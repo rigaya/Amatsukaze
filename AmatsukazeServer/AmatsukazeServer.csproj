@@ -114,6 +114,9 @@
   <PropertyGroup>
     <PreBuildEvent>"$(ProjectDir)\Version.bat" "$(ProjectDir)\Version.t4"</PreBuildEvent>
   </PropertyGroup>
+  <PropertyGroup>
+    <TextTransformPath>$(VsInstallRoot)\Common7\IDE\TextTransform.exe</TextTransformPath>
+  </PropertyGroup>
   <Import Project="..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets" Condition="Exists('..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
