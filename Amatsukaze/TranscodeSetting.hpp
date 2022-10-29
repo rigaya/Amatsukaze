@@ -297,6 +297,8 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		bool needTimecode = (timecodepath.size() > 0);
 		bool needSubs = (inSubs.size() > 0);
 
+		tstring dst = needTimecode ? tmpoutpath : outpath;
+#if 0
 		// まずはmuxerで映像、音声、チャプターをmux
 		if (videoFormat.fixedFrameRate) {
 			sb.append(_T(" -i \"%s?fps=%d/%d"), inVideo,
@@ -319,8 +321,29 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		}
 		sb.append(_T(" --optimize-pd"));
 
-		tstring dst = needTimecode ? tmpoutpath : outpath;
 		sb.append(_T(" -o \"%s\""), dst);
+#else
+		sb.clear();
+		sb.append(_T("\"%s\""), mp4boxpath);
+		sb.append(_T(" -add \"%s#video"), inVideo);
+		bool addOpt = false;
+		if (videoFormat.fixedFrameRate) {
+			sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
+		}
+		if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
+			sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+		}
+		sb.append(_T("\""));
+		for (const auto& inAudio : inAudios) {
+			sb.append(_T(" -add \"%s\"#audio"), inAudio);
+		}
+		// timelineeditorがチャプターを消すのでtimecodeがある時はmp4boxで入れる
+		if (needChapter && !needTimecode) {
+			sb.append(_T(" -chap \"%s\""), chapterpath);
+			needChapter = false;
+		}
+		sb.append(_T(" \"%s\""), dst);
+#endif
 
 		ret.push_back(std::make_pair(sb.str(), false));
 		sb.clear();
