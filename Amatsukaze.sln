@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio Version 17
+VisualStudioVersion = 17.3.32929.385
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FileCutter", "FileCutter\FileCutter.vcxproj", "{62A88502-50BC-4045-A184-13C08DCC00E5}"
 EndProject
@@ -60,7 +60,6 @@ Global
 		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Debug|x64.Build.0 = Debug|x64
 		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Release|Any CPU.ActiveCfg = Release|Win32
 		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Release|x64.ActiveCfg = Release|x64
-		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Release|x64.Build.0 = Release|x64
 		{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}.Debug|Any CPU.ActiveCfg = Debug|x64
 		{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}.Debug|x64.ActiveCfg = Debug|x64
 		{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}.Debug|x64.Build.0 = Debug|x64
