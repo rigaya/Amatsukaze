@@ -617,7 +617,7 @@ utv_coreプロジェクトに「NuGetパッケージの管理」から"lz4"を�
 AvisynthNeoが必要です。ソースを落として、ビルドしてください。
 ビルドにはCMakeが必要です。AviSynth.libをlib/x64(or x86)へコピーしてください。
 
-BatchHashCheckerにはOpenSSL 1.0.2が必要です。[Stwaberry Perl](https://strawberryperl.com/)をインストールの上、
+BatchHashCheckerにはOpenSSL 1.0.2が必要です。[Strawberry Perl](https://strawberryperl.com/)をインストールの上、
 [OpenSSL 1.0.2](https://www.openssl.org/source/old/1.0.2/)をダウンロードして展開します。
 "x64 Native Tools Command Prompt for VS2022"で、下記を実行します。
 ```
