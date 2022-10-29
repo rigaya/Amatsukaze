@@ -181,7 +181,7 @@ static tstring makeEncoderArgs(
 	}
 
 	if (encoder == ENCODER_SVTAV1) {
-		sb.append(_T(" %s -b \"%s\""), options, outpath);
+		sb.append(_T(" %s -b \"%s\" --progress 2"), options, outpath);
 	}
 	else {
 		sb.append(_T(" %s -o \"%s\""), options, outpath);
