@@ -147,7 +147,17 @@ static tstring makeEncoderArgs(
 	//ss << " --input-res " << fmt.width << "x" << fmt.height;
 	//ss << " --sar " << fmt.sarWidth << ":" << fmt.sarHeight;
 
-	if (encoder != ENCODER_SVTAV1) {
+	if (encoder == ENCODER_SVTAV1) {
+		if (fmt.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {
+			sb.append(_T(" --color-primaries %s"), av::getColorPrimStr(fmt.colorPrimaries));
+		}
+		if (fmt.transferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
+			sb.append(_T(" --transfer-characteristics %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics));
+		}
+		if (fmt.colorSpace != AVCOL_TRC_UNSPECIFIED) {
+			sb.append(_T(" --matrix-coefficients %s"), av::getColorSpaceStr(fmt.colorSpace));
+		}
+	} else {
 		if (fmt.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {
 			sb.append(_T(" --colorprim %s"), av::getColorPrimStr(fmt.colorPrimaries));
 		}
