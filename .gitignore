@@ -3,6 +3,7 @@
 
 /*.VC.VC.opendb
 /*.VC.db
+*.user
 
 Debug/
 Release/
