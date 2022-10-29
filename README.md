@@ -603,15 +603,30 @@ Amatsukazeと同梱&依存ライブラリはすべて64bitに統一されてい�
 
 ## ビルド方法
 
-FFmpeg（ライブラリ）が必要です。Windowsビルドのdev版を落として、
-libの中身をプロジェクトのlib/x64(or x86)フォルダへコピーします。
+FFmpeg（ライブラリ）が必要です。
+ビルド例は[こちら](https://github.com/rigaya/build_scripts/tree/master/ffmpeg_dll)。
+```
+build_ffmpeg_dll.sh -aur -t swscale
+```
 
-Ut Video Codec Suite（ライブラリ）が必要です。ソースを落として、
-ビルドしてください。必要なのはutv_core.libだけです。これを
-lib/x64(or x86)へコピーしてください。ビルドにはcygwinが必要なので注意。
+Ut Video Codec Suite（ライブラリ）が必要です。
+ソースを落として、clang-clを導入済みしたVisual Studioでビルドします。
+utv_coreプロジェクトに「NuGetパッケージの管理」から"lz4"を登録してビルドしてください。
+必要なのはutv_core.libだけです。これをlib/x64(or x86)へコピーしてください。
 
 AvisynthNeoが必要です。ソースを落として、ビルドしてください。
 ビルドにはCMakeが必要です。AviSynth.libをlib/x64(or x86)へコピーしてください。
+
+BatchHashCheckerにはOpenSSL 1.0.2が必要です。[Stwaberry Perl](https://strawberryperl.com/)をインストールの上、
+[OpenSSL 1.0.2](https://www.openssl.org/source/old/1.0.2/)をダウンロードして展開します。
+"x64 Native Tools Command Prompt for VS2022"で、下記を実行します。
+```
+cd openssl-1.0.2u
+perl Configure VC-WIN64A --prefix=%CD%\x64 no-asm
+ms\do_win64a.bat
+nmake -f ms\ntdll.mak install
+```
+libeay32.dllをlib/x64へコピーしてください。
 
 単体テストプロジェクト(AmatsukazeUnitTest)は、他にgoogletestのライブラリが必要です。
 サブモジュールでgoogletestは追加してあるので、git submodule updateでコードを落として、
