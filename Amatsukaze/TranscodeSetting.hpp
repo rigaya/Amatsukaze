@@ -299,8 +299,12 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 		// まずはmuxerで映像、音声、チャプターをmux
 		if (videoFormat.fixedFrameRate) {
-			sb.append(_T(" -i \"%s?fps=%d/%d\""), inVideo,
+			sb.append(_T(" -i \"%s?fps=%d/%d"), inVideo,
 				videoFormat.frameRateNum, videoFormat.frameRateDenom);
+			if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
+				sb.append(_T(",par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+			}
+			sb.append(_T("\""));
 		}
 		else {
 			sb.append(_T(" -i \"%s\""), inVideo);
@@ -364,6 +368,11 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 		if (timecodepath.size()) {
 			sb.append(_T(" --timestamps \"0:%s\""), timecodepath);
+		}
+		if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
+			int darWidth = 0, darHeight = 0;
+			videoFormat.getDAR(darWidth, darHeight);
+			sb.append(_T(" --aspect-ratio \"0:%d/%d\""), darWidth, darHeight);
 		}
 		sb.append(_T(" \"%s\""), inVideo);
 
