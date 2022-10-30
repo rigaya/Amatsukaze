@@ -325,7 +325,8 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 #else
 		sb.clear();
 		sb.append(_T("\"%s\""), mp4boxpath);
-		sb.append(_T(" -add \"%s#video"), inVideo);
+		sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
+		sb.append(_T(" -add \"%s#video:name=Video"), inVideo);
 		bool addOpt = false;
 		if (videoFormat.fixedFrameRate) {
 			sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
@@ -334,15 +335,15 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 			sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
 		}
 		sb.append(_T("\""));
-		for (const auto& inAudio : inAudios) {
-			sb.append(_T(" -add \"%s\"#audio"), inAudio);
+		for (int i = 0; i < (int)inAudios.size(); ++i) {
+			sb.append(_T(" -add \"%s\"#audio:name=Audio%d"), inAudios[i], i);
 		}
 		// timelineeditorがチャプターを消すのでtimecodeがある時はmp4boxで入れる
 		if (needChapter && !needTimecode) {
 			sb.append(_T(" -chap \"%s\""), chapterpath);
 			needChapter = false;
 		}
-		sb.append(_T(" \"%s\""), dst);
+		sb.append(_T(" -new \"%s\""), dst);
 #endif
 
 		ret.push_back(std::make_pair(sb.str(), false));
@@ -364,7 +365,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 		if (needChapter || needSubs) {
 			// 字幕とチャプターを埋め込む
-			sb.append(_T("\"%s\""), mp4boxpath);
+			sb.append(_T("\"%s\" -brand mp42 -ab mp41 -ab iso2"), mp4boxpath);
 			for (int i = 0; i < (int)inSubs.size(); ++i) {
 				if (subsTitles[i] == _T("SRT")) { // mp4はSRTのみ
 					sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
