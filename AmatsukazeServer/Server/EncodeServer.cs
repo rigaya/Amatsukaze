@@ -797,6 +797,10 @@ namespace Amatsukaze.Server
             {
                 setting.X265Path = GetExePath(basePath, "x265");
             }
+            if (string.IsNullOrEmpty(setting.SVTAV1Path))
+            {
+                setting.SVTAV1Path = GetExePath(basePath, "SvtAv1EncApp");
+            }
             if (string.IsNullOrEmpty(setting.MuxerPath))
             {
                 setting.MuxerPath = Path.Combine(basePath, "muxer.exe");
