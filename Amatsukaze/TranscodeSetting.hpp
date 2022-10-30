@@ -322,6 +322,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		sb.append(_T(" --optimize-pd"));
 
 		sb.append(_T(" -o \"%s\""), dst);
+		ret.push_back(std::make_pair(sb.str(), false));
 #else
 		sb.clear();
 		sb.append(_T("\"%s\""), mp4boxpath);
@@ -344,9 +345,8 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 			needChapter = false;
 		}
 		sb.append(_T(" -new \"%s\""), dst);
+		ret.push_back(std::make_pair(sb.str(), true));
 #endif
-
-		ret.push_back(std::make_pair(sb.str(), false));
 		sb.clear();
 
 		if (needTimecode) {
