@@ -396,9 +396,19 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 			sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
 		}
 		if (!videoFormat.isSARUnspecified()) {
-			int darWidth = 0, darHeight = 0;
-			videoFormat.getDAR(darWidth, darHeight);
-			sb.append(_T(" --aspect-ratio \"0:%d/%d\""), darWidth, darHeight);
+			int x = videoFormat.displayWidth  * videoFormat.sarWidth;
+			int y = videoFormat.displayHeight * videoFormat.sarHeight;
+			int a = x, b = y, c;
+			while ((c = a % b) != 0)
+				a = b, b = c;
+			x /= b;
+			y /= b;
+			const double ratio = (videoFormat.sarWidth >= videoFormat.sarHeight)
+				? videoFormat.displayHeight / (double)y
+				: videoFormat.displayWidth  / (double)x;
+			const int disp_w = (int)(x * ratio + 0.5);
+			const int disp_h = (int)(y * ratio + 0.5);
+			sb.append(_T(" --display-dimensions \"0:%dx%d\""), disp_w, disp_h);
 		}
 		sb.append(_T(" \"%s\""), inVideo);
 
