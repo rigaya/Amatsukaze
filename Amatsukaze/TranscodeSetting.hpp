@@ -392,6 +392,8 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 		if (timecodepath.size()) {
 			sb.append(_T(" --timestamps \"0:%s\""), timecodepath);
+		} else {
+			sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
 		}
 		if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
 			int darWidth = 0, darHeight = 0;
