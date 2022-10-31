@@ -332,7 +332,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		if (videoFormat.fixedFrameRate) {
 			sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
 		}
-		if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
+		if (!videoFormat.isSARUnspecified()) {
 			sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
 		}
 		sb.append(_T("\""));
@@ -395,7 +395,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		} else {
 			sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
 		}
-		if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
+		if (!videoFormat.isSARUnspecified()) {
 			int darWidth = 0, darHeight = 0;
 			videoFormat.getDAR(darWidth, darHeight);
 			sb.append(_T(" --aspect-ratio \"0:%d/%d\""), darWidth, darHeight);
