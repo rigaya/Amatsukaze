@@ -136,6 +136,7 @@ static tstring makeEncoderArgs(
 	const VideoFormat& fmt,
 	const tstring& timecodepath,
 	int vfrTimingFps,
+	const ENUM_FORMAT format,
 	const tstring& outpath)
 {
 	StringBuilderT sb;
@@ -210,7 +211,12 @@ static tstring makeEncoderArgs(
 	case ENCODER_QSVENC:
 	case ENCODER_NVENC:
 	case ENCODER_VCEENC:
-		sb.append(_T(" --format raw --y4m -i -"));
+		if (format == FORMAT_MKV) {
+			sb.append(_T(" --output-format matroska"));
+		} else {
+			sb.append(_T(" --output-format raw"));
+		}
+		sb.append(_T(" --y4m -i -"));
 		break;
 	case ENCODER_SVTAV1:
 		sb.append(_T(" -i stdin"));

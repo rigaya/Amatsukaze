@@ -435,6 +435,7 @@ private:
 			setting_.getOptions(
 				0, fmt.format, srcBitrate, false, pass_, std::vector<BitrateZone>(), 1, EncodeFileKey()),
 			fmt, tstring(), false,
+			setting_.getFormat(),
 			setting_.getEncVideoFilePath(EncodeFileKey()));
 
 		ctx.info("[エンコーダ開始]");

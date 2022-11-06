@@ -372,6 +372,7 @@ public:
 			outfmt,
 			timecodepath,
 			vfrTimingFps,
+			setting_.getFormat(),
 			setting_.getEncVideoFilePath(key));
 	}
 
