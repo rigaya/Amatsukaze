@@ -857,7 +857,8 @@ class LogoAnalyzer : AMTObject
 			if (codec->EncodeGetExtraData(extra.data(), extraSize, UTVF_YV12, pThis->scanw, pThis->scanh)) {
 				THROW(RuntimeException, "failed to EncodeGetExtraData (UtVideo)");
 			}
-			if (codec->EncodeBegin(UTVF_YV12, pThis->scanw, pThis->scanh, CBGROSSWIDTH_WINDOWS)) {
+			std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
+			if (codec->EncodeBegin(UTVF_YV12, pThis->scanw, pThis->scanh, cbGrossWidth.data())) {
 				THROW(RuntimeException, "failed to EncodeBegin (UtVideo)");
 			}
 
@@ -947,7 +948,8 @@ class LogoAnalyzer : AMTObject
 			file.readHeader();
 			auto extra = file.getExtra();
 
-			if (codec->DecodeBegin(UTVF_YV12, scanw, scanh, CBGROSSWIDTH_WINDOWS, extra.data(), (int)extra.size())) {
+			std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
+			if (codec->DecodeBegin(UTVF_YV12, scanw, scanh, cbGrossWidth.data(), extra.data(), (int)extra.size())) {
 				THROW(RuntimeException, "failed to DecodeBegin (UtVideo)");
 			}
 
@@ -999,7 +1001,8 @@ class LogoAnalyzer : AMTObject
 			file.readHeader();
 			auto extra = file.getExtra();
 
-			if (codec->DecodeBegin(UTVF_YV12, scanw, scanh, CBGROSSWIDTH_WINDOWS, extra.data(), (int)extra.size())) {
+			std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
+			if (codec->DecodeBegin(UTVF_YV12, scanw, scanh, cbGrossWidth.data(), extra.data(), (int)extra.size())) {
 				THROW(RuntimeException, "failed to DecodeBegin (UtVideo)");
 			}
 

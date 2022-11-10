@@ -319,14 +319,15 @@ static int LosslessTest(AMTContext& ctx, const ConfigWrapper& setting)
 		auto memOut = std::unique_ptr<uint8_t[]>(new uint8_t[outSize]);
 		auto memDec = std::unique_ptr<uint8_t[]>(new uint8_t[rawSize]);
 		auto memHeader = std::unique_ptr<uint8_t[]>(new uint8_t[headerSize]);
+		std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
 
 		if (codecEnc->EncodeGetExtraData(memHeader.get(), headerSize, UTVF_YV12, vi.width, vi.height)) {
 			THROW(RuntimeException, "failed to EncodeGetExtraData (UtVideo)");
 		}
-		if (codecEnc->EncodeBegin(UTVF_YV12, vi.width, vi.height, CBGROSSWIDTH_WINDOWS)) {
+		if (codecEnc->EncodeBegin(UTVF_YV12, vi.width, vi.height, cbGrossWidth.data())) {
 			THROW(RuntimeException, "failed to EncodeBegin (UtVideo)");
 		}
-		if (codecDec->DecodeBegin(UTVF_YV12, vi.width, vi.height, CBGROSSWIDTH_WINDOWS, memHeader.get(), headerSize)) {
+		if (codecDec->DecodeBegin(UTVF_YV12, vi.width, vi.height, cbGrossWidth.data(), memHeader.get(), headerSize)) {
 			THROW(RuntimeException, "failed to DecodeBegin (UtVideo)");
 		}
 
@@ -379,10 +380,11 @@ static int LosslessFileTest(AMTContext& ctx, const ConfigWrapper& setting)
 		auto memDec = std::unique_ptr<uint8_t[]>(new uint8_t[rawSize]);
 		std::vector<uint8_t> extra(extraSize);
 
+		std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
 		if (codec->EncodeGetExtraData(extra.data(), extraSize, UTVF_YV12, vi.width, vi.height)) {
 			THROW(RuntimeException, "failed to EncodeGetExtraData (UtVideo)");
 		}
-		if (codec->EncodeBegin(UTVF_YV12, vi.width, vi.height, CBGROSSWIDTH_WINDOWS)) {
+		if (codec->EncodeBegin(UTVF_YV12, vi.width, vi.height, cbGrossWidth.data())) {
 			THROW(RuntimeException, "failed to EncodeBegin (UtVideo)");
 		}
 		file.writeHeader(vi.width, vi.height, numframes, extra);
@@ -412,7 +414,8 @@ static int LosslessFileTest(AMTContext& ctx, const ConfigWrapper& setting)
 		auto memDec = std::unique_ptr<uint8_t[]>(new uint8_t[rawSize]);
 		auto memOut = std::unique_ptr<uint8_t[]>(new uint8_t[outSize]);
 
-		if (codec->DecodeBegin(UTVF_YV12, width, height, CBGROSSWIDTH_WINDOWS, extra.data(), (int)extra.size())) {
+		std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
+		if (codec->DecodeBegin(UTVF_YV12, width, height, cbGrossWidth.data(), extra.data(), (int)extra.size())) {
 			THROW(RuntimeException, "failed to DecodeBegin (UtVideo)");
 		}
 

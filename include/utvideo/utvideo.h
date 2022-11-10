@@ -10,7 +10,7 @@ typedef ptrdiff_t ssize_t;
 #endif
 #endif
 
-#include "utvideo/version.h"
+#include "version.h"
 
 /*
  * NOTE:
@@ -76,6 +76,8 @@ typedef ptrdiff_t ssize_t;
 
 typedef uint32_t utvf_t;
 
+#define MAKEUTVF(a, b, c, d) ((utvf_t)(((a) << 24) | ((b) << 16) | ((c) << 8) | (d)))
+
 #define UTVF_INVALID 0
 
 // Non-FourCC RGB formats
@@ -101,9 +103,18 @@ typedef uint32_t utvf_t;
 #define UTVF_ULH4 ((utvf_t)'ULH4')
 #define UTVF_ULH2 ((utvf_t)'ULH2')
 #define UTVF_ULH0 ((utvf_t)'ULH0')
+
 #define UTVF_UQRA ((utvf_t)'UQRA')
 #define UTVF_UQRG ((utvf_t)'UQRG')
 #define UTVF_UQY2 ((utvf_t)'UQY2')
+#define UTVF_UQY0 ((utvf_t)'UQY0')
+
+#define UTVF_UMRA ((utvf_t)'UMRA')
+#define UTVF_UMRG ((utvf_t)'UMRG')
+#define UTVF_UMY4 ((utvf_t)'UMY4')
+#define UTVF_UMY2 ((utvf_t)'UMY2')
+#define UTVF_UMH4 ((utvf_t)'UMH4')
+#define UTVF_UMH2 ((utvf_t)'UMH2')
 
 #define UTVF_YV24 ((utvf_t)'YV24')
 #define UTVF_YUY2 ((utvf_t)'YUY2')
@@ -116,6 +127,19 @@ typedef uint32_t utvf_t;
 #define UTVF_HDYC ((utvf_t)'HDYC')
 #define UTVF_YV16 ((utvf_t)'YV16')
 #define UTVF_YV12 ((utvf_t)'YV12')
+#define UTVF_NV12 ((utvf_t)'NV12')
 #define UTVF_v210 ((utvf_t)'v210')
 #define UTVF_b64a ((utvf_t)'b64a')
 #define UTVF_b48r ((utvf_t)'b48r')
+#define UTVF_r210 ((utvf_t)'r210')
+#define UTVF_P210 ((utvf_t)'P210')
+#define UTVF_P216 ((utvf_t)'P216')
+#define UTVF_P010 ((utvf_t)'P010')
+#define UTVF_P016 ((utvf_t)'P016')
+
+#define UTVF_YUV444P10LE MAKEUTVF('Y', '3',  0, 10)
+#define UTVF_YUV444P16LE MAKEUTVF('Y', '3',  0, 16)
+#define UTVF_YUV422P10LE MAKEUTVF('Y', '3', 10, 10)
+#define UTVF_YUV422P16LE MAKEUTVF('Y', '3', 10, 16)
+#define UTVF_YUV420P10LE MAKEUTVF('Y', '3', 11, 10)
+#define UTVF_YUV420P16LE MAKEUTVF('Y', '3', 11, 16)
