@@ -1190,11 +1190,19 @@ public:
 			}
 		}
 		if (numFrames > 0) {
-			if (conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X265) {
+			switch (conf.encoder) {
+			case ENCODER_X264:
+			case ENCODER_X265:
+			case ENCODER_QSVENC:
+			case ENCODER_NVENC:
+			case ENCODER_VCEENC:
 				sb.append(_T(" --frames %d"), numFrames);
-			}
-			else if (conf.encoder == ENCODER_SVTAV1) {
+				break;
+			case ENCODER_SVTAV1:
 				sb.append(_T(" -n %d"), numFrames);
+				break;
+			default:
+				break;
 			}
 		}
 		return sb.str();
