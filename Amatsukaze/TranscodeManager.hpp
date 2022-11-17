@@ -747,6 +747,15 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 			AMTFilterVideoEncoder encoder(ctx, std::max(4, setting.getNumEncodeBufferFrames()));
 			encoder.encode(filterClip, outfmt,
 				timeCodes, encoderArgs, env);
+
+			//エンコーダでのリサイズを反映
+			if (eoInfo.resizeWidth != 0 && eoInfo.resizeHeight != 0) {
+				fileOut.vfmt.width = eoInfo.resizeWidth;
+				fileOut.vfmt.height = eoInfo.resizeHeight;
+				// エンコーダ側でリサイズを行う場合は、SAR比を1:1にする
+				fileOut.vfmt.sarWidth = 1;
+				fileOut.vfmt.sarHeight = 1;
+			}
 		}
 		catch (const AvisynthError& avserror) {
 			THROWF(AviSynthException, "%s", avserror.msg);
