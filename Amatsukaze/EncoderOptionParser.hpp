@@ -54,9 +54,11 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str)
 	if (encoder == ENCODER_X264) {
 		info.format = VS_H264;
 		return info;
-	}
-	else if (encoder == ENCODER_X265) {
+	} else if (encoder == ENCODER_X265) {
 		info.format = VS_H265;
+		return info;
+	} else if (encoder == ENCODER_SVTAV1) {
+		info.format = VS_AV1;
 		return info;
 	}
 
@@ -144,14 +146,13 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str)
 		else if (arg == L"-c" || arg == L"--codec") {
 			if (next == L"h264") {
 				info.format = VS_H264;
-			}
-			else if (next == L"hevc") {
+			} else if (next == L"hevc") {
 				info.format = VS_H265;
-			}
-			else if (next == L"mpeg2") {
+			} else if (next == L"mpeg2") {
 				info.format = VS_MPEG2;
-			}
-			else {
+			} else if (next == L"av1") {
+				info.format = VS_AV1;
+			} else {
 				info.format = VS_UNKNOWN;
 			}
 		}
