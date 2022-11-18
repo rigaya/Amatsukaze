@@ -161,9 +161,9 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str)
 			}
 		} else if (arg == L"--output-res") {
 			int w = 0, h = 0;
-			if (   wscanf_s(next.c_str(), L"%dx%d", &w, &h) == 2
-				|| wscanf_s(next.c_str(), L"%d:%d", &w, &h) == 2
-				|| wscanf_s(next.c_str(), L"%d/%d", &w, &h) == 2) {
+			if (   swscanf_s(next.c_str(), L"%dx%d", &w, &h) == 2
+				|| swscanf_s(next.c_str(), L"%d:%d", &w, &h) == 2
+				|| swscanf_s(next.c_str(), L"%d/%d", &w, &h) == 2) {
 				if (w <= 0 || h <= 0) {
 					THROW(ArgumentException,"--output-res‚ÍŽ©‘R”‚ÅŽw’è‚µ‚Ä‚­‚¾‚³‚¢");
 				}
