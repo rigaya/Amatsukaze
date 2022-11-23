@@ -243,7 +243,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 			conf.audioEncoderPath = pathNormalize(getParam(argc, argv, i++));
 		}
 		else if (key == _T("-aeo") || key == _T("--audio-encoder-option")) {
-			conf.encoderOptions = getParam(argc, argv, i++);
+			conf.audioEncoderOptions = getParam(argc, argv, i++);
 		}
 		else if (key == _T("-ab") || key == _T("--audio-bitrate")) {
 			conf.audioBitrateInKbps = std::stoi(getParam(argc, argv, i++));
