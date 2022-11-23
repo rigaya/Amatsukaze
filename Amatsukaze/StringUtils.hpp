@@ -80,26 +80,26 @@ FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag) {
 namespace string_internal {
 
 // nullèIí[Ç™Ç†ÇÈÇÃÇ≈
-static std::vector<char> to_string(std::wstring str) {
+static std::vector<char> to_string(std::wstring str, uint32_t codepage = CP_ACP) {
 	if (str.size() == 0) {
 		return std::vector<char>(1);
 	}
 	int dstlen = WideCharToMultiByte(
-		CP_ACP, 0, str.c_str(), (int)str.size(), NULL, 0, NULL, NULL);
+		codepage, 0, str.c_str(), (int)str.size(), NULL, 0, NULL, NULL);
 	std::vector<char> ret(dstlen + 1);
-	WideCharToMultiByte(CP_ACP, 0,
+	WideCharToMultiByte(codepage, 0,
 		str.c_str(), (int)str.size(), ret.data(), (int)ret.size(), NULL, NULL);
 	ret.back() = 0; // null terminate
 	return ret;
 }
-static std::vector<wchar_t> to_wstring(std::string str) {
+static std::vector<wchar_t> to_wstring(std::string str, uint32_t codepage = CP_ACP) {
 	if (str.size() == 0) {
 		return std::vector<wchar_t>(1);
 	}
 	int dstlen = MultiByteToWideChar(
-		CP_ACP, 0, str.c_str(), (int)str.size(), NULL, 0);
+		codepage, 0, str.c_str(), (int)str.size(), NULL, 0);
 	std::vector<wchar_t> ret(dstlen + 1);
-	MultiByteToWideChar(CP_ACP, 0,
+	MultiByteToWideChar(codepage, 0,
 		str.c_str(), (int)str.size(), ret.data(), (int)ret.size());
 	ret.back() = 0; // null terminate
 	return ret;
@@ -153,38 +153,38 @@ protected:
 };
 }
 
-static std::string to_string(const std::wstring& str) {
-	std::vector<char> ret = string_internal::to_string(str);
+static std::string to_string(const std::wstring& str, uint32_t codepage = CP_ACP) {
+	std::vector<char> ret = string_internal::to_string(str, codepage);
 	return std::string(ret.begin(), ret.end());
 }
 
-static std::string to_string(const std::string& str) {
+static std::string to_string(const std::string& str, uint32_t codepage = CP_ACP) {
 	return str;
 }
 
-static std::wstring to_wstring(const std::wstring& str) {
+static std::wstring to_wstring(const std::wstring& str, uint32_t codepage = CP_ACP) {
 	return str;
 }
 
-static std::wstring to_wstring(const std::string& str) {
-	std::vector<wchar_t> ret = string_internal::to_wstring(str);
+static std::wstring to_wstring(const std::string& str, uint32_t codepage = CP_ACP) {
+	std::vector<wchar_t> ret = string_internal::to_wstring(str, codepage);
 	return std::wstring(ret.begin(), ret.end());
 }
 
 #ifdef _MSC_VER
-static std::wstring to_tstring(const std::wstring& str) {
+static std::wstring to_tstring(const std::wstring& str, uint32_t codepage = CP_ACP) {
 	return str;
 }
 
-static std::wstring to_tstring(const std::string& str) {
-	return to_wstring(str);
+static std::wstring to_tstring(const std::string& str, uint32_t codepage = CP_ACP) {
+	return to_wstring(str, codepage);
 }
 #else
-static std::string to_tstring(const std::wstring& str) {
+static std::string to_tstring(const std::wstring& str, uint32_t codepage = CP_ACP) {
 	return to_string(str);
 }
 
-static std::string to_tstring(const std::string& str) {
+static std::string to_tstring(const std::string& str, uint32_t codepage = CP_ACP) {
 	return str;
 }
 #endif

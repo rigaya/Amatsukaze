@@ -13,9 +13,6 @@
 #include <map>
 #include <set>
 #include <fstream>
-#include <cctype>
-#include <locale>
-#include <codecvt>
 
 #include "CoreUtils.hpp"
 #include "OSUtil.hpp"
@@ -440,22 +437,26 @@ public:
 		if (File::exists(mapPath) == false) {
 			THROWF(ArgumentException, "DRCSマッピングファイルが見つかりません: %s",
 				mapPath.c_str());
-		}
-		else {
+		} else {
 			// BOMありUTF-8で読み込む
-			std::wifstream input(mapPath);
-			// codecvt_utf8 はUCS-2にしか対応していないので使わないように！
-			// 必ず codecvt_utf8_utf16 を使うこと
-			input.imbue(std::locale(input.getloc(), new std::codecvt_utf8_utf16<wchar_t, 0x10ffff, std::consume_header>));
-			for (std::wstring line; getline(input, line);)
+			std::ifstream input(mapPath);
+			// BOMスキップ
 			{
+				const char a = input.get();
+				const char b = input.get();
+				const char c = input.get();
+				if (a != (char)0xEF || b != (char)0xBB || c != (char)0xBF) { //UTF-8 BOM
+					input.seekg(0);
+				}
+			}
+			for (std::string line; getline(input, line);) {
 				if (line.size() >= 34) {
-					std::string key(line.begin(), line.begin() + 32);
-					std::transform(key.begin(), key.end(), key.begin(), ::toupper);
+					std::string key = line.substr(0, 32);
+					std::transform(key.begin(), key.end(), key.begin(), toupper);
 					bool ok = (line[32] == '=');
 					for (auto c : key) if (!isxdigit(c)) ok = false;
 					if (ok) {
-						drcsMap[key] = std::wstring(line.begin() + 33, line.end());
+						drcsMap[key] = to_wstring(line.substr(33), CP_UTF8);
 					}
 				}
 			}
@@ -1030,8 +1031,7 @@ void WriteUTF8File(const tstring& filename, const std::string& utf8text)
 
 void WriteUTF8File(const tstring& filename, const std::wstring& text)
 {
-	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-	WriteUTF8File(filename, converter.to_bytes(text));
+	WriteUTF8File(filename, to_string(text, CP_UTF8));
 }
 
 // C API for P/Invoke
