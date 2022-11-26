@@ -333,7 +333,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		sb.clear();
 		sb.append(_T("\"%s\""), mp4boxpath);
 		sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
-		sb.append(_T(" -add \"%s#video:name=Video"), inVideo);
+		sb.append(_T(" -add \"%s#video:name=Video:forcesync"), inVideo);
 		bool addOpt = false;
 		if (videoFormat.fixedFrameRate) {
 			sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
