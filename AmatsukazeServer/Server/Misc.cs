@@ -300,6 +300,7 @@ namespace Amatsukaze.Server
 
         private List<byte> rawtext = new List<byte>();
         private bool isCR = false;
+        private DateTime lastReplace = DateTime.MinValue;
 
         public virtual void Clear()
         {
@@ -335,9 +336,16 @@ namespace Amatsukaze.Server
         private void OutLine()
         {
             string text = Encoding.Default.GetString(rawtext.ToArray());
+            string svtav1_encoding = @"Encoding frame\s+[0-9]+\s+[0-9]*\.?[0-9]+ kbps ";
             if (isCR)
             {
-                OnReplaceLine(text);
+                DateTime timeNow = DateTime.Now;
+                TimeSpan threshold = new TimeSpan(0, 0, 0, 0, 500);
+                if (!Regex.IsMatch(text, svtav1_encoding) || (timeNow - lastReplace) >= threshold)
+                {
+                    OnReplaceLine(text);
+                    lastReplace = timeNow;
+                }
             }
             else
             {
