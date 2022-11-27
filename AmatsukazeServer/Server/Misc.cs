@@ -300,7 +300,6 @@ namespace Amatsukaze.Server
 
         private List<byte> rawtext = new List<byte>();
         private bool isCR = false;
-        private DateTime lastReplace = DateTime.MinValue;
 
         public virtual void Clear()
         {
@@ -338,13 +337,7 @@ namespace Amatsukaze.Server
             string text = Encoding.Default.GetString(rawtext.ToArray());
             if (isCR)
             {
-                DateTime timeNow = DateTime.Now;
-                TimeSpan threshold = new TimeSpan(0, 0, 0, 0, 500);
-                if ((timeNow - lastReplace) >= threshold)
-                {
-                    OnReplaceLine(text);
-                    lastReplace = timeNow;
-                }
+                OnReplaceLine(text);
             }
             else
             {
