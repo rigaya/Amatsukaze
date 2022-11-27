@@ -129,6 +129,18 @@ static const char* encoderToString(ENUM_ENCODER encoder) {
 	return "Unknown";
 }
 
+static bool encoderOutputInContainer(const ENUM_ENCODER encoder, const ENUM_FORMAT format) {
+	switch (encoder) {
+	case ENCODER_QSVENC:
+	case ENCODER_NVENC:
+	case ENCODER_VCEENC:
+		return (format == FORMAT_MP4 || format == FORMAT_MKV);
+	default:
+		break;
+	}
+	return false;
+}
+
 static tstring makeEncoderArgs(
 	ENUM_ENCODER encoder,
 	const tstring& binpath,
@@ -211,10 +223,12 @@ static tstring makeEncoderArgs(
 	case ENCODER_QSVENC:
 	case ENCODER_NVENC:
 	case ENCODER_VCEENC:
-		if (format == FORMAT_MKV) {
-			sb.append(_T(" --output-format matroska"));
-		} else {
-			sb.append(_T(" --output-format raw"));
+		if (encoderOutputInContainer(encoder, format)) {
+			if (format == FORMAT_MKV) {
+				sb.append(_T(" --output-format matroska"));
+			} else if (format == FORMAT_MP4) {
+				sb.append(_T(" --output-format mp4"));
+			}
 		}
 		sb.append(_T(" --y4m -i -"));
 		break;
@@ -277,11 +291,13 @@ static tstring makeAudioEncoderArgs(
 }
 
 static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
-	ENUM_FORMAT format,
+	const ENUM_ENCODER encoder,
+	const ENUM_FORMAT format,
 	const tstring& binpath,
 	const tstring& timelineeditorpath,
 	const tstring& mp4boxpath,
 	const tstring& inVideo,
+	const bool encoderOutputInContainer,
 	const VideoFormat& videoFormat,
 	const std::vector<tstring>& inAudios,
 	const tstring& outpath,
@@ -334,12 +350,13 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		sb.append(_T("\"%s\""), mp4boxpath);
 		sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
 		sb.append(_T(" -add \"%s#video:name=Video:forcesync"), inVideo);
-		bool addOpt = false;
-		if (videoFormat.fixedFrameRate) {
-			sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
-		}
-		if (!videoFormat.isSARUnspecified()) {
-			sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+		if (!encoderOutputInContainer) {
+			if (videoFormat.fixedFrameRate) {
+				sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
+			}
+			if (encoder == ENCODER_SVTAV1 && !videoFormat.isSARUnspecified()) {
+				sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+			}
 		}
 		sb.append(_T("\""));
 		for (int i = 0; i < (int)inAudios.size(); ++i) {
@@ -398,11 +415,11 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 		if (timecodepath.size()) {
 			sb.append(_T(" --timestamps \"0:%s\""), timecodepath);
-		} else {
+		} else if (!encoderOutputInContainer) {
 			sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
 		}
-		if (!videoFormat.isSARUnspecified()) {
-			int x = videoFormat.width  * videoFormat.sarWidth;
+		if (!encoderOutputInContainer && encoder == ENCODER_SVTAV1 && !videoFormat.isSARUnspecified()) {
+			int x = videoFormat.width * videoFormat.sarWidth;
 			int y = videoFormat.height * videoFormat.sarHeight;
 			int a = x, b = y, c;
 			while ((c = a % b) != 0)
@@ -411,7 +428,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 			y /= b;
 			const double ratio = (videoFormat.sarWidth >= videoFormat.sarHeight)
 				? videoFormat.height / (double)y
-				: videoFormat.width  / (double)x;
+				: videoFormat.width / (double)x;
 			const int disp_w = (int)(x * ratio + 0.5);
 			const int disp_h = (int)(y * ratio + 0.5);
 			sb.append(_T(" --display-dimensions \"0:%dx%d\""), disp_w, disp_h);

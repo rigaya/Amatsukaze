@@ -203,9 +203,10 @@ public:
 
 		auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax);
 		auto args = makeMuxerArgs(
-			setting_.getFormat(),
+			setting_.getEncoder(), setting_.getFormat(),
 			setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
-			encVideoFile, vfmt, audioFiles,
+			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
+			vfmt, audioFiles,
 			outPath, tmpOutPath, chapterFile,
 			fileOut.timecode, timebase, subsFiles, subsTitles, metaFile);
 
@@ -263,9 +264,10 @@ public:
 		tstring encVideoFile = setting_.getEncVideoFilePath(EncodeFileKey());
 		tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey());
 		auto args = makeMuxerArgs(
-			FORMAT_MP4,
+			setting_.getEncoder(), FORMAT_MP4,
 			setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
-			encVideoFile, videoFormat, audioFiles, outFilePath,
+			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
+			videoFormat, audioFiles, outFilePath,
 			tstring(), tstring(), tstring(), std::pair<int, int>(),
 			std::vector<tstring>(), std::vector<tstring>(), tstring());
 		ctx.info("[MuxŠJŽn]");

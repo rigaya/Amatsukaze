@@ -27,8 +27,6 @@ struct EncoderOptionInfo {
 	ENUM_ENCODER_DEINT deint;
 	bool afsTimecode;
 	int selectEvery;
-	int resizeWidth;
-	int resizeHeight;
 };
 
 static std::vector<std::wstring> SplitOptions(const tstring& str)
@@ -68,8 +66,6 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str)
 	int argc = (int)argv.size();
 
 	info.format = VS_H264;
-	info.resizeWidth = 0;
-	info.resizeHeight = 0;
 
 	for (int i = 0; i < argc; ++i) {
 		auto& arg = argv[i];
@@ -116,10 +112,6 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str)
 				THROW(ArgumentException,
 					"vpp-afsオプションに誤りがあります。24fps化する場合は間引き(drop)もonにする必要があります");
 			}
-			if (drop && !timecode) {
-				THROW(ArgumentException,
-					"vpp-afsで間引き(drop)がonの場合はタイムコード(timecode=true)が必須です");
-			}
 			if (timecode) {
 				info.deint = ENCODER_DEINT_VFR;
 				info.afsTimecode = true;
@@ -158,17 +150,6 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str)
 				info.format = VS_AV1;
 			} else {
 				info.format = VS_UNKNOWN;
-			}
-		} else if (arg == L"--output-res") {
-			int w = 0, h = 0;
-			if (   swscanf_s(next.c_str(), L"%dx%d", &w, &h) == 2
-				|| swscanf_s(next.c_str(), L"%d:%d", &w, &h) == 2
-				|| swscanf_s(next.c_str(), L"%d/%d", &w, &h) == 2) {
-				if (w <= 0 || h <= 0) {
-					THROW(ArgumentException,"--output-resは自然数で指定してください");
-				}
-				info.resizeWidth = w;
-				info.resizeHeight = h;
 			}
 		}
 	}
