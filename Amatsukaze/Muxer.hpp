@@ -80,7 +80,7 @@ public:
 		// 音声ファイルを作成
 		std::vector<tstring> audioFiles;
 		if (setting_.isEncodeAudio()) {
-			audioFiles.push_back(setting_.getIntAudioFilePath(key, 0));
+			audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
 		}
 		else {
 			for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); ++asrc) {
@@ -91,8 +91,8 @@ public:
 						// デュアルモノは2つのAACに分離
 						ctx.infoF("音声%d-%dはデュアルモノなので2つのAACファイルに分離します", fileIn.outKey.format, asrc);
 						SpDualMonoSplitter splitter(ctx);
-						tstring filepath0 = setting_.getIntAudioFilePath(key, adst++);
-						tstring filepath1 = setting_.getIntAudioFilePath(key, adst++);
+						tstring filepath0 = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
+						tstring filepath1 = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
 						splitter.open(0, filepath0);
 						splitter.open(1, filepath1);
 						for (int frameIndex : frameList) {
@@ -105,7 +105,7 @@ public:
 						if (isDualMono) {
 							ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
 						}
-						tstring filepath = setting_.getIntAudioFilePath(key, adst++);
+						tstring filepath = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
 						File file(filepath, _T("wb"));
 						for (int frameIndex : frameList) {
 							file.write(audioCache_[frameIndex]);
@@ -259,7 +259,7 @@ public:
 		// Mux
 		std::vector<tstring> audioFiles;
 		for (int i = 0; i < audioCount; ++i) {
-			audioFiles.push_back(setting_.getIntAudioFilePath(EncodeFileKey(), i));
+			audioFiles.push_back(setting_.getIntAudioFilePath(EncodeFileKey(), i, setting_.getAudioEncoder()));
 		}
 		tstring encVideoFile = setting_.getEncVideoFilePath(EncodeFileKey());
 		tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey());

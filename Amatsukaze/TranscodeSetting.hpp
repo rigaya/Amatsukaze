@@ -250,6 +250,7 @@ enum ENUM_AUDIO_ENCODER {
 	AUDIO_ENCODER_NEROAAC,
 	AUDIO_ENCODER_QAAC,
 	AUDIO_ENCODER_FDKAAC,
+	AUDIO_ENCODER_OPUSENC,
 };
 
 static tstring makeAudioEncoderArgs(
@@ -274,6 +275,9 @@ static tstring makeAudioEncoderArgs(
 		case AUDIO_ENCODER_FDKAAC:
 			sb.append(_T(" -b %d "), kbps * 1000);
 			break;
+		case AUDIO_ENCODER_OPUSENC:
+			sb.append(_T(" --vbr --bitrate %d "), kbps);
+			break;
 		}
 	}
 
@@ -284,6 +288,9 @@ static tstring makeAudioEncoderArgs(
 	case AUDIO_ENCODER_QAAC:
 	case AUDIO_ENCODER_FDKAAC:
 		sb.append(_T(" -o \"%s\" -"), outpath);
+		break;
+	case AUDIO_ENCODER_OPUSENC:
+		sb.append(_T(" - \"%s\""), outpath);
 		break;
 	}
 
@@ -986,8 +993,8 @@ public:
 		return str;
 	}
 
-	tstring getIntAudioFilePath(EncodeFileKey key, int aindex) const {
-		return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.aac"),
+	tstring getIntAudioFilePath(EncodeFileKey key, int aindex, ENUM_AUDIO_ENCODER encoder) const {
+		return regtmp(StringFormat((encoder == AUDIO_ENCODER_OPUSENC) ? _T("%s/a%d-%d-%d-%d%s.opus") : _T("%s/a%d-%d-%d-%d%s.aac"),
 			tmpDir.path(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
 	}
 

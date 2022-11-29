@@ -376,7 +376,7 @@ private:
 			for (int i = 0; i < (int)fmt->nb_streams; ++i) {
 				if (fmt->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 					audioFiles_.emplace_back(new AudioFileWriter(
-						fmt->streams[i], setting_.getIntAudioFilePath(EncodeFileKey(), audioCount_), 8 * 1024));
+						fmt->streams[i], setting_.getIntAudioFilePath(EncodeFileKey(), audioCount_, setting_.getAudioEncoder()), 8 * 1024));
 					audioMap_[i] = audioCount_++;
 				}
 			}

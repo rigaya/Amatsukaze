@@ -1848,6 +1848,7 @@ namespace Amatsukaze.Models
                     case AudioEncoderType.NeroAac: return Data.NeroAacOption;
                     case AudioEncoderType.Qaac: return Data.QaacOption;
                     case AudioEncoderType.Fdkaac: return Data.FdkaacOption;
+                    case AudioEncoderType.OpusEnc: return Data.OpusEncOption;
                 }
                 return null;
             }
@@ -1868,6 +1869,11 @@ namespace Amatsukaze.Models
                         if (Data.FdkaacOption == value)
                             return;
                         Data.FdkaacOption = value;
+                        break;
+                    case AudioEncoderType.OpusEnc:
+                        if (Data.OpusEncOption == value)
+                            return;
+                        Data.OpusEncOption = value;
                         break;
                     default:
                         return;
@@ -1948,7 +1954,7 @@ namespace Amatsukaze.Models
             get { return new string[] { "MP4", "MKV", "M2TS", "TS" }; }
         }
         public string[] AudioEncoderList {
-            get { return new string[] { "NeroAAC", "qaac", "fdkaac" }; }
+            get { return new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" }; }
         }
 
         #region IsModified変更通知プロパティ
@@ -2867,6 +2873,20 @@ namespace Amatsukaze.Models
                 if (Model.FdkaacPath == value)
                     return;
                 Model.FdkaacPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region OpusEncPath変更通知プロパティ
+        public string OpusEncPath
+        {
+            get { return Model.OpusEncPath; }
+            set
+            {
+                if (Model.OpusEncPath == value)
+                    return;
+                Model.OpusEncPath = value;
                 RaisePropertyChanged();
             }
         }

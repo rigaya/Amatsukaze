@@ -469,8 +469,8 @@ public:
 static int SplitDualMonoAAC(AMTContext& ctx, const ConfigWrapper& setting)
 {
 	std::vector<tstring> outpaths;
-	outpaths.push_back(setting.getIntAudioFilePath(EncodeFileKey(), 0));
-	outpaths.push_back(setting.getIntAudioFilePath(EncodeFileKey(), 1));
+	outpaths.push_back(setting.getIntAudioFilePath(EncodeFileKey(), 0, setting.getAudioEncoder()));
+	outpaths.push_back(setting.getIntAudioFilePath(EncodeFileKey(), 1, setting.getAudioEncoder()));
 	TestSplitDualMono splitter(ctx, outpaths);
 
 	File src(setting.getSrcFilePath(), _T("rb"));

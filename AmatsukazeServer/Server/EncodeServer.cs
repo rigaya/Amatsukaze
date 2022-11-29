@@ -1165,9 +1165,13 @@ namespace Amatsukaze.Server
             {
                 return setting.QaacPath;
             }
-            else
+            else if (encoderType == AudioEncoderType.Fdkaac)
             {
                 return setting.FdkaacPath;
+            }
+            else
+            {
+                return setting.OpusEncPath;
             }
         }
 
@@ -1181,9 +1185,13 @@ namespace Amatsukaze.Server
             {
                 return profile.QaacOption;
             }
-            else
+            else if (profile.AudioEncoderType == AudioEncoderType.Fdkaac)
             {
                 return profile.FdkaacOption;
+            }
+            else
+            {
+                return profile.OpusEncOption;
             }
         }
 
@@ -1197,9 +1205,13 @@ namespace Amatsukaze.Server
             {
                 return "qaac";
             }
-            else
+            else if (encoderType == AudioEncoderType.Fdkaac)
             {
                 return "fdkaac";
+            }
+            else
+            {
+                return "opusenc";
             }
         }
 

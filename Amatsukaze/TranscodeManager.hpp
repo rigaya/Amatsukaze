@@ -661,7 +661,7 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 		ctx.info("[音声エンコード]");
 		for (int i = 0; i < (int)keys.size(); ++i) {
 			auto key = keys[i];
-			auto outpath = setting.getIntAudioFilePath(key, 0);
+			auto outpath = setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder());
 			auto args = makeAudioEncoderArgs(
 				setting.getAudioEncoder(),
 				setting.getAudioEncoderPath(),

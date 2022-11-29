@@ -34,7 +34,8 @@ namespace Amatsukaze.Server
     {
         NeroAac,
         Qaac,
-        Fdkaac
+        Fdkaac,
+        OpusEnc
     }
 
     public enum DecoderType
@@ -331,6 +332,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public string FdkaacOption { get; set; }
         [DataMember]
+        public string OpusEncOption { get; set; }
+        [DataMember]
         public bool EnableAudioBitrate { get; set; }
         [DataMember]
         public int AudioBitrateInKbps { get; set; }
@@ -408,6 +411,8 @@ namespace Amatsukaze.Server
         public string QaacPath { get; set; }
         [DataMember]
         public string FdkaacPath { get; set; }
+        [DataMember]
+        public string OpusEncPath { get; set; }
 
         [DataMember]
         public string WorkPath { get; set; }

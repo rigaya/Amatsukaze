@@ -44,7 +44,7 @@ static void printHelp(const tchar* bin) {
 		"  --2pass             2passエンコード\n"
 		"  --splitsub          メイン以外のフォーマットは結合しない\n"
 		"  -aet|--audio-encoder-type <タイプ> 音声エンコーダ[]"
-		"                      対応エンコーダ: neroAac, qaac, fdkaac\n"
+		"                      対応エンコーダ: neroAac, qaac, fdkaac, opusenc\n"
 		"                      指定しなければ音声はエンコードしない\n"
 		"  -ae|--audio-encoder <パス> 音声エンコーダ[]"
 		"  -aeo|--audio-encoder-option <オプション> 音声エンコーダへ渡すオプション[]\n"
@@ -151,6 +151,9 @@ static ENUM_AUDIO_ENCODER audioEncoderFtomString(const tstring& str) {
 	}
 	else if (str == _T("fdkaac")) {
 		return AUDIO_ENCODER_FDKAAC;
+	}
+	else if (str == _T("opusenc")) {
+		return AUDIO_ENCODER_OPUSENC;
 	}
 	return (ENUM_AUDIO_ENCODER)-1;
 }
