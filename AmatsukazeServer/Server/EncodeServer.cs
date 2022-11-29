@@ -1452,6 +1452,10 @@ namespace Amatsukaze.Server
                                 .Append(audioEncoderOption)
                                 .Append("\"");
                         }
+                        if (profile.EnableAudioBitrate)
+                        {
+                            sb.Append(" -ab ").Append(profile.AudioBitrateInKbps);
+                        }
 
                     }
                 } // if (mode != ProcMode.CMCheck)
