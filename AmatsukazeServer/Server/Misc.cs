@@ -341,7 +341,14 @@ namespace Amatsukaze.Server
             {
                 DateTime timeNow = DateTime.Now;
                 TimeSpan threshold = new TimeSpan(0, 0, 0, 0, 500);
-                if (!Regex.IsMatch(text, svtav1_encoding) || (timeNow - lastReplace) >= threshold)
+                bool isSVTAV1Encoding = false;
+                try
+                {
+                    isSVTAV1Encoding = Regex.IsMatch(text, svtav1_encoding);
+                } catch (Exception) {
+
+                }
+                if (!isSVTAV1Encoding || (timeNow - lastReplace) >= threshold)
                 {
                     OnReplaceLine(text);
                     lastReplace = timeNow;
