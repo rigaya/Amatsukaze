@@ -639,7 +639,7 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        public SimpleDisplayConsole AddQueueConsole { get; } = new SimpleDisplayConsole();
+        public SimpleDisplayConsole AddQueueConsole { get; private set; }
 
         public ClientModel()
         {
@@ -655,6 +655,8 @@ namespace Amatsukaze.Models
             AutoSelectListView.IsLiveSorting = true;
             SelectableProfiles.Add(new CollectionContainer() { Collection = AutoSelectListView });
             SelectableProfiles.Add(new CollectionContainer() { Collection = ProfileListView });
+
+            AddQueueConsole = new SimpleDisplayConsole(Setting);
 
             LoadAppData();
             requestLogoThread = RequestLogoThread();
@@ -1277,7 +1279,7 @@ namespace Amatsukaze.Models
             int numRequire = index + 1;
             while (ConsoleList.Count < numRequire)
             {
-                ConsoleList.Add(new DisplayConsole() { Id = ConsoleList.Count + 1 });
+                ConsoleList.Add(new DisplayConsole(Setting) { Id = ConsoleList.Count + 1 });
             }
         }
 

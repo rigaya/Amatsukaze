@@ -461,6 +461,8 @@ namespace Amatsukaze.Server
         public bool RunHoursSuspendEncoders { get; set; }
         [DataMember]
         public bool[] RunHours { get; set; }
+        [DataMember]
+        public string ConsoleFontFamilyName { get; set; }
 
         public ExtensionDataObject ExtensionData { get; set; }
 
