@@ -25,6 +25,29 @@ struct EncodeFileOutput {
 	tstring timecode;
 };
 
+static ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting) {
+	if (!setting.getUseMKVWhenSubExist() || setting.getFormat() == FORMAT_MKV) {
+		return setting.getFormat();
+	}
+	bool subExists = false;
+	for (NicoJKType jktype : setting.getNicoJKTypes()) {
+		auto srcsub = setting.getTmpNicoJKASSPath(key, jktype);
+		if (File::exists(srcsub)) {
+			subExists = true;
+		}
+	}
+	for (int lang = 0; lang < reformInfo.getEncodeFile(key).captionList.size(); ++lang) {
+		auto srcass = setting.getTmpASSFilePath(key, lang);
+		if (File::exists(srcass)) {
+			subExists = true;
+		}
+	}
+	if (subExists) {
+		return FORMAT_MKV;
+	}
+	return setting.getFormat();
+}
+
 class AMTMuxder : public AMTObject {
 public:
 	AMTMuxder(
@@ -44,6 +67,7 @@ public:
 	{
 		const auto& fileIn = reformInfo_.getEncodeFile(key);
 		auto fmt = reformInfo_.getFormat(key);
+		auto muxFormat = getActualOutputFormat(key, reformInfo_, setting_);
 		auto vfmt = fileOut.vfmt;
 
 		if (eoInfo.selectEvery > 1) {
@@ -135,7 +159,7 @@ public:
 		if (nicoOK) {
 			for (NicoJKType jktype : setting_.getNicoJKTypes()) {
 				auto srcsub = setting_.getTmpNicoJKASSPath(key, jktype);
-				if (setting_.getFormat() == FORMAT_MKV) {
+				if (muxFormat == FORMAT_MKV) {
 					subsFiles.push_back(srcsub);
 					subsTitles.push_back(StringFormat(_T("NicoJK%s"), GetNicoJKSuffix(jktype)));
 				}
@@ -148,7 +172,7 @@ public:
 		}
 		for (int lang = 0; lang < fileIn.captionList.size(); ++lang) {
 			auto srcass = setting_.getTmpASSFilePath(key, lang);
-			if (setting_.getFormat() == FORMAT_MKV) {
+			if (muxFormat == FORMAT_MKV) {
 				subsFiles.push_back(srcass);
 				subsTitles.push_back(_T("ASS"));
 			}
@@ -165,10 +189,10 @@ public:
 			}
 		}
 
-		tstring tmpOutPath = setting_.getVfrTmpFilePath(key);
+		tstring tmpOutPath = setting_.getVfrTmpFilePath(key, muxFormat);
 
 		tstring metaFile;
-		if (setting_.getFormat() == FORMAT_M2TS || setting_.getFormat() == FORMAT_TS) {
+		if (muxFormat == FORMAT_M2TS || muxFormat == FORMAT_TS) {
 			// M2TS/TSの場合はmetaファイル作成
 			StringBuilder sb;
 			sb.append("MUXOPT\n");
@@ -201,11 +225,20 @@ public:
 		// タイムコード用
 		auto timebase = std::make_pair(vfmt.frameRateNum * (fileOut.vfrTimingFps / 30), vfmt.frameRateDenom);
 
-		auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax);
+		auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax, muxFormat);
+		auto muxerPath = setting_.getMuxerPath();
+		if (muxFormat != setting_.getFormat()) { // 初期のフォーマットから変わっているとき
+			if (muxFormat == FORMAT_MKV) { // useMKVWhenSubExistの場合
+				muxerPath = setting_.getMkvMergePath();
+				ctx.infoF("字幕が存在するため、mkv出力に切り替えます。");
+			} else {
+				THROWF(RuntimeException, "Unexpected error, muxFormat != setting_.getFormat()");
+			}
+		}
 		auto args = makeMuxerArgs(
-			setting_.getEncoder(), setting_.getFormat(),
-			setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
-			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
+			setting_.getEncoder(), muxFormat, muxerPath,
+			setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
+			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
 			vfmt, audioFiles,
 			outPath, tmpOutPath, chapterFile,
 			fileOut.timecode, timebase, subsFiles, subsTitles, metaFile);
@@ -262,9 +295,9 @@ public:
 			audioFiles.push_back(setting_.getIntAudioFilePath(EncodeFileKey(), i, setting_.getAudioEncoder()));
 		}
 		tstring encVideoFile = setting_.getEncVideoFilePath(EncodeFileKey());
-		tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey());
+		tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat());
 		auto args = makeMuxerArgs(
-			setting_.getEncoder(), FORMAT_MP4,
+			setting_.getEncoder(), setting_.getFormat(),
 			setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
 			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
 			videoFormat, audioFiles, outFilePath,
@@ -282,7 +315,7 @@ public:
 		}
 
 		{ // 出力サイズ取得
-			File outfile(setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey()), _T("rb"));
+			File outfile(setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat()), _T("rb"));
 			totalOutSize_ += outfile.size();
 		}
 	}

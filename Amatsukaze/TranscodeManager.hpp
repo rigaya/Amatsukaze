@@ -767,7 +767,7 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 	// 出力結果を表示
 	reformInfo.printOutputMapping([&](EncodeFileKey key) {
 		const auto& file = reformInfo.getEncodeFile(key);
-		return setting.getOutFilePath(file.outKey, file.keyMax);
+		return setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(key, reformInfo, setting));
 	});
 
 	// 出力結果JSON出力
@@ -781,7 +781,7 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 			const auto& file = reformInfo.getEncodeFile(keys[i]);
 			const auto& info = outFileInfo[i];
 			sb.append("{ \"path\": \"%s\", \"srcbitrate\": %d, \"outbitrate\": %d, \"outfilesize\": %lld, ",
-				toJsonString(setting.getOutFilePath(file.outKey, file.keyMax)), (int)info.srcBitrate,
+				toJsonString(setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(keys[i], reformInfo, setting))), (int)info.srcBitrate,
 				std::isnan(info.targetBitrate) ? -1 : (int)info.targetBitrate, info.fileSize);
 			sb.append("\"subs\": [");
 			for (int s = 0; s < (int)info.outSubs.size(); ++s) {
@@ -845,7 +845,7 @@ static void transcodeSimpleMain(AMTContext& ctx, const ConfigWrapper& setting)
 	if (setting.getOutInfoJsonPath().size() > 0) {
 		StringBuilder sb;
 		sb.append("{ \"srcpath\": \"%s\"", toJsonString(setting.getSrcFilePath()))
-			.append(", \"outpath\": \"%s\"", toJsonString(setting.getOutFilePath(EncodeFileKey(), EncodeFileKey())))
+			.append(", \"outpath\": \"%s\"", toJsonString(setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat())))
 			.append(", \"srcfilesize\": %lld", srcFileSize)
 			.append(", \"outfilesize\": %lld", totalOutSize)
 			.append(" }");

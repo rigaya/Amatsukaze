@@ -1354,6 +1354,13 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" -fmt ts -m \"" + setting.TsMuxeRPath + "\"");
                     }
+                    if (profile.OutputFormat == FormatType.MP4 && profile.UseMKVWhenSubExists)
+                    {
+                        sb.Append(" --use-mkv-when-sub-exists")
+                            .Append(" --mkvmerge \"")
+                            .Append(setting.MKVMergePath)
+                            .Append("\"");
+                    }
 
                     if (bitrateCM != 1)
                     {

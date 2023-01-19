@@ -159,10 +159,30 @@
                           SelectedIndex="{Binding Model.SelectedProfile.H264DecoderInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                        ToolTip="CUVIDの方が速いです。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
 
-                    <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="78" Height="22"
-                       ItemsSource="{Binding Model.SelectedProfile.FormatList}" 
-                       SelectedIndex="{Binding Model.SelectedProfile.OutputFormatInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       ToolTip="MP4の場合、ASS字幕は別ファイルとして出力されます"/>
+                    <DockPanel>
+                        <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="78" Height="22"
+                           ItemsSource="{Binding Model.SelectedProfile.FormatList}" 
+                           SelectedIndex="{Binding Model.SelectedProfile.OutputFormatInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ToolTip="MP4の場合、ASS字幕は別ファイルとして出力されます"/>
+
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.SelectedProfile.OutputFormatInt}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <CheckBox Content="字幕がある場合、MKV出力する" VerticalAlignment="Center" Margin="5,5" 
+                                  IsChecked="{Binding Model.SelectedProfile.UseMKVWhenSubExists, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="字幕がある場合、字幕ファイルが別途できるのを避けるため、mkvで出力します。"/>
+                        </StackPanel>
+
+
+                    </DockPanel>
 
                     <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="130" Height="22"
                        ItemsSource="{Binding Model.SelectedProfile.OutputOptionList}" 

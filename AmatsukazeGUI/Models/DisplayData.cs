@@ -1671,6 +1671,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region UseMKVWhenSubExists変更通知プロパティ
+        public bool UseMKVWhenSubExists {
+            get { return Data.UseMKVWhenSubExists; }
+            set
+            {
+                if (Data.UseMKVWhenSubExists == value)
+                    return;
+                Data.UseMKVWhenSubExists = value;
+                UpdateWarningText();
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region IgnoreEncodeAffinity変更通知プロパティ
         public bool IgnoreEncodeAffinity
         {
@@ -2207,6 +2221,7 @@ namespace Amatsukaze.Models
             text.KeyValue("MPEG2デコーダ", Mpeg2DecoderList[(int)Data.Mpeg2Decoder]);
             text.KeyValue("H264デコーダ", H264DecoderList[(int)Data.H264Deocder]);
             text.KeyValue("出力フォーマット", FormatList[(int)Data.OutputFormat]);
+            text.KeyValue("出力フォーマット-字幕がある時MKV出力する", Data.UseMKVWhenSubExists);
             text.KeyValue("出力選択", OutputMask.Name);
             text.KeyValue("SCRenameによるリネームを行う", Data.EnableRename);
             text.KeyValue("SCRename書式", Data.RenameFormat);

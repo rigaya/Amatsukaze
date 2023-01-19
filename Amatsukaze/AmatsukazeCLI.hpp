@@ -50,9 +50,11 @@ static void printHelp(const tchar* bin) {
 		"  -aeo|--audio-encoder-option <オプション> 音声エンコーダへ渡すオプション[]\n"
 		"  -fmt|--format <フォーマット> 出力フォーマット[mp4]\n"
 		"                      対応フォーマット: mp4,mkv,m2ts,ts\n"
+		"  --use-mkv-when-sub-exists 字幕がある場合にはmkv出力を強制する。\n"
 		"  -m|--muxer  <パス>  L-SMASHのmuxerまたはmkvmergeまたはtsMuxeRへのパス[muxer.exe]\n"
 		"  -t|--timelineeditor  <パス>  timelineeditorへのパス（MP4でVFR出力する場合に必要）[timelineeditor.exe]\n"
 		"  --mp4box <パス>     mp4boxへのパス（MP4で字幕処理する場合に必要）[mp4box.exe]\n"
+		"  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
 		"  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
 		"  -pf|--postfilter <パス>  ポストフィルタAvisynthスクリプトへのパス[]\n"
 		"  --mpeg2decoder <デコーダ>  MPEG2用デコーダ[default]\n"
@@ -180,6 +182,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 	conf.encoderOptions = _T("");
 	conf.timelineditorPath = _T("timelineeditor.exe");
 	conf.mp4boxPath = _T("mp4box.exe");
+	conf.mkvmergePath = _T("mkvmerge.exe");
 	conf.chapterExePath = _T("chapter_exe.exe");
 	conf.joinLogoScpPath = _T("join_logo_scp.exe");
 	conf.nicoConvAssPath = _T("NicoConvASS.exe");
@@ -199,6 +202,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 	conf.outPipe = INVALID_HANDLE_VALUE;
 	conf.maxFadeLength = 16;
 	conf.numEncodeBufferFrames = 16;
+	conf.useMKVWhenSubExist = false;
 	bool nicojk = false;
 
 	for (int i = 1; i < argc; ++i) {
@@ -293,8 +297,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 			else {
 				THROWF(ArgumentException, "--formatの指定が間違っています: %" PRITSTR "", arg);
 			}
-		}
-		else if (key == _T("--chapter")) {
+		} else if (key == _T("--use-mkv-when-sub-exists")) {
+			conf.useMKVWhenSubExist = true;
+		} else if (key == _T("--chapter")) {
 			conf.chapter = true;
 		}
 		else if (key == _T("--subtitles")) {
@@ -311,6 +316,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 		}
 		else if (key == _T("--mp4box")) {
 			conf.mp4boxPath = pathNormalize(getParam(argc, argv, i++));
+		}
+		else if (key == _T("--mkvmerge")) {
+			conf.mkvmergePath = pathNormalize(getParam(argc, argv, i++));
 		}
 		else if (key == _T("-j") || key == _T("--json")) {
 			conf.outInfoJsonPath = pathNormalize(getParam(argc, argv, i++));
@@ -550,6 +558,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 		conf.nicoConvAssPath = search(conf.nicoConvAssPath);
 		conf.nicoConvChSidPath = pathGetDirectory(conf.nicoConvAssPath) + _T("/ch_sid.txt");
 		conf.mp4boxPath = search(conf.mp4boxPath);
+		conf.mkvmergePath = search(conf.mkvmergePath);
 		conf.muxerPath = search(conf.muxerPath);
 		conf.timelineditorPath = search(conf.timelineditorPath);
 	}

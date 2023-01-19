@@ -224,6 +224,9 @@ namespace Amatsukaze.Server
         public FormatType OutputFormat { get; set; }
 
         [DataMember]
+        public bool UseMKVWhenSubExists { get; set; }
+
+        [DataMember]
         public string FilterPath { get; set; }
         [DataMember]
         public string PostFilterPath { get; set; }

@@ -611,9 +611,11 @@ struct Config {
 	tstring muxerPath;
 	tstring timelineditorPath;
 	tstring mp4boxPath;
+	tstring mkvmergePath;
 	tstring nicoConvAssPath;
 	tstring nicoConvChSidPath;
 	ENUM_FORMAT format;
+	bool useMKVWhenSubExist;
 	bool splitSub;
 	bool twoPass;
 	bool autoBitrate;
@@ -739,6 +741,10 @@ public:
 		return conf.format;
 	}
 
+	bool getUseMKVWhenSubExist() const {
+		return conf.useMKVWhenSubExist;
+	}
+
 	bool isFormatVFRSupported() const {
 		return conf.format != FORMAT_M2TS && conf.format != FORMAT_TS;
 	}
@@ -753,6 +759,10 @@ public:
 
 	tstring getMp4BoxPath() const {
 		return conf.mp4boxPath;
+	}
+
+	tstring getMkvMergePath() const {
+		return conf.mkvmergePath;
 	}
 
 	tstring getNicoConvAssPath() const {
@@ -1061,9 +1071,9 @@ public:
 			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm), GetNicoJKSuffix(type)));
 	}
 
-	tstring getVfrTmpFilePath(EncodeFileKey key) const {
+	tstring getVfrTmpFilePath(EncodeFileKey key, ENUM_FORMAT format) const {
 		return regtmp(StringFormat(_T("%s/t%d-%d-%d%s.%s"),
-			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm), getOutputExtention()));
+			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm), getOutputExtention(format)));
 	}
 
 	tstring getM2tsMetaFilePath(EncodeFileKey key) const {
@@ -1071,8 +1081,8 @@ public:
 			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
 	}
 
-	const char* getOutputExtention() const {
-		switch (conf.format) {
+	const char* getOutputExtention(ENUM_FORMAT format) const {
+		switch (format) {
 		case FORMAT_MP4: return "mp4";
 		case FORMAT_MKV: return "mkv";
 		case FORMAT_M2TS: return "m2ts";
@@ -1081,7 +1091,7 @@ public:
 		return "amatsukze";
 	}
 
-	tstring getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax) const {
+	tstring getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format) const {
 		StringBuilderT sb;
 		sb.append(_T("%s"), conf.outVideoPath);
 		if (key.format > 0) {
@@ -1090,7 +1100,7 @@ public:
 		if (keyMax.div > 1) {
 			sb.append(_T("_div%d"), key.div + 1);
 		}
-		sb.append(_T("%s.%s"), GetCMSuffix(key.cm), getOutputExtention());
+		sb.append(_T("%s.%s"), GetCMSuffix(key.cm), getOutputExtention(format));
 		return sb.str();
 	}
 
@@ -1240,7 +1250,9 @@ public:
 		ctx.infoF("入力: %s", conf.srcFilePath);
 		ctx.infoF("出力: %s", conf.outVideoPath);
 		ctx.infoF("一時フォルダ: %s", tmpDir.path());
-		ctx.infoF("出力フォーマット: %s", formatToString(conf.format));
+		ctx.infoF("出力フォーマット: %s%s",
+			formatToString(conf.format),
+			(conf.useMKVWhenSubExist) ? " (字幕ありではMKV)" : "");
 		ctx.infoF("エンコーダ: %s (%s)", conf.encoderPath, encoderToString(conf.encoder));
 		ctx.infoF("エンコーダオプション: %s", conf.encoderOptions);
 		if (conf.autoBitrate) {
@@ -1261,6 +1273,13 @@ public:
 				ctx.infoF("logo%d: %s", (i + 1), conf.logoPath[i]);
 			}
 			ctx.infoF("ロゴ消し: %s", conf.noDelogo ? "しない" : "する");
+		}
+		if (conf.audioEncoder != AUDIO_ENCODER_NONE) {
+			ctx.infoF("音声: %s (%s)", conf.audioEncoderPath, audioEncoderToString(conf.audioEncoder));
+			if (conf.audioBitrateInKbps > 0) {
+				ctx.infoF("音声エンコーダビットレート: %d kbps", conf.audioBitrateInKbps);
+			}
+			ctx.infoF("音声エンコーダオプション: %s", conf.audioEncoderOptions);
 		}
 		ctx.infoF("字幕: %s", conf.subtitles ? "有効" : "無効");
 		if (conf.subtitles) {
@@ -1301,6 +1320,17 @@ private:
 		case FORMAT_MKV: return "Matroska";
 		case FORMAT_M2TS: return "M2TS";
 		case FORMAT_TS: return "TS";
+		}
+		return "unknown";
+	}
+
+	const char* audioEncoderToString(ENUM_AUDIO_ENCODER fmt) const {
+		switch (fmt) {
+		case AUDIO_ENCODER_NONE: return "none";
+		case AUDIO_ENCODER_NEROAAC: return "neroaac";
+		case AUDIO_ENCODER_QAAC: return "qaac";
+		case AUDIO_ENCODER_FDKAAC: return "fdkaac";
+		case AUDIO_ENCODER_OPUSENC: return "opus";
 		}
 		return "unknown";
 	}
