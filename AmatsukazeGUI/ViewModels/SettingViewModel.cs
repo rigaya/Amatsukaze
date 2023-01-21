@@ -243,5 +243,27 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearFontFamilyCommand
+        private ViewModelCommand _ClearFontFamilyCommand;
+
+        public ViewModelCommand ClearFontFamilyCommand
+        {
+            get
+            {
+                if (_ClearFontFamilyCommand == null)
+                {
+                    _ClearFontFamilyCommand = new ViewModelCommand(ClearFontFamily);
+                }
+                return _ClearFontFamilyCommand;
+            }
+        }
+
+        public void ClearFontFamily()
+        {
+            Model.Setting.ConsoleFont = new System.Windows.Media.FontFamily();
+        }
+        #endregion
+
+
     }
 }

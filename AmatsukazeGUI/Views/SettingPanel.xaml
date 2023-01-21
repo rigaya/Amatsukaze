@@ -10,7 +10,7 @@
              xmlns:c="clr-namespace:Amatsukaze.Components" 
              xmlns:Models="clr-namespace:Amatsukaze.Models" x:Class="Amatsukaze.Views.SettingPanel" 
              mc:Ignorable="d" 
-             d:DesignHeight="1300" d:DesignWidth="500"
+             d:DesignHeight="1300" d:DesignWidth="500" d:Background="White"
              d:DataContext="{d:DesignInstance {x:Type vm:SettingViewModel}}">
     
     <UserControl.Resources>
@@ -40,6 +40,7 @@
                     <ColumnDefinition />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -300,6 +301,16 @@
                         </ItemsControl>
                     </DockPanel>
                 </StackPanel>
+                <!-- Setting console font -->
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <DockPanel Grid.Row="5" Grid.Column="1" Margin="10,0,0,0">
+                    <StackPanel DockPanel.Dock="Right">
+                        <Button Height="16" Content="クリア" Margin="4" Command="{Binding ClearFontFamilyCommand}"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <ComboBox ItemsSource="{Binding Source={x:Static Fonts.SystemFontFamilies}}" SelectedValue="{Binding Model.Setting.ConsoleFont, Mode=TwoWay}"/>
+                    </StackPanel>
+                </DockPanel>
             </Grid>
         </ScrollViewer>
     </DockPanel>

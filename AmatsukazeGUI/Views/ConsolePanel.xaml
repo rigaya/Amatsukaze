@@ -31,7 +31,7 @@
         </ListBox.ContextMenu>
         <ListBox.ItemTemplate>
             <DataTemplate>
-                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="{Binding ElementName=lst, Path=DataContext.Model.Setting.ConsoleFont, Mode=OneWay}"  />
             </DataTemplate>
         </ListBox.ItemTemplate>
     </ListBox>
