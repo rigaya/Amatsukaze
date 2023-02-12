@@ -1,6 +1,9 @@
-﻿using System;
+﻿using Amatsukaze.Lib;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -79,7 +82,14 @@ namespace Amatsukaze.Server
                 {
                     worker.State = State.Parking;
                     parking.Add(worker.Id);
-                    ScheduleTask();
+                    try
+                    {
+                        ScheduleTask();
+                    }
+                    catch (Exception exception)
+                    {
+                        await OnError(worker.Id, "スケジューラで不明なエラーが発生しました。", exception);
+                    }
                 }
                 if (--numRunning == 0)
                 {
@@ -94,12 +104,21 @@ namespace Amatsukaze.Server
 
         private void ScheduleTask()
         {
-            while(parking.Count > 0)
+            while (parking.Count > 0)
             {
                 var item = Queue.PopItem();
-                if(item == null)
+                if (item == null)
                 {
                     return;
+                }
+                if (parking.Count == 0)
+                {
+                    // Queue.PopItemの中で、Clean->AddQueue -> WorkerPool.NotifyAddQueue -> ScheduleTask と呼ばれ、
+                    // その中で、RunItemされることがあり、parking.Count が 0 になることがある。
+                    // その場合、itemは処理できないので、Queueに投げ返す。
+                    // これをしないと、このitemがリトライするまで実行されなくなる
+                    Queue.AddQueue(item);
+                    break;
                 }
                 var wid = parking.First();
                 parking.Remove(wid);
