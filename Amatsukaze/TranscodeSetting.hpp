@@ -237,7 +237,11 @@ static tstring makeEncoderArgs(
 		break;
 	}
 
-	if (timecodepath.size() > 0 && encoder == ENCODER_X264) {
+	if (timecodepath.size() > 0
+		&& (encoder == ENCODER_X264
+         || encoder == ENCODER_QSVENC
+	     || encoder == ENCODER_NVENC
+		 || encoder == ENCODER_VCEENC)) {
 		std::pair<int, int> timebase = std::make_pair(fmt.frameRateNum * (vfrTimingFps / 30), fmt.frameRateDenom);
 		sb.append(_T(" --tcfile-in \"%s\" --timebase %d/%d"), timecodepath, timebase.second, timebase.first);
 	}
