@@ -153,6 +153,24 @@ protected:
 };
 }
 
+static std::string str_replace(std::string str, const std::string& from, const std::string& to) {
+	std::string::size_type pos = 0;
+	while (pos = str.find(from, pos), pos != std::string::npos) {
+		str.replace(pos, from.length(), to);
+		pos += to.length();
+	}
+	return str;
+}
+
+static std::wstring str_replace(std::wstring str, const std::wstring& from, const std::wstring& to) {
+	std::wstring::size_type pos = 0;
+	while (pos = str.find(from, pos), pos != std::wstring::npos) {
+		str.replace(pos, from.length(), to);
+		pos += to.length();
+	}
+	return str;
+}
+
 static std::string to_string(const std::wstring& str, uint32_t codepage = CP_ACP) {
 	std::vector<char> ret = string_internal::to_string(str, codepage);
 	return std::string(ret.begin(), ret.end());

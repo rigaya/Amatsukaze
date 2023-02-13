@@ -941,9 +941,13 @@ public:
 		return conf.systemAvsPlugin;
 	}
 
-  AMT_PRINT_PREFIX getPrintPrefix() const {
-    return conf.printPrefix;
-  }
+    AMT_PRINT_PREFIX getPrintPrefix() const {
+      return conf.printPrefix;
+    }
+
+	tstring getTmpDir() const {
+		return tmpDir.path();
+	}
 
 	tstring getAudioFilePath() const {
 		return regtmp(StringFormat(_T("%s/audio.dat"), tmpDir.path()));

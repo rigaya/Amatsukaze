@@ -342,6 +342,35 @@ protected:
 	}
 };
 
+
+static tstring replaceOptions(
+	const tstring& options,
+	const VideoFormat& fmt,
+	const ConfigWrapper& setting,
+	const EncodeFileKey key) {
+	tstring ret = options;
+	ret = str_replace(ret, _T("@IMAGE_WIDTH@"),               StringFormat(_T("%d"), fmt.width));
+	ret = str_replace(ret, _T("@IMAGE_HEIGHT@"),              StringFormat(_T("%d"), fmt.height));
+	ret = str_replace(ret, _T("@AMT_TEMP_DIR@"),              setting.getTmpDir());
+	ret = str_replace(ret, _T("@AMT_TEMP_VIDEO@"),            _T("\"") + setting.getEncVideoFilePath(key) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_AUDIO@"),            _T("\"") + setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_AUDIO_0@"),          _T("\"") + setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_AUDIO_1@"),          _T("\"") + setting.getIntAudioFilePath(key, 1, setting.getAudioEncoder()) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_CHAPTER@"),          _T("\"") + setting.getTmpChapterPath(key) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_TIMECODE@"),         _T("\"") + setting.getAvsTimecodePath(key) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS@"),              _T("\"") + setting.getTmpASSFilePath(key, 0) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS_0@"),            _T("\"") + setting.getTmpASSFilePath(key, 0) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS_1@"),            _T("\"") + setting.getTmpASSFilePath(key, 1) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_SRT@"),              _T("\"") + setting.getTmpSRTFilePath(key, 0) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_SRT_0@"),            _T("\"") + setting.getTmpSRTFilePath(key, 0) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_SRT_1@"),            _T("\"") + setting.getTmpSRTFilePath(key, 1) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS_NICOJK_720S@"),  _T("\"") + setting.getTmpNicoJKASSPath(key, NICOJK_720S) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS_NICOJK_720T@"),  _T("\"") + setting.getTmpNicoJKASSPath(key, NICOJK_720T) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS_NICOJK_1080S@"), _T("\"") + setting.getTmpNicoJKASSPath(key, NICOJK_1080S) + _T("\""));
+	ret = str_replace(ret, _T("@AMT_TEMP_ASS_NICOJK_1080T@"), _T("\"") + setting.getTmpNicoJKASSPath(key, NICOJK_1080T) + _T("\""));
+	return ret;
+}
+
 class EncoderArgumentGenerator
 {
 public:
@@ -366,9 +395,10 @@ public:
 		return makeEncoderArgs(
 			setting_.getEncoder(),
 			setting_.getEncoderPath(),
-			setting_.getOptions(
+			replaceOptions(setting_.getOptions(
 				numFrames,
 				srcFormat, srcBitrate, false, pass, zones, vfrBitrateScale, key),
+				outfmt, setting_, key),
 			outfmt,
 			timecodepath,
 			vfrTimingFps,
