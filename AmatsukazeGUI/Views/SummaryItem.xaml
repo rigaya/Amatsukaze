@@ -66,6 +66,11 @@
                         GPU:<Run Text="{Binding Data.GPU, Mode=OneWay}"/>@<Run Text="{Binding Data.GpuIndex, Mode=OneWay}"/>
                 </TextBlock>
                 <TextBlock Text="{Binding Data.LastLine, Mode=OneWay}" Foreground="{Binding ForeColor, Mode=OneWay}" VerticalAlignment="Center"/>
+                <DockPanel.ContextMenu>
+                    <ContextMenu x:Name="queueMenu">
+                        <MenuItem Header="キャンセル" Command="{Binding CancelCommand}" />
+                    </ContextMenu>
+                </DockPanel.ContextMenu>
             </DockPanel>
         </Button>
         <Button Width="100" HorizontalAlignment="Right" Command="{Binding ToggleSuspendCommand}">

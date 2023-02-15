@@ -2773,8 +2773,22 @@ namespace Amatsukaze.Server
             return queueManager.Queue.Where(s => s.SrcPath == srcPath).ToArray();
         }
 
+        int getItemIdFromWorkerId(int workerId)
+        {
+            var workers = workerPool.Workers.ToArray();
+            return (0 <= workerId && workerId < workers.Length) ? ((TranscodeWorker)workers[workerId]).GetItemId() : -1;
+        }
+
         public Task ChangeItem(ChangeItemData data)
         {
+            if (data.ItemId < 0)
+            {
+                data.ItemId = getItemIdFromWorkerId(data.workerId);
+                if (data.ItemId < 0)
+                {
+                    return Task.FromResult(0);
+                }
+            }
             return queueManager.ChangeItem(data);
         }
 #endregion

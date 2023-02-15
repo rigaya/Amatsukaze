@@ -41,6 +41,11 @@ namespace Amatsukaze.Server
 
         private List<Task> waitList;
 
+        public int GetItemId()
+        {
+            return (item != null) ? item.Id : -1;
+        }
+
         public TranscodeWorker(int id, EncodeServer server)
         {
             this.Id = id;

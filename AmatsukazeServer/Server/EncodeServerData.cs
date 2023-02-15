@@ -810,6 +810,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public int ItemId { get; set; }
         [DataMember]
+        public int workerId { get; set; }
+        [DataMember]
         public ChangeItemType ChangeType { get; set; }
         [DataMember]
         public int Priority { get; set; }

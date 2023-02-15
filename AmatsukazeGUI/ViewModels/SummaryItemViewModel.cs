@@ -13,6 +13,8 @@ using Livet.Messaging.Windows;
 
 using Amatsukaze.Models;
 using System.Windows.Media;
+using Amatsukaze.Server;
+using System.Collections;
 
 namespace Amatsukaze.ViewModels
 {
@@ -138,5 +140,30 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region CancelCommand
+        private ListenerCommand<IEnumerable> _CancelCommand;
+
+        public ListenerCommand<IEnumerable> CancelCommand
+        {
+            get
+            {
+                if (_CancelCommand == null)
+                {
+                    _CancelCommand = new ListenerCommand<IEnumerable>(Cancel);
+                }
+                return _CancelCommand;
+            }
+        }
+
+        public async void Cancel(IEnumerable selectedItems)
+        {
+            await Model.Server?.ChangeItem(new ChangeItemData()
+            {
+                ItemId = -1,
+                workerId = Data.Id - 1,
+                ChangeType = ChangeItemType.Cancel
+            });
+        }
+        #endregion
     }
 }
