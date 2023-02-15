@@ -220,9 +220,7 @@ private:
 		if (mode == CONV_ASS_LOG) {
 			sb.append(_T(" -nicojk 1"), startTime);
 		}
-		if (mode != CONV_ASS_XML) {
-			sb.append(_T(" -tx_starttime %zu"), startTime);
-		}
+		sb.append(_T(" -tx_starttime %zu"), startTime);
 		sb.append(_T(" \"%s\""), pathToOS(
 			(mode != CONV_ASS_XML) ? setting_.getSrcFilePath() : setting_.getTmpNicoJKXMLPath()));
 		return sb.str();
