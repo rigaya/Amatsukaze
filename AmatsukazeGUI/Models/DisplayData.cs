@@ -2137,13 +2137,14 @@ namespace Amatsukaze.Models
             }
             if (Data.EncoderType == EncoderType.NVEnc)
             {
-                var mes = "GeForceではNVEncによる同時エンコードは3つまでに制限されています\r\n";
-                if ((Model.Setting?.NumParallel ?? 0) >= 4)
+                var mes = "GeForceではNVEncによる同時エンコードは5つまでに制限されています\r\n";
+                int maxNVEncParallel = 5;
+                if ((Model.Setting?.NumParallel ?? 0) >= (maxNVEncParallel+1))
                 {
                     if (Model.Setting?.SchedulingEnabled ?? false)
                     {
                         var encodeRes = Data.ReqResources[(int)ResourcePhase.Encode];
-                        if (encodeRes.CPU * 4 <= 100 && encodeRes.HDD * 4 <= 100 && encodeRes.GPU * 4 <= 100)
+                        if (encodeRes.CPU * (maxNVEncParallel+1) <= 100 && encodeRes.HDD * (maxNVEncParallel+1) <= 100 && encodeRes.GPU * (maxNVEncParallel+1) <= 100)
                         {
                             sb.Append(mes);
                         }
