@@ -189,7 +189,8 @@ public:
 			}
 		}
 
-		tstring tmpOutPath = setting_.getVfrTmpFilePath(key, muxFormat);
+		const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, muxFormat);
+		const tstring tmpOut2Path = setting_.getVfrTmpFile2Path(key, muxFormat);
 
 		tstring metaFile;
 		if (muxFormat == FORMAT_M2TS || muxFormat == FORMAT_TS) {
@@ -240,7 +241,7 @@ public:
 			setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
 			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
 			vfmt, audioFiles,
-			outPath, tmpOutPath, chapterFile,
+			outPath, tmpOut1Path, tmpOut2Path, chapterFile,
 			fileOut.timecode, timebase, subsFiles, subsTitles, metaFile);
 
 		for (int i = 0; i < (int)args.size(); ++i) {
@@ -301,7 +302,7 @@ public:
 			setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
 			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
 			videoFormat, audioFiles, outFilePath,
-			tstring(), tstring(), tstring(), std::pair<int, int>(),
+			tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
 			std::vector<tstring>(), std::vector<tstring>(), tstring());
 		ctx.info("[MuxŠJŽn]");
 		ctx.infoF("%s", args[0].first);

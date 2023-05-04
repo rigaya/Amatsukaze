@@ -312,7 +312,8 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 	const VideoFormat& videoFormat,
 	const std::vector<tstring>& inAudios,
 	const tstring& outpath,
-	const tstring& tmpoutpath,
+	const tstring& tmpout1path,
+	const tstring& tmpout2path,
 	const tstring& chapterpath,
 	const tstring& timecodepath,
 	std::pair<int, int> timebase,
@@ -330,7 +331,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		bool needTimecode = (timecodepath.size() > 0);
 		bool needSubs = (inSubs.size() > 0);
 
-		tstring dst = needTimecode ? tmpoutpath : outpath;
+		tstring dst = (needTimecode || needChapter || needSubs) ? tmpout1path : outpath;
 #if 0
 		// まずはmuxerで映像、音声、チャプターをmux
 		if (videoFormat.fixedFrameRate) {
@@ -384,6 +385,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		sb.clear();
 
 		if (needTimecode) {
+			tstring timelineeditorout = (needChapter || needSubs) ? tmpout2path : outpath;
 			// 必要ならtimelineeditorでtimecodeを埋め込む
 			sb.append(_T("\"%s\""), timelineeditorpath)
 				.append(_T(" --track 1"))
@@ -391,15 +393,17 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 				.append(_T(" --media-timescale %d"), timebase.first)
 				.append(_T(" --media-timebase %d"), timebase.second)
 				.append(_T(" \"%s\""), dst)
-				.append(_T(" \"%s\""), outpath);
+				.append(_T(" \"%s\""), timelineeditorout);
 			ret.push_back(std::make_pair(sb.str(), false));
 			sb.clear();
 			needTimecode = false;
+			dst = timelineeditorout;
 		}
 
 		if (needChapter || needSubs) {
 			// 字幕とチャプターを埋め込む
 			sb.append(_T("\"%s\" -brand mp42 -ab mp41 -ab iso2"), mp4boxpath);
+			sb.append(_T(" -add \"%s\""), dst);
 			for (int i = 0; i < (int)inSubs.size(); ++i) {
 				if (subsTitles[i] == _T("SRT")) { // mp4はSRTのみ
 					sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
@@ -411,7 +415,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 				sb.append(_T(" -chap \"%s\""), chapterpath);
 				needChapter = false;
 			}
-			sb.append(_T(" \"%s\""), outpath);
+			sb.append(_T(" -new \"%s\""), outpath);
 			ret.push_back(std::make_pair(sb.str(), true));
 			sb.clear();
 		}
@@ -1079,8 +1083,13 @@ public:
 			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm), GetNicoJKSuffix(type)));
 	}
 
-	tstring getVfrTmpFilePath(EncodeFileKey key, ENUM_FORMAT format) const {
-		return regtmp(StringFormat(_T("%s/t%d-%d-%d%s.%s"),
+	tstring getVfrTmpFile1Path(EncodeFileKey key, ENUM_FORMAT format) const {
+		return regtmp(StringFormat(_T("%s/t1%d-%d-%d%s.%s"),
+			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm), getOutputExtention(format)));
+	}
+
+	tstring getVfrTmpFile2Path(EncodeFileKey key, ENUM_FORMAT format) const {
+		return regtmp(StringFormat(_T("%s/t2%d-%d-%d%s.%s"),
 			tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm), getOutputExtention(format)));
 	}
 
