@@ -328,10 +328,9 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 	if (format == FORMAT_MP4) {
 		bool needChapter = (chapterpath.size() > 0);
-		bool needTimecode = (timecodepath.size() > 0);
-		bool needSubs = (inSubs.size() > 0);
+		const bool needTimecode = (timecodepath.size() > 0);
+		const bool needSubs = (inSubs.size() > 0);
 
-		tstring dst = (needTimecode || needChapter || needSubs) ? tmpout1path : outpath;
 #if 0
 		// まずはmuxerで映像、音声、チャプターをmux
 		if (videoFormat.fixedFrameRate) {
@@ -379,13 +378,14 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 			sb.append(_T(" -chap \"%s\""), chapterpath);
 			needChapter = false;
 		}
+		tstring dst = (needTimecode || needChapter || needSubs) ? tmpout1path : outpath;
 		sb.append(_T(" -new \"%s\""), dst);
 		ret.push_back(std::make_pair(sb.str(), true));
 #endif
 		sb.clear();
 
 		if (needTimecode) {
-			tstring timelineeditorout = (needChapter || needSubs) ? tmpout2path : outpath;
+			const tstring timelineeditorout = (needChapter || needSubs) ? tmpout2path : outpath;
 			// 必要ならtimelineeditorでtimecodeを埋め込む
 			sb.append(_T("\"%s\""), timelineeditorpath)
 				.append(_T(" --track 1"))
@@ -396,7 +396,6 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 				.append(_T(" \"%s\""), timelineeditorout);
 			ret.push_back(std::make_pair(sb.str(), false));
 			sb.clear();
-			needTimecode = false;
 			dst = timelineeditorout;
 		}
 
@@ -409,11 +408,9 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 					sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
 				}
 			}
-			needSubs = false;
 			// timecodeがある場合はこっちでチャプターを入れる
 			if (needChapter) {
 				sb.append(_T(" -chap \"%s\""), chapterpath);
-				needChapter = false;
 			}
 			sb.append(_T(" -new \"%s\""), outpath);
 			ret.push_back(std::make_pair(sb.str(), true));
