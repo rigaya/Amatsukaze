@@ -2,7 +2,7 @@
 
 Automated MPEG2-TS Transcoder
 
-## [ダウンロードはこちら](https://github.com/nekopanda/Amatsukaze/releases)
+## [ダウンロードはこちら](https://github.com/rigaya/Amatsukaze/releases)
 
 ## これは何？
 
@@ -18,7 +18,7 @@ TSファイルをエンコードしてmp4やmkvにするソフトです。
 
 ### 対応エンコーダ
 
-x264, x265, QSVEnc, NVEnc
+x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 
 ### 実装されている機能
 
@@ -46,7 +46,7 @@ x264, x265, QSVEnc, NVEnc
 
 ### 対応環境
 
-Windows 7以降 (64bit)
+Windows 10/11 (64bit)
 
 ### インストール方法
 
