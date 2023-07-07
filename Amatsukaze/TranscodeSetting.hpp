@@ -328,8 +328,8 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 
 	if (format == FORMAT_MP4) {
 		bool needChapter = (chapterpath.size() > 0);
+		bool needSubs = (inSubs.size() > 0);
 		const bool needTimecode = (timecodepath.size() > 0);
-		const bool needSubs = (inSubs.size() > 0);
 
 #if 0
 		// まずはmuxerで映像、音声、チャプターをmux
@@ -373,10 +373,17 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		for (int i = 0; i < (int)inAudios.size(); ++i) {
 			sb.append(_T(" -add \"%s\"#audio:name=Audio%d"), inAudios[i], i);
 		}
-		// timelineeditorがチャプターを消すのでtimecodeがある時はmp4boxで入れる
 		if (needChapter && !needTimecode) {
 			sb.append(_T(" -chap \"%s\""), chapterpath);
 			needChapter = false;
+		}
+		if (needSubs && !needTimecode) {
+			for (int i = 0; i < (int)inSubs.size(); ++i) {
+				if (subsTitles[i] == _T("SRT")) { // mp4はSRTのみ
+					sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
+				}
+			}
+			needSubs = false;
 		}
 		tstring dst = (needTimecode || needChapter || needSubs) ? tmpout1path : outpath;
 		sb.append(_T(" -new \"%s\""), dst);
@@ -408,6 +415,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 					sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
 				}
 			}
+			// timelineeditorがチャプターを消すのでtimecodeがある時はmp4boxで入れる
 			// timecodeがある場合はこっちでチャプターを入れる
 			if (needChapter) {
 				sb.append(_T(" -chap \"%s\""), chapterpath);
