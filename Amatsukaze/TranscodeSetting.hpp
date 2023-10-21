@@ -257,6 +257,17 @@ enum ENUM_AUDIO_ENCODER {
 	AUDIO_ENCODER_OPUSENC,
 };
 
+static const char* audioEncoderToString(ENUM_AUDIO_ENCODER fmt) {
+	switch (fmt) {
+	case AUDIO_ENCODER_NONE: return "none";
+	case AUDIO_ENCODER_NEROAAC: return "neroaac";
+	case AUDIO_ENCODER_QAAC: return "qaac";
+	case AUDIO_ENCODER_FDKAAC: return "fdkaac";
+	case AUDIO_ENCODER_OPUSENC: return "opus";
+	}
+	return "unknown";
+}
+
 static tstring makeAudioEncoderArgs(
 	ENUM_AUDIO_ENCODER encoder,
 	const tstring& binpath,
@@ -1342,17 +1353,6 @@ private:
 		case FORMAT_MKV: return "Matroska";
 		case FORMAT_M2TS: return "M2TS";
 		case FORMAT_TS: return "TS";
-		}
-		return "unknown";
-	}
-
-	const char* audioEncoderToString(ENUM_AUDIO_ENCODER fmt) const {
-		switch (fmt) {
-		case AUDIO_ENCODER_NONE: return "none";
-		case AUDIO_ENCODER_NEROAAC: return "neroaac";
-		case AUDIO_ENCODER_QAAC: return "qaac";
-		case AUDIO_ENCODER_FDKAAC: return "fdkaac";
-		case AUDIO_ENCODER_OPUSENC: return "opus";
 		}
 		return "unknown";
 	}

@@ -347,10 +347,14 @@ static tstring replaceOptions(
 	const tstring& options,
 	const VideoFormat& fmt,
 	const ConfigWrapper& setting,
-	const EncodeFileKey key) {
+	const EncodeFileKey key,
+	const int serviceID) {
 	tstring ret = options;
 	ret = str_replace(ret, _T("@IMAGE_WIDTH@"),               StringFormat(_T("%d"), fmt.width));
 	ret = str_replace(ret, _T("@IMAGE_HEIGHT@"),              StringFormat(_T("%d"), fmt.height));
+	ret = str_replace(ret, _T("@SERVICE_ID@"),                StringFormat(_T("%d"), serviceID));
+	ret = str_replace(ret, _T("@AMT_ENCODER@"),               to_tstring(encoderToString(setting.getEncoder())));
+	ret = str_replace(ret, _T("@AMT_AUDIO_ENCODER@"),         to_tstring(audioEncoderToString(setting.getAudioEncoder())));
 	ret = str_replace(ret, _T("@AMT_TEMP_DIR@"),              setting.getTmpDir());
 	ret = str_replace(ret, _T("@AMT_TEMP_VIDEO@"),            _T("\"") + setting.getEncVideoFilePath(key) + _T("\""));
 	ret = str_replace(ret, _T("@AMT_TEMP_AUDIO@"),            _T("\"") + setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()) + _T("\""));
@@ -388,7 +392,7 @@ public:
 		double vfrBitrateScale,
 		tstring timecodepath,
 		int vfrTimingFps,
-		EncodeFileKey key, int pass)
+		EncodeFileKey key, int pass, int serviceID)
 	{
 		VIDEO_STREAM_FORMAT srcFormat = reformInfo_.getVideoStreamFormat();
 		double srcBitrate = getSourceBitrate(key.video);
@@ -398,7 +402,7 @@ public:
 			replaceOptions(setting_.getOptions(
 				numFrames,
 				srcFormat, srcBitrate, false, pass, zones, vfrBitrateScale, key),
-				outfmt, setting_, key),
+				outfmt, setting_, key, serviceID),
 			outfmt,
 			timecodepath,
 			vfrTimingFps,
@@ -764,7 +768,7 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 					argGen->GenEncoderOptions(
 						outvi.num_frames,
 						outfmt, bitrateZones, vfrBitrateScale,
-						fileOut.timecode, fileOut.vfrTimingFps, key, pass[i]));
+						fileOut.timecode, fileOut.vfrTimingFps, key, pass[i], serviceId));
 			}
 			AMTFilterVideoEncoder encoder(ctx, std::max(4, setting.getNumEncodeBufferFrames()));
 			encoder.encode(filterClip, outfmt,
