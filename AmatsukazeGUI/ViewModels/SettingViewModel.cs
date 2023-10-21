@@ -243,6 +243,48 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearNicoConvASSPathCommand
+        private ViewModelCommand _ClearNicoConvASSPathCommand;
+
+        public ViewModelCommand ClearNicoConvASSPathCommand
+        {
+            get
+            {
+                if (_ClearNicoConvASSPathCommand == null)
+                {
+                    _ClearNicoConvASSPathCommand = new ViewModelCommand(ClearNicoConvASSPath);
+                }
+                return _ClearNicoConvASSPathCommand;
+            }
+        }
+
+        public void ClearNicoConvASSPath()
+        {
+            Model.Setting.NicoConvASSPath = null;
+        }
+        #endregion
+
+        #region ClearTsReplacePathCommand
+        private ViewModelCommand _ClearTsReplacePathCommand;
+
+        public ViewModelCommand ClearTsReplacePathCommand
+        {
+            get
+            {
+                if (_ClearTsReplacePathCommand == null)
+                {
+                    _ClearTsReplacePathCommand = new ViewModelCommand(ClearTsReplacePath);
+                }
+                return _ClearTsReplacePathCommand;
+            }
+        }
+
+        public void ClearTsReplacePath()
+        {
+            Model.Setting.TsReplacePath = null;
+        }
+        #endregion
+
         #region ClearFontFamilyCommand
         private ViewModelCommand _ClearFontFamilyCommand;
 

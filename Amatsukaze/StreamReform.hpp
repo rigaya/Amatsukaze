@@ -234,8 +234,9 @@ public:
 
 	// 1. コンストラクト直後に呼ぶ
 	// splitSub: メイン以外のフォーマットを結合しない
-	void prepare(bool splitSub, bool isEncodeAudio) {
+	void prepare(bool splitSub, bool isEncodeAudio, bool isTsreplace) {
 		isEncodeAudio_ = isEncodeAudio;
+		isTsreplace_ = isTsreplace;
 		reformMain(splitSub);
 		genWaveAudioStream();
 	}
@@ -504,6 +505,7 @@ private:
 
 	std::array<std::vector<NicoJKLine>, NICOJK_MAX> nicoJKList_;
 	bool isEncodeAudio_;
+	bool isTsreplace_;
 
 	// 計算データ
 	bool isVFR_;
@@ -1097,7 +1099,7 @@ private:
 
 	bool isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b) {
 		if (a.videoFormat != b.videoFormat) return false;
-		if (isEncodeAudio_) return true;
+		if (isEncodeAudio_ || isTsreplace_) return true;
 		if (a.audioFormat.size() != b.audioFormat.size()) return false;
 		for (int i = 0; i < (int)a.audioFormat.size(); ++i) {
 			if (a.audioFormat[i] != b.audioFormat[i]) {
@@ -1279,7 +1281,7 @@ private:
 			}
 			double audioDuration = file.time - audioState.time;
 			double audioPts = endPts - audioDuration;
-			const AudioFormat* format = isEncodeAudio_ ? nullptr : &audioFormat[i];
+			const AudioFormat* format = isEncodeAudio_ || isTsreplace_  ? nullptr : &audioFormat[i];
 			fillAudioFrames(file, i, format, audioPts, audioDuration, adiff);
 		}
 	}

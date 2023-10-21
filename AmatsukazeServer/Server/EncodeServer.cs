@@ -825,6 +825,10 @@ namespace Amatsukaze.Server
             {
                 setting.JoinLogoScpPath = GetExePath(basePath, "join_logo_scp");
             }
+            if (string.IsNullOrEmpty(setting.TsReplacePath))
+            {
+                setting.TsReplacePath = GetExePath(basePath, "tsreplace");
+            }
             return setting;
         }
 
@@ -1321,7 +1325,7 @@ namespace Amatsukaze.Server
                         .Append(json)
                         .Append("\"");
 
-                    if (profile.OutputFormat == FormatType.MP4)
+                    if (profile.OutputFormat == FormatType.MP4 || profile.OutputFormat == FormatType.TSREPLACE)
                     {
                         sb.Append(" --mp4box \"")
                             .Append(setting.MP4BoxPath)
@@ -1346,13 +1350,17 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" -fmt mkv -m \"" + setting.MKVMergePath + "\"");
                     }
-                    else if(profile.OutputFormat == FormatType.M2TS)
+                    else if (profile.OutputFormat == FormatType.M2TS)
                     {
                         sb.Append(" -fmt m2ts -m \"" + setting.TsMuxeRPath + "\"");
                     }
                     else if (profile.OutputFormat == FormatType.TS)
                     {
                         sb.Append(" -fmt ts -m \"" + setting.TsMuxeRPath + "\"");
+                    }
+                    else if (profile.OutputFormat == FormatType.TSREPLACE)
+                    {
+                        sb.Append(" -fmt tsreplace -m \"" + setting.TsReplacePath + "\"");
                     }
                     if (profile.OutputFormat == FormatType.MP4 && profile.UseMKVWhenSubExists)
                     {
@@ -1694,7 +1702,18 @@ namespace Amatsukaze.Server
                         throw new ArgumentException("MKVMergeパスが設定されていません");
                     }
                 }
-                else
+                else if (profile.OutputFormat == FormatType.TSREPLACE)
+                {
+                    if (string.IsNullOrEmpty(setting.TsReplacePath))
+                    {
+                        throw new ArgumentException("tsreplaceパスが設定されていません");
+                    }
+                    if (profile.EncoderType == EncoderType.SVTAV1)
+                    {
+                        throw new ArgumentException("TS (replace)使用時は、SVT-AV1は使用できません。");
+                    }
+                }
+                else if (profile.OutputFormat == FormatType.TS || profile.OutputFormat == FormatType.M2TS)
                 {
                     if (string.IsNullOrEmpty(setting.TsMuxeRPath))
                     {

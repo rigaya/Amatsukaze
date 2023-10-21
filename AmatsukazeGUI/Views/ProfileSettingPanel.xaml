@@ -17,7 +17,7 @@
     <UserControl.Resources>
         <ResourceDictionary Source="CommonResources.xaml"/>
     </UserControl.Resources>
-    
+
     <i:Interaction.Triggers>
         <l:InteractionMessageTrigger Messenger="{Binding Messenger}" MessageKey="FromProfile">
             <l:TransitionInteractionMessageAction InvokeActionOnlyWhenWindowIsActive="False"/>
@@ -27,7 +27,7 @@
             <l:ConfirmationDialogInteractionMessageAction InvokeActionOnlyWhenWindowIsActive="False"/>
         </l:InteractionMessageTrigger>
     </i:Interaction.Triggers>
-    
+
     <DockPanel>
         <DockPanel.Resources>
             <BooleanToVisibilityConverter x:Key="BoolVisibilityConverter" />
@@ -43,13 +43,13 @@
             <Button DockPanel.Dock="Right" Content="適用" Margin="2" Height="30" Width="60" Command="{Binding ApplyProfileCommand}" />
             <ComboBox ItemsSource="{Binding Model.ProfileListView}" Margin="5" Height="22" SelectedItem="{Binding Model.SelectedProfile, Mode=TwoWay}"/>
         </DockPanel>
-        
+
         <Separator DockPanel.Dock="Top"/>
 
         <TextBlock DockPanel.Dock="Bottom" TextWrapping="Wrap" VerticalAlignment="Top" Margin="0,0.333,74,0">
             <Run Text="{Binding Model.SelectedProfile.SettingWarningText}" Foreground="Red" /><Run Text=" "/><Run Text="「適用」で反映。「更新」を押すと編集中の設定が失われるので注意"/>
         </TextBlock>
-        
+
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
             <Grid>
                 <Grid.Resources>
@@ -160,7 +160,7 @@
                        ToolTip="CUVIDの方が速いです。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
 
                     <DockPanel>
-                        <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="78" Height="22"
+                        <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,3" Width="120" Height="22"
                            ItemsSource="{Binding Model.SelectedProfile.FormatList}" 
                            SelectedIndex="{Binding Model.SelectedProfile.OutputFormatInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                            ToolTip="MP4の場合、ASS字幕は別ファイルとして出力されます"/>
@@ -187,10 +187,13 @@
                     <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="130" Height="22"
                        ItemsSource="{Binding Model.SelectedProfile.OutputOptionList}" 
                        SelectedItem="{Binding Model.SelectedProfile.OutputMask, Mode=TwoWay}"
-                       ToolTip="CMカットの精度は100%ではありません"/>
+                       ToolTip="CMカットの精度は100%ではありません"
+                       IsEnabled="{Binding Model.SelectedProfile.OutputOptionEnabled}"
+                    />
+
 
                 </StackPanel>
-                
+
                 <StackPanel Grid.Row="2" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,3" Text="リネーム"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式"/>
@@ -211,7 +214,7 @@
                     <CheckBox Height="16" Margin="0,3"  Content="ジャンルごとにフォルダ分け" 
                               IsChecked="{Binding Model.SelectedProfile.EnableGunreFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               ToolTip="SCRenameで名前が取得できた場合はフォルダ分けされません。" />
-                    
+
                     <ComboBox Height="22" Margin="0,3" ToolTip="エンコード実行直前に実行するバッチファイル"
                               ItemsSource="{Binding Model.PreBatFiles}"
                               SelectedItem="{Binding Model.SelectedProfile.PreBatchFile, Mode=TwoWay}" />
@@ -246,8 +249,8 @@
                                             ToolTip="メインとなるフィルタを設定します。" />
                                     </DockPanel>
                                     <DockPanel>
-                                    <TextBlock Text="ポストフィルタ" Margin="0,6"/>
-                                    <ComboBox Margin="0,3" Height="23"
+                                        <TextBlock Text="ポストフィルタ" Margin="0,6"/>
+                                        <ComboBox Margin="0,3" Height="23"
                                         ItemsSource="{Binding Model.PostScriptFiles}"
                                         Text="{Binding PostFilterPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top"
                                             ToolTip="メインフィルタの後に掛けるフィルタを設定します。" />
@@ -349,8 +352,6 @@
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,8" Height="32">音声エンコーダ<LineBreak/>追加オプション</TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,0">
-                    <CheckBox Content="音声をエンコードする" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,4"
-                                  IsChecked="{Binding Model.SelectedProfile.EnableAudioEncode, Mode=TwoWay}"/>
                     <StackPanel>
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
@@ -432,7 +433,7 @@
                         <CheckBox Grid.Row="2" Grid.Column="2" Content="半透明" Margin="3,3" IsChecked="{Binding Model.SelectedProfile.NicoJKFormat1080T, Mode=TwoWay}"/>
                     </Grid>
                 </StackPanel>
-                
+
                 <StackPanel Grid.Row="7" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,80" Text="その他の設定"/>
                 </StackPanel>
@@ -523,7 +524,7 @@
                         </DockPanel>
                     </StackPanel>
                 </Expander>
-                
+
                 <StackPanel Grid.Row="9" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Left" Margin="0,40">
                         スケジューリング<LineBreak/>リソース設定
@@ -612,7 +613,7 @@
                                 「基本設定」で設定可能です。異なるGPUはリソースが別にカウントされます。
                             </Paragraph>
                             <Paragraph>
-                                <Bold>Tips: </Bold>「基本設定」で設定されるエンコード並列数は、
+                                <Bold>Tips:</Bold> 「基本設定」で設定されるエンコード並列数は、
                                 リソース制限により中断されているエンコードインスタンスもカウントされます。
                                 リソース設定で並列実行数を制御する場合は、エンコード並列数は多めに設定してください。
                             </Paragraph>

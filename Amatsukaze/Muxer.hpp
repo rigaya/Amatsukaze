@@ -105,8 +105,7 @@ public:
 		std::vector<tstring> audioFiles;
 		if (setting_.isEncodeAudio()) {
 			audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
-		}
-		else {
+		} else if (setting_.getFormat() != FORMAT_TSREPLACE) { // tsreaplceの場合は音声ファイルを作らない
 			for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); ++asrc) {
 				const std::vector<int>& frameList = fileIn.audioFrames[asrc];
 				if (frameList.size() > 0) {
@@ -150,6 +149,11 @@ public:
 			auto path = setting_.getTmpChapterPath(key);
 			if (File::exists(path)) {
 				chapterFile = path;
+				if (muxFormat == FORMAT_TSREPLACE) {
+					//tsreplaceの場合は、チャプターファイルを別ファイルとしてコピー
+					auto dstchapter = setting_.getOutChapterPath(fileIn.outKey, fileIn.keyMax);
+					File::copy(chapterFile, dstchapter);
+				}
 			}
 		}
 
@@ -189,8 +193,8 @@ public:
 			}
 		}
 
-		const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, muxFormat);
-		const tstring tmpOut2Path = setting_.getVfrTmpFile2Path(key, muxFormat);
+		const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, (muxFormat == FORMAT_TSREPLACE) ? FORMAT_MP4 : muxFormat);
+		const tstring tmpOut2Path = setting_.getVfrTmpFile2Path(key, (muxFormat == FORMAT_TSREPLACE) ? FORMAT_MP4 : muxFormat);
 
 		tstring metaFile;
 		if (muxFormat == FORMAT_M2TS || muxFormat == FORMAT_TS) {
@@ -239,6 +243,7 @@ public:
 		auto args = makeMuxerArgs(
 			setting_.getEncoder(), muxFormat, muxerPath,
 			setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
+			setting_.getSrcFilePath(),
 			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
 			vfmt, audioFiles,
 			outPath, tmpOut1Path, tmpOut2Path, chapterFile,
@@ -300,6 +305,7 @@ public:
 		auto args = makeMuxerArgs(
 			setting_.getEncoder(), setting_.getFormat(),
 			setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
+			setting_.getSrcFilePath(),
 			encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
 			videoFormat, audioFiles, outFilePath,
 			tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),

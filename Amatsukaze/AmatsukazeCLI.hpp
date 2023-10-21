@@ -282,21 +282,19 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 		}
 		else if (key == _T("-fmt") || key == _T("--format")) {
 			const auto arg = getParam(argc, argv, i++);
-			if (arg == _T("mp4")) {
-				conf.format = FORMAT_MP4;
-			}
-			else if (arg == _T("mkv")) {
-				conf.format = FORMAT_MKV;
-			}
-			else if (arg == _T("m2ts")) {
-				conf.format = FORMAT_M2TS;
-			}
-			else if (arg == _T("ts")) {
-				conf.format = FORMAT_TS;
-			}
-			else {
-				THROWF(ArgumentException, "--formatの指定が間違っています: %" PRITSTR "", arg);
-			}
+            if (arg == _T("mp4")) {
+                conf.format = FORMAT_MP4;
+            } else if (arg == _T("mkv")) {
+                conf.format = FORMAT_MKV;
+            } else if (arg == _T("m2ts")) {
+                conf.format = FORMAT_M2TS;
+            } else if (arg == _T("ts")) {
+                conf.format = FORMAT_TS;
+            } else if (arg == _T("tsreplace")) {
+                conf.format = FORMAT_TSREPLACE;
+            } else {
+                THROWF(ArgumentException, "--formatの指定が間違っています: %" PRITSTR "", arg);
+            }
 		} else if (key == _T("--use-mkv-when-sub-exists")) {
 			conf.useMKVWhenSubExist = true;
 		} else if (key == _T("--chapter")) {
@@ -496,15 +494,15 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 
 	// muxerのデフォルト値
 	if (conf.muxerPath.size() == 0) {
-		if (conf.format == FORMAT_MP4) {
-			conf.muxerPath = _T("muxer.exe");
-		}
-		else if (conf.format == FORMAT_MKV) {
-			conf.muxerPath = _T("mkvmerge.exe");
-		}
-		else {
-			conf.muxerPath = _T("tsmuxer.exe");
-		}
+        if (conf.format == FORMAT_MP4) {
+            conf.muxerPath = _T("muxer.exe");
+        } else if (conf.format == FORMAT_MKV) {
+            conf.muxerPath = _T("mkvmerge.exe");
+        } else if (conf.format == FORMAT_TSREPLACE) {
+			conf.muxerPath = _T("tsreplace.exe");
+        } else {
+            conf.muxerPath = _T("tsmuxer.exe");
+        }
 	}
 
 	if (conf.mode == _T("ts") || conf.mode == _T("g")) {

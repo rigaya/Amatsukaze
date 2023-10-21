@@ -98,6 +98,7 @@ enum ENUM_FORMAT {
 	FORMAT_MKV,
 	FORMAT_M2TS,
 	FORMAT_TS,
+	FORMAT_TSREPLACE,
 };
 
 struct BitrateSetting {
@@ -134,7 +135,7 @@ static bool encoderOutputInContainer(const ENUM_ENCODER encoder, const ENUM_FORM
 	case ENCODER_QSVENC:
 	case ENCODER_NVENC:
 	case ENCODER_VCEENC:
-		return (format == FORMAT_MP4 || format == FORMAT_MKV);
+		return (format == FORMAT_MP4 || format == FORMAT_MKV || format == FORMAT_TSREPLACE);
 	default:
 		break;
 	}
@@ -226,7 +227,7 @@ static tstring makeEncoderArgs(
 		if (encoderOutputInContainer(encoder, format)) {
 			if (format == FORMAT_MKV) {
 				sb.append(_T(" --output-format matroska"));
-			} else if (format == FORMAT_MP4) {
+			} else if (format == FORMAT_MP4 || format == FORMAT_TSREPLACE) {
 				sb.append(_T(" --output-format mp4"));
 			}
 		}
@@ -318,6 +319,7 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 	const tstring& binpath,
 	const tstring& timelineeditorpath,
 	const tstring& mp4boxpath,
+	const tstring& srcTSFilePath,
 	const tstring& inVideo,
 	const bool encoderOutputInContainer,
 	const VideoFormat& videoFormat,
@@ -342,32 +344,6 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		bool needSubs = (inSubs.size() > 0);
 		const bool needTimecode = (timecodepath.size() > 0);
 
-#if 0
-		// まずはmuxerで映像、音声、チャプターをmux
-		if (videoFormat.fixedFrameRate) {
-			sb.append(_T(" -i \"%s?fps=%d/%d"), inVideo,
-				videoFormat.frameRateNum, videoFormat.frameRateDenom);
-			if (videoFormat.sarWidth * videoFormat.sarHeight > 0) {
-				sb.append(_T(",par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
-			}
-			sb.append(_T("\""));
-		}
-		else {
-			sb.append(_T(" -i \"%s\""), inVideo);
-		}
-		for (const auto& inAudio : inAudios) {
-			sb.append(_T(" -i \"%s\""), inAudio);
-		}
-		// timelineeditorがチャプターを消すのでtimecodeがある時はmp4boxで入れる
-		if (needChapter && !needTimecode) {
-			sb.append(_T(" --chapter \"%s\""), chapterpath);
-			needChapter = false;
-		}
-		sb.append(_T(" --optimize-pd"));
-
-		sb.append(_T(" -o \"%s\""), dst);
-		ret.push_back(std::make_pair(sb.str(), false));
-#else
 		sb.clear();
 		sb.append(_T("\"%s\""), mp4boxpath);
 		sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
@@ -399,7 +375,6 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		tstring dst = (needTimecode || needChapter || needSubs) ? tmpout1path : outpath;
 		sb.append(_T(" -new \"%s\""), dst);
 		ret.push_back(std::make_pair(sb.str(), true));
-#endif
 		sb.clear();
 
 		if (needTimecode) {
@@ -476,7 +451,53 @@ static std::vector<std::pair<tstring, bool>> makeMuxerArgs(
 		ret.push_back(std::make_pair(sb.str(), true));
 		sb.clear();
 	}
-	else { // M2TS or TS
+	else if (format == FORMAT_TSREPLACE) {
+		tstring tmppath = inVideo;
+		if (!encoderOutputInContainer) {
+			const bool needTimecode = (timecodepath.size() > 0);
+
+			sb.clear();
+			sb.append(_T("\"%s\""), mp4boxpath);
+			sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
+			sb.append(_T(" -add \"%s#video:name=Video:forcesync"), inVideo);
+			if (!encoderOutputInContainer) {
+				if (videoFormat.fixedFrameRate) {
+					sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
+				}
+				//if (encoder == ENCODER_SVTAV1 && !videoFormat.isSARUnspecified()) {
+				//	sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+				//}
+			}
+			sb.append(_T("\""));
+			sb.append(_T(" -new \"%s\""), tmpout1path);
+			ret.push_back(std::make_pair(sb.str(), true));
+			sb.clear();
+			tmppath = tmpout1path;
+
+			if (needTimecode) {
+				const tstring timelineeditorout = tmpout2path;
+				// 必要ならtimelineeditorでtimecodeを埋め込む
+				sb.append(_T("\"%s\""), timelineeditorpath)
+					.append(_T(" --track 1"))
+					.append(_T(" --timecode \"%s\""), timecodepath)
+					.append(_T(" --media-timescale %d"), timebase.first)
+					.append(_T(" --media-timebase %d"), timebase.second)
+					.append(_T(" \"%s\""), tmppath)
+					.append(_T(" \"%s\""), timelineeditorout);
+				ret.push_back(std::make_pair(sb.str(), false));
+				sb.clear();
+				tmppath = timelineeditorout;
+			}
+		}
+		sb.clear();
+		sb.append(_T("\"%s\""), binpath);
+		sb.append(_T(" -i \"%s\""), srcTSFilePath);
+		sb.append(_T(" -r \"%s\""), tmppath);
+		sb.append(_T(" --replace-format mp4"));
+		sb.append(_T(" -o \"%s\""), outpath);
+		ret.push_back(std::make_pair(sb.str(), true));
+		sb.clear();
+	} else { // M2TS or TS
 		sb.append(_T(" \"%s\" \"%s\""), metapath, outpath);
 		ret.push_back(std::make_pair(sb.str(), true));
 		sb.clear();
@@ -1120,6 +1141,7 @@ public:
 		case FORMAT_MKV: return "mkv";
 		case FORMAT_M2TS: return "m2ts";
 		case FORMAT_TS: return "ts";
+		case FORMAT_TSREPLACE: return "ts";
 		}
 		return "amatsukze";
 	}
@@ -1154,6 +1176,20 @@ public:
 			sb.append(_T("-%d"), langidx);
 		}
 		sb.append(_T(".ass"));
+		return sb.str();
+	}
+
+	tstring getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax) const {
+		StringBuilderT sb;
+		sb.append(_T("%s.chapter"), conf.outVideoPath);
+		if (key.format > 0) {
+			sb.append(_T("-%d"), key.format);
+		}
+		if (keyMax.div > 1) {
+			sb.append(_T("_div%d"), key.div + 1);
+		}
+		sb.append(_T("%s"), GetCMSuffix(key.cm));
+		sb.append(_T(".txt"));
 		return sb.str();
 	}
 
@@ -1353,6 +1389,7 @@ private:
 		case FORMAT_MKV: return "Matroska";
 		case FORMAT_M2TS: return "M2TS";
 		case FORMAT_TS: return "TS";
+		case FORMAT_TSREPLACE: return "TS (replace)";
 		}
 		return "unknown";
 	}

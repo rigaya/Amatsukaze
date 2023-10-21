@@ -84,6 +84,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="ChapterExeパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="JoinLogoScpパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="NicoConvASSパス"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="tsreplaceパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="tsMuxeRパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="SCRename.vbsパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="AutoVfr.exeパス"/>
@@ -110,6 +111,8 @@
                         <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearTimelineEditorPathCommand}"/>
                         <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearChapterExepathCommand}"/>
                         <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearJoinLogoScpPathCommand}"/>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}"/>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearTsReplacePathCommand}"/>
                         <Border Height="28"/>
                         <Border Height="28"/>
                     </StackPanel>
@@ -130,6 +133,7 @@
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.ChapterExePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.JoinLogoScpPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.TsReplacePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.TsMuxeRPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.SCRenamePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.AutoVfrPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>

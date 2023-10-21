@@ -506,6 +506,15 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 	if (!isNoEncode && !setting.isFormatVFRSupported() && eoInfo.afsTimecode) {
 		THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
 	}
+	if (setting.getFormat() == FORMAT_TSREPLACE) {
+		auto cmtypes = setting.getCMTypes();
+		if (cmtypes.size() != 1 || cmtypes[0] != CMTYPE_BOTH) {
+			THROW(FormatException, "tsreplaceはCMカットに対応していません");
+		}
+		if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265) {
+			THROW(FormatException, "tsreplaceはH.264/H.265以外には対応していません");
+		}
+	}
 
 	ResourceManger rm(ctx, setting.getInPipe(), setting.getOutPipe());
 	rm.wait(HOST_CMD_TSAnalyze);
@@ -545,7 +554,7 @@ static void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting)
 		}
 	}
 
-	reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio());
+	reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE);
 
 	time_t startTime = reformInfo.getFirstFrameTime();
 

@@ -1045,6 +1045,8 @@ namespace Amatsukaze.Server
                     return ".m2ts";
                 case FormatType.TS:
                     return ".ts";
+                case FormatType.TSREPLACE:
+                    return ".ts";
             }
             throw new ArgumentException();
         }

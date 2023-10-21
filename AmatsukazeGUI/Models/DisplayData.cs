@@ -1674,11 +1674,22 @@ namespace Amatsukaze.Models
                 if ((int)Data.OutputFormat == value)
                     return;
                 Data.OutputFormat = (FormatType)value;
+                if (Data.OutputFormat == FormatType.TSREPLACE)
+                {
+                    Data.OutputMask = 1;
+                }
                 UpdateWarningText();
                 RaisePropertyChanged();
+                if (Data.OutputFormat == FormatType.TSREPLACE)
+                {
+                    RaisePropertyChanged("OutputMask");
+                }
+                RaisePropertyChanged("OutputOptionEnabled");
             }
         }
         #endregion
+
+        public bool OutputOptionEnabled { get { return Data.OutputFormat != FormatType.TSREPLACE; } }
 
         #region UseMKVWhenSubExists変更通知プロパティ
         public bool UseMKVWhenSubExists {
@@ -1974,7 +1985,7 @@ namespace Amatsukaze.Models
         };
         public DisplayOutputMask[] OutputOptionList { get { return OutputOptionList_; } }
         public string[] FormatList {
-            get { return new string[] { "MP4", "MKV", "M2TS", "TS" }; }
+            get { return new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" }; }
         }
         public string[] AudioEncoderList {
             get { return new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" }; }
@@ -2824,6 +2835,20 @@ namespace Amatsukaze.Models
                 if (Model.NicoConvASSPath == value)
                     return;
                 Model.NicoConvASSPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TsReplacePath変更通知プロパティ
+        public string TsReplacePath
+        {
+            get { return Model.TsReplacePath; }
+            set
+            {
+                if (Model.TsReplacePath == value)
+                    return;
+                Model.TsReplacePath = value;
                 RaisePropertyChanged();
             }
         }

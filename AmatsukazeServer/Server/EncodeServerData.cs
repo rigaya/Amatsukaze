@@ -50,7 +50,8 @@ namespace Amatsukaze.Server
         MP4 = 0,
         MKV,
         M2TS,
-        TS
+        TS,
+        TSREPLACE,
     }
 
     public enum FinishAction
@@ -225,6 +226,9 @@ namespace Amatsukaze.Server
 
         [DataMember]
         public bool UseMKVWhenSubExists { get; set; }
+
+        [DataMember]
+        public bool TSReplaceVideo { get; set; }
 
         [DataMember]
         public string FilterPath { get; set; }
@@ -404,6 +408,8 @@ namespace Amatsukaze.Server
         public string NicoConvASSPath { get; set; }
         [DataMember]
         public string TsMuxeRPath { get; set; }
+        [DataMember]
+        public string TsReplacePath { get; set; }
         [DataMember]
         public string SCRenamePath { get; set; }
         [DataMember]
