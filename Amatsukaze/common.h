@@ -22,11 +22,11 @@
 #define PRINTF(...) fprintf(stderr, __VA_ARGS__); fflush(stderr)
 
 inline void assertion_failed(const char* line, const char* file, int lineNum) {
-	char buf[500];
-	sprintf_s(buf, "Assertion failed!! %s (%s:%d)", line, file, lineNum);
-	PRINTF("%s\n", buf);
-	//MessageBox(NULL, "Error", "Amatsukaze", MB_OK);
-	throw buf;
+    char buf[500];
+    sprintf_s(buf, "Assertion failed!! %s (%s:%d)", line, file, lineNum);
+    PRINTF("%s\n", buf);
+    //MessageBox(NULL, "Error", "Amatsukaze", MB_OK);
+    throw buf;
 }
 
 #ifndef _DEBUG
@@ -36,19 +36,18 @@ inline void assertion_failed(const char* line, const char* file, int lineNum) {
 #endif
 
 inline int __builtin_clzl(uint64_t mask) {
-	DWORD index;
+    DWORD index;
 #ifdef _WIN64
-	_BitScanReverse64(&index, mask);
+    _BitScanReverse64(&index, mask);
 #else
-	DWORD highWord = (DWORD)(mask >> 32);
-	DWORD lowWord = (DWORD)mask;
-	if (highWord) {
-		_BitScanReverse(&index, highWord);
-		index += 32;
-	}
-	else {
-		_BitScanReverse(&index, lowWord);
-	}
+    DWORD highWord = (DWORD)(mask >> 32);
+    DWORD lowWord = (DWORD)mask;
+    if (highWord) {
+        _BitScanReverse(&index, highWord);
+        index += 32;
+    } else {
+        _BitScanReverse(&index, lowWord);
+    }
 #endif
-	return index;
+    return index;
 }

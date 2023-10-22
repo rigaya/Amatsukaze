@@ -11,9 +11,9 @@
 @EpgDataCap.dll‚Ìg‚¢•û‚ÌQl‚É‚µ‚Ä‚à‚ç‚¤‚Æ‚¢‚¢‚©‚àB
 
 œEpgDataCap.dllACaption.dll‚Ìæ‚èˆµ‚¢‚É‚Â‚¢‚Ä
-	ƒtƒŠ[ƒ\ƒtƒg‚É‘g‚İ‚Şê‡‚Í“Á‚É§ŒÀ‚Íİ‚¯‚Ü‚¹‚ñB‚½‚¾‚µAdll‚ÍƒIƒŠƒWƒiƒ‹‚Ì‚Ü‚Ü
-	‘g‚İ‚ñ‚Å‚­‚¾‚³‚¢B
-	‚±‚Ìdll‚ğg—p‚µ‚½‚±‚Æ‚É‚æ‚Á‚Ä”­¶‚µ‚½–â‘è‚É‚Â‚¢‚Ä•ÛØ‚ÍˆêØs‚¢‚Ü‚¹‚ñB
+    ƒtƒŠ[ƒ\ƒtƒg‚É‘g‚İ‚Şê‡‚Í“Á‚É§ŒÀ‚Íİ‚¯‚Ü‚¹‚ñB‚½‚¾‚µAdll‚ÍƒIƒŠƒWƒiƒ‹‚Ì‚Ü‚Ü
+    ‘g‚İ‚ñ‚Å‚­‚¾‚³‚¢B
+    ‚±‚Ìdll‚ğg—p‚µ‚½‚±‚Æ‚É‚æ‚Á‚Ä”­¶‚µ‚½–â‘è‚É‚Â‚¢‚Ä•ÛØ‚ÍˆêØs‚¢‚Ü‚¹‚ñB
 @¤—pAƒVƒFƒAƒEƒFƒA‚È‚Ç‚É‘g‚İ‚Ş‚Ì‚Í•s‰Â‚Å‚·B
 ------ˆø—pI—¹------
 */
@@ -30,135 +30,133 @@
 #include "TranscodeSetting.hpp"
 
 inline bool operator==(const CLUT_DAT_DLL &a, const CLUT_DAT_DLL &b) {
-	return a.ucR == b.ucR && a.ucG == b.ucG && a.ucB == b.ucB && a.ucAlpha == b.ucAlpha;
+    return a.ucR == b.ucR && a.ucG == b.ucG && a.ucB == b.ucB && a.ucAlpha == b.ucAlpha;
 }
 
 struct CaptionFormat {
 
-	enum STYLE {
-		UNDERLINE = 1,
-		SHADOW = 2,
-		BOLD = 4,
-		ITALIC = 8,
+    enum STYLE {
+        UNDERLINE = 1,
+        SHADOW = 2,
+        BOLD = 4,
+        ITALIC = 8,
 
-		BOTTOM = 0x10,
-		RIGHT = 0x20,
-		TOP = 0x40,
-		LEFT = 0x80,
-	};
+        BOTTOM = 0x10,
+        RIGHT = 0x20,
+        TOP = 0x40,
+        LEFT = 0x80,
+    };
 
-	static int GetStyle(const CAPTION_CHAR_DATA_DLL &style) {
-		int ret = 0;
-		if (style.bUnderLine) ret |= UNDERLINE;
-		if (style.bShadow) ret |= SHADOW;
-		if (style.bBold) ret |= BOLD;
-		if (style.bItalic) ret |= ITALIC;
-		ret |= (style.bHLC & 0xF0);
-		ret |= (style.bFlushMode & 0x3) << 8;
-		return ret;
-	}
+    static int GetStyle(const CAPTION_CHAR_DATA_DLL &style) {
+        int ret = 0;
+        if (style.bUnderLine) ret |= UNDERLINE;
+        if (style.bShadow) ret |= SHADOW;
+        if (style.bBold) ret |= BOLD;
+        if (style.bItalic) ret |= ITALIC;
+        ret |= (style.bHLC & 0xF0);
+        ret |= (style.bFlushMode & 0x3) << 8;
+        return ret;
+    }
 
-	int pos;
-	float charW, charH;
-	float width, height;
-	CLUT_DAT_DLL textColor;
-	CLUT_DAT_DLL backColor;
-	int style;
-	int sizeMode;
+    int pos;
+    float charW, charH;
+    float width, height;
+    CLUT_DAT_DLL textColor;
+    CLUT_DAT_DLL backColor;
+    int style;
+    int sizeMode;
 
-	bool IsUnderline() const {
-		return (style & UNDERLINE) != 0;
-	}
-	bool IsShadow() const {
-		return (style & SHADOW) != 0;
-	}
-	bool IsBold() const {
-		return (style & BOLD) != 0;
-	}
-	bool IsItalic() const {
-		return (style & ITALIC) != 0;
-	}
-	bool IsHighLightBottom() const {
-		return (style & BOTTOM) != 0;
-	}
-	bool IsHighLightRight() const {
-		return (style & RIGHT) != 0;
-	}
-	bool IsHighLightTop() const {
-		return (style & TOP) != 0;
-	}
-	bool IsHighLightLeft() const {
-		return (style & LEFT) != 0;
-	}
-	int GetFlushMode() const {
-		return (style >> 8) & 3;
-	}
+    bool IsUnderline() const {
+        return (style & UNDERLINE) != 0;
+    }
+    bool IsShadow() const {
+        return (style & SHADOW) != 0;
+    }
+    bool IsBold() const {
+        return (style & BOLD) != 0;
+    }
+    bool IsItalic() const {
+        return (style & ITALIC) != 0;
+    }
+    bool IsHighLightBottom() const {
+        return (style & BOTTOM) != 0;
+    }
+    bool IsHighLightRight() const {
+        return (style & RIGHT) != 0;
+    }
+    bool IsHighLightTop() const {
+        return (style & TOP) != 0;
+    }
+    bool IsHighLightLeft() const {
+        return (style & LEFT) != 0;
+    }
+    int GetFlushMode() const {
+        return (style >> 8) & 3;
+    }
 };
 
 struct CaptionLine {
-	std::wstring text;
-	int planeW;
-	int planeH;
-	float posX;
-	float posY;
-	std::vector<CaptionFormat> formats;
+    std::wstring text;
+    int planeW;
+    int planeH;
+    float posX;
+    float posY;
+    std::vector<CaptionFormat> formats;
 
-	void Write(const File& file) const {
-		std::vector<wchar_t> v(text.begin(), text.end());
-		file.writeArray(v);
-		file.writeValue(planeW);
-		file.writeValue(planeH);
-		file.writeValue(posX);
-		file.writeValue(posY);
-		file.writeArray(formats);
-	}
+    void Write(const File& file) const {
+        std::vector<wchar_t> v(text.begin(), text.end());
+        file.writeArray(v);
+        file.writeValue(planeW);
+        file.writeValue(planeH);
+        file.writeValue(posX);
+        file.writeValue(posY);
+        file.writeArray(formats);
+    }
 
-	static std::unique_ptr<CaptionLine> Read(const File& file) {
-		auto ptr = std::unique_ptr<CaptionLine>(new CaptionLine());
-		auto v = file.readArray<wchar_t>();
-		ptr->text.assign(v.begin(), v.end());
-		ptr->planeW = file.readValue<int>();
-		ptr->planeH = file.readValue<int>();
-		ptr->posX = file.readValue<float>();
-		ptr->posY = file.readValue<float>();
-		ptr->formats = file.readArray<CaptionFormat>();
-		return ptr;
-	}
+    static std::unique_ptr<CaptionLine> Read(const File& file) {
+        auto ptr = std::unique_ptr<CaptionLine>(new CaptionLine());
+        auto v = file.readArray<wchar_t>();
+        ptr->text.assign(v.begin(), v.end());
+        ptr->planeW = file.readValue<int>();
+        ptr->planeH = file.readValue<int>();
+        ptr->posX = file.readValue<float>();
+        ptr->posY = file.readValue<float>();
+        ptr->formats = file.readArray<CaptionFormat>();
+        return ptr;
+    }
 };
 
 struct CaptionItem {
-	int64_t PTS;
-	int langIndex;
-	int waitTime;
-	// null‚¾‚ÆƒNƒŠƒA
-	std::unique_ptr<CaptionLine> line;
+    int64_t PTS;
+    int langIndex;
+    int waitTime;
+    // null‚¾‚ÆƒNƒŠƒA
+    std::unique_ptr<CaptionLine> line;
 
-	void Write(const File& file) const {
-		file.writeValue(PTS);
-		file.writeValue(langIndex);
-		file.writeValue(waitTime);
-		if (line) {
-			file.writeValue((int)1);
-			line->Write(file);
-		}
-		else {
-			file.writeValue((int)0);
-		}
-	}
+    void Write(const File& file) const {
+        file.writeValue(PTS);
+        file.writeValue(langIndex);
+        file.writeValue(waitTime);
+        if (line) {
+            file.writeValue((int)1);
+            line->Write(file);
+        } else {
+            file.writeValue((int)0);
+        }
+    }
 
-	static CaptionItem Read(const File& file) {
-		CaptionItem item;
-		item.PTS = file.readValue<int64_t>();
-		item.langIndex = file.readValue<int>();
-		item.waitTime = file.readValue<int>();
-		if (file.readValue<int>()) {
-			item.line = CaptionLine::Read(file);
-		}
-		else {
-			item.line = nullptr;
-		}
-		return item;
-	}
+    static CaptionItem Read(const File& file) {
+        CaptionItem item;
+        item.PTS = file.readValue<int64_t>();
+        item.langIndex = file.readValue<int>();
+        item.waitTime = file.readValue<int>();
+        if (file.readValue<int>()) {
+            item.line = CaptionLine::Read(file);
+        } else {
+            item.line = nullptr;
+        }
+        return item;
+    }
 };
 
 // ”¼Šp’uŠ·‰Â”\•¶šƒŠƒXƒg
@@ -167,312 +165,294 @@ static const LPCWSTR HALF_F_LIST = L"@ABCDEFGHIOQ^bimnopu{
 static const LPCWSTR HALF_T_LIST = L"@ABCDEFGHIOQ^bjmnopv{|ƒ„“”•–—‚X‚y‚š";
 static const LPCWSTR HALF_R_LIST = L" ¤¡,.¥:;?!^_/|([]{}¢+-=<>$%#&*@0Aa";
 
-static BOOL CalcMD5FromDRCSPattern(std::vector<char>& hash, const DRCS_PATTERN_DLL *pPattern)
-{
-	WORD wGradation = pPattern->wGradation;
-	int nWidth = pPattern->bmiHeader.biWidth;
-	int nHeight = pPattern->bmiHeader.biHeight;
-	if (!(wGradation == 2 || wGradation == 4) || nWidth > DRCS_SIZE_MAX || nHeight > DRCS_SIZE_MAX) {
-		return FALSE;
-	}
-	BYTE bData[(DRCS_SIZE_MAX*DRCS_SIZE_MAX + 3) / 4] = {};
-	const BYTE *pbBitmap = pPattern->pbBitmap;
+static BOOL CalcMD5FromDRCSPattern(std::vector<char>& hash, const DRCS_PATTERN_DLL *pPattern) {
+    WORD wGradation = pPattern->wGradation;
+    int nWidth = pPattern->bmiHeader.biWidth;
+    int nHeight = pPattern->bmiHeader.biHeight;
+    if (!(wGradation == 2 || wGradation == 4) || nWidth > DRCS_SIZE_MAX || nHeight > DRCS_SIZE_MAX) {
+        return FALSE;
+    }
+    BYTE bData[(DRCS_SIZE_MAX * DRCS_SIZE_MAX + 3) / 4] = {};
+    const BYTE *pbBitmap = pPattern->pbBitmap;
 
-	DWORD dwDataLen = wGradation == 2 ? (nWidth*nHeight + 7) / 8 : (nWidth*nHeight + 3) / 4;
-	DWORD dwSizeImage = 0;
-	for (int y = nHeight - 1; y >= 0; y--) {
-		for (int x = 0; x < nWidth; x++) {
-			int nPix = x % 2 == 0 ? pbBitmap[dwSizeImage++] >> 4 :
-				pbBitmap[dwSizeImage - 1] & 0x0F;
-			int nPos = y*nWidth + x;
-			if (wGradation == 2) {
-				bData[nPos / 8] |= (BYTE)((nPix / 3) << (7 - nPos % 8));
-			}
-			else {
-				bData[nPos / 4] |= (BYTE)(nPix << ((3 - nPos % 4) * 2));
-			}
-		}
-		dwSizeImage = (dwSizeImage + 3) / 4 * 4;
-	}
+    DWORD dwDataLen = wGradation == 2 ? (nWidth * nHeight + 7) / 8 : (nWidth * nHeight + 3) / 4;
+    DWORD dwSizeImage = 0;
+    for (int y = nHeight - 1; y >= 0; y--) {
+        for (int x = 0; x < nWidth; x++) {
+            int nPix = x % 2 == 0 ? pbBitmap[dwSizeImage++] >> 4 :
+                pbBitmap[dwSizeImage - 1] & 0x0F;
+            int nPos = y * nWidth + x;
+            if (wGradation == 2) {
+                bData[nPos / 8] |= (BYTE)((nPix / 3) << (7 - nPos % 8));
+            } else {
+                bData[nPos / 4] |= (BYTE)(nPix << ((3 - nPos % 4) * 2));
+            }
+        }
+        dwSizeImage = (dwSizeImage + 3) / 4 * 4;
+    }
 
-	HCRYPTPROV hProv = NULL;
-	HCRYPTHASH hHash = NULL;
-	BOOL bRet = FALSE;
-	if (!::CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-		hProv = NULL;
-		goto EXIT;
-	}
-	if (!::CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash)) {
-		hHash = NULL;
-		goto EXIT;
-	}
-	if (!::CryptHashData(hHash, bData, dwDataLen, 0)) goto EXIT;
-	DWORD dwHashLen = 16;
-	BYTE bHash[16];
-	if (!::CryptGetHashParam(hHash, HP_HASHVAL, bHash, &dwHashLen, 0)) goto EXIT;
+    HCRYPTPROV hProv = NULL;
+    HCRYPTHASH hHash = NULL;
+    BOOL bRet = FALSE;
+    if (!::CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
+        hProv = NULL;
+        goto EXIT;
+    }
+    if (!::CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash)) {
+        hHash = NULL;
+        goto EXIT;
+    }
+    if (!::CryptHashData(hHash, bData, dwDataLen, 0)) goto EXIT;
+    DWORD dwHashLen = 16;
+    BYTE bHash[16];
+    if (!::CryptGetHashParam(hHash, HP_HASHVAL, bHash, &dwHashLen, 0)) goto EXIT;
 
-	static const char* digits = "0123456789ABCDEF";
-	hash.resize(32);
-	for (int i = 0; i < 16; ++i) {
-		hash[i * 2 + 0] = digits[bHash[i] >> 4];
-		hash[i * 2 + 1] = digits[bHash[i] & 0x0F];
-	}
+    static const char* digits = "0123456789ABCDEF";
+    hash.resize(32);
+    for (int i = 0; i < 16; ++i) {
+        hash[i * 2 + 0] = digits[bHash[i] >> 4];
+        hash[i * 2 + 1] = digits[bHash[i] & 0x0F];
+    }
 
-	bRet = TRUE;
+    bRet = TRUE;
 EXIT:
-	if (hHash) ::CryptDestroyHash(hHash);
-	if (hProv) ::CryptReleaseContext(hProv, 0);
-	return bRet;
+    if (hHash) ::CryptDestroyHash(hHash);
+    if (hProv) ::CryptReleaseContext(hProv, 0);
+    return bRet;
 }
 
-static void SaveDRCSImage(const tstring& filename, const DRCS_PATTERN_DLL* pData)
-{
-	//ƒtƒ@ƒCƒ‹‚ª‚È‚¯‚ê‚Î‘‚«‚±‚Ş
-	if (File::exists(filename) == false) {
-		//‚Ç‚ñ‚È”zF‚É‚µ‚Ä‚à\‚í‚È‚¢Bcolors[4]ˆÈã‚ÌF‚ÍoŒ»‚µ‚È‚¢
-		RGBQUAD colors[16] = { { 255, 255, 255, 0 },{ 170, 170, 170, 0 },{ 85, 85, 85, 0 },{ 0, 0, 0, 0 } };
-		BITMAPFILEHEADER bmfHeader = { 0 };
-		bmfHeader.bfType = 0x4D42;
-		bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(pData->bmiHeader) + sizeof(colors);
-		bmfHeader.bfSize = bmfHeader.bfOffBits + pData->bmiHeader.biSizeImage;
+static void SaveDRCSImage(const tstring& filename, const DRCS_PATTERN_DLL* pData) {
+    //ƒtƒ@ƒCƒ‹‚ª‚È‚¯‚ê‚Î‘‚«‚±‚Ş
+    if (File::exists(filename) == false) {
+        //‚Ç‚ñ‚È”zF‚É‚µ‚Ä‚à\‚í‚È‚¢Bcolors[4]ˆÈã‚ÌF‚ÍoŒ»‚µ‚È‚¢
+        RGBQUAD colors[16] = { { 255, 255, 255, 0 },{ 170, 170, 170, 0 },{ 85, 85, 85, 0 },{ 0, 0, 0, 0 } };
+        BITMAPFILEHEADER bmfHeader = { 0 };
+        bmfHeader.bfType = 0x4D42;
+        bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(pData->bmiHeader) + sizeof(colors);
+        bmfHeader.bfSize = bmfHeader.bfOffBits + pData->bmiHeader.biSizeImage;
 
-		File file(filename, _T("wb"));
-		file.writeValue(bmfHeader);
-		file.writeValue(pData->bmiHeader);
-		file.write(MemoryChunk((uint8_t*)colors, sizeof(colors)));
-		file.write(MemoryChunk((uint8_t*)pData->pbBitmap, pData->bmiHeader.biSizeImage));
-	}
+        File file(filename, _T("wb"));
+        file.writeValue(bmfHeader);
+        file.writeValue(pData->bmiHeader);
+        file.write(MemoryChunk((uint8_t*)colors, sizeof(colors)));
+        file.write(MemoryChunk((uint8_t*)pData->pbBitmap, pData->bmiHeader.biSizeImage));
+    }
 }
 
-static int StrlenWoLoSurrogate(LPCWSTR str)
-{
-	int len = 0;
-	for (; *str; ++str) {
-		if ((*str & 0xFC00) != 0xDC00) ++len;
-	}
-	return len;
+static int StrlenWoLoSurrogate(LPCWSTR str) {
+    int len = 0;
+    for (; *str; ++str) {
+        if ((*str & 0xFC00) != 0xDC00) ++len;
+    }
+    return len;
 }
 
 struct DRCSOutInfo {
-	tstring filename;
-	double elapsed;
+    tstring filename;
+    double elapsed;
 };
 
-class CaptionDLLParser : public AMTObject
-{
+class CaptionDLLParser : public AMTObject {
 public:
-	CaptionDLLParser(AMTContext& ctx)
-		: AMTObject(ctx)
-	{ }
+    CaptionDLLParser(AMTContext& ctx)
+        : AMTObject(ctx) {}
 
-	// Å‰‚Ì‚P‚Â‚¾‚¯ˆ—‚·‚é
-	CaptionItem ProcessCaption(int64_t PTS, int langIndex,
-		const CAPTION_DATA_DLL* capList, int capCount, DRCS_PATTERN_DLL* pDrcsList, int drcsCount)
-	{
-		const CAPTION_DATA_DLL& caption = capList[0];
+    // Å‰‚Ì‚P‚Â‚¾‚¯ˆ—‚·‚é
+    CaptionItem ProcessCaption(int64_t PTS, int langIndex,
+        const CAPTION_DATA_DLL* capList, int capCount, DRCS_PATTERN_DLL* pDrcsList, int drcsCount) {
+        const CAPTION_DATA_DLL& caption = capList[0];
 
-		CaptionItem item;
-		item.PTS = PTS;
-		item.langIndex = langIndex;
-		item.waitTime = caption.dwWaitTime;
+        CaptionItem item;
+        item.PTS = PTS;
+        item.langIndex = langIndex;
+        item.waitTime = caption.dwWaitTime;
 
-		if (caption.bClear) {
-		}
-		else {
-			item.line = ShowCaptionData(PTS, caption, pDrcsList, drcsCount);
-		}
+        if (caption.bClear) {
+        } else {
+            item.line = ShowCaptionData(PTS, caption, pDrcsList, drcsCount);
+        }
 
-		return item;
-	}
+        return item;
+    }
 
-	virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5) = 0;
+    virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5) = 0;
 
 private:
 
-	// ŠgkŒã‚Ì•¶šƒTƒCƒY‚ğ“¾‚é
-	static void GetCharSize(float *pCharW, float *pCharH, float *pDirW, float *pDirH, const CAPTION_CHAR_DATA_DLL &charData)
-	{
-		float charTransX = 2;
-		float charTransY = 2;
-		switch (charData.wCharSizeMode) {
-		case CP_STR_SMALL:
-			charTransX = 1;
-			charTransY = 1;
-			break;
-		case CP_STR_MEDIUM:
-			charTransX = 1;
-			charTransY = 2;
-			break;
-		case CP_STR_HIGH_W:
-			charTransX = 2;
-			charTransY = 4;
-			break;
-		case CP_STR_WIDTH_W:
-			charTransX = 4;
-			charTransY = 2;
-			break;
-		case CP_STR_W:
-			charTransX = 4;
-			charTransY = 4;
-			break;
-		}
-		if (pCharW) *pCharW = charData.wCharW * charTransX / 2;
-		if (pCharH) *pCharH = charData.wCharH * charTransY / 2;
-		if (pDirW) *pDirW = (charData.wCharW + charData.wCharHInterval) * charTransX / 2;
-		if (pDirH) *pDirH = (charData.wCharH + charData.wCharVInterval) * charTransY / 2;
-	}
+    // ŠgkŒã‚Ì•¶šƒTƒCƒY‚ğ“¾‚é
+    static void GetCharSize(float *pCharW, float *pCharH, float *pDirW, float *pDirH, const CAPTION_CHAR_DATA_DLL &charData) {
+        float charTransX = 2;
+        float charTransY = 2;
+        switch (charData.wCharSizeMode) {
+        case CP_STR_SMALL:
+            charTransX = 1;
+            charTransY = 1;
+            break;
+        case CP_STR_MEDIUM:
+            charTransX = 1;
+            charTransY = 2;
+            break;
+        case CP_STR_HIGH_W:
+            charTransX = 2;
+            charTransY = 4;
+            break;
+        case CP_STR_WIDTH_W:
+            charTransX = 4;
+            charTransY = 2;
+            break;
+        case CP_STR_W:
+            charTransX = 4;
+            charTransY = 4;
+            break;
+        }
+        if (pCharW) *pCharW = charData.wCharW * charTransX / 2;
+        if (pCharH) *pCharH = charData.wCharH * charTransY / 2;
+        if (pDirW) *pDirW = (charData.wCharW + charData.wCharHInterval) * charTransX / 2;
+        if (pDirH) *pDirH = (charData.wCharH + charData.wCharVInterval) * charTransY / 2;
+    }
 
-	void AddText(CaptionLine& line, const std::wstring& text,
-		float charW, float charH, float width, float height, const CAPTION_CHAR_DATA_DLL &style)
-	{
-		line.formats.emplace_back();
+    void AddText(CaptionLine& line, const std::wstring& text,
+        float charW, float charH, float width, float height, const CAPTION_CHAR_DATA_DLL &style) {
+        line.formats.emplace_back();
 
-		CaptionFormat& fmt = line.formats.back();
-		fmt.pos = (int)line.text.size();
-		fmt.charW = charW;
-		fmt.charH = charH;
-		fmt.width = width;
-		fmt.height = height;
-		fmt.textColor = style.stCharColor;
-		fmt.backColor = style.stBackColor;
-		fmt.style = CaptionFormat::GetStyle(style);
-		fmt.sizeMode = style.wCharSizeMode;
+        CaptionFormat& fmt = line.formats.back();
+        fmt.pos = (int)line.text.size();
+        fmt.charW = charW;
+        fmt.charH = charH;
+        fmt.width = width;
+        fmt.height = height;
+        fmt.textColor = style.stCharColor;
+        fmt.backColor = style.stBackColor;
+        fmt.style = CaptionFormat::GetStyle(style);
+        fmt.sizeMode = style.wCharSizeMode;
 
-		line.text += text;
-	}
+        line.text += text;
+    }
 
-	// š–‹–{•¶‚ğ1s‚¾‚¯ˆ—‚·‚é
-	std::unique_ptr<CaptionLine> ShowCaptionData(int64_t PTS,
-		const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount)
-	{
-		auto line = std::unique_ptr<CaptionLine>(new CaptionLine());
+    // š–‹–{•¶‚ğ1s‚¾‚¯ˆ—‚·‚é
+    std::unique_ptr<CaptionLine> ShowCaptionData(int64_t PTS,
+        const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount) {
+        auto line = std::unique_ptr<CaptionLine>(new CaptionLine());
 
-		if (caption.wSWFMode == 9 || caption.wSWFMode == 10) {
-			line->planeW = 720;
-			line->planeH = 480;
-		}
-		else {
-			line->planeW = 960;
-			line->planeH = 540;
-		}
-		line->posX = caption.wPosX;
-		line->posY = caption.wPosY;
+        if (caption.wSWFMode == 9 || caption.wSWFMode == 10) {
+            line->planeW = 720;
+            line->planeH = 480;
+        } else {
+            line->planeW = 960;
+            line->planeH = 540;
+        }
+        line->posX = caption.wPosX;
+        line->posY = caption.wPosY;
 
-		for (DWORD i = 0; i < caption.dwListCount; ++i) {
-			const CAPTION_CHAR_DATA_DLL &charData = caption.pstCharList[i];
+        for (DWORD i = 0; i < caption.dwListCount; ++i) {
+            const CAPTION_CHAR_DATA_DLL &charData = caption.pstCharList[i];
 
-			float charW, charH, dirW, dirH;
-			GetCharSize(&charW, &charH, &dirW, &dirH, charData);
+            float charW, charH, dirW, dirH;
+            GetCharSize(&charW, &charH, &dirW, &dirH, charData);
 
-			bool fSearchHalf = (charData.wCharSizeMode == CP_STR_MEDIUM);
+            bool fSearchHalf = (charData.wCharSizeMode == CP_STR_MEDIUM);
 
-			std::wstring srctext = static_cast<LPCWSTR>(charData.pszDecode);
-			while (srctext.size() > 0) {
-				std::wstring showtext = srctext;
-				std::wstring nexttext;
+            std::wstring srctext = static_cast<LPCWSTR>(charData.pszDecode);
+            while (srctext.size() > 0) {
+                std::wstring showtext = srctext;
+                std::wstring nexttext;
 
-				// •¶š—ñ‚ÉDRCS‚©ŠOš‚©”¼Šp’uŠ·‰Â”\•¶š‚ªŠÜ‚Ü‚ê‚é‚©’²‚×‚é
-				const DRCS_PATTERN_DLL *pDrcs = NULL;
-				LPCWSTR pszDrcsStr = NULL;
-				WCHAR szHalf[2] = {};
-				if (drcsCount != 0 || fSearchHalf) {
-					for (int j = 0; j < (int)srctext.size(); ++j) {
-						if (0xEC00 <= srctext[j] && srctext[j] <= 0xECFF) {
-							// DRCS
-							for (DWORD k = 0; k < drcsCount; ++k) {
-								if (pDrcsList[k].dwUCS == srctext[j]) {
-									pDrcs = &pDrcsList[k];
-									if (pDrcsList[k].bmiHeader.biWidth == charW &&
-										pDrcsList[k].bmiHeader.biHeight == charH)
-									{
-										break;
-									}
-								}
-							}
-							if (pDrcs) {
-								// ‚à‚µ‚ ‚ê‚Î’u‚«‚©‚¦‰Â”\‚È•¶š—ñ‚ğæ“¾
-								std::vector<char> md5;
-								if (CalcMD5FromDRCSPattern(md5, pDrcs)) {
-									std::string md5str(md5.begin(), md5.end());
-									auto& drcsmap = ctx.getDRCSMapping();
-									auto it = drcsmap.find(md5str);
-									if (it != drcsmap.end()) {
-										pszDrcsStr = it->second.c_str();
-									}
-									else {
-										// ƒ}ƒbƒsƒ“ƒO‚ª‚È‚¢‚Ì‚Å‰æ‘œ‚ğ•Û‘¶‚·‚é
-										auto info = getDRCSOutPath(PTS, std::string(md5.begin(), md5.end()));
-										SaveDRCSImage(info.filename, pDrcs);
+                // •¶š—ñ‚ÉDRCS‚©ŠOš‚©”¼Šp’uŠ·‰Â”\•¶š‚ªŠÜ‚Ü‚ê‚é‚©’²‚×‚é
+                const DRCS_PATTERN_DLL *pDrcs = NULL;
+                LPCWSTR pszDrcsStr = NULL;
+                WCHAR szHalf[2] = {};
+                if (drcsCount != 0 || fSearchHalf) {
+                    for (int j = 0; j < (int)srctext.size(); ++j) {
+                        if (0xEC00 <= srctext[j] && srctext[j] <= 0xECFF) {
+                            // DRCS
+                            for (DWORD k = 0; k < drcsCount; ++k) {
+                                if (pDrcsList[k].dwUCS == srctext[j]) {
+                                    pDrcs = &pDrcsList[k];
+                                    if (pDrcsList[k].bmiHeader.biWidth == charW &&
+                                        pDrcsList[k].bmiHeader.biHeight == charH) {
+                                        break;
+                                    }
+                                }
+                            }
+                            if (pDrcs) {
+                                // ‚à‚µ‚ ‚ê‚Î’u‚«‚©‚¦‰Â”\‚È•¶š—ñ‚ğæ“¾
+                                std::vector<char> md5;
+                                if (CalcMD5FromDRCSPattern(md5, pDrcs)) {
+                                    std::string md5str(md5.begin(), md5.end());
+                                    auto& drcsmap = ctx.getDRCSMapping();
+                                    auto it = drcsmap.find(md5str);
+                                    if (it != drcsmap.end()) {
+                                        pszDrcsStr = it->second.c_str();
+                                    } else {
+                                        // ƒ}ƒbƒsƒ“ƒO‚ª‚È‚¢‚Ì‚Å‰æ‘œ‚ğ•Û‘¶‚·‚é
+                                        auto info = getDRCSOutPath(PTS, std::string(md5.begin(), md5.end()));
+                                        SaveDRCSImage(info.filename, pDrcs);
 
-										ctx.incrementCounter(AMT_ERR_NO_DRCS_MAP);
+                                        ctx.incrementCounter(AMT_ERR_NO_DRCS_MAP);
 
-										if (info.elapsed >= 0) {
-											double seconds = info.elapsed / MPEG_CLOCK_HZ;
-											int minutes = (int)(seconds / 60);
-											seconds -= minutes * 60;
-											ctx.warnF("[š–‹] ‰f‘œ%d•ª%d•b•t‹ß‚Éƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‚ª‚ ‚è‚Ü‚·B’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢ -> %s",
-												minutes, (int)seconds, info.filename.c_str());
-										}
-										else {
-											ctx.warnF("[š–‹] ƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‚ª‚ ‚è‚Ü‚·B’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢ -> %s",
-												info.filename.c_str());
-										}
-									}
-								}
-								showtext = srctext.substr(0, j);
-								nexttext = srctext.substr(j + 1);
-								break;
-							}
-						}
-						else if (fSearchHalf) {
-							for (int k = 0; HALF_F_LIST[k]; ++k) {
-								wchar_t r = HALF_R_LIST[k];
-								if ((r != L'A' && r != L'a') &&
-									(r != L'0') &&
-									(r == L'A' || r == L'a' || r == L'0') &&
-									HALF_F_LIST[k] <= srctext[j] && srctext[j] <= HALF_T_LIST[k])
-								{
-									// ”¼Šp’uŠ·‰Â”\•¶š
-									szHalf[0] = r + srctext[j] - HALF_F_LIST[k];
-									szHalf[1] = 0;
-									showtext = srctext.substr(0, j);
-									nexttext = srctext.substr(j + 1);
-									break;
-								}
-							}
-							if (nexttext.size()) break;
-						}
-					}
-				}
+                                        if (info.elapsed >= 0) {
+                                            double seconds = info.elapsed / MPEG_CLOCK_HZ;
+                                            int minutes = (int)(seconds / 60);
+                                            seconds -= minutes * 60;
+                                            ctx.warnF("[š–‹] ‰f‘œ%d•ª%d•b•t‹ß‚Éƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‚ª‚ ‚è‚Ü‚·B’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢ -> %s",
+                                                minutes, (int)seconds, info.filename.c_str());
+                                        } else {
+                                            ctx.warnF("[š–‹] ƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‚ª‚ ‚è‚Ü‚·B’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢ -> %s",
+                                                info.filename.c_str());
+                                        }
+                                    }
+                                }
+                                showtext = srctext.substr(0, j);
+                                nexttext = srctext.substr(j + 1);
+                                break;
+                            }
+                        } else if (fSearchHalf) {
+                            for (int k = 0; HALF_F_LIST[k]; ++k) {
+                                wchar_t r = HALF_R_LIST[k];
+                                if ((r != L'A' && r != L'a') &&
+                                    (r != L'0') &&
+                                    (r == L'A' || r == L'a' || r == L'0') &&
+                                    HALF_F_LIST[k] <= srctext[j] && srctext[j] <= HALF_T_LIST[k]) {
+                                    // ”¼Šp’uŠ·‰Â”\•¶š
+                                    szHalf[0] = r + srctext[j] - HALF_F_LIST[k];
+                                    szHalf[1] = 0;
+                                    showtext = srctext.substr(0, j);
+                                    nexttext = srctext.substr(j + 1);
+                                    break;
+                                }
+                            }
+                            if (nexttext.size()) break;
+                        }
+                    }
+                }
 
-				// •¶š—ñ‚ğ•`‰æ
-				int lenWos = StrlenWoLoSurrogate(showtext.c_str());
-				if (showtext.size() > 0) {
-					AddText(*line, showtext, charW, charH, dirW * lenWos, dirH, charData);
-				}
+                // •¶š—ñ‚ğ•`‰æ
+                int lenWos = StrlenWoLoSurrogate(showtext.c_str());
+                if (showtext.size() > 0) {
+                    AddText(*line, showtext, charW, charH, dirW * lenWos, dirH, charData);
+                }
 
-				if (pDrcs) {
-					// DRCS‚ğ•¶š—ñ‚Å•`‰æ
-					if (pszDrcsStr == nullptr) {
-						pszDrcsStr = L" ";
-					}
-					lenWos = StrlenWoLoSurrogate(pszDrcsStr);
-					if (lenWos > 0) {
-						// ƒŒƒCƒAƒEƒgˆÛ‚Ì‚½‚ßA‰½•¶š‚Å‚ ‚Á‚Ä‚à1•¶š•‚É‹l‚ß‚é
-						AddText(*line, pszDrcsStr, (float)charData.wCharW / lenWos, charH, dirW, dirH, charData);
-					}
-				}
-				else if (szHalf[0]) {
-					// ”¼Šp•¶š‚ğ•`‰æ
-					AddText(*line, szHalf, charW, charH, dirW, dirH, charData);
-				}
+                if (pDrcs) {
+                    // DRCS‚ğ•¶š—ñ‚Å•`‰æ
+                    if (pszDrcsStr == nullptr) {
+                        pszDrcsStr = L" ";
+                    }
+                    lenWos = StrlenWoLoSurrogate(pszDrcsStr);
+                    if (lenWos > 0) {
+                        // ƒŒƒCƒAƒEƒgˆÛ‚Ì‚½‚ßA‰½•¶š‚Å‚ ‚Á‚Ä‚à1•¶š•‚É‹l‚ß‚é
+                        AddText(*line, pszDrcsStr, (float)charData.wCharW / lenWos, charH, dirW, dirH, charData);
+                    }
+                } else if (szHalf[0]) {
+                    // ”¼Šp•¶š‚ğ•`‰æ
+                    AddText(*line, szHalf, charW, charH, dirW, dirH, charData);
+                }
 
-				srctext = nexttext;
-			}
-		}
+                srctext = nexttext;
+            }
+        }
 
-		return line;
-	}
+        return line;
+    }
 };
 
 
