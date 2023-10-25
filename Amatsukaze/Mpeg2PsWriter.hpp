@@ -7,8 +7,8 @@
 */
 #pragma once
 
-#include "StreamUtils.hpp"
-#include "Mpeg2TsParser.hpp"
+#include "StreamUtils.h"
+#include "Mpeg2TsParser.h"
 
 #include <deque>
 #include <vector>

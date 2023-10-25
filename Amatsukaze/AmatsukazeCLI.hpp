@@ -9,8 +9,8 @@
 
 #include <time.h>
 
-#include "TranscodeManager.hpp"
-#include "AmatsukazeTestImpl.hpp"
+#include "TranscodeManager.h"
+#include "AmatsukazeTestImpl.h"
 #include "Version.h"
 
 // MSVCのマルチバイトはUnicodeでないので文字列操作に適さないのでwchar_tで文字列操作をする

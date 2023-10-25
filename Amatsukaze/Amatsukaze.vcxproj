@@ -90,8 +90,9 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;AVS_LINKAGE_DLLIMPORT;WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -106,8 +107,9 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;AVS_LINKAGE_DLLIMPORT;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -124,9 +126,10 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;AVS_LINKAGE_DLLIMPORT;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -146,9 +149,10 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;AVS_LINKAGE_DLLIMPORT;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -165,46 +169,48 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AdtsParser.hpp" />
-    <ClInclude Include="AmatsukazeCLI.hpp" />
-    <ClInclude Include="AmatsukazeTestImpl.hpp" />
-    <ClInclude Include="AMTLogo.hpp" />
-    <ClInclude Include="AMTSource.hpp" />
+    <ClInclude Include="AdtsParser.h" />
+    <ClInclude Include="AmatsukazeTestImpl.h" />
+    <ClInclude Include="AMTLogo.h" />
+    <ClInclude Include="AMTSource.h" />
     <ClInclude Include="AribString.hpp" />
-    <ClInclude Include="AudioEncoder.hpp" />
-    <ClInclude Include="CaptionData.hpp" />
-    <ClInclude Include="CaptionFormatter.hpp" />
-    <ClInclude Include="CMAnalyze.hpp" />
+    <ClInclude Include="AudioEncoder.h" />
+    <ClInclude Include="CaptionData.h" />
+    <ClInclude Include="CaptionFormatter.h" />
+    <ClInclude Include="CMAnalyze.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="CoreUtils.hpp" />
-    <ClInclude Include="Encoder.hpp" />
-    <ClInclude Include="EncoderOptionParser.hpp" />
-    <ClInclude Include="FilteredSource.hpp" />
-    <ClInclude Include="InterProcessComm.hpp" />
+    <ClInclude Include="Encoder.h" />
+    <ClInclude Include="EncoderOptionParser.h" />
+    <ClInclude Include="FileUtils.hpp" />
+    <ClInclude Include="FilteredSource.h" />
+    <ClInclude Include="H264VideoParser.h" />
+    <ClInclude Include="InterProcessComm.h" />
     <ClInclude Include="List.hpp" />
-    <ClInclude Include="LogoGUISupport.hpp" />
-    <ClInclude Include="LogoScan.hpp" />
-    <ClInclude Include="Muxer.hpp" />
-    <ClInclude Include="NicoJK.hpp" />
-    <ClInclude Include="OSUtil.hpp" />
-    <ClInclude Include="PacketCache.hpp" />
-    <ClInclude Include="PerformanceUtil.hpp" />
-    <ClInclude Include="ProcessThread.hpp" />
-    <ClInclude Include="H264VideoParser.hpp" />
-    <ClInclude Include="Mpeg2PsWriter.hpp" />
-    <ClInclude Include="Mpeg2TsParser.hpp" />
-    <ClInclude Include="Mpeg2VideoParser.hpp" />
-    <ClInclude Include="StreamReform.hpp" />
-    <ClInclude Include="StreamUtils.hpp" />
-    <ClInclude Include="StringUtils.hpp" />
-    <ClInclude Include="ReaderWriterFFmpeg.hpp" />
-    <ClInclude Include="TranscodeManager.hpp" />
-    <ClInclude Include="TranscodeSetting.hpp" />
+    <ClInclude Include="LogoScan.h" />
+    <ClInclude Include="Mpeg2TsParser.h" />
+    <ClInclude Include="Mpeg2VideoParser.h" />
+    <ClInclude Include="Muxer.h" />
+    <ClInclude Include="NicoJK.h" />
+    <ClInclude Include="OSUtil.h" />
+    <ClInclude Include="PacketCache.h" />
+    <ClInclude Include="PerformanceUtil.h" />
+    <ClInclude Include="ProcessThread.h" />
+    <ClInclude Include="ReaderWriterFFmpeg.h" />
+    <ClInclude Include="StreamReform.h" />
+    <ClInclude Include="StreamUtils.h" />
+    <ClInclude Include="StringUtils.h" />
+    <ClInclude Include="TranscodeManager.h" />
+    <ClInclude Include="TranscodeSetting.h" />
     <ClInclude Include="Tree.hpp" />
-    <ClInclude Include="TsInfo.hpp" />
+    <ClInclude Include="TsInfo.h" />
+    <ClInclude Include="TsSplitter.h" />
+    <ClInclude Include="Version.h" />
+    <ClInclude Include="VideoFilter.h" />
     <ClInclude Include="WaveWriter.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AdtsParser.cpp" />
     <ClCompile Include="Amatsukaze.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -223,6 +229,13 @@
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="AmatsukazeTestImpl.cpp" />
+    <ClCompile Include="AMTLogo.cpp" />
+    <ClCompile Include="AMTSource.cpp" />
+    <ClCompile Include="AudioEncoder.cpp" />
+    <ClCompile Include="CaptionData.cpp" />
+    <ClCompile Include="CaptionFormatter.cpp" />
+    <ClCompile Include="CMAnalyze.cpp" />
     <ClCompile Include="ComputeKernel.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions</EnableEnhancedInstructionSet>
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">AdvancedVectorExtensions</EnableEnhancedInstructionSet>
@@ -235,7 +248,35 @@
       <BasicRuntimeChecks Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Default</BasicRuntimeChecks>
       <BasicRuntimeChecks Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Default</BasicRuntimeChecks>
     </ClCompile>
-    <ClInclude Include="TsSplitter.hpp" />
+    <ClCompile Include="Encoder.cpp" />
+    <ClCompile Include="EncoderOptionParser.cpp" />
+    <ClCompile Include="FilteredSource.cpp" />
+    <ClCompile Include="H264VideoParser.cpp" />
+    <ClCompile Include="InterProcessComm.cpp" />
+    <ClCompile Include="LogoScan.cpp" />
+    <ClCompile Include="Mpeg2TsParser.cpp" />
+    <ClCompile Include="Mpeg2VideoParser.cpp" />
+    <ClCompile Include="Muxer.cpp" />
+    <ClCompile Include="NicoJK.cpp" />
+    <ClCompile Include="OSUtil.cpp" />
+    <ClCompile Include="PacketCache.cpp" />
+    <ClCompile Include="PerformanceUtil.cpp" />
+    <ClCompile Include="ProcessThread.cpp" />
+    <ClCompile Include="ReaderWriterFFmpeg.cpp" />
+    <ClCompile Include="StreamReform.cpp" />
+    <ClCompile Include="StreamUtils.cpp" />
+    <ClCompile Include="StringUtils.cpp" />
+    <ClCompile Include="TranscodeManager.cpp" />
+    <ClCompile Include="TranscodeSetting.cpp" />
+    <ClCompile Include="TsInfo.cpp" />
+    <ClCompile Include="TsSplitter.cpp" />
+    <ClCompile Include="VideoFilter.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="WaveWriter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="AMTDebug.natvis" />

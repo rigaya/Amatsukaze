@@ -6,6 +6,8 @@
 */
 #pragma once
 
+#include <memory>
+
 namespace aribstring {
 
 // 他の部分は全部設定なし（Ansi）だが、とりあえずこのファイルだけUnicodeを使うようにする
@@ -18,7 +20,7 @@ namespace aribstring {
 typedef const wchar_t* LPCTSTR;
 typedef wchar_t TCHAR;
 
-int lstrlen(LPCTSTR lpString) { return lstrlenW(lpString); }
+static int lstrlen(LPCTSTR lpString) { return lstrlenW(lpString); }
 
 static const bool abCharSizeTable[] =
 {
@@ -1014,9 +1016,7 @@ private:
 
 } // namespace aribstring
 
-#include <memory>
-
-std::wstring GetAribString(MemoryChunk mc) {
+static std::wstring GetAribString(MemoryChunk mc) {
     int bufsize = (int)mc.length + 1;
     auto buf = std::unique_ptr<wchar_t[]>(new wchar_t[bufsize]);
     int dstLen = aribstring::CAribString::AribToString(buf.get(), bufsize, mc.data, (int)mc.length);

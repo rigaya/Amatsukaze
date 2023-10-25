@@ -7,8 +7,8 @@
 */
 #pragma once
 
-#include "ReaderWriterFFmpeg.hpp"
-#include "LogoScan.hpp"
+#include "ReaderWriterFFmpeg.h"
+#include "LogoScan.h"
 
 namespace av {
 
