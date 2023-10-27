@@ -352,6 +352,8 @@
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,8" Height="32">音声エンコーダ<LineBreak/>追加オプション</TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,0">
+                    <CheckBox Content="音声をエンコードする" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,4"
+                                  IsChecked="{Binding Model.SelectedProfile.EnableAudioEncode, Mode=TwoWay}"/>
                     <StackPanel>
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
