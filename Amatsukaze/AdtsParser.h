@@ -14,8 +14,6 @@
 #include <vector>
 #include <map>
 
-#include "faad.h"
-
 #include "StreamUtils.h"
 
 enum AAC_SYNTAX_ELEMENTS {
@@ -49,6 +47,9 @@ struct AdtsHeader {
 };
 #endif
 
+struct NeAACDecFrameInfo;
+typedef void *NeAACDecHandle;
+
 class AdtsParser : public AMTObject {
 public:
     AdtsParser(AMTContext&ctx);
@@ -75,7 +76,7 @@ private:
 
     bool resetDecoder(MemoryChunk data);
 
-    AUDIO_CHANNELS getAudioChannels(const AdtsHeader& header, const NeAACDecFrameInfo& frameInfo);
+    AUDIO_CHANNELS getAudioChannels(const AdtsHeader& header, const NeAACDecFrameInfo *frameInfo);
 
     int64_t channelCanonical(int numElem, const uint8_t* elems);
 

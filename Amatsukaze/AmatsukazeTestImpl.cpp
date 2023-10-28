@@ -7,6 +7,7 @@
 */
 
 #include "AmatsukazeTestImpl.h"
+#include "faad.h"
 
 /* static */ int test::PrintCRCTable(AMTContext& ctx, const ConfigWrapper& setting) {
     CRC32 crc;

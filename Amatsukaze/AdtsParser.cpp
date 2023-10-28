@@ -6,6 +6,7 @@
 * http://opensource.org/licenses/mit-license.php
 */
 #include "AdtsParser.h"
+#include "faad.h"
 
 bool AdtsHeader::parse(uint8_t *data, int length) {
     // 長さチェック
@@ -167,7 +168,7 @@ AdtsParser::~AdtsParser() {
                         AudioFrameData frameData;
                         frameData.numSamples = frameInfo.original_samples / numChannels;
                         frameData.numDecodedSamples = frameInfo.samples / numChannels;
-                        frameData.format.channels = getAudioChannels(header, frameInfo);
+                        frameData.format.channels = getAudioChannels(header, &frameInfo);
                         frameData.format.sampleRate = frameInfo.samplerate;
 
                         // ストリームが正常なら frameInfo.bytesconsumed == header.frame_length となるはずだが
@@ -268,7 +269,7 @@ bool AdtsParser::resetDecoder(MemoryChunk data) {
     return true;
 }
 
-AUDIO_CHANNELS AdtsParser::getAudioChannels(const AdtsHeader& header, const NeAACDecFrameInfo& frameInfo) {
+AUDIO_CHANNELS AdtsParser::getAudioChannels(const AdtsHeader& header, const NeAACDecFrameInfo *frameInfo) {
 
     if (header.channel_configuration > 0) {
         switch (header.channel_configuration) {
@@ -282,7 +283,7 @@ AUDIO_CHANNELS AdtsParser::getAudioChannels(const AdtsHeader& header, const NeAA
         }
     }
 
-    int64_t canonical = channelCanonical(frameInfo.fr_ch_ele, frameInfo.element_id);
+    int64_t canonical = channelCanonical(frameInfo->fr_ch_ele, frameInfo->element_id);
     auto it = channelsMap.find(canonical);
     if (it == channelsMap.end()) {
         return AUDIO_NONE;
