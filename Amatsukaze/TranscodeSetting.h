@@ -13,9 +13,6 @@
 
 #include "StreamUtils.h"
 
-// カラースペース定義を使うため
-#include "libavutil/pixfmt.h"
-
 struct EncoderZone {
     int startFrame;
     int endFrame;

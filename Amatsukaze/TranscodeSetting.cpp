@@ -8,6 +8,9 @@
 
 #include "TranscodeSetting.h"
 
+// カラースペース定義を使うため
+#include "libavutil/pixfmt.h"
+
 BitrateZone::BitrateZone()
     : EncoderZone()
     , bitrate() {}
