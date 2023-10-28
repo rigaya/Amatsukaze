@@ -966,31 +966,18 @@ tstring ConfigWrapper::getM2tsMetaFilePath(EncodeFileKey key) const {
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
 }
 
-const char* ConfigWrapper::getOutputExtention(ENUM_FORMAT format) const {
+const tchar* ConfigWrapper::getOutputExtention(ENUM_FORMAT format) const {
     switch (format) {
-    case FORMAT_MP4: return "mp4";
-    case FORMAT_MKV: return "mkv";
-    case FORMAT_M2TS: return "m2ts";
-    case FORMAT_TS: return "ts";
-    case FORMAT_TSREPLACE: return "ts";
+    case FORMAT_MP4: return _T("mp4");
+    case FORMAT_MKV: return _T("mkv");
+    case FORMAT_M2TS: return _T("m2ts");
+    case FORMAT_TS: return _T("ts");
+    case FORMAT_TSREPLACE: return _T("ts");
     }
-    return "amatsukze";
+    return _T("amatsukze");
 }
 
-tstring ConfigWrapper::getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format) const {
-    StringBuilderT sb;
-    sb.append(_T("%s"), conf.outVideoPath);
-    if (key.format > 0) {
-        sb.append(_T("-%d"), key.format);
-    }
-    if (keyMax.div > 1) {
-        sb.append(_T("_div%d"), key.div + 1);
-    }
-    sb.append(_T("%s.%s"), GetCMSuffix(key.cm), getOutputExtention(format));
-    return sb.str();
-}
-
-tstring ConfigWrapper::getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, int langidx, NicoJKType jktype) const {
+tstring ConfigWrapper::getOutFileBase(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const {
     StringBuilderT sb;
     sb.append(_T("%s"), conf.outVideoPath);
     if (key.format > 0) {
@@ -1000,6 +987,24 @@ tstring ConfigWrapper::getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, in
         sb.append(_T("_div%d"), key.div + 1);
     }
     sb.append(_T("%s"), GetCMSuffix(key.cm));
+    if (format == FORMAT_TSREPLACE) {
+        switch (codec) {
+        case VS_H264: sb.append(_T(".h264")); break;
+        case VS_H265: sb.append(_T(".hevc")); break;
+        case VS_AV1: sb.append(_T(".av1")); break;
+        default:sb.append(_T(".replace")); break;
+        }
+    }
+    return sb.str();
+}
+
+tstring ConfigWrapper::getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const {
+    return getOutFileBase(key, keyMax, format, codec) + tstring(_T(".")) + getOutputExtention(format);
+}
+
+tstring ConfigWrapper::getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx, NicoJKType jktype) const {
+    StringBuilderT sb;
+    sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
     if (langidx < 0) {
         sb.append(_T("-nicojk%s"), GetNicoJKSuffix(jktype));
     } else if (langidx > 0) {
@@ -1009,17 +1014,10 @@ tstring ConfigWrapper::getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, in
     return sb.str();
 }
 
-tstring ConfigWrapper::getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax) const {
+tstring ConfigWrapper::getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const {
     StringBuilderT sb;
-    sb.append(_T("%s.chapter"), conf.outVideoPath);
-    if (key.format > 0) {
-        sb.append(_T("-%d"), key.format);
-    }
-    if (keyMax.div > 1) {
-        sb.append(_T("_div%d"), key.div + 1);
-    }
-    sb.append(_T("%s"), GetCMSuffix(key.cm));
-    sb.append(_T(".txt"));
+    sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
+    sb.append(_T(".chapter.txt"));
     return sb.str();
 }
 

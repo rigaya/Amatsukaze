@@ -219,7 +219,7 @@
 }
 
 /* static */ int test::WaveWriteHeader(AMTContext& ctx, const ConfigWrapper& setting) {
-    tstring dstfile = setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat());
+    tstring dstfile = setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat(), VS_H264);
 
     FILE* fp = fsopenT(dstfile.c_str(), _T("wb"), _SH_DENYNO);
     if (fp == nullptr) {
@@ -274,7 +274,7 @@
     audioDiffInfo.printAudioPtsDiff(ctx);
     reformInfo.printOutputMapping([&](EncodeFileKey key) {
         const auto& file = reformInfo.getEncodeFile(key);
-        return setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(key, reformInfo, setting));
+        return setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(key, reformInfo, setting), VS_H264);
         });
     return 0;
 }
@@ -349,7 +349,7 @@
 
     {
         int numframes = 100;
-        LosslessVideoFile file(ctx, setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat()), _T("wb"));
+        LosslessVideoFile file(ctx, setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat(), VS_H264), _T("wb"));
         PClip clip = env->Invoke("Import", to_string(setting.getFilterScriptPath()).c_str()).AsClip();
 
         VideoInfo vi = clip->GetVideoInfo();
@@ -383,7 +383,7 @@
     }
 
     {
-        LosslessVideoFile file(ctx, setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat()), _T("rb"));
+        LosslessVideoFile file(ctx, setting.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting.getFormat(), VS_H264), _T("rb"));
         file.readHeader();
 
         int width = file.getWidth();

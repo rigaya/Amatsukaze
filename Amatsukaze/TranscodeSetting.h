@@ -436,13 +436,15 @@ public:
 
     tstring getM2tsMetaFilePath(EncodeFileKey key) const;
 
-    const char* getOutputExtention(ENUM_FORMAT format) const;
+    const tchar* getOutputExtention(ENUM_FORMAT format) const;
 
-    tstring getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format) const;
+    tstring getOutFileBase(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
-    tstring getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, int langidx, NicoJKType jktype) const;
+    tstring getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
-    tstring getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax) const;
+    tstring getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx, NicoJKType jktype) const;
+
+    tstring getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
     tstring getOutSummaryPath() const;
 

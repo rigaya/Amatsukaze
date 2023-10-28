@@ -128,7 +128,7 @@ void AMTMuxder::mux(EncodeFileKey key,
             chapterFile = path;
             if (muxFormat == FORMAT_TSREPLACE) {
                 //tsreplaceの場合は、チャプターファイルを別ファイルとしてコピー
-                auto dstchapter = setting_.getOutChapterPath(fileIn.outKey, fileIn.keyMax);
+                auto dstchapter = setting_.getOutChapterPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
                 File::copy(chapterFile, dstchapter);
             }
         }
@@ -144,7 +144,7 @@ void AMTMuxder::mux(EncodeFileKey key,
                 subsFiles.push_back(srcsub);
                 subsTitles.push_back(StringFormat(_T("NicoJK%s"), GetNicoJKSuffix(jktype)));
             } else { // MP4の場合は別ファイルとしてコピー
-                auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, -1, jktype);
+                auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, -1, jktype);
                 File::copy(srcsub, dstsub);
                 fileOut.outSubs.push_back(dstsub);
             }
@@ -156,7 +156,7 @@ void AMTMuxder::mux(EncodeFileKey key,
             subsFiles.push_back(srcass);
             subsTitles.push_back(_T("ASS"));
         } else { // MP4,M2TSの場合は別ファイルとしてコピー
-            auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, lang, (NicoJKType)0);
+            auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang, (NicoJKType)0);
             File::copy(srcass, dstsub);
             fileOut.outSubs.push_back(dstsub);
         }
@@ -205,7 +205,7 @@ void AMTMuxder::mux(EncodeFileKey key,
     // タイムコード用
     auto timebase = std::make_pair(vfmt.frameRateNum * (fileOut.vfrTimingFps / 30), vfmt.frameRateDenom);
 
-    auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax, muxFormat);
+    auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
     auto muxerPath = setting_.getMuxerPath();
     if (muxFormat != setting_.getFormat()) { // 初期のフォーマットから変わっているとき
         if (muxFormat == FORMAT_MKV) { // useMKVWhenSubExistの場合
@@ -259,7 +259,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         audioFiles.push_back(setting_.getIntAudioFilePath(EncodeFileKey(), i, setting_.getAudioEncoder()));
     }
     tstring encVideoFile = setting_.getEncVideoFilePath(EncodeFileKey());
-    tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat());
+    tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat(), videoFormat.format);
     auto args = makeMuxerArgs(
         setting_.getEncoder(), setting_.getFormat(),
         setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
@@ -280,7 +280,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
     }
 
     { // 出力サイズ取得
-        File outfile(setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat()), _T("rb"));
+        File outfile(setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat(), videoFormat.format), _T("rb"));
         totalOutSize_ += outfile.size();
     }
 }
