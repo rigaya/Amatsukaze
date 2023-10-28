@@ -23,27 +23,6 @@ int stricmpT(const char* string1, const char* string2) {
     return _stricmp(string1, string2);
 }
 
-int rmdirT(const wchar_t* dirname) {
-    return _wrmdir(dirname);
-}
-int rmdirT(const char* dirname) {
-    return _rmdir(dirname);
-}
-
-int mkdirT(const wchar_t* dirname) {
-    return _wmkdir(dirname);
-}
-int mkdirT(const char* dirname) {
-    return _mkdir(dirname);
-}
-
-int removeT(const wchar_t* dirname) {
-    return _wremove(dirname);
-}
-int removeT(const char* dirname) {
-    return remove(dirname);
-}
-
 FILE* fsopenT(const wchar_t* FileName, const wchar_t* Mode, int ShFlag) {
     return _wfsopen(FileName, Mode, ShFlag);
 }

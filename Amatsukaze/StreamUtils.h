@@ -15,7 +15,7 @@
 #include <fstream>
 
 #include "CoreUtils.hpp"
-#include "FileUtils.hpp"
+#include "FileUtils.h"
 #include "OSUtil.h"
 #include "StringUtils.h"
 

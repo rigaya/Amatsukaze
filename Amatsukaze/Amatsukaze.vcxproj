@@ -182,7 +182,7 @@
     <ClInclude Include="CoreUtils.hpp" />
     <ClInclude Include="Encoder.h" />
     <ClInclude Include="EncoderOptionParser.h" />
-    <ClInclude Include="FileUtils.hpp" />
+    <ClInclude Include="FileUtils.h" />
     <ClInclude Include="FilteredSource.h" />
     <ClInclude Include="H264VideoParser.h" />
     <ClInclude Include="InterProcessComm.h" />
@@ -250,6 +250,7 @@
     </ClCompile>
     <ClCompile Include="Encoder.cpp" />
     <ClCompile Include="EncoderOptionParser.cpp" />
+    <ClCompile Include="FileUtils.cpp" />
     <ClCompile Include="FilteredSource.cpp" />
     <ClCompile Include="H264VideoParser.cpp" />
     <ClCompile Include="InterProcessComm.cpp" />

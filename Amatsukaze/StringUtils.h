@@ -42,15 +42,6 @@ size_t strlenT(const char* string);
 int stricmpT(const wchar_t* string1, const wchar_t* string2);
 int stricmpT(const char* string1, const char* string2);
 
-int rmdirT(const wchar_t* dirname);
-int rmdirT(const char* dirname);
-
-int mkdirT(const wchar_t* dirname);
-int mkdirT(const char* dirname);
-
-int removeT(const wchar_t* dirname);
-int removeT(const char* dirname);
-
 FILE* fsopenT(const wchar_t* FileName, const wchar_t* Mode, int ShFlag);
 
 FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag);

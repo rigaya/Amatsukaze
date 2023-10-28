@@ -14,7 +14,7 @@
 #pragma once
 
 #include "CoreUtils.hpp"
-#include "FileUtils.hpp"
+#include "FileUtils.h"
 #include "logo.h"
 
 namespace logo {
