@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Amtasukaze Logo Analyze
 * Copyright (c) 2017-2019 Nekopanda
 *

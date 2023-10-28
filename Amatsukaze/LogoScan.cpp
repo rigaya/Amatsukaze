@@ -1,4 +1,4 @@
-/**
+﻿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
