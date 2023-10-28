@@ -43,7 +43,6 @@ int stricmpT(const wchar_t* string1, const wchar_t* string2);
 int stricmpT(const char* string1, const char* string2);
 
 FILE* fsopenT(const wchar_t* FileName, const wchar_t* Mode, int ShFlag);
-
 FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag);
 
 

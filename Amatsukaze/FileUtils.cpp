@@ -18,10 +18,20 @@ DWORD GetFullPathNameT(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer, L
 }
 
 int rmdirT(const wchar_t* dirname) {
-    return _wrmdir(dirname);
+    try {
+        std::filesystem::remove_all(dirname);
+    } catch (...) {
+        return 1;
+    }
+    return 0;
 }
 int rmdirT(const char* dirname) {
-    return _rmdir(dirname);
+    try {
+        std::filesystem::remove_all(dirname);
+    } catch (...) {
+        return 1;
+    }
+    return 0;
 }
 
 int mkdirT(const wchar_t* dirname) {
@@ -32,10 +42,20 @@ int mkdirT(const char* dirname) {
 }
 
 int removeT(const wchar_t* dirname) {
-    return _wremove(dirname);
+    try {
+        std::filesystem::remove_all(dirname);
+    } catch (...) {
+        return 1;
+    }
+    return 0;
 }
 int removeT(const char* dirname) {
-    return remove(dirname);
+    try {
+        std::filesystem::remove_all(dirname);
+    } catch (...) {
+        return 1;
+    }
+    return 0;
 }
 
 void PrintFileAll(const tstring& path) {
