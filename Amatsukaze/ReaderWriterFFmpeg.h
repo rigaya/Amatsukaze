@@ -21,6 +21,8 @@
 #define ENABLE_FFMPEG_FILTER 0
 
 // libffmpeg
+#pragma warning(push)
+#pragma warning(disable:4819) //C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
 extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavcodec/avcodec.h>
@@ -32,6 +34,7 @@ extern "C" {
 #include <libavutil/opt.h>
 #endif
 }
+#pragma warning(pop)
 #pragma comment(lib, "avutil.lib")
 #pragma comment(lib, "avcodec.lib")
 #pragma comment(lib, "avformat.lib")
