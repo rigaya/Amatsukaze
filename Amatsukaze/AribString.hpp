@@ -20,8 +20,6 @@ namespace aribstring {
 typedef const wchar_t* LPCTSTR;
 typedef wchar_t TCHAR;
 
-static int lstrlen(LPCTSTR lpString) { return lstrlenW(lpString); }
-
 static const bool abCharSizeTable[] =
 {
     false,	// CODE_UNKNOWN					不明なグラフィックセット(非対応)

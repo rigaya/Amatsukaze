@@ -82,7 +82,7 @@ static void DebugPrint(const char* fmt, ...) {
     va_start(argp, fmt);
     _vsnprintf_s(buf, sizeof(buf), fmt, argp);
     va_end(argp);
-    OutputDebugString(buf);
+    OutputDebugStringA(buf);
 }
 
 /** @brief ポインタとサイズのセット */
