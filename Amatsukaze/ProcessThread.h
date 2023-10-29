@@ -13,6 +13,7 @@
 
 #include <deque>
 #include <string>
+#include <thread>
 #include <mutex>
 #include <condition_variable>
 
@@ -179,7 +180,7 @@ private:
 
 class SubProcess {
 public:
-    SubProcess(const tstring& args);
+    SubProcess(const tstring& args, const bool disablePowerThrottoling = false);
     ~SubProcess();
     void write(MemoryChunk mc);
     size_t readErr(MemoryChunk mc);
@@ -197,18 +198,22 @@ private:
         HANDLE writeHandle;
     };
 
-    PROCESS_INFORMATION pi_ = PROCESS_INFORMATION();
+    void runSetPowerThrottling();
+
+    PROCESS_INFORMATION pi_;
     Pipe stdErrPipe_;
     Pipe stdOutPipe_;
     Pipe stdInPipe_;
     DWORD exitCode_;
+    std::thread thSetPowerThrottling_;
+    bool thSetPowerThrottlingAbort_;
 
     size_t readGeneric(MemoryChunk mc, HANDLE readHandle);
 };
 
 class EventBaseSubProcess : public SubProcess {
 public:
-    EventBaseSubProcess(const tstring& args);
+    EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling = false);
     ~EventBaseSubProcess();
     int join();
     bool isRunning();
@@ -233,7 +238,7 @@ private:
 
 class StdRedirectedSubProcess : public EventBaseSubProcess {
 public:
-    StdRedirectedSubProcess(const tstring& args, int bufferLines = 0, bool isUtf8 = false);
+    StdRedirectedSubProcess(const tstring& args, const int bufferLines = 0, const bool isUtf8 = false, const bool disablePowerThrottoling = false);
 
     ~StdRedirectedSubProcess();
 

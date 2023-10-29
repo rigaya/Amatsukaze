@@ -31,7 +31,7 @@ private:
 class Y4MEncodeWriter : AMTObject, NonCopyable {
     static const char* getYUV(VideoInfo vi);
 public:
-    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt);
+    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling);
     ~Y4MEncodeWriter();
 
     void inputFrame(const PVideoFrame& frame);
@@ -63,7 +63,7 @@ public:
 
     void encode(
         PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
-        const std::vector<tstring>& encoderOptions,
+        const std::vector<tstring>& encoderOptions, const bool disablePowerThrottoling,
         IScriptEnvironment* env);
 
 private:

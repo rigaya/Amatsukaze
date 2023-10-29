@@ -14,17 +14,14 @@
 #include <vector>
 #include <direct.h>
 #include "CoreUtils.hpp"
+#include "rgy_tchar.h"
 
 #ifdef _MSC_VER
-typedef std::wstring tstring;
 typedef wchar_t tchar;
 #define PRITSTR "ls"
-#define _T(s) L ## s
 #else
-typedef std::string tstring;
 typedef char tchar;
 #define PRITSTR "s"
-#define _T(s) s
 #endif
 
 template <typename ... Args>
@@ -95,10 +92,6 @@ protected:
     AutoBuffer buffer;
 };
 }
-
-std::string str_replace(std::string str, const std::string& from, const std::string& to);
-
-std::wstring str_replace(std::wstring str, const std::wstring& from, const std::wstring& to);
 
 std::string to_string(const std::wstring& str, uint32_t codepage = CP_ACP);
 

@@ -79,10 +79,10 @@ void Y4MWriter::inputFrame(const PVideoFrame& frame) {
     if (vi.Is444()) return "424";
     return "Unknown";
 }
-Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt)
+Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling)
     : AMTObject(ctx)
     , y4mWriter_(new MyVideoWriter(this, vi, fmt))
-    , process_(new StdRedirectedSubProcess(encoder_args, 5)) {
+    , process_(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling)) {
     ctx.infoF("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps",
         getYUV(vi), vi.BitsPerComponent(), fmt.progressive ? "progressive" : "tff",
         fmt.width, fmt.height, fmt.sarWidth, fmt.sarHeight, vi.fps_numerator, vi.fps_denominator);
@@ -135,7 +135,7 @@ AMTFilterVideoEncoder::AMTFilterVideoEncoder(
 
 void AMTFilterVideoEncoder::encode(
     PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
-    const std::vector<tstring>& encoderOptions,
+    const std::vector<tstring>& encoderOptions, const bool disablePowerThrottoling,
     IScriptEnvironment* env) {
     vi_ = source->GetVideoInfo();
     outfmt_ = outfmt;
@@ -156,7 +156,7 @@ void AMTFilterVideoEncoder::encode(
         ctx.infoF("%s", args);
 
         // 初期化
-        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, args, vi_, outfmt_));
+        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, args, vi_, outfmt_, disablePowerThrottoling));
 
         Stopwatch sw;
         // エンコードスレッド開始

@@ -7,6 +7,7 @@
 */
 
 #include "TranscodeManager.h"
+#include "rgy_util.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
@@ -699,9 +700,12 @@ void DoBadThing() {
                         outfmt, bitrateZones, vfrBitrateScale,
                         fileOut.timecode, fileOut.vfrTimingFps, key, pass[i], serviceId));
             }
+            // x264, x265, SVT-AV1のときはdisablePowerThrottoling=trueとする
+            // QSV/NV/VCEEncではプロセス内で自動的に最適なように設定されるため不要
+            const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
             AMTFilterVideoEncoder encoder(ctx, std::max(4, setting.getNumEncodeBufferFrames()));
             encoder.encode(filterClip, outfmt,
-                timeCodes, encoderArgs, env);
+                timeCodes, encoderArgs, disablePowerThrottoling, env);
         } catch (const AvisynthError& avserror) {
             THROWF(AviSynthException, "%s", avserror.msg);
         }

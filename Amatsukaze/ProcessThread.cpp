@@ -7,9 +7,16 @@
 */
 
 #include "ProcessThread.h"
+#include "rgy_thread_affinity.h"
 
-
-SubProcess::SubProcess(const tstring& args) {
+SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) :
+    pi_(PROCESS_INFORMATION()),
+    stdErrPipe_(),
+    stdOutPipe_(),
+    stdInPipe_(),
+    exitCode_(0),
+    thSetPowerThrottling_(),
+    thSetPowerThrottlingAbort_(false) {
     STARTUPINFOW si = STARTUPINFOW();
 
     si.cb = sizeof(si);
@@ -41,6 +48,10 @@ SubProcess::SubProcess(const tstring& args) {
     stdErrPipe_.closeWrite();
     stdOutPipe_.closeWrite();
     stdInPipe_.closeRead();
+
+    if (disablePowerThrottoling) {
+        runSetPowerThrottling();
+    }
 }
 SubProcess::~SubProcess() {
     join();
@@ -66,8 +77,21 @@ size_t SubProcess::readOut(MemoryChunk mc) {
 void SubProcess::finishWrite() {
     stdInPipe_.closeWrite();
 }
+
+void SubProcess::runSetPowerThrottling() {
+    thSetPowerThrottling_ = std::thread([&]() {
+        while (!thSetPowerThrottlingAbort_ || pi_.hProcess == NULL) {
+            SetThreadPowerThrottolingModeForModule(pi_.dwProcessId, nullptr, RGYThreadPowerThrottlingMode::Disabled);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+    });
+}
 int SubProcess::join() {
     if (pi_.hProcess != NULL) {
+        if (thSetPowerThrottling_.joinable()) {
+            thSetPowerThrottlingAbort_ = true;
+            thSetPowerThrottling_.join();
+        }
         // 子プロセスの終了を待つ
         WaitForSingleObject(pi_.hProcess, INFINITE);
         // 終了コード取得
@@ -127,8 +151,8 @@ size_t SubProcess::readGeneric(MemoryChunk mc, HANDLE readHandle) {
     return bytesRead;
 }
 
-EventBaseSubProcess::EventBaseSubProcess(const tstring& args)
-    : SubProcess(args)
+EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling)
+    : SubProcess(args, disablePowerThrottoling)
     , drainOut(this, false)
     , drainErr(this, true) {
     drainOut.start();
@@ -182,8 +206,8 @@ void EventBaseSubProcess::drain_thread(bool isErr) {
     }
 }
 
-StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, int bufferLines, bool isUtf8)
-    : EventBaseSubProcess(args)
+StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling)
+    : EventBaseSubProcess(args, disablePowerThrottoling)
     , bufferLines(bufferLines)
     , isUtf8(isUtf8)
     , outLiner(this, false)
