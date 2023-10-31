@@ -16,7 +16,7 @@ SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) 
     stdInPipe_(),
     exitCode_(0),
     thSetPowerThrottling_(),
-    thSetPowerThrottlingAbort_(false) {
+    heSetPowerThrottlingAbort_(NULL) {
     STARTUPINFOW si = STARTUPINFOW();
 
     si.cb = sizeof(si);
@@ -79,18 +79,26 @@ void SubProcess::finishWrite() {
 }
 
 void SubProcess::runSetPowerThrottling() {
+    heSetPowerThrottlingAbort_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (heSetPowerThrottlingAbort_ == NULL) {
+        return;
+    }
     thSetPowerThrottling_ = std::thread([&]() {
-        while (!thSetPowerThrottlingAbort_ || pi_.hProcess == NULL) {
-            SetThreadPowerThrottolingModeForModule(pi_.dwProcessId, nullptr, RGYThreadPowerThrottlingMode::Disabled);
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        while (WaitForSingleObject(heSetPowerThrottlingAbort_, 5000) == WAIT_TIMEOUT) {
+            if (pi_.hProcess) {
+                SetThreadPowerThrottolingModeForModule(pi_.dwProcessId, nullptr, RGYThreadPowerThrottlingMode::Disabled);
+            }
         }
     });
 }
 int SubProcess::join() {
     if (pi_.hProcess != NULL) {
         if (thSetPowerThrottling_.joinable()) {
-            thSetPowerThrottlingAbort_ = true;
+            SetEvent(heSetPowerThrottlingAbort_);
             thSetPowerThrottling_.join();
+            CloseHandle(heSetPowerThrottlingAbort_);
+            heSetPowerThrottlingAbort_ = NULL;
         }
         // 子プロセスの終了を待つ
         WaitForSingleObject(pi_.hProcess, INFINITE);

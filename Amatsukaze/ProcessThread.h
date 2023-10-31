@@ -206,7 +206,7 @@ private:
     Pipe stdInPipe_;
     DWORD exitCode_;
     std::thread thSetPowerThrottling_;
-    bool thSetPowerThrottlingAbort_;
+    HANDLE heSetPowerThrottlingAbort_;
 
     size_t readGeneric(MemoryChunk mc, HANDLE readHandle);
 };
