@@ -17,9 +17,8 @@
 #include <array>
 #include <mutex>
 #include <set>
-
-#include "Tree.hpp"
-#include "List.hpp"
+#include <deque>
+#include <unordered_map>
 #include "StreamReform.h"
 #include "ReaderWriterFFmpeg.h"
 
@@ -67,12 +66,11 @@ class AMTSource : public IClip, AMTObject {
 
     struct CacheFrame {
         PVideoFrame data;
-        TreeNode<int, CacheFrame*> treeNode;
-        ListNode<CacheFrame*> listNode;
+        int key;
     };
 
-    Tree<int, CacheFrame*> frameCache;
-    List<CacheFrame*> recentAccessed;
+    std::map<int, CacheFrame*> frameCache;
+    std::deque<CacheFrame*> recentAccessed;
 
     // デコードできなかったフレームの置換先リスト
     std::map<int, int> failedMap;

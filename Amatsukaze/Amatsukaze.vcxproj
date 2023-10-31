@@ -97,7 +97,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;AVS_LINKAGE_DLLIMPORT;WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;$(SolutionDir)common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp14</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -115,7 +115,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;AVS_LINKAGE_DLLIMPORT;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;$(SolutionDir)common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp14</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -136,7 +136,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;$(SolutionDir)common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp14</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -160,7 +160,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)include;$(SolutionDir)include_gpl;$(SolutionDir)common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp14</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -194,7 +194,6 @@
     <ClInclude Include="FilteredSource.h" />
     <ClInclude Include="H264VideoParser.h" />
     <ClInclude Include="InterProcessComm.h" />
-    <ClInclude Include="List.hpp" />
     <ClInclude Include="LogoScan.h" />
     <ClInclude Include="Mpeg2TsParser.h" />
     <ClInclude Include="Mpeg2VideoParser.h" />
@@ -210,7 +209,6 @@
     <ClInclude Include="StringUtils.h" />
     <ClInclude Include="TranscodeManager.h" />
     <ClInclude Include="TranscodeSetting.h" />
-    <ClInclude Include="Tree.hpp" />
     <ClInclude Include="TsInfo.h" />
     <ClInclude Include="TsSplitter.h" />
     <ClInclude Include="Version.h" />
@@ -258,12 +256,7 @@
     </ClCompile>
     <ClCompile Include="Encoder.cpp" />
     <ClCompile Include="EncoderOptionParser.cpp" />
-    <ClCompile Include="FileUtils.cpp">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
-    </ClCompile>
+    <ClCompile Include="FileUtils.cpp" />
     <ClCompile Include="FilteredSource.cpp" />
     <ClCompile Include="H264VideoParser.cpp" />
     <ClCompile Include="InterProcessComm.cpp" />

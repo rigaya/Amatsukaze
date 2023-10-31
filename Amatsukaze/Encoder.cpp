@@ -114,7 +114,7 @@ void Y4MEncodeWriter::finish() {
 }
 
 const std::deque<std::vector<char>>& Y4MEncodeWriter::getLastLines() {
-    process_->getLastLines();
+    return process_->getLastLines();
 }
 Y4MEncodeWriter::MyVideoWriter::MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo vi, VideoFormat fmt)
     : Y4MWriter(vi, fmt)

@@ -703,7 +703,7 @@ AVRational av::EncodeWriter::getFrameRate() const {
 }
 
 const std::deque<std::vector<char>>& av::EncodeWriter::getLastLines() {
-    process_->getLastLines();
+    return process_->getLastLines();
 }
 av::EncodeWriter::MyVideoWriter::MyVideoWriter(EncodeWriter* this_, VideoFormat fmt, int bufsize)
     : VideoWriter(fmt, bufsize)

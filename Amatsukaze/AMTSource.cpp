@@ -257,17 +257,15 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
 void AMTSource::PutFrame(int n, const PVideoFrame& frame) {
     CacheFrame* pcache = new CacheFrame();
     pcache->data = frame;
-    pcache->treeNode.key = n;
-    pcache->treeNode.value = pcache;
-    pcache->listNode.value = pcache;
-    frameCache.insert(&pcache->treeNode);
-    recentAccessed.push_front(&pcache->listNode);
+    pcache->key = n;
+    frameCache[n] = pcache;
+    recentAccessed.push_front(pcache);
 
     if ((int)recentAccessed.size() > seekDistance * 3 / 2) {
         // キャッシュから溢れたら削除
-        CacheFrame* pdel = recentAccessed.back().value;
-        frameCache.erase(frameCache.it(&pdel->treeNode));
-        recentAccessed.erase(recentAccessed.it(&pdel->listNode));
+        CacheFrame* pdel = recentAccessed.back();
+        frameCache.erase(pdel->key);
+        recentAccessed.pop_back();
         delete pdel;
     }
 }
@@ -367,7 +365,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
         // ディレイを適用させる
         if (cacheit != frameCache.end()) {
             // すでにキャッシュにある
-            UpdateAccessed(cacheit->value);
+            UpdateAccessed(cacheit->second);
             lastDecodeFrame = frameIndex;
         } else if (prevFrame != nullptr) {
             PutFrame(frameIndex, MakeFrame((*prevFrame)(), frame(), env));
@@ -382,7 +380,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
             auto cachenext = frameCache.find(frameIndex + 1);
             if (cachenext != frameCache.end()) {
                 // すでにキャッシュにある
-                UpdateAccessed(cachenext->value);
+                UpdateAccessed(cachenext->second);
             } else {
                 PutFrame(frameIndex + 1, MakeFrame(frame(), frame(), env));
             }
@@ -392,7 +390,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
         // そのまま
         if (cacheit != frameCache.end()) {
             // すでにキャッシュにある
-            UpdateAccessed(cacheit->value);
+            UpdateAccessed(cacheit->second);
         } else {
             PutFrame(frameIndex, MakeFrame(frame(), frame(), env));
         }
@@ -403,20 +401,24 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
 }
 
 void AMTSource::UpdateAccessed(CacheFrame* frame) {
-    recentAccessed.erase(recentAccessed.it(&frame->listNode));
-    recentAccessed.push_front(&frame->listNode);
+    // recentAccessed にframeがあれば先頭に移動
+    auto target = std::find(recentAccessed.begin(), recentAccessed.end(), frame);
+    if (target != recentAccessed.end()) {
+        recentAccessed.erase(target);
+    }
+    recentAccessed.push_front(frame);
 }
 
 PVideoFrame AMTSource::ForceGetFrame(int n, IScriptEnvironment* env) {
     if (frameCache.size() == 0) {
         return env->NewVideoFrame(vi);
     }
-    auto lb = frameCache.lower_bound(n);
-    if (lb->key != n && lb != frameCache.begin()) {
-        --lb;
+    auto lb = frameCache.find(n);
+    if (lb == frameCache.end()) {
+        lb = frameCache.begin();
     }
-    UpdateAccessed(lb->value);
-    return lb->value->data;
+    UpdateAccessed(lb->second);
+    return lb->second->data;
 }
 
 void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
@@ -541,9 +543,9 @@ AMTSource::AMTSource(AMTContext& ctx,
 AMTSource::~AMTSource() {
     // キャッシュを削除
     while (recentAccessed.size() > 0) {
-        CacheFrame* pdel = recentAccessed.back().value;
-        frameCache.erase(frameCache.it(&pdel->treeNode));
-        recentAccessed.erase(recentAccessed.it(&pdel->listNode));
+        CacheFrame* pdel = recentAccessed.back();
+        frameCache.erase(pdel->key);
+        recentAccessed.pop_back();
         delete pdel;
     }
 }
@@ -558,8 +560,8 @@ PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
     // キャッシュにあれば返す
     auto it = frameCache.find(n);
     if (it != frameCache.end()) {
-        UpdateAccessed(it->value);
-        return it->value->data;
+        UpdateAccessed(it->second);
+        return it->second->data;
     }
 
     // デコードできないフレームは置換フレームに置き換える

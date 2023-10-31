@@ -24,12 +24,6 @@
     <ClInclude Include="WaveWriter.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Tree.hpp">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="List.hpp">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="AdtsParser.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
