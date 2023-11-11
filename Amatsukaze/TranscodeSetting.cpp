@@ -270,6 +270,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     const bool encoderOutputInContainer,
     const VideoFormat& videoFormat,
     const std::vector<tstring>& inAudios,
+    const tstring& tmpdir,
     const tstring& outpath,
     const tstring& tmpout1path,
     const tstring& tmpout2path,
@@ -292,6 +293,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
         sb.clear();
         sb.append(_T("\"%s\""), mp4boxpath);
         sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
+        sb.append(_T(" -tmp \"%s\""), tmpdir);
         sb.append(_T(" -add \"%s#video:name=Video:forcesync"), inVideo);
         if (!encoderOutputInContainer) {
             if (videoFormat.fixedFrameRate) {

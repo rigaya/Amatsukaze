@@ -111,6 +111,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const bool encoderOutputInContainer,
     const VideoFormat& videoFormat,
     const std::vector<tstring>& inAudios,
+    const tstring& tmpdir,
     const tstring& outpath,
     const tstring& tmpout1path,
     const tstring& tmpout2path,

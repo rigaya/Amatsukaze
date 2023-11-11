@@ -220,7 +220,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         setting_.getSrcFilePath(),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
-        vfmt, audioFiles,
+        vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile);
 
@@ -265,7 +265,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         setting_.getSrcFilePath(),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
-        videoFormat, audioFiles, outFilePath,
+        videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
         std::vector<tstring>(), std::vector<tstring>(), tstring());
     ctx.info("[MuxŠJŽn]");
