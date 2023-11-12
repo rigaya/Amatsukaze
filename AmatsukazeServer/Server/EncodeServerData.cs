@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -463,6 +465,10 @@ namespace Amatsukaze.Server
         public bool PrintTimePrefix { get; set; }
         [DataMember]
         public bool EnableShutdownAction { get; set; }
+        [DataMember]
+        public bool NoActionExe { get; set; }
+        [DataMember]
+        public List<string> NoActionExeList { get; set; }
 
         [DataMember]
         public bool EnableRunHours { get; set; }
@@ -1109,6 +1115,10 @@ namespace Amatsukaze.Server
         public FinishAction Action { get; set; }
         [DataMember]
         public int Seconds { get; set; }
+        [DataMember]
+        public bool noActionExe { get; set; }
+        [DataMember]
+        public List<string> noActionExeList { get; set; }
     }
 
     public enum StateChangeEvent

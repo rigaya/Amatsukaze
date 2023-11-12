@@ -17,6 +17,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Markup;
 
 namespace Amatsukaze.Models
 {
@@ -3152,6 +3153,88 @@ namespace Amatsukaze.Models
             }
         }
         #endregion
+
+
+
+        #region noActionExe変更通知プロパティ
+        public bool noActionExe
+        {
+            get { return Model.NoActionExe; }
+            set
+            {
+                if (Model.NoActionExe == value)
+                    return;
+                Model.NoActionExe = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        public string noFinishExeName { get; set; }
+        public int noActionExeIndex { get; set; }
+
+        private ObservableCollection<string> _NoActionExeList = new ObservableCollection<string>();
+
+
+        public ObservableCollection<string> NoActionExeList
+        {
+            // Model.NoActionExeList から取得する
+            get {
+                _NoActionExeList.Clear();
+                if (Model.NoActionExeList != null)
+                {
+                    Model.NoActionExeList.ForEach(s => _NoActionExeList.Add(s));
+                }
+                RaisePropertyChanged("DeleteNoActionExeEnabled");
+                return _NoActionExeList;
+            }
+            set
+            {
+                if (_NoActionExeList == value)
+                    return;
+                _NoActionExeList = value;
+                Model.NoActionExeList = _NoActionExeList.ToList();
+                RaisePropertyChanged();
+                RaisePropertyChanged("DeleteNoActionExeEnabled");
+            }
+        }
+        //_NoActionExeListのサイズを返す
+        public int NoActionExeListSize
+        {
+            get { return _NoActionExeList.Count; }
+        }
+
+        // _NoActionExeList にstringの値を追加する
+        public void AddNoActionExeList()
+        {
+            int origCount = _NoActionExeList.Count;
+            if (string.IsNullOrWhiteSpace(noFinishExeName))
+                return;
+            if (_NoActionExeList.Contains(noFinishExeName))
+                return;
+            _NoActionExeList.Add(noFinishExeName);
+            Model.NoActionExeList = _NoActionExeList.ToList();
+            RaisePropertyChanged();
+            if (origCount == 0)
+            {
+                RaisePropertyChanged("DeleteNoActionExeEnabled");
+            }
+        }
+        // _NoActionExeListからnoActionExeIndexの位置の値を削除する
+        public void RemoveNoActionExeList()
+        {
+            if (noActionExeIndex < 0 || noActionExeIndex >= _NoActionExeList.Count)
+                return;
+            _NoActionExeList.RemoveAt(noActionExeIndex);
+            Model.NoActionExeList = _NoActionExeList.ToList();
+            RaisePropertyChanged();
+            if (_NoActionExeList.Count == 0)
+            {
+                RaisePropertyChanged("DeleteNoActionExeEnabled");
+            }
+        }
+
+        public bool DeleteNoActionExeEnabled { get { return NoActionExeListSize > 0; } }
 
         #region EnableRunHours変更通知プロパティ
         public bool EnableRunHours {

@@ -295,11 +295,12 @@ namespace Amatsukaze.Server
                         preventSuspend.Dispose();
                         preventSuspend = null;
                     }
-                    if (AppData_.finishSetting.Action != FinishAction.None)
+                    if (AppData_.finishSetting.Action != FinishAction.None
+                        && (!AppData_.setting.NoActionExe || !FinishActionRunner.CheckNoActionExeExists(AppData_.setting.NoActionExeList)))
                     {
                         await CancelSleep(); // 2重に走るのは回避する
                         finishActionRunner = new FinishActionRunner(
-                            AppData_.finishSetting.Action, AppData_.finishSetting.Seconds);
+                            AppData_.finishSetting.Action, AppData_.finishSetting.Seconds, AppData_.setting.NoActionExe, AppData_.setting.NoActionExeList);
                         SleepCancel = new FinishSetting()
                         {
                             Action = AppData_.finishSetting.Action,

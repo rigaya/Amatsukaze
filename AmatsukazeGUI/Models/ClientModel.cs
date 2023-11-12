@@ -482,7 +482,7 @@ namespace Amatsukaze.Models
         #endregion
 
         #region Setting変更通知プロパティ
-        private DisplaySetting _Setting = new DisplaySetting() { Model = new Amatsukaze.Server.Setting() };
+        private DisplaySetting _Setting = new DisplaySetting() { Model = new Amatsukaze.Server.Setting() { NoActionExeList = new List<string>() } };
 
         public DisplaySetting Setting {
             get { return _Setting; }

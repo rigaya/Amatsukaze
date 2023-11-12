@@ -1,6 +1,8 @@
 ﻿using Amatsukaze.Models;
+using Amatsukaze.Server;
 using Livet.Commands;
 using Livet.EventListeners;
+using System.Windows.Markup;
 
 namespace Amatsukaze.ViewModels
 {
@@ -284,6 +286,47 @@ namespace Amatsukaze.ViewModels
             Model.Setting.TsReplacePath = null;
         }
         #endregion
+
+        #region DeleteNoActionExeCommand
+        private ViewModelCommand _DeleteNoActionExeCommand;
+
+        public ViewModelCommand DeleteNoActionExeCommand
+        {
+            get
+            {
+                if (_DeleteNoActionExeCommand == null)
+                {
+                    _DeleteNoActionExeCommand = new ViewModelCommand(DeleteNoActionExe);
+                }
+                return _DeleteNoActionExeCommand;
+            }
+        }
+        public void DeleteNoActionExe()
+        {
+            Model.Setting.RemoveNoActionExeList();
+        }
+        #endregion
+
+        #region AddNoActionExeCommand
+        private ViewModelCommand _AddNoActionExeCommand;
+
+        public ViewModelCommand AddNoActionExeCommand
+        {
+            get
+            {
+                if (_AddNoActionExeCommand == null)
+                {
+                    _AddNoActionExeCommand = new ViewModelCommand(AddNoActionExe);
+                }
+                return _AddNoActionExeCommand;
+            }
+        }
+        public void AddNoActionExe()
+        {
+            Model.Setting.AddNoActionExeList();
+        }
+        #endregion
+
 
         #region ClearFontFamilyCommand
         private ViewModelCommand _ClearFontFamilyCommand;

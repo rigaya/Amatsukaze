@@ -1620,6 +1620,8 @@ namespace Amatsukaze.Server
     {
         public FinishAction Action { get; private set; }
         public int Seconds { get; private set; }
+        public bool NoActionExe { get; private set; }
+        public List<String> NoActionExeList { get; private set; }
         private Task Thread;
 
         private PowerState ActionPowerState {
@@ -1637,7 +1639,7 @@ namespace Amatsukaze.Server
 
         public bool Canceled;
 
-        public FinishActionRunner(FinishAction action, int seconds)
+        public FinishActionRunner(FinishAction action, int seconds, bool noActionExe, List<String> noActionExeList)
         {
             if(action == FinishAction.None)
             {
@@ -1645,7 +1647,31 @@ namespace Amatsukaze.Server
             }
             Action = action;
             Seconds = seconds;
+            NoActionExe = noActionExe;
+            NoActionExeList = noActionExeList;
             Thread = Run();
+        }
+
+        public static bool CheckNoActionExeExists(List<String> noActionExeList)
+        {
+            // 現在実行されているProcessModule.Filenameのリストを取得する
+            var procs = new List<string>();
+            foreach (var p in Process.GetProcesses())
+            {
+                try
+                {
+                    procs.Add(Path.GetFileName(p.MainModule.FileName.ToLower()));
+                }
+                catch (Exception) {
+                }
+            }
+
+            // procs内の文字列が、NoActionExeList内の文字列が前方一致するかどうかをチェックする
+            if (noActionExeList.Any(s => procs.Any(p => p.StartsWith(s.ToLower()))))
+            {
+                return true;
+            }
+            return false;
         }
 
         private async Task Run()
@@ -1653,6 +1679,11 @@ namespace Amatsukaze.Server
             await Task.Delay(Seconds * 1000);
 
             if (Canceled) return;
+
+            if (NoActionExe)
+            {
+                if (CheckNoActionExeExists(NoActionExeList)) return;
+            }
 
             if(Action == FinishAction.Shutdown)
             {

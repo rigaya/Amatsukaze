@@ -46,7 +46,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <StackPanel>
@@ -158,12 +159,6 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="x265VFR時間レート"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="フィルタグラフ出力"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="CLIログ表示"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="GUI設定"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="エンコード最大並列数"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="プロセス優先度"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="CPUアフィニティ"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text=""/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="スケジューリング"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="10,10,0,0">
@@ -186,9 +181,68 @@
                     </DockPanel>
                     <CheckBox  Margin="0,4" Height="16" Content="フィルタグラフを出力する" IsChecked="{Binding Model.Setting.DumpFilter, Mode=TwoWay}"/>
                     <CheckBox  Margin="0,4" Height="16" Content="ログの先頭に時刻を表示する" IsChecked="{Binding Model.Setting.PrintTimePrefix, Mode=TwoWay}"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="エンコード後設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,10,0,0">
                     <CheckBox  Margin="0,4" Height="16" Content="エンコード後シャットダウンの選択肢を有効化"
                                IsChecked="{Binding Model.Setting.EnableShutdownAction, Mode=TwoWay}"
                                ToolTip="誤操作を防ぐためデフォルトではシャットダウンを選択できないようになっています。"/>
+                    <CheckBox  Margin="0,4" Height="16"  Content="指定プロセス実行中にスリープ・休止・シャットダウンを抑止する"
+                               IsChecked="{Binding Model.Setting.noActionExe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                               ToolTip="指定の名前のプロセスがあった場合に、&#xA;エンコード後にスリープ等を行わないようにします。&#xA;録画等、PCをオンにしておく必要がある場合に誤ってオフにしてしまうのを&#xA;防止します。"/>
+                    <DockPanel>
+                        <DockPanel.Style>
+                            <Style TargetType="DockPanel">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.noActionExe}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DockPanel.Style>
+                        <StackPanel>
+                            <DockPanel Margin="2">
+                                <TextBlock VerticalAlignment="Top" Text="対象プロセスの実行ファイル名"/>
+                            </DockPanel>
+                            <DockPanel Margin="2">
+                                <TextBox HorizontalAlignment="Left" Width="160" Margin="10,0,0,0" Text="{Binding Model.Setting.noFinishExeName, Mode=TwoWay}"
+                                         ToolTip="プロセスのファイル名を記入し、追加ボタンをクリックしてください。"/>
+                                <Button Width="40" Margin="5,0,5,0" HorizontalAlignment="Right" Content="追加"
+                                            Command="{Binding AddNoActionExeCommand}"
+                                            ToolTip="上部ボックスのプロセス名をリストに追加します。"/>
+                            </DockPanel>
+                            <DockPanel Margin="2">
+                                <StackPanel DockPanel.Dock="Right" Margin="0">
+                                    <Button Width="40" Margin="5,0,5,0" HorizontalAlignment="Right" Content="削除"
+                                            Command="{Binding DeleteNoActionExeCommand}"
+                                            IsEnabled="{Binding Model.Setting.DeleteNoActionExeEnabled}"
+                                            ToolTip="右リストで選択したプロセス名を削除します。"/>
+                                </StackPanel>
+                                <StackPanel DockPanel.Dock="Right" Margin="0">
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                        <StackPanel Margin="10,0,10,0">
+                            <ListBox Width="160" Height="80" Margin="0,0,0,0" HorizontalAlignment="Left"
+                                     ItemsSource="{Binding Model.Setting.NoActionExeList}"
+                                     SelectedIndex="{Binding Model.Setting.noActionExeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="このリスト中の実行ファイル名のプロセスが存在する場合、スリープ等を行いません(前方一致)。&#xA;なお、大文字・小文字は区別しません。"/>
+                        </StackPanel>
+                    </DockPanel>
+                </StackPanel>
+
+
+                <StackPanel Grid.Row="5" Margin="0,10,0,0">
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="エンコード最大並列数"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="プロセス優先度"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="CPUアフィニティ"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text=""/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="スケジューリング"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,10,0,0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Right" TextWrapping="Wrap" Width="22" VerticalAlignment="Center" HorizontalAlignment="Center"
                                    Text="{Binding Model.Setting.NumParallel}"/>
@@ -269,9 +323,10 @@
                         </ItemsControl>
                     </DockPanel>
                 </StackPanel>
-                
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="稼働時間設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,10,0,0">
+
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="稼働時間設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="6" Grid.Column="1" Margin="10,10,0,0">
                     <CheckBox  Margin="0,4" Height="16"  Content="稼働時間設定を有効にする"
                                IsChecked="{Binding Model.Setting.EnableRunHours, Mode=TwoWay}"/>
                     <DockPanel>
@@ -306,8 +361,8 @@
                     </DockPanel>
                 </StackPanel>
                 <!-- Setting console font -->
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                <DockPanel Grid.Row="5" Grid.Column="1" Margin="10,0,0,0">
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <DockPanel Grid.Row="7" Grid.Column="1" Margin="10,0,0,0">
                     <StackPanel DockPanel.Dock="Right">
                         <Button Height="16" Content="クリア" Margin="4" Command="{Binding ClearFontFamilyCommand}"/>
                     </StackPanel>
