@@ -1375,6 +1375,10 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" -bcm ").Append(bitrateCM);
                     }
+                    if (profile.CMQualityOffset != 0)
+                    {
+                        sb.Append(" --cm-quality-offset ").Append(profile.CMQualityOffset);
+                    }
                     if (setting.EnableX265VFRTimeFactor &&
                         (profile.EncoderType == EncoderType.x265 || profile.EncoderType == EncoderType.NVEnc))
                     {

@@ -7,19 +7,21 @@
 */
 
 #include "TranscodeSetting.h"
+#include "EncoderOptionParser.h"
 
 // カラースペース定義を使うため
 #include "libavutil/pixfmt.h"
 
-BitrateZone::BitrateZone()
-    : EncoderZone()
-    , bitrate() {}
-BitrateZone::BitrateZone(EncoderZone zone)
-    : EncoderZone(zone)
-    , bitrate() {}
-BitrateZone::BitrateZone(EncoderZone zone, double bitrate)
-    : EncoderZone(zone)
-    , bitrate(bitrate) {}
+BitrateZone::BitrateZone() :
+    EncoderZone(),
+    bitrate() {}
+BitrateZone::BitrateZone(EncoderZone zone) :
+    EncoderZone(zone),
+    bitrate() {}
+BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset) :
+    EncoderZone(zone),
+    bitrate(bitrate),
+    qualityOffset(qualityOffset) {}
 
 // カラースペース3セット
 // x265は数値そのままでもOKだが、x264はhelpを見る限りstringでなければ
@@ -700,6 +702,10 @@ double ConfigWrapper::getBitrateCM() const {
     return conf.bitrateCM;
 }
 
+double ConfigWrapper::getCMQualityOffset() const {
+    return conf.cmQualityOffset;
+}
+
 double ConfigWrapper::getX265TimeFactor() const {
     return conf.x265TimeFactor;
 }
@@ -1049,7 +1055,7 @@ tstring ConfigWrapper::getFilterGraphDumpPath(EncodeFileKey key) const {
 }
 
 bool ConfigWrapper::isZoneAvailable() const {
-    return conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X265 || conf.encoder == ENCODER_NVENC;
+    return conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X265 || conf.encoder == ENCODER_NVENC || conf.encoder == ENCODER_QSVENC;
 }
 
 bool ConfigWrapper::isZoneWithoutBitrateAvailable() const {
@@ -1068,7 +1074,7 @@ tstring ConfigWrapper::getOptions(
     int numFrames,
     VIDEO_STREAM_FORMAT srcFormat, double srcBitrate, bool pulldown,
     int pass, const std::vector<BitrateZone>& zones, double vfrBitrateScale,
-    EncodeFileKey key) const {
+    EncodeFileKey key, const EncoderOptionInfo& eoInfo) const {
     StringBuilderT sb;
     sb.append(_T("%s"), conf.encoderOptions);
     double targetBitrate = 0;
@@ -1106,16 +1112,44 @@ tstring ConfigWrapper::getOptions(
             // x264/265
             sb.append(_T(" --zones "));
             for (int i = 0; i < (int)zones.size(); ++i) {
-                auto zone = zones[i];
+                const auto& zone = zones[i];
                 sb.append(_T("%s%d,%d,b=%.3g"), (i > 0) ? "/" : "",
                     zone.startFrame, zone.endFrame - 1, zone.bitrate);
             }
-        } else if (conf.autoBitrate) {
-            // NVEnc
-            for (int i = 0; i < (int)zones.size(); ++i) {
-                auto zone = zones[i];
-                sb.append(_T(" --dynamic-rc %d:%d,vbrhq=%d"),
-                    zone.startFrame, zone.endFrame - 1, (int)std::round(targetBitrate * zone.bitrate));
+        } else {
+            // QSVEnc/NVEnc
+            if (conf.autoBitrate) {
+                for (int i = 0; i < (int)zones.size(); ++i) {
+                    const auto& zone = zones[i];
+                    sb.append(_T(" --dynamic-rc %d:%d,vbr=%d"),
+                        zone.startFrame, zone.endFrame - 1, (int)std::round(targetBitrate * zone.bitrate));
+                }
+            } else if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode) {
+                if (rcMode->isBitrateMode) {
+                    for (int i = 0; i < (int)zones.size(); ++i) {
+                        const auto& zone = zones[i];
+                        sb.append(_T(" --dynamic-rc %d:%d,%s=%d"),
+                            zone.startFrame, zone.endFrame - 1, rcMode->name, (int)std::round(eoInfo.rcModeValue[0] * zone.bitrate));
+                    }
+                } else {
+                    for (int i = 0; i < (int)zones.size(); ++i) {
+                        const auto& zone = zones[i];
+                        if (zone.qualityOffset == 0.0) continue;
+                        if (tstring(rcMode->name) == _T("cqp")) {
+                            sb.append(_T(" --dynamic-rc %d:%d,%s=%d:%d:%d"),
+                                zone.startFrame, zone.endFrame - 1, rcMode->name,
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[1] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[2] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
+                        } else if (rcMode->isFloat) {
+                            sb.append(_T(" --dynamic-rc %d:%d,%s=%f"),
+                                zone.startFrame, zone.endFrame - 1, rcMode->name, std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcMode->valueMin), (double)rcMode->valueMax));
+                        } else {
+                            sb.append(_T(" --dynamic-rc %d:%d,%s=%d"),
+                                zone.startFrame, zone.endFrame - 1, rcMode->name, std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
+                        }
+                    }
+                }
             }
         }
     }

@@ -29,7 +29,19 @@ struct EncoderOptionInfo {
     ENUM_ENCODER_DEINT deint;
     bool afsTimecode;
     int selectEvery;
+    tstring rcMode;
+    double rcModeValue[3];
 };
+
+struct EncoderRCMode {
+    const TCHAR *name;
+    bool isBitrateMode;
+    bool isFloat;
+    int valueMin;
+    int valueMax;
+};
+
+const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const tstring& str);
 
 static std::vector<std::wstring> SplitOptions(const tstring& str);
 

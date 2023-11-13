@@ -249,6 +249,8 @@ namespace Amatsukaze.Server
         public BitrateSetting Bitrate { get; set; }
         [DataMember]
         public double BitrateCM { get; set; }
+        [DataMember]
+        public double CMQualityOffset { get; set; }
 
         [DataMember]
         public string JLSCommandFile { get; set; }

@@ -749,6 +749,7 @@ namespace Amatsukaze.Server
                 {
                     EncoderType = EncoderType.x264,
                     BitrateCM = 0.5,
+                    CMQualityOffset = 0,
                     OutputMask = 1,
                     DisableChapter = true, // デフォルトはチャプター解析無効
                     DisableSubs = true, // デフォルトは字幕無効

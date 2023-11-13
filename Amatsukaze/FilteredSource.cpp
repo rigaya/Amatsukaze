@@ -545,8 +545,8 @@ void AMTFilterSource::MakeZones(
         // VFRタイムスタンプをoutZonesに反映させる
         double tick = (double)infmt.frameRateDenom / infmt.frameRateNum;
         for (int i = 0; i < (int)outZones_.size(); ++i) {
-            outZones_[i].startFrame = std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].startFrame * tick * 1000) - timeCodes_.begin();
-            outZones_[i].endFrame = std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].endFrame * tick * 1000) - timeCodes_.begin();
+            outZones_[i].startFrame = (int)(std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].startFrame * tick * 1000) - timeCodes_.begin());
+            outZones_[i].endFrame = (int)(std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].endFrame * tick * 1000) - timeCodes_.begin());
         }
     } else if (numSrcFrames != numOutFrames) {
         // フレーム数が変わっている場合はゾーンを引き伸ばす

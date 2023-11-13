@@ -273,7 +273,14 @@
                         <Border Width="10"/>
                         <TextBox HorizontalAlignment="Left" Width="50" Height="23"
                              Text="{Binding Model.SelectedProfile.BitrateCM, Mode=TwoWay, StringFormat=\{0:F\}, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="CMのビットレートを下げたいときに1より小さい値（0.3など）を設定すると有効です。&#xA;QSVEnc,VCEEncで通常出力の場合は対応していません。"/>
+                             ToolTip="CMのビットレートを下げたいときに1より小さい値（0.3など）を設定すると有効です。&#xA;VCEEncで通常出力の場合は対応していません。"/>
+                        <Border Width="10"/>
+                        <TextBlock Text="CM品質オフセット" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                        <Border Width="10"/>
+                        <TextBox HorizontalAlignment="Left" Width="50" Height="23"
+                             Text="{Binding Model.SelectedProfile.CMQualityOffset, Mode=TwoWay, StringFormat=\{0:F\}, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding Model.SelectedProfile.CMQualityOffsetEnabled}"
+                             ToolTip="CMのビットレートを下げたいときに正の値（8など）を設定すると有効です。&#xA;QSVEnc,NVEncで品質指定のモード使用時に適用します。"/>
                     </DockPanel>
                     <DockPanel>
                         <CheckBox x:Name="autoBitrateCheck" DockPanel.Dock="Top" Content="自動ビットレート指定"

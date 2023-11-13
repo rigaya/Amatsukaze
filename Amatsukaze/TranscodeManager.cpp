@@ -333,7 +333,8 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
     double vfrBitrateScale,
     tstring timecodepath,
     int vfrTimingFps,
-    EncodeFileKey key, int pass, int serviceID) {
+    EncodeFileKey key, int pass, int serviceID,
+    const EncoderOptionInfo& eoInfo) {
     VIDEO_STREAM_FORMAT srcFormat = reformInfo_.getVideoStreamFormat();
     double srcBitrate = getSourceBitrate(key.video);
     return makeEncoderArgs(
@@ -341,7 +342,7 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
         setting_.getEncoderPath(),
         replaceOptions(setting_.getOptions(
             numFrames,
-            srcFormat, srcBitrate, false, pass, zones, vfrBitrateScale, key),
+            srcFormat, srcBitrate, false, pass, zones, vfrBitrateScale, key, eoInfo),
             outfmt, setting_, key, serviceID),
         outfmt,
         timecodepath,
@@ -376,12 +377,13 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
     const std::vector<double>& timeCodes,
     const std::vector<EncoderZone>& cmzones,
     const ConfigWrapper& setting,
+    const EncoderOptionInfo& eoInfo,
     VideoInfo outvi) {
     std::vector<BitrateZone> bitrateZones;
     if (timeCodes.size() == 0 || setting.isEncoderSupportVFR()) {
         // VFRでない、または、エンコーダがVFRをサポートしている -> VFR用に調整する必要がない
         for (int i = 0; i < (int)cmzones.size(); ++i) {
-            bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM());
+            bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
         }
     } else {
         if (setting.isZoneAvailable()) {
@@ -398,10 +400,16 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
                 dump.writeValue(0.05);
             }
 #endif
-            return MakeVFRBitrateZones(
-                timeCodes, cmzones, setting.getBitrateCM(),
-                outvi.fps_numerator, outvi.fps_denominator,
-                setting.getX265TimeFactor(), 0.05); // 全体で5%までの差なら許容する
+            if (auto rcMode = getRCMode(setting.getEncoder(), eoInfo.rcMode); !setting.isAutoBitrate() && rcMode && !rcMode->isBitrateMode) {
+                for (int i = 0; i < (int)cmzones.size(); ++i) {
+                    bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
+                }
+            } else {
+                return MakeVFRBitrateZones(
+                    timeCodes, cmzones, setting.getBitrateCM(),
+                    outvi.fps_numerator, outvi.fps_denominator,
+                    setting.getX265TimeFactor(), 0.05); // 全体で5%までの差なら許容する
+            }
         }
     }
     return bitrateZones;
@@ -524,7 +532,7 @@ void DoBadThing() {
     std::vector<std::pair<size_t, bool>> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
     for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
-        size_t numFrames = reformInfo.getFilterSourceFrames(videoFileIndex).size();
+        int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
         // チャプター解析は300フレーム（約10秒）以上ある場合だけ
         //（短すぎるとエラーになることがあるので）
         bool isAnalyze = (setting.isChapterEnabled() && numFrames >= 300);
@@ -689,7 +697,7 @@ void DoBadThing() {
                 pass.push_back(-1);
             }
 
-            auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, outvi);
+            auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, eoInfo, outvi);
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
             // VFRフレームタイミングが120fpsか
             std::vector<tstring> encoderArgs;
@@ -698,7 +706,7 @@ void DoBadThing() {
                     argGen->GenEncoderOptions(
                         outvi.num_frames,
                         outfmt, bitrateZones, vfrBitrateScale,
-                        fileOut.timecode, fileOut.vfrTimingFps, key, pass[i], serviceId));
+                        fileOut.timecode, fileOut.vfrTimingFps, key, pass[i], serviceId, eoInfo));
             }
             // x264, x265, SVT-AV1のときはdisablePowerThrottoling=trueとする
             // QSV/NV/VCEEncではプロセス内で自動的に最適なように設定されるため不要

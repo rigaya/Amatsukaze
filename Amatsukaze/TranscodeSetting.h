@@ -13,6 +13,8 @@
 
 #include "StreamUtils.h"
 
+struct EncoderOptionInfo;
+
 struct EncoderZone {
     int startFrame;
     int endFrame;
@@ -20,10 +22,11 @@ struct EncoderZone {
 
 struct BitrateZone : EncoderZone {
     double bitrate;
+    double qualityOffset;
 
     BitrateZone();
     BitrateZone(EncoderZone zone);
-    BitrateZone(EncoderZone zone, double bitrate);
+    BitrateZone(EncoderZone zone, double bitrate, double qualityOffset);
 };
 
 namespace av {
@@ -203,6 +206,7 @@ struct Config {
     bool useNicoJKLog;
     BitrateSetting bitrate;
     double bitrateCM;
+    double cmQualityOffset;
     double x265TimeFactor;
     int serviceId;
     DecoderSetting decoderSetting;
@@ -311,6 +315,8 @@ public:
     BitrateSetting getBitrate() const;
 
     double getBitrateCM() const;
+
+    double getCMQualityOffset() const;
 
     double getX265TimeFactor() const;
 
@@ -466,7 +472,7 @@ public:
         int numFrames,
         VIDEO_STREAM_FORMAT srcFormat, double srcBitrate, bool pulldown,
         int pass, const std::vector<BitrateZone>& zones, double vfrBitrateScale,
-        EncodeFileKey key) const;
+        EncodeFileKey key, const EncoderOptionInfo& eoInfo) const;
 
     void dump() const;
 

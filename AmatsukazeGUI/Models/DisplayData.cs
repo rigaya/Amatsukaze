@@ -1156,6 +1156,7 @@ namespace Amatsukaze.Models
                 UpdateWarningText();
                 RaisePropertyChanged();
                 RaisePropertyChanged("EncoderOption");
+                RaisePropertyChanged("CMQualityOffsetEnabled");
             }
         }
         #endregion
@@ -1320,6 +1321,21 @@ namespace Amatsukaze.Models
             }
         }
         #endregion
+
+        #region CMQualityOffset変更通知プロパティ
+        public double CMQualityOffset
+        {
+            get { return Data.CMQualityOffset; }
+            set
+            {
+                if (Data.CMQualityOffset == value)
+                    return;
+                Data.CMQualityOffset = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+        public bool CMQualityOffsetEnabled { get { return Data.EncoderType == EncoderType.QSVEnc || Data.EncoderType == EncoderType.NVEnc; } }
 
         #region JLSCommandFile変更通知プロパティ
         public object JLSCommandFile {

@@ -129,7 +129,8 @@ public:
         double vfrBitrateScale,
         tstring timecodepath,
         int vfrTimingFps,
-        EncodeFileKey key, int pass, int serviceID);
+        EncodeFileKey key, int pass, int serviceID,
+        const EncoderOptionInfo& eoInfo);
 
     // src, target
     std::pair<double, double> printBitrate(AMTContext& ctx, EncodeFileKey key) const;
@@ -145,6 +146,7 @@ std::vector<BitrateZone> MakeBitrateZones(
     const std::vector<double>& timeCodes,
     const std::vector<EncoderZone>& cmzones,
     const ConfigWrapper& setting,
+    const EncoderOptionInfo& eoInfo,
     VideoInfo outvi);
 
 #if 0

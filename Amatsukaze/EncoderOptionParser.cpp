@@ -6,8 +6,63 @@
 * http://opensource.org/licenses/mit-license.php
 */
 
+#include <limits>
 #include "common.h"
 #include "EncoderOptionParser.h"
+
+static const EncoderRCMode RCMODES_X264_X265[] = {
+    { _T("crf"),     false, true,  0, 51 },
+    { _T("bitrate"), true,  false, 1, std::numeric_limits<int>::max() }
+};
+
+static const EncoderRCMode RCMODES_QSVENC[] = {
+    { _T("icq"),    false, false, 1,  51 },
+    { _T("la-icq"), false, false, 1,  51 },
+    { _T("cqp"),    false, false, 0, 255 },
+    { _T("vbr"),    true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("cbr"),    true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("avbr"),   true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("la"),     true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("la-hrd"), true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("vcm"),    true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("qvbr"),   true,  false, 1, std::numeric_limits<int>::max() }
+};
+
+static const EncoderRCMode RCMODES_NVENC[] = {
+    { _T("qvbr"),  false, true,  1,  51  },
+    { _T("cqp"),   false, false, 0, 255 },
+    { _T("cbr"),   true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("cbrhq"), true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("vbr"),   true,  false, 1, std::numeric_limits<int>::max() },
+    { _T("vbrhq"), true,  false, 1, std::numeric_limits<int>::max() }
+};
+
+static int QSVENC_DEFAULT_ICQ = 23;
+static int NVENC_DEFAULT_QVBR = 25;
+
+static std::vector<EncoderRCMode> encoderRCModes(ENUM_ENCODER encoder) {
+    switch (encoder) {
+    case ENCODER_QSVENC:
+        return std::vector<EncoderRCMode>(std::begin(RCMODES_QSVENC), std::end(RCMODES_QSVENC));
+    case ENCODER_NVENC:
+        return std::vector<EncoderRCMode>(std::begin(RCMODES_NVENC), std::end(RCMODES_NVENC));
+    default:
+        return std::vector<EncoderRCMode>();
+    }
+}
+
+const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const tstring& str) {
+    if (str.empty() || str.length() == 0) return nullptr;
+
+    const auto rcmodes = encoderRCModes(encoder);
+    auto it = std::find_if(rcmodes.begin(), rcmodes.end(), [&str](const EncoderRCMode& mode) {
+        return str == mode.name;
+        });
+    if (it != rcmodes.end()) {
+        return &(*it);
+    }
+    return nullptr;
+}
 
 /* static */ std::vector<std::wstring> SplitOptions(const tstring& str) {
     std::wstring wstr = to_wstring(str);
@@ -39,15 +94,61 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
         return info;
     }
 
+    const auto rcmodes = encoderRCModes(encoder);
+
     auto argv = SplitOptions(str);
     int argc = (int)argv.size();
 
+    //デフォルト値をセット
     info.format = VS_H264;
+    switch (encoder) {
+    case ENCODER_QSVENC:
+        info.rcMode = rcmodes.front().name;
+        info.rcModeValue[0] = QSVENC_DEFAULT_ICQ;
+        break;
+    case ENCODER_NVENC:
+        info.rcMode = rcmodes.front().name;
+        info.rcModeValue[0] = NVENC_DEFAULT_QVBR;
+        break;
+    default: break;
+    }
+
+    double qvbr_quality = -1.0;
 
     for (int i = 0; i < argc; ++i) {
         auto& arg = argv[i];
         auto& next = (i + 1 < argc) ? argv[i + 1] : L"";
-        if (arg == L"--vpp-deinterlace") {
+
+        // argがrcmodesのnameに一致する場合、その要素を取得する
+        if (auto it = std::find_if(rcmodes.begin(), rcmodes.end(), [&arg](const EncoderRCMode& mode) {
+            return arg == (tstring(_T("--")) + mode.name);
+            }); it != rcmodes.end()) {
+            info.rcMode = it->name;
+            if (tstring(it->name) == L"cqp") {
+                std::wregex re3(L"([^:]+):([^:]+):([^:]+)");
+                std::wregex re2(L"([^:]+):([^:]+)");
+                std::wsmatch m;
+                if (std::regex_match(next, m, re3)) {
+                    info.rcModeValue[0] = std::stoi(m[1].str());
+                    info.rcModeValue[1] = std::stoi(m[2].str());
+                    info.rcModeValue[2] = std::stoi(m[3].str());
+                } else if (std::regex_match(next, m, re2)) {
+                    info.rcModeValue[0] = std::stoi(m[1].str());
+                    info.rcModeValue[1] = std::stoi(m[2].str());
+                    info.rcModeValue[2] = info.rcModeValue[1];
+                } else {
+                    info.rcModeValue[0] = std::stoi(next);
+                    info.rcModeValue[1] = info.rcModeValue[0];
+                    info.rcModeValue[2] = info.rcModeValue[1];
+                }
+            } else if (it->isFloat) {
+                info.rcModeValue[0] = std::stod(next);
+            } else {
+                info.rcModeValue[0] = std::stoi(next);
+            }
+        } else if (arg == L"--vbr-quality") {
+            qvbr_quality = std::stod(next);
+        } else if (arg == L"--vpp-deinterlace") {
             if (next == L"normal" || next == L"adaptive") {
                 info.deint = ENCODER_DEINT_30P;
             } else if (next == L"it") {
@@ -119,6 +220,10 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 info.format = VS_UNKNOWN;
             }
         }
+    }
+    if (encoder == ENCODER_NVENC && info.rcModeValue[0] <= 0.0 && qvbr_quality >= 0.0) {
+        info.rcMode = _T("qvbr");
+        info.rcModeValue[0] = qvbr_quality;
     }
 
     return info;

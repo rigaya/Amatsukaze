@@ -41,6 +41,7 @@ static void printHelp(const tchar* bin) {
         "                      入力がMPEG2の場合はf=1とする\n"
         "                      指定がない場合はビットレートオプションを追加しない\n"
         "  -bcm|--bitrate-cm <float>   CM判定されたところのビットレート倍率\n"
+        "  --cm-quality-offset <float> CM判定されたところの品質オフセット\n"
         "  --2pass             2passエンコード\n"
         "  --splitsub          メイン以外のフォーマットは結合しない\n"
         "  -aet|--audio-encoder-type <タイプ> 音声エンコーダ[]"
@@ -182,6 +183,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.mode = _T("ts");
     conf.modeArgs = _T("");
     conf.bitrateCM = 1.0;
+    conf.cmQualityOffset = 0.0;
     conf.x265TimeFactor = 0.25;
     conf.serviceId = -1;
     conf.cmoutmask = 1;
@@ -248,6 +250,12 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.bitrateCM);
             if (ret == 0) {
                 THROWF(ArgumentException, "--bitrate-cmの指定が間違っています");
+            }
+        } else if (key == _T("--cm-quality-offset")) {
+            const auto arg = getParam(argc, argv, i++);
+            int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.cmQualityOffset);
+            if (ret == 0) {
+                THROWF(ArgumentException, "--cm-quality-offsetの指定が間違っています");
             }
         } else if (key == _T("--2pass")) {
             conf.twoPass = true;
