@@ -343,6 +343,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
             // 字幕とチャプターを埋め込む
             sb.append(_T("\"%s\" -brand mp42 -ab mp41 -ab iso2"), mp4boxpath);
             sb.append(_T(" -add \"%s\""), dst);
+            sb.append(_T(" -tmp \"%s\""), tmpdir);
             for (int i = 0; i < (int)inSubs.size(); ++i) {
                 if (subsTitles[i] == _T("SRT")) { // mp4はSRTのみ
                     sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
