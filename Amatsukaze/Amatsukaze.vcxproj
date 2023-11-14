@@ -107,6 +107,9 @@
     <PreBuildEvent>
       <Command>.\Version.bat</Command>
     </PreBuildEvent>
+    <ResourceCompile>
+      <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -125,6 +128,9 @@
     <PreBuildEvent>
       <Command>.\Version.bat</Command>
     </PreBuildEvent>
+    <ResourceCompile>
+      <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -149,6 +155,9 @@
     <PreBuildEvent>
       <Command>.\Version.bat</Command>
     </PreBuildEvent>
+    <ResourceCompile>
+      <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -172,6 +181,9 @@
     <PreBuildEvent>
       <Command>.\Version.bat</Command>
     </PreBuildEvent>
+    <ResourceCompile>
+      <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -179,6 +191,7 @@
   <ItemGroup>
     <ClInclude Include="AdtsParser.h" />
     <ClInclude Include="AmatsukazeTestImpl.h" />
+    <ClInclude Include="Amatsukaze_version.h" />
     <ClInclude Include="AMTLogo.h" />
     <ClInclude Include="AMTSource.h" />
     <ClInclude Include="AribString.hpp" />
@@ -298,6 +311,9 @@
     <ProjectReference Include="..\TVCaptionMod2\Caption_src\Caption.vcxproj">
       <Project>{60bc8339-018f-4af1-a09c-edaf70a007b7}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Amatsukaze_version.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
