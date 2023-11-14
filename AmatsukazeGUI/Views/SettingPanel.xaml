@@ -190,7 +190,7 @@
                                ToolTip="誤操作を防ぐためデフォルトではシャットダウンを選択できないようになっています。"/>
                     <CheckBox  Margin="0,4" Height="16"  Content="指定プロセス実行中にスリープ・休止・シャットダウンを行わない"
                                IsChecked="{Binding Model.Setting.noActionExe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                               ToolTip="指定の名前のプロセスがあった場合に、&#xA;エンコード後にスリープ等を行わないようにします。&#xA;録画等、PCをオンにしておく必要がある場合に誤ってオフにしてしまうのを&#xA;防止します。"/>
+                               ToolTip="指定の名前のプロセスがあった場合に、&#xA;エンコード後にスリープ等を行わないようにします。&#xA;録画等、PCをオンにしておく必要がある場合に&#xA;誤ってオフにしてしまうのを防止します。"/>
                     <DockPanel>
                         <DockPanel.Style>
                             <Style TargetType="DockPanel">
