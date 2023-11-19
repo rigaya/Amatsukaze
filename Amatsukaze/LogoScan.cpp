@@ -94,8 +94,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
         // 平均値
         float avg = std::accumulate(k, k + KLEN, 0.0f) / KLEN;
         // 平均値をゼロにする
-        std::transform(k, k + KLEN,
-            stdext::checked_array_iterator<float*>(k, KLEN), [=](float p) { return p - avg; });
+        std::transform(k, k + KLEN, k, [avg](float p) { return p - avg; });
         };
 
     // 特徴点の抽出 //
