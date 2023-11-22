@@ -1067,7 +1067,7 @@ bool ConfigWrapper::isEncoderSupportVFR() const {
 }
 
 bool ConfigWrapper::isBitrateCMEnabled() const {
-    return conf.bitrateCM != 1.0;
+    return conf.bitrateCM != 1.0 || conf.cmQualityOffset != 0;
 }
 
 tstring ConfigWrapper::getOptions(
