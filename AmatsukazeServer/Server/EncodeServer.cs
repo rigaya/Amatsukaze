@@ -476,6 +476,8 @@ namespace Amatsukaze.Server
                         preventSuspend.Dispose();
                         preventSuspend = null;
                     }
+
+                    DeleteOldLogFile();
                 }
 
                 // TODO: アンマネージ リソース (アンマネージ オブジェクト) を解放し、下のファイナライザーをオーバーライドします。
@@ -836,7 +838,7 @@ namespace Amatsukaze.Server
         private Setting GetDefaultSetting()
         {
             string basePath = Path.GetDirectoryName(GetType().Assembly.Location);
-            return SetDefaultPath(new Setting() { NumParallel = 1 });
+            return SetDefaultPath(new Setting() { NumParallel = 1, DeleteOldLogsDays = 180 });
         }
 
 
@@ -878,6 +880,10 @@ namespace Amatsukaze.Server
             if (AppData_.setting.RunHours == null)
             {
                 AppData_.setting.RunHours = Enumerable.Repeat(true, 24).ToArray();
+            }
+            if (AppData_.setting.DeleteOldLogsDays < 0)
+            {
+                AppData_.setting.DeleteOldLogsDays = 180;
             }
             if (AppData_.scriptData == null)
             {
@@ -1074,6 +1080,70 @@ namespace Amatsukaze.Server
                 Util.AddLog("ログファイル書き込み失敗", e);
             }
             return Task.FromResult(0);
+        }
+
+        private void DeleteOldLogFile()
+        {
+            if (!AppData_.setting.DeleteOldLogs) return;
+
+            // 現在の日付を取得する
+            var now = DateTime.Now.Date;
+
+            for (int i = logData.Items.Count - 1; i >= 0; i--)
+            {
+                if (logData.Items[i].EncodeStartDate.Date <= now.AddDays(-AppData_.setting.DeleteOldLogsDays))
+                {
+                    string logpath = GetLogFileBase(logData.Items[i].EncodeStartDate) + ".txt";
+                    if (File.Exists(logpath))
+                    {
+                        try
+                        {
+                            File.Delete(logpath);
+                        }
+                        catch (Exception e)
+                        {
+                            Util.AddLog("ログファイル " + logpath + " の削除に失敗", e);
+                        }
+                    }
+                    string jsonpath = GetLogFileBase(logData.Items[i].EncodeStartDate) + ".json";
+                    if (File.Exists(jsonpath))
+                    {
+                        try
+                        {
+                            File.Delete(jsonpath);
+                        }
+                        catch (Exception e)
+                        {
+                            Util.AddLog("ログファイル " + jsonpath + " の削除に失敗", e);
+                        }
+                    }
+                    logData.Items.RemoveAt(i);
+                }
+            }
+            // 現在のリストを上書き保存する
+            logFile.Save(logData.Items);
+
+            for (int i = checkLogData.Items.Count - 1; i >= 0; i--)
+            {
+                if (checkLogData.Items[i].CheckStartDate.Date <= now.AddDays(-AppData_.setting.DeleteOldLogsDays))
+                {
+                    string logpath = GetCheckLogFileBase(checkLogData.Items[i].CheckStartDate) + ".txt";
+                    if (File.Exists(logpath))
+                    {
+                        try
+                        {
+                            File.Delete(logpath);
+                        }
+                        catch (Exception e)
+                        {
+                            Util.AddLog("ログファイル " + logpath + " の削除に失敗", e);
+                        }
+                    }
+                    checkLogData.Items.RemoveAt(i);
+                }
+            }
+            // 現在のリストを上書き保存する
+            checkLogFile.Save(checkLogData.Items);
         }
 
         private static string GetEncoderPath(EncoderType encoderType, Setting setting)

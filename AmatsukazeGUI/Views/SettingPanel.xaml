@@ -159,6 +159,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="x265VFR時間レート"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="フィルタグラフ出力"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="CLIログ表示"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,4" Text="古いログの削除"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="10,10,0,0">
@@ -181,6 +182,11 @@
                     </DockPanel>
                     <CheckBox  Margin="0,4" Height="16" Content="フィルタグラフを出力する" IsChecked="{Binding Model.Setting.DumpFilter, Mode=TwoWay}"/>
                     <CheckBox  Margin="0,4" Height="16" Content="ログの先頭に時刻を表示する" IsChecked="{Binding Model.Setting.PrintTimePrefix, Mode=TwoWay}"/>
+                    <DockPanel>
+                        <CheckBox  Margin="0,4" Height="16" IsChecked="{Binding Model.Setting.DeleteOldLogs, Mode=TwoWay}"/>
+                        <TextBox Width="30" Height="22" Margin="4,0" HorizontalAlignment="Left" VerticalAlignment="Center" Text="{Binding Model.Setting.DeleteOldLogsDays, Mode=TwoWay, StringFormat=\{0:D\}}" />
+                        <TextBlock VerticalAlignment="Center" Text="日経過したログファイルを自動削除する"/>
+                    </DockPanel>
                 </StackPanel>
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="エンコード後設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>

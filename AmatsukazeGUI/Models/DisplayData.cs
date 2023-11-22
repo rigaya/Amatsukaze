@@ -3171,6 +3171,34 @@ namespace Amatsukaze.Models
         #endregion
 
 
+        #region DeleteOldLogs変更通知プロパティ
+        public bool DeleteOldLogs
+        {
+            get { return Model.DeleteOldLogs; }
+            set
+            {
+                if (Model.DeleteOldLogs == value)
+                    return;
+                Model.DeleteOldLogs = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region DeleteOldLogsDays変更通知プロパティ
+        public int DeleteOldLogsDays
+        {
+            get { return Model.DeleteOldLogsDays; }
+            set
+            {
+                if (Model.DeleteOldLogsDays == value)
+                    return;
+                Model.DeleteOldLogsDays = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
 
         #region noActionExe変更通知プロパティ
         public bool noActionExe

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq.Expressions;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
@@ -51,6 +52,36 @@ namespace Amatsukaze.Server
                 }
             }));
             return list;
+        }
+
+        public void Save(List<T> list)
+        {
+            var setting = new XmlWriterSettings() { OmitXmlDeclaration = true };
+            var s = new DataContractSerializer(typeof(T));
+            // 書き込みに失敗した場合に備え、一時ファイルに書き込んでから移動する
+            var tmpfile = filepath + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(tmpfile));
+            try {
+                using (var fs = new FileStream(tmpfile, FileMode.Create))
+                foreach (var item in list)
+                {
+                    using (var writer = XmlWriter.Create(fs, setting))
+                    {
+                        s.WriteObject(writer, item);
+                    }
+                }
+                // 成功したら tmpfile を filepath に移動
+                // ファイルが消えることのないよう、コピーしてからdeleteする
+                File.Copy(tmpfile, filepath, true);
+                File.Delete(tmpfile);
+            }
+            finally
+            {
+                if (File.Exists(tmpfile))
+                {
+                    File.Delete(tmpfile);
+                }
+            }
         }
 
         public void Add(List<T> list)

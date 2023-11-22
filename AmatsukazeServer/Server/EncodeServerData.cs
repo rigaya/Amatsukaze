@@ -481,6 +481,12 @@ namespace Amatsukaze.Server
         [DataMember]
         public string ConsoleFontFamilyName { get; set; }
 
+        [DataMember]
+        public bool DeleteOldLogs { get; set; }
+
+        [DataMember]
+        public int DeleteOldLogsDays { get; set; }
+
         public ExtensionDataObject ExtensionData { get; set; }
 
         public string ActualWorkPath
