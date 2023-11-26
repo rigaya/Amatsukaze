@@ -3193,7 +3193,7 @@ namespace Amatsukaze.Models
             {
                 if (Model.DeleteOldLogsDays == value)
                     return;
-                Model.DeleteOldLogsDays = value;
+                Model.DeleteOldLogsDays = Math.Max(value, 0);
                 RaisePropertyChanged();
             }
         }
