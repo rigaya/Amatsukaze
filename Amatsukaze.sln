@@ -22,8 +22,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Caption", "TVCaptionMod2\Ca
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BatchHashChecker", "BatchHashChecker\BatchHashChecker.vcxproj", "{04FF3B58-FB29-40C0-8BB7-706B396BC767}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NicoJK18Client", "NicoJK18Client\NicoJK18Client.csproj", "{5A1E4CA1-C310-4E2C-AD88-100E7249396C}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmatsukazeServer", "AmatsukazeServer\AmatsukazeServer.csproj", "{5BAC25F7-EAD0-4B4C-84A7-6EDC9C4C8CD6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmatsukazeAddTask", "AmatsukazeAddTask\AmatsukazeAddTask.csproj", "{FB72ECC9-FB61-420F-855B-33ABD6FD5F55}"
@@ -125,14 +123,6 @@ Global
 		{04FF3B58-FB29-40C0-8BB7-706B396BC767}.Release|x64.Build.0 = Release|x64
 		{04FF3B58-FB29-40C0-8BB7-706B396BC767}.Release|x86.ActiveCfg = Release|x64
 		{04FF3B58-FB29-40C0-8BB7-706B396BC767}.Release|x86.Build.0 = Release|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Debug|Any CPU.ActiveCfg = Debug|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Debug|x64.ActiveCfg = Debug|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Debug|x86.ActiveCfg = Debug|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Debug|x86.Build.0 = Debug|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Release|Any CPU.ActiveCfg = Release|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Release|x64.ActiveCfg = Release|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Release|x86.ActiveCfg = Release|x64
-		{5A1E4CA1-C310-4E2C-AD88-100E7249396C}.Release|x86.Build.0 = Release|x64
 		{5BAC25F7-EAD0-4B4C-84A7-6EDC9C4C8CD6}.Debug|Any CPU.ActiveCfg = Debug|x64
 		{5BAC25F7-EAD0-4B4C-84A7-6EDC9C4C8CD6}.Debug|x64.ActiveCfg = Debug|x64
 		{5BAC25F7-EAD0-4B4C-84A7-6EDC9C4C8CD6}.Debug|x64.Build.0 = Debug|x64
