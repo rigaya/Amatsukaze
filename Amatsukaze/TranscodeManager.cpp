@@ -342,7 +342,7 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
         setting_.getEncoderPath(),
         replaceOptions(setting_.getOptions(
             numFrames,
-            srcFormat, srcBitrate, false, pass, zones, vfrBitrateScale, key, eoInfo),
+            srcFormat, srcBitrate, false, pass, zones, setting_.getEncVideoOptionFilePath(key), vfrBitrateScale, key, eoInfo),
             outfmt, setting_, key, serviceID),
         outfmt,
         timecodepath,

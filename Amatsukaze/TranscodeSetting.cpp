@@ -855,6 +855,11 @@ tstring ConfigWrapper::getEncVideoFilePath(EncodeFileKey key) const {
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
 }
 
+tstring ConfigWrapper::getEncVideoOptionFilePath(EncodeFileKey key) const {
+    return regtmp(StringFormat(_T("%s/v%d-%d-%d%s.opt.txt"),
+        tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
+}
+
 tstring ConfigWrapper::getAfsTimecodePath(EncodeFileKey key) const {
     return regtmp(StringFormat(_T("%s/v%d-%d-%d%s.timecode.txt"),
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
@@ -1073,7 +1078,7 @@ bool ConfigWrapper::isBitrateCMEnabled() const {
 tstring ConfigWrapper::getOptions(
     int numFrames,
     VIDEO_STREAM_FORMAT srcFormat, double srcBitrate, bool pulldown,
-    int pass, const std::vector<BitrateZone>& zones, double vfrBitrateScale,
+    int pass, const std::vector<BitrateZone>& zones, const tstring& optionFilePath, double vfrBitrateScale,
     EncodeFileKey key, const EncoderOptionInfo& eoInfo) const {
     StringBuilderT sb;
     sb.append(_T("%s"), conf.encoderOptions);
@@ -1116,40 +1121,49 @@ tstring ConfigWrapper::getOptions(
                 sb.append(_T("%s%d,%d,b=%.3g"), (i > 0) ? "/" : "",
                     zone.startFrame, zone.endFrame - 1, zone.bitrate);
             }
-        } else {
+        } else if (optionFilePath.length() > 0) {
             // QSVEnc/NVEnc
             if (conf.autoBitrate) {
+                // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
+                std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(optionFilePath.c_str(), _T("w")), fclose);
                 for (int i = 0; i < (int)zones.size(); ++i) {
                     const auto& zone = zones[i];
-                    sb.append(_T(" --dynamic-rc %d:%d,vbr=%d"),
+                    fprintf(fp.get(), " --dynamic-rc %d:%d,vbr=%d\n",
                         zone.startFrame, zone.endFrame - 1, (int)std::round(targetBitrate * zone.bitrate));
                 }
+                sb.append(_T(" --option-file \"%s\""), optionFilePath);
             } else if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode) {
+                // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
+                std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(optionFilePath.c_str(), _T("w")), fclose);
                 if (rcMode->isBitrateMode) {
                     for (int i = 0; i < (int)zones.size(); ++i) {
                         const auto& zone = zones[i];
-                        sb.append(_T(" --dynamic-rc %d:%d,%s=%d"),
-                            zone.startFrame, zone.endFrame - 1, rcMode->name, (int)std::round(eoInfo.rcModeValue[0] * zone.bitrate));
+                        fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
+                            zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                            (int)std::round(eoInfo.rcModeValue[0] * zone.bitrate));
                     }
                 } else {
                     for (int i = 0; i < (int)zones.size(); ++i) {
                         const auto& zone = zones[i];
                         if (zone.qualityOffset == 0.0) continue;
                         if (tstring(rcMode->name) == _T("cqp")) {
-                            sb.append(_T(" --dynamic-rc %d:%d,%s=%d:%d:%d"),
-                                zone.startFrame, zone.endFrame - 1, rcMode->name,
+                            fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d:%d:%d\n",
+                                zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[1] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[2] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
                         } else if (rcMode->isFloat) {
-                            sb.append(_T(" --dynamic-rc %d:%d,%s=%f"),
-                                zone.startFrame, zone.endFrame - 1, rcMode->name, std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcMode->valueMin), (double)rcMode->valueMax));
+                            fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%f\n",
+                                zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                                std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcMode->valueMin), (double)rcMode->valueMax));
                         } else {
-                            sb.append(_T(" --dynamic-rc %d:%d,%s=%d"),
-                                zone.startFrame, zone.endFrame - 1, rcMode->name, std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
+                            fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
+                                zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
                         }
                     }
                 }
+                sb.append(_T(" --option-file \"%s\""), optionFilePath);
             }
         }
     }

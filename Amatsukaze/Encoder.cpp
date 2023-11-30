@@ -324,7 +324,7 @@ void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
         setting_.getEncoder(),
         setting_.getEncoderPath(),
         setting_.getOptions(
-            0, fmt.format, srcBitrate, false, pass_, std::vector<BitrateZone>(), 1, EncodeFileKey(), EncoderOptionInfo()),
+            0, fmt.format, srcBitrate, false, pass_, std::vector<BitrateZone>(), tstring(), 1, EncodeFileKey(), EncoderOptionInfo()),
         fmt, tstring(), false,
         setting_.getFormat(),
         setting_.getEncVideoFilePath(EncodeFileKey()));

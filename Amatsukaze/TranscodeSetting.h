@@ -392,6 +392,8 @@ public:
 
     tstring getEncVideoFilePath(EncodeFileKey key) const;
 
+    tstring getEncVideoOptionFilePath(EncodeFileKey key) const;
+
     tstring getAfsTimecodePath(EncodeFileKey key) const;
 
     tstring getAvsTmpPath(EncodeFileKey key) const;
@@ -471,7 +473,7 @@ public:
     tstring getOptions(
         int numFrames,
         VIDEO_STREAM_FORMAT srcFormat, double srcBitrate, bool pulldown,
-        int pass, const std::vector<BitrateZone>& zones, double vfrBitrateScale,
+        int pass, const std::vector<BitrateZone>& zones, const tstring& optionFilePath, double vfrBitrateScale,
         EncodeFileKey key, const EncoderOptionInfo& eoInfo) const;
 
     void dump() const;
