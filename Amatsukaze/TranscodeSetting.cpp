@@ -1134,6 +1134,7 @@ tstring ConfigWrapper::getOptions(
                 sb.append(_T(" --option-file \"%s\""), optionFilePath);
             } else if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
+                bool addOptFileCmd = false;
                 std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(optionFilePath.c_str(), _T("w")), fclose);
                 if (rcMode->isBitrateMode) {
                     for (int i = 0; i < (int)zones.size(); ++i) {
@@ -1141,11 +1142,13 @@ tstring ConfigWrapper::getOptions(
                         fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
                             zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
                             (int)std::round(eoInfo.rcModeValue[0] * zone.bitrate));
+                        addOptFileCmd = true;
                     }
                 } else {
                     for (int i = 0; i < (int)zones.size(); ++i) {
                         const auto& zone = zones[i];
                         if (zone.qualityOffset == 0.0) continue;
+                        addOptFileCmd = true;
                         if (tstring(rcMode->name) == _T("cqp")) {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d:%d:%d\n",
                                 zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
@@ -1163,7 +1166,9 @@ tstring ConfigWrapper::getOptions(
                         }
                     }
                 }
-                sb.append(_T(" --option-file \"%s\""), optionFilePath);
+                if (addOptFileCmd) {
+                    sb.append(_T(" --option-file \"%s\""), optionFilePath);
+                }
             }
         }
     }
