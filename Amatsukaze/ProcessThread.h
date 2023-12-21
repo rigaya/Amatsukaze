@@ -19,6 +19,7 @@
 
 #include "StreamUtils.h"
 #include "PerformanceUtil.h"
+#include "rgy_thread_affinity.h"
 
 //#define SUBPROC_OUT (isErr ? stderr : stdout)
 // o—Í‚ª¬‚´‚é‚Ì‚ğ–h‚®‚½‚ß‘S‚Ästderr‚Éo—Í
@@ -205,8 +206,7 @@ private:
     Pipe stdOutPipe_;
     Pipe stdInPipe_;
     DWORD exitCode_;
-    std::thread thSetPowerThrottling_;
-    HANDLE heSetPowerThrottlingAbort_;
+    std::unique_ptr<RGYThreadSetPowerThrottoling> thSetPowerThrottling;
 
     size_t readGeneric(MemoryChunk mc, HANDLE readHandle);
 };

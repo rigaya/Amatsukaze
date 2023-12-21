@@ -634,3 +634,41 @@ bool SetThreadPowerThrottolingModeForModule(const uint32_t TargetProcessId, cons
     return false;
 }
 #endif // #if defined(_WIN32) || defined(_WIN64)
+
+RGYThreadSetPowerThrottoling::RGYThreadSetPowerThrottoling(uint32_t pid_) :
+    heAbort(CreateEventW(nullptr, FALSE, FALSE, nullptr)),
+    pid(pid_),
+    thread(),
+    mode(RGYThreadPowerThrottlingMode::Auto) {}
+
+RGYThreadSetPowerThrottoling::~RGYThreadSetPowerThrottoling() {
+    abortThread();
+}
+
+void RGYThreadSetPowerThrottoling::run(const RGYThreadPowerThrottlingMode mode_) {
+    mode = mode_;
+    if (!heAbort || !pid) {
+        return;
+    }
+    thread = std::thread([&]() {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        while (WaitForSingleObject(heAbort, 5000) == WAIT_TIMEOUT) {
+            if (pid) {
+                SetThreadPowerThrottolingModeForModule(pid, nullptr, mode);
+            }
+        }
+    });
+}
+
+void RGYThreadSetPowerThrottoling::abortThread() {
+    if (heAbort) {
+        SetEvent(heAbort);
+    }
+    if (thread.joinable()) {
+        thread.join();
+    }
+    if (heAbort) {
+        CloseHandle(heAbort);
+        heAbort = nullptr;
+    }
+}

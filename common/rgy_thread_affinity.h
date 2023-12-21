@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <array>
 #include <limits>
+#include <thread>
 #include "rgy_tchar.h"
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -212,5 +213,18 @@ bool SetThreadAffinityForModule(const uint32_t TargetProcessId, const TCHAR *Tar
 
 bool SetThreadPowerThrottolingMode(RGYThreadHandle threadHandle, const RGYThreadPowerThrottlingMode mode);
 bool SetThreadPowerThrottolingModeForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const RGYThreadPowerThrottlingMode mode);
+
+
+class RGYThreadSetPowerThrottoling {
+    RGYThreadHandle heAbort;
+    uint32_t pid;
+    std::thread thread;
+    RGYThreadPowerThrottlingMode mode;
+public:
+    RGYThreadSetPowerThrottoling(uint32_t pid);
+    ~RGYThreadSetPowerThrottoling();
+    void run(RGYThreadPowerThrottlingMode mode);
+    void abortThread();
+};
 
 #endif //__RGY_THREAD_AFFINITY_H__

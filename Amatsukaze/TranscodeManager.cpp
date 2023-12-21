@@ -8,6 +8,7 @@
 
 #include "TranscodeManager.h"
 #include "rgy_util.h"
+#include "rgy_thread_affinity.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
@@ -413,7 +414,9 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
         }
     }
     return bitrateZones;
-}// ページヒープが機能しているかテスト
+}
+
+// ページヒープが機能しているかテスト
 void DoBadThing() {
     char *p = (char*)HeapAlloc(
         GetProcessHeap(),
@@ -426,6 +429,9 @@ void DoBadThing() {
     MessageBox(NULL, "Debug", "Amatsukaze", MB_OK);
     //DoBadThing();
 #endif
+
+    auto thSetPowerThrottling = std::make_unique<RGYThreadSetPowerThrottoling>(GetCurrentProcessId());
+    thSetPowerThrottling->run(RGYThreadPowerThrottlingMode::Disabled);
 
     const_cast<ConfigWrapper&>(setting).CreateTempDir();
     setting.dump();
@@ -737,6 +743,7 @@ void DoBadThing() {
     ctx.infoF("Mux完了: %.2f秒", sw.getAndReset());
 
     muxer = nullptr;
+    thSetPowerThrottling->abortThread();
 
     // 出力結果を表示
     reformInfo.printOutputMapping([&](EncodeFileKey key) {
