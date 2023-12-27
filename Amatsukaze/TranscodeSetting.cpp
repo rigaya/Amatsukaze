@@ -994,6 +994,10 @@ const tchar* ConfigWrapper::getOutputExtention(ENUM_FORMAT format) const {
     return _T("amatsukze");
 }
 
+tstring ConfigWrapper::getOutFileBaseWithoutPrefix() const {
+    return conf.outVideoPath;
+}
+
 tstring ConfigWrapper::getOutFileBase(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const {
     StringBuilderT sb;
     sb.append(_T("%s"), conf.outVideoPath);

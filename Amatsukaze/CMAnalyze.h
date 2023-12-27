@@ -26,6 +26,7 @@ class CMAnalyze : public AMTObject {
 public:
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting,
+        int serviceId,
         int videoFileIndex, int numFrames);
 
     CMAnalyze(AMTContext& ctx,
@@ -76,7 +77,7 @@ private:
 
     tstring MakeJoinLogoScpArgs(int videoFileIndex);
 
-    void joinLogoScp(int videoFileIndex);
+    void joinLogoScp(int videoFileIndex, int serviceId);
 
     void readTrimAVS(int videoFileIndex, int numFrames);
 

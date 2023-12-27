@@ -466,11 +466,11 @@ void DoBadThing() {
     }
     StreamReformInfo reformInfo = splitter->split();
     ctx.infoF("TS‰ðÍŠ®—¹: %.2f•b", sw.getAndReset());
-    int serviceId = splitter->getActualServiceId();
-    int64_t numTotalPackets = splitter->getNumTotalPackets();
-    int64_t numScramblePackets = splitter->getNumScramblePackets();
-    int64_t totalIntVideoSize = splitter->getTotalIntVideoSize();
-    int64_t srcFileSize = splitter->getSrcFileSize();
+    const int serviceId = splitter->getActualServiceId();
+    const int64_t numTotalPackets = splitter->getNumTotalPackets();
+    const int64_t numScramblePackets = splitter->getNumScramblePackets();
+    const int64_t totalIntVideoSize = splitter->getTotalIntVideoSize();
+    const int64_t srcFileSize = splitter->getSrcFileSize();
     splitter = nullptr;
 
     if (setting.isDumpStreamInfo()) {
@@ -544,7 +544,7 @@ void DoBadThing() {
         bool isAnalyze = (setting.isChapterEnabled() && numFrames >= 300);
 
         cmanalyze.emplace_back(std::unique_ptr<CMAnalyze>(isAnalyze
-            ? new CMAnalyze(ctx, setting, videoFileIndex, numFrames)
+            ? new CMAnalyze(ctx, setting, serviceId, videoFileIndex, numFrames)
             : new CMAnalyze(ctx, setting)));
 
         CMAnalyze* cma = cmanalyze.back().get();

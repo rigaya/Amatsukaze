@@ -10,6 +10,7 @@
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
     const ConfigWrapper& setting,
+    int serviceId,
     int videoFileIndex, int numFrames)
     : AMTObject(ctx)
     , setting_(setting) {
@@ -47,7 +48,7 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     // CM推定
     ctx.info("[CM解析]");
     sw.start();
-    joinLogoScp(videoFileIndex);
+    joinLogoScp(videoFileIndex, serviceId);
     ctx.infoF("完了: %.2f秒", sw.getAndReset());
 
     ctx.info("[CM解析結果 - TrimAVS]");
@@ -306,14 +307,26 @@ tstring CMAnalyze::MakeJoinLogoScpArgs(int videoFileIndex) {
     return sb.str();
 }
 
-void CMAnalyze::joinLogoScp(int videoFileIndex) {
+void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     auto args = MakeJoinLogoScpArgs(videoFileIndex);
     ctx.infoF("%s", args);
+    // join_logo_scp向けの環境変数を設定
+    const tstring clioutpath = setting_.getOutFileBaseWithoutPrefix() + _T(".") + setting_.getOutputExtention(setting_.getFormat());
+    SetEnvironmentVariable(_T("CLI_IN_PATH"), setting_.getSrcFilePath().c_str());
+    SetEnvironmentVariable(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceId).c_str());
+    SetEnvironmentVariable(_T("CLI_OUT_PATH"), clioutpath.c_str());
+    ctx.infoF("CLI_IN_PATH  : %s", to_string(setting_.getSrcFilePath()).c_str());
+    ctx.infoF("SERVICE_ID   : %d", serviceId);
+    ctx.infoF("CLI_OUT_PATH : %s", to_string(clioutpath).c_str());
     MySubProcess process(args);
     int exitCode = process.join();
     if (exitCode != 0) {
         THROWF(FormatException, "join_logo_scp.exeがエラーコード(%d)を返しました", exitCode);
     }
+    // join_logo_scp向けの環境変数を解除
+    SetEnvironmentVariable(_T("CLI_IN_PATH"), NULL);
+    SetEnvironmentVariable(_T("SERVICE_ID"), NULL);
+    SetEnvironmentVariable(_T("CLI_OUT_PATH"), NULL);
 }
 
 void CMAnalyze::readTrimAVS(int videoFileIndex, int numFrames) {

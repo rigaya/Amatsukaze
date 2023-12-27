@@ -444,6 +444,8 @@ public:
 
     const tchar* getOutputExtention(ENUM_FORMAT format) const;
 
+    tstring getOutFileBaseWithoutPrefix() const;
+
     tstring getOutFileBase(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
     tstring getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
