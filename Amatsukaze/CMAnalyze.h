@@ -27,7 +27,7 @@ public:
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting,
         int serviceId,
-        int videoFileIndex, int numFrames);
+        int videoFileIndex, int numFrames, bool analyzeChapterAndCM);
 
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting);

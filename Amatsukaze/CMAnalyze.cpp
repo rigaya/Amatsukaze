@@ -11,11 +11,12 @@
 CMAnalyze::CMAnalyze(AMTContext& ctx,
     const ConfigWrapper& setting,
     int serviceId,
-    int videoFileIndex, int numFrames)
+    int videoFileIndex, int numFrames,
+    bool analyzeChapterAndCM)
     : AMTObject(ctx)
     , setting_(setting) {
     Stopwatch sw;
-    tstring avspath = makeAVSFile(videoFileIndex);
+    const tstring avspath = makeAVSFile(videoFileIndex);
 
     // ロゴ解析
     if (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0) {
@@ -36,36 +37,38 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
         }
     }
 
-    // チャプター解析
-    ctx.info("[無音・シーンチェンジ解析]");
-    sw.start();
-    chapterExe(videoFileIndex, avspath);
-    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+    if (analyzeChapterAndCM) {
+        // チャプター解析
+        ctx.info("[無音・シーンチェンジ解析]");
+        sw.start();
+        chapterExe(videoFileIndex, avspath);
+        ctx.infoF("完了: %.2f秒", sw.getAndReset());
 
-    ctx.info("[無音・シーンチェンジ解析結果]");
-    PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
+        ctx.info("[無音・シーンチェンジ解析結果]");
+        PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
 
-    // CM推定
-    ctx.info("[CM解析]");
-    sw.start();
-    joinLogoScp(videoFileIndex, serviceId);
-    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+        // CM推定
+        ctx.info("[CM解析]");
+        sw.start();
+        joinLogoScp(videoFileIndex, serviceId);
+        ctx.infoF("完了: %.2f秒", sw.getAndReset());
 
-    ctx.info("[CM解析結果 - TrimAVS]");
-    PrintFileAll(setting_.getTmpTrimAVSPath(videoFileIndex));
-    ctx.info("[CM解析結果 - 詳細]");
-    PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
+        ctx.info("[CM解析結果 - TrimAVS]");
+        PrintFileAll(setting_.getTmpTrimAVSPath(videoFileIndex));
+        ctx.info("[CM解析結果 - 詳細]");
+        PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
 
-    // AVSファイルからCM区間を読む
-    readTrimAVS(videoFileIndex, numFrames);
+        // AVSファイルからCM区間を読む
+        readTrimAVS(videoFileIndex, numFrames);
 
-    // シーンチェンジ
-    readSceneChanges(videoFileIndex);
+        // シーンチェンジ
+        readSceneChanges(videoFileIndex);
 
-    // 分割情報
-    readDiv(videoFileIndex, numFrames);
+        // 分割情報
+        readDiv(videoFileIndex, numFrames);
 
-    makeCMZones(numFrames);
+        makeCMZones(numFrames);
+    }
 }
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,

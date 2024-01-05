@@ -538,18 +538,19 @@ void DoBadThing() {
     std::vector<std::pair<size_t, bool>> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
     for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
-        int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
+        const int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
+        const bool delogoEnabled = setting.isNoDelogo() ? false : true;
         // チャプター解析は300フレーム（約10秒）以上ある場合だけ
-        //（短すぎるとエラーになることがあるので）
-        bool isAnalyze = (setting.isChapterEnabled() && numFrames >= 300);
+        //（短すぎるとエラーになることがあるので
+        const bool analyzeChapterAndCM = (setting.isChapterEnabled() && numFrames >= 300);
 
-        cmanalyze.emplace_back(std::unique_ptr<CMAnalyze>(isAnalyze
-            ? new CMAnalyze(ctx, setting, serviceId, videoFileIndex, numFrames)
+        cmanalyze.emplace_back(std::unique_ptr<CMAnalyze>(analyzeChapterAndCM || delogoEnabled
+            ? new CMAnalyze(ctx, setting, serviceId, videoFileIndex, numFrames, analyzeChapterAndCM)
             : new CMAnalyze(ctx, setting)));
 
         CMAnalyze* cma = cmanalyze.back().get();
 
-        if (isAnalyze && setting.isPmtCutEnabled()) {
+        if (analyzeChapterAndCM && setting.isPmtCutEnabled()) {
             // PMT変更によるCM追加認識
             cma->applyPmtCut(numFrames, setting.getPmtCutSideRate(),
                 reformInfo.getPidChangedList(videoFileIndex));
@@ -565,7 +566,7 @@ void DoBadThing() {
         logoFound.emplace_back(numFrames, cma->getLogoPath().size() > 0);
         reformInfo.applyCMZones(videoFileIndex, cma->getZones(), cma->getDivs());
 
-        if (isAnalyze) {
+        if (analyzeChapterAndCM) {
             chapterMakers[videoFileIndex] = std::unique_ptr<MakeChapter>(
                 new MakeChapter(ctx, setting, reformInfo, videoFileIndex, cma->getTrims()));
         }
