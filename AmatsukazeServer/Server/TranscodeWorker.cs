@@ -719,7 +719,9 @@ namespace Amatsukaze.Server
 
             bool ignoreNoLogo = true;
             string[] logopaths = null;
-            if (item.Mode != ProcMode.DrcsCheck && profile.NoDelogo == false)
+            bool enableChapter = !profile.DisableChapter;
+            bool enableDelogo = !profile.NoDelogo;
+            if (item.Mode != ProcMode.DrcsCheck && (enableChapter || enableDelogo))
             {
                 var logofiles = serviceSetting.LogoSettings
                     .Where(s => s.CanUse(item.TsTime))
