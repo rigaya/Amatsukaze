@@ -729,9 +729,7 @@ namespace Amatsukaze.Server
                     .ToArray();
                 if (logofiles.Length == 0)
                 {
-                    // これは必要ないはず
-                    item.FailReason = "ロゴ設定がありません";
-                    return null;
+                    return FailLogItem(item, item.Profile.Name, "ロゴ設定がありません", now, now);
                 }
                 ignoreNoLogo = !logofiles.All(path => path != LogoSetting.NO_LOGO);
                 logopaths = logofiles.Where(path => path != LogoSetting.NO_LOGO).ToArray();
