@@ -598,7 +598,7 @@ class LogoFrame : AMTObject {
         numFrames = (int)(evalResults.size() / numLogos);
         framesPerSec = (int)std::round((float)vi.fps_numerator / vi.fps_denominator);
 
-        ctx.info("Finished");
+        ctx.infoF("Finished %d frames", numFrames);
     }
 
 public:
