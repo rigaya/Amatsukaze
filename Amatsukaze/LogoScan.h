@@ -528,11 +528,10 @@ class LogoFrame : AMTObject {
     float logoRatio;
 
     template <typename pixel_t>
-    void ScanFrame(PVideoFrame& frame, float* memDeint, float* memWork, const float maxv, std::vector<EvalResult>& outResult) {
+    void ScanFrame(PVideoFrame& frame, float* memDeint, float* memWork, const float maxv, EvalResult *outResult) {
         const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->GetReadPtr(PLANAR_Y));
-        int pitchY = frame->GetPitch(PLANAR_Y);
+        const int pitchY = frame->GetPitch(PLANAR_Y);
 
-        outResult.resize(numLogos, { 0.0f, 0.0f });
         for (int i = 0; i < numLogos; ++i) {
             LogoDataParam& logo = deintArr[i];
             if (logo.isValid() == false ||
@@ -544,7 +543,7 @@ class LogoFrame : AMTObject {
             }
 
             // フレームをインタレ解除
-            int off = logo.getImgX() + logo.getImgY() * pitchY;
+            const int off = logo.getImgX() + logo.getImgY() * pitchY;
             DeintY(memDeint, srcY + off, pitchY, logo.getWidth(), logo.getHeight());
 
             // ロゴ評価
@@ -573,7 +572,7 @@ class LogoFrame : AMTObject {
         std::vector<float> memWork(maxYSize + 8, 0.0f);
         const float maxv = (float)((1 << vi.BitsPerComponent()) - 1);
         evalResults.clear();
-        evalResults.reserve(vi.num_frames * numLogos);
+        evalResults.resize(vi.num_frames * numLogos, EvalResult{ 0, -1 });
 
         if (trims.size() > 0 && (trims.size() % 2) == 0) {
             ctx.infoF("解析範囲");
@@ -582,18 +581,16 @@ class LogoFrame : AMTObject {
             }
         }
 
-        std::vector<EvalResult> frameResults;
         for (int n = 0; n < vi.num_frames; n++) {
             if (!inTrimRange(n, trims)) {
                 continue;
             }
             PVideoFrame frame = clip->GetFrame(n, env);
-            ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, frameResults);
+            ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, &evalResults[n * numLogos]);
 
             if ((n % 5000) == 0) {
                 ctx.infoF("%6d/%d", n, vi.num_frames);
             }
-            evalResults.insert(evalResults.end(), frameResults.begin(), frameResults.end());
         }
         numFrames = (int)(evalResults.size() / numLogos);
         framesPerSec = (int)std::round((float)vi.fps_numerator / vi.fps_denominator);
