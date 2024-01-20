@@ -80,22 +80,6 @@ void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, 
     makeCMZones(numFrames);
 }
 
-const tstring& CMAnalyze::getLogoPath() const {
-    return logopath;
-}
-
-const std::vector<int>& CMAnalyze::getTrims() const {
-    return trims;
-}
-
-const std::vector<EncoderZone>& CMAnalyze::getZones() const {
-    return cmzones;
-}
-
-const std::vector<int>& CMAnalyze::getDivs() const {
-    return divs;
-}
-
 // PMT•ÏXî•ñ‚©‚çCM’Ç‰Á”F¯
 void CMAnalyze::applyPmtCut(
     int numFrames, const double* rates,

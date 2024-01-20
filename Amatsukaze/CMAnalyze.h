@@ -29,13 +29,10 @@ public:
 
     void analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM);
 
-    const tstring& getLogoPath() const;
-
-    const std::vector<int>& getTrims() const;
-
-    const std::vector<EncoderZone>& getZones() const;
-
-    const std::vector<int>& getDivs() const;
+    const tstring& getLogoPath() const { return logopath; }
+    const std::vector<int>& getTrims() const { return trims; }
+    const std::vector<EncoderZone>& getZones() const { return cmzones; }
+    const std::vector<int>& getDivs() const { return divs; }
 
     // PMT•ÏXî•ñ‚©‚çCM’Ç‰Á”F¯
     void applyPmtCut(
