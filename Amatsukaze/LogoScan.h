@@ -508,8 +508,8 @@ public:
 
 class LogoFrame : AMTObject {
     int numLogos;
-    std::unique_ptr<LogoDataParam[]> logoArr;
-    std::unique_ptr<LogoDataParam[]> deintArr;
+    std::vector<LogoDataParam> logoArr;
+    std::vector<LogoDataParam> deintArr;
 
     int maxYSize;
     int numFrames;
@@ -569,8 +569,8 @@ class LogoFrame : AMTObject {
 
     template <typename pixel_t>
     void IterateFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env) {
-        auto memDeint = std::unique_ptr<float[]>(new float[maxYSize + 8]);
-        auto memWork = std::unique_ptr<float[]>(new float[maxYSize + 8]);
+        std::vector<float> memDeint(maxYSize + 8, 0.0f);
+        std::vector<float> memWork(maxYSize + 8, 0.0f);
         const float maxv = (float)((1 << vi.BitsPerComponent()) - 1);
         evalResults.clear();
         evalResults.reserve(vi.num_frames * numLogos);
@@ -588,7 +588,7 @@ class LogoFrame : AMTObject {
                 continue;
             }
             PVideoFrame frame = clip->GetFrame(n, env);
-            ScanFrame<pixel_t>(frame, memDeint.get(), memWork.get(), maxv, frameResults);
+            ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, frameResults);
 
             if ((n % 5000) == 0) {
                 ctx.infoF("%6d/%d", n, vi.num_frames);

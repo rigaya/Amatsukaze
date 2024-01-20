@@ -1046,9 +1046,9 @@ int __stdcall logo::AMTEraseLogo::SetCacheHints(int cachehints, int frame_range)
 // 絶対値<0.2fは不明とみなす
 logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofiles, float maskratio) :
     AMTObject(ctx),
-    numLogos(0),
-    logoArr(),
-    deintArr(),
+    numLogos((int)logofiles.size()),
+    logoArr(logofiles.size()),
+    deintArr(logofiles.size()),
     maxYSize(0),
     numFrames(0),
     framesPerSec(0),
@@ -1056,11 +1056,6 @@ logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofile
     evalResults(),
     bestLogo(-1),
     logoRatio(0.0) {
-    numLogos = (int)logofiles.size();
-    logoArr = std::unique_ptr<LogoDataParam[]>(new LogoDataParam[logofiles.size()]);
-    deintArr = std::unique_ptr<LogoDataParam[]>(new LogoDataParam[logofiles.size()]);
-
-    maxYSize = 0;
     for (int i = 0; i < (int)logofiles.size(); ++i) {
         try {
             LogoHeader header;
