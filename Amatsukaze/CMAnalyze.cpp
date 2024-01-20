@@ -9,12 +9,13 @@
 #include "CMAnalyze.h"
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
-    const ConfigWrapper& setting,
-    int serviceId,
-    int videoFileIndex, int numFrames,
-    bool analyzeChapterAndCM)
-    : AMTObject(ctx)
-    , setting_(setting) {
+    const ConfigWrapper& setting) :
+    AMTObject(ctx),
+    setting_(setting) {}
+
+void CMAnalyze::analyze(int serviceId,
+    int videoFileIndex, int numFrames, bool analyzeChapterAndCM) {
+
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
@@ -70,11 +71,6 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
         makeCMZones(numFrames);
     }
 }
-
-CMAnalyze::CMAnalyze(AMTContext& ctx,
-    const ConfigWrapper& setting)
-    : AMTObject(ctx)
-    , setting_(setting) {}
 
 const tstring& CMAnalyze::getLogoPath() const {
     return logopath;

@@ -25,12 +25,10 @@
 class CMAnalyze : public AMTObject {
 public:
     CMAnalyze(AMTContext& ctx,
-        const ConfigWrapper& setting,
-        int serviceId,
-        int videoFileIndex, int numFrames, bool analyzeChapterAndCM);
-
-    CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting);
+
+    void analyze(int serviceId,
+        int videoFileIndex, int numFrames, bool analyzeChapterAndCM);
 
     const tstring& getLogoPath() const;
 

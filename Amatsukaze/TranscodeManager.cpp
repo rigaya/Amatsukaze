@@ -538,17 +538,17 @@ void DoBadThing() {
     std::vector<std::pair<size_t, bool>> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
     for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
+        cmanalyze.push_back(std::make_unique<CMAnalyze>(ctx, setting));
+
         const int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
         const bool delogoEnabled = setting.isNoDelogo() ? false : true;
         // チャプター解析は300フレーム（約10秒）以上ある場合だけ
         //（短すぎるとエラーになることがあるので
         const bool analyzeChapterAndCM = (setting.isChapterEnabled() && numFrames >= 300);
-
-        cmanalyze.emplace_back(std::unique_ptr<CMAnalyze>(analyzeChapterAndCM || delogoEnabled
-            ? new CMAnalyze(ctx, setting, serviceId, videoFileIndex, numFrames, analyzeChapterAndCM)
-            : new CMAnalyze(ctx, setting)));
-
-        CMAnalyze* cma = cmanalyze.back().get();
+        CMAnalyze *cma = cmanalyze.back().get();
+        if (analyzeChapterAndCM || delogoEnabled) {
+            cma->analyze(serviceId, videoFileIndex, numFrames, analyzeChapterAndCM);
+        }
 
         if (analyzeChapterAndCM && setting.isPmtCutEnabled()) {
             // PMT変更によるCM追加認識
