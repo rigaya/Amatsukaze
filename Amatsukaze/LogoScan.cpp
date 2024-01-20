@@ -1095,42 +1095,53 @@ void logo::LogoFrame::dumpResult(const tstring& basepath) {
     }
 }
 
+// 直近のtargetFramesフレームのうち、
 // 0番目～numCandidatesまでのロゴから最も合っているロゴ(bestLogo)を選択
 // numCandidatesの指定がない場合(-1)は、すべてのロゴから検索
-void logo::LogoFrame::selectLogo(int numCandidates) {
+// targetFramesの指定がない場合(-1)は、すべてのフレームから検索
+std::vector<logo::LogoFrame::LogoScore> logo::LogoFrame::calcLogoScore(int& targetFrames, int numCandidates) const {
     if (numCandidates < 0) {
         numCandidates = numLogos;
     }
-    struct Summary {
-        float cost;    // 消した後のゴミの量
-        int numFrames;  // 検出したフレーム数
-    };
-    std::vector<Summary> logoSummary(numCandidates);
-    for (int n = 0; n < numFrames; ++n) {
-        for (int i = 0; i < numCandidates; ++i) {
-            auto& r = evalResults[n * numLogos + i];
+    const int scanedFrames = (int)(evalResults.size() / numLogos);
+    const int startFrame = (targetFrames < 0) ? 0 : std::max(0, scanedFrames - targetFrames);
+    targetFrames = scanedFrames - startFrame;
+    std::vector<LogoScore> logoScore(numCandidates);
+    for (int n = startFrame; n < scanedFrames; n++) {
+        for (int i = 0; i < numCandidates; i++) {
+            const auto& r = evalResults[n * numLogos + i];
             // ロゴを検出 かつ 消せてる
             if (r.corr0 > THRESH && std::abs(r.corr1) < THRESH) {
-                logoSummary[i].numFrames++;
-                logoSummary[i].cost += std::abs(r.corr1);
+                logoScore[i].numFrames++;
+                logoScore[i].cost += std::abs(r.corr1);
             }
         }
     }
-    std::vector<float> logoScore(numCandidates);
-    for (int i = 0; i < numCandidates; ++i) {
-        auto& s = logoSummary[i];
+    for (int i = 0; i < numCandidates; i++) {
+        auto& s = logoScore[i];
         // (消した後のゴミの量の平均) * (検出したフレーム割合の逆数)
-        logoScore[i] = (s.numFrames == 0) ? INFINITY :
-            (s.cost / s.numFrames) * (numFrames / (float)s.numFrames);
+        s.score = (s.numFrames == 0) ? INFINITY :
+            (s.cost / s.numFrames) * (targetFrames / (float)s.numFrames);
+    }
+    return logoScore;
+}
+
+void logo::LogoFrame::selectLogo(int numCandidates) {
+    int targetFrames = -1;
+    const auto logoScore = calcLogoScore(numCandidates, -1);
+    for (int i = 0; i < numCandidates; i++) {
+        auto& s = logoScore[i];
 #if 1
         ctx.debugF("logo%d: %f * %f = %f", i + 1,
             (s.cost / s.numFrames),
-            (numFrames / (float)s.numFrames),
+            (targetFrames / (float)s.numFrames),
             logoScore[i]);
 #endif
     }
-    bestLogo = (int)(std::min_element(logoScore.begin(), logoScore.end()) - logoScore.begin());
-    logoRatio = (float)logoSummary[bestLogo].numFrames / numFrames;
+    bestLogo = (int)(std::min_element(logoScore.begin(), logoScore.end(), [](const auto& a, const auto& b) {
+        return a.score < b.score;
+    }) - logoScore.begin());
+    logoRatio = (float)logoScore[bestLogo].numFrames / targetFrames;
 }
 
 // logoIndexに指定したロゴのlogoframeファイルを出力

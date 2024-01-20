@@ -601,6 +601,18 @@ class LogoFrame : AMTObject {
         ctx.infoF("Finished %d frames", numFrames);
     }
 
+    struct LogoScore {
+        float cost;    // 消した後のゴミの量
+        int numFrames;  // 検出したフレーム数
+        float score;
+    };
+
+    // 直近のtargetFramesフレームのうち、
+    // 0番目～numCandidatesまでのロゴから最も合っているロゴ(bestLogo)を選択
+    // numCandidatesの指定がない場合(-1)は、すべてのロゴから検索
+    // targetFramesの指定がない場合(-1)は、すべてのフレームから検索
+    std::vector<LogoScore> calcLogoScore(int& targetFrames, int numCandidates) const;
+
 public:
     LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofiles, float maskratio);
 
