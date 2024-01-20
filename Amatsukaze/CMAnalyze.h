@@ -27,8 +27,7 @@ public:
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting);
 
-    void analyze(int serviceId,
-        int videoFileIndex, int numFrames, bool analyzeChapterAndCM);
+    void analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM);
 
     const tstring& getLogoPath() const;
 
@@ -62,6 +61,10 @@ private:
     std::vector<EncoderZone> cmzones;
     std::vector<int> sceneChanges;
     std::vector<int> divs;
+
+    void analyzeLogo(const int videoFileIndex, Stopwatch& sw, const tstring& avspath);
+
+    void analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
     tstring makeAVSFile(int videoFileIndex);
 

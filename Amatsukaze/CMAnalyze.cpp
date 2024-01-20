@@ -13,63 +13,71 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     AMTObject(ctx),
     setting_(setting) {}
 
-void CMAnalyze::analyze(int serviceId,
-    int videoFileIndex, int numFrames, bool analyzeChapterAndCM) {
+void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM) {
 
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
     // ロゴ解析
     if (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0) {
-        ctx.info("[ロゴ解析]");
-        sw.start();
-        logoFrame(videoFileIndex, avspath);
-        ctx.infoF("完了: %.2f秒", sw.getAndReset());
-
-        ctx.info("[ロゴ解析結果]");
-        if (logopath.size() > 0) {
-            ctx.infoF("マッチしたロゴ: %s", logopath);
-            PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
-        }
-        const auto& eraseLogoPath = setting_.getEraseLogoPath();
-        for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
-            ctx.infoF("追加ロゴ%d: %s", i + 1, eraseLogoPath[i]);
-            PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
-        }
+        analyzeLogo(videoFileIndex, sw, avspath);
     }
 
+    // チャプター・CM解析
     if (analyzeChapterAndCM) {
-        // チャプター解析
-        ctx.info("[無音・シーンチェンジ解析]");
-        sw.start();
-        chapterExe(videoFileIndex, avspath);
-        ctx.infoF("完了: %.2f秒", sw.getAndReset());
-
-        ctx.info("[無音・シーンチェンジ解析結果]");
-        PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
-
-        // CM推定
-        ctx.info("[CM解析]");
-        sw.start();
-        joinLogoScp(videoFileIndex, serviceId);
-        ctx.infoF("完了: %.2f秒", sw.getAndReset());
-
-        ctx.info("[CM解析結果 - TrimAVS]");
-        PrintFileAll(setting_.getTmpTrimAVSPath(videoFileIndex));
-        ctx.info("[CM解析結果 - 詳細]");
-        PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
-
-        // AVSファイルからCM区間を読む
-        readTrimAVS(videoFileIndex, numFrames);
-
-        // シーンチェンジ
-        readSceneChanges(videoFileIndex);
-
-        // 分割情報
-        readDiv(videoFileIndex, numFrames);
-
-        makeCMZones(numFrames);
+        analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
     }
+}
+
+void CMAnalyze::analyzeLogo(const int videoFileIndex, Stopwatch& sw, const tstring& avspath) {
+    ctx.info("[ロゴ解析]");
+    sw.start();
+    logoFrame(videoFileIndex, avspath);
+    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+
+    ctx.info("[ロゴ解析結果]");
+    if (logopath.size() > 0) {
+        ctx.infoF("マッチしたロゴ: %s", logopath);
+        PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
+    }
+    const auto& eraseLogoPath = setting_.getEraseLogoPath();
+    for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
+        ctx.infoF("追加ロゴ%d: %s", i + 1, eraseLogoPath[i]);
+        PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
+    }
+}
+
+void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+    // チャプター解析
+    ctx.info("[無音・シーンチェンジ解析]");
+    sw.start();
+    chapterExe(videoFileIndex, avspath);
+    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+
+    ctx.info("[無音・シーンチェンジ解析結果]");
+    PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
+
+    // CM推定
+    ctx.info("[CM解析]");
+    sw.start();
+    joinLogoScp(videoFileIndex, serviceId);
+    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+
+    ctx.info("[CM解析結果 - TrimAVS]");
+    PrintFileAll(setting_.getTmpTrimAVSPath(videoFileIndex));
+    ctx.info("[CM解析結果 - 詳細]");
+    PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
+
+    // AVSファイルからCM区間を読む
+    readTrimAVS(videoFileIndex, numFrames);
+
+    // シーンチェンジ
+    readSceneChanges(videoFileIndex);
+
+    // 分割情報
+    readDiv(videoFileIndex, numFrames);
+
+    makeCMZones(numFrames);
 }
 
 const tstring& CMAnalyze::getLogoPath() const {
