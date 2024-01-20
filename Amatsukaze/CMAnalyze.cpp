@@ -20,25 +20,26 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     divs() {}
 
 void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM) {
-
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
         const bool logoOffJL = logoOffInJL(videoFileIndex);
-        if (!logoOffJL) {
+        if (logoOffJL) {
+            ctx.info("チャプター・CM解析にロゴを使用しません。");
+        } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う
             analyzeLogo(videoFileIndex, sw, avspath);
-        } else {
-            ctx.info("JL: LogoOff");
         }
         // チャプター・CM解析本体
         analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
     }
 
-    // ロゴ解析 (未実行なら)
-    analyzeLogo(videoFileIndex, sw, avspath);
+    // ロゴ解析 (未実行かつロゴ消しする場合)
+    if (!setting_.isNoDelogo()) {
+        analyzeLogo(videoFileIndex, sw, avspath);
+    }
 }
 
 void CMAnalyze::analyzeLogo(const int videoFileIndex, Stopwatch& sw, const tstring& avspath) {
