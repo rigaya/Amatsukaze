@@ -53,6 +53,7 @@ private:
 
     const ConfigWrapper& setting_;
 
+    bool logoAnalysisDone;
     tstring logopath;
     std::vector<int> trims;
     std::vector<EncoderZone> cmzones;
@@ -82,6 +83,8 @@ private:
     void readTrimAVS(std::string str, int numFrames);
 
     void readDiv(int videoFileIndex, int numFrames);
+
+    bool logoOffInJL(const int videoFileIndex) const;
 
     void readSceneChanges(int videoFileIndex);
 

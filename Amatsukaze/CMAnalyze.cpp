@@ -11,39 +11,54 @@
 CMAnalyze::CMAnalyze(AMTContext& ctx,
     const ConfigWrapper& setting) :
     AMTObject(ctx),
-    setting_(setting) {}
+    setting_(setting),
+    logoAnalysisDone(false),
+    logopath(),
+    trims(),
+    cmzones(),
+    sceneChanges(),
+    divs() {}
 
 void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM) {
 
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
-    // ÉçÉSâêÕ
-    if (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0) {
-        analyzeLogo(videoFileIndex, sw, avspath);
-    }
+    bool logoAnalysisDone = false;
 
     // É`ÉÉÉvÉ^Å[ÅECMâêÕ
     if (analyzeChapterAndCM) {
+        // JLÇ…LogoOffÇÃãLèqÇ™Ç»Ç¢èÍçáÇÕêÊÇ…ÉçÉSâêÕÇçsÇ§
+        const bool logoOffJL = logoOffInJL(videoFileIndex);
+        if (!logoOffJL) {
+            analyzeLogo(videoFileIndex, sw, avspath);
+        }
         analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
     }
+
+    // ÉçÉSâêÕ (ñ¢é¿çsÇ»ÇÁ)
+    analyzeLogo(videoFileIndex, sw, avspath);
 }
 
 void CMAnalyze::analyzeLogo(const int videoFileIndex, Stopwatch& sw, const tstring& avspath) {
-    ctx.info("[ÉçÉSâêÕ]");
-    sw.start();
-    logoFrame(videoFileIndex, avspath);
-    ctx.infoF("äÆóπ: %.2fïb", sw.getAndReset());
+    if (!logoAnalysisDone
+        && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
+        ctx.info("[ÉçÉSâêÕ]");
+        sw.start();
+        logoFrame(videoFileIndex, avspath);
+        ctx.infoF("äÆóπ: %.2fïb", sw.getAndReset());
 
-    ctx.info("[ÉçÉSâêÕåãâ ]");
-    if (logopath.size() > 0) {
-        ctx.infoF("É}ÉbÉ`ÇµÇΩÉçÉS: %s", logopath);
-        PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
-    }
-    const auto& eraseLogoPath = setting_.getEraseLogoPath();
-    for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
-        ctx.infoF("í«â¡ÉçÉS%d: %s", i + 1, eraseLogoPath[i]);
-        PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
+        ctx.info("[ÉçÉSâêÕåãâ ]");
+        if (logopath.size() > 0) {
+            ctx.infoF("É}ÉbÉ`ÇµÇΩÉçÉS: %s", logopath);
+            PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
+        }
+        const auto& eraseLogoPath = setting_.getEraseLogoPath();
+        for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
+            ctx.infoF("í«â¡ÉçÉS%d: %s", i + 1, eraseLogoPath[i]);
+            PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
+        }
+        logoAnalysisDone = true;
     }
 }
 
@@ -184,7 +199,8 @@ CMAnalyze::MySubProcess::MySubProcess(const tstring& args, File* out, File* err)
     : EventBaseSubProcess(args)
     , out(out)
     , err(err) {}
-/* virtual */ void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
+
+void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
     // Ç±ÇÍÇÕÉ}ÉãÉ`ÉXÉåÉbÉhÇ≈åƒÇŒÇÍÇÈÇÃíçà”
     File* dst = isErr ? err : out;
     if (dst != nullptr) {
@@ -387,6 +403,23 @@ void CMAnalyze::readSceneChanges(int videoFileIndex) {
             sceneChanges.push_back(std::stoi(m[1].str()));
         }
     }
+}
+
+bool CMAnalyze::logoOffInJL(const int videoFileIndex) const {
+    File file(setting_.getTmpJlsPath(videoFileIndex), _T("r"));
+    std::string str;
+    while (file.getline(str)) {
+        // str ÇÃ # à»ç~ÇÕçÌèúÇ∑ÇÈ (ÉRÉÅÉìÉg)
+        auto pos = str.find('#');
+        if (pos != std::string::npos) {
+            str.erase(pos);
+        }
+        // LogoOff Ç™Ç†ÇÈÇ©Ç«Ç§Ç©
+        if (str.find("LogoOff") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void CMAnalyze::makeCMZones(int numFrames) {
