@@ -421,7 +421,7 @@
         PClip clip = env->Invoke("Import", to_string(setting.getFilterScriptPath()).c_str()).AsClip();
 
         logo::LogoFrame logof(ctx, setting.getLogoPath(), 0.1f);
-        logof.scanFrames(clip, env.get());
+        logof.scanFrames(clip, {}, env.get());
         logof.writeResult(setting.getTmpLogoFramePath(0));
 
         ctx.infoF("BestLogo: %s\n", setting.getLogoPath()[logof.getBestLogo()].c_str());

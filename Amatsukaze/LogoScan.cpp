@@ -1044,9 +1044,18 @@ int __stdcall logo::AMTEraseLogo::SetCacheHints(int cachehints, int frame_range)
 }
 
 // 絶対値<0.2fは不明とみなす
-logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofiles, float maskratio)
-    : AMTObject(ctx)
-    , bestLogo(-1) {
+logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofiles, float maskratio) :
+    AMTObject(ctx),
+    numLogos(0),
+    logoArr(),
+    deintArr(),
+    maxYSize(0),
+    numFrames(0),
+    framesPerSec(0),
+    vi(),
+    evalResults(),
+    bestLogo(-1),
+    logoRatio(0.0) {
     numLogos = (int)logofiles.size();
     logoArr = std::unique_ptr<LogoDataParam[]>(new LogoDataParam[logofiles.size()]);
     deintArr = std::unique_ptr<LogoDataParam[]>(new LogoDataParam[logofiles.size()]);
@@ -1068,14 +1077,12 @@ logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofile
     }
 }
 
-void logo::LogoFrame::scanFrames(PClip clip, IScriptEnvironment2* env) {
+void logo::LogoFrame::scanFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env) {
     vi = clip->GetVideoInfo();
     int pixelSize = vi.ComponentSize();
     switch (pixelSize) {
-    case 1:
-        return IterateFrames<uint8_t>(clip, env);
-    case 2:
-        return IterateFrames<uint16_t>(clip, env);
+    case 1: return IterateFrames<uint8_t>(clip, trims, env);
+    case 2: return IterateFrames<uint16_t>(clip, trims, env);
     default:
         env->ThrowError("[LogoFrame] Unsupported pixel format");
     }

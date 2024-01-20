@@ -24,15 +24,16 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
-    bool logoAnalysisDone = false;
-
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
-        // JLにLogoOffの記述がない場合は先にロゴ解析を行う
         const bool logoOffJL = logoOffInJL(videoFileIndex);
         if (!logoOffJL) {
+            // JLにLogoOffの記述がない場合は先にロゴ解析を行う
             analyzeLogo(videoFileIndex, sw, avspath);
+        } else {
+            ctx.info("JL: LogoOff");
         }
+        // チャプター・CM解析本体
         analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
     }
 
@@ -255,7 +256,7 @@ void CMAnalyze::logoFrame(int videoFileIndex, const tstring& avspath) {
         std::vector<tstring> allLogoPath = logoPath;
         allLogoPath.insert(allLogoPath.end(), eraseLogoPath.begin(), eraseLogoPath.end());
         logo::LogoFrame logof(ctx, allLogoPath, 0.35f);
-        logof.scanFrames(clip, env.get());
+        logof.scanFrames(clip, trims, env.get());
 
         if (logoPath.size() > 0) {
 #if 0
@@ -406,7 +407,7 @@ void CMAnalyze::readSceneChanges(int videoFileIndex) {
 }
 
 bool CMAnalyze::logoOffInJL(const int videoFileIndex) const {
-    File file(setting_.getTmpJlsPath(videoFileIndex), _T("r"));
+    File file(setting_.getJoinLogoScpCmdPath(), _T("r"));
     std::string str;
     while (file.getline(str)) {
         // str の # 以降は削除する (コメント)

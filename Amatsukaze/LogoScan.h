@@ -519,7 +519,7 @@ class LogoFrame : AMTObject {
     struct EvalResult {
         float corr0, corr1;
     };
-    std::unique_ptr<EvalResult[]> evalResults;
+    std::vector<EvalResult> evalResults;
 
     // 絶対値<0.2fは不明とみなす
     const float THRESH = 0.2f;
@@ -528,10 +528,11 @@ class LogoFrame : AMTObject {
     float logoRatio;
 
     template <typename pixel_t>
-    void ScanFrame(PVideoFrame& frame, float* memDeint, float* memWork, float maxv, EvalResult* outResult) {
+    void ScanFrame(PVideoFrame& frame, float* memDeint, float* memWork, const float maxv, std::vector<EvalResult>& outResult) {
         const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->GetReadPtr(PLANAR_Y));
         int pitchY = frame->GetPitch(PLANAR_Y);
 
+        outResult.resize(numLogos, { 0.0f, 0.0f });
         for (int i = 0; i < numLogos; ++i) {
             LogoDataParam& logo = deintArr[i];
             if (logo.isValid() == false ||
@@ -552,21 +553,49 @@ class LogoFrame : AMTObject {
         }
     }
 
+    bool inTrimRange(const int n, const std::vector<int>& trims) const {
+        // trimsの長さが0の場合は、すべてのフレームを対象とする
+        if (trims.size() == 0 || (trims.size() % 2) != 0) {
+            return true;
+        }
+        // n が trimの範囲内か確認し、範囲内ならtrueを返す
+        for (int i = 0; i < trims.size()/2; i++) {
+            if (trims[2*i] <= n && n <= trims[2*i + 1]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     template <typename pixel_t>
-    void IterateFrames(PClip clip, IScriptEnvironment2* env) {
+    void IterateFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env) {
         auto memDeint = std::unique_ptr<float[]>(new float[maxYSize + 8]);
         auto memWork = std::unique_ptr<float[]>(new float[maxYSize + 8]);
-        float maxv = (float)((1 << vi.BitsPerComponent()) - 1);
-        evalResults = std::unique_ptr<EvalResult[]>(new EvalResult[vi.num_frames * numLogos]);
-        for (int n = 0; n < vi.num_frames; ++n) {
+        const float maxv = (float)((1 << vi.BitsPerComponent()) - 1);
+        evalResults.clear();
+        evalResults.reserve(vi.num_frames * numLogos);
+
+        if (trims.size() > 0 && (trims.size() % 2) == 0) {
+            ctx.infoF("解析範囲");
+            for (int i = 0; i < trims.size() / 2; i++) {
+                ctx.infoF(" %6d-%6d", trims[2 * i], trims[2 * i + 1]);
+            }
+        }
+
+        std::vector<EvalResult> frameResults;
+        for (int n = 0; n < vi.num_frames; n++) {
+            if (!inTrimRange(n, trims)) {
+                continue;
+            }
             PVideoFrame frame = clip->GetFrame(n, env);
-            ScanFrame<pixel_t>(frame, memDeint.get(), memWork.get(), maxv, &evalResults[n * numLogos]);
+            ScanFrame<pixel_t>(frame, memDeint.get(), memWork.get(), maxv, frameResults);
 
             if ((n % 5000) == 0) {
                 ctx.infoF("%6d/%d", n, vi.num_frames);
             }
+            evalResults.insert(evalResults.end(), frameResults.begin(), frameResults.end());
         }
-        numFrames = vi.num_frames;
+        numFrames = (int)(evalResults.size() / numLogos);
         framesPerSec = (int)std::round((float)vi.fps_numerator / vi.fps_denominator);
 
         ctx.info("Finished");
@@ -575,7 +604,7 @@ class LogoFrame : AMTObject {
 public:
     LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofiles, float maskratio);
 
-    void scanFrames(PClip clip, IScriptEnvironment2* env);
+    void scanFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env);
 
     void dumpResult(const tstring& basepath);
 
