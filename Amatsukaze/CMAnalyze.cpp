@@ -6,6 +6,7 @@
 * http://opensource.org/licenses/mit-license.php
 */
 
+#include <future>
 #include "CMAnalyze.h"
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
@@ -30,7 +31,7 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int
             ctx.info("チャプター・CM解析にロゴを使用しません。");
         } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う
-            analyzeLogo(videoFileIndex, sw, avspath);
+            analyzeLogo(videoFileIndex, numFrames, sw, avspath);
         }
         // チャプター・CM解析本体
         analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
@@ -38,16 +39,16 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int
 
     // ロゴ解析 (未実行かつロゴ消しする場合)
     if (!setting_.isNoDelogo()) {
-        analyzeLogo(videoFileIndex, sw, avspath);
+        analyzeLogo(videoFileIndex, numFrames, sw, avspath);
     }
 }
 
-void CMAnalyze::analyzeLogo(const int videoFileIndex, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::analyzeLogo(const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     if (!logoAnalysisDone
         && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
         ctx.info("[ロゴ解析]");
         sw.start();
-        logoFrame(videoFileIndex, avspath);
+        logoFrame(videoFileIndex, numFrames, avspath);
         ctx.infoF("完了: %.2f秒", sw.getAndReset());
 
         ctx.info("[ロゴ解析結果]");
@@ -239,46 +240,83 @@ std::string CMAnalyze::makePreamble() {
     return sb.str();
 }
 
-void CMAnalyze::logoFrame(int videoFileIndex, const tstring& avspath) {
-    ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
+void CMAnalyze::logoFrame(const int videoFileIndex, const int numFrames, const tstring& avspath) {
+    const auto& logoPath = setting_.getLogoPath();
+    const auto& eraseLogoPath = setting_.getEraseLogoPath();
 
-    try {
-        AVSValue result;
-        env->Invoke("Eval", AVSValue(makePreamble().c_str()));
-        env->LoadPlugin(to_string(GetModulePath()).c_str(), true, &result);
-        PClip clip = env->Invoke("AMTSource", to_string(setting_.getTmpAMTSourcePath(videoFileIndex)).c_str()).AsClip();
+    std::vector<tstring> allLogoPath = logoPath;
+    allLogoPath.insert(allLogoPath.end(), eraseLogoPath.begin(), eraseLogoPath.end());
+    logo::LogoFrame logof(ctx, allLogoPath, 0.35f);
 
-        auto vi = clip->GetVideoInfo();
-        int duration = vi.num_frames * vi.fps_denominator / vi.fps_numerator;
+    if (trims.size() > 0 && (trims.size() % 2) == 0) {
+        ctx.infoF("解析範囲");
+        for (int i = 0; i < trims.size() / 2; i++) {
+            ctx.infoF(" %6d-%6d", trims[2 * i], trims[2 * i + 1]);
+        }
+    }
+    int duration = 0;
+    const int processorCount = GetProcessorCount();
+    const int minFramesPerThread = 600;
+    const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(4, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
+    const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : 8, processorCount / totalThreads));
+    if (totalThreads > 1) {
+        ctx.infoF("並列ロゴ解析 %d並列数 x デコード%dスレッド", totalThreads, decodeThreads);
+    }
+    std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
+    for (int ith = 0; ith < totalThreads; ith++) {
+        logoScanThreads.push_back(std::async(std::launch::async, [&](const int threadID) {
+            try {
+                ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
+                AVSValue result;
+                env->Invoke("Eval", AVSValue(makePreamble().c_str()));
+                env->LoadPlugin(to_string(GetModulePath()).c_str(), true, &result);
+                const auto amtsourcePath = to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
+                AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
+                PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
 
-        const auto& logoPath = setting_.getLogoPath();
-        const auto& eraseLogoPath = setting_.getEraseLogoPath();
+                auto vi = clip->GetVideoInfo();
+                if (threadID == 0) {
+                    logof.setClipInfo(clip);
+                    duration = vi.num_frames * vi.fps_denominator / vi.fps_numerator;
+                }
 
-        std::vector<tstring> allLogoPath = logoPath;
-        allLogoPath.insert(allLogoPath.end(), eraseLogoPath.begin(), eraseLogoPath.end());
-        logo::LogoFrame logof(ctx, allLogoPath, 0.35f);
-        logof.scanFrames(clip, trims, env.get());
-
-        if (logoPath.size() > 0) {
-#if 0
-            logof.dumpResult(setting_.getTmpLogoFramePath(videoFileIndex));
-#endif
-            logof.selectLogo((int)logoPath.size());
-            logof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex));
-
-            float threshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
-            if (logof.getLogoRatio() < threshold) {
-                ctx.info("この区間はマッチするロゴはありませんでした");
-            } else {
-                logopath = setting_.getLogoPath()[logof.getBestLogo()];
+                logof.scanFrames(clip, trims, threadID, totalThreads, env.get());
+            } catch (const AvisynthError& avserror) {
+                return std::pair<int, std::string>{ 1, avserror.msg };
+            }
+            return std::pair<int, std::string>{ 0, "" };
+        }, ith));
+        // duration が設定されるまで2スレッド目以降の起動を待機する
+        if (ith == 0) {
+            while (duration == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
-
-        for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
-            logof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex, i), (int)logoPath.size() + i);
+    }
+    for (size_t ith = 0; ith < logoScanThreads.size(); ith++) {
+        const auto& result = logoScanThreads[ith].get();
+        if (result.first != 0) {
+            THROWF(AviSynthException, "logo scan #%d: %s", ith, result.second.c_str());
         }
-    } catch (const AvisynthError& avserror) {
-        THROWF(AviSynthException, "%s", avserror.msg);
+    }
+
+    if (logoPath.size() > 0) {
+#if 0
+        logof.dumpResult(setting_.getTmpLogoFramePath(videoFileIndex));
+#endif
+        logof.selectLogo(trims, (int)logoPath.size());
+        logof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex));
+
+        float threshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
+        if (logof.getLogoRatio() < threshold) {
+            ctx.info("この区間はマッチするロゴはありませんでした");
+        } else {
+            logopath = setting_.getLogoPath()[logof.getBestLogo()];
+        }
+    }
+
+    for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
+        logof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex, i), (int)logoPath.size() + i);
     }
 }
 

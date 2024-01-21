@@ -1564,6 +1564,21 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+
+        #region ParallelLogoAnalysis変更通知プロパティ
+        public bool ParallelLogoAnalysis
+        {
+            get { return Data.ParallelLogoAnalysis; }
+            set
+            {
+                if (Data.ParallelLogoAnalysis == value)
+                    return;
+                Data.ParallelLogoAnalysis = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region MoveEDCBFiles変更通知プロパティ
         public bool MoveEDCBFiles {
             get { return Data.MoveEDCBFiles; }
@@ -2342,6 +2357,7 @@ namespace Amatsukaze.Models
             text.KeyValue("ロゴ検出判定しきい値を低くする", Data.LooseLogoDetection);
             text.KeyValue("ロゴ検出に失敗しても処理を続行する", Data.IgnoreNoLogo);
             text.KeyValue("ロゴ消ししない", Data.NoDelogo);
+            text.KeyValue("並列ロゴ解析", Data.ParallelLogoAnalysis);
             text.KeyValue("メインフォーマット以外は結合しない", Data.SplitSub);
             text.KeyValue("システムにインストールされているAviSynthプラグインを有効にする", Data.SystemAviSynthPlugin);
             text.KeyValue("ネットワーク越しに転送する場合のハッシュチェックを無効にする", Data.DisableHashCheck);

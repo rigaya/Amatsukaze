@@ -57,7 +57,7 @@ void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
         env->ThrowError("avcodec_parameters_to_context failed");
     }
     codecCtx()->pkt_timebase = videoStream->time_base;
-    codecCtx()->thread_count = GetFFmpegThreads(GetProcessorCount());
+    codecCtx()->thread_count = GetFFmpegThreads((decodeThreads) ? decodeThreads : GetProcessorCount());
 
     // export_mvs for codecview
     //AVDictionary *opts = NULL;
@@ -502,12 +502,14 @@ AMTSource::AMTSource(AMTContext& ctx,
     const std::vector<FilterSourceFrame>& frames,
     const std::vector<FilterAudioFrame>& audioFrames,
     const DecoderSetting& decoderSetting,
+    const int threads,
     const char* filterdesc,
     bool outputQP,
     IScriptEnvironment* env)
     : AMTObject(ctx)
     , frames(frames)
     , decoderSetting(decoderSetting)
+    , decodeThreads(threads)
     , audioFrames(audioFrames)
     , filterdesc(filterdesc)
     , outputQP(outputQP)
@@ -679,7 +681,7 @@ void SaveAMTSource(
     file.writeValue(decoderSetting);
 }
 
-PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, IScriptEnvironment* env) {
+PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, int threads, IScriptEnvironment* env) {
     File file(loadpath, _T("rb"));
     auto& srcpathv = file.readArray<tchar>();
     tstring srcpath(srcpathv.begin(), srcpathv.end());
@@ -692,7 +694,7 @@ PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool output
     data->audioFrames = file.readArray<FilterAudioFrame>();
     DecoderSetting decoderSetting = file.readValue<DecoderSetting>();
     AMTSource* src = new AMTSource(*g_ctx_for_plugin_filter,
-        srcpath, audiopath, vfmt, afmt, data->frames, data->audioFrames, decoderSetting, filterdesc, outputQP, env);
+        srcpath, audiopath, vfmt, afmt, data->frames, data->audioFrames, decoderSetting, threads, filterdesc, outputQP, env);
     src->TransferStreamInfo(std::move(data));
     return src;
 }
@@ -703,8 +705,9 @@ AVSValue CreateAMTSource(AVSValue args, void* user_data, IScriptEnvironment* env
     }
     tstring filename = to_tstring(args[0].AsString());
     const char* filterdesc = args[1].AsString("");
-    bool outputQP = args[2].AsBool(true);
-    return LoadAMTSource(filename, filterdesc, outputQP, env);
+    const bool outputQP = args[2].AsBool(true);
+    const int threads = args[3].AsInt(0);
+    return LoadAMTSource(filename, filterdesc, outputQP, threads, env);
 }
 
 AVSLosslessSource::AVSLosslessSource(AMTContext& ctx, const tstring& filepath, const VideoFormat& format, IScriptEnvironment* env)

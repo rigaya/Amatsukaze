@@ -762,6 +762,10 @@ bool ConfigWrapper::isNoDelogo() const {
     return conf.noDelogo;
 }
 
+bool ConfigWrapper::isParallelLogoAnalysis() const {
+    return conf.parallelLogoAnalysis;
+}
+
 int ConfigWrapper::getMaxFadeLength() const {
     return conf.maxFadeLength;
 }
@@ -1224,8 +1228,9 @@ void ConfigWrapper::dump() const {
         for (int i = 0; i < (int)conf.logoPath.size(); ++i) {
             ctx.infoF("logo%d: %s", (i + 1), conf.logoPath[i]);
         }
-        ctx.infoF("ƒƒSÁ‚µ: %s", conf.noDelogo ? "‚µ‚È‚¢" : "‚·‚é");
     }
+    ctx.infoF("ƒƒSÁ‚µ: %s", conf.noDelogo ? "‚µ‚È‚¢" : "‚·‚é");
+    ctx.infoF("•À—ñƒƒS‰ðÍ: %s", conf.parallelLogoAnalysis ? "ƒIƒ“" : "ƒIƒt");
     if (conf.audioEncoder != AUDIO_ENCODER_NONE) {
         ctx.infoF("‰¹º: %s (%s)", conf.audioEncoderPath, audioEncoderToString(conf.audioEncoder));
         if (conf.audioBitrateInKbps > 0) {

@@ -1056,6 +1056,7 @@ logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofile
     evalResults(),
     bestLogo(-1),
     logoRatio(0.0) {
+    vi.num_frames = 0;
     for (int i = 0; i < (int)logofiles.size(); ++i) {
         try {
             LogoHeader header;
@@ -1072,12 +1073,22 @@ logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofile
     }
 }
 
-void logo::LogoFrame::scanFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env) {
+void logo::LogoFrame::setClipInfo(PClip clip) {
     vi = clip->GetVideoInfo();
-    int pixelSize = vi.ComponentSize();
+    evalResults.clear();
+    evalResults.resize(vi.num_frames * numLogos, EvalResult{ 0, -1 });
+    numFrames = vi.num_frames;
+    framesPerSec = (int)std::round((float)vi.fps_numerator / vi.fps_denominator);
+}
+
+void logo::LogoFrame::scanFrames(PClip clip, const std::vector<int>& trims, const int threadId, const int totalThreads, IScriptEnvironment2* env) {
+    if (vi.num_frames == 0) {
+        setClipInfo(clip);
+    }
+    const int pixelSize = vi.ComponentSize();
     switch (pixelSize) {
-    case 1: return IterateFrames<uint8_t>(clip, trims, env);
-    case 2: return IterateFrames<uint16_t>(clip, trims, env);
+    case 1: return IterateFrames<uint8_t>(clip, trims, threadId, totalThreads, env);
+    case 2: return IterateFrames<uint16_t>(clip, trims, threadId, totalThreads, env);
     default:
         env->ThrowError("[LogoFrame] Unsupported pixel format");
     }
@@ -1095,28 +1106,28 @@ void logo::LogoFrame::dumpResult(const tstring& basepath) {
     }
 }
 
-// 直近のtargetFramesフレームのうち、
 // 0番目～numCandidatesまでのロゴから最も合っているロゴ(bestLogo)を選択
 // numCandidatesの指定がない場合(-1)は、すべてのロゴから検索
 // targetFramesの指定がない場合(-1)は、すべてのフレームから検索
-std::vector<logo::LogoFrame::LogoScore> logo::LogoFrame::calcLogoScore(int& targetFrames, int numCandidates) const {
+std::vector<logo::LogoFrame::LogoScore> logo::LogoFrame::calcLogoScore(const std::vector<std::pair<int, int>>& range, int numCandidates) const {
     if (numCandidates < 0) {
         numCandidates = numLogos;
     }
-    const int scanedFrames = (int)(evalResults.size() / numLogos);
-    const int startFrame = (targetFrames < 0) ? 0 : std::max(0, scanedFrames - targetFrames);
-    targetFrames = scanedFrames - startFrame;
     std::vector<LogoScore> logoScore(numCandidates);
-    for (int n = startFrame; n < scanedFrames; n++) {
-        for (int i = 0; i < numCandidates; i++) {
-            const auto& r = evalResults[n * numLogos + i];
-            // ロゴを検出 かつ 消せてる
-            if (r.corr0 > THRESH && std::abs(r.corr1) < THRESH) {
-                logoScore[i].numFrames++;
-                logoScore[i].cost += std::abs(r.corr1);
+    for (const auto& r : range) {
+        const int n_fin = std::min(r.second, (int)evalResults.size() / numLogos - 1);
+        for (int n = r.first; n <= n_fin; n++) {
+            for (int i = 0; i < numCandidates; i++) {
+                const auto& r = evalResults[n * numLogos + i];
+                // ロゴを検出 かつ 消せてる
+                if (r.corr0 > THRESH && std::abs(r.corr1) < THRESH) {
+                    logoScore[i].numFrames++;
+                    logoScore[i].cost += std::abs(r.corr1);
+                }
             }
         }
     }
+    const int targetFrames = getTotalFrames(range);
     for (int i = 0; i < numCandidates; i++) {
         auto& s = logoScore[i];
         // (消した後のゴミの量の平均) * (検出したフレーム割合の逆数)
@@ -1126,16 +1137,15 @@ std::vector<logo::LogoFrame::LogoScore> logo::LogoFrame::calcLogoScore(int& targ
     return logoScore;
 }
 
-void logo::LogoFrame::selectLogo(int numCandidates) {
-    int targetFrames = -1;
-    const auto logoScore = calcLogoScore(numCandidates, -1);
+void logo::LogoFrame::selectLogo(const std::vector<int>& trims, int numCandidates) {
+    const auto targetRange = trimAllTargets(trims);
+    const int targetFrames = getTotalFrames(targetRange);
+    const auto logoScore = calcLogoScore(targetRange, numCandidates);
     for (int i = 0; i < numCandidates; i++) {
-        auto& s = logoScore[i];
+        const auto& s = logoScore[i];
 #if 1
         ctx.debugF("logo%d: %f * %f = %f", i + 1,
-            (s.cost / s.numFrames),
-            (targetFrames / (float)s.numFrames),
-            logoScore[i]);
+            (s.cost / s.numFrames), (targetFrames / (float)s.numFrames), s.score);
 #endif
     }
     bestLogo = (int)(std::min_element(logoScore.begin(), logoScore.end(), [](const auto& a, const auto& b) {
@@ -1149,7 +1159,7 @@ void logo::LogoFrame::selectLogo(int numCandidates) {
 void logo::LogoFrame::writeResult(const tstring& outpath, int logoIndex) {
     if (logoIndex < 0) {
         if (bestLogo < 0) {
-            selectLogo();
+            selectLogo({});
         }
         logoIndex = bestLogo;
     }

@@ -221,6 +221,7 @@ struct Config {
     double pmtCutSideRate[2];
     bool looseLogoDetection;
     bool noDelogo;
+    bool parallelLogoAnalysis;
     int maxFadeLength;
     tstring chapterExePath;
     tstring chapterExeOptions;
@@ -345,6 +346,8 @@ public:
     bool isLooseLogoDetection() const;
 
     bool isNoDelogo() const;
+
+    bool isParallelLogoAnalysis() const;
 
     int getMaxFadeLength() const;
 

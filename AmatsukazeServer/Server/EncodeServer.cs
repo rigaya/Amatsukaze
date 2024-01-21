@@ -1614,6 +1614,10 @@ namespace Amatsukaze.Server
                 {
                     sb.Append(" --no-delogo");
                 }
+                if (profile.ParallelLogoAnalysis)
+                {
+                    sb.Append(" --parallel-logo-analysis");
+                }
                 if (profile.NoRemoveTmp)
                 {
                     sb.Append(" --no-remove-tmp");

@@ -46,6 +46,7 @@ class AMTSource : public IClip, AMTObject {
     const std::vector<FilterAudioFrame>& audioFrames;
     DecoderSetting decoderSetting;
     std::string filterdesc;
+    int decodeThreads;
     int audioSamplesPerFrame;
     bool interlaced;
 
@@ -201,6 +202,7 @@ public:
         const std::vector<FilterSourceFrame>& frames,
         const std::vector<FilterAudioFrame>& audioFrames,
         const DecoderSetting& decoderSetting,
+        const int threads,
         const char* filterdesc,
         bool outputQP,
         IScriptEnvironment* env);

@@ -273,6 +273,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool NoDelogo { get; set; }
         [DataMember]
+        public bool ParallelLogoAnalysis { get; set; }
+        [DataMember]
         public bool SystemAviSynthPlugin { get; set; }
         [DataMember]
         public bool DisableHashCheck { get; set; }

@@ -552,50 +552,82 @@ class LogoFrame : AMTObject {
         }
     }
 
+    std::vector<std::pair<int, int>> trimAllTargets(const std::vector<int>& trims) const {
+        std::vector<std::pair<int, int>> targetAll; // 全スレッドの対象
+        // trimsの長さが0の場合は、すべてのフレームを対象とする
+        if (trims.size() == 0 || (trims.size() % 2) != 0) {
+            targetAll = { { 0, vi.num_frames - 1 } };
+        } else {
+            for (int i = 0; i < trims.size() / 2; i++) {
+                targetAll.push_back({ trims[i * 2], trims[i * 2 + 1] });
+            }
+        }
+        return targetAll;
+    }
+
+    std::vector<std::pair<int, int>> getIterateFrameRange(const std::vector<int>& trims, const int threadId, const int totalThreads) const {
+        const auto targetAll = trimAllTargets(trims); // 全スレッドの対象
+        // 全スレッドのフレーム数
+        const int targetAllFrames = getTotalFrames(targetAll);
+        // 各スレッドの開始/終了フレーム
+        const int frameStart = (int)((double)targetAllFrames * threadId / std::max(totalThreads, 1) + 0.5);
+        const int frameEnd   = (int)((double)targetAllFrames * (threadId + 1) / std::max(totalThreads, 1) + 0.5);
+        // targetAll の範囲のうち、frameStart - frameEnd の範囲を作って返す
+        std::vector<std::pair<int, int>> target;
+        int sum = 0;
+        for (const auto& r : targetAll) {
+            const int len = r.second - r.first + 1;
+            if (sum + len <= frameStart) {
+                sum += len;
+                continue;
+            }
+            const int start = r.first + std::max(0, frameStart - sum);
+            const int end = r.second - std::max(0, sum + len - frameEnd);
+            target.push_back({ start, end });
+            sum += len;
+            if (sum >= frameEnd) {
+                break;
+            }
+        }
+        return target;
+    }
+
+    int getTotalFrames(const std::vector<std::pair<int, int>>& range) const {
+        return std::accumulate(range.begin(), range.end(), 0, [](int sum, const std::pair<int, int>& r) { return sum + r.second - r.first + 1; });
+    }
+
     bool inTrimRange(const int n, const std::vector<int>& trims) const {
         // trimsの長さが0の場合は、すべてのフレームを対象とする
         if (trims.size() == 0 || (trims.size() % 2) != 0) {
             return true;
         }
         // n が trimの範囲内か確認し、範囲内ならtrueを返す
-        for (int i = 0; i < trims.size()/2; i++) {
-            if (trims[2*i] <= n && n <= trims[2*i + 1]) {
-                return true;
-            }
-        }
         return false;
     }
 
     template <typename pixel_t>
-    void IterateFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env) {
+    void IterateFrames(PClip clip, const std::vector<int>& trims, const int threadId, const int totalThreads, IScriptEnvironment2* env) {
         std::vector<float> memDeint(maxYSize + 8, 0.0f);
         std::vector<float> memWork(maxYSize + 8, 0.0f);
         const float maxv = (float)((1 << vi.BitsPerComponent()) - 1);
-        evalResults.clear();
-        evalResults.resize(vi.num_frames * numLogos, EvalResult{ 0, -1 });
 
-        if (trims.size() > 0 && (trims.size() % 2) == 0) {
-            ctx.infoF("解析範囲");
-            for (int i = 0; i < trims.size() / 2; i++) {
-                ctx.infoF(" %6d-%6d", trims[2 * i], trims[2 * i + 1]);
+        const auto& range = getIterateFrameRange(trims, threadId, totalThreads);
+        for (const auto& r : range) {
+            ctx.infoF("  logo scan #%d: %6d-%6d", threadId, r.first, r.second);
+        }
+        const int threadTotalFrames = getTotalFrames(range);
+
+        int finished = 0;
+        for (const auto& r : range) {
+            for (int n = r.first; n <= r.second; n++, finished++) {
+                PVideoFrame frame = clip->GetFrame(n, env);
+                ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, &evalResults[n * numLogos]);
+
+                if ((finished % 5000) == 0) {
+                    ctx.infoF("  logo scan #%d: Finished %6d/%d frames", threadId, finished, threadTotalFrames);
+                }
             }
         }
-
-        for (int n = 0; n < vi.num_frames; n++) {
-            if (!inTrimRange(n, trims)) {
-                continue;
-            }
-            PVideoFrame frame = clip->GetFrame(n, env);
-            ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, &evalResults[n * numLogos]);
-
-            if ((n % 5000) == 0) {
-                ctx.infoF("%6d/%d", n, vi.num_frames);
-            }
-        }
-        numFrames = (int)(evalResults.size() / numLogos);
-        framesPerSec = (int)std::round((float)vi.fps_numerator / vi.fps_denominator);
-
-        ctx.infoF("Finished %d frames", numFrames);
     }
 
     struct LogoScore {
@@ -608,18 +640,20 @@ class LogoFrame : AMTObject {
     // 0番目～numCandidatesまでのロゴから最も合っているロゴ(bestLogo)を選択
     // numCandidatesの指定がない場合(-1)は、すべてのロゴから検索
     // targetFramesの指定がない場合(-1)は、すべてのフレームから検索
-    std::vector<LogoScore> calcLogoScore(int& targetFrames, int numCandidates) const;
+    std::vector<LogoScore> calcLogoScore(const std::vector<std::pair<int, int>>& range, int numCandidates) const;
 
 public:
     LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofiles, float maskratio);
 
-    void scanFrames(PClip clip, const std::vector<int>& trims, IScriptEnvironment2* env);
+    void setClipInfo(PClip clip);
+
+    void scanFrames(PClip clip, const std::vector<int>& trims, const int threadId, const int totalThreads, IScriptEnvironment2* env);
 
     void dumpResult(const tstring& basepath);
 
     // 0番目～numCandidatesまでのロゴから最も合っているロゴ(bestLogo)を選択
     // numCandidatesの指定がない場合(-1)は、すべてのロゴから検索
-    void selectLogo(int numCandidates = -1);
+    void selectLogo(const std::vector<int>& trims, int numCandidates = -1);
 
     // logoIndexに指定したロゴのlogoframeファイルを出力
     // logoIndexの指定がない場合(-1)は、bestLogoを出力
