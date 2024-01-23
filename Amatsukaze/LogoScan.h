@@ -24,12 +24,14 @@
 #include <fstream>
 
 float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, float* pavg);
+void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
 
 // ComputeKernel.cpp
 bool IsAVXAvailable();
 bool IsAVX2Available();
 float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w, float* pavg);
 float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg);
+void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
 
 #if 0
 float CalcCorrelation5x5_Debug(const float* k, const float* Y, int x, int y, int w, float* pavg);
@@ -56,7 +58,8 @@ class LogoDataParam : public LogoData {
     int maskpixels;
     float blackScore;
 
-    float(*pCalcCorrelation5x5)(const float* k, const float* Y, int x, int y, int w, float* pavg);
+    decltype(CalcCorrelation5x5)* pCalcCorrelation5x5;
+    decltype(removeLogoLine)* pRemoveLogoLine;
 public:
     LogoDataParam();
 

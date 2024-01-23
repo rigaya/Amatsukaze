@@ -10,6 +10,18 @@
 #include <cstdlib>
 #include <regex>
 
+
+void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
+    for (int x = 0; x < logowidth; x++) {
+        const float srcv = src[x];
+        const float a = logoAY[x];
+        const float b = logoBY[x];
+        const float bg = a * srcv + b * maxv;
+        const float dstv = fade * bg + (1 - fade) * srcv;
+        dst[x] = dstv;
+    }
+}
+
 float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, float* pavg) {
     float avg = 0.0f;
     for (int ky = -2; ky <= 2; ++ky) {
@@ -73,7 +85,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
     const float corrLowerLimit = 0.2f;
 
     pCalcCorrelation5x5 = IsAVX2Available() ? CalcCorrelation5x5_AVX2 : (IsAVXAvailable() ? CalcCorrelation5x5_AVX : CalcCorrelation5x5);
-    pCalcCorrelation5x5 = IsAVXAvailable() ? CalcCorrelation5x5_AVX : CalcCorrelation5x5;
+    pRemoveLogoLine = IsAVX2Available() ? removeLogoLineAVX2 : removeLogoLine;
 
     int YSize = w * h;
     auto memWork = std::unique_ptr<float[]>(new float[YSize * CLEN + 8]);
@@ -190,15 +202,8 @@ float logo::LogoDataParam::EvaluateLogo(const float *src, float maxv, float fade
     }
 
     // ロゴを除去
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            float srcv = src[x + y * stride];
-            float a = logoAY[x + y * w];
-            float b = logoBY[x + y * w];
-            float bg = a * srcv + b * maxv;
-            float dstv = fade * bg + (1 - fade) * srcv;
-            work[x + y * w] = dstv;
-        }
+    for (int y = 0; y < h; y++) {
+        pRemoveLogoLine(&work[y * w], &src[y * stride], stride, &logoAY[y * w], &logoBY[y * w], w, maxv, fade);
     }
 
     // 正規化
