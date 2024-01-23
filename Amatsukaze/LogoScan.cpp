@@ -72,6 +72,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
     // 相関下限パラメータ
     const float corrLowerLimit = 0.2f;
 
+    pCalcCorrelation5x5 = IsAVX2Available() ? CalcCorrelation5x5_AVX2 : (IsAVXAvailable() ? CalcCorrelation5x5_AVX : CalcCorrelation5x5);
     pCalcCorrelation5x5 = IsAVXAvailable() ? CalcCorrelation5x5_AVX : CalcCorrelation5x5;
 
     int YSize = w * h;

@@ -27,7 +27,9 @@ float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, fl
 
 // ComputeKernel.cpp
 bool IsAVXAvailable();
+bool IsAVX2Available();
 float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w, float* pavg);
+float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg);
 
 #if 0
 float CalcCorrelation5x5_Debug(const float* k, const float* Y, int x, int y, int w, float* pavg);

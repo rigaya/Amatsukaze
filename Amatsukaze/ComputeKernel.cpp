@@ -48,6 +48,7 @@ bool IsAVX2Available() {
     return g_cpuinfo.avx2;
 }
 
+#if 0
 // https://qiita.com/beru/items/fff00c19968685dada68
 // in  : ( x7, x6, x5, x4, x3, x2, x1, x0 )
 // out : ( -,  -,  -, xsum )
@@ -72,32 +73,52 @@ inline __m128 hsum256_ps(__m256 x) {
     const __m128 sum = _mm_add_ss(lo, hi);
     return sum;
 }
+#endif
+
+// 5Ç¬ÇæÇØÇÃêÖïΩâ¡éZ
+inline __m128 hsum5_256_ps(__m256 x) {
+    // hiQuad = ( -, -, -, x4 )
+    const __m128 hiQuad = _mm256_extractf128_ps(x, 1);
+    // loQuad = ( x3, x2, x1, x0 )
+    const __m128 loQuad = _mm256_castps256_ps128(x);
+    // loDual = ( -, -, x1, x0 )
+    const __m128 loDual = loQuad;
+    // hiDual = ( -, -, x3, x2 )
+    const __m128 hiDual = _mm_movehl_ps(loQuad, loQuad);
+    // sumDual = ( -, -, x1+x3, x0+x2 )
+    const __m128 sumDual = _mm_add_ps(loDual, hiDual);
+    // lo = ( -, -, -, x0+x2+x4 )
+    const __m128 lo = _mm_add_ss(sumDual, hiQuad);
+    // hi = ( -, -, -, x1+x3 )
+    const __m128 hi = _mm_shuffle_ps(sumDual, sumDual, 0x1);
+    // sum = ( -, -, -, x0+x1+x2+x3+x4 )
+    const __m128 sum = _mm_add_ss(lo, hi);
+    return sum;
+}
 
 // k,YÇÕå„ÇÎÇ…3óvëfÇÕÇ›èoÇµÇƒì«Çﬁ
-float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w, float* pavg)
-{
-    // å„ÇÎÇÃÉSÉ~Çè¡Ç∑ÇΩÇﬂÇÃÉ}ÉXÉN
-    const auto mask = _mm256_castsi256_ps(_mm256_set_epi32(0, 0, 0, -1, -1, -1, -1, -1));
-
+template<bool avx2>
+__forceinline float CalcCorrelation5x5_AVX_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg) {
     const auto y0 = _mm256_loadu_ps(Y + (x - 2) + w * (y - 2));
     const auto y1 = _mm256_loadu_ps(Y + (x - 2) + w * (y - 1));
     const auto y2 = _mm256_loadu_ps(Y + (x - 2) + w * (y + 0));
     const auto y3 = _mm256_loadu_ps(Y + (x - 2) + w * (y + 1));
     const auto y4 = _mm256_loadu_ps(Y + (x - 2) + w * (y + 2));
 
-    auto vysum = _mm256_and_ps(
+    auto vysum =
         _mm256_add_ps(
             _mm256_add_ps(
                 _mm256_add_ps(y0, y1),
                 _mm256_add_ps(y2, y3)),
-            y4),
-        mask);
+            y4);
+
+    const float avgmul = 1.0f / 25.0f;
+    const __m128 vsumss = hsum5_256_ps(vysum);
+    const __m128 vavgss = _mm_mul_ss(vsumss, _mm_load_ss(&avgmul));
 
     float avg;
-    _mm_store_ss(&avg, hsum256_ps(vysum));
-    avg /= 25;
-
-    auto vavg = _mm256_broadcast_ss(&avg);
+    _mm_store_ss(&avg, vavgss);
+    __m256 vavg = (avx2) ? _mm256_broadcastss_ps(vavgss) : _mm256_broadcast_ss(&avg);
 
     const auto k0 = _mm256_loadu_ps(k + 0);
     const auto k1 = _mm256_loadu_ps(k + 5);
@@ -105,17 +126,35 @@ float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w
     const auto k3 = _mm256_loadu_ps(k + 15);
     const auto k4 = _mm256_loadu_ps(k + 20);
 
-    auto vsum = _mm256_and_ps(
-        _mm256_add_ps(
+    const auto y0diff = _mm256_sub_ps(y0, vavg);
+    const auto y1diff = _mm256_sub_ps(y1, vavg);
+    const auto y2diff = _mm256_sub_ps(y2, vavg);
+    const auto y3diff = _mm256_sub_ps(y3, vavg);
+    const auto y4diff = _mm256_sub_ps(y4, vavg);
+
+    auto vsum =
+        (avx2)
+        ? _mm256_fmadd_ps(k0, y0diff,
             _mm256_add_ps(
-                _mm256_add_ps(_mm256_mul_ps(k0, _mm256_sub_ps(y0, vavg)), _mm256_mul_ps(k1, _mm256_sub_ps(y1, vavg))),
-                _mm256_add_ps(_mm256_mul_ps(k2, _mm256_sub_ps(y2, vavg)), _mm256_mul_ps(k3, _mm256_sub_ps(y3, vavg)))),
-            _mm256_mul_ps(k4, _mm256_sub_ps(y4, vavg))),
-        mask);
+                _mm256_fmadd_ps(k1, y1diff, _mm256_mul_ps(k2, y2diff)),
+                _mm256_fmadd_ps(k3, y3diff, _mm256_mul_ps(k4, y4diff))))
+        : _mm256_add_ps(
+            _mm256_add_ps(
+                _mm256_add_ps(_mm256_mul_ps(k0, y0diff), _mm256_mul_ps(k1, y1diff)),
+                _mm256_add_ps(_mm256_mul_ps(k2, y2diff), _mm256_mul_ps(k3, y3diff))),
+            _mm256_mul_ps(k4, y4diff));
 
     float sum;
-    _mm_store_ss(&sum, hsum256_ps(vsum));
+    _mm_store_ss(&sum, hsum5_256_ps(vsum));
 
     if (pavg) *pavg = avg;
     return sum;
 };
+
+float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w, float* pavg) {
+    return CalcCorrelation5x5_AVX_AVX2<false>(k, Y, x, y, w, pavg);
+}
+
+float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg) {
+    return CalcCorrelation5x5_AVX_AVX2<true>(k, Y, x, y, w, pavg);
+}
