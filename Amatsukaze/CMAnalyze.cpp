@@ -257,7 +257,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const int numFrames, const t
     int duration = 0;
     const int processorCount = GetProcessorCount();
     const int minFramesPerThread = 600;
-    const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(4, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
+    const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(8, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
     const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : 8, processorCount / totalThreads));
     if (totalThreads > 1) {
         ctx.infoF("並列ロゴ解析 %d並列数 x デコード%dスレッド", totalThreads, decodeThreads);
