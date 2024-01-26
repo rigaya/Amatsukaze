@@ -171,6 +171,8 @@ struct Config {
     tstring modeArgs; // テスト用
     // 入力ファイルパス（拡張子を含む）
     tstring srcFilePath;
+    // 入力ファイルパス(オリジナル)（拡張子を含む）
+    tstring srcFilePathOrg;
     // 出力ファイルパス（拡張子を除く）
     tstring outVideoPath;
     // 結果情報JSON出力パス
@@ -256,6 +258,8 @@ public:
     tstring getModeArgs() const;
 
     tstring getSrcFilePath() const;
+
+    tstring getSrcFileOriginalPath() const;
 
     tstring getOutInfoJsonPath() const;
 

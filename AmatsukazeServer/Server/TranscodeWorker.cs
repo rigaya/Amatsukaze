@@ -829,6 +829,7 @@ namespace Amatsukaze.Server
 
             bool isMp4 = item.SrcPath.ToLower().EndsWith(".mp4");
             string srcpath = item.SrcPath;
+            string srcpathOrg = null;
             string localsrc = null;
             string localdst = dstpath;
             string tmpBase = null;
@@ -868,7 +869,7 @@ namespace Amatsukaze.Server
                     {
                         await CopyFileAsync(srcpath, localsrc);
                     }
-
+                    srcpathOrg = srcpath; // もともとのファイル名を記憶
                     srcpath = localsrc;
                     localdst = tmpBase + "-out";
                 }
@@ -900,7 +901,7 @@ namespace Amatsukaze.Server
                     item.Mode, profile,
                     server.AppData_.setting,
                     isMp4,
-                    srcpath, localdst + ext, json,
+                    srcpath, srcpathOrg, localdst + ext, json,
                     item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs,
                     pipes?.InHandle, pipes?.OutHandle, Id);
                 string exename = server.AppData_.setting.AmatsukazePath;

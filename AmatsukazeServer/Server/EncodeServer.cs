@@ -1295,7 +1295,7 @@ namespace Amatsukaze.Server
             ProfileSetting profile,
             Setting setting,
             bool isGeneric,
-            string src, string dst, string json,
+            string src, string srcOrg, string dst, string json,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs,
             string inHandle, string outHandle, int pid)
@@ -1332,6 +1332,11 @@ namespace Amatsukaze.Server
                 .Append(" --drcs \"")
                 .Append(GetDRCSMapPath())
                 .Append("\"");
+
+            if (srcOrg != null)
+            {
+                sb.Append(" --original-input-file \"").Append(srcOrg).Append("\"");
+            }
 
             if(inHandle != null)
             {

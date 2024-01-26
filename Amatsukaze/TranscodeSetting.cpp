@@ -582,6 +582,10 @@ tstring ConfigWrapper::getSrcFilePath() const {
     return conf.srcFilePath;
 }
 
+tstring ConfigWrapper::getSrcFileOriginalPath() const {
+    return conf.srcFilePathOrg;
+}
+
 tstring ConfigWrapper::getOutInfoJsonPath() const {
     return conf.outInfoJsonPath;
 }
@@ -1205,6 +1209,9 @@ void ConfigWrapper::dump() const {
         ctx.infoF("Mode: %s", conf.mode);
     }
     ctx.infoF("入力: %s", conf.srcFilePath);
+    if (conf.srcFilePath != conf.srcFilePathOrg) {
+        ctx.infoF("入力 (オリジナル): %s", conf.srcFilePathOrg);
+    }
     ctx.infoF("出力: %s", conf.outVideoPath);
     ctx.infoF("一時フォルダ: %s", tmpDir.path());
     ctx.infoF("出力フォーマット: %s%s",

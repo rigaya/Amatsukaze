@@ -201,6 +201,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         tstring key = argv[i];
         if (key == _T("-i") || key == _T("--input")) {
             conf.srcFilePath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--original-input-file")) {
+            conf.srcFilePathOrg = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("-o") || key == _T("--output")) {
             conf.outVideoPath =
                 pathRemoveExtension(pathNormalize(getParam(argc, argv, i++)));
@@ -495,6 +497,10 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.mkvmergePath = search(conf.mkvmergePath);
         conf.muxerPath = search(conf.muxerPath);
         conf.timelineditorPath = search(conf.timelineditorPath);
+    }
+
+    if (conf.srcFilePathOrg.size() == 0) {
+        conf.srcFilePathOrg = conf.srcFilePath;
     }
 
     return std::unique_ptr<ConfigWrapper>(new ConfigWrapper(ctx, conf));

@@ -359,10 +359,13 @@ void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     ctx.infoF("%s", args);
     // join_logo_scpå¸ÇØÇÃä¬ã´ïœêîÇê›íË
     const tstring clioutpath = setting_.getOutFileBaseWithoutPrefix() + _T(".") + setting_.getOutputExtention(setting_.getFormat());
-    SetEnvironmentVariable(_T("CLI_IN_PATH"), setting_.getSrcFilePath().c_str());
-    SetEnvironmentVariable(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceId).c_str());
-    SetEnvironmentVariable(_T("CLI_OUT_PATH"), clioutpath.c_str());
+    SetTemporaryEnvironmentVariable tmpvar;
+    tmpvar.set(_T("CLI_IN_PATH"), setting_.getSrcFilePath().c_str());
+    tmpvar.set(_T("TS_IN_PATH"), setting_.getSrcFileOriginalPath().c_str());
+    tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceId).c_str());
+    tmpvar.set(_T("CLI_OUT_PATH"), clioutpath.c_str());
     ctx.infoF("CLI_IN_PATH  : %s", to_string(setting_.getSrcFilePath()).c_str());
+    ctx.infoF("TS_IN_PATH   : %s", to_string(setting_.getSrcFileOriginalPath()).c_str());
     ctx.infoF("SERVICE_ID   : %d", serviceId);
     ctx.infoF("CLI_OUT_PATH : %s", to_string(clioutpath).c_str());
     MySubProcess process(args);

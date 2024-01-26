@@ -22,6 +22,23 @@
 #include "PerformanceUtil.h"
 #include "StreamReform.h"
 
+class SetTemporaryEnvironmentVariable {
+private:
+    std::vector<tstring> varnames;
+public:
+    SetTemporaryEnvironmentVariable() : varnames() {
+    }
+    ~SetTemporaryEnvironmentVariable() {
+        for (const auto& name : varnames) {
+            SetEnvironmentVariable(name.c_str(), nullptr);
+        }
+    }
+    bool set(const tstring& name, const tstring& value) {
+        varnames.push_back(name);
+        return SetEnvironmentVariable(name.c_str(), value.c_str());
+    }
+};
+
 class CMAnalyze : public AMTObject {
 public:
     CMAnalyze(AMTContext& ctx,
