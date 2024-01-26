@@ -794,6 +794,10 @@ tstring ConfigWrapper::getJoinLogoScpOptions() const {
     return conf.joinLogoScpOptions;
 }
 
+tstring ConfigWrapper::getKeyFramePath(bool removeOrgExt) const {
+    return ((removeOrgExt) ? pathRemoveExtension(conf.srcFilePathOrg) : conf.srcFilePathOrg) + _T(".keyframe");
+}
+
 tstring ConfigWrapper::getTrimAVSPath() const {
     return conf.trimavsPath;
 }
