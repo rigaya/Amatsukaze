@@ -134,10 +134,10 @@ __forceinline float CalcCorrelation5x5_AVX_AVX2(const float* k, const float* Y, 
 
     auto vsum =
         (avx2)
-        ? _mm256_fmadd_ps(k0, y0diff,
+        ? _mm256_fmadd_ps(k4, y4diff,
             _mm256_add_ps(
-                _mm256_fmadd_ps(k1, y1diff, _mm256_mul_ps(k2, y2diff)),
-                _mm256_fmadd_ps(k3, y3diff, _mm256_mul_ps(k4, y4diff))))
+                _mm256_fmadd_ps(k0, y0diff, _mm256_mul_ps(k1, y1diff)),
+                _mm256_fmadd_ps(k2, y2diff, _mm256_mul_ps(k3, y3diff))))
         : _mm256_add_ps(
             _mm256_add_ps(
                 _mm256_add_ps(_mm256_mul_ps(k0, y0diff), _mm256_mul_ps(k1, y1diff)),
