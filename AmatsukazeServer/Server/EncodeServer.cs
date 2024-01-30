@@ -1401,6 +1401,15 @@ namespace Amatsukaze.Server
                         .Append(json)
                         .Append("\"");
 
+                    if (profile.EncoderType == EncoderType.SVTAV1
+                        && profile.ForceSARWidth > 0 && profile.ForceSARHeight > 0)
+                    {
+                        sb.Append(" --sar ")
+                            .Append(profile.ForceSARWidth)
+                            .Append(':')
+                            .Append(profile.ForceSARHeight);
+                    }
+
                     if (profile.OutputFormat == FormatType.MP4 || profile.OutputFormat == FormatType.TSREPLACE)
                     {
                         sb.Append(" --mp4box \"")

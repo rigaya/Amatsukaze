@@ -261,8 +261,13 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     return sb.str();
 }
 
+bool sarValid(const std::pair<int, int>& sar) {
+    return sar.first > 0 && sar.second > 0;
+}
+
 /* static */ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const ENUM_ENCODER encoder,
+    const std::pair<int, int>& userSAR,
     const ENUM_FORMAT format,
     const tstring& binpath,
     const tstring& timelineeditorpath,
@@ -301,8 +306,10 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
             if (videoFormat.fixedFrameRate) {
                 sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
             }
-            if (encoder == ENCODER_SVTAV1 && !videoFormat.isSARUnspecified()) {
-                sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+            if (encoder == ENCODER_SVTAV1 && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+                const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
+                const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
+                sb.append(_T(":par=%d:%d"), sarW, sarH);
             }
         }
         sb.append(_T("\""));
@@ -373,15 +380,17 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
         } else if (!encoderOutputInContainer) {
             sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
         }
-        if (!encoderOutputInContainer && encoder == ENCODER_SVTAV1 && !videoFormat.isSARUnspecified()) {
-            int x = videoFormat.width * videoFormat.sarWidth;
-            int y = videoFormat.height * videoFormat.sarHeight;
+        if (!encoderOutputInContainer && encoder == ENCODER_SVTAV1 && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+            const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
+            const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
+            int x = videoFormat.width * sarW;
+            int y = videoFormat.height * sarH;
             int a = x, b = y, c;
             while ((c = a % b) != 0)
                 a = b, b = c;
             x /= b;
             y /= b;
-            const double ratio = (videoFormat.sarWidth >= videoFormat.sarHeight)
+            const double ratio = (sarW >= sarH)
                 ? videoFormat.height / (double)y
                 : videoFormat.width / (double)x;
             const int disp_w = (int)(x * ratio + 0.5);
@@ -412,8 +421,10 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
                 if (videoFormat.fixedFrameRate) {
                     sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
                 }
-                //if (encoder == ENCODER_SVTAV1 && !videoFormat.isSARUnspecified()) {
-                //	sb.append(_T(":par=%d:%d"), videoFormat.sarWidth, videoFormat.sarHeight);
+                //if (encoder == ENCODER_SVTAV1 && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+                //    const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
+                //    const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
+                //    sb.append(_T(":par=%d:%d"), sarW, sarH);
                 //}
             }
             sb.append(_T("\""));
@@ -608,6 +619,10 @@ tstring ConfigWrapper::getEncoderPath() const {
 
 tstring ConfigWrapper::getEncoderOptions() const {
     return conf.encoderOptions;
+}
+
+std::pair<int, int> ConfigWrapper::getUserSAR() const {
+    return conf.userSAR;
 }
 
 ENUM_AUDIO_ENCODER ConfigWrapper::getAudioEncoder() const {
@@ -1219,6 +1234,9 @@ void ConfigWrapper::dump() const {
         (conf.useMKVWhenSubExist) ? " (字幕ありではMKV)" : "");
     ctx.infoF("エンコーダ: %s (%s)", conf.encoderPath, encoderToString(conf.encoder));
     ctx.infoF("エンコーダオプション: %s", conf.encoderOptions);
+    if (conf.userSAR.first > 0 && conf.userSAR.second > 0) {
+        ctx.infoF("ユーザー指定SAR: %d:%d", conf.userSAR.first, conf.userSAR.second);
+    }
     if (conf.autoBitrate) {
         ctx.infoF("自動ビットレート: 有効 (%g:%g:%g)",
             conf.bitrate.a, conf.bitrate.b, conf.bitrate.h264);

@@ -1157,6 +1157,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged();
                 RaisePropertyChanged("EncoderOption");
                 RaisePropertyChanged("CMQualityOffsetEnabled");
+                RaisePropertyChanged("ForceSAREnabled");
             }
         }
         #endregion
@@ -1212,6 +1213,51 @@ namespace Amatsukaze.Models
                         return;
                 }
                 UpdateWarningText();
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+        public bool ForceSAREnabled { get { return Data.EncoderType == EncoderType.SVTAV1; } }
+
+        #region ForceSAR変更通知プロパティ
+        public bool ForceSAR
+        {
+            get { return Data.ForceSAR; }
+            set
+            {
+                if (Data.ForceSAR == value)
+                    return;
+                Data.ForceSAR = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+
+        #region ForceSARWidth変更通知プロパティ
+        public int ForceSARWidth
+        {
+            get { return Data.ForceSARWidth; }
+            set
+            {
+                if (Data.ForceSARWidth == value)
+                    return;
+                Data.ForceSARWidth = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+
+        #region ForceSARHeight変更通知プロパティ
+        public int ForceSARHeight
+        {
+            get { return Data.ForceSARHeight; }
+            set
+            {
+                if (Data.ForceSARHeight == value)
+                    return;
+                Data.ForceSARHeight = value;
                 RaisePropertyChanged();
             }
         }
@@ -2267,6 +2313,10 @@ namespace Amatsukaze.Models
             text.KeyValue("更新日時", Data.LastUpdate.ToString("yyyy年MM月dd日 hh:mm:ss"));
             text.KeyValue("エンコーダ", EncoderList[(int)Data.EncoderType]);
             text.KeyValue("エンコーダ追加オプション", EncoderOption);
+            if (Data.EncoderType == EncoderType.SVTAV1 && Data.ForceSAR)
+            {
+                text.KeyValue("SAR比上書き", string.Format("{0}:{1}", Data.ForceSARWidth, Data.ForceSARHeight));
+            }
             text.KeyValue("JoinLogoScpコマンドファイル", Data.JLSCommandFile ?? "チャンネル設定に従う");
             text.KeyValue("JoinLogoScpオプション", Data.JLSOption ?? "チャンネル設定に従う");
             text.KeyValue("chapter_exeオプション", Data.ChapterExeOption);

@@ -36,6 +36,7 @@ static void printHelp(const tchar* bin) {
         "  -eo|--encoder-option <オプション> エンコーダへ渡すオプション[]\n"
         "                      入力ファイルの解像度、アスペクト比、インタレースフラグ、\n"
         "                      フレームレート、カラーマトリクス等は自動で追加されるので不要\n"
+        "  --sar w:h           SAR比の上書き (SVT-AV1使用時のみ有効)\n"
         "  -b|--bitrate a:b:f  ビットレート計算式 映像ビットレートkbps = f*(a*s+b)\n"
         "                      sは入力映像ビットレート、fは入力がH264の場合は入力されたfだが、\n"
         "                      入力がMPEG2の場合はf=1とする\n"
@@ -183,6 +184,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.joinLogoScpCmdPath = moduleDir + _T("/../JL/JL_標準.txt");
     conf.mode = _T("ts");
     conf.modeArgs = _T("");
+    conf.userSAR = { 0, 0 };
     conf.bitrateCM = 1.0;
     conf.cmQualityOffset = 0.0;
     conf.x265TimeFactor = 0.25;
@@ -225,6 +227,12 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.encoderPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("-eo") || key == _T("--encoder-option")) {
             conf.encoderOptions = getParam(argc, argv, i++);
+        } else if (key == _T("--sar")) {
+            const auto arg = getParam(argc, argv, i++);
+            int ret = sscanfT(arg.c_str(), _T("%d:%d"), &conf.userSAR.first, &conf.userSAR.second);
+            if (ret < 2) {
+                THROWF(ArgumentException, "--sarの指定が間違っています");
+            }
         } else if (key == _T("-aet") || key == _T("--audio-encoder-type")) {
             tstring arg = getParam(argc, argv, i++);
             conf.audioEncoder = audioEncoderFtomString(arg);

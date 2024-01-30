@@ -216,7 +216,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         }
     }
     auto args = makeMuxerArgs(
-        setting_.getEncoder(), muxFormat, muxerPath,
+        setting_.getEncoder(), setting_.getUserSAR(), muxFormat, muxerPath,
         setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         setting_.getSrcFilePath(),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
@@ -261,7 +261,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
     tstring encVideoFile = setting_.getEncVideoFilePath(EncodeFileKey());
     tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat(), videoFormat.format);
     auto args = makeMuxerArgs(
-        setting_.getEncoder(), setting_.getFormat(),
+        setting_.getEncoder(), setting_.getUserSAR(), setting_.getFormat(),
         setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         setting_.getSrcFilePath(),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),

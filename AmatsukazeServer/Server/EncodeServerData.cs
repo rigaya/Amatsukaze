@@ -220,6 +220,13 @@ namespace Amatsukaze.Server
         public string SVTAV1Option { get; set; }
 
         [DataMember]
+        public bool ForceSAR { get; set; }
+        [DataMember]
+        public int ForceSARWidth { get; set; }
+        [DataMember]
+        public int ForceSARHeight { get; set; }
+
+        [DataMember]
         public DecoderType Mpeg2Decoder { get; set; }
         [DataMember]
         public DecoderType H264Deocder { get; set; }

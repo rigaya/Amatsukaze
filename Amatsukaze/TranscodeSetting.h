@@ -105,6 +105,7 @@ tstring makeAudioEncoderArgs(
 
 std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const ENUM_ENCODER encoder,
+    const std::pair<int, int>& userSAR,
     const ENUM_FORMAT format,
     const tstring& binpath,
     const tstring& timelineeditorpath,
@@ -187,6 +188,7 @@ struct Config {
     ENUM_ENCODER encoder;
     tstring encoderPath;
     tstring encoderOptions;
+    std::pair<int, int> userSAR;
     ENUM_AUDIO_ENCODER audioEncoder;
     tstring audioEncoderPath;
     tstring audioEncoderOptions;
@@ -272,6 +274,8 @@ public:
     tstring getEncoderPath() const;
 
     tstring getEncoderOptions() const;
+
+    std::pair<int, int> getUserSAR() const;
 
     ENUM_AUDIO_ENCODER getAudioEncoder() const;
 
