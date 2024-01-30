@@ -8,7 +8,6 @@
 
 #include <future>
 #include "CMAnalyze.h"
-#include "rgy_util.h"
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
     const ConfigWrapper& setting) :
@@ -21,26 +20,21 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     sceneChanges(),
     divs() {}
 
-void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM, const bool checkKeyFrameFile) {
+void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM) {
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
-        if (checkKeyFrameFile && readKeyFrames(videoFileIndex, numFrames)) {
-            analyzeSceneChange(videoFileIndex, sw, avspath);
-            readSceneChanges(videoFileIndex);
+        const bool logoOffJL = logoOffInJL(videoFileIndex);
+        if (logoOffJL) {
+            ctx.info("チャプター・CM解析にロゴを使用しません。");
         } else {
-            const bool logoOffJL = logoOffInJL(videoFileIndex);
-            if (logoOffJL) {
-                ctx.info("チャプター・CM解析にロゴを使用しません。");
-            } else {
-                // JLにLogoOffの記述がない場合は先にロゴ解析を行う
-                analyzeLogo(videoFileIndex, numFrames, sw, avspath);
-            }
-            // チャプター・CM解析本体
-            analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
+            // JLにLogoOffの記述がない場合は先にロゴ解析を行う
+            analyzeLogo(videoFileIndex, numFrames, sw, avspath);
         }
+        // チャプター・CM解析本体
+        analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
     }
 
     // ロゴ解析 (未実行かつロゴ消しする場合)
@@ -71,7 +65,8 @@ void CMAnalyze::analyzeLogo(const int videoFileIndex, const int numFrames, Stopw
     }
 }
 
-void CMAnalyze::analyzeSceneChange(const int videoFileIndex, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+    // チャプター解析
     ctx.info("[無音・シーンチェンジ解析]");
     sw.start();
     chapterExe(videoFileIndex, avspath);
@@ -79,11 +74,7 @@ void CMAnalyze::analyzeSceneChange(const int videoFileIndex, Stopwatch& sw, cons
 
     ctx.info("[無音・シーンチェンジ解析結果]");
     PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
-}
 
-void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath) {
-    // チャプター解析
-    analyzeSceneChange(videoFileIndex, sw, avspath);
     // CM推定
     ctx.info("[CM解析]");
     sw.start();
@@ -382,81 +373,10 @@ void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     if (exitCode != 0) {
         THROWF(FormatException, "join_logo_scp.exeがエラーコード(%d)を返しました", exitCode);
     }
-}
-
-bool CMAnalyze::readKeyFrames(const int videoFileIndex, const int numFrames) {
-    if (videoFileIndex > 0) {
-        ctx.infoF("keyframe読み込みはtsが分割エンコーダされる場合には対応していません");
-        return false;
-    }
-    auto keyframefile = setting_.getKeyFramePath(false);
-    if (!PathFileExists(keyframefile.c_str())) {
-        keyframefile = setting_.getKeyFramePath(true);
-        if (!PathFileExists(keyframefile.c_str())) {
-            return false;
-        }
-    }
-    std::vector<int> keyframes;
-    File file(keyframefile, _T("r"));
-    std::string str;
-    while (file.getline(str)) {
-        if (str.length() > 0) {
-            const auto value = std::stoi(str);
-            // 範囲外になっていないかチェック
-            if (value >= numFrames - 1) {
-                // 奇数個なら最後に追加
-                if (keyframes.size() % 2 != 0) {
-                    keyframes.push_back(numFrames - 1);
-                }
-                break;
-            }
-            keyframes.push_back(value);
-        }
-    }
-    // 奇数個なら最後に追加
-    if (keyframes.size() % 2 != 0) {
-        keyframes.push_back(numFrames);
-    }
-    trims = keyframes;
-    //終了点を内側にずらす
-    for (size_t i = 1; i < trims.size(); i += 2) {
-        trims[i] -= 1;
-    }
-    //trimがない場合
-    if (trims.size() == 0) {
-        keyframes.push_back(0);
-        keyframes.push_back(numFrames-1);
-    }
-
-    ctx.info("keyframeから分割点を読み取りました");
-    for (size_t i = 0; i < trims.size(); i += 2) {
-        ctx.infoF("  %6d - %6d", trims[i], trims[i+1]);
-    }
-
-    createJlsFromKeyFrame(videoFileIndex, numFrames);
-
-    // cmzonesに反映
-    makeCMZones(numFrames);
-    return true;
-}
-
-void CMAnalyze::createJlsFromKeyFrame(const int videoFileIndex, const int numFrames) {
-    File file(setting_.getTmpJlsPath(videoFileIndex), _T("w"));
-    if (trims[0] != 0) {
-        file.writeline(strsprintf("%6d %6d %4d %3d %4d :%s", 0, trims[0]-1, 0, 0, 0, "CM"));
-    }
-    for (size_t i = 0; i < trims.size(); i+=2) {
-        const int startL  = trims[i+0];
-        const int endL    = trims[i+1];
-        const int durL = (int)((endL - startL) / 30.0 + 0.5);
-        file.writeline(strsprintf("%6d %6d %4d %3d %4d :%s", startL, endL, durL, 0, 0, "L"));
-        if (i + 2 < trims.size() - 1) {
-            const int startCM = trims[i + 1] + 1;
-            const int endCM   = trims[i + 2] - 1;
-            const int durCM = (int)((endCM - startCM) / 30.0 + 0.5);
-            file.writeline(strsprintf("%6d %6d %4d %3d %4d :%s", startCM, endCM, durCM, 0, 0, "CM"));
-        }
-    }
+    // join_logo_scp向けの環境変数を解除
+    SetEnvironmentVariable(_T("CLI_IN_PATH"), NULL);
+    SetEnvironmentVariable(_T("SERVICE_ID"), NULL);
+    SetEnvironmentVariable(_T("CLI_OUT_PATH"), NULL);
 }
 
 void CMAnalyze::readTrimAVS(int videoFileIndex, int numFrames) {

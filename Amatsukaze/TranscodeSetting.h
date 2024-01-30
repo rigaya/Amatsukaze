@@ -365,8 +365,6 @@ public:
 
     tstring getJoinLogoScpOptions() const;
 
-    tstring getKeyFramePath(bool removeOrgExt) const;
-
     tstring getTrimAVSPath() const;
 
     const std::vector<CMType>& getCMTypes() const;

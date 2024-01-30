@@ -44,7 +44,7 @@ public:
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting);
 
-    void analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM, const bool checkKeyFrameFile);
+    void analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM);
 
     const tstring& getLogoPath() const { return logopath; }
     const std::vector<int>& getTrims() const { return trims; }
@@ -79,8 +79,6 @@ private:
 
     void analyzeLogo(const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
-    void analyzeSceneChange(const int videoFileIndex, Stopwatch& sw, const tstring& avspath);
-
     void analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
     tstring makeAVSFile(int videoFileIndex);
@@ -96,10 +94,6 @@ private:
     tstring MakeJoinLogoScpArgs(int videoFileIndex);
 
     void joinLogoScp(int videoFileIndex, int serviceId);
-
-    void createJlsFromKeyFrame(const int videoFileIndex, const int numFrames);
-
-    bool readKeyFrames(const int videoFileIndex, const int numFrames);
 
     void readTrimAVS(int videoFileIndex, int numFrames);
 

@@ -547,8 +547,7 @@ void DoBadThing() {
         const bool analyzeChapterAndCM = (setting.isChapterEnabled() && numFrames >= 300);
         CMAnalyze *cma = cmanalyze.back().get();
         if (analyzeChapterAndCM || delogoEnabled) {
-            const bool checkKeyFrameFile = numVideoFiles <= 1; // キーフレーム読み込みは、ファイル分割がない場合のみ可能
-            cma->analyze(serviceId, videoFileIndex, numFrames, analyzeChapterAndCM, checkKeyFrameFile);
+            cma->analyze(serviceId, videoFileIndex, numFrames, analyzeChapterAndCM);
         }
 
         if (analyzeChapterAndCM && setting.isPmtCutEnabled()) {
