@@ -2226,8 +2226,8 @@ namespace Amatsukaze.Models
             }
             if (Data.EncoderType == EncoderType.NVEnc)
             {
-                var mes = "GeForceではNVEncによる同時エンコードは5つまでに制限されています\r\n";
-                int maxNVEncParallel = 5;
+                var mes = "GeForceではNVEncによる同時エンコードは8つまでに制限されています\r\n";
+                int maxNVEncParallel = 8;
                 if ((Model.Setting?.NumParallel ?? 0) >= (maxNVEncParallel+1))
                 {
                     if (Model.Setting?.SchedulingEnabled ?? false)
