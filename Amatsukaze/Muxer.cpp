@@ -74,7 +74,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         if (eoInfo.deint != ENCODER_DEINT_NONE) {
             // 一応警告を出す
             ctx.warn("エンコーダへの入力はプログレッシブですが、"
-                "エンコーダオプションでインタレ解除指定がされています。");
+                     "エンコーダオプションでインタレ解除指定がされています。");
             ctx.warn("エンコーダでこのオプションが無視される場合は問題ありません。");
         }
     }
