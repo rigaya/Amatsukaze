@@ -1167,7 +1167,7 @@ tstring ConfigWrapper::getOptions(
                     for (int i = 0; i < (int)zones.size(); ++i) {
                         const auto& zone = zones[i];
                         fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
-                            zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                            zone.startFrame, zone.endFrame - 1, rcMode->name,
                             (int)std::round(eoInfo.rcModeValue[0] * zone.bitrate));
                         addOptFileCmd = true;
                     }
@@ -1176,19 +1176,19 @@ tstring ConfigWrapper::getOptions(
                         const auto& zone = zones[i];
                         if (zone.qualityOffset == 0.0) continue;
                         addOptFileCmd = true;
-                        if (tstring(rcMode->name) == _T("cqp")) {
+                        if (std::string(rcMode->name) == "cqp") {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d:%d:%d\n",
-                                zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                                zone.startFrame, zone.endFrame - 1, rcMode->name,
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[1] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[2] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
                         } else if (rcMode->isFloat) {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%f\n",
-                                zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                                zone.startFrame, zone.endFrame - 1, rcMode->name,
                                 std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcMode->valueMin), (double)rcMode->valueMax));
                         } else {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
-                                zone.startFrame, zone.endFrame - 1, to_string(rcMode->name).c_str(),
+                                zone.startFrame, zone.endFrame - 1, rcMode->name,
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
                         }
                     }

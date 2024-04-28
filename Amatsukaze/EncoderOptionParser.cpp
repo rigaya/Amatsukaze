@@ -11,30 +11,30 @@
 #include "EncoderOptionParser.h"
 
 static const EncoderRCMode RCMODES_X264_X265[] = {
-    { _T("crf"),     false, true,  0, 51 },
-    { _T("bitrate"), true,  false, 1, std::numeric_limits<int>::max() }
+    { "crf",     false, true,  0, 51 },
+    { "bitrate", true,  false, 1, std::numeric_limits<int>::max() }
 };
 
 static const EncoderRCMode RCMODES_QSVENC[] = {
-    { _T("icq"),    false, false, 1,  51 },
-    { _T("la-icq"), false, false, 1,  51 },
-    { _T("cqp"),    false, false, 0, 255 },
-    { _T("vbr"),    true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("cbr"),    true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("avbr"),   true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("la"),     true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("la-hrd"), true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("vcm"),    true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("qvbr"),   true,  false, 1, std::numeric_limits<int>::max() }
+    { "icq",    false, false, 1,  51 },
+    { "la-icq", false, false, 1,  51 },
+    { "cqp",    false, false, 0, 255 },
+    { "vbr",    true,  false, 1, std::numeric_limits<int>::max() },
+    { "cbr",    true,  false, 1, std::numeric_limits<int>::max() },
+    { "avbr",   true,  false, 1, std::numeric_limits<int>::max() },
+    { "la",     true,  false, 1, std::numeric_limits<int>::max() },
+    { "la-hrd", true,  false, 1, std::numeric_limits<int>::max() },
+    { "vcm",    true,  false, 1, std::numeric_limits<int>::max() },
+    { "qvbr",   true,  false, 1, std::numeric_limits<int>::max() }
 };
 
 static const EncoderRCMode RCMODES_NVENC[] = {
-    { _T("qvbr"),  false, true,  1,  51  },
-    { _T("cqp"),   false, false, 0, 255 },
-    { _T("cbr"),   true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("cbrhq"), true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("vbr"),   true,  false, 1, std::numeric_limits<int>::max() },
-    { _T("vbrhq"), true,  false, 1, std::numeric_limits<int>::max() }
+    { "qvbr",  false, true,  1,  51  },
+    { "cqp",   false, false, 0, 255 },
+    { "cbr",   true,  false, 1, std::numeric_limits<int>::max() },
+    { "cbrhq", true,  false, 1, std::numeric_limits<int>::max() },
+    { "vbr",   true,  false, 1, std::numeric_limits<int>::max() },
+    { "vbrhq", true,  false, 1, std::numeric_limits<int>::max() }
 };
 
 static int QSVENC_DEFAULT_ICQ = 23;
@@ -51,12 +51,13 @@ static std::vector<EncoderRCMode> encoderRCModes(ENUM_ENCODER encoder) {
     }
 }
 
-const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const tstring& str) {
+const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const std::string& str) {
     if (str.empty() || str.length() == 0) return nullptr;
 
     const auto rcmodes = encoderRCModes(encoder);
-    auto it = std::find_if(rcmodes.begin(), rcmodes.end(), [&str](const EncoderRCMode& mode) {
-        return str == mode.name;
+    const auto target = to_string(str);
+    auto it = std::find_if(rcmodes.begin(), rcmodes.end(), [&target](const EncoderRCMode& mode) {
+        return target == mode.name;
         });
     if (it != rcmodes.end()) {
         return &(*it);
@@ -121,10 +122,10 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
 
         // arg‚ªrcmodes‚Ìname‚Éˆê’v‚·‚éê‡A‚»‚Ì—v‘f‚ðŽæ“¾‚·‚é
         if (auto it = std::find_if(rcmodes.begin(), rcmodes.end(), [&arg](const EncoderRCMode& mode) {
-            return arg == (tstring(_T("--")) + mode.name);
+            return arg == (tstring(_T("--")) + to_tstring(mode.name));
             }); it != rcmodes.end()) {
             info.rcMode = it->name;
-            if (tstring(it->name) == L"cqp") {
+            if (std::string(it->name) == "cqp") {
                 std::wregex re3(L"([^:]+):([^:]+):([^:]+)");
                 std::wregex re2(L"([^:]+):([^:]+)");
                 std::wsmatch m;
@@ -222,7 +223,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
         }
     }
     if (encoder == ENCODER_NVENC && info.rcModeValue[0] <= 0.0 && qvbr_quality >= 0.0) {
-        info.rcMode = _T("qvbr");
+        info.rcMode = "qvbr";
         info.rcModeValue[0] = qvbr_quality;
     }
 
