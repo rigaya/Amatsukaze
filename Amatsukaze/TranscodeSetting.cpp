@@ -14,10 +14,12 @@
 
 BitrateZone::BitrateZone() :
     EncoderZone(),
-    bitrate() {}
+    bitrate(0.0),
+    qualityOffset(0.0) {}
 BitrateZone::BitrateZone(EncoderZone zone) :
     EncoderZone(zone),
-    bitrate() {}
+    bitrate(0.0),
+    qualityOffset(0.0) {}
 BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset) :
     EncoderZone(zone),
     bitrate(bitrate),
