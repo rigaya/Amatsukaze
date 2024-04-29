@@ -78,7 +78,7 @@ void string_internal::StringBuilderBase::clear() {
 
 /* static */ std::string to_string(const std::wstring& str, uint32_t codepage) {
     std::vector<char> ret = string_internal::to_string(str, codepage);
-    return std::string(ret.begin(), ret.end());
+    return std::string(ret.data());
 }
 
 /* static */ std::string to_string(const std::string& str, uint32_t codepage) {
@@ -91,7 +91,7 @@ void string_internal::StringBuilderBase::clear() {
 
 /* static */ std::wstring to_wstring(const std::string& str, uint32_t codepage) {
     std::vector<wchar_t> ret = string_internal::to_wstring(str, codepage);
-    return std::wstring(ret.begin(), ret.end());
+    return std::wstring(ret.data());
 
 #ifdef _MSC_VER
 }/* static */ std::wstring to_tstring(const std::wstring& str, uint32_t codepage) {
