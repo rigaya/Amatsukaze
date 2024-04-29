@@ -1313,6 +1313,7 @@ namespace Amatsukaze.Models
                 Data.OutputMask = value?.Mask ?? OutputOptionList_[0].Mask;
                 UpdateWarningText();
                 RaisePropertyChanged();
+                RaisePropertyChanged("CMQualityOffsetEnabled");
             }
         }
         #endregion
@@ -1381,7 +1382,18 @@ namespace Amatsukaze.Models
             }
         }
         #endregion
-        public bool CMQualityOffsetEnabled { get { return Data.EncoderType == EncoderType.QSVEnc || Data.EncoderType == EncoderType.NVEnc; } }
+        public bool CMQualityOffsetEnabled { get {
+                if (Data.EncoderType == EncoderType.QSVEnc || Data.EncoderType == EncoderType.NVEnc)
+                {
+                    return true;
+                }
+                if ((Data.EncoderType == EncoderType.x264 || Data.EncoderType == EncoderType.x265 || Data.EncoderType == EncoderType.SVTAV1)
+                    && Data.OutputMask == 6 /*本編とCMを分離*/)
+                {
+                    return true;
+                }
+                return false;
+            } }
 
         #region JLSCommandFile変更通知プロパティ
         public object JLSCommandFile {

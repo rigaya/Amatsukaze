@@ -1101,7 +1101,7 @@ bool ConfigWrapper::isEncoderSupportVFR() const {
 }
 
 bool ConfigWrapper::isBitrateCMEnabled() const {
-    return conf.bitrateCM != 1.0 || conf.cmQualityOffset != 0;
+    return conf.bitrateCM != 1.0 || conf.cmQualityOffset != 0.0;
 }
 
 tstring ConfigWrapper::getOptions(
@@ -1140,17 +1140,27 @@ tstring ConfigWrapper::getOptions(
             pass, getEncStatsFilePath(key));
     }
     if (zones.size() &&
-        isZoneAvailable() &&
-        (isEncoderSupportVFR() == false || isBitrateCMEnabled())) {
+        isZoneAvailable() && // エンコーダが--zones/--dynamic-rcに対応しているか?
+        (isEncoderSupportVFR() == false || isBitrateCMEnabled())) { // VFR調整が必要 あるいは CMビットレート調整(品質オフセット含む)が必要
         if (isZoneWithoutBitrateAvailable()) {
+            //ctx.info("getOptions: ApplyZone x264/x265");
             // x264/265
-            sb.append(_T(" --zones "));
-            for (int i = 0; i < (int)zones.size(); ++i) {
-                const auto& zone = zones[i];
-                sb.append(_T("%s%d,%d,b=%.3g"), (i > 0) ? "/" : "",
-                    zone.startFrame, zone.endFrame - 1, zone.bitrate);
+            // ここではzone.bitrateは倍率の意味、1.0なら無効
+            // 有効なzoneの指定があるか探す
+            if (std::find_if(zones.begin(), zones.end(), [](const auto& z) { return z.bitrate != 1.0; }) != zones.end()) {
+                sb.append(_T(" --zones "));
+                bool zoneAdded = false;
+                for (int i = 0; i < (int)zones.size(); ++i) {
+                    const auto& zone = zones[i];
+                    if (zone.bitrate != 1.0) { 
+                        sb.append(_T("%s%d,%d,b=%.3g"), (zoneAdded) ? "/" : "",
+                            zone.startFrame, zone.endFrame - 1, zone.bitrate);
+                        zoneAdded = true;
+                    }
+                }
             }
         } else if (optionFilePath.length() > 0) {
+            //ctx.info("getOptions: ApplyZone QSVEnc/NVEnc");
             // QSVEnc/NVEnc
             if (conf.autoBitrate) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
@@ -1198,6 +1208,22 @@ tstring ConfigWrapper::getOptions(
                 if (addOptFileCmd) {
                     sb.append(_T(" --option-file \"%s\""), optionFilePath);
                 }
+            }
+        }
+    }
+    // x264/x265は--zonesで品質オフセットは指定できない、またSVT-AV1にはそもそもzonesがない
+    // しかし、CM分離時は--crfを直接上書きすることで対応可能
+    if (key.cm == CMTYPE_CM
+        && (conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X265 || conf.encoder == ENCODER_SVTAV1)) {
+        //ctx.infoF("getOptions: ApplyZone CM eoInfo.rcMode %s, cmQualityOffset %f", eoInfo.rcMode, conf.cmQualityOffset);
+        if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode && !rcMode->isBitrateMode && conf.cmQualityOffset != 0.0) {
+            const tstring rcModeName = to_tstring(rcMode->name);
+            if (rcMode->isFloat) {
+                sb.append(_T(" --%s %f"), rcModeName,
+                    std::min(std::max(eoInfo.rcModeValue[0] + conf.cmQualityOffset, (double)rcMode->valueMin), (double)rcMode->valueMax));
+            } else {
+                sb.append(_T(" --%s %d"), rcModeName,
+                    std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + conf.cmQualityOffset), rcMode->valueMin), rcMode->valueMax));
             }
         }
     }

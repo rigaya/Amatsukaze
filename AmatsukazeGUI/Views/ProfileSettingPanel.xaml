@@ -317,7 +317,7 @@
                         <TextBox HorizontalAlignment="Left" Width="50" Height="23"
                              Text="{Binding Model.SelectedProfile.CMQualityOffset, Mode=TwoWay, StringFormat=\{0:F\}, UpdateSourceTrigger=PropertyChanged}"
                              IsEnabled="{Binding Model.SelectedProfile.CMQualityOffsetEnabled}"
-                             ToolTip="CMのビットレートを下げたいときに正の値（8など）を設定すると有効です。&#xA;QSVEnc,NVEncで品質指定のモード使用時に適用します。"/>
+                             ToolTip="CMのビットレートを下げたいときに正の値（8など）を設定すると有効です。&#xA;QSVEnc,NVEncで品質指定のモード使用時、&#xA;またx264/x265/SVT-AV1で本編とCMを分離を選択した場合の品質指定のモード使用時に使用できます。"/>
                     </DockPanel>
                     <DockPanel>
                         <CheckBox x:Name="autoBitrateCheck" DockPanel.Dock="Top" Content="自動ビットレート指定"
