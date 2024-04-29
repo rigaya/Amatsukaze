@@ -414,7 +414,7 @@ PVideoFrame AMTSource::ForceGetFrame(int n, IScriptEnvironment* env) {
         return env->NewVideoFrame(vi);
     }
     auto lb = frameCache.lower_bound(n);
-    if (lb->first != n && lb != frameCache.begin()) {
+    if (lb == frameCache.end() || (lb->first != n && lb != frameCache.begin())) {
         lb--;
     }
     UpdateAccessed(lb->second);
