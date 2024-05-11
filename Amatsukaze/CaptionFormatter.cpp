@@ -40,6 +40,8 @@ void CaptionASSFormatter::header() {
         .append(L"ScaledBorderAndShadow: Yes\n")
         .append(L"PlayResX: %d\n", (int)PlayResX)
         .append(L"PlayResY: %d\n", (int)PlayResY)
+        .append(L"LayoutResX: %d\n", (int)PlayResX)
+        .append(L"LayoutResY: %d\n", (int)PlayResY)
         .append(L"\n")
         .append(L"[V4+ Styles]\n")
         .append(L"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
