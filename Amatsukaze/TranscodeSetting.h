@@ -479,6 +479,8 @@ public:
 
     bool isZoneWithoutBitrateAvailable() const;
 
+    bool isZoneWithQualityAvailable() const;
+
     bool isEncoderSupportVFR() const;
 
     bool isBitrateCMEnabled() const;

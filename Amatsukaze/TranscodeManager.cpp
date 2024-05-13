@@ -401,7 +401,12 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
                 dump.writeValue(0.05);
             }
 #endif
-            if (auto rcMode = getRCMode(setting.getEncoder(), eoInfo.rcMode); !setting.isAutoBitrate() && rcMode && !rcMode->isBitrateMode && setting.getCMQualityOffset() != 0.0) {
+            if (auto rcMode = getRCMode(setting.getEncoder(), eoInfo.rcMode);
+                setting.isZoneWithQualityAvailable()   // 品質オフセットを--dynamic-rcで指定可能なエンコーダである
+                && !setting.isAutoBitrate()            // 自動ビットレートでない
+                && rcMode && !rcMode->isBitrateMode    // ビットレートモードでない
+                && setting.getCMQualityOffset() != 0.0 // 品質オフセットが有効
+            ) {
                 for (int i = 0; i < (int)cmzones.size(); i++) {
                     bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
                 }

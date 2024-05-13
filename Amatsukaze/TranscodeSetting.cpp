@@ -1096,6 +1096,10 @@ bool ConfigWrapper::isZoneWithoutBitrateAvailable() const {
     return conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X265;
 }
 
+bool ConfigWrapper::isZoneWithQualityAvailable() const {
+    return conf.encoder == ENCODER_NVENC || conf.encoder == ENCODER_QSVENC;
+}
+
 bool ConfigWrapper::isEncoderSupportVFR() const {
     return conf.encoder == ENCODER_X264;
 }
@@ -1142,7 +1146,7 @@ tstring ConfigWrapper::getOptions(
     if (zones.size() &&
         isZoneAvailable() && // エンコーダが--zones/--dynamic-rcに対応しているか?
         (isEncoderSupportVFR() == false || isBitrateCMEnabled())) { // VFR調整が必要 あるいは CMビットレート調整(品質オフセット含む)が必要
-        if (isZoneWithoutBitrateAvailable()) {
+        if (isZoneWithoutBitrateAvailable()) { // x264/x265
             //ctx.info("getOptions: ApplyZone x264/x265");
             // x264/265
             // ここではzone.bitrateは倍率の意味、1.0なら無効
@@ -1159,7 +1163,7 @@ tstring ConfigWrapper::getOptions(
                     }
                 }
             }
-        } else if (optionFilePath.length() > 0) {
+        } else if (isZoneWithQualityAvailable() && optionFilePath.length() > 0) {
             //ctx.info("getOptions: ApplyZone QSVEnc/NVEnc");
             // QSVEnc/NVEnc
             if (conf.autoBitrate) {
