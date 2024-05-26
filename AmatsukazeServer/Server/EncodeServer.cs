@@ -81,7 +81,7 @@ namespace Amatsukaze.Server
 
         // キューに追加されるTSを解析するスレッド
         private Task queueThread;
-        private BufferBlock<AddQueueRequest> queueQ = new BufferBlock<AddQueueRequest>();
+        private BufferBlock<object> queueQ = new BufferBlock<object>();
 
         // ロゴファイルやJLSコマンドファイルを監視するスレッド
         private Task watchFileThread;
@@ -1894,9 +1894,21 @@ namespace Amatsukaze.Server
             {
                 while (await queueQ.OutputAvailableAsync())
                 {
-                    AddQueueRequest req = await queueQ.ReceiveAsync();
-                    await queueManager.AddQueue(req);
-                    await Client.OnAddResult(req.RequestId);
+                    string requestId = null;
+                    var req = await queueQ.ReceiveAsync();
+                    if (req.GetType() == typeof(AddQueueRequest))
+                    {
+                        AddQueueRequest reqAddQueue = req as AddQueueRequest;
+                        await queueManager.AddQueue(reqAddQueue);
+                        requestId = reqAddQueue.RequestId;
+                    }
+                    else if (req.GetType() == typeof(ChangeItemData))
+                    {
+                        ChangeItemData reqChangeItem = req as ChangeItemData;
+                        await ChangeItem(reqChangeItem);
+                        requestId = reqChangeItem.RequestId;
+                    }
+                    await Client.OnAddResult(requestId);
                 }
             }
             catch (Exception exception)
@@ -2706,6 +2718,12 @@ namespace Amatsukaze.Server
         public Task AddQueue(AddQueueRequest req)
         {
             queueQ.Post(req);
+            return Task.FromResult(0);
+        }
+
+        public Task ChangeItemTask(ChangeItemData data)
+        {
+            queueQ.Post(data);
             return Task.FromResult(0);
         }
 

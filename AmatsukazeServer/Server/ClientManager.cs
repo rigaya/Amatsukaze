@@ -264,6 +264,9 @@ namespace Amatsukaze.Server
                 case RPCMethodId.ChangeItem:
                     server.ChangeItem((ChangeItemData)arg);
                     break;
+                case RPCMethodId.ChangeItemTask:
+                    server.ChangeItemTask((ChangeItemData)arg);
+                    break;
                 case RPCMethodId.PauseEncode:
                     server.PauseEncode((PauseRequest)arg);
                     break;

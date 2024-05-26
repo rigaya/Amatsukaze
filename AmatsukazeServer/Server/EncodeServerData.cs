@@ -848,6 +848,8 @@ namespace Amatsukaze.Server
         public string Profile { get; set; }
         [DataMember]
         public int Position { get; set; }
+        [DataMember]
+        public string RequestId { get; set; }
     }
 
     [DataContract]

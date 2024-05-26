@@ -13,6 +13,7 @@ namespace Amatsukaze.Server
     public interface IAddTaskServer
     {
         Task AddQueue(AddQueueRequest dir);
+        Task ChangeItemTask(ChangeItemData data);
 
         // スタブ用接続終了
         void Finish();
@@ -83,6 +84,7 @@ namespace Amatsukaze.Server
         SetAutoSelect,
         AddQueue,
         ChangeItem,
+        ChangeItemTask,
         PauseEncode,
         CancelAddQueue,
         CancelSleep,
@@ -190,6 +192,7 @@ namespace Amatsukaze.Server
             { RPCMethodId.SetAutoSelect, typeof(AutoSelectUpdate) },
             { RPCMethodId.AddQueue, typeof(AddQueueRequest) },
             { RPCMethodId.ChangeItem, typeof(ChangeItemData) },
+            { RPCMethodId.ChangeItemTask, typeof(ChangeItemData) },
             { RPCMethodId.PauseEncode, typeof(PauseRequest) },
             { RPCMethodId.CancelAddQueue, null },
             { RPCMethodId.CancelSleep, null },
@@ -496,6 +499,11 @@ namespace Amatsukaze.Server
         public Task ChangeItem(ChangeItemData data)
         {
             return Server.ChangeItem(Copy(data));
+        }
+
+        public Task ChangeItemTask(ChangeItemData data)
+        {
+            return Server.ChangeItemTask(Copy(data));
         }
 
         public Task EndServer()

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace Amatsukaze.AddTask
@@ -22,6 +23,9 @@ namespace Amatsukaze.AddTask
         public string AddQueueBat;
         public int Priority = 3;
 
+        public int ItemID = -1;
+        public ChangeItemType ChangeType = ChangeItemType.ResetState;
+
         public string NasDir;
         public bool NoMove;
         public bool ClearSucceeded;
@@ -35,17 +39,14 @@ namespace Amatsukaze.AddTask
         public static void PrintHelp()
         {
             string help =
-                Environment.GetCommandLineArgs()[0] + " <オプション> -f <input.ts>\r\n" +
-                "オプション\r\n" +
+                Environment.GetCommandLineArgs()[0] + " <オプション>\r\n" +
+                "タスク追加用オプション\r\n" +
                 "  -f|--file <パス>        入力ファイルパス\r\n" +
                 "  -s|--setting <プロファイル名> エンコード設定プロファイル\r\n" +
                 "  -b|--bat <バッチファイル名> 追加時実行バッチ\r\n" +
                 "  --priority <優先度>     優先度\r\n" +
-                "  -ip|--ip <IPアドレス>   AmatsukazeServerアドレス\r\n" +
-                "  -p|--port <ポート番号>  AmatsukazeServerポート番号\r\n" +
                 "  -o|--outdir <パス>      出力先ディレクトリ\r\n" +
                 "  -d|--nasdir <パス>      NASのTSファイル置き場\r\n" +
-                "  -r|--amt-root <パス>    Amatsukazeのルートディレクトリ（サーバ起動用）\r\n" +
                 "  --remote-dir <パス>     サーバから入力ファイルにアクセスするときのディレクトリパス\r\n" +
                 "                          サーバからだとパスが異なる場合に必要\r\n" +
                 "                          ファイル名部分は入力ファイル名からコピーされるのでディレクトリパスのみ入力すること\r\n" +
@@ -55,9 +56,53 @@ namespace Amatsukaze.AddTask
                 "  --no-move               NASにコピーしたTSファイルをtransferedフォルダに移動しない\r\n" +
                 "  --clear-succeeded       NASにコピーする際、コピー先のsucceededフォルダを空にする\r\n" +
                 "  --with-related          NASにコピーする際、関連ファイルも一緒にコピー・移動する\r\n" +
+                "\r\n" +
+                "タスク操作用オプション\r\n" +
+                "  --item-id <ID>          操作対象ITEM ID\r\n" +
+                "  --action <操作名>\r\n" +
+                "    - retry               リトライ\n" +
+                "    - updateprofile       プロファイルを更新してリトライ\r\n" +
+                "    - duplicate           同じタスクを投入\r\n" +
+                "    - cancel              キャンセル\r\n" +
+                "    - priority            優先度変更\r\n" +
+                "    - profile             プロファイル変更\r\n" +
+                "    - removeitem          アイテム削除\r\n" +
+                "    - forcestart          アイテムを強制的に開始\r\n" +
+                "  -s|--setting <プロファイル名> --action profile での変更先\r\n" +
+                "  --priority <優先度>           --action priority での変更先\r\n" +
+                "\r\n" +
+                "AmatsukazeServer 指定用オプション (共通)\r\n" +
+                "  -ip|--ip <IPアドレス>   AmatsukazeServerアドレス\r\n" +
+                "  -p|--port <ポート番号>  AmatsukazeServerポート番号\r\n" +
+                "  -r|--amt-root <パス>    Amatsukazeのルートディレクトリ（サーバ起動用）\r\n" +
                 "  --subnet <サブネットマスク>  Wake On Lan用サブネットマスク\r\n" +
                 "  --mac <MACアドレス>  Wake On Lan用MACアドレス\r\n";
             Console.WriteLine(help);
+        }
+
+        public ChangeItemType GetChangeItemType(string arg)
+        {
+            switch (arg)
+            {
+                case "retry":
+                    return ChangeItemType.ResetState;
+                case "updateprofile":
+                    return ChangeItemType.UpdateProfile;
+                case "duplicate":
+                    return ChangeItemType.Duplicate;
+                case "cancel":
+                    return ChangeItemType.Cancel;
+                case "profile":
+                    return ChangeItemType.Profile;
+                case "priority":
+                    return ChangeItemType.Priority;
+                case "removeitem":
+                    return ChangeItemType.RemoveItem;
+                case "forcestart":
+                    return ChangeItemType.ForceStart;
+                default:
+                    throw new Exception("不正な操作名です");
+            }
         }
 
         public GUIOPtion(string[] args)
@@ -82,6 +127,16 @@ namespace Amatsukaze.AddTask
                 else if (arg == "-f" || arg == "--file")
                 {
                     FilePath = args[i + 1];
+                    ++i;
+                }
+                else if (arg == "--item-id")
+                {
+                    ItemID = int.Parse(args[i + 1]);
+                    ++i;
+                }
+                else if (arg == "--action")
+                {
+                    ChangeType = GetChangeItemType(args[i + 1]);
                     ++i;
                 }
                 else if (arg == "--remote-dir")
@@ -150,7 +205,7 @@ namespace Amatsukaze.AddTask
                 }
             }
 
-            if(string.IsNullOrEmpty(FilePath))
+            if(ItemID < 0 && string.IsNullOrEmpty(FilePath))
             {
                 throw new Exception("入力ファイルパスを入力してください");
             }
@@ -209,7 +264,8 @@ namespace Amatsukaze.AddTask
         public GUIOPtion option;
 
         private CUIServerConnection server;
-        private AddQueueRequest request;
+        AddQueueRequest addRequest;
+        ChangeItemData resetRequest;
         private bool okReceived;
 
         private static bool IsRunningOnMono()
@@ -219,77 +275,97 @@ namespace Amatsukaze.AddTask
 
         public async Task Exec()
         {
-            string srcpath = option.FilePath;
-            byte[] hash = null;
-
-            if (string.IsNullOrEmpty(option.NasDir) == false)
+            if (!string.IsNullOrEmpty(option.FilePath))
             {
-                if (File.Exists(option.FilePath) == false)
-                {
-                    throw new Exception("入力ファイルが見つかりません");
-                }
+                string srcpath = option.FilePath;
+                byte[] hash = null;
 
-                if (option.ClearSucceeded)
+                if (string.IsNullOrEmpty(option.NasDir) == false)
                 {
-                    // succeededを空にする
-                    var succeeded = option.NasDir + Path.DirectorySeparatorChar + "succeeded";
-                    if(Directory.Exists(succeeded))
+                    if (File.Exists(option.FilePath) == false)
                     {
-                        foreach (var file in Directory.GetFiles(succeeded))
+                        throw new Exception("入力ファイルが見つかりません");
+                    }
+
+                    if (option.ClearSucceeded)
+                    {
+                        // succeededを空にする
+                        var succeeded = option.NasDir + Path.DirectorySeparatorChar + "succeeded";
+                        if (Directory.Exists(succeeded))
                         {
-                            File.Delete(file);
+                            foreach (var file in Directory.GetFiles(succeeded))
+                            {
+                                File.Delete(file);
+                            }
+                        }
+                    }
+                    // NASにコピー
+                    var remotepath = option.NasDir + Path.DirectorySeparatorChar + Path.GetFileName(srcpath);
+                    hash = await HashUtil.CopyWithHash(option.FilePath, remotepath);
+                    srcpath = remotepath;
+                    if (option.WithRelated)
+                    {
+                        var body = Path.GetFileNameWithoutExtension(option.FilePath);
+                        var tsext = Path.GetExtension(option.FilePath);
+                        var srcDir = Path.GetDirectoryName(option.FilePath);
+                        foreach (var ext in ServerSupport.GetFileExtentions(null, true))
+                        {
+                            string srcPath = srcDir + Path.DirectorySeparatorChar + body + ext;
+                            string dstPath = option.NasDir + Path.DirectorySeparatorChar + body + ext;
+                            if (File.Exists(srcPath))
+                            {
+                                File.Copy(srcPath, dstPath);
+                            }
                         }
                     }
                 }
-                // NASにコピー
-                var remotepath = option.NasDir + Path.DirectorySeparatorChar + Path.GetFileName(srcpath);
-                hash = await HashUtil.CopyWithHash(option.FilePath, remotepath);
-                srcpath = remotepath;
-                if(option.WithRelated)
+
+                if (string.IsNullOrEmpty(option.RemoteDir) == false)
                 {
-                    var body = Path.GetFileNameWithoutExtension(option.FilePath);
-                    var tsext = Path.GetExtension(option.FilePath);
-                    var srcDir = Path.GetDirectoryName(option.FilePath);
-                    foreach (var ext in ServerSupport.GetFileExtentions(null, true))
+                    // これはサーバからのアクセス用パスなので"\\"で区切る
+                    srcpath = option.RemoteDir + "\\" + Path.GetFileName(srcpath);
+                }
+
+                Console.WriteLine(srcpath + " を追加します");
+
+                // リクエストを生成
+                addRequest = new AddQueueRequest()
+                {
+                    DirPath = Path.GetDirectoryName(srcpath),
+                    Outputs = new List<OutputInfo>()
                     {
-                        string srcPath = srcDir + Path.DirectorySeparatorChar + body + ext;
-                        string dstPath = option.NasDir + Path.DirectorySeparatorChar + body + ext;
-                        if (File.Exists(srcPath))
+                        new OutputInfo()
                         {
-                            File.Copy(srcPath, dstPath);
+                            DstPath = option.OutPath,
+                            Profile = option.Profile,
+                            Priority = option.Priority,
                         }
-                    }
+                    },
+                    Targets = new List<AddQueueItem>() {
+                        new AddQueueItem() { Path = srcpath, Hash = hash }
+                    },
+                    Mode = ProcMode.AutoBatch,
+                    RequestId = UniqueId(),
+                    AddQueueBat = option.AddQueueBat
+                };
+            }
+            else if (option.ItemID >= 0)
+            {
+                resetRequest = new ChangeItemData()
+                {
+                    ItemId = option.ItemID,
+                    ChangeType = option.ChangeType,
+                    RequestId = UniqueId()
+                };
+                if (option.ChangeType == ChangeItemType.Priority)
+                {
+                    resetRequest.Priority = option.Priority;
+                }
+                if (option.ChangeType == ChangeItemType.Profile)
+                {
+                    resetRequest.Profile = option.Profile;
                 }
             }
-
-            if(string.IsNullOrEmpty(option.RemoteDir) == false)
-            {
-                // これはサーバからのアクセス用パスなので"\\"で区切る
-                srcpath = option.RemoteDir + "\\" + Path.GetFileName(srcpath);
-            }
-
-            Console.WriteLine(srcpath + " を追加します");
-
-            // リクエストを生成
-            request = new AddQueueRequest()
-            {
-                DirPath = Path.GetDirectoryName(srcpath),
-                Outputs = new List<OutputInfo>()
-                {
-                    new OutputInfo()
-                    {
-                        DstPath = option.OutPath,
-                        Profile = option.Profile,
-                        Priority = option.Priority,
-                    }
-                },
-                Targets = new List<AddQueueItem>() {
-                    new AddQueueItem() { Path = srcpath, Hash = hash }
-                },
-                Mode = ProcMode.AutoBatch,
-                RequestId = UniqueId(),
-                AddQueueBat = option.AddQueueBat
-            };
 
             server = new CUIServerConnection(this);
             bool isLocal = !IsRunningOnMono() && ServerSupport.IsLocalIP(option.ServerIP);
@@ -346,7 +422,18 @@ namespace Amatsukaze.AddTask
                 try
                 {
                     // サーバにタスク登録
-                    await server.AddQueue(request);
+                    if (addRequest != null)
+                    {
+                        await server.AddQueue(addRequest);
+                    }
+                    else if (resetRequest != null)
+                    {
+                        await server.ChangeItemTask(resetRequest);
+                    }
+                    else
+                    {
+                        throw new Exception("リクエストが不正です");
+                    }
 
                     // リクエストIDの完了通知ゲット or タイムアウトしたら終了
                     var timeout = Task.Delay(30 * 1000);
@@ -424,7 +511,11 @@ namespace Amatsukaze.AddTask
 
         public Task OnAddResult(string requestId)
         {
-            if(request.RequestId == requestId)
+            if (addRequest != null && addRequest.RequestId == requestId)
+            {
+                okReceived = true;
+            }
+            else if (resetRequest != null && resetRequest.RequestId == requestId)
             {
                 okReceived = true;
             }

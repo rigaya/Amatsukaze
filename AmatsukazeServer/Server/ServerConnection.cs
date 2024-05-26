@@ -94,6 +94,11 @@ namespace Amatsukaze.Server
             return Send(RPCMethodId.ChangeItem, data);
         }
 
+        public Task ChangeItemTask(ChangeItemData data)
+        {
+            return Send(RPCMethodId.ChangeItemTask, data);
+        }
+
         public Task PauseEncode(PauseRequest request)
         {
             return Send(RPCMethodId.PauseEncode, request);
@@ -326,6 +331,23 @@ namespace Amatsukaze.Server
                 await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
             }
         }
+        private async Task Send(RPCMethodId id, ChangeItemData obj)
+        {
+            if (client != null)
+            {
+                var data = new List<byte[]>();
+                var ms = new MemoryStream();
+                var serializer = new DataContractSerializer(typeof(ChangeItemData));
+                serializer.WriteObject(ms, obj);
+                data.Add(ms.ToArray());
+                var objbyes = RPCData.CombineChunks(data);
+                byte[] bytes = RPCData.Combine(
+                    BitConverter.GetBytes((short)id),
+                    BitConverter.GetBytes(objbyes.Length),
+                    objbyes);
+                await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+            }
+        }
 
         internal void OnRequestReceived(RPCMethodId methodId, object arg)
         {
@@ -343,6 +365,11 @@ namespace Amatsukaze.Server
         public Task AddQueue(AddQueueRequest dir)
         {
             return Send(RPCMethodId.AddQueue, dir);
+        }
+
+        public Task ChangeItemTask(ChangeItemData data)
+        {
+            return Send(RPCMethodId.ChangeItemTask, data);
         }
 
         public void Finish()
