@@ -131,6 +131,27 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearSVTAV1PathCommand
+        private ViewModelCommand _ClearSVTAV1PathCommand;
+
+        public ViewModelCommand ClearSVTAV1PathCommand
+        {
+            get
+            {
+                if (_ClearSVTAV1PathCommand == null)
+                {
+                    _ClearSVTAV1PathCommand = new ViewModelCommand(ClearSVTAV1Path);
+                }
+                return _ClearSVTAV1PathCommand;
+            }
+        }
+
+        public void ClearSVTAV1Path()
+        {
+            Model.Setting.SVTAV1Path = null;
+        }
+        #endregion
+
         #region ClearMuxerPathCommand
         private ViewModelCommand _ClearMuxerPathCommand;
 
@@ -263,27 +284,6 @@ namespace Amatsukaze.ViewModels
         public void ClearNicoConvASSPath()
         {
             Model.Setting.NicoConvASSPath = null;
-        }
-        #endregion
-
-        #region ClearTsReplacePathCommand
-        private ViewModelCommand _ClearTsReplacePathCommand;
-
-        public ViewModelCommand ClearTsReplacePathCommand
-        {
-            get
-            {
-                if (_ClearTsReplacePathCommand == null)
-                {
-                    _ClearTsReplacePathCommand = new ViewModelCommand(ClearTsReplacePath);
-                }
-                return _ClearTsReplacePathCommand;
-            }
-        }
-
-        public void ClearTsReplacePath()
-        {
-            Model.Setting.TsReplacePath = null;
         }
         #endregion
 
