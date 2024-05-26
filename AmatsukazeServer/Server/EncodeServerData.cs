@@ -457,6 +457,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool SupressSleep { get; set; }
         [DataMember]
+        public bool LogoPendAsError { get; set; }
+        [DataMember]
         public bool DumpFilter { get; set; }
         [DataMember]
         public bool SchedulingEnabled { get; set; }

@@ -3185,6 +3185,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region LogoPendAsError変更通知プロパティ
+        public bool LogoPendAsError
+        {
+            get { return Model.LogoPendAsError; }
+            set
+            {
+                if (Model.LogoPendAsError == value)
+                    return;
+                Model.LogoPendAsError = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region DumpFilter変更通知プロパティ
         public bool DumpFilter
         {
