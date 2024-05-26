@@ -785,6 +785,131 @@ namespace Amatsukaze.Server
             return null;
         }
 
+        struct EncodeExeFileInfo
+        {
+            public string Path;
+            public int[] version;
+        }
+        private static int[] GetEncoderExeVersionFromFilename(string filename, EncoderType type)
+        {
+            switch (type)
+            {
+                case EncoderType.x264:
+                    // x264はx264_3186_x64.exeのような形式なので、このうち3186をintに変換して返す
+                    var match = System.Text.RegularExpressions.Regex.Match(filename, @"x264_(\d+)_");
+                    if (match.Success)
+                    {
+                        return new int[] { int.Parse(match.Groups[1].Value), 0, 0, 0 };
+                    }
+                    break;
+                case EncoderType.x265:
+                    // x265はx265_3.6+7_x64.exeのような形式なので、このうち、3, 6, 7をintに変換して配列で返す
+                    match = System.Text.RegularExpressions.Regex.Match(filename, @"x265_(\d+)\.(\d+)\+(\d+)_");
+                    if (match.Success)
+                    {
+                        return new int[] { int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), 0, int.Parse(match.Groups[3].Value) };
+                    }
+                    break;
+                case EncoderType.SVTAV1:
+                    //svt-av1はSvtAv1EncApp_2.0.0-31_x64.exeのような形式なので、このうち、2, 0, 0, 31をintに変換して配列で返す
+                    match = System.Text.RegularExpressions.Regex.Match(filename, @"SvtAv1EncApp_(\d+)\.(\d+)\.(\d+)-(\d+)_");
+                    if (match.Success)
+                    {
+                        return new int[] { int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value), int.Parse(match.Groups[4].Value) };
+                    }
+                    //svt-av1はSvtAv1EncApp_v1.8.0_x64のような形式もあるので、このうち、1, 8, 0, 0をintに変換して配列で返す
+                    match = System.Text.RegularExpressions.Regex.Match(filename, @"SvtAv1EncApp_v(\d+)\.(\d+)\.(\d+)_");
+                    if (match.Success)
+                    {
+                        return new int[] { int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value), 0 };
+                    }
+                    break;
+                default:
+                    break;
+            }
+            return null;
+        }
+
+        private static string GetEncoderExePath(string basePath, EncoderType type)
+        {
+            string pattern = "";
+            switch (type)
+            {
+                case EncoderType.x264:
+                    pattern = "x264";
+                    break;
+                case EncoderType.x265:
+                    pattern = "x265";
+                    break;
+                case EncoderType.SVTAV1:
+                    pattern = "SvtAv1EncApp";
+                    break;
+                default:
+                    return null;
+            }
+            var exeList = new List<EncodeExeFileInfo>();
+            foreach (var path in Directory.GetFiles(basePath))
+            {
+                var fname = Path.GetFileName(path);
+                if (fname.StartsWith(pattern) && fname.EndsWith(".exe"))
+                {
+                    // pathの「ファイル バージョン」を取得してリストに追加する
+                    int[] version = null;
+                    // versionはa.b.c.dの形式なので、a,b,c,dをintに変換して配列にする
+                    try
+                    {
+                        var versionStr = FileVersionInfo.GetVersionInfo(path).FileVersion;
+                        version = versionStr.Split('.').Select(int.Parse).ToArray();
+                    }
+                    catch (Exception)
+                    {
+                        // バージョン情報が取得できない場合はファイル名から取得
+                        try
+                        {
+                            version = GetEncoderExeVersionFromFilename(fname, type);
+                        }
+                        catch (Exception)
+                        { }
+                    }
+                    exeList.Add(new EncodeExeFileInfo() { Path = path, version = version });
+                }
+            }
+            // exeList内のバージョン情報を比較して最新のものを返す
+            var maxVersion = new int[] { 0, 0, 0, 0 };
+            string maxPath = null;
+            foreach (var exe in exeList)
+            {
+                if (exe.version == null)
+                {
+                    continue;
+                }
+                bool isNewer = false;
+                for (int i = 0; i < 4; i++)
+                {
+                    if (exe.version[i] > maxVersion[i])
+                    {
+                        isNewer = true;
+                        break;
+                    }
+                    else if (exe.version[i] < maxVersion[i])
+                    {
+                        break;
+                    }
+                }
+                if (isNewer)
+                {
+                    maxVersion = exe.version;
+                    maxPath = exe.Path;
+                }
+            }
+            if (maxPath == null && exeList.Count > 0)
+            {
+                //nullの場合は、exeListの先頭のものを返す
+                maxPath = exeList[0].Path;
+            }
+            return maxPath;
+        }
+
         private Setting SetDefaultPath(Setting setting)
         {
             string basePath = Path.GetDirectoryName(GetType().Assembly.Location);
@@ -794,15 +919,15 @@ namespace Amatsukaze.Server
             }
             if (string.IsNullOrEmpty(setting.X264Path))
             {
-                setting.X264Path = GetExePath(basePath, "x264");
+                setting.X264Path = GetEncoderExePath(basePath, EncoderType.x264);
             }
             if (string.IsNullOrEmpty(setting.X265Path))
             {
-                setting.X265Path = GetExePath(basePath, "x265");
+                setting.X265Path = GetEncoderExePath(basePath, EncoderType.x265);
             }
             if (string.IsNullOrEmpty(setting.SVTAV1Path))
             {
-                setting.SVTAV1Path = GetExePath(basePath, "SvtAv1EncApp");
+                setting.SVTAV1Path = GetEncoderExePath(basePath, EncoderType.SVTAV1);
             }
             if (string.IsNullOrEmpty(setting.MuxerPath))
             {
