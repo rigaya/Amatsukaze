@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -315,16 +316,73 @@ namespace Amatsukaze.Server
             }
         }
 
+        private String ConvertStrZtoH(String str)
+        {
+            var strZenkaku1 = @"０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ";
+            var strZenkaku2 = @"　！”＃＄％＆’（）＊＋，－．／：；＜＝＞？＠［￥］＾＿‘｛｜｝￣";
+            var strHankaku1 = @"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+            var strHankaku2 = @" !”#$%&'()＊+,-.／：;＜=＞？@[￥]^_`{｜}~"; // パスに使用できない文字は全角のままにする
+
+            var strZenkaku = strZenkaku1 + strZenkaku2;
+            var strHankaku = strHankaku1 + strHankaku2;
+
+            var sb = new StringBuilder();
+            var itstr = StringInfo.GetTextElementEnumerator(str);
+            while (itstr.MoveNext())
+            {
+                var targetChar = itstr.GetTextElement();
+                // targetCharがstrZenkakuに含まれる文字列なら、同じ位置のstrHankakuの文字列に置換する
+                var index = strZenkaku.IndexOf(targetChar);
+                if (index >= 0)
+                {
+                    sb.Append(strHankaku[index]);
+                }
+                else
+                {
+                    sb.Append(targetChar);
+                }
+            }
+            return sb.ToString();
+        }
+
+        public string RemoveBracketedChars(string str)
+        {
+            // 正規表現パターンを作成し、カッコで囲まれた1文字を検索する。
+            var regex = new Regex(@"\[\w\]");
+            while (regex.IsMatch(str))
+            {
+                str = regex.Replace(str, "");
+            }
+            return str;
+        }
+
         private void SetupEnv(StringDictionary env)
         {
             var genre = Item.Genre.FirstOrDefault();
             var displayGenre = (genre != null) ? SubGenre.GetDisplayGenre(genre) : null;
 
+            var inPath = MovedSrcPath ?? Item.SrcPath;
+            var inPath2 = Path.Combine(Path.GetDirectoryName(inPath), RemoveBracketedChars(Path.GetFileName(inPath)));
+            var inPathZtoH = Path.Combine(Path.GetDirectoryName(inPath), ConvertStrZtoH(Path.GetFileName(inPath)));
+            var inPath2ZtoH = Path.Combine(Path.GetDirectoryName(inPath2), ConvertStrZtoH(Path.GetFileName(inPath2)));
+
+            var outPath = Item.DstPath;
+            var outPath2 = Path.Combine(Path.GetDirectoryName(outPath), RemoveBracketedChars(Path.GetFileName(outPath)));
+            var outPathZtoH = Path.Combine(Path.GetDirectoryName(outPath), ConvertStrZtoH(Path.GetFileName(outPath)));
+            var outPath2ZtoH = Path.Combine(Path.GetDirectoryName(outPath2), ConvertStrZtoH(Path.GetFileName(outPath2)));
+
             env.Add("ITEM_ID", Item.Id.ToString());
-            env.Add("IN_PATH", MovedSrcPath ?? Item.SrcPath);
-            env.Add("OUT_PATH", Item.DstPath);
+            env.Add("IN_PATH", inPath);
+            env.Add("IN_PATH2", inPath2);
+            env.Add("IN_PATH_ZTOH", inPathZtoH);
+            env.Add("IN_PATH2_ZTOH", inPath2ZtoH);
+            env.Add("OUT_PATH", outPath);
+            env.Add("OUT_PATH2", outPath2);
+            env.Add("OUT_PATH_ZTOH", outPathZtoH);
+            env.Add("OUT_PATH2_ZTOH", outPath2ZtoH);
             env.Add("SERVICE_ID", Item.ServiceId.ToString());
             env.Add("SERVICE_NAME", Item.ServiceName);
+            env.Add("SERVICE_NAME_ZTOH", ConvertStrZtoH(Item.ServiceName));
             env.Add("TS_TIME", Item.TsTime.ToString());
             env.Add("ITEM_MODE", Item.Mode.ToString());
             env.Add("ITEM_PRIORITY", Item.Priority.ToString());
