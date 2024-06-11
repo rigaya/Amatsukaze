@@ -371,6 +371,11 @@ namespace Amatsukaze.Server
             var outPathZtoH = Path.Combine(Path.GetDirectoryName(outPath), ConvertStrZtoH(Path.GetFileName(outPath)));
             var outPath2ZtoH = Path.Combine(Path.GetDirectoryName(outPath2), ConvertStrZtoH(Path.GetFileName(outPath2)));
 
+            var eventName = Item.EventName;
+            var eventName2 = RemoveBracketedChars(eventName);
+            var eventNameZtoH = ConvertStrZtoH(eventName);
+            var eventName2ZtoH = ConvertStrZtoH(eventName2);
+
             env.Add("ITEM_ID", Item.Id.ToString());
             env.Add("IN_PATH", inPath);
             env.Add("IN_PATH2", inPath2);
@@ -389,7 +394,10 @@ namespace Amatsukaze.Server
             env.Add("EVENT_GENRE", displayGenre?.FullName ?? "-");
             env.Add("IMAGE_WIDTH", Item.ImageWidth.ToString());
             env.Add("IMAGE_HEIGHT", Item.ImageHeight.ToString());
-            env.Add("EVENT_NAME", Item.EventName);
+            env.Add("EVENT_NAME", eventName);
+            env.Add("EVENT_NAME2", eventName2);
+            env.Add("EVENT_NAME_ZTOH", eventNameZtoH);
+            env.Add("EVENT_NAME2_ZTOH", eventName2ZtoH);
             env.Add("TAG", string.Join(";", Item.Tags));
 
             if(Phase != ScriptPhase.OnAdd)
