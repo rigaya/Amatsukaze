@@ -249,7 +249,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
 
     switch (encoder) {
     case AUDIO_ENCODER_NEROAAC:
-        sb.append(_T(" -if - -of \"%s\""), outpath);
+        sb.append(_T(" -ignorelength -if - -of \"%s\""), outpath);
         break;
     case AUDIO_ENCODER_QAAC:
     case AUDIO_ENCODER_FDKAAC:
