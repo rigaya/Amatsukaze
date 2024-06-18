@@ -362,14 +362,26 @@ namespace Amatsukaze.Server
             var displayGenre = (genre != null) ? SubGenre.GetDisplayGenre(genre) : null;
 
             var inPath = MovedSrcPath ?? Item.SrcPath;
-            var inPath2 = Path.Combine(Path.GetDirectoryName(inPath), RemoveBracketedChars(Path.GetFileName(inPath)));
-            var inPathZtoH = Path.Combine(Path.GetDirectoryName(inPath), ConvertStrZtoH(Path.GetFileName(inPath)));
-            var inPath2ZtoH = Path.Combine(Path.GetDirectoryName(inPath2), ConvertStrZtoH(Path.GetFileName(inPath2)));
+            var inDir = Path.GetDirectoryName(inPath);
+            var inExt = Path.GetExtension(inPath);
+            var inPath2 = Path.Combine(inDir, RemoveBracketedChars(Path.GetFileName(inPath)));
+            var inPathZtoH = Path.Combine(inDir, ConvertStrZtoH(Path.GetFileName(inPath)));
+            var inPath2ZtoH = Path.Combine(inDir, ConvertStrZtoH(Path.GetFileName(inPath2)));
+            var inFilename = Path.GetFileNameWithoutExtension(inPath);
+            var inFilenameZtoH = ConvertStrZtoH(inFilename);
+            var inFilename2 = RemoveBracketedChars(inFilename);
+            var inFilename2ZtoH = ConvertStrZtoH(inFilename2);
 
+            var outDir = Path.GetDirectoryName(Item.DstPath);
+            var outExt = Path.GetExtension(Item.DstPath);
             var outPath = Item.DstPath;
-            var outPath2 = Path.Combine(Path.GetDirectoryName(outPath), RemoveBracketedChars(Path.GetFileName(outPath)));
-            var outPathZtoH = Path.Combine(Path.GetDirectoryName(outPath), ConvertStrZtoH(Path.GetFileName(outPath)));
-            var outPath2ZtoH = Path.Combine(Path.GetDirectoryName(outPath2), ConvertStrZtoH(Path.GetFileName(outPath2)));
+            var outPath2 = Path.Combine(outDir, RemoveBracketedChars(Path.GetFileName(outPath)));
+            var outPathZtoH = Path.Combine(outDir, ConvertStrZtoH(Path.GetFileName(outPath)));
+            var outPath2ZtoH = Path.Combine(outDir, ConvertStrZtoH(Path.GetFileName(outPath2)));
+            var outFilename = Path.GetFileNameWithoutExtension(outPath);
+            var outFilenameZtoH = ConvertStrZtoH(outFilename);
+            var outFilename2 = RemoveBracketedChars(outFilename);
+            var outFilename2ZtoH = ConvertStrZtoH(outFilename2);
 
             var eventName = Item.EventName;
             var eventName2 = RemoveBracketedChars(eventName);
@@ -381,10 +393,24 @@ namespace Amatsukaze.Server
             env.Add("IN_PATH2", inPath2);
             env.Add("IN_PATH_ZTOH", inPathZtoH);
             env.Add("IN_PATH2_ZTOH", inPath2ZtoH);
+            env.Add("IN_FILENAME", inFilename);
+            env.Add("IN_FILENAME_ZTOH", inFilenameZtoH);
+            env.Add("IN_FILENAME2", inFilename2);
+            env.Add("IN_FILENAME2_ZTOH", inFilename2ZtoH);
+            env.Add("IN_DIR", inDir);
+            env.Add("IN_EXT", inExt);
+
             env.Add("OUT_PATH", outPath);
             env.Add("OUT_PATH2", outPath2);
             env.Add("OUT_PATH_ZTOH", outPathZtoH);
             env.Add("OUT_PATH2_ZTOH", outPath2ZtoH);
+            env.Add("OUT_FILENAME", outFilename);
+            env.Add("OUT_FILENAME_ZTOH", outFilenameZtoH);
+            env.Add("OUT_FILENAME2", outFilename2);
+            env.Add("OUT_FILENAME2_ZTOH", outFilename2ZtoH);
+            env.Add("OUT_DIR", outDir);
+            env.Add("OUT_EXT", outExt);
+
             env.Add("SERVICE_ID", Item.ServiceId.ToString());
             env.Add("SERVICE_NAME", Item.ServiceName);
             env.Add("SERVICE_NAME_ZTOH", ConvertStrZtoH(Item.ServiceName));
