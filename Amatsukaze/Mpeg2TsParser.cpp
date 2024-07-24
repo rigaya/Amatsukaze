@@ -1029,7 +1029,9 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
             table->add(captionEs.pid, &captionDelegator);
         }
 
-        selectorHandler->onPmtUpdated(pmt.PCR_PID());
+        const auto pcr_pid = pmt.PCR_PID();
+        ctx.infoF("PID: 0x%04x TYPE: PCR", pcr_pid);
+        selectorHandler->onPmtUpdated(pcr_pid);
         if (table == curHandlerTable) {
             selectorHandler->onPidTableChanged(videoEs, audioEs, captionEs);
         }
