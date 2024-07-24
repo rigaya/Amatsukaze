@@ -125,9 +125,9 @@ private:
     bool buffering;
 };
 
-class TsSystemClock {
+class TsSystemClock : public AMTObject {
 public:
-    TsSystemClock();
+    TsSystemClock(AMTContext& ctx);
 
     void setPcrPid(int PcrPid);
 

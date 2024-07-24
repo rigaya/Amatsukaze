@@ -223,8 +223,9 @@ void TsPacketBuffer::backAndInput() {
         handler->onTsPacket(-1, packet);
     }
 }
-TsSystemClock::TsSystemClock()
-    : PcrPid(-1)
+TsSystemClock::TsSystemClock(AMTContext& ctx)
+    : AMTObject(ctx)
+    , PcrPid(-1)
     , numPcrReceived(0)
     , numTotakPacketsReveived(0)
     , pcrInfo() {}
@@ -261,10 +262,15 @@ void TsSystemClock::inputTsPacket(TsPacket packet) {
             MemoryChunk data = packet.adapdation_field();
             AdapdationField af(data.data, (int)data.length);
             if (af.parse() && af.check()) {
-                if (af.discontinuity_indicator()) {
-                    // PCRが連続でないのでリセット
-                    numPcrReceived = 0;
-                }
+                // 従来のコメントに、「ARIB TR-14 8.2.3に送出規定があって、TSパケットの連続性、PCR連続性が切れる場合に送られる」とある
+                // しかし、該当の記述はDIT(PID=0x001e)に関するもので、必ずしもPCRのPIDに対する記述ではないように読める
+                // 実際、PCRと映像のPIDが一致する場合に、ここでPCRのリセットをしてしまうと、実際にはPCRが連続にもかかわらず、
+                // "Audio/Video PES Packet にクロック情報がありません"となってdropしてしまう
+                // そこでaf.discontinuity_indicator()による処理は無効化する
+                //if (af.discontinuity_indicator()) {
+                //    // PCRが連続でないのでリセット
+                //    numPcrReceived = 0;
+                //}
                 if (pcrInfo[1].packetIndex < numTotakPacketsReveived) {
                     std::swap(pcrInfo[0], pcrInfo[1]);
                     if (af.PCR_flag()) {
@@ -293,9 +299,10 @@ double TsSystemClock::currentBitrate() {
 TsSplitter::TsSplitter(AMTContext& ctx, bool enableVideo, bool enableAudio, bool enableCaption)
     : AMTObject(ctx)
     , initPhase(PMT_WAITING)
+    , tsPacketParser(ctx)
+    , tsSystemClock(ctx)
     , tsPacketHandler(*this)
     , pcrDetectionHandler(*this)
-    , tsPacketParser(ctx)
     , tsPacketSelector(ctx)
     , videoParser(ctx, *this)
     , captionParser(ctx, *this)
