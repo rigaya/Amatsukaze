@@ -373,7 +373,6 @@ namespace Amatsukaze.Server
             var inFilename2ZtoH = ConvertStrZtoH(inFilename2);
 
             var outDir = Path.GetDirectoryName(Item.DstPath);
-            var outExt = Path.GetExtension(Item.DstPath);
             var outPath = Item.DstPath;
             var outPath2 = Path.Combine(outDir, RemoveBracketedChars(Path.GetFileName(outPath)));
             var outPathZtoH = Path.Combine(outDir, ConvertStrZtoH(Path.GetFileName(outPath)));
@@ -409,7 +408,6 @@ namespace Amatsukaze.Server
             env.Add("OUT_FILENAME2", outFilename2);
             env.Add("OUT_FILENAME2_ZTOH", outFilename2ZtoH);
             env.Add("OUT_DIR", outDir);
-            env.Add("OUT_EXT", outExt);
 
             env.Add("SERVICE_ID", Item.ServiceId.ToString());
             env.Add("SERVICE_NAME", Item.ServiceName);
