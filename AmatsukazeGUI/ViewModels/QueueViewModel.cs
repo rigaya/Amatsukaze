@@ -1339,5 +1339,7 @@ namespace Amatsukaze.ViewModels
                 });
             }
         }
+        public double QueueListScrollVerticalOffset { get; set; } = 0;
+        public double QueueListScrollHorizontalOffset { get; set; } = 0;
     }
 }

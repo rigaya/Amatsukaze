@@ -90,5 +90,62 @@ namespace Amatsukaze.Views
                 }
             }
         }
+        bool SaveScrollPosition = false;
+        private void QueueList_Loaded(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as QueueViewModel;
+            if(vm != null)
+            {
+                var listBox = sender as ListBox;
+                var scrollViewer = ScrollViewerHelper.GetScrollViewer(listBox);
+
+                if (scrollViewer != null)
+                {
+                    try
+                    {
+                        scrollViewer.ScrollToVerticalOffset(vm.QueueListScrollVerticalOffset);
+                        scrollViewer.ScrollToHorizontalOffset(vm.QueueListScrollHorizontalOffset);
+                    }
+                    catch { }
+                }
+                SaveScrollPosition = true;
+            }
+        }
+        private void QueueList_Unloaded(object sender, RoutedEventArgs e)
+        {
+            SaveScrollPosition = false;
+        }
+
+        private void QueueList_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            var vm = DataContext as QueueViewModel;
+            if (vm != null && SaveScrollPosition)
+            {
+                var listBox = sender as ListBox;
+                var scrollViewer = ScrollViewerHelper.GetScrollViewer(listBox);
+
+                if (scrollViewer != null)
+                {
+                    vm.QueueListScrollVerticalOffset = scrollViewer.VerticalOffset;
+                    vm.QueueListScrollHorizontalOffset = scrollViewer.HorizontalOffset;
+                }
+            }
+        }
+    }
+
+    public static class ScrollViewerHelper
+    {
+        public static ScrollViewer GetScrollViewer(DependencyObject depObj)
+        {
+            if (depObj is ScrollViewer) return depObj as ScrollViewer;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(depObj); i++)
+            {
+                var child = VisualTreeHelper.GetChild(depObj, i);
+                var result = GetScrollViewer(child);
+                if (result != null) return result;
+            }
+            return null;
+        }
     }
 }

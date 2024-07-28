@@ -820,7 +820,10 @@
                 PreviewDragOver="ListBox_PreviewDragOver" 
                 Drop="ListBox_Drop" AllowDrop="True" 
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                SelectionMode="Extended">
+                SelectionMode="Extended"
+                Loaded="QueueList_Loaded"
+                Unloaded="QueueList_Unloaded"
+                ScrollViewer.ScrollChanged="QueueList_ScrollChanged" >
                 <i:Interaction.Behaviors>
                     <c:DragBehavior OnlyEvent="True" OnDropAt="{Binding DropAtCommand}" />
                 </i:Interaction.Behaviors>
