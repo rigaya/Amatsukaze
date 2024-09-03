@@ -1316,7 +1316,7 @@ namespace Amatsukaze.Server
                             Phase = ScriptPhase.PostEncode,
                             ScriptPath = server.GetBatDirectoryPath() + "\\" + item.Profile.PostBatchFile,
                             Item = item,
-                            Log = logItem,
+                            Log = (item.IsCheck) ? null : logItem, // IsCheckの場合は、CheckLogItemが来るので互換性がない
                             RelatedFiles = new List<string>(),
                             OnOutput = WriteTextBytes
                         };
