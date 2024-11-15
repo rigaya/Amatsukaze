@@ -111,6 +111,9 @@ class AMTSource : public IClip, AMTObject {
 
     template <typename T>
     void Copy1(T* dst, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
+        dpitch /= sizeof(T);
+        tpitch /= sizeof(T);
+        bpitch /= sizeof(T);
         for (int y = 0; y < h; y += 2) {
             T* dst0 = dst + dpitch * (y + 0);
             T* dst1 = dst + dpitch * (y + 1);
@@ -123,6 +126,9 @@ class AMTSource : public IClip, AMTObject {
 
     template <typename T>
     void Copy2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
+        dpitch /= sizeof(T);
+        tpitch /= sizeof(T);
+        bpitch /= sizeof(T);
         for (int y = 0; y < h; y += 2) {
             T* dstU0 = dstU + dpitch * (y + 0);
             T* dstU1 = dstU + dpitch * (y + 1);
