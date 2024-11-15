@@ -216,6 +216,7 @@
     <ClInclude Include="FileUtils.h" />
     <ClInclude Include="FilteredSource.h" />
     <ClInclude Include="H264VideoParser.h" />
+    <ClInclude Include="HEVCVideoParser.h" />
     <ClInclude Include="InterProcessComm.h" />
     <ClInclude Include="LogoScan.h" />
     <ClInclude Include="Mpeg2TsParser.h" />
@@ -282,6 +283,7 @@
     <ClCompile Include="FileUtils.cpp" />
     <ClCompile Include="FilteredSource.cpp" />
     <ClCompile Include="H264VideoParser.cpp" />
+    <ClCompile Include="HEVCVideoParser.cpp" />
     <ClCompile Include="InterProcessComm.cpp" />
     <ClCompile Include="LogoScan.cpp" />
     <ClCompile Include="Mpeg2TsParser.cpp" />

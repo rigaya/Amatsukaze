@@ -20,6 +20,7 @@
 #include "Mpeg2TsParser.h"
 #include "Mpeg2VideoParser.h"
 #include "H264VideoParser.h"
+#include "HEVCVideoParser.h"
 #include "AdtsParser.h"
 #include "Mpeg2PsWriter.hpp"
 #include "WaveWriter.h"
@@ -53,6 +54,7 @@ private:
 
     MPEG2VideoParser mpeg2parser;
     H264VideoParser h264parser;
+    HEVCVideoParser hevcparser;
 
     IVideoParser* parser;
 

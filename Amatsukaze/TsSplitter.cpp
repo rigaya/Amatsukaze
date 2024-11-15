@@ -15,6 +15,7 @@ VideoFrameParser::VideoFrameParser(AMTContext&ctx)
     , videoFormat()
     , mpeg2parser(ctx)
     , h264parser(ctx)
+    , hevcparser(ctx)
     , parser(&mpeg2parser) {}
 
 void VideoFrameParser::setStreamFormat(VIDEO_STREAM_FORMAT streamFormat) {
@@ -25,6 +26,9 @@ void VideoFrameParser::setStreamFormat(VIDEO_STREAM_FORMAT streamFormat) {
             break;
         case VS_H264:
             parser = &h264parser;
+            break;
+        case VS_H265:
+            parser = &hevcparser;
             break;
         }
         reset();
