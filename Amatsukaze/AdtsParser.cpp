@@ -19,7 +19,7 @@ bool AdtsHeader::parse(uint8_t *data, int length) {
         if (syncword != 0xFFF) return false;
 
         uint8_t ID = reader.read<1>();
-        if (ID != 1) return false; // ŒÅ’è
+        //if (ID != 1) return false; // MPEG4 ... 0 MPEG2 ... 1
         uint8_t layer = reader.read<2>();
         if (layer != 0) return false; // ŒÅ’è
 
