@@ -1099,7 +1099,7 @@ bool TsPacketSelector::isVideo(uint8_t stream_type) {
     switch (stream_type) {
     case 0x02: // MPEG2-VIDEO
     case 0x1B: // H.264/AVC
-        //	case 0x24: // H.265/HEVC
+    case 0x24: // H.265/HEVC
         return true;
     }
     return false;

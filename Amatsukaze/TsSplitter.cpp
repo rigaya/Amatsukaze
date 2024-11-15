@@ -461,6 +461,9 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
         case 0x1B: // H.264/AVC
             videoParser.setStreamFormat(VS_H264);
             break;
+        case 0x24: // H.265/HEVC
+            videoParser.setStreamFormat(VS_H265);
+            break;
         }
 
         // 必要な数だけ音声パーサ作る

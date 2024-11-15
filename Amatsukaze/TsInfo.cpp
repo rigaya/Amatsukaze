@@ -175,6 +175,9 @@ void TsInfoParser::onPMT(int pid, PsiSection section) {
                 case 0x1B:
                     type = VS_H264;
                     break;
+                case 0x24:
+                    type = VS_H265;
+                    break;
                 }
                 if (type != VS_UNKNOWN) {
                     int videoPid = elem.elementary_PID();
