@@ -9,7 +9,8 @@
 #include "LogoScan.h"
 #include <cstdlib>
 #include <regex>
-
+#include "zlib.h"
+#pragma comment(lib, "zlib.lib")
 
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
     for (int x = 0; x < logowidth; x++) {
@@ -24,15 +25,15 @@ void removeLogoLine(float *dst, const float *src, const int srcStride, const flo
 
 float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, float* pavg) {
     float avg = 0.0f;
-    for (int ky = -2; ky <= 2; ++ky) {
-        for (int kx = -2; kx <= 2; ++kx) {
+    for (int ky = -2; ky <= 2; ky++) {
+        for (int kx = -2; kx <= 2; kx++) {
             avg += Y[(x + kx) + (y + ky) * w];
         }
     }
     avg /= 25;
     float sum = 0.0f;
-    for (int ky = -2; ky <= 2; ++ky) {
-        for (int kx = -2; kx <= 2; ++kx) {
+    for (int ky = -2; ky <= 2; ky++) {
+        for (int kx = -2; kx <= 2; kx++) {
             sum += k[(kx + 2) + (ky + 2) * 5] * (Y[(x + kx) + (y + ky) * w] - avg);
         }
     }
@@ -47,21 +48,50 @@ float CalcCorrelation5x5_Debug(const float* k, const float* Y, int x, int y, int
     }
     return f1;
 }
-logo::LogoDataParam::LogoDataParam() {}
+logo::LogoDataParam::LogoDataParam() :
+    LogoData(),
+    imgw(0),
+    imgh(0),
+    imgx(0),
+    imgy(0),
+    mask(),
+    kernels(),
+    scales(),
+    thresh(0.0f),
+    maskpixels(0),
+    blackScore(0.0f),
+    pCalcCorrelation5x5(nullptr),
+    pRemoveLogoLine(nullptr) {}
 
-logo::LogoDataParam::LogoDataParam(LogoData&& logo, const LogoHeader* header)
-    : LogoData(std::move(logo))
-    , imgw(header->imgw)
-    , imgh(header->imgh)
-    , imgx(header->imgx)
-    , imgy(header->imgy) {}
+logo::LogoDataParam::LogoDataParam(LogoData&& logo, const LogoHeader* header) :
+    LogoData(std::move(logo)),
+    imgw(header->imgw),
+    imgh(header->imgh),
+    imgx(header->imgx),
+    imgy(header->imgy),
+    mask(),
+    kernels(),
+    scales(),
+    thresh(0.0f),
+    maskpixels(0),
+    blackScore(0.0f),
+    pCalcCorrelation5x5(nullptr),
+    pRemoveLogoLine(nullptr) {}
 
-logo::LogoDataParam::LogoDataParam(LogoData&& logo, int imgw, int imgh, int imgx, int imgy)
-    : LogoData(std::move(logo))
-    , imgw(imgw)
-    , imgh(imgh)
-    , imgx(imgx)
-    , imgy(imgy) {}
+logo::LogoDataParam::LogoDataParam(LogoData&& logo, int imgw, int imgh, int imgx, int imgy) :
+    LogoData(std::move(logo)),
+    imgw(imgw),
+    imgh(imgh),
+    imgx(imgx),
+    imgy(imgy),
+    mask(),
+    kernels(),
+    scales(),
+    thresh(0.0f),
+    maskpixels(0),
+    blackScore(0.0f),
+    pCalcCorrelation5x5(nullptr),
+    pRemoveLogoLine(nullptr) {}
 
 int logo::LogoDataParam::getImgWidth() const { return imgw; }
 int logo::LogoDataParam::getImgHeight() const { return imgh; }
@@ -91,7 +121,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
     auto memWork = std::unique_ptr<float[]>(new float[YSize * CLEN + 8]);
 
     // 各単色背景にロゴを乗せる
-    for (int c = 0; c < CLEN; ++c) {
+    for (int c = 0; c < CLEN; c++) {
         float *slice = &memWork[c * YSize];
         std::fill_n(slice, YSize, (float)(c << CSHIFT));
         AddLogo(slice, 255);
@@ -99,8 +129,8 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
 
     auto makeKernel = [](float* k, float* Y, int x, int y, int w) {
         // コピー
-        for (int ky = -2; ky <= 2; ++ky) {
-            for (int kx = -2; kx <= 2; ++kx) {
+        for (int ky = -2; ky <= 2; ky++) {
+            for (int kx = -2; kx <= 2; kx++) {
                 k[(kx + 2) + (ky + 2) * KSIZE] = Y[(x + kx) + (y + ky) * w];
             }
         }
@@ -115,8 +145,8 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
          // 画素値の分散の大きい順にmaskratio割合のピクセルを着目点とする
     std::vector<std::pair<float, int>> variance(YSize);
     // 各ピクセルの分散を計算（計算されていないところはゼロ初期化されてる）
-    for (int y = 2; y < h - 2; ++y) {
-        for (int x = 2; x < w - 2; ++x) {
+    for (int y = 2; y < h - 2; y++) {
+        for (int x = 2; x < w - 2; x++) {
             // 真ん中の色を取る
             float *slice = &memWork[(CLEN >> 1) * YSize];
             float k[KLEN];
@@ -126,7 +156,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
         }
     }
     // ピクセルインデックスを生成
-    for (int i = 0; i < YSize; ++i) {
+    for (int i = 0; i < YSize; i++) {
         variance[i].second = i;
     }
     // 降順ソート
@@ -134,7 +164,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
     // 計算結果からmask生成
     mask = std::unique_ptr<uint8_t[]>(new uint8_t[YSize]());
     maskpixels = std::min(YSize, (int)(YSize * maskratio));
-    for (int i = 0; i < maskpixels; ++i) {
+    for (int i = 0; i < maskpixels; i++) {
         mask[variance[i].second] = 1;
     }
 #if 0
@@ -149,24 +179,24 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
     scales = std::unique_ptr<ScaleLimit[]>(new ScaleLimit[maskpixels * CLEN]);
     int count = 0;
     float avgCorr = 0.0f;
-    for (int y = 2; y < h - 2; ++y) {
-        for (int x = 2; x < w - 2; ++x) {
+    for (int y = 2; y < h - 2; y++) {
+        for (int x = 2; x < w - 2; x++) {
             if (mask[x + y * w]) {
                 float* k = &kernels[count * KLEN];
                 ScaleLimit* s = &scales[count * CLEN];
                 makeKernel(k, memWork.get(), x, y, w);
-                for (int i = 0; i < CLEN; ++i) {
+                for (int i = 0; i < CLEN; i++) {
                     float *slice = &memWork[i * YSize];
                     avgCorr += s[i].scale = std::abs(pCalcCorrelation5x5(k, slice, x, y, w, nullptr));
                 }
-                ++count;
+                count++;
             }
         }
     }
     avgCorr /= maskpixels * CLEN;
     // 相関下限（これより小さい相関のピクセルはスケールしない）
     float limitCorr = avgCorr * corrLowerLimit;
-    for (int i = 0; i < maskpixels * CLEN; ++i) {
+    for (int i = 0; i < maskpixels * CLEN; i++) {
         float corr = scales[i].scale;
         scales[i].scale = (corr > 0) ? (1.0f / corr) : 0.0f;
         scales[i].scale2 = std::min(1.0f, corr / limitCorr);
@@ -174,7 +204,7 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
 
 #if 0
     // ロゴカーネルをチェック
-    for (int idx = 0; idx < count; ++idx) {
+    for (int idx = 0; idx < count; idx++) {
         float* k = &kernels[idx++ * KLEN];
         float sum = std::accumulate(k, k + KLEN, 0.0f);
         //float abssum = std::accumulate(k, k + KLEN, 0.0f,
@@ -214,8 +244,8 @@ std::unique_ptr<logo::LogoDataParam> logo::LogoDataParam::MakeFieldLogo(bool bot
     auto logo = std::unique_ptr<logo::LogoDataParam>(
         new logo::LogoDataParam(LogoData(w, h / 2, logUVx, logUVy), imgw, imgh / 2, imgx, imgy / 2));
 
-    for (int y = 0; y < logo->h; ++y) {
-        for (int x = 0; x < logo->w; ++x) {
+    for (int y = 0; y < logo->h; y++) {
+        for (int x = 0; x < logo->w; x++) {
             logo->aY[x + y * w] = aY[x + (bottom + y * 2) * w];
             logo->bY[x + y * w] = bY[x + (bottom + y * 2) * w];
         }
@@ -225,8 +255,8 @@ std::unique_ptr<logo::LogoDataParam> logo::LogoDataParam::MakeFieldLogo(bool bot
     int wUV = logo->w >> logUVx;
     int hUV = logo->h >> logUVy;
 
-    for (int y = 0; y < hUV; ++y) {
-        for (int x = 0; x < wUV; ++x) {
+    for (int y = 0; y < hUV; y++) {
+        for (int x = 0; x < wUV; x++) {
             logo->aU[x + y * wUV] = aU[x + (UVoffset + y * 2) * wUV];
             logo->bU[x + y * wUV] = bU[x + (UVoffset + y * 2) * wUV];
             logo->aV[x + y * wUV] = aV[x + (UVoffset + y * 2) * wUV];
@@ -245,8 +275,8 @@ float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
     // ロゴとの相関を評価
     int count = 0;
     float result = 0;
-    for (int y = 2; y < h - 2; ++y) {
-        for (int x = 2; x < w - 2; ++x) {
+    for (int y = 2; y < h - 2; y++) {
+        for (int x = 2; x < w - 2; x++) {
             if (mask[x + y * w]) {
                 const float* k = &kernels[count * KLEN];
 
@@ -261,7 +291,7 @@ float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
 
                 result += score;
 
-                ++count;
+                count++;
             }
         }
     }
@@ -272,8 +302,8 @@ float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
 void logo::LogoDataParam::AddLogo(float* Y, int maxv) {
     const float *logoAY = GetA(PLANAR_Y);
     const float *logoBY = GetB(PLANAR_Y);
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
             float a = logoAY[x + y * w];
             float b = logoBY[x + y * w];
             if (a > 0) {
@@ -289,12 +319,7 @@ void logo::LogoDataParam::AddLogo(float* Y, int maxv) {
     a = ((double)n * sum_xy - sum_x * sum_y) / temp;
     b = (sum_x2 * sum_y - sum_x * sum_xy) / temp;
 }
-logo::LogoColor::LogoColor()
-    : sumF()
-    , sumB()
-    , sumF2()
-    , sumB2()
-    , sumFB() {}
+logo::LogoColor::LogoColor() : sumF(), sumB(), sumF2(), sumB2(), sumFB() {}
 
 // ピクセルの色を追加 f:前景 b:背景
 void logo::LogoColor::Add(int f, int b) {
@@ -357,9 +382,9 @@ int logo::LogoScan::med_average(const std::vector<short>& s) {
 }
 
 /* static */ void logo::LogoScan::maxfilter(float *data, float *work, int w, int h) {
-    for (int y = 0; y < h; ++y) {
+    for (int y = 0; y < h; y++) {
         work[0 + y * w] = data[0 + y * w];
-        for (int x = 1; x < w - 1; ++x) {
+        for (int x = 1; x < w - 1; x++) {
             float a = data[x - 1 + y * w];
             float b = data[x + y * w];
             float c = data[x + 1 + y * w];
@@ -367,8 +392,8 @@ int logo::LogoScan::med_average(const std::vector<short>& s) {
         }
         work[w - 1 + y * w] = data[w - 1 + y * w];
     }
-    for (int y = 1; y < h - 1; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 1; y < h - 1; y++) {
+        for (int x = 0; x < w; x++) {
             float a = data[x + (y - 1) * w];
             float b = data[x + y * w];
             float c = data[x + (y + 1) * w];
@@ -377,29 +402,29 @@ int logo::LogoScan::med_average(const std::vector<short>& s) {
     }
 }
 // thy: オリジナルだとデフォルト30*8=240（8bitだと12くらい？）
-logo::LogoScan::LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy)
-    : scanw(scanw)
-    , scanh(scanh)
-    , logUVx(logUVx)
-    , logUVy(logUVy)
-    , thy(thy)
-    , nframes()
-    , logoY(new LogoColor[scanw * scanh])
-    , logoU(new LogoColor[scanw * scanh >> (logUVx + logUVy)])
-    , logoV(new LogoColor[scanw * scanh >> (logUVx + logUVy)]) {}
+logo::LogoScan::LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy) :
+    scanw(scanw),
+    scanh(scanh),
+    logUVx(logUVx),
+    logUVy(logUVy),
+    thy(thy),
+    nframes(),
+    logoY(new LogoColor[scanw * scanh]),
+    logoU(new LogoColor[scanw * scanh >> (logUVx + logUVy)]),
+    logoV(new LogoColor[scanw * scanh >> (logUVx + logUVy)]) {}
 
 void logo::LogoScan::Normalize(int mavx) {
     int scanUVw = scanw >> logUVx;
     int scanUVh = scanh >> logUVy;
 
     // 8bitなので255
-    for (int y = 0; y < scanh; ++y) {
-        for (int x = 0; x < scanw; ++x) {
+    for (int y = 0; y < scanh; y++) {
+        for (int x = 0; x < scanw; x++) {
             logoY[x + y * scanw].Normalize(mavx);
         }
     }
-    for (int y = 0; y < scanUVh; ++y) {
-        for (int x = 0; x < scanUVw; ++x) {
+    for (int y = 0; y < scanUVh; y++) {
+        for (int x = 0; x < scanUVw; x++) {
             logoU[x + y * scanUVw].Normalize(mavx);
             logoV[x + y * scanUVw].Normalize(mavx);
         }
@@ -417,14 +442,14 @@ std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
     float *bU = data->GetB(PLANAR_U);
     float *bV = data->GetB(PLANAR_V);
 
-    for (int y = 0; y < scanh; ++y) {
-        for (int x = 0; x < scanw; ++x) {
+    for (int y = 0; y < scanh; y++) {
+        for (int x = 0; x < scanw; x++) {
             int off = x + y * scanw;
             if (!logoY[off].GetAB(aY[off], bY[off], nframes)) return nullptr;
         }
     }
-    for (int y = 0; y < scanUVh; ++y) {
-        for (int x = 0; x < scanUVw; ++x) {
+    for (int y = 0; y < scanUVh; y++) {
+        for (int x = 0; x < scanUVw; x++) {
             int off = x + y * scanUVw;
             if (!logoU[off].GetAB(aU[off], bU[off], nframes)) return nullptr;
             if (!logoV[off].GetAB(aV[off], bV[off], nframes)) return nullptr;
@@ -444,8 +469,8 @@ std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
 
         int sizeY = scanw * scanh;
         auto dist = std::unique_ptr<float[]>(new float[sizeY]());
-        for (int y = 0; y < scanh; ++y) {
-            for (int x = 0; x < scanw; ++x) {
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
                 int off = x + y * scanw;
                 int offUV = (x >> logUVx) + (y >> logUVy) * scanUVw;
                 dist[off] = calcDist(aY[off], bY[off]) +
@@ -464,8 +489,8 @@ std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
         maxfilter(dist.get(), work.get(), scanw, scanh);
 
         // 小さいところはゼロにする
-        for (int y = 0; y < scanh; ++y) {
-            for (int x = 0; x < scanw; ++x) {
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
                 int off = x + y * scanw;
                 int offUV = (x >> logUVx) + (y >> logUVy) * scanUVw;
                 if (dist[off] < 0.3f) {
@@ -552,14 +577,14 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
 
     auto merge = [](float a, float b, float c) { return (a + 2 * b + c) / 4.0f; };
 
-    for (int x = 0; x < w; ++x) {
+    for (int x = 0; x < w; x++) {
         dstAY[x] = srcAY[x];
         dstBY[x] = srcBY[x];
         dstAY[x + (h - 1) * w] = srcAY[x + (h - 1) * w];
         dstBY[x + (h - 1) * w] = srcBY[x + (h - 1) * w];
     }
-    for (int y = 1; y < h - 1; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 1; y < h - 1; y++) {
+        for (int x = 0; x < w; x++) {
             dstAY[x + y * w] = merge(
                 srcAY[x + (y - 1) * w],
                 srcAY[x + y * w],
@@ -571,21 +596,40 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
         }
     }
 }
-logo::LogoAnalyzer::InitialLogoCreator::InitialLogoCreator(LogoAnalyzer* pThis)
-    : SimpleVideoReader(pThis->ctx)
-    , pThis(pThis)
-    , codec(make_unique_ptr(CCodec::CreateInstance(UTVF_ULH0, "Amatsukaze")))
-    , scanDataSize(pThis->scanw * pThis->scanh * 3 / 2)
-    , codedSize(codec->EncodeGetOutputSize(UTVF_YV12, pThis->scanw, pThis->scanh))
-    , readCount()
-    , memScanData(new uint8_t[scanDataSize])
-    , memCoded(new uint8_t[codedSize]) {}
+
+logo::LogoScanDataCompressed::LogoScanDataCompressed() : compressed_data(), original_size(0) {};
+
+logo::LogoScanDataCompressed::~LogoScanDataCompressed() {};
+
+void logo::LogoScanDataCompressed::compress(const void *ptr, size_t datasize) {
+    original_size = datasize;
+    std::vector<uint8_t> tmp(datasize * 3 / 2);
+    unsigned long compressed_size = (unsigned long)tmp.size();
+    compress2(tmp.data(), &compressed_size, (BYTE *)ptr, datasize, 9);
+
+    compressed_data.resize(compressed_size);
+    memcpy(compressed_data.data(), tmp.data(), compressed_size);
+}
+
+void logo::LogoScanDataCompressed::decompress(void *ptr) {
+    unsigned long buf_size = original_size;
+    uncompress((BYTE *)ptr, &buf_size, (BYTE *)compressed_data.data(), (unsigned long)compressed_data.size());
+}
+
+logo::LogoAnalyzer::InitialLogoCreator::InitialLogoCreator(LogoAnalyzer* pThis) :
+    SimpleVideoReader(pThis->ctx),
+    pThis(pThis),
+    scanDataSize(pThis->scanw * pThis->scanh * 3 / 2),
+    highBitDepth(false),
+    readCount(0),
+    filesize(0),
+    memScanData(),
+    scanData() {}
+
 void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int serviceid) {
     { File file(src, _T("rb")); filesize = file.size(); }
 
     SimpleVideoReader::readAll(src, serviceid);
-
-    codec->EncodeEnd();
 
     logoscan->Normalize(255);
     pThis->logodata = logoscan->GetLogo(false);
@@ -594,17 +638,6 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
     }
 }
 /* virtual */ void logo::LogoAnalyzer::InitialLogoCreator::onFirstFrame(AVStream *videoStream, AVFrame* frame) {
-    size_t extraSize = codec->EncodeGetExtraDataSize();
-    std::vector<uint8_t> extra(extraSize);
-
-    if (codec->EncodeGetExtraData(extra.data(), extraSize, UTVF_YV12, pThis->scanw, pThis->scanh)) {
-        THROW(RuntimeException, "failed to EncodeGetExtraData (UtVideo)");
-    }
-    std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
-    if (codec->EncodeBegin(UTVF_YV12, pThis->scanw, pThis->scanh, cbGrossWidth.data())) {
-        THROW(RuntimeException, "failed to EncodeBegin (UtVideo)");
-    }
-
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
 
     pThis->logUVx = desc->log2_chroma_w;
@@ -612,13 +645,8 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
     pThis->imgw = frame->width;
     pThis->imgh = frame->height;
 
-    file = std::unique_ptr<LosslessVideoFile>(
-        new LosslessVideoFile(pThis->ctx, pThis->workfile, _T("wb")));
     logoscan = std::unique_ptr<LogoScan>(
         new LogoScan(pThis->scanw, pThis->scanh, pThis->logUVx, pThis->logUVy, pThis->thy));
-
-    // フレーム数は最大フレーム数（実際はそこまで書き込まないこともある）
-    file->writeHeader(pThis->scanw, pThis->scanh, pThis->numMaxFrames, extra);
 
     pThis->numFrames = 0;
 }
@@ -627,24 +655,9 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
 
     if (pThis->numFrames >= pThis->numMaxFrames) return false;
 
-    // スキャン部分だけ
-    int pitchY = frame->linesize[0];
-    int pitchUV = frame->linesize[1];
-    int offY = pThis->scanx + pThis->scany * pitchY;
-    int offUV = (pThis->scanx >> pThis->logUVx) + (pThis->scany >> pThis->logUVy) * pitchUV;
-    const uint8_t* scanY = frame->data[0] + offY;
-    const uint8_t* scanU = frame->data[1] + offUV;
-    const uint8_t* scanV = frame->data[2] + offUV;
+    highBitDepth = av_pix_fmt_desc_get((AVPixelFormat)(frame->format))->comp[0].depth > 8;
 
-    if (logoscan->AddFrame(scanY, scanU, scanV, pitchY, pitchUV)) {
-        ++pThis->numFrames;
-
-        // 有効なフレームは保存しておく
-        CopyYV12(memScanData.get(), scanY, scanU, scanV, pitchY, pitchUV, pThis->scanw, pThis->scanh);
-        bool keyFrame = false;
-        size_t codedSize = codec->EncodeFrame(memCoded.get(), &keyFrame, memScanData.get());
-        file->writeFrame(memCoded.get(), (int)codedSize);
-    }
+    (highBitDepth) ? AddFrame<uint16_t>(frame) : AddFrame<uint8_t>(frame);
 
     if ((readCount % 200) == 0) {
         float progress = (float)currentPos / filesize * 50;
@@ -657,141 +670,33 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
 }
 
 void logo::LogoAnalyzer::MakeInitialLogo() {
-    InitialLogoCreator creator(this);
-    creator.readAll(srcpath, serviceid);
+    creator = std::make_unique<InitialLogoCreator>(this);
+    creator->readAll(srcpath, serviceid);
 }
 
-void logo::LogoAnalyzer::ReMakeLogo() {
-    // 複数fade値でロゴを評価 //
-    auto codec = make_unique_ptr(CCodec::CreateInstance(UTVF_ULH0, "Amatsukaze"));
-
-    // ロゴを評価用にインタレ解除
-    LogoDataParam deintLogo(LogoData(scanw, scanh, logUVx, logUVy), scanw, scanh, scanx, scany);
-    DeintLogo(deintLogo, *logodata, scanw, scanh);
-    deintLogo.CreateLogoMask(0.1f);
-
-    size_t scanDataSize = scanw * scanh * 3 / 2;
-    size_t YSize = scanw * scanh;
-    size_t codedSize = codec->EncodeGetOutputSize(UTVF_YV12, scanw, scanh);
-    size_t extraSize = codec->EncodeGetExtraDataSize();
-    auto memScanData = std::unique_ptr<uint8_t[]>(new uint8_t[scanDataSize]);
-    auto memCoded = std::unique_ptr<uint8_t[]>(new uint8_t[codedSize]);
-
-    auto memDeint = std::unique_ptr<float[]>(new float[YSize + 8]);
-    auto memWork = std::unique_ptr<float[]>(new float[YSize + 8]);
-
-    const int numFade = 20;
-    auto minFades = std::unique_ptr<int[]>(new int[numFrames]);
-    {
-        LosslessVideoFile file(ctx, workfile, _T("rb"));
-        file.readHeader();
-        auto extra = file.getExtra();
-
-        std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
-        if (codec->DecodeBegin(UTVF_YV12, scanw, scanh, cbGrossWidth.data(), extra.data(), (int)extra.size())) {
-            THROW(RuntimeException, "failed to DecodeBegin (UtVideo)");
-        }
-
-        // 全フレームループ
-        for (int i = 0; i < numFrames; ++i) {
-            int64_t codedSize = file.readFrame(i, memCoded.get());
-            if (codec->DecodeFrame(memScanData.get(), memCoded.get()) != scanDataSize) {
-                THROW(RuntimeException, "failed to DecodeFrame (UtVideo)");
-            }
-            // フレームをインタレ解除
-            DeintY(memDeint.get(), memScanData.get(), scanw, scanw, scanh);
-            // fade値ループ
-            float minResult = FLT_MAX;
-            int minFadeIndex = 0;
-            for (int fi = 0; fi < numFade; ++fi) {
-                float fade = 0.1f * fi;
-                // ロゴを評価
-                float result = std::abs(deintLogo.EvaluateLogo(memDeint.get(), 255.0f, fade, memWork.get()));
-                if (result < minResult) {
-                    minResult = result;
-                    minFadeIndex = fi;
-                }
-            }
-            minFades[i] = minFadeIndex;
-
-            if ((i % 100) == 0) {
-                float progress = (float)i / numFrames * 25 + progressbase;
-                if (cb(progress, i, numFrames, numFrames) == false) {
-                    THROW(RuntimeException, "Cancel requested");
-                }
-            }
-        }
-
-        codec->DecodeEnd();
-    }
-
-    // 評価値を集約
-    // とりあえず出してみる
-    std::vector<int> numMinFades(numFade);
-    for (int i = 0; i < numFrames; ++i) {
-        numMinFades[minFades[i]]++;
-    }
-    int maxi = (int)(std::max_element(numMinFades.begin(), numMinFades.end()) - numMinFades.begin());
-    printf("maxi = %d (%.1f%%)\n", maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
-
-    LogoScan logoscan(scanw, scanh, logUVx, logUVy, thy);
-    {
-        LosslessVideoFile file(ctx, workfile, _T("rb"));
-        file.readHeader();
-        auto extra = file.getExtra();
-
-        std::array<size_t, 3> cbGrossWidth = { CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS, CBGROSSWIDTH_WINDOWS };
-        if (codec->DecodeBegin(UTVF_YV12, scanw, scanh, cbGrossWidth.data(), extra.data(), (int)extra.size())) {
-            THROW(RuntimeException, "failed to DecodeBegin (UtVideo)");
-        }
-
-        int scanUVw = scanw >> logUVx;
-        int scanUVh = scanh >> logUVy;
-        int offU = scanw * scanh;
-        int offV = offU + scanUVw * scanUVh;
-
-        // 全フレームループ
-        for (int i = 0; i < numFrames; ++i) {
-            int64_t codedSize = file.readFrame(i, memCoded.get());
-            if (codec->DecodeFrame(memScanData.get(), memCoded.get()) != scanDataSize) {
-                THROW(RuntimeException, "failed to DecodeFrame (UtVideo)");
-            }
-            // ロゴのあるフレームだけAddFrame
-            if (minFades[i] > 8) { // TODO: 調整
-                const uint8_t* ptr = memScanData.get();
-                logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw);
-            }
-
-            if ((i % 2000) == 0) printf("%d frames\n", i);
-        }
-
-        codec->DecodeEnd();
-    }
-
-    // ロゴ作成
-    logoscan.Normalize(255);
-    logodata = logoscan.GetLogo(true);
-
-    if (logodata == nullptr) {
-        THROW(RuntimeException, "Insufficient logo frames");
-    }
-}
 logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
     int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
-    LOGO_ANALYZE_CB cb)
-    : AMTObject(ctx)
-    , srcpath(srcpath)
-    , serviceid(serviceid)
-    , workfile(workfile)
-    , dstpath(dstpath)
-    , scanx(imgx)
-    , scany(imgy)
-    , scanw(w)
-    , scanh(h)
-    , thy(thy)
-    , numMaxFrames(numMaxFrames)
-    , cb(cb) {
-    //
+    LOGO_ANALYZE_CB cb) :
+    AMTObject(ctx),
+    srcpath(srcpath),
+    serviceid(serviceid),
+    workfile(workfile),
+    dstpath(dstpath),
+    cb(cb),
+    scanx(imgx),
+    scany(imgy),
+    scanw(w),
+    scanh(h),
+    thy(thy),
+    numMaxFrames(numMaxFrames),
+    logUVx(),
+    logUVy(),
+    imgw(),
+    imgh(),
+    numFrames(),
+    logodata(),
+    progressbase(0),
+    creator() {
 }
 
 void logo::LogoAnalyzer::ScanLogo() {
@@ -802,9 +707,9 @@ void logo::LogoAnalyzer::ScanLogo() {
     // データ解析とロゴの作り直し
     progressbase = 50;
     //MultiCandidate();
-    ReMakeLogo();
+    (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
     progressbase = 75;
-    ReMakeLogo();
+    (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
     //ReMakeLogo();
 
     if (cb(1, numFrames, numFrames, numFrames) == false) {
@@ -892,7 +797,7 @@ void logo::AMTEraseLogo::CalcFade2(int n, float& fadeT, float& fadeB, IScriptEnv
 
     int prev_n = INT_MAX;
     PVideoFrame frame;
-    for (int i = -DIST; i <= DIST; ++i) {
+    for (int i = -DIST; i <= DIST; i++) {
         int nsrc = std::max(0, std::min(vi.num_frames - 1, n + i));
         int analyze_n = (nsrc + i) >> 3;
         int idx = (nsrc + i) & 7;
@@ -909,7 +814,7 @@ void logo::AMTEraseLogo::CalcFade2(int n, float& fadeT, float& fadeB, IScriptEnv
     frame = nullptr;
 
     int minfades[DIST * 2 + 1];
-    for (int i = 0; i < DIST * 2 + 1; ++i) {
+    for (int i = 0; i < DIST * 2 + 1; i++) {
         minfades[i] = (int)(std::min_element(frames[i].p, frames[i].p + 11) - frames[i].p);
     }
     int minT = (int)(std::min_element(frames[DIST].t, frames[DIST].t + 11) - frames[DIST].t);
@@ -917,7 +822,7 @@ void logo::AMTEraseLogo::CalcFade2(int n, float& fadeT, float& fadeB, IScriptEnv
     // 前後4フレームを見てフェードしてるか突然消えてるか判断
     float before_fades = 0;
     float after_fades = 0;
-    for (int i = 1; i <= 4; ++i) {
+    for (int i = 1; i <= 4; i++) {
         before_fades += minfades[DIST - i];
         after_fades += minfades[DIST + i];
     }
@@ -944,7 +849,7 @@ void logo::AMTEraseLogo::CalcFade(int n, float& fadeT, float& fadeB, IScriptEnvi
         // 切り替わり周辺だけリアルタイム解析結果を使う
         int halfWidth = (maxFadeLength >> 1);
         std::vector<int> frames(halfWidth * 2 + 1);
-        for (int i = -halfWidth; i <= halfWidth; ++i) {
+        for (int i = -halfWidth; i <= halfWidth; i++) {
             int nsrc = std::max(0, std::min(vi.num_frames - 1, n + i));
             frames[i + halfWidth] = frameResult[nsrc];
         }
@@ -1063,7 +968,7 @@ logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofile
     bestLogo(-1),
     logoRatio(0.0) {
     vi.num_frames = 0;
-    for (int i = 0; i < (int)logofiles.size(); ++i) {
+    for (int i = 0; i < (int)logofiles.size(); i++) {
         try {
             LogoHeader header;
             logoArr[i] = LogoDataParam(LogoData::Load(logofiles[i], &header), &header);
@@ -1101,9 +1006,9 @@ void logo::LogoFrame::scanFrames(PClip clip, const std::vector<int>& trims, cons
 }
 
 void logo::LogoFrame::dumpResult(const tstring& basepath) {
-    for (int i = 0; i < numLogos; ++i) {
+    for (int i = 0; i < numLogos; i++) {
         StringBuilder sb;
-        for (int n = 0; n < numFrames; ++n) {
+        for (int n = 0; n < numFrames; n++) {
             auto& r = evalResults[n * numLogos + i];
             sb.append("%f,%f\n", r.corr0, r.corr1);
         }
@@ -1184,7 +1089,7 @@ void logo::LogoFrame::writeResult(const tstring& outpath, int logoIndex) {
     int halfWinFrames = winFrames / 2;
     std::vector<float> rawScores_(numFrames + winFrames);
     auto rawScores = rawScores_.begin() + halfWinFrames;
-    for (int n = 0; n < numFrames; ++n) {
+    for (int n = 0; n < numFrames; n++) {
         auto& r = evalResults[n * numLogos + logoIndex];
         // corr0のマイナスとcorr1のプラスはノイズなので消す
         rawScores[n] = std::max(0.0f, r.corr0) + std::min(0.0f, r.corr1);
@@ -1201,7 +1106,7 @@ void logo::LogoFrame::writeResult(const tstring& outpath, int logoIndex) {
     // フィルタで均す
     std::vector<FrameResult> frameResult(numFrames);
     std::vector<float> medianBuf(medianFrames);
-    for (int i = 0; i < numFrames; ++i) {
+    for (int i = 0; i < numFrames; i++) {
         // MinMax
         // 前の最大値と後ろの最大値の小さい方を取る
         // 動きの多い映像でロゴがかき消されることがあるので、それを救済する

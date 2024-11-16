@@ -609,26 +609,17 @@ FFmpeg（ライブラリ）が必要です。
 build_ffmpeg_dll.sh -aur -t swscale
 ```
 
-Ut Video Codec Suite（ライブラリ）が必要です。
 vcpkgをインストールします。
-```
+
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 bootstrap-vcpkg.bat
 vcpkg integrate install
-```
 
-次にlz4をインストールします。
-```
-vcpkg install lz4:x64-windows-static
-```
+次にzlibをインストールします。
 
-ソースを落として、clang-clを導入済みしたVisual Studioでビルドします。
-```
-git clone https://github.com/umezawatakeshi/utvideo.git
-```
-utv_coreをビルドします。
-必要なのはutv_core.libだけです。これをlib/x64(or x86)へコピーしてください。
+vcpkg install zlib:x64-windows-static
+
 
 BatchHashCheckerにはOpenSSLが必要です。
 ```

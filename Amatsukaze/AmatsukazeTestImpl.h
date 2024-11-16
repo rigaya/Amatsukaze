@@ -36,10 +36,6 @@ int FileStreamInfo(AMTContext& ctx, const ConfigWrapper& setting);
 
 int ParseArgs(AMTContext& ctx, const ConfigWrapper& setting);
 
-int LosslessTest(AMTContext& ctx, const ConfigWrapper& setting);
-
-int LosslessFileTest(AMTContext& ctx, const ConfigWrapper& setting);
-
 int LogoFrameTest(AMTContext& ctx, const ConfigWrapper& setting);
 
 class TestSplitDualMono : public DualMonoSplitter {

@@ -151,19 +151,19 @@ public:
         int scanUVw = scanw >> logUVx;
         int scanUVh = scanh >> logUVy;
 
-        for (int y = 0; y < scanh; ++y) {
-            for (int x = 0; x < scanw; ++x) {
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
                 logoY[x + y * scanw].Add(srcY[x + y * pitchY], bgY);
             }
         }
-        for (int y = 0; y < scanUVh; ++y) {
-            for (int x = 0; x < scanUVw; ++x) {
+        for (int y = 0; y < scanUVh; y++) {
+            for (int x = 0; x < scanUVw; x++) {
                 logoU[x + y * scanUVw].Add(srcU[x + y * pitchUV], bgU);
                 logoV[x + y * scanUVw].Add(srcV[x + y * pitchUV], bgV);
             }
         }
 
-        ++nframes;
+        nframes++;
     }
 
     template <typename pixel_t>
@@ -187,21 +187,21 @@ public:
         *	背景色計算
         *-------------------------------------------------------------------*/
 
-        for (int x = 0; x < scanw; ++x) {
+        for (int x = 0; x < scanw; x++) {
             tmpY.push_back(srcY[x]);
             tmpY.push_back(srcY[x + (scanh - 1) * pitchY]);
         }
-        for (int y = 1; y < scanh - 1; ++y) {
+        for (int y = 1; y < scanh - 1; y++) {
             tmpY.push_back(srcY[y * pitchY]);
             tmpY.push_back(srcY[scanw - 1 + y * pitchY]);
         }
-        for (int x = 0; x < scanUVw; ++x) {
+        for (int x = 0; x < scanUVw; x++) {
             tmpU.push_back(srcU[x]);
             tmpU.push_back(srcU[x + (scanUVh - 1) * pitchUV]);
             tmpV.push_back(srcV[x]);
             tmpV.push_back(srcV[x + (scanUVh - 1) * pitchUV]);
         }
-        for (int y = 1; y < scanUVh - 1; ++y) {
+        for (int y = 1; y < scanUVh - 1; y++) {
             tmpU.push_back(srcU[y * pitchUV]);
             tmpU.push_back(srcU[scanUVw - 1 + y * pitchUV]);
             tmpV.push_back(srcV[y * pitchUV]);
@@ -252,12 +252,12 @@ template <typename pixel_t>
 void DeintY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
     auto merge = [](int a, int b, int c) { return (a + 2 * b + c + 2) / 4.0f; };
 
-    for (int x = 0; x < w; ++x) {
+    for (int x = 0; x < w; x++) {
         dst[x] = src[x];
         dst[x + (h - 1) * w] = src[x + (h - 1) * srcPitch];
     }
-    for (int y = 1; y < h - 1; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 1; y < h - 1; y++) {
+        for (int x = 0; x < w; x++) {
             dst[x + y * w] = merge(
                 src[x + (y - 1) * srcPitch],
                 src[x + y * srcPitch],
@@ -268,8 +268,8 @@ void DeintY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
 
 template <typename pixel_t>
 void CopyY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
             dst[x + y * w] = src[x + y * srcPitch];
         }
     }
@@ -277,7 +277,68 @@ void CopyY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
 
 typedef bool(*LOGO_ANALYZE_CB)(float progress, int nread, int total, int ngather);
 
+class LogoScanDataCompressed {
+public:
+    LogoScanDataCompressed();
+    ~LogoScanDataCompressed();
+
+    void compress(const void *ptr, size_t datasize);
+    void decompress(void *ptr);
+    int originalSize() const { return original_size; }
+protected:
+    std::vector<char> compressed_data;
+    
+    unsigned long original_size;
+};
+
 class LogoAnalyzer : AMTObject {
+
+    class InitialLogoCreator : SimpleVideoReader {
+        LogoAnalyzer* pThis;
+        size_t scanDataSize;
+        bool highBitDepth;
+        int readCount;
+        int64_t filesize;
+        std::vector<uint8_t> memScanData;
+        std::unique_ptr<LogoScan> logoscan;
+        std::vector<std::unique_ptr<LogoScanDataCompressed>> scanData;
+    public:
+        InitialLogoCreator(LogoAnalyzer* pThis);
+        void readAll(const tstring& src, int serviceid);
+        bool isHighBitDepth() const { return highBitDepth; }
+        int numFrames() const { return (int)scanData.size(); }
+        int getFrameSize(const int i) const { return (int)scanData[i]->originalSize(); }
+        void getFrame(const int i, void *ptr) { return scanData[i]->decompress(ptr); }
+    protected:
+        virtual void onFirstFrame(AVStream *videoStream, AVFrame* frame);;
+        virtual bool onFrame(AVFrame* frame);
+
+        template <typename pixel_t>
+        void AddFrame(AVFrame* frame) {
+            // スキャン部分だけ
+            const int pitchY = frame->linesize[0] / sizeof(pixel_t);
+            const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
+            const int offY = pThis->scanx + pThis->scany * pitchY;
+            const int offUV = (pThis->scanx >> pThis->logUVx) + (pThis->scany >> pThis->logUVy) * pitchUV;
+            const pixel_t* scanY = (const pixel_t *)frame->data[0] + offY;
+            const pixel_t* scanU = (const pixel_t *)frame->data[1] + offUV;
+            const pixel_t* scanV = (const pixel_t *)frame->data[2] + offUV;
+
+            if (logoscan->AddFrame(scanY, scanU, scanV, pitchY, pitchUV)) {
+                pThis->numFrames++;
+
+                memScanData.resize(scanDataSize * sizeof(pixel_t));
+
+                // 有効なフレームは保存しておく
+                CopyYV12((pixel_t *)memScanData.data(), scanY, scanU, scanV, pitchY, pitchUV, pThis->scanw, pThis->scanh);
+                //ここでメモリにためる
+                auto scanDataCompressed = std::make_unique<LogoScanDataCompressed>();
+                scanDataCompressed->compress(memScanData.data(), scanDataSize * sizeof(pixel_t));
+                scanData.push_back(std::move(scanDataCompressed));
+            }
+        }
+    };
+
     tstring srcpath;
     int serviceid;
 
@@ -295,29 +356,99 @@ class LogoAnalyzer : AMTObject {
 
     float progressbase;
 
-    // 今の所可逆圧縮が8bitのみなので対応は8bitのみ
-    class InitialLogoCreator : SimpleVideoReader {
-        LogoAnalyzer* pThis;
-        CCodecPointer codec;
-        size_t scanDataSize;
-        size_t codedSize;
-        int readCount;
-        int64_t filesize;
-        std::unique_ptr<uint8_t[]> memScanData;
-        std::unique_ptr<uint8_t[]> memCoded;
-        std::unique_ptr<LosslessVideoFile> file;
-        std::unique_ptr<LogoScan> logoscan;
-    public:
-        InitialLogoCreator(LogoAnalyzer* pThis);
-        void readAll(const tstring& src, int serviceid);
-    protected:
-        virtual void onFirstFrame(AVStream *videoStream, AVFrame* frame);;
-        virtual bool onFrame(AVFrame* frame);;
-    };
+    std::unique_ptr<InitialLogoCreator> creator;
 
     void MakeInitialLogo();
 
-    void ReMakeLogo();
+    template <typename pixel_t>
+    void ReMakeLogo()  {
+
+        // ロゴを評価用にインタレ解除
+        LogoDataParam deintLogo(LogoData(scanw, scanh, logUVx, logUVy), scanw, scanh, scanx, scany);
+        DeintLogo(deintLogo, *logodata, scanw, scanh);
+        deintLogo.CreateLogoMask(0.1f);
+
+        const int numFrames = creator->numFrames();
+
+        const size_t scanDataSize = scanw * scanh * 3 / 2;
+        const size_t YSize = scanw * scanh;
+        std:vector<pixel_t> memScanData;
+
+        auto memDeint = std::unique_ptr<float[]>(new float[YSize + 8]);
+        auto memWork = std::unique_ptr<float[]>(new float[YSize + 8]);
+
+        const int numFade = 20;
+        auto minFades = std::unique_ptr<int[]>(new int[numFrames]);
+        {
+            // メモリから読む
+
+            // 全フレームループ
+            for (int i = 0; i < numFrames; i++) {
+                memScanData.resize(creator->getFrameSize(i));
+                creator->getFrame(i, memScanData.data());
+                // フレームをインタレ解除
+                DeintY(memDeint.get(), memScanData.data(), scanw, scanw, scanh);
+                // fade値ループ
+                float minResult = FLT_MAX;
+                int minFadeIndex = 0;
+                for (int fi = 0; fi < numFade; ++fi) {
+                    float fade = 0.1f * fi;
+                    // ロゴを評価
+                    float result = std::abs(deintLogo.EvaluateLogo(memDeint.get(), 255.0f, fade, memWork.get()));
+                    if (result < minResult) {
+                        minResult = result;
+                        minFadeIndex = fi;
+                    }
+                }
+                minFades[i] = minFadeIndex;
+
+                if ((i % 100) == 0) {
+                    float progress = (float)i / numFrames * 25 + progressbase;
+                    if (cb(progress, i, numFrames, numFrames) == false) {
+                        THROW(RuntimeException, "Cancel requested");
+                    }
+                }
+            }
+        }
+
+        // 評価値を集約
+        // とりあえず出してみる
+        std::vector<int> numMinFades(numFade);
+        for (int i = 0; i < numFrames; ++i) {
+            numMinFades[minFades[i]]++;
+        }
+        int maxi = (int)(std::max_element(numMinFades.begin(), numMinFades.end()) - numMinFades.begin());
+        printf("maxi = %d (%.1f%%)\n", maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
+
+        LogoScan logoscan(scanw, scanh, logUVx, logUVy, thy);
+        {
+            int scanUVw = scanw >> logUVx;
+            int scanUVh = scanh >> logUVy;
+            int offU = scanw * scanh;
+            int offV = offU + scanUVw * scanUVh;
+
+            // 全フレームループ
+            for (int i = 0; i < numFrames; ++i) {
+                memScanData.resize(creator->getFrameSize(i));
+                creator->getFrame(i, memScanData.data());
+                // ロゴのあるフレームだけAddFrame
+                if (minFades[i] > 8) { // TODO: 調整
+                    const auto ptr = memScanData.data();
+                    logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw);
+                }
+
+                if ((i % 2000) == 0) printf("%d frames\n", i);
+            }
+        }
+
+        // ロゴ作成
+        logoscan.Normalize(255);
+        logodata = logoscan.GetLogo(true);
+
+        if (logodata == nullptr) {
+            THROW(RuntimeException, "Insufficient logo frames");
+        }
+    }
 
 public:
     LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
@@ -356,7 +487,7 @@ class AMTAnalyzeLogo : public GenericVideoFilter {
 
         float maxv = (float)((1 << srcvi.BitsPerComponent()) - 1);
 
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 8; i++) {
             int nsrc = std::max(0, std::min(srcvi.num_frames - 1, n * 8 + i));
             PVideoFrame frame = child->GetFrame(nsrc, env);
 
@@ -375,7 +506,7 @@ class AMTAnalyzeLogo : public GenericVideoFilter {
             DeintY(memDeint.get(), srcY + off, pitchY, header.w, header.h);
 
             LogoAnalyzeFrame info;
-            for (int f = 0; f <= 10; ++f) {
+            for (int f = 0; f <= 10; f++) {
                 info.p[f] = std::abs(deintLogo->EvaluateLogo(memDeint.get(), maxv, (float)f / 10.0f, memWork.get()));
                 info.t[f] = std::abs(fieldLogoT->EvaluateLogo(memCopy.get(), maxv, (float)f / 10.0f, memWork.get(), header.w * 2));
                 info.b[f] = std::abs(fieldLogoB->EvaluateLogo(memCopy.get() + header.w, maxv, (float)f / 10.0f, memWork.get(), header.w * 2));
@@ -408,8 +539,8 @@ class AMTEraseLogo : public GenericVideoFilter {
 
     template <typename pixel_t>
     void Delogo(pixel_t* dst, int w, int h, int logopitch, int imgpitch, float maxv, const float* A, const float* B, float fade) {
-        for (int y = 0; y < h; ++y) {
-            for (int x = 0; x < w; ++x) {
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
                 float srcv = dst[x + y * imgpitch];
                 float a = A[x + y * logopitch];
                 float b = B[x + y * logopitch];
@@ -537,7 +668,7 @@ class LogoFrame : AMTObject {
         const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->GetReadPtr(PLANAR_Y));
         const int pitchY = frame->GetPitch(PLANAR_Y);
 
-        for (int i = 0; i < numLogos; ++i) {
+        for (int i = 0; i < numLogos; i++) {
             LogoDataParam& logo = deintArr[i];
             if (logo.isValid() == false ||
                 logo.getImgWidth() != vi.width ||

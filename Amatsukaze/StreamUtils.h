@@ -734,8 +734,6 @@ enum NicoJKType {
 };
 
 #include "avisynth.h"
-#include "utvideo/utvideo.h"
-#include "utvideo/Codec.h"
 
 void DeleteScriptEnvironment(IScriptEnvironment2* env);
 
@@ -743,53 +741,45 @@ typedef std::unique_ptr<IScriptEnvironment2, decltype(&DeleteScriptEnvironment)>
 
 ScriptEnvironmentPointer make_unique_ptr(IScriptEnvironment2* env);
 
-void DeleteUtVideoCodec(CCodec* codec);
+template<typename T>
+void CopyYV12(T* dst, const T* srcY, const T* srcU, const T* srcV, int pitchY, int pitchUV, int width, int height) {
+    int widthUV = width >> 1;
+    int heightUV = height >> 1;
 
-typedef std::unique_ptr<CCodec, decltype(&DeleteUtVideoCodec)> CCodecPointer;
+    T* dstp = dst;
+    for (int y = 0; y < height; ++y) {
+        memcpy(dstp, &srcY[y * pitchY], width * sizeof(T));
+        dstp += width;
+    }
+    for (int y = 0; y < heightUV; ++y) {
+        memcpy(dstp, &srcU[y * pitchUV], widthUV * sizeof(T));
+        dstp += widthUV;
+    }
+    for (int y = 0; y < heightUV; ++y) {
+        memcpy(dstp, &srcV[y * pitchUV], widthUV * sizeof(T));
+        dstp += widthUV;
+    }
+}
 
-CCodecPointer make_unique_ptr(CCodec* codec);
+template<typename T>
+void CopyYV12(T* dst, PVideoFrame& frame, int width, int height) {
+    const T* srcY = (const T* )frame->GetReadPtr(PLANAR_Y);
+    const T* srcU = (const T* )frame->GetReadPtr(PLANAR_U);
+    const T* srcV = (const T* )frame->GetReadPtr(PLANAR_V);
+    int pitchY = frame->GetPitch(PLANAR_Y) / sizeof(T);
+    int pitchUV = frame->GetPitch(PLANAR_U) / sizeof(T);
+    CopyYV12(dst, srcY, srcU, srcV, pitchY, pitchUV, width, height);
+}
 
-// 1インスタンスは書き込みor読み込みのどちらか一方しか使えない
-class LosslessVideoFile : AMTObject {
-    struct LosslessFileHeader {
-        int magic;
-        int version;
-        int width;
-        int height;
-    };
-
-    File file;
-    LosslessFileHeader fh;
-    std::vector<uint8_t> extra;
-    std::vector<int> framesizes;
-    std::vector<int64_t> offsets;
-
-    int current;
-
-public:
-    LosslessVideoFile(AMTContext& ctx, const tstring& filepath, const tchar* mode);
-
-    void writeHeader(int width, int height, int numframes, const std::vector<uint8_t>& extra);
-
-    void readHeader();
-
-    int getWidth() const { return fh.width; }
-    int getHeight() const { return fh.height; }
-    int getNumFrames() const { return (int)framesizes.size(); }
-    const std::vector<uint8_t>& getExtra() const { return extra; }
-
-    void writeFrame(const uint8_t* data, int len);
-
-    int64_t readFrame(int n, uint8_t* data);
-};
-
-void CopyYV12(uint8_t* dst, PVideoFrame& frame, int width, int height);
-
-void CopyYV12(PVideoFrame& dst, uint8_t* frame, int width, int height);
-
-void CopyYV12(uint8_t* dst,
-    const uint8_t* srcY, const uint8_t* srcU, const uint8_t* srcV,
-    int pitchY, int pitchUV, int width, int height);
+template<typename T>
+void CopyYV12(PVideoFrame& dst, uint8_t* frame, int width, int height) {
+    const T* dstY = (const T* )dst->GetWritePtr(PLANAR_Y);
+    const T* dstU = (const T* )dst->GetWritePtr(PLANAR_U);
+    const T* dstV = (const T* )dst->GetWritePtr(PLANAR_V);
+    int pitchY = dst->GetPitch(PLANAR_Y) / sizeof(T);
+    int pitchUV = dst->GetPitch(PLANAR_U) / sizeof(T);
+    CopyYV12(dst, srcY, srcU, srcV, pitchY, pitchUV, width, height);
+}
 
 void ConcatFiles(const std::vector<tstring>& srcpaths, const tstring& dstpath);
 

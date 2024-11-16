@@ -597,8 +597,6 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
             test::FileStreamInfo(ctx, setting);
         else if (mode == _T("test_parseargs"))
             test::ParseArgs(ctx, setting);
-        else if (mode == _T("test_lossless"))
-            test::LosslessFileTest(ctx, setting);
         else if (mode == _T("test_logoframe"))
             test::LogoFrameTest(ctx, setting);
         else if (mode == _T("test_dualmono"))

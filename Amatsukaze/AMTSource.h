@@ -243,24 +243,4 @@ PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool output
 
 AVSValue CreateAMTSource(AVSValue args, void* user_data, IScriptEnvironment* env);
 
-class AVSLosslessSource : public IClip {
-    LosslessVideoFile file;
-    CCodecPointer codec;
-    VideoInfo vi;
-    std::unique_ptr<uint8_t[]> codedFrame;
-    std::unique_ptr<uint8_t[]> rawFrame;
-public:
-    AVSLosslessSource(AMTContext& ctx, const tstring& filepath, const VideoFormat& format, IScriptEnvironment* env);
-
-    ~AVSLosslessSource();
-
-    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
-
-    void __stdcall GetAudio(void* buf, __int64 start, __int64 count, IScriptEnvironment* env);
-    const VideoInfo& __stdcall GetVideoInfo();
-    bool __stdcall GetParity(int n);
-
-    int __stdcall SetCacheHints(int cachehints, int frame_range);
-};
-
 } // namespace av {

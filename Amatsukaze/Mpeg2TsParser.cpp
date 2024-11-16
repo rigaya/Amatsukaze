@@ -1139,8 +1139,8 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
 }
 
 /* static */ const char* TsPacketSelector::componentTagString(int component_tag) {
-    if (component_tag >= 0x00 && component_tag <= 0x0F) return "MPEG2 映像";
-    if (component_tag >= 0x10 && component_tag <= 0x2F) return "MPEG2 AAC 音声";
+    if (component_tag >= 0x00 && component_tag <= 0x0F) return "映像";
+    if (component_tag >= 0x10 && component_tag <= 0x2F) return "AAC 音声";
     if (component_tag >= 0x30 && component_tag <= 0x37) return "字幕";
     if (component_tag >= 0x38 && component_tag <= 0x3F) return "文字スーパー";
     if (component_tag >= 0x40 && component_tag <= 0x7F) return "データ";
@@ -1156,7 +1156,7 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
     case 0x8D:
     case 0x8E:
     case 0x8F:
-        return "MPEG2 AAC 音声";
+        return "AAC 音声";
     case 0x87:
         return "字幕";
     case 0x80:
