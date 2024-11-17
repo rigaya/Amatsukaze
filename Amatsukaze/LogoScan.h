@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <numeric>
+#include <vector>
 #include <fstream>
 
 float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, float* pavg);
@@ -99,11 +100,8 @@ class LogoColor {
 public:
     LogoColor();
 
-    // ピクセルの色を追加 f:前景 b:背景
-    void Add(int f, int b);
-
-    // 値を0～1に正規化
-    void Normalize(int maxv);
+    // ピクセルの色を追加 f:前景 b:背景 (0-1の値を入れること)
+    void Add(double f, double b);
 
     /*====================================================================
     * 	GetAB_?()
@@ -119,7 +117,7 @@ class LogoScan {
     int logUVy;
     int thy;
 
-    std::vector<short> tmpY, tmpU, tmpV;
+    std::vector<int> tmpY, tmpU, tmpV;
 
     int nframes;
     std::unique_ptr<LogoColor[]> logoY, logoU, logoV;
@@ -127,7 +125,7 @@ class LogoScan {
     /*--------------------------------------------------------------------
     *	真中らへんを平均
     *-------------------------------------------------------------------*/
-    int med_average(const std::vector<short>& s);
+    int med_average(const std::vector<int>& s);
 
     static float calcDist(float a, float b);
 
@@ -147,19 +145,21 @@ public:
         const pixel_t* srcU,
         const pixel_t* srcV,
         int pitchY, int pitchUV,
-        int bgY, int bgU, int bgV) {
+        int bgY, int bgU, int bgV, int bitdepth) {
         int scanUVw = scanw >> logUVx;
         int scanUVh = scanh >> logUVy;
 
+        const double normalize = 1.0 / ((1 << bitdepth) - 1);
+
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
-                logoY[x + y * scanw].Add(srcY[x + y * pitchY], bgY);
+                logoY[x + y * scanw].Add(srcY[x + y * pitchY] * normalize, bgY * normalize);
             }
         }
         for (int y = 0; y < scanUVh; y++) {
             for (int x = 0; x < scanUVw; x++) {
-                logoU[x + y * scanUVw].Add(srcU[x + y * pitchUV], bgU);
-                logoV[x + y * scanUVw].Add(srcV[x + y * pitchUV], bgV);
+                logoU[x + y * scanUVw].Add(srcU[x + y * pitchUV] * normalize, bgU * normalize);
+                logoV[x + y * scanUVw].Add(srcV[x + y * pitchUV] * normalize, bgV * normalize);
             }
         }
 
@@ -171,7 +171,7 @@ public:
         const pixel_t* srcY,
         const pixel_t* srcU,
         const pixel_t* srcV,
-        int pitchY, int pitchUV) {
+        int pitchY, int pitchUV, int bitdepth) {
         int scanUVw = scanw >> logUVx;
         int scanUVh = scanh >> logUVy;
 
@@ -210,15 +210,15 @@ public:
 
         // 最小と最大が閾値以上離れている場合、単一色でないと判断
         std::sort(tmpY.begin(), tmpY.end());
-        if (abs(tmpY.front() - tmpY.back()) > thy) { // オリジナルだと thy * 8
+        if (abs(tmpY.front() - tmpY.back()) > (thy << (bitdepth - 8))) { // オリジナルだと thy * 8
             return false;
         }
         std::sort(tmpU.begin(), tmpU.end());
-        if (abs(tmpU.front() - tmpU.back()) > thy) { // オリジナルだと thy * 8
+        if (abs(tmpU.front() - tmpU.back()) > (thy << (bitdepth - 8))) { // オリジナルだと thy * 8
             return false;
         }
         std::sort(tmpV.begin(), tmpV.end());
-        if (abs(tmpV.front() - tmpV.back()) > thy) { // オリジナルだと thy * 8
+        if (abs(tmpV.front() - tmpV.back()) > (thy << (bitdepth - 8))) { // オリジナルだと thy * 8
             return false;
         }
 
@@ -227,7 +227,7 @@ public:
         int bgV = med_average(tmpV);
 
         // 有効フレームを追加
-        AddScanFrame(srcY, srcU, srcV, pitchY, pitchUV, bgY, bgU, bgV);
+        AddScanFrame(srcY, srcU, srcV, pitchY, pitchUV, bgY, bgU, bgV, bitdepth);
 
         return true;
     }
@@ -250,7 +250,7 @@ void DeintLogo(LogoData& dst, LogoData& src, int w, int h);
 
 template <typename pixel_t>
 void DeintY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
-    auto merge = [](int a, int b, int c) { return (a + 2 * b + c + 2) / 4.0f; };
+    auto merge = [](int a, int b, int c) { return (a + 2 * b + c + 2) * 0.25f; };
 
     for (int x = 0; x < w; x++) {
         dst[x] = src[x];
@@ -296,7 +296,7 @@ class LogoAnalyzer : AMTObject {
     class InitialLogoCreator : SimpleVideoReader {
         LogoAnalyzer* pThis;
         size_t scanDataSize;
-        bool highBitDepth;
+        int bitDepth;
         int readCount;
         int64_t filesize;
         std::vector<uint8_t> memScanData;
@@ -305,7 +305,8 @@ class LogoAnalyzer : AMTObject {
     public:
         InitialLogoCreator(LogoAnalyzer* pThis);
         void readAll(const tstring& src, int serviceid);
-        bool isHighBitDepth() const { return highBitDepth; }
+        int bitdepth() const { return bitDepth; }
+        bool isHighBitDepth() const { return bitDepth > 8; }
         int numFrames() const { return (int)scanData.size(); }
         int getFrameSize(const int i) const { return (int)scanData[i]->originalSize(); }
         void getFrame(const int i, void *ptr) { return scanData[i]->decompress(ptr); }
@@ -324,7 +325,7 @@ class LogoAnalyzer : AMTObject {
             const pixel_t* scanU = (const pixel_t *)frame->data[1] + offUV;
             const pixel_t* scanV = (const pixel_t *)frame->data[2] + offUV;
 
-            if (logoscan->AddFrame(scanY, scanU, scanV, pitchY, pitchUV)) {
+            if (logoscan->AddFrame(scanY, scanU, scanV, pitchY, pitchUV, bitDepth)) {
                 pThis->numFrames++;
 
                 memScanData.resize(scanDataSize * sizeof(pixel_t));
@@ -372,7 +373,7 @@ class LogoAnalyzer : AMTObject {
 
         const size_t scanDataSize = scanw * scanh * 3 / 2;
         const size_t YSize = scanw * scanh;
-        std:vector<pixel_t> memScanData;
+        std::vector<pixel_t> memScanData;
 
         auto memDeint = std::unique_ptr<float[]>(new float[YSize + 8]);
         auto memWork = std::unique_ptr<float[]>(new float[YSize + 8]);
@@ -380,12 +381,12 @@ class LogoAnalyzer : AMTObject {
         const int numFade = 20;
         auto minFades = std::unique_ptr<int[]>(new int[numFrames]);
         {
-            // メモリから読む
 
             // 全フレームループ
             for (int i = 0; i < numFrames; i++) {
                 memScanData.resize(creator->getFrameSize(i));
                 creator->getFrame(i, memScanData.data());
+                const float maxv = (float)(1 << (creator->bitdepth() - 1));
                 // フレームをインタレ解除
                 DeintY(memDeint.get(), memScanData.data(), scanw, scanw, scanh);
                 // fade値ループ
@@ -394,7 +395,7 @@ class LogoAnalyzer : AMTObject {
                 for (int fi = 0; fi < numFade; ++fi) {
                     float fade = 0.1f * fi;
                     // ロゴを評価
-                    float result = std::abs(deintLogo.EvaluateLogo(memDeint.get(), 255.0f, fade, memWork.get()));
+                    float result = std::abs(deintLogo.EvaluateLogo(memDeint.get(), maxv, fade, memWork.get()));
                     if (result < minResult) {
                         minResult = result;
                         minFadeIndex = fi;
@@ -434,7 +435,7 @@ class LogoAnalyzer : AMTObject {
                 // ロゴのあるフレームだけAddFrame
                 if (minFades[i] > 8) { // TODO: 調整
                     const auto ptr = memScanData.data();
-                    logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw);
+                    logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw, creator->bitdepth());
                 }
 
                 if ((i % 2000) == 0) printf("%d frames\n", i);
@@ -442,7 +443,6 @@ class LogoAnalyzer : AMTObject {
         }
 
         // ロゴ作成
-        logoscan.Normalize(255);
         logodata = logoscan.GetLogo(true);
 
         if (logodata == nullptr) {
@@ -666,7 +666,7 @@ class LogoFrame : AMTObject {
     template <typename pixel_t>
     void ScanFrame(PVideoFrame& frame, float* memDeint, float* memWork, const float maxv, EvalResult *outResult) {
         const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->GetReadPtr(PLANAR_Y));
-        const int pitchY = frame->GetPitch(PLANAR_Y);
+        const int pitchY = frame->GetPitch(PLANAR_Y) / sizeof(pixel_t);
 
         for (int i = 0; i < numLogos; i++) {
             LogoDataParam& logo = deintArr[i];

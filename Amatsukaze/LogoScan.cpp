@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <regex>
 #include "zlib.h"
-#pragma comment(lib, "zlib.lib")
 
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
     for (int x = 0; x < logowidth; x++) {
@@ -314,29 +313,19 @@ void logo::LogoDataParam::AddLogo(float* Y, int maxv) {
 }
 
 /* static */ void logo::approxim_line(int n, double sum_x, double sum_y, double sum_x2, double sum_xy, double& a, double& b) {
-    // doubleやfloatにはNaNが定義されているのでゼロ除算で例外は発生しない
-    double temp = (double)n * sum_x2 - sum_x * sum_x;
-    a = ((double)n * sum_xy - sum_x * sum_y) / temp;
-    b = (sum_x2 * sum_y - sum_x * sum_xy) / temp;
+    double temp = (double)n * sum_x2 - sum_x * sum_x; // n^2 * x^2
+    a = ((double)n * sum_xy - sum_x * sum_y) / temp;  // (n^2 * x^2) / (n^2 * x^2) = 1
+    b = (sum_x2 * sum_y - sum_x * sum_xy) / temp;     // (n^2 * x^3) / (n^2 * x^2) = x
 }
 logo::LogoColor::LogoColor() : sumF(), sumB(), sumF2(), sumB2(), sumFB() {}
 
 // ピクセルの色を追加 f:前景 b:背景
-void logo::LogoColor::Add(int f, int b) {
+void logo::LogoColor::Add(double f, double b) {
     sumF += f;
     sumB += b;
     sumF2 += f * f;
     sumB2 += b * b;
     sumFB += f * b;
-}
-
-// 値を0～1に正規化
-void logo::LogoColor::Normalize(int maxv) {
-    sumF /= (double)maxv;
-    sumB /= (double)maxv;
-    sumF2 /= (double)maxv * maxv;
-    sumB2 /= (double)maxv * maxv;
-    sumFB /= (double)maxv * maxv;
 }
 
 /*====================================================================
@@ -362,7 +351,7 @@ bool logo::LogoColor::GetAB(float& A, float& B, int data_count) const {
 /*--------------------------------------------------------------------
 *	真中らへんを平均
 *-------------------------------------------------------------------*/
-int logo::LogoScan::med_average(const std::vector<short>& s) {
+int logo::LogoScan::med_average(const std::vector<int>& s) {
     double t = 0;
     int nn = 0;
 
@@ -412,24 +401,6 @@ logo::LogoScan::LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy) 
     logoY(new LogoColor[scanw * scanh]),
     logoU(new LogoColor[scanw * scanh >> (logUVx + logUVy)]),
     logoV(new LogoColor[scanw * scanh >> (logUVx + logUVy)]) {}
-
-void logo::LogoScan::Normalize(int mavx) {
-    int scanUVw = scanw >> logUVx;
-    int scanUVh = scanh >> logUVy;
-
-    // 8bitなので255
-    for (int y = 0; y < scanh; y++) {
-        for (int x = 0; x < scanw; x++) {
-            logoY[x + y * scanw].Normalize(mavx);
-        }
-    }
-    for (int y = 0; y < scanUVh; y++) {
-        for (int x = 0; x < scanUVw; x++) {
-            logoU[x + y * scanUVw].Normalize(mavx);
-            logoV[x + y * scanUVw].Normalize(mavx);
-        }
-    }
-}
 
 std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
     int scanUVw = scanw >> logUVx;
@@ -602,10 +573,10 @@ logo::LogoScanDataCompressed::LogoScanDataCompressed() : compressed_data(), orig
 logo::LogoScanDataCompressed::~LogoScanDataCompressed() {};
 
 void logo::LogoScanDataCompressed::compress(const void *ptr, size_t datasize) {
-    original_size = datasize;
+    original_size = (unsigned long)datasize;
     std::vector<uint8_t> tmp(datasize * 3 / 2);
     unsigned long compressed_size = (unsigned long)tmp.size();
-    compress2(tmp.data(), &compressed_size, (BYTE *)ptr, datasize, 9);
+    compress2(tmp.data(), &compressed_size, (BYTE *)ptr, (unsigned long)datasize, Z_DEFAULT_COMPRESSION);
 
     compressed_data.resize(compressed_size);
     memcpy(compressed_data.data(), tmp.data(), compressed_size);
@@ -620,7 +591,7 @@ logo::LogoAnalyzer::InitialLogoCreator::InitialLogoCreator(LogoAnalyzer* pThis) 
     SimpleVideoReader(pThis->ctx),
     pThis(pThis),
     scanDataSize(pThis->scanw * pThis->scanh * 3 / 2),
-    highBitDepth(false),
+    bitDepth(8),
     readCount(0),
     filesize(0),
     memScanData(),
@@ -631,7 +602,6 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
 
     SimpleVideoReader::readAll(src, serviceid);
 
-    logoscan->Normalize(255);
     pThis->logodata = logoscan->GetLogo(false);
     if (pThis->logodata == nullptr) {
         THROW(RuntimeException, "Insufficient logo frames");
@@ -639,6 +609,8 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
 }
 /* virtual */ void logo::LogoAnalyzer::InitialLogoCreator::onFirstFrame(AVStream *videoStream, AVFrame* frame) {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
+
+    bitDepth = desc->comp[0].depth;
 
     pThis->logUVx = desc->log2_chroma_w;
     pThis->logUVy = desc->log2_chroma_h;
@@ -655,9 +627,7 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
 
     if (pThis->numFrames >= pThis->numMaxFrames) return false;
 
-    highBitDepth = av_pix_fmt_desc_get((AVPixelFormat)(frame->format))->comp[0].depth > 8;
-
-    (highBitDepth) ? AddFrame<uint16_t>(frame) : AddFrame<uint8_t>(frame);
+    (isHighBitDepth()) ? AddFrame<uint16_t>(frame) : AddFrame<uint8_t>(frame);
 
     if ((readCount % 200) == 0) {
         float progress = (float)currentPos / filesize * 50;
