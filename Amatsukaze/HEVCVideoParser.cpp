@@ -147,7 +147,8 @@ bool HEVCVideoParser::inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>&
         vfinfo.format.colorSpace = m_codecCtxParser->colorspace;
         vfinfo.format.colorPrimaries = m_codecCtxParser->color_primaries;
         vfinfo.format.transferCharacteristics = m_codecCtxParser->color_trc;
-        vfinfo.progressive = m_parserCtx->picture_structure == AV_PICTURE_STRUCTURE_FRAME || m_parserCtx->picture_structure == AV_PICTURE_STRUCTURE_UNKNOWN;
+        vfinfo.format.progressive = m_parserCtx->picture_structure == AV_PICTURE_STRUCTURE_FRAME || m_parserCtx->picture_structure == AV_PICTURE_STRUCTURE_UNKNOWN;
+        vfinfo.progressive = vfinfo.format.progressive;
         switch (m_parserCtx->pict_type) {
         case AV_PICTURE_TYPE_I: vfinfo.type = FRAME_I; break;
         case AV_PICTURE_TYPE_P: vfinfo.type = FRAME_P; break;
