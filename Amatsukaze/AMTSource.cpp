@@ -57,7 +57,7 @@ void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
         env->ThrowError("avcodec_parameters_to_context failed");
     }
     codecCtx()->pkt_timebase = videoStream->time_base;
-    codecCtx()->thread_count = GetFFmpegThreads((decodeThreads) ? decodeThreads : GetProcessorCount());
+    codecCtx()->thread_count = GetFFmpegThreads((decodeThreads) ? decodeThreads : GetProcessorCount(), videoStream->codecpar->height);
 
     // export_mvs for codecview
     //AVDictionary *opts = NULL;

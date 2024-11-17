@@ -8,8 +8,9 @@
 
 #include "ReaderWriterFFmpeg.h"
 
-int av::GetFFmpegThreads(int preferred) {
-    return std::min(8, std::max(1, preferred));
+int av::GetFFmpegThreads(int preferred, int height) {
+    const int maxThreads = (height > 1080) ? 16 : 8;
+    return std::min(maxThreads, std::max(1, preferred));
 }
 
 AVStream* av::GetVideoStream(AVFormatContext* pCtx) {

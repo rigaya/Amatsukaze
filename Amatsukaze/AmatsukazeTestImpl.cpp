@@ -432,7 +432,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
     if (avcodec_parameters_to_context(codecCtx(), videoStream->codecpar) != 0) {
         THROW(FormatException, "avcodec_parameters_to_context failed");
     }
-    codecCtx()->thread_count = GetFFmpegThreads(GetProcessorCount() - 2);
+    codecCtx()->thread_count = GetFFmpegThreads(GetProcessorCount() - 2, videoStream->codecpar->height);
     if (avcodec_open2(codecCtx(), pCodec, NULL) != 0) {
         THROW(FormatException, "avcodec_open2 failed");
     }

@@ -45,7 +45,7 @@ extern "C" {
 
 namespace av {
 
-int GetFFmpegThreads(int preferred);
+int GetFFmpegThreads(int preferred, int height);
 
 AVStream* GetVideoStream(AVFormatContext* pCtx);
 
