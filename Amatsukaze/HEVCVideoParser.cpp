@@ -129,10 +129,20 @@ bool HEVCVideoParser::inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>&
         vfinfo.format.height = m_codecCtxParser->height;
         vfinfo.format.displayWidth = m_codecCtxParser->coded_width ? m_codecCtxParser->coded_width : vfinfo.format.width;
         vfinfo.format.displayHeight = m_codecCtxParser->coded_height ? m_codecCtxParser->coded_height : vfinfo.format.height;
-        vfinfo.format.sarWidth = m_codecCtxParser->sample_aspect_ratio.num;
-        vfinfo.format.sarHeight = m_codecCtxParser->sample_aspect_ratio.den;
-        vfinfo.format.frameRateNum = m_codecCtxParser->framerate.num;
-        vfinfo.format.frameRateDenom = m_codecCtxParser->framerate.den;
+        if (m_codecCtxParser->sample_aspect_ratio.num > 0 && m_codecCtxParser->sample_aspect_ratio.den > 0) {
+            vfinfo.format.sarWidth = m_codecCtxParser->sample_aspect_ratio.num;
+            vfinfo.format.sarHeight = m_codecCtxParser->sample_aspect_ratio.den;
+        } else {
+            vfinfo.format.sarWidth = 1;
+            vfinfo.format.sarHeight = 1;
+        }
+        if (m_codecCtxParser->framerate.num > 0 && m_codecCtxParser->framerate.den > 0) {
+            vfinfo.format.frameRateNum = m_codecCtxParser->framerate.num;
+            vfinfo.format.frameRateDenom = m_codecCtxParser->framerate.den;
+        } else {
+            vfinfo.format.frameRateNum = 60000;
+            vfinfo.format.frameRateDenom = 1001;
+        }
         vfinfo.format.fixedFrameRate = 1;
         vfinfo.format.colorSpace = m_codecCtxParser->colorspace;
         vfinfo.format.colorPrimaries = m_codecCtxParser->color_primaries;
