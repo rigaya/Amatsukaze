@@ -40,10 +40,10 @@ namespace av {
 const char* getColorPrimStr(int color_prim);
 
 // ƒKƒ“ƒ}
-const char* getTransferCharacteristicsStr(int transfer_characteritics);
+const char* getTransferCharacteristicsStr(int transfer_characteritics, bool forSVTAV1);
 
 // •ÏŠ·ŒW”
-const char* getColorSpaceStr(int color_space);
+const char* getColorSpaceStr(int color_space, bool forSVTAV1);
 
 } // namespace av {
 

@@ -43,13 +43,13 @@ BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset)
 }
 
 // ÉKÉìÉ}
-/* static */ const char* av::getTransferCharacteristicsStr(int transfer_characteritics) {
+/* static */ const char* av::getTransferCharacteristicsStr(int transfer_characteritics, bool forSVTAV1) {
     switch (transfer_characteritics) {
     case AVCOL_TRC_BT709: return "bt709";
-    case AVCOL_TRC_IEC61966_2_4: return "iec61966-2-4";
+    case AVCOL_TRC_IEC61966_2_4: return (forSVTAV1) ? "iec61966" : "iec61966-2-4";
     case AVCOL_TRC_BT2020_10: return "bt2020-10";
-    case AVCOL_TRC_SMPTEST2084: return "smpte-st-2084";
-    case AVCOL_TRC_ARIB_STD_B67: return "arib-std-b67";
+    case AVCOL_TRC_SMPTEST2084: return (forSVTAV1) ? "smpte2084" : "smpte-st-2084";
+    case AVCOL_TRC_ARIB_STD_B67: return (forSVTAV1) ? "hlg" : "arib-std-b67";
     default:
         THROWF(FormatException,
             "Unsupported color transfer characteritics (%d)", transfer_characteritics);
@@ -58,10 +58,10 @@ BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset)
 }
 
 // ïœä∑åWêî
-/* static */ const char* av::getColorSpaceStr(int color_space) {
+/* static */ const char* av::getColorSpaceStr(int color_space, bool forSVTAV1) {
     switch (color_space) {
     case AVCOL_SPC_BT709: return "bt709";
-    case AVCOL_SPC_BT2020_NCL: return "bt2020nc";
+    case AVCOL_SPC_BT2020_NCL: return (forSVTAV1) ? "bt2020-ncl" : "bt2020nc";
     default:
         THROWF(FormatException,
             "Unsupported color color space (%d)", color_space);
@@ -126,20 +126,20 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
             sb.append(_T(" --color-primaries %s"), av::getColorPrimStr(fmt.colorPrimaries));
         }
         if (fmt.transferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --transfer-characteristics %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics));
+            sb.append(_T(" --transfer-characteristics %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics, true));
         }
         if (fmt.colorSpace != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --matrix-coefficients %s"), av::getColorSpaceStr(fmt.colorSpace));
+            sb.append(_T(" --matrix-coefficients %s"), av::getColorSpaceStr(fmt.colorSpace, true));
         }
     } else {
         if (fmt.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {
             sb.append(_T(" --colorprim %s"), av::getColorPrimStr(fmt.colorPrimaries));
         }
         if (fmt.transferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --transfer %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics));
+            sb.append(_T(" --transfer %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics, false));
         }
         if (fmt.colorSpace != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --colormatrix %s"), av::getColorSpaceStr(fmt.colorSpace));
+            sb.append(_T(" --colormatrix %s"), av::getColorSpaceStr(fmt.colorSpace, false));
         }
     }
 
