@@ -321,11 +321,12 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const int numFrames, const t
 }
 
 tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
-    return StringFormat(_T("\"%s\" -v \"%s\" -o \"%s\" %s%s"),
-        setting_.getChapterExePath(), pathToOS(avspath),
+    return StringFormat(_T("\"%s\"%s -v \"%s\" -o \"%s\" %s"),
+        setting_.getChapterExePath(),
+        (inputFormat.format == VS_H265) ? _T(" --serial") : _T(""), // H.265の場合はシリアルモードにしないと異常終了する場合がある
+        pathToOS(avspath),
         pathToOS(setting_.getTmpChapterExePath(videoFileIndex)),
-        setting_.getChapterExeOptions(),
-        (inputFormat.format == VS_H265) ? _T(" --serial") : _T("")); // H.265の場合はシリアルモードにしないと異常終了する場合がある
+        setting_.getChapterExeOptions());
 }
 
 void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
