@@ -44,7 +44,7 @@ public:
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting);
 
-    void analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM);
+    void analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM);
 
     const tstring& getLogoPath() const { return logopath; }
     const std::vector<int>& getTrims() const { return trims; }
@@ -79,7 +79,7 @@ private:
 
     void analyzeLogo(const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
-    void analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath);
+    void analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
     tstring makeAVSFile(int videoFileIndex);
 
@@ -87,9 +87,9 @@ private:
 
     void logoFrame(const int videoFileIndex, const int numFrames, const tstring& avspath);
 
-    tstring MakeChapterExeArgs(int videoFileIndex, const tstring& avspath);
+    tstring MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 
-    void chapterExe(int videoFileIndex, const tstring& avspath);
+    void chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 
     tstring MakeJoinLogoScpArgs(int videoFileIndex);
 

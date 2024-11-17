@@ -20,7 +20,7 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     sceneChanges(),
     divs() {}
 
-void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int numFrames, const bool analyzeChapterAndCM) {
+void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM) {
     Stopwatch sw;
     const tstring avspath = makeAVSFile(videoFileIndex);
 
@@ -34,7 +34,7 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const int
             analyzeLogo(videoFileIndex, numFrames, sw, avspath);
         }
         // チャプター・CM解析本体
-        analyzeChapterCM(serviceId, videoFileIndex, numFrames, sw, avspath);
+        analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avspath);
     }
 
     // ロゴ解析 (未実行かつロゴ消しする場合)
@@ -65,11 +65,11 @@ void CMAnalyze::analyzeLogo(const int videoFileIndex, const int numFrames, Stopw
     }
 }
 
-void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     // チャプター解析
     ctx.info("[無音・シーンチェンジ解析]");
     sw.start();
-    chapterExe(videoFileIndex, avspath);
+    chapterExe(videoFileIndex, inputFormat, avspath);
     ctx.infoF("完了: %.2f秒", sw.getAndReset());
 
     ctx.info("[無音・シーンチェンジ解析結果]");
@@ -320,16 +320,17 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const int numFrames, const t
     }
 }
 
-tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const tstring& avspath) {
-    return StringFormat(_T("\"%s\" -v \"%s\" -o \"%s\" %s"),
+tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
+    return StringFormat(_T("\"%s\" -v \"%s\" -o \"%s\" %s%s"),
         setting_.getChapterExePath(), pathToOS(avspath),
         pathToOS(setting_.getTmpChapterExePath(videoFileIndex)),
-        setting_.getChapterExeOptions());
+        setting_.getChapterExeOptions(),
+        (inputFormat.format == VS_H265) ? _T(" --serial") : _T("")); // H.265の場合はシリアルモードにしないと異常終了する場合がある
 }
 
-void CMAnalyze::chapterExe(int videoFileIndex, const tstring& avspath) {
+void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
     File stdoutf(setting_.getTmpChapterExeOutPath(videoFileIndex), _T("wb"));
-    auto args = MakeChapterExeArgs(videoFileIndex, avspath);
+    auto args = MakeChapterExeArgs(videoFileIndex, inputFormat, avspath);
     ctx.infoF("%s", args);
     MySubProcess process(args, &stdoutf);
     int exitCode = process.join();

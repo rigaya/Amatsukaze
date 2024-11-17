@@ -544,7 +544,7 @@ void DoBadThing() {
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
     for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
         cmanalyze.push_back(std::make_unique<CMAnalyze>(ctx, setting));
-
+        const auto& inputVideofmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0)).videoFormat;
         const int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
         const bool delogoEnabled = setting.isNoDelogo() ? false : true;
         // チャプター解析は300フレーム（約10秒）以上ある場合だけ
@@ -552,7 +552,7 @@ void DoBadThing() {
         const bool analyzeChapterAndCM = (setting.isChapterEnabled() && numFrames >= 300);
         CMAnalyze *cma = cmanalyze.back().get();
         if (analyzeChapterAndCM || delogoEnabled) {
-            cma->analyze(serviceId, videoFileIndex, numFrames, analyzeChapterAndCM);
+            cma->analyze(serviceId, videoFileIndex, inputVideofmt, numFrames, analyzeChapterAndCM);
         }
 
         if (analyzeChapterAndCM && setting.isPmtCutEnabled()) {
