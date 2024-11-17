@@ -372,12 +372,12 @@ namespace Amatsukaze.Server
             var inFilename2 = RemoveBracketedChars(inFilename);
             var inFilename2ZtoH = ConvertStrZtoH(inFilename2);
 
-            var outDir = Path.GetDirectoryName(Item.DstPath);
+            var outDir = Path.GetDirectoryName(Item.DstPath); // DstPathは拡張子がついていないらしい
             var outPath = Item.DstPath;
             var outPath2 = Path.Combine(outDir, RemoveBracketedChars(Path.GetFileName(outPath)));
             var outPathZtoH = Path.Combine(outDir, ConvertStrZtoH(Path.GetFileName(outPath)));
             var outPath2ZtoH = Path.Combine(outDir, ConvertStrZtoH(Path.GetFileName(outPath2)));
-            var outFilename = Path.GetFileNameWithoutExtension(outPath);
+            var outFilename = Path.GetFileName(outPath);
             var outFilenameZtoH = ConvertStrZtoH(outFilename);
             var outFilename2 = RemoveBracketedChars(outFilename);
             var outFilename2ZtoH = ConvertStrZtoH(outFilename2);
