@@ -77,7 +77,7 @@ private:
     std::vector<int> sceneChanges;
     std::vector<int> divs;
 
-    void analyzeLogo(const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath);
+    void analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
     void analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
@@ -85,7 +85,7 @@ private:
 
     std::string makePreamble();
 
-    void logoFrame(const int videoFileIndex, const int numFrames, const tstring& avspath);
+    void logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
     tstring MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 

@@ -31,7 +31,7 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
             ctx.info("チャプター・CM解析にロゴを使用しません。");
         } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う
-            analyzeLogo(videoFileIndex, numFrames, sw, avspath);
+            analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avspath);
         }
         // チャプター・CM解析本体
         analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avspath);
@@ -39,16 +39,16 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
 
     // ロゴ解析 (未実行かつロゴ消しする場合)
     if (!setting_.isNoDelogo()) {
-        analyzeLogo(videoFileIndex, numFrames, sw, avspath);
+        analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avspath);
     }
 }
 
-void CMAnalyze::analyzeLogo(const int videoFileIndex, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     if (!logoAnalysisDone
         && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
         ctx.info("[ロゴ解析]");
         sw.start();
-        logoFrame(videoFileIndex, numFrames, avspath);
+        logoFrame(videoFileIndex, inputFormat, numFrames, avspath);
         ctx.infoF("完了: %.2f秒", sw.getAndReset());
 
         ctx.info("[ロゴ解析結果]");
@@ -240,7 +240,7 @@ std::string CMAnalyze::makePreamble() {
     return sb.str();
 }
 
-void CMAnalyze::logoFrame(const int videoFileIndex, const int numFrames, const tstring& avspath) {
+void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
     const auto& logoPath = setting_.getLogoPath();
     const auto& eraseLogoPath = setting_.getEraseLogoPath();
 
@@ -258,7 +258,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const int numFrames, const t
     const int processorCount = GetProcessorCount();
     const int minFramesPerThread = 600;
     const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(8, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
-    const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : 8, processorCount / totalThreads));
+    const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
     if (totalThreads > 1) {
         ctx.infoF("並列ロゴ解析 %d並列 x デコード%dスレッド", totalThreads, decodeThreads);
     }
