@@ -944,6 +944,10 @@ tstring ConfigWrapper::getTmpAMTSourcePath(int vindex) const {
     return regtmp(StringFormat(_T("%s/amts%d.dat"), tmpDir.path(), vindex));
 }
 
+tstring ConfigWrapper::getTmpSourceAVS8bitPath(int vindex) const {
+    return regtmp(StringFormat(_T("%s/amts%d_8bit.avs"), tmpDir.path(), vindex));
+}
+
 tstring ConfigWrapper::getTmpSourceAVSPath(int vindex) const {
     return regtmp(StringFormat(_T("%s/amts%d.avs"), tmpDir.path(), vindex));
 }

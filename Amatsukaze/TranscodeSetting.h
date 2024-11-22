@@ -427,6 +427,8 @@ public:
 
     tstring getTmpSourceAVSPath(int vindex) const;
 
+    tstring getTmpSourceAVS8bitPath(int vindex) const;
+
     tstring getTmpLogoFramePath(int vindex, int logoIndex = -1) const;
 
     tstring getTmpChapterExePath(int vindex) const;

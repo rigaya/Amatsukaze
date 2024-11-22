@@ -22,7 +22,8 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
 
 void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM) {
     Stopwatch sw;
-    const tstring avspath = makeAVSFile(videoFileIndex);
+    const auto avsAnalyzeLogo = makeAVSFile(videoFileIndex, inputFormat, false);
+    const auto avsChapterExe  = makeAVSFile(videoFileIndex, inputFormat, true);
 
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
@@ -31,15 +32,15 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
             ctx.info("チャプター・CM解析にロゴを使用しません。");
         } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う
-            analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avspath);
+            analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
         }
         // チャプター・CM解析本体
-        analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avspath);
+        analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsChapterExe);
     }
 
     // ロゴ解析 (未実行かつロゴ消しする場合)
     if (!setting_.isNoDelogo()) {
-        analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avspath);
+        analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
     }
 }
 
@@ -214,7 +215,7 @@ void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
     }
 }
 
-tstring CMAnalyze::makeAVSFile(int videoFileIndex) {
+tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool force8bit) {
     StringBuilder sb;
 
     // オートロードプラグインのロードに失敗すると動作しなくなるのでそれを回避
@@ -223,7 +224,11 @@ tstring CMAnalyze::makeAVSFile(int videoFileIndex) {
     sb.append("LoadPlugin(\"%s\")\n", GetModulePath());
     sb.append("AMTSource(\"%s\")\n", setting_.getTmpAMTSourcePath(videoFileIndex));
     sb.append("Prefetch(1)\n");
-    tstring avspath = setting_.getTmpSourceAVSPath(videoFileIndex);
+    // chapter_exeは8bitしか受け付けない
+    if (inputFormat.format != VS_MPEG2 && force8bit) {
+        sb.append("ConvertToYV12()\n");
+    }
+    const tstring avspath = (force8bit) ? setting_.getTmpSourceAVS8bitPath(videoFileIndex) : setting_.getTmpSourceAVSPath(videoFileIndex);
     File file(avspath, _T("w"));
     file.write(sb.getMC());
     return avspath;
@@ -323,7 +328,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
 tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
     return StringFormat(_T("\"%s\"%s -v \"%s\" -o \"%s\" %s"),
         setting_.getChapterExePath(),
-        (inputFormat.format == VS_H265) ? _T(" --serial") : _T(""), // H.265の場合はシリアルモードにしないと異常終了する場合がある
+        (inputFormat.format == VS_H265) ? _T("") : _T(""), // H.265の場合はシリアルモードにしないと異常終了する場合がある
         pathToOS(avspath),
         pathToOS(setting_.getTmpChapterExePath(videoFileIndex)),
         setting_.getChapterExeOptions());
