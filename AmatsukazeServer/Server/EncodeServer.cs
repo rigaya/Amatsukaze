@@ -1432,21 +1432,21 @@ namespace Amatsukaze.Server
             if (   streamFormat != VideoStreamFormat.MPEG2
                 || streamFormat != VideoStreamFormat.H264)
             {
-                sb.Append("--loadv2");
+                sb.Append(" --loadv2");
                 loadV2 = true;
             }
 
             if (mode == ProcMode.CMCheck)
             {
-                sb.Append("--mode cm");
+                sb.Append(" --mode cm");
             }
             else if(mode == ProcMode.DrcsCheck)
             {
-                sb.Append("--mode drcs");
+                sb.Append(" --mode drcs");
             }
             else if (isGeneric)
             {
-                sb.Append("--mode g");
+                sb.Append(" --mode g");
             }
 
             if(setting.DumpFilter)
