@@ -215,7 +215,7 @@ void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
     }
 }
 
-tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool force8bit) {
+tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool forChapterExe) {
     StringBuilder sb;
 
     // オートロードプラグインのロードに失敗すると動作しなくなるのでそれを回避
@@ -225,10 +225,13 @@ tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputForma
     sb.append("AMTSource(\"%s\")\n", setting_.getTmpAMTSourcePath(videoFileIndex));
     sb.append("Prefetch(1)\n");
     // chapter_exeは8bitしか受け付けない
-    if (inputFormat.format != VS_MPEG2 && force8bit) {
+    if (inputFormat.format != VS_MPEG2 && forChapterExe) {
         sb.append("ConvertToYV12()\n");
+        if (inputFormat.width > 1920 && inputFormat.height > 1080) {
+            sb.append("BilinearResize(1920, 1080)\n");
+        }
     }
-    const tstring avspath = (force8bit) ? setting_.getTmpSourceAVS8bitPath(videoFileIndex) : setting_.getTmpSourceAVSPath(videoFileIndex);
+    const tstring avspath = (forChapterExe) ? setting_.getTmpSourceAVS8bitPath(videoFileIndex) : setting_.getTmpSourceAVSPath(videoFileIndex);
     File file(avspath, _T("w"));
     file.write(sb.getMC());
     return avspath;

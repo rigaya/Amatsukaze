@@ -81,7 +81,7 @@ private:
 
     void analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
-    tstring makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool force8bit);
+    tstring makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool forChapterExe);
 
     std::string makePreamble();
 
