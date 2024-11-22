@@ -1428,10 +1428,12 @@ namespace Amatsukaze.Server
         {
             StringBuilder sb = new StringBuilder();
 
+            bool loadV2 = false;
             if (   streamFormat != VideoStreamFormat.MPEG2
                 || streamFormat != VideoStreamFormat.H264)
             {
                 sb.Append("--loadv2");
+                loadV2 = true;
             }
 
             if (mode == ProcMode.CMCheck)
@@ -1732,7 +1734,11 @@ namespace Amatsukaze.Server
                         .Append("\"");
                 }
 
-                string[] decoderNames = new string[] { "default", "default", "CUVID" };
+                string[] decoderNames = new string[] { "default", "QSV", "CUVID" };
+                if (!loadV2)
+                {
+                    decoderNames[1] = "default";
+                }
                 if (profile.Mpeg2Decoder != DecoderType.Default)
                 {
                     sb.Append("  --mpeg2decoder ");
