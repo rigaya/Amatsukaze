@@ -184,7 +184,7 @@ class AMTSource : public IClip, AMTObject {
             }
         }
     }
-
+#if 0
     template <typename T, int dstdepth, int srcdepth>
     void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
         for (int y = 0; y < h; y += 2) {
@@ -202,6 +202,28 @@ class AMTSource : public IClip, AMTObject {
             }
         }
     }
+#else
+    // ‚È‚º‚©‚±‚Á‚¿‚Å‚È‚¢‚ÆŽ©“®ƒxƒNƒgƒ‹‰»‚³‚ê‚È‚¢
+    template <typename T, typename Tx2, int dstdepth, int srcdepth>
+    void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
+        for (int y = 0; y < h; y += 2) {
+            T* dstU0 = dstU + dpitch * (y + 0);
+            T* dstU1 = dstU + dpitch * (y + 1);
+            T* dstV0 = dstV + dpitch * (y + 0);
+            T* dstV1 = dstV + dpitch * (y + 1);
+            const Tx2* src0 = (const Tx2*)(top + tpitch * (y + 0));
+            const Tx2* src1 = (const Tx2*)(bottom + bpitch * (y + 1));
+            for (int x = 0; x < w; x++) {
+                dstU0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x] & ((T)-1));
+                dstV0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x] >> ((sizeof(Tx2) - sizeof(T)) * 8));
+            }
+            for (int x = 0; x < w; x++) {
+                dstU1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x] & ((T)-1));
+                dstV1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x] >> ((sizeof(Tx2) - sizeof(T)) * 8));
+            }
+        }
+    }
+#endif
 
     template <typename T, int dstdepth, int srcdepth>
     void MergeFieldConvert(
@@ -214,7 +236,15 @@ class AMTSource : public IClip, AMTObject {
         Convert1<T, dstdepth, srcdepth>(dstY, srctY, srcbY, width, height, dstPitchY, srctPitchY, srcbPitchY);
 
         if (nv12) {
+#if 0
             Convert2<T, dstdepth, srcdepth>(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
+#else
+            if (sizeof(T) == 1) {
+                Convert2<T, uint16_t, dstdepth, srcdepth>(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
+            } else if (sizeof(T) == 2) {
+                Convert2<T, uint32_t, dstdepth, srcdepth>(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
+            }
+#endif
         } else {
             Convert1<T, dstdepth, srcdepth>(dstU, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
             Convert1<T, dstdepth, srcdepth>(dstV, srctV, srcbV, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
