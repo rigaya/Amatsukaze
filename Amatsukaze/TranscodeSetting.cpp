@@ -1304,9 +1304,10 @@ void ConfigWrapper::dump() const {
     } else {
         ctx.info("サービスID: 指定なし");
     }
-    ctx.infoF("デコーダ: MPEG2:%s H264:%s",
+    ctx.infoF("デコーダ: MPEG2:%s H264:%s HEVC:%s",
         decoderToString(conf.decoderSetting.mpeg2),
-        decoderToString(conf.decoderSetting.h264));
+        decoderToString(conf.decoderSetting.h264),
+        decoderToString(conf.decoderSetting.hevc));
 }
 
 void ConfigWrapper::CreateTempDir() {

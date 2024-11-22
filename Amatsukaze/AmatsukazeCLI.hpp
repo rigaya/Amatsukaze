@@ -332,6 +332,12 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             if (conf.decoderSetting.h264 == (DECODER_TYPE)-1) {
                 PRINTF("--h264decoder‚ÌŽw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
             }
+        } else if (key == _T("--hevcdecoder")) {
+            tstring arg = getParam(argc, argv, i++);
+            conf.decoderSetting.hevc = decoderFromString(arg);
+            if (conf.decoderSetting.hevc == (DECODER_TYPE)-1) {
+                PRINTF("--hevcdecoder‚ÌŽw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
+            }
         } else if (key == _T("-eb") || key == _T("--encode-buffer")) {
             conf.numEncodeBufferFrames = std::stoi(getParam(argc, argv, i++));
         } else if (key == _T("--ignore-no-logo")) {

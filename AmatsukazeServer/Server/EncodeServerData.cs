@@ -236,6 +236,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public DecoderType H264Deocder { get; set; }
         [DataMember]
+        public DecoderType HEVCDecoder { get; set; }
+        [DataMember]
         public FormatType OutputFormat { get; set; }
 
         [DataMember]

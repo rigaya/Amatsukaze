@@ -1757,6 +1757,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region HEVCDecoderInt変更通知プロパティ
+        public int HEVCDecoderInt
+        {
+            get { return (int)Data.HEVCDecoder; }
+            set
+            {
+                if ((int)Data.HEVCDecoder == value)
+                    return;
+                Data.HEVCDecoder = (DecoderType)value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region OutputFormatInt変更通知プロパティ
         public int OutputFormatInt {
             get { return (int)Data.OutputFormat; }
@@ -2054,6 +2068,9 @@ namespace Amatsukaze.Models
         public string[] H264DecoderList {
             get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
         }
+        public string[] HEVCDecoderList {
+            get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
+        }
         public DisplayOutputMask[] OutputOptionList_ = new DisplayOutputMask[]
         {
             new DisplayOutputMask()
@@ -2335,6 +2352,7 @@ namespace Amatsukaze.Models
 
             text.KeyValue("MPEG2デコーダ", Mpeg2DecoderList[(int)Data.Mpeg2Decoder]);
             text.KeyValue("H264デコーダ", H264DecoderList[(int)Data.H264Deocder]);
+            text.KeyValue("HEVCデコーダ", HEVCDecoderList[(int)Data.HEVCDecoder]);
             text.KeyValue("出力フォーマット", FormatList[(int)Data.OutputFormat]);
             text.KeyValue("出力フォーマット-字幕がある時MKV出力する", Data.UseMKVWhenSubExists);
             text.KeyValue("出力選択", OutputMask.Name);

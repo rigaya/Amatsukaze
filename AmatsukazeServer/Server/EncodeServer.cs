@@ -1744,6 +1744,12 @@ namespace Amatsukaze.Server
                     sb.Append("  --h264decoder ");
                     sb.Append(decoderNames[(int)profile.H264Deocder]);
                 }
+
+                if (profile.HEVCDecoder != DecoderType.Default)
+                {
+                    sb.Append("  --hevcdecoder ");
+                    sb.Append(decoderNames[(int)profile.HEVCDecoder]);
+                }
                 if (ignoreNoLogo)
                 {
                     sb.Append(" --ignore-no-logo");
