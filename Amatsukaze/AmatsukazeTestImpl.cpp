@@ -424,7 +424,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
         THROW(FormatException, "Could not find video stream ...");
     }
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
-    AVCodec *pCodec = avcodec_find_decoder(vcodecId);
+    const AVCodec *pCodec = avcodec_find_decoder(vcodecId);
     if (pCodec == NULL) {
         THROW(FormatException, "Could not find decoder ...");
     }

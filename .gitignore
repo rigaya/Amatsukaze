@@ -7,6 +7,10 @@
 
 Debug/
 Release/
+Debug2/
+Release2/
+
+/ffmpeg_lgpl
 
 /packages/
 

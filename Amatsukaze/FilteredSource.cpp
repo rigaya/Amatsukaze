@@ -89,9 +89,14 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
 }
 
 /* static */ PICTURE_TYPE getPictureTypeFromAVFrame(AVFrame* frame) {
-    bool interlaced = frame->interlaced_frame != 0;
-    bool tff = frame->top_field_first != 0;
-    int repeat = frame->repeat_pict;
+#ifdef AMATSUKAZE2DLL
+    const bool interlaced = (frame->flags & AV_FRAME_FLAG_INTERLACED) != 0;
+    const bool tff = (frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) != 0;
+#else
+    const bool interlaced = frame->interlaced_frame != 0;
+    const bool tff = frame->top_field_first != 0;
+#endif
+    const int repeat = frame->repeat_pict;
     if (interlaced == false) {
         switch (repeat) {
         case 0: return PIC_FRAME;

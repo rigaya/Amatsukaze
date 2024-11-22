@@ -22,6 +22,11 @@ namespace Amatsukaze.Server
         public ExtensionDataObject ExtensionData { get; set; }
     }
 
+    public enum VideoStreamFormat
+    {
+        Unknown, MPEG2, H264, H265, AV1
+    }
+
     public enum EncoderType
     {
         x264 = 0,
@@ -705,6 +710,9 @@ namespace Amatsukaze.Server
         public int Priority { get; set; }
         [DataMember]
         public DateTime AddTime { get; set; }
+
+        [DataMember]
+        public VideoStreamFormat StreamFormat { get; set; }
 
         [DataMember]
         public int ServiceId { get; set; }

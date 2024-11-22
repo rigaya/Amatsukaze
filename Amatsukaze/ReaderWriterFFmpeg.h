@@ -13,6 +13,7 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <cstdint>
 
 #include "StreamUtils.h"
 #include "ProcessThread.h"
@@ -65,10 +66,10 @@ private:
 
 class CodecContext : NonCopyable {
 public:
-    CodecContext(AVCodec* pCodec);
+    CodecContext(const AVCodec* pCodec);
     CodecContext();
     ~CodecContext();
-    void Set(AVCodec* pCodec);
+    void Set(const AVCodec* pCodec);
     void Free();
     AVCodecContext* operator()();
 private:
@@ -144,7 +145,7 @@ private:
     bool fieldMode_;
     std::unique_ptr<av::Frame> prevFrame_;
 
-    AVCodec* getHWAccelCodec(AVCodecID vcodecId, const DecoderSetting& decoderSetting);
+    const AVCodec* getHWAccelCodec(AVCodecID vcodecId, const DecoderSetting& decoderSetting);
 
     void onFrame(Frame& frame);
 

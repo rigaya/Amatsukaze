@@ -201,7 +201,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 
     for (int i = 1; i < argc; ++i) {
         tstring key = argv[i];
-        if (key == _T("-i") || key == _T("--input")) {
+        if (key == _T("--loadv2")) {
+            ; // skip
+        } else if (key == _T("-i") || key == _T("--input")) {
             conf.srcFilePath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--original-input-file")) {
             conf.srcFilePathOrg = pathNormalize(getParam(argc, argv, i++));
@@ -637,7 +639,7 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
     }
 }
 
-__declspec(dllexport) int AmatsukazeCLI(int argc, const wchar_t* argv[]) {
+int RunAmatsukazeCLI(int argc, const wchar_t* argv[]) {
     try {
         printCopyright();
 
@@ -657,7 +659,7 @@ __declspec(dllexport) int AmatsukazeCLI(int argc, const wchar_t* argv[]) {
         // FFMPEGライブラリ初期化
         InitializeCriticalSection(&g_log_crisec);
         av_log_set_callback(amatsukaze_av_log_callback);
-        av_register_all();
+        //av_register_all();
 
         // キャプションDLL初期化
         InitializeCPW();

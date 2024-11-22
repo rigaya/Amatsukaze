@@ -58,7 +58,7 @@ av::Frame& av::Frame::operator=(const Frame& src) {
     av_frame_ref(frame_, src());
     return *this;
 }
-av::CodecContext::CodecContext(AVCodec* pCodec)
+av::CodecContext::CodecContext(const AVCodec* pCodec)
     : ctx_() {
     Set(pCodec);
 }
@@ -67,7 +67,7 @@ av::CodecContext::CodecContext()
 av::CodecContext::~CodecContext() {
     Free();
 }
-void av::CodecContext::Set(AVCodec* pCodec) {
+void av::CodecContext::Set(const AVCodec* pCodec) {
     if (pCodec == NULL) {
         THROW(RuntimeException, "pCodec is NULL");
     }
@@ -136,7 +136,11 @@ AVFilterInOut*& av::FilterInOut::operator()() {
 av::WriteIOContext::WriteIOContext(int bufsize)
     : ctx_() {
     unsigned char* buffer = (unsigned char*)av_malloc(bufsize);
+#if AMATSUKAZE2DLL
+    ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, reinterpret_cast<int (*)(void *, const uint8_t *, int)>(write_packet_), NULL);
+#else
     ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, write_packet_, NULL);
+#endif
 }
 av::WriteIOContext::~WriteIOContext() {
     av_free(ctx_->buffer);
@@ -183,7 +187,7 @@ void av::VideoReader::readAll(const tstring& src, const DecoderSetting& decoderS
         THROW(FormatException, "Could not find video stream ...");
     }
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
-    AVCodec *pCodec = getHWAccelCodec(vcodecId, decoderSetting);
+    const AVCodec *pCodec = getHWAccelCodec(vcodecId, decoderSetting);
     if (pCodec == NULL) {
         ctx.warn("指定されたデコーダが使用できないためデフォルトデコーダを使います");
         pCodec = avcodec_find_decoder(vcodecId);
@@ -234,7 +238,7 @@ void av::VideoReader::readAll(const tstring& src, const DecoderSetting& decoderS
 /* virtual */ void av::VideoReader::onFrameDecoded(Frame& frame) {}
 /* virtual */ void av::VideoReader::onAudioPacket(AVPacket& packet) {}
 
-AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const DecoderSetting& decoderSetting) {
+const AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const DecoderSetting& decoderSetting) {
     switch (vcodecId) {
     case AV_CODEC_ID_MPEG2VIDEO:
         switch (decoderSetting.mpeg2) {
@@ -266,7 +270,14 @@ AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const DecoderSetti
 
 void av::VideoReader::onFrame(Frame& frame) {
     if (fieldMode_) {
-        if (frame()->interlaced_frame == false) {
+#ifdef AMATSUKAZE2DLL
+        const bool interlaced = (frame()->flags & AV_FRAME_FLAG_INTERLACED) != 0;
+        const bool tff = (frame()->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) != 0;
+#else
+        const bool interlaced = frame()->interlaced_frame != 0;
+        const bool tff = frame()->top_field_first != 0;
+#endif
+        if (interlaced == false) {
             // フレームがインタレースでなかったらそのまま出力
             prevFrame_ = nullptr;
             onFrameDecoded(frame);
@@ -276,7 +287,7 @@ void av::VideoReader::onFrame(Frame& frame) {
             // top_field_first=1: top field
             // top_field_first=0: bottom field
             // となっているようである
-            if (frame()->top_field_first) {
+            if (tff) {
                 prevFrame_ = std::unique_ptr<av::Frame>(new av::Frame(frame));
             } else {
                 ctx.warn("トップフィールドを想定していたがそうではなかったのでフィールドを破棄");
@@ -307,7 +318,11 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     }
 
     fmt_.format = srcFormat;
+#ifdef AMATSUKAZE2DLL
+    fmt_.progressive = (frame->flags & AV_FRAME_FLAG_INTERLACED) == 0;
+#else
     fmt_.progressive = !(frame->interlaced_frame);
+#endif
     fmt_.width = frame->width;
     fmt_.height = frame->height;
     fmt_.sarWidth = frame->sample_aspect_ratio.num;

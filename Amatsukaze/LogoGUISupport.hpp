@@ -29,7 +29,7 @@ class GUIMediaFile : public AMTObject {
 
     void MakeCodecContext() {
         AVCodecID vcodecId = videoStream->codecpar->codec_id;
-        AVCodec *pCodec = avcodec_find_decoder(vcodecId);
+        const AVCodec *pCodec = avcodec_find_decoder(vcodecId);
         if (pCodec == NULL) {
             THROW(FormatException, "Could not find decoder ...");
         }
@@ -70,8 +70,13 @@ class GUIMediaFile : public AMTObject {
                     THROW(FormatException, "avcodec_send_packet failed");
                 }
                 while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
+#ifdef AMATSUKAZE2DLL
+                    const int key_frame = (frame()->flags & AV_FRAME_FLAG_KEY) != 0;
+#else
+                    const int key_frame = frame()->key_frame;
+#endif
                     // 最初はIフレームまでスキップ
-                    if (lastDecodeFrame != -1 || frame()->key_frame) {
+                    if (lastDecodeFrame != -1 || key_frame) {
                         if (frame()->width != width || frame()->height != height) {
                             init(frame());
                         }

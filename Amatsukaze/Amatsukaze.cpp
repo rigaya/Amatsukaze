@@ -20,11 +20,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     return TRUE;
 }
 
+extern "C" __declspec(dllexport) int AmatsukazeCLI(int argc, const wchar_t* argv[]) {
+    return RunAmatsukazeCLI(argc, argv);
+}
+
 extern "C" __declspec(dllexport) void InitAmatsukazeDLL() {
     // FFMPEGライブラリ初期化
-    av_register_all();
+    //av_register_all();
 #if ENABLE_FFMPEG_FILTER
-    avfilter_register_all();
+    //avfilter_register_all();
 #endif
 }
 
@@ -41,9 +45,9 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 
     if (g_av_initialized == false) {
         // FFMPEGライブラリ初期化
-        av_register_all();
+        //av_register_all();
 #if ENABLE_FFMPEG_FILTER
-        avfilter_register_all();
+        //avfilter_register_all();
 #endif
         g_av_initialized = true;
     }

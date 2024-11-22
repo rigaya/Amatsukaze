@@ -95,7 +95,7 @@ class AMTSource : public IClip, AMTObject {
     // 直前のnon B QPテーブル
     PVideoFrame nonBQPTable;
 
-    AVCodec* getHWAccelCodec(AVCodecID vcodecId);
+    const AVCodec* getHWAccelCodec(AVCodecID vcodecId);
 
     void MakeCodecContext(IScriptEnvironment* env);
 

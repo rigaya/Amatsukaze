@@ -1421,11 +1421,18 @@ namespace Amatsukaze.Server
             Setting setting,
             bool isGeneric,
             string src, string srcOrg, string dst, string json,
+            VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs,
             string inHandle, string outHandle, int pid)
         {
             StringBuilder sb = new StringBuilder();
+
+            if (   streamFormat != VideoStreamFormat.MPEG2
+                || streamFormat != VideoStreamFormat.H264)
+            {
+                sb.Append("--loadv2");
+            }
 
             if (mode == ProcMode.CMCheck)
             {

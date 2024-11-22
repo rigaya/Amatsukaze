@@ -12,7 +12,7 @@
 namespace av {
 
 
-AVCodec* AMTSource::getHWAccelCodec(AVCodecID vcodecId) {
+const AVCodec* AMTSource::getHWAccelCodec(AVCodecID vcodecId) {
     switch (vcodecId) {
     case AV_CODEC_ID_MPEG2VIDEO:
         switch (decoderSetting.mpeg2) {
@@ -44,7 +44,7 @@ AVCodec* AMTSource::getHWAccelCodec(AVCodecID vcodecId) {
 
 void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
-    AVCodec *pCodec = getHWAccelCodec(vcodecId);
+    const AVCodec *pCodec = getHWAccelCodec(vcodecId);
     if (pCodec == NULL) {
         ctx.warn("指定されたデコーダが使用できないためデフォルトデコーダを使います");
         pCodec = avcodec_find_decoder(vcodecId);
@@ -216,6 +216,7 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
     // フレームタイプ
     ret->SetProperty("FrameType", top->pict_type);
 
+#ifndef AMATSUKAZE2DLL
     // QPテーブル
     if (outputQP) {
         int qp_stride, qp_scale_type;
@@ -250,6 +251,7 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
             }
         }
     }
+#endif
 
     return ret;
 }
@@ -443,7 +445,11 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
         // シーク後最初のフレームでないならOK
         if (lastDecodeFrame != -1) return true;
         // キーフレームならOK
+#ifdef AMATSUKAZE2DLL
+        if (frame()->flags & AV_FRAME_FLAG_KEY) return true;
+#else
         if (frame()->key_frame) return true;
+#endif
         // タイムスタンプがキーフレームのものならキーフレームと判断
         if (keyFramePTS != -1 && keyFramePTS == frame()->pts) return true;
         // まだキーフレームでないので、欠損を含む可能性がある
