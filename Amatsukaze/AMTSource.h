@@ -151,10 +151,10 @@ class AMTSource : public IClip, AMTObject {
 
         T* srctY = (T*)top->data[0];
         T* srctU = (T*)top->data[1];
-        T* srctV = (top->format != AV_PIX_FMT_NV12) ? (T*)top->data[2] : ((T*)top->data[1] + 1);
+        T* srctV = (top->format != AV_PIX_FMT_NV12 && top->format != AV_PIX_FMT_P010LE) ? (T*)top->data[2] : ((T*)top->data[1] + 1);
         T* srcbY = (T*)bottom->data[0];
         T* srcbU = (T*)bottom->data[1];
-        T* srcbV = (top->format != AV_PIX_FMT_NV12) ? (T*)bottom->data[2] : ((T*)bottom->data[1] + 1);
+        T* srcbV = (top->format != AV_PIX_FMT_NV12 && top->format != AV_PIX_FMT_P010LE) ? (T*)bottom->data[2] : ((T*)bottom->data[1] + 1);
         T* dstY = (T*)dst->GetWritePtr(PLANAR_Y);
         T* dstU = (T*)dst->GetWritePtr(PLANAR_U);
         T* dstV = (T*)dst->GetWritePtr(PLANAR_V);
@@ -170,7 +170,7 @@ class AMTSource : public IClip, AMTObject {
 
         int widthUV = vi.width >> desc->log2_chroma_w;
         int heightUV = vi.height >> desc->log2_chroma_h;
-        if (top->format != AV_PIX_FMT_NV12) {
+        if (top->format != AV_PIX_FMT_NV12 && top->format != AV_PIX_FMT_P010LE) {
             Copy1<T>(dstU, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
             Copy1<T>(dstV, srctV, srcbV, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
         } else {
