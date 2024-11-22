@@ -176,7 +176,17 @@ void AMTSource::MakeVideoInfo(const VideoFormat& vfmt, const AudioFormat& afmt) 
 
 void AMTSource::UpdateVideoInfo(IScriptEnvironment* env) {
     // ビット深度は取得してないのでffmpegから取得する
-    vi.pixel_type = toAVSFormat(codecCtx()->pix_fmt, env);
+    const auto streamPixFmt = (AVPixelFormat)videoStream->codecpar->format;
+    const auto codecPixFmt = codecCtx()->pix_fmt;
+    const int streamBitDepth = av_pix_fmt_desc_get(streamPixFmt)->comp[0].depth;
+    const int codecBitDepth = av_pix_fmt_desc_get(codecPixFmt)->comp[0].depth;
+    if (streamBitDepth > 8 && codecBitDepth > 8 && streamBitDepth < codecBitDepth) {
+        // hwデコードの場合、10bitでもP010で返されることがある
+        // もとのビット深度を採用するため、streamPixFmtを使用する
+        vi.pixel_type = toAVSFormat(streamPixFmt, env);
+    } else {
+        vi.pixel_type = toAVSFormat(codecPixFmt, env);
+    }
 
 #if ENABLE_FFMPEG_FILTER
     if (bufferSinkCtx) {
@@ -205,12 +215,13 @@ void AMTSource::ResetDecoder(IScriptEnvironment* env) {
 
 PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironment* env) {
     PVideoFrame ret = env->NewVideoFrame(vi);
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get((AVPixelFormat)(top->format));
+    const auto srcFormat = (AVPixelFormat)(top->format);
+    const int srcBitDepth = (srcFormat == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(srcFormat)->comp[0].depth;
 
-    if (desc->comp[0].depth > 8) {
-        MergeField<uint16_t>(ret, top, bottom);
+    if (srcBitDepth > 8) {
+        MergeField<uint16_t>(ret, top, bottom, AVSFormatBitdepth(vi.pixel_type), srcBitDepth, env);
     } else {
-        MergeField<uint8_t>(ret, top, bottom);
+        MergeField<uint8_t>(ret, top, bottom, AVSFormatBitdepth(vi.pixel_type), srcBitDepth, env);
     }
 
     // フレームタイプ
@@ -270,6 +281,17 @@ void AMTSource::PutFrame(int n, const PVideoFrame& frame) {
         recentAccessed.pop_back();
         delete pdel;
     }
+}
+
+int AMTSource::AVSFormatBitdepth(const int avsformat) {
+    // ビット深度取得
+    switch (avsformat) {
+    case VideoInfo::CS_YUV420P12: return 12;
+    case VideoInfo::CS_YUV420P10: return 10;
+    case VideoInfo::CS_YV12:
+    default: return 8;
+    }
+    return 0;
 }
 
 int AMTSource::toAVSFormat(AVPixelFormat format, IScriptEnvironment* env) {
