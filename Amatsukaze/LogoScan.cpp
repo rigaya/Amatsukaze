@@ -282,7 +282,8 @@ float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
                 float avg;
                 float sum = pCalcCorrelation5x5(k, work, x, y, w, &avg);
                 // avg単色の場合の相関値が1になるように正規化
-                ScaleLimit s = scales[count * CLEN + (std::max(0, std::min(255, (int)avg)) >> CSHIFT)];
+                const int idx = std::max(0, std::min((int)CLEN, (int)(avg * CLEN / maxv)));
+                ScaleLimit s = scales[count * CLEN + idx];
                 // 1を超える部分は捨てる（ロゴによる相関ではない部分なので）
                 float normalized = std::max(-1.0f, std::min(1.0f, sum * s.scale));
                 // 相関が下限値以下の場合は一部元に戻す
