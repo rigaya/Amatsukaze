@@ -1536,6 +1536,7 @@ namespace Amatsukaze.Server
                         .Append("\"");
 
                     if (profile.EncoderType == EncoderType.SVTAV1
+                        && profile.ForceSAR
                         && profile.ForceSARWidth > 0 && profile.ForceSARHeight > 0)
                     {
                         sb.Append(" --sar ")
