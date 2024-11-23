@@ -1430,7 +1430,7 @@ namespace Amatsukaze.Server
 
             bool loadV2 = false;
             if (   streamFormat != VideoStreamFormat.MPEG2
-                || streamFormat != VideoStreamFormat.H264)
+                && streamFormat != VideoStreamFormat.H264)
             {
                 sb.Append(" --loadv2");
                 loadV2 = true;
