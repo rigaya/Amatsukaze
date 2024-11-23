@@ -386,7 +386,7 @@ class LogoAnalyzer : AMTObject {
             for (int i = 0; i < numFrames; i++) {
                 memScanData.resize(creator->getFrameSize(i));
                 creator->getFrame(i, memScanData.data());
-                const float maxv = (float)(1 << (creator->bitdepth() - 1));
+                const float maxv = (float)((1 << creator->bitdepth()) - 1);
                 // フレームをインタレ解除
                 DeintY(memDeint.get(), memScanData.data(), scanw, scanw, scanh);
                 // fade値ループ
