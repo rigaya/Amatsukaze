@@ -329,9 +329,10 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
 }
 
 tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
+    const bool is60fps = (int)(inputFormat.frameRateNum / (double)inputFormat.frameRateDenom + 0.5) >= 60;
     return StringFormat(_T("\"%s\"%s -v \"%s\" -o \"%s\" %s"),
         setting_.getChapterExePath(),
-        (inputFormat.format == VS_H265) ? _T("") : _T(""), // H.265の場合はシリアルモードにしないと異常終了する場合がある
+        (is60fps) ? _T(" -s 20") : _T(""), // デフォルトが30fpsのときに-s 10相当なので60fpsの場合は20にする
         pathToOS(avspath),
         pathToOS(setting_.getTmpChapterExePath(videoFileIndex)),
         setting_.getChapterExeOptions());
