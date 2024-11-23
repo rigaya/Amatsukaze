@@ -178,12 +178,13 @@ void AMTSource::UpdateVideoInfo(IScriptEnvironment* env) {
     // ビット深度は取得してないのでffmpegから取得する
     const auto streamPixFmt = (AVPixelFormat)videoStream->codecpar->format;
     const auto codecPixFmt = codecCtx()->pix_fmt;
-    const int streamBitDepth = av_pix_fmt_desc_get(streamPixFmt)->comp[0].depth;
-    const int codecBitDepth = av_pix_fmt_desc_get(codecPixFmt)->comp[0].depth;
+    const int streamBitDepth = (streamPixFmt == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(streamPixFmt)->comp[0].depth;
+    const int codecBitDepth = (codecPixFmt == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(codecPixFmt)->comp[0].depth;
     if (streamBitDepth > 8 && codecBitDepth > 8 && streamBitDepth < codecBitDepth) {
         // hwデコードの場合、10bitでもP010で返されることがある
         // もとのビット深度を採用するため、streamPixFmtを使用する
         vi.pixel_type = toAVSFormat(streamPixFmt, env);
+        convertPix = ConvertPixFuncs(streamBitDepth, codecBitDepth);
     } else {
         vi.pixel_type = toAVSFormat(codecPixFmt, env);
     }
@@ -533,23 +534,36 @@ AMTSource::AMTSource(AMTContext& ctx,
     const int threads,
     const char* filterdesc,
     bool outputQP,
-    IScriptEnvironment* env)
-    : AMTObject(ctx)
-    , frames(frames)
-    , decoderSetting(decoderSetting)
-    , decodeThreads(threads)
-    , audioFrames(audioFrames)
-    , filterdesc(filterdesc)
-    , outputQP(outputQP)
-    , inputCtx(srcpath)
-    , vi()
-    , waveFile(audiopath, _T("rb"))
+    IScriptEnvironment* env) :
+    AMTObject(ctx),
+    frames(frames),
+    audioFrames(audioFrames),
+    decoderSetting(decoderSetting),
+    filterdesc(filterdesc),
+    decodeThreads(threads),
+    audioSamplesPerFrame(0),
+    interlaced(false),
+    outputQP(outputQP),
+    inputCtx(srcpath),
+    codecCtx(),
 #if ENABLE_FFMPEG_FILTER
-    , bufferSrcCtx()
-    , bufferSinkCtx()
+    filterGraph(),
+    bufferSrcCtx(),
+    bufferSinkCtx(),
 #endif
-    , seekDistance(10)
-    , lastDecodeFrame(-1) {
+    videoStream(nullptr),
+    storage(),
+    frameCache(),
+    recentAccessed(),
+    failedMap(),
+    vi(),
+    mutex(),
+    waveFile(audiopath, _T("rb")),
+    seekDistance(10),
+    lastDecodeFrame(-1),
+    prevFrame(),
+    nonBQPTable(),
+    convertPix() {
 #if !ENABLE_FFMPEG_FILTER
     if (this->filterdesc.size()) {
         env->ThrowError("This AMTSouce build does not support FFmpeg filter option ...");

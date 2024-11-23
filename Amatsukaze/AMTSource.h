@@ -19,6 +19,7 @@
 #include <set>
 #include <deque>
 #include <unordered_map>
+#include "ConvertPix.h"
 #include "StreamReform.h"
 #include "ReaderWriterFFmpeg.h"
 
@@ -95,6 +96,8 @@ class AMTSource : public IClip, AMTObject {
     // 直前のnon B QPテーブル
     PVideoFrame nonBQPTable;
 
+    ConvertPixFuncs convertPix;
+
     const AVCodec* getHWAccelCodec(AVCodecID vcodecId);
 
     void MakeCodecContext(IScriptEnvironment* env);
@@ -109,38 +112,6 @@ class AMTSource : public IClip, AMTObject {
 
     void ResetDecoder(IScriptEnvironment* env);
 
-    template<int out_bit_depth, int in_bit_depth, int shift_offset>
-    int conv_bit_depth_lsft_() {
-        const int lsft = out_bit_depth - (in_bit_depth + shift_offset);
-        return lsft < 0 ? 0 : lsft;
-    }
-
-    template<int out_bit_depth, int in_bit_depth, int shift_offset>
-    int conv_bit_depth_rsft_() {
-        const int rsft = in_bit_depth + shift_offset - out_bit_depth;
-        return rsft < 0 ? 0 : rsft;
-    }
-
-    template<int out_bit_depth, int in_bit_depth, int shift_offset>
-    int conv_bit_depth_rsft_add_() {
-        const int rsft = conv_bit_depth_rsft_<out_bit_depth, in_bit_depth, shift_offset>();
-        return (rsft - 1 >= 0) ? 1 << (rsft - 1) : 0;
-    }
-
-    template<int out_bit_depth, int in_bit_depth, int shift_offset>
-    int conv_bit_depth_(int c) {
-        if (out_bit_depth > in_bit_depth + shift_offset) {
-            return c << conv_bit_depth_lsft_<out_bit_depth, in_bit_depth, shift_offset>();
-        } else if (out_bit_depth < in_bit_depth + shift_offset) {
-            const int x = (c + conv_bit_depth_rsft_add_<out_bit_depth, in_bit_depth, shift_offset>()) >> conv_bit_depth_rsft_<out_bit_depth, in_bit_depth, shift_offset>();
-            const int low = 0;
-            const int high = (1 << out_bit_depth) - 1;
-            return (((x) <= (high)) ? (((x) >= (low)) ? (x) : (low)) : (high));
-        } else {
-            return c;
-        }
-    }
-
     template <typename T>
     void Copy1(T* dst, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
         for (int y = 0; y < h; y += 2) {
@@ -150,20 +121,6 @@ class AMTSource : public IClip, AMTObject {
             const T* src1 = bottom + bpitch * (y + 1);
             memcpy(dst0, src0, sizeof(T) * w);
             memcpy(dst1, src1, sizeof(T) * w);
-        }
-    }
-
-    template <typename T, int dstdepth, int srcdepth>
-    void Convert1(T* dst, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
-        for (int y = 0; y < h; y += 2) {
-            T* dst0 = dst + dpitch * (y + 0);
-            T* dst1 = dst + dpitch * (y + 1);
-            const T* src0 = top + tpitch * (y + 0);
-            const T* src1 = bottom + bpitch * (y + 1);
-            for (int x = 0; x < w; x++) {
-                dst0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x]);
-                dst1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x]);
-            }
         }
     }
 
@@ -182,72 +139,6 @@ class AMTSource : public IClip, AMTObject {
                 dstU1[x] = src1[x * 2 + 0];
                 dstV1[x] = src1[x * 2 + 1];
             }
-        }
-    }
-#if 0
-    template <typename T, int dstdepth, int srcdepth>
-    void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
-        for (int y = 0; y < h; y += 2) {
-            T* dstU0 = dstU + dpitch * (y + 0);
-            T* dstU1 = dstU + dpitch * (y + 1);
-            T* dstV0 = dstV + dpitch * (y + 0);
-            T* dstV1 = dstV + dpitch * (y + 1);
-            const T* src0 = top + tpitch * (y + 0);
-            const T* src1 = bottom + bpitch * (y + 1);
-            for (int x = 0; x < w; x++) {
-                dstU0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x * 2 + 0]);
-                dstV0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x * 2 + 1]);
-                dstU1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x * 2 + 0]);
-                dstV1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x * 2 + 1]);
-            }
-        }
-    }
-#else
-    // なぜかこっちでないと自動ベクトル化されない
-    template <typename T, typename Tx2, int dstdepth, int srcdepth>
-    void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
-        for (int y = 0; y < h; y += 2) {
-            T* dstU0 = dstU + dpitch * (y + 0);
-            T* dstU1 = dstU + dpitch * (y + 1);
-            T* dstV0 = dstV + dpitch * (y + 0);
-            T* dstV1 = dstV + dpitch * (y + 1);
-            const Tx2* src0 = (const Tx2*)(top + tpitch * (y + 0));
-            const Tx2* src1 = (const Tx2*)(bottom + bpitch * (y + 1));
-            for (int x = 0; x < w; x++) {
-                dstU0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x] & ((T)-1));
-                dstV0[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src0[x] >> ((sizeof(Tx2) - sizeof(T)) * 8));
-            }
-            for (int x = 0; x < w; x++) {
-                dstU1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x] & ((T)-1));
-                dstV1[x] = conv_bit_depth_<dstdepth, srcdepth, 0>(src1[x] >> ((sizeof(Tx2) - sizeof(T)) * 8));
-            }
-        }
-    }
-#endif
-
-    template <typename T, int dstdepth, int srcdepth>
-    void MergeFieldConvert(
-        T* dstY, T* dstU, T* dstV,
-        T* srctY, T* srctU, T* srctV,
-        T* srcbY, T* srcbU, T* srcbV,
-        int width, int height,
-        int widthUV, int heightUV,
-        int dstPitchY, int dstPitchUV, int srctPitchY, int srctPitchUV, int srcbPitchY, int srcbPitchUV, bool nv12) {
-        Convert1<T, dstdepth, srcdepth>(dstY, srctY, srcbY, width, height, dstPitchY, srctPitchY, srcbPitchY);
-
-        if (nv12) {
-#if 0
-            Convert2<T, dstdepth, srcdepth>(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
-#else
-            if (sizeof(T) == 1) {
-                Convert2<T, uint16_t, dstdepth, srcdepth>(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
-            } else if (sizeof(T) == 2) {
-                Convert2<T, uint32_t, dstdepth, srcdepth>(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
-            }
-#endif
-        } else {
-            Convert1<T, dstdepth, srcdepth>(dstU, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
-            Convert1<T, dstdepth, srcdepth>(dstV, srctV, srcbV, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
         }
     }
 
@@ -277,11 +168,14 @@ class AMTSource : public IClip, AMTObject {
         const int heightUV = vi.height >> desc->log2_chroma_h;
 
         if (dstBitDepth != srcBitDepth) {
-            if (srcBitDepth == 16) {
-                switch (dstBitDepth) {
-                case 10: MergeFieldConvert<T, 10, 16>(dstY, dstU, dstV, srctY, srctU, srctV, srcbY, srcbU, srcbV, vi.width, vi.height, widthUV, heightUV, dstPitchY, dstPitchUV, srctPitchY, srctPitchUV, srcbPitchY, srcbPitchUV, nv12); break;
-                case 12: MergeFieldConvert<T, 12, 16>(dstY, dstU, dstV, srctY, srctU, srctV, srcbY, srcbU, srcbV, vi.width, vi.height, widthUV, heightUV, dstPitchY, dstPitchUV, srctPitchY, srctPitchUV, srcbPitchY, srcbPitchUV, nv12); break;
-                default: env->ThrowError("not supported conversion."); break;
+            if (srcBitDepth == 16 && convertPix.convert1) {
+                convertPix.convert1(dstY, srctY, srcbY, vi.width, vi.height, dstPitchY, srctPitchY, srcbPitchY);
+
+                if (nv12) {
+                    convertPix.convert2(dstU, dstV, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
+                } else {
+                    convertPix.convert1(dstU, srctU, srcbU, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
+                    convertPix.convert1(dstV, srctV, srcbV, widthUV, heightUV, dstPitchUV, srctPitchUV, srcbPitchUV);
                 }
             } else {
                 env->ThrowError("not supported conversion.");
