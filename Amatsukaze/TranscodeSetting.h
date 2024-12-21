@@ -124,7 +124,8 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     std::pair<int, int> timebase,
     const std::vector<tstring>& inSubs,
     const std::vector<tstring>& subsTitles,
-    const tstring& metapath);
+    const tstring& metapath,
+    const bool tsreplaceRemoveTypeD);
 
 tstring makeTimelineEditorArgs(
     const tstring& binpath,
@@ -199,6 +200,7 @@ struct Config {
     tstring nicoConvAssPath;
     tstring nicoConvChSidPath;
     ENUM_FORMAT format;
+    bool tsreplaceRemoveTypeD;
     bool useMKVWhenSubExist;
     bool splitSub;
     bool twoPass;
@@ -286,6 +288,8 @@ public:
     tstring getAudioEncoderOptions() const;
 
     ENUM_FORMAT getFormat() const;
+
+    bool getTsreplaceRemoveTypeD() const;
 
     bool getUseMKVWhenSubExist() const;
 

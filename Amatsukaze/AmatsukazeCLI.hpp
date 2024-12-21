@@ -52,11 +52,12 @@ static void printHelp(const tchar* bin) {
         "  -aeo|--audio-encoder-option <オプション> 音声エンコーダへ渡すオプション[]\n"
         "  -fmt|--format <フォーマット> 出力フォーマット[mp4]\n"
         "                      対応フォーマット: mp4,mkv,m2ts,ts\n"
-        "  --use-mkv-when-sub-exists 字幕がある場合にはmkv出力を強制する。\n"
+        "  --use-mkv-when-sub-exists 字幕がある場合にはmkv出力を強制する\n"
         "  -m|--muxer  <パス>  L-SMASHのmuxerまたはmkvmergeまたはtsMuxeRへのパス[muxer.exe]\n"
         "  -t|--timelineeditor  <パス>  timelineeditorへのパス（MP4でVFR出力する場合に必要）[timelineeditor.exe]\n"
         "  --mp4box <パス>     mp4boxへのパス（MP4で字幕処理する場合に必要）[mp4box.exe]\n"
         "  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
+        "  --tsreplace-remove-typed  tsreplace実行時に--remove-typedを指定する\n"
         "  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
         "  -pf|--postfilter <パス>  ポストフィルタAvisynthスクリプトへのパス[]\n"
         "  --mpeg2decoder <デコーダ>  MPEG2用デコーダ[default]\n"
@@ -196,6 +197,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.outPipe = INVALID_HANDLE_VALUE;
     conf.maxFadeLength = 16;
     conf.numEncodeBufferFrames = 16;
+    conf.tsreplaceRemoveTypeD = false;
     conf.useMKVWhenSubExist = false;
     bool nicojk = false;
 
@@ -289,6 +291,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             } else {
                 THROWF(ArgumentException, "--formatの指定が間違っています: %" PRITSTR "", arg);
             }
+        } else if (key == _T("--tsreplace-remove-typed")) {
+            conf.tsreplaceRemoveTypeD = true;
         } else if (key == _T("--use-mkv-when-sub-exists")) {
             conf.useMKVWhenSubExist = true;
         } else if (key == _T("--chapter")) {

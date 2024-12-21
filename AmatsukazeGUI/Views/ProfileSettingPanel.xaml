@@ -224,6 +224,21 @@
                                   ToolTip="字幕がある場合、字幕ファイルが別途できるのを避けるため、mkvで出力します。"/>
                         </StackPanel>
 
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.SelectedProfile.TsreplaceSelected}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <CheckBox Content="データ放送を削除する" VerticalAlignment="Center" Margin="5,5" 
+                                  IsChecked="{Binding Model.SelectedProfile.TsreplaceRemoveTypeD, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="データ放送を削除し、出力tsの軽量化を図ります"/>
+                        </StackPanel>
 
                     </DockPanel>
 
