@@ -1789,20 +1789,37 @@ namespace Amatsukaze.Models
                     RaisePropertyChanged("OutputMask");
                 }
                 RaisePropertyChanged("OutputOptionEnabled");
+                RaisePropertyChanged("TsreplaceSelected");
             }
         }
         #endregion
 
         public bool OutputOptionEnabled { get { return Data.OutputFormat != FormatType.TSREPLACE; } }
+        public bool TsreplaceSelected { get { return Data.OutputFormat == FormatType.TSREPLACE; } }
 
         #region UseMKVWhenSubExists変更通知プロパティ
-        public bool UseMKVWhenSubExists {
+        public bool UseMKVWhenSubExists
+        {
             get { return Data.UseMKVWhenSubExists; }
             set
             {
                 if (Data.UseMKVWhenSubExists == value)
                     return;
                 Data.UseMKVWhenSubExists = value;
+                UpdateWarningText();
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TsreplaceRemoveTypeD変更通知プロパティ
+        public bool TsreplaceRemoveTypeD {
+            get { return Data.TsreplaceRemoveTypeD; }
+            set
+            {
+                if (Data.TsreplaceRemoveTypeD == value)
+                    return;
+                Data.TsreplaceRemoveTypeD = value;
                 UpdateWarningText();
                 RaisePropertyChanged();
             }

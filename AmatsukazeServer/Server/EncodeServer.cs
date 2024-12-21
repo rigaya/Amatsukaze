@@ -1589,6 +1589,10 @@ namespace Amatsukaze.Server
                             .Append(setting.MKVMergePath)
                             .Append("\"");
                     }
+                    if (profile.OutputFormat == FormatType.TSREPLACE && profile.TsreplaceRemoveTypeD)
+                    {
+                        sb.Append(" --tsreplace-remove-typed");
+                    }
 
                     if (bitrateCM != 1)
                     {

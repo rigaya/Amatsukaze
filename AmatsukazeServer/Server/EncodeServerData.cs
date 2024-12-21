@@ -244,6 +244,9 @@ namespace Amatsukaze.Server
         public bool UseMKVWhenSubExists { get; set; }
 
         [DataMember]
+        public bool TsreplaceRemoveTypeD { get; set; }
+
+        [DataMember]
         public bool TSReplaceVideo { get; set; }
 
         [DataMember]

@@ -288,7 +288,8 @@ bool sarValid(const std::pair<int, int>& sar) {
     std::pair<int, int> timebase,
     const std::vector<tstring>& inSubs,
     const std::vector<tstring>& subsTitles,
-    const tstring& metapath) {
+    const tstring& metapath,
+    const bool tsreplaceRemoveTypeD) {
     std::vector<std::pair<tstring, bool>> ret;
 
     StringBuilderT sb;
@@ -455,6 +456,9 @@ bool sarValid(const std::pair<int, int>& sar) {
         sb.append(_T(" -i \"%s\""), srcTSFilePath);
         sb.append(_T(" -r \"%s\""), tmppath);
         sb.append(_T(" --replace-format mp4"));
+        if (tsreplaceRemoveTypeD) {
+            sb.append(_T(" --remove-typed"));
+        }
         sb.append(_T(" -o \"%s\""), outpath);
         ret.push_back(std::make_pair(sb.str(), true));
         sb.clear();
@@ -645,6 +649,10 @@ tstring ConfigWrapper::getAudioEncoderOptions() const {
 
 ENUM_FORMAT ConfigWrapper::getFormat() const {
     return conf.format;
+}
+
+bool ConfigWrapper::getTsreplaceRemoveTypeD() const {
+    return conf.tsreplaceRemoveTypeD;
 }
 
 bool ConfigWrapper::getUseMKVWhenSubExist() const {
