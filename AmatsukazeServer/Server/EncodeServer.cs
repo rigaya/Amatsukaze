@@ -12,6 +12,7 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using System.Windows;
 
 namespace Amatsukaze.Server
 {
@@ -74,6 +75,7 @@ namespace Amatsukaze.Server
         private List<string> AddQueueBatFiles = new List<string>();
         private List<string> PreBatFiles = new List<string>();
         private List<string> PostBatFiles = new List<string>();
+        private List<string> PreEncodeBatFiles = new List<string>();
         private DRCSManager drcsManager;
 
         private UIState UIState_ = new UIState() { OutputPathHistory = new List<string>() };
@@ -1423,7 +1425,7 @@ namespace Amatsukaze.Server
             string src, string srcOrg, string dst, string json,
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
-            bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs,
+            bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string batDir,
             string inHandle, string outHandle, int pid)
         {
             StringBuilder sb = new StringBuilder();
@@ -1799,6 +1801,10 @@ namespace Amatsukaze.Server
                 if (string.IsNullOrEmpty(trimavs) == false)
                 {
                     sb.Append(" --trimavs \"").Append(trimavs).Append("\"");
+                }
+                if (string.IsNullOrEmpty(profile.PreEncodeBatchFile) == false)
+                {
+                    sb.Append(" --pre-enc-bat \"").Append(batDir + "\\" + profile.PreEncodeBatchFile).Append("\"");
                 }
 
                 if (logofiles != null)
@@ -2359,11 +2365,14 @@ namespace Amatsukaze.Server
                                 .Where(f => f.StartsWith("実行前_")).ToList();
                             PostBatFiles = files
                                 .Where(f => f.StartsWith("実行後_")).ToList();
+                            PreEncodeBatFiles = files
+                                .Where(f => f.StartsWith("エンコード前_")).ToList();
 
                             await Client.OnCommonData(new CommonData()
                             {
                                 AddQueueBatFiles = AddQueueBatFiles,
                                 PreBatFiles = PreBatFiles,
+                                PreEncodeBatFiles = PreEncodeBatFiles,
                                 PostBatFiles = PostBatFiles
                             });
                         }

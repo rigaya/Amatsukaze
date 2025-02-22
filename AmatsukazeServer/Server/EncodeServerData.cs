@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -338,6 +338,8 @@ namespace Amatsukaze.Server
 
         [DataMember]
         public string PreBatchFile { get; set; }
+        [DataMember]
+        public string PreEncodeBatchFile { get; set; }
         [DataMember]
         public string PostBatchFile { get; set; }
 
@@ -1428,6 +1430,8 @@ namespace Amatsukaze.Server
         public List<string> AddQueueBatFiles { get; set; }
         [DataMember]
         public List<string> PreBatFiles { get; set; }
+        [DataMember]
+        public List<string> PreEncodeBatFiles { get; set; }
         [DataMember]
         public List<string> PostBatFiles { get; set; }
         [DataMember]

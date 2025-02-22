@@ -902,7 +902,7 @@ namespace Amatsukaze.Server
                     server.AppData_.setting,
                     isMp4,
                     srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
-                    item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs,
+                    item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, server.GetBatDirectoryPath(),
                     pipes?.InHandle, pipes?.OutHandle, Id);
                 string exename = server.AppData_.setting.AmatsukazePath;
 

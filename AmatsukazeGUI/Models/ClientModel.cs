@@ -313,6 +313,22 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region PreEncodeBatFiles変更通知プロパティ
+        private List<string> _PreEncodeBatFiles;
+
+        public List<string> PreEncodeBatFiles
+        {
+            get { return _PreEncodeBatFiles; }
+            set
+            { 
+                if (_PreEncodeBatFiles == value)
+                    return;
+                _PreEncodeBatFiles = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region PostBatFiles変更通知プロパティ
         private List<string> _PostBatFiles;
 
@@ -1263,6 +1279,10 @@ namespace Amatsukaze.Models
             {
                 PreBatFiles = new string[] { "なし" }.Concat(data.PreBatFiles).ToList();
             }
+            if (data.PreEncodeBatFiles != null)
+            {
+                PreEncodeBatFiles = new string[] { "なし" }.Concat(data.PreEncodeBatFiles).ToList();
+            }
             if (data.PostBatFiles != null)
             {
                 PostBatFiles = new string[] { "なし" }.Concat(data.PostBatFiles).ToList();
@@ -1533,6 +1553,8 @@ namespace Amatsukaze.Models
                         SelectedProfile = profile;
                     }
                 }
+
+                profile.PreEncodeBatchFile = data.Profile.PreEncodeBatchFile;
             }
             else
             {

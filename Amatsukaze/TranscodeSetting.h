@@ -199,6 +199,7 @@ struct Config {
     tstring mkvmergePath;
     tstring nicoConvAssPath;
     tstring nicoConvChSidPath;
+    tstring preEncBatchFile;
     ENUM_FORMAT format;
     bool tsreplaceRemoveTypeD;
     bool useMKVWhenSubExist;
@@ -286,6 +287,8 @@ public:
     tstring getAudioEncoderPath() const;
 
     tstring getAudioEncoderOptions() const;
+
+    tstring getPreEncBatchFile() const;
 
     ENUM_FORMAT getFormat() const;
 

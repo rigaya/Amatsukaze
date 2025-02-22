@@ -1913,6 +1913,21 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region PreEncodeBatchFile変更通知プロパティ
+        public string PreEncodeBatchFile
+        {
+            get { return string.IsNullOrEmpty(Data.PreEncodeBatchFile) ? "なし" : Data.PreEncodeBatchFile; }
+            set
+            {
+                string val = (value == "なし") ? "" : value;
+                if (Data.PreEncodeBatchFile == value)
+                    return;
+                Data.PreEncodeBatchFile = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region PostBatchFile変更通知プロパティ
         public string PostBatchFile {
             get { return string.IsNullOrEmpty(Data.PostBatchFile) ? "なし" : Data.PostBatchFile; }

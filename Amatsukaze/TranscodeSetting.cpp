@@ -647,6 +647,10 @@ tstring ConfigWrapper::getAudioEncoderOptions() const {
     return conf.audioEncoderOptions;
 }
 
+tstring ConfigWrapper::getPreEncBatchFile() const {
+    return conf.preEncBatchFile;
+}
+
 ENUM_FORMAT ConfigWrapper::getFormat() const {
     return conf.format;
 }

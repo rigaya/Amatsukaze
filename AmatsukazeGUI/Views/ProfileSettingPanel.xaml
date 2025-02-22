@@ -257,6 +257,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="" Margin="0,3"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="実行前バッチ" Margin="0,6"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="エンコード前バッチ" Margin="0,6"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="実行後バッチ" Margin="0,6"/>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0">
@@ -276,6 +277,9 @@
                     <ComboBox Height="22" Margin="0,3" ToolTip="エンコード実行直前に実行するバッチファイル"
                               ItemsSource="{Binding Model.PreBatFiles}"
                               SelectedItem="{Binding Model.SelectedProfile.PreBatchFile, Mode=TwoWay}" />
+                    <ComboBox Height="22" Margin="0,3" ToolTip="エンコード開始直前に実行するバッチファイル"
+                              ItemsSource="{Binding Model.PreEncodeBatFiles}"
+                              SelectedItem="{Binding Model.SelectedProfile.PreEncodeBatchFile, Mode=TwoWay}" />
                     <ComboBox Height="22" Margin="0,3" ToolTip="エンコード実行後に実行するバッチファイル"
                               ItemsSource="{Binding Model.PostBatFiles}"
                               SelectedItem="{Binding Model.SelectedProfile.PostBatchFile, Mode=TwoWay}" />

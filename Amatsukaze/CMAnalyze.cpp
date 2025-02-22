@@ -384,10 +384,6 @@ void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     if (exitCode != 0) {
         THROWF(FormatException, "join_logo_scp.exeがエラーコード(%d)を返しました", exitCode);
     }
-    // join_logo_scp向けの環境変数を解除
-    SetEnvironmentVariable(_T("CLI_IN_PATH"), NULL);
-    SetEnvironmentVariable(_T("SERVICE_ID"), NULL);
-    SetEnvironmentVariable(_T("CLI_OUT_PATH"), NULL);
 }
 
 void CMAnalyze::readTrimAVS(int videoFileIndex, int numFrames) {

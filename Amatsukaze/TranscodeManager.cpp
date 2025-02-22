@@ -321,6 +321,116 @@ void AMTSplitter::printInteraceCount() {
     ret = str_replace(ret, _T("@AMT_TEMP_ASS_NICOJK_1080T@"), _T("\"") + setting.getTmpNicoJKASSPath(key, NICOJK_1080T) + _T("\""));
     return ret;
 }
+
+void AddEnvironmentVariable(std::wstring& envBlock, const std::wstring& name, const std::wstring& value) {
+    envBlock += name;
+    envBlock += L"=";
+    envBlock += value;
+    envBlock += L'\0';
+}
+
+tstring GetDirectoryName(const tstring& path) {
+    size_t lastSeparator = path.find_last_of(_T("/\\"));
+    if (lastSeparator == tstring::npos) {
+        return _T("");  // ディレクトリ区切りが見つからない場合は空文字列を返す
+    }
+    return path.substr(0, lastSeparator);
+}
+
+/* static */ int executeBatchFile(
+    const tstring& batchPath,
+    const VideoFormat& fmt,
+    const ConfigWrapper& setting,
+    const EncodeFileKey key,
+    const int serviceID) {
+    if (batchPath.empty()) {
+        return 0;
+    }
+    
+    // 一時バッチファイルのパスを生成
+    tstring tempBatchPath = setting.getEncVideoFilePath(key) + _T(".bat");
+    
+    try {
+        // バッチファイルをコピー
+        if (CopyFile(batchPath.c_str(), tempBatchPath.c_str(), FALSE) == 0) {
+            return -1;
+        }
+
+        const auto outPath = setting.getOutFileBaseWithoutPrefix() + _T(".") + setting.getOutputExtention(setting.getFormat());
+
+        SetTemporaryEnvironmentVariable tmpvar;
+        tmpvar.set(_T("CLI_IN_PATH"), setting.getSrcFilePath().c_str());
+        tmpvar.set(_T("TS_IN_PATH"), setting.getSrcFileOriginalPath().c_str());
+        tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceID).c_str());
+        tmpvar.set(_T("CLI_OUT_PATH"), outPath);
+        tmpvar.set(_T("TS_IN_DIR"), GetDirectoryName(setting.getSrcFileOriginalPath().c_str()));
+        tmpvar.set(_T("CLI_OUT_DIR"), GetDirectoryName(outPath));
+        tmpvar.set(_T("OUT_DIR"), GetDirectoryName(outPath));
+        tmpvar.set(_T("IMAGE_WIDTH"), StringFormat(_T("%d"), fmt.width));
+        tmpvar.set(_T("IMAGE_HEIGHT"), StringFormat(_T("%d"), fmt.height));
+        tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceID));
+        tmpvar.set(_T("AMT_ENCODER"), to_tstring(encoderToString(setting.getEncoder())));
+        tmpvar.set(_T("AMT_AUDIO_ENCODER"), to_tstring(audioEncoderToString(setting.getAudioEncoder())));
+        tmpvar.set(_T("AMT_TEMP_DIR"), setting.getTmpDir());
+        tmpvar.set(_T("AMT_TEMP_AVS"), setting.getAvsTmpPath(key));
+        tmpvar.set(_T("AMT_TEMP_AVS_TC"), setting.getAvsTimecodePath(key));
+        tmpvar.set(_T("AMT_TEMP_AVS_DURATION"), setting.getAvsDurationPath(key));
+        tmpvar.set(_T("AMT_TEMP_AFS_TC"), setting.getAfsTimecodePath(key));
+        tmpvar.set(_T("AMT_TEMP_VIDEO"), setting.getEncVideoFilePath(key));
+        tmpvar.set(_T("AMT_TEMP_AUDIO"), setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()));
+        tmpvar.set(_T("AMT_TEMP_AUDIO_0"), setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()));
+        tmpvar.set(_T("AMT_TEMP_AUDIO_1"), setting.getIntAudioFilePath(key, 1, setting.getAudioEncoder()));
+        tmpvar.set(_T("AMT_TEMP_CHAPTER"), setting.getTmpChapterPath(key));
+        tmpvar.set(_T("AMT_TEMP_TIMECODE"), setting.getAvsTimecodePath(key));
+        tmpvar.set(_T("AMT_TEMP_ASS"), setting.getTmpASSFilePath(key, 0));
+        tmpvar.set(_T("AMT_TEMP_ASS_0"), setting.getTmpASSFilePath(key, 0));
+        tmpvar.set(_T("AMT_TEMP_ASS_1"), setting.getTmpASSFilePath(key, 1));
+        tmpvar.set(_T("AMT_TEMP_SRT"), setting.getTmpSRTFilePath(key, 0));
+        tmpvar.set(_T("AMT_TEMP_SRT_0"), setting.getTmpSRTFilePath(key, 0));
+        tmpvar.set(_T("AMT_TEMP_SRT_1"), setting.getTmpSRTFilePath(key, 1));
+        tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_720S"), setting.getTmpNicoJKASSPath(key, NICOJK_720S));
+        tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_720T"), setting.getTmpNicoJKASSPath(key, NICOJK_720T));
+        tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_1080S"), setting.getTmpNicoJKASSPath(key, NICOJK_1080S));
+        tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_1080T"), setting.getTmpNicoJKASSPath(key, NICOJK_1080T));
+        
+        // バッチファイルを実行
+        STARTUPINFO si = { sizeof(STARTUPINFO) };
+        PROCESS_INFORMATION pi;
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        
+        if (!CreateProcess(
+            NULL,
+            (LPTSTR)tempBatchPath.c_str(),
+            NULL,
+            NULL,
+            FALSE,
+            CREATE_NO_WINDOW,
+            NULL,
+            setting.getTmpDir().c_str(),
+            &si,
+            &pi)) {
+            return -1;
+        }
+        
+        // プロセスの終了を待機
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        
+        // 終了コードを取得
+        DWORD exitCode;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        
+        // ハンドルを閉じる
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        
+        return (int)exitCode;
+        
+    } catch (...) {
+        return -1;
+    }
+}
+
 EncoderArgumentGenerator::EncoderArgumentGenerator(
     const ConfigWrapper& setting,
     StreamReformInfo& reformInfo)
@@ -670,6 +780,14 @@ void DoBadThing() {
 
         AMTFilterSource filterSource(ctx, setting, reformInfo,
             cma->getZones(), cma->getLogoPath(), key, rm);
+
+        if (!setting.getPreEncBatchFile().empty()) {
+            ctx.infoF("[エンコード前バッチファイル] %d/%d", i + 1, (int)keys.size());
+            ctx.infoF("%s", setting.getPreEncBatchFile().c_str());
+            if (executeBatchFile(setting.getPreEncBatchFile(), filterSource.getFormat(), setting, key, serviceId)) {
+                THROW(RuntimeException, "エンコード前バッチファイルの実行に失敗しました");
+            }
+        }
 
         try {
             PClip filterClip = filterSource.getClip();
