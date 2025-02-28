@@ -397,7 +397,7 @@ tstring GetDirectoryName(const tstring& path) {
         STARTUPINFO si = { sizeof(STARTUPINFO) };
         PROCESS_INFORMATION pi;
         si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_HIDE;
+        si.wShowWindow = SW_MINIMIZE;
         
         if (!CreateProcess(
             NULL,
@@ -405,7 +405,7 @@ tstring GetDirectoryName(const tstring& path) {
             NULL,
             NULL,
             FALSE,
-            CREATE_NO_WINDOW,
+            CREATE_NEW_CONSOLE,
             NULL,
             setting.getTmpDir().c_str(),
             &si,
