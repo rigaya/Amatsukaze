@@ -1920,9 +1920,9 @@ namespace Amatsukaze.Models
             set
             {
                 string val = (value == "なし") ? "" : value;
-                if (Data.PreEncodeBatchFile == value)
+                if (Data.PreEncodeBatchFile == val)
                     return;
-                Data.PreEncodeBatchFile = value;
+                Data.PreEncodeBatchFile = val;
                 RaisePropertyChanged();
             }
         }
@@ -2393,6 +2393,7 @@ namespace Amatsukaze.Models
             text.KeyValue("ジャンルごとにフォルダ分け", Data.EnableGunreFolder);
 
             text.KeyValue("実行前バッチ", Data.PreBatchFile ?? "なし");
+            text.KeyValue("エンコ前バッチ", Data.PreEncodeBatchFile ?? "なし");
             text.KeyValue("実行後バッチ", Data.PostBatchFile ?? "なし");
 
             if (Data.FilterOption == Server.FilterOption.None)
