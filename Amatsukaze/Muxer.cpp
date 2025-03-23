@@ -36,8 +36,7 @@ AMTMuxder::AMTMuxder(
     const StreamReformInfo& reformInfo)
     : AMTObject(ctx)
     , setting_(setting)
-    , reformInfo_(reformInfo)
-    , audioCache_(ctx, setting.getAudioFilePath(), reformInfo.getAudioFileOffsets(), 12, 4) {}
+    , reformInfo_(reformInfo) {}
 
 void AMTMuxder::mux(EncodeFileKey key,
     const EncoderOptionInfo& eoInfo, // エンコーダオプション情報
@@ -84,32 +83,17 @@ void AMTMuxder::mux(EncodeFileKey key,
     if (setting_.isEncodeAudio()) {
         audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
     } else if (setting_.getFormat() != FORMAT_TSREPLACE) { // tsreaplceの場合は音声ファイルを作らない
-        for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); ++asrc) {
+        for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); asrc++) {
             const std::vector<int>& frameList = fileIn.audioFrames[asrc];
             if (frameList.size() > 0) {
                 bool isDualMono = (fmt.audioFormat[asrc].channels == AUDIO_2LANG);
                 if (!setting_.isEncodeAudio() && isDualMono) {
-                    // デュアルモノは2つのAACに分離
-                    ctx.infoF("音声%d-%dはデュアルモノなので2つのAACファイルに分離します", fileIn.outKey.format, asrc);
-                    SpDualMonoSplitter splitter(ctx);
                     tstring filepath0 = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
                     tstring filepath1 = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
-                    splitter.open(0, filepath0);
-                    splitter.open(1, filepath1);
-                    for (int frameIndex : frameList) {
-                        splitter.inputPacket(audioCache_[frameIndex]);
-                    }
                     audioFiles.push_back(filepath0);
                     audioFiles.push_back(filepath1);
                 } else {
-                    if (isDualMono) {
-                        ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
-                    }
                     tstring filepath = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
-                    File file(filepath, _T("wb"));
-                    for (int frameIndex : frameList) {
-                        file.write(audioCache_[frameIndex]);
-                    }
                     audioFiles.push_back(filepath);
                 }
             }
@@ -239,11 +223,11 @@ void AMTMuxder::mux(EncodeFileKey key,
     File outfile(outPath, _T("rb"));
     fileOut.fileSize = outfile.size();
 }
-AMTMuxder::SpDualMonoSplitter::SpDualMonoSplitter(AMTContext& ctx) : DualMonoSplitter(ctx) {}
-void AMTMuxder::SpDualMonoSplitter::open(int index, const tstring& filename) {
+SpDualMonoSplitter::SpDualMonoSplitter(AMTContext& ctx) : DualMonoSplitter(ctx) {}
+void SpDualMonoSplitter::open(int index, const tstring& filename) {
     file[index] = std::unique_ptr<File>(new File(filename, _T("wb")));
 }
-/* virtual */ void AMTMuxder::SpDualMonoSplitter::OnOutFrame(int index, MemoryChunk mc) {
+/* virtual */ void SpDualMonoSplitter::OnOutFrame(int index, MemoryChunk mc) {
     file[index]->write(mc);
 }
 AMTSimpleMuxder::AMTSimpleMuxder(

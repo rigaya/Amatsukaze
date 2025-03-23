@@ -12,7 +12,6 @@
 #include "StreamUtils.h"
 #include "TranscodeSetting.h"
 #include "StreamReform.h"
-#include "PacketCache.h"
 #include "EncoderOptionParser.h"
 #include "AdtsParser.h"
 #include "ProcessThread.h"
@@ -29,6 +28,14 @@ struct EncodeFileOutput {
 
 ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting);
 
+class SpDualMonoSplitter : public DualMonoSplitter {
+    std::unique_ptr<File> file[2];
+public:
+    SpDualMonoSplitter(AMTContext& ctx);
+    void open(int index, const tstring& filename);
+    virtual void OnOutFrame(int index, MemoryChunk mc);
+};
+
 class AMTMuxder : public AMTObject {
 public:
     AMTMuxder(
@@ -39,22 +46,11 @@ public:
     void mux(EncodeFileKey key,
         const EncoderOptionInfo& eoInfo, // エンコーダオプション情報
         bool nicoOK,
-        EncodeFileOutput& fileOut) // 出力情報
-;
+        EncodeFileOutput& fileOut); // 出力情報
 
 private:
-    class SpDualMonoSplitter : public DualMonoSplitter {
-        std::unique_ptr<File> file[2];
-    public:
-        SpDualMonoSplitter(AMTContext& ctx);
-        void open(int index, const tstring& filename);
-        virtual void OnOutFrame(int index, MemoryChunk mc);
-    };
-
     const ConfigWrapper& setting_;
     const StreamReformInfo& reformInfo_;
-
-    PacketCache audioCache_;
 };
 
 class AMTSimpleMuxder : public AMTObject {

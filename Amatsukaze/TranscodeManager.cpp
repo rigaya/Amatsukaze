@@ -9,6 +9,8 @@
 #include "TranscodeManager.h"
 #include "rgy_util.h"
 #include "rgy_thread_affinity.h"
+#include "AdtsParser.h"
+#include "PacketCache.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
@@ -755,7 +757,7 @@ void DoBadThing() {
 
     if (setting.isEncodeAudio()) {
         ctx.info("[音声エンコード]");
-        for (int i = 0; i < (int)keys.size(); ++i) {
+        for (int i = 0; i < (int)keys.size(); i++) {
             auto key = keys[i];
             auto outpath = setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder());
             auto args = makeAudioEncoderArgs(
@@ -767,6 +769,41 @@ void DoBadThing() {
             auto format = reformInfo.getFormat(key);
             auto audioFrames = reformInfo.getWaveInput(reformInfo.getEncodeFile(key).audioFrames[0]);
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
+        }
+    } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreaplceの場合は音声ファイルを作らない
+        ctx.info("[音声出力]");
+        PacketCache audioCache(ctx, setting.getAudioFilePath(), reformInfo.getAudioFileOffsets(), 12, 4);
+        for (int i = 0; i < (int)keys.size(); i++) {
+            const auto key = keys[i];
+            const auto& fileIn = reformInfo.getEncodeFile(key);
+            const auto fmt = reformInfo.getFormat(key);
+            for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); asrc++) {
+                const std::vector<int>& frameList = fileIn.audioFrames[asrc];
+                if (frameList.size() > 0) {
+                    const bool isDualMono = (fmt.audioFormat[asrc].channels == AUDIO_2LANG);
+                    if (!setting.isEncodeAudio() && isDualMono) {
+                        // デュアルモノは2つのAACに分離
+                        ctx.infoF("音声%d-%dはデュアルモノなので2つのAACファイルに分離します", fileIn.outKey.format, asrc);
+                        SpDualMonoSplitter splitter(ctx);
+                        const tstring filepath0 = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
+                        const tstring filepath1 = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
+                        splitter.open(0, filepath0);
+                        splitter.open(1, filepath1);
+                        for (int frameIndex : frameList) {
+                            splitter.inputPacket(audioCache[frameIndex]);
+                        }
+                    } else {
+                        if (isDualMono) {
+                            ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
+                        }
+                        const tstring filepath = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
+                        File file(filepath, _T("wb"));
+                        for (int frameIndex : frameList) {
+                            file.write(audioCache[frameIndex]);
+                        }
+                    }
+                }
+            }
         }
     }
 
