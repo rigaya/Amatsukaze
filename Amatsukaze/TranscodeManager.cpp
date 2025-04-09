@@ -770,7 +770,7 @@ void DoBadThing() {
             auto audioFrames = reformInfo.getWaveInput(reformInfo.getEncodeFile(key).audioFrames[0]);
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
         }
-    } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreaplceの場合は音声ファイルを作らない
+    } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreplaceの場合は音声ファイルを作らない
         ctx.info("[音声出力]");
         PacketCache audioCache(ctx, setting.getAudioFilePath(), reformInfo.getAudioFileOffsets(), 12, 4);
         for (int i = 0; i < (int)keys.size(); i++) {
