@@ -22,15 +22,21 @@ int _tmain(int argc, const TCHAR* argv[]) {
     }
 
     static const wchar_t* dllnames[] = { L"Amatsukaze.dll", L"Amatsukaze2.dll" };
-#else
-    static const TCHAR* dllnames[] = { _T("libAmatsukaze.so") };
-#endif
     auto hModule = RGY_LOAD_LIBRARY(dllnames[loadTarget]);
+#else
+    static const TCHAR* dllnames[] = { _T("./libAmatsukaze.so"), _T("../lib/libAmatsukaze.so"), _T("libAmatsukaze.so") };
+    void* hModule = NULL;
+    for (int i = 0; i < _countof(dllnames); i++) {
+        hModule = RGY_LOAD_LIBRARY(dllnames[i]);
+        if (hModule != NULL) {
+            break;
+        }
+    }
+#endif
     if (hModule == NULL) {
         std::wcerr << L"Failed to load " << dllnames[loadTarget] << std::endl;
         return -1;
     }
-
     AmatsukazeCLIFunc AmatsukazeCLI = (AmatsukazeCLIFunc)RGY_GET_PROC_ADDRESS(hModule, "AmatsukazeCLI");
     if (AmatsukazeCLI == NULL) {
         std::wcerr << L"Failed to find AmatsukazeCLI function" << std::endl;
