@@ -63,6 +63,36 @@ bool ResourceAllocation::IsFailed() const {
     return gpuIndex == -1;
 }
 
+ResourceManger::ResourceManger(AMTContext& ctx, pipe_handle_t inPipe, pipe_handle_t outPipe)
+        : AMTObject(ctx)
+#if defined(_WIN32) || defined(_WIN64)
+        , inPipe(inPipe)
+        , outPipe(outPipe)
+#else
+        , inPipe((int)(intptr_t)inPipe)
+        , outPipe((int)(intptr_t)outPipe)
+#endif
+{ };
+
+
+ResourceManger::~ResourceManger() {
+#if defined(_WIN32) || defined(_WIN64)
+    if (inPipe != INVALID_HANDLE_VALUE) CloseHandle(inPipe);
+    if (outPipe != INVALID_HANDLE_VALUE) CloseHandle(outPipe);
+#else
+    if (inPipe >= 0) close(inPipe);
+    if (outPipe >= 0) close(outPipe);
+#endif
+}
+
+bool ResourceManger::isValid() const {
+#if defined(_WIN32) || defined(_WIN64)
+    return inPipe != INVALID_HANDLE_VALUE && outPipe != INVALID_HANDLE_VALUE;
+#else
+    return inPipe >= 0 && outPipe >= 0;
+#endif
+}
+
 void ResourceManger::write(MemoryChunk mc) const {
 #if defined(_WIN32) || defined(_WIN64)
     DWORD bytesWritten = 0;

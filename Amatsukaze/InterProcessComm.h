@@ -51,38 +51,11 @@ private:
     pipe_handle_t outPipe;
 
 public:
-    ResourceManger(AMTContext& ctx, pipe_handle_t inPipe, pipe_handle_t outPipe)
-        : AMTObject(ctx)
-#if defined(_WIN32) || defined(_WIN64)
-        , inPipe(inPipe)
-        , outPipe(outPipe)
-#else
-        , inPipe((int)(intptr_t)inPipe)
-        , outPipe((int)(intptr_t)outPipe)
-#endif
-    {
-        if (!isValid()) {
-            THROW(RuntimeException, "invalid pipe handle");
-        }
-    }
+    ResourceManger(AMTContext& ctx, pipe_handle_t inPipe, pipe_handle_t outPipe);
 
-    ~ResourceManger() {
-#if defined(_WIN32) || defined(_WIN64)
-        if (inPipe != INVALID_HANDLE_VALUE) CloseHandle(inPipe);
-        if (outPipe != INVALID_HANDLE_VALUE) CloseHandle(outPipe);
-#else
-        if (inPipe >= 0) close(inPipe);
-        if (outPipe >= 0) close(outPipe);
-#endif
-    }
+    ~ResourceManger();
 
-    bool isValid() const {
-#if defined(_WIN32) || defined(_WIN64)
-        return inPipe != INVALID_HANDLE_VALUE && outPipe != INVALID_HANDLE_VALUE;
-#else
-        return inPipe >= 0 && outPipe >= 0;
-#endif
-    }
+    bool isValid() const;
 
     void write(MemoryChunk mc) const;
     void read(MemoryChunk mc) const;
