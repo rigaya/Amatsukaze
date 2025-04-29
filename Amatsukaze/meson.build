@@ -6,7 +6,6 @@ amatsukaze_sources = [
   'AmatsukazeTestImpl.cpp',
   'AudioEncoder.cpp',
   'CMAnalyze.cpp',
-  'CaptionData.cpp',
   'CaptionFormatter.cpp',
   'ComputeKernel.cpp',
   'ConvertPix.cpp',
@@ -35,6 +34,11 @@ amatsukaze_sources = [
   'TsInfo.cpp',
   'TsSplitter.cpp',
   'WaveWriter.cpp',
+]
+
+# cp932文字コードが必要なファイル
+cp932_sources = [
+  'CaptionData.cpp',
 ]
 
 # AVX/AVX2用ファイル
@@ -136,7 +140,16 @@ aribstring_lib = static_library('aribstring',
   'AribString.cpp',
   include_directories : amatsukaze_include_dirs,
   dependencies : amatsukaze_deps,
-  cpp_args : amatsukaze_cpp_args + ['-D_UNICODE'],
+  cpp_args : amatsukaze_cpp_args + ['-D_UNICODE'] + (meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang' ? ['-fexec-charset=cp932'] : []),
+  install : false,
+)
+
+# cp932文字コードが必要なファイル用のライブラリ
+cp932_lib = static_library('cp932_files',
+  cp932_sources,
+  include_directories : amatsukaze_include_dirs,
+  dependencies : amatsukaze_deps,
+  cpp_args : amatsukaze_cpp_args + (meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang' ? ['-fexec-charset=cp932'] : []),
   install : false,
 )
 
@@ -146,8 +159,8 @@ amatsukaze_lib = shared_library('Amatsukaze',
   dependencies : amatsukaze_deps,
   cpp_args : amatsukaze_cpp_args,
   link_args : amatsukaze_link_args,
-  link_with : [avx_lib, avx2_lib, aribstring_lib],
-  install : false,
+  link_with : [avx_lib, avx2_lib, aribstring_lib, cp932_lib],
+  install : true,
 )
 
 amatsukaze_dep = declare_dependency(

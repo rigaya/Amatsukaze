@@ -6,7 +6,13 @@ project('AmatsukazeCLI', ['c', 'cpp'],
 # コンパイラフラグ
 cpp_args = []
 if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
-  cpp_args += ['-fPIC', '-pthread', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unknown-pragmas', '-Wno-unused-variable', '-Wno-unused-but-set-variable', '-fexec-charset=cp932']
+  cpp_args += ['-fPIC', '-pthread', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unknown-pragmas', '-Wno-unused-variable', '-Wno-unused-but-set-variable']
+endif
+
+# Shift-JIS文字コード用のコンパイラフラグ（特定のファイルのみに使用）
+cpp_args_cp932 = cpp_args + []
+if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
+  cpp_args_cp932 += ['-fexec-charset=cp932']
 endif
 
 # SIMD 拡張命令セット用のコンパイルフラグ

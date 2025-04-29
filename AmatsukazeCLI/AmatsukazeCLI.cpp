@@ -23,7 +23,7 @@ int _tmain(int argc, const TCHAR* argv[]) {
 
     static const wchar_t* dllnames[] = { L"Amatsukaze.dll", L"Amatsukaze2.dll" };
 #else
-    static const TCHAR* dllnames[] = { _T("Amatsukaze.so") };
+    static const TCHAR* dllnames[] = { _T("libAmatsukaze.so") };
 #endif
     auto hModule = RGY_LOAD_LIBRARY(dllnames[loadTarget]);
     if (hModule == NULL) {
