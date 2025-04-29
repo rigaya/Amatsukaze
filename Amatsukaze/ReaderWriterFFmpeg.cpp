@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -88,7 +88,7 @@ AVCodecContext* av::CodecContext::operator()() {
 }
 av::InputContext::InputContext(const tstring& src)
     : ctx_() {
-    if (avformat_open_input(&ctx_, to_string(src).c_str(), NULL, NULL) != 0) {
+    if (avformat_open_input(&ctx_, tchar_to_string(src).c_str(), NULL, NULL) != 0) {
         THROW(IOException, "failed avformat_open_input");
     }
 }
@@ -137,7 +137,8 @@ av::WriteIOContext::WriteIOContext(int bufsize)
     : ctx_() {
     unsigned char* buffer = (unsigned char*)av_malloc(bufsize);
 #if AMATSUKAZE2DLL
-    ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, reinterpret_cast<int (*)(void *, const uint8_t *, int)>(write_packet_), NULL);
+    void *func_ptr = (void *)write_packet_;
+    ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, (int (*)(void *, uint8_t *, int))(write_packet_), NULL);
 #else
     ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, write_packet_, NULL);
 #endif
@@ -162,7 +163,7 @@ av::OutputContext::OutputContext(WriteIOContext& ioCtx, const char* format)
         THROW(FormatException, "pb already has ...");
     }
     ctx_->pb = ioCtx();
-    // 10bitˆÈãYUV4MPEG‘Î‰
+    // 10bitä»¥ä¸ŠYUV4MPEGå¯¾å¿œ
     ctx_->strict_std_compliance = FF_COMPLIANCE_UNOFFICIAL;
 }
 av::OutputContext::~OutputContext() {
@@ -189,7 +190,7 @@ void av::VideoReader::readAll(const tstring& src, const DecoderSetting& decoderS
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
     const AVCodec *pCodec = getHWAccelCodec(vcodecId, decoderSetting);
     if (pCodec == NULL) {
-        ctx.warn("w’è‚³‚ê‚½ƒfƒR[ƒ_‚ªg—p‚Å‚«‚È‚¢‚½‚ßƒfƒtƒHƒ‹ƒgƒfƒR[ƒ_‚ğg‚¢‚Ü‚·");
+        ctx.warn("æŒ‡å®šã•ã‚ŒãŸãƒ‡ã‚³ãƒ¼ãƒ€ãŒä½¿ç”¨ã§ããªã„ãŸã‚ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ä½¿ã„ã¾ã™");
         pCodec = avcodec_find_decoder(vcodecId);
     }
     if (pCodec == NULL) {
@@ -246,6 +247,8 @@ const AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const Decode
             return avcodec_find_decoder_by_name("mpeg2_qsv");
         case DECODER_CUVID:
             return avcodec_find_decoder_by_name("mpeg2_cuvid");
+        default:
+            break;
         }
         break;
     case AV_CODEC_ID_H264:
@@ -254,6 +257,8 @@ const AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const Decode
             return avcodec_find_decoder_by_name("h264_qsv");
         case DECODER_CUVID:
             return avcodec_find_decoder_by_name("h264_cuvid");
+        default:
+            break;
         }
         break;
     case AV_CODEC_ID_HEVC:
@@ -262,7 +267,11 @@ const AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const Decode
             return avcodec_find_decoder_by_name("hevc_qsv");
         case DECODER_CUVID:
             return avcodec_find_decoder_by_name("hevc_cuvid");
+        default:
+            break;
         }
+        break;
+    default:
         break;
     }
     return avcodec_find_decoder(vcodecId);
@@ -278,22 +287,22 @@ void av::VideoReader::onFrame(Frame& frame) {
         const bool tff = frame()->top_field_first != 0;
 #endif
         if (interlaced == false) {
-            // ƒtƒŒ[ƒ€‚ªƒCƒ“ƒ^ƒŒ[ƒX‚Å‚È‚©‚Á‚½‚ç‚»‚Ì‚Ü‚Üo—Í
+            // ãƒ•ãƒ¬ãƒ¼ãƒ ãŒã‚¤ãƒ³ã‚¿ãƒ¬ãƒ¼ã‚¹ã§ãªã‹ã£ãŸã‚‰ãã®ã¾ã¾å‡ºåŠ›
             prevFrame_ = nullptr;
             onFrameDecoded(frame);
         } else if (prevFrame_ == nullptr) {
-            // ƒgƒbƒvƒtƒB[ƒ‹ƒh‚Å‚È‚©‚Á‚½‚ç”jŠü
-            // d—l‚©‚Ç‚¤‚©‚Í•s–¾‚¾‚¯‚ÇFFMPEG ver.3.2.2Œ»İ
+            // ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã§ãªã‹ã£ãŸã‚‰ç ´æ£„
+            // ä»•æ§˜ã‹ã©ã†ã‹ã¯ä¸æ˜ã ã‘ã©FFMPEG ver.3.2.2ç¾åœ¨
             // top_field_first=1: top field
             // top_field_first=0: bottom field
-            // ‚Æ‚È‚Á‚Ä‚¢‚é‚æ‚¤‚Å‚ ‚é
+            // ã¨ãªã£ã¦ã„ã‚‹ã‚ˆã†ã§ã‚ã‚‹
             if (tff) {
                 prevFrame_ = std::unique_ptr<av::Frame>(new av::Frame(frame));
             } else {
-                ctx.warn("ƒgƒbƒvƒtƒB[ƒ‹ƒh‚ğ‘z’è‚µ‚Ä‚¢‚½‚ª‚»‚¤‚Å‚Í‚È‚©‚Á‚½‚Ì‚ÅƒtƒB[ƒ‹ƒh‚ğ”jŠü");
+                ctx.warn("ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’æƒ³å®šã—ã¦ã„ãŸãŒãã†ã§ã¯ãªã‹ã£ãŸã®ã§ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’ç ´æ£„");
             }
         } else {
-            // 2–‡‚ÌƒtƒB[ƒ‹ƒh‚ğ‡¬
+            // 2æšã®ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’åˆæˆ
             auto merged = mergeFields(*prevFrame_, frame);
             onFrameDecoded(*merged);
             prevFrame_ = nullptr;
@@ -315,6 +324,8 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     case AV_CODEC_ID_MPEG2VIDEO:
         srcFormat = VS_MPEG2;
         break;
+    default:
+        break;
     }
 
     fmt_.format = srcFormat;
@@ -330,12 +341,12 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     fmt_.colorPrimaries = frame->color_primaries;
     fmt_.transferCharacteristics = frame->color_trc;
     fmt_.colorSpace = frame->colorspace;
-    // ¡‚Ì‚Æ‚±‚ëŒÅ’èƒtƒŒ[ƒ€ƒŒ[ƒg‚µ‚©‘Î‰‚µ‚È‚¢
+    // ä»Šã®ã¨ã“ã‚å›ºå®šãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆã—ã‹å¯¾å¿œã—ãªã„
     fmt_.fixedFrameRate = true;
     fmt_.frameRateNum = stream->r_frame_rate.num;
     fmt_.frameRateDenom = stream->r_frame_rate.den;
 
-    // x265‚ÅƒCƒ“ƒ^ƒŒ[ƒX‚Ìê‡‚Ífield mode
+    // x265ã§ã‚¤ãƒ³ã‚¿ãƒ¬ãƒ¼ã‚¹ã®å ´åˆã¯field mode
     fieldMode_ = (fmt_.format == VS_H265 && fmt_.progressive == false);
 
     if (fieldMode_) {
@@ -346,7 +357,7 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     onVideoFormat(stream, fmt_);
 }
 
-// 2‚Â‚ÌƒtƒŒ[ƒ€‚ÌƒgƒbƒvƒtƒB[ƒ‹ƒhAƒ{ƒgƒ€ƒtƒB[ƒ‹ƒh‚ğ‡¬
+// 2ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã€ãƒœãƒˆãƒ ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’åˆæˆ
 /* static */ std::unique_ptr<av::Frame> av::VideoReader::mergeFields(av::Frame& topframe, av::Frame& bottomframe) {
     auto dstframe = std::unique_ptr<av::Frame>(new av::Frame());
 
@@ -354,15 +365,15 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     AVFrame* bottom = bottomframe();
     AVFrame* dst = (*dstframe)();
 
-    // ƒtƒŒ[ƒ€‚ÌƒvƒƒpƒeƒB‚ğƒRƒs[
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ã‚’ã‚³ãƒ”ãƒ¼
     av_frame_copy_props(dst, top);
 
-    // ƒƒ‚ƒŠƒTƒCƒY‚ÉŠÖ‚·‚éî•ñ‚ğƒRƒs[
+    // ãƒ¡ãƒ¢ãƒªã‚µã‚¤ã‚ºã«é–¢ã™ã‚‹æƒ…å ±ã‚’ã‚³ãƒ”ãƒ¼
     dst->format = top->format;
     dst->width = top->width;
     dst->height = top->height * 2;
 
-    // ƒƒ‚ƒŠŠm•Û
+    // ãƒ¡ãƒ¢ãƒªç¢ºä¿
     if (av_frame_get_buffer(dst, 64) != 0) {
         THROW(RuntimeException, "failed to allocate frame buffer");
     }
@@ -387,7 +398,7 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
         }
     }
 
-    return std::move(dstframe);
+    return dstframe;
 }
 av::VideoWriter::VideoWriter(VideoFormat fmt, int bufsize)
     : ioCtx_(this, bufsize)
@@ -399,7 +410,7 @@ av::VideoWriter::VideoWriter(VideoFormat fmt, int bufsize)
 
 void av::VideoWriter::inputFrame(Frame& frame) {
 
-    // ƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN
+    // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãƒã‚§ãƒƒã‚¯
     ASSERT(fmt_.width == frame()->width);
     ASSERT(fmt_.height == frame()->height);
     ASSERT(fmt_.sarWidth == frame()->sample_aspect_ratio.num);
@@ -408,7 +419,7 @@ void av::VideoWriter::inputFrame(Frame& frame) {
     ASSERT(fmt_.transferCharacteristics == frame()->color_trc);
     ASSERT(fmt_.colorSpace == frame()->colorspace);
 
-    // PTSÄ’è‹`
+    // PTSå†å®šç¾©
     frame()->pts = frameCount_++;
 
     init(frame);
@@ -482,7 +493,7 @@ void av::VideoWriter::init(Frame& frame) {
             THROW(FormatException, "avcodec_open2 failed");
         }
 
-        // muxer‚ÉƒGƒ“ƒR[ƒ_ƒpƒ‰ƒ[ƒ^‚ğ“n‚·
+        // muxerã«ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã‚’æ¸¡ã™
         avcodec_parameters_from_context(st->codecpar, enc);
 
         // for debug
@@ -503,7 +514,7 @@ av::AudioWriter::AudioWriter(AVStream* src, int bufsize)
         THROW(FormatException, "avformat_new_stream failed");
     }
 
-    // ƒR[ƒfƒbƒNƒpƒ‰ƒ[ƒ^‚ğƒRƒs[
+    // ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã‚’ã‚³ãƒ”ãƒ¼
     avcodec_parameters_copy(st->codecpar, src->codecpar);
 
     // for debug
@@ -515,7 +526,7 @@ av::AudioWriter::AudioWriter(AVStream* src, int bufsize)
 }
 
 void av::AudioWriter::inputFrame(AVPacket& frame) {
-    // av_interleaved_write_frame‚Épacket‚Ìownership‚ğ“n‚·‚Ì‚Å
+    // av_interleaved_write_frameã«packetã®ownershipã‚’æ¸¡ã™ã®ã§
     AVPacket outpacket = AVPacket();
     av_packet_ref(&outpacket, &frame);
     outpacket.stream_index = 0;
@@ -547,7 +558,7 @@ void av::Y4MParser::inputData(MemoryChunk mc) {
     y4mbuf.add(mc);
     while (true) {
         if (y4mcur == 0) {
-            // ƒXƒgƒŠ[ƒ€ƒwƒbƒ_
+            // ã‚¹ãƒˆãƒªãƒ¼ãƒ ãƒ˜ãƒƒãƒ€
             auto data = y4mbuf.get();
             uint8_t* end = (uint8_t*)memchr(data.data, 0x0a, data.length);
             if (end == nullptr) {
@@ -614,26 +625,26 @@ void av::Y4MParser::inputData(MemoryChunk mc) {
             }
             frameSize = (width * height * bp4p) >> 2;
             y4mbuf.trimHead(end - data.data + 1);
-            y4mcur = 1; // Ÿ‚ÍƒtƒŒ[ƒ€ƒwƒbƒ_
+            y4mcur = 1; // æ¬¡ã¯ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ˜ãƒƒãƒ€
         }
         if (y4mcur == 1) {
-            // ƒtƒŒ[ƒ€ƒwƒbƒ_
+            // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ˜ãƒƒãƒ€
             auto data = y4mbuf.get();
             uint8_t* end = (uint8_t*)memchr(data.data, 0x0a, data.length);
             if (end == nullptr) {
                 break;
             }
             y4mbuf.trimHead(end - data.data + 1);
-            y4mcur = 2; // Ÿ‚ÍƒtƒŒ[ƒ€ƒf[ƒ^
+            y4mcur = 2; // æ¬¡ã¯ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ‡ãƒ¼ã‚¿
         }
         if (y4mcur == 2) {
-            // ƒtƒŒ[ƒ€ƒf[ƒ^
+            // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ‡ãƒ¼ã‚¿
             if (y4mbuf.size() < frameSize) {
                 break;
             }
             y4mbuf.trimHead(frameSize);
             frameCount++;
-            y4mcur = 1; // Ÿ‚ÍƒtƒŒ[ƒ€ƒwƒbƒ_
+            y4mcur = 1; // æ¬¡ã¯ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ˜ãƒƒãƒ€
         }
     }
 }
@@ -660,7 +671,7 @@ void av::EncodeWriter::start(const tstring& encoder_args, VideoFormat fmt, bool 
     }
     fieldMode_ = fieldMode;
     if (fieldMode) {
-        // ƒtƒB[ƒ‹ƒhƒ‚[ƒh‚Ì‚Æ‚«‚Í‰ğ‘œ“x‚Íc1/2‚ÅFPS‚Í2”{
+        // ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ãƒ¢ãƒ¼ãƒ‰ã®ã¨ãã¯è§£åƒåº¦ã¯ç¸¦1/2ã§FPSã¯2å€
         fmt.height /= 2;
         fmt.frameRateNum *= 2;
     }
@@ -677,7 +688,7 @@ void av::EncodeWriter::inputFrame(Frame& frame) {
         THROW(RuntimeException, "failed to input frame due to encoder error ...");
     }
     if (fieldMode_) {
-        // ƒtƒB[ƒ‹ƒhƒ‚[ƒh‚Ì‚Æ‚«‚Ítop,bottom‚Ì2‚Â‚É•ª‚¯‚Äo—Í
+        // ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ãƒ¢ãƒ¼ãƒ‰ã®ã¨ãã¯top,bottomã®2ã¤ã«åˆ†ã‘ã¦å‡ºåŠ›
         av::Frame top = av::Frame();
         av::Frame bottom = av::Frame();
         splitFrameToFields(frame, top, bottom);
@@ -694,18 +705,18 @@ void av::EncodeWriter::finish() {
         process_->finishWrite();
         int ret = process_->join();
         if (ret != 0) {
-            ctx.error("««««««ƒGƒ“ƒR[ƒ_ÅŒã‚Ìo—Í««««««");
+            ctx.error("â†“â†“â†“â†“â†“â†“ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€æœ€å¾Œã®å‡ºåŠ›â†“â†“â†“â†“â†“â†“");
             for (auto v : process_->getLastLines()) {
                 v.push_back(0); // null terminate
                 ctx.errorF("%s", v.data());
             }
-            ctx.error("ªªªªªªƒGƒ“ƒR[ƒ_ÅŒã‚Ìo—Íªªªªªª");
-            THROWF(RuntimeException, "ƒGƒ“ƒR[ƒ_I—¹ƒR[ƒh: 0x%x", ret);
+            ctx.error("â†‘â†‘â†‘â†‘â†‘â†‘ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€æœ€å¾Œã®å‡ºåŠ›â†‘â†‘â†‘â†‘â†‘â†‘");
+            THROWF(RuntimeException, "ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€çµ‚äº†ã‚³ãƒ¼ãƒ‰: 0x%x", ret);
         }
         int inFrame = getFrameCount();
         int outFrame = y4mparser.getFrameCount();
         if (inFrame != outFrame) {
-            THROWF(RuntimeException, "ƒtƒŒ[ƒ€”‚ª‡‚¢‚Ü‚¹‚ñ(%d vs %d)", inFrame, outFrame);
+            THROWF(RuntimeException, "ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ãŒåˆã„ã¾ã›ã‚“(%d vs %d)", inFrame, outFrame);
         }
     }
 }
@@ -739,29 +750,29 @@ void av::EncodeWriter::onVideoWrite(MemoryChunk mc) {
 
 VideoFormat av::EncodeWriter::getEncoderInputVideoFormat(VideoFormat format) {
     if (fieldMode_) {
-        // ƒtƒB[ƒ‹ƒhƒ‚[ƒh‚Ì‚Æ‚«‚Í‰ğ‘œ“x‚Íc1/2‚ÅFPS‚Í2”{
+        // ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ãƒ¢ãƒ¼ãƒ‰ã®ã¨ãã¯è§£åƒåº¦ã¯ç¸¦1/2ã§FPSã¯2å€
         format.height /= 2;
         format.frameRateNum *= 2;
     }
     return format;
 }
 
-// 1‚Â‚ÌƒtƒŒ[ƒ€‚ğƒgƒbƒvƒtƒB[ƒ‹ƒhAƒ{ƒgƒ€ƒtƒB[ƒ‹ƒh‚Ì2‚Â‚ÌƒtƒŒ[ƒ€‚É•ª‰ğ
+// 1ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã€ãƒœãƒˆãƒ ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã®2ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã«åˆ†è§£
 /* static */ void av::EncodeWriter::splitFrameToFields(av::Frame& frame, av::Frame& topfield, av::Frame& bottomfield) {
     AVFrame* src = frame();
     AVFrame* top = topfield();
     AVFrame* bottom = bottomfield();
 
-    // ƒtƒŒ[ƒ€‚ÌƒvƒƒpƒeƒB‚ğƒRƒs[
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ã‚’ã‚³ãƒ”ãƒ¼
     av_frame_copy_props(top, src);
     av_frame_copy_props(bottom, src);
 
-    // ƒƒ‚ƒŠƒTƒCƒY‚ÉŠÖ‚·‚éî•ñ‚ğƒRƒs[
+    // ãƒ¡ãƒ¢ãƒªã‚µã‚¤ã‚ºã«é–¢ã™ã‚‹æƒ…å ±ã‚’ã‚³ãƒ”ãƒ¼
     top->format = bottom->format = src->format;
     top->width = bottom->width = src->width;
     top->height = bottom->height = src->height / 2;
 
-    // ƒƒ‚ƒŠŠm•Û
+    // ãƒ¡ãƒ¢ãƒªç¢ºä¿
     if (av_frame_get_buffer(top, 64) != 0) {
         THROW(RuntimeException, "failed to allocate frame buffer");
     }

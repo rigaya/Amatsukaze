@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * String Utility
@@ -12,9 +12,10 @@
 #include <string>
 #include <cassert>
 #include <vector>
-#include <direct.h>
 #include "CoreUtils.hpp"
+#include "rgy_osdep.h"
 #include "rgy_tchar.h"
+#include "rgy_util.h"
 
 #ifdef _MSC_VER
 typedef wchar_t tchar;
@@ -45,15 +46,24 @@ FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag);
 
 namespace string_internal {
 
-// nullI’[‚ª‚ ‚é‚Ì‚Å
-static std::vector<char> to_string(std::wstring str, uint32_t codepage = CP_ACP);
-static std::vector<wchar_t> to_wstring(std::string str, uint32_t codepage = CP_ACP);
+static std::vector<wchar_t> si_to_wstring(const char *str) { auto ret = char_to_wstring(str); return std::vector<wchar_t>(ret.begin(), ret.end()); }
+static std::vector<wchar_t> si_to_wstring(const std::string& str) { auto ret = char_to_wstring(str); return std::vector<wchar_t>(ret.begin(), ret.end()); }
+
+static std::vector<wchar_t> si_to_wstring(const wchar_t *str) { auto ret = std::wstring(str); return std::vector<wchar_t>(ret.begin(), ret.end()); }
+static std::vector<wchar_t> si_to_wstring(const std::wstring& str) { return std::vector<wchar_t>(str.begin(), str.end()); }
+
+static std::vector<char> si_to_string(const wchar_t *str) { auto ret = wstring_to_string(str); return std::vector<char>(ret.begin(), ret.end()); }
+static std::vector<char> si_to_string(const std::wstring& str) { auto ret = wstring_to_string(str); return std::vector<char>(ret.begin(), ret.end()); }
+
+static std::vector<char> si_to_string(const char *str) { auto ret = std::string(str); return std::vector<char>(ret.begin(), ret.end()); }
+static std::vector<char> si_to_string(const std::string& str) { return std::vector<char>(str.begin(), str.end()); }
+
 
 class MakeArgContext {
     std::vector<std::vector<char>> args;
 public:
     template <typename T> const char* arg(const T& value) {
-        args.push_back(to_string(value));
+        args.push_back(si_to_string(value));
         return args.back().data();
     }
 };
@@ -62,7 +72,7 @@ class MakeArgWContext {
     std::vector<std::vector<wchar_t>> args;
 public:
     template <typename T> const wchar_t* arg(const T& value) {
-        args.push_back(to_wstring(value));
+        args.push_back(si_to_wstring(value));
         return args.back().data();
     }
 };
@@ -93,31 +103,13 @@ protected:
 };
 }
 
-std::string to_string(const std::wstring& str, uint32_t codepage = CP_ACP);
-
-std::string to_string(const std::string& str, uint32_t codepage = CP_ACP);
-
-std::wstring to_wstring(const std::wstring& str, uint32_t codepage = CP_ACP);
-
-std::wstring to_wstring(const std::string& str, uint32_t codepage = CP_ACP);
-
-#ifdef _MSC_VER
-std::wstring to_tstring(const std::wstring& str, uint32_t codepage = CP_ACP);
-
-std::wstring to_tstring(const std::string& str, uint32_t codepage = CP_ACP);
-#else
-std::string to_tstring(const std::wstring& str, uint32_t codepage = CP_ACP);
-
-std::string to_tstring(const std::string& str, uint32_t codepage = CP_ACP);
-#endif
-
 template <typename ... Args>
 std::string StringFormat(const char* fmt, const Args& ... args) {
     std::string str;
     string_internal::MakeArgContext ctx;
     size_t size = _scprintf(fmt, string_internal::MakeArg(ctx, args) ...);
     if (size > 0) {
-        str.reserve(size + 1); // nullI’[‚ğ‘«‚·
+        str.reserve(size + 1); // nullçµ‚ç«¯ã‚’è¶³ã™
         str.resize(size);
         snprintf(&str[0], str.size() + 1, fmt, string_internal::MakeArg(ctx, args) ...);
     }
@@ -130,7 +122,7 @@ std::wstring StringFormat(const wchar_t* fmt, const Args& ... args) {
     string_internal::MakeArgWContext ctx;
     size_t size = _scwprintf(fmt, string_internal::MakeArgW(ctx, args) ...);
     if (size > 0) {
-        str.reserve(size + 1); // nullI’[‚ğ‘«‚·
+        str.reserve(size + 1); // nullçµ‚ç«¯ã‚’è¶³ã™
         str.resize(size);
         swprintf(&str[0], str.size() + 1, fmt, string_internal::MakeArgW(ctx, args) ...);
     }
@@ -144,7 +136,7 @@ public:
         string_internal::MakeArgContext ctx;
         size_t size = _scprintf(fmt, string_internal::MakeArg(ctx, args) ...);
         if (size > 0) {
-            auto mc = buffer.space((int)((size + 1) * sizeof(char))); // nullI’[‚ğ‘«‚·
+            auto mc = buffer.space((int)((size + 1) * sizeof(char))); // nullçµ‚ç«¯ã‚’è¶³ã™
             snprintf(reinterpret_cast<char*>(mc.data), mc.length / sizeof(char),
                 fmt, string_internal::MakeArg(ctx, args) ...);
         }
@@ -162,7 +154,7 @@ public:
         string_internal::MakeArgWContext ctx;
         size_t size = _scwprintf(fmt, string_internal::MakeArgW(ctx, args) ...);
         if (size > 0) {
-            auto mc = buffer.space((int)((size + 1) * sizeof(wchar_t))); // nullI’[‚ğ‘«‚·
+            auto mc = buffer.space((int)((size + 1) * sizeof(wchar_t))); // nullçµ‚ç«¯ã‚’è¶³ã™
             swprintf(reinterpret_cast<wchar_t*>(mc.data), mc.length / sizeof(wchar_t),
                 fmt, string_internal::MakeArgW(ctx, args) ...);
         }

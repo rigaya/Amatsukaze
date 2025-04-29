@@ -1,5 +1,5 @@
-// -----------------------------------------------------------------------------------------
-// Amatsukaze‰ü‘¢”Å by rigaya (original by nekopanda)
+ï»¿// -----------------------------------------------------------------------------------------
+// Amatsukazeæ”¹é€ ç‰ˆ by rigaya (original by nekopanda)
 // -----------------------------------------------------------------------------------------
 // The MIT License
 //
@@ -50,8 +50,8 @@ public:
     virtual bool inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>& info, int64_t PTS, int64_t DTS);
 
 private:
-    std::unique_ptr<AVCodecParserContext, decltype(&av_parser_close)> m_parserCtx;            //“®‰æƒXƒgƒŠ[ƒ€‚ÌParser
-    std::unique_ptr<AVCodecContext, RGYAVDeleter<AVCodecContext>> m_codecCtxParser;       //“®‰æƒXƒgƒŠ[ƒ€‚ÌParser—p
+    std::unique_ptr<AVCodecParserContext, decltype(&av_parser_close)> m_parserCtx;            //å‹•ç”»ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®Parser
+    std::unique_ptr<AVCodecContext, RGYAVDeleter<AVCodecContext>> m_codecCtxParser;       //å‹•ç”»ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®Parserç”¨
 
     decltype(parse_nal_unit_hevc_c)* m_parse_nal_unit_hevc;
     int m_posBytes;

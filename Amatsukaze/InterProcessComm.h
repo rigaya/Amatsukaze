@@ -1,4 +1,4 @@
-#pragma once
+Ôªø#pragma once
 
 /**
 * Amtasukaze Communication to Host Process
@@ -15,6 +15,13 @@
 #include <memory>
 
 #include "StreamUtils.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+using pipe_handle_t = HANDLE;
+#else
+using pipe_handle_t = int;
+static const int INVALID_HANDLE_VALUE = -1;
+#endif
 
 std::vector<char> toUTF8String(const std::wstring& str);
 
@@ -38,35 +45,53 @@ struct ResourceAllocation {
     bool IsFailed() const;
 };
 
-class ResourceManger : AMTObject {
-    HANDLE inPipe;
-    HANDLE outPipe;
-
-    void write(MemoryChunk mc) const;
-
-    void read(MemoryChunk mc) const;
-
-    void writeCommand(int cmd) const;
-
-    /*
-       void write(int cmd, const std::string& json) {
-           write(MemoryChunk((uint8_t*)&cmd, 4));
-           int sz = (int)json.size();
-           write(MemoryChunk((uint8_t*)&sz, 4));
-           write(MemoryChunk((uint8_t*)json.data(), sz));
-       }
-    */
-
-    static ResourceAllocation DefaultAllocation();
-
-    ResourceAllocation readCommand(int expected) const;
+class ResourceManger : public AMTObject {
+private:
+    pipe_handle_t inPipe;
+    pipe_handle_t outPipe;
 
 public:
-    ResourceManger(AMTContext& ctx, HANDLE inPipe, HANDLE outPipe);
+    ResourceManger(AMTContext& ctx, pipe_handle_t inPipe, pipe_handle_t outPipe)
+        : AMTObject(ctx)
+#if defined(_WIN32) || defined(_WIN64)
+        , inPipe(inPipe)
+        , outPipe(outPipe)
+#else
+        , inPipe((int)(intptr_t)inPipe)
+        , outPipe((int)(intptr_t)outPipe)
+#endif
+    {
+        if (!isValid()) {
+            THROW(RuntimeException, "invalid pipe handle");
+        }
+    }
 
+    ~ResourceManger() {
+#if defined(_WIN32) || defined(_WIN64)
+        if (inPipe != INVALID_HANDLE_VALUE) CloseHandle(inPipe);
+        if (outPipe != INVALID_HANDLE_VALUE) CloseHandle(outPipe);
+#else
+        if (inPipe >= 0) close(inPipe);
+        if (outPipe >= 0) close(outPipe);
+#endif
+    }
+
+    bool isValid() const {
+#if defined(_WIN32) || defined(_WIN64)
+        return inPipe != INVALID_HANDLE_VALUE && outPipe != INVALID_HANDLE_VALUE;
+#else
+        return inPipe >= 0 && outPipe >= 0;
+#endif
+    }
+
+    void write(MemoryChunk mc) const;
+    void read(MemoryChunk mc) const;
+    void writeCommand(int cmd) const;
+    static ResourceAllocation DefaultAllocation();
+    ResourceAllocation readCommand(int expected) const;
     ResourceAllocation request(PipeCommand phase) const;
 
-    // ÉäÉ\Å[ÉXämï€Ç≈Ç´ÇÈÇ‹Ç≈ë“Ç¬
+    // „É™„ÇΩ„Éº„ÇπÁ¢∫‰øù„Åß„Åç„Çã„Åæ„ÅßÂæÖ„Å§
     ResourceAllocation wait(PipeCommand phase) const;
 };
 

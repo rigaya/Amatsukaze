@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Wave file writer
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -41,7 +41,7 @@ enum {
 
 uint32_t toBigEndian(uint32_t a);
 
-// numSamples: 1ƒ`ƒƒƒ“ƒlƒ‹‚ ‚½‚è‚ÌƒTƒ“ƒvƒ‹”
-// ƒGƒ‰[ŒŸo‚Ì‚½‚ß numSamples ‚ª64bit‚É‚È‚Á‚Ä‚¢‚é‚ªint‚ğ’´‚¦‚é”ÍˆÍ‚É‘Î‰‚µ‚Ä‚¢‚é–ó‚Å‚Í‚È‚¢‚±‚Æ‚É’ˆÓ
+// numSamples: 1ãƒãƒ£ãƒ³ãƒãƒ«ã‚ãŸã‚Šã®ã‚µãƒ³ãƒ—ãƒ«æ•°
+// ã‚¨ãƒ©ãƒ¼æ¤œå‡ºã®ãŸã‚ numSamples ãŒ64bitã«ãªã£ã¦ã„ã‚‹ãŒintã‚’è¶…ãˆã‚‹ç¯„å›²ã«å¯¾å¿œã—ã¦ã„ã‚‹è¨³ã§ã¯ãªã„ã“ã¨ã«æ³¨æ„
 void writeWaveHeader(FILE* fp, int channels, int samplerate, int bitswidth, int64_t numSamples);
 

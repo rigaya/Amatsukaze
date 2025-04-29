@@ -1,4 +1,4 @@
-/**
+Ôªø/**
 * Amatsukaze core utility
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -11,7 +11,9 @@
 #include "common.h"
 
 #include <string>
-#include <io.h>
+#include <cstring>
+#include <cstdarg>
+//#include <io.h>
 
 #define AMT_MAX_PATH 512
 
@@ -54,11 +56,20 @@ constexpr const char* file_name(const char* str) { return str_slant(str) ? r_sla
 
 #define __FILENAME__ core_utils::file_name(__FILE__)
 
+#if defined(_WIN32) || defined(_WIN64)
 #define THROW(exception, message) \
 	throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " message, __FILENAME__, __LINE__)))
 
 #define THROWF(exception, fmt, ...) \
 	throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " fmt, __FILENAME__, __LINE__, __VA_ARGS__)))
+#else
+#define THROW(exception, message) \
+    throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " message, __FILENAME__, __LINE__)))
+
+// ÂèØÂ§âÂºïÊï∞„Éû„ÇØ„É≠„Çí‰øÆÊ≠£
+#define THROWF(exception, fmt, ...) \
+    throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " fmt, __FILENAME__, __LINE__ __VA_OPT__(,) __VA_ARGS__)))
+#endif
 
 static void throw_exception_(const Exception& exc) {
     PRINTF("AMT [error] %s\n", exc.message());
@@ -66,32 +77,32 @@ static void throw_exception_(const Exception& exc) {
     exc.raise();
 }
 
-// ÉRÉsÅ[ã÷é~ÉIÉuÉWÉFÉNÉg
+// „Ç≥„Éî„ÉºÁ¶ÅÊ≠¢„Ç™„Éñ„Ç∏„Çß„ÇØ„Éà
 class NonCopyable {
 protected:
     NonCopyable() {}
-    ~NonCopyable() {} /// protected Ç»îÒâºëzÉfÉXÉgÉâÉNÉ^
+    ~NonCopyable() {} /// protected „Å™Èùû‰ªÆÊÉ≥„Éá„Çπ„Éà„É©„ÇØ„Çø
 private:
-    NonCopyable(const NonCopyable &);
-    NonCopyable& operator=(const NonCopyable &) {}
+    NonCopyable(const NonCopyable &) = delete;
+    NonCopyable& operator=(const NonCopyable &) = delete;
 };
 
 static void DebugPrint(const char* fmt, ...) {
     va_list argp;
-    char buf[1000];
+    char buf[4096];
     va_start(argp, fmt);
-    _vsnprintf_s(buf, sizeof(buf), fmt, argp);
+    vsprintf(buf, fmt, argp);
     va_end(argp);
-    OutputDebugStringA(buf);
+    fprintf(stderr, "%s", buf);
 }
 
-/** @brief É|ÉCÉìÉ^Ç∆ÉTÉCÉYÇÃÉZÉbÉg */
+/** @brief „Éù„Ç§„É≥„Çø„Å®„Çµ„Ç§„Ç∫„ÅÆ„Çª„ÉÉ„Éà */
 struct MemoryChunk {
 
     MemoryChunk() : data(NULL), length(0) {}
     MemoryChunk(uint8_t* data, size_t length) : data(data), length(length) {}
 
-    // ÉfÅ[É^ÇÃíÜêgÇî‰är
+    // „Éá„Éº„Çø„ÅÆ‰∏≠Ë∫´„ÇíÊØîËºÉ
     bool operator==(MemoryChunk o) const {
         if (o.length != length) return false;
         return memcmp(data, o.data, length) == 0;
@@ -104,7 +115,7 @@ struct MemoryChunk {
     size_t length;
 };
 
-/** @brief ÉäÉìÉOÉoÉbÉtÉ@Ç≈ÇÕÇ»Ç¢Ç™trimHeadÇ∆trimTailÇ™ìØÇ∂Ç≠ÇÁÇ¢çÇë¨Ç»ÉoÉbÉtÉ@ */
+/** @brief „É™„É≥„Ç∞„Éê„ÉÉ„Éï„Ç°„Åß„ÅØ„Å™„ÅÑ„ÅåtrimHead„Å®trimTail„ÅåÂêå„Åò„Åè„Çâ„ÅÑÈ´òÈÄü„Å™„Éê„ÉÉ„Éï„Ç° */
 class AutoBuffer {
 public:
     AutoBuffer()
@@ -130,7 +141,7 @@ public:
         data_[tail_++] = byte;
     }
 
-    /** @brief óLå¯Ç»ÉfÅ[É^ÉTÉCÉY */
+    /** @brief ÊúâÂäπ„Å™„Éá„Éº„Çø„Çµ„Ç§„Ç∫ */
     size_t size() const {
         return tail_ - head_;
     }
@@ -139,12 +150,12 @@ public:
         return &data_[head_];
     }
 
-    /** @brief ÉfÅ[É^Ç÷ */
+    /** @brief „Éá„Éº„Çø„Å∏ */
     MemoryChunk get() const {
         return MemoryChunk(&data_[head_], size());
     }
 
-    /** @brief í«â¡ÉXÉyÅ[ÉXéÊìæ */
+    /** @brief ËøΩÂä†„Çπ„Éö„Éº„ÇπÂèñÂæó */
     MemoryChunk space(int at_least = 0) {
         if (at_least > 0) {
             ensure(at_least);
@@ -152,21 +163,21 @@ public:
         return MemoryChunk(&data_[tail_], capacity_ - tail_);
     }
 
-    /** @brief êKÇsizeÇæÇØå„ÇÎÇ…Ç∏ÇÁÇ∑ÅiÇªÇÃï™ÉTÉCÉYÇ‡ëùÇ¶ÇÈÅj */
+    /** @brief Â∞ª„Çísize„Å†„ÅëÂæå„Çç„Å´„Åö„Çâ„ÅôÔºà„Åù„ÅÆÂàÜ„Çµ„Ç§„Ç∫„ÇÇÂ¢ó„Åà„ÇãÔºâ */
     void extend(int size) {
         ensure(size);
         tail_ += size;
     }
 
-    /** @brief sizeï™ÇæÇØì™ÇçÌÇÈ */
+    /** @brief sizeÂàÜ„Å†„ÅëÈ†≠„ÇíÂâä„Çã */
     void trimHead(size_t size) {
         head_ = std::min(head_ + size, tail_);
-        if (head_ == tail_) { // íÜêgÇ™Ç»Ç≠Ç»Ç¡ÇΩÇÁà íuÇèâä˙âªÇµÇƒÇ®Ç≠
+        if (head_ == tail_) { // ‰∏≠Ë∫´„Åå„Å™„Åè„Å™„Å£„Åü„Çâ‰ΩçÁΩÆ„ÇíÂàùÊúüÂåñ„Åó„Å¶„Åä„Åè
             head_ = tail_ = 0;
         }
     }
 
-    /** @brief sizeï™ÇæÇØêKÇçÌÇÈ */
+    /** @brief sizeÂàÜ„Å†„ÅëÂ∞ª„ÇíÂâä„Çã */
     void trimTail(size_t size) {
         if (this->size() < size) {
             tail_ = head_;
@@ -175,12 +186,12 @@ public:
         }
     }
 
-    /** @brief ÉÅÉÇÉäÇÕäJï˙ÇµÇ»Ç¢Ç™ÉfÅ[É^ÉTÉCÉYÇÉ[ÉçÇ…Ç∑ÇÈ */
+    /** @brief „É°„É¢„É™„ÅØÈñãÊîæ„Åó„Å™„ÅÑ„Åå„Éá„Éº„Çø„Çµ„Ç§„Ç∫„Çí„Çº„É≠„Å´„Åô„Çã */
     void clear() {
         head_ = tail_ = 0;
     }
 
-    /** @brief ÉÅÉÇÉäÇäJï˙ÇµÇƒèâä˙èÛë‘Ç…Ç∑ÇÈÅiçƒégópâ¬î\Åj*/
+    /** @brief „É°„É¢„É™„ÇíÈñãÊîæ„Åó„Å¶ÂàùÊúüÁä∂ÊÖã„Å´„Åô„ÇãÔºàÂÜç‰ΩøÁî®ÂèØËÉΩÔºâ*/
     void release() {
         clear();
         if (data_ != NULL) {
@@ -205,10 +216,10 @@ private:
 
     void ensure(size_t extra) {
         if (tail_ + extra > capacity_) {
-            // ë´ÇËÇ»Ç¢
+            // Ë∂≥„Çä„Å™„ÅÑ
             size_t next = nextSize(tail_ - head_ + extra);
             if (next <= capacity_) {
-                // óeó ÇÕè\ï™Ç»ÇÃÇ≈ÉfÅ[É^Çà⁄ìÆÇµÇƒÉXÉyÅ[ÉXÇçÏÇÈ
+                // ÂÆπÈáè„ÅØÂçÅÂàÜ„Å™„ÅÆ„Åß„Éá„Éº„Çø„ÇíÁßªÂãï„Åó„Å¶„Çπ„Éö„Éº„Çπ„Çí‰Ωú„Çã
                 memmove(data_, data_ + head_, tail_ - head_);
             } else {
                 uint8_t* new_ = new uint8_t[next];

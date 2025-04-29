@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze TS Info
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -10,6 +10,7 @@
 #include "Mpeg2TsParser.h"
 #include "AribString.hpp"
 #include "TsSplitter.h"
+#include "CoreUtils.hpp"
 
 #include <stdint.h>
 
@@ -18,7 +19,7 @@
 struct ProgramInfo {
     int programId;
     bool hasVideo;
-    int videoPid; // “¯‚¶‰f‘œ‚Ì•ÊƒT[ƒrƒX‚É’ˆÓ
+    int videoPid; // åŒã˜æ˜ åƒã®åˆ¥ã‚µãƒ¼ãƒ“ã‚¹ã«æ³¨æ„
     VideoFormat videoFormat;
 };
 
@@ -125,7 +126,7 @@ private:
     std::vector<ServiceInfo> serviceList;
     JSTTime time;
 
-    // ƒCƒxƒ“ƒgî•ñ‚©‚ç
+    // ã‚¤ãƒ™ãƒ³ãƒˆæƒ…å ±ã‹ã‚‰
     JSTTime startTime;
 
     PSIDelegator* newPsiHandler(int pid);
@@ -159,7 +160,7 @@ public:
 
     bool HasServiceInfo();
 
-    // ref int‚Åó‚¯æ‚é
+    // ref intã§å—ã‘å–ã‚‹
     void GetDay(int* y, int* m, int* d);
 
     void GetTime(int* h, int* m, int* s);
@@ -176,7 +177,7 @@ public:
 
     int GetServiceId(int i);
 
-    // IntPtr‚Åó‚¯æ‚Á‚ÄMarshal.PtrToStringUni‚Å•ÏŠ·
+    // IntPtrã§å—ã‘å–ã£ã¦Marshal.PtrToStringUniã§å¤‰æ›
     const wchar_t* GetProviderName(int i);
 
     const wchar_t* GetServiceName(int i);

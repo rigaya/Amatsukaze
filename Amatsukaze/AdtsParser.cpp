@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -9,19 +9,19 @@
 #include "faad.h"
 
 bool AdtsHeader::parse(uint8_t *data, int length) {
-    // ’·‚³ƒ`ƒFƒbƒN
+    // é•·ã•ãƒã‚§ãƒƒã‚¯
     if (length < 7) return false;
 
     BitReader reader(MemoryChunk(data, length));
     try {
         uint16_t syncword = reader.read<12>();
-        // sync word •s³
+        // sync word ä¸æ­£
         if (syncword != 0xFFF) return false;
 
         uint8_t ID = reader.read<1>();
         //if (ID != 1) return false; // MPEG4 ... 0 MPEG2 ... 1
         uint8_t layer = reader.read<2>();
-        if (layer != 0) return false; // ŒÅ’è
+        if (layer != 0) return false; // å›ºå®š
 
         protection_absent = reader.read<1>();
         profile = reader.read<2>();
@@ -39,7 +39,7 @@ bool AdtsHeader::parse(uint8_t *data, int length) {
 
         numBytesRead = reader.numReadBytes();
 
-        if (frame_length < numBytesRead) return false; // ƒwƒbƒ_‚æ‚è’Z‚¢‚Ì‚Í‚¨‚©‚µ‚¢
+        if (frame_length < numBytesRead) return false; // ãƒ˜ãƒƒãƒ€ã‚ˆã‚ŠçŸ­ã„ã®ã¯ãŠã‹ã—ã„
     } catch (const EOFException&) {
         return false;
     } catch (const FormatException&) {
@@ -90,15 +90,15 @@ AdtsParser::~AdtsParser() {
     info.clear();
     decodedBuffer.clear();
 
-    // codedBuffer‚ÍŸ‚ÉinputFrame‚ªŒÄ‚Î‚ê‚é‚Ü‚Åƒf[ƒ^‚ğ•Û‚·‚é•K—v‚ª‚ ‚é‚Ì‚Å
-    // inputFrame‚Ìæ“ª‚Å‘O‚ÌinputFrameŒÄ‚Ño‚µ‚Å“Ç‚ñ‚¾ƒf[ƒ^‚ğÁ‚·
+    // codedBufferã¯æ¬¡ã«inputFrameãŒå‘¼ã°ã‚Œã‚‹ã¾ã§ãƒ‡ãƒ¼ã‚¿ã‚’ä¿æŒã™ã‚‹å¿…è¦ãŒã‚ã‚‹ã®ã§
+    // inputFrameã®å…ˆé ­ã§å‰ã®inputFrameå‘¼ã³å‡ºã—ã§èª­ã‚“ã ãƒ‡ãƒ¼ã‚¿ã‚’æ¶ˆã™
     codedBuffer.trimHead(bytesConsumed_);
 
     if (codedBuffer.size() >= (1 << 13)) {
-        // •s³‚Èƒf[ƒ^‚ª‘±‚­‚Æˆ—‚³‚ê‚È‚¢ƒf[ƒ^‚ª‰i‰“‚Æ‘‚¦‚Ä‚¢‚­‚Ì‚Å
-        // ‘‚¦‰ß‚¬‚½‚çÌ‚Ä‚é
-        // ƒwƒbƒ_‚Ìframe_lengthƒtƒB[ƒ‹ƒh‚Í13bit‚È‚Ì‚Å‚»‚êˆÈãƒf[ƒ^‚ª‚ ‚Á‚½‚ç
-        // Š®‘S‚É•s³ƒf[ƒ^
+        // ä¸æ­£ãªãƒ‡ãƒ¼ã‚¿ãŒç¶šãã¨å‡¦ç†ã•ã‚Œãªã„ãƒ‡ãƒ¼ã‚¿ãŒæ°¸é ã¨å¢—ãˆã¦ã„ãã®ã§
+        // å¢—ãˆéããŸã‚‰æ¨ã¦ã‚‹
+        // ãƒ˜ãƒƒãƒ€ã®frame_lengthãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã¯13bitãªã®ã§ãã‚Œä»¥ä¸Šãƒ‡ãƒ¼ã‚¿ãŒã‚ã£ãŸã‚‰
+        // å®Œå…¨ã«ä¸æ­£ãƒ‡ãƒ¼ã‚¿
         codedBuffer.clear();
     }
 
@@ -107,12 +107,12 @@ AdtsParser::~AdtsParser() {
     MemoryChunk frame = codedBuffer.get();
 
     if (frame.length < 7) {
-        // ƒf[ƒ^•s³
+        // ãƒ‡ãƒ¼ã‚¿ä¸æ­£
         return false;
     }
 
     if (lastPTS_ == -1 && PTS >= 0) {
-        // Å‰‚ÌPTS
+        // æœ€åˆã®PTS
         lastPTS_ = PTS;
         PTS = -1;
     }
@@ -127,31 +127,31 @@ AdtsParser::~AdtsParser() {
             uint8_t* ptr = frame.data + ibytes;
             int len = (int)frame.length - ibytes;
 
-            // ƒwƒbƒ_[OK‚©‚ÂƒtƒŒ[ƒ€’·‚¾‚¯‚Ìƒf[ƒ^‚ª‚ ‚é
+            // ãƒ˜ãƒƒãƒ€ãƒ¼OKã‹ã¤ãƒ•ãƒ¬ãƒ¼ãƒ é•·ã ã‘ã®ãƒ‡ãƒ¼ã‚¿ãŒã‚ã‚‹
             if (header.parse(ptr, len)
                 && header.frame_length <= len) {
-                // ƒXƒgƒŠ[ƒ€‚ğ‰ğÍ‚·‚é‚Ì‚Í–Ê“|‚È‚Ì‚ÅƒfƒR[ƒh‚µ‚¿‚á‚¤
+                // ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’è§£æã™ã‚‹ã®ã¯é¢å€’ãªã®ã§ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ã¡ã‚ƒã†
                 if (hAacDec == NULL) {
                     resetDecoder(MemoryChunk(ptr, len));
                 }
                 NeAACDecFrameInfo frameInfo;
                 void* samples = NeAACDecDecode(hAacDec, &frameInfo, ptr, len);
                 if (frameInfo.error != 0) {
-                    // ƒtƒH[ƒ}ƒbƒg‚ª•Ï‚í‚é‚ÆƒGƒ‰[‚ğ“f‚­‚Ì‚Å‰Šú‰»‚µ‚Ä‚à‚¤‚P‰ñH‚í‚¹‚é
-                    // •Ï‚Èg‚¢•û‚¾‚¯‚ÇNeroAACŒN‚ÍƒXƒgƒŠ[ƒ€‚Ì“r’†‚Å
-                    // ƒtƒH[ƒ}ƒbƒg‚ª•Ï‚í‚é‚±‚Æ‚ğ‘z’è‚µ‚Ä‚¢‚È‚¢‚ñ‚¾‚©‚çd•û‚È‚¢
-                    //ifixed header‚ª•Ï‚í‚ç‚È‚­‚Ä‚àƒ`ƒƒƒ“ƒlƒ‹\¬‚ª•Ï‚í‚é‚±‚Æ‚ª‚ ‚é‚©‚ç“Ç‚ñ‚Å‚İ‚È‚¢‚Æ•ª‚©‚ç‚È‚¢j
+                    // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒå¤‰ã‚ã‚‹ã¨ã‚¨ãƒ©ãƒ¼ã‚’åãã®ã§åˆæœŸåŒ–ã—ã¦ã‚‚ã†ï¼‘å›é£Ÿã‚ã›ã‚‹
+                    // å¤‰ãªä½¿ã„æ–¹ã ã‘ã©NeroAACå›ã¯ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®é€”ä¸­ã§
+                    // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒå¤‰ã‚ã‚‹ã“ã¨ã‚’æƒ³å®šã—ã¦ã„ãªã„ã‚“ã ã‹ã‚‰ä»•æ–¹ãªã„
+                    //ï¼ˆfixed headerãŒå¤‰ã‚ã‚‰ãªãã¦ã‚‚ãƒãƒ£ãƒ³ãƒãƒ«æ§‹æˆãŒå¤‰ã‚ã‚‹ã“ã¨ãŒã‚ã‚‹ã‹ã‚‰èª­ã‚“ã§ã¿ãªã„ã¨åˆ†ã‹ã‚‰ãªã„ï¼‰
                     resetDecoder(MemoryChunk(ptr, len));
                     samples = NeAACDecDecode(hAacDec, &frameInfo, ptr, len);
                 }
                 if (frameInfo.error == 0) {
-                    // ƒ_ƒEƒ“ƒ~ƒbƒNƒX‚µ‚Ä‚¢‚é‚Ì‚Å2ch‚É‚È‚é‚Í‚¸
+                    // ãƒ€ã‚¦ãƒ³ãƒŸãƒƒã‚¯ã‚¹ã—ã¦ã„ã‚‹ã®ã§2chã«ãªã‚‹ã¯ãš
                     int numChannels = frameInfo.num_front_channels +
                         frameInfo.num_back_channels + frameInfo.num_side_channels + frameInfo.num_lfe_channels;
 
                     if (numChannels != 2) {
-                        // ƒtƒH[ƒ}ƒbƒg‚ª•Ï‚í‚é‚ÆƒoƒO‚Á‚Ä2ch‚É‚Å‚«‚È‚¢‚±‚Æ‚à‚ ‚é‚Ì‚ÅA‰Šú‰»‚µ‚Ä‚à‚¤‚P‰ñH‚í‚¹‚é
-                        // •Ï‚Èg‚¢•û‚¾‚¯‚ÇNeroAACŒN‚ÍƒXƒgƒŠ[ƒ€‚Ì“r’†‚Å(ry
+                        // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒå¤‰ã‚ã‚‹ã¨ãƒã‚°ã£ã¦2chã«ã§ããªã„ã“ã¨ã‚‚ã‚ã‚‹ã®ã§ã€åˆæœŸåŒ–ã—ã¦ã‚‚ã†ï¼‘å›é£Ÿã‚ã›ã‚‹
+                        // å¤‰ãªä½¿ã„æ–¹ã ã‘ã©NeroAACå›ã¯ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®é€”ä¸­ã§(ry
                         resetDecoder(MemoryChunk(ptr, len));
                         samples = NeAACDecDecode(hAacDec, &frameInfo, ptr, len);
 
@@ -161,7 +161,7 @@ AdtsParser::~AdtsParser() {
 
                     if (frameInfo.error != 0 || numChannels != 2) {
                         ctx.incrementCounter(AMT_ERR_DECODE_AUDIO);
-                        ctx.warn("‰¹ºƒtƒŒ[ƒ€‚ğ³‚µ‚­ƒfƒR[ƒh‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½");
+                        ctx.warn("éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’æ­£ã—ããƒ‡ã‚³ãƒ¼ãƒ‰ã§ãã¾ã›ã‚“ã§ã—ãŸ");
                     } else {
                         decodedBuffer.add(MemoryChunk((uint8_t*)samples, frameInfo.samples * 2));
 
@@ -171,39 +171,39 @@ AdtsParser::~AdtsParser() {
                         frameData.format.channels = getAudioChannels(header, &frameInfo);
                         frameData.format.sampleRate = frameInfo.samplerate;
 
-                        // ƒXƒgƒŠ[ƒ€‚ª³í‚È‚ç frameInfo.bytesconsumed == header.frame_length ‚Æ‚È‚é‚Í‚¸‚¾‚ª
-                        // ƒXƒgƒŠ[ƒ€‚ª•s³‚¾‚Æ“¯‚¶‚É‚È‚ç‚È‚¢‚±‚Æ‚ª‚ ‚é
-                        // ‚»‚Ìê‡A’·‚³‚Í header.frame_length ‚ğ—Dæ‚·‚é
-                        //i‚»‚Ì•û‚ªŸ‚ÌƒtƒŒ[ƒ€‚ª³‚µ‚­ƒfƒR[ƒh‚³‚ê‚éŠm—¦‚ªã‚ª‚é‚Ì‚Æ
-                        //  L-SMASH‚ªheader.frame_length‚ğŒ©‚ÄƒtƒŒ[ƒ€‚ğƒXƒLƒbƒv‚µ‚Ä‚¢‚é‚Ì‚Å
-                        //  ‚±‚ê‚ªÀÛ‚ÌƒtƒŒ[ƒ€’·‚Æˆê’v‚µ‚Ä‚¢‚È‚¢‚Æ—‚¿‚é‚Ì‚Åj
+                        // ã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒæ­£å¸¸ãªã‚‰ frameInfo.bytesconsumed == header.frame_length ã¨ãªã‚‹ã¯ãšã ãŒ
+                        // ã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒä¸æ­£ã ã¨åŒã˜ã«ãªã‚‰ãªã„ã“ã¨ãŒã‚ã‚‹
+                        // ãã®å ´åˆã€é•·ã•ã¯ header.frame_length ã‚’å„ªå…ˆã™ã‚‹
+                        //ï¼ˆãã®æ–¹ãŒæ¬¡ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒæ­£ã—ããƒ‡ã‚³ãƒ¼ãƒ‰ã•ã‚Œã‚‹ç¢ºç‡ãŒä¸ŠãŒã‚‹ã®ã¨
+                        //  L-SMASHãŒheader.frame_lengthã‚’è¦‹ã¦ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ã‚¹ã‚­ãƒƒãƒ—ã—ã¦ã„ã‚‹ã®ã§
+                        //  ã“ã‚ŒãŒå®Ÿéš›ã®ãƒ•ãƒ¬ãƒ¼ãƒ é•·ã¨ä¸€è‡´ã—ã¦ã„ãªã„ã¨è½ã¡ã‚‹ã®ã§ï¼‰
                         //frameData.codedDataSize = frameInfo.bytesconsumed;
                         frameData.codedDataSize = header.frame_length;
 
-                        // codedBuffer“àƒf[ƒ^‚Ö‚Ìƒ|ƒCƒ“ƒ^‚ğ“ü‚ê‚Ä‚¢‚é‚Ì‚Å
-                        // codedBuffer‚É‚ÍG‚ç‚È‚¢‚æ‚¤‚É’ˆÓI
+                        // codedBufferå†…ãƒ‡ãƒ¼ã‚¿ã¸ã®ãƒã‚¤ãƒ³ã‚¿ã‚’å…¥ã‚Œã¦ã„ã‚‹ã®ã§
+                        // codedBufferã«ã¯è§¦ã‚‰ãªã„ã‚ˆã†ã«æ³¨æ„ï¼
                         frameData.codedData = ptr;
                         frameData.decodedDataSize = frameInfo.samples * 2;
-                        // AutoBuffer‚Íƒƒ‚ƒŠÄŠm•Û‚ª‚ ‚é‚Ì‚ÅƒfƒR[ƒhƒf[ƒ^‚Ö‚Ìƒ|ƒCƒ“ƒ^‚ÍŒã‚Å“ü‚ê‚é
+                        // AutoBufferã¯ãƒ¡ãƒ¢ãƒªå†ç¢ºä¿ãŒã‚ã‚‹ã®ã§ãƒ‡ã‚³ãƒ¼ãƒ‰ãƒ‡ãƒ¼ã‚¿ã¸ã®ãƒã‚¤ãƒ³ã‚¿ã¯å¾Œã§å…¥ã‚Œã‚‹
 
-                        // PTS‚ğŒvZ
+                        // PTSã‚’è¨ˆç®—
                         int64_t duration = 90000 * frameData.numSamples / frameData.format.sampleRate;
                         if (ibytes < prevDataSize) {
-                            // ƒtƒŒ[ƒ€‚ÌŠJn‚ªŒ»İ‚ÌƒpƒPƒbƒgæ“ª‚æ‚è‘O‚¾‚Á‚½ê‡
-                            // i‚Â‚Ü‚èAPESƒpƒPƒbƒg‚Ì‹«ŠE‚ÆƒtƒŒ[ƒ€‚Ì‹«ŠE‚ªˆê’v‚µ‚È‚©‚Á‚½ê‡j
-                            // Œ»İ‚ÌƒpƒPƒbƒg‚ÌPTS‚Í“K—p‚Å‚«‚È‚¢‚Ì‚Å‘O‚ÌƒpƒPƒbƒg‚©‚ç‚Ì’l‚ğ“ü‚ê‚é
+                            // ãƒ•ãƒ¬ãƒ¼ãƒ ã®é–‹å§‹ãŒç¾åœ¨ã®ãƒ‘ã‚±ãƒƒãƒˆå…ˆé ­ã‚ˆã‚Šå‰ã ã£ãŸå ´åˆ
+                            // ï¼ˆã¤ã¾ã‚Šã€PESãƒ‘ã‚±ãƒƒãƒˆã®å¢ƒç•Œã¨ãƒ•ãƒ¬ãƒ¼ãƒ ã®å¢ƒç•ŒãŒä¸€è‡´ã—ãªã‹ã£ãŸå ´åˆï¼‰
+                            // ç¾åœ¨ã®ãƒ‘ã‚±ãƒƒãƒˆã®PTSã¯é©ç”¨ã§ããªã„ã®ã§å‰ã®ãƒ‘ã‚±ãƒƒãƒˆã‹ã‚‰ã®å€¤ã‚’å…¥ã‚Œã‚‹
                             frameData.PTS = lastPTS_;
                             lastPTS_ += duration;
-                            // Œ»İ‚ÌƒpƒPƒbƒg‚ª—ˆ‚È‚¯‚ê‚ÎƒtƒŒ[ƒ€‚ğo—Í‚Å‚«‚È‚©‚Á‚½‚Ì‚ÅAo—Í‚µ‚½ƒtƒŒ[ƒ€‚ÍŒ»İ‚ÌƒpƒPƒbƒg‚Ìˆê•”‚ğŠÜ‚Ş‚Í‚¸
+                            // ç¾åœ¨ã®ãƒ‘ã‚±ãƒƒãƒˆãŒæ¥ãªã‘ã‚Œã°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å‡ºåŠ›ã§ããªã‹ã£ãŸã®ã§ã€å‡ºåŠ›ã—ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã¯ç¾åœ¨ã®ãƒ‘ã‚±ãƒƒãƒˆã®ä¸€éƒ¨ã‚’å«ã‚€ã¯ãš
                             ASSERT(ibytes + header.frame_length > prevDataSize);
-                            // ‚Â‚Ü‚èAPTS‚Íi‚à‚µ‚ ‚ê‚Îj’¼Œã‚ÌƒtƒŒ[ƒ€‚ÌPTS‚Å‚ ‚é
+                            // ã¤ã¾ã‚Šã€PTSã¯ï¼ˆã‚‚ã—ã‚ã‚Œã°ï¼‰ç›´å¾Œã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®PTSã§ã‚ã‚‹
                             if (PTS >= 0) {
                                 lastPTS_ = PTS;
                                 PTS = -1;
                             }
                         } else {
-                            // PESƒpƒPƒbƒg‚Ì‹«ŠE‚ÆƒtƒŒ[ƒ€‚Ì‹«ŠE‚ªˆê’v‚µ‚½ê‡
-                            // ‚à‚µ‚­‚ÍPESƒpƒPƒbƒg‚Ì2”Ô–ÚˆÈ~‚ÌƒtƒŒ[ƒ€
+                            // PESãƒ‘ã‚±ãƒƒãƒˆã®å¢ƒç•Œã¨ãƒ•ãƒ¬ãƒ¼ãƒ ã®å¢ƒç•ŒãŒä¸€è‡´ã—ãŸå ´åˆ
+                            // ã‚‚ã—ãã¯PESãƒ‘ã‚±ãƒƒãƒˆã®2ç•ªç›®ä»¥é™ã®ãƒ•ãƒ¬ãƒ¼ãƒ 
                             if (PTS >= 0) {
                                 lastPTS_ = PTS;
                                 PTS = -1;
@@ -214,7 +214,7 @@ AdtsParser::~AdtsParser() {
 
                         info.push_back(frameData);
 
-                        // ƒf[ƒ^‚ği‚ß‚é
+                        // ãƒ‡ãƒ¼ã‚¿ã‚’é€²ã‚ã‚‹
                         //ASSERT(frameInfo.bytesconsumed == header.frame_length);
                         ibytes += header.frame_length - 1;
                         bytesConsumed_ = ibytes + 1;
@@ -223,9 +223,9 @@ AdtsParser::~AdtsParser() {
                     }
                 }
             } else {
-                // ƒwƒbƒ_•s³ or \•ª‚Èƒf[ƒ^‚ª‚È‚©‚Á‚½
+                // ãƒ˜ãƒƒãƒ€ä¸æ­£ or ååˆ†ãªãƒ‡ãƒ¼ã‚¿ãŒãªã‹ã£ãŸ
                 if (syncOK) {
-                    // ’¼‘O‚ÌƒtƒŒ[ƒ€‚ªOK‚È‚ç’P‚ÉŸ‚ÌƒpƒPƒbƒg‚ğóM‚·‚ê‚Î‚¢‚¢‚¾‚¯
+                    // ç›´å‰ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒOKãªã‚‰å˜ã«æ¬¡ã®ãƒ‘ã‚±ãƒƒãƒˆã‚’å—ä¿¡ã™ã‚Œã°ã„ã„ã ã‘
                     break;
                 }
             }
@@ -233,7 +233,7 @@ AdtsParser::~AdtsParser() {
         }
     }
 
-    // ƒfƒR[ƒhƒf[ƒ^‚Ìƒ|ƒCƒ“ƒ^‚ğ“ü‚ê‚é
+    // ãƒ‡ã‚³ãƒ¼ãƒ‰ãƒ‡ãƒ¼ã‚¿ã®ãƒã‚¤ãƒ³ã‚¿ã‚’å…¥ã‚Œã‚‹
     uint8_t* decodedData = decodedBuffer.ptr();
     for (int i = 0; i < (int)info.size(); ++i) {
         info[i].decodedData = (uint16_t*)decodedData;
@@ -257,13 +257,13 @@ bool AdtsParser::resetDecoder(MemoryChunk data) {
     hAacDec = NeAACDecOpen();
     NeAACDecConfigurationPtr conf = NeAACDecGetCurrentConfiguration(hAacDec);
     conf->outputFormat = FAAD_FMT_16BIT;
-    conf->downMatrix = 1; // WAVo—Í‚Í‰ğÍ—p‚È‚Ì‚Å2ch‚ ‚ê‚Î\•ª
+    conf->downMatrix = 1; // WAVå‡ºåŠ›ã¯è§£æç”¨ãªã®ã§2chã‚ã‚Œã°ååˆ†
     NeAACDecSetConfiguration(hAacDec, conf);
 
     unsigned long samplerate;
     unsigned char channels;
     if (NeAACDecInit(hAacDec, data.data, (int)data.length, &samplerate, &channels)) {
-        ctx.warn("NeAACDecInit‚É¸”s");
+        ctx.warn("NeAACDecInitã«å¤±æ•—");
         return false;
     }
     return true;
@@ -294,7 +294,7 @@ AUDIO_CHANNELS AdtsParser::getAudioChannels(const AdtsHeader& header, const NeAA
 int64_t AdtsParser::channelCanonical(int numElem, const uint8_t* elems) {
     int64_t canonical = -1;
 
-    // canonical‚É‚·‚éãŒÀi22.2ch‚Å‚à16ŒÂ‚È‚Ì‚Å\•ª‚È‚Í‚¸j
+    // canonicalã«ã™ã‚‹ä¸Šé™ï¼ˆ22.2chã§ã‚‚16å€‹ãªã®ã§ååˆ†ãªã¯ãšï¼‰
     if (numElem > 20) {
         numElem = 20;
     }
@@ -323,7 +323,7 @@ void AdtsParser::createChannelsMap() {
             AUDIO_2LANG,
             2,{ (uint8_t)ID_SCE, (uint8_t)ID_SCE }
         },
-        // ˆÈ‰º4K
+        // ä»¥ä¸‹4K
         {
             AUDIO_33_LFE,
             5,{ (uint8_t)ID_SCE, (uint8_t)ID_CPE, (uint8_t)ID_CPE, (uint8_t)ID_SCE, (uint8_t)ID_LFE }
@@ -376,22 +376,22 @@ DualMonoSplitter::~DualMonoSplitter() {
 void DualMonoSplitter::inputPacket(MemoryChunk frame) {
     AdtsHeader header;
     if (!header.parse(frame.data, (int)frame.length)) {
-        THROW(FormatException, "[DualMonoSplitter] ƒwƒbƒ_‚ğparse‚Å‚«‚È‚©‚Á‚½");
+        THROW(FormatException, "[DualMonoSplitter] ãƒ˜ãƒƒãƒ€ã‚’parseã§ããªã‹ã£ãŸ");
     }
-    // ƒXƒgƒŠ[ƒ€‚ğ‰ğÍ‚·‚é‚Ì‚Í–Ê“|‚È‚Ì‚ÅƒfƒR[ƒh‚µ‚¿‚á‚¤
+    // ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’è§£æã™ã‚‹ã®ã¯é¢å€’ãªã®ã§ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ã¡ã‚ƒã†
     if (hAacDec == NULL) {
         resetDecoder(MemoryChunk(frame.data, frame.length));
     }
     NeAACDecFrameInfo frameInfo;
     void* samples = NeAACDecDecode(hAacDec, &frameInfo, frame.data, (int)frame.length);
     if (frameInfo.error != 0) {
-        // ‚±‚±‚Å‚Í‘åä•v‚¾‚Æ‚Ív‚¤‚¯‚Çˆê‰ƒGƒ‰[‘Îô‚Í‚â‚Á‚Ä‚¨‚­
+        // ã“ã“ã§ã¯å¤§ä¸ˆå¤«ã ã¨ã¯æ€ã†ã‘ã©ä¸€å¿œã‚¨ãƒ©ãƒ¼å¯¾ç­–ã¯ã‚„ã£ã¦ãŠã
         resetDecoder(MemoryChunk(frame.data, frame.length));
         samples = NeAACDecDecode(hAacDec, &frameInfo, frame.data, (int)frame.length);
     }
     if (frameInfo.error == 0) {
         if (frameInfo.fr_ch_ele != 2) {
-            THROWF(FormatException, "ƒfƒ…ƒAƒ‹ƒ‚ƒmAAC‚ÌƒGƒŒƒƒ“ƒg”•s³ %d != 2", frameInfo.fr_ch_ele);
+            THROWF(FormatException, "ãƒ‡ãƒ¥ã‚¢ãƒ«ãƒ¢ãƒAACã®ã‚¨ãƒ¬ãƒ¡ãƒ³ãƒˆæ•°ä¸æ­£ %d != 2", frameInfo.fr_ch_ele);
         }
 
         for (int i = 0; i < 2; ++i) {
@@ -401,7 +401,7 @@ void DualMonoSplitter::inputPacket(MemoryChunk frame) {
             int end_bits = frameInfo.element_end[i];
             int frame_length = (end_bits - start_bits + 3 + 7) / 8 + 7;
 
-            // ƒwƒbƒ_
+            // ãƒ˜ãƒƒãƒ€
             writer.write<12>(0xFFF); // sync word
             writer.write<1>(1); // ID
             writer.write<2>(0); // layer
@@ -418,7 +418,7 @@ void DualMonoSplitter::inputPacket(MemoryChunk frame) {
             writer.write<11>((1 << 11) - 1); // adts_buffer_fullness(all ones means variable bit rate)
             writer.write<2>(0); // number_of_raw_data_blocks_in_frame
 
-            // SPE‚P‚Â
+            // SPEï¼‘ã¤
             BitReader reader(frame);
             reader.skip(start_bits);
             int bitpos = start_bits;
@@ -434,7 +434,7 @@ void DualMonoSplitter::inputPacket(MemoryChunk frame) {
             writer.flush();
 
             if (buf.size() != frame_length) {
-                THROW(RuntimeException, "ƒTƒCƒY‚ª‡‚í‚È‚¢");
+                THROW(RuntimeException, "ã‚µã‚¤ã‚ºãŒåˆã‚ãªã„");
             }
 
             OnOutFrame(i, buf.get());
@@ -461,7 +461,7 @@ bool DualMonoSplitter::resetDecoder(MemoryChunk data) {
     unsigned long samplerate;
     unsigned char channels;
     if (NeAACDecInit(hAacDec, data.data, (int)data.length, &samplerate, &channels)) {
-        ctx.warn("NeAACDecInit‚É¸”s");
+        ctx.warn("NeAACDecInitã«å¤±æ•—");
         return false;
     }
     return true;

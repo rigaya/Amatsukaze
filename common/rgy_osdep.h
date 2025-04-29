@@ -112,13 +112,26 @@ typedef void* HANDLE;
 typedef void* HMODULE;
 typedef void* HINSTANCE;
 typedef int errno_t;
+typedef unsigned char BYTE;
+typedef unsigned short WORD;
+typedef unsigned int DWORD;
+typedef short SHORT;
+typedef const BYTE* LPCBYTE;
+typedef const WCHAR* LPCWSTR;
+typedef unsigned int UINT;
+typedef char* LPSTR;
+typedef const char* LPCSTR;
+typedef bool* LPBOOL;
+typedef WCHAR* LPWSTR;
+typedef long LONG;
 
 #define RGY_LOAD_LIBRARY(x) dlopen((x), RTLD_LAZY)
 #define RGY_GET_PROC_ADDRESS dlsym
 #define RGY_FREE_LIBRARY dlclose
 
+static uint32_t CP_ACP = 0;
 static uint32_t CP_THREAD_ACP = 0;
-static uint32_t CP_UTF8 = 0;
+static uint32_t CP_UTF8 = 65001;
 
 #define __stdcall
 #define __fastcall
@@ -161,6 +174,12 @@ static inline char *strcat_s(char *dst, size_t size, const char *src) {
 static inline int _vsprintf_s(char *buffer, size_t size, const char *format, va_list argptr) {
     return vsprintf(buffer, format, argptr);
 }
+static inline size_t strnlen_s(const char *str, size_t maxlen) {
+    return strnlen(str, maxlen);
+}
+
+#define _fsopen(filename, mode, shflag) fopen(filename, mode)
+#define _wfsopen(filename, mode, shflag) fopen(wstring_to_string(filename).c_str(), wstring_to_string(mode).c_str())
 #define sscanf_s sscanf
 #define swscanf_s swscanf
 #define vsprintf_s(buf, size, fmt, va)  vsprintf(buf, fmt, va)
@@ -170,6 +189,8 @@ static inline int _vsprintf_s(char *buffer, size_t size, const char *format, va_
 #define _stricmp stricmp
 #define wcsicmp wcscasecmp
 #define _wcsicmp wcsicmp
+
+#define lstrlenW wcslen
 
 static short _InterlockedIncrement16(volatile short *pVariable) {
     return __sync_add_and_fetch((volatile short*)pVariable, 1);
@@ -197,13 +218,47 @@ static inline int _vscprintf(const char * format, va_list pargs) {
 }
 
 static inline int _vscwprintf(const WCHAR * format, va_list pargs) {
-    int retval;
-    va_list argcopy;
-    va_copy(argcopy, pargs);
-    retval = vswprintf(NULL, 0, format, argcopy);
-    va_end(argcopy);
+    wchar_t *buffer = nullptr;
+    int retval = -1;
+    int buf_size = 1024;
+    while (buf_size < 1024 * 1024) {
+        va_list argcopy;
+        va_copy(argcopy, pargs);
+        buffer = (wchar_t*)realloc(buffer, buf_size * sizeof(wchar_t));
+        int ret = swprintf(buffer, buf_size, format, argcopy);
+        va_end(argcopy);
+        if (retval >= 0){
+            retval = ret;
+            break;
+        }
+        buf_size *= 2;
+    }
+    if (buffer != nullptr) {
+        free(buffer);
+    }
     return retval;
 }
+
+static inline int _scprintf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int rc = _vscprintf(format, args);
+    va_end(args);
+    return rc;
+}
+
+static inline int _scwprintf(const wchar_t *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int rc = _vscwprintf(format, args);
+    va_end(args);
+    return rc;
+}
+
+#define vscprintf _vscprintf
+#define scprintf _scprintf
+#define vscwprintf _vscwprintf
+#define scwprintf _scwprintf
 
 static inline int sprintf_s(char *dst, const char* format, ...) {
     va_list args;
@@ -325,6 +380,42 @@ static int getStdInKey() {
 #define _fgetc_nolock fgetc
 #define _fseeki64 fseek
 #define _ftelli64 ftell
+
+typedef struct {
+    uint32_t biSize;
+    int32_t  biWidth;
+    int32_t  biHeight;
+    uint16_t biPlanes;
+    uint16_t biBitCount;
+    uint32_t biCompression;
+    uint32_t biSizeImage;
+    int32_t  biXPelsPerMeter;
+    int32_t  biYPelsPerMeter;
+    uint32_t biClrUsed;
+    uint32_t biClrImportant;
+} BITMAPINFOHEADER;
+
+typedef struct {
+    uint16_t   bfType;
+    uint32_t   bfSize;
+    uint16_t   bfReserved1;
+    uint16_t   bfReserved2;
+    uint32_t   bfOffBits;
+} BITMAPFILEHEADER;
+
+static const int BI_RGB        = 0;
+static const int BI_RLE8       = 1;
+static const int BI_RLE4       = 2;
+static const int BI_BITFIELDS  = 3;
+static const int BI_JPEG       = 4;
+static const int BI_PNG        = 5;
+
+typedef struct {
+  LONG left;
+  LONG top;
+  LONG right;
+  LONG bottom;
+} RECT;
 
 #endif //#if defined(_WIN32) || defined(_WIN64)
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /**
 * Amtasukaze Performance Utility
@@ -10,12 +10,12 @@
 #pragma once
 
 #include <deque>
+#include <chrono>
 #include "StreamUtils.h"
 
 class Stopwatch {
-    int64_t sum;
-    int64_t prev;
-    int64_t freq;
+    std::chrono::microseconds sum;
+    std::chrono::high_resolution_clock::time_point prev;
 public:
     Stopwatch();
 

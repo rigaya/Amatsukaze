@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /**
 * MPEG2 Video parser

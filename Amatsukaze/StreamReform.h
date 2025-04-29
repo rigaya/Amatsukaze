@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Output stream construction
@@ -20,9 +20,9 @@
 #include "StreamUtils.h"
 #include "Mpeg2TsParser.h"
 
-// ŠÔ‚Í‘S‚Ä 90kHz double ‚ÅŒvZ‚·‚é
-// 90kHz‚Å‚à60*1000/1001fps‚Ì1ƒtƒŒ[ƒ€‚ÌŠÔ‚Í®”‚Å•\‚¹‚È‚¢
-// ‚¾‚©‚ç‚ÆŒ¾‚Á‚Ä27MHz‚Å‚Í”’l‚ª‘å‚«‚·‚¬‚é
+// æ™‚é–“ã¯å…¨ã¦ 90kHz double ã§è¨ˆç®—ã™ã‚‹
+// 90kHzã§ã‚‚60*1000/1001fpsã®1ãƒ•ãƒ¬ãƒ¼ãƒ ã®æ™‚é–“ã¯æ•´æ•°ã§è¡¨ã›ãªã„
+// ã ã‹ã‚‰ã¨è¨€ã£ã¦27MHzã§ã¯æ•°å€¤ãŒå¤§ãã™ãã‚‹
 
 struct FileAudioFrameInfo : public AudioFrameInfo {
     int audioIdx;
@@ -53,33 +53,33 @@ enum StreamEventType {
 
 struct StreamEvent {
     StreamEventType type;
-    int frameIdx;	// ƒtƒŒ[ƒ€”Ô†
-    int audioIdx;	// •ÏX‚³‚ê‚½‰¹ºƒCƒ“ƒfƒbƒNƒXiAUDIO_FORMAT_CHANGED‚Ì‚Æ‚«‚Ì‚İ—LŒøj
-    int numAudio;	// ‰¹º‚Ì”iPID_TABLE_CHANGED‚Ì‚Æ‚«‚Ì‚İ—LŒøj
+    int frameIdx;	// ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·
+    int audioIdx;	// å¤‰æ›´ã•ã‚ŒãŸéŸ³å£°ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ï¼ˆAUDIO_FORMAT_CHANGEDã®ã¨ãã®ã¿æœ‰åŠ¹ï¼‰
+    int numAudio;	// éŸ³å£°ã®æ•°ï¼ˆPID_TABLE_CHANGEDã®ã¨ãã®ã¿æœ‰åŠ¹ï¼‰
 };
 
 typedef std::vector<std::vector<int>> FileAudioFrameList;
 
 struct OutVideoFormat {
-    int formatId; // “à•”ƒtƒH[ƒ}ƒbƒgIDi’Ê‚µ”Ô†j
+    int formatId; // å†…éƒ¨ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆIDï¼ˆé€šã—ç•ªå·ï¼‰
     int videoFileId;
     VideoFormat videoFormat;
     std::vector<AudioFormat> audioFormat;
 };
 
-// ‰¹ƒYƒŒ“Œvî•ñ
+// éŸ³ã‚ºãƒ¬çµ±è¨ˆæƒ…å ±
 struct AudioDiffInfo {
     double sumPtsDiff;
     int totalSrcFrames;
-    int totalAudioFrames; // o—Í‚µ‚½‰¹ºƒtƒŒ[ƒ€i…‘‚µ•ª‚ğŠÜ‚Şj
-    int totalUniquAudioFrames; // o—Í‚µ‚½‰¹ºƒtƒŒ[ƒ€i…‘‚µ•ª‚ğŠÜ‚Ü‚¸j
+    int totalAudioFrames; // å‡ºåŠ›ã—ãŸéŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ï¼ˆæ°´å¢—ã—åˆ†ã‚’å«ã‚€ï¼‰
+    int totalUniquAudioFrames; // å‡ºåŠ›ã—ãŸéŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ï¼ˆæ°´å¢—ã—åˆ†ã‚’å«ã¾ãšï¼‰
     double maxPtsDiff;
     double maxPtsDiffPos;
     double basePts;
 
-    // •b’PˆÊ‚Åæ“¾
+    // ç§’å˜ä½ã§å–å¾—
     double avgDiff() const;
-    // •b’PˆÊ‚Åæ“¾
+    // ç§’å˜ä½ã§å–å¾—
     double maxDiff() const;
 
     void printAudioPtsDiff(AMTContext& ctx) const;
@@ -92,9 +92,9 @@ private:
 
 struct FilterSourceFrame {
     bool halfDelay;
-    int frameIndex; // “à•”—p(DTS‡ƒtƒŒ[ƒ€”Ô†)
-    double pts; // “à•”—p
-    double frameDuration; // “à•”—p
+    int frameIndex; // å†…éƒ¨ç”¨(DTSé †ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·)
+    double pts; // å†…éƒ¨ç”¨
+    double frameDuration; // å†…éƒ¨ç”¨
     int64_t framePTS;
     int64_t fileOffset;
     int keyFrame;
@@ -102,7 +102,7 @@ struct FilterSourceFrame {
 };
 
 struct FilterAudioFrame {
-    int frameIndex; // ƒfƒoƒbƒO—p
+    int frameIndex; // ãƒ‡ãƒãƒƒã‚°ç”¨
     int64_t waveOffset;
     int waveLength;
 };
@@ -136,14 +136,14 @@ typedef std::array<std::vector<NicoJKLine>, NICOJK_MAX> NicoJKList;
 typedef std::pair<int64_t, JSTTime> TimeInfo;
 
 struct EncodeFileInput {
-    EncodeFileKey key;     // ƒL[
-    EncodeFileKey outKey; // o—Íƒtƒ@ƒCƒ‹–¼—pƒL[
-    EncodeFileKey keyMax;  // o—Íƒtƒ@ƒCƒ‹–¼Œˆ’è—pÅ‘å’l
-    double duration;       // Ä¶ŠÔ
-    std::vector<int> videoFrames; // ‰f‘œƒtƒŒ[ƒ€ƒŠƒXƒgi’†g‚ÍƒtƒBƒ‹ƒ^“ü—ÍƒtƒŒ[ƒ€‚Å‚ÌƒCƒ“ƒfƒbƒNƒXj
-    FileAudioFrameList audioFrames; // ‰¹ºƒtƒŒ[ƒ€ƒŠƒXƒg
-    OutCaptionList captionList;     // š–‹
-    NicoJKList nicojkList;          // ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg
+    EncodeFileKey key;     // ã‚­ãƒ¼
+    EncodeFileKey outKey; // å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«åç”¨ã‚­ãƒ¼
+    EncodeFileKey keyMax;  // å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«åæ±ºå®šç”¨æœ€å¤§å€¤
+    double duration;       // å†ç”Ÿæ™‚é–“
+    std::vector<int> videoFrames; // æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆï¼ˆä¸­èº«ã¯ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ã§ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ï¼‰
+    FileAudioFrameList audioFrames; // éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆ
+    OutCaptionList captionList;     // å­—å¹•
+    NicoJKList nicojkList;          // ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆ
 };
 
 class StreamReformInfo : public AMTObject {
@@ -157,48 +157,48 @@ public:
         std::vector<StreamEvent>& streamEventList,
         std::vector<TimeInfo>& timeList);
 
-    // 1. ƒRƒ“ƒXƒgƒ‰ƒNƒg’¼Œã‚ÉŒÄ‚Ô
-    // splitSub: ƒƒCƒ“ˆÈŠO‚ÌƒtƒH[ƒ}ƒbƒg‚ğŒ‹‡‚µ‚È‚¢
+    // 1. ã‚³ãƒ³ã‚¹ãƒˆãƒ©ã‚¯ãƒˆç›´å¾Œã«å‘¼ã¶
+    // splitSub: ãƒ¡ã‚¤ãƒ³ä»¥å¤–ã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’çµåˆã—ãªã„
     void prepare(bool splitSub, bool isEncodeAudio, bool isTsreplace);
 
     time_t getFirstFrameTime() const;
 
-    // 2. ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg‚ğæ“¾‚µ‚½‚çŒÄ‚Ô
+    // 2. ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆã‚’å–å¾—ã—ãŸã‚‰å‘¼ã¶
     void SetNicoJKList(const std::array<std::vector<NicoJKLine>, NICOJK_MAX>& nicoJKList);
 
-    // 2. Še’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚ÌCM‰ğÍŒã‚ÉŒÄ‚Ô
-    // cmzones: CMƒ][ƒ“iƒtƒBƒ‹ƒ^“ü—ÍƒtƒŒ[ƒ€”Ô†j
-    // divs: •ªŠ„ƒ|ƒCƒ“ƒgƒŠƒXƒgiƒtƒBƒ‹ƒ^“ü—ÍƒtƒŒ[ƒ€”Ô†j
+    // 2. å„ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã®CMè§£æå¾Œã«å‘¼ã¶
+    // cmzones: CMã‚¾ãƒ¼ãƒ³ï¼ˆãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ï¼‰
+    // divs: åˆ†å‰²ãƒã‚¤ãƒ³ãƒˆãƒªã‚¹ãƒˆï¼ˆãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ï¼‰
     void applyCMZones(int videoFileIndex, const std::vector<EncoderZone>& cmzones, const std::vector<int>& divs);
 
-    // 3. CM‰ğÍ‚ªI—¹‚µ‚½‚çƒGƒ“ƒR[ƒh‘O‚ÉŒÄ‚Ô
-    // cmtypes: o—Í‚·‚éCMƒ^ƒCƒvƒŠƒXƒg
+    // 3. CMè§£æãŒçµ‚äº†ã—ãŸã‚‰ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰å‰ã«å‘¼ã¶
+    // cmtypes: å‡ºåŠ›ã™ã‚‹CMã‚¿ã‚¤ãƒ—ãƒªã‚¹ãƒˆ
     AudioDiffInfo genAudio(const std::vector<CMType>& cmtypes);
 
-    // ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚ÌŒÂ”
+    // ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã®å€‹æ•°
     int getNumVideoFile() const;
 
-    // “ü—Í‰f‘œ‹KŠi
+    // å…¥åŠ›æ˜ åƒè¦æ ¼
     VIDEO_STREAM_FORMAT getVideoStreamFormat() const;
 
-    // PMT•ÏXPTSƒŠƒXƒg
+    // PMTå¤‰æ›´PTSãƒªã‚¹ãƒˆ
     std::vector<int> getPidChangedList(int videoFileIndex) const;
 
     int getMainVideoFileIndex() const;
 
-    // ƒtƒBƒ‹ƒ^“ü—Í‰f‘œƒtƒŒ[ƒ€
+    // ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ 
     const std::vector<FilterSourceFrame>& getFilterSourceFrames(int videoFileIndex) const;
 
-    // ƒtƒBƒ‹ƒ^“ü—Í‰¹ºƒtƒŒ[ƒ€
+    // ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ 
     const std::vector<FilterAudioFrame>& getFilterSourceAudioFrames(int videoFileIndex) const;
 
-    // o—Íƒtƒ@ƒCƒ‹î•ñ
+    // å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«æƒ…å ±
     const EncodeFileInput& getEncodeFile(EncodeFileKey key) const;
 
-    // ’†ŠÔˆêƒtƒ@ƒCƒ‹‚²‚Æ‚Ìo—Íƒtƒ@ƒCƒ‹”
+    // ä¸­é–“ä¸€æ™‚ãƒ•ã‚¡ã‚¤ãƒ«ã”ã¨ã®å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«æ•°
     int getNumEncoders(int videoFileIndex) const;
 
-    // ‡Œvo—Íƒtƒ@ƒCƒ‹”
+    // åˆè¨ˆå‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«æ•°
     //int getNumOutFiles() const {
     //	return (int)fileFormatId_.size();
     //}
@@ -206,21 +206,21 @@ public:
     // video frame index -> VideoFrameInfo
     const VideoFrameInfo& getVideoFrameInfo(int frameIndex) const;
 
-    // video frame index (DTS‡) -> encoder index
+    // video frame index (DTSé †) -> encoder index
     int getEncoderIndex(int frameIndex) const;
 
-    // key‚Ívideo,format‚Ì2‚Â‚µ‚©g‚í‚ê‚È‚¢
+    // keyã¯video,formatã®2ã¤ã—ã‹ä½¿ã‚ã‚Œãªã„
     const OutVideoFormat& getFormat(EncodeFileKey key) const;
 
-    // genAudioŒãg—p‰Â”\
+    // genAudioå¾Œä½¿ç”¨å¯èƒ½
     const std::vector<EncodeFileKey>& getOutFileKeys() const;
 
-    // ‰f‘œƒf[ƒ^ƒTƒCƒYiƒoƒCƒgjAŠÔiƒ^ƒCƒ€ƒXƒ^ƒ“ƒvj‚ÌƒyƒA
+    // æ˜ åƒãƒ‡ãƒ¼ã‚¿ã‚µã‚¤ã‚ºï¼ˆãƒã‚¤ãƒˆï¼‰ã€æ™‚é–“ï¼ˆã‚¿ã‚¤ãƒ ã‚¹ã‚¿ãƒ³ãƒ—ï¼‰ã®ãƒšã‚¢
     std::pair<int64_t, double> getSrcVideoInfo(int videoFileIndex) const;
 
-    // TODO: VFR—pƒ^ƒCƒ€ƒR[ƒhæ“¾
-    // infps: ƒtƒBƒ‹ƒ^“ü—Í‚ÌFPS
-    // outpfs: ƒtƒBƒ‹ƒ^o—Í‚ÌFPS
+    // TODO: VFRç”¨ã‚¿ã‚¤ãƒ ã‚³ãƒ¼ãƒ‰å–å¾—
+    // infps: ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ã®FPS
+    // outpfs: ãƒ•ã‚£ãƒ«ã‚¿å‡ºåŠ›ã®FPS
     void getTimeCode(
         int encoderIndex, int videoFileIndex, CMType cmtype, double infps, double outfps) const;
 
@@ -234,12 +234,12 @@ public:
 
     std::pair<double, double> getInOutDuration() const;
 
-    // ‰¹ºƒtƒŒ[ƒ€”Ô†ƒŠƒXƒg‚©‚çFilterAudioFrameƒŠƒXƒg‚É•ÏŠ·
+    // éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ãƒªã‚¹ãƒˆã‹ã‚‰FilterAudioFrameãƒªã‚¹ãƒˆã«å¤‰æ›
     std::vector<FilterAudioFrame> getWaveInput(const std::vector<int>& frameList) const;
 
     void printOutputMapping(std::function<tstring(EncodeFileKey)> getFileName) const;
 
-    // ˆÈ‰ºƒfƒoƒbƒO—p //
+    // ä»¥ä¸‹ãƒ‡ãƒãƒƒã‚°ç”¨ //
 
     void serialize(const tstring& path);
 
@@ -255,18 +255,18 @@ private:
         double startPTS, endPTS;
     };
 
-    // å—vƒCƒ“ƒfƒbƒNƒX‚Ìà–¾
-    // DTS‡: ‘S‰f‘œƒtƒŒ[ƒ€‚ğDTS‡‚Å•À‚×‚½‚Æ‚«‚ÌƒCƒ“ƒfƒbƒNƒX
-    // PTS‡: ‘S‰f‘œƒtƒŒ[ƒ€‚ğPTS‡‚Å•À‚×‚½‚Æ‚«‚ÌƒCƒ“ƒfƒbƒNƒX
-    // ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‡: ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚ÌƒCƒ“ƒfƒbƒNƒX(=video)
-    // ƒtƒH[ƒ}ƒbƒg‡: ‘SƒtƒH[ƒ}ƒbƒg‚ÌƒCƒ“ƒfƒbƒNƒX
-    // ƒtƒH[ƒ}ƒbƒg(o—Í)‡: Šî–{“I‚ÉƒtƒH[ƒ}ƒbƒg‚Æ“¯‚¶‚¾‚ªAuƒƒCƒ“ˆÈŠO‚ÍŒ‹‡‚µ‚È‚¢vê‡A
-    //                     ƒƒCƒ“ˆÈŠO‚ª•ª—£‚³‚ê‚ÄˆÙ‚È‚éƒCƒ“ƒfƒbƒNƒX‚É‚È‚Á‚Ä‚¢‚é(=format)
-    // o—Íƒtƒ@ƒCƒ‹‡: EncodeFileKey‚Å¯•Ê‚³‚ê‚éo—Íƒtƒ@ƒCƒ‹‚ÌƒCƒ“ƒfƒbƒNƒX
+    // ä¸»è¦ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ã®èª¬æ˜
+    // DTSé †: å…¨æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã‚’DTSé †ã§ä¸¦ã¹ãŸã¨ãã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // PTSé †: å…¨æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã‚’PTSé †ã§ä¸¦ã¹ãŸã¨ãã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«é †: ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹(=video)
+    // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆé †: å…¨ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)é †: åŸºæœ¬çš„ã«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¨åŒã˜ã ãŒã€ã€Œãƒ¡ã‚¤ãƒ³ä»¥å¤–ã¯çµåˆã—ãªã„ã€å ´åˆã€
+    //                     ãƒ¡ã‚¤ãƒ³ä»¥å¤–ãŒåˆ†é›¢ã•ã‚Œã¦ç•°ãªã‚‹ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ã«ãªã£ã¦ã„ã‚‹(=format)
+    // å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«é †: EncodeFileKeyã§è­˜åˆ¥ã•ã‚Œã‚‹å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
 
-    // “ü—Í‰ğÍ‚Ìo—Í
+    // å…¥åŠ›è§£æã®å‡ºåŠ›
     int numVideoFile_;
-    std::vector<FileVideoFrameInfo> videoFrameList_; // [DTS‡] 
+    std::vector<FileVideoFrameInfo> videoFrameList_; // [DTSé †] 
     std::vector<FileAudioFrameInfo> audioFrameList_;
     std::vector<CaptionItem> captionItemList_;
     std::vector<StreamEvent> streamEventList_;
@@ -276,47 +276,47 @@ private:
     bool isEncodeAudio_;
     bool isTsreplace_;
 
-    // ŒvZƒf[ƒ^
+    // è¨ˆç®—ãƒ‡ãƒ¼ã‚¿
     bool isVFR_;
     bool hasRFF_;
-    std::vector<double> modifiedPTS_; // [DTS‡] ƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS
-    std::vector<double> modifiedAudioPTS_; // ƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS
-    std::vector<double> modifiedCaptionPTS_; // ƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS
-    std::vector<double> audioFrameDuration_; // Še‰¹ºƒtƒŒ[ƒ€‚ÌŠÔ
-    std::vector<int> ordredVideoFrame_; // [PTS‡] -> [DTS‡] •ÏŠ·
-    std::vector<double> dataPTS_; // [DTS‡] ‰f‘œƒtƒŒ[ƒ€‚ÌƒXƒgƒŠ[ƒ€ã‚Å‚ÌˆÊ’u‚ÆPTS‚ÌŠÖ˜A•t‚¯
+    std::vector<double> modifiedPTS_; // [DTSé †] ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTS
+    std::vector<double> modifiedAudioPTS_; // ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTS
+    std::vector<double> modifiedCaptionPTS_; // ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTS
+    std::vector<double> audioFrameDuration_; // å„éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã®æ™‚é–“
+    std::vector<int> ordredVideoFrame_; // [PTSé †] -> [DTSé †] å¤‰æ›
+    std::vector<double> dataPTS_; // [DTSé †] æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã®ã‚¹ãƒˆãƒªãƒ¼ãƒ ä¸Šã§ã®ä½ç½®ã¨PTSã®é–¢é€£ä»˜ã‘
     std::vector<double> streamEventPTS_;
     std::vector<CaptionDuration> captionDuration_;
 
-    std::vector<std::vector<int>> indexAudioFrameList_; // ‰¹ºƒCƒ“ƒfƒbƒNƒX‚²‚Æ‚ÌƒtƒŒ[ƒ€ƒŠƒXƒg
+    std::vector<std::vector<int>> indexAudioFrameList_; // éŸ³å£°ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ã”ã¨ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆ
 
-    std::vector<OutVideoFormat> format_; // [ƒtƒH[ƒ}ƒbƒg‡]
-    // ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚²‚Æ‚ÌƒtƒH[ƒ}ƒbƒgŠJnƒCƒ“ƒfƒbƒNƒX
-    // ƒTƒCƒY‚Í’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹”+1
-    std::vector<int> formatStartIndex_; // [’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‡]
+    std::vector<OutVideoFormat> format_; // [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆé †]
+    // ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã”ã¨ã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆé–‹å§‹ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // ã‚µã‚¤ã‚ºã¯ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«æ•°+1
+    std::vector<int> formatStartIndex_; // [ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«é †]
 
-    std::vector<int> fileFormatId_; // [ƒtƒH[ƒ}ƒbƒg(o—Í)‡] -> [ƒtƒH[ƒ}ƒbƒg‡] •ÏŠ·
-    // ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚²‚Æ‚Ìƒtƒ@ƒCƒ‹ŠJnƒCƒ“ƒfƒbƒNƒX
-    // ƒTƒCƒY‚Í’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹”+1
-    std::vector<int> fileFormatStartIndex_; // [’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‡] -> [ƒtƒH[ƒ}ƒbƒg(o—Í)‡]
+    std::vector<int> fileFormatId_; // [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)é †] -> [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆé †] å¤‰æ›
+    // ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã”ã¨ã®ãƒ•ã‚¡ã‚¤ãƒ«é–‹å§‹ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // ã‚µã‚¤ã‚ºã¯ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«æ•°+1
+    std::vector<int> fileFormatStartIndex_; // [ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«é †] -> [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)é †]
 
-    // ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚²‚Æ
-    std::vector<std::vector<FilterSourceFrame>> filterFrameList_; // [PTS‡]
+    // ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã”ã¨
+    std::vector<std::vector<FilterSourceFrame>> filterFrameList_; // [PTSé †]
     std::vector<std::vector<FilterAudioFrame>> filterAudioFrameList_;
     std::vector<int64_t> filterSrcSize_;
     std::vector<double> filterSrcDuration_;
-    std::vector<std::vector<int>> fileDivs_; // CM‰ğÍŒ‹‰Ê
+    std::vector<std::vector<int>> fileDivs_; // CMè§£æçµæœ
 
-    std::vector<int> frameFormatId_; // [DTS‡] -> [ƒtƒH[ƒ}ƒbƒg(o—Í)‡]
+    std::vector<int> frameFormatId_; // [DTSé †] -> [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)é †]
 
-    // o—Íƒtƒ@ƒCƒ‹ƒŠƒXƒg
-    std::vector<EncodeFileKey> outFileKeys_; // [o—Íƒtƒ@ƒCƒ‹‡]
-    std::map<int, EncodeFileInput> outFiles_; // ƒL[‚ÍEncodeFileKey.key()
+    // å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒªã‚¹ãƒˆ
+    std::vector<EncodeFileKey> outFileKeys_; // [å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«é †]
+    std::map<int, EncodeFileInput> outFiles_; // ã‚­ãƒ¼ã¯EncodeFileKey.key()
 
-    // Å‰‚Ì‰f‘œƒtƒŒ[ƒ€‚Ì(UNIXŠÔ)
+    // æœ€åˆã®æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã®æ™‚åˆ»(UNIXæ™‚é–“)
     time_t firstFrameTime_;
 
-    std::vector<int64_t> audioFileOffsets_; // ‰¹ºƒtƒ@ƒCƒ‹ƒLƒƒƒbƒVƒ…—p
+    std::vector<int64_t> audioFileOffsets_; // éŸ³å£°ãƒ•ã‚¡ã‚¤ãƒ«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ç”¨
 
     double srcTotalDuration_;
     double outTotalDuration_;
@@ -327,30 +327,30 @@ private:
 
     template<typename I>
     void makeModifiedPTS(int64_t modifiedFirstPTS, std::vector<double>& modifiedPTS, const std::vector<I>& frames) {
-        // ‘OŒã‚ÌƒtƒŒ[ƒ€‚ÌPTS‚É6ŠÔˆÈã‚Ì‚¸‚ê‚ª‚ ‚é‚Æ³‚µ‚­ˆ—‚Å‚«‚È‚¢
+        // å‰å¾Œã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®PTSã«6æ™‚é–“ä»¥ä¸Šã®ãšã‚ŒãŒã‚ã‚‹ã¨æ­£ã—ãå‡¦ç†ã§ããªã„
         if (frames.size() == 0) return;
 
-        // ƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS‚ğ¶¬
+        // ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTSã‚’ç”Ÿæˆ
         modifiedPTS.resize(frames.size());
         int64_t prevPTS = modifiedFirstPTS;
         for (int i = 0; i < int(frames.size()); ++i) {
             int64_t PTS = frames[i].PTS;
             if (PTS == -1) {
-                // PTS‚ª‚È‚¢
+                // PTSãŒãªã„
                 THROWF(FormatException,
-                    "PTS‚ª‚ ‚è‚Ü‚¹‚ñBˆ—‚Å‚«‚Ü‚¹‚ñB %dƒtƒŒ[ƒ€–Ú", i);
+                    "PTSãŒã‚ã‚Šã¾ã›ã‚“ã€‚å‡¦ç†ã§ãã¾ã›ã‚“ã€‚ %dãƒ•ãƒ¬ãƒ¼ãƒ ç›®", i);
             }
             int64_t modPTS = prevPTS + int64_t((int32_t(PTS) - int32_t(prevPTS)));
             modifiedPTS[i] = (double)modPTS;
             prevPTS = modPTS;
         }
 
-        // ƒXƒgƒŠ[ƒ€‚ª–ß‚Á‚Ä‚¢‚éê‡‚Íˆ—‚Å‚«‚È‚¢‚Ì‚ÅƒGƒ‰[‚Æ‚·‚é
+        // ã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒæˆ»ã£ã¦ã„ã‚‹å ´åˆã¯å‡¦ç†ã§ããªã„ã®ã§ã‚¨ãƒ©ãƒ¼ã¨ã™ã‚‹
         for (int i = 1; i < int(frames.size()); ++i) {
             if (modifiedPTS[i] - modifiedPTS[i - 1] < -60 * MPEG_CLOCK_HZ) {
-                // 1•ªˆÈã–ß‚Á‚Ä‚¢‚é
+                // 1åˆ†ä»¥ä¸Šæˆ»ã£ã¦ã„ã‚‹
                 ctx.incrementCounter(AMT_ERR_NON_CONTINUOUS_PTS);
-                ctx.warnF("PTS‚ª–ß‚Á‚Ä‚¢‚Ü‚·B³‚µ‚­ˆ—‚Å‚«‚È‚¢‚©‚à‚µ‚ê‚Ü‚¹‚ñB [%d] %.0f -> %.0f",
+                ctx.warnF("PTSãŒæˆ»ã£ã¦ã„ã¾ã™ã€‚æ­£ã—ãå‡¦ç†ã§ããªã„ã‹ã‚‚ã—ã‚Œã¾ã›ã‚“ã€‚ [%d] %.0f -> %.0f",
                     i, modifiedPTS[i - 1], modifiedPTS[i]);
             }
         }
@@ -361,27 +361,27 @@ private:
     bool isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b);
 
     struct AudioState {
-        double time = 0; // ’Ç‰Á‚³‚ê‚½‰¹ºƒtƒŒ[ƒ€‚Ì‡ŒvŠÔ
-        double lostPts = -1; // “¯Šúƒ|ƒCƒ“ƒg‚ğŒ©¸‚Á‚½PTSi•\¦—pj
+        double time = 0; // è¿½åŠ ã•ã‚ŒãŸéŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã®åˆè¨ˆæ™‚é–“
+        double lostPts = -1; // åŒæœŸãƒã‚¤ãƒ³ãƒˆã‚’è¦‹å¤±ã£ãŸPTSï¼ˆè¡¨ç¤ºç”¨ï¼‰
         int lastFrame = -1;
     };
 
     struct OutFileState {
-        int formatId; // ƒfƒoƒbƒOo—Í—p
-        double time; // ’Ç‰Á‚³‚ê‚½‰f‘œƒtƒŒ[ƒ€‚Ì‡ŒvŠÔ
+        int formatId; // ãƒ‡ãƒãƒƒã‚°å‡ºåŠ›ç”¨
+        double time; // è¿½åŠ ã•ã‚ŒãŸæ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã®åˆè¨ˆæ™‚é–“
         std::vector<AudioState> audioState;
         FileAudioFrameList audioFrameList;
     };
 
     AudioDiffInfo initAudioDiffInfo();
 
-    // ƒtƒBƒ‹ƒ^“ü—Í‚©‚ç‰¹º\’z
+    // ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ã‹ã‚‰éŸ³å£°æ§‹ç¯‰
     AudioDiffInfo genAudioStream();
 
     void genWaveAudioStream();
 
-    // ƒ\[ƒXƒtƒŒ[ƒ€‚Ì•\¦ŠÔ
-    // index, nextIndex: DTS‡
+    // ã‚½ãƒ¼ã‚¹ãƒ•ãƒ¬ãƒ¼ãƒ ã®è¡¨ç¤ºæ™‚é–“
+    // index, nextIndex: DTSé †
     double getSourceFrameDuration(int index, int nextIndex);
 
     void addVideoFrame(OutFileState& file,
@@ -389,19 +389,19 @@ private:
         double pts, double duration, AudioDiffInfo* adiff);
 
     void fillAudioFrames(
-        OutFileState& file, int index, // ‘ÎÛƒtƒ@ƒCƒ‹‚Æ‰¹ºƒCƒ“ƒfƒbƒNƒX
-        const AudioFormat* format, // ‰¹ºƒtƒH[ƒ}ƒbƒg
-        double pts, double duration, // ŠJnC³PTS‚Æ90kHz‚Å‚Ìƒ^ƒCƒ€ƒXƒpƒ“
+        OutFileState& file, int index, // å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã¨éŸ³å£°ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+        const AudioFormat* format, // éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ
+        double pts, double duration, // é–‹å§‹ä¿®æ­£PTSã¨90kHzã§ã®ã‚¿ã‚¤ãƒ ã‚¹ãƒ‘ãƒ³
         AudioDiffInfo* adiff);
 
-    // lastFrame‚©‚ç‡”Ô‚ÉŒ©‚Ä‰¹ºƒtƒŒ[ƒ€‚ğ“ü‚ê‚é
+    // lastFrameã‹ã‚‰é †ç•ªã«è¦‹ã¦éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å…¥ã‚Œã‚‹
     void fillAudioFramesInOrder(
-        OutFileState& file, int index, // ‘ÎÛƒtƒ@ƒCƒ‹‚Æ‰¹ºƒCƒ“ƒfƒbƒNƒX
-        const AudioFormat* format, // ‰¹ºƒtƒH[ƒ}ƒbƒg
-        double& pts, double& duration, // ŠJnC³PTS‚Æ90kHz‚Å‚Ìƒ^ƒCƒ€ƒXƒpƒ“
+        OutFileState& file, int index, // å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã¨éŸ³å£°ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+        const AudioFormat* format, // éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ
+        double& pts, double& duration, // é–‹å§‹ä¿®æ­£PTSã¨90kHzã§ã®ã‚¿ã‚¤ãƒ ã‚¹ãƒ‘ãƒ³
         AudioDiffInfo* adiff);
 
-    // ƒtƒ@ƒCƒ‹‘S‘Ì‚Å‚ÌŠÔ
+    // ãƒ•ã‚¡ã‚¤ãƒ«å…¨ä½“ã§ã®æ™‚é–“
     std::pair<int, double> elapsedTime(double modPTS) const;
 
     void genCaptionStream();

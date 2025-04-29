@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Packet Cache for file
@@ -19,12 +19,12 @@ public:
     PacketCache(
         AMTContext& ctx,
         const tstring& filepath,
-        const std::vector<int64_t> offsets, // ƒf[ƒ^”+1—v‘f
-        int nLinebit, // ƒLƒƒƒbƒVƒ…ƒ‰ƒCƒ“ƒf[ƒ^”‚Ìƒrƒbƒg”
-        int nEntry)	 // Å‘åƒLƒƒƒbƒVƒ…•Ûƒ‰ƒCƒ“”
+        const std::vector<int64_t> offsets, // ãƒ‡ãƒ¼ã‚¿æ•°+1è¦ç´ 
+        int nLinebit, // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ãƒ©ã‚¤ãƒ³ãƒ‡ãƒ¼ã‚¿æ•°ã®ãƒ“ãƒƒãƒˆæ•°
+        int nEntry)	 // æœ€å¤§ã‚­ãƒ£ãƒƒã‚·ãƒ¥ä¿æŒãƒ©ã‚¤ãƒ³æ•°
 ;
     ~PacketCache();
-    // MemoryChunk‚Í­‚È‚­‚Æ‚ànEntry‰ñ‚ÌŒÄ‚Ño‚µ‚Ü‚Å—LŒø
+    // MemoryChunkã¯å°‘ãªãã¨ã‚‚nEntryå›ã®å‘¼ã³å‡ºã—ã¾ã§æœ‰åŠ¹
     MemoryChunk operator[](int index);
 private:
     int nLinebit_;

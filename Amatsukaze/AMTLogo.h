@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Amtasukaze Logo File
@@ -7,8 +7,8 @@
 * This software is released under the MIT License.
 * http://opensource.org/licenses/mit-license.php
 *
-* ‚½‚¾‚µAToOutLGP()‚Ì’†g‚Ìˆ—‚Í
-* MakKi‚Ì“§‰ß«ƒƒS ƒtƒBƒ‹ƒ^ƒvƒ‰ƒOƒCƒ“‚æ‚è”qØ
+* ãŸã ã—ã€ToOutLGP()ã®ä¸­èº«ã®å‡¦ç†ã¯
+* MakKiæ°ã®é€éæ€§ãƒ­ã‚´ ãƒ•ã‚£ãƒ«ã‚¿ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ã‚ˆã‚Šæ‹å€Ÿ
 * https://github.com/makiuchi-d/delogo-aviutl
 */
 #pragma once

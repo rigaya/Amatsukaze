@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Compile Target
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -9,42 +9,61 @@
 #include "AmatsukazeCLI.hpp"
 #include "LogoGUISupport.hpp"
 
-// AvisynthƒtƒBƒ‹ƒ^ƒfƒoƒbƒO—p
+// Avisynthãƒ•ã‚£ãƒ«ã‚¿ãƒ‡ãƒãƒƒã‚°ç”¨
 #include "TextOut.cpp"
 
+#if defined(_WIN32) || defined(_WIN64)
 HMODULE g_DllHandle;
+#else
+#include <dlfcn.h>
+void* g_DllHandle = nullptr;
+#endif
+
 bool g_av_initialized = false;
 
+#if defined(_WIN32) || defined(_WIN64)
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     if (dwReason == DLL_PROCESS_ATTACH) g_DllHandle = hModule;
     return TRUE;
 }
+#else
+// Linuxç”¨ã®å…±æœ‰ãƒ©ã‚¤ãƒ–ãƒ©ãƒªåˆæœŸåŒ–é–¢æ•°
+__attribute__((constructor))
+static void on_load(void) {
+    g_DllHandle = dlopen(nullptr, RTLD_LAZY);
+}
 
-extern "C" __declspec(dllexport) int AmatsukazeCLI(int argc, const wchar_t* argv[]) {
+__attribute__((destructor))
+static void on_unload(void) {
+    if (g_DllHandle) {
+        dlclose(g_DllHandle);
+        g_DllHandle = nullptr;
+    }
+}
+#endif
+
+extern "C" AMATSUKAZE_API int AmatsukazeCLI(int argc, const tchar* argv[]) {
     return RunAmatsukazeCLI(argc, argv);
 }
 
-extern "C" __declspec(dllexport) void InitAmatsukazeDLL() {
-    // FFMPEGƒ‰ƒCƒuƒ‰ƒŠ‰Šú‰»
+extern "C" AMATSUKAZE_API void InitAmatsukazeDLL() {
+    // FFMPEGãƒ©ã‚¤ãƒ–ãƒ©ãƒªåˆæœŸåŒ–
     //av_register_all();
 #if ENABLE_FFMPEG_FILTER
     //avfilter_register_all();
 #endif
 }
 
-static void init_console() {
-    AllocConsole();
-    FILE* fp;
-    freopen_s(&fp, "CONOUT$", "w", stdout);
-    freopen_s(&fp, "CONIN$", "r", stdin);
-}
-
-// CM‰ğÍ—pi{ƒfƒoƒbƒO—pjƒCƒ“ƒ^[ƒtƒF[ƒX
-extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment * env, const AVS_Linkage* const vectors) {
-    // ’¼ÚƒŠƒ“ƒN‚µ‚Ä‚¢‚é‚Ì‚Åvectors‚ğŠi”[‚·‚é•K—v‚Í‚È‚¢
+// CMè§£æç”¨ï¼ˆï¼‹ãƒ‡ãƒãƒƒã‚°ç”¨ï¼‰ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹
+#if defined(_WIN32) || defined(_WIN64)
+extern "C" AMATSUKAZE_API const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
+#else
+extern "C" AMATSUKAZE_API const char* AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
+#endif
+    // ç›´æ¥ãƒªãƒ³ã‚¯ã—ã¦ã„ã‚‹ã®ã§vectorsã‚’æ ¼ç´ã™ã‚‹å¿…è¦ã¯ãªã„
 
     if (g_av_initialized == false) {
-        // FFMPEGƒ‰ƒCƒuƒ‰ƒŠ‰Šú‰»
+        // FFMPEGãƒ©ã‚¤ãƒ–ãƒ©ãƒªåˆæœŸåŒ–
         //av_register_all();
 #if ENABLE_FFMPEG_FILTER
         //avfilter_register_all();

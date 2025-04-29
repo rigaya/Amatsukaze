@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,9 +8,12 @@
 #pragma once
 
 #include "common.h"
-
+#include "rgy_util.h"
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wsign-compare")
 #include "avisynth.h"
 #pragma comment(lib, "avisynth.lib")
+RGY_DISABLE_WARNING_POP
 
 #include <memory>
 #include <vector>
@@ -51,7 +54,7 @@ class AMTSource : public IClip, AMTObject {
     int audioSamplesPerFrame;
     bool interlaced;
 
-    bool outputQP; // QPƒe[ƒuƒ‹‚ğo—Í‚·‚é‚©
+    bool outputQP; // QPãƒ†ãƒ¼ãƒ–ãƒ«ã‚’å‡ºåŠ›ã™ã‚‹ã‹
 
     InputContext inputCtx;
     CodecContext codecCtx;
@@ -74,7 +77,7 @@ class AMTSource : public IClip, AMTObject {
     std::map<int, CacheFrame*> frameCache;
     std::deque<CacheFrame*> recentAccessed;
 
-    // ƒfƒR[ƒh‚Å‚«‚È‚©‚Á‚½ƒtƒŒ[ƒ€‚Ì’uŠ·æƒŠƒXƒg
+    // ãƒ‡ã‚³ãƒ¼ãƒ‰ã§ããªã‹ã£ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã®ç½®æ›å…ˆãƒªã‚¹ãƒˆ
     std::map<int, int> failedMap;
 
     VideoInfo vi;
@@ -85,15 +88,15 @@ class AMTSource : public IClip, AMTObject {
 
     int seekDistance;
 
-    // OnFrameDecoded‚Å’¼‘O‚ÉƒfƒR[ƒh‚³‚ê‚½ƒtƒŒ[ƒ€
-    // ‚Ü‚¾ƒfƒR[ƒh‚µ‚Ä‚È‚¢ê‡‚Í-1
+    // OnFrameDecodedã§ç›´å‰ã«ãƒ‡ã‚³ãƒ¼ãƒ‰ã•ã‚ŒãŸãƒ•ãƒ¬ãƒ¼ãƒ 
+    // ã¾ã ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ã¦ãªã„å ´åˆã¯-1
     int lastDecodeFrame;
 
-    // codecCtx‚ª’¼‘O‚ÉƒfƒR[ƒh‚µ‚½ƒtƒŒ[ƒ€”Ô†
-    // ‚Ü‚¾ƒfƒR[ƒh‚µ‚Ä‚È‚¢ê‡‚Ínullptr
+    // codecCtxãŒç›´å‰ã«ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ãŸãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·
+    // ã¾ã ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ã¦ãªã„å ´åˆã¯nullptr
     std::unique_ptr<Frame> prevFrame;
 
-    // ’¼‘O‚Ìnon B QPƒe[ƒuƒ‹
+    // ç›´å‰ã®non B QPãƒ†ãƒ¼ãƒ–ãƒ«
     PVideoFrame nonBQPTable;
 
     ConvertPixFuncs convertPix;
@@ -234,7 +237,7 @@ public:
 
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
-    void __stdcall GetAudio(void* buf, __int64 start, __int64 count, IScriptEnvironment* env);
+    void __stdcall GetAudio(void* buf, int64_t start, int64_t count, IScriptEnvironment* env);
 
     const VideoInfo& __stdcall GetVideoInfo();
 

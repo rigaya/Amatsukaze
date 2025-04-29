@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -39,9 +39,9 @@ AMTMuxder::AMTMuxder(
     , reformInfo_(reformInfo) {}
 
 void AMTMuxder::mux(EncodeFileKey key,
-    const EncoderOptionInfo& eoInfo, // ƒGƒ“ƒR[ƒ_ƒIƒvƒVƒ‡ƒ“î•ñ
+    const EncoderOptionInfo& eoInfo, // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã‚ªãƒ—ã‚·ãƒ§ãƒ³æƒ…å ±
     bool nicoOK,
-    EncodeFileOutput& fileOut) // o—Íî•ñ
+    EncodeFileOutput& fileOut) // å‡ºåŠ›æƒ…å ±
 {
     const auto& fileIn = reformInfo_.getEncodeFile(key);
     auto fmt = reformInfo_.getFormat(key);
@@ -49,12 +49,12 @@ void AMTMuxder::mux(EncodeFileKey key,
     auto vfmt = fileOut.vfmt;
 
     if (eoInfo.selectEvery > 1) {
-        // ƒGƒ“ƒR[ƒ_‚ÅŠÔˆø‚­ê‡‚ª‚ ‚é‚Ì‚ÅA‚»‚ê‚ğ”½‰f‚·‚é
+        // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§é–“å¼•ãå ´åˆãŒã‚ã‚‹ã®ã§ã€ãã‚Œã‚’åæ˜ ã™ã‚‹
         vfmt.mulDivFps(1, eoInfo.selectEvery);
     }
 
     if (vfmt.progressive == false) {
-        // ƒGƒ“ƒR[ƒ_‚ÅƒCƒ“ƒ^ƒŒ‰ğœ‚µ‚Ä‚¢‚éê‡‚ª‚ ‚é‚Ì‚ÅA‚»‚ê‚ğ”½‰f‚·‚é
+        // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤ã—ã¦ã„ã‚‹å ´åˆãŒã‚ã‚‹ã®ã§ã€ãã‚Œã‚’åæ˜ ã™ã‚‹
         switch (eoInfo.deint) {
         case ENCODER_DEINT_24P:
             vfmt.mulDivFps(4, 5);
@@ -68,21 +68,23 @@ void AMTMuxder::mux(EncodeFileKey key,
             vfmt.mulDivFps(2, 1);
             vfmt.progressive = true;
             break;
+        default:
+            break;
         }
     } else {
         if (eoInfo.deint != ENCODER_DEINT_NONE) {
-            // ˆê‰Œx‚ğo‚·
-            ctx.warn("ƒGƒ“ƒR[ƒ_‚Ö‚Ì“ü—Í‚ÍƒvƒƒOƒŒƒbƒVƒu‚Å‚·‚ªA"
-                     "ƒGƒ“ƒR[ƒ_ƒIƒvƒVƒ‡ƒ“‚ÅƒCƒ“ƒ^ƒŒ‰ğœw’è‚ª‚³‚ê‚Ä‚¢‚Ü‚·B");
-            ctx.warn("ƒGƒ“ƒR[ƒ_‚Å‚±‚ÌƒIƒvƒVƒ‡ƒ“‚ª–³‹‚³‚ê‚éê‡‚Í–â‘è‚ ‚è‚Ü‚¹‚ñB");
+            // ä¸€å¿œè­¦å‘Šã‚’å‡ºã™
+            ctx.warn("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã¸ã®å…¥åŠ›ã¯ãƒ—ãƒ­ã‚°ãƒ¬ãƒƒã‚·ãƒ–ã§ã™ãŒã€"
+                     "ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã‚ªãƒ—ã‚·ãƒ§ãƒ³ã§ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤æŒ‡å®šãŒã•ã‚Œã¦ã„ã¾ã™ã€‚");
+            ctx.warn("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã“ã®ã‚ªãƒ—ã‚·ãƒ§ãƒ³ãŒç„¡è¦–ã•ã‚Œã‚‹å ´åˆã¯å•é¡Œã‚ã‚Šã¾ã›ã‚“ã€‚");
         }
     }
 
-    // ‰¹ºƒtƒ@ƒCƒ‹‚ğì¬
+    // éŸ³å£°ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä½œæˆ
     std::vector<tstring> audioFiles;
     if (setting_.isEncodeAudio()) {
         audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
-    } else if (setting_.getFormat() != FORMAT_TSREPLACE) { // tsreaplce‚Ìê‡‚Í‰¹ºƒtƒ@ƒCƒ‹‚ğì‚ç‚È‚¢
+    } else if (setting_.getFormat() != FORMAT_TSREPLACE) { // tsreaplceã®å ´åˆã¯éŸ³å£°ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä½œã‚‰ãªã„
         for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); asrc++) {
             const std::vector<int>& frameList = fileIn.audioFrames[asrc];
             if (frameList.size() > 0) {
@@ -100,25 +102,25 @@ void AMTMuxder::mux(EncodeFileKey key,
         }
     }
 
-    // ‰f‘œƒtƒ@ƒCƒ‹
+    // æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«
     tstring encVideoFile;
     encVideoFile = setting_.getEncVideoFilePath(key);
 
-    // ƒ`ƒƒƒvƒ^[ƒtƒ@ƒCƒ‹
+    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼ãƒ•ã‚¡ã‚¤ãƒ«
     tstring chapterFile;
     if (setting_.isChapterEnabled()) {
         auto path = setting_.getTmpChapterPath(key);
         if (File::exists(path)) {
             chapterFile = path;
             if (muxFormat == FORMAT_TSREPLACE) {
-                //tsreplace‚Ìê‡‚ÍAƒ`ƒƒƒvƒ^[ƒtƒ@ƒCƒ‹‚ğ•Êƒtƒ@ƒCƒ‹‚Æ‚µ‚ÄƒRƒs[
+                //tsreplaceã®å ´åˆã¯ã€ãƒãƒ£ãƒ—ã‚¿ãƒ¼ãƒ•ã‚¡ã‚¤ãƒ«ã‚’åˆ¥ãƒ•ã‚¡ã‚¤ãƒ«ã¨ã—ã¦ã‚³ãƒ”ãƒ¼
                 auto dstchapter = setting_.getOutChapterPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
                 File::copy(chapterFile, dstchapter);
             }
         }
     }
 
-    // š–‹ƒtƒ@ƒCƒ‹
+    // å­—å¹•ãƒ•ã‚¡ã‚¤ãƒ«
     std::vector<tstring> subsFiles;
     std::vector<tstring> subsTitles;
     if (nicoOK) {
@@ -127,7 +129,7 @@ void AMTMuxder::mux(EncodeFileKey key,
             if (muxFormat == FORMAT_MKV) {
                 subsFiles.push_back(srcsub);
                 subsTitles.push_back(StringFormat(_T("NicoJK%s"), GetNicoJKSuffix(jktype)));
-            } else { // MP4‚Ìê‡‚Í•Êƒtƒ@ƒCƒ‹‚Æ‚µ‚ÄƒRƒs[
+            } else { // MP4ã®å ´åˆã¯åˆ¥ãƒ•ã‚¡ã‚¤ãƒ«ã¨ã—ã¦ã‚³ãƒ”ãƒ¼
                 auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, -1, jktype);
                 File::copy(srcsub, dstsub);
                 fileOut.outSubs.push_back(dstsub);
@@ -139,14 +141,14 @@ void AMTMuxder::mux(EncodeFileKey key,
         if (muxFormat == FORMAT_MKV) {
             subsFiles.push_back(srcass);
             subsTitles.push_back(_T("ASS"));
-        } else { // MP4,M2TS‚Ìê‡‚Í•Êƒtƒ@ƒCƒ‹‚Æ‚µ‚ÄƒRƒs[
+        } else { // MP4,M2TSã®å ´åˆã¯åˆ¥ãƒ•ã‚¡ã‚¤ãƒ«ã¨ã—ã¦ã‚³ãƒ”ãƒ¼
             auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang, (NicoJKType)0);
             File::copy(srcass, dstsub);
             fileOut.outSubs.push_back(dstsub);
         }
         auto srcsrt = setting_.getTmpSRTFilePath(key, lang);
         if (File::exists(srcsrt)) {
-            // SRT‚Í‹É‹H‚Éo—Í‚³‚ê‚È‚¢‚±‚Æ‚à‚ ‚é‚±‚Æ‚É’ˆÓ
+            // SRTã¯æ¥µç¨€ã«å‡ºåŠ›ã•ã‚Œãªã„ã“ã¨ã‚‚ã‚ã‚‹ã“ã¨ã«æ³¨æ„
             subsFiles.push_back(srcsrt);
             subsTitles.push_back(_T("SRT"));
         }
@@ -157,7 +159,7 @@ void AMTMuxder::mux(EncodeFileKey key,
 
     tstring metaFile;
     if (muxFormat == FORMAT_M2TS || muxFormat == FORMAT_TS) {
-        // M2TS/TS‚Ìê‡‚Ímetaƒtƒ@ƒCƒ‹ì¬
+        // M2TS/TSã®å ´åˆã¯metaãƒ•ã‚¡ã‚¤ãƒ«ä½œæˆ
         StringBuilder sb;
         sb.append("MUXOPT\n");
         switch (eoInfo.format) {
@@ -169,6 +171,8 @@ void AMTMuxder::mux(EncodeFileKey key,
             break;
         case VS_H265:
             sb.append("V_MPEGH/ISO/HEVC");
+            break;
+        default:
             break;
         }
         double fps = vfmt.frameRateNum / (double)vfmt.frameRateDenom;
@@ -186,15 +190,15 @@ void AMTMuxder::mux(EncodeFileKey key,
         file.write(sb.getMC());
     }
 
-    // ƒ^ƒCƒ€ƒR[ƒh—p
+    // ã‚¿ã‚¤ãƒ ã‚³ãƒ¼ãƒ‰ç”¨
     auto timebase = std::make_pair(vfmt.frameRateNum * (fileOut.vfrTimingFps / 30), vfmt.frameRateDenom);
 
     auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
     auto muxerPath = setting_.getMuxerPath();
-    if (muxFormat != setting_.getFormat()) { // ‰Šú‚ÌƒtƒH[ƒ}ƒbƒg‚©‚ç•Ï‚í‚Á‚Ä‚¢‚é‚Æ‚«
-        if (muxFormat == FORMAT_MKV) { // useMKVWhenSubExist‚Ìê‡
+    if (muxFormat != setting_.getFormat()) { // åˆæœŸã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‹ã‚‰å¤‰ã‚ã£ã¦ã„ã‚‹ã¨ã
+        if (muxFormat == FORMAT_MKV) { // useMKVWhenSubExistã®å ´åˆ
             muxerPath = setting_.getMkvMergePath();
-            ctx.infoF("š–‹‚ª‘¶İ‚·‚é‚½‚ßAmkvo—Í‚ÉØ‚è‘Ö‚¦‚Ü‚·B");
+            ctx.infoF("å­—å¹•ãŒå­˜åœ¨ã™ã‚‹ãŸã‚ã€mkvå‡ºåŠ›ã«åˆ‡ã‚Šæ›¿ãˆã¾ã™ã€‚");
         } else {
             THROWF(RuntimeException, "Unexpected error, muxFormat != setting_.getFormat()");
         }
@@ -216,7 +220,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         if (ret != 0) {
             THROWF(RuntimeException, "mux failed (exit code: %d)", ret);
         }
-        // mp4box‚ªƒRƒ“ƒ\[ƒ‹o—Í‚ÌƒR[ƒhƒy[ƒW‚ğ•Ï‚¦‚Ä‚µ‚Ü‚¤‚Ì‚Å–ß‚·
+        // mp4boxãŒã‚³ãƒ³ã‚½ãƒ¼ãƒ«å‡ºåŠ›ã®ã‚³ãƒ¼ãƒ‰ãƒšãƒ¼ã‚¸ã‚’å¤‰ãˆã¦ã—ã¾ã†ã®ã§æˆ»ã™
         ctx.setDefaultCP();
     }
 
@@ -253,7 +257,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
         std::vector<tstring>(), std::vector<tstring>(), tstring(), false);
-    ctx.info("[MuxŠJn]");
+    ctx.info("[Muxé–‹å§‹]");
     ctx.infoF("%s", args[0].first);
 
     {
@@ -264,7 +268,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         }
     }
 
-    { // o—ÍƒTƒCƒYæ“¾
+    { // å‡ºåŠ›ã‚µã‚¤ã‚ºå–å¾—
         File outfile(setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat(), videoFormat.format), _T("rb"));
         totalOutSize_ += outfile.size();
     }
@@ -275,7 +279,7 @@ int64_t AMTSimpleMuxder::getTotalOutSize() const {
 }
 AMTSimpleMuxder::MySubProcess::MySubProcess(const tstring& args) : EventBaseSubProcess(args) {}
 /* virtual */ void AMTSimpleMuxder::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
-    // ‚±‚ê‚Íƒ}ƒ‹ƒ`ƒXƒŒƒbƒh‚ÅŒÄ‚Î‚ê‚é‚Ì’ˆÓ
+    // ã“ã‚Œã¯ãƒãƒ«ãƒã‚¹ãƒ¬ãƒƒãƒ‰ã§å‘¼ã°ã‚Œã‚‹ã®æ³¨æ„
     fwrite(mc.data, mc.length, 1, SUBPROC_OUT);
     fflush(SUBPROC_OUT);
 }

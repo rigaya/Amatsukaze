@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Reader/Writer with FFmpeg
@@ -18,12 +18,12 @@
 #include "StreamUtils.h"
 #include "ProcessThread.h"
 
-// AMTSource‚ÌƒtƒBƒ‹ƒ^[ƒIƒvƒVƒ‡ƒ“‚ğ—LŒø‚É‚·‚é‚©
+// AMTSourceã®ãƒ•ã‚£ãƒ«ã‚¿ãƒ¼ã‚ªãƒ—ã‚·ãƒ§ãƒ³ã‚’æœ‰åŠ¹ã«ã™ã‚‹ã‹
 #define ENABLE_FFMPEG_FILTER 0
 
 // libffmpeg
 #pragma warning(push)
-#pragma warning(disable:4819) //C4819: ƒtƒ@ƒCƒ‹‚ÍAŒ»İ‚ÌƒR[ƒh ƒy[ƒW (932) ‚Å•\¦‚Å‚«‚È‚¢•¶š‚ğŠÜ‚ñ‚Å‚¢‚Ü‚·Bƒf[ƒ^‚Ì‘¹¸‚ğ–h‚®‚½‚ß‚ÉAƒtƒ@ƒCƒ‹‚ğ Unicode Œ`®‚Å•Û‘¶‚µ‚Ä‚­‚¾‚³‚¢B
+#pragma warning(disable:4819) //C4819: ãƒ•ã‚¡ã‚¤ãƒ«ã¯ã€ç¾åœ¨ã®ã‚³ãƒ¼ãƒ‰ ãƒšãƒ¼ã‚¸ (932) ã§è¡¨ç¤ºã§ããªã„æ–‡å­—ã‚’å«ã‚“ã§ã„ã¾ã™ã€‚ãƒ‡ãƒ¼ã‚¿ã®æå¤±ã‚’é˜²ããŸã‚ã«ã€ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ Unicode å½¢å¼ã§ä¿å­˜ã—ã¦ãã ã•ã„ã€‚
 extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavcodec/avcodec.h>
@@ -151,7 +151,7 @@ private:
 
     void onFirstFrame(AVStream *stream, AVFrame *frame);
 
-    // 2‚Â‚ÌƒtƒŒ[ƒ€‚ÌƒgƒbƒvƒtƒB[ƒ‹ƒhAƒ{ƒgƒ€ƒtƒB[ƒ‹ƒh‚ğ‡¬
+    // 2ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã€ãƒœãƒˆãƒ ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’åˆæˆ
     static std::unique_ptr<av::Frame> mergeFields(av::Frame& topframe, av::Frame& bottomframe);
 };
 
@@ -262,14 +262,14 @@ private:
     bool fieldMode_;
     bool error_;
 
-    // o—Íƒ`ƒFƒbƒN—pi‚È‚­‚Ä‚àˆ—‚Í–â‘è‚È‚¢j
+    // å‡ºåŠ›ãƒã‚§ãƒƒã‚¯ç”¨ï¼ˆãªãã¦ã‚‚å‡¦ç†ã¯å•é¡Œãªã„ï¼‰
     Y4MParser y4mparser;
 
     void onVideoWrite(MemoryChunk mc);
 
     VideoFormat getEncoderInputVideoFormat(VideoFormat format);
 
-    // 1‚Â‚ÌƒtƒŒ[ƒ€‚ğƒgƒbƒvƒtƒB[ƒ‹ƒhAƒ{ƒgƒ€ƒtƒB[ƒ‹ƒh‚Ì2‚Â‚ÌƒtƒŒ[ƒ€‚É•ª‰ğ
+    // 1ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã€ãƒœãƒˆãƒ ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã®2ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã«åˆ†è§£
     static void splitFrameToFields(av::Frame& frame, av::Frame& topfield, av::Frame& bottomfield);
 };
 

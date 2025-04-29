@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Amtasukaze Transcode Setting
@@ -12,6 +12,8 @@
 #include <string>
 
 #include "StreamUtils.h"
+#include "CoreUtils.hpp"
+#include "InterProcessComm.h"
 
 struct EncoderOptionInfo;
 
@@ -31,18 +33,18 @@ struct BitrateZone : EncoderZone {
 
 namespace av {
 
-// ƒJƒ‰[ƒXƒy[ƒX3ƒZƒbƒg
-// x265‚Í”’l‚»‚Ì‚Ü‚Ü‚Å‚àOK‚¾‚ªAx264‚Íhelp‚ğŒ©‚éŒÀ‚èstring‚Å‚È‚¯‚ê‚Î
-// ‚È‚ç‚È‚¢‚æ‚¤‚È‚Ì‚Å•ÏŠ·‚ğ’è‹`
-// ‚Æ‚è‚ ‚¦‚¸ARIB STD-B32 v3.7‚É‘‚¢‚Ä‚ ‚é‚Ì‚¾‚¯
+// ã‚«ãƒ©ãƒ¼ã‚¹ãƒšãƒ¼ã‚¹3ã‚»ãƒƒãƒˆ
+// x265ã¯æ•°å€¤ãã®ã¾ã¾ã§ã‚‚OKã ãŒã€x264ã¯helpã‚’è¦‹ã‚‹é™ã‚Šstringã§ãªã‘ã‚Œã°
+// ãªã‚‰ãªã„ã‚ˆã†ãªã®ã§å¤‰æ›ã‚’å®šç¾©
+// ã¨ã‚Šã‚ãˆãšARIB STD-B32 v3.7ã«æ›¸ã„ã¦ã‚ã‚‹ã®ã ã‘
 
-// 3Œ´F
+// 3åŸè‰²
 const char* getColorPrimStr(int color_prim);
 
-// ƒKƒ“ƒ}
+// ã‚¬ãƒ³ãƒ
 const char* getTransferCharacteristicsStr(int transfer_characteritics, bool forSVTAV1);
 
-// •ÏŠ·ŒW”
+// å¤‰æ›ä¿‚æ•°
 const char* getColorSpaceStr(int color_space, bool forSVTAV1);
 
 } // namespace av {
@@ -167,25 +169,25 @@ const char* GetCMSuffix(CMType cmtype);
 const char* GetNicoJKSuffix(NicoJKType type);
 
 struct Config {
-    // ˆêƒtƒHƒ‹ƒ_
+    // ä¸€æ™‚ãƒ•ã‚©ãƒ«ãƒ€
     tstring workDir;
     tstring mode;
-    tstring modeArgs; // ƒeƒXƒg—p
-    // “ü—Íƒtƒ@ƒCƒ‹ƒpƒXiŠg’£q‚ğŠÜ‚Şj
+    tstring modeArgs; // ãƒ†ã‚¹ãƒˆç”¨
+    // å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹ï¼ˆæ‹¡å¼µå­ã‚’å«ã‚€ï¼‰
     tstring srcFilePath;
-    // “ü—Íƒtƒ@ƒCƒ‹ƒpƒX(ƒIƒŠƒWƒiƒ‹)iŠg’£q‚ğŠÜ‚Şj
+    // å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹(ã‚ªãƒªã‚¸ãƒŠãƒ«)ï¼ˆæ‹¡å¼µå­ã‚’å«ã‚€ï¼‰
     tstring srcFilePathOrg;
-    // o—Íƒtƒ@ƒCƒ‹ƒpƒXiŠg’£q‚ğœ‚­j
+    // å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹ï¼ˆæ‹¡å¼µå­ã‚’é™¤ãï¼‰
     tstring outVideoPath;
-    // Œ‹‰Êî•ñJSONo—ÍƒpƒX
+    // çµæœæƒ…å ±JSONå‡ºåŠ›ãƒ‘ã‚¹
     tstring outInfoJsonPath;
-    // DRCSƒ}ƒbƒsƒ“ƒOƒtƒ@ƒCƒ‹ƒpƒX
+    // DRCSãƒãƒƒãƒ”ãƒ³ã‚°ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹
     tstring drcsMapPath;
     tstring drcsOutPath;
-    // ƒtƒBƒ‹ƒ^ƒpƒX
+    // ãƒ•ã‚£ãƒ«ã‚¿ãƒ‘ã‚¹
     tstring filterScriptPath;
     tstring postFilterScriptPath;
-    // ƒGƒ“ƒR[ƒ_İ’è
+    // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€è¨­å®š
     ENUM_ENCODER encoder;
     tstring encoderPath;
     tstring encoderOptions;
@@ -219,7 +221,7 @@ struct Config {
     DecoderSetting decoderSetting;
     int audioBitrateInKbps;
     int numEncodeBufferFrames;
-    // CM‰ğÍ—pİ’è
+    // CMè§£æç”¨è¨­å®š
     std::vector<tstring> logoPath;
     std::vector<tstring> eraseLogoPath;
     bool ignoreNoLogo;
@@ -237,14 +239,14 @@ struct Config {
     tstring joinLogoScpOptions;
     int cmoutmask;
     tstring trimavsPath;
-    // ŒŸoƒ‚[ƒh—p
+    // æ¤œå‡ºãƒ¢ãƒ¼ãƒ‰ç”¨
     int maxframes;
-    // ƒzƒXƒgƒvƒƒZƒX‚Æ‚Ì’ÊM—p
-    HANDLE inPipe;
-    HANDLE outPipe;
+    // ãƒ›ã‚¹ãƒˆãƒ—ãƒ­ã‚»ã‚¹ã¨ã®é€šä¿¡ç”¨
+    pipe_handle_t inPipe;
+    pipe_handle_t outPipe;
     int affinityGroup;
     uint64_t affinityMask;
-    // ƒfƒoƒbƒO—pİ’è
+    // ãƒ‡ãƒãƒƒã‚°ç”¨è¨­å®š
     bool dumpStreamInfo;
     bool systemAvsPlugin;
     bool noRemoveTmp;
@@ -384,9 +386,9 @@ public:
 
     int getMaxFrames() const;
 
-    HANDLE getInPipe() const;
+    pipe_handle_t getInPipe() const;
 
-    HANDLE getOutPipe() const;
+    pipe_handle_t getOutPipe() const;
 
     int getAffinityGroup() const;
 

@@ -23,6 +23,7 @@
 #include <numeric>
 #include <vector>
 #include <fstream>
+#include <numeric>
 
 float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, float* pavg);
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
@@ -390,7 +391,7 @@ class LogoAnalyzer : AMTObject {
                 // フレームをインタレ解除
                 DeintY(memDeint.get(), memScanData.data(), scanw, scanw, scanh);
                 // fade値ループ
-                float minResult = FLT_MAX;
+                float minResult = std::numeric_limits<float>::max();
                 int minFadeIndex = 0;
                 for (int fi = 0; fi < numFade; ++fi) {
                     float fade = 0.1f * fi;

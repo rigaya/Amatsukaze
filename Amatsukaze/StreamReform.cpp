@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,6 +7,7 @@
 */
 
 #include "StreamReform.h"
+#include <cmath>
 
 FileAudioFrameInfo::FileAudioFrameInfo()
     : AudioFrameInfo()
@@ -32,11 +33,11 @@ FileVideoFrameInfo::FileVideoFrameInfo(const VideoFrameInfo& info)
     : VideoFrameInfo(info)
     , fileOffset(0) {}
 
-// •b’PˆÊ‚Åæ“¾
+// ç§’å˜ä½ã§å–å¾—
 double AudioDiffInfo::avgDiff() const {
     return ((double)sumPtsDiff / totalAudioFrames) / MPEG_CLOCK_HZ;
 }
-// •b’PˆÊ‚Åæ“¾
+// ç§’å˜ä½ã§å–å¾—
 double AudioDiffInfo::maxDiff() const {
     return (double)maxPtsDiff / MPEG_CLOCK_HZ;
 }
@@ -46,18 +47,18 @@ void AudioDiffInfo::printAudioPtsDiff(AMTContext& ctx) const {
     double maxDiff = this->maxDiff() * 1000;
     int notIncluded = totalSrcFrames - totalUniquAudioFrames;
 
-    ctx.infoF("o—Í‰¹ºƒtƒŒ[ƒ€: %di‚¤‚¿…‘‚µƒtƒŒ[ƒ€%dj",
+    ctx.infoF("å‡ºåŠ›éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ : %dï¼ˆã†ã¡æ°´å¢—ã—ãƒ•ãƒ¬ãƒ¼ãƒ %dï¼‰",
         totalAudioFrames, totalAudioFrames - totalUniquAudioFrames);
-    ctx.infoF("–¢o—ÍƒtƒŒ[ƒ€: %di%.3f%%j",
+    ctx.infoF("æœªå‡ºåŠ›ãƒ•ãƒ¬ãƒ¼ãƒ : %dï¼ˆ%.3f%%ï¼‰",
         notIncluded, (double)notIncluded * 100 / totalSrcFrames);
 
-    ctx.infoF("‰¹ƒYƒŒ: •½‹Ï %.2fms Å‘å %.2fms",
+    ctx.infoF("éŸ³ã‚ºãƒ¬: å¹³å‡ %.2fms æœ€å¤§ %.2fms",
         avgDiff, maxDiff);
     if (maxPtsDiff > 0 && maxDiff - avgDiff > 1) {
         double sec = elapsedTime(maxPtsDiffPos);
         int minutes = (int)(sec / 60);
         sec -= minutes * 60;
-        ctx.infoF("Å‘å‰¹ƒYƒŒˆÊ’u: “ü—ÍÅ‰‚Ì‰f‘œƒtƒŒ[ƒ€‚©‚ç%d•ª%.3f•bŒã",
+        ctx.infoF("æœ€å¤§éŸ³ã‚ºãƒ¬ä½ç½®: å…¥åŠ›æœ€åˆã®æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã‚‰%dåˆ†%.3fç§’å¾Œ",
             minutes, sec);
     }
 }
@@ -112,8 +113,8 @@ StreamReformInfo::StreamReformInfo(
     , outTotalDuration_()
     , firstFrameTime_() {}
 
-// 1. ƒRƒ“ƒXƒgƒ‰ƒNƒg’¼Œã‚ÉŒÄ‚Ô
-// splitSub: ƒƒCƒ“ˆÈŠO‚ÌƒtƒH[ƒ}ƒbƒg‚ğŒ‹‡‚µ‚È‚¢
+// 1. ã‚³ãƒ³ã‚¹ãƒˆãƒ©ã‚¯ãƒˆç›´å¾Œã«å‘¼ã¶
+// splitSub: ãƒ¡ã‚¤ãƒ³ä»¥å¤–ã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’çµåˆã—ãªã„
 void StreamReformInfo::prepare(bool splitSub, bool isEncodeAudio, bool isTsreplace) {
     isEncodeAudio_ = isEncodeAudio;
     isTsreplace_ = isTsreplace;
@@ -125,7 +126,7 @@ time_t StreamReformInfo::getFirstFrameTime() const {
     return firstFrameTime_;
 }
 
-// 2. ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg‚ğæ“¾‚µ‚½‚çŒÄ‚Ô
+// 2. ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆã‚’å–å¾—ã—ãŸã‚‰å‘¼ã¶
 void StreamReformInfo::SetNicoJKList(const std::array<std::vector<NicoJKLine>, NICOJK_MAX>& nicoJKList) {
     for (int t = 0; t < NICOJK_MAX; ++t) {
         nicoJKList_[t].resize(nicoJKList[t].size());
@@ -133,7 +134,7 @@ void StreamReformInfo::SetNicoJKList(const std::array<std::vector<NicoJKLine>, N
         for (int i = 0; i < (int)nicoJKList[t].size(); ++i) {
             auto& src = nicoJKList[t][i];
             auto& dst = nicoJKList_[t][i];
-            // ŠJn‰f‘œƒIƒtƒZƒbƒg‚ğ‰ÁZ
+            // é–‹å§‹æ˜ åƒã‚ªãƒ•ã‚»ãƒƒãƒˆã‚’åŠ ç®—
             dst.start = src.start + startTime;
             dst.end = src.end + startTime;
             dst.line = src.line;
@@ -141,9 +142,9 @@ void StreamReformInfo::SetNicoJKList(const std::array<std::vector<NicoJKLine>, N
     }
 }
 
-// 2. Še’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚ÌCM‰ğÍŒã‚ÉŒÄ‚Ô
-// cmzones: CMƒ][ƒ“iƒtƒBƒ‹ƒ^“ü—ÍƒtƒŒ[ƒ€”Ô†j
-// divs: •ªŠ„ƒ|ƒCƒ“ƒgƒŠƒXƒgiƒtƒBƒ‹ƒ^“ü—ÍƒtƒŒ[ƒ€”Ô†j
+// 2. å„ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã®CMè§£æå¾Œã«å‘¼ã¶
+// cmzones: CMã‚¾ãƒ¼ãƒ³ï¼ˆãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ï¼‰
+// divs: åˆ†å‰²ãƒã‚¤ãƒ³ãƒˆãƒªã‚¹ãƒˆï¼ˆãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ï¼‰
 void StreamReformInfo::applyCMZones(int videoFileIndex, const std::vector<EncoderZone>& cmzones, const std::vector<int>& divs) {
     auto& frames = filterFrameList_[videoFileIndex];
     for (auto zone : cmzones) {
@@ -154,25 +155,25 @@ void StreamReformInfo::applyCMZones(int videoFileIndex, const std::vector<Encode
     fileDivs_[videoFileIndex] = divs;
 }
 
-// 3. CM‰ğÍ‚ªI—¹‚µ‚½‚çƒGƒ“ƒR[ƒh‘O‚ÉŒÄ‚Ô
-// cmtypes: o—Í‚·‚éCMƒ^ƒCƒvƒŠƒXƒg
+// 3. CMè§£æãŒçµ‚äº†ã—ãŸã‚‰ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰å‰ã«å‘¼ã¶
+// cmtypes: å‡ºåŠ›ã™ã‚‹CMã‚¿ã‚¤ãƒ—ãƒªã‚¹ãƒˆ
 AudioDiffInfo StreamReformInfo::genAudio(const std::vector<CMType>& cmtypes) {
     calcSizeAndTime(cmtypes);
     genCaptionStream();
     return genAudioStream();
 }
 
-// ’†ŠÔ‰f‘œƒtƒ@ƒCƒ‹‚ÌŒÂ”
+// ä¸­é–“æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã®å€‹æ•°
 int StreamReformInfo::getNumVideoFile() const {
     return numVideoFile_;
 }
 
-// “ü—Í‰f‘œ‹KŠi
+// å…¥åŠ›æ˜ åƒè¦æ ¼
 VIDEO_STREAM_FORMAT StreamReformInfo::getVideoStreamFormat() const {
     return videoFrameList_[0].format.format;
 }
 
-// PMT•ÏXPTSƒŠƒXƒg
+// PMTå¤‰æ›´PTSãƒªã‚¹ãƒˆ
 std::vector<int> StreamReformInfo::getPidChangedList(int videoFileIndex) const {
     std::vector<int> ret;
     auto& frames = filterFrameList_[videoFileIndex];
@@ -203,28 +204,28 @@ int StreamReformInfo::getMainVideoFileIndex() const {
     return maxIndex;
 }
 
-// ƒtƒBƒ‹ƒ^“ü—Í‰f‘œƒtƒŒ[ƒ€
+// ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ 
 const std::vector<FilterSourceFrame>& StreamReformInfo::getFilterSourceFrames(int videoFileIndex) const {
     return filterFrameList_[videoFileIndex];
 }
 
-// ƒtƒBƒ‹ƒ^“ü—Í‰¹ºƒtƒŒ[ƒ€
+// ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ 
 const std::vector<FilterAudioFrame>& StreamReformInfo::getFilterSourceAudioFrames(int videoFileIndex) const {
     return filterAudioFrameList_[videoFileIndex];
 }
 
-// o—Íƒtƒ@ƒCƒ‹î•ñ
+// å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«æƒ…å ±
 const EncodeFileInput& StreamReformInfo::getEncodeFile(EncodeFileKey key) const {
     return outFiles_.at(key.key());
 }
 
-// ’†ŠÔˆêƒtƒ@ƒCƒ‹‚²‚Æ‚Ìo—Íƒtƒ@ƒCƒ‹”
+// ä¸­é–“ä¸€æ™‚ãƒ•ã‚¡ã‚¤ãƒ«ã”ã¨ã®å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«æ•°
 int StreamReformInfo::getNumEncoders(int videoFileIndex) const {
     return int(
         fileFormatStartIndex_[videoFileIndex + 1] - fileFormatStartIndex_[videoFileIndex]);
 }
 
-// ‡Œvo—Íƒtƒ@ƒCƒ‹”
+// åˆè¨ˆå‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«æ•°
 //int getNumOutFiles() const {
 //	return (int)fileFormatId_.size();
 //}
@@ -234,32 +235,32 @@ const VideoFrameInfo& StreamReformInfo::getVideoFrameInfo(int frameIndex) const 
     return videoFrameList_[frameIndex];
 }
 
-// video frame index (DTS‡) -> encoder index
+// video frame index (DTSé †) -> encoder index
 int StreamReformInfo::getEncoderIndex(int frameIndex) const {
     int fileId = frameFormatId_[frameIndex];
     const auto& format = format_[fileFormatId_[fileId]];
     return fileId - formatStartIndex_[format.videoFileId];
 }
 
-// key‚Ívideo,format‚Ì2‚Â‚µ‚©g‚í‚ê‚È‚¢
+// keyã¯video,formatã®2ã¤ã—ã‹ä½¿ã‚ã‚Œãªã„
 const OutVideoFormat& StreamReformInfo::getFormat(EncodeFileKey key) const {
     int fileId = fileFormatStartIndex_[key.video] + key.format;
     return format_[fileFormatId_[fileId]];
 }
 
-// genAudioŒãg—p‰Â”\
+// genAudioå¾Œä½¿ç”¨å¯èƒ½
 const std::vector<EncodeFileKey>& StreamReformInfo::getOutFileKeys() const {
     return outFileKeys_;
 }
 
-// ‰f‘œƒf[ƒ^ƒTƒCƒYiƒoƒCƒgjAŠÔiƒ^ƒCƒ€ƒXƒ^ƒ“ƒvj‚ÌƒyƒA
+// æ˜ åƒãƒ‡ãƒ¼ã‚¿ã‚µã‚¤ã‚ºï¼ˆãƒã‚¤ãƒˆï¼‰ã€æ™‚é–“ï¼ˆã‚¿ã‚¤ãƒ ã‚¹ã‚¿ãƒ³ãƒ—ï¼‰ã®ãƒšã‚¢
 std::pair<int64_t, double> StreamReformInfo::getSrcVideoInfo(int videoFileIndex) const {
     return std::make_pair(filterSrcSize_[videoFileIndex], filterSrcDuration_[videoFileIndex]);
 }
 
-// TODO: VFR—pƒ^ƒCƒ€ƒR[ƒhæ“¾
-// infps: ƒtƒBƒ‹ƒ^“ü—Í‚ÌFPS
-// outpfs: ƒtƒBƒ‹ƒ^o—Í‚ÌFPS
+// TODO: VFRç”¨ã‚¿ã‚¤ãƒ ã‚³ãƒ¼ãƒ‰å–å¾—
+// infps: ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ã®FPS
+// outpfs: ãƒ•ã‚£ãƒ«ã‚¿å‡ºåŠ›ã®FPS
 void StreamReformInfo::getTimeCode(
     int encoderIndex, int videoFileIndex, CMType cmtype, double infps, double outfps) const {
     //
@@ -285,7 +286,7 @@ std::pair<double, double> StreamReformInfo::getInOutDuration() const {
     return std::make_pair(srcTotalDuration_, outTotalDuration_);
 }
 
-// ‰¹ºƒtƒŒ[ƒ€”Ô†ƒŠƒXƒg‚©‚çFilterAudioFrameƒŠƒXƒg‚É•ÏŠ·
+// éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ãƒªã‚¹ãƒˆã‹ã‚‰FilterAudioFrameãƒªã‚¹ãƒˆã«å¤‰æ›
 std::vector<FilterAudioFrame> StreamReformInfo::getWaveInput(const std::vector<int>& frameList) const {
     std::vector<FilterAudioFrame> ret;
     for (int i = 0; i < (int)frameList.size(); ++i) {
@@ -300,12 +301,12 @@ std::vector<FilterAudioFrame> StreamReformInfo::getWaveInput(const std::vector<i
 }
 
 void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> getFileName) const {
-    ctx.info("[o—Íƒtƒ@ƒCƒ‹]");
+    ctx.info("[å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«]");
     for (int i = 0; i < (int)outFileKeys_.size(); ++i) {
         ctx.infoF("%d: %s", i, getFileName(outFileKeys_[i]));
     }
 
-    ctx.info("[“ü—Í->o—Íƒ}ƒbƒsƒ“ƒO]");
+    ctx.info("[å…¥åŠ›->å‡ºåŠ›ãƒãƒƒãƒ”ãƒ³ã‚°]");
     double fromPTS = dataPTS_[0];
     int prevFileId = 0;
     for (int i = 0; i < (int)ordredVideoFrame_.size(); ++i) {
@@ -316,7 +317,7 @@ void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> 
             // print
             auto from = elapsedTime(fromPTS);
             auto to = elapsedTime(pts);
-            ctx.infoF("%3d•ª%05.3f•b - %3d•ª%05.3f•b -> %d",
+            ctx.infoF("%3dåˆ†%05.3fç§’ - %3dåˆ†%05.3fç§’ -> %d",
                 from.first, from.second, to.first, to.second, fileFormatId_[prevFileId]);
             prevFileId = fileId;
             fromPTS = pts;
@@ -324,11 +325,11 @@ void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> 
     }
     auto from = elapsedTime(fromPTS);
     auto to = elapsedTime(dataPTS_.back());
-    ctx.infoF("%3d•ª%05.3f•b - %3d•ª%05.3f•b -> %d",
+    ctx.infoF("%3dåˆ†%05.3fç§’ - %3dåˆ†%05.3fç§’ -> %d",
         from.first, from.second, to.first, to.second, fileFormatId_[prevFileId]);
 }
 
-// ˆÈ‰ºƒfƒoƒbƒO—p //
+// ä»¥ä¸‹ãƒ‡ãƒãƒƒã‚°ç”¨ //
 
 void StreamReformInfo::serialize(const tstring& path) {
     serialize(File(path, _T("wb")));
@@ -360,23 +361,23 @@ void StreamReformInfo::serialize(const File& file) {
 
 void StreamReformInfo::reformMain(bool splitSub) {
     if (videoFrameList_.size() == 0) {
-        THROW(FormatException, "‰f‘œƒtƒŒ[ƒ€‚ª1–‡‚à‚ ‚è‚Ü‚¹‚ñ");
+        THROW(FormatException, "æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ãŒ1æšã‚‚ã‚ã‚Šã¾ã›ã‚“");
     }
     if (audioFrameList_.size() == 0) {
-        THROW(FormatException, "‰¹ºƒtƒŒ[ƒ€‚ª1–‡‚à‚ ‚è‚Ü‚¹‚ñ");
+        THROW(FormatException, "éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ãŒ1æšã‚‚ã‚ã‚Šã¾ã›ã‚“");
     }
     if (streamEventList_.size() == 0 || streamEventList_[0].type != PID_TABLE_CHANGED) {
-        THROW(FormatException, "•s³‚Èƒf[ƒ^‚Å‚·");
+        THROW(FormatException, "ä¸æ­£ãªãƒ‡ãƒ¼ã‚¿ã§ã™");
     }
 
     /*
-    // framePtsMap_‚ğì¬i‚·‚®‚Éì‚ê‚é‚Ì‚Åj
+    // framePtsMap_ã‚’ä½œæˆï¼ˆã™ãã«ä½œã‚Œã‚‹ã®ã§ï¼‰
     for (int i = 0; i < int(videoFrameList_.size()); ++i) {
         framePtsMap_[videoFrameList_[i].PTS] = i;
     }
     */
 
-    // VFRŒŸo
+    // VFRæ¤œå‡º
     isVFR_ = false;
     for (int i = 0; i < int(videoFrameList_.size()); ++i) {
         if (videoFrameList_[i].format.fixedFrameRate == false) {
@@ -386,11 +387,11 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     if (isVFR_) {
-        THROW(FormatException, "‚±‚Ìƒo[ƒWƒ‡ƒ“‚ÍVFR‚É‘Î‰‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+        THROW(FormatException, "ã“ã®ãƒãƒ¼ã‚¸ãƒ§ãƒ³ã¯VFRã«å¯¾å¿œã—ã¦ã„ã¾ã›ã‚“");
     }
 
-    // ŠeƒRƒ“ƒ|[ƒlƒ“ƒgŠJnPTS‚ğ‰f‘œƒtƒŒ[ƒ€Šî€‚Ìƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS‚É•ÏŠ·
-    //i‚±‚ê‚ğ‚â‚ç‚È‚¢‚ÆŠJnƒtƒŒ[ƒ€“¯m‚ªŠÔ‚Éƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚ğ‹²‚ñ‚Å‚é‚Æ”äŠr‚Å‚«‚È‚­‚È‚éj
+    // å„ã‚³ãƒ³ãƒãƒ¼ãƒãƒ³ãƒˆé–‹å§‹PTSã‚’æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ åŸºæº–ã®ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTSã«å¤‰æ›
+    //ï¼ˆã“ã‚Œã‚’ã‚„ã‚‰ãªã„ã¨é–‹å§‹ãƒ•ãƒ¬ãƒ¼ãƒ åŒå£«ãŒé–“ã«ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã‚’æŒŸã‚“ã§ã‚‹ã¨æ¯”è¼ƒã§ããªããªã‚‹ï¼‰
     std::vector<int64_t> startPTSs;
     startPTSs.push_back(videoFrameList_[0].PTS);
     startPTSs.push_back(audioFrameList_[0].PTS);
@@ -406,19 +407,19 @@ void StreamReformInfo::reformMain(bool splitSub) {
         prevPTS = modPTS;
     }
 
-    // ŠeƒRƒ“ƒ|[ƒlƒ“ƒg‚Ìƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS‚ğ¶¬
+    // å„ã‚³ãƒ³ãƒãƒ¼ãƒãƒ³ãƒˆã®ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTSã‚’ç”Ÿæˆ
     makeModifiedPTS(modifiedStartPTS[0], modifiedPTS_, videoFrameList_);
     makeModifiedPTS(modifiedStartPTS[1], modifiedAudioPTS_, audioFrameList_);
     makeModifiedPTS(modifiedStartPTS[2], modifiedCaptionPTS_, captionItemList_);
 
-    // audioFrameDuration_‚ğ¶¬
+    // audioFrameDuration_ã‚’ç”Ÿæˆ
     audioFrameDuration_.resize(audioFrameList_.size());
     for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
         const auto& frame = audioFrameList_[i];
         audioFrameDuration_[i] = (frame.numSamples * MPEG_CLOCK_HZ) / (double)frame.format.sampleRate;
     }
 
-    // ptsOrdredVideoFrame_‚ğ¶¬
+    // ptsOrdredVideoFrame_ã‚’ç”Ÿæˆ
     ordredVideoFrame_.resize(videoFrameList_.size());
     for (int i = 0; i < (int)videoFrameList_.size(); ++i) {
         ordredVideoFrame_[i] = i;
@@ -427,8 +428,8 @@ void StreamReformInfo::reformMain(bool splitSub) {
         return modifiedPTS_[a] < modifiedPTS_[b];
         });
 
-    // dataPTS‚ğ¶¬
-    // Œã‚ë‚©‚çŒ©‚Ä‚»‚Ì“_‚ÅÅ‚à¬‚³‚¢PTS‚ğdataPTS‚Æ‚·‚é
+    // dataPTSã‚’ç”Ÿæˆ
+    // å¾Œã‚ã‹ã‚‰è¦‹ã¦ãã®æ™‚ç‚¹ã§æœ€ã‚‚å°ã•ã„PTSã‚’dataPTSã¨ã™ã‚‹
     double curMin = INFINITY;
     double curMax = 0;
     dataPTS_.resize(videoFrameList_.size());
@@ -438,7 +439,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
         dataPTS_[i] = curMin;
     }
 
-    // š–‹‚ÌŠJnEI—¹‚ğŒvZ
+    // å­—å¹•ã®é–‹å§‹ãƒ»çµ‚äº†ã‚’è¨ˆç®—
     captionDuration_.resize(captionItemList_.size());
     double curEnd = dataPTS_.back();
     for (int i = (int)captionItemList_.size() - 1; i >= 0; --i) {
@@ -447,14 +448,14 @@ void StreamReformInfo::reformMain(bool splitSub) {
             captionDuration_[i].startPTS = modPTS;
             captionDuration_[i].endPTS = curEnd;
         } else {
-            // ƒNƒŠƒA
+            // ã‚¯ãƒªã‚¢
             captionDuration_[i].startPTS = captionDuration_[i].endPTS = modPTS;
-            // I—¹‚ğXV
+            // çµ‚äº†ã‚’æ›´æ–°
             curEnd = modPTS;
         }
     }
 
-    // ƒXƒgƒŠ[ƒ€ƒCƒxƒ“ƒg‚ÌPTS‚ğŒvZ
+    // ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚¤ãƒ™ãƒ³ãƒˆã®PTSã‚’è¨ˆç®—
     double endPTS = curMax + 1;
     streamEventPTS_.resize(streamEventList_.size());
     for (int i = 0; i < (int)streamEventList_.size(); ++i) {
@@ -462,14 +463,14 @@ void StreamReformInfo::reformMain(bool splitSub) {
         double pts = -1;
         if (ev.type == PID_TABLE_CHANGED || ev.type == VIDEO_FORMAT_CHANGED) {
             if (ev.frameIdx >= (int)videoFrameList_.size()) {
-                // Œã‚ë‰ß‚¬‚Ä‘ÎÛ‚ÌƒtƒŒ[ƒ€‚ª‚È‚¢
+                // å¾Œã‚éãã¦å¯¾è±¡ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãªã„
                 pts = endPTS;
             } else {
                 pts = dataPTS_[ev.frameIdx];
             }
         } else if (ev.type == AUDIO_FORMAT_CHANGED) {
             if (ev.frameIdx >= (int)audioFrameList_.size()) {
-                // Œã‚ë‰ß‚¬‚Ä‘ÎÛ‚ÌƒtƒŒ[ƒ€‚ª‚È‚¢
+                // å¾Œã‚éãã¦å¯¾è±¡ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãªã„
                 pts = endPTS;
             } else {
                 pts = modifiedAudioPTS_[ev.frameIdx];
@@ -478,17 +479,17 @@ void StreamReformInfo::reformMain(bool splitSub) {
         streamEventPTS_[i] = pts;
     }
 
-    // ŠÔ“I‚É‹ß‚¢ƒXƒgƒŠ[ƒ€ƒCƒxƒ“ƒg‚ğ1‚Â‚Ì•Ï‰»“_‚Æ‚İ‚È‚·
+    // æ™‚é–“çš„ã«è¿‘ã„ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚¤ãƒ™ãƒ³ãƒˆã‚’1ã¤ã®å¤‰åŒ–ç‚¹ã¨ã¿ãªã™
     const double CHANGE_TORELANCE = 3 * MPEG_CLOCK_HZ;
 
     std::vector<int> sectionFormatList;
     std::vector<double> startPtsList;
 
-    ctx.info("[ƒtƒH[ƒ}ƒbƒgØ‚è‘Ö‚¦‰ğÍ]");
+    ctx.info("[ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆåˆ‡ã‚Šæ›¿ãˆè§£æ]");
 
-    // Œ»İ‚Ì‰¹ºƒtƒH[ƒ}ƒbƒg‚ğ•Û
-    // ‰¹ºES”‚ª•Ï‰»‚µ‚Ä‚à‘O‚Ì‰¹ºƒtƒH[ƒ}ƒbƒg‚Æ•Ï‚í‚ç‚È‚¢ê‡‚Í
-    // ƒCƒxƒ“ƒg‚ª”ò‚ñ‚Å‚±‚È‚¢‚Ì‚ÅAŒ»İ‚Ì‰¹ºES”‚Æ‚ÍŠÖŒW‚È‚­‘S‰¹ºƒtƒH[ƒ}ƒbƒg‚ğ•Û‚·‚é
+    // ç¾åœ¨ã®éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’ä¿æŒ
+    // éŸ³å£°ESæ•°ãŒå¤‰åŒ–ã—ã¦ã‚‚å‰ã®éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¨å¤‰ã‚ã‚‰ãªã„å ´åˆã¯
+    // ã‚¤ãƒ™ãƒ³ãƒˆãŒé£›ã‚“ã§ã“ãªã„ã®ã§ã€ç¾åœ¨ã®éŸ³å£°ESæ•°ã¨ã¯é–¢ä¿‚ãªãå…¨éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’ä¿æŒã™ã‚‹
     std::vector<AudioFormat> curAudioFormats;
 
     OutVideoFormat curFormat = OutVideoFormat();
@@ -511,17 +512,17 @@ void StreamReformInfo::reformMain(bool splitSub) {
         auto& ev = streamEventList_[i];
         double pts = streamEventPTS_[i];
         if (pts >= endPTS) {
-            // Œã‚ë‚É‰f‘œ‚ª‚È‚¯‚ê‚ÎˆÓ–¡‚ª‚È‚¢
+            // å¾Œã‚ã«æ˜ åƒãŒãªã‘ã‚Œã°æ„å‘³ãŒãªã„
             continue;
         }
-        if (curFromPTS != -1 &&          // from‚ª‚ ‚é
-            curFormat.videoFileId >= 0 &&  // ‰f‘œ‚ª‚ ‚é
-            curFromPTS + CHANGE_TORELANCE < pts) // CHANGE_TORELANCE‚æ‚è—£‚ê‚Ä‚¢‚é
+        if (curFromPTS != -1 &&          // fromãŒã‚ã‚‹
+            curFormat.videoFileId >= 0 &&  // æ˜ åƒãŒã‚ã‚‹
+            curFromPTS + CHANGE_TORELANCE < pts) // CHANGE_TORELANCEã‚ˆã‚Šé›¢ã‚Œã¦ã„ã‚‹
         {
-            // ‹æŠÔ‚ğ’Ç‰Á
+            // åŒºé–“ã‚’è¿½åŠ 
             addSection();
         }
-        // •ÏX‚ğ”½‰f
+        // å¤‰æ›´ã‚’åæ˜ 
         switch (ev.type) {
         case PID_TABLE_CHANGED:
             if (curAudioFormats.size() < ev.numAudio) {
@@ -538,20 +539,20 @@ void StreamReformInfo::reformMain(bool splitSub) {
             }
             break;
         case VIDEO_FORMAT_CHANGED:
-            // ƒtƒ@ƒCƒ‹•ÏX
+            // ãƒ•ã‚¡ã‚¤ãƒ«å¤‰æ›´
             if (!curFormat.videoFormat.isBasicEquals(videoFrameList_[ev.frameIdx].format)) {
-                // ƒAƒXƒyƒNƒg”äˆÈŠO‚à•ÏX‚³‚ê‚Ä‚¢‚½‚çƒtƒ@ƒCƒ‹‚ğ•ª‚¯‚é
-                //iAMTSplitter‚ÆğŒ‚ğ‡‚í‚¹‚È‚¯‚ê‚Î‚È‚ç‚È‚¢‚±‚Æ‚É’ˆÓj
+                // ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ä»¥å¤–ã‚‚å¤‰æ›´ã•ã‚Œã¦ã„ãŸã‚‰ãƒ•ã‚¡ã‚¤ãƒ«ã‚’åˆ†ã‘ã‚‹
+                //ï¼ˆAMTSplitterã¨æ¡ä»¶ã‚’åˆã‚ã›ãªã‘ã‚Œã°ãªã‚‰ãªã„ã“ã¨ã«æ³¨æ„ï¼‰
                 ++curFormat.videoFileId;
                 formatStartIndex_.push_back((int)format_.size());
             }
             curFormat.videoFormat = videoFrameList_[ev.frameIdx].format;
             if (curVideoFromPTS != -1) {
-                // ‰f‘œƒtƒH[ƒ}ƒbƒg‚Ì•ÏX‚ğ‹æŠÔ‚Æ‚µ‚Äæ‚è‚±‚Ú‚·‚Æ
-                // AMTSplitter‚Æ‚Ì®‡«‚ªæ‚ê‚È‚­‚È‚é‚Ì‚Å‹­§“I‚É’Ç‰Á
+                // æ˜ åƒãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã®å¤‰æ›´ã‚’åŒºé–“ã¨ã—ã¦å–ã‚Šã“ã¼ã™ã¨
+                // AMTSplitterã¨ã®æ•´åˆæ€§ãŒå–ã‚Œãªããªã‚‹ã®ã§å¼·åˆ¶çš„ã«è¿½åŠ 
                 addSection();
             }
-            // ‰f‘œƒtƒH[ƒ}ƒbƒg‚Ì•ÏX‚ğ—Dæ‚³‚¹‚é
+            // æ˜ åƒãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã®å¤‰æ›´æ™‚åˆ»ã‚’å„ªå…ˆã•ã›ã‚‹
             curFromPTS = curVideoFromPTS = dataPTS_[ev.frameIdx];
             break;
         case AUDIO_FORMAT_CHANGED:
@@ -564,21 +565,23 @@ void StreamReformInfo::reformMain(bool splitSub) {
                 curFromPTS = pts;
             }
             break;
+        default:
+            break;
         }
     }
-    // ÅŒã‚Ì‹æŠÔ‚ğ’Ç‰Á
+    // æœ€å¾Œã®åŒºé–“ã‚’è¿½åŠ 
     if (curFromPTS != -1) {
         addSection();
     }
     startPtsList.push_back(endPTS);
     formatStartIndex_.push_back((int)format_.size());
 
-    // frameSectionId‚ğ¶¬
+    // frameSectionIdã‚’ç”Ÿæˆ
     std::vector<int> outFormatFrames(format_.size());
     std::vector<int> frameSectionId(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); ++i) {
         double pts = modifiedPTS_[i];
-        // ‹æŠÔ‚ğ’T‚·
+        // åŒºé–“ã‚’æ¢ã™
         int sectionId = int(std::partition_point(startPtsList.begin(), startPtsList.end(),
             [=](double sec) {
                 return !(pts < sec);
@@ -591,11 +594,11 @@ void StreamReformInfo::reformMain(bool splitSub) {
         outFormatFrames[sectionFormatList[sectionId]]++;
     }
 
-    // ƒZƒNƒVƒ‡ƒ“¨ƒtƒ@ƒCƒ‹ƒ}ƒbƒsƒ“ƒO‚ğ¶¬
+    // ã‚»ã‚¯ã‚·ãƒ§ãƒ³â†’ãƒ•ã‚¡ã‚¤ãƒ«ãƒãƒƒãƒ”ãƒ³ã‚°ã‚’ç”Ÿæˆ
     std::vector<int> sectionFileList(sectionFormatList.size());
 
     if (splitSub) {
-        // ƒƒCƒ“ƒtƒH[ƒ}ƒbƒgˆÈŠO‚ÍŒ‹‡‚µ‚È‚¢ //
+        // ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆä»¥å¤–ã¯çµåˆã—ãªã„ //
 
         int mainFormatId = int(std::max_element(
             outFormatFrames.begin(), outFormatFrames.end()) - outFormatFrames.begin());
@@ -622,23 +625,23 @@ void StreamReformInfo::reformMain(bool splitSub) {
         fileFormatStartIndex_.push_back((int)fileFormatId_.size());
     } else {
         for (int i = 0; i < (int)sectionFormatList.size(); ++i) {
-            // ƒtƒ@ƒCƒ‹‚ÆƒtƒH[ƒ}ƒbƒg‚Í“¯‚¶
+            // ãƒ•ã‚¡ã‚¤ãƒ«ã¨ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯åŒã˜
             sectionFileList[i] = sectionFormatList[i];
         }
         for (int i = 0; i < (int)format_.size(); ++i) {
-            // ƒtƒ@ƒCƒ‹‚ÆƒtƒH[ƒ}ƒbƒg‚ÍP“™•ÏŠ·
+            // ãƒ•ã‚¡ã‚¤ãƒ«ã¨ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯æ’ç­‰å¤‰æ›
             fileFormatId_.push_back(i);
         }
         fileFormatStartIndex_ = formatStartIndex_;
     }
 
-    // frameFormatId_‚ğ¶¬
+    // frameFormatId_ã‚’ç”Ÿæˆ
     frameFormatId_.resize(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); ++i) {
         frameFormatId_[i] = sectionFileList[frameSectionId[i]];
     }
 
-    // ƒtƒBƒ‹ƒ^—p“ü—ÍƒtƒŒ[ƒ€ƒŠƒXƒg¶¬
+    // ãƒ•ã‚£ãƒ«ã‚¿ç”¨å…¥åŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆç”Ÿæˆ
     filterFrameList_ = std::vector<std::vector<FilterSourceFrame>>(numVideoFile_);
     for (int videoId = 0; videoId < (int)numVideoFile_; ++videoId) {
         int keyFrame = -1;
@@ -658,18 +661,18 @@ void StreamReformInfo::reformMain(bool splitSub) {
                     keyFrame = int(list.size());
                 }
 
-                // ‚Ü‚¾ƒL[ƒtƒŒ[ƒ€‚ª‚È‚¢ê‡‚ÍÌ‚Ä‚é
+                // ã¾ã ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãªã„å ´åˆã¯æ¨ã¦ã‚‹
                 if (keyFrame == -1) continue;
 
                 FilterSourceFrame frame;
                 frame.halfDelay = false;
                 frame.frameIndex = i;
                 frame.pts = mPTS;
-                frame.frameDuration = timePerFrame; // TODO: VFR‘Î‰
+                frame.frameDuration = timePerFrame; // TODO: VFRå¯¾å¿œ
                 frame.framePTS = (int64_t)mPTS;
                 frame.fileOffset = srcframe.fileOffset;
                 frame.keyFrame = keyFrame;
-                frame.cmType = CMTYPE_NONCM; // Å‰‚Í‘S•”NonCM‚É‚µ‚Ä‚¨‚­
+                frame.cmType = CMTYPE_NONCM; // æœ€åˆã¯å…¨éƒ¨NonCMã«ã—ã¦ãŠã
 
                 switch (srcframe.pic) {
                 case PIC_FRAME:
@@ -702,27 +705,29 @@ void StreamReformInfo::reformMain(bool splitSub) {
                     frame.pts += timePerFrame;
                     list.push_back(frame);
                     break;
+                default:
+                    break;
                 }
             }
         }
     }
 
-    // indexAudioFrameList_‚ğì¬
+    // indexAudioFrameList_ã‚’ä½œæˆ
     int numMaxAudio = 1;
     for (int i = 0; i < (int)format_.size(); ++i) {
         numMaxAudio = std::max(numMaxAudio, (int)format_[i].audioFormat.size());
     }
     indexAudioFrameList_.resize(numMaxAudio);
     for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
-        // ’Z‚·‚¬‚ÄƒZƒNƒVƒ‡ƒ“‚Æ‚µ‚Ä”F¯‚³‚ê‚È‚©‚Á‚½•”•ª‚É
-        // numMaxAudio‚ğ’´‚¦‚é‰¹ºƒf[ƒ^‚ª‘¶İ‚·‚é‰Â”\«‚ª‚ ‚é
-        // ‰¹º”‚ğ’´‚¦‚Ä‚¢‚é‰¹ºƒtƒŒ[ƒ€‚Í–³‹‚·‚é
+        // çŸ­ã™ãã¦ã‚»ã‚¯ã‚·ãƒ§ãƒ³ã¨ã—ã¦èªè­˜ã•ã‚Œãªã‹ã£ãŸéƒ¨åˆ†ã«
+        // numMaxAudioã‚’è¶…ãˆã‚‹éŸ³å£°ãƒ‡ãƒ¼ã‚¿ãŒå­˜åœ¨ã™ã‚‹å¯èƒ½æ€§ãŒã‚ã‚‹
+        // éŸ³å£°æ•°ã‚’è¶…ãˆã¦ã„ã‚‹éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã¯ç„¡è¦–ã™ã‚‹
         if (audioFrameList_[i].audioIdx < numMaxAudio) {
             indexAudioFrameList_[audioFrameList_[i].audioIdx].push_back(i);
         }
     }
 
-    // audioFileOffsets_‚ğ¶¬
+    // audioFileOffsets_ã‚’ç”Ÿæˆ
     audioFileOffsets_.resize(audioFrameList_.size() + 1);
     for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
         audioFileOffsets_[i] = audioFrameList_[i].fileOffset;
@@ -730,28 +735,29 @@ void StreamReformInfo::reformMain(bool splitSub) {
     const auto& lastFrame = audioFrameList_.back();
     audioFileOffsets_.back() = lastFrame.fileOffset + lastFrame.codedDataSize;
 
-    // ŠÔî•ñ
+    // æ™‚é–“æƒ…å ±
     srcTotalDuration_ = dataPTS_.back() - dataPTS_.front();
     if (timeList_.size() > 0) {
         auto ti = timeList_[0];
-        // ƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚Ä‚é‰Â”\«‚ª‚ ‚é‚Ì‚ÅãˆÊƒrƒbƒg‚ÍÌ‚Ä‚ÄŒvZ
+        // ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ã¦ã‚‹å¯èƒ½æ€§ãŒã‚ã‚‹ã®ã§ä¸Šä½ãƒ“ãƒƒãƒˆã¯æ¨ã¦ã¦è¨ˆç®—
         double diff = (double)(int32_t(ti.first / 300 - dataPTS_.front())) / MPEG_CLOCK_HZ;
         tm t = tm();
         ti.second.getDay(t.tm_year, t.tm_mon, t.tm_mday);
         ti.second.getTime(t.tm_hour, t.tm_min, t.tm_sec);
-        // ’²®
-        t.tm_mon -= 1; // Œ‚Í0n‚Ü‚è‚È‚Ì‚Å
-        t.tm_year -= 1900; // ”N‚Í1900‚ğˆø‚­
-        t.tm_hour -= 9; // “ú–{‚È‚Ì‚ÅGMT+9
-        t.tm_sec -= (int)std::round(diff); // Å‰‚ÌƒtƒŒ[ƒ€‚Ü‚Å–ß‚·
-        firstFrameTime_ = _mkgmtime(&t);
+        // èª¿æ•´
+        t.tm_mon -= 1; // æœˆã¯0å§‹ã¾ã‚Šãªã®ã§
+        t.tm_year -= 1900; // å¹´ã¯1900ã‚’å¼•ã
+        t.tm_hour -= 9; // æ—¥æœ¬ãªã®ã§GMT+9
+        t.tm_sec -= (int)std::round(diff); // æœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ã¾ã§æˆ»ã™
+        //firstFrameTime_ = _mkgmtime(&t);
+        firstFrameTime_ = amt_mkgmtime(&t);
     }
 
     fileDivs_.resize(numVideoFile_);
 }
 
 void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
-    // CM‰ğÍ‚ª‚È‚¢‚Æ‚«‚ÍfileDivs_‚ªİ’è‚³‚ê‚Ä‚¢‚È‚¢‚Ì‚Å‚±‚±‚Åİ’è
+    // CMè§£æãŒãªã„ã¨ãã¯fileDivs_ãŒè¨­å®šã•ã‚Œã¦ã„ãªã„ã®ã§ã“ã“ã§è¨­å®š
     for (int i = 0; i < numVideoFile_; ++i) {
         auto& divs = fileDivs_[i];
         if (divs.size() == 0) {
@@ -760,7 +766,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         }
     }
 
-    // ƒtƒ@ƒCƒ‹ƒŠƒXƒg¶¬
+    // ãƒ•ã‚¡ã‚¤ãƒ«ãƒªã‚¹ãƒˆç”Ÿæˆ
     outFileKeys_.clear();
     for (int video = 0; video < numVideoFile_; ++video) {
         int numEncoders = getNumEncoders(video);
@@ -773,7 +779,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         }
     }
 
-    // Še’†ŠÔƒtƒ@ƒCƒ‹‚Ì“ü—Íƒtƒ@ƒCƒ‹ŠÔ‚ÆƒTƒCƒY‚ğŒvZ
+    // å„ä¸­é–“ãƒ•ã‚¡ã‚¤ãƒ«ã®å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«æ™‚é–“ã¨ã‚µã‚¤ã‚ºã‚’è¨ˆç®—
     filterSrcSize_ = std::vector<int64_t>(numVideoFile_, 0);
     filterSrcDuration_ = std::vector<double>(numVideoFile_, 0);
     std::vector<double> fileFormatDuration(fileFormatId_.size(), 0);
@@ -787,18 +793,18 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
             ? ordredVideoFrame_[i + 1]
             : -1;
         double duration = getSourceFrameDuration(ordered, next);
-        // ’†ŠÔƒtƒ@ƒCƒ‹‚²‚ÌƒTƒCƒY‚ÆŠÔiƒ\[ƒXƒrƒbƒgƒŒ[ƒgŒvZ—pj
+        // ä¸­é–“ãƒ•ã‚¡ã‚¤ãƒ«ã”ã®ã‚µã‚¤ã‚ºã¨æ™‚é–“ï¼ˆã‚½ãƒ¼ã‚¹ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆè¨ˆç®—ç”¨ï¼‰
         filterSrcSize_[videoId] += frame.codedDataSize;
         filterSrcDuration_[videoId] += duration;
-        // ƒtƒH[ƒ}ƒbƒgio—Íj‚²‚Æ‚ÌŠÔio—Íƒtƒ@ƒCƒ‹–¼Œˆ’è—pj
+        // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆï¼ˆå‡ºåŠ›ï¼‰ã”ã¨ã®æ™‚é–“ï¼ˆå‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«åæ±ºå®šç”¨ï¼‰
         fileFormatDuration[fileFormatId] += duration;
     }
 
     int maxId = (int)(std::max_element(fileFormatDuration.begin(), fileFormatDuration.end()) -
         fileFormatDuration.begin());
 
-    // [ƒtƒH[ƒ}ƒbƒg(o—Í)] -> [o—Í—p”Ô†] ì¬
-    // Å‚àŠÔ‚Ì’·‚¢ƒtƒH[ƒ}ƒbƒg(o—Í)‚ªƒ[ƒB‚»‚êˆÈŠO‚Í‡”Ô’Ê‚è
+    // [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)] -> [å‡ºåŠ›ç”¨ç•ªå·] ä½œæˆ
+    // æœ€ã‚‚æ™‚é–“ã®é•·ã„ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)ãŒã‚¼ãƒ­ã€‚ãã‚Œä»¥å¤–ã¯é †ç•ªé€šã‚Š
     std::vector<int> formatOutIndex(fileFormatId_.size());
     formatOutIndex[maxId] = 0;
     for (int i = 0, cnt = 1; i < (int)formatOutIndex.size(); ++i) {
@@ -807,22 +813,22 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         }
     }
 
-    // Šeo—Íƒtƒ@ƒCƒ‹‚Ìƒƒ^ƒf[ƒ^‚ğì¬
+    // å„å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã®ãƒ¡ã‚¿ãƒ‡ãƒ¼ã‚¿ã‚’ä½œæˆ
     for (auto key : outFileKeys_) {
         auto& file = outFiles_[key.key()];
-        // [ƒtƒH[ƒ}ƒbƒg(o—Í)‡]
+        // [ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ(å‡ºåŠ›)é †]
         int foramtId = fileFormatStartIndex_[key.video] + key.format;
 
-        file.outKey.video = 0; // g‚í‚È‚¢
+        file.outKey.video = 0; // ä½¿ã‚ãªã„
         file.outKey.format = formatOutIndex[foramtId];
         file.outKey.div = key.div;
         file.outKey.cm = (key.cm == cmtypes[0]) ? CMTYPE_BOTH : key.cm;
-        file.keyMax.video = 0; // g‚í‚È‚¢
+        file.keyMax.video = 0; // ä½¿ã‚ãªã„
         file.keyMax.format = (int)fileFormatId_.size();
         file.keyMax.div = (int)fileDivs_[key.video].size() - 1;
-        file.keyMax.cm = key.cm; // g‚í‚È‚¢
+        file.keyMax.cm = key.cm; // ä½¿ã‚ãªã„
 
-        // ƒtƒŒ[ƒ€ƒŠƒXƒgì¬
+        // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆä½œæˆ
         file.videoFrames.clear();
         const auto& frameList = filterFrameList_[key.video];
         int start = fileDivs_[key.video][key.div];
@@ -835,14 +841,14 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
             }
         }
 
-        // ŠÔ‚ğŒvZ
+        // æ™‚é–“ã‚’è¨ˆç®—
         file.duration = 0;
         for (int i = 0; i < (int)file.videoFrames.size(); ++i) {
             file.duration += frameList[file.videoFrames[i]].frameDuration;
         }
     }
 
-    // ‘o—ÍŠÔ
+    // ç·å‡ºåŠ›æ™‚é–“
     outTotalDuration_ = 0;
     for (auto key : outFileKeys_) {
         outTotalDuration_ += outFiles_.at(key.key()).duration;
@@ -850,14 +856,14 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
 }
 
 void StreamReformInfo::registerOrGetFormat(OutVideoFormat& format) {
-    // ‚·‚Å‚É‚ ‚é‚Ì‚©‚ç’T‚·
+    // ã™ã§ã«ã‚ã‚‹ã®ã‹ã‚‰æ¢ã™
     for (int i = formatStartIndex_.back(); i < (int)format_.size(); ++i) {
         if (isEquealFormat(format_[i], format)) {
             format.formatId = i;
             return;
         }
     }
-    // ‚È‚¢‚Ì‚Å“o˜^
+    // ãªã„ã®ã§ç™»éŒ²
     format.formatId = (int)format_.size();
     format_.push_back(format);
 }
@@ -881,9 +887,9 @@ AudioDiffInfo StreamReformInfo::initAudioDiffInfo() {
     return adiff;
 }
 
-// ƒtƒBƒ‹ƒ^“ü—Í‚©‚ç‰¹º\’z
+// ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›ã‹ã‚‰éŸ³å£°æ§‹ç¯‰
 AudioDiffInfo StreamReformInfo::genAudioStream() {
-    // Šeƒtƒ@ƒCƒ‹‚Ì‰¹º\’z
+    // å„ãƒ•ã‚¡ã‚¤ãƒ«ã®éŸ³å£°æ§‹ç¯‰
     for (int v = 0; v < (int)outFileKeys_.size(); ++v) {
         auto key = outFileKeys_[v];
         int formatId = fileFormatStartIndex_[key.video] + key.format;
@@ -903,7 +909,7 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
         file.audioFrames = std::move(state.audioFrameList);
     }
 
-    // ‰¹ƒYƒŒ“Œvî•ñ‚Ì‚½‚ß‚à‚¤1ƒpƒXÀs
+    // éŸ³ã‚ºãƒ¬çµ±è¨ˆæƒ…å ±ã®ãŸã‚ã‚‚ã†1ãƒ‘ã‚¹å®Ÿè¡Œ
     AudioDiffInfo adiff = initAudioDiffInfo();
     std::vector<OutFileState> states(fileFormatId_.size());
     for (int i = 0; i < (int)states.size(); ++i) {
@@ -928,8 +934,8 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
 }
 
 void StreamReformInfo::genWaveAudioStream() {
-    // ‘S‰f‘œƒtƒŒ[ƒ€‚ğ’Ç‰Á
-    ctx.info("[CM”»’è—p‰¹º\’z]");
+    // å…¨æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¿½åŠ 
+    ctx.info("[CMåˆ¤å®šç”¨éŸ³å£°æ§‹ç¯‰]");
     filterAudioFrameList_.resize(numVideoFile_);
     for (int videoId = 0; videoId < (int)numVideoFile_; ++videoId) {
         OutFileState file = { 0 };
@@ -941,19 +947,19 @@ void StreamReformInfo::genWaveAudioStream() {
         auto& frames = filterFrameList_[videoId];
         auto& format = format_[formatStartIndex_[videoId]];
 
-        // AviSynth‚ªVFR‚É‘Î‰‚µ‚Ä‚¢‚È‚¢‚Ì‚ÅACFR‘O’ñ‚Å–â‘è‚È‚¢
+        // AviSynthãŒVFRã«å¯¾å¿œã—ã¦ã„ãªã„ã®ã§ã€CFRå‰æã§å•é¡Œãªã„
         double timePerFrame = format.videoFormat.frameRateDenom * MPEG_CLOCK_HZ / (double)format.videoFormat.frameRateNum;
 
         for (int i = 0; i < (int)frames.size(); ++i) {
             double endPts = frames[i].pts + timePerFrame;
             file.time += timePerFrame;
 
-            // file.time‚Ü‚Å‰¹º‚ği‚ß‚é
+            // file.timeã¾ã§éŸ³å£°ã‚’é€²ã‚ã‚‹
             auto& audioState = file.audioState[0];
             if (audioState.time < file.time) {
                 double audioDuration = file.time - audioState.time;
                 double audioPts = endPts - audioDuration;
-                // ƒXƒeƒŒƒI‚É•ÏŠ·‚³‚ê‚Ä‚¢‚é‚Í‚¸‚È‚Ì‚ÅA‰¹ºƒtƒH[ƒ}ƒbƒg‚Í–â‚í‚È‚¢
+                // ã‚¹ãƒ†ãƒ¬ã‚ªã«å¤‰æ›ã•ã‚Œã¦ã„ã‚‹ã¯ãšãªã®ã§ã€éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯å•ã‚ãªã„
                 fillAudioFrames(file, 0, nullptr, audioPts, audioDuration, nullptr);
             }
         }
@@ -970,8 +976,8 @@ void StreamReformInfo::genWaveAudioStream() {
     }
 }
 
-// ƒ\[ƒXƒtƒŒ[ƒ€‚Ì•\¦ŠÔ
-// index, nextIndex: DTS‡
+// ã‚½ãƒ¼ã‚¹ãƒ•ãƒ¬ãƒ¼ãƒ ã®è¡¨ç¤ºæ™‚é–“
+// index, nextIndex: DTSé †
 double StreamReformInfo::getSourceFrameDuration(int index, int nextIndex) {
     const auto& videoFrame = videoFrameList_[index];
     int formatId = fileFormatId_[frameFormatId_[index]];
@@ -981,7 +987,7 @@ double StreamReformInfo::getSourceFrameDuration(int index, int nextIndex) {
     double duration;
     if (isVFR_) { // VFR
         if (nextIndex == -1) {
-            duration = 0; // ÅŒã‚ÌƒtƒŒ[ƒ€
+            duration = 0; // æœ€å¾Œã®ãƒ•ãƒ¬ãƒ¼ãƒ 
         } else {
             duration = modifiedPTS_[nextIndex] - modifiedPTS_[index];
         }
@@ -1020,10 +1026,10 @@ void StreamReformInfo::addVideoFrame(OutFileState& file,
     ASSERT(audioFormat.size() == file.audioFrameList.size());
     ASSERT(audioFormat.size() == file.audioState.size());
     for (int i = 0; i < (int)audioFormat.size(); ++i) {
-        // file.time‚Ü‚Å‰¹º‚ği‚ß‚é
+        // file.timeã¾ã§éŸ³å£°ã‚’é€²ã‚ã‚‹
         auto& audioState = file.audioState[i];
         if (audioState.time >= file.time) {
-            // ‰¹º‚Í\•ªi‚ñ‚Å‚é
+            // éŸ³å£°ã¯ååˆ†é€²ã‚“ã§ã‚‹
             continue;
         }
         double audioDuration = file.time - audioState.time;
@@ -1034,32 +1040,32 @@ void StreamReformInfo::addVideoFrame(OutFileState& file,
 }
 
 void StreamReformInfo::fillAudioFrames(
-    OutFileState& file, int index, // ‘ÎÛƒtƒ@ƒCƒ‹‚Æ‰¹ºƒCƒ“ƒfƒbƒNƒX
-    const AudioFormat* format, // ‰¹ºƒtƒH[ƒ}ƒbƒg
-    double pts, double duration, // ŠJnC³PTS‚Æ90kHz‚Å‚Ìƒ^ƒCƒ€ƒXƒpƒ“
+    OutFileState& file, int index, // å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã¨éŸ³å£°ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    const AudioFormat* format, // éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ
+    double pts, double duration, // é–‹å§‹ä¿®æ­£PTSã¨90kHzã§ã®ã‚¿ã‚¤ãƒ ã‚¹ãƒ‘ãƒ³
     AudioDiffInfo* adiff) {
     auto& state = file.audioState[index];
     const auto& frameList = indexAudioFrameList_[index];
 
     fillAudioFramesInOrder(file, index, format, pts, duration, adiff);
     if (duration <= 0) {
-        // \•ªo—Í‚µ‚½
+        // ååˆ†å‡ºåŠ›ã—ãŸ
         return;
     }
 
-    // ‚à‚µ‚©‚µ‚½‚ç–ß‚Á‚½‚ç‚ ‚é‚©‚à‚µ‚ê‚È‚¢‚Ì‚Å’T‚µ‚È‚¨‚·
+    // ã‚‚ã—ã‹ã—ãŸã‚‰æˆ»ã£ãŸã‚‰ã‚ã‚‹ã‹ã‚‚ã—ã‚Œãªã„ã®ã§æ¢ã—ãªãŠã™
     auto it = std::partition_point(frameList.begin(), frameList.end(), [&](int frameIndex) {
         double modPTS = modifiedAudioPTS_[frameIndex];
         double frameDuration = audioFrameDuration_[frameIndex];
         return modPTS + (frameDuration / 2) < pts;
         });
     if (it != frameList.end()) {
-        // Œ©‚Â‚¯‚½‚Æ‚±‚ë‚ÉˆÊ’u‚ğƒZƒbƒg‚µ‚Ä“ü‚ê‚Ä‚İ‚é
+        // è¦‹ã¤ã‘ãŸã¨ã“ã‚ã«ä½ç½®ã‚’ã‚»ãƒƒãƒˆã—ã¦å…¥ã‚Œã¦ã¿ã‚‹
         if (state.lostPts != pts) {
             state.lostPts = pts;
             if (adiff) {
                 auto elapsed = elapsedTime(pts);
-                ctx.debugF("%d•ª%.3f•b‚Å‰¹º%d-%d‚Ì“¯Šúƒ|ƒCƒ“ƒg‚ğŒ©¸‚Á‚½‚Ì‚ÅÄŒŸõ",
+                ctx.debugF("%dåˆ†%.3fç§’ã§éŸ³å£°%d-%dã®åŒæœŸãƒã‚¤ãƒ³ãƒˆã‚’è¦‹å¤±ã£ãŸã®ã§å†æ¤œç´¢",
                     elapsed.first, elapsed.second, file.formatId, index);
             }
         }
@@ -1067,18 +1073,18 @@ void StreamReformInfo::fillAudioFrames(
         fillAudioFramesInOrder(file, index, format, pts, duration, adiff);
     }
 
-    // —LŒø‚È‰¹ºƒtƒŒ[ƒ€‚ªŒ©‚Â‚©‚ç‚È‚©‚Á‚½ê‡‚Í‚Æ‚è‚ ‚¦‚¸‰½‚à‚µ‚È‚¢
-    // Ÿ‚É—LŒø‚È‰¹ºƒtƒŒ[ƒ€‚ªŒ©‚Â‚©‚Á‚½‚ç‚»‚ÌŠÔ‚ÍƒtƒŒ[ƒ€…‘‚µ‚³‚ê‚é
-    // ‰f‘œ‚æ‚è‰¹º‚ª’Z‚­‚È‚é‰Â”\«‚Í‚ ‚é‚ªA—LŒø‚È‰¹º‚ª‚È‚¢‚Ì‚Å‚ ‚ê‚Îd•û‚È‚¢‚µ
-    // ‰¹ƒYƒŒ‚·‚é‚í‚¯‚Å‚Í‚È‚¢‚Ì‚Å–â‘è‚È‚¢‚Æv‚í‚ê‚é
+    // æœ‰åŠ¹ãªéŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ãŒè¦‹ã¤ã‹ã‚‰ãªã‹ã£ãŸå ´åˆã¯ã¨ã‚Šã‚ãˆãšä½•ã‚‚ã—ãªã„
+    // æ¬¡ã«æœ‰åŠ¹ãªéŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ãŒè¦‹ã¤ã‹ã£ãŸã‚‰ãã®é–“ã¯ãƒ•ãƒ¬ãƒ¼ãƒ æ°´å¢—ã—ã•ã‚Œã‚‹
+    // æ˜ åƒã‚ˆã‚ŠéŸ³å£°ãŒçŸ­ããªã‚‹å¯èƒ½æ€§ã¯ã‚ã‚‹ãŒã€æœ‰åŠ¹ãªéŸ³å£°ãŒãªã„ã®ã§ã‚ã‚Œã°ä»•æ–¹ãªã„ã—
+    // éŸ³ã‚ºãƒ¬ã™ã‚‹ã‚ã‘ã§ã¯ãªã„ã®ã§å•é¡Œãªã„ã¨æ€ã‚ã‚Œã‚‹
 
 }
 
-// lastFrame‚©‚ç‡”Ô‚ÉŒ©‚Ä‰¹ºƒtƒŒ[ƒ€‚ğ“ü‚ê‚é
+// lastFrameã‹ã‚‰é †ç•ªã«è¦‹ã¦éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å…¥ã‚Œã‚‹
 void StreamReformInfo::fillAudioFramesInOrder(
-    OutFileState& file, int index, // ‘ÎÛƒtƒ@ƒCƒ‹‚Æ‰¹ºƒCƒ“ƒfƒbƒNƒX
-    const AudioFormat* format, // ‰¹ºƒtƒH[ƒ}ƒbƒg
-    double& pts, double& duration, // ŠJnC³PTS‚Æ90kHz‚Å‚Ìƒ^ƒCƒ€ƒXƒpƒ“
+    OutFileState& file, int index, // å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã¨éŸ³å£°ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    const AudioFormat* format, // éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ
+    double& pts, double& duration, // é–‹å§‹ä¿®æ­£PTSã¨90kHzã§ã®ã‚¿ã‚¤ãƒ ã‚¹ãƒ‘ãƒ³
     AudioDiffInfo* adiff) {
     auto& state = file.audioState[index];
     auto& outFrameList = file.audioFrameList.at(index);
@@ -1094,40 +1100,40 @@ void StreamReformInfo::fillAudioFramesInOrder(
         double quaterDuration = frameDuration / 4;
 
         if (modPTS >= pts + duration) {
-            // ŠJn‚ªI—¹‚æ‚èŒã‚ë‚Ìê‡
+            // é–‹å§‹ãŒçµ‚äº†ã‚ˆã‚Šå¾Œã‚ã®å ´åˆ
             if (modPTS >= pts + frameDuration - quaterDuration) {
-                // ƒtƒŒ[ƒ€‚Ì4•ª‚Ì3ˆÈã‚ÌƒYƒŒ‚Ä‚¢‚éê‡
-                // s‚«‰ß‚¬
+                // ãƒ•ãƒ¬ãƒ¼ãƒ ã®4åˆ†ã®3ä»¥ä¸Šã®ã‚ºãƒ¬ã¦ã„ã‚‹å ´åˆ
+                // è¡Œãéã
                 break;
             }
         }
         if (modPTS + (frameDuration / 2) < pts) {
-            // ‘O‚·‚¬‚é‚Ì‚ÅƒXƒLƒbƒv
+            // å‰ã™ãã‚‹ã®ã§ã‚¹ã‚­ãƒƒãƒ—
             ++nskipped;
             continue;
         }
         if (format != nullptr && frame.format != *format) {
-            // ƒtƒH[ƒ}ƒbƒg‚ªˆá‚¤‚Ì‚ÅƒXƒLƒbƒv
+            // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒé•ã†ã®ã§ã‚¹ã‚­ãƒƒãƒ—
             continue;
         }
 
-        // ‹ó‚«‚ª‚ ‚éê‡‚ÍƒtƒŒ[ƒ€‚ğ…‘‚µ‚·‚é
-        // ƒtƒŒ[ƒ€‚Ì4•ª‚Ì3ˆÈã‚Ì‹ó‚«‚ª‚Å‚«‚éê‡‚Í–„‚ß‚é
+        // ç©ºããŒã‚ã‚‹å ´åˆã¯ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’æ°´å¢—ã—ã™ã‚‹
+        // ãƒ•ãƒ¬ãƒ¼ãƒ ã®4åˆ†ã®3ä»¥ä¸Šã®ç©ºããŒã§ãã‚‹å ´åˆã¯åŸ‹ã‚ã‚‹
         int nframes = (int)std::max(1.0, ((modPTS - pts) + (frameDuration / 4)) / frameDuration);
 
         if (adiff) {
             if (nframes > 1) {
                 auto elapsed = elapsedTime(modPTS);
-                ctx.debugF("%d•ª%.3f•b‚Å‰¹º%d-%d‚É‚¸‚ê‚ª‚ ‚é‚Ì‚Å%dƒtƒŒ[ƒ€…‘‚µ",
+                ctx.debugF("%dåˆ†%.3fç§’ã§éŸ³å£°%d-%dã«ãšã‚ŒãŒã‚ã‚‹ã®ã§%dãƒ•ãƒ¬ãƒ¼ãƒ æ°´å¢—ã—",
                     elapsed.first, elapsed.second, file.formatId, index, nframes - 1);
             }
             if (nskipped > 0) {
                 if (state.lastFrame == -1) {
-                    ctx.debugF("‰¹º%d-%d‚Í%dƒtƒŒ[ƒ€–Ú‚©‚çŠJn",
+                    ctx.debugF("éŸ³å£°%d-%dã¯%dãƒ•ãƒ¬ãƒ¼ãƒ ç›®ã‹ã‚‰é–‹å§‹",
                         file.formatId, index, nskipped);
                 } else {
                     auto elapsed = elapsedTime(modPTS);
-                    ctx.debugF("%d•ª%.3f•b‚Å‰¹º%d-%d‚É‚¸‚ê‚ª‚ ‚é‚Ì‚Å%dƒtƒŒ[ƒ€ƒXƒLƒbƒv",
+                    ctx.debugF("%dåˆ†%.3fç§’ã§éŸ³å£°%d-%dã«ãšã‚ŒãŒã‚ã‚‹ã®ã§%dãƒ•ãƒ¬ãƒ¼ãƒ ã‚¹ã‚­ãƒƒãƒ—",
                         elapsed.first, elapsed.second, file.formatId, index, nskipped);
                 }
                 nskipped = 0;
@@ -1137,7 +1143,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
         }
 
         for (int t = 0; t < nframes; ++t) {
-            // “Œvî•ñ
+            // çµ±è¨ˆæƒ…å ±
             if (adiff) {
                 double diff = std::abs(modPTS - pts);
                 if (adiff->maxPtsDiff < diff) {
@@ -1148,7 +1154,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
                 ++adiff->totalAudioFrames;
             }
 
-            // ƒtƒŒ[ƒ€‚ğo—Í
+            // ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å‡ºåŠ›
             outFrameList.push_back(frameIndex);
             state.time += frameDuration;
             pts += frameDuration;
@@ -1157,13 +1163,13 @@ void StreamReformInfo::fillAudioFramesInOrder(
 
         state.lastFrame = i;
         if (duration <= 0) {
-            // \•ªo—Í‚µ‚½
+            // ååˆ†å‡ºåŠ›ã—ãŸ
             return;
         }
     }
 }
 
-// ƒtƒ@ƒCƒ‹‘S‘Ì‚Å‚ÌŠÔ
+// ãƒ•ã‚¡ã‚¤ãƒ«å…¨ä½“ã§ã®æ™‚é–“
 std::pair<int, double> StreamReformInfo::elapsedTime(double modPTS) const {
     double sec = (double)(modPTS - dataPTS_[0]) / MPEG_CLOCK_HZ;
     int minutes = (int)(sec / 60);
@@ -1172,7 +1178,7 @@ std::pair<int, double> StreamReformInfo::elapsedTime(double modPTS) const {
 }
 
 void StreamReformInfo::genCaptionStream() {
-    ctx.info("[š–‹\’z]");
+    ctx.info("[å­—å¹•æ§‹ç¯‰]");
 
     for (int v = 0; v < (int)outFileKeys_.size(); ++v) {
         auto key = outFileKeys_[v];
@@ -1206,18 +1212,18 @@ void StreamReformInfo::genCaptionStream() {
             frameTimes.push_back(curTime);
             curTime += srcFrames[frames[i]].frameDuration;
         }
-        // ÅIƒtƒŒ[ƒ€‚ÌI—¹‚à’Ç‰Á
+        // æœ€çµ‚ãƒ•ãƒ¬ãƒ¼ãƒ ã®çµ‚äº†æ™‚åˆ»ã‚‚è¿½åŠ 
         frameTimes.push_back(curTime);
 
-        // š–‹‚ğ¶¬
+        // å­—å¹•ã‚’ç”Ÿæˆ
         for (int i = 0; i < (int)captionItemList_.size(); ++i) {
-            if (captionItemList_[i].line) { // ƒNƒŠƒAˆÈŠO
+            if (captionItemList_[i].line) { // ã‚¯ãƒªã‚¢ä»¥å¤–
                 auto duration = captionDuration_[i];
                 auto start = getFrameIndex(duration.startPTS);
                 auto end = getFrameIndex(duration.endPTS);
-                if (start < end) { // 1ƒtƒŒ[ƒ€ˆÈã•\¦ŠÔ‚Ì‚ ‚éê‡‚Ì‚İ
+                if (start < end) { // 1ãƒ•ãƒ¬ãƒ¼ãƒ ä»¥ä¸Šè¡¨ç¤ºæ™‚é–“ã®ã‚ã‚‹å ´åˆã®ã¿
                     int langIndex = captionItemList_[i].langIndex;
-                    if (langIndex >= file.captionList.size()) { // Œ¾Œê‚ª‘«‚è‚È‚¢ê‡‚ÍL‚°‚é
+                    if (langIndex >= file.captionList.size()) { // è¨€èªãŒè¶³ã‚Šãªã„å ´åˆã¯åºƒã’ã‚‹
                         file.captionList.resize(langIndex + 1);
                     }
                     OutCaptionLine outcap = {
@@ -1228,12 +1234,12 @@ void StreamReformInfo::genCaptionStream() {
             }
         }
 
-        // ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg‚ğ¶¬
+        // ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆã‚’ç”Ÿæˆ
         for (int t = 0; t < NICOJK_MAX; ++t) {
             auto& srcList = nicoJKList_[t];
             for (int i = 0; i < (int)srcList.size(); ++i) {
                 auto item = srcList[i];
-                // ŠJn‚ª‚±‚Ìƒtƒ@ƒCƒ‹‚ÉŠÜ‚Ü‚ê‚Ä‚¢‚é‚©
+                // é–‹å§‹ãŒã“ã®ãƒ•ã‚¡ã‚¤ãƒ«ã«å«ã¾ã‚Œã¦ã„ã‚‹ã‹
                 if (containsPTS(item.start)) {
                     double startTime = frameTimes[getFrameIndex(item.start)];
                     double endTime = frameTimes[getFrameIndex(item.end)];

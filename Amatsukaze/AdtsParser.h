@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * ADTS AAC parser
@@ -64,7 +64,7 @@ private:
     AdtsHeader header;
     std::map<int64_t, AUDIO_CHANNELS> channelsMap;
 
-    // ƒpƒPƒbƒgŠÔ‚Å‚Ìî•ñ•Û
+    // ãƒ‘ã‚±ãƒƒãƒˆé–“ã§ã®æƒ…å ±ä¿æŒ
     AutoBuffer codedBuffer;
     int bytesConsumed_;
     int64_t lastPTS_;
@@ -83,7 +83,7 @@ private:
     void createChannelsMap();
 };
 
-// ƒfƒ…ƒAƒ‹ƒ‚ƒmAAC‚ğ2‚Â‚ÌAAC‚É–³—ò‰»•ª—£‚·‚é
+// ãƒ‡ãƒ¥ã‚¢ãƒ«ãƒ¢ãƒAACã‚’2ã¤ã®AACã«ç„¡åŠ£åŒ–åˆ†é›¢ã™ã‚‹
 class DualMonoSplitter : AMTObject {
 public:
     DualMonoSplitter(AMTContext& ctx);

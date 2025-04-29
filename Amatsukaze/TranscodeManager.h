@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Transcode manager
@@ -64,7 +64,7 @@ protected:
     int64_t waveFileSize_;
     int64_t srcFileSize_;
 
-    // ƒf[ƒ^
+    // ãƒ‡ãƒ¼ã‚¿
     std::vector<FileVideoFrameInfo> videoFrameList_;
     std::vector<FileAudioFrameInfo> audioFrameList_;
     std::vector<StreamEvent> streamEventList_;
@@ -77,7 +77,7 @@ protected:
 
     void printInteraceCount();
 
-    // TsSplitter‰¼‘zŠÖ” //
+    // TsSplitterä»®æƒ³é–¢æ•° //
 
     virtual void onVideoPesPacket(
         int64_t clock,
@@ -101,7 +101,7 @@ protected:
 
     virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5);
 
-    // TsPacketSelectorHandler‰¼‘zŠÖ” //
+    // TsPacketSelectorHandlerä»®æƒ³é–¢æ•° //
 
     virtual void onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption);
 
@@ -150,7 +150,7 @@ std::vector<BitrateZone> MakeBitrateZones(
     VideoInfo outvi);
 
 #if 0
-// ƒy[ƒWƒq[ƒv‚ª‹@”\‚µ‚Ä‚¢‚é‚©ƒeƒXƒg
+// ãƒšãƒ¼ã‚¸ãƒ’ãƒ¼ãƒ—ãŒæ©Ÿèƒ½ã—ã¦ã„ã‚‹ã‹ãƒ†ã‚¹ãƒˆ
 void DoBadThing();
 #endif
 
@@ -169,7 +169,7 @@ protected:
     const ConfigWrapper& setting_;
     std::vector<VideoFrameInfo> videoFrameList_;
 
-    // TsSplitter‰¼‘zŠÖ” //
+    // TsSplitterä»®æƒ³é–¢æ•° //
 
     virtual void onVideoPesPacket(
         int64_t clock,
@@ -209,7 +209,7 @@ protected:
     std::vector<VideoFrameInfo> videoFrameList_;
     bool hasSubtltle_;
 
-    // TsSplitter‰¼‘zŠÖ” //
+    // TsSplitterä»®æƒ³é–¢æ•° //
 
     virtual void onVideoPesPacket(
         int64_t clock,
@@ -248,7 +248,7 @@ protected:
     const ConfigWrapper& setting_;
     std::vector<VideoFrameInfo> videoFrameList_;
 
-    // TsSplitter‰¼‘zŠÖ” //
+    // TsSplitterä»®æƒ³é–¢æ•° //
 
     virtual void onVideoPesPacket(
         int64_t clock,

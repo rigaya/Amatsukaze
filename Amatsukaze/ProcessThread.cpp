@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Sub process and thread utility
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -9,142 +9,169 @@
 #include "ProcessThread.h"
 #include "rgy_thread_affinity.h"
 
+// ã‚³ãƒãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³æ–‡å­—åˆ—ã‚’å¼•æ•°ãƒªã‚¹ãƒˆã«åˆ†å‰²ã™ã‚‹ãƒ˜ãƒ«ãƒ‘ãƒ¼é–¢æ•°
+std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
+    std::vector<tstring> args;
+    
+#if defined(_WIN32) || defined(_WIN64)
+    // Windowsç‰ˆã®å®Ÿè£…
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(cmdLine.c_str(), &argc);
+    if (argv) {
+        for (int i = 0; i < argc; i++) {
+            args.push_back(argv[i]);
+        }
+        LocalFree(argv);
+    }
+#else
+    // Linux/Unixç‰ˆã®å®Ÿè£…
+    // å˜ç´”ãªã‚·ã‚§ãƒ«é¢¨ã®è§£æã‚’è¡Œã†
+    const auto isSpace = [](tchar c) { return c == _T(' ') || c == _T('\t'); };
+    
+    bool inQuote = false;
+    tchar quoteChar = 0;
+    tstring currentArg;
+    
+    for (size_t i = 0; i < cmdLine.length(); i++) {
+        tchar c = cmdLine[i];
+        
+        // ã‚¯ã‚ªãƒ¼ãƒˆå‡¦ç†
+        if (c == _T('\'') || c == _T('"')) {
+            if (!inQuote) {
+                inQuote = true;
+                quoteChar = c;
+            } else if (c == quoteChar) {
+                inQuote = false;
+                quoteChar = 0;
+            } else {
+                currentArg += c;
+            }
+            continue;
+        }
+        
+        // ãƒãƒƒã‚¯ã‚¹ãƒ©ãƒƒã‚·ãƒ¥ã«ã‚ˆã‚‹ã‚¨ã‚¹ã‚±ãƒ¼ãƒ—
+        if (c == _T('\\') && i + 1 < cmdLine.length()) {
+            tchar nextChar = cmdLine[i + 1];
+            if (nextChar == _T('\'') || nextChar == _T('"') || nextChar == _T('\\')) {
+                currentArg += nextChar;
+                i++; // æ¬¡ã®æ–‡å­—ã‚’ã‚¹ã‚­ãƒƒãƒ—
+                continue;
+            }
+        }
+        
+        // ç©ºç™½æ–‡å­—ã®å‡¦ç†
+        if (isSpace(c) && !inQuote) {
+            if (!currentArg.empty()) {
+                args.push_back(currentArg);
+                currentArg.clear();
+            }
+        } else {
+            currentArg += c;
+        }
+    }
+    
+    // æœ€å¾Œã®å¼•æ•°ã‚’è¿½åŠ 
+    if (!currentArg.empty()) {
+        args.push_back(currentArg);
+    }
+#endif
+
+    // ç©ºã®ãƒªã‚¹ãƒˆã«ãªã‚‰ãªã„ã‚ˆã†ã«ã€å°‘ãªãã¨ã‚‚ç©ºã®å¼•æ•°ã‚’1ã¤å…¥ã‚Œã‚‹
+    if (args.empty()) {
+        args.push_back(_T(""));
+    }
+    
+    return args;
+}
+
 SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) :
-    pi_(PROCESS_INFORMATION()),
-    stdErrPipe_(),
-    stdOutPipe_(),
-    stdInPipe_(),
+    process_(createRGYPipeProcess()),
     exitCode_(0),
     thSetPowerThrottling() {
-    STARTUPINFOW si = STARTUPINFOW();
-
-    si.cb = sizeof(si);
-    si.hStdError = stdErrPipe_.writeHandle;
-    si.hStdOutput = stdOutPipe_.writeHandle;
-    si.hStdInput = stdInPipe_.readHandle;
-    si.dwFlags |= STARTF_USESTDHANDLES;
-
-    // •K—v‚È‚¢ƒnƒ“ƒhƒ‹‚ÍŒp³‚ğ–³Œø‰»
-    if (SetHandleInformation(stdErrPipe_.readHandle, HANDLE_FLAG_INHERIT, 0) == 0 ||
-        SetHandleInformation(stdOutPipe_.readHandle, HANDLE_FLAG_INHERIT, 0) == 0 ||
-        SetHandleInformation(stdInPipe_.writeHandle, HANDLE_FLAG_INHERIT, 0) == 0) {
-        THROW(RuntimeException, "failed to set handle information");
+    
+    // RGYPipeProcessã®åˆæœŸåŒ–ï¼ˆæ¨™æº–å…¥å‡ºåŠ›ã®ãƒ¢ãƒ¼ãƒ‰è¨­å®šï¼‰
+    process_->init(PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
+    
+    // ã‚³ãƒãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³æ–‡å­—åˆ—ã‚’å¼•æ•°ãƒªã‚¹ãƒˆã«åˆ†å‰²
+    std::vector<tstring> argsList = SplitCommandLine(args);
+    
+    // ãƒ—ãƒ­ã‚»ã‚¹èµ·å‹•
+    if (process_->run(argsList, nullptr, 0, false, false) != 0) {
+        THROW(RuntimeException, "ãƒ—ãƒ­ã‚»ã‚¹èµ·å‹•ã«å¤±æ•—ã€‚exeã®ãƒ‘ã‚¹ã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚");
     }
-
-    // Priority Class‚Í–¾¦‚µ‚Ä‚¢‚È‚¢‚Ì‚ÅAƒfƒtƒHƒ‹ƒg“®ì‚Æ‚È‚é
-    // ƒfƒtƒHƒ‹ƒg“®ì‚ÍAeƒvƒƒZƒXi‚±‚ÌƒvƒƒZƒXj‚ªNORMAL_PRIORITY_CLASSˆÈã‚Å
-    // “®‚¢‚Ä‚¢‚éê‡‚ÍANORMAL_PRIORITY_CLASS
-    // IDLE_PRIORITY_CLASS‚¨‚æ‚ÑBELOW_NORMAL_PRIORITY_CLASS‚Å
-    // “®‚¢‚Ä‚¢‚éê‡‚ÍA‚»‚ÌPriority Class‚ªŒp³‚³‚ê‚é
-    // Priority Class‚ÍqƒvƒƒZƒX‚ÉŒp³‚³‚ê‚é‘ÎÛ‚Å‚Í‚È‚¢‚ªA
-    // NORMAL_PRIORITY_CLASSˆÈ‰º‚Å‚ÍÀ¿Œp³‚³‚ê‚é‚±‚Æ‚É’ˆÓ
-
-    if (CreateProcessW(NULL, const_cast<tchar*>(args.c_str()), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_) == 0) {
-        THROW(RuntimeException, "ƒvƒƒZƒX‹N“®‚É¸”sBexe‚ÌƒpƒX‚ğŠm”F‚µ‚Ä‚­‚¾‚³‚¢B");
-    }
-
-    // qƒvƒƒZƒX—p‚Ìƒnƒ“ƒhƒ‹‚Í•K—v‚È‚¢‚Ì‚Å•Â‚¶‚é
-    stdErrPipe_.closeWrite();
-    stdOutPipe_.closeWrite();
-    stdInPipe_.closeRead();
 
     if (disablePowerThrottoling) {
         runSetPowerThrottling();
     }
 }
+
 SubProcess::~SubProcess() {
     join();
 }
+
 void SubProcess::write(MemoryChunk mc) {
     if (mc.length > 0xFFFFFFFF) {
         THROW(RuntimeException, "buffer too large");
     }
-    DWORD bytesWritten = 0;
-    if (WriteFile(stdInPipe_.writeHandle, mc.data, (DWORD)mc.length, &bytesWritten, NULL) == 0) {
-        THROW(RuntimeException, "failed to write to stdin pipe");
-    }
+    
+    size_t bytesWritten = process_->stdInFpWrite(mc.data, mc.length);
     if (bytesWritten != mc.length) {
         THROW(RuntimeException, "failed to write to stdin pipe (bytes written mismatch)");
     }
 }
+
 size_t SubProcess::readErr(MemoryChunk mc) {
-    return readGeneric(mc, stdErrPipe_.readHandle);
+    std::vector<uint8_t> buffer(mc.length);
+    int bytesRead = process_->stdErrRead(buffer);
+    if (bytesRead < 0) {
+        return 0;
+    }
+    
+    if (bytesRead > 0) {
+        memcpy(mc.data, buffer.data(), bytesRead);
+    }
+    
+    return bytesRead;
 }
+
 size_t SubProcess::readOut(MemoryChunk mc) {
-    return readGeneric(mc, stdOutPipe_.readHandle);
+    std::vector<uint8_t> buffer(mc.length);
+    int bytesRead = process_->stdOutRead(buffer);
+    if (bytesRead < 0) {
+        return 0;
+    }
+    
+    if (bytesRead > 0) {
+        memcpy(mc.data, buffer.data(), bytesRead);
+    }
+    
+    return bytesRead;
 }
+
 void SubProcess::finishWrite() {
-    stdInPipe_.closeWrite();
+    process_->stdInFpClose();
 }
 
 void SubProcess::runSetPowerThrottling() {
-    if (pi_.hProcess) {
-        thSetPowerThrottling = std::make_unique<RGYThreadSetPowerThrottoling>(pi_.dwProcessId);
+#if defined(_WIN32) || defined(_WIN64)
+    int pid = process_->pid();
+    if (pid > 0) {
+        thSetPowerThrottling = std::make_unique<RGYThreadSetPowerThrottoling>(pid);
         thSetPowerThrottling->run(RGYThreadPowerThrottlingMode::Disabled);
     }
+#endif // defined(_WIN32) || defined(_WIN64)
 }
+
 int SubProcess::join() {
-    if (pi_.hProcess != NULL) {
+    if (process_) {
         if (thSetPowerThrottling) {
             thSetPowerThrottling->abortThread();
         }
-        // qƒvƒƒZƒX‚ÌI—¹‚ğ‘Ò‚Â
-        WaitForSingleObject(pi_.hProcess, INFINITE);
-        // I—¹ƒR[ƒhæ“¾
-        GetExitCodeProcess(pi_.hProcess, &exitCode_);
-
-        CloseHandle(pi_.hProcess);
-        CloseHandle(pi_.hThread);
-        pi_.hProcess = NULL;
+        
+        exitCode_ = process_->waitAndGetExitCode();
+        process_->close();
     }
     return exitCode_;
-}
-
-SubProcess::Pipe::Pipe() {
-    // Œp³‚ğ—LŒø‚É‚µ‚Äì¬
-    SECURITY_ATTRIBUTES sa = SECURITY_ATTRIBUTES();
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = NULL;
-    if (CreatePipe(&readHandle, &writeHandle, &sa, 0) == 0) {
-        THROW(RuntimeException, "failed to create pipe");
-    }
-}
-SubProcess::Pipe::~Pipe() {
-    closeRead();
-    closeWrite();
-}
-void SubProcess::Pipe::closeRead() {
-    if (readHandle != NULL) {
-        CloseHandle(readHandle);
-        readHandle = NULL;
-    }
-}
-void SubProcess::Pipe::closeWrite() {
-    if (writeHandle != NULL) {
-        CloseHandle(writeHandle);
-        writeHandle = NULL;
-    }
-}
-
-size_t SubProcess::readGeneric(MemoryChunk mc, HANDLE readHandle) {
-    if (mc.length > 0xFFFFFFFF) {
-        THROW(RuntimeException, "buffer too large");
-    }
-    DWORD bytesRead = 0;
-    while (true) {
-        if (ReadFile(readHandle, mc.data, (DWORD)mc.length, &bytesRead, NULL) == 0) {
-            if (GetLastError() == ERROR_BROKEN_PIPE) {
-                return 0;
-            }
-            THROW(RuntimeException, "failed to read from pipe");
-        }
-        // ƒpƒCƒv‚ÍWriteFile‚Éƒ[ƒ‚ğ“n‚·‚ÆReadFile‚ªƒ[ƒ‚Å‹A‚Á‚Ä‚­‚é‚Ì‚Åƒ`ƒFƒbƒN
-        if (bytesRead != 0) {
-            break;
-        }
-    }
-    return bytesRead;
 }
 
 EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling)
@@ -154,28 +181,30 @@ EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disable
     drainOut.start();
     drainErr.start();
 }
+
 EventBaseSubProcess::~EventBaseSubProcess() {
     if (drainOut.isRunning()) {
         THROW(InvalidOperationException, "call join before destroy object ...");
     }
 }
+
 int EventBaseSubProcess::join() {
     /*
-    * I—¹ˆ—‚Ì—¬‚ê
+    * çµ‚äº†å‡¦ç†ã®æµã‚Œ
     * finishWrite()
-    * -> qƒvƒƒZƒX‚ªI—¹ŒŸ’m
-    * -> qƒvƒƒZƒX‚ªI—¹
-    * -> stdout,stderr‚Ì‘‚«‚İƒnƒ“ƒhƒ‹‚ª©“®“I‚É•Â‚¶‚é
-    * -> SubProcess.readGeneric()‚ªEOFException‚ğ•Ô‚·
-    * -> DrainThread‚ª—áŠO‚ğƒLƒƒƒbƒ`‚µ‚ÄI—¹
-    * -> DrainThread‚Ìjoin()‚ªŠ®—¹
-    * -> EventBaseSubProcess‚Ìjoin()‚ªŠ®—¹
-    * -> ƒvƒƒZƒX‚ÍI—¹‚µ‚Ä‚¢‚é‚Ì‚ÅSubProcess‚ÌƒfƒXƒgƒ‰ƒNƒ^‚Í‚·‚®‚ÉŠ®—¹
+    * -> å­ãƒ—ãƒ­ã‚»ã‚¹ãŒçµ‚äº†æ¤œçŸ¥
+    * -> å­ãƒ—ãƒ­ã‚»ã‚¹ãŒçµ‚äº†
+    * -> stdout,stderrã®æ›¸ãè¾¼ã¿ãƒãƒ³ãƒ‰ãƒ«ãŒè‡ªå‹•çš„ã«é–‰ã˜ã‚‹
+    * -> SubProcess.readGeneric()ãŒEOFExceptionã‚’è¿”ã™
+    * -> DrainThreadãŒä¾‹å¤–ã‚’ã‚­ãƒ£ãƒƒãƒã—ã¦çµ‚äº†
+    * -> DrainThreadã®join()ãŒå®Œäº†
+    * -> EventBaseSubProcessã®join()ãŒå®Œäº†
+    * -> ãƒ—ãƒ­ã‚»ã‚¹ã¯çµ‚äº†ã—ã¦ã„ã‚‹ã®ã§SubProcessã®ãƒ‡ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ã¯ã™ãã«å®Œäº†
     */
     try {
         finishWrite();
     } catch (RuntimeException&) {
-        // qƒvƒƒZƒX‚ªƒGƒ‰[I—¹‚µ‚Ä‚¢‚é‚Æ‘‚«‚İ‚É¸”s‚·‚é‚ª–³‹‚·‚é
+        // å­ãƒ—ãƒ­ã‚»ã‚¹ãŒã‚¨ãƒ©ãƒ¼çµ‚äº†ã—ã¦ã„ã‚‹ã¨æ›¸ãè¾¼ã¿ã«å¤±æ•—ã™ã‚‹ãŒç„¡è¦–ã™ã‚‹
     }
     drainOut.join();
     drainErr.join();
@@ -186,6 +215,7 @@ bool EventBaseSubProcess::isRunning() { return drainOut.isRunning(); }
 EventBaseSubProcess::DrainThread::DrainThread(EventBaseSubProcess* this_, bool isErr)
     : this_(this_)
     , isErr_(isErr) {}
+
 void EventBaseSubProcess::DrainThread::run() {
     this_->drain_thread(isErr_);
 }
@@ -195,7 +225,7 @@ void EventBaseSubProcess::drain_thread(bool isErr) {
     MemoryChunk mc(buffer.data(), buffer.size());
     while (true) {
         size_t bytesRead = isErr ? readErr(mc) : readOut(mc);
-        if (bytesRead == 0) { // I—¹
+        if (bytesRead == 0) { // çµ‚äº†
             break;
         }
         onOut(isErr, MemoryChunk(mc.data, bytesRead));
@@ -229,13 +259,11 @@ void StdRedirectedSubProcess::SpStringLiner::OnTextLine(const uint8_t* ptr, int 
     pThis->onTextLine(isErr, ptr, len, brlen);
 }
 
-
 void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len, int brlen) {
-
     std::vector<char> line;
     if (isUtf8) {
         line = utf8ToString(ptr, len);
-        // •ÏŠ·‚·‚éê‡‚Í‚±‚±‚Åo—Í
+        // å¤‰æ›ã™ã‚‹å ´åˆã¯ã“ã“ã§å‡ºåŠ›
         fwrite(line.data(), line.size(), 1, SUBPROC_OUT);
         fprintf(SUBPROC_OUT, "\n");
         fflush(SUBPROC_OUT);
@@ -253,35 +281,35 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
 }
 
 void StdRedirectedSubProcess::onOut(bool isErr, MemoryChunk mc) {
-    if (bufferLines > 0 || isUtf8) { // •K—v‚ª‚ ‚éê‡‚Ì‚İ
+    if (bufferLines > 0 || isUtf8) { // å¿…è¦ãŒã‚ã‚‹å ´åˆã®ã¿
         (isErr ? errLiner : outLiner).AddBytes(mc);
     }
     if (!isUtf8) {
-        // •ÏŠ·‚µ‚È‚¢ê‡‚Í‚±‚±‚Å‚·‚®‚Éo—Í
+        // å¤‰æ›ã—ãªã„å ´åˆã¯ã“ã“ã§ã™ãã«å‡ºåŠ›
         fwrite(mc.data, mc.length, 1, SUBPROC_OUT);
         fflush(SUBPROC_OUT);
     }
 }
 
-
+#if defined(_WIN32) || defined(_WIN64)
 CPUInfo::CPUInfo() {
     DWORD length = 0;
     GetLogicalProcessorInformationEx(RelationAll, nullptr, &length);
     if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-        THROW(RuntimeException, "GetLogicalProcessorInformationEx‚ªERROR_INSUFFICIENT_BUFFER‚ğ•Ô‚³‚È‚©‚Á‚½");
+        THROW(RuntimeException, "GetLogicalProcessorInformationExãŒERROR_INSUFFICIENT_BUFFERã‚’è¿”ã•ãªã‹ã£ãŸ");
     }
     std::unique_ptr<uint8_t[]> buf = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
     uint8_t* ptr = buf.get();
     uint8_t* end = ptr + length;
     if (GetLogicalProcessorInformationEx(
         RelationAll, (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)ptr, &length) == 0) {
-        THROW(RuntimeException, "GetLogicalProcessorInformationEx‚É¸”s");
+        THROW(RuntimeException, "GetLogicalProcessorInformationExã«å¤±æ•—");
     }
     while (ptr < end) {
         auto info = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)ptr;
         switch (info->Relationship) {
         case RelationCache:
-            // •K—v‚È‚Ì‚ÍL2,L3‚Ì‚İ
+            // å¿…è¦ãªã®ã¯L2,L3ã®ã¿
             if (info->Cache.Level == 2 || info->Cache.Level == 3) {
                 data[(info->Cache.Level == 2) ? PROC_TAG_L2 : PROC_TAG_L3].push_back(info->Cache.GroupMask);
             }
@@ -299,7 +327,7 @@ CPUInfo::CPUInfo() {
             break;
         case RelationProcessorCore:
             if (info->Processor.GroupCount != 1) {
-                THROW(RuntimeException, "GetLogicalProcessorInformationEx‚Å—\Šú‚µ‚È‚¢ƒf[ƒ^");
+                THROW(RuntimeException, "GetLogicalProcessorInformationExã§äºˆæœŸã—ãªã„ãƒ‡ãƒ¼ã‚¿");
             }
             data[PROC_TAG_CORE].push_back(info->Processor.GroupMask[0]);
             break;
@@ -309,6 +337,7 @@ CPUInfo::CPUInfo() {
         ptr += info->Size;
     }
 }
+
 const GROUP_AFFINITY* CPUInfo::GetData(PROCESSOR_INFO_TAG tag, int* count) {
     *count = (int)data[tag].size();
     return data[tag].data();
@@ -322,7 +351,9 @@ extern "C" __declspec(dllexport) void* CPUInfo_Create(AMTContext * ctx) {
     }
     return nullptr;
 }
+
 extern "C" __declspec(dllexport) void CPUInfo_Delete(CPUInfo * ptr) { delete ptr; }
+
 extern "C" __declspec(dllexport) const GROUP_AFFINITY * CPUInfo_GetData(CPUInfo * ptr, int tag, int* count) {
     return ptr->GetData((PROCESSOR_INFO_TAG)tag, count);
 }
@@ -335,7 +366,8 @@ bool SetCPUAffinity(int group, uint64_t mask) {
     gf.Group = group;
     gf.Mask = (KAFFINITY)mask;
     bool result = (SetThreadGroupAffinity(GetCurrentThread(), &gf, nullptr) != FALSE);
-    // ƒvƒƒZƒX‚ª•¡”‚ÌƒOƒ‹[ƒv‚É‚Ü‚½‚ª‚Á‚Ä‚é‚Æ«‚ÍƒGƒ‰[‚É‚È‚é‚ç‚µ‚¢
+    // ãƒ—ãƒ­ã‚»ã‚¹ãŒè¤‡æ•°ã®ã‚°ãƒ«ãƒ¼ãƒ—ã«ã¾ãŸãŒã£ã¦ã‚‹ã¨â†“ã¯ã‚¨ãƒ©ãƒ¼ã«ãªã‚‹ã‚‰ã—ã„
     SetProcessAffinityMask(GetCurrentProcess(), (DWORD_PTR)mask);
     return result;
 }
+#endif // defined(_WIN32) || defined(_WIN64)

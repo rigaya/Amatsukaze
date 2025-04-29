@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,29 +8,54 @@
 
 #include "OSUtil.h"
 #include "StringUtils.h"
+#include "rgy_osdep.h"
+#include "rgy_filesystem.h"
+#if defined(_WIN32) || defined(_WIN64)
+#include "Shlwapi.h"
+#endif
+#include "cpu_info.h"
 
-std::wstring GetModulePath() {
-    wchar_t buf[AMT_MAX_PATH] = { 0 };
-    GetModuleFileNameW(g_DllHandle, buf, AMT_MAX_PATH);
-    return buf;
+tstring GetModulePath() {
+    return getModulePath(g_DllHandle);
 }
 
-std::wstring GetModuleDirectory() {
-    wchar_t buf[AMT_MAX_PATH] = { 0 };
-    GetModuleFileNameW(g_DllHandle, buf, AMT_MAX_PATH);
-    PathRemoveFileSpecW(buf);
-    return buf;
+tstring GetModuleDirectory() {
+    return PathRemoveFileSpecFixed(getModulePath(g_DllHandle)).second;
 }
 
 std::wstring SearchExe(const std::wstring& name) {
+#if defined(_WIN32) || defined(_WIN64)
     wchar_t buf[AMT_MAX_PATH] = { 0 };
     if (!SearchPathW(0, name.c_str(), 0, AMT_MAX_PATH, buf, 0)) {
         return name;
     }
     return buf;
+#else
+    auto ret = get_file_list_with_filter(L"./", name);
+    if (ret.size() > 0) {
+        return ret[0];
+    }
+    return name;
+#endif
 }
 
-//std::wstring GetDirectoryPath(const std::wstring& name) {
+std::string SearchExe(const std::string& name) {
+#if defined(_WIN32) || defined(_WIN64)
+    char buf[AMT_MAX_PATH] = { 0 };
+    if (!SearchPathA(0, name.c_str(), 0, AMT_MAX_PATH, buf, 0)) {
+        return name;
+    }
+    return buf;
+#else
+    auto ret = get_file_list_with_filter("./", name);
+    if (ret.size() > 0) {
+        return ret[0];
+    }
+    return name;
+#endif
+}
+
+//std::wstring GetDirectoryPath(const std::wstring& name)nin {
 //	wchar_t buf[AMT_MAX_PATH] = { 0 };
 //	std::copy(name.begin(), name.end(), buf);
 //	PathRemoveFileSpecW(buf);
@@ -38,50 +63,54 @@ std::wstring SearchExe(const std::wstring& name) {
 //}
 
 bool DirectoryExists(const std::wstring& dirName_in) {
-    DWORD ftyp = GetFileAttributesW(dirName_in.c_str());
-    if (ftyp == INVALID_FILE_ATTRIBUTES)
-        return false;
-    if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
-        return true;
-    return false;
+    return rgy_directory_exists(dirName_in);
 }
 
-// dirpath‚Í I’[\\‚È‚µ
-// pattern‚Í "*.*" ‚Æ‚©
-// ƒfƒBƒŒƒNƒgƒŠ–¼‚ğŠÜ‚Ü‚È‚¢ƒtƒ@ƒCƒ‹–¼ƒŠƒXƒg‚ª•Ô‚é
+// dirpathã¯ çµ‚ç«¯\\ãªã—
+// patternã¯ "*.*" ã¨ã‹
+// ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªåã‚’å«ã¾ãªã„ãƒ•ã‚¡ã‚¤ãƒ«åãƒªã‚¹ãƒˆãŒè¿”ã‚‹
 std::vector<std::wstring> GetDirectoryFiles(const std::wstring& dirpath, const std::wstring& pattern) {
+#if defined(_WIN32) || defined(_WIN64)
     std::wstring search = dirpath + _T("/") + pattern;
     std::vector<std::wstring> result;
     WIN32_FIND_DATAW findData;
     HANDLE hFind = FindFirstFileW(search.c_str(), &findData);
     if (hFind == INVALID_HANDLE_VALUE) {
         if (GetLastError() == ERROR_FILE_NOT_FOUND) {
-            // ƒtƒ@ƒCƒ‹‚ª1‚Â‚à‚È‚©‚Á‚½
+            // ãƒ•ã‚¡ã‚¤ãƒ«ãŒ1ã¤ã‚‚ãªã‹ã£ãŸ
             return std::vector<std::wstring>();
         }
-        THROWF(IOException, "ƒtƒ@ƒCƒ‹—ñ‹“‚É¸”s: %s", search);
+        THROWF(IOException, "ãƒ•ã‚¡ã‚¤ãƒ«åˆ—æŒ™ã«å¤±æ•—: %s", search);
     }
     do {
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            // ƒfƒBƒŒƒNƒgƒŠ
+            // ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
         } else {
-            // ƒtƒ@ƒCƒ‹
+            // ãƒ•ã‚¡ã‚¤ãƒ«
             result.push_back(findData.cFileName);
         }
     } while (FindNextFileW(hFind, &findData));
     FindClose(hFind);
     return result;
+#else
+    return get_file_list_with_filter(dirpath, pattern);
+#endif
 }
 
-// Œ»İ‚ÌƒXƒŒƒbƒh‚Éİ’è‚³‚ê‚Ä‚¢‚éƒRƒA”‚ğæ“¾
+std::vector<std::string> GetDirectoryFiles(const std::string& dirpath, const std::string& pattern) {
+    return get_file_list_with_filter(dirpath, pattern);
+}
+
+// ç¾åœ¨ã®ã‚¹ãƒ¬ãƒƒãƒ‰ã«è¨­å®šã•ã‚Œã¦ã„ã‚‹ã‚³ã‚¢æ•°ã‚’å–å¾—
 int GetProcessorCount() {
-    GROUP_AFFINITY gaffinity;
-    if (GetThreadGroupAffinity(GetCurrentThread(), &gaffinity)) {
-        int cnt = 0;
-        for (int i = 0; i < 64; ++i) {
-            if (gaffinity.Mask & (DWORD_PTR(1) << i)) cnt++;
-        }
-        return cnt;
-    }
-    return 8; // ¸”s‚µ‚½‚ç“K“–‚È’l‚É‚µ‚Ä‚¨‚­
+    return get_cpu_info().logical_cores;
+}
+
+// Windows/Linuxä¸¡å¯¾å¿œã®mkgmtimeãƒ©ãƒƒãƒ‘ãƒ¼
+long long amt_mkgmtime(struct tm* t) {
+#if defined(_WIN32) || defined(_WIN64)
+    return _mkgmtime(t);
+#else
+    return timegm(t);
+#endif
 }

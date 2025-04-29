@@ -620,20 +620,6 @@ bool SetThreadPowerThrottolingModeForModule(const uint32_t TargetProcessId, cons
     }
     return ret;
 }
-#else
-bool SetThreadPriorityForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const RGYThreadPriority ThreadPriority) {
-    return false;
-}
-bool SetThreadAffinityForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const uint64_t ThreadAffinityMask) {
-    return false;
-}
-bool SetThreadPowerThrottolingMode(RGYThreadHandle threadHandle, const RGYThreadPowerThrottlingMode mode) {
-    return false;
-}
-bool SetThreadPowerThrottolingModeForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const RGYThreadPowerThrottlingMode mode) {
-    return false;
-}
-#endif // #if defined(_WIN32) || defined(_WIN64)
 
 RGYThreadSetPowerThrottoling::RGYThreadSetPowerThrottoling(uint32_t pid_) :
     heAbort(CreateEventW(nullptr, FALSE, FALSE, nullptr)),
@@ -672,3 +658,32 @@ void RGYThreadSetPowerThrottoling::abortThread() {
         heAbort = nullptr;
     }
 }
+
+#else
+bool SetThreadPriorityForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const RGYThreadPriority ThreadPriority) {
+    return false;
+}
+bool SetThreadAffinityForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const uint64_t ThreadAffinityMask) {
+    return false;
+}
+bool SetThreadPowerThrottolingMode(RGYThreadHandle threadHandle, const RGYThreadPowerThrottlingMode mode) {
+    return false;
+}
+bool SetThreadPowerThrottolingModeForModule(const uint32_t TargetProcessId, const TCHAR* TargetModule, const RGYThreadPowerThrottlingMode mode) {
+    return false;
+}
+
+RGYThreadSetPowerThrottoling::RGYThreadSetPowerThrottoling(uint32_t pid_) :
+    heAbort(),
+    pid(pid_),
+    thread(),
+    mode(RGYThreadPowerThrottlingMode::Auto) {}
+
+RGYThreadSetPowerThrottoling::~RGYThreadSetPowerThrottoling() {
+    abortThread();
+}
+
+void RGYThreadSetPowerThrottoling::run(const RGYThreadPowerThrottlingMode mode_) { }
+
+void RGYThreadSetPowerThrottoling::abortThread() { }
+#endif // #if defined(_WIN32) || defined(_WIN64)

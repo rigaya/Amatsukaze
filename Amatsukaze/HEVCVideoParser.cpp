@@ -1,5 +1,5 @@
-// -----------------------------------------------------------------------------------------
-// Amatsukaze‰ü‘¢”Å by rigaya (original by nekopanda)
+ï»¿// -----------------------------------------------------------------------------------------
+// Amatsukazeæ”¹é€ ç‰ˆ by rigaya (original by nekopanda)
 // -----------------------------------------------------------------------------------------
 // The MIT License
 //
@@ -84,7 +84,7 @@ bool HEVCVideoParser::inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>&
         initParser();
     }
     auto nal_units = m_parse_nal_unit_hevc(frame.data, frame.length);
-    //nal_unit‚Ìtype‚ğƒ`ƒFƒbƒN‚µ‚ÄNALU_HEVC_VPS,NALU_HEVC_SPS,NALU_HEVC_PPS‚Ì3‚Â‚ª‚»‚ë‚Á‚Ä‚¢‚é‚©Šm”F‚·‚é
+    //nal_unitã®typeã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦NALU_HEVC_VPS,NALU_HEVC_SPS,NALU_HEVC_PPSã®3ã¤ãŒãã‚ã£ã¦ã„ã‚‹ã‹ç¢ºèªã™ã‚‹
     auto nal_vps = std::find_if(nal_units.begin(), nal_units.end(), [](const auto& n) { return n.type == NALU_HEVC_VPS; });
     auto nal_sps = std::find_if(nal_units.begin(), nal_units.end(), [](const auto& n) { return n.type == NALU_HEVC_SPS; });
     auto nal_pps = std::find_if(nal_units.begin(), nal_units.end(), [](const auto& n) { return n.type == NALU_HEVC_PPS; });

@@ -14,8 +14,12 @@
 #include "gtest/gtest.h"
 
 #define AVS_LINKAGE_DLLIMPORT
+#include "rgy_util.h"
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wsign-compare")
 #include "avisynth.h"
 #pragma comment(lib, "avisynth.lib")
+RGY_DISABLE_WARNING_POP
 
 #include <Windows.h>
 

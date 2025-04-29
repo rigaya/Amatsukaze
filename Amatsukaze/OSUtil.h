@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Amtasukaze OS Utility
@@ -10,8 +10,8 @@
 #pragma once
 
 #include "common.h"
-#include <Windows.h>
-#include "Shlwapi.h"
+#include "rgy_osdep.h"
+#include "rgy_tchar.h"
 
 #include <vector>
 #include <string>
@@ -20,11 +20,12 @@
 
 extern HMODULE g_DllHandle;
 
-std::wstring GetModulePath();
+tstring GetModulePath();
 
-std::wstring GetModuleDirectory();
+tstring GetModuleDirectory();
 
 std::wstring SearchExe(const std::wstring& name);
+std::string SearchExe(const std::string& name);
 
 //std::wstring GetDirectoryPath(const std::wstring& name) {
 //	wchar_t buf[AMT_MAX_PATH] = { 0 };
@@ -35,11 +36,16 @@ std::wstring SearchExe(const std::wstring& name);
 
 bool DirectoryExists(const std::wstring& dirName_in);
 
-// dirpath‚Í I’[\\‚È‚µ
-// pattern‚Í "*.*" ‚Æ‚©
-// ƒfƒBƒŒƒNƒgƒŠ–¼‚ğŠÜ‚Ü‚È‚¢ƒtƒ@ƒCƒ‹–¼ƒŠƒXƒg‚ª•Ô‚é
+// dirpathã¯ çµ‚ç«¯\\ãªã—
+// patternã¯ "*.*" ã¨ã‹
+// ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªåã‚’å«ã¾ãªã„ãƒ•ã‚¡ã‚¤ãƒ«åãƒªã‚¹ãƒˆãŒè¿”ã‚‹
+std::vector<std::string> GetDirectoryFiles(const std::string& dirpath, const std::string& pattern);
 std::vector<std::wstring> GetDirectoryFiles(const std::wstring& dirpath, const std::wstring& pattern);
 
-// Œ»İ‚ÌƒXƒŒƒbƒh‚Éİ’è‚³‚ê‚Ä‚¢‚éƒRƒA”‚ğæ“¾
+// ç¾åœ¨ã®ã‚¹ãƒ¬ãƒƒãƒ‰ã«è¨­å®šã•ã‚Œã¦ã„ã‚‹ã‚³ã‚¢æ•°ã‚’å–å¾—
 int GetProcessorCount();
+
+// Windows/Linuxä¸¡å¯¾å¿œã®mkgmtimeãƒ©ãƒƒãƒ‘ãƒ¼
+// tmã‚’UTCã¨ã—ã¦time_tã«å¤‰æ›
+long long amt_mkgmtime(struct tm* t);
 

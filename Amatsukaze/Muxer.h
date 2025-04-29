@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Call muxer
@@ -18,7 +18,7 @@
 
 struct EncodeFileOutput {
     VideoFormat vfmt;
-    std::vector<tstring> outSubs; // ŠO•”ƒtƒ@ƒCƒ‹‚Åo—Í‚³‚ê‚½š–‹
+    std::vector<tstring> outSubs; // å¤–éƒ¨ãƒ•ã‚¡ã‚¤ãƒ«ã§å‡ºåŠ›ã•ã‚ŒãŸå­—å¹•
     int64_t fileSize;
     double srcBitrate;
     double targetBitrate;
@@ -44,9 +44,9 @@ public:
         const StreamReformInfo& reformInfo);
 
     void mux(EncodeFileKey key,
-        const EncoderOptionInfo& eoInfo, // ƒGƒ“ƒR[ƒ_ƒIƒvƒVƒ‡ƒ“î•ñ
+        const EncoderOptionInfo& eoInfo, // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã‚ªãƒ—ã‚·ãƒ§ãƒ³æƒ…å ±
         bool nicoOK,
-        EncodeFileOutput& fileOut); // o—Íî•ñ
+        EncodeFileOutput& fileOut); // å‡ºåŠ›æƒ…å ±
 
 private:
     const ConfigWrapper& setting_;

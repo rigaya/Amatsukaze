@@ -1,4 +1,4 @@
-/**
+Ôªø/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,6 +8,8 @@
 
 #include "AmatsukazeTestImpl.h"
 #include "faad.h"
+#include <thread>
+#include <chrono>
 
 /* static */ int test::PrintCRCTable(AMTContext& ctx, const ConfigWrapper& setting) {
     CRC32 crc;
@@ -113,7 +115,7 @@
         size_t readBytes = fread(buf.get(), 1, BUF_SIZE, fp);
         psVerifier.verify(MemoryChunk(buf.get(), readBytes));
     } catch (const Exception& e) {
-        fprintf(stderr, "Verify MPEG2-PS Error: ó·äOÇ™ÉXÉçÅ[Ç≥ÇÍÇ‹ÇµÇΩ -> %s\n", e.message());
+        fprintf(stderr, "Verify MPEG2-PS Error: ‰æãÂ§ñ„Åå„Çπ„É≠„Éº„Åï„Çå„Åæ„Åó„Åü -> %s\n", e.message());
         return 1;
     }
     fclose(fp);
@@ -131,7 +133,7 @@
         StreamReformInfo reformInfo = splitter->split();
         reformInfo.serialize(setting.getStreamInfoPath());
     } catch (const Exception& e) {
-        fprintf(stderr, "ReadTS Error: ó·äOÇ™ÉXÉçÅ[Ç≥ÇÍÇ‹ÇµÇΩ -> %s\n", e.message());
+        fprintf(stderr, "ReadTS Error: ‰æãÂ§ñ„Åå„Çπ„É≠„Éº„Åï„Çå„Åæ„Åó„Åü -> %s\n", e.message());
         return 1;
     }
 
@@ -178,7 +180,7 @@
         i += frameInfo.bytesconsumed;
     }
 
-    // ê≥âÉfÅ[É^Ç∆î‰är
+    // Ê≠£Ëß£„Éá„Éº„Çø„Å®ÊØîËºÉ
     FILE* testfp = fsopenT(testfile.c_str(), _T("rb"), _SH_DENYNO);
     if (testfp == nullptr) {
         return 1;
@@ -186,10 +188,10 @@
 
     auto testbuf = std::unique_ptr<uint8_t>(new uint8_t[BUF_SIZE]);
     size_t testBytes = fread(testbuf.get(), 1, BUF_SIZE, testfp);
-    // data chunkÇíTÇ∑
+    // data chunk„ÇíÊé¢„Åô
     for (int i = sizeof(RiffHeader); ; ) {
         if (!(i < (int)testBytes - 8)) {
-            fprintf(stderr, "èoóÕÇ™è¨Ç≥Ç∑Ç¨Ç‹Ç∑\n");
+            fprintf(stderr, "Âá∫Âäõ„ÅåÂ∞è„Åï„Åô„Åé„Åæ„Åô\n");
             return 1;
         }
         if (read32(testbuf.get() + i) == 'data') {
@@ -197,13 +199,13 @@
             const uint16_t* pTest = (const uint16_t*)(testbuf.get() + i + 8);
             const uint16_t* pDec = (const uint16_t*)decoded.ptr();
             if (testLength != decoded.size()) {
-                fprintf(stderr, "åãâ ÇÃÉTÉCÉYÇ™çáÇ¢Ç‹ÇπÇÒ\n");
+                fprintf(stderr, "ÁµêÊûú„ÅÆ„Çµ„Ç§„Ç∫„ÅåÂêà„ÅÑ„Åæ„Åõ„Çì\n");
                 return 1;
             }
-            // AACÇÃÉfÉRÅ[Éhåãâ ÇÕè¨êîÇ»ÇÃÇ≈ä€ÇﬂåÎç∑Ççló∂ÇµÇƒ
+            // AAC„ÅÆ„Éá„Ç≥„Éº„ÉâÁµêÊûú„ÅØÂ∞èÊï∞„Å™„ÅÆ„Åß‰∏∏„ÇÅË™§Â∑Æ„ÇíËÄÉÊÖÆ„Åó„Å¶
             for (int c = 0; c < testLength / 2; ++c) {
                 if ((std::abs((int)pTest[c] - (int)pDec[c]) > 1)) {
-                    fprintf(stderr, "ÉfÉRÅ[Éhåãâ Ç™çáÇ¢Ç‹ÇπÇÒ\n");
+                    fprintf(stderr, "„Éá„Ç≥„Éº„ÉâÁµêÊûú„ÅåÂêà„ÅÑ„Åæ„Åõ„Çì\n");
                     return 1;
                 }
             }
@@ -289,7 +291,7 @@
 /* static */ int test::LogoFrameTest(AMTContext& ctx, const ConfigWrapper& setting) {
     {
         auto env = make_unique_ptr(CreateScriptEnvironment2());
-        PClip clip = env->Invoke("Import", to_string(setting.getFilterScriptPath()).c_str()).AsClip();
+        PClip clip = env->Invoke("Import", tchar_to_string(setting.getFilterScriptPath()).c_str()).AsClip();
 
         logo::LogoFrame logof(ctx, setting.getLogoPath(), 0.1f);
         logof.scanFrames(clip, {}, 0, 1, env.get());
@@ -360,14 +362,14 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
             unsigned long samplerate;
             unsigned char channels;
             if (NeAACDecInit(hAacDec, buf.get() + offset, (int)header.frame_length, &samplerate, &channels)) {
-                ctx.warn("NeAACDecInitÇ…é∏îs");
+                ctx.warn("NeAACDecInit„Å´Â§±Êïó");
                 return 1;
             }
         }
         NeAACDecFrameInfo frameInfo;
         void* samples = NeAACDecDecode(hAacDec, &frameInfo, buf.get() + offset, header.frame_length);
         if (frameInfo.error != 0) {
-            THROW(FormatException, "ÉfÉRÅ[Éhé∏îs ...");
+            THROW(FormatException, "„Éá„Ç≥„Éº„ÉâÂ§±Êïó ...");
         }
         offset += header.frame_length;
     }
@@ -399,7 +401,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
             }
         }
     } catch (const Exception& e) {
-        fprintf(stderr, "CaptionASS Error: ó·äOÇ™ÉXÉçÅ[Ç≥ÇÍÇ‹ÇµÇΩ -> %s\n", e.message());
+        fprintf(stderr, "CaptionASS Error: ‰æãÂ§ñ„Åå„Çπ„É≠„Éº„Åï„Çå„Åæ„Åó„Åü -> %s\n", e.message());
         return 1;
     }
 
@@ -535,19 +537,19 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
     for (int i = 0; i < 10000; ++i) {
         ctx.infoF("Test Loop: %d", i);
         rm.wait(HOST_CMD_TSAnalyze);
-        Sleep(rand() % 300);
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));
         rm.wait(HOST_CMD_CMAnalyze);
-        Sleep(rand() % 300);
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));
         rm.wait(HOST_CMD_Filter);
-        Sleep(rand() % 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 100));
         auto encodeRes = rm.request(HOST_CMD_Encode);
         if (encodeRes.IsFailed()) {
-            // ÉäÉ\Å[ÉXÇ™ämï€Ç≈Ç´ÇƒÇ¢Ç»Ç©Ç¡ÇΩÇÁämï€Ç≈Ç´ÇÈÇ‹Ç≈ë“Ç¬
+            // „É™„ÇΩ„Éº„Çπ„ÅåÁ¢∫‰øù„Åß„Åç„Å¶„ÅÑ„Å™„Åã„Å£„Åü„ÇâÁ¢∫‰øù„Åß„Åç„Çã„Åæ„ÅßÂæÖ„Å§
             encodeRes = rm.wait(HOST_CMD_Encode);
         }
-        Sleep(rand() % 1000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 1000));
         rm.wait(HOST_CMD_Mux);
-        Sleep(rand() % 300);
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));
     }
     return 0;
 }

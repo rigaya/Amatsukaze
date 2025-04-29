@@ -1,4 +1,4 @@
-/**
+Ôªø/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include "StringUtils.h"
+#include "rgy_osdep.h"
+#include "rgy_util.h"
 
 size_t strlenT(const wchar_t* string) {
     return wcslen(string);
@@ -30,33 +32,6 @@ FILE* fsopenT(const wchar_t* FileName, const wchar_t* Mode, int ShFlag) {
 FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag) {
     return _fsopen(FileName, Mode, ShFlag);
 }
-
-// nullèIí[Ç™Ç†ÇÈÇÃÇ≈
-/* static */ std::vector<char> string_internal::to_string(std::wstring str, uint32_t codepage) {
-    if (str.size() == 0) {
-        return std::vector<char>(1);
-    }
-    int dstlen = WideCharToMultiByte(
-        codepage, 0, str.c_str(), (int)str.size(), NULL, 0, NULL, NULL);
-    std::vector<char> ret(dstlen + 1);
-    WideCharToMultiByte(codepage, 0,
-        str.c_str(), (int)str.size(), ret.data(), (int)ret.size(), NULL, NULL);
-    ret.back() = 0; // null terminate
-    return ret;
-}
-/* static */ std::vector<wchar_t> string_internal::to_wstring(std::string str, uint32_t codepage) {
-    if (str.size() == 0) {
-        return std::vector<wchar_t>(1);
-    }
-    int dstlen = MultiByteToWideChar(
-        codepage, 0, str.c_str(), (int)str.size(), NULL, 0);
-    std::vector<wchar_t> ret(dstlen + 1);
-    MultiByteToWideChar(codepage, 0,
-        str.c_str(), (int)str.size(), ret.data(), (int)ret.size());
-    ret.back() = 0; // null terminate
-    return ret;
-}
-
 const char* string_internal::MakeArg(MakeArgContext& ctx, const char* value) { return value; }
 const char* string_internal::MakeArg(MakeArgContext& ctx, const wchar_t* value) { return ctx.arg(value); }
 const char* string_internal::MakeArg(MakeArgContext& ctx, const std::string& value) { return value.c_str(); }
@@ -75,41 +50,6 @@ MemoryChunk string_internal::StringBuilderBase::getMC() {
 void string_internal::StringBuilderBase::clear() {
     buffer.clear();
 }
-
-/* static */ std::string to_string(const std::wstring& str, uint32_t codepage) {
-    std::vector<char> ret = string_internal::to_string(str, codepage);
-    return std::string(ret.data());
-}
-
-/* static */ std::string to_string(const std::string& str, uint32_t codepage) {
-    return str;
-}
-
-/* static */ std::wstring to_wstring(const std::wstring& str, uint32_t codepage) {
-    return str;
-}
-
-/* static */ std::wstring to_wstring(const std::string& str, uint32_t codepage) {
-    std::vector<wchar_t> ret = string_internal::to_wstring(str, codepage);
-    return std::wstring(ret.data());
-
-#ifdef _MSC_VER
-}/* static */ std::wstring to_tstring(const std::wstring& str, uint32_t codepage) {
-    return str;
-}
-
-/* static */ std::wstring to_tstring(const std::string& str, uint32_t codepage) {
-    return to_wstring(str, codepage);
-}
-#else
-/* static */ std::string to_tstring(const std::wstring& str, uint32_t codepage) {
-    return to_string(str);
-}
-
-/* static */ std::string to_tstring(const std::string& str, uint32_t codepage) {
-    return str;
-}
-#endif
 
 std::string StringBuilder::str() const {
     auto mc = buffer.get();
@@ -158,17 +98,9 @@ bool StringLiner::SearchLineBreak() {
 }
 
 std::vector<char> utf8ToString(const uint8_t* ptr, int sz) {
-    int dstlen = MultiByteToWideChar(
-        CP_UTF8, 0, (const char*)ptr, sz, nullptr, 0);
-    std::vector<wchar_t> w(dstlen);
-    MultiByteToWideChar(
-        CP_UTF8, 0, (const char*)ptr, sz, w.data(), (int)w.size());
-    dstlen = WideCharToMultiByte(
-        CP_ACP, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
-    std::vector<char> ret(dstlen);
-    WideCharToMultiByte(CP_ACP, 0,
-        w.data(), (int)w.size(), ret.data(), (int)ret.size(), nullptr, nullptr);
-    return ret;
+    auto w = char_to_wstring(std::string(reinterpret_cast<const char*>(ptr), sz), CP_UTF8);
+    auto ret = wstring_to_string(w, CP_ACP);
+    return std::vector<char>(ret.begin(), ret.end());
 }
 
 bool starts_with(const std::wstring& str, const std::wstring& test) {
@@ -185,9 +117,9 @@ bool ends_with(const tstring & value, const tstring & ending) {
 
 /* static */ tstring pathNormalize(tstring path) {
     if (path.size() != 0) {
-        // ÉoÉbÉNÉXÉâÉbÉVÉÖÇÕÉXÉâÉbÉVÉÖÇ…ïœä∑
+        // „Éê„ÉÉ„ÇØ„Çπ„É©„ÉÉ„Ç∑„É•„ÅØ„Çπ„É©„ÉÉ„Ç∑„É•„Å´Â§âÊèõ
         std::replace(path.begin(), path.end(), _T('\\'), _T('/'));
-        // ç≈å„ÇÃÉXÉâÉbÉVÉÖÇÕéÊÇÈ
+        // ÊúÄÂæå„ÅÆ„Çπ„É©„ÉÉ„Ç∑„É•„ÅØÂèñ„Çã
         if (path.back() == _T('/')) {
             path.pop_back();
         }
@@ -209,7 +141,7 @@ bool ends_with(const tstring & value, const tstring & ending) {
     for (int i = 0; exts[i]; ++i) {
         size_t extlen = strlenT(exts[i]);
         if (path.size() > extlen) {
-            if (_wcsicmp(c_path + (path.size() - extlen), exts[i]) == 0) {
+            if (stricmpT(c_path + (path.size() - extlen), exts[i]) == 0) {
                 return path.substr(0, path.size() - extlen);
             }
         }

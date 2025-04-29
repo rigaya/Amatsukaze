@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -23,7 +23,7 @@ void TemporalNRFilter::init(int temporalDistance, int threshold, bool interlaced
     interlaced_ = interlaced;
 
     if (NFRAMES_ > MAX_NFRAMES) {
-        THROW(InvalidOperationException, "TemporalNRFilterÅ‘å–‡”‚ğ’´‚¦‚Ä‚¢‚Ü‚·");
+        THROW(InvalidOperationException, "TemporalNRFilteræœ€å¤§æšæ•°ã‚’è¶…ãˆã¦ã„ã¾ã™");
     }
 }
 /* virtual */ void TemporalNRFilter::start() {
@@ -39,7 +39,7 @@ void TemporalNRFilter::init(int temporalDistance, int threshold, bool interlaced
     case AV_PIX_FMT_YUV420P16LE:
         break;
     default:
-        THROW(FormatException, "–¢‘Î‰ƒtƒH[ƒ}ƒbƒg‚Å‚·");
+        THROW(FormatException, "æœªå¯¾å¿œãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã§ã™");
     }
 
     frames_.emplace_back(std::move(frame));
@@ -79,15 +79,15 @@ std::unique_ptr<av::Frame> TemporalNRFilter::TNRFilter(AVFrame** frames, int fra
     AVFrame* top = frames[0];
     AVFrame* dst = (*dstframe)();
 
-    // ƒtƒŒ[ƒ€‚ÌƒvƒƒpƒeƒB‚ğƒRƒs[
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ã‚’ã‚³ãƒ”ãƒ¼
     av_frame_copy_props(dst, top);
 
-    // ƒƒ‚ƒŠƒTƒCƒY‚ÉŠÖ‚·‚éî•ñ‚ğƒRƒs[
+    // ãƒ¡ãƒ¢ãƒªã‚µã‚¤ã‚ºã«é–¢ã™ã‚‹æƒ…å ±ã‚’ã‚³ãƒ”ãƒ¼
     dst->format = top->format;
     dst->width = top->width;
     dst->height = top->height;
 
-    // ƒƒ‚ƒŠŠm•Û
+    // ãƒ¡ãƒ¢ãƒªç¢ºä¿
     if (av_frame_get_buffer(dst, 64) != 0) {
         THROW(RuntimeException, "failed to allocate frame buffer");
     }
@@ -113,16 +113,16 @@ CudaTemporalNRFilter::CudaTemporalNRFilter() : filter_(NULL), frame_(-1) {}
 void CudaTemporalNRFilter::init(int temporalDistance, int threshold, int batchSize, int interlaced) {
     filter_ = cudaTNRCreate(temporalDistance, threshold, batchSize, interlaced);
     if (filter_ == NULL) {
-        THROW(RuntimeException, "cudaTNRCreate‚É¸”s");
+        THROW(RuntimeException, "cudaTNRCreateã«å¤±æ•—");
     }
 }
 /* virtual */ void CudaTemporalNRFilter::start() {}
 /* virtual */ void CudaTemporalNRFilter::onFrame(std::unique_ptr<av::Frame>&& frame) {
     if (filter_ == NULL) {
-        THROW(InvalidOperationException, "init‚ğŒÄ‚ñ‚Å‚­‚¾‚³‚¢");
+        THROW(InvalidOperationException, "initã‚’å‘¼ã‚“ã§ãã ã•ã„");
     }
     if (cudaTNRSendFrame(filter_, (*frame)()) != 0) {
-        THROW(RuntimeException, "cudaTNRSendFrame‚É¸”s");
+        THROW(RuntimeException, "cudaTNRSendFrameã«å¤±æ•—");
     }
     frameQueue_.emplace_back(std::move(frame));
     while (cudaTNRRecvFrame(filter_, frame_()) == 0) {
@@ -134,14 +134,14 @@ void CudaTemporalNRFilter::init(int temporalDistance, int threshold, int batchSi
 }
 /* virtual */ void CudaTemporalNRFilter::finish() {
     if (filter_ == NULL) {
-        THROW(InvalidOperationException, "init‚ğŒÄ‚ñ‚Å‚­‚¾‚³‚¢");
+        THROW(InvalidOperationException, "initã‚’å‘¼ã‚“ã§ãã ã•ã„");
     }
     if (cudaTNRFinish(filter_) != 0) {
-        THROW(RuntimeException, "cudaTNRFinish‚É¸”s");
+        THROW(RuntimeException, "cudaTNRFinishã«å¤±æ•—");
     }
     while (cudaTNRRecvFrame(filter_, frame_()) == 0) {
         if (frameQueue_.size() == 0) {
-            THROW(RuntimeException, "ƒtƒBƒ‹ƒ^‚ÅƒtƒŒ[ƒ€‚ª‘‰Á‚µ‚Ü‚µ‚½");
+            THROW(RuntimeException, "ãƒ•ã‚£ãƒ«ã‚¿ã§ãƒ•ãƒ¬ãƒ¼ãƒ ãŒå¢—åŠ ã—ã¾ã—ãŸ");
         }
         av_frame_copy_props(frame_(), (*frameQueue_.front())());
         frame_.frameIndex_ = frameQueue_.front()->frameIndex_;
@@ -149,6 +149,6 @@ void CudaTemporalNRFilter::init(int temporalDistance, int threshold, int batchSi
         sendFrame(std::unique_ptr<av::Frame>(new av::Frame(frame_)));
     }
     if (frameQueue_.size() != 0) {
-        THROW(RuntimeException, "ƒtƒBƒ‹ƒ^‚ÅƒtƒŒ[ƒ€‚ªŒ¸­‚µ‚Ü‚µ‚½");
+        THROW(RuntimeException, "ãƒ•ã‚£ãƒ«ã‚¿ã§ãƒ•ãƒ¬ãƒ¼ãƒ ãŒæ¸›å°‘ã—ã¾ã—ãŸ");
     }
 }

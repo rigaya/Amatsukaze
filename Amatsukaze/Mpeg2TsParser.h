@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * MPEG2-TS parser
@@ -11,13 +11,13 @@
 
 #include "StreamUtils.h"
 
-/** @brief TSƒpƒPƒbƒg‚ÌƒAƒ_ƒvƒe[ƒVƒ‡ƒ“ƒtƒB[ƒ‹ƒh */
+/** @brief TSãƒ‘ã‚±ãƒƒãƒˆã®ã‚¢ãƒ€ãƒ—ãƒ†ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ */
 struct AdapdationField : public MemoryChunk {
     AdapdationField(uint8_t* data, int length);
 
     uint8_t adapdation_field_length() const;
-    // ARIB TR-14 8.2.3‚É‘—o‹K’è‚ª‚ ‚é
-    // TSƒpƒPƒbƒg‚Ì˜A‘±«APCR˜A‘±«‚ªØ‚ê‚éê‡‚É‘—‚ç‚ê‚é
+    // ARIB TR-14 8.2.3ã«é€å‡ºè¦å®šãŒã‚ã‚‹
+    // TSãƒ‘ã‚±ãƒƒãƒˆã®é€£ç¶šæ€§ã€PCRé€£ç¶šæ€§ãŒåˆ‡ã‚Œã‚‹å ´åˆã«é€ã‚‰ã‚Œã‚‹
     uint8_t discontinuity_indicator() const;
     uint8_t randam_access_indicator() const;
     uint8_t elementary_stream_priority_indicator() const;
@@ -38,7 +38,7 @@ private:
     int64_t read_pcr(uint8_t* ptr);
 };
 
-/** @brief TSƒpƒPƒbƒg */
+/** @brief TSãƒ‘ã‚±ãƒƒãƒˆ */
 struct TsPacket : public MemoryChunk {
 
     TsPacket(uint8_t* data);
@@ -67,7 +67,7 @@ private:
     int payload_offset;
 };
 
-/** @brief PESƒpƒPƒbƒg‚Ìæ“ª9ƒoƒCƒg */
+/** @brief PESãƒ‘ã‚±ãƒƒãƒˆã®å…ˆé ­9ãƒã‚¤ãƒˆ */
 struct PESConstantHeader : public MemoryChunk {
 
     PESConstantHeader(MemoryChunk mc);
@@ -90,7 +90,7 @@ struct PESConstantHeader : public MemoryChunk {
     uint8_t PES_extension_flags() const;
     uint8_t PES_header_data_length() const;
 
-    /** @brief \•ª‚È’·‚³‚ª‚È‚¢ê‡ false ‚ğ•Ô‚· */
+    /** @brief ååˆ†ãªé•·ã•ãŒãªã„å ´åˆ false ã‚’è¿”ã™ */
     bool parse();
 
     bool check();
@@ -109,7 +109,7 @@ struct PESPacket : public PESConstantHeader {
 
     MemoryChunk paylod();
 
-    // PTS, DTS‚ª‚ ‚é‚Æ‚«‚¾‚¯‘‚«Š·‚¦‚é
+    // PTS, DTSãŒã‚ã‚‹ã¨ãã ã‘æ›¸ãæ›ãˆã‚‹
     void changeTimestamp(int64_t PTS, int64_t DTS);
 
     void changeStreamId(uint8_t stream_id_);
@@ -126,42 +126,42 @@ private:
     int payload_offset;
 };
 
-/** @brief TSƒpƒPƒbƒg‚ğØ‚èo‚·
-* inputTS()‚ğ•K—v‰ñ”ŒÄ‚Ño‚µ‚ÄÅŒã‚Éflush()‚ğ•K‚¸ŒÄ‚Ño‚·‚±‚ÆB
-* flush()‚ğŒÄ‚Ño‚³‚È‚¢‚Æ“à•”‚Ìƒoƒbƒtƒ@‚Éc‚Á‚½ƒf[ƒ^‚ªˆ—‚³‚ê‚È‚¢B
+/** @brief TSãƒ‘ã‚±ãƒƒãƒˆã‚’åˆ‡ã‚Šå‡ºã™
+* inputTS()ã‚’å¿…è¦å›æ•°å‘¼ã³å‡ºã—ã¦æœ€å¾Œã«flush()ã‚’å¿…ãšå‘¼ã³å‡ºã™ã“ã¨ã€‚
+* flush()ã‚’å‘¼ã³å‡ºã•ãªã„ã¨å†…éƒ¨ã®ãƒãƒƒãƒ•ã‚¡ã«æ®‹ã£ãŸãƒ‡ãƒ¼ã‚¿ãŒå‡¦ç†ã•ã‚Œãªã„ã€‚
 */
 class TsPacketParser : public AMTObject {
     enum {
-        // “¯ŠúƒR[ƒh‚ğ’T‚·‚Æ‚«‚Éƒ`ƒFƒbƒN‚·‚éƒpƒPƒbƒg”
+        // åŒæœŸã‚³ãƒ¼ãƒ‰ã‚’æ¢ã™ã¨ãã«ãƒã‚§ãƒƒã‚¯ã™ã‚‹ãƒ‘ã‚±ãƒƒãƒˆæ•°
         CHECK_PACKET_NUM = 8,
     };
 public:
     TsPacketParser(AMTContext& ctx);
 
-    /** @brief TSƒf[ƒ^‚ğ“ü—Í */
+    /** @brief TSãƒ‡ãƒ¼ã‚¿ã‚’å…¥åŠ› */
     void inputTS(MemoryChunk data);
 
-    /** @brief “à•”ƒoƒbƒtƒ@‚ğƒtƒ‰ƒbƒVƒ… */
+    /** @brief å†…éƒ¨ãƒãƒƒãƒ•ã‚¡ã‚’ãƒ•ãƒ©ãƒƒã‚·ãƒ¥ */
     void flush();
 
-    /** @brief c‚Á‚Ä‚¢‚éƒf[ƒ^‚ğ‘S‚ÄƒNƒŠƒA */
+    /** @brief æ®‹ã£ã¦ã„ã‚‹ãƒ‡ãƒ¼ã‚¿ã‚’å…¨ã¦ã‚¯ãƒªã‚¢ */
     void reset();
 
 protected:
-    /** @brief Ø‚è‚¾‚³‚ê‚½TSƒpƒPƒbƒg‚ğˆ— */
+    /** @brief åˆ‡ã‚Šã ã•ã‚ŒãŸTSãƒ‘ã‚±ãƒƒãƒˆã‚’å‡¦ç† */
     virtual void onTsPacket(TsPacket packet) = 0;
 
 private:
     AutoBuffer buffer;
     bool syncOK;
 
-    // numPacketŒÂ•ª‚ÌƒpƒPƒbƒg‚Ì“¯ŠúƒoƒCƒg‚ª‡‚Á‚Ä‚¢‚é‚©ƒ`ƒFƒbƒN
+    // numPacketå€‹åˆ†ã®ãƒ‘ã‚±ãƒƒãƒˆã®åŒæœŸãƒã‚¤ãƒˆãŒåˆã£ã¦ã„ã‚‹ã‹ãƒã‚§ãƒƒã‚¯
     bool checkSyncByte(uint8_t* ptr, int numPacket);
 
-    // uæ“ª‚ÆŸ‚ÌƒpƒPƒbƒg‚Ì“¯ŠúƒoƒCƒg‚ğŒ©‚Ä‡‚Á‚Ä‚¢‚ê‚Îo—Ív‚ğŒJ‚è•Ô‚·
+    // ã€Œå…ˆé ­ã¨æ¬¡ã®ãƒ‘ã‚±ãƒƒãƒˆã®åŒæœŸãƒã‚¤ãƒˆã‚’è¦‹ã¦åˆã£ã¦ã„ã‚Œã°å‡ºåŠ›ã€ã‚’ç¹°ã‚Šè¿”ã™
     void outPackets();
 
-    // ƒpƒPƒbƒg‚ğƒ`ƒFƒbƒN‚µ‚Äo—Í
+    // ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦å‡ºåŠ›
     void checkAndOutPacket(MemoryChunk data);
 };
 
@@ -174,7 +174,7 @@ class PesParser : public TsPacketHandler {
 public:
     PesParser();
 
-    /** @brief TSƒpƒPƒbƒg(ƒ`ƒFƒbƒNÏ‚İ)‚ğ“ü—Í */
+    /** @brief TSãƒ‘ã‚±ãƒƒãƒˆ(ãƒã‚§ãƒƒã‚¯æ¸ˆã¿)ã‚’å…¥åŠ› */
     virtual void onTsPacket(int64_t clock, TsPacket packet);
 
 protected:
@@ -184,7 +184,7 @@ private:
     AutoBuffer buffer;
     int contCounter;
 
-    // ƒpƒPƒbƒg‚ğƒ`ƒFƒbƒN‚µ‚Äo—Í
+    // ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦å‡ºåŠ›
     void checkAndOutPacket(int64_t clock, MemoryChunk data);
 };
 
@@ -492,7 +492,7 @@ class PsiParser : public AMTObject, public TsPacketHandler {
 public:
     PsiParser(AMTContext& ctx);
 
-    /** ó‘ÔƒŠƒZƒbƒg */
+    /** çŠ¶æ…‹ãƒªã‚»ãƒƒãƒˆ */
     void clear();
 
     virtual void onTsPacket(int64_t clock, TsPacket packet);
@@ -504,7 +504,7 @@ private:
     AutoBuffer buffer;
     int64_t packetClock;
 
-    // ƒpƒPƒbƒg‚ğƒ`ƒFƒbƒN‚µ‚Äo—Í
+    // ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦å‡ºåŠ›
     void checkAndOutSection();
 };
 
@@ -526,13 +526,13 @@ class PidHandlerTable {
 public:
     PidHandlerTable();
 
-    // ŒÅ’èPIDƒnƒ“ƒhƒ‰‚ğ“o˜^B•K‚¸Å‰‚ÉŒÄ‚Ño‚·‚±‚Æ
-    //iclear‚µ‚Ä‚àíœ‚³‚ê‚È‚¢j
+    // å›ºå®šPIDãƒãƒ³ãƒ‰ãƒ©ã‚’ç™»éŒ²ã€‚å¿…ãšæœ€åˆã«å‘¼ã³å‡ºã™ã“ã¨
+    //ï¼ˆclearã—ã¦ã‚‚å‰Šé™¤ã•ã‚Œãªã„ï¼‰
     void addConstant(int pid, TsPacketHandler* handler);
 
-    /** @brief ”Ô†pidˆÊ’u‚Éhandler‚ğƒZƒbƒg
-    * “¯‚¶ƒe[ƒuƒ‹’†‚Å“¯‚¶ƒnƒ“ƒhƒ‰‚Í‚P‚Â‚Ìpid‚É‚µ‚©•R•t‚¯‚Å‚«‚È‚¢
-    * ƒnƒ“ƒhƒ‰‚ª•Ê‚Ìpid‚É‚Ğ‚à•t‚¯‚³‚ê‚Ä‚¢‚éê‡‰ğœ‚³‚ê‚Ä‚©‚çV‚µ‚­ƒZƒbƒg‚³‚ê‚é
+    /** @brief ç•ªå·pidä½ç½®ã«handlerã‚’ã‚»ãƒƒãƒˆ
+    * åŒã˜ãƒ†ãƒ¼ãƒ–ãƒ«ä¸­ã§åŒã˜ãƒãƒ³ãƒ‰ãƒ©ã¯ï¼‘ã¤ã®pidã«ã—ã‹ç´ä»˜ã‘ã§ããªã„
+    * ãƒãƒ³ãƒ‰ãƒ©ãŒåˆ¥ã®pidã«ã²ã‚‚ä»˜ã‘ã•ã‚Œã¦ã„ã‚‹å ´åˆè§£é™¤ã•ã‚Œã¦ã‹ã‚‰æ–°ã—ãã‚»ãƒƒãƒˆã•ã‚Œã‚‹
     */
     bool add(int pid, TsPacketHandler* handler, bool overwrite = true);
 
@@ -558,13 +558,13 @@ struct PMTESInfo {
 
 class TsPacketSelectorHandler {
 public:
-    // ƒT[ƒrƒX‚ğİ’è‚·‚éê‡‚ÍƒT[ƒrƒX‚Ìpidsã‚Å‚ÌƒCƒ“ƒfƒbƒNƒX
-    // ‚È‚É‚à‚µ‚È‚¢ê‡‚Í•‰‚Ì’l‚Ì•Ô‚·
+    // ã‚µãƒ¼ãƒ“ã‚¹ã‚’è¨­å®šã™ã‚‹å ´åˆã¯ã‚µãƒ¼ãƒ“ã‚¹ã®pidsä¸Šã§ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // ãªã«ã‚‚ã—ãªã„å ´åˆã¯è² ã®å€¤ã®è¿”ã™
     virtual int onPidSelect(int TSID, const std::vector<int>& pids) = 0;
 
     virtual void onPmtUpdated(int PcrPid) = 0;
 
-    // TsPacketSelector‚ÅPID Table‚ª•ÏX‚³‚ê‚½•ÏXŒã‚Ìî•ñ‚ª‘—‚ç‚ê‚é
+    // TsPacketSelectorã§PID TableãŒå¤‰æ›´ã•ã‚ŒãŸæ™‚å¤‰æ›´å¾Œã®æƒ…å ±ãŒé€ã‚‰ã‚Œã‚‹
     virtual void onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption) = 0;
 
     virtual void onVideoPacket(int64_t clock, TsPacket packet) = 0;
@@ -584,10 +584,10 @@ public:
 
     void setHandler(TsPacketSelectorHandler* handler);
 
-    // •\¦—p
+    // è¡¨ç¤ºç”¨
     void setStartClock(int64_t startClock);
 
-    // PSIƒp[ƒT“à•”ƒoƒbƒtƒ@‚ğƒNƒŠƒA
+    // PSIãƒ‘ãƒ¼ã‚µå†…éƒ¨ãƒãƒƒãƒ•ã‚¡ã‚’ã‚¯ãƒªã‚¢
     void resetParser();
 
     void inputTsPacket(int64_t clock, TsPacket packet);
@@ -653,7 +653,7 @@ private:
 
     TsPacketSelectorHandler *selectorHandler;
 
-    // 27MHzƒNƒƒbƒN
+    // 27MHzã‚¯ãƒ­ãƒƒã‚¯
     int64_t startClock;
     int64_t currentClock;
 

@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amatsukaze common header
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,23 +7,30 @@
 */
 #pragma once
 
-// ƒ^[ƒQƒbƒg‚ğ Windows Vista ‚Éİ’è
-#define _WIN32_WINNT 0x0601 // _WIN32_WINNT_WIN7
-#include <SDKDDKVer.h>
-
-#define WIN32_LEAN_AND_MEAN             // Windows ƒwƒbƒ_[‚©‚çg—p‚³‚ê‚Ä‚¢‚È‚¢•”•ª‚ğœŠO‚µ‚Ü‚·B
-#define NOMINMAX
-// Windows ƒwƒbƒ_[ ƒtƒ@ƒCƒ‹:
-#include <windows.h>
-
 #include <cstdint>
 #include <stdio.h>
 
+// Windowsé–¢é€£ã®å®šç¾©
+#if !defined(AMATSUKAZE_API)
+  #if defined(_WIN32) || defined(_WIN64)
+    #define AMATSUKAZE_API __declspec(dllexport)
+    #define WINAPI __stdcall
+  #else
+    #define AMATSUKAZE_API __attribute__((visibility("default")))
+    #define WINAPI
+  #endif
+#endif
+
 #define PRINTF(...) fprintf(stderr, __VA_ARGS__); fflush(stderr)
+
 
 inline void assertion_failed(const char* line, const char* file, int lineNum) {
     char buf[500];
+#if defined(_WIN32) || defined(_WIN64)
     sprintf_s(buf, "Assertion failed!! %s (%s:%d)", line, file, lineNum);
+#else
+    sprintf(buf, "Assertion failed!! %s (%s:%d)", line, file, lineNum);
+#endif
     PRINTF("%s\n", buf);
     //MessageBox(NULL, "Error", "Amatsukaze", MB_OK);
     throw buf;
@@ -35,13 +42,14 @@ inline void assertion_failed(const char* line, const char* file, int lineNum) {
 #define ASSERT(exp) do { if(!(exp)) assertion_failed(#exp, __FILE__, __LINE__); } while(0)
 #endif
 
+#if defined(_WIN32) || defined(_WIN64)
 inline int __builtin_clzl(uint64_t mask) {
-    DWORD index;
+    unsigned long index;
 #ifdef _WIN64
     _BitScanReverse64(&index, mask);
 #else
-    DWORD highWord = (DWORD)(mask >> 32);
-    DWORD lowWord = (DWORD)mask;
+    unsigned long highWord = (unsigned long)(mask >> 32);
+    unsigned long lowWord = (unsigned long)mask;
     if (highWord) {
         _BitScanReverse(&index, highWord);
         index += 32;
@@ -51,3 +59,4 @@ inline int __builtin_clzl(uint64_t mask) {
 #endif
     return index;
 }
+#endif

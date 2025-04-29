@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amatsukaze core utility
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -11,9 +11,10 @@
 #include "common.h"
 
 #include <string>
-#include <io.h>
+#include "rgy_osdep.h"
 #include "StringUtils.h"
 #include "CoreUtils.hpp"
+#include "rgy_filesystem.h"
 
 DWORD GetFullPathNameT(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR* lpFilePart);
 DWORD GetFullPathNameT(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer, LPSTR* lpFilePart);
@@ -32,20 +33,20 @@ std::basic_string<Char> GetFullPath(const std::basic_string<Char>& path) {
     Char buf[AMT_MAX_PATH];
     int sz = GetFullPathNameT(path.c_str(), AMT_MAX_PATH, buf, nullptr);
     if (sz >= AMT_MAX_PATH) {
-        THROWF(IOException, "ƒpƒX‚ª’·‚·‚¬‚Ü‚·: %s", path);
+        THROWF(IOException, "ãƒ‘ã‚¹ãŒé•·ã™ãã¾ã™: %s", path);
     }
     if (sz == 0) {
-        THROWF(IOException, "GetFullPathName()‚É¸”s: %s", path);
+        THROWF(IOException, "GetFullPathName()ã«å¤±æ•—: %s", path);
     }
     return std::basic_string<Char>(buf);
 }
 
 class File : NonCopyable {
 public:
-    File(const tstring& path, const tchar* mode) : path_(path) {
+    File(const tstring& path, const TCHAR* mode) : path_(path) {
         fp_ = fsopenT(path.c_str(), mode, _SH_DENYNO);
         if (fp_ == NULL) {
-            THROWF(IOException, "ƒtƒ@ƒCƒ‹‚ğŠJ‚¯‚Ü‚¹‚ñ: %s", GetFullPath(path));
+            THROWF(IOException, "ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã‘ã¾ã›ã‚“: %s", GetFullPath(path));
         }
     }
     ~File() {
@@ -76,7 +77,7 @@ public:
         if (mc.length == 0) return 0;
         size_t ret = fread(mc.data, 1, mc.length, fp_);
         if (ret == 0 && feof(fp_)) {
-            // ƒtƒ@ƒCƒ‹I’[
+            // ãƒ•ã‚¡ã‚¤ãƒ«çµ‚ç«¯
             return 0;
         }
         if (ret <= 0) {
@@ -144,11 +145,11 @@ public:
                 return line.size() > 0;
             }
             if (buf[BUF_SIZE - 2] != 0 && buf[BUF_SIZE - 2] != '\n') {
-                // ‚Ü‚¾‚ ‚é
+                // ã¾ã ã‚ã‚‹
                 line.append(buf);
                 continue;
             } else {
-                // ‰üs•¶š‚ğæ‚èœ‚­
+                // æ”¹è¡Œæ–‡å­—ã‚’å–ã‚Šé™¤ã
                 size_t len = strlen(buf);
                 if (buf[len - 1] == '\n') buf[--len] = 0;
                 if (buf[len - 1] == '\r') buf[--len] = 0;
@@ -171,10 +172,10 @@ public:
         return false;
     }
     static void copy(const tstring& srcpath, const tstring& dstpath) {
-        CopyFileW(srcpath.c_str(), dstpath.c_str(), FALSE);
+        rgy_file_copy(srcpath, dstpath, true);
     }
 private:
-    const tstring path_; // ƒGƒ‰[ƒƒbƒZ[ƒW•\¦—p
+    const tstring path_; // ã‚¨ãƒ©ãƒ¼ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸è¡¨ç¤ºç”¨
     FILE* fp_;
 };
 

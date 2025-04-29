@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Sub process and thread utility
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,9 +8,7 @@
 #pragma once
 
 #include "common.h"
-#include <Windows.h>
-#include <process.h>
-
+#include <thread>
 #include <deque>
 #include <string>
 #include <thread>
@@ -20,54 +18,38 @@
 #include "StreamUtils.h"
 #include "PerformanceUtil.h"
 #include "rgy_thread_affinity.h"
+#include "rgy_pipe.h"
 
 //#define SUBPROC_OUT (isErr ? stderr : stdout)
-// o—Í‚ª¬‚´‚é‚Ì‚ğ–h‚®‚½‚ß‘S‚Ästderr‚Éo—Í
+// å‡ºåŠ›ãŒæ··ã–ã‚‹ã®ã‚’é˜²ããŸã‚å…¨ã¦stderrã«å‡ºåŠ›
 #define SUBPROC_OUT stderr
 
-// ƒXƒŒƒbƒh‚Ístart()‚ÅŠJniƒRƒ“ƒXƒgƒ‰ƒNƒ^‚©‚ç‰¼‘zŠÖ”‚ğŒÄ‚Ô‚±‚Æ‚Í‚Å‚«‚È‚¢‚½‚ßj
-// run()‚Í”h¶ƒNƒ‰ƒX‚ÅÀ‘•‚³‚ê‚Ä‚¢‚é‚Ì‚Årun()‚ªI—¹‚·‚é‘O‚É”h¶ƒNƒ‰ƒX‚ÌƒfƒXƒgƒ‰ƒNƒ^‚ªI—¹‚µ‚È‚¢‚æ‚¤‚É’ˆÓI
-// ˆÀ‘S‚Ì‚½‚ßjoin()‚ªŠ®—¹‚µ‚Ä‚¢‚È‚¢ó‘Ô‚ÅThreadBase‚ÌƒfƒXƒgƒ‰ƒNƒ^‚É“ü‚é‚ÆƒGƒ‰[‚Æ‚·‚é
+// ã‚³ãƒãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³æ–‡å­—åˆ—ã‚’å¼•æ•°ãƒªã‚¹ãƒˆã«åˆ†å‰²ã™ã‚‹ãƒ˜ãƒ«ãƒ‘ãƒ¼é–¢æ•°
+std::vector<tstring> SplitCommandLine(const tstring& cmdLine);
+
+// ã‚¹ãƒ¬ãƒƒãƒ‰ã¯start()ã§é–‹å§‹ï¼ˆã‚³ãƒ³ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ã‹ã‚‰ä»®æƒ³é–¢æ•°ã‚’å‘¼ã¶ã“ã¨ã¯ã§ããªã„ãŸã‚ï¼‰
+// run()ã¯æ´¾ç”Ÿã‚¯ãƒ©ã‚¹ã§å®Ÿè£…ã•ã‚Œã¦ã„ã‚‹ã®ã§run()ãŒçµ‚äº†ã™ã‚‹å‰ã«æ´¾ç”Ÿã‚¯ãƒ©ã‚¹ã®ãƒ‡ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ãŒçµ‚äº†ã—ãªã„ã‚ˆã†ã«æ³¨æ„ï¼
+// å®‰å…¨ã®ãŸã‚join()ãŒå®Œäº†ã—ã¦ã„ãªã„çŠ¶æ…‹ã§ThreadBaseã®ãƒ‡ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ã«å…¥ã‚‹ã¨ã‚¨ãƒ©ãƒ¼ã¨ã™ã‚‹
 class ThreadBase {
 public:
-    ThreadBase() : thread_handle_(NULL) {}
+    ThreadBase() : thread_() {}
     ~ThreadBase() {
-        if (thread_handle_ != NULL) {
-            THROW(InvalidOperationException, "finish join() before destroy object ...");
-        }
     }
     void start() {
-        if (thread_handle_ != NULL) {
-            THROW(InvalidOperationException, "thread already started ...");
-        }
-        thread_handle_ = (HANDLE)_beginthreadex(NULL, 0, thread_, this, 0, NULL);
-        if (thread_handle_ == (HANDLE)-1) {
-            THROW(RuntimeException, "failed to begin pump thread ...");
-        }
+        thread_ = std::thread([this]() { run(); });
     }
     void join() {
-        if (thread_handle_ != NULL) {
-            WaitForSingleObject(thread_handle_, INFINITE);
-            CloseHandle(thread_handle_);
-            thread_handle_ = NULL;
+        if (thread_.joinable()) {
+            thread_.join();
         }
     }
-    bool isRunning() { return thread_handle_ != NULL; }
+    bool isRunning() { return thread_.joinable(); }
 
 protected:
     virtual void run() = 0;
 
 private:
-    HANDLE thread_handle_;
-
-    static unsigned __stdcall thread_(void* arg) {
-        try {
-            static_cast<ThreadBase*>(arg)->run();
-        } catch (const Exception& e) {
-            throw e;
-        }
-        return 0;
-    }
+    std::thread thread_;
 };
 
 template <typename T, bool PERF = false>
@@ -153,7 +135,7 @@ private:
             {
                 std::unique_lock<std::mutex> lock(critical_section_);
                 while (data_.size() == 0) {
-                    // data_.size()==0‚Åfinished_‚È‚çI—¹
+                    // data_.size()==0ã§finished_ãªã‚‰çµ‚äº†
                     if (finished_ || error_) return;
                     if (PERF) consumer.start();
                     cond_empty_.wait(lock);
@@ -189,26 +171,11 @@ public:
     void finishWrite();
     int join();
 private:
-    class Pipe {
-    public:
-        Pipe();
-        ~Pipe();
-        void closeRead();
-        void closeWrite();
-        HANDLE readHandle;
-        HANDLE writeHandle;
-    };
-
     void runSetPowerThrottling();
 
-    PROCESS_INFORMATION pi_;
-    Pipe stdErrPipe_;
-    Pipe stdOutPipe_;
-    Pipe stdInPipe_;
+    std::unique_ptr<RGYPipeProcess> process_;
     DWORD exitCode_;
     std::unique_ptr<RGYThreadSetPowerThrottoling> thSetPowerThrottling;
-
-    size_t readGeneric(MemoryChunk mc, HANDLE readHandle);
 };
 
 class EventBaseSubProcess : public SubProcess {
@@ -276,6 +243,7 @@ enum PROCESSOR_INFO_TAG {
     PROC_TAG_COUNT
 };
 
+#if defined(_WIN32) || defined(_WIN64)
 class CPUInfo {
     std::vector<GROUP_AFFINITY> data[PROC_TAG_COUNT];
 public:
@@ -284,3 +252,13 @@ public:
 };
 
 bool SetCPUAffinity(int group, uint64_t mask);
+#else
+// Linuxã§ã¯æœªå®Ÿè£…
+class CPUInfo {
+public:
+    CPUInfo() {}
+    const void* GetData(PROCESSOR_INFO_TAG tag, int* count) { *count = 0; return nullptr; }
+};
+
+inline bool SetCPUAffinity(int, uint64_t) { return true; }
+#endif

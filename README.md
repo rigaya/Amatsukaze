@@ -507,13 +507,13 @@ BatchHashChecker.exeは、ファイルがデータ化けしてないか、チェ
 主に、ネットワーク転送でのビット化けや、HDD読み取りエラーでのデータ化けなどを検出するのが目的です。
 
 例えば、D:\MyFolderにあるファイルをチェック対象にしたい場合は、以下のコマンドで、ハッシュ値ファイルを作成しておきます。
-```
+```bash
 BatchHashChecker.exe m D:\MyFolder
 ```
 このコマンドはフォルダ中の全てのファイルのハッシュ値を計算し、D:\MyFolder.hash に保存します。
 
 チェックしたい時は、以下のコマンドを実行します。
-```
+```bash
 BatchHashChecker.exe c D:\MyFolder
 ```
 これで、ハッシュ値ファイルを作成した時点から、データが変化していないかをチェックできます。
@@ -527,7 +527,7 @@ MyFolder.hashも同じところに移動すれば、チェックできます。
 ハッシュ値ファイルはテキストファイルなので、編集可能です。
 編集するとハッシュ値が合わなくなるので、以下のコマンドでハッシュ値ファイル自体のハッシュ値を更新できます。
 （D:\MyFolder.hashのハッシュ値を更新する場合）
-```
+```bash
 BatchHashChecker.exe hu D:\MyFolder
 ```
 
@@ -605,7 +605,7 @@ Amatsukazeと同梱&依存ライブラリはすべて64bitに統一されてい�
 
 FFmpeg（ライブラリ）が必要です。
 ビルド例は[こちら](https://github.com/rigaya/build_scripts/tree/master/ffmpeg_dll)。
-```
+```bash
 build_ffmpeg_dll.sh -aur -t swscale
 ```
 
@@ -622,7 +622,7 @@ vcpkg install zlib:x64-windows-static
 
 
 BatchHashCheckerにはOpenSSLが必要です。
-```
+```bash
 vcpkg install openssl:x64-windows-static
 ```
 
@@ -637,4 +637,47 @@ googletest/googletest/msvc/gtest-md.slnを開いて、ビルドしてくださ�
 単体テストプロジェクト(AmatsukazeUnitTest)は、他にOpenCVも使っているので、OpenCV 3.2.0をビルドしてこれもlibをlib/x64(or x86)へコピーしてください。
 
 gitでバージョンを取得するので、gitにパスを通した状態で、gitリポジトリでビルドする必要があります。
+
+# Linuxビルド手順
+
+AmatsukazeCLIをLinux環境でビルドするには以下の手順に従ってください。
+
+## 必要なパッケージのインストール
+
+Ubuntuの場合：
+
+```bash
+sudo apt update
+sudo apt install build-essential meson ninja-build pkg-config libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
+```
+
+## ビルド方法
+
+以下のコマンドでビルドします：
+
+```bash
+# ビルドディレクトリを作成
+mkdir -p build && cd build
+
+# Mesonプロジェクトの設定
+meson setup ..
+
+# ビルド実行
+ninja
+
+# インストール（オプション）
+sudo ninja install
+```
+
+## 実行方法
+
+```bash
+./AmatsukazeCLI/AmatsukazeCLI -i <input.ts> -o <output.mp4>
+```
+
+## 注意事項
+
+- このLinuxビルドは開発中です。すべての機能が完全に動作するわけではありません。
+- ffmpegはシステムライブラリを使用します。適切なバージョンのffmpegがインストールされていることを確認してください。
+- Windows固有の機能は一部制限がある可能性があります。
 

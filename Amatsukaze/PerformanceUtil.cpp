@@ -1,4 +1,4 @@
-/**
+Ôªø/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,40 +8,38 @@
 
 #include "PerformanceUtil.h"
 
+
 Stopwatch::Stopwatch()
-    : sum(0) {
-    QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+    : sum() {
 }
 
 void Stopwatch::reset() {
-    sum = 0;
+    sum = std::chrono::microseconds(0);
 }
 
 void Stopwatch::start() {
-    QueryPerformanceCounter((LARGE_INTEGER*)&prev);
+    prev = std::chrono::high_resolution_clock::now();
 }
 
 double Stopwatch::current() {
-    int64_t cur;
-    QueryPerformanceCounter((LARGE_INTEGER*)&cur);
-    return (double)(cur - prev) / freq;
+    const auto cur = std::chrono::high_resolution_clock::now();
+    return std::chrono::duration_cast<std::chrono::microseconds>(cur - prev).count() * 1e-6;
 }
 
 void Stopwatch::stop() {
-    int64_t cur;
-    QueryPerformanceCounter((LARGE_INTEGER*)&cur);
-    sum += cur - prev;
+    const auto cur = std::chrono::high_resolution_clock::now();
+    sum += std::chrono::duration_cast<std::chrono::microseconds>(cur - prev);
     prev = cur;
 }
 
 double Stopwatch::getTotal() const {
-    return (double)sum / freq;
+    return std::chrono::duration_cast<std::chrono::microseconds>(sum).count() * 1e-6;
 }
 
 double Stopwatch::getAndReset() {
     stop();
     double ret = getTotal();
-    sum = 0;
+    sum = std::chrono::microseconds(0);
     return ret;
 }
 
@@ -52,7 +50,7 @@ void FpsPrinter::updateProgress(bool last) {
     current = TimeCount();
 
     if (last) {
-        ctx.infoF("complete. %.2ffps (%dÉtÉåÅ[ÉÄ)", sum.count / sum.span, total);
+        ctx.infoF("complete. %.2ffps (%d„Éï„É¨„Éº„É†)", sum.count / sum.span, total);
     } else {
         float sumtime = 0;
         int sumcount = 0;

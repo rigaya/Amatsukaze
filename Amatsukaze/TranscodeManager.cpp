@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -11,6 +11,7 @@
 #include "rgy_thread_affinity.h"
 #include "AdtsParser.h"
 #include "PacketCache.h"
+#include "rgy_pipe.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
@@ -86,7 +87,7 @@ void AMTSplitter::readAll() {
     case PIC_BFF:
     case PIC_TFF_RFF:
         return (p1 == PIC_BFF || p1 == PIC_BFF_RFF);
-    default: // ‚»‚êˆÈŠO‚Íƒ`ƒFƒbƒN‘ÎÛŠO
+    default: // ãã‚Œä»¥å¤–ã¯ãƒã‚§ãƒƒã‚¯å¯¾è±¡å¤–
         return true;
     }
 }
@@ -94,11 +95,11 @@ void AMTSplitter::readAll() {
 void AMTSplitter::printInteraceCount() {
 
     if (videoFrameList_.size() == 0) {
-        ctx.error("ƒtƒŒ[ƒ€‚ª‚ ‚è‚Ü‚¹‚ñ");
+        ctx.error("ãƒ•ãƒ¬ãƒ¼ãƒ ãŒã‚ã‚Šã¾ã›ã‚“");
         return;
     }
 
-    // ƒ‰ƒbƒvƒAƒ‰ƒEƒ“ƒh‚µ‚È‚¢PTS‚ğ¶¬
+    // ãƒ©ãƒƒãƒ—ã‚¢ãƒ©ã‚¦ãƒ³ãƒ‰ã—ãªã„PTSã‚’ç”Ÿæˆ
     std::vector<std::pair<int64_t, int>> modifiedPTS;
     int64_t videoBasePTS = videoFrameList_[0].PTS;
     int64_t prevPTS = videoFrameList_[0].PTS;
@@ -109,11 +110,11 @@ void AMTSplitter::printInteraceCount() {
         prevPTS = modPTS;
     }
 
-    // PTS‚Åƒ\[ƒg
+    // PTSã§ã‚½ãƒ¼ãƒˆ
     std::sort(modifiedPTS.begin(), modifiedPTS.end());
 
 #if 0
-    // ƒtƒŒ[ƒ€ƒŠƒXƒg‚ğo—Í
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆã‚’å‡ºåŠ›
     FILE* framesfp = fopen("frames.txt", "w");
     fprintf(framesfp, "FrameNumber,DecodeFrameNumber,PTS,Duration,FRAME_TYPE,PIC_TYPE,IsGOPStart\n");
     for (int i = 0; i < (int)modifiedPTS.size(); ++i) {
@@ -136,7 +137,7 @@ void AMTSplitter::printInteraceCount() {
     fclose(framesfp);
 #endif
 
-    // PTSŠÔŠu‚ğo—Í
+    // PTSé–“éš”ã‚’å‡ºåŠ›
     struct Integer {
         int v;
         Integer() : v(0) {}
@@ -156,13 +157,13 @@ void AMTSplitter::printInteraceCount() {
         prevPTS = PTS;
     }
 
-    ctx.info("[‰f‘œƒtƒŒ[ƒ€“Œvî•ñ]");
+    ctx.info("[æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ çµ±è¨ˆæƒ…å ±]");
 
     int64_t totalTime = modifiedPTS.back().first - videoBasePTS;
     double sec = (double)totalTime / MPEG_CLOCK_HZ;
     int minutes = (int)(sec / 60);
     sec -= minutes * 60;
-    ctx.infoF("ŠÔ: %d•ª%.3f•b", minutes, sec);
+    ctx.infoF("æ™‚é–“: %dåˆ†%.3fç§’", minutes, sec);
 
     ctx.infoF("FRAME=%d DBL=%d TLP=%d TFF=%d BFF=%d TFF_RFF=%d BFF_RFF=%d",
         interaceCounter[0], interaceCounter[1], interaceCounter[2], interaceCounter[3], interaceCounter[4], interaceCounter[5], interaceCounter[6]);
@@ -172,7 +173,7 @@ void AMTSplitter::printInteraceCount() {
     }
 }
 
-// TsSplitter‰¼‘zŠÖ” //
+// TsSplitterä»®æƒ³é–¢æ•° //
 
 /* virtual */ void AMTSplitter::onVideoPesPacket(
     int64_t clock,
@@ -186,12 +187,12 @@ void AMTSplitter::printInteraceCount() {
 }
 
 /* virtual */ void AMTSplitter::onVideoFormatChanged(VideoFormat fmt) {
-    ctx.info("[‰f‘œƒtƒH[ƒ}ƒbƒg•ÏX]");
+    ctx.info("[æ˜ åƒãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆå¤‰æ›´]");
 
     StringBuilder sb;
-    sb.append("ƒTƒCƒY: %dx%d", fmt.width, fmt.height);
+    sb.append("ã‚µã‚¤ã‚º: %dx%d", fmt.width, fmt.height);
     if (fmt.width != fmt.displayWidth || fmt.height != fmt.displayHeight) {
-        sb.append(" •\¦—Ìˆæ: %dx%d", fmt.displayWidth, fmt.displayHeight);
+        sb.append(" è¡¨ç¤ºé ˜åŸŸ: %dx%d", fmt.displayWidth, fmt.displayHeight);
     }
     int darW, darH; fmt.getDAR(darW, darH);
     sb.append(" (%d:%d)", darW, darH);
@@ -202,10 +203,10 @@ void AMTSplitter::printInteraceCount() {
     }
     ctx.info(sb.str().c_str());
 
-    // ƒtƒ@ƒCƒ‹•ÏX
+    // ãƒ•ã‚¡ã‚¤ãƒ«å¤‰æ›´
     if (!curVideoFormat_.isBasicEquals(fmt)) {
-        // ƒAƒXƒyƒNƒg”äˆÈŠO‚à•ÏX‚³‚ê‚Ä‚¢‚½‚çƒtƒ@ƒCƒ‹‚ğ•ª‚¯‚é
-        //iStreamReform‚ÆğŒ‚ğ‡‚í‚¹‚È‚¯‚ê‚Î‚È‚ç‚È‚¢‚±‚Æ‚É’ˆÓj
+        // ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ä»¥å¤–ã‚‚å¤‰æ›´ã•ã‚Œã¦ã„ãŸã‚‰ãƒ•ã‚¡ã‚¤ãƒ«ã‚’åˆ†ã‘ã‚‹
+        //ï¼ˆStreamReformã¨æ¡ä»¶ã‚’åˆã‚ã›ãªã‘ã‚Œã°ãªã‚‰ãªã„ã“ã¨ã«æ³¨æ„ï¼‰
         writeHandler.open(setting_.getIntVideoFilePath(videoFileCount_++));
         psWriter.outHeader(videoStreamType_, audioStreamType_);
     }
@@ -243,8 +244,8 @@ void AMTSplitter::printInteraceCount() {
 }
 
 /* virtual */ void AMTSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {
-    ctx.infoF("[‰¹º%dƒtƒH[ƒ}ƒbƒg•ÏX]", audioIdx);
-    ctx.infoF("ƒ`ƒƒƒ“ƒlƒ‹: %s ƒTƒ“ƒvƒ‹ƒŒ[ƒg: %d",
+    ctx.infoF("[éŸ³å£°%dãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆå¤‰æ›´]", audioIdx);
+    ctx.infoF("ãƒãƒ£ãƒ³ãƒãƒ«: %s ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ: %d",
         getAudioChannelString(fmt.channels), fmt.sampleRate);
 
     StreamEvent ev = StreamEvent();
@@ -270,10 +271,10 @@ void AMTSplitter::printInteraceCount() {
     return info;
 }
 
-// TsPacketSelectorHandler‰¼‘zŠÖ” //
+// TsPacketSelectorHandlerä»®æƒ³é–¢æ•° //
 
 /* virtual */ void AMTSplitter::onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption) {
-    // ƒx[ƒXƒNƒ‰ƒX‚Ìˆ—
+    // ãƒ™ãƒ¼ã‚¹ã‚¯ãƒ©ã‚¹ã®å‡¦ç†
     TsSplitter::onPidTableChanged(video, audio, caption);
 
     ASSERT(audio.size() > 0);
@@ -302,8 +303,8 @@ void AMTSplitter::printInteraceCount() {
     ret = str_replace(ret, _T("@IMAGE_WIDTH@"), StringFormat(_T("%d"), fmt.width));
     ret = str_replace(ret, _T("@IMAGE_HEIGHT@"), StringFormat(_T("%d"), fmt.height));
     ret = str_replace(ret, _T("@SERVICE_ID@"), StringFormat(_T("%d"), serviceID));
-    ret = str_replace(ret, _T("@AMT_ENCODER@"), to_tstring(encoderToString(setting.getEncoder())));
-    ret = str_replace(ret, _T("@AMT_AUDIO_ENCODER@"), to_tstring(audioEncoderToString(setting.getAudioEncoder())));
+    ret = str_replace(ret, _T("@AMT_ENCODER@"), char_to_tstring(encoderToString(setting.getEncoder())));
+    ret = str_replace(ret, _T("@AMT_AUDIO_ENCODER@"), char_to_tstring(audioEncoderToString(setting.getAudioEncoder())));
     ret = str_replace(ret, _T("@AMT_TEMP_DIR@"), setting.getTmpDir());
     ret = str_replace(ret, _T("@AMT_TEMP_VIDEO@"), _T("\"") + setting.getEncVideoFilePath(key) + _T("\""));
     ret = str_replace(ret, _T("@AMT_TEMP_AUDIO@"), _T("\"") + setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()) + _T("\""));
@@ -334,7 +335,7 @@ void AddEnvironmentVariable(std::wstring& envBlock, const std::wstring& name, co
 tstring GetDirectoryName(const tstring& path) {
     size_t lastSeparator = path.find_last_of(_T("/\\"));
     if (lastSeparator == tstring::npos) {
-        return _T("");  // ƒfƒBƒŒƒNƒgƒŠ‹æØ‚è‚ªŒ©‚Â‚©‚ç‚È‚¢ê‡‚Í‹ó•¶š—ñ‚ğ•Ô‚·
+        return _T("");  // ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªåŒºåˆ‡ã‚ŠãŒè¦‹ã¤ã‹ã‚‰ãªã„å ´åˆã¯ç©ºæ–‡å­—åˆ—ã‚’è¿”ã™
     }
     return path.substr(0, lastSeparator);
 }
@@ -349,12 +350,12 @@ tstring GetDirectoryName(const tstring& path) {
         return 0;
     }
     
-    // ˆêƒoƒbƒ`ƒtƒ@ƒCƒ‹‚ÌƒpƒX‚ğ¶¬
-    tstring tempBatchPath = setting.getEncVideoFilePath(key) + _T(".bat");
+    // ä¸€æ™‚ãƒãƒƒãƒãƒ•ã‚¡ã‚¤ãƒ«ã®ãƒ‘ã‚¹ã‚’ç”Ÿæˆ
+    tstring tempBatchPath = setting.getEncVideoFilePath(key) + _T(".") + rgy_get_extension(batchPath);
     
     try {
-        // ƒoƒbƒ`ƒtƒ@ƒCƒ‹‚ğƒRƒs[
-        if (CopyFile(batchPath.c_str(), tempBatchPath.c_str(), FALSE) == 0) {
+        // ãƒãƒƒãƒãƒ•ã‚¡ã‚¤ãƒ«ã‚’ã‚³ãƒ”ãƒ¼
+        if (rgy_file_copy(batchPath.c_str(), tempBatchPath.c_str(), true) == 0) {
             return -1;
         }
 
@@ -371,8 +372,8 @@ tstring GetDirectoryName(const tstring& path) {
         tmpvar.set(_T("IMAGE_WIDTH"), StringFormat(_T("%d"), fmt.width));
         tmpvar.set(_T("IMAGE_HEIGHT"), StringFormat(_T("%d"), fmt.height));
         tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceID));
-        tmpvar.set(_T("AMT_ENCODER"), to_tstring(encoderToString(setting.getEncoder())));
-        tmpvar.set(_T("AMT_AUDIO_ENCODER"), to_tstring(audioEncoderToString(setting.getAudioEncoder())));
+        tmpvar.set(_T("AMT_ENCODER"), char_to_tstring(encoderToString(setting.getEncoder())));
+        tmpvar.set(_T("AMT_AUDIO_ENCODER"), char_to_tstring(audioEncoderToString(setting.getAudioEncoder())));
         tmpvar.set(_T("AMT_TEMP_DIR"), setting.getTmpDir());
         tmpvar.set(_T("AMT_TEMP_AVS"), setting.getAvsTmpPath(key));
         tmpvar.set(_T("AMT_TEMP_AVS_TC"), setting.getAvsTimecodePath(key));
@@ -394,39 +395,19 @@ tstring GetDirectoryName(const tstring& path) {
         tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_720T"), setting.getTmpNicoJKASSPath(key, NICOJK_720T));
         tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_1080S"), setting.getTmpNicoJKASSPath(key, NICOJK_1080S));
         tmpvar.set(_T("AMT_TEMP_ASS_NICOJK_1080T"), setting.getTmpNicoJKASSPath(key, NICOJK_1080T));
-        
-        // ƒoƒbƒ`ƒtƒ@ƒCƒ‹‚ğÀs
-        STARTUPINFO si = { sizeof(STARTUPINFO) };
-        PROCESS_INFORMATION pi;
-        si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_MINIMIZE;
-        
-        if (!CreateProcess(
-            NULL,
-            (LPTSTR)tempBatchPath.c_str(),
-            NULL,
-            NULL,
-            FALSE,
-            CREATE_NEW_CONSOLE,
-            NULL,
-            setting.getTmpDir().c_str(),
-            &si,
-            &pi)) {
+
+        // ãƒãƒƒãƒãƒ•ã‚¡ã‚¤ãƒ«ã‚’å®Ÿè¡Œ
+        std::unique_ptr<RGYPipeProcess> process = createRGYPipeProcess();
+        // æ¨™æº–å…¥å‡ºåŠ›ã¯ä¸è¦ãªã®ã§å…¨ã¦ç„¡åŠ¹åŒ–
+        process->init(PIPE_MODE_DISABLE, PIPE_MODE_DISABLE, PIPE_MODE_DISABLE);
+        std::vector<tstring> args = { tempBatchPath };
+        int runResult = process->run(args, setting.getTmpDir().c_str(), 0, false, true); // æœ€å°åŒ–ã§å®Ÿè¡Œ
+        if (runResult != 0) {
             return -1;
         }
-        
-        // ƒvƒƒZƒX‚ÌI—¹‚ğ‘Ò‹@
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        
-        // I—¹ƒR[ƒh‚ğæ“¾
-        DWORD exitCode;
-        GetExitCodeProcess(pi.hProcess, &exitCode);
-        
-        // ƒnƒ“ƒhƒ‹‚ğ•Â‚¶‚é
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        
-        return (int)exitCode;
+        // ãƒ—ãƒ­ã‚»ã‚¹ã®çµ‚äº†ã‚’å¾…æ©Ÿã—ã€çµ‚äº†ã‚³ãƒ¼ãƒ‰ã‚’å–å¾—
+        int exitCode = process->waitAndGetExitCode();
+        return exitCode;
         
     } catch (...) {
         return -1;
@@ -467,7 +448,7 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
 // src, target
 std::pair<double, double> EncoderArgumentGenerator::printBitrate(AMTContext& ctx, EncodeFileKey key) const {
     double srcBitrate = getSourceBitrate(key.video);
-    ctx.infoF("“ü—Í‰f‘œƒrƒbƒgƒŒ[ƒg: %d kbps", (int)srcBitrate);
+    ctx.infoF("å…¥åŠ›æ˜ åƒãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ: %d kbps", (int)srcBitrate);
     VIDEO_STREAM_FORMAT srcFormat = reformInfo_.getVideoStreamFormat();
     double targetBitrate = std::numeric_limits<float>::quiet_NaN();
     if (setting_.isAutoBitrate()) {
@@ -475,13 +456,13 @@ std::pair<double, double> EncoderArgumentGenerator::printBitrate(AMTContext& ctx
         if (key.cm == CMTYPE_CM) {
             targetBitrate *= setting_.getBitrateCM();
         }
-        ctx.infoF("–Ú•W‰f‘œƒrƒbƒgƒŒ[ƒg: %d kbps", (int)targetBitrate);
+        ctx.infoF("ç›®æ¨™æ˜ åƒãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ: %d kbps", (int)targetBitrate);
     }
     return std::make_pair(srcBitrate, targetBitrate);
 }
 
 double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
-    // ƒrƒbƒgƒŒ[ƒgŒvZ
+    // ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆè¨ˆç®—
     const auto& info = reformInfo_.getSrcVideoInfo(fileId);
     return ((double)info.first * 8 / 1000) / ((double)info.second / MPEG_CLOCK_HZ);
 }
@@ -494,13 +475,13 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
     VideoInfo outvi) {
     std::vector<BitrateZone> bitrateZones;
     if (timeCodes.size() == 0 || setting.isEncoderSupportVFR()) {
-        // VFR‚Å‚È‚¢A‚Ü‚½‚ÍAƒGƒ“ƒR[ƒ_‚ªVFR‚ğƒTƒ|[ƒg‚µ‚Ä‚¢‚é -> VFR—p‚É’²®‚·‚é•K—v‚ª‚È‚¢
+        // VFRã§ãªã„ã€ã¾ãŸã¯ã€ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ãŒVFRã‚’ã‚µãƒãƒ¼ãƒˆã—ã¦ã„ã‚‹ -> VFRç”¨ã«èª¿æ•´ã™ã‚‹å¿…è¦ãŒãªã„
         for (int i = 0; i < (int)cmzones.size(); ++i) {
             bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
         }
     } else {
         if (setting.isZoneAvailable()) {
-            // VFR”ñ‘Î‰ƒGƒ“ƒR[ƒ_‚Åƒ][ƒ“‚É‘Î‰‚µ‚Ä‚¢‚ê‚ÎƒrƒbƒgƒŒ[ƒgƒ][ƒ“¶¬
+            // VFRéå¯¾å¿œã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã‚¾ãƒ¼ãƒ³ã«å¯¾å¿œã—ã¦ã„ã‚Œã°ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚¾ãƒ¼ãƒ³ç”Ÿæˆ
 #if 0
             {
                 File dump("zone_param.dat", "wb");
@@ -514,10 +495,10 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
             }
 #endif
             if (auto rcMode = getRCMode(setting.getEncoder(), eoInfo.rcMode);
-                setting.isZoneWithQualityAvailable()   // •i¿ƒIƒtƒZƒbƒg‚ğ--dynamic-rc‚Åw’è‰Â”\‚ÈƒGƒ“ƒR[ƒ_‚Å‚ ‚é
-                && !setting.isAutoBitrate()            // ©“®ƒrƒbƒgƒŒ[ƒg‚Å‚È‚¢
-                && rcMode && !rcMode->isBitrateMode    // ƒrƒbƒgƒŒ[ƒgƒ‚[ƒh‚Å‚È‚¢
-                && setting.getCMQualityOffset() != 0.0 // •i¿ƒIƒtƒZƒbƒg‚ª—LŒø
+                setting.isZoneWithQualityAvailable()   // å“è³ªã‚ªãƒ•ã‚»ãƒƒãƒˆã‚’--dynamic-rcã§æŒ‡å®šå¯èƒ½ãªã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã‚ã‚‹
+                && !setting.isAutoBitrate()            // è‡ªå‹•ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã§ãªã„
+                && rcMode && !rcMode->isBitrateMode    // ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆãƒ¢ãƒ¼ãƒ‰ã§ãªã„
+                && setting.getCMQualityOffset() != 0.0 // å“è³ªã‚ªãƒ•ã‚»ãƒƒãƒˆãŒæœ‰åŠ¹
             ) {
                 for (int i = 0; i < (int)cmzones.size(); i++) {
                     bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
@@ -526,14 +507,15 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
                 return MakeVFRBitrateZones(
                     timeCodes, cmzones, setting.getBitrateCM(),
                     outvi.fps_numerator, outvi.fps_denominator,
-                    setting.getX265TimeFactor(), 0.05); // ‘S‘Ì‚Å5%‚Ü‚Å‚Ì·‚È‚ç‹–—e‚·‚é
+                    setting.getX265TimeFactor(), 0.05); // å…¨ä½“ã§5%ã¾ã§ã®å·®ãªã‚‰è¨±å®¹ã™ã‚‹
             }
         }
     }
     return bitrateZones;
 }
 
-// ƒy[ƒWƒq[ƒv‚ª‹@”\‚µ‚Ä‚¢‚é‚©ƒeƒXƒg
+// ãƒšãƒ¼ã‚¸ãƒ’ãƒ¼ãƒ—ãŒæ©Ÿèƒ½ã—ã¦ã„ã‚‹ã‹ãƒ†ã‚¹ãƒˆ
+#if 0
 void DoBadThing() {
     char *p = (char*)HeapAlloc(
         GetProcessHeap(),
@@ -541,6 +523,8 @@ void DoBadThing() {
         8);
     memset(p, 'x', 32);
 }
+#endif
+
 /* static */ void transcodeMain(AMTContext& ctx, const ConfigWrapper& setting) {
 #if 0
     MessageBox(NULL, "Debug", "Amatsukaze", MB_OK);
@@ -558,17 +542,17 @@ void DoBadThing() {
     auto eoInfo = ParseEncoderOption(setting.getEncoder(), setting.getEncoderOptions());
     PrintEncoderInfo(ctx, eoInfo);
 
-    // ƒ`ƒFƒbƒN
+    // ãƒã‚§ãƒƒã‚¯
     if (!isNoEncode && !setting.isFormatVFRSupported() && eoInfo.afsTimecode) {
-        THROW(FormatException, "M2TS/TSo—Í‚ÍVFR‚ğƒTƒ|[ƒg‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+        THROW(FormatException, "M2TS/TSå‡ºåŠ›ã¯VFRã‚’ã‚µãƒãƒ¼ãƒˆã—ã¦ã„ã¾ã›ã‚“");
     }
     if (setting.getFormat() == FORMAT_TSREPLACE) {
         auto cmtypes = setting.getCMTypes();
         if (cmtypes.size() != 1 || cmtypes[0] != CMTYPE_BOTH) {
-            THROW(FormatException, "tsreplace‚ÍCMƒJƒbƒg‚É‘Î‰‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+            THROW(FormatException, "tsreplaceã¯CMã‚«ãƒƒãƒˆã«å¯¾å¿œã—ã¦ã„ã¾ã›ã‚“");
         }
         if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265) {
-            THROW(FormatException, "tsreplace‚ÍH.264/H.265ˆÈŠO‚É‚Í‘Î‰‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+            THROW(FormatException, "tsreplaceã¯H.264/H.265ä»¥å¤–ã«ã¯å¯¾å¿œã—ã¦ã„ã¾ã›ã‚“");
         }
     }
 
@@ -582,7 +566,7 @@ void DoBadThing() {
         splitter->setServiceId(setting.getServiceId());
     }
     StreamReformInfo reformInfo = splitter->split();
-    ctx.infoF("TS‰ğÍŠ®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("TSè§£æå®Œäº†: %.2fç§’", sw.getAndReset());
     const int serviceId = splitter->getActualServiceId();
     const int64_t numTotalPackets = splitter->getNumTotalPackets();
     const int64_t numScramblePackets = splitter->getNumScramblePackets();
@@ -594,19 +578,19 @@ void DoBadThing() {
         reformInfo.serialize(setting.getStreamInfoPath());
     }
 
-    // ƒXƒNƒ‰ƒ“ƒuƒ‹ƒpƒPƒbƒgƒ`ƒFƒbƒN
+    // ã‚¹ã‚¯ãƒ©ãƒ³ãƒ–ãƒ«ãƒ‘ã‚±ãƒƒãƒˆãƒã‚§ãƒƒã‚¯
     double scrambleRatio = (double)numScramblePackets / (double)numTotalPackets;
     if (scrambleRatio > 0.01) {
-        ctx.errorF("%.2f%%‚ÌƒpƒPƒbƒg‚ªƒXƒNƒ‰ƒ“ƒuƒ‹ó‘Ô‚Å‚·B", scrambleRatio * 100);
+        ctx.errorF("%.2f%%ã®ãƒ‘ã‚±ãƒƒãƒˆãŒã‚¹ã‚¯ãƒ©ãƒ³ãƒ–ãƒ«çŠ¶æ…‹ã§ã™ã€‚", scrambleRatio * 100);
         if (scrambleRatio > 0.3) {
-            THROW(FormatException, "ƒXƒNƒ‰ƒ“ƒuƒ‹ƒpƒPƒbƒg‚ª‘½‚·‚¬‚Ü‚·");
+            THROW(FormatException, "ã‚¹ã‚¯ãƒ©ãƒ³ãƒ–ãƒ«ãƒ‘ã‚±ãƒƒãƒˆãŒå¤šã™ãã¾ã™");
         }
     }
 
     if (!isNoEncode && setting.isIgnoreNoDrcsMap() == false) {
-        // DRCSƒ}ƒbƒsƒ“ƒOƒ`ƒFƒbƒN
+        // DRCSãƒãƒƒãƒ”ãƒ³ã‚°ãƒã‚§ãƒƒã‚¯
         if (ctx.getErrorCount(AMT_ERR_NO_DRCS_MAP) > 0) {
-            THROW(NoDrcsMapException, "ƒ}ƒbƒsƒ“ƒO‚É‚È‚¢DRCSŠOš‚ ‚è³í‚Éš–‹ˆ—‚Å‚«‚È‚©‚Á‚½‚½‚ßI—¹‚µ‚Ü‚·");
+            THROW(NoDrcsMapException, "ãƒãƒƒãƒ”ãƒ³ã‚°ã«ãªã„DRCSå¤–å­—ã‚ã‚Šæ­£å¸¸ã«å­—å¹•å‡¦ç†ã§ããªã‹ã£ãŸãŸã‚çµ‚äº†ã—ã¾ã™");
         }
     }
 
@@ -617,16 +601,16 @@ void DoBadThing() {
     NicoJK nicoJK(ctx, setting);
     bool nicoOK = false;
     if (!isNoEncode && setting.isNicoJKEnabled()) {
-        ctx.info("[ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒgæ“¾]");
+        ctx.info("[ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆå–å¾—]");
         auto srcDuration = reformInfo.getInDuration() / MPEG_CLOCK_HZ;
         nicoOK = nicoJK.makeASS(serviceId, startTime, (int)srcDuration);
         if (nicoOK) {
             reformInfo.SetNicoJKList(nicoJK.getDialogues());
         } else {
             if (nicoJK.isFail() == false) {
-                ctx.info("‘Î‰ƒ`ƒƒƒ“ƒlƒ‹‚ª‚ ‚è‚Ü‚¹‚ñ");
+                ctx.info("å¯¾å¿œãƒãƒ£ãƒ³ãƒãƒ«ãŒã‚ã‚Šã¾ã›ã‚“");
             } else if (setting.isIgnoreNicoJKError() == false) {
-                THROW(RuntimeException, "ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒgæ“¾‚É¸”s");
+                THROW(RuntimeException, "ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆå–å¾—ã«å¤±æ•—");
             }
         }
     }
@@ -635,9 +619,9 @@ void DoBadThing() {
     int mainFileIndex = reformInfo.getMainVideoFileIndex();
     std::vector<std::unique_ptr<CMAnalyze>> cmanalyze;
 
-    // ƒ\[ƒXƒtƒ@ƒCƒ‹“Ç‚İ‚İ—pƒf[ƒ^•Û‘¶
+    // ã‚½ãƒ¼ã‚¹ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿ç”¨ãƒ‡ãƒ¼ã‚¿ä¿å­˜
     for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
-        // ƒtƒ@ƒCƒ‹“Ç‚İ‚İî•ñ‚ğ•Û‘¶
+        // ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿æƒ…å ±ã‚’ä¿å­˜
         auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
         auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
         av::SaveAMTSource(amtsPath,
@@ -649,7 +633,7 @@ void DoBadThing() {
             setting.getDecoderSetting());
     }
 
-    // ƒƒSECM‰ğÍ
+    // ãƒ­ã‚´ãƒ»CMè§£æ
     rm.wait(HOST_CMD_CMAnalyze);
     sw.start();
     std::vector<std::pair<size_t, bool>> logoFound;
@@ -659,8 +643,8 @@ void DoBadThing() {
         const auto& inputVideofmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0)).videoFormat;
         const int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
         const bool delogoEnabled = setting.isNoDelogo() ? false : true;
-        // ƒ`ƒƒƒvƒ^[‰ğÍ‚Í300ƒtƒŒ[ƒ€i–ñ10•bjˆÈã‚ ‚éê‡‚¾‚¯
-        //i’Z‚·‚¬‚é‚ÆƒGƒ‰[‚É‚È‚é‚±‚Æ‚ª‚ ‚é‚Ì‚Å
+        // ãƒãƒ£ãƒ—ã‚¿ãƒ¼è§£æã¯300ãƒ•ãƒ¬ãƒ¼ãƒ ï¼ˆç´„10ç§’ï¼‰ä»¥ä¸Šã‚ã‚‹å ´åˆã ã‘
+        //ï¼ˆçŸ­ã™ãã‚‹ã¨ã‚¨ãƒ©ãƒ¼ã«ãªã‚‹ã“ã¨ãŒã‚ã‚‹ã®ã§
         const bool analyzeChapterAndCM = (setting.isChapterEnabled() && numFrames >= 300);
         CMAnalyze *cma = cmanalyze.back().get();
         if (analyzeChapterAndCM || delogoEnabled) {
@@ -668,14 +652,14 @@ void DoBadThing() {
         }
 
         if (analyzeChapterAndCM && setting.isPmtCutEnabled()) {
-            // PMT•ÏX‚É‚æ‚éCM’Ç‰Á”F¯
+            // PMTå¤‰æ›´ã«ã‚ˆã‚‹CMè¿½åŠ èªè­˜
             cma->applyPmtCut(numFrames, setting.getPmtCutSideRate(),
                 reformInfo.getPidChangedList(videoFileIndex));
         }
 
         if (videoFileIndex == mainFileIndex) {
             if (setting.getTrimAVSPath().size()) {
-                // Trimî•ñ“ü—Í
+                // Trimæƒ…å ±å…¥åŠ›
                 cma->inputTrimAVS(numFrames, setting.getTrimAVSPath());
             }
         }
@@ -689,21 +673,21 @@ void DoBadThing() {
         }
     }
     if (setting.isChapterEnabled()) {
-        // ƒƒS‚ª‚ ‚Á‚½‚©ƒ`ƒFƒbƒN //
-        // ‰f‘œƒtƒ@ƒCƒ‹‚ğƒtƒŒ[ƒ€”‚Åƒ\[ƒg
+        // ãƒ­ã‚´ãŒã‚ã£ãŸã‹ãƒã‚§ãƒƒã‚¯ //
+        // æ˜ åƒãƒ•ã‚¡ã‚¤ãƒ«ã‚’ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ã§ã‚½ãƒ¼ãƒˆ
         std::sort(logoFound.begin(), logoFound.end());
-        if (setting.getLogoPath().size() > 0 && // ƒƒSw’è‚ ‚è
-            setting.isIgnoreNoLogo() == false &&          // ƒƒS‚È‚µ–³‹‚Å‚È‚¢
+        if (setting.getLogoPath().size() > 0 && // ãƒ­ã‚´æŒ‡å®šã‚ã‚Š
+            setting.isIgnoreNoLogo() == false &&          // ãƒ­ã‚´ãªã—ç„¡è¦–ã§ãªã„
             logoFound.back().first >= 300 &&
-            logoFound.back().second == false)     // Å‚à’·‚¢‰f‘œ‚ÅƒƒS‚ªŒ©‚Â‚©‚ç‚È‚©‚Á‚½
+            logoFound.back().second == false)     // æœ€ã‚‚é•·ã„æ˜ åƒã§ãƒ­ã‚´ãŒè¦‹ã¤ã‹ã‚‰ãªã‹ã£ãŸ
         {
-            THROW(NoLogoException, "ƒ}ƒbƒ`‚·‚éƒƒS‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ‚Å‚µ‚½");
+            THROW(NoLogoException, "ãƒãƒƒãƒã™ã‚‹ãƒ­ã‚´ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã§ã—ãŸ");
         }
-        ctx.infoF("ƒƒSECM‰ğÍŠ®—¹: %.2f•b", sw.getAndReset());
+        ctx.infoF("ãƒ­ã‚´ãƒ»CMè§£æå®Œäº†: %.2fç§’", sw.getAndReset());
     }
 
     if (isNoEncode) {
-        // CM‰ğÍ‚Ì‚İ‚È‚ç‚±‚±‚ÅI—¹
+        // CMè§£æã®ã¿ãªã‚‰ã“ã“ã§çµ‚äº†
         return;
     }
 
@@ -712,13 +696,13 @@ void DoBadThing() {
 
     const auto& allKeys = reformInfo.getOutFileKeys();
     std::vector<EncodeFileKey> keys;
-    // 1•bˆÈ‰º‚È‚ço—Í‚µ‚È‚¢
+    // 1ç§’ä»¥ä¸‹ãªã‚‰å‡ºåŠ›ã—ãªã„
     std::copy_if(allKeys.begin(), allKeys.end(), std::back_inserter(keys),
         [&](EncodeFileKey key) { return reformInfo.getEncodeFile(key).duration >= MPEG_CLOCK_HZ; });
 
     std::vector<EncodeFileOutput> outFileInfo(keys.size());
 
-    ctx.info("[ƒ`ƒƒƒvƒ^[¶¬]");
+    ctx.info("[ãƒãƒ£ãƒ—ã‚¿ãƒ¼ç”Ÿæˆ]");
     for (int i = 0; i < (int)keys.size(); ++i) {
         auto key = keys[i];
         if (chapterMakers[key.video]) {
@@ -726,7 +710,7 @@ void DoBadThing() {
         }
     }
 
-    ctx.info("[š–‹ƒtƒ@ƒCƒ‹¶¬]");
+    ctx.info("[å­—å¹•ãƒ•ã‚¡ã‚¤ãƒ«ç”Ÿæˆ]");
     for (int i = 0; i < (int)keys.size(); ++i) {
         auto key = keys[i];
         CaptionASSFormatter formatterASS(ctx);
@@ -738,8 +722,8 @@ void DoBadThing() {
             auto srt = formatterSRT.generate(capList[lang]);
             WriteUTF8File(setting.getTmpASSFilePath(key, lang), ass);
             if (srt.size() > 0) {
-                // SRT‚ÍCP_STR_SMALL‚µ‚©‚È‚©‚Á‚½ê‡‚È‚Ço—Í‚ª‚È‚¢ê‡‚ª‚ ‚èA
-                // ‹óƒtƒ@ƒCƒ‹‚Ímux‚ÉƒGƒ‰[‚É‚È‚é‚Ì‚ÅA1s‚à‚È‚¢ê‡‚Ío—Í‚µ‚È‚¢
+                // SRTã¯CP_STR_SMALLã—ã‹ãªã‹ã£ãŸå ´åˆãªã©å‡ºåŠ›ãŒãªã„å ´åˆãŒã‚ã‚Šã€
+                // ç©ºãƒ•ã‚¡ã‚¤ãƒ«ã¯muxæ™‚ã«ã‚¨ãƒ©ãƒ¼ã«ãªã‚‹ã®ã§ã€1è¡Œã‚‚ãªã„å ´åˆã¯å‡ºåŠ›ã—ãªã„
                 WriteUTF8File(setting.getTmpSRTFilePath(key, lang), srt);
             }
         }
@@ -753,10 +737,10 @@ void DoBadThing() {
             }
         }
     }
-    ctx.infoF("š–‹ƒtƒ@ƒCƒ‹¶¬Š®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("å­—å¹•ãƒ•ã‚¡ã‚¤ãƒ«ç”Ÿæˆå®Œäº†: %.2fç§’", sw.getAndReset());
 
     if (setting.isEncodeAudio()) {
-        ctx.info("[‰¹ºƒGƒ“ƒR[ƒh]");
+        ctx.info("[éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰]");
         for (int i = 0; i < (int)keys.size(); i++) {
             auto key = keys[i];
             auto outpath = setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder());
@@ -770,8 +754,8 @@ void DoBadThing() {
             auto audioFrames = reformInfo.getWaveInput(reformInfo.getEncodeFile(key).audioFrames[0]);
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
         }
-    } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreplace‚Ìê‡‚Í‰¹ºƒtƒ@ƒCƒ‹‚ğì‚ç‚È‚¢
-        ctx.info("[‰¹ºo—Í]");
+    } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreplaceã®å ´åˆã¯éŸ³å£°ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä½œã‚‰ãªã„
+        ctx.info("[éŸ³å£°å‡ºåŠ›]");
         PacketCache audioCache(ctx, setting.getAudioFilePath(), reformInfo.getAudioFileOffsets(), 12, 4);
         for (int i = 0; i < (int)keys.size(); i++) {
             const auto key = keys[i];
@@ -782,8 +766,8 @@ void DoBadThing() {
                 if (frameList.size() > 0) {
                     const bool isDualMono = (fmt.audioFormat[asrc].channels == AUDIO_2LANG);
                     if (!setting.isEncodeAudio() && isDualMono) {
-                        // ƒfƒ…ƒAƒ‹ƒ‚ƒm‚Í2‚Â‚ÌAAC‚É•ª—£
-                        ctx.infoF("‰¹º%d-%d‚Íƒfƒ…ƒAƒ‹ƒ‚ƒm‚È‚Ì‚Å2‚Â‚ÌAACƒtƒ@ƒCƒ‹‚É•ª—£‚µ‚Ü‚·", fileIn.outKey.format, asrc);
+                        // ãƒ‡ãƒ¥ã‚¢ãƒ«ãƒ¢ãƒã¯2ã¤ã®AACã«åˆ†é›¢
+                        ctx.infoF("éŸ³å£°%d-%dã¯ãƒ‡ãƒ¥ã‚¢ãƒ«ãƒ¢ãƒãªã®ã§2ã¤ã®AACãƒ•ã‚¡ã‚¤ãƒ«ã«åˆ†é›¢ã—ã¾ã™", fileIn.outKey.format, asrc);
                         SpDualMonoSplitter splitter(ctx);
                         const tstring filepath0 = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
                         const tstring filepath1 = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
@@ -794,7 +778,7 @@ void DoBadThing() {
                         }
                     } else {
                         if (isDualMono) {
-                            ctx.infoF("‰¹º%d-%d‚Íƒfƒ…ƒAƒ‹ƒ‚ƒm‚Å‚·‚ªA‰¹ºƒtƒH[ƒ}ƒbƒg–³‹w’è‚ª‚ ‚é‚Ì‚Å•ª—£‚µ‚Ü‚¹‚ñ", fileIn.outKey.format, asrc);
+                            ctx.infoF("éŸ³å£°%d-%dã¯ãƒ‡ãƒ¥ã‚¢ãƒ«ãƒ¢ãƒã§ã™ãŒã€éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆç„¡è¦–æŒ‡å®šãŒã‚ã‚‹ã®ã§åˆ†é›¢ã—ã¾ã›ã‚“", fileIn.outKey.format, asrc);
                         }
                         const tstring filepath = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
                         File file(filepath, _T("wb"));
@@ -819,10 +803,10 @@ void DoBadThing() {
             cma->getZones(), cma->getLogoPath(), key, rm);
 
         if (!setting.getPreEncBatchFile().empty()) {
-            ctx.infoF("[ƒGƒ“ƒR[ƒh‘Oƒoƒbƒ`ƒtƒ@ƒCƒ‹] %d/%d", i + 1, (int)keys.size());
+            ctx.infoF("[ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰å‰ãƒãƒƒãƒãƒ•ã‚¡ã‚¤ãƒ«] %d/%d", i + 1, (int)keys.size());
             ctx.infoF("%s", setting.getPreEncBatchFile().c_str());
             if (executeBatchFile(setting.getPreEncBatchFile(), filterSource.getFormat(), setting, key, serviceId)) {
-                THROW(RuntimeException, "ƒGƒ“ƒR[ƒh‘Oƒoƒbƒ`ƒtƒ@ƒCƒ‹‚ÌÀs‚É¸”s‚µ‚Ü‚µ‚½");
+                THROW(RuntimeException, "ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰å‰ãƒãƒƒãƒãƒ•ã‚¡ã‚¤ãƒ«ã®å®Ÿè¡Œã«å¤±æ•—ã—ã¾ã—ãŸ");
             }
         }
 
@@ -834,7 +818,7 @@ void DoBadThing() {
             auto& outvi = filterClip->GetVideoInfo();
             auto& timeCodes = filterSource.getTimeCodes();
 
-            ctx.infoF("[ƒGƒ“ƒR[ƒhŠJn] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));
+            ctx.infoF("[ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰é–‹å§‹] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));
             auto bitrate = argGen->printBitrate(ctx, key);
 
             fileOut.vfmt = outfmt;
@@ -843,16 +827,16 @@ void DoBadThing() {
             fileOut.vfrTimingFps = filterSource.getVfrTimingFps();
 
             if (timeCodes.size() > 0) {
-                // ƒtƒBƒ‹ƒ^‚É‚æ‚éVFR‚ª—LŒø
+                // ãƒ•ã‚£ãƒ«ã‚¿ã«ã‚ˆã‚‹VFRãŒæœ‰åŠ¹
                 if (eoInfo.afsTimecode) {
-                    THROW(ArgumentException, "ƒGƒ“ƒR[ƒ_‚ÆƒtƒBƒ‹ƒ^‚Ì—¼•û‚ÅVFRƒ^ƒCƒ€ƒR[ƒh‚ªo—Í‚³‚ê‚Ä‚¢‚Ü‚·B");
+                    THROW(ArgumentException, "ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã¨ãƒ•ã‚£ãƒ«ã‚¿ã®ä¸¡æ–¹ã§VFRã‚¿ã‚¤ãƒ ã‚³ãƒ¼ãƒ‰ãŒå‡ºåŠ›ã•ã‚Œã¦ã„ã¾ã™ã€‚");
                 }
                 if (eoInfo.selectEvery > 1) {
-                    THROW(ArgumentException, "VFR‚Åo—Í‚·‚éê‡‚ÍAƒGƒ“ƒR[ƒ_‚ÅŠÔˆø‚­‚±‚Æ‚Í‚Å‚«‚Ü‚¹‚ñ");
+                    THROW(ArgumentException, "VFRã§å‡ºåŠ›ã™ã‚‹å ´åˆã¯ã€ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§é–“å¼•ãã“ã¨ã¯ã§ãã¾ã›ã‚“");
                 } else if (!setting.isFormatVFRSupported()) {
-                    THROW(FormatException, "M2TS/TSo—Í‚ÍVFR‚ğƒTƒ|[ƒg‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+                    THROW(FormatException, "M2TS/TSå‡ºåŠ›ã¯VFRã‚’ã‚µãƒãƒ¼ãƒˆã—ã¦ã„ã¾ã›ã‚“");
                 }
-                ctx.infoF("VFRƒ^ƒCƒ~ƒ“ƒO: %d fps", fileOut.vfrTimingFps);
+                ctx.infoF("VFRã‚¿ã‚¤ãƒŸãƒ³ã‚°: %d fps", fileOut.vfrTimingFps);
                 fileOut.timecode = setting.getAvsTimecodePath(key);
             }
 
@@ -866,7 +850,7 @@ void DoBadThing() {
 
             auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, eoInfo, outvi);
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
-            // VFRƒtƒŒ[ƒ€ƒ^ƒCƒ~ƒ“ƒO‚ª120fps‚©
+            // VFRãƒ•ãƒ¬ãƒ¼ãƒ ã‚¿ã‚¤ãƒŸãƒ³ã‚°ãŒ120fpsã‹
             std::vector<tstring> encoderArgs;
             for (int i = 0; i < (int)pass.size(); ++i) {
                 encoderArgs.push_back(
@@ -875,8 +859,8 @@ void DoBadThing() {
                         outfmt, bitrateZones, vfrBitrateScale,
                         fileOut.timecode, fileOut.vfrTimingFps, key, pass[i], serviceId, eoInfo));
             }
-            // x264, x265, SVT-AV1‚Ì‚Æ‚«‚ÍdisablePowerThrottoling=true‚Æ‚·‚é
-            // QSV/NV/VCEEnc‚Å‚ÍƒvƒƒZƒX“à‚Å©“®“I‚ÉÅ“K‚È‚æ‚¤‚Éİ’è‚³‚ê‚é‚½‚ß•s—v
+            // x264, x265, SVT-AV1ã®ã¨ãã¯disablePowerThrottoling=trueã¨ã™ã‚‹
+            // QSV/NV/VCEEncã§ã¯ãƒ—ãƒ­ã‚»ã‚¹å†…ã§è‡ªå‹•çš„ã«æœ€é©ãªã‚ˆã†ã«è¨­å®šã•ã‚Œã‚‹ãŸã‚ä¸è¦
             const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
             AMTFilterVideoEncoder encoder(ctx, std::max(4, setting.getNumEncodeBufferFrames()));
             encoder.encode(filterClip, outfmt,
@@ -885,7 +869,7 @@ void DoBadThing() {
             THROWF(AviSynthException, "%s", avserror.msg);
         }
     }
-    ctx.infoF("ƒGƒ“ƒR[ƒhŠ®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰å®Œäº†: %.2fç§’", sw.getAndReset());
 
     argGen = nullptr;
 
@@ -896,23 +880,23 @@ void DoBadThing() {
     for (int i = 0; i < (int)keys.size(); ++i) {
         auto key = keys[i];
 
-        ctx.infoF("[MuxŠJn] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));
+        ctx.infoF("[Muxé–‹å§‹] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));
         muxer->mux(key, eoInfo, nicoOK, outFileInfo[i]);
 
         totalOutSize += outFileInfo[i].fileSize;
     }
-    ctx.infoF("MuxŠ®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("Muxå®Œäº†: %.2fç§’", sw.getAndReset());
 
     muxer = nullptr;
     thSetPowerThrottling->abortThread();
 
-    // o—ÍŒ‹‰Ê‚ğ•\¦
+    // å‡ºåŠ›çµæœã‚’è¡¨ç¤º
     reformInfo.printOutputMapping([&](EncodeFileKey key) {
         const auto& file = reformInfo.getEncodeFile(key);
         return setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(key, reformInfo, setting), eoInfo.format);
         });
 
-    // o—ÍŒ‹‰ÊJSONo—Í
+    // å‡ºåŠ›çµæœJSONå‡ºåŠ›
     if (setting.getOutInfoJsonPath().size() > 0) {
         StringBuilder sb;
         sb.append("{ ")
@@ -966,7 +950,7 @@ void DoBadThing() {
 
 /* static */ void transcodeSimpleMain(AMTContext& ctx, const ConfigWrapper& setting) {
     if (ends_with(setting.getSrcFilePath(), _T(".ts"))) {
-        ctx.warn("ˆê”Êƒtƒ@ƒCƒ‹ƒ‚[ƒh‚Å‚ÌTSƒtƒ@ƒCƒ‹‚Ìˆ—‚Í”ñ„§‚Å‚·");
+        ctx.warn("ä¸€èˆ¬ãƒ•ã‚¡ã‚¤ãƒ«ãƒ¢ãƒ¼ãƒ‰ã§ã®TSãƒ•ã‚¡ã‚¤ãƒ«ã®å‡¦ç†ã¯éæ¨å¥¨ã§ã™");
     }
 
     auto encoder = std::unique_ptr<AMTSimpleVideoEncoder>(new AMTSimpleVideoEncoder(ctx, setting));
@@ -981,8 +965,8 @@ void DoBadThing() {
     int64_t totalOutSize = muxer->getTotalOutSize();
     muxer = nullptr;
 
-    // o—ÍŒ‹‰Ê‚ğ•\¦
-    ctx.info("Š®—¹");
+    // å‡ºåŠ›çµæœã‚’è¡¨ç¤º
+    ctx.info("å®Œäº†");
     if (setting.getOutInfoJsonPath().size() > 0) {
         StringBuilder sb;
         sb.append("{ \"srcpath\": \"%s\"", toJsonString(setting.getSrcFilePath()))
@@ -1013,13 +997,13 @@ void DrcsSearchSplitter::readAll() {
     } while (readBytes == buffer.length);
 }
 
-// TsSplitter‰¼‘zŠÖ” //
+// TsSplitterä»®æƒ³é–¢æ•° //
 
 /* virtual */ void DrcsSearchSplitter::onVideoPesPacket(
     int64_t clock,
     const std::vector<VideoFrameInfo>& frames,
     PESPacket packet) {
-    // ¡‚ÌŠÅ‰‚ÌƒtƒŒ[ƒ€‚µ‚©•K—v‚È‚¢‚¯‚Ç
+    // ä»Šã®æ‰€æœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ã—ã‹å¿…è¦ãªã„ã‘ã©
     for (const VideoFrameInfo& frame : frames) {
         videoFrameList_.push_back(frame);
     }
@@ -1059,10 +1043,10 @@ void SubtitleDetectorSplitter::readAll(int maxframes) {
     MemoryChunk buffer(buffer_ptr.get(), BUFSIZE);
     File srcfile(setting_.getSrcFilePath(), _T("rb"));
     auto fileSize = srcfile.size();
-    // ƒtƒ@ƒCƒ‹æ“ª‚©‚ç10%‚Ì‚Æ‚±‚ë‚©‚ç“Ç‚Ş
+    // ãƒ•ã‚¡ã‚¤ãƒ«å…ˆé ­ã‹ã‚‰10%ã®ã¨ã“ã‚ã‹ã‚‰èª­ã‚€
     srcfile.seek(fileSize / 10, SEEK_SET);
     int64_t totalRead = 0;
-    // ÅŒã‚Ì10%‚Í“Ç‚Ü‚È‚¢
+    // æœ€å¾Œã®10%ã¯èª­ã¾ãªã„
     int64_t end = fileSize / 10 * 9;
     size_t readBytes;
     do {
@@ -1076,13 +1060,13 @@ bool SubtitleDetectorSplitter::getHasSubtitle() const {
     return hasSubtltle_;
 }
 
-// TsSplitter‰¼‘zŠÖ” //
+// TsSplitterä»®æƒ³é–¢æ•° //
 
 /* virtual */ void SubtitleDetectorSplitter::onVideoPesPacket(
     int64_t clock,
     const std::vector<VideoFrameInfo>& frames,
     PESPacket packet) {
-    // ¡‚ÌŠÅ‰‚ÌƒtƒŒ[ƒ€‚µ‚©•K—v‚È‚¢‚¯‚Ç
+    // ä»Šã®æ‰€æœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ã—ã‹å¿…è¦ãªã„ã‘ã©
     for (const VideoFrameInfo& frame : frames) {
         videoFrameList_.push_back(frame);
     }
@@ -1122,10 +1106,10 @@ void AudioDetectorSplitter::readAll(int maxframes) {
     MemoryChunk buffer(buffer_ptr.get(), BUFSIZE);
     File srcfile(setting_.getSrcFilePath(), _T("rb"));
     auto fileSize = srcfile.size();
-    // ƒtƒ@ƒCƒ‹æ“ª‚©‚ç10%‚Ì‚Æ‚±‚ë‚©‚ç“Ç‚Ş
+    // ãƒ•ã‚¡ã‚¤ãƒ«å…ˆé ­ã‹ã‚‰10%ã®ã¨ã“ã‚ã‹ã‚‰èª­ã‚€
     srcfile.seek(fileSize / 10, SEEK_SET);
     int64_t totalRead = 0;
-    // ÅŒã‚Ì10%‚Í“Ç‚Ü‚È‚¢
+    // æœ€å¾Œã®10%ã¯èª­ã¾ãªã„
     int64_t end = fileSize / 10 * 9;
     size_t readBytes;
     do {
@@ -1135,13 +1119,13 @@ void AudioDetectorSplitter::readAll(int maxframes) {
     } while (totalRead < end && videoFrameList_.size() < maxframes);
 }
 
-// TsSplitter‰¼‘zŠÖ” //
+// TsSplitterä»®æƒ³é–¢æ•° //
 
 /* virtual */ void AudioDetectorSplitter::onVideoPesPacket(
     int64_t clock,
     const std::vector<VideoFrameInfo>& frames,
     PESPacket packet) {
-    // ¡‚ÌŠÅ‰‚ÌƒtƒŒ[ƒ€‚µ‚©•K—v‚È‚¢‚¯‚Ç
+    // ä»Šã®æ‰€æœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ã—ã‹å¿…è¦ãªã„ã‘ã©
     for (const VideoFrameInfo& frame : frames) {
         videoFrameList_.push_back(frame);
     }
@@ -1156,7 +1140,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
     PESPacket packet) {}
 
 /* virtual */ void AudioDetectorSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {
-    printf("ƒCƒ“ƒfƒbƒNƒX: %d ƒ`ƒƒƒ“ƒlƒ‹: %s ƒTƒ“ƒvƒ‹ƒŒ[ƒg: %d\n",
+    printf("ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹: %d ãƒãƒ£ãƒ³ãƒãƒ«: %s ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ: %d\n",
         audioIdx, getAudioChannelString(fmt.channels), fmt.sampleRate);
 }
 
@@ -1179,7 +1163,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
         splitter->setServiceId(setting.getServiceId());
     }
     splitter->readAll();
-    ctx.infoF("Š®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("å®Œäº†: %.2fç§’", sw.getAndReset());
 }
 
 /* static */ void detectSubtitleMain(AMTContext& ctx, const ConfigWrapper& setting) {
@@ -1188,7 +1172,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
         splitter->setServiceId(setting.getServiceId());
     }
     splitter->readAll(setting.getMaxFrames());
-    printf("š–‹%s\n", splitter->getHasSubtitle() ? "‚ ‚è" : "‚È‚µ");
+    printf("å­—å¹•%s\n", splitter->getHasSubtitle() ? "ã‚ã‚Š" : "ãªã—");
 }
 
 /* static */ void detectAudioMain(AMTContext& ctx, const ConfigWrapper& setting) {

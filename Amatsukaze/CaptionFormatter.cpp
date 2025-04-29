@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,6 +7,7 @@
 */
 
 #include "CaptionFormatter.h"
+#include <cmath>
 
 CaptionASSFormatter::CaptionASSFormatter(AMTContext& ctx)
     : AMTObject(ctx) {
@@ -49,7 +50,7 @@ void CaptionASSFormatter::header() {
             "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
         .append(L"Style: Default,Yu Gothic,%d,&H00FFFFFF,&H000000FF,&H00000000,&H7F000000,"
             "1,0,0,0,100,100,4,"
-            "0,1,2,2,1,0,0,0,1\n", (int)DefFontSize + 10) // ‚È‚º‚©Yu Gothic‚Í+10‚µ‚È‚¢‚Æ‚»‚ÌƒTƒCƒY‚É‚È‚ç‚È‚©‚Á‚½
+            "0,1,2,2,1,0,0,0,1\n", (int)DefFontSize + 10) // ãªãœã‹Yu Gothicã¯+10ã—ãªã„ã¨ãã®ã‚µã‚¤ã‚ºã«ãªã‚‰ãªã‹ã£ãŸ
         .append(L"\n")
         .append(L"[Events]\n")
         .append(L"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
@@ -68,7 +69,7 @@ void CaptionASSFormatter::item(const OutCaptionLine& line) {
     time(line.end);
     sb.append(L",Default,,0000,0000,0000,,");
 
-    // “r’†‚Å‰ğ‘œ“x‚ª•Ï‚í‚Á‚½‚Æ‚«—p
+    // é€”ä¸­ã§è§£åƒåº¦ãŒå¤‰ã‚ã£ãŸã¨ãç”¨
     float scalex = (float)PlayResX / line.line->planeW;
     float scaley = (float)PlayResY / line.line->planeH;
 
@@ -80,13 +81,13 @@ void CaptionASSFormatter::item(const OutCaptionLine& line) {
         int begin = fmts[i].pos;
         int end = (i + 1 < nfrags) ? fmts[i + 1].pos : (int)text.size();
         auto& fmt = fmts[i];
-        auto& fragtext = std::wstring(text.begin() + begin, text.begin() + end);
+        auto fragtext = std::wstring(text.begin() + begin, text.begin() + end);
 
         if (i == 0) {
             int len = StrlenWoLoSurrogate(fragtext.c_str());
             float x = line.line->posX + (fmt.width / len - fmt.charW) * DefFontSize / fmt.charW / 2;
             float y = line.line->posY - (fmt.height - fmt.charH) / 2;
-            // pos‚Íæ“ª‚Å‚µ‚©Œø‰Ê‚ª‚È‚¢–Í—l
+            // posã¯å…ˆé ­ã§ã—ã‹åŠ¹æœãŒãªã„æ¨¡æ§˜
             setPos((int)(x * scalex), (int)(y * scaley));
         }
 
@@ -108,7 +109,7 @@ void CaptionASSFormatter::fragment(float scalex, float scaley, const std::wstrin
     setStyle(fmt.style);
 
     if (attr.getMC().length > 0) {
-        // ƒI[ƒo[ƒ‰ƒCƒhƒR[ƒho—Í
+        // ã‚ªãƒ¼ãƒãƒ¼ãƒ©ã‚¤ãƒ‰ã‚³ãƒ¼ãƒ‰å‡ºåŠ›
         sb.append(L"{%s}", attr.str());
         attr.clear();
     }
@@ -232,12 +233,12 @@ void CaptionSRTFormatter::item(const OutCaptionLine& line) {
 
     for (int i = 0; i < nfrags; ++i) {
         if (fmts[i].sizeMode == CP_STR_SMALL) {
-            // ¬ƒTƒCƒY‚Ío—Í‚µ‚È‚¢
+            // å°ã‚µã‚¤ã‚ºã¯å‡ºåŠ›ã—ãªã„
             continue;
         }
         if (line.end != prevEnd) {
             pushLine();
-            // ŠÔ‚ğo—Í
+            // æ™‚é–“ã‚’å‡ºåŠ›
             sb.append(L"\n%d\n", subIndex++);
             time(line.start);
             sb.append(L" --> ");
@@ -247,13 +248,13 @@ void CaptionSRTFormatter::item(const OutCaptionLine& line) {
             prevPosY = -1;
         }
         if (line.line->posY != prevPosY) {
-            // ‰üs
+            // æ”¹è¡Œ
             pushLine();
             prevPosY = line.line->posY;
         }
         int begin = fmts[i].pos;
         int end = (i + 1 < nfrags) ? fmts[i + 1].pos : (int)text.size();
-        auto& fragtext = std::wstring(text.begin() + begin, text.begin() + end);
+        auto fragtext = std::wstring(text.begin() + begin, text.begin() + end);
         linebuf.append(L"%s", fragtext);
     }
 }

@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -124,15 +124,15 @@ void MPEG2SequenceHeader::getSAR(int& sar_w, int& sar_h) {
         return;
     }
 
-    // DARæ“¾
+    // DARå–å¾—
     int dar_w, dar_h;
     getDAR(dar_w, dar_h);
 
-    // DAR‘ÎÛ‚Ì—Ìˆæ‚ğæ“¾
+    // DARå¯¾è±¡ã®é ˜åŸŸã‚’å–å¾—
     int dw = displayWidth();
     int dh = displayHeight();
 
-    // ƒAƒXƒyƒNƒg”ä‚ğŒvZ
+    // ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã‚’è¨ˆç®—
     sar_w = dar_w * dh;
     sar_h = dar_h * dw;
     int denom = gcd(sar_w, sar_h);
@@ -289,7 +289,7 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
         case PICTURE_START_CODE:
             MPEG2PictureHeader& picHeader = pictureHeader[receivedField++];
             if (picHeader.parse(&frame.data[b], (int)frame.length - b)) {
-                if (receivedField == 1) { // 1–‡–Ú
+                if (receivedField == 1) { // 1æšç›®
                     switch (picHeader.picture_structure) {
                     case 1: // Top Field
                         picType = PIC_TFF;
@@ -329,26 +329,28 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
                     }
                     progressive = (picHeader.progressive_frame != 0);
                 } else {
-                    // 2–‡–Ú‚Íƒ`ƒFƒbƒN‰Â”\‚¾‚¯‚Ç–Ê“|‚È‚Ì‚ÅŒ©‚È‚¢
+                    // 2æšç›®ã¯ãƒã‚§ãƒƒã‚¯å¯èƒ½ã ã‘ã©é¢å€’ãªã®ã§è¦‹ãªã„
                     if (picHeader.picture_structure == 3) {
                         ctx.incrementCounter(AMT_ERR_H264_UNEXPECTED_FIELD);
-                        ctx.error("ƒtƒB[ƒ‹ƒh”z’u‚ª•Ï‘¥“I‚·‚¬‚Ä‘Î‰‚Å‚«‚Ü‚¹‚ñ");
+                        ctx.error("ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é…ç½®ãŒå¤‰å‰‡çš„ã™ãã¦å¯¾å¿œã§ãã¾ã›ã‚“");
                         return false;
                     }
                     switch (picType) {
                     case PIC_TFF:
                         if (picHeader.picture_structure != 2) {
                             ctx.incrementCounter(AMT_ERR_H264_UNEXPECTED_FIELD);
-                            ctx.error("ƒtƒB[ƒ‹ƒh”z’u‚ª•Ï‘¥“I‚·‚¬‚Ä‘Î‰‚Å‚«‚Ü‚¹‚ñ");
+                            ctx.error("ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é…ç½®ãŒå¤‰å‰‡çš„ã™ãã¦å¯¾å¿œã§ãã¾ã›ã‚“");
                             return false;
                         }
                         break;
                     case PIC_BFF:
                         if (picHeader.picture_structure != 1) {
                             ctx.incrementCounter(AMT_ERR_H264_UNEXPECTED_FIELD);
-                            ctx.error("ƒtƒB[ƒ‹ƒh”z’u‚ª•Ï‘¥“I‚·‚¬‚Ä‘Î‰‚Å‚«‚Ü‚¹‚ñ");
+                            ctx.error("ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é…ç½®ãŒå¤‰å‰‡çš„ã™ãã¦å¯¾å¿œã§ãã¾ã›ã‚“");
                             return false;
                         }
+                        break;
+                    default:
                         break;
                     }
                 }
@@ -357,12 +359,12 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
 
             if (receivedField > 2) {
                 ctx.incrementCounter(AMT_ERR_H264_UNEXPECTED_FIELD);
-                ctx.error("ƒtƒB[ƒ‹ƒh”z’u‚ª•Ï‘¥“I‚·‚¬‚Ä‘Î‰‚Å‚«‚Ü‚¹‚ñ");
+                ctx.error("ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é…ç½®ãŒå¤‰å‰‡çš„ã™ãã¦å¯¾å¿œã§ãã¾ã›ã‚“");
                 return false;
             }
 
             if (receivedField == 2) {
-                // 1ƒtƒŒ[ƒ€óM‚µ‚½
+                // 1ãƒ•ãƒ¬ãƒ¼ãƒ å—ä¿¡ã—ãŸ
                 VideoFrameInfo finfo;
                 finfo.format = format;
                 finfo.isGopStart = isGopStart;
@@ -374,7 +376,7 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
                 finfo.codedDataSize = codedDataSize;
                 info.push_back(finfo);
 
-                // ‰Šú‰»‚µ‚Ä‚¨‚­
+                // åˆæœŸåŒ–ã—ã¦ãŠã
                 receivedField = 0;
                 isGopStart = false;
                 picType = PIC_FRAME;

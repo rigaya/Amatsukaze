@@ -1,7 +1,7 @@
-#pragma once
+ï»¿#pragma once
 
 /**
-* Amtasukaze ƒjƒRƒjƒRÀ‹µ ASS generator
+* Amtasukaze ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ ASS generator
 * Copyright (c) 2017-2019 Nekopanda
 *
 * This software is released under the MIT License.
@@ -19,9 +19,9 @@
 
 class NicoJK : public AMTObject {
     enum ConvMode {
-        CONV_ASS_XML,  // nicojk18‚Åxml‚ğæ“¾‚µ‚Ä•ÏŠ·
-        CONV_ASS_TS,   // ‚»‚Ì‚Ü‚Üts‚ğ“Š‚°‚Ä•ÏŠ·
-        CONV_ASS_LOG,  // NicoJKƒƒO‚ğ—Dæ“I‚Ég‚Á‚Ä•ÏŠ·
+        CONV_ASS_XML,  // nicojk18ã§xmlã‚’å–å¾—ã—ã¦å¤‰æ›
+        CONV_ASS_TS,   // ãã®ã¾ã¾tsã‚’æŠ•ã’ã¦å¤‰æ›
+        CONV_ASS_LOG,  // NicoJKãƒ­ã‚°ã‚’å„ªå…ˆçš„ã«ä½¿ã£ã¦å¤‰æ›
     };
 public:
     NicoJK(AMTContext& ctx,

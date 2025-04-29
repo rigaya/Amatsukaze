@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -22,7 +22,7 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     const std::vector<FilterAudioFrame>& audioFrames) {
     using namespace wave;
 
-    ctx.info("[‰¹ºƒGƒ“ƒR[ƒ_‹N“®]");
+    ctx.info("[éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€èµ·å‹•]");
     ctx.infoF("%s", encoder_args);
 
     auto process = std::unique_ptr<StdRedirectedSubProcess>(
@@ -32,7 +32,7 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     int bytesPerSample = 2;
     Header header;
     set4(header.chunkID, "RIFF");
-    header.chunkSize = 0; // ƒTƒCƒY–¢’è
+    header.chunkSize = 0; // ã‚µã‚¤ã‚ºæœªå®š
     set4(header.format, "WAVE");
     set4(header.subchunk1ID, "fmt ");
     header.subchunk1Size = 16;
@@ -43,15 +43,15 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     header.blockAlign = bytesPerSample * nchannels;
     header.bitsPerSample = bytesPerSample * 8;
     set4(header.subchunk2ID, "data");
-    header.subchunk2Size = 0; // ƒTƒCƒY–¢’è
+    header.subchunk2Size = 0; // ã‚µã‚¤ã‚ºæœªå®š
 
     process->write(MemoryChunk((uint8_t*)&header, sizeof(header)));
 
     int audioSamplesPerFrame = 1024;
-    // waveLength‚Íƒ[ƒ‚Ì‚±‚Æ‚à‚ ‚é‚Ì‚Å’ˆÓ
+    // waveLengthã¯ã‚¼ãƒ­ã®ã“ã¨ã‚‚ã‚ã‚‹ã®ã§æ³¨æ„
     for (int i = 0; i < (int)audioFrames.size(); ++i) {
         if (audioFrames[i].waveLength != 0) {
-            audioSamplesPerFrame = audioFrames[i].waveLength / 4; // 16bitƒXƒeƒŒƒI‘O’ñ
+            audioSamplesPerFrame = audioFrames[i].waveLength / 4; // 16bitã‚¹ãƒ†ãƒ¬ã‚ªå‰æ
             break;
         }
     }
@@ -64,11 +64,11 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
 
     for (size_t i = 0; i < audioFrames.size(); ++i) {
         if (audioFrames[i].waveLength != 0) {
-            // wave‚ª‚ ‚é‚È‚ç“Ç‚Ş
+            // waveãŒã‚ã‚‹ãªã‚‰èª­ã‚€
             srcFile.seek(audioFrames[i].waveOffset, SEEK_SET);
             srcFile.read(mc);
         } else {
-            // ‚È‚¢ê‡‚Íƒ[ƒ–„‚ß‚·‚é
+            // ãªã„å ´åˆã¯ã‚¼ãƒ­åŸ‹ã‚ã™ã‚‹
             memset(mc.data, 0x00, mc.length);
         }
         process->write(mc);
@@ -77,12 +77,12 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     process->finishWrite();
     int ret = process->join();
     if (ret != 0) {
-        ctx.error("««««««‰¹ºƒGƒ“ƒR[ƒ_ÅŒã‚Ìo—Í««««««");
+        ctx.error("â†“â†“â†“â†“â†“â†“éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€æœ€å¾Œã®å‡ºåŠ›â†“â†“â†“â†“â†“â†“");
         for (auto v : process->getLastLines()) {
             v.push_back(0); // null terminate
             ctx.errorF("%s", v.data());
         }
-        ctx.error("ªªªªªª‰¹ºƒGƒ“ƒR[ƒ_ÅŒã‚Ìo—Íªªªªªª");
-        THROWF(RuntimeException, "‰¹ºƒGƒ“ƒR[ƒ_I—¹ƒR[ƒh: 0x%x", ret);
+        ctx.error("â†‘â†‘â†‘â†‘â†‘â†‘éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€æœ€å¾Œã®å‡ºåŠ›â†‘â†‘â†‘â†‘â†‘â†‘");
+        THROWF(RuntimeException, "éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€çµ‚äº†ã‚³ãƒ¼ãƒ‰: 0x%x", ret);
     }
 }

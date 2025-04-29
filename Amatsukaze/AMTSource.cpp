@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,7 +7,8 @@
 */
 
 #include "AMTSource.h"
-
+#include <string>
+#include <cstdint>
 
 namespace av {
 
@@ -20,6 +21,8 @@ const AVCodec* AMTSource::getHWAccelCodec(AVCodecID vcodecId) {
             return avcodec_find_decoder_by_name("mpeg2_qsv");
         case DECODER_CUVID:
             return avcodec_find_decoder_by_name("mpeg2_cuvid");
+        default:
+            break;
         }
         break;
     case AV_CODEC_ID_H264:
@@ -28,6 +31,8 @@ const AVCodec* AMTSource::getHWAccelCodec(AVCodecID vcodecId) {
             return avcodec_find_decoder_by_name("h264_qsv");
         case DECODER_CUVID:
             return avcodec_find_decoder_by_name("h264_cuvid");
+        default:
+            break;
         }
         break;
     case AV_CODEC_ID_HEVC:
@@ -36,7 +41,11 @@ const AVCodec* AMTSource::getHWAccelCodec(AVCodecID vcodecId) {
             return avcodec_find_decoder_by_name("hevc_qsv");
         case DECODER_CUVID:
             return avcodec_find_decoder_by_name("hevc_cuvid");
+        default:
+            break;
         }
+        break;
+    default:
         break;
     }
     return avcodec_find_decoder(vcodecId);
@@ -46,7 +55,7 @@ void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
     const AVCodec *pCodec = getHWAccelCodec(vcodecId);
     if (pCodec == NULL) {
-        ctx.warn("w’è‚³‚ê‚½ƒfƒR[ƒ_‚ªg—p‚Å‚«‚È‚¢‚½‚ßƒfƒtƒHƒ‹ƒgƒfƒR[ƒ_‚ğg‚¢‚Ü‚·");
+        ctx.warn("æŒ‡å®šã•ã‚ŒãŸãƒ‡ã‚³ãƒ¼ãƒ€ãŒä½¿ç”¨ã§ããªã„ãŸã‚ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ä½¿ã„ã¾ã™");
         pCodec = avcodec_find_decoder(vcodecId);
     }
     if (pCodec == NULL) {
@@ -155,10 +164,10 @@ void AMTSource::MakeVideoInfo(const VideoFormat& vfmt, const AudioFormat& afmt) 
 
     if (audioFrames.size() > 0) {
         audioSamplesPerFrame = 1024;
-        // waveLength‚Íƒ[ƒ‚Ì‚±‚Æ‚à‚ ‚é‚Ì‚Å’ˆÓ
+        // waveLengthã¯ã‚¼ãƒ­ã®ã“ã¨ã‚‚ã‚ã‚‹ã®ã§æ³¨æ„
         for (int i = 0; i < (int)audioFrames.size(); ++i) {
             if (audioFrames[i].waveLength != 0) {
-                audioSamplesPerFrame = audioFrames[i].waveLength / 4; // 16bitƒXƒeƒŒƒI‘O’ñ
+                audioSamplesPerFrame = audioFrames[i].waveLength / 4; // 16bitã‚¹ãƒ†ãƒ¬ã‚ªå‰æ
                 break;
             }
         }
@@ -175,14 +184,14 @@ void AMTSource::MakeVideoInfo(const VideoFormat& vfmt, const AudioFormat& afmt) 
 }
 
 void AMTSource::UpdateVideoInfo(IScriptEnvironment* env) {
-    // ƒrƒbƒg[“x‚Íæ“¾‚µ‚Ä‚È‚¢‚Ì‚Åffmpeg‚©‚çæ“¾‚·‚é
+    // ãƒ“ãƒƒãƒˆæ·±åº¦ã¯å–å¾—ã—ã¦ãªã„ã®ã§ffmpegã‹ã‚‰å–å¾—ã™ã‚‹
     const auto streamPixFmt = (AVPixelFormat)videoStream->codecpar->format;
     const auto codecPixFmt = codecCtx()->pix_fmt;
     const int streamBitDepth = (streamPixFmt == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(streamPixFmt)->comp[0].depth;
     const int codecBitDepth = (codecPixFmt == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(codecPixFmt)->comp[0].depth;
     if (streamBitDepth > 8 && codecBitDepth > 8 && streamBitDepth < codecBitDepth) {
-        // hwƒfƒR[ƒh‚Ìê‡A10bit‚Å‚àP010‚Å•Ô‚³‚ê‚é‚±‚Æ‚ª‚ ‚é
-        // ‚à‚Æ‚Ìƒrƒbƒg[“x‚ğÌ—p‚·‚é‚½‚ßAstreamPixFmt‚ğg—p‚·‚é
+        // hwãƒ‡ã‚³ãƒ¼ãƒ‰ã®å ´åˆã€10bitã§ã‚‚P010ã§è¿”ã•ã‚Œã‚‹ã“ã¨ãŒã‚ã‚‹
+        // ã‚‚ã¨ã®ãƒ“ãƒƒãƒˆæ·±åº¦ã‚’æ¡ç”¨ã™ã‚‹ãŸã‚ã€streamPixFmtã‚’ä½¿ç”¨ã™ã‚‹
         vi.pixel_type = toAVSFormat(streamPixFmt, env);
         convertPix = ConvertPixFuncs(streamBitDepth, codecBitDepth);
     } else {
@@ -191,7 +200,7 @@ void AMTSource::UpdateVideoInfo(IScriptEnvironment* env) {
 
 #if ENABLE_FFMPEG_FILTER
     if (bufferSinkCtx) {
-        // ƒtƒBƒ‹ƒ^‚ª‚ ‚ê‚ÎƒtƒBƒ‹ƒ^‚Ìo—Í‚ÉXV
+        // ãƒ•ã‚£ãƒ«ã‚¿ãŒã‚ã‚Œã°ãƒ•ã‚£ãƒ«ã‚¿ã®å‡ºåŠ›ã«æ›´æ–°
         const AVFilterLink* outlink = bufferSinkCtx->inputs[0];
         vi.pixel_type = toAVSFormat((AVPixelFormat)outlink->format, env);
 
@@ -225,11 +234,14 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
         MergeField<uint8_t>(ret, top, bottom, AVSFormatBitdepth(vi.pixel_type), srcBitDepth, env);
     }
 
-    // ƒtƒŒ[ƒ€ƒ^ƒCƒv
+    // Linuxã§ã¯AvisynthPlusã‚’ä½¿ã†ã®ã§è¨­å®šã§ããªãã†?
+#if defined(_WIN32) || defined(_WIN64)
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ã‚¿ã‚¤ãƒ—
     ret->SetProperty("FrameType", top->pict_type);
+#endif
 
 #ifndef AMATSUKAZE2DLL
-    // QPƒe[ƒuƒ‹
+    // QPãƒ†ãƒ¼ãƒ–ãƒ«
     if (outputQP) {
         int qp_stride, qp_scale_type;
         const int8_t* qp_table = av_frame_get_qp_table(top, &qp_stride, &qp_scale_type);
@@ -276,7 +288,7 @@ void AMTSource::PutFrame(int n, const PVideoFrame& frame) {
     recentAccessed.push_front(pcache);
 
     if ((int)recentAccessed.size() > seekDistance * 3 / 2) {
-        // ƒLƒƒƒbƒVƒ…‚©‚çˆì‚ê‚½‚çíœ
+        // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‹ã‚‰æº¢ã‚ŒãŸã‚‰å‰Šé™¤
         CacheFrame* pdel = recentAccessed.back();
         frameCache.erase(pdel->key);
         recentAccessed.pop_back();
@@ -285,7 +297,7 @@ void AMTSource::PutFrame(int n, const PVideoFrame& frame) {
 }
 
 int AMTSource::AVSFormatBitdepth(const int avsformat) {
-    // ƒrƒbƒg[“xæ“¾
+    // ãƒ“ãƒƒãƒˆæ·±åº¦å–å¾—
     switch (avsformat) {
     case VideoInfo::CS_YUV420P12: return 12;
     case VideoInfo::CS_YUV420P10: return 10;
@@ -296,7 +308,7 @@ int AMTSource::AVSFormatBitdepth(const int avsformat) {
 }
 
 int AMTSource::toAVSFormat(AVPixelFormat format, IScriptEnvironment* env) {
-    // ƒrƒbƒg[“xæ“¾
+    // ãƒ“ãƒƒãƒˆæ·±åº¦å–å¾—
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(format);
     switch (desc->comp[0].depth) {
     case 8:
@@ -306,7 +318,7 @@ int AMTSource::toAVSFormat(AVPixelFormat format, IScriptEnvironment* env) {
     case 12:
         return VideoInfo::CS_YUV420P12;
     }
-    env->ThrowError("‘Î‰‚µ‚Ä‚¢‚È‚¢ƒrƒbƒg[“x‚Å‚·");
+    env->ThrowError("å¯¾å¿œã—ã¦ã„ãªã„ãƒ“ãƒƒãƒˆæ·±åº¦ã§ã™");
     return 0;
 }
 
@@ -322,7 +334,7 @@ void AMTSource::InputFrameFilter(Frame* frame, bool enableOut, IScriptEnvironmen
         Frame filtered;
         int ret = av_buffersink_get_frame(bufferSinkCtx, filtered());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            // ‚à‚Á‚Æ“ü—Í‚ª•K—v or ‚à‚¤ƒtƒŒ[ƒ€‚ª‚È‚¢
+            // ã‚‚ã£ã¨å…¥åŠ›ãŒå¿…è¦ or ã‚‚ã†ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãªã„
             break;
         }
         if (ret < 0) {
@@ -336,7 +348,7 @@ void AMTSource::InputFrameFilter(Frame* frame, bool enableOut, IScriptEnvironmen
 
 void AMTSource::OnFrameDecoded(Frame& frame, IScriptEnvironment* env) {
     if (bufferSrcCtx) {
-        // ƒtƒBƒ‹ƒ^ˆ—
+        // ãƒ•ã‚£ãƒ«ã‚¿å‡¦ç†
         //frame()->pts = frame()->best_effort_timestamp;
         InputFrameFilter(&frame, true, env);
     } else {
@@ -346,8 +358,8 @@ void AMTSource::OnFrameDecoded(Frame& frame, IScriptEnvironment* env) {
 #endif
 
 void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
-    // ffmpeg‚Ìpts wrap‚Ìd•û‚ª“ä‚È‚Ì‚Å‰ºˆÊ33bit‚Ì‚İ‚ğŒ©‚é
-    //i26ŠÔˆÈã‚ ‚é“®‰æ‚¾‚Æd•¡‚·‚é‰Â”\«‚Í‚ ‚é‚ª–³‹j
+    // ffmpegã®pts wrapã®ä»•æ–¹ãŒè¬ãªã®ã§ä¸‹ä½33bitã®ã¿ã‚’è¦‹ã‚‹
+    //ï¼ˆ26æ™‚é–“ä»¥ä¸Šã‚ã‚‹å‹•ç”»ã ã¨é‡è¤‡ã™ã‚‹å¯èƒ½æ€§ã¯ã‚ã‚‹ãŒç„¡è¦–ï¼‰
     int64_t pts = frame()->pts & ((int64_t(1) << 33) - 1);
 
     int64_t headDiff = 0, tailDiff = 0;
@@ -357,7 +369,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
 
     if (it == frames.begin() && pts < it->framePTS) {
         headDiff = it->framePTS - pts;
-        // ¬‚³‚·‚¬‚½ê‡‚Í1ü•ª’Ç‰Á‚µ‚ÄŒ©‚é
+        // å°ã•ã™ããŸå ´åˆã¯1å‘¨åˆ†è¿½åŠ ã—ã¦è¦‹ã‚‹
         pts += (int64_t(1) << 33);
         it = std::lower_bound(frames.begin(), frames.end(), pts, [](const FilterSourceFrame& e, int64_t pts) {
             return e.framePTS < pts;
@@ -365,21 +377,21 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
     }
 
     if (it == frames.end()) {
-        // ÅŒã‚æ‚èŒã‚ë‚¾‚Á‚½
+        // æœ€å¾Œã‚ˆã‚Šå¾Œã‚ã ã£ãŸ
         tailDiff = pts - frames.back().framePTS;
-        // ‘O‚Ì‰Â”\«‚à‚ ‚é‚Ì‚ÅA”»’è
+        // å‰ã®å¯èƒ½æ€§ã‚‚ã‚ã‚‹ã®ã§ã€åˆ¤å®š
         if (headDiff == 0 || headDiff > tailDiff) {
             lastDecodeFrame = vi.num_frames;
         }
-        prevFrame = nullptr; // ˜A‘±‚Å‚È‚­‚È‚éê‡‚ÍnullƒŠƒZƒbƒg
+        prevFrame = nullptr; // é€£ç¶šã§ãªããªã‚‹å ´åˆã¯nullãƒªã‚»ãƒƒãƒˆ
         return;
     }
 
     if (it->framePTS != pts) {
-        // ˆê’v‚·‚éƒtƒŒ[ƒ€‚ª‚È‚¢
+        // ä¸€è‡´ã™ã‚‹ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãªã„
         ctx.incrementCounter(AMT_ERR_UNKNOWN_PTS);
         ctx.warnF("Unknown PTS frame %lld", pts);
-        prevFrame = nullptr; // ˜A‘±‚Å‚È‚­‚È‚éê‡‚ÍnullƒŠƒZƒbƒg
+        prevFrame = nullptr; // é€£ç¶šã§ãªããªã‚‹å ´åˆã¯nullãƒªã‚»ãƒƒãƒˆ
         return;
     }
 
@@ -387,24 +399,24 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
     auto cacheit = frameCache.find(frameIndex);
 
     if (it->halfDelay) {
-        // ƒfƒBƒŒƒC‚ğ“K—p‚³‚¹‚é
+        // ãƒ‡ã‚£ãƒ¬ã‚¤ã‚’é©ç”¨ã•ã›ã‚‹
         if (cacheit != frameCache.end()) {
-            // ‚·‚Å‚ÉƒLƒƒƒbƒVƒ…‚É‚ ‚é
+            // ã™ã§ã«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã«ã‚ã‚‹
             UpdateAccessed(cacheit->second);
             lastDecodeFrame = frameIndex;
         } else if (prevFrame != nullptr) {
             PutFrame(frameIndex, MakeFrame((*prevFrame)(), frame(), env));
             lastDecodeFrame = frameIndex;
         } else {
-            // ’¼‘O‚ÌƒtƒŒ[ƒ€‚ª‚È‚¢‚Ì‚ÅƒtƒŒ[ƒ€‚ğì‚ê‚È‚¢
+            // ç›´å‰ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãªã„ã®ã§ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ä½œã‚Œãªã„
         }
 
-        // Ÿ‚ÌƒtƒŒ[ƒ€‚à“¯‚¶ƒtƒŒ[ƒ€‚ğQÆ‚µ‚Ä‚½‚ç‚»‚ê‚ào—Í
+        // æ¬¡ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚‚åŒã˜ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å‚ç…§ã—ã¦ãŸã‚‰ãã‚Œã‚‚å‡ºåŠ›
         auto next = it + 1;
         if (next != frames.end() && next->framePTS == it->framePTS) {
             auto cachenext = frameCache.find(frameIndex + 1);
             if (cachenext != frameCache.end()) {
-                // ‚·‚Å‚ÉƒLƒƒƒbƒVƒ…‚É‚ ‚é
+                // ã™ã§ã«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã«ã‚ã‚‹
                 UpdateAccessed(cachenext->second);
             } else {
                 PutFrame(frameIndex + 1, MakeFrame(frame(), frame(), env));
@@ -412,9 +424,9 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
             lastDecodeFrame = frameIndex + 1;
         }
     } else {
-        // ‚»‚Ì‚Ü‚Ü
+        // ãã®ã¾ã¾
         if (cacheit != frameCache.end()) {
-            // ‚·‚Å‚ÉƒLƒƒƒbƒVƒ…‚É‚ ‚é
+            // ã™ã§ã«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã«ã‚ã‚‹
             UpdateAccessed(cacheit->second);
         } else {
             PutFrame(frameIndex, MakeFrame(frame(), frame(), env));
@@ -426,7 +438,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
 }
 
 void AMTSource::UpdateAccessed(CacheFrame* frame) {
-    // recentAccessed ‚Éframe‚ª‚ ‚ê‚Îæ“ª‚ÉˆÚ“®
+    // recentAccessed ã«frameãŒã‚ã‚Œã°å…ˆé ­ã«ç§»å‹•
     auto target = std::find(recentAccessed.begin(), recentAccessed.end(), frame);
     if (target != recentAccessed.end()) {
         recentAccessed.erase(target);
@@ -450,39 +462,39 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
     Frame frame;
     AVPacket packet = AVPacket();
 
-    // CUVID‚Ípic_type‚ª“KØ‚ÉƒZƒbƒg‚³‚ê‚È‚¢‚Ì‚ÅƒL[ƒtƒŒ[ƒ€‚©‚Ç‚¤‚©‚ª•ª‚©‚ç‚È‚¢
-    // FFmpeg‚ÍQÆƒtƒŒ[ƒ€‚ªŒ‡”@‚µ‚Ä‚¢‚Ä‚àƒtƒŒ[ƒ€‚ğ•Ô‚µ‚Ä‚µ‚Ü‚¤‚Ì‚Å
-    // ƒV[ƒNŒã‚ÌÅ‰‚ÌƒtƒŒ[ƒ€‚ªŒ‡‘¹‚ğŠÜ‚Ş‰Â”\«‚ª‚ ‚é
-    // ‚±‚ê‚ÍFFmpeg‚ª‚»‚ÌŒ‡”@‚µ‚½QÆƒtƒŒ[ƒ€‚ªƒpƒPƒbƒgƒƒX‚É‚æ‚é‚à‚Ì‚È‚Ì‚©
-    // ƒV[ƒN‚É‚æ‚é‚à‚Ì‚È‚Ì‚©‚Ì‹æ•Ê‚ª‚Å‚«‚È‚¢‚½‚ßAd•û‚È‚¢‚Ì‚¾‚ªA
-    // ƒV[ƒN‚É‚æ‚é‚à‚Ì‚Ìê‡‚ÍA–{—ˆ‚ÍƒfƒR[ƒh‚Å‚«‚½‚Í‚¸‚ÌƒtƒŒ[ƒ€‚È‚Ì‚ÅA
-    // ‚»‚ÌŒ‡‘¹‚ğŠÜ‚ŞƒtƒŒ[ƒ€‚ğ•Ô‚µ‚Ä‚µ‚Ü‚¤‚Ì‚Í–â‘è
-    // pic_type‚ª“KØ‚ÉƒZƒbƒg‚³‚ê‚éƒfƒR[ƒ_‚Ìê‡‚ÍA
-    // uIƒtƒŒ[ƒ€‚©‚ç‚ª—LŒø‚ÈƒtƒŒ[ƒ€v‚Æ”»’è‚·‚ê‚Î—Ç‚©‚Á‚½‚ª
-    // pic_type‚ª“KØ‚ÉƒZƒbƒg‚³‚ê‚È‚¢ƒfƒR[ƒ_‚Ìê‡‚ÍA
-    // ©•ª‚ÅIƒtƒŒ[ƒ€‚©‚Ç‚¤‚©”»’è‚·‚é•K—v‚ª‚ ‚é
-    // packet‚©‚çƒL[ƒtƒŒ[ƒ€‚ÌPTS‚ğæ“¾‚µ‚Ä
-    // ƒfƒR[ƒh‚µ‚½ƒtƒŒ[ƒ€‚ª‚»‚ÌPTS‚È‚çƒL[ƒtƒŒ[ƒ€‚Æ”»’f‚·‚é
+    // CUVIDã¯pic_typeãŒé©åˆ‡ã«ã‚»ãƒƒãƒˆã•ã‚Œãªã„ã®ã§ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã©ã†ã‹ãŒåˆ†ã‹ã‚‰ãªã„
+    // FFmpegã¯å‚ç…§ãƒ•ãƒ¬ãƒ¼ãƒ ãŒæ¬ å¦‚ã—ã¦ã„ã¦ã‚‚ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¿”ã—ã¦ã—ã¾ã†ã®ã§
+    // ã‚·ãƒ¼ã‚¯å¾Œã®æœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒæ¬ æã‚’å«ã‚€å¯èƒ½æ€§ãŒã‚ã‚‹
+    // ã“ã‚Œã¯FFmpegãŒãã®æ¬ å¦‚ã—ãŸå‚ç…§ãƒ•ãƒ¬ãƒ¼ãƒ ãŒãƒ‘ã‚±ãƒƒãƒˆãƒ­ã‚¹ã«ã‚ˆã‚‹ã‚‚ã®ãªã®ã‹
+    // ã‚·ãƒ¼ã‚¯ã«ã‚ˆã‚‹ã‚‚ã®ãªã®ã‹ã®åŒºåˆ¥ãŒã§ããªã„ãŸã‚ã€ä»•æ–¹ãªã„ã®ã ãŒã€
+    // ã‚·ãƒ¼ã‚¯ã«ã‚ˆã‚‹ã‚‚ã®ã®å ´åˆã¯ã€æœ¬æ¥ã¯ãƒ‡ã‚³ãƒ¼ãƒ‰ã§ããŸã¯ãšã®ãƒ•ãƒ¬ãƒ¼ãƒ ãªã®ã§ã€
+    // ãã®æ¬ æã‚’å«ã‚€ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¿”ã—ã¦ã—ã¾ã†ã®ã¯å•é¡Œ
+    // pic_typeãŒé©åˆ‡ã«ã‚»ãƒƒãƒˆã•ã‚Œã‚‹ãƒ‡ã‚³ãƒ¼ãƒ€ã®å ´åˆã¯ã€
+    // ã€ŒIãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã‚‰ãŒæœ‰åŠ¹ãªãƒ•ãƒ¬ãƒ¼ãƒ ã€ã¨åˆ¤å®šã™ã‚Œã°è‰¯ã‹ã£ãŸãŒ
+    // pic_typeãŒé©åˆ‡ã«ã‚»ãƒƒãƒˆã•ã‚Œãªã„ãƒ‡ã‚³ãƒ¼ãƒ€ã®å ´åˆã¯ã€
+    // è‡ªåˆ†ã§Iãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã©ã†ã‹åˆ¤å®šã™ã‚‹å¿…è¦ãŒã‚ã‚‹
+    // packetã‹ã‚‰ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã®PTSã‚’å–å¾—ã—ã¦
+    // ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ãŸãƒ•ãƒ¬ãƒ¼ãƒ ãŒãã®PTSãªã‚‰ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã¨åˆ¤æ–­ã™ã‚‹
     int64_t keyFramePTS = -1;
     auto isFrameReady = [&]() {
-        // ƒV[ƒNŒãÅ‰‚ÌƒtƒŒ[ƒ€‚Å‚È‚¢‚È‚çOK
+        // ã‚·ãƒ¼ã‚¯å¾Œæœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ã§ãªã„ãªã‚‰OK
         if (lastDecodeFrame != -1) return true;
-        // ƒL[ƒtƒŒ[ƒ€‚È‚çOK
+        // ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ãªã‚‰OK
 #ifdef AMATSUKAZE2DLL
         if (frame()->flags & AV_FRAME_FLAG_KEY) return true;
 #else
         if (frame()->key_frame) return true;
 #endif
-        // ƒ^ƒCƒ€ƒXƒ^ƒ“ƒv‚ªƒL[ƒtƒŒ[ƒ€‚Ì‚à‚Ì‚È‚çƒL[ƒtƒŒ[ƒ€‚Æ”»’f
+        // ã‚¿ã‚¤ãƒ ã‚¹ã‚¿ãƒ³ãƒ—ãŒã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã®ã‚‚ã®ãªã‚‰ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã¨åˆ¤æ–­
         if (keyFramePTS != -1 && keyFramePTS == frame()->pts) return true;
-        // ‚Ü‚¾ƒL[ƒtƒŒ[ƒ€‚Å‚È‚¢‚Ì‚ÅAŒ‡‘¹‚ğŠÜ‚Ş‰Â”\«‚ª‚ ‚é
+        // ã¾ã ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã§ãªã„ã®ã§ã€æ¬ æã‚’å«ã‚€å¯èƒ½æ€§ãŒã‚ã‚‹
         return false;
         };
 
     while (av_read_frame(inputCtx(), &packet) == 0) {
         if (packet.stream_index == videoStream->index) {
             if ((packet.flags & AV_PKT_FLAG_KEY) && keyFramePTS == -1) {
-                // Å‰‚ÌƒL[ƒtƒŒ[ƒ€‚ÌPTS‚ğŠo‚¦‚Ä‚¨‚­
+                // æœ€åˆã®ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã®PTSã‚’è¦šãˆã¦ãŠã
                 keyFramePTS = packet.pts;
             }
             if (avcodec_send_packet(codecCtx(), &packet) != 0) {
@@ -490,7 +502,7 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
                 ctx.warn("avcodec_send_packet failed");
             }
             while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
-                // Å‰‚ÍƒL[ƒtƒŒ[ƒ€‚Ü‚ÅƒXƒLƒbƒv
+                // æœ€åˆã¯ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã¾ã§ã‚¹ã‚­ãƒƒãƒ—
                 if (isFrameReady()) {
 #if ENABLE_FFMPEG_FILTER
                     OnFrameDecoded(frame, env);
@@ -507,7 +519,7 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
     }
 #if ENABLE_FFMPEG_FILTER
     if (bufferSrcCtx) {
-        // ƒXƒgƒŠ[ƒ€‚Í‘S‚Ä“Ç‚İæ‚Á‚½‚Ì‚ÅƒtƒBƒ‹ƒ^‚ğflush
+        // ã‚¹ãƒˆãƒªãƒ¼ãƒ ã¯å…¨ã¦èª­ã¿å–ã£ãŸã®ã§ãƒ•ã‚£ãƒ«ã‚¿ã‚’flush
         InputFrameFilter(nullptr, true, env);
     }
 #endif
@@ -517,9 +529,9 @@ void AMTSource::registerFailedFrames(int begin, int end, int replace, IScriptEnv
     for (int f = begin; f < end; ++f) {
         failedMap[f] = replace;
     }
-    // ƒfƒR[ƒh•s‰ÂƒtƒŒ[ƒ€”‚ª‚PŠ„‚ğ’´‚¦‚éê‡‚ÍƒGƒ‰[‚Æ‚·‚é
+    // ãƒ‡ã‚³ãƒ¼ãƒ‰ä¸å¯ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ãŒï¼‘å‰²ã‚’è¶…ãˆã‚‹å ´åˆã¯ã‚¨ãƒ©ãƒ¼ã¨ã™ã‚‹
     if (failedMap.size() * 10 > frames.size()) {
-        env->ThrowError("[AMTSource] ƒfƒR[ƒh‚Å‚«‚È‚¢ƒtƒŒ[ƒ€”‚ª‘½‚·‚¬‚Ü‚· -> %dƒtƒŒ[ƒ€‚ªƒfƒR[ƒh•s‰Â",
+        env->ThrowError("[AMTSource] ãƒ‡ã‚³ãƒ¼ãƒ‰ã§ããªã„ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ãŒå¤šã™ãã¾ã™ -> %dãƒ•ãƒ¬ãƒ¼ãƒ ãŒãƒ‡ã‚³ãƒ¼ãƒ‰ä¸å¯",
             (int)failedMap.size());
     }
 }
@@ -579,13 +591,13 @@ AMTSource::AMTSource(AMTContext& ctx,
         env->ThrowError("Could not find video stream ...");
     }
 
-    // ‰Šú‰»
+    // åˆæœŸåŒ–
     ResetDecoder(env);
     UpdateVideoInfo(env);
 }
 
 AMTSource::~AMTSource() {
-    // ƒLƒƒƒbƒVƒ…‚ğíœ
+    // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚’å‰Šé™¤
     while (recentAccessed.size() > 0) {
         CacheFrame* pdel = recentAccessed.back();
         frameCache.erase(pdel->key);
@@ -601,24 +613,24 @@ void AMTSource::TransferStreamInfo(std::unique_ptr<AMTSourceData>&& streamInfo) 
 PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
     std::lock_guard<std::mutex> guard(mutex);
 
-    // ƒLƒƒƒbƒVƒ…‚É‚ ‚ê‚Î•Ô‚·
+    // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã«ã‚ã‚Œã°è¿”ã™
     auto it = frameCache.find(n);
     if (it != frameCache.end()) {
         UpdateAccessed(it->second);
         return it->second->data;
     }
 
-    // ƒfƒR[ƒh‚Å‚«‚È‚¢ƒtƒŒ[ƒ€‚Í’uŠ·ƒtƒŒ[ƒ€‚É’u‚«Š·‚¦‚é
+    // ãƒ‡ã‚³ãƒ¼ãƒ‰ã§ããªã„ãƒ•ãƒ¬ãƒ¼ãƒ ã¯ç½®æ›ãƒ•ãƒ¬ãƒ¼ãƒ ã«ç½®ãæ›ãˆã‚‹
     if (failedMap.find(n) != failedMap.end()) {
         n = failedMap[n];
     }
 
-    // ƒLƒƒƒbƒVƒ…‚É‚È‚¢‚Ì‚ÅƒfƒR[ƒh‚·‚é
+    // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã«ãªã„ã®ã§ãƒ‡ã‚³ãƒ¼ãƒ‰ã™ã‚‹
     if (lastDecodeFrame != -1 && n > lastDecodeFrame && n < lastDecodeFrame + seekDistance) {
-        // ‘O‚É‚·‚·‚ß‚é
+        // å‰ã«ã™ã™ã‚ã‚‹
         DecodeLoop(n, env);
     } else {
-        // ƒV[ƒN‚µ‚ÄƒfƒR[ƒh‚·‚é
+        // ã‚·ãƒ¼ã‚¯ã—ã¦ãƒ‡ã‚³ãƒ¼ãƒ‰ã™ã‚‹
         int keyNum = frames[n].keyFrame;
         for (int i = 0; ; ++i) {
             int64_t fileOffset = frames[keyNum].fileOffset / 188 * 188;
@@ -628,25 +640,25 @@ PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
             ResetDecoder(env);
             DecodeLoop(n, env);
             if (frameCache.find(n) != frameCache.end()) {
-                // ƒfƒR[ƒh¬Œ÷
+                // ãƒ‡ã‚³ãƒ¼ãƒ‰æˆåŠŸ
                 seekDistance = std::max(seekDistance, n - keyNum);
                 break;
             }
             if (keyNum <= 0) {
-                // ‚±‚êˆÈã–ß‚ê‚È‚¢
-                // n‚©‚çlastDecodeFrame‚Ü‚Å‚ğƒfƒR[ƒh•s‰Â‚Æ‚·‚é
+                // ã“ã‚Œä»¥ä¸Šæˆ»ã‚Œãªã„
+                // nã‹ã‚‰lastDecodeFrameã¾ã§ã‚’ãƒ‡ã‚³ãƒ¼ãƒ‰ä¸å¯ã¨ã™ã‚‹
                 registerFailedFrames(n, lastDecodeFrame, lastDecodeFrame, env);
                 break;
             }
             if (lastDecodeFrame >= 0 && lastDecodeFrame < n) {
-                // ƒf[ƒ^‚ª‘«‚è‚È‚­‚ÄƒS[ƒ‹‚É“’B‚Å‚«‚È‚©‚Á‚½
-                // ‚±‚ÌƒtƒŒ[ƒ€‚æ‚èŒã‚ë‚Í‘S‚ÄƒfƒR[ƒh•s‰Â‚Æ‚·‚é
+                // ãƒ‡ãƒ¼ã‚¿ãŒè¶³ã‚Šãªãã¦ã‚´ãƒ¼ãƒ«ã«åˆ°é”ã§ããªã‹ã£ãŸ
+                // ã“ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚ˆã‚Šå¾Œã‚ã¯å…¨ã¦ãƒ‡ã‚³ãƒ¼ãƒ‰ä¸å¯ã¨ã™ã‚‹
                 registerFailedFrames(lastDecodeFrame + 1, (int)frames.size(), lastDecodeFrame, env);
                 break;
             }
             if (i == 2) {
-                // ƒfƒR[ƒh¸”s
-                // n‚©‚çlastDecodeFrame‚Ü‚Å‚ğƒfƒR[ƒh•s‰Â‚Æ‚·‚é
+                // ãƒ‡ã‚³ãƒ¼ãƒ‰å¤±æ•—
+                // nã‹ã‚‰lastDecodeFrameã¾ã§ã‚’ãƒ‡ã‚³ãƒ¼ãƒ‰ä¸å¯ã¨ã™ã‚‹
                 registerFailedFrames(n, lastDecodeFrame, lastDecodeFrame, env);
                 break;
             }
@@ -657,28 +669,28 @@ PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
     return ForceGetFrame(n, env);
 }
 
-void __stdcall AMTSource::GetAudio(void* buf, __int64 start, __int64 count, IScriptEnvironment* env) {
+void __stdcall AMTSource::GetAudio(void* buf, int64_t start, int64_t count, IScriptEnvironment* env) {
     std::lock_guard<std::mutex> guard(mutex);
 
     if (audioFrames.size() == 0) return;
 
-    const int sampleBytes = 4; // 16bitƒXƒeƒŒƒI‘O’ñ
+    const int sampleBytes = 4; // 16bitã‚¹ãƒ†ãƒ¬ã‚ªå‰æ
     int frameWaveLength = audioSamplesPerFrame * sampleBytes;
     uint8_t* ptr = (uint8_t*)buf;
-    for (__int64 frameIndex = start / audioSamplesPerFrame, frameOffset = start % audioSamplesPerFrame;
-        count > 0 && frameIndex < (__int64)audioFrames.size();
+    for (int64_t frameIndex = start / audioSamplesPerFrame, frameOffset = start % audioSamplesPerFrame;
+        count > 0 && frameIndex < (int64_t)audioFrames.size();
         ++frameIndex, frameOffset = 0) {
-        // ‚±‚ÌƒtƒŒ[ƒ€‚Å–„‚ß‚é‚×‚«ƒoƒCƒg”
+        // ã“ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã§åŸ‹ã‚ã‚‹ã¹ããƒã‚¤ãƒˆæ•°
         int readBytes = std::min<int>(
             (int)(frameWaveLength - frameOffset * sampleBytes),
             (int)count * sampleBytes);
 
         if (audioFrames[(size_t)frameIndex].waveLength != 0) {
-            // wave‚ª‚ ‚é‚È‚ç“Ç‚Ş
+            // waveãŒã‚ã‚‹ãªã‚‰èª­ã‚€
             waveFile.seek(audioFrames[(size_t)frameIndex].waveOffset + frameOffset * sampleBytes, SEEK_SET);
             waveFile.read(MemoryChunk(ptr, readBytes));
         } else {
-            // ‚È‚¢ê‡‚Íƒ[ƒ–„‚ß‚·‚é
+            // ãªã„å ´åˆã¯ã‚¼ãƒ­åŸ‹ã‚ã™ã‚‹
             memset(ptr, 0x00, readBytes);
         }
 
@@ -686,7 +698,7 @@ void __stdcall AMTSource::GetAudio(void* buf, __int64 start, __int64 count, IScr
         count -= readBytes / sampleBytes;
     }
     if (count > 0) {
-        // ƒtƒ@ƒCƒ‹‚ÌI‚í‚è‚Ü‚Å“’B‚µ‚½‚çc‚è‚Íƒ[ƒ‚Å–„‚ß‚é
+        // ãƒ•ã‚¡ã‚¤ãƒ«ã®çµ‚ã‚ã‚Šã¾ã§åˆ°é”ã—ãŸã‚‰æ®‹ã‚Šã¯ã‚¼ãƒ­ã§åŸ‹ã‚ã‚‹
         memset(ptr, 0, (size_t)count * sampleBytes);
     }
 }
@@ -698,7 +710,7 @@ bool __stdcall AMTSource::GetParity(int n) {
 }
 
 int __stdcall AMTSource::SetCacheHints(int cachehints, int frame_range) {
-    // ’¼ÚƒCƒ“ƒXƒ^ƒ“ƒX‰»‚³‚ê‚éê‡AMTGuard‚ª“ü‚ç‚È‚¢‚Ì‚ÅMT_NICE_FILTERˆÈŠOƒ_ƒ
+    // ç›´æ¥ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹åŒ–ã•ã‚Œã‚‹å ´åˆã€MTGuardãŒå…¥ã‚‰ãªã„ã®ã§MT_NICE_FILTERä»¥å¤–ãƒ€ãƒ¡
     if (cachehints == CACHE_GET_MTMODE) return MT_NICE_FILTER;
     return 0;
 };
@@ -725,9 +737,9 @@ void SaveAMTSource(
 
 PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, int threads, IScriptEnvironment* env) {
     File file(loadpath, _T("rb"));
-    auto& srcpathv = file.readArray<tchar>();
+    auto srcpathv = file.readArray<tchar>();
     tstring srcpath(srcpathv.begin(), srcpathv.end());
-    auto& audiopathv = file.readArray<tchar>();
+    auto audiopathv = file.readArray<tchar>();
     tstring audiopath(audiopathv.begin(), audiopathv.end());
     VideoFormat vfmt = file.readValue<VideoFormat>();
     AudioFormat afmt = file.readValue<AudioFormat>();
@@ -745,7 +757,7 @@ AVSValue CreateAMTSource(AVSValue args, void* user_data, IScriptEnvironment* env
     if (g_ctx_for_plugin_filter == nullptr) {
         g_ctx_for_plugin_filter = new AMTContext();
     }
-    tstring filename = to_tstring(args[0].AsString());
+    tstring filename = char_to_tstring(args[0].AsString());
     const char* filterdesc = args[1].AsString("");
     const bool outputQP = args[2].AsBool(true);
     const int threads = args[3].AsInt(0);

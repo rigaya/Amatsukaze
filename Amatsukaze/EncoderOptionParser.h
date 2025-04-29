@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /**
 * Encoder Option Parser
@@ -14,7 +14,12 @@
 
 #include "StringUtils.h"
 #include "TranscodeSetting.h"
+#include "rgy_util.h"
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wsign-compare")
 #include "avisynth.h"
+#pragma comment(lib, "avisynth.lib")
+RGY_DISABLE_WARNING_POP
 
 enum ENUM_ENCODER_DEINT {
     ENCODER_DEINT_NONE,

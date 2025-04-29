@@ -1,23 +1,23 @@
-#pragma once
+﻿#pragma once
 
 /*
 * ARIB Caption
-* ���̃\�[�X�R�[�h��TVCaptionMod2��Caption.dll�̃R�[�h�𗬗p���Ă��܂��B
-* ���C�Z���X�̓I���W�i���ł̈ȉ����C�Z���X�ɏ]���܂��B
-------���p�J�n------
-��EpgDataCap_Bon�ATSEpgView_Sample�ANetworkRemocon�ACaption�ATSEpgViewServer��
-�\�[�X�̎�舵���ɂ���
-�@����GPL�Ƃ��ɂ͂��Ȃ��̂Ŏ��R�ɉ��ς��Ă�����č\��Ȃ��ł��B
-�@���ς��Č��J����ꍇ�͉��ϕ����̃\�[�X���炢�͈ꏏ�Ɍ��J���Ă��������B
-�@�i�����ł͂Ȃ��̂ŕʂɌ��J���Ȃ��Ă������ł��j
-�@EpgDataCap.dll�̎g�����̎Q�l�ɂ��Ă��炤�Ƃ��������B
+* このソースコードはTVCaptionMod2やCaption.dllのコードを流用しています。
+* ライセンスはオリジナル版の以下ライセンスに従います。
+------引用開始------
+●EpgDataCap_Bon、TSEpgView_Sample、NetworkRemocon、Caption、TSEpgViewServerの
+ソースの取り扱いについて
+　特にGPLとかにはしないので自由に改変してもらって構わないです。
+　改変して公開する場合は改変部分のソースぐらいは一緒に公開してください。
+　（強制ではないので別に公開しなくてもいいです）
+　EpgDataCap.dllの使い方の参考にしてもらうといいかも。
 
-��EpgDataCap.dll�ACaption.dll�̎�舵���ɂ���
-    �t���[�\�t�g�ɑg�ݍ��ޏꍇ�͓��ɐ����݂͐��܂���B�������Adll�̓I���W�i���̂܂�
-    �g�ݍ���ł��������B
-    ����dll���g�p�������Ƃɂ���Ĕ����������ɂ��ĕۏ؂͈�؍s���܂���B
-�@���p�A�V�F�A�E�F�A�Ȃǂɑg�ݍ��ނ͕̂s�ł��B
-------���p�I��------
+●EpgDataCap.dll、Caption.dllの取り扱いについて
+    フリーソフトに組み込む場合は特に制限は設けません。ただし、dllはオリジナルのまま
+    組み込んでください。
+    このdllを使用したことによって発生した問題について保証は一切行いません。
+　商用、シェアウェアなどに組み込むのは不可です。
+------引用終了------
 */
 #pragma once
 
@@ -26,8 +26,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <Wincrypt.h>
-
+#include "rgy_osdep.h"
 #include "CaptionDef.h"
 #include "StreamUtils.h"
 #include "TranscodeSetting.h"
@@ -88,7 +87,7 @@ struct CaptionItem {
     int64_t PTS;
     int langIndex;
     int waitTime;
-    // null���ƃN���A
+    // nullだとクリア
     std::unique_ptr<CaptionLine> line;
 
     void Write(const File& file) const;
@@ -96,8 +95,8 @@ struct CaptionItem {
     static CaptionItem Read(const File& file);
 };
 
-// ���p�u���\�������X�g
-// �L����JISX0213 1��1��̂����O���t���p�ӂ���Ă���\�����\���������Ȃ��̂���
+// 半角置換可能文字リスト
+// 記号はJISX0213 1面1区のうちグリフが用意されている可能性が十分高そうなものだけ
 extern const LPCWSTR HALF_F_LIST;
 extern const LPCWSTR HALF_T_LIST;
 extern const LPCWSTR HALF_R_LIST;
@@ -117,7 +116,7 @@ class CaptionDLLParser : public AMTObject {
 public:
     CaptionDLLParser(AMTContext& ctx);
 
-    // �ŏ��̂P������������
+    // 最初の１つだけ処理する
     CaptionItem ProcessCaption(int64_t PTS, int langIndex,
         const CAPTION_DATA_DLL* capList, int capCount, DRCS_PATTERN_DLL* pDrcsList, int drcsCount);
 
@@ -125,13 +124,13 @@ public:
 
 private:
 
-    // �g�k��̕����T�C�Y�𓾂�
+    // 拡縮後の文字サイズを得る
     static void GetCharSize(float *pCharW, float *pCharH, float *pDirW, float *pDirH, const CAPTION_CHAR_DATA_DLL &charData);
 
     void AddText(CaptionLine& line, const std::wstring& text,
         float charW, float charH, float width, float height, const CAPTION_CHAR_DATA_DLL &style);
 
-    // �����{����1�s������������
+    // 字幕本文を1行だけ処理する
     std::unique_ptr<CaptionLine> ShowCaptionData(int64_t PTS,
         const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount);
 };

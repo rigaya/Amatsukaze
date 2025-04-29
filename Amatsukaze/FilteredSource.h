@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * Create encoder source with avisynth filters
@@ -33,7 +33,7 @@ public:
 private:
     std::unique_ptr<av::Frame> prevFrame_;
 
-    // 2‚Â‚ÌƒtƒŒ[ƒ€‚ÌƒgƒbƒvƒtƒB[ƒ‹ƒhAƒ{ƒgƒ€ƒtƒB[ƒ‹ƒh‚ğ‡¬
+    // 2ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã€ãƒœãƒˆãƒ ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’åˆæˆ
     static std::unique_ptr<av::Frame> mixFields(av::Frame& topframe, av::Frame& bottomframe);
 };
 
@@ -73,10 +73,10 @@ public:
 
     const VideoFormat& getFormat() const;
 
-    // “ü—Íƒ][ƒ“‚ÌtrimŒã‚Ìƒ][ƒ“‚ğ•Ô‚·
+    // å…¥åŠ›ã‚¾ãƒ¼ãƒ³ã®trimå¾Œã®ã‚¾ãƒ¼ãƒ³ã‚’è¿”ã™
     const std::vector<EncoderZone> getZones() const;
 
-    // ŠeƒtƒŒ[ƒ€‚ÌŠÔms(ÅŒã‚ÌƒtƒŒ[ƒ€‚Ì•\¦ŠÔ‚ğ’è‹`‚·‚é‚½‚ß—v‘f”‚ÍƒtƒŒ[ƒ€”+1)
+    // å„ãƒ•ãƒ¬ãƒ¼ãƒ ã®æ™‚é–“ms(æœ€å¾Œã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®è¡¨ç¤ºæ™‚é–“ã‚’å®šç¾©ã™ã‚‹ãŸã‚è¦ç´ æ•°ã¯ãƒ•ãƒ¬ãƒ¼ãƒ æ•°+1)
     const std::vector<double>& getTimeCodes() const;
 
     int getVfrTimingFps() const;
@@ -109,7 +109,7 @@ private:
     void trimInput(EncodeFileKey key,
         const StreamReformInfo& reformInfo);
 
-    // –ß‚è’l: ‘Oˆ—H
+    // æˆ»ã‚Šå€¤: å‰å‡¦ç†ï¼Ÿ
     bool FilterPass(int pass, int gpuIndex,
         EncodeFileKey key,
         const StreamReformInfo& reformInfo,
@@ -134,14 +134,14 @@ public:
     static AVSValue __cdecl Create(AVSValue args, void* user_data, IScriptEnvironment* env);
 };
 
-// VFR‚Å‚¾‚¢‚½‚¢‚ÌƒŒ[ƒgƒRƒ“ƒgƒ[ƒ‹‚ğÀŒ»‚·‚é
-// VFRƒ^ƒCƒ~ƒ“ƒO‚ÆCMƒ][ƒ“‚©‚çƒ][ƒ“‚ÆƒrƒbƒgƒŒ[ƒg‚ğì¬
+// VFRã§ã ã„ãŸã„ã®ãƒ¬ãƒ¼ãƒˆã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ã‚’å®Ÿç¾ã™ã‚‹
+// VFRã‚¿ã‚¤ãƒŸãƒ³ã‚°ã¨CMã‚¾ãƒ¼ãƒ³ã‹ã‚‰ã‚¾ãƒ¼ãƒ³ã¨ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚’ä½œæˆ
 std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCodes,
     const std::vector<EncoderZone>& cmzones, double bitrateCM,
     int fpsNum, int fpsDenom, double timeFactor, double costLimit);
 
-// VFR‚É‘Î‰‚µ‚Ä‚¢‚È‚¢ƒGƒ“ƒR[ƒ_‚ÅƒrƒbƒgƒŒ[ƒgw’è‚ğs‚¤‚Æ‚«—p‚Ì
-// •½‹ÏƒtƒŒ[ƒ€ƒŒ[ƒg‚ğl—¶‚µ‚½ƒrƒbƒgƒŒ[ƒg‚ğŒvZ‚·‚é
+// VFRã«å¯¾å¿œã—ã¦ã„ãªã„ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆæŒ‡å®šã‚’è¡Œã†ã¨ãç”¨ã®
+// å¹³å‡ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆã‚’è€ƒæ…®ã—ãŸãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚’è¨ˆç®—ã™ã‚‹
 double AdjustVFRBitrate(const std::vector<double>& timeCodes, int fpsNum, int fpsDenom);
 
 AVSValue __cdecl AMTExec(AVSValue args, void* user_data, IScriptEnvironment* env);

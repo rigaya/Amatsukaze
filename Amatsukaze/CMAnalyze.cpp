@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -25,20 +25,20 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
     const auto avsAnalyzeLogo = makeAVSFile(videoFileIndex, inputFormat, false);
     const auto avsChapterExe  = makeAVSFile(videoFileIndex, inputFormat, true);
 
-    // ƒ`ƒƒƒvƒ^[ECM‰ğÍ
+    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼ãƒ»CMè§£æ
     if (analyzeChapterAndCM) {
         const bool logoOffJL = logoOffInJL(videoFileIndex);
         if (logoOffJL) {
-            ctx.info("ƒ`ƒƒƒvƒ^[ECM‰ğÍ‚ÉƒƒS‚ğg—p‚µ‚Ü‚¹‚ñB");
+            ctx.info("ãƒãƒ£ãƒ—ã‚¿ãƒ¼ãƒ»CMè§£æã«ãƒ­ã‚´ã‚’ä½¿ç”¨ã—ã¾ã›ã‚“ã€‚");
         } else {
-            // JL‚ÉLogoOff‚Ì‹Lq‚ª‚È‚¢ê‡‚Íæ‚ÉƒƒS‰ğÍ‚ğs‚¤
+            // JLã«LogoOffã®è¨˜è¿°ãŒãªã„å ´åˆã¯å…ˆã«ãƒ­ã‚´è§£æã‚’è¡Œã†
             analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
         }
-        // ƒ`ƒƒƒvƒ^[ECM‰ğÍ–{‘Ì
+        // ãƒãƒ£ãƒ—ã‚¿ãƒ¼ãƒ»CMè§£ææœ¬ä½“
         analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsChapterExe);
     }
 
-    // ƒƒS‰ğÍ (–¢Às‚©‚ÂƒƒSÁ‚µ‚·‚éê‡)
+    // ãƒ­ã‚´è§£æ (æœªå®Ÿè¡Œã‹ã¤ãƒ­ã‚´æ¶ˆã—ã™ã‚‹å ´åˆ)
     if (!setting_.isNoDelogo()) {
         analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
     }
@@ -47,19 +47,19 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
 void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     if (!logoAnalysisDone
         && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
-        ctx.info("[ƒƒS‰ğÍ]");
+        ctx.info("[ãƒ­ã‚´è§£æ]");
         sw.start();
         logoFrame(videoFileIndex, inputFormat, numFrames, avspath);
-        ctx.infoF("Š®—¹: %.2f•b", sw.getAndReset());
+        ctx.infoF("å®Œäº†: %.2fç§’", sw.getAndReset());
 
-        ctx.info("[ƒƒS‰ğÍŒ‹‰Ê]");
+        ctx.info("[ãƒ­ã‚´è§£æçµæœ]");
         if (logopath.size() > 0) {
-            ctx.infoF("ƒ}ƒbƒ`‚µ‚½ƒƒS: %s", logopath);
+            ctx.infoF("ãƒãƒƒãƒã—ãŸãƒ­ã‚´: %s", logopath);
             PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
         }
         const auto& eraseLogoPath = setting_.getEraseLogoPath();
         for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
-            ctx.infoF("’Ç‰ÁƒƒS%d: %s", i + 1, eraseLogoPath[i]);
+            ctx.infoF("è¿½åŠ ãƒ­ã‚´%d: %s", i + 1, eraseLogoPath[i]);
             PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
         }
         logoAnalysisDone = true;
@@ -67,52 +67,52 @@ void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFo
 }
 
 void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
-    // ƒ`ƒƒƒvƒ^[‰ğÍ
-    ctx.info("[–³‰¹EƒV[ƒ“ƒ`ƒFƒ“ƒW‰ğÍ]");
+    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼è§£æ
+    ctx.info("[ç„¡éŸ³ãƒ»ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸è§£æ]");
     sw.start();
     chapterExe(videoFileIndex, inputFormat, avspath);
-    ctx.infoF("Š®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("å®Œäº†: %.2fç§’", sw.getAndReset());
 
-    ctx.info("[–³‰¹EƒV[ƒ“ƒ`ƒFƒ“ƒW‰ğÍŒ‹‰Ê]");
+    ctx.info("[ç„¡éŸ³ãƒ»ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸è§£æçµæœ]");
     PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
 
-    // CM„’è
-    ctx.info("[CM‰ğÍ]");
+    // CMæ¨å®š
+    ctx.info("[CMè§£æ]");
     sw.start();
     joinLogoScp(videoFileIndex, serviceId);
-    ctx.infoF("Š®—¹: %.2f•b", sw.getAndReset());
+    ctx.infoF("å®Œäº†: %.2fç§’", sw.getAndReset());
 
-    ctx.info("[CM‰ğÍŒ‹‰Ê - TrimAVS]");
+    ctx.info("[CMè§£æçµæœ - TrimAVS]");
     PrintFileAll(setting_.getTmpTrimAVSPath(videoFileIndex));
-    ctx.info("[CM‰ğÍŒ‹‰Ê - Ú×]");
+    ctx.info("[CMè§£æçµæœ - è©³ç´°]");
     PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
 
-    // AVSƒtƒ@ƒCƒ‹‚©‚çCM‹æŠÔ‚ğ“Ç‚Ş
+    // AVSãƒ•ã‚¡ã‚¤ãƒ«ã‹ã‚‰CMåŒºé–“ã‚’èª­ã‚€
     readTrimAVS(videoFileIndex, numFrames);
 
-    // ƒV[ƒ“ƒ`ƒFƒ“ƒW
+    // ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸
     readSceneChanges(videoFileIndex);
 
-    // •ªŠ„î•ñ
+    // åˆ†å‰²æƒ…å ±
     readDiv(videoFileIndex, numFrames);
 
     makeCMZones(numFrames);
 }
 
-// PMT•ÏXî•ñ‚©‚çCM’Ç‰Á”F¯
+// PMTå¤‰æ›´æƒ…å ±ã‹ã‚‰CMè¿½åŠ èªè­˜
 void CMAnalyze::applyPmtCut(
     int numFrames, const double* rates,
     const std::vector<int>& pidChanges) {
     if (sceneChanges.size() == 0) {
-        ctx.info("ƒV[ƒ“ƒ`ƒFƒ“ƒWî•ñ‚ª‚È‚¢‚½‚ßPMT•ÏXî•ñ‚ğCM”»’è‚É—˜—p‚Å‚«‚Ü‚¹‚ñ");
+        ctx.info("ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸æƒ…å ±ãŒãªã„ãŸã‚PMTå¤‰æ›´æƒ…å ±ã‚’CMåˆ¤å®šã«åˆ©ç”¨ã§ãã¾ã›ã‚“");
     }
 
-    ctx.info("[PMTXVCM”F¯]");
+    ctx.info("[PMTæ›´æ–°CMèªè­˜]");
 
     int validStart = 0, validEnd = numFrames;
     std::vector<int> matchedPoints;
 
-    // picChanges‚É‹ß‚¢sceneChanges‚ğŒ©‚Â‚¯‚é
+    // picChangesã«è¿‘ã„sceneChangesã‚’è¦‹ã¤ã‘ã‚‹
     for (int i = 1; i < (int)pidChanges.size(); ++i) {
         int next = (int)(std::lower_bound(
             sceneChanges.begin(), sceneChanges.end(),
@@ -126,23 +126,23 @@ void CMAnalyze::applyPmtCut(
         }
         //ctx.infoF("%d,%d,%d,%d,%d", pidChanges[i], next, sceneChanges[next], prev, sceneChanges[prev]);
         int diff = std::abs(pidChanges[i] - sceneChanges[next]);
-        if (diff < 30 * 2) { // Ÿ
+        if (diff < 30 * 2) { // æ¬¡
             matchedPoints.push_back(sceneChanges[next]);
-            ctx.infoF("ƒtƒŒ[ƒ€%d‚ÌPMT•ÏX‚ÍƒtƒŒ[ƒ€%d‚ÉƒV[ƒ“ƒ`ƒFƒ“ƒW‚ ‚è",
+            ctx.infoF("ãƒ•ãƒ¬ãƒ¼ãƒ %dã®PMTå¤‰æ›´ã¯ãƒ•ãƒ¬ãƒ¼ãƒ %dã«ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸ã‚ã‚Š",
                 pidChanges[i], sceneChanges[next]);
         } else {
             diff = std::abs(pidChanges[i] - sceneChanges[prev]);
-            if (diff < 30 * 2) { // ‘O
+            if (diff < 30 * 2) { // å‰
                 matchedPoints.push_back(sceneChanges[prev]);
-                ctx.infoF("ƒtƒŒ[ƒ€%d‚ÌPMT•ÏX‚ÍƒtƒŒ[ƒ€%d‚ÉƒV[ƒ“ƒ`ƒFƒ“ƒW‚ ‚è",
+                ctx.infoF("ãƒ•ãƒ¬ãƒ¼ãƒ %dã®PMTå¤‰æ›´ã¯ãƒ•ãƒ¬ãƒ¼ãƒ %dã«ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸ã‚ã‚Š",
                     pidChanges[i], sceneChanges[prev]);
             } else {
-                ctx.infoF("ƒtƒŒ[ƒ€%d‚ÌPMT•ÏX‚Í•t‹ß‚ÉƒV[ƒ“ƒ`ƒFƒ“ƒW‚ª‚È‚¢‚½‚ß–³‹‚µ‚Ü‚·", pidChanges[i]);
+                ctx.infoF("ãƒ•ãƒ¬ãƒ¼ãƒ %dã®PMTå¤‰æ›´ã¯ä»˜è¿‘ã«ã‚·ãƒ¼ãƒ³ãƒã‚§ãƒ³ã‚¸ãŒãªã„ãŸã‚ç„¡è¦–ã—ã¾ã™", pidChanges[i]);
             }
         }
     }
 
-    // ‘OŒãƒJƒbƒg•”•ª‚ğZo
+    // å‰å¾Œã‚«ãƒƒãƒˆéƒ¨åˆ†ã‚’ç®—å‡º
     int maxCutFrames0 = (int)(rates[0] * numFrames);
     int maxCutFrames1 = numFrames - (int)(rates[1] * numFrames);
     for (int i = 0; i < (int)matchedPoints.size(); ++i) {
@@ -153,50 +153,50 @@ void CMAnalyze::applyPmtCut(
             validEnd = std::min(validEnd, matchedPoints[i]);
         }
     }
-    ctx.infoF("İ’è‹æŠÔ: 0-%d %d-%d", maxCutFrames0, maxCutFrames1, numFrames);
-    ctx.infoF("ŒŸoCM‹æŠÔ: 0-%d %d-%d", validStart, validEnd, numFrames);
+    ctx.infoF("è¨­å®šåŒºé–“: 0-%d %d-%d", maxCutFrames0, maxCutFrames1, numFrames);
+    ctx.infoF("æ¤œå‡ºCMåŒºé–“: 0-%d %d-%d", validStart, validEnd, numFrames);
 
-    // trims‚É”½‰f
+    // trimsã«åæ˜ 
     auto copy = trims;
     trims.clear();
     for (int i = 0; i < (int)copy.size(); i += 2) {
         auto start = copy[i];
         auto end = copy[i + 1];
         if (end <= validStart) {
-            // ŠJn‘O
+            // é–‹å§‹å‰
             continue;
         } else if (start <= validStart) {
-            // “r’†‚©‚çŠJn
+            // é€”ä¸­ã‹ã‚‰é–‹å§‹
             start = validStart;
         }
         if (start >= validEnd) {
-            // I—¹Œã
+            // çµ‚äº†å¾Œ
             continue;
         } else if (end >= validEnd) {
-            // “r’†‚ÅI—¹
+            // é€”ä¸­ã§çµ‚äº†
             end = validEnd;
         }
         trims.push_back(start);
         trims.push_back(end);
     }
 
-    // cmzones‚É”½‰f
+    // cmzonesã«åæ˜ 
     makeCMZones(numFrames);
 }
 
 void CMAnalyze::inputTrimAVS(int numFrames, const tstring& trimavsPath) {
-    ctx.infoF("[Trimî•ñ“ü—Í]: %s", trimavsPath.c_str());
+    ctx.infoF("[Trimæƒ…å ±å…¥åŠ›]: %s", trimavsPath.c_str());
     PrintFileAll(trimavsPath);
 
-    // AVSƒtƒ@ƒCƒ‹‚©‚çCM‹æŠÔ‚ğ“Ç‚Ş
+    // AVSãƒ•ã‚¡ã‚¤ãƒ«ã‹ã‚‰CMåŒºé–“ã‚’èª­ã‚€
     File file(trimavsPath, _T("r"));
     std::string str;
     if (!file.getline(str)) {
-        THROW(FormatException, "TrimAVSƒtƒ@ƒCƒ‹‚ª“Ç‚ß‚Ü‚¹‚ñ");
+        THROW(FormatException, "TrimAVSãƒ•ã‚¡ã‚¤ãƒ«ãŒèª­ã‚ã¾ã›ã‚“");
     }
     readTrimAVS(str, numFrames);
 
-    // cmzones‚É”½‰f
+    // cmzonesã«åæ˜ 
     makeCMZones(numFrames);
 }
 CMAnalyze::MySubProcess::MySubProcess(const tstring& args, File* out, File* err)
@@ -205,7 +205,7 @@ CMAnalyze::MySubProcess::MySubProcess(const tstring& args, File* out, File* err)
     , err(err) {}
 
 void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
-    // ‚±‚ê‚Íƒ}ƒ‹ƒ`ƒXƒŒƒbƒh‚ÅŒÄ‚Î‚ê‚é‚Ì’ˆÓ
+    // ã“ã‚Œã¯ãƒãƒ«ãƒã‚¹ãƒ¬ãƒƒãƒ‰ã§å‘¼ã°ã‚Œã‚‹ã®æ³¨æ„
     File* dst = isErr ? err : out;
     if (dst != nullptr) {
         dst->write(mc);
@@ -218,13 +218,13 @@ void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
 tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool forChapterExe) {
     StringBuilder sb;
 
-    // ƒI[ƒgƒ[ƒhƒvƒ‰ƒOƒCƒ“‚Ìƒ[ƒh‚É¸”s‚·‚é‚Æ“®ì‚µ‚È‚­‚È‚é‚Ì‚Å‚»‚ê‚ğ‰ñ”ğ
+    // ã‚ªãƒ¼ãƒˆãƒ­ãƒ¼ãƒ‰ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ã®ãƒ­ãƒ¼ãƒ‰ã«å¤±æ•—ã™ã‚‹ã¨å‹•ä½œã—ãªããªã‚‹ã®ã§ãã‚Œã‚’å›é¿
     sb.append("ClearAutoloadDirs()\n");
 
     sb.append("LoadPlugin(\"%s\")\n", GetModulePath());
     sb.append("AMTSource(\"%s\")\n", setting_.getTmpAMTSourcePath(videoFileIndex));
     sb.append("Prefetch(1)\n");
-    // chapter_exe‚Í8bit‚µ‚©ó‚¯•t‚¯‚È‚¢
+    // chapter_exeã¯8bitã—ã‹å—ã‘ä»˜ã‘ãªã„
     if (inputFormat.format != VS_MPEG2 && forChapterExe) {
         sb.append("ConvertToYV12()\n");
         if (inputFormat.width > 1920 && inputFormat.height > 1080) {
@@ -239,11 +239,11 @@ tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputForma
 
 std::string CMAnalyze::makePreamble() {
     StringBuilder sb;
-    // ƒVƒXƒeƒ€‚Ìƒvƒ‰ƒOƒCƒ“ƒtƒHƒ‹ƒ_‚ğ–³Œø‰»
+    // ã‚·ã‚¹ãƒ†ãƒ ã®ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ãƒ•ã‚©ãƒ«ãƒ€ã‚’ç„¡åŠ¹åŒ–
     if (setting_.isSystemAvsPlugin() == false) {
         sb.append("ClearAutoloadDirs()\n");
     }
-    // Amatsukaze—pƒI[ƒgƒ[ƒhƒtƒHƒ‹ƒ_‚ğ’Ç‰Á
+    // Amatsukazeç”¨ã‚ªãƒ¼ãƒˆãƒ­ãƒ¼ãƒ‰ãƒ•ã‚©ãƒ«ãƒ€ã‚’è¿½åŠ 
     sb.append("AddAutoloadDir(\"%s/plugins64\")\n", GetModuleDirectory());
     return sb.str();
 }
@@ -257,7 +257,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     logo::LogoFrame logof(ctx, allLogoPath, 0.35f);
 
     if (trims.size() > 0 && (trims.size() % 2) == 0) {
-        ctx.infoF("‰ğÍ”ÍˆÍ");
+        ctx.infoF("è§£æç¯„å›²");
         for (int i = 0; i < trims.size() / 2; i++) {
             ctx.infoF(" %6d-%6d", trims[2 * i], trims[2 * i + 1]);
         }
@@ -268,7 +268,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(8, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
     const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
     if (totalThreads > 1) {
-        ctx.infoF("•À—ñƒƒS‰ğÍ %d•À—ñ x ƒfƒR[ƒh%dƒXƒŒƒbƒh", totalThreads, decodeThreads);
+        ctx.infoF("ä¸¦åˆ—ãƒ­ã‚´è§£æ %dä¸¦åˆ— x ãƒ‡ã‚³ãƒ¼ãƒ‰%dã‚¹ãƒ¬ãƒƒãƒ‰", totalThreads, decodeThreads);
     }
     std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
     for (int ith = 0; ith < totalThreads; ith++) {
@@ -277,8 +277,8 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
                 ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
                 AVSValue result;
                 env->Invoke("Eval", AVSValue(makePreamble().c_str()));
-                env->LoadPlugin(to_string(GetModulePath()).c_str(), true, &result);
-                const auto amtsourcePath = to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
+                env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &result);
+                const auto amtsourcePath = tchar_to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
                 AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
                 PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
 
@@ -294,7 +294,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
             }
             return std::pair<int, std::string>{ 0, "" };
         }, ith));
-        // duration ‚ªİ’è‚³‚ê‚é‚Ü‚Å2ƒXƒŒƒbƒh–ÚˆÈ~‚Ì‹N“®‚ğ‘Ò‹@‚·‚é
+        // duration ãŒè¨­å®šã•ã‚Œã‚‹ã¾ã§2ã‚¹ãƒ¬ãƒƒãƒ‰ç›®ä»¥é™ã®èµ·å‹•ã‚’å¾…æ©Ÿã™ã‚‹
         if (ith == 0) {
             while (duration == 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -317,7 +317,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
 
         float threshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
         if (logof.getLogoRatio() < threshold) {
-            ctx.info("‚±‚Ì‹æŠÔ‚Íƒ}ƒbƒ`‚·‚éƒƒS‚Í‚ ‚è‚Ü‚¹‚ñ‚Å‚µ‚½");
+            ctx.info("ã“ã®åŒºé–“ã¯ãƒãƒƒãƒã™ã‚‹ãƒ­ã‚´ã¯ã‚ã‚Šã¾ã›ã‚“ã§ã—ãŸ");
         } else {
             logopath = setting_.getLogoPath()[logof.getBestLogo()];
         }
@@ -332,7 +332,7 @@ tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inp
     const bool is60fps = (int)(inputFormat.frameRateNum / (double)inputFormat.frameRateDenom + 0.5) >= 60;
     return StringFormat(_T("\"%s\"%s -v \"%s\" -o \"%s\" %s"),
         setting_.getChapterExePath(),
-        (is60fps) ? _T(" -s 20") : _T(""), // ƒfƒtƒHƒ‹ƒg‚ª30fps‚Ì‚Æ‚«‚É-s 10‘Š“–‚È‚Ì‚Å60fps‚Ìê‡‚Í20‚É‚·‚é
+        (is60fps) ? _T(" -s 20") : _T(""), // ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆãŒ30fpsã®ã¨ãã«-s 10ç›¸å½“ãªã®ã§60fpsã®å ´åˆã¯20ã«ã™ã‚‹
         pathToOS(avspath),
         pathToOS(setting_.getTmpChapterExePath(videoFileIndex)),
         setting_.getChapterExeOptions());
@@ -345,7 +345,7 @@ void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, c
     MySubProcess process(args, &stdoutf);
     int exitCode = process.join();
     if (exitCode != 0) {
-        THROWF(FormatException, "ChapterExe‚ªƒGƒ‰[ƒR[ƒh(%d)‚ğ•Ô‚µ‚Ü‚µ‚½", exitCode);
+        THROWF(FormatException, "ChapterExeãŒã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰(%d)ã‚’è¿”ã—ã¾ã—ãŸ", exitCode);
     }
 }
 
@@ -368,21 +368,21 @@ tstring CMAnalyze::MakeJoinLogoScpArgs(int videoFileIndex) {
 void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     auto args = MakeJoinLogoScpArgs(videoFileIndex);
     ctx.infoF("%s", args);
-    // join_logo_scpŒü‚¯‚ÌŠÂ‹«•Ï”‚ğİ’è
+    // join_logo_scpå‘ã‘ã®ç’°å¢ƒå¤‰æ•°ã‚’è¨­å®š
     const tstring clioutpath = setting_.getOutFileBaseWithoutPrefix() + _T(".") + setting_.getOutputExtention(setting_.getFormat());
     SetTemporaryEnvironmentVariable tmpvar;
     tmpvar.set(_T("CLI_IN_PATH"), setting_.getSrcFilePath().c_str());
     tmpvar.set(_T("TS_IN_PATH"), setting_.getSrcFileOriginalPath().c_str());
     tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceId).c_str());
     tmpvar.set(_T("CLI_OUT_PATH"), clioutpath.c_str());
-    ctx.infoF("CLI_IN_PATH  : %s", to_string(setting_.getSrcFilePath()).c_str());
-    ctx.infoF("TS_IN_PATH   : %s", to_string(setting_.getSrcFileOriginalPath()).c_str());
+    ctx.infoF("CLI_IN_PATH  : %s", tchar_to_string(setting_.getSrcFilePath()).c_str());
+    ctx.infoF("TS_IN_PATH   : %s", tchar_to_string(setting_.getSrcFileOriginalPath()).c_str());
     ctx.infoF("SERVICE_ID   : %d", serviceId);
-    ctx.infoF("CLI_OUT_PATH : %s", to_string(clioutpath).c_str());
+    ctx.infoF("CLI_OUT_PATH : %s", tchar_to_string(clioutpath).c_str());
     MySubProcess process(args);
     int exitCode = process.join();
     if (exitCode != 0) {
-        THROWF(FormatException, "join_logo_scp.exe‚ªƒGƒ‰[ƒR[ƒh(%d)‚ğ•Ô‚µ‚Ü‚µ‚½", exitCode);
+        THROWF(FormatException, "join_logo_scp.exeãŒã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰(%d)ã‚’è¿”ã—ã¾ã—ãŸ", exitCode);
     }
 }
 
@@ -390,7 +390,7 @@ void CMAnalyze::readTrimAVS(int videoFileIndex, int numFrames) {
     File file(setting_.getTmpTrimAVSPath(videoFileIndex), _T("r"));
     std::string str;
     if (!file.getline(str)) {
-        THROW(FormatException, "join_logo_scp.exe‚Ìo—ÍAVSƒtƒ@ƒCƒ‹‚ª“Ç‚ß‚Ü‚¹‚ñ");
+        THROW(FormatException, "join_logo_scp.exeã®å‡ºåŠ›AVSãƒ•ã‚¡ã‚¤ãƒ«ãŒèª­ã‚ã¾ã›ã‚“");
     }
     readTrimAVS(str, numFrames);
 }
@@ -417,7 +417,7 @@ void CMAnalyze::readDiv(int videoFileIndex, int numFrames) {
             divs.push_back(std::atoi(str.c_str()));
         }
     }
-    // ³‹K‰»
+    // æ­£è¦åŒ–
     if (divs.size() == 0) {
         divs.push_back(0);
     }
@@ -431,10 +431,10 @@ void CMAnalyze::readSceneChanges(int videoFileIndex) {
     File file(setting_.getTmpChapterExeOutPath(videoFileIndex), _T("r"));
     std::string str;
 
-    // ƒwƒbƒ_•”•ª‚ğƒXƒLƒbƒv
+    // ãƒ˜ãƒƒãƒ€éƒ¨åˆ†ã‚’ã‚¹ã‚­ãƒƒãƒ—
     while (1) {
         if (!file.getline(str)) {
-            THROW(FormatException, "ChapterExe.exe‚Ìo—Íƒtƒ@ƒCƒ‹‚ª“Ç‚ß‚Ü‚¹‚ñ");
+            THROW(FormatException, "ChapterExe.exeã®å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãŒèª­ã‚ã¾ã›ã‚“");
         }
         if (starts_with(str, "----")) {
             break;
@@ -459,12 +459,12 @@ bool CMAnalyze::logoOffInJL(const int videoFileIndex) const {
     File file(setting_.getJoinLogoScpCmdPath(), _T("r"));
     std::string str;
     while (file.getline(str)) {
-        // str ‚Ì # ˆÈ~‚Ííœ‚·‚é (ƒRƒƒ“ƒg)
+        // str ã® # ä»¥é™ã¯å‰Šé™¤ã™ã‚‹ (ã‚³ãƒ¡ãƒ³ãƒˆ)
         auto pos = str.find('#');
         if (pos != std::string::npos) {
             str.erase(pos);
         }
-        // LogoOff ‚ª‚ ‚é‚©‚Ç‚¤‚©
+        // LogoOff ãŒã‚ã‚‹ã‹ã©ã†ã‹
         if (str.find("LogoOff") != std::string::npos) {
             return true;
         }
@@ -479,7 +479,7 @@ void CMAnalyze::makeCMZones(int numFrames) {
 
     for (int i = 1; i < (int)split.size(); ++i) {
         if (split[i] < split[i - 1]) {
-            THROW(FormatException, "join_logo_scp.exe‚Ìo—ÍAVSƒtƒ@ƒCƒ‹‚ª•s³‚Å‚·");
+            THROW(FormatException, "join_logo_scp.exeã®å‡ºåŠ›AVSãƒ•ã‚¡ã‚¤ãƒ«ãŒä¸æ­£ã§ã™");
         }
     }
 
@@ -545,7 +545,7 @@ std::vector<MakeChapter::JlsElement> MakeChapter::readJls(const tstring& jlspath
 }
 
 void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> elements) {
-    // isCut, isCMƒtƒ‰ƒO‚ğ¶¬
+    // isCut, isCMãƒ•ãƒ©ã‚°ã‚’ç”Ÿæˆ
     for (int i = 0; i < (int)elements.size(); ++i) {
         auto& e = elements[i];
         int trimIdx = (int)(std::lower_bound(trims.begin(), trims.end(), (e.frameStart + e.frameEnd) / 2) - trims.begin());
@@ -554,7 +554,7 @@ void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> eleme
         e.isOld = (e.comment.size() == 0);
     }
 
-    // —]•ª‚È‚à‚Ì‚Íƒ}[ƒW
+    // ä½™åˆ†ãªã‚‚ã®ã¯ãƒãƒ¼ã‚¸
     JlsElement cur = elements[0];
     for (int i = 1; i < (int)elements.size(); ++i) {
         auto& e = elements[i];
@@ -574,7 +574,7 @@ void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> eleme
     }
     chapters.push_back(cur);
 
-    // ƒRƒƒ“ƒg‚ğƒ`ƒƒƒvƒ^[–¼‚É•ÏX
+    // ã‚³ãƒ¡ãƒ³ãƒˆã‚’ãƒãƒ£ãƒ—ã‚¿ãƒ¼åã«å¤‰æ›´
     int nChapter = -1;
     bool prevCM = true;
     for (int i = 0; i < (int)chapters.size(); ++i) {
@@ -609,7 +609,7 @@ void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> eleme
 std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey key) {
     const auto& outFrames = reformInfo.getEncodeFile(key).videoFrames;
 
-    // ƒ`ƒƒƒvƒ^[‚ğ•ªŠ„Œã‚ÌƒtƒŒ[ƒ€”Ô†‚É•ÏŠ·
+    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã‚’åˆ†å‰²å¾Œã®ãƒ•ãƒ¬ãƒ¼ãƒ ç•ªå·ã«å¤‰æ›
     std::vector<JlsElement> cvtChapters;
     for (int i = 0; i < (int)chapters.size(); ++i) {
         const auto& c = chapters[i];
@@ -619,22 +619,22 @@ std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey 
         cvtChapters.push_back(fc);
     }
 
-    // ’Z‚·‚¬‚éƒ`ƒƒƒvƒ^[‚ÍÁ‚·
+    // çŸ­ã™ãã‚‹ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã¯æ¶ˆã™
     auto& vfmt = reformInfo.getFormat(key).videoFormat;
     int fps = (int)std::round((float)vfmt.frameRateNum / vfmt.frameRateDenom);
     std::vector<JlsElement> fileChapters;
     JlsElement cur = { 0 };
     for (int i = 0; i < (int)cvtChapters.size(); ++i) {
         auto& c = cvtChapters[i];
-        if (c.frameEnd - c.frameStart < fps * 2) { // 2•bˆÈ‰º‚Ìƒ`ƒƒƒvƒ^[‚ÍÁ‚·
+        if (c.frameEnd - c.frameStart < fps * 2) { // 2ç§’ä»¥ä¸‹ã®ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã¯æ¶ˆã™
             cur.frameEnd = c.frameEnd;
         } else if (cur.comment.size() == 0) {
-            // ‚Ü‚¾’†g‚ğ“ü‚ê‚Ä‚¢‚È‚¢ê‡‚Í¡‚Ìƒ`ƒƒƒvƒ^[‚ğ“ü‚ê‚é
+            // ã¾ã ä¸­èº«ã‚’å…¥ã‚Œã¦ã„ãªã„å ´åˆã¯ä»Šã®ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã‚’å…¥ã‚Œã‚‹
             int start = cur.frameStart;
             cur = c;
             cur.frameStart = start;
         } else {
-            // ‚à‚¤’†g‚ª“ü‚Á‚Ä‚¢‚é‚Ì‚ÅAo—Í
+            // ã‚‚ã†ä¸­èº«ãŒå…¥ã£ã¦ã„ã‚‹ã®ã§ã€å‡ºåŠ›
             fileChapters.push_back(cur);
             cur = c;
         }
@@ -650,7 +650,7 @@ void MakeChapter::writeChapter(const std::vector<JlsElement>& chapters, EncodeFi
     auto& vfmt = reformInfo.getFormat(key).videoFormat;
     float frameMs = (float)vfmt.frameRateDenom / vfmt.frameRateNum * 1000.0f;
 
-    ctx.infoF("ƒtƒ@ƒCƒ‹: %d-%d-%d %s", key.video, key.format, key.div, CMTypeToString(key.cm));
+    ctx.infoF("ãƒ•ã‚¡ã‚¤ãƒ«: %d-%d-%d %s", key.video, key.format, key.div, CMTypeToString(key.cm));
 
     StringBuilder sb;
     int sumframes = 0;

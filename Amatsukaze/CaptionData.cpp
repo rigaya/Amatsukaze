@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,6 +7,18 @@
 */
 
 #include "CaptionData.h"
+#if defined(_WIN32) || defined(_WIN64)
+#include <Wincrypt.h>
+#else
+#include <openssl/md5.h>
+// Windowsäº’æ›ã®RGBQUADæ§‹é€ ä½“ã‚’å®šç¾©
+typedef struct {
+    uint8_t rgbBlue;
+    uint8_t rgbGreen;
+    uint8_t rgbRed;
+    uint8_t rgbReserved;
+} RGBQUAD;
+#endif
 
 /* static */ int CaptionFormat::GetStyle(const CAPTION_CHAR_DATA_DLL &style) {
     int ret = 0;
@@ -94,11 +106,11 @@ void CaptionItem::Write(const File& file) const {
     return item;
 }
 
-// ”¼Šp’uŠ·‰Â”\•¶šƒŠƒXƒg
-// ‹L†‚ÍJISX0213 1–Ê1‹æ‚Ì‚¤‚¿ƒOƒŠƒt‚ª—pˆÓ‚³‚ê‚Ä‚¢‚é‰Â”\«‚ª\•ª‚‚»‚¤‚È‚à‚Ì‚¾‚¯
-/* static */ const LPCWSTR HALF_F_LIST = L"@ABCDEFGHIOQ^bimnopu{|ƒ„“”•–—‚O‚`‚";
-/* static */ const LPCWSTR HALF_T_LIST = L"@ABCDEFGHIOQ^bjmnopv{|ƒ„“”•–—‚X‚y‚š";
-/* static */ const LPCWSTR HALF_R_LIST = L" ¤¡,.¥:;?!^_/|([]{}¢+-=<>$%#&*@0Aa";
+// åŠè§’ç½®æ›å¯èƒ½æ–‡å­—ãƒªã‚¹ãƒˆ
+// è¨˜å·ã¯JISX0213 1é¢1åŒºã®ã†ã¡ã‚°ãƒªãƒ•ãŒç”¨æ„ã•ã‚Œã¦ã„ã‚‹å¯èƒ½æ€§ãŒååˆ†é«˜ãã†ãªã‚‚ã®ã ã‘
+/* static */ const LPCWSTR HALF_F_LIST = L"ã€€ã€ã€‚ï¼Œï¼ãƒ»ï¼šï¼›ï¼Ÿï¼ï¼¾ï¼¿ï¼ï½œï¼ˆï¼»ï¼½ï½›ï½ã€Œï¼‹ï¼ï¼ï¼œï¼ï¼„ï¼…ï¼ƒï¼†ï¼Šï¼ ï¼ï¼¡ï½";
+/* static */ const LPCWSTR HALF_T_LIST = L"ã€€ã€ã€‚ï¼Œï¼ãƒ»ï¼šï¼›ï¼Ÿï¼ï¼¾ï¼¿ï¼ï½œï¼‰ï¼»ï¼½ï½›ï½ã€ï¼‹ï¼ï¼ï¼œï¼ï¼„ï¼…ï¼ƒï¼†ï¼Šï¼ ï¼™ï¼ºï½š";
+/* static */ const LPCWSTR HALF_R_LIST = L" ï½¤ï½¡,.ï½¥:;?!^_/|([]{}ï½¢+-=<>$%#&*@0Aa";
 
 /* static */ BOOL CalcMD5FromDRCSPattern(std::vector<char>& hash, const DRCS_PATTERN_DLL *pPattern) {
     WORD wGradation = pPattern->wGradation;
@@ -126,9 +138,12 @@ void CaptionItem::Write(const File& file) const {
         dwSizeImage = (dwSizeImage + 3) / 4 * 4;
     }
 
+    BOOL bRet = FALSE;
+#if defined(_WIN32) || defined(_WIN64)
+    // Windowsç‰ˆã®å®Ÿè£…ï¼ˆWinCryptï¼‰
     HCRYPTPROV hProv = NULL;
     HCRYPTHASH hHash = NULL;
-    BOOL bRet = FALSE;
+    
     if (!::CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
         hProv = NULL;
         goto EXIT;
@@ -153,13 +168,42 @@ void CaptionItem::Write(const File& file) const {
 EXIT:
     if (hHash) ::CryptDestroyHash(hHash);
     if (hProv) ::CryptReleaseContext(hProv, 0);
+#else
+    // Linuxç‰ˆã®å®Ÿè£…ï¼ˆOpenSSLï¼‰
+    MD5_CTX md5Context;
+    unsigned char digest[16];
+    
+    if (!MD5_Init(&md5Context)) {
+        goto EXIT;
+    }
+    
+    if (!MD5_Update(&md5Context, bData, dwDataLen)) {
+        goto EXIT;
+    }
+    
+    if (!MD5_Final(digest, &md5Context)) {
+        goto EXIT;
+    }
+    
+    // ãƒãƒƒã‚·ãƒ¥å€¤ã‚’16é€²æ•°æ–‡å­—åˆ—ã«å¤‰æ›
+    static const char* digits = "0123456789ABCDEF";
+    hash.resize(32);
+    for (int i = 0; i < 16; ++i) {
+        hash[i * 2 + 0] = digits[digest[i] >> 4];
+        hash[i * 2 + 1] = digits[digest[i] & 0x0F];
+    }
+    
+    bRet = TRUE;
+EXIT:
+    // OpenSSLã§ã¯ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã®æ˜ç¤ºçš„ãªè§£æ”¾ã¯ä¸è¦
+#endif
     return bRet;
 }
 
 /* static */ void SaveDRCSImage(const tstring& filename, const DRCS_PATTERN_DLL* pData) {
-    //ƒtƒ@ƒCƒ‹‚ª‚È‚¯‚ê‚Î‘‚«‚±‚Ş
+    //ãƒ•ã‚¡ã‚¤ãƒ«ãŒãªã‘ã‚Œã°æ›¸ãã“ã‚€
     if (File::exists(filename) == false) {
-        //‚Ç‚ñ‚È”zF‚É‚µ‚Ä‚à\‚í‚È‚¢Bcolors[4]ˆÈã‚ÌF‚ÍoŒ»‚µ‚È‚¢
+        //ã©ã‚“ãªé…è‰²ã«ã—ã¦ã‚‚æ§‹ã‚ãªã„ã€‚colors[4]ä»¥ä¸Šã®è‰²ã¯å‡ºç¾ã—ãªã„
         RGBQUAD colors[16] = { { 255, 255, 255, 0 },{ 170, 170, 170, 0 },{ 85, 85, 85, 0 },{ 0, 0, 0, 0 } };
         BITMAPFILEHEADER bmfHeader = { 0 };
         bmfHeader.bfType = 0x4D42;
@@ -184,7 +228,7 @@ EXIT:
 CaptionDLLParser::CaptionDLLParser(AMTContext& ctx)
     : AMTObject(ctx) {}
 
-// Å‰‚Ì‚P‚Â‚¾‚¯ˆ—‚·‚é
+// æœ€åˆã®ï¼‘ã¤ã ã‘å‡¦ç†ã™ã‚‹
 CaptionItem CaptionDLLParser::ProcessCaption(int64_t PTS, int langIndex,
     const CAPTION_DATA_DLL* capList, int capCount, DRCS_PATTERN_DLL* pDrcsList, int drcsCount) {
     const CAPTION_DATA_DLL& caption = capList[0];
@@ -202,7 +246,7 @@ CaptionItem CaptionDLLParser::ProcessCaption(int64_t PTS, int langIndex,
     return item;
 }
 
-// ŠgkŒã‚Ì•¶šƒTƒCƒY‚ğ“¾‚é
+// æ‹¡ç¸®å¾Œã®æ–‡å­—ã‚µã‚¤ã‚ºã‚’å¾—ã‚‹
 /* static */ void CaptionDLLParser::GetCharSize(float *pCharW, float *pCharH, float *pDirW, float *pDirH, const CAPTION_CHAR_DATA_DLL &charData) {
     float charTransX = 2;
     float charTransY = 2;
@@ -252,7 +296,7 @@ void CaptionDLLParser::AddText(CaptionLine& line, const std::wstring& text,
     line.text += text;
 }
 
-// š–‹–{•¶‚ğ1s‚¾‚¯ˆ—‚·‚é
+// å­—å¹•æœ¬æ–‡ã‚’1è¡Œã ã‘å‡¦ç†ã™ã‚‹
 std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
     const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount) {
     auto line = std::unique_ptr<CaptionLine>(new CaptionLine());
@@ -280,7 +324,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
             std::wstring showtext = srctext;
             std::wstring nexttext;
 
-            // •¶š—ñ‚ÉDRCS‚©ŠOš‚©”¼Šp’uŠ·‰Â”\•¶š‚ªŠÜ‚Ü‚ê‚é‚©’²‚×‚é
+            // æ–‡å­—åˆ—ã«DRCSã‹å¤–å­—ã‹åŠè§’ç½®æ›å¯èƒ½æ–‡å­—ãŒå«ã¾ã‚Œã‚‹ã‹èª¿ã¹ã‚‹
             const DRCS_PATTERN_DLL *pDrcs = NULL;
             LPCWSTR pszDrcsStr = NULL;
             WCHAR szHalf[2] = {};
@@ -298,7 +342,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                             }
                         }
                         if (pDrcs) {
-                            // ‚à‚µ‚ ‚ê‚Î’u‚«‚©‚¦‰Â”\‚È•¶š—ñ‚ğæ“¾
+                            // ã‚‚ã—ã‚ã‚Œã°ç½®ãã‹ãˆå¯èƒ½ãªæ–‡å­—åˆ—ã‚’å–å¾—
                             std::vector<char> md5;
                             if (CalcMD5FromDRCSPattern(md5, pDrcs)) {
                                 std::string md5str(md5.begin(), md5.end());
@@ -307,7 +351,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                                 if (it != drcsmap.end()) {
                                     pszDrcsStr = it->second.c_str();
                                 } else {
-                                    // ƒ}ƒbƒsƒ“ƒO‚ª‚È‚¢‚Ì‚Å‰æ‘œ‚ğ•Û‘¶‚·‚é
+                                    // ãƒãƒƒãƒ”ãƒ³ã‚°ãŒãªã„ã®ã§ç”»åƒã‚’ä¿å­˜ã™ã‚‹
                                     auto info = getDRCSOutPath(PTS, std::string(md5.begin(), md5.end()));
                                     SaveDRCSImage(info.filename, pDrcs);
 
@@ -317,10 +361,10 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                                         double seconds = info.elapsed / MPEG_CLOCK_HZ;
                                         int minutes = (int)(seconds / 60);
                                         seconds -= minutes * 60;
-                                        ctx.warnF("[š–‹] ‰f‘œ%d•ª%d•b•t‹ß‚Éƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‚ª‚ ‚è‚Ü‚·B’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢ -> %s",
+                                        ctx.warnF("[å­—å¹•] æ˜ åƒæ™‚åˆ»%dåˆ†%dç§’ä»˜è¿‘ã«ãƒãƒƒãƒ”ãƒ³ã‚°ã®ãªã„DRCSå¤–å­—ãŒã‚ã‚Šã¾ã™ã€‚è¿½åŠ ã—ã¦ãã ã•ã„ -> %s",
                                             minutes, (int)seconds, info.filename.c_str());
                                     } else {
-                                        ctx.warnF("[š–‹] ƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‚ª‚ ‚è‚Ü‚·B’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢ -> %s",
+                                        ctx.warnF("[å­—å¹•] ãƒãƒƒãƒ”ãƒ³ã‚°ã®ãªã„DRCSå¤–å­—ãŒã‚ã‚Šã¾ã™ã€‚è¿½åŠ ã—ã¦ãã ã•ã„ -> %s",
                                             info.filename.c_str());
                                     }
                                 }
@@ -336,7 +380,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                                 (r != L'0') &&
                                 (r == L'A' || r == L'a' || r == L'0') &&
                                 HALF_F_LIST[k] <= srctext[j] && srctext[j] <= HALF_T_LIST[k]) {
-                                // ”¼Šp’uŠ·‰Â”\•¶š
+                                // åŠè§’ç½®æ›å¯èƒ½æ–‡å­—
                                 szHalf[0] = r + srctext[j] - HALF_F_LIST[k];
                                 szHalf[1] = 0;
                                 showtext = srctext.substr(0, j);
@@ -349,24 +393,24 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                 }
             }
 
-            // •¶š—ñ‚ğ•`‰æ
+            // æ–‡å­—åˆ—ã‚’æç”»
             int lenWos = StrlenWoLoSurrogate(showtext.c_str());
             if (showtext.size() > 0) {
                 AddText(*line, showtext, charW, charH, dirW * lenWos, dirH, charData);
             }
 
             if (pDrcs) {
-                // DRCS‚ğ•¶š—ñ‚Å•`‰æ
+                // DRCSã‚’æ–‡å­—åˆ—ã§æç”»
                 if (pszDrcsStr == nullptr) {
-                    pszDrcsStr = L" ";
+                    pszDrcsStr = L"â–¡";
                 }
                 lenWos = StrlenWoLoSurrogate(pszDrcsStr);
                 if (lenWos > 0) {
-                    // ƒŒƒCƒAƒEƒgˆÛ‚Ì‚½‚ßA‰½•¶š‚Å‚ ‚Á‚Ä‚à1•¶š•‚É‹l‚ß‚é
+                    // ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆç¶­æŒã®ãŸã‚ã€ä½•æ–‡å­—ã§ã‚ã£ã¦ã‚‚1æ–‡å­—å¹…ã«è©°ã‚ã‚‹
                     AddText(*line, pszDrcsStr, (float)charData.wCharW / lenWos, charH, dirW, dirH, charData);
                 }
             } else if (szHalf[0]) {
-                // ”¼Šp•¶š‚ğ•`‰æ
+                // åŠè§’æ–‡å­—ã‚’æç”»
                 AddText(*line, szHalf, charW, charH, dirW, dirH, charData);
             }
 

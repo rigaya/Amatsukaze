@@ -754,7 +754,7 @@ int __stdcall logo::AMTAnalyzeLogo::SetCacheHints(int cachehints, int frame_rang
 /* static */ AVSValue __cdecl logo::AMTAnalyzeLogo::Create(AVSValue args, void* user_data, IScriptEnvironment* env) {
     return new AMTAnalyzeLogo(
         args[0].AsClip(),       // source
-        to_tstring(args[1].AsString()),			// logopath
+        char_to_tstring(args[1].AsString()),			// logopath
         (float)args[2].AsFloat(35) / 100.0f, // maskratio
         env
     );
@@ -917,8 +917,8 @@ int __stdcall logo::AMTEraseLogo::SetCacheHints(int cachehints, int frame_range)
     return new AMTEraseLogo(
         args[0].AsClip(),       // source
         args[1].AsClip(),       // analyzeclip
-        to_tstring(args[2].AsString()),			// logopath
-        to_tstring(args[3].AsString("")),		// logofpath
+        char_to_tstring(args[2].AsString()),			// logopath
+        char_to_tstring(args[3].AsString("")),		// logofpath
         args[4].AsInt(0),       // mode
         args[5].AsInt(16),      // maxfade
         env

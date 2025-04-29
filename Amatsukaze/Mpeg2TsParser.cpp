@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -11,8 +11,8 @@
 AdapdationField::AdapdationField(uint8_t* data, int length) : MemoryChunk(data, length) {}
 
 uint8_t AdapdationField::adapdation_field_length() const { return data[0]; }
-// ARIB TR-14 8.2.3‚É‘—o‹K’è‚ª‚ ‚é
-// TSƒpƒPƒbƒg‚Ì˜A‘±«APCR˜A‘±«‚ªØ‚ê‚éê‡‚É‘—‚ç‚ê‚é
+// ARIB TR-14 8.2.3ã«é€å‡ºè¦å®šãŒã‚ã‚‹
+// TSãƒ‘ã‚±ãƒƒãƒˆã®é€£ç¶šæ€§ã€PCRé€£ç¶šæ€§ãŒåˆ‡ã‚Œã‚‹å ´åˆã«é€ã‚‰ã‚Œã‚‹
 uint8_t AdapdationField::discontinuity_indicator() const { return bsm(data[1], 7, 1); }
 uint8_t AdapdationField::randam_access_indicator() const { return bsm(data[1], 6, 1); }
 uint8_t AdapdationField::elementary_stream_priority_indicator() const { return bsm(data[1], 5, 1); }
@@ -66,7 +66,7 @@ bool TsPacket::parse() {
         if (adaptation_field_control() & 0x2) {
             // exists adapdation field
             int adaptation_field_length = data[4];
-            // TSƒpƒPƒbƒgƒwƒbƒ_+ƒAƒ_ƒvƒe[ƒVƒ‡ƒ“ƒtƒB[ƒ‹ƒh’·‚Íadaptation_field_length‚ÉŠÜ‚Ü‚ê‚Ä‚¢‚È‚¢
+            // TSãƒ‘ã‚±ãƒƒãƒˆãƒ˜ãƒƒãƒ€+ã‚¢ãƒ€ãƒ—ãƒ†ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é•·ã¯adaptation_field_lengthã«å«ã¾ã‚Œã¦ã„ãªã„
             payload_offset = 4 + 1 + adaptation_field_length;
         } else {
             payload_offset = 4;
@@ -76,12 +76,12 @@ bool TsPacket::parse() {
 }
 
 bool TsPacket::check() {
-    if (sync_byte() != TS_SYNC_BYTE) return false; // “¯ŠúƒR[ƒh‚ª‡‚Á‚Ä‚¢‚È‚¢
-    if (PID() >= 0x0002U && PID() <= 0x000FU) return false; // –¢’è‹`PID
-    if (transport_scrambling_control() == 0x01) return false; // –¢’è‹`ƒXƒNƒ‰ƒ“ƒuƒ‹§Œä
-    if (adaptation_field_control() == 0x00) return false; // –¢’è‹`ƒAƒ_ƒvƒe[ƒVƒ‡ƒ“ƒtƒB[ƒ‹ƒh§Œä
+    if (sync_byte() != TS_SYNC_BYTE) return false; // åŒæœŸã‚³ãƒ¼ãƒ‰ãŒåˆã£ã¦ã„ãªã„
+    if (PID() >= 0x0002U && PID() <= 0x000FU) return false; // æœªå®šç¾©PID
+    if (transport_scrambling_control() == 0x01) return false; // æœªå®šç¾©ã‚¹ã‚¯ãƒ©ãƒ³ãƒ–ãƒ«åˆ¶å¾¡
+    if (adaptation_field_control() == 0x00) return false; // æœªå®šç¾©ã‚¢ãƒ€ãƒ—ãƒ†ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰åˆ¶å¾¡
     if (has_payload() && payload_offset >= TS_PACKET_LENGTH) {
-        // ƒAƒ_ƒvƒe[ƒVƒ‡ƒ“ƒtƒB[ƒ‹ƒh‚ª’·‚·‚¬‚é
+        // ã‚¢ãƒ€ãƒ—ãƒ†ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ãŒé•·ã™ãã‚‹
         return false;
     }
     return true;
@@ -95,7 +95,7 @@ MemoryChunk TsPacket::adapdation_field() {
 }
 
 MemoryChunk TsPacket::payload() {
-    // ƒyƒCƒ[ƒh‚Ì’·‚³’²®‚ÍƒAƒ_ƒvƒe[ƒVƒ‡ƒ“ƒtƒB[ƒ‹ƒh‚Å‚È‚³‚ê‚é‚æ`
+    // ãƒšã‚¤ãƒ­ãƒ¼ãƒ‰ã®é•·ã•èª¿æ•´ã¯ã‚¢ãƒ€ãƒ—ãƒ†ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã§ãªã•ã‚Œã‚‹ã‚ˆï½
     return MemoryChunk(
         &data[payload_offset], TS_PACKET_LENGTH - payload_offset);
 }
@@ -120,15 +120,15 @@ uint8_t PESConstantHeader::PES_CRC_flags() const { return bsm(data[7], 1, 1); }
 uint8_t PESConstantHeader::PES_extension_flags() const { return bsm(data[7], 0, 1); }
 uint8_t PESConstantHeader::PES_header_data_length() const { return data[8]; }
 
-/** @brief \•ª‚È’·‚³‚ª‚È‚¢ê‡ false ‚ğ•Ô‚· */
+/** @brief ååˆ†ãªé•·ã•ãŒãªã„å ´åˆ false ã‚’è¿”ã™ */
 bool PESConstantHeader::parse() {
     if (length < 9) return false;
     return true;
 }
 
 bool PESConstantHeader::check() {
-    if (packet_start_code_prefix() != 0x000001) return false; // ƒXƒ^[ƒgƒR[ƒh
-    if ((data[6] & 0xC0) != 0x80U) return false; // ŒÅ’èƒrƒbƒg
+    if (packet_start_code_prefix() != 0x000001) return false; // ã‚¹ã‚¿ãƒ¼ãƒˆã‚³ãƒ¼ãƒ‰
+    if ((data[6] & 0xC0) != 0x80U) return false; // å›ºå®šãƒ“ãƒƒãƒˆ
     if (PTS_DTS_flags() == 0x01)return false; // forbidden
     return true;
 }
@@ -143,10 +143,10 @@ bool PESPacket::parse() {
         return false;
     }
     if (stream_id() == 0xBF) {
-        // private_stream_2‚Í‘Î‰‚µ‚È‚¢
+        // private_stream_2ã¯å¯¾å¿œã—ãªã„
         return false;
     }
-    // ƒwƒbƒ_’·ƒ`ƒFƒbƒN
+    // ãƒ˜ãƒƒãƒ€é•·ãƒã‚§ãƒƒã‚¯
     int headerLength = PES_header_data_length();
     int calculatedLength = 0;
     if (has_PTS()) calculatedLength += 5;
@@ -159,7 +159,7 @@ bool PESPacket::parse() {
     if (PES_extension_flags()) calculatedLength += 1;
 
     if (headerLength < calculatedLength) {
-        // ƒwƒbƒ_’·‚ª‘«‚è‚È‚¢
+        // ãƒ˜ãƒƒãƒ€é•·ãŒè¶³ã‚Šãªã„
         return false;
     }
 
@@ -182,7 +182,7 @@ bool PESPacket::check() {
     if (!PESConstantHeader::check()) {
         return false;
     }
-    // ’·‚³ƒ`ƒFƒbƒN
+    // é•·ã•ãƒã‚§ãƒƒã‚¯
     int packetLength = PES_packet_length();
     if (payload_offset >= (int)length) return false;
     if (packetLength != 0 && packetLength + 6 != (int)length) return false;
@@ -193,7 +193,7 @@ MemoryChunk PESPacket::paylod() {
     return MemoryChunk(data + payload_offset, (int)length - payload_offset);
 }
 
-// PTS, DTS‚ª‚ ‚é‚Æ‚«‚¾‚¯‘‚«Š·‚¦‚é
+// PTS, DTSãŒã‚ã‚‹ã¨ãã ã‘æ›¸ãæ›ãˆã‚‹
 void PESPacket::changeTimestamp(int64_t PTS, int64_t DTS) {
     int pos = 9;
     if (has_PTS()) {
@@ -240,7 +240,7 @@ TsPacketParser::TsPacketParser(AMTContext& ctx)
     : AMTObject(ctx)
     , syncOK(false) {}
 
-/** @brief TSƒf[ƒ^‚ğ“ü—Í */
+/** @brief TSãƒ‡ãƒ¼ã‚¿ã‚’å…¥åŠ› */
 void TsPacketParser::inputTS(MemoryChunk data) {
 
     buffer.add(data);
@@ -249,22 +249,22 @@ void TsPacketParser::inputTS(MemoryChunk data) {
         outPackets();
     }
     while (buffer.size() >= CHECK_PACKET_NUM * TS_PACKET_LENGTH) {
-        // ƒ`ƒFƒbƒN‚·‚é‚Ì‚É\•ª‚È—Ê‚ª‚ ‚é
+        // ãƒã‚§ãƒƒã‚¯ã™ã‚‹ã®ã«ååˆ†ãªé‡ãŒã‚ã‚‹
         if (checkSyncByte(buffer.ptr(), CHECK_PACKET_NUM)) {
             syncOK = true;
             outPackets();
         } else {
-            // ƒ_ƒ‚¾‚Á‚½‚Ì‚Å1ƒoƒCƒgƒXƒLƒbƒv
+            // ãƒ€ãƒ¡ã ã£ãŸã®ã§1ãƒã‚¤ãƒˆã‚¹ã‚­ãƒƒãƒ—
             syncOK = false;
             buffer.trimHead(1);
         }
     }
 }
 
-/** @brief “à•”ƒoƒbƒtƒ@‚ğƒtƒ‰ƒbƒVƒ… */
+/** @brief å†…éƒ¨ãƒãƒƒãƒ•ã‚¡ã‚’ãƒ•ãƒ©ãƒƒã‚·ãƒ¥ */
 void TsPacketParser::flush() {
     while (buffer.size() >= TS_PACKET_LENGTH) {
-        // æ“ªƒpƒPƒbƒg‚Ì“¯ŠúƒR[ƒh‚ª‡‚Á‚Ä‚¢‚ê‚Îo—Í‚·‚é
+        // å…ˆé ­ãƒ‘ã‚±ãƒƒãƒˆã®åŒæœŸã‚³ãƒ¼ãƒ‰ãŒåˆã£ã¦ã„ã‚Œã°å‡ºåŠ›ã™ã‚‹
         if (checkSyncByte(buffer.ptr(), 1)) {
             checkAndOutPacket(MemoryChunk(buffer.ptr(), TS_PACKET_LENGTH));
             buffer.trimHead(TS_PACKET_LENGTH);
@@ -274,13 +274,13 @@ void TsPacketParser::flush() {
     }
 }
 
-/** @brief c‚Á‚Ä‚¢‚éƒf[ƒ^‚ğ‘S‚ÄƒNƒŠƒA */
+/** @brief æ®‹ã£ã¦ã„ã‚‹ãƒ‡ãƒ¼ã‚¿ã‚’å…¨ã¦ã‚¯ãƒªã‚¢ */
 void TsPacketParser::reset() {
     buffer.clear();
     syncOK = false;
 }
 
-// numPacketŒÂ•ª‚ÌƒpƒPƒbƒg‚Ì“¯ŠúƒoƒCƒg‚ª‡‚Á‚Ä‚¢‚é‚©ƒ`ƒFƒbƒN
+// numPacketå€‹åˆ†ã®ãƒ‘ã‚±ãƒƒãƒˆã®åŒæœŸãƒã‚¤ãƒˆãŒåˆã£ã¦ã„ã‚‹ã‹ãƒã‚§ãƒƒã‚¯
 bool TsPacketParser::checkSyncByte(uint8_t* ptr, int numPacket) {
     for (int i = 0; i < numPacket; ++i) {
         if (ptr[TS_PACKET_LENGTH * i] != TS_SYNC_BYTE) {
@@ -290,17 +290,17 @@ bool TsPacketParser::checkSyncByte(uint8_t* ptr, int numPacket) {
     return true;
 }
 
-// uæ“ª‚ÆŸ‚ÌƒpƒPƒbƒg‚Ì“¯ŠúƒoƒCƒg‚ğŒ©‚Ä‡‚Á‚Ä‚¢‚ê‚Îo—Ív‚ğŒJ‚è•Ô‚·
+// ã€Œå…ˆé ­ã¨æ¬¡ã®ãƒ‘ã‚±ãƒƒãƒˆã®åŒæœŸãƒã‚¤ãƒˆã‚’è¦‹ã¦åˆã£ã¦ã„ã‚Œã°å‡ºåŠ›ã€ã‚’ç¹°ã‚Šè¿”ã™
 void TsPacketParser::outPackets() {
     while (buffer.size() >= 2 * TS_PACKET_LENGTH &&
         checkSyncByte(buffer.ptr(), 2)) {
         checkAndOutPacket(MemoryChunk(buffer.ptr(), TS_PACKET_LENGTH));
-        // onTsPacket‚Åreset‚ªŒÄ‚Î‚ê‚é‚©‚à‚µ‚ê‚È‚¢‚Ì‚Å’ˆÓ
+        // onTsPacketã§resetãŒå‘¼ã°ã‚Œã‚‹ã‹ã‚‚ã—ã‚Œãªã„ã®ã§æ³¨æ„
         buffer.trimHead(TS_PACKET_LENGTH);
     }
 }
 
-// ƒpƒPƒbƒg‚ğƒ`ƒFƒbƒN‚µ‚Äo—Í
+// ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦å‡ºåŠ›
 void TsPacketParser::checkAndOutPacket(MemoryChunk data) {
     TsPacket packet(data.data);
     if (packet.parse() && packet.check()) {
@@ -309,10 +309,10 @@ void TsPacketParser::checkAndOutPacket(MemoryChunk data) {
 }
 PesParser::PesParser() : contCounter(0) {}
 
-/** @brief TSƒpƒPƒbƒg(ƒ`ƒFƒbƒNÏ‚İ)‚ğ“ü—Í */
+/** @brief TSãƒ‘ã‚±ãƒƒãƒˆ(ãƒã‚§ãƒƒã‚¯æ¸ˆã¿)ã‚’å…¥åŠ› */
 /* virtual */ void PesParser::onTsPacket(int64_t clock, TsPacket packet) {
 
-    // ƒpƒPƒbƒg‚Ì˜A‘±«ƒJƒEƒ“ƒ^‚ğƒ`ƒFƒbƒN
+    // ãƒ‘ã‚±ãƒƒãƒˆã®é€£ç¶šæ€§ã‚«ã‚¦ãƒ³ã‚¿ã‚’ãƒã‚§ãƒƒã‚¯
     int cc = packet.continuity_counter();
     if (cc != contCounter) {
         buffer.clear();
@@ -320,14 +320,14 @@ PesParser::PesParser() : contCounter(0) {}
     contCounter = (cc + 1) & 0xF;
 
     if (packet.has_payload()) {
-        // ƒf[ƒ^‚ ‚è
+        // ãƒ‡ãƒ¼ã‚¿ã‚ã‚Š
 
         if (packet.payload_unit_start_indicator()) {
-            // ƒpƒPƒbƒgƒXƒ^[ƒg
-            // ƒyƒCƒ[ƒhÅ‰‚©‚çn‚Ü‚é‚ñ‚¾‚æ‚Ë
+            // ãƒ‘ã‚±ãƒƒãƒˆã‚¹ã‚¿ãƒ¼ãƒˆ
+            // ãƒšã‚¤ãƒ­ãƒ¼ãƒ‰æœ€åˆã‹ã‚‰å§‹ã¾ã‚‹ã‚“ã ã‚ˆã­
 
             if (buffer.size() > 0) {
-                // ‘O‚ÌƒpƒPƒbƒgƒf[ƒ^‚ª‚ ‚éê‡‚Ío—Í
+                // å‰ã®ãƒ‘ã‚±ãƒƒãƒˆãƒ‡ãƒ¼ã‚¿ãŒã‚ã‚‹å ´åˆã¯å‡ºåŠ›
                 checkAndOutPacket(clock, buffer.get());
                 buffer.clear();
             }
@@ -336,13 +336,13 @@ PesParser::PesParser() : contCounter(0) {}
         MemoryChunk payload = packet.payload();
         buffer.add(payload);
 
-        // Š®—¹ƒ`ƒFƒbƒN
+        // å®Œäº†ãƒã‚§ãƒƒã‚¯
         PESConstantHeader header(buffer.get());
         if (header.parse()) {
             int PES_packet_length = header.PES_packet_length();
             int lengthIncludeHeader = PES_packet_length + 6;
             if (PES_packet_length != 0 && (int)buffer.size() >= lengthIncludeHeader) {
-                // ƒpƒPƒbƒg‚ÌƒXƒgƒAŠ®—¹
+                // ãƒ‘ã‚±ãƒƒãƒˆã®ã‚¹ãƒˆã‚¢å®Œäº†
                 checkAndOutPacket(clock, MemoryChunk(buffer.ptr(), lengthIncludeHeader));
                 buffer.trimHead(lengthIncludeHeader);
             }
@@ -350,10 +350,10 @@ PesParser::PesParser() : contCounter(0) {}
     }
 }
 
-// ƒpƒPƒbƒg‚ğƒ`ƒFƒbƒN‚µ‚Äo—Í
+// ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦å‡ºåŠ›
 void PesParser::checkAndOutPacket(int64_t clock, MemoryChunk data) {
     PESPacket packet(data);
-    // ƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN
+    // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãƒã‚§ãƒƒã‚¯
     if (packet.parse() && packet.check()) {
         // OK
         onPesPacket(clock, packet);
@@ -458,7 +458,7 @@ bool PsiConstantHeader::parse() {
 }
 
 bool PsiConstantHeader::check() const {
-    return true; // ÅŒã‚ÉCRC‚Åƒ`ƒFƒbƒN‚·‚é‚Ì‚Å‰½‚à‚µ‚È‚¢
+    return true; // æœ€å¾Œã«CRCã§ãƒã‚§ãƒƒã‚¯ã™ã‚‹ã®ã§ä½•ã‚‚ã—ãªã„
 }
 
 PsiSection::PsiSection(AMTContext& ctx, MemoryChunk mc)
@@ -486,7 +486,7 @@ bool PsiSection::check() const {
 
 MemoryChunk PsiSection::payload() {
     int payload_offset = section_syntax_indicator() ? 8 : 3;
-    // CRC_32‚Ì4bytesˆø‚­
+    // CRC_32ã®4byteså¼•ã
     return MemoryChunk(data + payload_offset, length - payload_offset - 4);
 }
 
@@ -508,7 +508,7 @@ bool PAT::parse() {
 
 bool PAT::check() const {
     if (section.table_id() != 0x00) return false;
-    // ‚±‚ê‚ğƒ`ƒFƒbƒN‚µ‚È‚¢‚ÆCRC‚È‚µ‚ğOK‚Æ‚µ‚Ä‚µ‚Ü‚¤‚Ì‚Åd—v
+    // ã“ã‚Œã‚’ãƒã‚§ãƒƒã‚¯ã—ãªã„ã¨CRCãªã—ã‚’OKã¨ã—ã¦ã—ã¾ã†ã®ã§é‡è¦
     if (section.section_syntax_indicator() != 1) return false;
     return (payload_.length % 4) == 0;
 }
@@ -616,7 +616,7 @@ void JSTTime::getTime(int& h, int& m, int& s) {
 }
 
 /* static */ void JSTTime::MJDtoYMD(uint16_t mjd16, int& y, int& m, int& d) {
-    // 2000”NˆÈ‘O‚¾‚Á‚½‚çãˆÊ1ƒrƒbƒg‚ğ‘«‚·
+    // 2000å¹´ä»¥å‰ã ã£ãŸã‚‰ä¸Šä½1ãƒ“ãƒƒãƒˆã‚’è¶³ã™
     int mjd = (mjd16 < 51544) ? mjd16 + 65536 : mjd16;
     int ydash = int((mjd - 15078.2) / 365.25);
     int mdash = int((mjd - 14956.1 - int(ydash * 365.25)) / 30.6001);
@@ -648,7 +648,7 @@ bool TOT::parse() {
 
 bool TOT::check() const {
     if (section.section_syntax_indicator() != 0) return false;
-    // section_syntax_indicator‚Í0‚¾‚ªCRC‚ª‚ ‚é‚Ì‚Åƒ`ƒFƒbƒN‚·‚é
+    // section_syntax_indicatorã¯0ã ãŒCRCãŒã‚ã‚‹ã®ã§ãƒã‚§ãƒƒã‚¯ã™ã‚‹
     if (section.ctx.getCRC()->calc(section.data, (int)section.length, 0xFFFFFFFFUL)) return false;
     return true;
 }
@@ -696,7 +696,7 @@ EITElement EIT::get(int i) const {
 PsiParser::PsiParser(AMTContext& ctx)
     : AMTObject(ctx), packetClock(-1) {}
 
-/** ó‘ÔƒŠƒZƒbƒg */
+/** çŠ¶æ…‹ãƒªã‚»ãƒƒãƒˆ */
 void PsiParser::clear() {
     buffer.clear();
 }
@@ -704,19 +704,19 @@ void PsiParser::clear() {
 /* virtual */ void PsiParser::onTsPacket(int64_t clock, TsPacket packet) {
 
     if (packet.has_payload()) {
-        // ƒf[ƒ^‚ ‚è
+        // ãƒ‡ãƒ¼ã‚¿ã‚ã‚Š
 
         MemoryChunk payload = packet.payload();
 
         if (packet.payload_unit_start_indicator()) {
-            // ƒZƒNƒVƒ‡ƒ“ŠJn‚ª‚ ‚é
+            // ã‚»ã‚¯ã‚·ãƒ§ãƒ³é–‹å§‹ãŒã‚ã‚‹
             int startPos = payload.data[0] + 1; // pointer field
-            // ’·‚³ƒ`ƒFƒbƒN
+            // é•·ã•ãƒã‚§ãƒƒã‚¯
             if (startPos >= (int)payload.length) {
                 return;
             }
             if (startPos > 1) {
-                // ‘O‚ÌƒZƒNƒVƒ‡ƒ“‚Ì‘±‚«‚ª‚ ‚é
+                // å‰ã®ã‚»ã‚¯ã‚·ãƒ§ãƒ³ã®ç¶šããŒã‚ã‚‹
                 buffer.add(MemoryChunk(&payload.data[1], startPos - 1));
                 checkAndOutSection();
             }
@@ -732,16 +732,16 @@ void PsiParser::clear() {
     }
 }
 
-// ƒpƒPƒbƒg‚ğƒ`ƒFƒbƒN‚µ‚Äo—Í
+// ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒã‚§ãƒƒã‚¯ã—ã¦å‡ºåŠ›
 void PsiParser::checkAndOutSection() {
-    // Š®—¹ƒ`ƒFƒbƒN
+    // å®Œäº†ãƒã‚§ãƒƒã‚¯
     PsiConstantHeader header(buffer.get());
     if (header.parse()) {
         int lengthIncludeHeader = header.section_length() + 3;
         if ((int)buffer.size() >= lengthIncludeHeader) {
-            // ƒpƒPƒbƒg‚ÌƒXƒgƒAŠ®—¹
+            // ãƒ‘ã‚±ãƒƒãƒˆã®ã‚¹ãƒˆã‚¢å®Œäº†
             PsiSection section(ctx, MemoryChunk(buffer.ptr(), lengthIncludeHeader));
-            // ƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN
+            // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãƒã‚§ãƒƒã‚¯
             if (section.parse() && section.check()) {
                 // OK
                 onPsiSection(packetClock, section);
@@ -763,19 +763,19 @@ PsiUpdatedDetector::PsiUpdatedDetector(AMTContext&ctx)
 PidHandlerTable::PidHandlerTable()
     : table() {}
 
-// ŒÅ’èPIDƒnƒ“ƒhƒ‰‚ğ“o˜^B•K‚¸Å‰‚ÉŒÄ‚Ño‚·‚±‚Æ
-//iclear‚µ‚Ä‚àíœ‚³‚ê‚È‚¢j
+// å›ºå®šPIDãƒãƒ³ãƒ‰ãƒ©ã‚’ç™»éŒ²ã€‚å¿…ãšæœ€åˆã«å‘¼ã³å‡ºã™ã“ã¨
+//ï¼ˆclearã—ã¦ã‚‚å‰Šé™¤ã•ã‚Œãªã„ï¼‰
 void PidHandlerTable::addConstant(int pid, TsPacketHandler* handler) {
     constHandlers[pid] = handler;
     table[pid] = handler;
 }
 
-/** @brief ”Ô†pidˆÊ’u‚Éhandler‚ğƒZƒbƒg
-* “¯‚¶ƒe[ƒuƒ‹’†‚Å“¯‚¶ƒnƒ“ƒhƒ‰‚Í‚P‚Â‚Ìpid‚É‚µ‚©•R•t‚¯‚Å‚«‚È‚¢
-* ƒnƒ“ƒhƒ‰‚ª•Ê‚Ìpid‚É‚Ğ‚à•t‚¯‚³‚ê‚Ä‚¢‚éê‡‰ğœ‚³‚ê‚Ä‚©‚çV‚µ‚­ƒZƒbƒg‚³‚ê‚é
+/** @brief ç•ªå·pidä½ç½®ã«handlerã‚’ã‚»ãƒƒãƒˆ
+* åŒã˜ãƒ†ãƒ¼ãƒ–ãƒ«ä¸­ã§åŒã˜ãƒãƒ³ãƒ‰ãƒ©ã¯ï¼‘ã¤ã®pidã«ã—ã‹ç´ä»˜ã‘ã§ããªã„
+* ãƒãƒ³ãƒ‰ãƒ©ãŒåˆ¥ã®pidã«ã²ã‚‚ä»˜ã‘ã•ã‚Œã¦ã„ã‚‹å ´åˆè§£é™¤ã•ã‚Œã¦ã‹ã‚‰æ–°ã—ãã‚»ãƒƒãƒˆã•ã‚Œã‚‹
 */
 bool PidHandlerTable::add(int pid, TsPacketHandler* handler, bool overwrite) {
-    // PAT‚Í•ÏX•s‰Â
+    // PATã¯å¤‰æ›´ä¸å¯
     if (pid == 0 || pid > MAX_PID) {
         return false;
     }
@@ -783,7 +783,7 @@ bool PidHandlerTable::add(int pid, TsPacketHandler* handler, bool overwrite) {
         return false;
     }
     if (table[pid] == handler) {
-        // ‚·‚Å‚ÉƒZƒbƒg‚³‚ê‚Ä‚¢‚é
+        // ã™ã§ã«ã‚»ãƒƒãƒˆã•ã‚Œã¦ã„ã‚‹
         return true;
     }
     auto it = handlers.find(handler);
@@ -806,7 +806,7 @@ void PidHandlerTable::clear() {
     for (auto pair : handlers) {
         auto it = constHandlers.find(pair.second);
         if (it != constHandlers.end()) {
-            // ŒÅ’èƒnƒ“ƒhƒ‰‚ª‚ ‚ê‚Î‚»‚ê‚ğƒZƒbƒg
+            // å›ºå®šãƒãƒ³ãƒ‰ãƒ©ãŒã‚ã‚Œã°ãã‚Œã‚’ã‚»ãƒƒãƒˆ
             table[pair.second] = it->second;
         } else {
             table[pair.second] = NULL;
@@ -860,12 +860,12 @@ void TsPacketSelector::setHandler(TsPacketSelectorHandler* handler) {
     selectorHandler = handler;
 }
 
-// •\¦—p
+// è¡¨ç¤ºç”¨
 void TsPacketSelector::setStartClock(int64_t startClock) {
     this->startClock = startClock;
 }
 
-// PSIƒp[ƒT“à•”ƒoƒbƒtƒ@‚ğƒNƒŠƒA
+// PSIãƒ‘ãƒ¼ã‚µå†…éƒ¨ãƒãƒƒãƒ•ã‚¡ã‚’ã‚¯ãƒªã‚¢
 void TsPacketSelector::resetParser() {
     PsiParserPAT.clear();
     PsiParserPMT.clear();
@@ -875,7 +875,7 @@ void TsPacketSelector::inputTsPacket(int64_t clock, TsPacket packet) {
 
     currentClock = clock;
     if (waitingNewVideo && packet.PID() == videoEs.pid) {
-        // ‘Ò‚Á‚Ä‚¢‚½‰f‘œƒpƒPƒbƒg—ˆ‚½‚Ì‚Åƒe[ƒuƒ‹•ÏX
+        // å¾…ã£ã¦ã„ãŸæ˜ åƒãƒ‘ã‚±ãƒƒãƒˆæ¥ãŸã®ã§ãƒ†ãƒ¼ãƒ–ãƒ«å¤‰æ›´
         waitingNewVideo = false;
         swapHandlerTable();
         selectorHandler->onPidTableChanged(videoEs, audioEs, captionEs);
@@ -934,20 +934,20 @@ void TsPacketSelector::onPatUpdated(PsiSection section) {
             }
         }
         if (TSID_ != patTSID) {
-            // TS‚ª•Ï‚í‚Á‚½
+            // TSãŒå¤‰ã‚ã£ãŸ
             curHandlerTable->clear();
             PsiParserPMT.clear();
             TSID_ = patTSID;
         }
         int progidx = selectorHandler->onPidSelect(patTSID, sids);
         if (progidx >= (int)sids.size()) {
-            throw InvalidOperationException("‘I‘ğ‚µ‚½ƒT[ƒrƒXƒCƒ“ƒfƒbƒNƒX‚Í”ÍˆÍŠO‚Å‚·");
+            throw InvalidOperationException("é¸æŠã—ãŸã‚µãƒ¼ãƒ“ã‚¹ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ã¯ç¯„å›²å¤–ã§ã™");
         }
         if (progidx >= 0) {
             int sid = sids[progidx];
             int pid = pids[progidx];
             if (SID_ != sid) {
-                // ƒT[ƒrƒX‘I‘ğ‚ª•Ï‚í‚Á‚½
+                // ã‚µãƒ¼ãƒ“ã‚¹é¸æŠãŒå¤‰ã‚ã£ãŸ
                 curHandlerTable->clear();
                 PsiParserPMT.clear();
                 SID_ = sid;
@@ -967,7 +967,7 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
 
         printPMT(pmt);
 
-        // ‰f‘œA‰¹ºAš–‹‚ğ’T‚·
+        // æ˜ åƒã€éŸ³å£°ã€å­—å¹•ã‚’æ¢ã™
         PMTESInfo videoEs(-1, -1);
         std::vector<PMTESInfo> audioEs;
         PMTESInfo captionEs(-1, -1);
@@ -982,11 +982,11 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
             } else if (isCaption(stream_type)) {
                 auto descs = ParseDescriptors(elem.descriptor());
                 for (int i = 0; i < (int)descs.size(); ++i) {
-                    if (descs[i].tag() == 0x52) { // ƒXƒgƒŠ[ƒ€¯•Ê‹Lqq
+                    if (descs[i].tag() == 0x52) { // ã‚¹ãƒˆãƒªãƒ¼ãƒ è­˜åˆ¥è¨˜è¿°å­
                         StreamIdentifierDescriptor streamdesc(descs[i]);
                         if (streamdesc.parse()) {
                             int ct = streamdesc.component_tag();
-                            if (ct == 0x30 || ct == 0x87) { // TvCaptionMod2‚ğQl‚É‚µ‚½
+                            if (ct == 0x30 || ct == 0x87) { // TvCaptionMod2ã‚’å‚è€ƒã«ã—ãŸ
                                 captionEs.stype = stream_type;
                                 captionEs.pid = elem.elementary_PID();
                             }
@@ -997,22 +997,22 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
             }
         }
         if (videoEs.pid == -1) {
-            // ‰f‘œƒXƒgƒŠ[ƒ€‚ª‚È‚¢
-            ctx.warn("PMT ‰f‘œƒXƒgƒŠ[ƒ€‚ª‚ ‚è‚Ü‚¹‚ñ");
+            // æ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒãªã„
+            ctx.warn("PMT æ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒã‚ã‚Šã¾ã›ã‚“");
             return;
         }
         if (audioEs.size() == 0) {
-            ctx.warn("PMT ƒI[ƒfƒBƒIƒXƒgƒŠ[ƒ€‚ª‚ ‚è‚Ü‚¹‚ñ");
+            ctx.warn("PMT ã‚ªãƒ¼ãƒ‡ã‚£ã‚ªã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒã‚ã‚Šã¾ã›ã‚“");
         }
 
         // 
         PidHandlerTable *table = curHandlerTable;
         if (videoEs.pid != this->videoEs.pid) {
-            // ‰f‘œƒXƒgƒŠ[ƒ€‚ª•Ï‚í‚éê‡
+            // æ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒå¤‰ã‚ã‚‹å ´åˆ
             waitingNewVideo = true;
             table = nextHandlerTable;
             if (this->videoEs.pid != -1) {
-                ctx.info("PMT ‰f‘œƒXƒgƒŠ[ƒ€‚Ì•ÏX‚ğŒŸ’m");
+                ctx.info("PMT æ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ ã®å¤‰æ›´ã‚’æ¤œçŸ¥");
             }
         }
 
@@ -1084,7 +1084,7 @@ void TsPacketSelector::swapHandlerTable() {
     std::swap(curHandlerTable, nextHandlerTable);
     nextHandlerTable->clear();
 
-    // PMT‚ğˆø‚«Œp‚®
+    // PMTã‚’å¼•ãç¶™ã
     curHandlerTable->add(pmtPid, &PsiParserPMT);
 }
 
@@ -1106,7 +1106,7 @@ bool TsPacketSelector::isVideo(uint8_t stream_type) {
 }
 
 bool TsPacketSelector::isAudio(uint8_t stream_type) {
-    // AACˆÈŠO–¢‘Î‰
+    // AACä»¥å¤–æœªå¯¾å¿œ
     return (stream_type == 0x0F);
 }
 
@@ -1123,9 +1123,9 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
     case 0x04: // ISO/IEC 13818-3 (MPEG-2 halved sample rate audio) in a packetized stream
         return "MPEG2-AUDIO";
     case 0x06: // ITU-T Rec. H.222 and ISO/IEC 13818-1 (MPEG-2 packetized data) privately defined (i.e., DVB subtitles / VBI and AC - 3)
-        return "š–‹";
+        return "å­—å¹•";
     case 0x0D: // ISO/IEC 13818-6 DSM CC tabled data
-        return "ƒf[ƒ^ƒJƒ‹[ƒZƒ‹";
+        return "ãƒ‡ãƒ¼ã‚¿ã‚«ãƒ«ãƒ¼ã‚»ãƒ«";
     case 0x0F: // ISO/IEC 13818-7 ADTS AAC (MPEG-2 lower bit-rate audio) in a packetized stream
         return "ADTS AAC";
     case 0x11: // ISO/IEC 14496-3 (MPEG-4 LOAS multi-format framed audio) in a packetized stream
@@ -1139,15 +1139,15 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
 }
 
 /* static */ const char* TsPacketSelector::componentTagString(int component_tag) {
-    if (component_tag >= 0x00 && component_tag <= 0x0F) return "‰f‘œ";
-    if (component_tag >= 0x10 && component_tag <= 0x2F) return "AAC ‰¹º";
-    if (component_tag >= 0x30 && component_tag <= 0x37) return "š–‹";
-    if (component_tag >= 0x38 && component_tag <= 0x3F) return "•¶šƒX[ƒp[";
-    if (component_tag >= 0x40 && component_tag <= 0x7F) return "ƒf[ƒ^";
+    if (component_tag >= 0x00 && component_tag <= 0x0F) return "æ˜ åƒ";
+    if (component_tag >= 0x10 && component_tag <= 0x2F) return "AAC éŸ³å£°";
+    if (component_tag >= 0x30 && component_tag <= 0x37) return "å­—å¹•";
+    if (component_tag >= 0x38 && component_tag <= 0x3F) return "æ–‡å­—ã‚¹ãƒ¼ãƒ‘ãƒ¼";
+    if (component_tag >= 0x40 && component_tag <= 0x7F) return "ãƒ‡ãƒ¼ã‚¿";
     switch (component_tag) {
     case 0x81:
     case 0x82:
-        return "ŠÈˆÕ“®‰æ ‰f‘œ";
+        return "ç°¡æ˜“å‹•ç”» æ˜ åƒ";
     case 0x83:
     case 0x84:
     case 0x85:
@@ -1156,37 +1156,37 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
     case 0x8D:
     case 0x8E:
     case 0x8F:
-        return "AAC ‰¹º";
+        return "AAC éŸ³å£°";
     case 0x87:
-        return "š–‹";
+        return "å­—å¹•";
     case 0x80:
     case 0x8B:
-        return "ƒf[ƒ^";
+        return "ãƒ‡ãƒ¼ã‚¿";
     case 0x89:
     case 0x8A:
-        return "ƒCƒxƒ“ƒgƒƒbƒZ[ƒW";
+        return "ã‚¤ãƒ™ãƒ³ãƒˆãƒ¡ãƒƒã‚»ãƒ¼ã‚¸";
     }
     return nullptr;
 }
 
 void TsPacketSelector::printPMT(const PMT& pmt) {
     if (currentClock == -1 || startClock == -1) {
-        ctx.info("[PMTXV]");
+        ctx.info("[PMTæ›´æ–°]");
     } else {
         double sec = (currentClock - startClock) / 27000000.0;
         int minutes = (int)(sec / 60);
         sec -= minutes * 60;
-        ctx.infoF("[PMTXV] ƒXƒgƒŠ[ƒ€: %d•ª%.2f•b", minutes, sec);
+        ctx.infoF("[PMTæ›´æ–°] ã‚¹ãƒˆãƒªãƒ¼ãƒ æ™‚åˆ»: %dåˆ†%.2fç§’", minutes, sec);
     }
 
     const char* content = NULL;
     for (int i = 0; i < pmt.numElems(); ++i) {
         PMTElement elem = pmt.get(i);
-        // ƒRƒ“ƒ|[ƒlƒ“ƒgƒ^ƒO‚ğæ“¾
+        // ã‚³ãƒ³ãƒãƒ¼ãƒãƒ³ãƒˆã‚¿ã‚°ã‚’å–å¾—
         int component_tag = -1;
         auto descs = ParseDescriptors(elem.descriptor());
         for (int i = 0; i < (int)descs.size(); ++i) {
-            if (descs[i].tag() == 0x52) { // ƒXƒgƒŠ[ƒ€¯•Ê‹Lqq
+            if (descs[i].tag() == 0x52) { // ã‚¹ãƒˆãƒªãƒ¼ãƒ è­˜åˆ¥è¨˜è¿°å­
                 StreamIdentifierDescriptor streamdesc(descs[i]);
                 if (streamdesc.parse()) {
                     component_tag = streamdesc.component_tag();
@@ -1199,7 +1199,7 @@ void TsPacketSelector::printPMT(const PMT& pmt) {
             if (tag != NULL) {
                 ctx.infoF("PID: 0x%04x TYPE: %s TAG: %s(0x%02x)", elem.elementary_PID(), content, tag, component_tag);
             } else if (component_tag != -1) {
-                ctx.infoF("PID: 0x%04x TYPE: %s TAG: •s–¾(0x%02x)", elem.elementary_PID(), content, component_tag);
+                ctx.infoF("PID: 0x%04x TYPE: %s TAG: ä¸æ˜(0x%02x)", elem.elementary_PID(), content, component_tag);
             } else {
                 ctx.infoF("PID: 0x%04x TYPE: %s", elem.elementary_PID(), content);
             }

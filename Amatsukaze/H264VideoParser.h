@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * H.264/AVC Elementary Stream parser
@@ -72,33 +72,33 @@ struct H264SequenceParameterSet {
 
     RECT frame_crop;
 
-    uint8_t vui_parameters_present_flag; // 1ŒÅ’è
+    uint8_t vui_parameters_present_flag; // 1å›ºå®š
 
     // vui_parameters
-    uint8_t aspect_ratio_info_present_flag; // 1ŒÅ’è
+    uint8_t aspect_ratio_info_present_flag; // 1å›ºå®š
     uint8_t aspect_ratio_idc;
-    uint16_t sar_width; // 4ŒÅ’è
-    uint16_t sar_height; // 3ŒÅ’è
+    uint16_t sar_width; // 4å›ºå®š
+    uint16_t sar_height; // 3å›ºå®š
 
     uint8_t overscan_info_present_flag;
     uint8_t overscan_appropriate_flag;
 
     uint8_t video_signal_type_present_flag;
     uint8_t video_format;
-    uint8_t video_full_range_flag; // 0ŒÅ’è
+    uint8_t video_full_range_flag; // 0å›ºå®š
     uint8_t colour_description_present_flag;
-    uint8_t colour_primaries; // 1ŒÅ’è
+    uint8_t colour_primaries; // 1å›ºå®š
     uint8_t transfer_characteristics; // 1 or 11
-    uint8_t matrix_coefficients; // 1ŒÅ’è
+    uint8_t matrix_coefficients; // 1å›ºå®š
 
-    uint8_t chroma_loc_info_present_flag; // 0ŒÅ’è
+    uint8_t chroma_loc_info_present_flag; // 0å›ºå®š
     uint32_t chroma_sample_loc_type_top_field;
     uint32_t chroma_sample_loc_type_bottom_field;
 
-    uint8_t timing_info_present_flag; // 1ŒÅ’è
-    uint32_t num_units_in_tick; // 1001ŒÅ’è
+    uint8_t timing_info_present_flag; // 1å›ºå®š
+    uint32_t num_units_in_tick; // 1001å›ºå®š
     uint32_t time_scale; // 60000(29.97) or 120000(59.94)
-    uint8_t fixed_frame_rate_flag; // 1ŒÅ’è
+    uint8_t fixed_frame_rate_flag; // 1å›ºå®š
 
     uint8_t nal_hrd_parameters_present_flag;
     H264HRDParameters nal_hrd_parameters;
@@ -108,7 +108,7 @@ struct H264SequenceParameterSet {
 
     uint8_t low_delay_hrd_flag;
 
-    uint8_t pic_struct_present_flag; // 1ŒÅ’è
+    uint8_t pic_struct_present_flag; // 1å›ºå®š
 
     uint8_t bitstream_restriction_flag;
     uint8_t motion_vectors_over_pic_boundaries_flag;
@@ -213,7 +213,7 @@ public:
 class H264VideoParser : public AMTObject, public IVideoParser {
     struct NalUnit {
         int offset;
-        int length; // rbsp_trailing_bits‚ğœ‚¢‚½’·‚³
+        int length; // rbsp_trailing_bitsã‚’é™¤ã„ãŸé•·ã•
     };
 public:
 
@@ -227,7 +227,7 @@ private:
     AutoBuffer buffer;
     std::vector<NalUnit> nalUnits;
 
-    // ’¼‘O‚Ì beffering period ‚Ì DTS;
+    // ç›´å‰ã® beffering period ã® DTS;
     int64_t beffering_period_DTS;
 
     H264SequenceParameterSet sps;

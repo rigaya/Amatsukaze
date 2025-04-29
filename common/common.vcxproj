@@ -41,8 +41,12 @@
     <ClInclude Include="rgy_bitstream.h" />
     <ClInclude Include="rgy_codepage.h" />
     <ClInclude Include="rgy_def.h" />
+    <ClInclude Include="rgy_env.h" />
+    <ClInclude Include="rgy_event.h" />
+    <ClInclude Include="rgy_filesystem.h" />
     <ClInclude Include="rgy_memmem.h" />
     <ClInclude Include="rgy_osdep.h" />
+    <ClInclude Include="rgy_pipe.h" />
     <ClInclude Include="rgy_simd.h" />
     <ClInclude Include="rgy_tchar.h" />
     <ClInclude Include="rgy_thread_affinity.h" />
@@ -73,6 +77,9 @@
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release2|x64'">AdvancedVectorExtensions512</EnableEnhancedInstructionSet>
     </ClCompile>
     <ClCompile Include="rgy_codepage.cpp" />
+    <ClCompile Include="rgy_env.cpp" />
+    <ClCompile Include="rgy_event.cpp" />
+    <ClCompile Include="rgy_filesystem.cpp" />
     <ClCompile Include="rgy_memmem.cpp" />
     <ClCompile Include="rgy_memmem_avx2.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -94,6 +101,8 @@
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AdvancedVectorExtensions512</EnableEnhancedInstructionSet>
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release2|x64'">AdvancedVectorExtensions512</EnableEnhancedInstructionSet>
     </ClCompile>
+    <ClCompile Include="rgy_pipe.cpp" />
+    <ClCompile Include="rgy_pipe_linux.cpp" />
     <ClCompile Include="rgy_simd.cpp" />
     <ClCompile Include="rgy_thread_affinity.cpp" />
     <ClCompile Include="rgy_util.cpp" />

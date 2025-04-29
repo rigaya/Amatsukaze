@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /**
 * Output frames to encoder

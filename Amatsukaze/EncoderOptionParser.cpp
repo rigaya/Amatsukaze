@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -79,7 +79,7 @@ const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const std::string& str) {
 }
 
 /* static */ std::vector<std::wstring> SplitOptions(const tstring& str) {
-    std::wstring wstr = to_wstring(str);
+    std::wstring wstr = tchar_to_wstring(str);
     std::wregex re(L"(([^\" ]+)|\"([^\"]+)\") *");
     std::wsregex_iterator it(wstr.begin(), wstr.end(), re);
     std::wsregex_iterator end;
@@ -102,7 +102,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
     auto argv = SplitOptions(str);
     int argc = (int)argv.size();
 
-    //ƒfƒtƒHƒ‹ƒg’l‚ğƒZƒbƒg
+    //ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆå€¤ã‚’ã‚»ãƒƒãƒˆ
     info.format = VS_H264;
     switch (encoder) {
     case ENCODER_X264:
@@ -144,10 +144,10 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 info.rcMode = "tbr";
             }
         } else {
-            // arg‚ªrcmodes‚Ìname‚Éˆê’v‚·‚éê‡A‚»‚Ì—v‘f‚ğæ“¾‚·‚é
+            // argãŒrcmodesã®nameã«ä¸€è‡´ã™ã‚‹å ´åˆã€ãã®è¦ç´ ã‚’å–å¾—ã™ã‚‹
             const EncoderRCMode *argmode = nullptr;
             for (int i = 0; rcmodes && rcmodes[i].name; i++) {
-                if (arg == std::wstring(L"--") + to_wstring(rcmodes[i].name)) {
+                if (arg == std::wstring(L"--") + char_to_wstring(rcmodes[i].name)) {
                     argmode = &rcmodes[i];
                     break;
                 }
@@ -215,7 +215,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 }
                 if (is24 && !drop) {
                     THROW(ArgumentException,
-                        "vpp-afsƒIƒvƒVƒ‡ƒ“‚ÉŒë‚è‚ª‚ ‚è‚Ü‚·B24fps‰»‚·‚éê‡‚ÍŠÔˆø‚«(drop)‚àon‚É‚·‚é•K—v‚ª‚ ‚è‚Ü‚·");
+                        "vpp-afsã‚ªãƒ—ã‚·ãƒ§ãƒ³ã«èª¤ã‚ŠãŒã‚ã‚Šã¾ã™ã€‚24fpsåŒ–ã™ã‚‹å ´åˆã¯é–“å¼•ã(drop)ã‚‚onã«ã™ã‚‹å¿…è¦ãŒã‚ã‚Šã¾ã™");
                 }
                 if (timecode) {
                     info.deint = ENCODER_DEINT_VFR;
@@ -266,22 +266,22 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
 void PrintEncoderInfo(AMTContext& ctx, EncoderOptionInfo info) {
     switch (info.deint) {
     case ENCODER_DEINT_NONE:
-        ctx.info("ƒGƒ“ƒR[ƒ_‚Å‚ÌƒCƒ“ƒ^ƒŒ‰ğœ: ‚È‚µ");
+        ctx.info("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã®ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤: ãªã—");
         break;
     case ENCODER_DEINT_24P:
-        ctx.info("ƒGƒ“ƒR[ƒ_‚Å‚ÌƒCƒ“ƒ^ƒŒ‰ğœ: 24fps‰»");
+        ctx.info("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã®ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤: 24fpsåŒ–");
         break;
     case ENCODER_DEINT_30P:
-        ctx.info("ƒGƒ“ƒR[ƒ_‚Å‚ÌƒCƒ“ƒ^ƒŒ‰ğœ: 30fps‰»");
+        ctx.info("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã®ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤: 30fpsåŒ–");
         break;
     case ENCODER_DEINT_60P:
-        ctx.info("ƒGƒ“ƒR[ƒ_‚Å‚ÌƒCƒ“ƒ^ƒŒ‰ğœ: 60fps‰»");
+        ctx.info("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã®ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤: 60fpsåŒ–");
         break;
     case ENCODER_DEINT_VFR:
-        ctx.info("ƒGƒ“ƒR[ƒ_‚Å‚ÌƒCƒ“ƒ^ƒŒ‰ğœ: VFR‰»");
+        ctx.info("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ã®ã‚¤ãƒ³ã‚¿ãƒ¬è§£é™¤: VFRåŒ–");
         break;
     }
     if (info.selectEvery > 1) {
-        ctx.infoF("ƒGƒ“ƒR[ƒ_‚Å%dƒtƒŒ[ƒ€‚É1ƒtƒŒ[ƒ€ŠÔˆø‚­", info.selectEvery);
+        ctx.infoF("ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§%dãƒ•ãƒ¬ãƒ¼ãƒ ã«1ãƒ•ãƒ¬ãƒ¼ãƒ é–“å¼•ã", info.selectEvery);
     }
 }

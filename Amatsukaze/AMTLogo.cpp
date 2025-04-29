@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,7 +7,12 @@
 */
 
 #include "AMTLogo.h"
+#include "rgy_util.h"
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wsign-compare")
 #include "avisynth.h"
+#pragma comment(lib, "avisynth.lib")
+RGY_DISABLE_WARNING_POP
 
 logo::LogoHeader::LogoHeader() {}
 
@@ -49,7 +54,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
     float y0 = (x0 - B) / A;
     float y1 = (x1 - B) / A;
     ToYC48Y(y0); ToYC48Y(y1);
-    // (0,y0),(2048,y1)‚ğ’Ê‚é’¼ü
+    // (0,y0),(2048,y1)ã‚’é€šã‚‹ç›´ç·š
     B = y0;
     A = (y1 - y0) / 2048.0f;
 }
@@ -60,7 +65,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
     float y0 = (x0 - B) / A;
     float y1 = (x1 - B) / A;
     ToYC48C(y0); ToYC48C(y1);
-    // (0,y0),(2048,y1)‚ğ’Ê‚é’¼ü
+    // (0,y0),(2048,y1)ã‚’é€šã‚‹ç›´ç·š
     B = y0;
     A = (y1 - y0) / 2048.0f;
 }
@@ -70,16 +75,16 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
     float B;
     float temp;
 
-    // ‹P“x
+    // è¼åº¦
     A = aY;
     B = bY;
     ToYC48ABY(A, B);
-    if (A == 1) {	// 0‚Å‚ÌœZ‰ñ”ğ
+    if (A == 1) {	// 0ã§ã®é™¤ç®—å›é¿
         lgp.y = lgp.dp_y = 0;
     } else {
         temp = B / (1 - A) + 0.5f;
         if (std::abs(temp) < 0x7FFF) {
-            // short‚Ì”ÍˆÍ“à
+            // shortã®ç¯„å›²å†…
             lgp.y = (short)temp;
             temp = (1 - A) * LOGO_MAX_DP + 0.5f;
             if (std::abs(temp) > 0x3FFF || short(temp) == 0)
@@ -90,7 +95,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
             lgp.y = lgp.dp_y = 0;
     }
 
-    // F·(Â)
+    // è‰²å·®(é’)
     A = aU;
     B = bU;
     ToYC48ABC(A, B);
@@ -99,7 +104,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
     } else {
         temp = B / (1 - A) + 0.5f;
         if (std::abs(temp) < 0x7FFF) {
-            // short”ÍˆÍ“à
+            // shortç¯„å›²å†…
             lgp.cb = (short)temp;
             temp = (1 - A) * LOGO_MAX_DP + 0.5f;
             if (std::abs(temp) > 0x3FFF || short(temp) == 0)
@@ -110,7 +115,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
             lgp.cb = lgp.dp_cb = 0;
     }
 
-    // F·(Ô)
+    // è‰²å·®(èµ¤)
     A = aV;
     B = bV;
     ToYC48ABC(A, B);
@@ -119,7 +124,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
     } else {
         temp = B / (1 - A) + 0.5f;
         if (std::abs(temp) < 0x7FFF) {
-            // short”ÍˆÍ“à
+            // shortç¯„å›²å†…
             lgp.cr = (short)temp;
             temp = (1 - A) * LOGO_MAX_DP + 0.5f;
             if (std::abs(temp) > 0x3FFF || short(temp) == 0)
@@ -197,7 +202,7 @@ float* logo::LogoData::GetB(int plane) {
 }
 
 void logo::LogoData::Save(const tstring& filepath, const LogoHeader* header) {
-    // ƒx[ƒX•”•ªì¬
+    // ãƒ™ãƒ¼ã‚¹éƒ¨åˆ†ä½œæˆ
     int wUV = w >> logUVx;
     std::vector<LOGO_PIXEL> basedata(header->w * header->h);
     for (int y = 0; y < h; ++y) {
@@ -216,14 +221,14 @@ void logo::LogoData::Save(const tstring& filepath, const LogoHeader* header) {
 /* static */ logo::LogoData logo::LogoData::Load(const tstring& filepath, LogoHeader* header) {
     File file(filepath, _T("rb"));
 
-    // ƒx[ƒX•”•ª‚ğƒXƒLƒbƒv
+    // ãƒ™ãƒ¼ã‚¹éƒ¨åˆ†ã‚’ã‚¹ã‚­ãƒƒãƒ—
     file.readValue<LOGO_FILE_HEADER>();
     LOGO_HEADER h = file.readValue<LOGO_HEADER>();
     file.seek(LOGO_PIXELSIZE(&h), SEEK_CUR);
 
     *header = file.readValue<LogoHeader>();
 
-    // TODO: magic,versionƒ`ƒFƒbƒN
+    // TODO: magic,versionãƒã‚§ãƒƒã‚¯
 
     LogoData logo(header->w, header->h, header->logUVx, header->logUVy);
 

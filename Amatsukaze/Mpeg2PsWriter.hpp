@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * MPEG2-PS writer
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -101,7 +101,7 @@ struct PsProgramStreamMap : public AMTObject {
         uint16_t elementary_stream_map_length = reader.read<16>();
         for (int remain = elementary_stream_map_length; remain > 0; ) {
             if (remain < 4) {
-                // ’·‚³•s³
+                // é•·ã•ä¸æ­£
                 return false;
             }
             PSMESInfo info;
@@ -111,7 +111,7 @@ struct PsProgramStreamMap : public AMTObject {
             reader.skip(elementary_stream_info_length * 8);
             remain -= 4 + elementary_stream_info_length;
             if (remain < 0) {
-                // ’·‚³•s³
+                // é•·ã•ä¸æ­£
                 return false;
             }
         }
@@ -121,7 +121,7 @@ struct PsProgramStreamMap : public AMTObject {
 
         uint32_t crc = ctx.getCRC()->calc(data.data, nReadBytes, uint32_t(-1));
         if (crc != 0) {
-            // CRC•s³
+            // CRCä¸æ­£
             return false;
         }
 
@@ -136,7 +136,7 @@ struct PsProgramStreamMap : public AMTObject {
 
 };
 
-// ƒfƒoƒbƒO—p
+// ãƒ‡ãƒãƒƒã‚°ç”¨
 class PsStreamVerifier {
 public:
     PsStreamVerifier(AMTContext&ctx)
@@ -150,17 +150,17 @@ public:
         do {
             pos += pack(MemoryChunk(mc.data + pos, mc.length - pos));
             if (mc.length - pos < 4) {
-                PRINTF("WARNING: I—¹ƒR[ƒh‚ª‚ ‚è‚Ü‚¹‚ñ‚Å‚µ‚½\n");
+                PRINTF("WARNING: çµ‚äº†ã‚³ãƒ¼ãƒ‰ãŒã‚ã‚Šã¾ã›ã‚“ã§ã—ãŸ\n");
                 goto eof;
             }
             code = read32(mc.data + pos);
         } while (code == PACK_START_CODE);
         if (code != MPEG_PROGRAM_END_CODE) {
-            PRINTF("WARNING: I—¹ƒR[ƒh‚ª‚ ‚è‚Ü‚¹‚ñ‚Å‚µ‚½\n");
+            PRINTF("WARNING: çµ‚äº†ã‚³ãƒ¼ãƒ‰ãŒã‚ã‚Šã¾ã›ã‚“ã§ã—ãŸ\n");
         }
 
     eof:
-        PRINTF("“Ç‚İæ‚èI—¹ VideoPackets: %d AudioPackets: %d\n", nVideoPackets, nAudioPackets);
+        PRINTF("èª­ã¿å–ã‚Šçµ‚äº† VideoPackets: %d AudioPackets: %d\n", nVideoPackets, nAudioPackets);
     }
 private:
     PsProgramStreamMap psm;
@@ -186,7 +186,7 @@ private:
             return 0;
         }
         if (read24(packet.data) != 0x01) {
-            // ƒXƒ^[ƒgƒR[ƒh•s³
+            // ã‚¹ã‚¿ãƒ¼ãƒˆã‚³ãƒ¼ãƒ‰ä¸æ­£
             error();
         }
         uint8_t stream_id = packet.data[3];
@@ -204,7 +204,7 @@ private:
         default:
             for (PSMESInfo& info : psm.streams) {
                 if (stream_id == info.stream_id) {
-                    // ESƒXƒgƒŠ[ƒ€
+                    // ESã‚¹ãƒˆãƒªãƒ¼ãƒ 
                     if (isVideoStream(stream_id)) {
                         ++nVideoPackets;
                     }
@@ -220,7 +220,7 @@ private:
             if (isAudioStream(stream_id)) {
                 ++nAudioPackets;
             } else {
-                // PRINTF("•s–¾stream: 0x%x\n", stream_id);
+                // PRINTF("ä¸æ˜stream: 0x%x\n", stream_id);
             }
             return skipPesPacket(packet);
         }
@@ -299,12 +299,12 @@ struct PsEsBuffer {
     }
 };
 
-// PS‚Í‰f‘œƒGƒ“ƒR[ƒh—p‚È‚Ì‚ÅA‰¹º‚Í‚¨‚Ü‚¯
-// ‰¹º‚Í•¡”ƒ`ƒƒƒlƒ‹‚ ‚Á‚½‚Æ‚µ‚Ä‚àAÅ‰‚Ì‚Pƒ`ƒƒƒ“ƒlƒ‹‚¾‚¯o—Í‚·‚é
+// PSã¯æ˜ åƒã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ç”¨ãªã®ã§ã€éŸ³å£°ã¯ãŠã¾ã‘
+// éŸ³å£°ã¯è¤‡æ•°ãƒãƒ£ãƒãƒ«ã‚ã£ãŸã¨ã—ã¦ã‚‚ã€æœ€åˆã®ï¼‘ãƒãƒ£ãƒ³ãƒãƒ«ã ã‘å‡ºåŠ›ã™ã‚‹
 class PsStreamWriter : public AMTObject {
     enum {
-        BITRATE = 80 * 1000 * 1000, // MP@HL‚ÌÅ‘åƒrƒbƒgƒŒ[ƒg
-        VBV_SIZE = 9781248 / 8, // MP@HL‚ÌVBV Buffer Size
+        BITRATE = 80 * 1000 * 1000, // MP@HLã®æœ€å¤§ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ
+        VBV_SIZE = 9781248 / 8, // MP@HLã®VBV Buffer Size
         SYSTEM_CLOCK = 27 * 1000 * 1000,
 
         VIDEO_STREAM_ID = 0xE0,
@@ -320,7 +320,7 @@ public:
         : AMTObject(ctx) {
         systemClock.maxBitsPerSecond = BITRATE;
         videoBuffer.bufferSize = VBV_SIZE;
-        audioBuffer.bufferSize = 3584; // ‚Æ‚è‚ ‚¦‚¸ƒfƒtƒHƒ‹ƒg’l
+        audioBuffer.bufferSize = 3584; // ã¨ã‚Šã‚ãˆãšãƒ‡ãƒ•ã‚©ãƒ«ãƒˆå€¤
         audioChannels = AUDIO_NONE;
         psmVersion = 0;
         videoStreamType = 0;
@@ -332,7 +332,7 @@ public:
         this->handler = handler;
     }
 
-    // ƒtƒ@ƒCƒ‹‚Ìæ“ª‚Å•K‚¸ŒÄ‚Ño‚·‚±‚Æ
+    // ãƒ•ã‚¡ã‚¤ãƒ«ã®å…ˆé ­ã§å¿…ãšå‘¼ã³å‡ºã™ã“ã¨
     void outHeader(int videoStreamType, int audioStreamType) {
         if (this->videoStreamType != videoStreamType ||
             this->audioStreamType != audioStreamType) {
@@ -357,13 +357,13 @@ public:
         int64_t lastDTS = frames.back().DTS;
 #endif
 
-        // ƒfƒR[ƒ_ƒoƒbƒtƒ@‚ª‹ó‚­‚Ü‚ÅƒNƒƒbƒN‚ği‚ß‚é
+        // ãƒ‡ã‚³ãƒ¼ãƒ€ãƒãƒƒãƒ•ã‚¡ãŒç©ºãã¾ã§ã‚¯ãƒ­ãƒƒã‚¯ã‚’é€²ã‚ã‚‹
         putAccessUnit(lastDTS, (int)packet.length, videoBuffer);
 
-        // ƒpƒPƒbƒgƒf[ƒ^‚ğ‘‚«‚Ş
+        // ãƒ‘ã‚±ãƒƒãƒˆãƒ‡ãƒ¼ã‚¿ã‚’æ›¸ãè¾¼ã‚€
         writePesPacket(packet, VIDEO_STREAM_ID, PTS, DTS);
 
-        // o—Í
+        // å‡ºåŠ›
         outPack();
     }
 
@@ -380,19 +380,19 @@ public:
         int64_t lastDTS = frames.back().PTS;
 #endif
 
-        // ƒoƒbƒtƒ@ƒTƒCƒY’²®
+        // ãƒãƒƒãƒ•ã‚¡ã‚µã‚¤ã‚ºèª¿æ•´
         if (audioChannels != frames.front().format.channels) {
             audioChannels = frames.front().format.channels;
             audioBuffer.bufferSize = audioBufferSize(getNumAudioChannels(audioChannels));
         }
 
-        // ƒfƒR[ƒ_ƒoƒbƒtƒ@‚ª‹ó‚­‚Ü‚ÅƒNƒƒbƒN‚ği‚ß‚é
+        // ãƒ‡ã‚³ãƒ¼ãƒ€ãƒãƒƒãƒ•ã‚¡ãŒç©ºãã¾ã§ã‚¯ãƒ­ãƒƒã‚¯ã‚’é€²ã‚ã‚‹
         putAccessUnit(lastDTS, (int)packet.length, audioBuffer);
 
-        // ƒpƒPƒbƒgƒf[ƒ^‚ğ‘‚«‚Ş
+        // ãƒ‘ã‚±ãƒƒãƒˆãƒ‡ãƒ¼ã‚¿ã‚’æ›¸ãè¾¼ã‚€
         writePesPacket(packet, AUDIO_STREAM_ID, PTS, PTS);
 
-        // o—Í
+        // å‡ºåŠ›
         outPack();
     }
 private:
@@ -408,7 +408,7 @@ private:
     int psmVersion;
     bool nextIsPSM;
 
-    // outVideoPesPacket, outAudioPesPacket‚ÌÅŒã‚Å•K‚¸ƒNƒŠƒA‚³‚ê‚é‚±‚Æ
+    // outVideoPesPacket, outAudioPesPacketã®æœ€å¾Œã§å¿…ãšã‚¯ãƒªã‚¢ã•ã‚Œã‚‹ã“ã¨
     AutoBuffer buffer;
 
     void initWhenNeeded(int64_t clock) {
@@ -512,7 +512,7 @@ private:
         writer.write<1>(0); // copyright
         writer.write<1>(1); // original_or_copy
         writer.write<2>(PTS_DTS_flag);
-        writer.write<6>(0); // ‘¼‚Ìƒtƒ‰ƒO‚Ü‚Æ‚ß‚Ä
+        writer.write<6>(0); // ä»–ã®ãƒ•ãƒ©ã‚°ã¾ã¨ã‚ã¦
 
         writer.write<8>(header_length);
         if (PTS_DTS_flag == 2) {
@@ -529,16 +529,16 @@ private:
         MemoryChunk payload = packet.paylod();
         int offset = 0;
 
-        // ƒpƒPƒbƒg’·‚ª PES_packet_length ‚Å•\‚¹‚é16bit‚ğ’´‚¦‚Ä‚¢‚éê‡‚ª‚ ‚é‚Ì‚Å•ªŠ„‚·‚é•K—v‚ª‚ ‚é
+        // ãƒ‘ã‚±ãƒƒãƒˆé•·ãŒ PES_packet_length ã§è¡¨ã›ã‚‹16bitã‚’è¶…ãˆã¦ã„ã‚‹å ´åˆãŒã‚ã‚‹ã®ã§åˆ†å‰²ã™ã‚‹å¿…è¦ãŒã‚ã‚‹
         do {
             int length = std::min<int>(32 * 1000, (int)payload.length - offset);
             BitWriter writer(buffer);
             if (offset == 0) {
-                // æ“ª
+                // å…ˆé ­
                 writePackHeader(writer);
                 writePesPacketHeader(writer, stream_id, length, packet.PTS_DTS_flags(), PTS, DTS);
             } else {
-                // æ“ªˆÈŠO
+                // å…ˆé ­ä»¥å¤–
                 writePesPacketHeader(writer, stream_id, length, 0, 0, 0);
             }
             buffer.add(MemoryChunk(payload.data + offset, length));
@@ -548,38 +548,38 @@ private:
         } while (offset < (int)payload.length);
     }
 
-    // w’èƒoƒCƒg”‚ğ“ü—Í‚·‚é‚Ì‚É‚©‚©‚éŠÔ‚¾‚¯ƒNƒƒbƒN‚ği‚ß‚é
+    // æŒ‡å®šãƒã‚¤ãƒˆæ•°ã‚’å…¥åŠ›ã™ã‚‹ã®ã«ã‹ã‹ã‚‹æ™‚é–“ã ã‘ã‚¯ãƒ­ãƒƒã‚¯ã‚’é€²ã‚ã‚‹
     void proceedClock(int streamBytes) {
         int64_t clockDiff = int64_t(streamBytes) * 8 * SYSTEM_CLOCK / BITRATE;
         systemClock.currentClock += clockDiff;
     }
 
     void putAccessUnit(int64_t DTS, int sizeInBytes, PsEsBuffer& esBuffer) {
-        // –{“–‚Ípacket‚É‚Í•¡”‚ÌƒAƒNƒZƒXƒ†ƒjƒbƒg‚ªŠÜ‚Ü‚ê‚é‚ª–Ê“|‚È‚Ì‚Å1‚Â‚ÌƒAƒNƒZƒXƒ†ƒjƒbƒg‚Æ‚İ‚È‚·
+        // æœ¬å½“ã¯packetã«ã¯è¤‡æ•°ã®ã‚¢ã‚¯ã‚»ã‚¹ãƒ¦ãƒ‹ãƒƒãƒˆãŒå«ã¾ã‚Œã‚‹ãŒé¢å€’ãªã®ã§1ã¤ã®ã‚¢ã‚¯ã‚»ã‚¹ãƒ¦ãƒ‹ãƒƒãƒˆã¨ã¿ãªã™
         PsAccessUnit au;
         au.DTS = DTS;
         au.sizeInBytes = sizeInBytes;
 
-        // ‹ó‚«‚ª‚Å‚«‚éŠÔi\•ª‚È‹ó‚«‚ª‚·‚Å‚É‚ ‚éê‡‚Í-1j
+        // ç©ºããŒã§ãã‚‹æ™‚é–“ï¼ˆååˆ†ãªç©ºããŒã™ã§ã«ã‚ã‚‹å ´åˆã¯-1ï¼‰
         int64_t time = esBuffer.makeSpace(au.sizeInBytes);
         if (time > systemClock.currentClock) {
-            // ƒoƒbƒtƒ@‚É‹ó‚«‚ª‚È‚¢‚Ì‚Åtime‚Ü‚Å‘Ò‚Â
+            // ãƒãƒƒãƒ•ã‚¡ã«ç©ºããŒãªã„ã®ã§timeã¾ã§å¾…ã¤
             systemClock.currentClock = time;
         }
 
-        // ƒAƒNƒZƒXƒ†ƒjƒbƒg‚ğ’Ç‰Á
+        // ã‚¢ã‚¯ã‚»ã‚¹ãƒ¦ãƒ‹ãƒƒãƒˆã‚’è¿½åŠ 
         esBuffer.accessUnits.push_back(au);
     }
 
-    // buffer‚É‘‚«‚ñ‚¾pack‚ğo—Í
+    // bufferã«æ›¸ãè¾¼ã‚“ã packã‚’å‡ºåŠ›
     void outPack() {
-        // ƒf[ƒ^‚ğo—Í
+        // ãƒ‡ãƒ¼ã‚¿ã‚’å‡ºåŠ›
         if (handler != NULL) {
             handler->onStreamData(buffer.get());
         }
-        // ƒNƒƒbƒN‚ği‚ß‚é
+        // ã‚¯ãƒ­ãƒƒã‚¯ã‚’é€²ã‚ã‚‹
         proceedClock((int)buffer.size());
-        // ƒoƒbƒtƒ@‚ğƒNƒŠƒA‚µ‚Ä‚¨‚­
+        // ãƒãƒƒãƒ•ã‚¡ã‚’ã‚¯ãƒªã‚¢ã—ã¦ãŠã
         buffer.clear();
     }
 

@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -40,7 +40,7 @@
         case 16: return "mono16";
         }
     }
-    THROW(FormatException, "ƒTƒ|[ƒg‚³‚ê‚Ä‚¢‚È‚¢ƒtƒBƒ‹ƒ^o—ÍŒ`®‚Å‚·");
+    THROW(FormatException, "ã‚µãƒãƒ¼ãƒˆã•ã‚Œã¦ã„ãªã„ãƒ•ã‚£ãƒ«ã‚¿å‡ºåŠ›å½¢å¼ã§ã™");
     return 0;
 }
 Y4MWriter::Y4MWriter(VideoInfo vi, VideoFormat outfmt) : n(0) {
@@ -103,13 +103,13 @@ void Y4MEncodeWriter::finish() {
         process_->finishWrite();
         int ret = process_->join();
         if (ret != 0) {
-            ctx.error("««««««ƒGƒ“ƒR[ƒ_ÅŒã‚Ìo—Í««««««");
+            ctx.error("â†“â†“â†“â†“â†“â†“ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€æœ€å¾Œã®å‡ºåŠ›â†“â†“â†“â†“â†“â†“");
             for (auto v : process_->getLastLines()) {
                 v.push_back(0); // null terminate
                 ctx.errorF("%s", v.data());
             }
-            ctx.error("ªªªªªªƒGƒ“ƒR[ƒ_ÅŒã‚Ìo—Íªªªªªª");
-            THROWF(RuntimeException, "ƒGƒ“ƒR[ƒ_I—¹ƒR[ƒh: 0x%x", ret);
+            ctx.error("â†‘â†‘â†‘â†‘â†‘â†‘ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€æœ€å¾Œã®å‡ºåŠ›â†‘â†‘â†‘â†‘â†‘â†‘");
+            THROWF(RuntimeException, "ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€çµ‚äº†ã‚³ãƒ¼ãƒ‰: 0x%x", ret);
         }
     }
 }
@@ -131,7 +131,7 @@ AMTFilterVideoEncoder::AMTFilterVideoEncoder(
     AMTContext&ctx, int numEncodeBufferFrames)
     : AMTObject(ctx)
     , thread_(this, numEncodeBufferFrames) {
-    ctx.infoF("ƒoƒbƒtƒ@ƒŠƒ“ƒOƒtƒŒ[ƒ€”: %d", numEncodeBufferFrames);
+    ctx.infoF("ãƒãƒƒãƒ•ã‚¡ãƒªãƒ³ã‚°ãƒ•ãƒ¬ãƒ¼ãƒ æ•°: %d", numEncodeBufferFrames);
 }
 
 void AMTFilterVideoEncoder::encode(
@@ -144,49 +144,49 @@ void AMTFilterVideoEncoder::encode(
     int bufsize = outfmt_.width * outfmt_.height * 3;
 
     if (timeCodes.size() > 0 && vi_.num_frames != timeCodes.size() - 1) {
-        THROW(RuntimeException, "ƒtƒŒ[ƒ€”‚ª‡‚¢‚Ü‚¹‚ñ");
+        THROW(RuntimeException, "ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ãŒåˆã„ã¾ã›ã‚“");
     }
 
     int npass = (int)encoderOptions.size();
     for (int i = 0; i < npass; ++i) {
-        ctx.infoF("%d/%dƒpƒX ƒGƒ“ƒR[ƒhŠJn —\’èƒtƒŒ[ƒ€”: %d", i + 1, npass, vi_.num_frames);
+        ctx.infoF("%d/%dãƒ‘ã‚¹ ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰é–‹å§‹ äºˆå®šãƒ•ãƒ¬ãƒ¼ãƒ æ•°: %d", i + 1, npass, vi_.num_frames);
 
         const tstring& args = encoderOptions[i];
 
-        ctx.info("[ƒGƒ“ƒR[ƒ_‹N“®]");
+        ctx.info("[ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€èµ·å‹•]");
         ctx.infoF("%s", args);
 
-        // ‰Šú‰»
+        // åˆæœŸåŒ–
         encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, args, vi_, outfmt_, disablePowerThrottoling));
 
         Stopwatch sw;
-        // ƒGƒ“ƒR[ƒhƒXƒŒƒbƒhŠJn
+        // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ã‚¹ãƒ¬ãƒƒãƒ‰é–‹å§‹
         thread_.start();
         sw.start();
 
         bool error = false;
 
         try {
-            // ƒGƒ“ƒR[ƒh
+            // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰
             for (int i = 0; i < vi_.num_frames; ++i) {
                 auto frame = source->GetFrame(i, env);
                 thread_.put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
             }
         } catch (const AvisynthError& avserror) {
-            ctx.errorF("AvisynthƒtƒBƒ‹ƒ^‚ÅƒGƒ‰[‚ª”­¶: %s", avserror.msg);
+            ctx.errorF("Avisynthãƒ•ã‚£ãƒ«ã‚¿ã§ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿ: %s", avserror.msg);
             error = true;
         } catch (Exception&) {
             error = true;
         }
 
-        // ƒGƒ“ƒR[ƒhƒXƒŒƒbƒh‚ğI—¹‚µ‚Ä©•ª‚Éˆø‚«Œp‚®
+        // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ã‚¹ãƒ¬ãƒƒãƒ‰ã‚’çµ‚äº†ã—ã¦è‡ªåˆ†ã«å¼•ãç¶™ã
         thread_.join();
 
-        // c‚Á‚½ƒtƒŒ[ƒ€‚ğˆ—
+        // æ®‹ã£ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å‡¦ç†
         encoder_->finish();
 
         if (error) {
-            THROW(RuntimeException, "ƒGƒ“ƒR[ƒh’†‚É•s–¾‚ÈƒGƒ‰[‚ª”­¶");
+            THROW(RuntimeException, "ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ä¸­ã«ä¸æ˜ãªã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿ");
         }
 
         encoder_ = nullptr;
@@ -214,9 +214,9 @@ AMTSimpleVideoEncoder::AMTSimpleVideoEncoder(
 
 void AMTSimpleVideoEncoder::encode() {
     if (setting_.isTwoPass()) {
-        ctx.info("1/2ƒpƒX ƒGƒ“ƒR[ƒhŠJn");
+        ctx.info("1/2ãƒ‘ã‚¹ ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰é–‹å§‹");
         processAllData(1);
-        ctx.info("2/2ƒpƒX ƒGƒ“ƒR[ƒhŠJn");
+        ctx.info("2/2ãƒ‘ã‚¹ ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰é–‹å§‹");
         processAllData(2);
     } else {
         processAllData(-1);
@@ -264,7 +264,7 @@ AMTSimpleVideoEncoder::AudioFileWriter::AudioFileWriter(AVStream* stream, const 
 
 void AMTSimpleVideoEncoder::onFileOpen(AVFormatContext *fmt) {
     audioMap_ = std::vector<int>(fmt->nb_streams, -1);
-    if (pass_ <= 1) { // 2ƒpƒX–Ú‚Ío—Í‚µ‚È‚¢
+    if (pass_ <= 1) { // 2ãƒ‘ã‚¹ç›®ã¯å‡ºåŠ›ã—ãªã„
         audioCount_ = 0;
         for (int i = 0; i < (int)fmt->nb_streams; ++i) {
             if (fmt->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -281,19 +281,19 @@ void AMTSimpleVideoEncoder::processAllData(int pass) {
 
     encoder_ = new av::EncodeWriter(ctx);
 
-    // ƒGƒ“ƒR[ƒhƒXƒŒƒbƒhŠJn
+    // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ã‚¹ãƒ¬ãƒƒãƒ‰é–‹å§‹
     thread_.start();
 
-    // ƒGƒ“ƒR[ƒh
+    // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰
     reader_.readAll(setting_.getSrcFilePath(), setting_.getDecoderSetting());
 
-    // ƒGƒ“ƒR[ƒhƒXƒŒƒbƒh‚ğI—¹‚µ‚Ä©•ª‚Éˆø‚«Œp‚®
+    // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ã‚¹ãƒ¬ãƒƒãƒ‰ã‚’çµ‚äº†ã—ã¦è‡ªåˆ†ã«å¼•ãç¶™ã
     thread_.join();
 
-    // c‚Á‚½ƒtƒŒ[ƒ€‚ğˆ—
+    // æ®‹ã£ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å‡¦ç†
     encoder_->finish();
 
-    if (pass_ <= 1) { // 2ƒpƒX–Ú‚Ío—Í‚µ‚È‚¢
+    if (pass_ <= 1) { // 2ãƒ‘ã‚¹ç›®ã¯å‡ºåŠ›ã—ãªã„
         for (int i = 0; i < audioCount_; ++i) {
             audioFiles_[i]->flush();
         }
@@ -308,18 +308,18 @@ void AMTSimpleVideoEncoder::processAllData(int pass) {
 void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
     videoFormat_ = fmt;
 
-    // ƒrƒbƒgƒŒ[ƒgŒvZ
+    // ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆè¨ˆç®—
     File file(setting_.getSrcFilePath(), _T("rb"));
     srcFileSize_ = file.size();
     double srcBitrate = ((double)srcFileSize_ * 8 / 1000) / (stream->duration * av_q2d(stream->time_base));
-    ctx.infoF("“ü—Í‰f‘œƒrƒbƒgƒŒ[ƒg: %d kbps", (int)srcBitrate);
+    ctx.infoF("å…¥åŠ›æ˜ åƒãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ: %d kbps", (int)srcBitrate);
 
     if (setting_.isAutoBitrate()) {
-        ctx.infoF("–Ú•W‰f‘œƒrƒbƒgƒŒ[ƒg: %d kbps",
+        ctx.infoF("ç›®æ¨™æ˜ åƒãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ: %d kbps",
             (int)setting_.getBitrate().getTargetBitrate(fmt.format, srcBitrate));
     }
 
-    // ‰Šú‰»
+    // åˆæœŸåŒ–
     tstring args = makeEncoderArgs(
         setting_.getEncoder(),
         setting_.getEncoderPath(),
@@ -329,10 +329,10 @@ void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
         setting_.getFormat(),
         setting_.getEncVideoFilePath(EncodeFileKey()));
 
-    ctx.info("[ƒGƒ“ƒR[ƒ_ŠJn]");
+    ctx.info("[ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€é–‹å§‹]");
     ctx.infoF("%s", args);
 
-    // x265‚ÅƒCƒ“ƒ^ƒŒ[ƒX‚Ìê‡‚ÍƒtƒB[ƒ‹ƒhƒ‚[ƒh
+    // x265ã§ã‚¤ãƒ³ã‚¿ãƒ¬ãƒ¼ã‚¹ã®å ´åˆã¯ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ãƒ¢ãƒ¼ãƒ‰
     bool dstFieldMode =
         (setting_.getEncoder() == ENCODER_X265 && fmt.progressive == false);
 
@@ -341,13 +341,13 @@ void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
 }
 
 void AMTSimpleVideoEncoder::onFrameDecoded(av::Frame& frame__) {
-    // ƒtƒŒ[ƒ€‚ğƒRƒs[‚µ‚ÄƒXƒŒƒbƒh‚É“n‚·
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ã‚³ãƒ”ãƒ¼ã—ã¦ã‚¹ãƒ¬ãƒƒãƒ‰ã«æ¸¡ã™
     thread_.put(std::unique_ptr<av::Frame>(new av::Frame(frame__)), 1);
 }
 
 void AMTSimpleVideoEncoder::onFrameReceived(std::unique_ptr<av::Frame>&& frame) {
-    // RFFƒtƒ‰ƒOˆ—
-    // PTS‚ÍinputFrame‚ÅÄ’è‹`‚³‚ê‚é‚Ì‚ÅC³‚µ‚È‚¢‚Å‚»‚Ì‚Ü‚Ü“n‚·
+    // RFFãƒ•ãƒ©ã‚°å‡¦ç†
+    // PTSã¯inputFrameã§å†å®šç¾©ã•ã‚Œã‚‹ã®ã§ä¿®æ­£ã—ãªã„ã§ãã®ã¾ã¾æ¸¡ã™
     PICTURE_TYPE pic = getPictureTypeFromAVFrame((*frame)());
     //fprintf(stderr, "%s\n", PictureTypeString(pic));
     rffExtractor_.inputFrame(*encoder_, std::move(frame), pic);
@@ -356,7 +356,7 @@ void AMTSimpleVideoEncoder::onFrameReceived(std::unique_ptr<av::Frame>&& frame) 
 }
 
 void AMTSimpleVideoEncoder::onAudioPacket(AVPacket& packet) {
-    if (pass_ <= 1) { // 2ƒpƒX–Ú‚Ío—Í‚µ‚È‚¢
+    if (pass_ <= 1) { // 2ãƒ‘ã‚¹ç›®ã¯å‡ºåŠ›ã—ãªã„
         int audioIdx = audioMap_[packet.stream_index];
         if (audioIdx >= 0) {
             audioFiles_[audioIdx]->inputFrame(packet);

@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -9,25 +9,14 @@
 #include <deque>
 #include "InterProcessComm.h"
 #include "PerformanceUtil.h"
-
-/* static */ std::vector<char> toUTF8String(const std::wstring& str) {
-    if (str.size() == 0) {
-        return std::vector<char>();
-    }
-    int dstlen = WideCharToMultiByte(CP_UTF8, 0, str.c_str(), (int)str.size(), NULL, 0, NULL, NULL);
-    if (dstlen == 0) {
-        THROW(RuntimeException, "MultiByteToWideChar failed");
-    }
-    std::vector<char> ret(dstlen);
-    WideCharToMultiByte(CP_UTF8, 0, str.c_str(), (int)str.size(), ret.data(), (int)ret.size(), NULL, NULL);
-    return ret;
-}
+#include "rgy_util.h"
 
 /* static */ std::string toJsonString(const tstring& str) {
     if (str.size() == 0) {
         return std::string();
     }
-    std::vector<char> utf8 = toUTF8String(to_wstring(str));
+    auto utf8str = wstring_to_string(tchar_to_wstring(str), CP_UTF8);
+    std::vector<char> utf8 = std::vector<char>(utf8str.begin(), utf8str.end());
     std::vector<char> ret;
     for (char c : utf8) {
         switch (c) {
@@ -75,6 +64,7 @@ bool ResourceAllocation::IsFailed() const {
 }
 
 void ResourceManger::write(MemoryChunk mc) const {
+#if defined(_WIN32) || defined(_WIN64)
     DWORD bytesWritten = 0;
     if (WriteFile(outPipe, mc.data, (DWORD)mc.length, &bytesWritten, NULL) == 0) {
         THROW(RuntimeException, "failed to write to stdin pipe");
@@ -82,9 +72,20 @@ void ResourceManger::write(MemoryChunk mc) const {
     if (bytesWritten != mc.length) {
         THROW(RuntimeException, "failed to write to stdin pipe (bytes written mismatch)");
     }
+#else
+    ssize_t written = 0;
+    while (written < mc.length) {
+        ssize_t result = ::write(outPipe, mc.data + written, mc.length - written);
+        if (result < 0) {
+            THROW(RuntimeException, "failed to write to stdin pipe");
+        }
+        written += result;
+    }
+#endif
 }
 
 void ResourceManger::read(MemoryChunk mc) const {
+#if defined(_WIN32) || defined(_WIN64)
     int offset = 0;
     while (offset < mc.length) {
         DWORD bytesRead = 0;
@@ -93,6 +94,19 @@ void ResourceManger::read(MemoryChunk mc) const {
         }
         offset += bytesRead;
     }
+#else
+    ssize_t offset = 0;
+    while (offset < mc.length) {
+        ssize_t result = ::read(inPipe, mc.data + offset, mc.length - offset);
+        if (result < 0) {
+            THROW(RuntimeException, "failed to read from pipe");
+        }
+        if (result == 0) {
+            THROW(RuntimeException, "pipe closed unexpectedly");
+        }
+        offset += result;
+    }
+#endif
 }
 
 void ResourceManger::writeCommand(int cmd) const {
@@ -114,7 +128,6 @@ void ResourceManger::writeCommand(int cmd) const {
 }
 
 ResourceAllocation ResourceManger::readCommand(int expected) const {
-    DWORD bytesRead = 0;
     int32_t cmd;
     ResourceAllocation res;
     read(MemoryChunk((uint8_t*)&cmd, sizeof(cmd)));
@@ -124,31 +137,35 @@ ResourceAllocation ResourceManger::readCommand(int expected) const {
     read(MemoryChunk((uint8_t*)&res, sizeof(res)));
     return res;
 }
-ResourceManger::ResourceManger(AMTContext& ctx, HANDLE inPipe, HANDLE outPipe)
-    : AMTObject(ctx)
-    , inPipe(inPipe)
-    , outPipe(outPipe) {}
 
 ResourceAllocation ResourceManger::request(PipeCommand phase) const {
+#if defined(_WIN32) || defined(_WIN64)
     if (inPipe == INVALID_HANDLE_VALUE) {
+#else
+    if (inPipe < 0) {
+#endif
         return DefaultAllocation();
     }
     writeCommand(phase | HOST_CMD_NoWait);
     return readCommand(phase);
 }
 
-// ƒŠƒ\[ƒXŠm•Û‚Å‚«‚é‚Ü‚Å‘Ò‚Â
+// ãƒªã‚½æ‹ã‚¹ç¢ºä¿ã§ãã‚‹ã¾ã§å¾…ã¤
 ResourceAllocation ResourceManger::wait(PipeCommand phase) const {
+#if defined(_WIN32) || defined(_WIN64)
     if (inPipe == INVALID_HANDLE_VALUE) {
+#else
+    if (inPipe < 0) {
+#endif
         return DefaultAllocation();
     }
     ResourceAllocation ret = request(phase);
     if (ret.IsFailed()) {
         writeCommand(phase);
-        ctx.progress("ƒŠƒ\[ƒX‘Ò‚¿ ...");
+        ctx.progress("ãƒªã‚½ãƒ¼ã‚¹å¾…ã¡ ...");
         Stopwatch sw; sw.start();
         ret = readCommand(phase);
-        ctx.infoF("ƒŠƒ\[ƒX‘Ò‚¿ %.2f•b", sw.getAndReset());
+        ctx.infoF("ãƒªã‚½ãƒ¼ã‚¹å¾…ã¡ %.2fç§’", sw.getAndReset());
     }
     return ret;
 }

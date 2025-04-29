@@ -1,4 +1,4 @@
-/**
+Ôªø/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -19,9 +19,9 @@ bool NicoJK::makeASS(int serviceId, time_t startTime, int duration) {
     Stopwatch sw;
     sw.start();
     if (!makeASS_(sw, serviceId, startTime, duration)) return false;
-    ctx.infoF("ÉRÉÅÉìÉgASSê∂ê¨: %.2fïb", sw.getAndReset());
+    ctx.infoF("„Ç≥„É°„É≥„ÉàASSÁîüÊàê: %.2fÁßí", sw.getAndReset());
     readASS();
-    ctx.infoF("ÉRÉÅÉìÉgASSì«Ç›çûÇ›: %.2fïb", sw.getAndReset());
+    ctx.infoF("„Ç≥„É°„É≥„ÉàASSË™≠„ÅøËæº„Åø: %.2fÁßí", sw.getAndReset());
     return true;
 }
 
@@ -47,9 +47,9 @@ NicoJK::MySubProcess::~MySubProcess() {
 }
 
 bool NicoJK::MySubProcess::isFail() const {
-    // ëŒâûÉ`ÉÉÉìÉlÉãÇ™Ç»Ç¢èÍçáÇÕÉGÉâÅ[Ç…ÇµÇΩÇ≠Ç»Ç¢
-    // âΩÇ‡åæÇÌÇ»Ç¢èÍçáÇÕÅAëŒâûÇ∑ÇÈÉ`ÉÉÉìÉlÉãÇ™Ç»Ç¢Ç∆îªífÇ∑ÇÈ
-    // ëºÇ…Ç§Ç‹Ç≠îªï Ç∑ÇÈï˚ñ@Ç™ï™Ç©ÇÁÇ»Ç¢
+    // ÂØæÂøú„ÉÅ„É£„É≥„Éç„É´„Åå„Å™„ÅÑÂ†¥Âêà„ÅØ„Ç®„É©„Éº„Å´„Åó„Åü„Åè„Å™„ÅÑ
+    // ‰Ωï„ÇÇË®Ä„Çè„Å™„ÅÑÂ†¥Âêà„ÅØ„ÄÅÂØæÂøú„Åô„Çã„ÉÅ„É£„É≥„Éç„É´„Åå„Å™„ÅÑ„Å®Âà§Êñ≠„Åô„Çã
+    // ‰ªñ„Å´„ÅÜ„Åæ„ÅèÂà§Âà•„Åô„ÇãÊñπÊ≥ï„ÅåÂàÜ„Åã„Çâ„Å™„ÅÑ
     return errConv.nlines > 0;
 }
 NicoJK::MySubProcess::OutConv::OutConv(bool isErr) : nlines(0), isErr(isErr) {}
@@ -99,7 +99,7 @@ bool NicoJK::getNicoJKXml(time_t startTime, int duration) {
         return true;
     }
     if (exitCode == 100) {
-        // É`ÉÉÉìÉlÉãÇ™Ç»Ç¢
+        // „ÉÅ„É£„É≥„Éç„É´„Åå„Å™„ÅÑ
         return false;
     }
     isFail_ = true;
@@ -121,32 +121,33 @@ void NicoJK::makeT(NicoJKType srcType, NicoJKType dstType) {
 
     while (file.getline(str)) {
         if (str.size() >= 6 && str.substr(0, 6) == "Style:") {
-            // ïœçXëO
+            // Â§âÊõ¥Ââç
             //|0           |1         |2 |3         |4         |5         |6         |7 |8|9|0|1  |2  |3|4   |5|6|7|8|9 |0 |1 |2|
             // Style: white,MS PGothic,28,&H00ffffff,&H00ffffff,&H00000000,&H00000000,-1,0,0,0,200,200,0,0.00,1,0,4,7,20,20,40,1
-            // ïœçXå„
+            // Â§âÊõ¥Âæå
             // Style: white,MS PGothic,28,&H70ffffff,&H70ffffff,&H70000000,&H70000000,-1,0,0,0,200,200,0,0.00,1,1,0,7,20,20,40,1
             auto tokens = split(str, ",");
             for (int i = 3; i < 7; ++i) {
-                // ìßñæìx
+                // ÈÄèÊòéÂ∫¶
                 tokens[i][2] = '7';
                 tokens[i][3] = '0';
             }
-            tokens[16] = "1"; // OutlineÇ†ÇË
-            tokens[17] = "0"; // ShadowÇ»Çµ
+            tokens[16] = "1"; // Outline„ÅÇ„Çä
+            tokens[17] = "0"; // Shadow„Å™„Åó
 
             StringBuilder sb;
             for (int i = 0; i < (int)tokens.size(); ++i) {
                 sb.append("%s%s", i ? "," : "", tokens[i]);
             }
-            dst.writeline(sb.str());
+            auto tmp = sb.str();
+            dst.writeline(tmp);
         } else {
             dst.writeline(str);
             break;
         }
     }
 
-    // écÇË
+    // ÊÆã„Çä
     while (file.getline(str)) dst.writeline(str);
 }
 
@@ -242,20 +243,24 @@ bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int durati
         getJKNum(serviceId);
         if (jknum_ == -1) return false;
 
-        // éÊìæéûçèÇï\é¶
+        // ÂèñÂæóÊôÇÂàª„ÇíË°®Á§∫
         tm t;
+#if defined(_WIN32) || defined(_WIN64)
         if (gmtime_s(&t, &startTime) != 0) {
+#else
+        if (gmtime_r(&startTime, &t) == NULL) {
+#endif
             THROW(RuntimeException, "gmtime_s failed ...");
         }
         t.tm_hour += 9; // GMT+9
         mktime(&t);
-        ctx.infoF("%s (jk%d) %dîN%02dåé%02dì˙ %02déû%02dï™%02dïb Ç©ÇÁ %déûä‘%02dï™%02dïb",
+        ctx.infoF("%s (jk%d) %dÂπ¥%02dÊúà%02dÊó• %02dÊôÇ%02dÂàÜ%02dÁßí „Åã„Çâ %dÊôÇÈñì%02dÂàÜ%02dÁßí",
             tvname_.c_str(), jknum_,
             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
             duration / 3600, (duration / 60) % 60, duration % 60);
 
         if (!getNicoJKXml(startTime, duration)) return false;
-        ctx.infoF("ÉRÉÅÉìÉgXMLéÊìæ: %.2fïb", sw.getAndReset());
+        ctx.infoF("„Ç≥„É°„É≥„ÉàXMLÂèñÂæó: %.2fÁßí", sw.getAndReset());
         return nicoConvASS(CONV_ASS_XML, startTime);
     } else {
         if (setting_.isUseNicoJKLog()) return false;

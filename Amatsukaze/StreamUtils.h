@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Memory and Stream utility
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -13,11 +13,12 @@
 #include <map>
 #include <set>
 #include <fstream>
-
+#include "rgy_osdep.h"
 #include "CoreUtils.hpp"
 #include "FileUtils.h"
 #include "OSUtil.h"
 #include "StringUtils.h"
+#include "rgy_util.h"
 
 enum {
     TS_SYNC_BYTE = 0x47,
@@ -27,20 +28,20 @@ enum {
 
     MAX_PID = 0x1FFF,
 
-    MPEG_CLOCK_HZ = 90000, // MPEG2,H264,H265‚ÍPTS‚ª90kHz’PˆÊ‚Æ‚È‚Á‚Ä‚¢‚é
+    MPEG_CLOCK_HZ = 90000, // MPEG2,H264,H265ã¯PTSãŒ90kHzå˜ä½ã¨ãªã£ã¦ã„ã‚‹
 };
 
 inline static int nblocks(int n, int block) {
     return (n + block - 1) / block;
 }
 
-/** @brief shift‚¾‚¯‰EƒVƒtƒg‚µ‚Ämask”bit‚¾‚¯•Ô‚·(bit shift mask) */
+/** @brief shiftã ã‘å³ã‚·ãƒ•ãƒˆã—ã¦maskæ•°bitã ã‘è¿”ã™(bit shift mask) */
 template <typename T>
 T bsm(T v, int shift, int mask) {
     return (v >> shift) & ((T(1) << mask) - 1);
 }
 
-/** @brief mask”bit‚¾‚¯shift‚¾‚¯¶ƒVƒtƒg‚µ‚Ä‘‚«‚Ş(bit mask shift) */
+/** @brief maskæ•°bitã ã‘shiftã ã‘å·¦ã‚·ãƒ•ãƒˆã—ã¦æ›¸ãè¾¼ã‚€(bit mask shift) */
 template <typename T, typename U>
 void bms(T& v, U data, int shift, int mask) {
     v |= (data & ((T(1) << mask) - 1)) << shift;
@@ -86,7 +87,7 @@ public:
         return (filled + ((int)data.length - offset) * 8) >= bits;
     }
 
-    // bitsƒrƒbƒg“Ç‚ñ‚Åi‚ß‚é
+    // bitsãƒ“ãƒƒãƒˆèª­ã‚“ã§é€²ã‚ã‚‹
     // bits <= 32
     template <int bits>
     uint32_t read() {
@@ -99,12 +100,12 @@ public:
         }
         fill();
         if (bits > filled) {
-            throw EOFException("BitReader.read‚ÅƒI[ƒo[ƒ‰ƒ“");
+            throw EOFException("BitReader.readã§ã‚ªãƒ¼ãƒãƒ¼ãƒ©ãƒ³");
         }
         return read_(bits);
     }
 
-    // bitsƒrƒbƒg“Ç‚Ş‚¾‚¯
+    // bitsãƒ“ãƒƒãƒˆèª­ã‚€ã ã‘
     // bits <= 32
     template <int bits>
     uint32_t next() {
@@ -117,7 +118,7 @@ public:
         }
         fill();
         if (bits > filled) {
-            throw EOFException("BitReader.next‚ÅƒI[ƒo[ƒ‰ƒ“");
+            throw EOFException("BitReader.nextã§ã‚ªãƒ¼ãƒãƒ¼ãƒ©ãƒ³");
         }
         return next_(bits);
     }
@@ -134,7 +135,7 @@ public:
             fill();
             masked = bsm(current, 0, filled);
             if (masked == 0) {
-                throw EOFException("BitReader.readExpGolom‚ÅƒI[ƒo[ƒ‰ƒ“");
+                throw EOFException("BitReader.readExpGolomã§ã‚ªãƒ¼ãƒãƒ¼ãƒ©ãƒ³");
             }
         }
         int bodyLen = filled - __builtin_clzl(masked);
@@ -142,7 +143,7 @@ public:
         if (bodyLen > filled) {
             fill();
             if (bodyLen > filled) {
-                throw EOFException("BitReader.readExpGolom‚ÅƒI[ƒo[ƒ‰ƒ“");
+                throw EOFException("BitReader.readExpGolomã§ã‚ªãƒ¼ãƒãƒ¼ãƒ©ãƒ³");
             }
         }
         int shift = filled - bodyLen;
@@ -154,32 +155,32 @@ public:
         if (filled > bits) {
             filled -= bits;
         } else {
-            // ¡fill‚³‚ê‚Ä‚¢‚é•ª‚ğˆø‚­
+            // ä»Šfillã•ã‚Œã¦ã„ã‚‹åˆ†ã‚’å¼•ã
             bits -= filled;
             filled = 0;
-            // ‚±‚ê‚ÅƒoƒCƒgƒAƒ‰ƒCƒ“‚³‚ê‚é‚Ì‚Åc‚èƒoƒCƒg”ƒXƒLƒbƒv
+            // ã“ã‚Œã§ãƒã‚¤ãƒˆã‚¢ãƒ©ã‚¤ãƒ³ã•ã‚Œã‚‹ã®ã§æ®‹ã‚Šãƒã‚¤ãƒˆæ•°ã‚¹ã‚­ãƒƒãƒ—
             int skipBytes = bits / 8;
             offset += skipBytes;
             if (offset > (int)data.length) {
-                throw EOFException("BitReader.skip‚ÅƒI[ƒo[ƒ‰ƒ“");
+                throw EOFException("BitReader.skipã§ã‚ªãƒ¼ãƒãƒ¼ãƒ©ãƒ³");
             }
             bits -= skipBytes * 8;
-            // ‚à‚¤1‰ñfill‚µ‚Äc‚Á‚½ƒrƒbƒg”‚ğˆø‚­
+            // ã‚‚ã†1å›fillã—ã¦æ®‹ã£ãŸãƒ“ãƒƒãƒˆæ•°ã‚’å¼•ã
             fill();
             if (bits > filled) {
-                throw EOFException("BitReader.skip‚ÅƒI[ƒo[ƒ‰ƒ“");
+                throw EOFException("BitReader.skipã§ã‚ªãƒ¼ãƒãƒ¼ãƒ©ãƒ³");
             }
             filled -= bits;
         }
     }
 
-    // Ÿ‚ÌƒoƒCƒg‹«ŠE‚Ü‚Å‚Ìƒrƒbƒg‚ğÌ‚Ä‚é
+    // æ¬¡ã®ãƒã‚¤ãƒˆå¢ƒç•Œã¾ã§ã®ãƒ“ãƒƒãƒˆã‚’æ¨ã¦ã‚‹
     void byteAlign() {
         fill();
         filled &= ~7;
     }
 
-    // “Ç‚ñ‚¾ƒoƒCƒg”i’†“r”¼’[‚È•”•ª‚Ü‚Å“Ç‚ñ‚¾ê‡‚à‚PƒoƒCƒg‚Æ‚µ‚ÄŒvZj
+    // èª­ã‚“ã ãƒã‚¤ãƒˆæ•°ï¼ˆä¸­é€”åŠç«¯ãªéƒ¨åˆ†ã¾ã§èª­ã‚“ã å ´åˆã‚‚ï¼‘ãƒã‚¤ãƒˆã¨ã—ã¦è¨ˆç®—ï¼‰
     int numReadBytes() {
         return offset - (filled / 8);
     }
@@ -242,7 +243,7 @@ public:
 
     void flush() {
         if (filled & 7) {
-            THROW(FormatException, "ƒoƒCƒgƒAƒ‰ƒCƒ“‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+            THROW(FormatException, "ãƒã‚¤ãƒˆã‚¢ãƒ©ã‚¤ãƒ³ã—ã¦ã„ã¾ã›ã‚“");
         }
         store();
     }
@@ -304,21 +305,21 @@ enum AMT_LOG_LEVEL {
 };
 
 enum AMT_ERROR_COUNTER {
-    // •s–¾‚ÈPTS‚ÌƒtƒŒ[ƒ€
+    // ä¸æ˜ãªPTSã®ãƒ•ãƒ¬ãƒ¼ãƒ 
     AMT_ERR_UNKNOWN_PTS = 0,
-    // PESƒpƒPƒbƒgƒfƒR[ƒhƒGƒ‰[
+    // PESãƒ‘ã‚±ãƒƒãƒˆãƒ‡ã‚³ãƒ¼ãƒ‰ã‚¨ãƒ©ãƒ¼
     AMT_ERR_DECODE_PACKET_FAILED,
-    // H264‚É‚¨‚¯‚éPTSƒ~ƒXƒ}ƒbƒ`
+    // H264ã«ãŠã‘ã‚‹PTSãƒŸã‚¹ãƒãƒƒãƒ
     AMT_ERR_H264_PTS_MISMATCH,
-    // H264‚É‚¨‚¯‚éƒtƒB[ƒ‹ƒh”z’uƒGƒ‰[
+    // H264ã«ãŠã‘ã‚‹ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é…ç½®ã‚¨ãƒ©ãƒ¼
     AMT_ERR_H264_UNEXPECTED_FIELD,
-    // PTS‚ª–ß‚Á‚Ä‚¢‚é
+    // PTSãŒæˆ»ã£ã¦ã„ã‚‹
     AMT_ERR_NON_CONTINUOUS_PTS,
-    // DRCSƒ}ƒbƒsƒ“ƒO‚ª‚È‚¢
+    // DRCSãƒãƒƒãƒ”ãƒ³ã‚°ãŒãªã„
     AMT_ERR_NO_DRCS_MAP,
-    // ‰¹º‚ÅƒR[ƒhƒGƒ‰[
+    // éŸ³å£°ã§ã‚³ãƒ¼ãƒ‰ã‚¨ãƒ©ãƒ¼
     AMT_ERR_DECODE_AUDIO,
-    // ƒGƒ‰[‚ÌŒÂ”
+    // ã‚¨ãƒ©ãƒ¼ã®å€‹æ•°
     AMT_ERR_MAX,
 };
 
@@ -336,15 +337,19 @@ class AMTContext {
 public:
     AMTContext()
         : timePrefix(true)
+#if defined(_WIN32) || defined(_WIN64)
         , acp(GetACP())
+#else
+        , acp(CP_UTF8)
+#endif
         , errCounter() {}
 
     const CRC32* getCRC() const {
         return &crc;
     }
 
-    // II“ü—Í•¶š—ñ‚ğŠÜ‚Ş•¶š—ñ‚ğfmt‚É“n‚·‚Ì‚Í‹Ö~II
-    // i%‚ªŠÜ‚Ü‚ê‚Ä‚¢‚é‚ÆŒë“®ì‚·‚é‚Ì‚Åj
+    // ï¼ï¼å…¥åŠ›æ–‡å­—åˆ—ã‚’å«ã‚€æ–‡å­—åˆ—ã‚’fmtã«æ¸¡ã™ã®ã¯ç¦æ­¢ï¼ï¼
+    // ï¼ˆ%ãŒå«ã¾ã‚Œã¦ã„ã‚‹ã¨èª¤å‹•ä½œã™ã‚‹ã®ã§ï¼‰
 
     void debug(const char *str) const {
         print(str, AMT_LOG_DEBUG);
@@ -427,12 +432,12 @@ public:
 
     void loadDRCSMapping(const tstring& mapPath) {
         if (File::exists(mapPath) == false) {
-            THROWF(ArgumentException, "DRCSƒ}ƒbƒsƒ“ƒOƒtƒ@ƒCƒ‹‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ: %s",
+            THROWF(ArgumentException, "DRCSãƒãƒƒãƒ”ãƒ³ã‚°ãƒ•ã‚¡ã‚¤ãƒ«ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“: %s",
                 mapPath.c_str());
         } else {
-            // BOM‚ ‚èUTF-8‚Å“Ç‚İ‚Ş
+            // BOMã‚ã‚ŠUTF-8ã§èª­ã¿è¾¼ã‚€
             std::ifstream input(mapPath);
-            // BOMƒXƒLƒbƒv
+            // BOMã‚¹ã‚­ãƒƒãƒ—
             {
                 const char a = input.get();
                 const char b = input.get();
@@ -448,17 +453,19 @@ public:
                     bool ok = (line[32] == '=');
                     for (auto c : key) if (!isxdigit(c)) ok = false;
                     if (ok) {
-                        drcsMap[key] = to_wstring(line.substr(33), CP_UTF8);
+                        drcsMap[key] = char_to_wstring(line.substr(33), CP_UTF8);
                     }
                 }
             }
         }
     }
 
-    // ƒRƒ“ƒ\[ƒ‹o—Í‚ğƒfƒtƒHƒ‹ƒgƒR[ƒhƒy[ƒW‚Éİ’è
+    // ã‚³ãƒ³ã‚½ãƒ¼ãƒ«å‡ºåŠ›ã‚’ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã‚³ãƒ¼ãƒ‰ãƒšãƒ¼ã‚¸ã«è¨­å®š
     void setDefaultCP() {
+#if defined(_WIN32) || defined(_WIN64)
         SetConsoleCP(acp);
         SetConsoleOutputCP(acp);
+#endif
     }
 
 private:
@@ -532,12 +539,12 @@ enum CMType {
     CMTYPE_MAX
 };
 
-// o—Íƒtƒ@ƒCƒ‹¯•Ê
+// å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«è­˜åˆ¥
 struct EncodeFileKey {
-    int video;   // ’†ŠÔƒtƒ@ƒCƒ‹”Ô†i‰f‘œƒtƒH[ƒ}ƒbƒgØ‚è‘Ö‚¦‚É‚æ‚é•ªŠ„j
-    int format;  // ƒtƒH[ƒ}ƒbƒg”Ô†i‰¹º‚»‚Ì‘¼‚ÌƒtƒH[ƒ}ƒbƒg•ÏX‚É‚æ‚é•ªŠ„j
-    int div;     // •ªŠ„”Ô†iCM\¬”F¯‚É‚æ‚é•ªŠ„j
-    CMType cm;   // CMƒ^ƒCƒvi–{•ÒACM‚È‚Çj
+    int video;   // ä¸­é–“ãƒ•ã‚¡ã‚¤ãƒ«ç•ªå·ï¼ˆæ˜ åƒãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆåˆ‡ã‚Šæ›¿ãˆã«ã‚ˆã‚‹åˆ†å‰²ï¼‰
+    int format;  // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆç•ªå·ï¼ˆéŸ³å£°ãã®ä»–ã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆå¤‰æ›´ã«ã‚ˆã‚‹åˆ†å‰²ï¼‰
+    int div;     // åˆ†å‰²ç•ªå·ï¼ˆCMæ§‹æˆèªè­˜ã«ã‚ˆã‚‹åˆ†å‰²ï¼‰
+    CMType cm;   // CMã‚¿ã‚¤ãƒ—ï¼ˆæœ¬ç·¨ã€CMãªã©ï¼‰
 
     explicit EncodeFileKey()
         : video(0), format(0), div(0), cm(CMTYPE_BOTH) {}
@@ -567,8 +574,8 @@ enum PICTURE_TYPE {
     PIC_FRAME_TRIPLING, // frame tripling
     PIC_TFF, // top field first
     PIC_BFF, // bottom field first
-    PIC_TFF_RFF, // tff ‚©‚Â repeat first field
-    PIC_BFF_RFF, // bff ‚©‚Â repeat first field
+    PIC_TFF_RFF, // tff ã‹ã¤ repeat first field
+    PIC_BFF_RFF, // bff ã‹ã¤ repeat first field
     MAX_PIC_TYPE,
 };
 
@@ -589,11 +596,11 @@ double presenting_time(PICTURE_TYPE picType, double frameRate);
 
 struct VideoFormat {
     VIDEO_STREAM_FORMAT format;
-    int width, height; // ƒtƒŒ[ƒ€‚Ì‰¡c
-    int displayWidth, displayHeight; // ƒtƒŒ[ƒ€‚Ì“à•\¦—Ìˆæ‚Ìc‰¡i•\¦—Ìˆæ’†SƒIƒtƒZƒbƒg‚Íƒ[ƒ‚Æ‰¼’èj
-    int sarWidth, sarHeight; // ƒAƒXƒyƒNƒg”ä
-    int frameRateNum, frameRateDenom; // ƒtƒŒ[ƒ€ƒŒ[ƒg
-    uint8_t colorPrimaries, transferCharacteristics, colorSpace; // ƒJƒ‰[ƒXƒy[ƒX
+    int width, height; // ãƒ•ãƒ¬ãƒ¼ãƒ ã®æ¨ªç¸¦
+    int displayWidth, displayHeight; // ãƒ•ãƒ¬ãƒ¼ãƒ ã®å†…è¡¨ç¤ºé ˜åŸŸã®ç¸¦æ¨ªï¼ˆè¡¨ç¤ºé ˜åŸŸä¸­å¿ƒã‚ªãƒ•ã‚»ãƒƒãƒˆã¯ã‚¼ãƒ­ã¨ä»®å®šï¼‰
+    int sarWidth, sarHeight; // ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”
+    int frameRateNum, frameRateDenom; // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆ
+    uint8_t colorPrimaries, transferCharacteristics, colorSpace; // ã‚«ãƒ©ãƒ¼ã‚¹ãƒšãƒ¼ã‚¹
     bool progressive, fixedFrameRate;
 
     bool isEmpty() const {
@@ -620,14 +627,14 @@ struct VideoFormat {
         darHeight /= denom;
     }
 
-    // ƒAƒXƒyƒNƒg”ä‚ÍŒ©‚È‚¢
+    // ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã¯è¦‹ãªã„
     bool isBasicEquals(const VideoFormat& o) const {
         return (width == o.width && height == o.height
             && frameRateNum == o.frameRateNum && frameRateDenom == o.frameRateDenom
             && progressive == o.progressive);
     }
 
-    // ƒAƒXƒyƒNƒg”ä‚àŒ©‚é
+    // ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã‚‚è¦‹ã‚‹
     bool operator==(const VideoFormat& o) const {
         return (isBasicEquals(o)
             && displayWidth == o.displayWidth && displayHeight == o.displayHeight
@@ -651,13 +658,13 @@ private:
 
 struct VideoFrameInfo {
     int64_t PTS, DTS;
-    // MPEG2‚Ìê‡ sequence header ‚ª‚ ‚é
-    // H264‚Ìê‡ SPS ‚ª‚ ‚é
+    // MPEG2ã®å ´åˆ sequence header ãŒã‚ã‚‹
+    // H264ã®å ´åˆ SPS ãŒã‚ã‚‹
     bool isGopStart;
     bool progressive;
     PICTURE_TYPE pic;
-    FRAME_TYPE type; // g‚í‚È‚¢‚¯‚ÇQlî•ñ
-    int codedDataSize; // ‰f‘œƒrƒbƒgƒXƒgƒŠ[ƒ€‚É‚¨‚¯‚éƒoƒCƒg”
+    FRAME_TYPE type; // ä½¿ã‚ãªã„ã‘ã©å‚è€ƒæƒ…å ±
+    int codedDataSize; // æ˜ åƒãƒ“ãƒƒãƒˆã‚¹ãƒˆãƒªãƒ¼ãƒ ã«ãŠã‘ã‚‹ãƒã‚¤ãƒˆæ•°
     VideoFormat format;
 };
 
@@ -673,15 +680,15 @@ enum AUDIO_CHANNELS {
 
     AUDIO_21, // 2/1
     AUDIO_22, // 2/2
-    AUDIO_2LANG, // 2 ‰¹º (1/ 0 + 1 / 0)
+    AUDIO_2LANG, // 2 éŸ³å£° (1/ 0 + 1 / 0)
 
-    // ˆÈ‰º4KŒü‚¯
+    // ä»¥ä¸‹4Kå‘ã‘
     AUDIO_52_LFE, // 7.1ch
     AUDIO_33_LFE, // 3/3.1
     AUDIO_2_22_LFE, // 2/0/0-2/0/2-0.1
     AUDIO_322_LFE, // 3/2/2.1
     AUDIO_2_32_LFE, // 2/0/0-3/0/2-0.1
-    AUDIO_020_32_LFE, // 0/2/0-3/0/2-0.1 // AUDIO_2_32_LFE‚Æ‹æ•Ê‚Å‚«‚È‚­‚ËH
+    AUDIO_020_32_LFE, // 0/2/0-3/0/2-0.1 // AUDIO_2_32_LFEã¨åŒºåˆ¥ã§ããªãã­ï¼Ÿ
     AUDIO_2_323_2LFE, // 2/0/0-3/2/3-0.2
     AUDIO_333_523_3_2LFE, // 22.2ch
 };
@@ -704,7 +711,7 @@ struct AudioFormat {
 
 struct AudioFrameInfo {
     int64_t PTS;
-    int numSamples; // 1ƒ`ƒƒƒ“ƒlƒ‹‚ ‚½‚è‚ÌƒTƒ“ƒvƒ‹”
+    int numSamples; // 1ãƒãƒ£ãƒ³ãƒãƒ«ã‚ãŸã‚Šã®ã‚µãƒ³ãƒ—ãƒ«æ•°
     AudioFormat format;
 };
 
@@ -718,10 +725,10 @@ struct AudioFrameData : public AudioFrameInfo {
 
 class IVideoParser {
 public:
-    // ‚Æ‚è‚ ‚¦‚¸•K—v‚È•¨‚¾‚¯
+    // ã¨ã‚Šã‚ãˆãšå¿…è¦ãªç‰©ã ã‘
     virtual void reset() = 0;
 
-    // PTS, DTS: 90kHzƒ^ƒCƒ€ƒXƒ^ƒ“ƒv î•ñ‚ª‚È‚¢ê‡‚Í-1
+    // PTS, DTS: 90kHzã‚¿ã‚¤ãƒ ã‚¹ã‚¿ãƒ³ãƒ— æƒ…å ±ãŒãªã„å ´åˆã¯-1
     virtual bool inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>& info, int64_t PTS, int64_t DTS) = 0;
 };
 
@@ -771,19 +778,19 @@ void CopyYV12(T* dst, PVideoFrame& frame, int width, int height) {
     CopyYV12(dst, srcY, srcU, srcV, pitchY, pitchUV, width, height);
 }
 
-template<typename T>
-void CopyYV12(PVideoFrame& dst, uint8_t* frame, int width, int height) {
-    const T* dstY = (const T* )dst->GetWritePtr(PLANAR_Y);
-    const T* dstU = (const T* )dst->GetWritePtr(PLANAR_U);
-    const T* dstV = (const T* )dst->GetWritePtr(PLANAR_V);
-    int pitchY = dst->GetPitch(PLANAR_Y) / sizeof(T);
-    int pitchUV = dst->GetPitch(PLANAR_U) / sizeof(T);
-    CopyYV12(dst, srcY, srcU, srcV, pitchY, pitchUV, width, height);
-}
+//template<typename T>
+//void CopyYV12(PVideoFrame& dst, uint8_t* frame, int width, int height) {
+//    const T* dstY = (const T* )dst->GetWritePtr(PLANAR_Y);
+//    const T* dstU = (const T* )dst->GetWritePtr(PLANAR_U);
+//    const T* dstV = (const T* )dst->GetWritePtr(PLANAR_V);
+//    int pitchY = dst->GetPitch(PLANAR_Y) / sizeof(T);
+//    int pitchUV = dst->GetPitch(PLANAR_U) / sizeof(T);
+//    CopyYV12(dst, srcY, srcU, srcV, pitchY, pitchUV, width, height);
+//}
 
 void ConcatFiles(const std::vector<tstring>& srcpaths, const tstring& dstpath);
 
-// BOM‚ ‚èUTF8‚Å‘‚«‚Ş
+// BOMã‚ã‚ŠUTF8ã§æ›¸ãè¾¼ã‚€
 void WriteUTF8File(const tstring& filename, const std::string& utf8text);
 
 void WriteUTF8File(const tstring& filename, const std::wstring& text);

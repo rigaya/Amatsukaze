@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,6 +7,7 @@
 */
 
 #include "H264VideoParser.h"
+#include <cmath>
 
 void H264HRDBitRate::read(BitReader& reader) {
     bit_rate_vlaue_minus1 = reader.readExpGolom();
@@ -33,7 +34,7 @@ void H264HRDParameters::read(BitReader& reader) {
 }
 
 bool H264SequenceParameterSet::parse(uint8_t *data, int length) {
-    // ‰Šú’l
+    // åˆæœŸå€¤
     chroma_format_idc = 1;
     bit_depth_luma_minus8 = 0;
     bit_depth_chroma_minus8 = 0;
@@ -139,7 +140,7 @@ void H264SequenceParameterSet::getPicutureSize(int& width, int& height) {
 
 void H264SequenceParameterSet::getSAR(int& width, int& height) {
     if (!vui_parameters_present_flag || !aspect_ratio_info_present_flag) {
-        // unspecified (FFMPEG‚É‡‚í‚¹‚éj
+        // unspecified (FFMPEGã«åˆã‚ã›ã‚‹ï¼‰
         width = 0;
         height = 1;
         return;
@@ -162,7 +163,7 @@ void H264SequenceParameterSet::getFramteRate(int& frameRateNum, int& frameRateDe
 
 void H264SequenceParameterSet::getColorDesc(uint8_t& colorPrimaries, uint8_t& transferCharacteristics, uint8_t& colorSpace) {
     if (!vui_parameters_present_flag || !colour_description_present_flag) {
-        // 2‚ÍUNSPECIFIED
+        // 2ã¯UNSPECIFIED
         colorPrimaries = 2;
         transferCharacteristics = 2;
         colorSpace = 2;
@@ -175,8 +176,8 @@ void H264SequenceParameterSet::getColorDesc(uint8_t& colorPrimaries, uint8_t& tr
 
 double H264SequenceParameterSet::getClockTick() {
     if (!vui_parameters_present_flag) {
-        // VUI parameters‚ª‚È‚©‚Á‚½‚çÄ¶‚Å‚«‚È‚¢‚æ
-        THROW(FormatException, "VUI parameters‚ª‚È‚¢");
+        // VUI parametersãŒãªã‹ã£ãŸã‚‰å†ç”Ÿã§ããªã„ã‚ˆ
+        THROW(FormatException, "VUI parametersãŒãªã„");
     }
     return (double)num_units_in_tick / time_scale;
 }
@@ -318,7 +319,7 @@ bool H264PicParameterSet::parse(uint8_t *data, int length) {
 bool H264PicParameterSet::check() { return true; }
 
 void H264SuplementaryEnhancementInformation::updateSPS(H264SequenceParameterSet* sps) {
-    // Type II Stream ‚É‚µ‚©‘Î‰‚µ‚È‚¢‚Ì‚Å VCL HRD ŠÖ˜A‚ÍÈ—ª
+    // Type II Stream ã«ã—ã‹å¯¾å¿œã—ãªã„ã®ã§ VCL HRD é–¢é€£ã¯çœç•¥
 
     nal_hrd_parameters_present_flag = sps->nal_hrd_parameters_present_flag;
     vcl_hrd_parameters_present_flag = sps->vcl_hrd_parameters_present_flag;
@@ -365,7 +366,7 @@ bool H264SuplementaryEnhancementInformation::parse(uint8_t *data, int length) {
                 has_recovery_point = true;
                 recovery_point(reader, payloadSize);
                 break;
-            default: // ‘¼‚Í‚¢‚ç‚È‚¢
+            default: // ä»–ã¯ã„ã‚‰ãªã„
                 reader.skip(payloadSize * 8);
                 break;
             }
@@ -416,7 +417,7 @@ void H264SuplementaryEnhancementInformation::pic_timing(BitReader& reader_orig, 
     }
     if (pic_struct_present_flag) {
         pic_struct = reader.read<4>();
-        // ƒ^ƒCƒ€ƒXƒ^ƒ“ƒv‚ÍÈ—ª
+        // ã‚¿ã‚¤ãƒ ã‚¹ã‚¿ãƒ³ãƒ—ã¯çœç•¥
     }
 
     reader_orig.skip(payloadSize * 8);
@@ -470,7 +471,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
     info.clear();
 
     if (frame.length < 4) {
-        // ƒf[ƒ^•s³
+        // ãƒ‡ãƒ¼ã‚¿ä¸æ­£
         return false;
     }
 
@@ -502,42 +503,42 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
         ++ptr; --payloadLength;
 
         switch (nal_unit_type) {
-        case 1: // IDRˆÈŠO‚ÌƒsƒNƒ`ƒƒ‚ÌƒXƒ‰ƒCƒX
-        case 2: // ƒf[ƒ^Eƒp[ƒeƒBƒVƒ‡ƒjƒ“ƒOA‚Å•„†‰»‚³‚ê‚½ƒXƒ‰ƒCƒX
-        case 3: // ƒf[ƒ^Eƒp[ƒeƒBƒVƒ‡ƒjƒ“ƒOB‚Å•„†‰»‚³‚ê‚½ƒXƒ‰ƒCƒX
-        case 4: // ƒf[ƒ^Eƒp[ƒeƒBƒVƒ‡ƒjƒ“ƒOC‚Å•„†‰»‚³‚ê‚½ƒXƒ‰ƒCƒX
-        case 5: // IDRƒsƒNƒ`ƒƒ‚ÌƒXƒ‰ƒCƒX
+        case 1: // IDRä»¥å¤–ã®ãƒ”ã‚¯ãƒãƒ£ã®ã‚¹ãƒ©ã‚¤ã‚¹
+        case 2: // ãƒ‡ãƒ¼ã‚¿ãƒ»ãƒ‘ãƒ¼ãƒ†ã‚£ã‚·ãƒ§ãƒ‹ãƒ³ã‚°Aã§ç¬¦å·åŒ–ã•ã‚ŒãŸã‚¹ãƒ©ã‚¤ã‚¹
+        case 3: // ãƒ‡ãƒ¼ã‚¿ãƒ»ãƒ‘ãƒ¼ãƒ†ã‚£ã‚·ãƒ§ãƒ‹ãƒ³ã‚°Bã§ç¬¦å·åŒ–ã•ã‚ŒãŸã‚¹ãƒ©ã‚¤ã‚¹
+        case 4: // ãƒ‡ãƒ¼ã‚¿ãƒ»ãƒ‘ãƒ¼ãƒ†ã‚£ã‚·ãƒ§ãƒ‹ãƒ³ã‚°Cã§ç¬¦å·åŒ–ã•ã‚ŒãŸã‚¹ãƒ©ã‚¤ã‚¹
+        case 5: // IDRãƒ”ã‚¯ãƒãƒ£ã®ã‚¹ãƒ©ã‚¤ã‚¹
             break;
         case 6: // SEI
             if (format.isEmpty()) {
-                // SPS‚ª—ˆ‚È‚¢‚Æˆ—‚Å‚«‚È‚¢
+                // SPSãŒæ¥ãªã„ã¨å‡¦ç†ã§ããªã„
                 break;
             }
             if (sei.parse(ptr, payloadLength)) {
                 if (sei.has_buffering_period) {
                     if (DTS != -1) {
-                        // Ÿ‚ÌAU‚Å”½‰f‚³‚ê‚é
+                        // æ¬¡ã®AUã§åæ˜ ã•ã‚Œã‚‹
                         next_bp_DTS = DTS;
                     }
                 }
                 if (sei.has_pic_timing) {
-                    if (receivedField == 0) { // Å‰‚ÌƒtƒB[ƒ‹ƒh‚ÌPTS‚¾‚¯æ“¾‚Å‚«‚ê‚Î‚¢‚¢
+                    if (receivedField == 0) { // æœ€åˆã®ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã®PTSã ã‘å–å¾—ã§ãã‚Œã°ã„ã„
                         if (beffering_period_DTS != -1) {
-                            // ’¼‘O‚Ìbeffering period‚ÌƒtƒŒ[ƒ€‚ÌDTS + ƒfƒR[ƒhdelay + o—Ídelay
+                            // ç›´å‰ã®beffering periodã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®DTS + ãƒ‡ã‚³ãƒ¼ãƒ‰delay + å‡ºåŠ›delay
                             double DTS_delay = sei.cpb_removal_delay * sps.getClockTick();
                             double PTS_delay = sei.dpb_output_delay * sps.getClockTick();
                             DTS_from_SEI = beffering_period_DTS + (int)std::round(DTS_delay * 90000);
                             PTS_from_SEI = beffering_period_DTS + (int)std::round((DTS_delay + PTS_delay) * 90000);
 
-                            // 33bit‰»
+                            // 33bitåŒ–
                             DTS_from_SEI &= (int64_t(1) << 33) - 1;
                             PTS_from_SEI &= (int64_t(1) << 33) - 1;
 
                             if (PTS != -1) {
-                                // PESƒpƒPƒbƒg‚ÌPTS‚Æˆê’v‚µ‚Ä‚¢‚é‚©ƒ`ƒFƒbƒN
+                                // PESãƒ‘ã‚±ãƒƒãƒˆã®PTSã¨ä¸€è‡´ã—ã¦ã„ã‚‹ã‹ãƒã‚§ãƒƒã‚¯
                                 if (std::abs(PTS - PTS_from_SEI) > 1) {
                                     ctx.incrementCounter(AMT_ERR_H264_PTS_MISMATCH);
-                                    ctx.warn("[H264ƒp[ƒT] PTS‚ªˆê’v‚µ‚Ü‚¹‚ñ");
+                                    ctx.warn("[H264ãƒ‘ãƒ¼ã‚µ] PTSãŒä¸€è‡´ã—ã¾ã›ã‚“");
                                 }
                             }
                         }
@@ -596,12 +597,12 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
 
                 if (receivedField > 2) {
                     ctx.incrementCounter(AMT_ERR_H264_UNEXPECTED_FIELD);
-                    ctx.warn("ƒtƒB[ƒ‹ƒh”z’u‚ª•Ï‘¥“I‚·‚¬‚Ä‘Î‰‚Å‚«‚Ü‚¹‚ñ");
+                    ctx.warn("ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é…ç½®ãŒå¤‰å‰‡çš„ã™ãã¦å¯¾å¿œã§ãã¾ã›ã‚“");
                     break;
                 }
 
                 if (receivedField == 2) {
-                    // 1ƒtƒŒ[ƒ€óM‚µ‚½
+                    // 1ãƒ•ãƒ¬ãƒ¼ãƒ å—ä¿¡ã—ãŸ
                     VideoFrameInfo finfo;
                     finfo.format = format;
                     finfo.isGopStart = isGopStart;
@@ -612,7 +613,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
                     finfo.codedDataSize = codedDataSize;
                     info.push_back(finfo);
 
-                    // ‰Šú‰»‚µ‚Ä‚¨‚­
+                    // åˆæœŸåŒ–ã—ã¦ãŠã
                     receivedField = 0;
                     isGopStart = false;
                     picType = PIC_FRAME;
@@ -620,7 +621,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
                     PTS_from_SEI = -1;
                     codedDataSize = 0;
 
-                    // “ü—Í‚³‚ê‚½PTS,DTS‚ÍÅ‰‚ÌƒtƒŒ[ƒ€‚É‚µ‚©“K—p‚³‚ê‚È‚¢‚Ì‚Å-1‚É‚µ‚Ä‚¨‚­
+                    // å…¥åŠ›ã•ã‚ŒãŸPTS,DTSã¯æœ€åˆã®ãƒ•ãƒ¬ãƒ¼ãƒ ã«ã—ã‹é©ç”¨ã•ã‚Œãªã„ã®ã§-1ã«ã—ã¦ãŠã
                     DTS = PTS = -1;
                 }
             }
@@ -630,10 +631,10 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
                 sei.updateSPS(&sps);
 
                 isGopStart = true;
-                format = VideoFormat(); // ‰Šú‰»
+                format = VideoFormat(); // åˆæœŸåŒ–
                 format.format = VS_H264;
                 sps.getPicutureSize(format.width, format.height);
-                // Œã‚Åpan_scan‚ÅC³‚³‚ê‚é‚©‚à‚µ‚ê‚È‚¢‚ª‚Æ‚è‚ ‚¦‚¸“¯‚¶’l‚É‚µ‚Ä‚¨‚­
+                // å¾Œã§pan_scanã§ä¿®æ­£ã•ã‚Œã‚‹ã‹ã‚‚ã—ã‚Œãªã„ãŒã¨ã‚Šã‚ãˆãšåŒã˜å€¤ã«ã—ã¦ãŠã
                 format.displayWidth = format.width;
                 format.displayHeight = format.height;
                 sps.getSAR(format.sarWidth, format.sarHeight);
@@ -648,23 +649,23 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
                 //
             }
             break;
-        case 9: // AUƒfƒŠƒ~ƒ^
+        case 9: // AUãƒ‡ãƒªãƒŸã‚¿
             frameType(bsm(*ptr, 5, 3), type);
             beffering_period_DTS = next_bp_DTS;
             break;
         case 10: // End of Sequence
         case 11: // End of Stream
         case 12: // Filler Data
-        case 13: // SPSŠg’£
-        case 19: // •â•ƒXƒ‰ƒCƒX
+        case 13: // SPSæ‹¡å¼µ
+        case 19: // è£œåŠ©ã‚¹ãƒ©ã‚¤ã‚¹
             break;
-        default: // –¢’è‹`
+        default: // æœªå®šç¾©
             break;
         }
     }
 
     if (format.isEmpty()) {
-        // SPS‚ª—ˆ‚Ä‚È‚¢‚Ì‚Å‚Æ‚è‚ ‚¦‚¸OK‚É‚·‚é
+        // SPSãŒæ¥ã¦ãªã„ã®ã§ã¨ã‚Šã‚ãˆãšOKã«ã™ã‚‹
         return true;
     }
 
@@ -694,10 +695,10 @@ void H264VideoParser::pushNalUnit(int unitStart, int lastNonZero) {
     if (lastNonZero > 0) {
         NalUnit nal;
         nal.offset = unitStart;
-        // rbsp_stop_one_bit‚ğæ‚èœ‚­
+        // rbsp_stop_one_bitã‚’å–ã‚Šé™¤ã
         uint8_t& lastByte = buffer.ptr()[lastNonZero - 1];
         if (lastByte == 0x80) {
-            // ƒyƒCƒ[ƒh‚Í‚±‚ÌƒoƒCƒg‚É‚Í‚È‚¢‚Ì‚Å1ƒoƒCƒgí‚é
+            // ãƒšã‚¤ãƒ­ãƒ¼ãƒ‰ã¯ã“ã®ãƒã‚¤ãƒˆã«ã¯ãªã„ã®ã§1ãƒã‚¤ãƒˆå‰Šã‚‹
             --lastNonZero;
         } else {
             lastByte &= lastByte - 1;

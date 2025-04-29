@@ -1,4 +1,4 @@
-/**
+﻿/**
 * Amtasukaze Logo GUI Support
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -18,8 +18,8 @@ class GUIMediaFile : public AMTObject {
     AVStream *videoStream;
     SwsContext * swsctx;
 
-    // OnFrameDecoded�Œ��O�Ƀf�R�[�h���ꂽ�t���[��
-    // �܂��f�R�[�h���ĂȂ��ꍇ��-1
+    // OnFrameDecodedで直前にデコードされたフレーム
+    // まだデコードしてない場合は-1
     int lastDecodeFrame;
 
     int64_t fileSize;
@@ -75,7 +75,7 @@ class GUIMediaFile : public AMTObject {
 #else
                     const int key_frame = frame()->key_frame;
 #endif
-                    // �ŏ���I�t���[���܂ŃX�L�b�v
+                    // 最初はIフレームまでスキップ
                     if (lastDecodeFrame != -1 || key_frame) {
                         if (frame()->width != width || frame()->height != height) {
                             init(frame());
@@ -92,7 +92,7 @@ class GUIMediaFile : public AMTObject {
             }
             if (packetpos != -1) {
                 if (packetpos - startpos > 50 * 1024 * 1024) {
-                    // 50MB�ǂ�ł��f�R�[�h�ł��Ȃ�������I��
+                    // 50MB読んでもデコードできなかったら終了
                     return false;
                 }
             }

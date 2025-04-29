@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Command Line Interface
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,12 +8,12 @@
 #pragma once
 
 #include <time.h>
-
+#include <mutex>
 #include "TranscodeManager.h"
 #include "AmatsukazeTestImpl.h"
 #include "Version.h"
 
-// MSVC‚Ìƒ}ƒ‹ƒ`ƒoƒCƒg‚ÍUnicode‚Å‚È‚¢‚Ì‚Å•¶š—ñ‘€ì‚É“K‚³‚È‚¢‚Ì‚Åwchar_t‚Å•¶š—ñ‘€ì‚ğ‚·‚é
+// MSVCã®ãƒãƒ«ãƒãƒã‚¤ãƒˆã¯Unicodeã§ãªã„ã®ã§æ–‡å­—åˆ—æ“ä½œã«é©ã•ãªã„ã®ã§wchar_tã§æ–‡å­—åˆ—æ“ä½œã‚’ã™ã‚‹
 
 
 static void printCopyright() {
@@ -24,104 +24,104 @@ static void printCopyright() {
 
 static void printHelp(const tchar* bin) {
     PRINTF(
-        "%" PRITSTR " <ƒIƒvƒVƒ‡ƒ“> -i <input.ts> -o <output.mp4>\n"
-        "ƒIƒvƒVƒ‡ƒ“ []‚ÍƒfƒtƒHƒ‹ƒg’l \n"
-        "  -i|--input  <ƒpƒX>  “ü—Íƒtƒ@ƒCƒ‹ƒpƒX\n"
-        "  -o|--output <ƒpƒX>  o—Íƒtƒ@ƒCƒ‹ƒpƒX\n"
-        "  -s|--serviceid <”’l> ˆ—‚·‚éƒT[ƒrƒXID‚ğw’è[]\n"
-        "  -w|--work   <ƒpƒX>  ˆêƒtƒ@ƒCƒ‹ƒpƒX[./]\n"
-        "  -et|--encoder-type <ƒ^ƒCƒv>  g—pƒGƒ“ƒR[ƒ_ƒ^ƒCƒv[x264]\n"
-        "                      ‘Î‰ƒGƒ“ƒR[ƒ_: x264,x265,QSVEnc,NVEnc,VCEEnc,SVT-AV1\n"
-        "  -e|--encoder <ƒpƒX> ƒGƒ“ƒR[ƒ_ƒpƒX[x264.exe]\n"
-        "  -eo|--encoder-option <ƒIƒvƒVƒ‡ƒ“> ƒGƒ“ƒR[ƒ_‚Ö“n‚·ƒIƒvƒVƒ‡ƒ“[]\n"
-        "                      “ü—Íƒtƒ@ƒCƒ‹‚Ì‰ğ‘œ“xAƒAƒXƒyƒNƒg”äAƒCƒ“ƒ^ƒŒ[ƒXƒtƒ‰ƒOA\n"
-        "                      ƒtƒŒ[ƒ€ƒŒ[ƒgAƒJƒ‰[ƒ}ƒgƒŠƒNƒX“™‚Í©“®‚Å’Ç‰Á‚³‚ê‚é‚Ì‚Å•s—v\n"
-        "  --sar w:h           SAR”ä‚Ìã‘‚« (SVT-AV1g—p‚Ì‚İ—LŒø)\n"
-        "  -b|--bitrate a:b:f  ƒrƒbƒgƒŒ[ƒgŒvZ® ‰f‘œƒrƒbƒgƒŒ[ƒgkbps = f*(a*s+b)\n"
-        "                      s‚Í“ü—Í‰f‘œƒrƒbƒgƒŒ[ƒgAf‚Í“ü—Í‚ªH264‚Ìê‡‚Í“ü—Í‚³‚ê‚½f‚¾‚ªA\n"
-        "                      “ü—Í‚ªMPEG2‚Ìê‡‚Íf=1‚Æ‚·‚é\n"
-        "                      w’è‚ª‚È‚¢ê‡‚ÍƒrƒbƒgƒŒ[ƒgƒIƒvƒVƒ‡ƒ“‚ğ’Ç‰Á‚µ‚È‚¢\n"
-        "  -bcm|--bitrate-cm <float>   CM”»’è‚³‚ê‚½‚Æ‚±‚ë‚ÌƒrƒbƒgƒŒ[ƒg”{—¦\n"
-        "  --cm-quality-offset <float> CM”»’è‚³‚ê‚½‚Æ‚±‚ë‚Ì•i¿ƒIƒtƒZƒbƒg\n"
-        "  --2pass             2passƒGƒ“ƒR[ƒh\n"
-        "  --splitsub          ƒƒCƒ“ˆÈŠO‚ÌƒtƒH[ƒ}ƒbƒg‚ÍŒ‹‡‚µ‚È‚¢\n"
-        "  -aet|--audio-encoder-type <ƒ^ƒCƒv> ‰¹ºƒGƒ“ƒR[ƒ_[]"
-        "                      ‘Î‰ƒGƒ“ƒR[ƒ_: neroAac, qaac, fdkaac, opusenc\n"
-        "                      w’è‚µ‚È‚¯‚ê‚Î‰¹º‚ÍƒGƒ“ƒR[ƒh‚µ‚È‚¢\n"
-        "  -ae|--audio-encoder <ƒpƒX> ‰¹ºƒGƒ“ƒR[ƒ_[]"
-        "  -aeo|--audio-encoder-option <ƒIƒvƒVƒ‡ƒ“> ‰¹ºƒGƒ“ƒR[ƒ_‚Ö“n‚·ƒIƒvƒVƒ‡ƒ“[]\n"
-        "  -fmt|--format <ƒtƒH[ƒ}ƒbƒg> o—ÍƒtƒH[ƒ}ƒbƒg[mp4]\n"
-        "                      ‘Î‰ƒtƒH[ƒ}ƒbƒg: mp4,mkv,m2ts,ts\n"
-        "  --use-mkv-when-sub-exists š–‹‚ª‚ ‚éê‡‚É‚Ímkvo—Í‚ğ‹­§‚·‚é\n"
-        "  -m|--muxer  <ƒpƒX>  L-SMASH‚Ìmuxer‚Ü‚½‚Ímkvmerge‚Ü‚½‚ÍtsMuxeR‚Ö‚ÌƒpƒX[muxer.exe]\n"
-        "  -t|--timelineeditor  <ƒpƒX>  timelineeditor‚Ö‚ÌƒpƒXiMP4‚ÅVFRo—Í‚·‚éê‡‚É•K—vj[timelineeditor.exe]\n"
-        "  --mp4box <ƒpƒX>     mp4box‚Ö‚ÌƒpƒXiMP4‚Åš–‹ˆ—‚·‚éê‡‚É•K—vj[mp4box.exe]\n"
-        "  --mkvmerge <ƒpƒX>   mkvmerge‚Ö‚ÌƒpƒXi--use-mkv-when-sub-existsg—p‚É•K—vj[mkvmerge.exe]\n"
-        "  --tsreplace-remove-typed  tsreplaceÀs‚É--remove-typed‚ğw’è‚·‚é\n"
-        "  -f|--filter <ƒpƒX>  ƒtƒBƒ‹ƒ^AvisynthƒXƒNƒŠƒvƒg‚Ö‚ÌƒpƒX[]\n"
-        "  -pf|--postfilter <ƒpƒX>  ƒ|ƒXƒgƒtƒBƒ‹ƒ^AvisynthƒXƒNƒŠƒvƒg‚Ö‚ÌƒpƒX[]\n"
-        "  --mpeg2decoder <ƒfƒR[ƒ_>  MPEG2—pƒfƒR[ƒ_[default]\n"
-        "                      g—p‰Â”\ƒfƒR[ƒ_: default,QSV,CUVID\n"
-        "  --h264decoder <ƒfƒR[ƒ_>  H264—pƒfƒR[ƒ_[default]\n"
-        "                      g—p‰Â”\ƒfƒR[ƒ_: default,QSV,CUVID\n"
-        "  --chapter           ƒ`ƒƒƒvƒ^[ECM‰ğÍ‚ğs‚¤\n"
-        "  --subtitles         š–‹‚ğˆ—‚·‚é\n"
-        "  --nicojk            ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg‚ğ’Ç‰Á‚·‚é\n"
-        "  --logo <ƒpƒX>       ƒƒSƒtƒ@ƒCƒ‹‚ğw’èi‚¢‚­‚Â‚Å‚àw’è‰Â”\j\n"
-        "  --erase-logo <ƒpƒX> ƒƒSÁ‚µ—p’Ç‰ÁƒƒSƒtƒ@ƒCƒ‹BƒƒSÁ‚µ‚É“K—p‚³‚ê‚Ü‚·Bi‚¢‚­‚Â‚Å‚àw’è‰Â”\j\n"
-        "  --drcs <ƒpƒX>       DRCSƒ}ƒbƒsƒ“ƒOƒtƒ@ƒCƒ‹ƒpƒX\n"
-        "  --ignore-no-drcsmap ƒ}ƒbƒsƒ“ƒO‚É‚È‚¢DRCSŠOš‚ª‚ ‚Á‚Ä‚àˆ—‚ğ‘±s‚·‚é\n"
-        "  --ignore-no-logo    ƒƒS‚ªŒ©‚Â‚©‚ç‚È‚­‚Ä‚àˆ—‚ğ‘±s‚·‚é\n"
-        "  --ignore-nicojk-error ƒjƒRƒjƒRÀ‹µæ“¾‚ÅƒGƒ‰[‚ª”­¶‚µ‚Ä‚àˆ—‚ğ‘±s‚·‚é\n"
-        "  --no-delogo         ƒƒSÁ‚µ‚ğ‚µ‚È‚¢iƒfƒtƒHƒ‹ƒg‚ÍƒƒS‚ª‚ ‚éê‡‚ÍÁ‚µ‚Ü‚·j\n"
-        "  --parallel-logo-analysis •À—ñƒƒS‰ğÍ\n"
-        "  --loose-logo-detection ƒƒSŒŸo”»’è‚µ‚«‚¢’l‚ğ’á‚­‚µ‚Ü‚·\n"
-        "  --max-fade-length <”’l> ƒƒS‚ÌÅ‘åƒtƒF[ƒhƒtƒŒ[ƒ€”[16]\n"
-        "  --chapter-exe <ƒpƒX> chapter_exe.exe‚Ö‚ÌƒpƒX\n"
-        "  --jls <ƒpƒX>         join_logo_scp.exe‚Ö‚ÌƒpƒX\n"
-        "  --jls-cmd <ƒpƒX>    join_logo_scp‚ÌƒRƒ}ƒ“ƒhƒtƒ@ƒCƒ‹‚Ö‚ÌƒpƒX\n"
-        "  --jls-option <ƒIƒvƒVƒ‡ƒ“>    join_logo_scp‚ÌƒRƒ}ƒ“ƒhƒtƒ@ƒCƒ‹‚Ö‚ÌƒpƒX\n"
-        "  --trimavs <ƒpƒX>    CMƒJƒbƒg—pTrim AVSƒtƒ@ƒCƒ‹‚Ö‚ÌƒpƒXBƒƒCƒ“ƒtƒ@ƒCƒ‹‚ÌCMƒJƒbƒgo—Í‚Å‚Ì‚İg—p‚³‚ê‚éB\n"
-        "  --nicoass <ƒpƒX>     NicoConvASS‚Ö‚ÌƒpƒX\n"
-        "  -om|--cmoutmask <”’l> o—Íƒ}ƒXƒN[1]\n"
-        "                      1 : ’Êí\n"
-        "                      2 : CM‚ğƒJƒbƒg\n"
-        "                      4 : CM‚Ì‚İo—Í\n"
-        "                      OR‚à‰Â —á) 6: –{•Ò‚ÆCM‚ğ•ª—£\n"
-        "  --nicojk18          ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg‚ğnicojk18ƒT[ƒo‚©‚çæ“¾\n"
-        "  --nicojklog         ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒg‚ğNicoJKƒƒOƒtƒHƒ‹ƒ_‚©‚çæ“¾\n"
-        "                      (NicoConvASS‚ğ -nicojk 1 ‚ÅŒÄ‚Ño‚µ‚Ü‚·)\n"
-        "  --nicojkmask <”’l> ƒjƒRƒjƒRÀ‹µƒRƒƒ“ƒgƒ}ƒXƒN[1]\n"
-        "                      1 : 1280x720•s“§–¾\n"
-        "                      2 : 1280x720”¼“§–¾\n"
-        "                      4 : 1920x1080•s“§–¾\n"
-        "                      8 : 1920x1080”¼“§–¾\n"
-        "                      OR‚à‰Â —á) 15: ‚·‚×‚Äo—Í\n"
-        "  --no-remove-tmp     ˆêƒtƒ@ƒCƒ‹‚ğíœ‚¹‚¸‚Éc‚·\n"
-        "                      ƒfƒtƒHƒ‹ƒg‚Í60fpsƒ^ƒCƒ~ƒ“ƒO‚Å¶¬\n"
-        "  --timefactor <”’l>  x265‚âNVEnc‚Å‹^—VFRƒŒ[ƒgƒRƒ“ƒgƒ[ƒ‹‚·‚é‚Æ‚«‚ÌŠÔƒŒ[ƒgƒtƒ@ƒNƒ^[[0.25]\n"
-        "  --pmt-cut <”’l>:<”’l>  PMT•ÏX‚ÅCM”F¯‚·‚é‚Æ‚«‚ÌÅ‘åCM”F¯ŠÔŠ„‡B‘SÄ¶ŠÔ‚É‘Î‚·‚éŠ„‡‚Åw’è‚·‚éB\n"
-        "                      —á‚¦‚Î 0.1:0.2 ‚Æ‚·‚é‚ÆŠJn10%%‚Ü‚Å‚ÉPMT•ÏX‚ª‚ ‚Á‚½ê‡‚Í‚»‚ÌPMT•ÏX‚Ü‚Å‚ğCM”F¯‚·‚éB\n"
-        "                      ‚Ü‚½I‚í‚è‚©‚ç20%%‚Ü‚Å‚ÉPMT•ÏX‚ª‚ ‚Á‚½ê‡‚à“¯—l‚ÉCM”F¯‚·‚éB[0:0]\n"
-        "  -j|--json   <ƒpƒX>  o—ÍŒ‹‰Êî•ñ‚ğJSONo—Í‚·‚éê‡‚Ío—Íƒtƒ@ƒCƒ‹ƒpƒX‚ğw’è[]\n"
-        "  --mode <ƒ‚[ƒh>     ˆ—ƒ‚[ƒh[ts]\n"
-        "                      ts : MPGE2-TS‚ğ“ü—Í‚·‚é’ÊíƒGƒ“ƒR[ƒhƒ‚[ƒh\n"
-        "                      cm : ƒGƒ“ƒR[ƒh‚Ü‚Ås‚í‚¸ACM‰ğÍ‚Ü‚Å‚ÅI—¹‚·‚éƒ‚[ƒh\n"
-        "                      drcs : ƒ}ƒbƒsƒ“ƒO‚Ì‚È‚¢DRCSŠOš‰æ‘œ‚¾‚¯o—Í‚·‚éƒ‚[ƒh\n"
-        "                      probe_subtitles : š–‹‚ª‚ ‚é‚©”»’è\n"
-        "                      probe_audio : ‰¹ºƒtƒH[ƒ}ƒbƒg‚ğo—Í\n"
-        "  --resource-manager <“ü—ÍƒpƒCƒv>:<o—ÍƒpƒCƒv> ƒŠƒ\[ƒXŠÇ—ƒzƒXƒg‚Æ‚Ì’ÊMƒpƒCƒv\n"
-        "  --affinity <ƒOƒ‹[ƒv>:<ƒ}ƒXƒN> CPUƒAƒtƒBƒjƒeƒB\n"
-        "                      ƒOƒ‹[ƒv‚ÍƒvƒƒZƒbƒTƒOƒ‹[ƒvi64˜_—ƒRƒAˆÈ‰º‚ÌƒVƒXƒeƒ€‚Å‚Í0‚Ì‚İj\n"
-        "  --max-frames        probe_*ƒ‚[ƒh‚Ì‚İ—LŒøBTS‚ğŒ©‚éŠÔ‚ğ‰f‘œƒtƒŒ[ƒ€”‚Åw’è[9000]\n"
-        "  --dump              ˆ—“r’†‚Ìƒf[ƒ^‚ğƒ_ƒ“ƒviƒfƒoƒbƒO—pj\n",
+        "%" PRITSTR " <ã‚ªãƒ—ã‚·ãƒ§ãƒ³> -i <input.ts> -o <output.mp4>\n"
+        "ã‚ªãƒ—ã‚·ãƒ§ãƒ³ []ã¯ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆå€¤ \n"
+        "  -i|--input  <ãƒ‘ã‚¹>  å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹\n"
+        "  -o|--output <ãƒ‘ã‚¹>  å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹\n"
+        "  -s|--serviceid <æ•°å€¤> å‡¦ç†ã™ã‚‹ã‚µãƒ¼ãƒ“ã‚¹IDã‚’æŒ‡å®š[]\n"
+        "  -w|--work   <ãƒ‘ã‚¹>  ä¸€æ™‚ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹[./]\n"
+        "  -et|--encoder-type <ã‚¿ã‚¤ãƒ—>  ä½¿ç”¨ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã‚¿ã‚¤ãƒ—[x264]\n"
+        "                      å¯¾å¿œã‚¨ãƒ³ã‚³ãƒ¼ãƒ€: x264,x265,QSVEnc,NVEnc,VCEEnc,SVT-AV1\n"
+        "  -e|--encoder <ãƒ‘ã‚¹> ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ãƒ‘ã‚¹[x264.exe]\n"
+        "  -eo|--encoder-option <ã‚ªãƒ—ã‚·ãƒ§ãƒ³> ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã¸æ¸¡ã™ã‚ªãƒ—ã‚·ãƒ§ãƒ³[]\n"
+        "                      å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã®è§£åƒåº¦ã€ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã€ã‚¤ãƒ³ã‚¿ãƒ¬ãƒ¼ã‚¹ãƒ•ãƒ©ã‚°ã€\n"
+        "                      ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆã€ã‚«ãƒ©ãƒ¼ãƒãƒˆãƒªã‚¯ã‚¹ç­‰ã¯è‡ªå‹•ã§è¿½åŠ ã•ã‚Œã‚‹ã®ã§ä¸è¦\n"
+        "  --sar w:h           SARæ¯”ã®ä¸Šæ›¸ã (SVT-AV1ä½¿ç”¨æ™‚ã®ã¿æœ‰åŠ¹)\n"
+        "  -b|--bitrate a:b:f  ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆè¨ˆç®—å¼ æ˜ åƒãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆkbps = f*(a*s+b)\n"
+        "                      sã¯å…¥åŠ›æ˜ åƒãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã€fã¯å…¥åŠ›ãŒH264ã®å ´åˆã¯å…¥åŠ›ã•ã‚ŒãŸfã ãŒã€\n"
+        "                      å…¥åŠ›ãŒMPEG2ã®å ´åˆã¯f=1ã¨ã™ã‚‹\n"
+        "                      æŒ‡å®šãŒãªã„å ´åˆã¯ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚ªãƒ—ã‚·ãƒ§ãƒ³ã‚’è¿½åŠ ã—ãªã„\n"
+        "  -bcm|--bitrate-cm <float>   CMåˆ¤å®šã•ã‚ŒãŸã¨ã“ã‚ã®ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆå€ç‡\n"
+        "  --cm-quality-offset <float> CMåˆ¤å®šã•ã‚ŒãŸã¨ã“ã‚ã®å“è³ªã‚ªãƒ•ã‚»ãƒƒãƒˆ\n"
+        "  --2pass             2passã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰\n"
+        "  --splitsub          ãƒ¡ã‚¤ãƒ³ä»¥å¤–ã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯çµåˆã—ãªã„\n"
+        "  -aet|--audio-encoder-type <ã‚¿ã‚¤ãƒ—> éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€[]"
+        "                      å¯¾å¿œã‚¨ãƒ³ã‚³ãƒ¼ãƒ€: neroAac, qaac, fdkaac, opusenc\n"
+        "                      æŒ‡å®šã—ãªã‘ã‚Œã°éŸ³å£°ã¯ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ã—ãªã„\n"
+        "  -ae|--audio-encoder <ãƒ‘ã‚¹> éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€[]"
+        "  -aeo|--audio-encoder-option <ã‚ªãƒ—ã‚·ãƒ§ãƒ³> éŸ³å£°ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã¸æ¸¡ã™ã‚ªãƒ—ã‚·ãƒ§ãƒ³[]\n"
+        "  -fmt|--format <ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ> å‡ºåŠ›ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ[mp4]\n"
+        "                      å¯¾å¿œãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ: mp4,mkv,m2ts,ts\n"
+        "  --use-mkv-when-sub-exists å­—å¹•ãŒã‚ã‚‹å ´åˆã«ã¯mkvå‡ºåŠ›ã‚’å¼·åˆ¶ã™ã‚‹\n"
+        "  -m|--muxer  <ãƒ‘ã‚¹>  L-SMASHã®muxerã¾ãŸã¯mkvmergeã¾ãŸã¯tsMuxeRã¸ã®ãƒ‘ã‚¹[muxer.exe]\n"
+        "  -t|--timelineeditor  <ãƒ‘ã‚¹>  timelineeditorã¸ã®ãƒ‘ã‚¹ï¼ˆMP4ã§VFRå‡ºåŠ›ã™ã‚‹å ´åˆã«å¿…è¦ï¼‰[timelineeditor.exe]\n"
+        "  --mp4box <ãƒ‘ã‚¹>     mp4boxã¸ã®ãƒ‘ã‚¹ï¼ˆMP4ã§å­—å¹•å‡¦ç†ã™ã‚‹å ´åˆã«å¿…è¦ï¼‰[mp4box.exe]\n"
+        "  --mkvmerge <ãƒ‘ã‚¹>   mkvmergeã¸ã®ãƒ‘ã‚¹ï¼ˆ--use-mkv-when-sub-existsä½¿ç”¨æ™‚ã«å¿…è¦ï¼‰[mkvmerge.exe]\n"
+        "  --tsreplace-remove-typed  tsreplaceå®Ÿè¡Œæ™‚ã«--remove-typedã‚’æŒ‡å®šã™ã‚‹\n"
+        "  -f|--filter <ãƒ‘ã‚¹>  ãƒ•ã‚£ãƒ«ã‚¿Avisynthã‚¹ã‚¯ãƒªãƒ—ãƒˆã¸ã®ãƒ‘ã‚¹[]\n"
+        "  -pf|--postfilter <ãƒ‘ã‚¹>  ãƒã‚¹ãƒˆãƒ•ã‚£ãƒ«ã‚¿Avisynthã‚¹ã‚¯ãƒªãƒ—ãƒˆã¸ã®ãƒ‘ã‚¹[]\n"
+        "  --mpeg2decoder <ãƒ‡ã‚³ãƒ¼ãƒ€>  MPEG2ç”¨ãƒ‡ã‚³ãƒ¼ãƒ€[default]\n"
+        "                      ä½¿ç”¨å¯èƒ½ãƒ‡ã‚³ãƒ¼ãƒ€: default,QSV,CUVID\n"
+        "  --h264decoder <ãƒ‡ã‚³ãƒ¼ãƒ€>  H264ç”¨ãƒ‡ã‚³ãƒ¼ãƒ€[default]\n"
+        "                      ä½¿ç”¨å¯èƒ½ãƒ‡ã‚³ãƒ¼ãƒ€: default,QSV,CUVID\n"
+        "  --chapter           ãƒãƒ£ãƒ—ã‚¿ãƒ¼ãƒ»CMè§£æã‚’è¡Œã†\n"
+        "  --subtitles         å­—å¹•ã‚’å‡¦ç†ã™ã‚‹\n"
+        "  --nicojk            ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆã‚’è¿½åŠ ã™ã‚‹\n"
+        "  --logo <ãƒ‘ã‚¹>       ãƒ­ã‚´ãƒ•ã‚¡ã‚¤ãƒ«ã‚’æŒ‡å®šï¼ˆã„ãã¤ã§ã‚‚æŒ‡å®šå¯èƒ½ï¼‰\n"
+        "  --erase-logo <ãƒ‘ã‚¹> ãƒ­ã‚´æ¶ˆã—ç”¨è¿½åŠ ãƒ­ã‚´ãƒ•ã‚¡ã‚¤ãƒ«ã€‚ãƒ­ã‚´æ¶ˆã—ã«é©ç”¨ã•ã‚Œã¾ã™ã€‚ï¼ˆã„ãã¤ã§ã‚‚æŒ‡å®šå¯èƒ½ï¼‰\n"
+        "  --drcs <ãƒ‘ã‚¹>       DRCSãƒãƒƒãƒ”ãƒ³ã‚°ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹\n"
+        "  --ignore-no-drcsmap ãƒãƒƒãƒ”ãƒ³ã‚°ã«ãªã„DRCSå¤–å­—ãŒã‚ã£ã¦ã‚‚å‡¦ç†ã‚’ç¶šè¡Œã™ã‚‹\n"
+        "  --ignore-no-logo    ãƒ­ã‚´ãŒè¦‹ã¤ã‹ã‚‰ãªãã¦ã‚‚å‡¦ç†ã‚’ç¶šè¡Œã™ã‚‹\n"
+        "  --ignore-nicojk-error ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³å–å¾—ã§ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¦ã‚‚å‡¦ç†ã‚’ç¶šè¡Œã™ã‚‹\n"
+        "  --no-delogo         ãƒ­ã‚´æ¶ˆã—ã‚’ã—ãªã„ï¼ˆãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã¯ãƒ­ã‚´ãŒã‚ã‚‹å ´åˆã¯æ¶ˆã—ã¾ã™ï¼‰\n"
+        "  --parallel-logo-analysis ä¸¦åˆ—ãƒ­ã‚´è§£æ\n"
+        "  --loose-logo-detection ãƒ­ã‚´æ¤œå‡ºåˆ¤å®šã—ãã„å€¤ã‚’ä½ãã—ã¾ã™\n"
+        "  --max-fade-length <æ•°å€¤> ãƒ­ã‚´ã®æœ€å¤§ãƒ•ã‚§ãƒ¼ãƒ‰ãƒ•ãƒ¬ãƒ¼ãƒ æ•°[16]\n"
+        "  --chapter-exe <ãƒ‘ã‚¹> chapter_exe.exeã¸ã®ãƒ‘ã‚¹\n"
+        "  --jls <ãƒ‘ã‚¹>         join_logo_scp.exeã¸ã®ãƒ‘ã‚¹\n"
+        "  --jls-cmd <ãƒ‘ã‚¹>    join_logo_scpã®ã‚³ãƒãƒ³ãƒ‰ãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ãƒ‘ã‚¹\n"
+        "  --jls-option <ã‚ªãƒ—ã‚·ãƒ§ãƒ³>    join_logo_scpã®ã‚³ãƒãƒ³ãƒ‰ãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ãƒ‘ã‚¹\n"
+        "  --trimavs <ãƒ‘ã‚¹>    CMã‚«ãƒƒãƒˆç”¨Trim AVSãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ãƒ‘ã‚¹ã€‚ãƒ¡ã‚¤ãƒ³ãƒ•ã‚¡ã‚¤ãƒ«ã®CMã‚«ãƒƒãƒˆå‡ºåŠ›ã§ã®ã¿ä½¿ç”¨ã•ã‚Œã‚‹ã€‚\n"
+        "  --nicoass <ãƒ‘ã‚¹>     NicoConvASSã¸ã®ãƒ‘ã‚¹\n"
+        "  -om|--cmoutmask <æ•°å€¤> å‡ºåŠ›ãƒã‚¹ã‚¯[1]\n"
+        "                      1 : é€šå¸¸\n"
+        "                      2 : CMã‚’ã‚«ãƒƒãƒˆ\n"
+        "                      4 : CMã®ã¿å‡ºåŠ›\n"
+        "                      ORã‚‚å¯ ä¾‹) 6: æœ¬ç·¨ã¨CMã‚’åˆ†é›¢\n"
+        "  --nicojk18          ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆã‚’nicojk18ã‚µãƒ¼ãƒã‹ã‚‰å–å¾—\n"
+        "  --nicojklog         ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆã‚’NicoJKãƒ­ã‚°ãƒ•ã‚©ãƒ«ãƒ€ã‹ã‚‰å–å¾—\n"
+        "                      (NicoConvASSã‚’ -nicojk 1 ã§å‘¼ã³å‡ºã—ã¾ã™)\n"
+        "  --nicojkmask <æ•°å€¤> ãƒ‹ã‚³ãƒ‹ã‚³å®Ÿæ³ã‚³ãƒ¡ãƒ³ãƒˆãƒã‚¹ã‚¯[1]\n"
+        "                      1 : 1280x720ä¸é€æ˜\n"
+        "                      2 : 1280x720åŠé€æ˜\n"
+        "                      4 : 1920x1080ä¸é€æ˜\n"
+        "                      8 : 1920x1080åŠé€æ˜\n"
+        "                      ORã‚‚å¯ ä¾‹) 15: ã™ã¹ã¦å‡ºåŠ›\n"
+        "  --no-remove-tmp     ä¸€æ™‚ãƒ•ã‚¡ã‚¤ãƒ«ã‚’å‰Šé™¤ã›ãšã«æ®‹ã™\n"
+        "                      ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã¯60fpsã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§ç”Ÿæˆ\n"
+        "  --timefactor <æ•°å€¤>  x265ã‚„NVEncã§ç–‘ä¼¼VFRãƒ¬ãƒ¼ãƒˆã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ã™ã‚‹ã¨ãã®æ™‚é–“ãƒ¬ãƒ¼ãƒˆãƒ•ã‚¡ã‚¯ã‚¿ãƒ¼[0.25]\n"
+        "  --pmt-cut <æ•°å€¤>:<æ•°å€¤>  PMTå¤‰æ›´ã§CMèªè­˜ã™ã‚‹ã¨ãã®æœ€å¤§CMèªè­˜æ™‚é–“å‰²åˆã€‚å…¨å†ç”Ÿæ™‚é–“ã«å¯¾ã™ã‚‹å‰²åˆã§æŒ‡å®šã™ã‚‹ã€‚\n"
+        "                      ä¾‹ãˆã° 0.1:0.2 ã¨ã™ã‚‹ã¨é–‹å§‹10%%ã¾ã§ã«PMTå¤‰æ›´ãŒã‚ã£ãŸå ´åˆã¯ãã®PMTå¤‰æ›´ã¾ã§ã‚’CMèªè­˜ã™ã‚‹ã€‚\n"
+        "                      ã¾ãŸçµ‚ã‚ã‚Šã‹ã‚‰20%%ã¾ã§ã«PMTå¤‰æ›´ãŒã‚ã£ãŸå ´åˆã‚‚åŒæ§˜ã«CMèªè­˜ã™ã‚‹ã€‚[0:0]\n"
+        "  -j|--json   <ãƒ‘ã‚¹>  å‡ºåŠ›çµæœæƒ…å ±ã‚’JSONå‡ºåŠ›ã™ã‚‹å ´åˆã¯å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹ã‚’æŒ‡å®š[]\n"
+        "  --mode <ãƒ¢ãƒ¼ãƒ‰>     å‡¦ç†ãƒ¢ãƒ¼ãƒ‰[ts]\n"
+        "                      ts : MPGE2-TSã‚’å…¥åŠ›ã™ã‚‹é€šå¸¸ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ãƒ¢ãƒ¼ãƒ‰\n"
+        "                      cm : ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ã¾ã§è¡Œã‚ãšã€CMè§£æã¾ã§ã§çµ‚äº†ã™ã‚‹ãƒ¢ãƒ¼ãƒ‰\n"
+        "                      drcs : ãƒãƒƒãƒ”ãƒ³ã‚°ã®ãªã„DRCSå¤–å­—ç”»åƒã ã‘å‡ºåŠ›ã™ã‚‹ãƒ¢ãƒ¼ãƒ‰\n"
+        "                      probe_subtitles : å­—å¹•ãŒã‚ã‚‹ã‹åˆ¤å®š\n"
+        "                      probe_audio : éŸ³å£°ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’å‡ºåŠ›\n"
+        "  --resource-manager <å…¥åŠ›ãƒ‘ã‚¤ãƒ—>:<å‡ºåŠ›ãƒ‘ã‚¤ãƒ—> ãƒªã‚½ãƒ¼ã‚¹ç®¡ç†ãƒ›ã‚¹ãƒˆã¨ã®é€šä¿¡ãƒ‘ã‚¤ãƒ—\n"
+        "  --affinity <ã‚°ãƒ«ãƒ¼ãƒ—>:<ãƒã‚¹ã‚¯> CPUã‚¢ãƒ•ã‚£ãƒ‹ãƒ†ã‚£\n"
+        "                      ã‚°ãƒ«ãƒ¼ãƒ—ã¯ãƒ—ãƒ­ã‚»ãƒƒã‚µã‚°ãƒ«ãƒ¼ãƒ—ï¼ˆ64è«–ç†ã‚³ã‚¢ä»¥ä¸‹ã®ã‚·ã‚¹ãƒ†ãƒ ã§ã¯0ã®ã¿ï¼‰\n"
+        "  --max-frames        probe_*ãƒ¢ãƒ¼ãƒ‰æ™‚ã®ã¿æœ‰åŠ¹ã€‚TSã‚’è¦‹ã‚‹æ™‚é–“ã‚’æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ æ•°ã§æŒ‡å®š[9000]\n"
+        "  --dump              å‡¦ç†é€”ä¸­ã®ãƒ‡ãƒ¼ã‚¿ã‚’ãƒ€ãƒ³ãƒ—ï¼ˆãƒ‡ãƒãƒƒã‚°ç”¨ï¼‰\n",
         bin);
 }
 
 static tstring getParam(int argc, const tchar* argv[], int ikey) {
     if (ikey + 1 >= argc) {
         THROWF(FormatException,
-            "%" PRITSTR "ƒIƒvƒVƒ‡ƒ“‚Íƒpƒ‰ƒ[ƒ^‚ª•K—v‚Å‚·", argv[ikey]);
+            "%" PRITSTR "ã‚ªãƒ—ã‚·ãƒ§ãƒ³ã¯ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ãŒå¿…è¦ã§ã™", argv[ikey]);
     }
     return argv[ikey + 1];
 }
@@ -182,7 +182,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.nicoConvChSidPath = _T("ch_sid.txt");
     conf.drcsOutPath = moduleDir + _T("/../drcs");
     conf.drcsMapPath = conf.drcsOutPath + _T("/drcs_map.txt");
-    conf.joinLogoScpCmdPath = moduleDir + _T("/../JL/JL_•W€.txt");
+    conf.joinLogoScpCmdPath = moduleDir + _T("/../JL/JL_æ¨™æº–.txt");
     conf.mode = _T("ts");
     conf.modeArgs = _T("");
     conf.userSAR = { 0, 0 };
@@ -225,7 +225,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             tstring arg = getParam(argc, argv, i++);
             conf.encoder = encoderFtomString(arg);
             if (conf.encoder == (ENUM_ENCODER)-1) {
-                PRINTF("--encoder-type‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
+                PRINTF("--encoder-typeã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %" PRITSTR "\n", arg.c_str());
             }
         } else if (key == _T("-e") || key == _T("--encoder")) {
             conf.encoderPath = pathNormalize(getParam(argc, argv, i++));
@@ -235,13 +235,13 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%d:%d"), &conf.userSAR.first, &conf.userSAR.second);
             if (ret < 2) {
-                THROWF(ArgumentException, "--sar‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--sarã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("-aet") || key == _T("--audio-encoder-type")) {
             tstring arg = getParam(argc, argv, i++);
             conf.audioEncoder = audioEncoderFtomString(arg);
             if (conf.audioEncoder == (ENUM_AUDIO_ENCODER)-1) {
-                PRINTF("--audio-encoder-type‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
+                PRINTF("--audio-encoder-typeã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %" PRITSTR "\n", arg.c_str());
             }
         } else if (key == _T("-ae") || key == _T("--audio-encoder")) {
             conf.audioEncoderPath = pathNormalize(getParam(argc, argv, i++));
@@ -254,7 +254,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             int ret = sscanfT(arg.c_str(), _T("%lf:%lf:%lf:%lf"),
                 &conf.bitrate.a, &conf.bitrate.b, &conf.bitrate.h264, &conf.bitrate.h265);
             if (ret < 3) {
-                THROWF(ArgumentException, "--bitrate‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--bitrateã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
             if (ret <= 3) {
                 conf.bitrate.h265 = 2;
@@ -264,13 +264,13 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.bitrateCM);
             if (ret == 0) {
-                THROWF(ArgumentException, "--bitrate-cm‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--bitrate-cmã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("--cm-quality-offset")) {
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.cmQualityOffset);
             if (ret == 0) {
-                THROWF(ArgumentException, "--cm-quality-offset‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--cm-quality-offsetã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("--2pass")) {
             conf.twoPass = true;
@@ -289,7 +289,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             } else if (arg == _T("tsreplace")) {
                 conf.format = FORMAT_TSREPLACE;
             } else {
-                THROWF(ArgumentException, "--format‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "", arg);
+                THROWF(ArgumentException, "--formatã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %" PRITSTR "", arg);
             }
         } else if (key == _T("--tsreplace-remove-typed")) {
             conf.tsreplaceRemoveTypeD = true;
@@ -318,29 +318,29 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("-s") || key == _T("--serivceid")) {
             tstring sidstr = getParam(argc, argv, i++);
             if (sidstr.size() > 2 && sidstr.substr(0, 2) == _T("0x")) {
-                // 16i
+                // 16é€²
                 conf.serviceId = std::stoi(sidstr.substr(2), NULL, 16);;
             } else {
-                // 10i
+                // 10é€²
                 conf.serviceId = std::stoi(sidstr);
             }
         } else if (key == _T("--mpeg2decoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.mpeg2 = decoderFromString(arg);
             if (conf.decoderSetting.mpeg2 == (DECODER_TYPE)-1) {
-                PRINTF("--mpeg2decoder‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
+                PRINTF("--mpeg2decoderã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %" PRITSTR "\n", arg.c_str());
             }
         } else if (key == _T("--h264decoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.h264 = decoderFromString(arg);
             if (conf.decoderSetting.h264 == (DECODER_TYPE)-1) {
-                PRINTF("--h264decoder‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
+                PRINTF("--h264decoderã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %" PRITSTR "\n", arg.c_str());
             }
         } else if (key == _T("--hevcdecoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.hevc = decoderFromString(arg);
             if (conf.decoderSetting.hevc == (DECODER_TYPE)-1) {
-                PRINTF("--hevcdecoder‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %" PRITSTR "\n", arg.c_str());
+                PRINTF("--hevcdecoderã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %" PRITSTR "\n", arg.c_str());
             }
         } else if (key == _T("-eb") || key == _T("--encode-buffer")) {
             conf.numEncodeBufferFrames = std::stoi(getParam(argc, argv, i++));
@@ -362,7 +362,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.x265TimeFactor);
             if (ret == 0) {
-                THROWF(ArgumentException, "--timefactor‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--timefactorã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("--logo")) {
             conf.logoPath.push_back(pathNormalize(getParam(argc, argv, i++)));
@@ -407,18 +407,23 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.dumpFilter = true;
         } else if (key == _T("--resource-manager")) {
             const auto arg = getParam(argc, argv, i++);
+#if defined(_WIN32) || defined(_WIN64)
             size_t inPipe, outPipe;
             int ret = sscanfT(arg.c_str(), _T("%zu:%zu"), &inPipe, &outPipe);
+#else
+            int inPipe, outPipe;
+            int ret = sscanfT(arg.c_str(), _T("%d:%d"), &inPipe, &outPipe);
+#endif
             if (ret < 2) {
-                THROWF(ArgumentException, "--resource-manager‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--resource-managerã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
-            conf.inPipe = (HANDLE)inPipe;
-            conf.outPipe = (HANDLE)outPipe;
+            conf.inPipe = (pipe_handle_t)inPipe;
+            conf.outPipe = (pipe_handle_t)outPipe;
         } else if (key == _T("--affinity")) {
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%d:%lld"), &conf.affinityGroup, &conf.affinityMask);
             if (ret < 2) {
-                THROWF(ArgumentException, "--affinity‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--affinityã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("--max-frames")) {
             conf.maxframes = std::stoi(getParam(argc, argv, i++));
@@ -427,7 +432,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             int ret = sscanfT(arg.c_str(), _T("%lf:%lf"),
                 &conf.pmtCutSideRate[0], &conf.pmtCutSideRate[1]);
             if (ret < 2) {
-                THROWF(ArgumentException, "--pmt-cut‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--pmt-cutã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("--print-prefix")) {
             const auto arg = getParam(argc, argv, i++);
@@ -436,15 +441,15 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             } else if (arg == _T("time")) {
                 conf.printPrefix = AMT_PREFIX_TIME;
             } else {
-                THROWF(ArgumentException, "--print-prefix‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·");
+                THROWF(ArgumentException, "--print-prefixã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™");
             }
         } else if (key == _T("--pre-enc-bat")) {
             conf.preEncBatchFile = pathNormalize(getParam(argc, argv, i++));
         } else if (key.size() == 0) {
             continue;
         } else {
-            // ‚È‚º‚©%ls‚Å’·‚¢•¶š—ñH‚í‚·‚Æ—‚¿‚é‚Ì‚Å%s‚Å•\¦
-            THROWF(FormatException, "•s–¾‚ÈƒIƒvƒVƒ‡ƒ“: %s", to_string(argv[i]));
+            // ãªãœã‹%lsã§é•·ã„æ–‡å­—åˆ—é£Ÿã‚ã™ã¨è½ã¡ã‚‹ã®ã§%sã§è¡¨ç¤º
+            THROWF(FormatException, "ä¸æ˜ãªã‚ªãƒ—ã‚·ãƒ§ãƒ³: %s", tchar_to_string(argv[i]));
         }
     }
 
@@ -452,7 +457,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.nicojkmask = 0;
     }
 
-    // muxer‚ÌƒfƒtƒHƒ‹ƒg’l
+    // muxerã®ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆå€¤
     if (conf.muxerPath.size() == 0) {
         if (conf.format == FORMAT_MP4) {
             conf.muxerPath = _T("muxer.exe");
@@ -467,45 +472,45 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 
     if (conf.mode == _T("ts") || conf.mode == _T("g")) {
         if (conf.srcFilePath.size() == 0) {
-            THROWF(ArgumentException, "“ü—Íƒtƒ@ƒCƒ‹‚ğw’è‚µ‚Ä‚­‚¾‚³‚¢");
+            THROWF(ArgumentException, "å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã‚’æŒ‡å®šã—ã¦ãã ã•ã„");
         }
         if (conf.outVideoPath.size() == 0) {
-            THROWF(ArgumentException, "o—Íƒtƒ@ƒCƒ‹‚ğw’è‚µ‚Ä‚­‚¾‚³‚¢");
+            THROWF(ArgumentException, "å‡ºåŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã‚’æŒ‡å®šã—ã¦ãã ã•ã„");
         }
     }
 
     if (conf.mode == _T("drcs") || conf.mode == _T("cm") || starts_with(conf.mode, _T("probe_"))) {
         if (conf.srcFilePath.size() == 0) {
-            THROWF(ArgumentException, "“ü—Íƒtƒ@ƒCƒ‹‚ğw’è‚µ‚Ä‚­‚¾‚³‚¢");
+            THROWF(ArgumentException, "å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã‚’æŒ‡å®šã—ã¦ãã ã•ã„");
         }
     }
 
     if (conf.chapter && !conf.ignoreNoLogo) {
         if (conf.logoPath.size() == 0) {
-            THROW(ArgumentException, "ƒƒS‚ªw’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ");
+            THROW(ArgumentException, "ãƒ­ã‚´ãŒæŒ‡å®šã•ã‚Œã¦ã„ã¾ã›ã‚“");
         }
     }
 
-    // CM‰ğÍ‚Í‚S‚Â‘µ‚¦‚é•K—v‚ª‚ ‚é
+    // CMè§£æã¯ï¼”ã¤æƒãˆã‚‹å¿…è¦ãŒã‚ã‚‹
     if (conf.chapterExePath.size() > 0 || conf.joinLogoScpPath.size() > 0) {
         if (conf.chapterExePath.size() == 0) {
-            THROW(ArgumentException, "chapter_exe.exe‚Ö‚ÌƒpƒX‚ªİ’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ");
+            THROW(ArgumentException, "chapter_exe.exeã¸ã®ãƒ‘ã‚¹ãŒè¨­å®šã•ã‚Œã¦ã„ã¾ã›ã‚“");
         }
         if (conf.joinLogoScpPath.size() == 0) {
-            THROW(ArgumentException, "join_logo_scp.exe‚Ö‚ÌƒpƒX‚ªİ’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ");
+            THROW(ArgumentException, "join_logo_scp.exeã¸ã®ãƒ‘ã‚¹ãŒè¨­å®šã•ã‚Œã¦ã„ã¾ã›ã‚“");
         }
     }
 
     if (conf.maxFadeLength < 0) {
-        THROW(ArgumentException, "max-fade-length‚ª•s³");
+        THROW(ArgumentException, "max-fade-lengthãŒä¸æ­£");
     }
 
     if (conf.mode == _T("enctask")) {
-        // •K—v‚È‚¢
+        // å¿…è¦ãªã„
         conf.workDir = _T("");
     }
 
-    // exe‚ğ’T‚·
+    // exeã‚’æ¢ã™
     if (conf.mode != _T("drcs") && !starts_with(conf.mode, _T("probe_"))) {
         auto search = [](const tstring& path) {
             return pathNormalize(SearchExe(path));
@@ -528,7 +533,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     return std::unique_ptr<ConfigWrapper>(new ConfigWrapper(ctx, conf));
 }
 
-static CRITICAL_SECTION g_log_crisec;
+static std::mutex g_log_mutex;
 static void amatsukaze_av_log_callback(
     void* ptr, int level, const char* fmt, va_list vl) {
     level &= 0xff;
@@ -544,11 +549,11 @@ static void amatsukaze_av_log_callback(
         return;
     }
 
-    static char* log_levels[] = {
+    static const char* log_levels[] = {
         "panic", "fatal", "error", "warn", "info", "verb", "debug", "trace"
     };
 
-    EnterCriticalSection(&g_log_crisec);
+    std::lock_guard<std::mutex> lock(g_log_mutex);
 
     static bool print_prefix = true;
     bool tmp_pp = print_prefix;
@@ -565,15 +570,13 @@ static void amatsukaze_av_log_callback(
     if (print_prefix) {
         fflush(stderr);
     }
-
-    LeaveCriticalSection(&g_log_crisec);
 }
 
 static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting) {
     try {
 
         if (setting.isSubtitlesEnabled()) {
-            // DRCSƒ}ƒbƒsƒ“ƒO‚ğƒ[ƒh
+            // DRCSãƒãƒƒãƒ”ãƒ³ã‚°ã‚’ãƒ­ãƒ¼ãƒ‰
             ctx.loadDRCSMapping(setting.getDRCSMapPath());
         }
 
@@ -633,14 +636,14 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
             test::ResourceTest(ctx, setting);
 
         else
-            ctx.errorF("--mode‚Ìw’è‚ªŠÔˆá‚Á‚Ä‚¢‚Ü‚·: %s\n", mode.c_str());
+            ctx.errorF("--modeã®æŒ‡å®šãŒé–“é•ã£ã¦ã„ã¾ã™: %s\n", mode.c_str());
 
         return 0;
     } catch (const NoLogoException&) {
-        // ƒƒS–³‚µ‚Í100‚Æ‚·‚é
+        // ãƒ­ã‚´ç„¡ã—ã¯100ã¨ã™ã‚‹
         return 100;
     } catch (const NoDrcsMapException&) {
-        // DRCSƒ}ƒbƒsƒ“ƒO‚È‚µ‚Í101‚Æ‚·‚é
+        // DRCSãƒãƒƒãƒ”ãƒ³ã‚°ãªã—ã¯101ã¨ã™ã‚‹
         return 101;
     } catch (const AvisynthError& avserror) {
         ctx.error("AviSynth Error");
@@ -651,7 +654,7 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
     }
 }
 
-int RunAmatsukazeCLI(int argc, const wchar_t* argv[]) {
+int RunAmatsukazeCLI(int argc, const tchar* argv[]) {
     try {
         printCopyright();
 
@@ -663,22 +666,21 @@ int RunAmatsukazeCLI(int argc, const wchar_t* argv[]) {
 
         ctx.setTimePrefix(setting->getPrintPrefix() == AMT_PREFIX_TIME);
 
-        // CPUƒAƒtƒBƒjƒeƒB‚ğİ’è
+        // CPUã‚¢ãƒ•ã‚£ãƒ‹ãƒ†ã‚£ã‚’è¨­å®š
         if (!SetCPUAffinity(setting->getAffinityGroup(), setting->getAffinityMask())) {
-            ctx.error("CPUƒAƒtƒBƒjƒeƒB‚ğİ’è‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½");
+            ctx.error("CPUã‚¢ãƒ•ã‚£ãƒ‹ãƒ†ã‚£ã‚’è¨­å®šã§ãã¾ã›ã‚“ã§ã—ãŸ");
         }
 
-        // FFMPEGƒ‰ƒCƒuƒ‰ƒŠ‰Šú‰»
-        InitializeCriticalSection(&g_log_crisec);
+        // FFMPEGãƒ©ã‚¤ãƒ–ãƒ©ãƒªåˆæœŸåŒ–
         av_log_set_callback(amatsukaze_av_log_callback);
         //av_register_all();
 
-        // ƒLƒƒƒvƒVƒ‡ƒ“DLL‰Šú‰»
+        // ã‚­ãƒ£ãƒ—ã‚·ãƒ§ãƒ³DLLåˆæœŸåŒ–
         InitializeCPW();
 
         return amatsukazeTranscodeMain(ctx, *setting);
     } catch (const Exception&) {
-        // parseArgs‚ÅƒGƒ‰[
+        // parseArgsã§ã‚¨ãƒ©ãƒ¼
         printHelp(argv[0]);
         return 1;
     }

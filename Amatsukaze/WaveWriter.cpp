@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Wave file writer
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -12,11 +12,11 @@ uint32_t toBigEndian(uint32_t a) {
     return (a >> 24) | ((a & 0xFF0000) >> 8) | ((a & 0xFF00) << 8) | (a << 24);
 }
 
-// numSamples: 1ƒ`ƒƒƒ“ƒlƒ‹‚ ‚½‚è‚ÌƒTƒ“ƒvƒ‹”
-// ƒGƒ‰[ŒŸo‚Ì‚½‚ß numSamples ‚ª64bit‚É‚È‚Á‚Ä‚¢‚é‚ªint‚ğ’´‚¦‚é”ÍˆÍ‚É‘Î‰‚µ‚Ä‚¢‚é–ó‚Å‚Í‚È‚¢‚±‚Æ‚É’ˆÓ
+// numSamples: 1ãƒãƒ£ãƒ³ãƒãƒ«ã‚ãŸã‚Šã®ã‚µãƒ³ãƒ—ãƒ«æ•°
+// ã‚¨ãƒ©ãƒ¼æ¤œå‡ºã®ãŸã‚ numSamples ãŒ64bitã«ãªã£ã¦ã„ã‚‹ãŒintã‚’è¶…ãˆã‚‹ç¯„å›²ã«å¯¾å¿œã—ã¦ã„ã‚‹è¨³ã§ã¯ãªã„ã“ã¨ã«æ³¨æ„
 void writeWaveHeader(FILE* fp, int channels, int samplerate, int bitswidth, int64_t numSamples) {
-    // ƒTƒCƒYƒ`ƒFƒbƒN
-    // ‘S‘Ì‚ÌƒTƒCƒY‚ª2^31 - 1ƒoƒCƒg‚ğ’´‚¦‚Ä‚Í‚È‚ç‚È‚¢
+    // ã‚µã‚¤ã‚ºãƒã‚§ãƒƒã‚¯
+    // å…¨ä½“ã®ã‚µã‚¤ã‚ºãŒ2^31 - 1ãƒã‚¤ãƒˆã‚’è¶…ãˆã¦ã¯ãªã‚‰ãªã„
     const int64_t MAX_SIZE = (int64_t(1) << 32) - 1;
 
     int headerSize = sizeof(RiffHeader) + sizeof(FormatChunk) + 8;
@@ -24,7 +24,7 @@ void writeWaveHeader(FILE* fp, int channels, int samplerate, int bitswidth, int6
     int64_t fileSize = headerSize + dataSize;
 
     if (fileSize > MAX_SIZE) {
-        THROW(FormatException, "2GB’´‚ÌWaveƒf[ƒ^ƒtƒ@ƒCƒ‹‚ÍƒTƒ|[ƒg‚µ‚Ä‚¢‚Ü‚¹‚ñ");
+        THROW(FormatException, "2GBè¶…ã®Waveãƒ‡ãƒ¼ã‚¿ãƒ•ã‚¡ã‚¤ãƒ«ã¯ã‚µãƒãƒ¼ãƒˆã—ã¦ã„ã¾ã›ã‚“");
     }
 
     struct Header {
@@ -54,7 +54,7 @@ void writeWaveHeader(FILE* fp, int channels, int samplerate, int bitswidth, int6
     };
 
     if (fwrite(&header, headerSize, 1, fp) != 1) {
-        throw IOException("Waveƒwƒbƒ_‚Ì‘‚«‚İ‚É¸”s");
+        throw IOException("Waveãƒ˜ãƒƒãƒ€ã®æ›¸ãè¾¼ã¿ã«å¤±æ•—");
     }
 }
 

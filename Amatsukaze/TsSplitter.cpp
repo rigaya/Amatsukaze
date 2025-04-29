@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -45,7 +45,7 @@ void VideoFrameParser::reset() {
 
 /* virtual */ void VideoFrameParser::onPesPacket(int64_t clock, PESPacket packet) {
     if (!packet.has_PTS()) {
-        ctx.error("Video PES Packet ‚É PTS ‚ª‚ ‚è‚Ü‚¹‚ñ");
+        ctx.error("Video PES Packet ã« PTS ãŒã‚ã‚Šã¾ã›ã‚“");
         return;
     }
 
@@ -54,7 +54,7 @@ void VideoFrameParser::reset() {
     MemoryChunk payload = packet.paylod();
 
     if (!parser->inputFrame(payload, frameInfo, PTS, DTS)) {
-        ctx.errorF("ƒtƒŒ[ƒ€î•ñ‚Ìæ“¾‚É¸”s PTS=%lld", PTS);
+        ctx.errorF("ãƒ•ãƒ¬ãƒ¼ãƒ æƒ…å ±ã®å–å¾—ã«å¤±æ•— PTS=%lld", PTS);
         return;
     }
 
@@ -62,12 +62,12 @@ void VideoFrameParser::reset() {
         const VideoFrameInfo& frame = frameInfo[0];
 
         if (frame.format.isEmpty()) {
-            // ƒtƒH[ƒ}ƒbƒg‚ª‚í‚©‚ç‚È‚¢‚ÆƒfƒR[ƒh‚Å‚«‚È‚¢‚Ì‚Å—¬‚³‚È‚¢
+            // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒã‚ã‹ã‚‰ãªã„ã¨ãƒ‡ã‚³ãƒ¼ãƒ‰ã§ããªã„ã®ã§æµã•ãªã„
             return;
         }
 
         if (frame.format != videoFormat) {
-            // ƒtƒH[ƒ}ƒbƒg‚ª•Ï‚í‚Á‚½
+            // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒå¤‰ã‚ã£ãŸ
             videoFormat = frame.format;
             onVideoFormatChanged(frame.format);
         }
@@ -82,7 +82,7 @@ AudioFrameParser::AudioFrameParser(AMTContext&ctx)
 
 /* virtual */ void AudioFrameParser::onPesPacket(int64_t clock, PESPacket packet) {
     if (clock == -1) {
-        ctx.error("Audio PES Packet ‚ÉƒNƒƒbƒNî•ñ‚ª‚ ‚è‚Ü‚¹‚ñ");
+        ctx.error("Audio PES Packet ã«ã‚¯ãƒ­ãƒƒã‚¯æƒ…å ±ãŒã‚ã‚Šã¾ã›ã‚“");
         return;
     }
 
@@ -96,7 +96,7 @@ AudioFrameParser::AudioFrameParser(AMTContext&ctx)
         const AudioFrameData& frame = frameData[0];
 
         if (frame.format != format) {
-            // ƒtƒH[ƒ}ƒbƒg‚ª•Ï‚í‚Á‚½
+            // ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒå¤‰ã‚ã£ãŸ
             format = frame.format;
             onAudioFormatChanged(frame.format);
         }
@@ -113,17 +113,17 @@ CaptionParser::CaptionParser(AMTContext&ctx)
     int64_t PTS = packet.has_PTS() ? packet.PTS : -1;
     int64_t SysClock = clock / 300;
 
-    // Šî–{“I‚ÉPTS‚ğˆ—‰Â”\‚ÈóM‹@‚¾‚ªA
-    // PTS‚ª³‚µ‚­‚È‚¢ê‡‚ª‚ ‚é‚Ì‚ÅA‚»‚Ìê‡‚Í
-    // PTS‚ğˆ—•s”\‚ÈóM‹@‚ğƒGƒ~ƒ…[ƒŒ[ƒVƒ‡ƒ“
-    // PTS‚ÆSysClock‚Æ‚Ì·‚Í
-    //  - ARIB‚É‚æ‚ê‚ÎóM‚©‚ç•\¦‚Ü‚Å­‚È‚­‚Æ‚à0.5•bˆÈã‹ó‚¯‚é‚æ‚¤‚É‚Æ‚ ‚é
-    //  - •¡”‚ÌTS‚ğŠm”F‚µ‚½‚Æ‚±‚ë‚¾‚¢‚½‚¢0.75`0.80•b‚­‚ç‚¢‚¾‚Á‚½
-    // ‚Ì‚ÅA0.5•b`1.5•b‚ğ³‚µ‚¢‚Æ”»’èA‚»‚êˆÈŠO‚Í0.8•bæ‚ğ•\¦‚Æ‚·‚é
+    // åŸºæœ¬çš„ã«PTSã‚’å‡¦ç†å¯èƒ½ãªå—ä¿¡æ©Ÿã ãŒã€
+    // PTSãŒæ­£ã—ããªã„å ´åˆãŒã‚ã‚‹ã®ã§ã€ãã®å ´åˆã¯
+    // PTSã‚’å‡¦ç†ä¸èƒ½ãªå—ä¿¡æ©Ÿã‚’ã‚¨ãƒŸãƒ¥ãƒ¼ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
+    // PTSã¨SysClockã¨ã®å·®ã¯
+    //  - ARIBã«ã‚ˆã‚Œã°å—ä¿¡ã‹ã‚‰è¡¨ç¤ºã¾ã§å°‘ãªãã¨ã‚‚0.5ç§’ä»¥ä¸Šç©ºã‘ã‚‹ã‚ˆã†ã«ã¨ã‚ã‚‹
+    //  - è¤‡æ•°ã®TSã‚’ç¢ºèªã—ãŸã¨ã“ã‚ã ã„ãŸã„0.75ï½0.80ç§’ãã‚‰ã„ã ã£ãŸ
+    // ã®ã§ã€0.5ç§’ï½1.5ç§’ã‚’æ­£ã—ã„ã¨åˆ¤å®šã€ãã‚Œä»¥å¤–ã¯0.8ç§’å…ˆã‚’è¡¨ç¤ºæ™‚åˆ»ã¨ã™ã‚‹
     auto Td = PTS - SysClock;
     if (Td < 0.5 * MPEG_CLOCK_HZ || Td > 1.5 * MPEG_CLOCK_HZ) {
         PTS = SysClock + (int)(0.8 * MPEG_CLOCK_HZ);
-        //ctx.info("š–‹PTS‚ğC³ %d", PTS);
+        //ctx.info("å­—å¹•PTSã‚’ä¿®æ­£ %d", PTS);
     }
 
     //int64_t DTS = packet.has_DTS() ? packet.DTS : PTS;
@@ -135,7 +135,7 @@ CaptionParser::CaptionParser(AMTContext&ctx)
 
     if (ret >= CP_NO_ERR_CAPTION_1 && ret <= CP_NO_ERR_CAPTION_8) {
         int ucLangTag = ret - CP_NO_ERR_CAPTION_1;
-        // š–‹•¶ƒf[ƒ^
+        // å­—å¹•æ–‡ãƒ‡ãƒ¼ã‚¿
         CAPTION_DATA_DLL* capList = nullptr;
         DWORD capCount = 0;
         DRCS_PATTERN_DLL* drcsList = nullptr;
@@ -143,7 +143,7 @@ CaptionParser::CaptionParser(AMTContext&ctx)
         if (GetCaptionDataCPW(ucLangTag, &capList, &capCount) != TRUE) {
             capCount = 0;
         } else {
-            // DRCS}Œ`ƒf[ƒ^(‚ ‚ê‚Î)
+            // DRCSå›³å½¢ãƒ‡ãƒ¼ã‚¿(ã‚ã‚Œã°)
             if (GetDRCSPatternCP(ucLangTag, &drcsList, &drcsCount) != TRUE) {
                 drcsCount = 0;
             }
@@ -154,13 +154,13 @@ CaptionParser::CaptionParser(AMTContext&ctx)
             }
         }
     } else if (ret == CP_CHANGE_VERSION) {
-        // š–‹ŠÇ—ƒf[ƒ^
-        // š–‹‚ÌƒtƒH[ƒ}ƒbƒg•ÏX‚Íl—¶‚µ‚È‚¢‚Ì‚Å¡‚Ì‚Æ‚±‚ëŒ©‚é•K—v‚È‚µ
+        // å­—å¹•ç®¡ç†ãƒ‡ãƒ¼ã‚¿
+        // å­—å¹•ã®ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆå¤‰æ›´ã¯è€ƒæ…®ã—ãªã„ã®ã§ä»Šã®ã¨ã“ã‚è¦‹ã‚‹å¿…è¦ãªã—
     } else if (ret == CP_NO_ERR_TAG_INFO) {
         //
     } else if (ret != TRUE && ret != CP_ERR_NEED_NEXT_PACKET &&
         (ret < CP_NO_ERR_CAPTION_1 || CP_NO_ERR_CAPTION_8 < ret)) {
-        // ƒGƒ‰[ƒpƒPƒbƒg
+        // ã‚¨ãƒ©ãƒ¼ãƒ‘ã‚±ãƒƒãƒˆ
     }
 
     if (captions.size() > 0) {
@@ -238,12 +238,12 @@ void TsSystemClock::setPcrPid(int PcrPid) {
     this->PcrPid = PcrPid;
 }
 
-// \•ª‚È”‚ÌPCR‚ğóM‚µ‚½‚©
+// ååˆ†ãªæ•°ã®PCRã‚’å—ä¿¡ã—ãŸã‹
 bool TsSystemClock::pcrReceived() {
     return numPcrReceived >= 2;
 }
 
-// Œ»İ“ü—Í‚³‚ê‚½ƒpƒPƒbƒg‚ğŠî€‚É‚µ‚Ärelative‚¾‚¯Œã‚ÌƒpƒPƒbƒg‚Ì“ü—Í‚ğ•Ô‚·
+// ç¾åœ¨å…¥åŠ›ã•ã‚ŒãŸãƒ‘ã‚±ãƒƒãƒˆã‚’åŸºæº–ã«ã—ã¦relativeã ã‘å¾Œã®ãƒ‘ã‚±ãƒƒãƒˆã®å…¥åŠ›æ™‚åˆ»ã‚’è¿”ã™
 int64_t TsSystemClock::getClock(int relative) {
     if (!pcrReceived()) {
         return -1;
@@ -254,25 +254,25 @@ int64_t TsSystemClock::getClock(int relative) {
     return clockDiff * (index - pcrInfo[1].packetIndex) / indexDiff + pcrInfo[1].clock;
 }
 
-// TSƒXƒgƒŠ[ƒ€‚ğÅ‰‚©‚ç“Ç‚İ’¼‚·‚Æ‚«‚ÉŒÄ‚Ño‚·
+// TSã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’æœ€åˆã‹ã‚‰èª­ã¿ç›´ã™ã¨ãã«å‘¼ã³å‡ºã™
 void TsSystemClock::backTs() {
     numTotakPacketsReveived = 0;
 }
 
-// TSƒXƒgƒŠ[ƒ€‚Ì‘Sƒf[ƒ^‚ğ“ü‚ê‚é‚±‚Æ
+// TSã‚¹ãƒˆãƒªãƒ¼ãƒ ã®å…¨ãƒ‡ãƒ¼ã‚¿ã‚’å…¥ã‚Œã‚‹ã“ã¨
 void TsSystemClock::inputTsPacket(TsPacket packet) {
     if (packet.PID() == PcrPid) {
         if (packet.has_adaptation_field()) {
             MemoryChunk data = packet.adapdation_field();
             AdapdationField af(data.data, (int)data.length);
             if (af.parse() && af.check()) {
-                // ]—ˆ‚ÌƒRƒƒ“ƒg‚ÉAuARIB TR-14 8.2.3‚É‘—o‹K’è‚ª‚ ‚Á‚ÄATSƒpƒPƒbƒg‚Ì˜A‘±«APCR˜A‘±«‚ªØ‚ê‚éê‡‚É‘—‚ç‚ê‚év‚Æ‚ ‚é
-                // ‚µ‚©‚µAŠY“–‚Ì‹Lq‚ÍDIT(PID=0x001e)‚ÉŠÖ‚·‚é‚à‚Ì‚ÅA•K‚¸‚µ‚àPCR‚ÌPID‚É‘Î‚·‚é‹Lq‚Å‚Í‚È‚¢‚æ‚¤‚É“Ç‚ß‚é
-                // ÀÛAPCR‚Æ‰f‘œ‚ÌPID‚ªˆê’v‚·‚éê‡‚ÉA‚±‚±‚ÅPCR‚ÌƒŠƒZƒbƒg‚ğ‚µ‚Ä‚µ‚Ü‚¤‚ÆAÀÛ‚É‚ÍPCR‚ª˜A‘±‚É‚à‚©‚©‚í‚ç‚¸A
-                // "Audio/Video PES Packet ‚ÉƒNƒƒbƒNî•ñ‚ª‚ ‚è‚Ü‚¹‚ñ"‚Æ‚È‚Á‚Ädrop‚µ‚Ä‚µ‚Ü‚¤
-                // ‚»‚±‚Åaf.discontinuity_indicator()‚É‚æ‚éˆ—‚Í–³Œø‰»‚·‚é
+                // å¾“æ¥ã®ã‚³ãƒ¡ãƒ³ãƒˆã«ã€ã€ŒARIB TR-14 8.2.3ã«é€å‡ºè¦å®šãŒã‚ã£ã¦ã€TSãƒ‘ã‚±ãƒƒãƒˆã®é€£ç¶šæ€§ã€PCRé€£ç¶šæ€§ãŒåˆ‡ã‚Œã‚‹å ´åˆã«é€ã‚‰ã‚Œã‚‹ã€ã¨ã‚ã‚‹
+                // ã—ã‹ã—ã€è©²å½“ã®è¨˜è¿°ã¯DIT(PID=0x001e)ã«é–¢ã™ã‚‹ã‚‚ã®ã§ã€å¿…ãšã—ã‚‚PCRã®PIDã«å¯¾ã™ã‚‹è¨˜è¿°ã§ã¯ãªã„ã‚ˆã†ã«èª­ã‚ã‚‹
+                // å®Ÿéš›ã€PCRã¨æ˜ åƒã®PIDãŒä¸€è‡´ã™ã‚‹å ´åˆã«ã€ã“ã“ã§PCRã®ãƒªã‚»ãƒƒãƒˆã‚’ã—ã¦ã—ã¾ã†ã¨ã€å®Ÿéš›ã«ã¯PCRãŒé€£ç¶šã«ã‚‚ã‹ã‹ã‚ã‚‰ãšã€
+                // "Audio/Video PES Packet ã«ã‚¯ãƒ­ãƒƒã‚¯æƒ…å ±ãŒã‚ã‚Šã¾ã›ã‚“"ã¨ãªã£ã¦dropã—ã¦ã—ã¾ã†
+                // ãã“ã§af.discontinuity_indicator()ã«ã‚ˆã‚‹å‡¦ç†ã¯ç„¡åŠ¹åŒ–ã™ã‚‹
                 //if (af.discontinuity_indicator()) {
-                //    // PCR‚ª˜A‘±‚Å‚È‚¢‚Ì‚ÅƒŠƒZƒbƒg
+                //    // PCRãŒé€£ç¶šã§ãªã„ã®ã§ãƒªã‚»ãƒƒãƒˆ
                 //    numPcrReceived = 0;
                 //}
                 if (pcrInfo[1].packetIndex < numTotakPacketsReveived) {
@@ -283,7 +283,7 @@ void TsSystemClock::inputTsPacket(TsPacket packet) {
                         ++numPcrReceived;
                     }
 
-                    // ƒeƒXƒg—p
+                    // ãƒ†ã‚¹ãƒˆç”¨
                     //if (pcrReceived()) {
                     //	PRINTF("PCR: %f Mbps\n", currentBitrate() / (1024 * 1024));
                     //}
@@ -328,7 +328,7 @@ void TsSplitter::reset() {
     tsPacketParser.setEnableBuffering(true);
 }
 
-// 0ˆÈ‰º‚Åw’è–³Œø
+// 0ä»¥ä¸‹ã§æŒ‡å®šç„¡åŠ¹
 void TsSplitter::setServiceId(int sid) {
     preferedServiceId = sid;
 }
@@ -366,19 +366,19 @@ TsSplitter::PcrDetectionHandler::PcrDetectionHandler(TsSplitter& this_)
 /* virtual */ void TsSplitter::PcrDetectionHandler::onTsPacket(int64_t clock, TsPacket packet) {
     this_.tsSystemClock.inputTsPacket(packet);
     if (this_.tsSystemClock.pcrReceived()) {
-        this_.ctx.debug("•K—v‚Èî•ñ‚Íæ“¾‚µ‚½‚Ì‚ÅTS‚ğÅ‰‚©‚ç“Ç‚İ’¼‚µ‚Ü‚·");
+        this_.ctx.debug("å¿…è¦ãªæƒ…å ±ã¯å–å¾—ã—ãŸã®ã§TSã‚’æœ€åˆã‹ã‚‰èª­ã¿ç›´ã—ã¾ã™");
         this_.initPhase = INIT_FINISHED;
-        // ƒnƒ“ƒhƒ‰‚ğ–ß‚µ‚ÄÅ‰‚©‚ç“Ç‚İ’¼‚·
+        // ãƒãƒ³ãƒ‰ãƒ©ã‚’æˆ»ã—ã¦æœ€åˆã‹ã‚‰èª­ã¿ç›´ã™
         this_.tsPacketParser.setHandler(&this_.tsPacketHandler);
         this_.tsPacketSelector.resetParser();
         this_.tsSystemClock.backTs();
 
         int64_t startClock = this_.tsSystemClock.getClock(0);
-        this_.ctx.infoF("ŠJnClock: %lld", startClock);
+        this_.ctx.infoF("é–‹å§‹Clock: %lld", startClock);
         this_.tsPacketSelector.setStartClock(startClock);
 
         this_.tsPacketParser.backAndInput();
-        // ‚à‚¤•K—v‚È‚¢‚Ì‚Åƒoƒbƒtƒ@ƒŠƒ“ƒO‚ÍOFF
+        // ã‚‚ã†å¿…è¦ãªã„ã®ã§ãƒãƒƒãƒ•ã‚¡ãƒªãƒ³ã‚°ã¯OFF
         this_.tsPacketParser.setEnableBuffering(false);
     }
 }
@@ -386,7 +386,7 @@ TsSplitter::SpVideoFrameParser::SpVideoFrameParser(AMTContext&ctx, TsSplitter& t
     : VideoFrameParser(ctx), this_(this_) {}
 /* virtual */ void TsSplitter::SpVideoFrameParser::onVideoPesPacket(int64_t clock, const std::vector<VideoFrameInfo>& frames, PESPacket packet) {
     if (clock == -1) {
-        ctx.error("Video PES Packet ‚ÉƒNƒƒbƒNî•ñ‚ª‚ ‚è‚Ü‚¹‚ñ");
+        ctx.error("Video PES Packet ã«ã‚¯ãƒ­ãƒƒã‚¯æƒ…å ±ãŒã‚ã‚Šã¾ã›ã‚“");
         return;
     }
     this_.onVideoPesPacket(clock, frames, packet);
@@ -414,38 +414,38 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
     return this_.getDRCSOutPath(PTS, md5);
 }
 
-// ƒT[ƒrƒX‚ğİ’è‚·‚éê‡‚ÍƒT[ƒrƒX‚Ìpidsã‚Å‚ÌƒCƒ“ƒfƒbƒNƒX
-// ‚È‚É‚à‚µ‚È‚¢ê‡‚Í•‰‚Ì’l‚Ì•Ô‚·
+// ã‚µãƒ¼ãƒ“ã‚¹ã‚’è¨­å®šã™ã‚‹å ´åˆã¯ã‚µãƒ¼ãƒ“ã‚¹ã®pidsä¸Šã§ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+// ãªã«ã‚‚ã—ãªã„å ´åˆã¯è² ã®å€¤ã®è¿”ã™
 /* virtual */ int TsSplitter::onPidSelect(int TSID, const std::vector<int>& pids) {
-    ctx.info("[PATXV]");
+    ctx.info("[PATæ›´æ–°]");
     for (int i = 0; i < int(pids.size()); ++i) {
         if (preferedServiceId == pids[i]) {
             selectedServiceId = pids[i];
-            ctx.infoF("ƒT[ƒrƒX %d ‚ğ‘I‘ğ", selectedServiceId);
+            ctx.infoF("ã‚µãƒ¼ãƒ“ã‚¹ %d ã‚’é¸æŠ", selectedServiceId);
             return i;
         }
     }
     if (preferedServiceId > 0) {
-        // ƒT[ƒrƒXw’è‚ª‚ ‚é‚Ì‚ÉŠY“–ƒT[ƒrƒX‚ª‚È‚©‚Á‚½‚çƒGƒ‰[‚Æ‚·‚é
+        // ã‚µãƒ¼ãƒ“ã‚¹æŒ‡å®šãŒã‚ã‚‹ã®ã«è©²å½“ã‚µãƒ¼ãƒ“ã‚¹ãŒãªã‹ã£ãŸã‚‰ã‚¨ãƒ©ãƒ¼ã¨ã™ã‚‹
         StringBuilder sb;
-        sb.append("ƒT[ƒrƒXID: ");
+        sb.append("ã‚µãƒ¼ãƒ“ã‚¹ID: ");
         for (int i = 0; i < (int)pids.size(); ++i) {
             sb.append("%s%d", (i > 0) ? ", " : "", pids[i]);
         }
-        sb.append(" w’èƒT[ƒrƒXID: %d", preferedServiceId);
-        ctx.error("w’è‚³‚ê‚½ƒT[ƒrƒX‚ª‚ ‚è‚Ü‚¹‚ñ");
+        sb.append(" æŒ‡å®šã‚µãƒ¼ãƒ“ã‚¹ID: %d", preferedServiceId);
+        ctx.error("æŒ‡å®šã•ã‚ŒãŸã‚µãƒ¼ãƒ“ã‚¹ãŒã‚ã‚Šã¾ã›ã‚“");
         ctx.error(sb.str().c_str());
         //THROW(InvalidOperationException, "failed to select service");
     }
     selectedServiceId = pids[0];
-    ctx.infoF("ƒT[ƒrƒX %d ‚ğ‘I‘ğiw’è‚ª‚ ‚è‚Ü‚¹‚ñ‚Å‚µ‚½j", selectedServiceId);
+    ctx.infoF("ã‚µãƒ¼ãƒ“ã‚¹ %d ã‚’é¸æŠï¼ˆæŒ‡å®šãŒã‚ã‚Šã¾ã›ã‚“ã§ã—ãŸï¼‰", selectedServiceId);
     return 0;
 }
 
 /* virtual */ void TsSplitter::onPmtUpdated(int PcrPid) {
     if (initPhase == PMT_WAITING) {
         initPhase = PCR_WAITING;
-        // PCRƒnƒ“ƒhƒ‰‚É’u‚«Š·‚¦‚ÄTS‚ğÅ‰‚©‚ç“Ç‚İ’¼‚·
+        // PCRãƒãƒ³ãƒ‰ãƒ©ã«ç½®ãæ›ãˆã¦TSã‚’æœ€åˆã‹ã‚‰èª­ã¿ç›´ã™
         tsPacketParser.setHandler(&pcrDetectionHandler);
         tsSystemClock.setPcrPid(PcrPid);
         tsPacketSelector.resetParser();
@@ -454,10 +454,10 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
     }
 }
 
-// TsPacketSelector‚ÅPID Table‚ª•ÏX‚³‚ê‚½•ÏXŒã‚Ìî•ñ‚ª‘—‚ç‚ê‚é
+// TsPacketSelectorã§PID TableãŒå¤‰æ›´ã•ã‚ŒãŸæ™‚å¤‰æ›´å¾Œã®æƒ…å ±ãŒé€ã‚‰ã‚Œã‚‹
 /* virtual */ void TsSplitter::onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption) {
     if (enableVideo || enableAudio) {
-        // ‰f‘œƒXƒgƒŠ[ƒ€Œ`®‚ğƒZƒbƒg
+        // æ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ å½¢å¼ã‚’ã‚»ãƒƒãƒˆ
         switch (video.stype) {
         case 0x02: // MPEG2-VIDEO
             videoParser.setStreamFormat(VS_MPEG2);
@@ -470,12 +470,12 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
             break;
         }
 
-        // •K—v‚È”‚¾‚¯‰¹ºƒp[ƒTì‚é
+        // å¿…è¦ãªæ•°ã ã‘éŸ³å£°ãƒ‘ãƒ¼ã‚µä½œã‚‹
         size_t numAudios = audio.size();
         while (audioParsers.size() < numAudios) {
             int audioIdx = int(audioParsers.size());
             audioParsers.push_back(new SpAudioFrameParser(ctx, *this, audioIdx));
-            ctx.infoF("‰¹ºƒp[ƒT %d ‚ğ’Ç‰Á", audioIdx);
+            ctx.infoF("éŸ³å£°ãƒ‘ãƒ¼ã‚µ %d ã‚’è¿½åŠ ", audioIdx);
         }
     }
 }

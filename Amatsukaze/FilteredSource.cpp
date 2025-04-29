@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -7,6 +7,7 @@
 */
 
 #include "FilteredSource.h"
+#include <string>
 
 void RFFExtractor::clear() {
     prevFrame_ = nullptr;
@@ -14,7 +15,7 @@ void RFFExtractor::clear() {
 
 void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Frame>&& frame, PICTURE_TYPE pic) {
 
-    // PTS‚ÍinputFrame‚ÅÄ’è‹`‚³‚ê‚é‚Ì‚ÅC³‚µ‚È‚¢‚Å‚»‚Ì‚Ü‚Ü“n‚·
+    // PTSã¯inputFrameã§å†å®šç¾©ã•ã‚Œã‚‹ã®ã§ä¿®æ­£ã—ãªã„ã§ãã®ã¾ã¾æ¸¡ã™
     switch (pic) {
     case PIC_FRAME:
     case PIC_TFF:
@@ -44,7 +45,7 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
     prevFrame_ = std::move(frame);
 }
 
-// 2‚Â‚ÌƒtƒŒ[ƒ€‚ÌƒgƒbƒvƒtƒB[ƒ‹ƒhAƒ{ƒgƒ€ƒtƒB[ƒ‹ƒh‚ğ‡¬
+// 2ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒˆãƒƒãƒ—ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã€ãƒœãƒˆãƒ ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã‚’åˆæˆ
 /* static */ std::unique_ptr<av::Frame> RFFExtractor::mixFields(av::Frame& topframe, av::Frame& bottomframe) {
     auto dstframe = std::unique_ptr<av::Frame>(new av::Frame());
 
@@ -52,15 +53,15 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
     AVFrame* bottom = bottomframe();
     AVFrame* dst = (*dstframe)();
 
-    // ƒtƒŒ[ƒ€‚ÌƒvƒƒpƒeƒB‚ğƒRƒs[
+    // ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ã‚’ã‚³ãƒ”ãƒ¼
     av_frame_copy_props(dst, top);
 
-    // ƒƒ‚ƒŠƒTƒCƒY‚ÉŠÖ‚·‚éî•ñ‚ğƒRƒs[
+    // ãƒ¡ãƒ¢ãƒªã‚µã‚¤ã‚ºã«é–¢ã™ã‚‹æƒ…å ±ã‚’ã‚³ãƒ”ãƒ¼
     dst->format = top->format;
     dst->width = top->width;
     dst->height = top->height;
 
-    // ƒƒ‚ƒŠŠm•Û
+    // ãƒ¡ãƒ¢ãƒªç¢ºä¿
     if (av_frame_get_buffer(dst, 64) != 0) {
         THROW(RuntimeException, "failed to allocate frame buffer");
     }
@@ -85,7 +86,7 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
         }
     }
 
-    return std::move(dstframe);
+    return dstframe;
 }
 
 /* static */ PICTURE_TYPE getPictureTypeFromAVFrame(AVFrame* frame) {
@@ -119,8 +120,8 @@ void AMTFilterSource::AvsScript::Apply(IScriptEnvironment* env) {
     if (str.size() > 0) {
         append.clear();
         script += str;
-        // ÅŒã‚ÌŒ‹‰Ê‚Í©•ª‚Ålast‚É“ü‚ê‚È‚¯‚ê‚Î‚È‚ç‚È‚¢‚±‚Æ‚É’ˆÓ
-        //i‚±‚ê‚ğ‚µ‚È‚¢‚ÆÅŒã‚ÌƒtƒBƒ‹ƒ^ŒÄ‚Ño‚µ‚Ì’¼‘O‚ªlast‚É‚È‚Á‚Ä‚µ‚Ü‚¤j
+        // æœ€å¾Œã®çµæœã¯è‡ªåˆ†ã§lastã«å…¥ã‚Œãªã‘ã‚Œã°ãªã‚‰ãªã„ã“ã¨ã«æ³¨æ„
+        //ï¼ˆã“ã‚Œã‚’ã—ãªã„ã¨æœ€å¾Œã®ãƒ•ã‚£ãƒ«ã‚¿å‘¼ã³å‡ºã—ã®ç›´å‰ãŒlastã«ãªã£ã¦ã—ã¾ã†ï¼‰
         env->SetVar("last", env->Invoke("Eval", str.c_str()));
     }
 }
@@ -148,7 +149,7 @@ void AMTFilterSource::readTimecodeFile(const tstring& filepath) {
             }
         }
     }
-    // ‡ŒvŠÔ‚ğ„‘ª
+    // åˆè¨ˆæ™‚é–“ã‚’æ¨æ¸¬
     size_t numFrames = timeCodes_.size();
     if (numFrames >= 2) {
         timeCodes_.push_back(timeCodes_[numFrames - 1] * 2 - timeCodes_[numFrames - 2]);
@@ -159,11 +160,11 @@ void AMTFilterSource::readTimecodeFile(const tstring& filepath) {
 
 void AMTFilterSource::readTimecode(EncodeFileKey key) {
     auto timecodepath = setting_.getAvsTimecodePath(key);
-    // timecodeƒtƒ@ƒCƒ‹‚ª‚ ‚Á‚½‚ç“Ç‚İ‚Ş
+    // timecodeãƒ•ã‚¡ã‚¤ãƒ«ãŒã‚ã£ãŸã‚‰èª­ã¿è¾¼ã‚€
     if (File::exists(timecodepath)) {
         readTimecodeFile(timecodepath);
-        // ƒx[ƒXFPS‚ğ„‘ª
-        // ƒtƒŒ[ƒ€ƒ^ƒCƒ~ƒ“ƒO‚Æ‚Ì·‚Ì˜a‚ªÅ‚à¬‚³‚¢FPS‚ğƒx[ƒXFPS‚Æ‚·‚é
+        // ãƒ™ãƒ¼ã‚¹FPSã‚’æ¨æ¸¬
+        // ãƒ•ãƒ¬ãƒ¼ãƒ ã‚¿ã‚¤ãƒŸãƒ³ã‚°ã¨ã®å·®ã®å’ŒãŒæœ€ã‚‚å°ã•ã„FPSã‚’ãƒ™ãƒ¼ã‚¹FPSã¨ã™ã‚‹
         double minDiff = timeCodes_.back();
         double epsilon = timeCodes_.size() * 10e-10;
         for (auto fps : { 60, 120, 240 }) {
@@ -193,7 +194,7 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
     , env_(make_unique_ptr((IScriptEnvironment2*)nullptr))
     , vfrTimingFps_(0) {
     try {
-        // ƒtƒBƒ‹ƒ^‘Oˆ——pƒŠƒ\[ƒXŠm•Û
+        // ãƒ•ã‚£ãƒ«ã‚¿å‰å‡¦ç†ç”¨ãƒªã‚½ãƒ¼ã‚¹ç¢ºä¿
         auto res = rm.wait(HOST_CMD_Filter);
 
         int pass = 0;
@@ -204,18 +205,18 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
             ReadAllFrames(pass);
         }
 
-        // ƒGƒ“ƒR[ƒh—pƒŠƒ\[ƒXŠm•Û
+        // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ç”¨ãƒªã‚½ãƒ¼ã‚¹ç¢ºä¿
         auto encodeRes = rm.request(HOST_CMD_Encode);
         if (encodeRes.IsFailed() || encodeRes.gpuIndex != res.gpuIndex) {
-            // Šm•Û‚Å‚«‚È‚©‚Á‚½ or GPU‚ª•ÏX‚³‚ê‚½‚ç ˆê’U‰ğ•ú‚·‚é
+            // ç¢ºä¿ã§ããªã‹ã£ãŸ or GPUãŒå¤‰æ›´ã•ã‚ŒãŸã‚‰ ä¸€æ—¦è§£æ”¾ã™ã‚‹
             env_ = nullptr;
             if (encodeRes.IsFailed()) {
-                // ƒŠƒ\[ƒX‚ªŠm•Û‚Å‚«‚Ä‚¢‚È‚©‚Á‚½‚çŠm•Û‚Å‚«‚é‚Ü‚Å‘Ò‚Â
+                // ãƒªã‚½ãƒ¼ã‚¹ãŒç¢ºä¿ã§ãã¦ã„ãªã‹ã£ãŸã‚‰ç¢ºä¿ã§ãã‚‹ã¾ã§å¾…ã¤
                 encodeRes = rm.wait(HOST_CMD_Encode);
             }
         }
 
-        // ƒGƒ“ƒR[ƒh—pƒŠƒ\[ƒX‚ÅƒAƒtƒBƒjƒeƒB‚ğİ’è
+        // ã‚¨ãƒ³ã‚³ãƒ¼ãƒ‰ç”¨ãƒªã‚½ãƒ¼ã‚¹ã§ã‚¢ãƒ•ã‚£ãƒ‹ãƒ†ã‚£ã‚’è¨­å®š
         res = encodeRes;
         SetCPUAffinity(res.group, res.mask);
         if (env_ == nullptr) {
@@ -230,7 +231,7 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
         }
 
         auto durationpath = setting_.getAvsDurationPath(key);
-        // durationƒtƒ@ƒCƒ‹‚ªAMTDecimate‚ğ‹²‚Ş
+        // durationãƒ•ã‚¡ã‚¤ãƒ«ãŒAMTDecimateã‚’æŒŸã‚€
         if (File::exists(durationpath)) {
             sb.append("AMTDecimate(\"%s\")\n", durationpath);
         }
@@ -240,7 +241,7 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
         if (setting_.isDumpFilter()) {
             sb.append("DumpFilterGraph(\"%s\", 1)\n",
                 setting_.getFilterGraphDumpPath(key));
-            // ƒƒ‚ƒŠƒfƒoƒbƒO—p 2000ƒtƒŒ[ƒ€‚²‚Æ‚ÉƒOƒ‰ƒtƒ_ƒ“ƒv
+            // ãƒ¡ãƒ¢ãƒªãƒ‡ãƒãƒƒã‚°ç”¨ 2000ãƒ•ãƒ¬ãƒ¼ãƒ ã”ã¨ã«ã‚°ãƒ©ãƒ•ãƒ€ãƒ³ãƒ—
             //sb.append("DumpFilterGraph(\"%s\", 2, 2000, true)\n",
             //	setting_.getFilterGraphDumpPath(fileId, encoderId, cmtype));
         }
@@ -253,10 +254,10 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
 
         MakeOutFormat(reformInfo.getFormat(key).videoFormat);
     } catch (const AvisynthError& avserror) {
-        // ƒfƒoƒbƒO—p‚ÉƒXƒNƒŠƒvƒg‚Í•Û‘¶‚µ‚Ä‚¨‚­
+        // ãƒ‡ãƒãƒƒã‚°ç”¨ã«ã‚¹ã‚¯ãƒªãƒ—ãƒˆã¯ä¿å­˜ã—ã¦ãŠã
         writeScriptFile(key);
-        // AvisynthError‚ÍScriptEnvironment‚ÉˆË‘¶‚µ‚Ä‚¢‚é‚Ì‚Å
-        // AviSynthException‚É•ÏŠ·‚·‚é
+        // AvisynthErrorã¯ScriptEnvironmentã«ä¾å­˜ã—ã¦ã„ã‚‹ã®ã§
+        // AviSynthExceptionã«å¤‰æ›ã™ã‚‹
         THROWF(AviSynthException, "%s", avserror.msg);
     }
 }
@@ -278,12 +279,12 @@ const VideoFormat& AMTFilterSource::getFormat() const {
     return outfmt_;
 }
 
-// “ü—Íƒ][ƒ“‚ÌtrimŒã‚Ìƒ][ƒ“‚ğ•Ô‚·
+// å…¥åŠ›ã‚¾ãƒ¼ãƒ³ã®trimå¾Œã®ã‚¾ãƒ¼ãƒ³ã‚’è¿”ã™
 const std::vector<EncoderZone> AMTFilterSource::getZones() const {
     return outZones_;
 }
 
-// ŠeƒtƒŒ[ƒ€‚ÌŠÔms(ÅŒã‚ÌƒtƒŒ[ƒ€‚Ì•\¦ŠÔ‚ğ’è‹`‚·‚é‚½‚ß—v‘f”‚ÍƒtƒŒ[ƒ€”+1)
+// å„ãƒ•ãƒ¬ãƒ¼ãƒ ã®æ™‚é–“ms(æœ€å¾Œã®ãƒ•ãƒ¬ãƒ¼ãƒ ã®è¡¨ç¤ºæ™‚é–“ã‚’å®šç¾©ã™ã‚‹ãŸã‚è¦ç´ æ•°ã¯ãƒ•ãƒ¬ãƒ¼ãƒ æ•°+1)
 const std::vector<double>& AMTFilterSource::getTimeCodes() const {
     return timeCodes_;
 }
@@ -307,7 +308,7 @@ std::vector<tstring> AMTFilterSource::GetSuitablePlugins(const tstring& basepath
         tstring FileName;
         tstring BaseName;
     };
-    if (DirectoryExists(basepath) == false) return std::vector<tstring>();
+    if (rgy_directory_exists(basepath) == false) return std::vector<tstring>();
     std::vector<tstring> categories = { _T("_avx2.dll"), _T("_avx.dll"), _T(".dll") };
     std::vector<std::vector<Plugin>> categoryList(categories.size());
     for (tstring filename : GetDirectoryFiles(basepath, _T("*.dll"))) {
@@ -350,22 +351,22 @@ void AMTFilterSource::InitEnv() {
     if (setting_.isDumpFilter()) {
         sb.append("SetGraphAnalysis(true)\n");
     }
-    // ƒVƒXƒeƒ€‚Ìƒvƒ‰ƒOƒCƒ“ƒtƒHƒ‹ƒ_‚ğ–³Œø‰»
+    // ã‚·ã‚¹ãƒ†ãƒ ã®ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ãƒ•ã‚©ãƒ«ãƒ€ã‚’ç„¡åŠ¹åŒ–
     if (setting_.isSystemAvsPlugin() == false) {
         sb.append("ClearAutoloadDirs()\n");
     }
     auto moduleDir = GetModuleDirectory();
-    // Amatsukaze—pƒI[ƒgƒ[ƒhƒtƒHƒ‹ƒ_‚ğ’Ç‰Á
+    // Amatsukazeç”¨ã‚ªãƒ¼ãƒˆãƒ­ãƒ¼ãƒ‰ãƒ•ã‚©ãƒ«ãƒ€ã‚’è¿½åŠ 
     sb.append("AddAutoloadDir(\"%s\\plugins64\")\n", moduleDir);
-    // AutoSelectƒvƒ‰ƒOƒCƒ“‚ğƒ[ƒh
+    // AutoSelectãƒ—ãƒ©ã‚°ã‚¤ãƒ³ã‚’ãƒ­ãƒ¼ãƒ‰
     for (auto& path : GetSuitablePlugins(moduleDir + _T("\\plugins64\\AutoSelected"))) {
         sb.append("LoadPlugin(\"%s\")\n", path);
     }
-    // ƒƒ‚ƒŠß–ñƒIƒvƒVƒ‡ƒ“‚ğ—LŒø‚É‚·‚é
+    // ãƒ¡ãƒ¢ãƒªç¯€ç´„ã‚ªãƒ—ã‚·ãƒ§ãƒ³ã‚’æœ‰åŠ¹ã«ã™ã‚‹
     sb.append("SetCacheMode(CACHE_OPTIMAL_SIZE)\n");
-    // ‚±‚ê‚Íƒƒ‚ƒŠ•s‘«‚É‚È‚é‚Æ‹É’[‚É«”\‚ª—‚¿‚é‚Ì‚Å‚â‚ß‚é
+    // ã“ã‚Œã¯ãƒ¡ãƒ¢ãƒªä¸è¶³ã«ãªã‚‹ã¨æ¥µç«¯ã«æ€§èƒ½ãŒè½ã¡ã‚‹ã®ã§ã‚„ã‚ã‚‹
     //sb.append("SetDeviceOpt(DEV_FREE_THRESHOLD, 1000)\n");
-    // Amatsukaze.dll‚ğƒ[ƒh
+    // Amatsukaze.dllã‚’ãƒ­ãƒ¼ãƒ‰
     sb.append("LoadPlugin(\"%s\")\n", GetModulePath());
 }
 
@@ -373,7 +374,7 @@ void AMTFilterSource::ReadAllFrames(int pass) {
     PClip clip = env_->GetVar("last").AsClip();
     const VideoInfo vi = clip->GetVideoInfo();
 
-    ctx.infoF("ƒtƒBƒ‹ƒ^ƒpƒX%d —\’èƒtƒŒ[ƒ€”: %d", pass + 1, vi.num_frames);
+    ctx.infoF("ãƒ•ã‚£ãƒ«ã‚¿ãƒ‘ã‚¹%d äºˆå®šãƒ•ãƒ¬ãƒ¼ãƒ æ•°: %d", pass + 1, vi.num_frames);
     Stopwatch sw;
     sw.start();
     int prevFrames = 0;
@@ -383,14 +384,14 @@ void AMTFilterSource::ReadAllFrames(int pass) {
         double elapsed = sw.current();
         if (elapsed >= 1.0) {
             double fps = (i - prevFrames) / elapsed;
-            ctx.progressF("%dƒtƒŒ[ƒ€Š®—¹ %.2ffps", i + 1, fps);
+            ctx.progressF("%dãƒ•ãƒ¬ãƒ¼ãƒ å®Œäº† %.2ffps", i + 1, fps);
 
             prevFrames = i;
             sw.stop();
         }
     }
 
-    ctx.infoF("ƒtƒBƒ‹ƒ^ƒpƒX%d Š®—¹: %.2f•b", pass + 1, sw.getTotal());
+    ctx.infoF("ãƒ•ã‚£ãƒ«ã‚¿ãƒ‘ã‚¹%d å®Œäº†: %.2fç§’", pass + 1, sw.getTotal());
 }
 
 void AMTFilterSource::defineMakeSource(
@@ -430,12 +431,12 @@ void AMTFilterSource::defineMakeSource(
 
 void AMTFilterSource::trimInput(EncodeFileKey key,
     const StreamReformInfo& reformInfo) {
-    // ‚±‚ÌencoderIndex+cmtype—p‚Ìo—ÍƒtƒŒ[ƒ€ƒŠƒXƒgì¬
+    // ã“ã®encoderIndex+cmtypeç”¨ã®å‡ºåŠ›ãƒ•ãƒ¬ãƒ¼ãƒ ãƒªã‚¹ãƒˆä½œæˆ
     const auto& srcFrames = reformInfo.getFilterSourceAudioFrames(key.video);
     const auto& outFrames = reformInfo.getEncodeFile(key).videoFrames;
     int numSrcFrames = (int)outFrames.size();
 
-    // •s˜A‘±“_‚Å‹æØ‚é
+    // ä¸é€£ç¶šç‚¹ã§åŒºåˆ‡ã‚‹
     std::vector<EncoderZone> trimZones;
     EncoderZone zone;
     zone.startFrame = outFrames.front();
@@ -453,11 +454,11 @@ void AMTFilterSource::trimInput(EncodeFileKey key,
     if (trimZones.size() > 1 ||
         trimZones[0].startFrame != 0 ||
         trimZones[0].endFrame != (srcFrames.size() - 1)) {
-        // Trim‚ª•K—v
+        // TrimãŒå¿…è¦
         for (int i = 0; i < (int)trimZones.size(); ++i) {
             if (i > 0) sb.append("++");
-            // Trim‚Ìlast_frame==0‚Í––”ö‚Ü‚Å‚·‚×‚Ä‚Æ‚¢‚¤ˆÓ–¡‚È‚Ì‚ÅA0‚Ì‚Æ‚«‚Í—áŠOˆ—
-            // endFrame >= startFrame‚È‚Ì‚ÅAendFrame==0‚Ì‚Æ‚«‚ÍstartFrame==0
+            // Trimã®last_frame==0ã¯æœ«å°¾ã¾ã§ã™ã¹ã¦ã¨ã„ã†æ„å‘³ãªã®ã§ã€0ã®ã¨ãã¯ä¾‹å¤–å‡¦ç†
+            // endFrame >= startFrameãªã®ã§ã€endFrame==0ã®ã¨ãã¯startFrame==0
             if (trimZones[i].endFrame == 0)
                 sb.append("Trim(0,-1)");
             else
@@ -467,7 +468,7 @@ void AMTFilterSource::trimInput(EncodeFileKey key,
     }
 }
 
-// –ß‚è’l: ‘Oˆ—H
+// æˆ»ã‚Šå€¤: å‰å‡¦ç†ï¼Ÿ
 bool AMTFilterSource::FilterPass(int pass, int gpuIndex,
     EncodeFileKey key,
     const StreamReformInfo& reformInfo,
@@ -500,14 +501,14 @@ void AMTFilterSource::MakeZones(
     const StreamReformInfo& reformInfo) {
     const auto& outFrames = reformInfo.getEncodeFile(key).videoFrames;
 
-    // ‚±‚ÌencoderIndex—p‚Ìƒ][ƒ“‚ğì¬
+    // ã“ã®encoderIndexç”¨ã®ã‚¾ãƒ¼ãƒ³ã‚’ä½œæˆ
     outZones_.clear();
     for (int i = 0; i < (int)zones.size(); ++i) {
         EncoderZone newZone = {
           (int)(std::lower_bound(outFrames.begin(), outFrames.end(), zones[i].startFrame) - outFrames.begin()),
           (int)(std::lower_bound(outFrames.begin(), outFrames.end(), zones[i].endFrame) - outFrames.begin())
         };
-        // ’Z‚·‚¬‚éê‡‚Íƒ][ƒ“‚ğÌ‚Ä‚é
+        // çŸ­ã™ãã‚‹å ´åˆã¯ã‚¾ãƒ¼ãƒ³ã‚’æ¨ã¦ã‚‹
         if (newZone.endFrame - newZone.startFrame > 30) {
             outZones_.push_back(newZone);
         }
@@ -525,36 +526,36 @@ void AMTFilterSource::MakeZones(
         : (double)numOutFrames * outvi.fps_denominator / outvi.fps_numerator;
     bool outParity = filter_->GetParity(0);
 
-    ctx.infoF("ƒtƒBƒ‹ƒ^“ü—Í: %dƒtƒŒ[ƒ€ %d/%dfps (%s)",
+    ctx.infoF("ãƒ•ã‚£ãƒ«ã‚¿å…¥åŠ›: %dãƒ•ãƒ¬ãƒ¼ãƒ  %d/%dfps (%s)",
         numSrcFrames, infmt.frameRateNum, infmt.frameRateDenom,
-        infmt.progressive ? "ƒvƒƒOƒŒƒbƒVƒu" : "ƒCƒ“ƒ^[ƒŒ[ƒX");
+        infmt.progressive ? "ãƒ—ãƒ­ã‚°ãƒ¬ãƒƒã‚·ãƒ–" : "ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ¬ãƒ¼ã‚¹");
 
     if (timeCodes_.size()) {
-        ctx.infoF("ƒtƒBƒ‹ƒ^o—Í: %dƒtƒŒ[ƒ€ VFR (ƒx[ƒX %d/%d fps)",
+        ctx.infoF("ãƒ•ã‚£ãƒ«ã‚¿å‡ºåŠ›: %dãƒ•ãƒ¬ãƒ¼ãƒ  VFR (ãƒ™ãƒ¼ã‚¹ %d/%d fps)",
             numOutFrames, outvi.fps_numerator, outvi.fps_denominator);
     } else {
-        ctx.infoF("ƒtƒBƒ‹ƒ^o—Í: %dƒtƒŒ[ƒ€ %d/%dfps (%s)",
+        ctx.infoF("ãƒ•ã‚£ãƒ«ã‚¿å‡ºåŠ›: %dãƒ•ãƒ¬ãƒ¼ãƒ  %d/%dfps (%s)",
             numOutFrames, outvi.fps_numerator, outvi.fps_denominator,
-            outParity ? "ƒCƒ“ƒ^[ƒŒ[ƒX" : "ƒvƒƒOƒŒƒbƒVƒu");
+            outParity ? "ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ¬ãƒ¼ã‚¹" : "ãƒ—ãƒ­ã‚°ãƒ¬ãƒƒã‚·ãƒ–");
     }
 
     if (std::abs(srcDuration - clipDuration) > 0.1f) {
-        THROWF(RuntimeException, "ƒtƒBƒ‹ƒ^o—Í‰f‘œ‚ÌŠÔ‚ª“ü—Í‚Æˆê’v‚µ‚Ü‚¹‚ñi“ü—Í: %.3f•b o—Í: %.3f•bj", srcDuration, clipDuration);
+        THROWF(RuntimeException, "ãƒ•ã‚£ãƒ«ã‚¿å‡ºåŠ›æ˜ åƒã®æ™‚é–“ãŒå…¥åŠ›ã¨ä¸€è‡´ã—ã¾ã›ã‚“ï¼ˆå…¥åŠ›: %.3fç§’ å‡ºåŠ›: %.3fç§’ï¼‰", srcDuration, clipDuration);
     }
 
     if (numSrcFrames != numOutFrames && outParity) {
-        ctx.warn("ƒtƒŒ[ƒ€”‚ª•Ï‚í‚Á‚Ä‚¢‚Ü‚·‚ªƒCƒ“ƒ^[ƒŒ[ƒX‚Ì‚Ü‚Ü‚Å‚·BƒvƒƒOƒŒƒbƒVƒuo—Í‚ª–Ú“I‚È‚çAssumeBFF()‚ğavsƒtƒ@ƒCƒ‹‚ÌÅŒã‚É’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢B");
+        ctx.warn("ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ãŒå¤‰ã‚ã£ã¦ã„ã¾ã™ãŒã‚¤ãƒ³ã‚¿ãƒ¼ãƒ¬ãƒ¼ã‚¹ã®ã¾ã¾ã§ã™ã€‚ãƒ—ãƒ­ã‚°ãƒ¬ãƒƒã‚·ãƒ–å‡ºåŠ›ãŒç›®çš„ãªã‚‰AssumeBFF()ã‚’avsãƒ•ã‚¡ã‚¤ãƒ«ã®æœ€å¾Œã«è¿½åŠ ã—ã¦ãã ã•ã„ã€‚");
     }
 
     if (timeCodes_.size()) {
-        // VFRƒ^ƒCƒ€ƒXƒ^ƒ“ƒv‚ğoutZones‚É”½‰f‚³‚¹‚é
+        // VFRã‚¿ã‚¤ãƒ ã‚¹ã‚¿ãƒ³ãƒ—ã‚’outZonesã«åæ˜ ã•ã›ã‚‹
         double tick = (double)infmt.frameRateDenom / infmt.frameRateNum;
         for (int i = 0; i < (int)outZones_.size(); ++i) {
             outZones_[i].startFrame = (int)(std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].startFrame * tick * 1000) - timeCodes_.begin());
             outZones_[i].endFrame = (int)(std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].endFrame * tick * 1000) - timeCodes_.begin());
         }
     } else if (numSrcFrames != numOutFrames) {
-        // ƒtƒŒ[ƒ€”‚ª•Ï‚í‚Á‚Ä‚¢‚éê‡‚Íƒ][ƒ“‚ğˆø‚«L‚Î‚·
+        // ãƒ•ãƒ¬ãƒ¼ãƒ æ•°ãŒå¤‰ã‚ã£ã¦ã„ã‚‹å ´åˆã¯ã‚¾ãƒ¼ãƒ³ã‚’å¼•ãä¼¸ã°ã™
         double scale = (double)numOutFrames / numSrcFrames;
         for (int i = 0; i < (int)outZones_.size(); ++i) {
             outZones_[i].startFrame = std::max(0, std::min(numOutFrames, (int)std::round(outZones_[i].startFrame * scale)));
@@ -565,23 +566,23 @@ void AMTFilterSource::MakeZones(
 
 void AMTFilterSource::MakeOutFormat(const VideoFormat& infmt) {
     auto vi = filter_->GetVideoInfo();
-    // vi_‚©‚çƒGƒ“ƒR[ƒ_“ü—Í—pVideoFormat‚ğ¶¬‚·‚é
+    // vi_ã‹ã‚‰ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€å…¥åŠ›ç”¨VideoFormatã‚’ç”Ÿæˆã™ã‚‹
     outfmt_ = infmt;
     if (outfmt_.width != vi.width || outfmt_.height != vi.height) {
-        // ƒŠƒTƒCƒY‚³‚ê‚½
+        // ãƒªã‚µã‚¤ã‚ºã•ã‚ŒãŸ
         outfmt_.width = vi.width;
         outfmt_.height = vi.height;
-        // ƒŠƒTƒCƒY‚³‚ê‚½ê‡‚ÍƒAƒXƒyƒNƒg”ä‚ğ1:1‚É‚·‚é
+        // ãƒªã‚µã‚¤ã‚ºã•ã‚ŒãŸå ´åˆã¯ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã‚’1:1ã«ã™ã‚‹
         outfmt_.sarHeight = outfmt_.sarWidth = 1;
     }
     outfmt_.frameRateDenom = vi.fps_denominator;
     outfmt_.frameRateNum = vi.fps_numerator;
-    // ƒCƒ“ƒ^[ƒŒ[ƒX‚©‚Ç‚¤‚©‚Íæ“¾‚Å‚«‚È‚¢‚Ì‚ÅƒpƒŠƒeƒB‚ªfalse(BFF?)‚¾‚Á‚½‚çƒvƒƒOƒŒƒbƒVƒu‚Æ‰¼’è
+    // ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ¬ãƒ¼ã‚¹ã‹ã©ã†ã‹ã¯å–å¾—ã§ããªã„ã®ã§ãƒ‘ãƒªãƒ†ã‚£ãŒfalse(BFF?)ã ã£ãŸã‚‰ãƒ—ãƒ­ã‚°ãƒ¬ãƒƒã‚·ãƒ–ã¨ä»®å®š
     outfmt_.progressive = (filter_->GetParity(0) == false);
 }
 AMTDecimate::AMTDecimate(PClip source, const std::string& duration, IScriptEnvironment* env)
     : GenericVideoFilter(source) {
-    File file(to_tstring(duration), _T("r"));
+    File file(char_to_tstring(duration), _T("r"));
     std::string str;
     while (file.getline(str)) {
         durations.push_back(std::atoi(str.c_str()));
@@ -611,28 +612,28 @@ PVideoFrame __stdcall AMTDecimate::GetFrame(int n, IScriptEnvironment* env) {
     );
 }
 
-// VFR‚Å‚¾‚¢‚½‚¢‚ÌƒŒ[ƒgƒRƒ“ƒgƒ[ƒ‹‚ğÀŒ»‚·‚é
-// VFRƒ^ƒCƒ~ƒ“ƒO‚ÆCMƒ][ƒ“‚©‚çƒ][ƒ“‚ÆƒrƒbƒgƒŒ[ƒg‚ğì¬
+// VFRã§ã ã„ãŸã„ã®ãƒ¬ãƒ¼ãƒˆã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ã‚’å®Ÿç¾ã™ã‚‹
+// VFRã‚¿ã‚¤ãƒŸãƒ³ã‚°ã¨CMã‚¾ãƒ¼ãƒ³ã‹ã‚‰ã‚¾ãƒ¼ãƒ³ã¨ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚’ä½œæˆ
 std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCodes,
     const std::vector<EncoderZone>& cmzones, double bitrateCM,
     int fpsNum, int fpsDenom, double timeFactor, double costLimit) {
     enum {
         UNIT_FRAMES = 8,
-        HARD_ZONE_LIMIT = 1000, // ƒ][ƒ“”ãŒÀ‚Í1000
-        TARGET_ZONES_PER_HOUR = 30 // –Ú•Wƒ][ƒ“”‚Í1ŠÔ‚ ‚½‚è30ŒÂ
+        HARD_ZONE_LIMIT = 1000, // ã‚¾ãƒ¼ãƒ³æ•°ä¸Šé™ã¯1000
+        TARGET_ZONES_PER_HOUR = 30 // ç›®æ¨™ã‚¾ãƒ¼ãƒ³æ•°ã¯1æ™‚é–“ã‚ãŸã‚Š30å€‹
     };
     struct Block {
-        int index;   // ƒuƒƒbƒNæ“ª‚ÌUNITƒAƒhƒŒƒX
-        int next;    // Œã‚ë‚ÌƒuƒƒbƒN‚Ìæ“ªƒuƒƒbƒNƒAƒhƒŒƒXi‚±‚ÌƒuƒƒbƒN‚ª‘¶İ‚µ‚È‚¢ê‡‚Í-1j
-        double avg;  // ‚±‚ÌƒuƒƒbƒN‚Ì•½‹ÏƒrƒbƒgƒŒ[ƒg
-        double cost; // Œã‚ë‚ÌƒuƒƒbƒN‚ÆŒ‹‡‚µ‚½‚Æ‚«‚Ì’Ç‰ÁƒRƒXƒg
+        int index;   // ãƒ–ãƒ­ãƒƒã‚¯å…ˆé ­ã®UNITã‚¢ãƒ‰ãƒ¬ã‚¹
+        int next;    // å¾Œã‚ã®ãƒ–ãƒ­ãƒƒã‚¯ã®å…ˆé ­ãƒ–ãƒ­ãƒƒã‚¯ã‚¢ãƒ‰ãƒ¬ã‚¹ï¼ˆã“ã®ãƒ–ãƒ­ãƒƒã‚¯ãŒå­˜åœ¨ã—ãªã„å ´åˆã¯-1ï¼‰
+        double avg;  // ã“ã®ãƒ–ãƒ­ãƒƒã‚¯ã®å¹³å‡ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ
+        double cost; // å¾Œã‚ã®ãƒ–ãƒ­ãƒƒã‚¯ã¨çµåˆã—ãŸã¨ãã®è¿½åŠ ã‚³ã‚¹ãƒˆ
     };
 
     if (timeCodes.size() == 0) {
         return std::vector<BitrateZone>();
     }
     int numFrames = (int)timeCodes.size() - 1;
-    // 8ƒtƒŒ[ƒ€‚²‚Æ‚Ì•½‹ÏƒrƒbƒgƒŒ[ƒg‚ğŒvZ
+    // 8ãƒ•ãƒ¬ãƒ¼ãƒ ã”ã¨ã®å¹³å‡ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚’è¨ˆç®—
     std::vector<double> units(nblocks(numFrames, UNIT_FRAMES));
     for (int i = 0; i < (int)units.size(); ++i) {
         auto start = timeCodes.begin() + i * UNIT_FRAMES;
@@ -641,29 +642,29 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
         double invfps = sum / (int)(end - start);
         units[i] = (invfps - 1.0) * timeFactor + 1.0;
     }
-    // cmzones‚ğ“K—p
+    // cmzonesã‚’é©ç”¨
     for (int i = 0; i < (int)cmzones.size(); ++i) {
-        // ”¼’[•”•ª‚ÍCMƒ][ƒ“‚ğ¬‚³‚­‚é•ûŒü‚ÉŠÛ‚ß‚é
+        // åŠç«¯éƒ¨åˆ†ã¯CMã‚¾ãƒ¼ãƒ³ã‚’å°ã•ãã‚‹æ–¹å‘ã«ä¸¸ã‚ã‚‹
         int start = nblocks(cmzones[i].startFrame, UNIT_FRAMES);
         int end = cmzones[i].endFrame / UNIT_FRAMES;
         for (int k = start; k < end; ++k) {
             units[k] *= bitrateCM;
         }
     }
-    // ‚±‚±‚Å‚Ìunits‚ÍŠeƒtƒŒ[ƒ€‚É“K—p‚·‚×‚«ƒrƒbƒgƒŒ[ƒg
-    // ‚¾‚ªA‚»‚Ì‚Ü‚Üzones‚É‚·‚é‚Æ”‚ª‘½‚·‚¬‚Ä
-    // ƒRƒ}ƒ“ƒhƒ‰ƒCƒ“ˆø”‚É‚Å‚«‚È‚¢‚Ì‚Å‚ ‚é’ö“x‚Ü‚Æ‚ß‚é
+    // ã“ã“ã§ã®unitsã¯å„ãƒ•ãƒ¬ãƒ¼ãƒ ã«é©ç”¨ã™ã¹ããƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ
+    // ã ãŒã€ãã®ã¾ã¾zonesã«ã™ã‚‹ã¨æ•°ãŒå¤šã™ãã¦
+    // ã‚³ãƒãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³å¼•æ•°ã«ã§ããªã„ã®ã§ã‚ã‚‹ç¨‹åº¦ã¾ã¨ã‚ã‚‹
     std::vector<Block> blocks;
     double cur = units[0];
     blocks.push_back(Block{ 0, 1, cur, 0 });
-    // “¯‚¶ƒrƒbƒgƒŒ[ƒg‚Ì˜A‘±‚Í‚Ü‚Æ‚ß‚é
+    // åŒã˜ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã®é€£ç¶šã¯ã¾ã¨ã‚ã‚‹
     for (int i = 1; i < (int)units.size(); ++i) {
         if (units[i] != cur) {
             cur = units[i];
             blocks.push_back(Block{ i, (int)blocks.size() + 1, cur, 0 });
         }
     }
-    // ÅŒã‚É”Ô•º‚ğ’u‚­
+    // æœ€å¾Œã«ç•ªå…µã‚’ç½®ã
     blocks.push_back(Block{ (int)units.size(), -1, 0, 0 });
 
     auto sumDiff = [&](int start, int end, double avg) {
@@ -678,38 +679,38 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
         int start = cur.index;
         int mid = next.index;
         int end = blocks[next.next].index;
-        // Œ»İ‚ÌƒRƒXƒg
+        // ç¾åœ¨ã®ã‚³ã‚¹ãƒˆ
 
         double cur_cost = sumDiff(start, mid, cur.avg);
         double next_cost = sumDiff(mid, end, next.avg);
-        // ˜AŒ‹Œã‚Ì•½‹ÏƒrƒbƒgƒŒ[ƒg
+        // é€£çµå¾Œã®å¹³å‡ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ
         double avg2 = (cur.avg * (mid - start) + next.avg * (end - mid)) / (end - start);
-        // ˜AŒ‹Œã‚ÌƒRƒXƒg
+        // é€£çµå¾Œã®ã‚³ã‚¹ãƒˆ
         double cost2 = sumDiff(start, end, avg2);
-        // ’Ç‰ÁƒRƒXƒg
+        // è¿½åŠ ã‚³ã‚¹ãƒˆ
         cur.cost = cost2 - (cur_cost + next_cost);
         };
 
-    // ˜AŒ‹’Ç‰ÁƒRƒXƒgŒvZ
+    // é€£çµæ™‚è¿½åŠ ã‚³ã‚¹ãƒˆè¨ˆç®—
     for (int i = 0; blocks[i].index < (int)units.size(); i = blocks[i].next) {
         auto& cur = blocks[i];
         auto& next = blocks[cur.next];
-        // Ÿ‚ÌƒuƒƒbƒN‚ª‘¶İ‚·‚ê‚Î
+        // æ¬¡ã®ãƒ–ãƒ­ãƒƒã‚¯ãŒå­˜åœ¨ã™ã‚Œã°
         if (next.index < (int)units.size()) {
             calcCost(cur, next);
         }
     }
 
-    // Å‘åƒuƒƒbƒN”
+    // æœ€å¤§ãƒ–ãƒ­ãƒƒã‚¯æ•°
     auto totalHours = timeCodes.back() / 1000.0 / 3600.0;
     int targetNumZones = std::max(1, (int)(TARGET_ZONES_PER_HOUR * totalHours));
     double totalCostLimit = units.size() * costLimit;
 
-    // ƒq[ƒvì¬
+    // ãƒ’ãƒ¼ãƒ—ä½œæˆ
     auto comp = [&](int b0, int b1) {
         return blocks[b0].cost > blocks[b1].cost;
         };
-    // ÅŒã‚ÌƒuƒƒbƒN‚Æ”Ô•º‚Í˜AŒ‹‚Å‚«‚È‚¢‚Ì‚Åœ‚­
+    // æœ€å¾Œã®ãƒ–ãƒ­ãƒƒã‚¯ã¨ç•ªå…µã¯é€£çµã§ããªã„ã®ã§é™¤ã
     int heapSize = (int)blocks.size() - 2;
     int numZones = heapSize;
     std::vector<int> indices(heapSize);
@@ -718,37 +719,37 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     double totalCost = 0;
     while ((totalCost < totalCostLimit && numZones > targetNumZones) ||
         numZones > HARD_ZONE_LIMIT) {
-        // ’Ç‰ÁƒRƒXƒgÅ¬ƒuƒƒbƒN
+        // è¿½åŠ ã‚³ã‚¹ãƒˆæœ€å°ãƒ–ãƒ­ãƒƒã‚¯
         int idx = indices.front();
         std::pop_heap(indices.begin(), indices.begin() + (heapSize--), comp);
         auto& cur = blocks[idx];
-        // ‚±‚ÌƒuƒƒbƒN‚ªŠù‚É˜AŒ‹Ï‚İ‚Å‚È‚¯‚ê‚Î
+        // ã“ã®ãƒ–ãƒ­ãƒƒã‚¯ãŒæ—¢ã«é€£çµæ¸ˆã¿ã§ãªã‘ã‚Œã°
         if (cur.next != -1) {
             auto& next = blocks[cur.next];
             int start = cur.index;
             int mid = next.index;
             int end = blocks[next.next].index;
             totalCost += cur.cost;
-            // ˜AŒ‹Œã‚Ì•½‹ÏƒrƒbƒgƒŒ[ƒg‚ÉXV
+            // é€£çµå¾Œã®å¹³å‡ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã«æ›´æ–°
             cur.avg = (cur.avg * (mid - start) + next.avg * (end - mid)) / (end - start);
-            // ˜AŒ‹Œã‚Ìnext‚ÉXV
+            // é€£çµå¾Œã®nextã«æ›´æ–°
             cur.next = next.next;
-            // ˜AŒ‹‚³‚ê‚éƒuƒƒbƒN‚Í–³Œø‰»
+            // é€£çµã•ã‚Œã‚‹ãƒ–ãƒ­ãƒƒã‚¯ã¯ç„¡åŠ¹åŒ–
             next.next = -1;
             --numZones;
-            // X‚ÉŸ‚ÌƒuƒƒbƒN‚ª‚ ‚ê‚Î
+            // æ›´ã«æ¬¡ã®ãƒ–ãƒ­ãƒƒã‚¯ãŒã‚ã‚Œã°
             auto& nextnext = blocks[cur.next];
             if (nextnext.index < (int)units.size()) {
-                // ˜AŒ‹‚Ì’Ç‰ÁƒRƒXƒg‚ğŒvZ
+                // é€£çµæ™‚ã®è¿½åŠ ã‚³ã‚¹ãƒˆã‚’è¨ˆç®—
                 calcCost(cur, nextnext);
-                // Ä“xƒq[ƒv‚É’Ç‰Á
+                // å†åº¦ãƒ’ãƒ¼ãƒ—ã«è¿½åŠ 
                 indices[heapSize] = idx;
                 std::push_heap(indices.begin(), indices.begin() + (++heapSize), comp);
             }
         }
     }
 
-    // Œ‹‰Ê‚ğ¶¬
+    // çµæœã‚’ç”Ÿæˆ
     std::vector<BitrateZone> zones;
     for (int i = 0; blocks[i].index < (int)units.size(); i = blocks[i].next) {
         const auto& cur = blocks[i];
@@ -762,8 +763,8 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     return zones;
 }
 
-// VFR‚É‘Î‰‚µ‚Ä‚¢‚È‚¢ƒGƒ“ƒR[ƒ_‚ÅƒrƒbƒgƒŒ[ƒgw’è‚ğs‚¤‚Æ‚«—p‚Ì
-// •½‹ÏƒtƒŒ[ƒ€ƒŒ[ƒg‚ğl—¶‚µ‚½ƒrƒbƒgƒŒ[ƒg‚ğŒvZ‚·‚é
+// VFRã«å¯¾å¿œã—ã¦ã„ãªã„ã‚¨ãƒ³ã‚³ãƒ¼ãƒ€ã§ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆæŒ‡å®šã‚’è¡Œã†ã¨ãç”¨ã®
+// å¹³å‡ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆã‚’è€ƒæ…®ã—ãŸãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆã‚’è¨ˆç®—ã™ã‚‹
 double AdjustVFRBitrate(const std::vector<double>& timeCodes, int fpsNum, int fpsDenom) {
     if (timeCodes.size() == 0) {
         return 1.0;

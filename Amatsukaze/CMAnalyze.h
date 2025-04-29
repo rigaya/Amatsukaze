@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /**
 * Amtasukaze CM Analyze
@@ -28,6 +28,7 @@ private:
 public:
     SetTemporaryEnvironmentVariable() : varnames() {
     }
+#if defined(_WIN32) || defined(_WIN64)
     ~SetTemporaryEnvironmentVariable() {
         for (const auto& name : varnames) {
             SetEnvironmentVariable(name.c_str(), nullptr);
@@ -37,6 +38,18 @@ public:
         varnames.push_back(name);
         return SetEnvironmentVariable(name.c_str(), value.c_str());
     }
+#else
+    ~SetTemporaryEnvironmentVariable() {
+        for (const auto& name : varnames) {
+            unsetenv(name.c_str());
+        }
+    }
+    bool set(const std::string& name, const std::string& value) {
+        varnames.push_back(name);
+        // setenvの第3引数は上書きを許可するかどうか（1で許可）
+        return (setenv(name.c_str(), value.c_str(), 1) == 0);
+    }
+#endif
 };
 
 class CMAnalyze : public AMTObject {
@@ -51,7 +64,7 @@ public:
     const std::vector<EncoderZone>& getZones() const { return cmzones; }
     const std::vector<int>& getDivs() const { return divs; }
 
-    // PMT�ύX��񂩂�CM�ǉ��F��
+    // PMT変更情報からCM追加認識
     void applyPmtCut(
         int numFrames, const double* rates,
         const std::vector<int>& pidChanges);

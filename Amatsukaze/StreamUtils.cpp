@@ -1,4 +1,4 @@
-/**
+Ôªø/**
 * Memory and Stream utility
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -8,11 +8,16 @@
 
 #include "StreamUtils.h"
 
+#include "rgy_util.h"
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wsign-compare")
 #include "avisynth.h"
+#pragma comment(lib, "avisynth.lib")
+RGY_DISABLE_WARNING_POP
 
 const char* CMTypeToString(CMType cmtype) {
     if (cmtype == CMTYPE_CM) return "CM";
-    if (cmtype == CMTYPE_NONCM) return "ñ{ï“";
+    if (cmtype == CMTYPE_NONCM) return "Êú¨Á∑®";
     return "";
 }
 
@@ -47,22 +52,23 @@ double presenting_time(PICTURE_TYPE picType, double frameRate) {
     case PIC_BFF: return 1.0 / frameRate;
     case PIC_TFF_RFF: return 1.5 / frameRate;
     case PIC_BFF_RFF: return 1.5 / frameRate;
+    default: break;
     }
-    // ïsñæ
+    // ‰∏çÊòé
     return 1.0 / frameRate;
 }
 
 const char* getAudioChannelString(AUDIO_CHANNELS channels) {
     switch (channels) {
-    case AUDIO_MONO: return "ÉÇÉmÉâÉã";
-    case AUDIO_STEREO: return "ÉXÉeÉåÉI";
+    case AUDIO_MONO: return "„É¢„Éé„É©„É´";
+    case AUDIO_STEREO: return "„Çπ„ÉÜ„É¨„Ç™";
     case AUDIO_30: return "3/0";
     case AUDIO_31: return "3/1";
     case AUDIO_32: return "3/2";
     case AUDIO_32_LFE: return "5.1ch";
     case AUDIO_21: return "2/1";
     case AUDIO_22: return "2/2";
-    case AUDIO_2LANG: return "ÉfÉÖÉAÉãÉÇÉm";
+    case AUDIO_2LANG: return "„Éá„É•„Ç¢„É´„É¢„Éé";
     case AUDIO_52_LFE: return "7.1ch";
     case AUDIO_33_LFE: return "3/3.1";
     case AUDIO_2_22_LFE: return "2/0/0-2/0/2-0.1";
@@ -71,8 +77,9 @@ const char* getAudioChannelString(AUDIO_CHANNELS channels) {
     case AUDIO_020_32_LFE: return "0/2/0-3/0/2-0.1";
     case AUDIO_2_323_2LFE: return "2/0/0-3/2/3-0.2";
     case AUDIO_333_523_3_2LFE: return "22.2ch";
+    default: break;
     }
-    return "ÉGÉâÅ[";
+    return "„Ç®„É©„Éº";
 }
 
 int getNumAudioChannels(AUDIO_CHANNELS channels) {
@@ -94,8 +101,9 @@ int getNumAudioChannels(AUDIO_CHANNELS channels) {
     case AUDIO_020_32_LFE: return 8;
     case AUDIO_2_323_2LFE: return 12;
     case AUDIO_333_523_3_2LFE: return 24;
+    default: break;
     }
-    return 2; // ïsñæ
+    return 2; // ‰∏çÊòé
 }
 
 void DeleteScriptEnvironment(IScriptEnvironment2* env) {
@@ -120,7 +128,7 @@ void ConcatFiles(const std::vector<tstring>& srcpaths, const tstring& dstpath) {
     }
 }
 
-// BOMÇ†ÇËUTF8Ç≈èëÇ´çûÇﬁ
+// BOM„ÅÇ„ÇäUTF8„ÅßÊêó„ÅçÊíº„ÇÄ
 void WriteUTF8File(const tstring& filename, const std::string& utf8text) {
     File file(filename, _T("w"));
     uint8_t bom[] = { 0xEF, 0xBB, 0xBF };
@@ -129,7 +137,7 @@ void WriteUTF8File(const tstring& filename, const std::string& utf8text) {
 }
 
 void WriteUTF8File(const tstring& filename, const std::wstring& text) {
-    WriteUTF8File(filename, to_string(text, CP_UTF8));
+    WriteUTF8File(filename, wstring_to_string(text, CP_UTF8));
 }
 
 // C API for P/Invoke

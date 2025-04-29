@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -11,18 +11,19 @@
 PacketCache::PacketCache(
     AMTContext& ctx,
     const tstring& filepath,
-    const std::vector<int64_t> offsets, // ƒf[ƒ^”+1—v‘f
-    int nLinebit, // ƒLƒƒƒbƒVƒ…ƒ‰ƒCƒ“ƒf[ƒ^”‚Ìƒrƒbƒg”
-    int nEntry)	 // Å‘åƒLƒƒƒbƒVƒ…•Ûƒ‰ƒCƒ“”
+    const std::vector<int64_t> offsets, // ãƒ‡ãƒ¼ã‚¿æ•°+1è¦ç´ 
+    int nLinebit, // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ãƒ©ã‚¤ãƒ³ãƒ‡ãƒ¼ã‚¿æ•°ã®ãƒ“ãƒƒãƒˆæ•°
+    int nEntry)	 // æœ€å¤§ã‚­ãƒ£ãƒƒã‚·ãƒ¥ä¿æŒãƒ©ã‚¤ãƒ³æ•°
     : AMTObject(ctx)
+    , nLinebit_(nLinebit)
+    , nEntry_(nEntry)
+    , nLineSize_(1 << nLinebit)
+    , nBaseIndexMask_(~(nLineSize_ - 1))
     , file_(filepath, _T("rb"))
     , offsets_(offsets)
-    , nLinebit_(nLinebit)
-    , nEntry_(nEntry) {
+    , cacheTable_()
+    , cacheEntries_() {
     int numData = (int)offsets.size() - 1;
-
-    nLineSize_ = 1 << nLinebit;
-    nBaseIndexMask_ = ~(nLineSize_ - 1);
     cacheTable_.resize((numData + nLineSize_ - 1) >> nLinebit_, nullptr);
 }
 PacketCache::~PacketCache() {
@@ -32,7 +33,7 @@ PacketCache::~PacketCache() {
     cacheTable_.clear();
     cacheEntries_.clear();
 }
-// MemoryChunk‚Í­‚È‚­‚Æ‚ànEntry‰ñ‚ÌŒÄ‚Ño‚µ‚Ü‚Å—LŒø
+// MemoryChunkã¯å°‘ãªãã¨ã‚‚nEntryå›ã®å‘¼ã³å‡ºã—ã¾ã§æœ‰åŠ¹
 MemoryChunk PacketCache::operator[](int index) {
     int64_t localOffset = offsets_[index] - offsets_[getLineBaseIndex(index)];
     int dataSize = int(offsets_[index + 1] - offsets_[index]);
@@ -49,9 +50,9 @@ int PacketCache::getLineBaseIndex(int index) const {
 uint8_t* PacketCache::getEntry(int lineNumber) {
     uint8_t*& entry = cacheTable_[lineNumber];
     if (entry == nullptr) {
-        // ƒLƒƒƒbƒVƒ…‚µ‚Ä‚¢‚È‚¢‚Ì‚Å“Ç‚İ‚Ş
+        // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã—ã¦ã„ãªã„ã®ã§èª­ã¿è¾¼ã‚€
         if ((int)cacheEntries_.size() >= nEntry_) {
-            // ƒGƒ“ƒgƒŠ”‚ğ’´‚¦‚éê‡‚ÍÅ‰‚É“Ç‚İ‚ñ‚¾ƒLƒƒƒbƒVƒ…ƒ‰ƒCƒ“‚ğíœ
+            // ã‚¨ãƒ³ãƒˆãƒªæ•°ã‚’è¶…ãˆã‚‹å ´åˆã¯æœ€åˆã«èª­ã¿è¾¼ã‚“ã ã‚­ãƒ£ãƒƒã‚·ãƒ¥ãƒ©ã‚¤ãƒ³ã‚’å‰Šé™¤
             auto& firstEntry = cacheTable_[cacheEntries_.front()];
             delete[] firstEntry; firstEntry = nullptr;
             cacheEntries_.pop_front();

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 /**
 * MPEG2-TS splitter
@@ -78,7 +78,7 @@ private:
     AdtsParser adtsParser;
 };
 
-// “¯ŠúŒ^‚Ìš–‹‚Ì‚İ‘Î‰B•¶šƒX[ƒp[‚É‚Í‘Î‰‚µ‚È‚¢
+// åŒæœŸå‹ã®å­—å¹•ã®ã¿å¯¾å¿œã€‚æ–‡å­—ã‚¹ãƒ¼ãƒ‘ãƒ¼ã«ã¯å¯¾å¿œã—ãªã„
 class CaptionParser : public AMTObject, public PesParser {
 public:
     CaptionParser(AMTContext&ctx);
@@ -100,7 +100,7 @@ private:
     SpCaptionFormatter fomatter;
 };
 
-// TSƒXƒgƒŠ[ƒ€‚ğˆê’è—Ê‚¾‚¯–ß‚ê‚é‚æ‚¤‚É‚·‚é
+// TSã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’ä¸€å®šé‡ã ã‘æˆ»ã‚Œã‚‹ã‚ˆã†ã«ã™ã‚‹
 class TsPacketBuffer : public TsPacketParser {
 public:
     TsPacketBuffer(AMTContext& ctx);
@@ -133,16 +133,16 @@ public:
 
     void setPcrPid(int PcrPid);
 
-    // \•ª‚È”‚ÌPCR‚ğóM‚µ‚½‚©
+    // ååˆ†ãªæ•°ã®PCRã‚’å—ä¿¡ã—ãŸã‹
     bool pcrReceived();
 
-    // Œ»İ“ü—Í‚³‚ê‚½ƒpƒPƒbƒg‚ğŠî€‚É‚µ‚Ärelative‚¾‚¯Œã‚ÌƒpƒPƒbƒg‚Ì“ü—Í‚ğ•Ô‚·
+    // ç¾åœ¨å…¥åŠ›ã•ã‚ŒãŸãƒ‘ã‚±ãƒƒãƒˆã‚’åŸºæº–ã«ã—ã¦relativeã ã‘å¾Œã®ãƒ‘ã‚±ãƒƒãƒˆã®å…¥åŠ›æ™‚åˆ»ã‚’è¿”ã™
     int64_t getClock(int relative);
 
-    // TSƒXƒgƒŠ[ƒ€‚ğÅ‰‚©‚ç“Ç‚İ’¼‚·‚Æ‚«‚ÉŒÄ‚Ño‚·
+    // TSã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’æœ€åˆã‹ã‚‰èª­ã¿ç›´ã™ã¨ãã«å‘¼ã³å‡ºã™
     void backTs();
 
-    // TSƒXƒgƒŠ[ƒ€‚Ì‘Sƒf[ƒ^‚ğ“ü‚ê‚é‚±‚Æ
+    // TSã‚¹ãƒˆãƒªãƒ¼ãƒ ã®å…¨ãƒ‡ãƒ¼ã‚¿ã‚’å…¥ã‚Œã‚‹ã“ã¨
     void inputTsPacket(TsPacket packet);
 
     double currentBitrate();
@@ -165,7 +165,7 @@ public:
 
     void reset();
 
-    // 0ˆÈ‰º‚Åw’è–³Œø
+    // 0ä»¥ä¸‹ã§æŒ‡å®šç„¡åŠ¹
     void setServiceId(int sid);
 
     int getActualServiceId();
@@ -179,9 +179,9 @@ public:
 
 protected:
     enum INITIALIZATION_PHASE {
-        PMT_WAITING,	// PAT,PMT‘Ò‚¿
-        PCR_WAITING,	// ƒrƒbƒgƒŒ[ƒgæ“¾‚Ì‚½‚ßPCR2‚Â‚ğóM’†
-        INIT_FINISHED,	// •K—v‚Èî•ñ‚Í‘µ‚Á‚½
+        PMT_WAITING,	// PAT,PMTå¾…ã¡
+        PCR_WAITING,	// ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆå–å¾—ã®ãŸã‚PCR2ã¤ã‚’å—ä¿¡ä¸­
+        INIT_FINISHED,	// å¿…è¦ãªæƒ…å ±ã¯æƒã£ãŸ
     };
 
     class SpTsPacketHandler : public TsPacketHandler {
@@ -273,13 +273,13 @@ protected:
 
     virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5) = 0;
 
-    // ƒT[ƒrƒX‚ğİ’è‚·‚éê‡‚ÍƒT[ƒrƒX‚Ìpidsã‚Å‚ÌƒCƒ“ƒfƒbƒNƒX
-    // ‚È‚É‚à‚µ‚È‚¢ê‡‚Í•‰‚Ì’l‚Ì•Ô‚·
+    // ã‚µãƒ¼ãƒ“ã‚¹ã‚’è¨­å®šã™ã‚‹å ´åˆã¯ã‚µãƒ¼ãƒ“ã‚¹ã®pidsä¸Šã§ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+    // ãªã«ã‚‚ã—ãªã„å ´åˆã¯è² ã®å€¤ã®è¿”ã™
     virtual int onPidSelect(int TSID, const std::vector<int>& pids);
 
     virtual void onPmtUpdated(int PcrPid);
 
-    // TsPacketSelector‚ÅPID Table‚ª•ÏX‚³‚ê‚½•ÏXŒã‚Ìî•ñ‚ª‘—‚ç‚ê‚é
+    // TsPacketSelectorã§PID TableãŒå¤‰æ›´ã•ã‚ŒãŸæ™‚å¤‰æ›´å¾Œã®æƒ…å ±ãŒé€ã‚‰ã‚Œã‚‹
     virtual void onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption);
 
     bool checkScramble(TsPacket packet);

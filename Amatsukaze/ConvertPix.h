@@ -1,4 +1,4 @@
-/**
+ï»¿/**
 * Amtasukaze Avisynth Source Plugin
 * Copyright (c) 2017-2019 Nekopanda
 *
@@ -12,7 +12,7 @@
 #include <immintrin.h>
 #endif
 
-template <typename T, int dstdepth, int srcdepth, bool avx2 /*Å“K‰»‚É‚æ‚èASSE”Å‚ÆAVX2”Å‚ª“¯‚¶‚É‚È‚é‚Ì‚ğ–h~‚·‚é‚½‚ß‚Ìƒ_ƒ~[*/>
+template <typename T, int dstdepth, int srcdepth, bool avx2 /*æœ€é©åŒ–ã«ã‚ˆã‚Šã€SSEç‰ˆã¨AVX2ç‰ˆãŒåŒã˜ã«ãªã‚‹ã®ã‚’é˜²æ­¢ã™ã‚‹ãŸã‚ã®ãƒ€ãƒŸãƒ¼*/>
 void Convert1(T* dst, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
     for (int y = 0; y < h; y += 2) {
         T* dst0 = dst + dpitch * (y + 0);
@@ -30,7 +30,7 @@ void Convert1(T* dst, const T* top, const T* bottom, int w, int h, int dpitch, i
 }
 
 #if 0
-template <typename T, int dstdepth, int srcdepth, bool avx2 /*Å“K‰»‚É‚æ‚èASSE”Å‚ÆAVX2”Å‚ª“¯‚¶‚É‚È‚é‚Ì‚ğ–h~‚·‚é‚½‚ß‚Ìƒ_ƒ~[*/>
+template <typename T, int dstdepth, int srcdepth, bool avx2 /*æœ€é©åŒ–ã«ã‚ˆã‚Šã€SSEç‰ˆã¨AVX2ç‰ˆãŒåŒã˜ã«ãªã‚‹ã®ã‚’é˜²æ­¢ã™ã‚‹ãŸã‚ã®ãƒ€ãƒŸãƒ¼*/>
 void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
     for (int y = 0; y < h; y += 2) {
         T* dstU0 = dstU + dpitch * (y + 0);
@@ -48,8 +48,8 @@ void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int
     }
 }
 #else
-// ‚È‚º‚©‚±‚Á‚¿‚Å‚È‚¢‚Æ©“®ƒxƒNƒgƒ‹‰»‚³‚ê‚È‚¢
-template <typename T, typename Tx2, int dstdepth, int srcdepth, bool avx2 /*Å“K‰»‚É‚æ‚èASSE”Å‚ÆAVX2”Å‚ª“¯‚¶‚É‚È‚é‚Ì‚ğ–h~‚·‚é‚½‚ß‚Ìƒ_ƒ~[*/>
+// ãªãœã‹ã“ã£ã¡ã§ãªã„ã¨è‡ªå‹•ãƒ™ã‚¯ãƒˆãƒ«åŒ–ã•ã‚Œãªã„
+template <typename T, typename Tx2, int dstdepth, int srcdepth, bool avx2 /*æœ€é©åŒ–ã«ã‚ˆã‚Šã€SSEç‰ˆã¨AVX2ç‰ˆãŒåŒã˜ã«ãªã‚‹ã®ã‚’é˜²æ­¢ã™ã‚‹ãŸã‚ã®ãƒ€ãƒŸãƒ¼*/>
 void Convert2(T* dstU, T* dstV, const T* top, const T* bottom, int w, int h, int dpitch, int tpitch, int bpitch) {
     for (int y = 0; y < h; y += 2) {
         T* dstU0 = dstU + dpitch * (y + 0);
