@@ -21,27 +21,6 @@ void* g_DllHandle = nullptr;
 
 bool g_av_initialized = false;
 
-#if defined(_WIN32) || defined(_WIN64)
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
-    if (dwReason == DLL_PROCESS_ATTACH) g_DllHandle = hModule;
-    return TRUE;
-}
-#else
-// Linux用の共有ライブラリ初期化関数
-__attribute__((constructor))
-static void on_load(void) {
-    g_DllHandle = dlopen(nullptr, RTLD_LAZY);
-}
-
-__attribute__((destructor))
-static void on_unload(void) {
-    if (g_DllHandle) {
-        dlclose(g_DllHandle);
-        g_DllHandle = nullptr;
-    }
-}
-#endif
-
 extern "C" AMATSUKAZE_API int AmatsukazeCLI(int argc, const tchar* argv[]) {
     return RunAmatsukazeCLI(argc, argv);
 }
@@ -83,3 +62,22 @@ extern "C" AMATSUKAZE_API const char* AvisynthPluginInit3(IScriptEnvironment* en
 
     return "Amatsukaze plugin";
 }
+
+
+#if defined(_WIN32) || defined(_WIN64)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
+    if (dwReason == DLL_PROCESS_ATTACH) g_DllHandle = hModule;
+    return TRUE;
+}
+#else
+// Linux用の共有ライブラリ初期化関数
+__attribute__((constructor))
+static void on_load(void) {
+    g_DllHandle = (void *)&AmatsukazeCLI;
+}
+
+__attribute__((destructor))
+static void on_unload(void) {
+    g_DllHandle = nullptr;
+}
+#endif

@@ -16,7 +16,7 @@
 #include "cpu_info.h"
 
 tstring GetModulePath() {
-    return getModulePath(g_DllHandle);
+    return GetFullPathFrom(getModulePath(g_DllHandle).c_str(), nullptr);
 }
 
 tstring GetModuleDirectory() {
