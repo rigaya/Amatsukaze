@@ -1,20 +1,20 @@
-/*
-* MakKiŽ‚Ì“§‰ß«ƒƒS ƒtƒBƒ‹ƒ^ƒvƒ‰ƒOƒCƒ“‚æ‚è”qŽØ
+ï»¿/*
+* MakKiæ°ã®é€éŽæ€§ãƒ­ã‚´ ãƒ•ã‚£ãƒ«ã‚¿ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ã‚ˆã‚Šæ‹å€Ÿ
 * https://github.com/makiuchi-d/delogo-aviutl
 */
 /*====================================================================
-*	ƒƒSƒpƒ^[ƒ“			logo.h
+*	ãƒ­ã‚´ãƒ‘ã‚¿ãƒ¼ãƒ³			logo.h
 * 
-* [ƒƒSƒf[ƒ^ƒtƒ@ƒCƒ‹\‘¢]
+* [ãƒ­ã‚´ãƒ‡ãƒ¼ã‚¿ãƒ•ã‚¡ã‚¤ãƒ«æ§‹é€ ]
 * 
-* 	"<logo file x.xx>"	// ƒtƒ@ƒCƒ‹ƒwƒbƒ_•¶Žš—ñFƒo[ƒWƒ‡ƒ“î•ñ(28byte)
+* 	"<logo file x.xx>"	// ãƒ•ã‚¡ã‚¤ãƒ«ãƒ˜ãƒƒãƒ€æ–‡å­—åˆ—ï¼šãƒãƒ¼ã‚¸ãƒ§ãƒ³æƒ…å ±(28byte)
 * 	+----
-* 	|	ƒtƒ@ƒCƒ‹‚ÉŠÜ‚Ü‚ê‚éƒƒSƒf[ƒ^‚Ì”(4byte, BigEndian)
+* 	|	ãƒ•ã‚¡ã‚¤ãƒ«ã«å«ã¾ã‚Œã‚‹ãƒ­ã‚´ãƒ‡ãƒ¼ã‚¿ã®æ•°(4byte, BigEndian)
 * 	+----
-* 	|	LOGO_HEADER		// ƒf[ƒ^ƒwƒbƒ_
+* 	|	LOGO_HEADER		// ãƒ‡ãƒ¼ã‚¿ãƒ˜ãƒƒãƒ€
 * 	+----
 * 	|
-* 	:	LOGO_PIXEL[h*w]	// ƒsƒNƒZƒ‹î•ñFƒTƒCƒY‚ÍLOGO_HEADER‚Ìw,h‚©‚çŽZo
+* 	:	LOGO_PIXEL[h*w]	// ãƒ”ã‚¯ã‚»ãƒ«æƒ…å ±ï¼šã‚µã‚¤ã‚ºã¯LOGO_HEADERã®w,hã‹ã‚‰ç®—å‡º
 * 	:
 * 	+----
 * 	|	LOGO_HEADER
@@ -27,14 +27,14 @@
 #ifndef ___LOGO_H
 #define ___LOGO_H
 
-/* ƒƒSƒwƒbƒ_•¶Žš—ñ */
+/* ãƒ­ã‚´ãƒ˜ãƒƒãƒ€æ–‡å­—åˆ— */
 #define LOGO_FILE_HEADER_STR "<logo data file ver0.1>\0\0\0\0\0"
 #define LOGO_FILE_HEADER_STR_SIZE  28
 
 /*--------------------------------------------------------------------
-*	LOGO_FILE_HEADER \‘¢‘Ì
-*		ƒtƒ@ƒCƒ‹ƒwƒbƒ_D
-*		ƒo[ƒWƒ‡ƒ“î•ñ‚ÆŠÜ‚Ü‚ê‚éƒf[ƒ^”
+*	LOGO_FILE_HEADER æ§‹é€ ä½“
+*		ãƒ•ã‚¡ã‚¤ãƒ«ãƒ˜ãƒƒãƒ€ï¼Ž
+*		ãƒãƒ¼ã‚¸ãƒ§ãƒ³æƒ…å ±ã¨å«ã¾ã‚Œã‚‹ãƒ‡ãƒ¼ã‚¿æ•°
 *-------------------------------------------------------------------*/
 typedef struct {
 	char str[LOGO_FILE_HEADER_STR_SIZE];
@@ -46,45 +46,45 @@ typedef struct {
 
 #define SWAP_ENDIAN(x) (((x&0xff)<<24)|((x&0xff00)<<8)|((x&0xff0000)>>8)|((x&0xff000000)>>24))
 
-/* •s“§–¾“xÅ‘å’l */
+/* ä¸é€æ˜Žåº¦æœ€å¤§å€¤ */
 #define LOGO_MAX_DP   1000
 
-/* ƒƒS–¼Å‘å•¶Žš”iI’[\0ŠÜ‚Þj */
+/* ãƒ­ã‚´åæœ€å¤§æ–‡å­—æ•°ï¼ˆçµ‚ç«¯\0å«ã‚€ï¼‰ */
 #define LOGO_MAX_NAME 32
 
 /*--------------------------------------------------------------------
-*	LOGO_HEADER \‘¢‘Ì
-*		ƒƒS‚ÌŠî–{“I‚Èî•ñ‚ð‹L˜^
+*	LOGO_HEADER æ§‹é€ ä½“
+*		ãƒ­ã‚´ã®åŸºæœ¬çš„ãªæƒ…å ±ã‚’è¨˜éŒ²
 *-------------------------------------------------------------------*/
 typedef struct {
-	char     name[LOGO_MAX_NAME]; 	/* –¼Ì                   */
-	short    x, y;      			/* Šî–{ˆÊ’u               */
-	short    h, w;      			/* ƒƒS‚‚³E•           */
-	short    fi, fo;    			/* ƒfƒtƒHƒ‹ƒg‚ÌFadeIn/Out */
-	short    st, ed;    			/* ƒfƒtƒHƒ‹ƒg‚ÌŠJŽn¥I—¹  */
+	char     name[LOGO_MAX_NAME]; 	/* åç§°                   */
+	short    x, y;      			/* åŸºæœ¬ä½ç½®               */
+	short    h, w;      			/* ãƒ­ã‚´é«˜ã•ãƒ»å¹…           */
+	short    fi, fo;    			/* ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã®FadeIn/Out */
+	short    st, ed;    			/* ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã®é–‹å§‹ï½¥çµ‚äº†  */
 } LOGO_HEADER;
 
 /*--------------------------------------------------------------------
-*	LOGO_PIXEL \‘¢‘Ì
-*		ƒƒS‚ÌŠeƒsƒNƒZƒ‹‚²‚Æ‚Ìî•ñ‚ð‹L˜^
+*	LOGO_PIXEL æ§‹é€ ä½“
+*		ãƒ­ã‚´ã®å„ãƒ”ã‚¯ã‚»ãƒ«ã”ã¨ã®æƒ…å ±ã‚’è¨˜éŒ²
 *-------------------------------------------------------------------*/
 typedef struct {
-	short dp_y;		/* •s“§–¾“xi‹P“xj            */
-	short y;		/* ‹P“x              0`4096   */
-	short dp_cb;	/* •s“§–¾“xiÂj              */
-	short cb;		/* F·iÂj    -2048`2048   */
-	short dp_cr;	/* •s“§–¾“xiÔj              */
-	short cr;		/* F·iÔj    -2048`2048   */
+	short dp_y;		/* ä¸é€æ˜Žåº¦ï¼ˆè¼åº¦ï¼‰            */
+	short y;		/* è¼åº¦              0ï½ž4096   */
+	short dp_cb;	/* ä¸é€æ˜Žåº¦ï¼ˆé’ï¼‰              */
+	short cb;		/* è‰²å·®ï¼ˆé’ï¼‰    -2048ï½ž2048   */
+	short dp_cr;	/* ä¸é€æ˜Žåº¦ï¼ˆèµ¤ï¼‰              */
+	short cr;		/* è‰²å·®ï¼ˆèµ¤ï¼‰    -2048ï½ž2048   */
 } LOGO_PIXEL;
 
 /*--------------------------------------------------------------------
-*	ƒƒSƒf[ƒ^‚ÌƒTƒCƒYiƒwƒbƒ_–³‚µj
+*	ãƒ­ã‚´ãƒ‡ãƒ¼ã‚¿ã®ã‚µã‚¤ã‚ºï¼ˆãƒ˜ãƒƒãƒ€ç„¡ã—ï¼‰
 *-------------------------------------------------------------------*/
 #define LOGO_PIXELSIZE(ptr)  \
 	(((LOGO_HEADER *)ptr)->h*((LOGO_HEADER *)ptr)->w*sizeof(LOGO_PIXEL))
 
 /*--------------------------------------------------------------------
-*	ƒƒSƒf[ƒ^‘S‘Ì‚ÌƒTƒCƒY
+*	ãƒ­ã‚´ãƒ‡ãƒ¼ã‚¿å…¨ä½“ã®ã‚µã‚¤ã‚º
 *-------------------------------------------------------------------*/
 #define LOGO_DATASIZE(ptr) (sizeof(LOGO_HEADER)+LOGO_PIXELSIZE(ptr))
 

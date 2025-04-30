@@ -1,4 +1,4 @@
-/**
+﻿/**
 * Amtasukaze CLI Entry point
 * Copyright (c) 2017-2019 Nekopanda
 *
