@@ -179,11 +179,12 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.encoderOptions = _T("");
     conf.encoderPath = _T("x264") + exeAppendix;
     conf.timelineditorPath = _T("timelineeditor") + exeAppendix;
-    conf.mp4boxPath = _T("mp4box") + exeAppendix;
+    conf.mp4boxPath = _T("MP4Box") + exeAppendix;
     conf.mkvmergePath = _T("mkvmerge") + exeAppendix;
     conf.chapterExePath = _T("chapter_exe") + exeAppendix;
     conf.joinLogoScpPath = _T("join_logo_scp") + exeAppendix;
     conf.nicoConvAssPath = _T("NicoConvASS") + exeAppendix;
+    conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
     conf.drcsOutPath = moduleDir + _T("/../drcs");
     conf.drcsMapPath = conf.drcsOutPath + _T("/drcs_map.txt");
