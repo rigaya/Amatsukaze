@@ -65,13 +65,9 @@ else
   endif
 endif
 
-# Linuxではシステムのlibfaadを使用
-if host_machine.system() == 'windows'
-  subdir('libfaad')
-  faad_dep = libfaad_dep
-else
-  faad_dep = dependency('faad2', required : true)
-endif
+# Linuxではシステムのlibfaadを使用する代わりに、常に内部のlibfaadを使用
+subdir('libfaad')
+faad_dep = libfaad_dep
 
 # バージョン情報の取得とVersion.hの生成
 git = find_program('git')

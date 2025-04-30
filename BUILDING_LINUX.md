@@ -8,7 +8,6 @@ AmatsukazeCLIはもともとWindows向けのMPEG2-TS変換ツールですが、�
 
 主な依存関係：
 - common（共通ユーティリティライブラリ）
-- libfaad2（AACデコーダー）
 - Caption（字幕処理ライブラリ）
 - FFmpeg（メディア処理ライブラリ - システムから提供）
 - OpenSSL（暗号化ライブラリ - MD5ハッシュ計算に使用）
@@ -30,14 +29,14 @@ AmatsukazeCLIはもともとWindows向けのMPEG2-TS変換ツールですが、�
 sudo apt update
 sudo apt install -y build-essential git meson ninja-build pkg-config \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
-    libfaad-dev libssl-dev libz-dev
+    libssl-dev libz-dev
 ```
 
 ### Fedora / RHEL / CentOS系
 
 ```bash
 sudo dnf install -y gcc gcc-c++ git meson ninja-build pkg-config \
-    ffmpeg-devel faad2-devel openssl-devel libz-devel
+    ffmpeg-devel openssl-devel libz-devel
 ```
 
 ### AviSynthのインストール
