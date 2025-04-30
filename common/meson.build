@@ -31,6 +31,7 @@ common_lib = static_library('common',
   common_sources,
   include_directories : common_inc,
   cpp_args : cpp_args,
+  pic : true,
   install : false,
 )
 
@@ -39,6 +40,7 @@ common_avx2_lib = static_library('common_avx2',
   common_avx2_sources,
   include_directories : common_inc,
   cpp_args : avx2_args,
+  pic : true,
   install : false,
 )
 
@@ -47,6 +49,7 @@ common_avx512_lib = static_library('common_avx512',
   common_avx512_sources,
   include_directories : common_inc,
   cpp_args : avx512_args,
+  pic : true,
   install : false,
 )
 

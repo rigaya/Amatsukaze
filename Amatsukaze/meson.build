@@ -124,7 +124,8 @@ avx_lib = static_library('avx_lib',
   avx_sources,
   include_directories : amatsukaze_include_dirs,
   dependencies : amatsukaze_deps,
-  cpp_args : avx_cpp_args
+  cpp_args : avx_cpp_args,
+  pic : true
 )
 
 # AVX2ファイルのターゲット
@@ -132,7 +133,8 @@ avx2_lib = static_library('avx2_lib',
   avx2_sources,
   include_directories : amatsukaze_include_dirs,
   dependencies : amatsukaze_deps,
-  cpp_args : avx2_cpp_args
+  cpp_args : avx2_cpp_args,
+  pic : true
 )
 
 # AribString.cppは_UNICODEマクロ付きで別途ビルド
@@ -141,6 +143,7 @@ aribstring_lib = static_library('aribstring',
   include_directories : amatsukaze_include_dirs,
   dependencies : amatsukaze_deps,
   cpp_args : amatsukaze_cpp_args + ['-D_UNICODE'] + (meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang' ? ['-fexec-charset=cp932'] : []),
+  pic : true,
   install : false,
 )
 
@@ -150,6 +153,7 @@ cp932_lib = static_library('cp932_files',
   include_directories : amatsukaze_include_dirs,
   dependencies : amatsukaze_deps,
   cpp_args : amatsukaze_cpp_args + (meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang' ? ['-fexec-charset=cp932'] : []),
+  pic : true,
   install : false,
 )
 
