@@ -31,6 +31,8 @@
 #define LOGO_FILE_HEADER_STR "<logo data file ver0.1>\0\0\0\0\0"
 #define LOGO_FILE_HEADER_STR_SIZE  28
 
+#pragma pack(push, 1)
+
 /*--------------------------------------------------------------------
 *	LOGO_FILE_HEADER 構造体
 *		ファイルヘッダ．
@@ -39,10 +41,12 @@
 typedef struct {
 	char str[LOGO_FILE_HEADER_STR_SIZE];
 	union{
-		unsigned long l;
+		unsigned int l;
 		unsigned char c[4];
 	} logonum;
 } LOGO_FILE_HEADER;
+
+static_assert(sizeof(LOGO_FILE_HEADER) == 32, "LOGO_FILE_HEADERのサイズが32バイトではありません");
 
 #define SWAP_ENDIAN(x) (((x&0xff)<<24)|((x&0xff00)<<8)|((x&0xff0000)>>8)|((x&0xff000000)>>24))
 
@@ -76,6 +80,8 @@ typedef struct {
 	short dp_cr;	/* 不透明度（赤）              */
 	short cr;		/* 色差（赤）    -2048～2048   */
 } LOGO_PIXEL;
+
+#pragma pack(pop)
 
 /*--------------------------------------------------------------------
 *	ロゴデータのサイズ（ヘッダ無し）
