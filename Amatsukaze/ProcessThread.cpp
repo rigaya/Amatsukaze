@@ -86,11 +86,13 @@ std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
 
 SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) :
     process_(createRGYPipeProcess()),
+    bufferStdOut(),
+    bufferStdErr(),
     exitCode_(0),
     thSetPowerThrottling() {
     
     // RGYPipeProcessの初期化（標準入出力のモード設定）
-    process_->init(PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
+    process_->init(PIPE_MODE_ENABLE | PIPE_MODE_ENABLE_FP, PIPE_MODE_ENABLE | PIPE_MODE_ENABLE_FP, PIPE_MODE_ENABLE | PIPE_MODE_ENABLE_FP);
     
     // コマンドライン文字列を引数リストに分割
     std::vector<tstring> argsList = SplitCommandLine(args);
@@ -121,28 +123,40 @@ void SubProcess::write(MemoryChunk mc) {
 }
 
 size_t SubProcess::readErr(MemoryChunk mc) {
-    std::vector<uint8_t> buffer(mc.length);
-    int bytesRead = process_->stdErrRead(buffer);
+    if (bufferStdErr.size() > 0) {
+        memcpy(mc.data, bufferStdErr.data(), bufferStdErr.size());
+        bufferStdErr.clear();
+        return bufferStdErr.size();
+    }
+    int bytesRead = process_->stdErrRead(bufferStdErr);
     if (bytesRead < 0) {
         return 0;
     }
     
     if (bytesRead > 0) {
-        memcpy(mc.data, buffer.data(), bytesRead);
+        bytesRead = std::min(bytesRead, (int)mc.length);
+        memcpy(mc.data, bufferStdErr.data(), bytesRead);
+        bufferStdErr.erase(bufferStdErr.begin(), bufferStdErr.begin() + bytesRead);
     }
     
     return bytesRead;
 }
 
 size_t SubProcess::readOut(MemoryChunk mc) {
-    std::vector<uint8_t> buffer(mc.length);
-    int bytesRead = process_->stdOutRead(buffer);
+    if (bufferStdOut.size() > 0) {
+        memcpy(mc.data, bufferStdOut.data(), bufferStdOut.size());
+        bufferStdOut.clear();
+        return bufferStdOut.size();
+    }
+    int bytesRead = process_->stdOutRead(bufferStdOut);
     if (bytesRead < 0) {
         return 0;
     }
     
     if (bytesRead > 0) {
-        memcpy(mc.data, buffer.data(), bytesRead);
+        bytesRead = std::min(bytesRead, (int)mc.length);
+        memcpy(mc.data, bufferStdOut.data(), bytesRead);
+        bufferStdOut.erase(bufferStdOut.begin(), bufferStdOut.begin() + bytesRead); 
     }
     
     return bytesRead;

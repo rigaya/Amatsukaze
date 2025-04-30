@@ -174,6 +174,8 @@ private:
     void runSetPowerThrottling();
 
     std::unique_ptr<RGYPipeProcess> process_;
+    std::vector<uint8_t> bufferStdOut;
+    std::vector<uint8_t> bufferStdErr;
     DWORD exitCode_;
     std::unique_ptr<RGYThreadSetPowerThrottoling> thSetPowerThrottling;
 };
