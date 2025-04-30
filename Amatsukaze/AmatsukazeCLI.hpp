@@ -168,17 +168,22 @@ static DECODER_TYPE decoderFromString(const tstring& str) {
 }
 
 static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const tchar* argv[]) {
+#if defined(_WIN32) || defined(_WIN64)
+    tstring exeAppendix = _T(".exe");
+#else
+    tstring exeAppendix = _T("");
+#endif
     tstring moduleDir = pathNormalize(GetModuleDirectory());
     Config conf = Config();
     conf.workDir = _T("./");
-    conf.encoderPath = _T("x264.exe");
     conf.encoderOptions = _T("");
-    conf.timelineditorPath = _T("timelineeditor.exe");
-    conf.mp4boxPath = _T("mp4box.exe");
-    conf.mkvmergePath = _T("mkvmerge.exe");
-    conf.chapterExePath = _T("chapter_exe.exe");
-    conf.joinLogoScpPath = _T("join_logo_scp.exe");
-    conf.nicoConvAssPath = _T("NicoConvASS.exe");
+    conf.encoderPath = _T("x264") + exeAppendix;
+    conf.timelineditorPath = _T("timelineeditor") + exeAppendix;
+    conf.mp4boxPath = _T("mp4box") + exeAppendix;
+    conf.mkvmergePath = _T("mkvmerge") + exeAppendix;
+    conf.chapterExePath = _T("chapter_exe") + exeAppendix;
+    conf.joinLogoScpPath = _T("join_logo_scp") + exeAppendix;
+    conf.nicoConvAssPath = _T("NicoConvASS") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
     conf.drcsOutPath = moduleDir + _T("/../drcs");
     conf.drcsMapPath = conf.drcsOutPath + _T("/drcs_map.txt");
