@@ -3,6 +3,9 @@ project('AmatsukazeCLI', ['c', 'cpp'],
   default_options : ['warning_level=1', 'cpp_std=c++17']
 )
 
+# スクリプトディレクトリの設定
+scripts_dir = meson.current_source_dir() / 'scripts'
+
 # コンパイラフラグ
 cpp_args = []
 if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
@@ -97,4 +100,38 @@ subdir('common')
 subdir('TVCaptionMod2/Caption_src')
 subdir('Amatsukaze')
 subdir('AmatsukazeCLI')
+
+# C#プロジェクトのビルドを追加（Linux対応）
+if get_option('build_csharp_projects')
+  cs_compiler = find_program('csc', 'dotnet', 'mcs', required : false)
+  
+  if cs_compiler.found()
+    message('C# compiler found, will build C# projects')
+    
+    # dotnetコマンドが見つかったかを確認する別の方法
+    use_dotnet = false
+    # 古いバージョンのmesonでも動作するようにする
+    dotnet_check = run_command('sh', '-c', 'which dotnet >/dev/null 2>&1 && echo true || echo false', check : false)
+    if dotnet_check.returncode() == 0 and dotnet_check.stdout().strip() == 'true'
+      use_dotnet = true
+      message('Using .NET Core/.NET 5+ for building C# projects')
+    else
+      message('Using Mono for building C# projects')
+    endif
+    
+    if use_dotnet
+      # .NET Core/.NET 5+ でのビルド
+      subdir('AmatsukazeServer')
+      subdir('AmatsukazeServerCLI')
+      subdir('AmatsukazeAddTask')
+    else
+      # Monoでのビルド
+      subdir('AmatsukazeServer')
+      subdir('AmatsukazeServerCLI')
+      subdir('AmatsukazeAddTask')
+    endif
+  else
+    message('C# compiler not found, skipping C# projects')
+  endif
+endif
 

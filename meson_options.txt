@@ -1,0 +1,1 @@
+option('build_csharp_projects', type : 'boolean', value : false, description : 'Build C# projects (AmatsukazeServer, AmatsukazeServerCLI, AmatsukazeAddTask, etc.)')
