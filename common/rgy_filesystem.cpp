@@ -115,13 +115,13 @@ std::wstring PathRemoveExtensionS(const std::wstring& path) {
     if (lastdot == std::string::npos) return path;
     return path.substr(0, lastdot);
 }
+#endif //#if defined(_WIN32) || defined(_WIN64)
 std::string PathCombineS(const std::string& dir, const std::string& filename) {
     return std::filesystem::path(dir).append(filename).string();
 }
 std::wstring PathCombineS(const std::wstring& dir, const std::wstring& filename) {
     return std::filesystem::path(dir).append(filename).wstring();
 }
-#endif //#if defined(_WIN32) || defined(_WIN64)
 //フォルダがあればOK、なければ作成する
 bool CreateDirectoryRecursive(const char *dir) {
     auto targetDir = std::filesystem::path(strlen(dir) ? dir : ".");

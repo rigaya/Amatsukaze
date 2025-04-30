@@ -36,12 +36,12 @@
 #if defined(_WIN32) || defined(_WIN64)
 bool rgy_get_filesize(const wchar_t *filepath, uint64_t *filesize);
 std::wstring PathRemoveExtensionS(const std::wstring& path);
-std::wstring PathCombineS(const std::wstring& dir, const std::wstring& filename);
-std::string PathCombineS(const std::string& dir, const std::string& filename);
 std::wstring PathGetFilename(const std::wstring& path);
 std::vector<tstring> get_file_list(const tstring& pattern, const tstring& dir);
 void rgy_file_remove(const wchar_t *path);
 #endif //#if defined(_WIN32) || defined(_WIN64)
+std::wstring PathCombineS(const std::wstring& dir, const std::wstring& filename);
+std::string PathCombineS(const std::string& dir, const std::string& filename);
 std::pair<int, std::wstring> PathRemoveFileSpecFixed(const std::wstring& path);
 std::string getModulePathA(void *module);
 std::wstring getModulePathW(void *module);
