@@ -151,6 +151,10 @@ bool ends_with(const tstring & value, const tstring & ending) {
 
 /* static */ tstring pathToOS(const tstring& path) {
     tstring ret = path;
+#if defined(_WIN32) || defined(_WIN64)
     std::replace(ret.begin(), ret.end(), _T('/'), _T('\\'));
+#else
+    std::replace(ret.begin(), ret.end(), _T('\\'), _T('/'));
+#endif
     return ret;
 }
