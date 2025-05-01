@@ -12,7 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Amatsukaze.Components;
-using System.Windows.Interactivity;
+using Microsoft.Xaml.Behaviors;
 
 namespace Amatsukaze.Views
 {
