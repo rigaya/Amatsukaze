@@ -457,7 +457,13 @@ namespace Amatsukaze.Server
             int readBytes = 0;
             while (readBytes < buf.Length)
             {
-                readBytes += await readPipe.ReadAsync(buf, readBytes, buf.Length - readBytes);
+                int n = await readPipe.ReadAsync(buf, readBytes, buf.Length - readBytes);
+                // .NET4.8ではパイプが閉じられると例外が出ていたが、
+                // .NET8.0ではパイプが閉じられると0を返すようになっていたので、
+                // 以前と同等の動作を下記で再現する
+                if (n == 0)
+                    throw new EndOfStreamException("パイプが閉じられました");
+                readBytes += n;
             }
         }
 
