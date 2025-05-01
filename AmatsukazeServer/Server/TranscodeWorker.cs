@@ -1200,7 +1200,7 @@ namespace Amatsukaze.Server
                     }
                     return;
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     if(retry++ < MAX_RETRY)
                     {
@@ -1210,7 +1210,7 @@ namespace Amatsukaze.Server
                         await Task.Delay(1000);
                         continue;
                     }
-                    throw e;
+                    throw;
                 }
             }
         }

@@ -508,7 +508,7 @@ namespace Amatsukaze.Server
                 bufferQ.Post(new Buffer() { buffer = new byte[2 * 1024 * 1024] });
             }
 
-            var sha512 = new SHA512Cng();
+            var sha512 = SHA512.Create();
 
             using (var src = File.OpenRead(srcpath))
             using (var dst = File.Create(dstpath))
@@ -1465,7 +1465,7 @@ namespace Amatsukaze.Server
 
     public class CachedAvsScript
     {
-        private static MD5CryptoServiceProvider HashProvider = new MD5CryptoServiceProvider();
+        private static MD5 HashProvider = MD5.Create();
 
         private static uint GetHashCode(byte[] bytes)
         {

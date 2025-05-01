@@ -1,427 +1,45 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}</ProjectGuid>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>WinExe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Amatsukaze</RootNamespace>
-    <AssemblyName>AmatsukazeGUI</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
-    <FileAlignment>512</FileAlignment>
-    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
-    <WarningLevel>4</WarningLevel>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UseWPF>true</UseWPF>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <StartupObject>Amatsukaze.App</StartupObject>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
-    <DebugSymbols>true</DebugSymbols>
     <OutputPath>..\x64\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <DebugType>full</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>true</Prefer32Bit>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
     <OutputPath>..\x64\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Livet">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>InfrastructureAssemblies\Livet.dll</HintPath>
-    </Reference>
-    <Reference Include="log4net, Version=2.0.15.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
-      <HintPath>..\packages\log4net.2.0.15\lib\net45\log4net.dll</HintPath>
-    </Reference>
     <Reference Include="Microsoft.Expression.Interactions">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>InfrastructureAssemblies\Microsoft.Expression.Interactions.dll</HintPath>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Configuration" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.Threading.Tasks.Dataflow, Version=4.5.24.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Tpl.Dataflow.4.5.24\lib\portable-net45+win8+wpa81\System.Threading.Tasks.Dataflow.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Web" />
-    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Windows.Interactivity">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>InfrastructureAssemblies\System.Windows.Interactivity.dll</HintPath>
     </Reference>
-    <Reference Include="System.Xml" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="System.Xaml">
-      <RequiredTargetFramework>4.0</RequiredTargetFramework>
-    </Reference>
-    <Reference Include="WindowsBase" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Components\BrowserBehavior.cs" />
-    <Compile Include="Components\CollectionItemListener.cs" />
-    <Compile Include="Components\ControlHostAdornerBase.cs" />
-    <Compile Include="Components\DragBehavior.cs" />
-    <Compile Include="Components\DragContentAdorner.cs" />
-    <Compile Include="Components\DragExtentionMethods.cs" />
-    <Compile Include="Components\DropDownButton.cs" />
-    <Compile Include="Components\ExtentionMethods.cs" />
-    <Compile Include="Components\GridViewSort.cs" />
-    <Compile Include="Components\InsertionAdorner.cs" />
-    <Compile Include="Components\InsertionCursor.xaml.cs">
-      <DependentUpon>InsertionCursor.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Components\InverseBooleanConverter.cs" />
-    <Compile Include="Components\LogScrollViewer.cs" />
-    <Compile Include="Components\MultiStyleExtension .cs" />
-    <Compile Include="Components\NegateValueConverter.cs" />
-    <Compile Include="Components\NotifyIconWrapper.cs">
+    <Compile Update="Components\NotifyIconWrapper.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="Components\NotifyIconWrapper.Designer.cs">
-      <DependentUpon>NotifyIconWrapper.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Components\ObservableViewModelCollection.cs" />
-    <Compile Include="Components\TaskbarInfoBehavior.cs" />
-    <Compile Include="Components\Utils.cs" />
-    <Compile Include="Models\DisplayData.cs" />
-    <Compile Include="Models\LogoAnalyzeModel.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs">
+    <Compile Update="Properties\AssemblyInfo.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
-    <Compile Include="ViewModels\AddQueueConsoleViewModel.cs" />
-    <Compile Include="ViewModels\AutoSelectSettingViewModel.cs" />
-    <Compile Include="ViewModels\CheckLogViewModel.cs" />
-    <Compile Include="ViewModels\ClientLogViewModel.cs" />
-    <Compile Include="ViewModels\DiskFreeSpaceViewModel.cs" />
-    <Compile Include="ViewModels\DrcsImageListViewModel.cs" />
-    <Compile Include="ViewModels\DrcsImageViewModel.cs" />
-    <Compile Include="ViewModels\EncodeLogViewModel.cs" />
-    <Compile Include="ViewModels\LogoAnalyzeViewModel.cs" />
-    <Compile Include="ViewModels\LogoImageViewModel.cs" />
-    <Compile Include="ViewModels\MakeBatchResultViewModel.cs" />
-    <Compile Include="ViewModels\MakeScriptViewModel.cs" />
-    <Compile Include="ViewModels\NamedViewModel.cs" />
-    <Compile Include="ViewModels\NewAutoSelectViewModel.cs" />
-    <Compile Include="ViewModels\NewProfileViewModel.cs" />
-    <Compile Include="ViewModels\ProfileSettingViewModel.cs" />
-    <Compile Include="ViewModels\SelectOutPathViewModel.cs" />
-    <Compile Include="ViewModels\ServerViewModel.cs" />
-    <Compile Include="ViewModels\ServiceSettingViewModel.cs" />
-    <Compile Include="ViewModels\SettingViewModel.cs" />
-    <Compile Include="ViewModels\SleepCancelViewModel.cs" />
-    <Compile Include="ViewModels\SummaryItemViewModel.cs" />
-    <Compile Include="ViewModels\SummaryViewModel.cs" />
-    <Compile Include="Views\AddQueueConsolePanel.xaml.cs">
-      <DependentUpon>AddQueueConsolePanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\AutoSelectSettingPanel.xaml.cs">
-      <DependentUpon>AutoSelectSettingPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\CheckLogPanel.xaml.cs">
-      <DependentUpon>CheckLogPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\ClientLogPanel.xaml.cs">
-      <DependentUpon>ClientLogPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\DiskFreeSpacePanel.xaml.cs">
-      <DependentUpon>DiskFreeSpacePanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\DrcsImage.xaml.cs">
-      <DependentUpon>DrcsImage.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\DrcsImageListPanel.xaml.cs">
-      <DependentUpon>DrcsImageListPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\EncodeLogPanel.xaml.cs">
-      <DependentUpon>EncodeLogPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\FilterAutoVfrPanel.xaml.cs">
-      <DependentUpon>FilterAutoVfrPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\FilterD3DVPPanel.xaml.cs">
-      <DependentUpon>FilterD3DVPPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\FilterKFMPanel.xaml.cs">
-      <DependentUpon>FilterKFMPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\FilterQTGMCPanel.xaml.cs">
-      <DependentUpon>FilterQTGMCPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\FilterSettingPanel.xaml.cs">
-      <DependentUpon>FilterSettingPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\FilterYadifPanel.xaml.cs">
-      <DependentUpon>FilterYadifPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\LogoAnalyzeWindow.xaml.cs">
-      <DependentUpon>LogoAnalyzeWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\LogoImageWindow.xaml.cs">
-      <DependentUpon>LogoImageWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\LogoItem.xaml.cs">
-      <DependentUpon>LogoItem.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\LogPanel.xaml.cs">
-      <DependentUpon>LogPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\MakeBatchResultWindow.xaml.cs">
-      <DependentUpon>MakeBatchResultWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\MakeScriptPanel.xaml.cs">
-      <DependentUpon>MakeScriptPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\NewProfileWindow.xaml.cs">
-      <DependentUpon>NewProfileWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\ProfileSettingPanel.xaml.cs">
-      <DependentUpon>ProfileSettingPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\QueuePanel.xaml.cs">
-      <DependentUpon>QueuePanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\SelectOutPath.xaml.cs">
-      <DependentUpon>SelectOutPath.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\ServerWindow.xaml.cs">
-      <DependentUpon>ServerWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\ServiceSettingPanel.xaml.cs">
-      <DependentUpon>ServiceSettingPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\SettingPanel.xaml.cs">
-      <DependentUpon>SettingPanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\SleepCancelWindow.xaml.cs">
-      <DependentUpon>SleepCancelWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\SummaryItem.xaml.cs">
-      <DependentUpon>SummaryItem.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\SummaryPanel.xaml.cs">
-      <DependentUpon>SummaryPanel.xaml</DependentUpon>
-    </Compile>
-    <Page Include="App.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="Components\InsertionCursor.xaml">
-      <SubType>Designer</SubType>
-      <Generator>XamlIntelliSenseFileGenerator</Generator>
-    </Page>
-    <Page Include="Views\AddQueueConsolePanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\AutoSelectSettingPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\CheckLogPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ClientLogPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\CommonResources.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ConsolePanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\DiskFreeSpacePanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\DrcsImage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\DrcsImageListPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\EncodeLogPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\FilterAutoVfrPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\FilterD3DVPPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\FilterKFMPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\FilterQTGMCPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\FilterSettingPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\FilterYadifPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\LogFilePanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ConfigWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\LogoAnalyzeWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\LogoImageWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\LogoItem.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\LogPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\MainWindow.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Compile Include="App.xaml.cs">
-      <DependentUpon>App.xaml</DependentUpon>
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="ViewModels\ConsoleViewModel.cs" />
-    <Compile Include="ViewModels\LogViewModel.cs" />
-    <Compile Include="ViewModels\QueueViewModel.cs" />
-    <Compile Include="Views\ConsolePanel.xaml.cs">
-      <DependentUpon>ConsolePanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\LogFilePanel.xaml.cs">
-      <DependentUpon>LogFilePanel.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Models\ClientModel.cs" />
-    <Compile Include="ViewModels\ConfigWindowViewModel.cs" />
-    <Compile Include="ViewModels\LogFileViewModel.cs" />
-    <Compile Include="ViewModels\MainWindowViewModel.cs" />
-    <Compile Include="Views\ConfigWindow.xaml.cs">
-      <DependentUpon>ConfigWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\MainWindow.xaml.cs">
-      <DependentUpon>MainWindow.xaml</DependentUpon>
-      <SubType>Code</SubType>
-    </Compile>
-    <Page Include="Views\MakeBatchResultWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\MakeScriptPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\NewProfileWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ProfileSettingPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\QueuePanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\SelectOutPath.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ServerWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ServiceSettingPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\SettingPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\SleepCancelWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\SummaryItem.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\SummaryPanel.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-    </Compile>
-    <EmbeddedResource Include="Components\NotifyIconWrapper.resx">
-      <DependentUpon>NotifyIconWrapper.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-    <None Include="app.config" />
-    <None Include="packages.config" />
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
@@ -436,54 +54,37 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AmatsukazeServer\AmatsukazeServer.csproj">
-      <Project>{5bac25f7-ead0-4b4c-84a7-6edc9c4c8cd6}</Project>
-      <Name>AmatsukazeServer</Name>
-    </ProjectReference>
+    <ProjectReference Include="..\AmatsukazeServer\AmatsukazeServer.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="LivetCask" Version="4.0.2" />
+    <PackageReference Include="LivetCask.Mvvm" Version="4.0.2" />
+    <PackageReference Include="log4net" Version="2.0.15" />
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageReference Include="System.Threading.Tasks.Dataflow" Version="7.0.0" />
+    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Views\DrcsImagePanel.xaml.cs" />
+  </ItemGroup>
   <PropertyGroup>
     <TextTransformPath>$(VsInstallRoot)\Common7\IDE\TextTransform.exe</TextTransformPath>
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug2|x64'">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\x64\Debug2\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <DebugType>full</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <LangVersion>7.3</LangVersion>
-    <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release2|x64'">
     <OutputPath>bin\x64\Release2\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <LangVersion>7.3</LangVersion>
-    <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <Import Project="..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets" Condition="Exists('..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets')" />
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>このプロジェクトは、このコンピューター上にない NuGet パッケージを参照しています。それらのパッケージをダウンロードするには、[NuGet パッケージの復元] を使用します。詳細については、http://go.microsoft.com/fwlink/?LinkID=322105 を参照してください。見つからないファイルは {0} です。</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets'))" />
-  </Target>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

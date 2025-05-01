@@ -21,12 +21,10 @@ namespace Amatsukaze
     {
         public static GUIOPtion Option;
 
-        /// <summary>
-        /// Application Entry Point.
-        /// </summary>
-        [System.STAThreadAttribute()]
-        public static void Main(string[] args)
+        private void Application_Startup(object sender, StartupEventArgs e)
         {
+            // オプションの初期化
+            string[] args = e.Args;
             Option = new GUIOPtion(args);
 
             // RootDirが定義されていればカレントディレクトリを設定
@@ -41,29 +39,22 @@ namespace Amatsukaze
             log4net.Config.XmlConfigurator.Configure(new FileInfo(
                 Path.GetDirectoryName(typeof(App).Assembly.Location) + "\\Log4net.Config.xml"));
 
-            Amatsukaze.App app = new Amatsukaze.App();
+            DispatcherHelper.UIDispatcher = Dispatcher;
+            //AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
 
+            // StartupUriの設定
             if (Option.LaunchType == LaunchType.Server || Option.LaunchType == LaunchType.Debug)
             {
-                app.StartupUri = new Uri("Views\\ServerWindow.xaml", UriKind.Relative);
+                this.StartupUri = new Uri("Views\\ServerWindow.xaml", UriKind.Relative);
             }
             else if(Option.LaunchType == LaunchType.Logo)
             {
-                app.StartupUri = new Uri("Views\\LogoAnalyzeWindow.xaml", UriKind.Relative);
+                this.StartupUri = new Uri("Views\\LogoAnalyzeWindow.xaml", UriKind.Relative);
             }
             else 
             {
-                app.StartupUri = new Uri("Views\\MainWindow.xaml", UriKind.Relative);
+                this.StartupUri = new Uri("Views\\MainWindow.xaml", UriKind.Relative);
             }
-
-            app.InitializeComponent();
-            app.Run();
-        }
-
-        private void Application_Startup(object sender, StartupEventArgs e)
-        {
-            DispatcherHelper.UIDispatcher = Dispatcher;
-            //AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
         }
 
         //集約エラーハンドラ

@@ -17,6 +17,7 @@ using System.Windows;
 using System.ComponentModel;
 using System.Net;
 using System.Windows.Shell;
+using System.Text.Json;
 
 namespace Amatsukaze.Models
 {
@@ -732,8 +733,7 @@ namespace Amatsukaze.Models
                 Lib.WINDOWPLACEMENT placement;
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                 var stream = new MemoryStream(appData.windowPlacement);
-                var formatter = new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
-                placement = (Lib.WINDOWPLACEMENT)formatter.Deserialize(stream);
+                placement = JsonSerializer.Deserialize<Lib.WINDOWPLACEMENT>(stream);
                 Lib.WinAPI.SetWindowPlacement(hwnd, ref placement);
             }
         }
@@ -744,8 +744,7 @@ namespace Amatsukaze.Models
             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
             Lib.WinAPI.GetWindowPlacement(hwnd, out placement);
             var stream = new MemoryStream();
-            var formatter = new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
-            formatter.Serialize(stream, placement);
+            JsonSerializer.Serialize(stream, placement);
             appData.windowPlacement = stream.ToArray();
             SaveAppData();
         }

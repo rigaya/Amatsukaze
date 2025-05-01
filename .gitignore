@@ -4,6 +4,11 @@
 /*.VC.VC.opendb
 /*.VC.db
 *.user
+*.nuget.g.targets
+*.nuget.g.props
+*.nuget.dgspec.json
+project.nuget.cache
+project.assets.json
 
 Debug/
 Release/

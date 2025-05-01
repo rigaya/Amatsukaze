@@ -1033,13 +1033,13 @@ namespace Amatsukaze.Server
         public string DisplayEncodeStart { get { return EncodeStartDate.ToGUIString(); } }
         public string DisplayEncodeFinish { get { return EncodeFinishDate.ToGUIString(); } }
         public string DisplayEncodeDuration { get { return EncodeDuration.ToGUIString(); } }
-        public string DisplaySrcDurationo { get { return (SrcVideoDuration != null) ? SrcVideoDuration.ToGUIString() : null; } }
-        public string DisplayOutDuration { get { return (OutVideoDuration != null) ? OutVideoDuration.ToGUIString() : null; } }
+        public string DisplaySrcDurationo { get { return (SrcVideoDuration != TimeSpan.Zero) ? SrcVideoDuration.ToGUIString() : null; } }
+        public string DisplayOutDuration { get { return (OutVideoDuration != TimeSpan.Zero) ? OutVideoDuration.ToGUIString() : null; } }
         public string DisplayVideoNotIncluded
         {
             get
             {
-                if (SrcVideoDuration == null) return null;
+                if (SrcVideoDuration == TimeSpan.Zero) return null;
                 var s = SrcVideoDuration.TotalMilliseconds;
                 var o = OutVideoDuration.TotalMilliseconds;
                 return ((double)(s - o) / (double)s * 100.0).ToString("F2");
@@ -1061,7 +1061,7 @@ namespace Amatsukaze.Server
         {
             get
             {
-                return (SrcVideoDuration != null)
+                return (SrcVideoDuration != TimeSpan.Zero)
 ? (SrcVideoDuration.TotalSeconds / EncodeDuration.TotalSeconds).ToString("F2")
 : null;
             }
@@ -1070,7 +1070,7 @@ namespace Amatsukaze.Server
         {
             get
             {
-                return (SrcVideoDuration != null)
+                return (SrcVideoDuration != TimeSpan.Zero)
 ? ((double)SrcFileSize / (SrcVideoDuration.TotalSeconds * 128.0 * 1024)).ToString("F3")
 : null;
             }
@@ -1079,7 +1079,7 @@ namespace Amatsukaze.Server
         {
             get
             {
-                return (SrcVideoDuration != null)
+                return (SrcVideoDuration != TimeSpan.Zero)
 ? ((double)OutFileSize / (OutVideoDuration.TotalSeconds * 128.0 * 1024)).ToString("F3")
 : null;
             }

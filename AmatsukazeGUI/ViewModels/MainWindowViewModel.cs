@@ -203,12 +203,12 @@ namespace Amatsukaze.ViewModels
         public async void Initialize()
         {
             var modelListener = new PropertyChangedEventListener(Model);
-            modelListener.Add(() => Model.IsRunning, (_, __) => RaisePropertyChanged(() => RunningState));
-            modelListener.Add(() => Model.IsSuspended, (_, __) => RaisePropertyChanged(() => RunningState));
-            modelListener.Add(() => Model.IsScheduledSuspend, (_, __) => RaisePropertyChanged(() => RunningState));
-            modelListener.Add(() => Model.ServerHostName, (_, __) => RaisePropertyChanged(() => WindowCaption));
-            modelListener.Add(() => Model.ServerVersion, (_, __) => RaisePropertyChanged(() => WindowCaption));
-            modelListener.Add(() => Model.IsCurrentResultFail, (_, __) =>
+            modelListener.Add("IsRunning", (_, __) => RaisePropertyChanged("RunningState"));
+            modelListener.Add("IsSuspended", (_, __) => RaisePropertyChanged("RunningState"));
+            modelListener.Add("IsScheduledSuspend", (_, __) => RaisePropertyChanged("RunningState"));
+            modelListener.Add("ServerHostName", (_, __) => RaisePropertyChanged("WindowCaption"));
+            modelListener.Add("ServerVersion", (_, __) => RaisePropertyChanged("WindowCaption"));
+            modelListener.Add("IsCurrentResultFail", (_, __) =>
             {
                 RaisePropertyChanged("StatusBackColor");
                 RaisePropertyChanged("StatusForeColor");
