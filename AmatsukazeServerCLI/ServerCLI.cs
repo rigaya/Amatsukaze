@@ -12,7 +12,7 @@ namespace Amatsukaze.Server
                 // ログパスを設定
                 log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
                 log4net.Config.XmlConfigurator.Configure(new FileInfo(
-                    Path.GetDirectoryName(typeof(ServerCLI).Assembly.Location) + "\\Log4net.Config.xml"));
+                    Path.Combine(System.AppContext.BaseDirectory, "Log4net.Config.xml")));
 
                 TaskSupport.SetSynchronizationContext();
                 GUIOPtion option = new GUIOPtion(args);

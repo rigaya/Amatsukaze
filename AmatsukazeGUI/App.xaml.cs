@@ -37,7 +37,7 @@ namespace Amatsukaze
             // ログパスを設定
             log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
             log4net.Config.XmlConfigurator.Configure(new FileInfo(
-                Path.GetDirectoryName(typeof(App).Assembly.Location) + "\\Log4net.Config.xml"));
+                Path.Combine(System.AppContext.BaseDirectory, "Log4net.Config.xml")));
 
             DispatcherHelper.UIDispatcher = Dispatcher;
             //AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);

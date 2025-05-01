@@ -911,10 +911,14 @@ namespace Amatsukaze.Server
             }
             return maxPath;
         }
+        private string GetBasePath()
+        {
+            return System.AppContext.BaseDirectory; // Path.GetDirectoryName(GetType().Assembly.Location);;
+        }
 
         private Setting SetDefaultPath(Setting setting)
         {
-            string basePath = Path.GetDirectoryName(GetType().Assembly.Location);
+            string basePath = GetBasePath();
             if (string.IsNullOrEmpty(setting.AmatsukazePath))
             {
                 setting.AmatsukazePath = Path.Combine(basePath, "AmatsukazeCLI.exe");
@@ -964,7 +968,7 @@ namespace Amatsukaze.Server
 
         private Setting GetDefaultSetting()
         {
-            string basePath = Path.GetDirectoryName(GetType().Assembly.Location);
+            string basePath = GetBasePath();
             return SetDefaultPath(new Setting() { NumParallel = 1, DeleteOldLogsDays = 180 });
         }
 

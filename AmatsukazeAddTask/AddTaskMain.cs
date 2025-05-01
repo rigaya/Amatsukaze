@@ -108,8 +108,7 @@ namespace Amatsukaze.AddTask
         public GUIOPtion(string[] args)
         {
             // デフォルトはexeのあるディレクトリの１つ上
-            AmatsukazeRoot = Path.GetDirectoryName(Path.GetDirectoryName(
-                typeof(ServerSupport).Assembly.Location));
+            AmatsukazeRoot = Path.GetDirectoryName(System.AppContext.BaseDirectory);
 
             for (int i = 0; i < args.Length; ++i)
             {
