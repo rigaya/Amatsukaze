@@ -498,6 +498,7 @@
     <ClCompile Include="AmatsukazeTestImpl.cpp" />
     <ClCompile Include="AMTLogo.cpp" />
     <ClCompile Include="AMTSource.cpp" />
+    <ClCompile Include="AribString.cpp" />
     <ClCompile Include="AudioEncoder.cpp" />
     <ClCompile Include="CaptionData.cpp" />
     <ClCompile Include="CaptionFormatter.cpp" />

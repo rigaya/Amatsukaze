@@ -13,7 +13,7 @@
 #define __HACK_UNICODE__
 #define _UNICODE
 #endif
-
+#include "rgy_osdep.h"
 #include "CoreUtils.hpp"
 
 #ifndef _MSC_VER
