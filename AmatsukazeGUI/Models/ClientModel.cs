@@ -730,11 +730,53 @@ namespace Amatsukaze.Models
         {
             if(appData.windowPlacement != null)
             {
-                Lib.WINDOWPLACEMENT placement;
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-                var stream = new MemoryStream(appData.windowPlacement);
-                placement = JsonSerializer.Deserialize<Lib.WINDOWPLACEMENT>(stream);
-                Lib.WinAPI.SetWindowPlacement(hwnd, ref placement);
+                try
+                {
+                    // まずJSONとしてデシリアライズを試みる
+                    var stream = new MemoryStream(appData.windowPlacement);
+                    var options = new JsonSerializerOptions
+                    {
+                        IncludeFields = true,
+                    };
+                    var placement = JsonSerializer.Deserialize<Lib.WINDOWPLACEMENT>(stream, options);
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                    Lib.WinAPI.SetWindowPlacement(hwnd, ref placement);
+                }
+                catch (JsonException)
+                {
+                    // JSONデシリアライズに失敗した場合、古いバイナリ形式として処理
+                    var stream = new MemoryStream(appData.windowPlacement);
+                    using (var reader = new BinaryReader(stream))
+                    {
+                        var placement = new Lib.WINDOWPLACEMENT();
+                        placement.length = reader.ReadInt32();
+                        placement.flags = reader.ReadInt32();
+                        placement.showCmd = (Lib.SW)reader.ReadInt32();
+                        
+                        // POINT構造体の読み込み
+                        var minX = reader.ReadInt32();
+                        var minY = reader.ReadInt32();
+                        placement.minPosition = new Lib.POINT(minX, minY);
+                        
+                        // POINT構造体の読み込み
+                        var maxX = reader.ReadInt32();
+                        var maxY = reader.ReadInt32();
+                        placement.maxPosition = new Lib.POINT(maxX, maxY);
+                        
+                        // RECT構造体の読み込み
+                        var left = reader.ReadInt32();
+                        var top = reader.ReadInt32();
+                        var right = reader.ReadInt32();
+                        var bottom = reader.ReadInt32();
+                        placement.normalPosition = new Lib.RECT(left, top, right, bottom);
+                        
+                        var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                        Lib.WinAPI.SetWindowPlacement(hwnd, ref placement);
+                    }
+                    
+                    // 次回からJSON形式で保存するために、現在のウィンドウ位置を保存
+                    SaveWindowPlacement(w);
+                }
             }
         }
 
@@ -744,7 +786,11 @@ namespace Amatsukaze.Models
             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
             Lib.WinAPI.GetWindowPlacement(hwnd, out placement);
             var stream = new MemoryStream();
-            JsonSerializer.Serialize(stream, placement);
+            var options = new JsonSerializerOptions
+            {
+                IncludeFields = true,
+            };
+            JsonSerializer.Serialize(stream, placement, options);
             appData.windowPlacement = stream.ToArray();
             SaveAppData();
         }
