@@ -252,7 +252,7 @@ namespace Amatsukaze.Models
             var image = mediafile.GetFrame((float)_FilePosition);
             if(image != null)
             {
-                CurrentImage = image;
+                CurrentImage = (BitmapSource)image;
             }
         }
 
@@ -342,7 +342,7 @@ namespace Amatsukaze.Models
             var image = Logo.GetImage((byte)LogoBG);
             if (image != null)
             {
-                LogoImage = image;
+                LogoImage = (BitmapSource)image;
             }
         }
 

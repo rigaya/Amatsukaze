@@ -2,10 +2,6 @@
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-#if WINDOWS
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-#endif
 
 namespace Amatsukaze.Lib
 {

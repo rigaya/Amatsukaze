@@ -38,6 +38,11 @@ namespace Amatsukaze.Win
             return new BitmapImage(uri);
         }
 
+        public object CreateBitmapFromRgb(byte[] buffer, int width, int height, int stride)
+        {
+            return BitmapSource.Create(width, height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null, buffer, stride);
+        }
+
         /// <summary>
         /// BitmapSourceをJPEGとしてファイルに保存します
         /// </summary>

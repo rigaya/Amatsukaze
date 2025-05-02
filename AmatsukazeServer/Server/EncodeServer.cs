@@ -224,13 +224,6 @@ namespace Amatsukaze.Server
 #endif
             this.finishRequested = finishRequested;
 
-            // クロスプラットフォーム対応の実装をセットアップ（Windowsでなければ）
-            if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-            {
-                BitmapManager.SetBitmapFactory(new DefaultBitmapFactory());
-                SystemUtility.SetImplementation(new DefaultSystemUtility());
-            }
-
             queueManager = new QueueManager(this);
             drcsManager = new DRCSManager(this);
 

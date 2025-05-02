@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -76,7 +77,7 @@ namespace Amatsukaze.Win
             IntPtr ReturnLength);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool ExitWindowsEx(ExitWindows uFlags,
+        private static extern bool ExitWindowsEx(uint uFlags,
             int dwReason);
 
         [DllImport("kernel32.dll")]
@@ -147,8 +148,11 @@ namespace Amatsukaze.Win
             }
             return new FileStream(handle, FileAccess.Read, 1, true);
         }
-        
-        bool testMailslot(string path)
+
+        /// <summary>
+        /// メールスロットをテストします
+        /// </summary>
+        public bool TestMailslot(string path)
         {
             // FileStreamの引数にmailslot名を渡すとエラーになってしまうので
             // CreateFileを直接呼び出す
@@ -203,7 +207,7 @@ namespace Amatsukaze.Win
         /// <summary>
         /// Windowsをシャットダウン、再起動、ログオフなどの操作を行います
         /// </summary>
-        public bool ExitWindowsEx(ExitWindows flags, int reason)
+        public bool ExitWindowsExNative(ExitWindows flags, int reason)
         {
             return ExitWindowsEx((uint)flags, reason);
         }
@@ -211,7 +215,7 @@ namespace Amatsukaze.Win
         /// <summary>
         /// スレッドハンドルを取得します
         /// </summary>
-        public IntPtr OpenThread(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId)
+        public IntPtr OpenThreadNative(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId)
         {
             return OpenThread(dwDesiredAccess, bInheritHandle, dwThreadId);
         }
@@ -219,7 +223,7 @@ namespace Amatsukaze.Win
         /// <summary>
         /// スレッドを一時停止します
         /// </summary>
-        public uint SuspendThread(uint threadId)
+        public uint SuspendThreadNative(uint threadId)
         {
             IntPtr hThread = OpenThread(ThreadAccess.SUSPEND_RESUME, false, threadId);
             if (hThread == IntPtr.Zero)
@@ -240,7 +244,7 @@ namespace Amatsukaze.Win
         /// <summary>
         /// スレッドを再開します
         /// </summary>
-        public int ResumeThread(uint threadId)
+        public int ResumeThreadNative(uint threadId)
         {
             IntPtr hThread = OpenThread(ThreadAccess.SUSPEND_RESUME, false, threadId);
             if (hThread == IntPtr.Zero)
@@ -259,9 +263,25 @@ namespace Amatsukaze.Win
         }
 
         /// <summary>
+        /// スレッドを一時停止します
+        /// </summary>
+        public uint SuspendThreadNative(IntPtr hThread)
+        {
+            return SuspendThread(hThread);
+        }
+
+        /// <summary>
+        /// スレッドを再開します
+        /// </summary>
+        public int ResumeThreadNative(IntPtr hThread)
+        {
+            return ResumeThread(hThread);
+        }
+
+        /// <summary>
         /// ハンドルを閉じます
         /// </summary>
-        public void CloseHandle(IntPtr hObject)
+        public void CloseHandleNative(IntPtr hObject)
         {
             CloseHandle(hObject);
         }

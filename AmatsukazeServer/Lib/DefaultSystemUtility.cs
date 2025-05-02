@@ -78,7 +78,7 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// Windowsをシャットダウン、再起動、ログオフなどの操作を行います
         /// </summary>
-        public bool ExitWindowsEx(ExitWindows uFlags, int dwReason)
+        public bool ExitWindowsExNative(ExitWindows uFlags, int dwReason)
         {
             // Linux環境では実装されていないのでfalseを返す
             return false;
@@ -95,7 +95,7 @@ namespace Amatsukaze.Lib
         /// <summary>   
         /// スレッドハンドルを取得します
         /// </summary>
-        public IntPtr OpenThread(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId)
+        public IntPtr OpenThreadNative(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId)
         {
             return IntPtr.Zero;
         }
@@ -103,7 +103,7 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// スレッドを一時停止します
         /// </summary>
-        public uint SuspendThread(IntPtr hThread)
+        public uint SuspendThreadNative(IntPtr hThread)
         {
             return 0;
         }
@@ -111,7 +111,7 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// スレッドを再開します
         /// </summary>
-        public int ResumeThread(IntPtr hThread)
+        public int ResumeThreadNative(IntPtr hThread)
         {
             return 0;
         }
@@ -119,7 +119,7 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// ハンドルを閉じます
         /// </summary>
-        public void CloseHandle(IntPtr hObject)
+        public void CloseHandleNative(IntPtr hObject)
         {
             // Linux環境では何もしない
         }

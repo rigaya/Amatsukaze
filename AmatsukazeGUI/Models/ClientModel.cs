@@ -740,7 +740,7 @@ namespace Amatsukaze.Models
                     };
                     var placement = JsonSerializer.Deserialize<Lib.WINDOWPLACEMENT>(stream, options);
                     var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-                    Lib.WinAPI.SetWindowPlacement(hwnd, ref placement);
+                    Lib.SystemUtility.SetWindowPlacement(hwnd, ref placement);
                 }
                 catch (JsonException)
                 {
@@ -771,7 +771,7 @@ namespace Amatsukaze.Models
                         placement.normalPosition = new Lib.RECT(left, top, right, bottom);
                         
                         var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-                        Lib.WinAPI.SetWindowPlacement(hwnd, ref placement);
+                        Lib.SystemUtility.SetWindowPlacement(hwnd, ref placement);
                     }
                     
                     // 次回からJSON形式で保存するために、現在のウィンドウ位置を保存
@@ -784,7 +784,7 @@ namespace Amatsukaze.Models
         {
             Lib.WINDOWPLACEMENT placement;
             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-            Lib.WinAPI.GetWindowPlacement(hwnd, out placement);
+            Lib.SystemUtility.GetWindowPlacement(hwnd, out placement);
             var stream = new MemoryStream();
             var options = new JsonSerializerOptions
             {
@@ -882,39 +882,6 @@ namespace Amatsukaze.Models
 
         private async Task<EncodeServer> MakeEncodeServer()
         {
-            // Windows環境での初期化
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-            {
-                // Windows専用の実装をセットアップ
-                try 
-                {
-                    // WpfBitmapFactoryとWindowsSystemUtilityはWindowsでのみ利用可能なクラス
-                    // これらの実装をリフレクションで探して、存在すれば初期化する
-                    var wpfBitmapFactoryType = Type.GetType("Amatsukaze.Win.WpfBitmapFactory, AmatsukazeServerWin");
-                    var windowsSystemUtilityType = Type.GetType("Amatsukaze.Win.WindowsSystemUtility, AmatsukazeServerWin");
-                    
-                    if (wpfBitmapFactoryType != null && windowsSystemUtilityType != null)
-                    {
-                        var bitmapFactory = Activator.CreateInstance(wpfBitmapFactoryType);
-                        var systemUtility = Activator.CreateInstance(windowsSystemUtilityType);
-                        
-                        // 見つかった実装をセット
-                        typeof(Amatsukaze.Lib.BitmapManager)
-                            .GetMethod("SetBitmapFactory")
-                            .Invoke(null, new[] { bitmapFactory });
-                        
-                        typeof(Amatsukaze.Lib.SystemUtility)
-                            .GetMethod("SetSystemUtility")
-                            .Invoke(null, new[] { systemUtility });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AddLog($"Windows専用実装の初期化に失敗: {ex.Message}");
-                    // 初期化に失敗しても続行する
-                }
-            }
-
             var server = new EncodeServer(0, new ClientAdapter(this), null);
             await server.Init();
             return server;

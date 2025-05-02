@@ -1,37 +1,56 @@
 ﻿using System.ComponentModel;
+using System.Windows;
+using Hardcodet.Wpf.TaskbarNotification;
 
 namespace Amatsukaze.Components
 {
-    public partial class NotifyIconWrapper : Component
+    public class NotifyIconWrapper : Component
     {
-        public System.Windows.Window Window;
+        private TaskbarIcon notifyIcon;
+        public Window Window;
 
         public string Text {
-            get { return notifyIcon1.Text; }
-            set { notifyIcon1.Text = value; }
+            get { return notifyIcon.ToolTipText; }
+            set { notifyIcon.ToolTipText = value; }
         }
 
         public NotifyIconWrapper()
         {
-            InitializeComponent();
+            Initialize();
         }
 
         public NotifyIconWrapper(IContainer container)
         {
             container.Add(this);
-
-            InitializeComponent();
+            Initialize();
         }
 
-        private void notifyIcon1_MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
+        private void Initialize()
+        {
+            notifyIcon = new TaskbarIcon();
+            notifyIcon.IconSource = Application.Current.MainWindow?.Icon;
+            notifyIcon.ToolTipText = "AmatsukazeServer";
+            notifyIcon.TrayMouseDoubleClick += NotifyIcon_TrayMouseDoubleClick;
+        }
+
+        private void NotifyIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
         {
             if (Window == null) return;
 
-            if (Window.WindowState == System.Windows.WindowState.Minimized)
+            if (Window.WindowState == WindowState.Minimized)
             {
-                Window.WindowState = System.Windows.WindowState.Normal;
+                Window.WindowState = WindowState.Normal;
             }
             Window.Activate();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                notifyIcon?.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 }

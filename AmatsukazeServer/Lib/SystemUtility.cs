@@ -11,6 +11,65 @@ namespace Amatsukaze.Lib
     public static class SystemUtility
     {
         private static ISystemUtility _instance;
+        private static bool _initialized = false;
+        private static readonly object _lock = new object();
+
+        /// <summary>
+        /// 静的コンストラクタでシステム機能初期化のセットアップを行う
+        /// </summary>
+        static SystemUtility()
+        {
+            // 初期化は初回アクセス時に行われる
+        }
+
+        /// <summary>
+        /// システム機能の初期化を行います
+        /// </summary>
+        private static void Initialize()
+        {
+            if (_initialized)
+                return;
+
+            lock (_lock)
+            {
+                if (_initialized)
+                    return;
+
+                // Windows環境での初期化
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    // Windows専用の実装をセットアップ
+                    try
+                    {
+                        // WindowsSystemUtilityはWindowsでのみ利用可能なクラス
+                        // リフレクションで探して、存在すれば初期化する
+                        var windowsSystemUtilityType = Type.GetType("Amatsukaze.Win.WindowsSystemUtility, AmatsukazeServerWin");
+
+                        if (windowsSystemUtilityType != null)
+                        {
+                            var systemUtility = Activator.CreateInstance(windowsSystemUtilityType);
+                            _instance = (ISystemUtility)systemUtility;
+                        }
+                        else
+                        {
+                            _instance = new DefaultSystemUtility();
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // 初期化に失敗したらデフォルト実装を使用
+                        _instance = new DefaultSystemUtility();
+                    }
+                }
+                else
+                {
+                    // Windows以外の環境ではデフォルト実装を使用
+                    _instance = new DefaultSystemUtility();
+                }
+
+                _initialized = true;
+            }
+        }
 
         /// <summary>
         /// プラットフォーム依存のシステム機能の実装を設定します
@@ -19,6 +78,7 @@ namespace Amatsukaze.Lib
         public static void SetImplementation(ISystemUtility implementation)
         {
             _instance = implementation ?? throw new ArgumentNullException(nameof(implementation));
+            _initialized = true;
         }
 
         /// <summary>
@@ -28,9 +88,9 @@ namespace Amatsukaze.Lib
         /// <exception cref="InvalidOperationException">実装が設定されていない場合</exception>
         private static ISystemUtility GetInstance()
         {
-            if (_instance == null)
+            if (!_initialized)
             {
-                throw new InvalidOperationException("SystemUtility implementation has not been set");
+                Initialize();
             }
             return _instance;
         }
@@ -86,9 +146,9 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// Windowsをシャットダウン、再起動、ログオフなどの操作を行います
         /// </summary>
-        public static bool ExitWindowsEx(ExitWindows uFlags, int dwReason)
+        public static bool ExitWindowsExNative(ExitWindows uFlags, int dwReason)
         {
-            return GetInstance().ExitWindowsEx(uFlags, dwReason);
+            return GetInstance().ExitWindowsExNative(uFlags, dwReason);
         }
 
         /// <summary>
@@ -110,33 +170,33 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// スレッドハンドルを取得します
         /// </summary>
-        public static IntPtr OpenThread(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId)
+        public static IntPtr OpenThreadNative(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId)
         {
-            return GetInstance().OpenThread(dwDesiredAccess, bInheritHandle, dwThreadId);
+            return GetInstance().OpenThreadNative(dwDesiredAccess, bInheritHandle, dwThreadId);
         }
 
         /// <summary>
         /// スレッドを一時停止します
         /// </summary>
-        public static uint SuspendThread(IntPtr hThread)
+        public static uint SuspendThreadNative(IntPtr hThread)
         {
-            return GetInstance().SuspendThread(hThread);
+            return GetInstance().SuspendThreadNative(hThread);
         }
 
         /// <summary>
         /// スレッドを再開します
         /// </summary>
-        public static int ResumeThread(IntPtr hThread)
+        public static int ResumeThreadNative(IntPtr hThread)
         {
-            return GetInstance().ResumeThread(hThread);
+            return GetInstance().ResumeThreadNative(hThread);
         }
 
         /// <summary>
         /// ハンドルを閉じます
         /// </summary>
-        public static void CloseHandle(IntPtr hObject)
+        public static void CloseHandleNative(IntPtr hObject)
         {
-            GetInstance().CloseHandle(hObject);
+            GetInstance().CloseHandleNative(hObject);
         }
     }
 
@@ -178,7 +238,7 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// Windowsをシャットダウン、再起動、ログオフなどの操作を行います
         /// </summary>
-        bool ExitWindowsEx(ExitWindows uFlags, int dwReason);
+        bool ExitWindowsExNative(ExitWindows uFlags, int dwReason);
 
         /// <summary>
         /// スリープ/サスペンド/休止状態への移行を実行します
@@ -193,22 +253,22 @@ namespace Amatsukaze.Lib
         /// <summary>
         /// スレッドハンドルを取得します
         /// </summary>
-        IntPtr OpenThread(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId);
+        IntPtr OpenThreadNative(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId);
 
         /// <summary>
         /// スレッドを一時停止します
         /// </summary>
-        uint SuspendThread(IntPtr hThread);
+        uint SuspendThreadNative(IntPtr hThread);
 
         /// <summary>
         /// スレッドを再開します
         /// </summary>
-        int ResumeThread(IntPtr hThread);
+        int ResumeThreadNative(IntPtr hThread);
 
         /// <summary>
         /// スレッドハンドルを閉じます
         /// </summary>
-        void CloseHandle(IntPtr hObject);
+        void CloseHandleNative(IntPtr hObject);
     }
 
     /// <summary>

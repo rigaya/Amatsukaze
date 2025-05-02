@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <StartupObject>Amatsukaze.App</StartupObject>
+    <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <OutputPath>..\x64\Debug\</OutputPath>
@@ -30,9 +31,6 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Update="Components\NotifyIconWrapper.cs">
-      <SubType>Component</SubType>
-    </Compile>
     <Compile Update="Properties\AssemblyInfo.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -59,6 +57,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\AmatsukazeServerWin\AmatsukazeServerWin.csproj" />
     <ProjectReference Include="..\AmatsukazeServer\AmatsukazeServer.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -72,6 +71,7 @@
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.31" />
     <PackageReference Include="System.Threading.Tasks.Dataflow" Version="7.0.0" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Views\DrcsImagePanel.xaml.cs" />

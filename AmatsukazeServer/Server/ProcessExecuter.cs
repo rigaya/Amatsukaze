@@ -52,7 +52,7 @@ namespace Amatsukaze.Server
                 {
                     foreach (var pOpenThread in SuspendedThreads)
                     {
-                        SystemUtility.CloseHandle(pOpenThread);
+                        SystemUtility.CloseHandleNative(pOpenThread);
                     };
                 }
                 Process.Dispose();
@@ -90,9 +90,9 @@ namespace Amatsukaze.Server
                 return;
 
             SuspendedThreads = Process.Threads.OfType<ProcessThread>()
-                .Select(pT => SystemUtility.OpenThread(ThreadAccess.SUSPEND_RESUME, false, (uint)pT.Id))
+                .Select(pT => SystemUtility.OpenThreadNative(ThreadAccess.SUSPEND_RESUME, false, (uint)pT.Id))
                 .Where(pOpenThread => pOpenThread != IntPtr.Zero)
-                .Where(pOpenThread => SystemUtility.SuspendThread(pOpenThread) != 0xFFFFFFFFU).ToArray();
+                .Where(pOpenThread => SystemUtility.SuspendThreadNative(pOpenThread) != 0xFFFFFFFFU).ToArray();
         }
 
         public void Resume()
@@ -105,8 +105,8 @@ namespace Amatsukaze.Server
             
             foreach(var pOpenThread in SuspendedThreads)
             {
-                SystemUtility.ResumeThread(pOpenThread);
-                SystemUtility.CloseHandle(pOpenThread);
+                SystemUtility.ResumeThreadNative(pOpenThread);
+                SystemUtility.CloseHandleNative(pOpenThread);
             };
             SuspendedThreads = null;
         }

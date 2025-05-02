@@ -1682,7 +1682,7 @@ namespace Amatsukaze.Server
             if(Action == FinishAction.Shutdown)
             {
                 Lib.SystemUtility.AdjustToken();
-                Lib.SystemUtility.ExitWindowsEx(Lib.ExitWindows.EWX_POWEROFF, 0);
+                Lib.SystemUtility.ExitWindowsExNative(Lib.ExitWindows.EWX_POWEROFF, 0);
             }
             else
             {
