@@ -101,7 +101,7 @@ if [ "$ACTION" = "convert" ]; then
             
             if [ "$PROJECT_NAME" = "AmatsukazeServerCLI" ] || [ "$PROJECT_NAME" = "AmatsukazeAddTask" ]; then
                 additional_items='  <ItemGroup>
-    <ProjectReference Include="../AmatsukazeServer/AmatsukazeServer.csproj" />
+    <ProjectReference Include="../AmatsukazeServer/AmatsukazeServer.csproj.sdk" />
   </ItemGroup>
 '"$(generate_package_references '    <PackageReference Include="log4net" Version="'"$LOG4NET_VERSION"'" />')"
                 
@@ -119,7 +119,7 @@ if [ "$ACTION" = "convert" ]; then
     <RootNamespace>Amatsukaze</RootNamespace>"
             
             additional_items='  <ItemGroup>
-    <ProjectReference Include="../AmatsukazeServer/AmatsukazeServer.csproj" />
+    <ProjectReference Include="../AmatsukazeServer/AmatsukazeServer.csproj.sdk" />
   </ItemGroup>
 '"$(generate_package_references '    <PackageReference Include="log4net" Version="'"$LOG4NET_VERSION"'" />
     <PackageReference Include="Microsoft.Tpl.Dataflow" Version="'"$TPL_DATAFLOW_VERSION"'" />')"
@@ -147,10 +147,9 @@ elif [ "$ACTION" = "build" ]; then
     fi
     
     echo "ビルドを開始します: $PROJECT_NAME"
-    cp "$SDK_PROJECT_FILE" "$PROJ_FILE"
     
     # ビルド実行
-    dotnet build -c Release
+    dotnet build -c Release "$SDK_PROJECT_FILE"
     
     # 出力ファイルコピー
     if [ "$PROJECT_TYPE" = "classlib" ]; then
@@ -167,9 +166,6 @@ elif [ "$ACTION" = "build" ]; then
         # 通常のコンソールアプリケーション
         cp "bin/Release/$TARGET_FRAMEWORK/$PROJECT_NAME" "$OUTPUT_FILE"
     fi
-    
-    # 一時ファイル削除
-    rm -f "$PROJ_FILE"
     
     echo "ビルド完了"
 fi

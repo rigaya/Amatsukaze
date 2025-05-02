@@ -5,7 +5,9 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
-using System.Windows.Media.Imaging;
+using System.Text;
+using System.Threading.Tasks;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server
 {
@@ -1237,8 +1239,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public int ImageHeight { get; set; }
 
-        // これはシリアライズできないので、別処理で送信する
-        public BitmapFrame Image { get; set; }
+        // BitmapFrameをobjectに変更
+        public object Image { get; set; }
     }
 
     public enum ServiceSettingUpdateType
@@ -1304,8 +1306,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public DrcsSourceItem[] SourceList { get; set; }
 
-        // これはシリアライズできないので、別処理で送信する
-        public BitmapFrame Image { get; set; }
+        // BitmapFrameをobjectに変更
+        public object Image { get; set; }
     }
 
     [DataContract]

@@ -2,16 +2,22 @@
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+#if WINDOWS
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+#endif
 
 namespace Amatsukaze.Lib
 {
     public static class AmatsukazeNatives
     {
-        /*
-         * NotificationObjectはプロパティ変更通知の仕組みを実装したオブジェクトです。
-         */
+#if WINDOWS
+        public const string AmatsukazeLibName = "Amatsukaze.dll";
+        public const CharSet AmatsukazeLibCharSet = CharSet.Unicode;
+#else
+        public const string AmatsukazeLibName = "libAmatsukaze.so";
+        public const CharSet AmatsukazeLibCharSet = CharSet.Ansi;
+#endif
     }
 
     public class AMTContext : IDisposable
@@ -19,16 +25,16 @@ namespace Amatsukaze.Lib
         public IntPtr Ptr { private set; get; }
 
         #region Natives
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void InitAmatsukazeDLL();
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr AMTContext_Create();
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void ATMContext_Delete(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr AMTContext_GetError(IntPtr ctx);
         #endregion
 
@@ -112,52 +118,52 @@ namespace Amatsukaze.Lib
         public IntPtr Ptr { private set; get; }
 
         #region Natives
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr TsInfo_Create(IntPtr ctx);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsInfo_Delete(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll", CharSet = CharSet.Unicode)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int TsInfo_ReadFile(IntPtr ptr, string filepath);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TsInfo_HasServiceInfo(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsInfo_GetDay(IntPtr ptr, out int y, out int m, out int d);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsInfo_GetTime(IntPtr ptr, out int h, out int m, out int s);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TsInfo_GetNumProgram(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsInfo_GetProgramInfo(IntPtr ptr, int i, out int progId, out bool hasVideo, out int videoPid, out int numContent);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsInfo_GetContentNibbles(IntPtr ptr, int i, int ci, out int level1, out int level2, out int user1, out int user2);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsInfo_GetVideoFormat(IntPtr ptr, int i, out int stream, out int width, out int height, out int sarW, out int  sarH);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TsInfo_GetNumService(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TsInfo_GetServiceId(IntPtr ptr, int i);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr TsInfo_GetProviderName(IntPtr ptr, int i);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr TsInfo_GetServiceName(IntPtr ptr, int i);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr TsInfo_GetEventName(IntPtr ptr, int i);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr TsInfo_GetEventText(IntPtr ptr, int i);
         #endregion
 
@@ -262,16 +268,16 @@ namespace Amatsukaze.Lib
         public IntPtr Ptr { private set; get; }
 
         #region Natives
-        [DllImport("Amatsukaze.dll", CharSet = CharSet.Unicode)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern IntPtr MediaFile_Create(IntPtr ctx, string filepath, int serviceid);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void MediaFile_Delete(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int MediaFile_DecodeFrame(IntPtr ptr, float pos, ref int width, ref int height);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static unsafe extern void MediaFile_GetFrame(IntPtr ptr, byte* rgb, int width, int height);
         #endregion
 
@@ -314,7 +320,7 @@ namespace Amatsukaze.Lib
         #endregion
 
         // 失敗したらnullが返るので注意
-        public BitmapSource GetFrame(float pos)
+        public object GetFrame(float pos)
         {
             int width = 0, height = 0;
             if(MediaFile_DecodeFrame(Ptr, pos, ref width, ref height) != 0)
@@ -330,8 +336,7 @@ namespace Amatsukaze.Lib
                             MediaFile_GetFrame(Ptr, pbuffer, width, height);
                         }
                     }
-                    return BitmapSource.Create(
-                        width, height, 96, 96, PixelFormats.Bgr24, null, buffer, stride);
+                    return BitmapManager.CreateBitmapFromRgb(buffer, width, height, stride);
                 }
             }
             return null;
@@ -346,49 +351,49 @@ namespace Amatsukaze.Lib
         public IntPtr Ptr { private set; get; }
 
         #region Natives
-        [DllImport("Amatsukaze.dll", CharSet = CharSet.Unicode)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern IntPtr LogoFile_Create(IntPtr ctx, string filepath);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void LogoFile_Delete(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetWidth(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetHeight(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetX(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetY(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetImgWidth(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetImgHeight(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int LogoFile_GetServiceId(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void LogoFile_SetServiceId(IntPtr ptr, int serviceId);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr LogoFile_GetName(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void LogoFile_SetName(IntPtr ptr, string name);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static unsafe extern void LogoFile_GetImage(IntPtr ptr, byte* buf, int stride, byte bg);
 
-        [DllImport("Amatsukaze.dll", CharSet = CharSet.Unicode)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int LogoFile_Save(IntPtr ptr, string filename);
 
-        [DllImport("Amatsukaze.dll", CharSet = CharSet.Unicode)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int ScanLogo(IntPtr ctx, string srcpath, int serviceid, string workfile, string dstpath,
             int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
         #endregion
@@ -461,7 +466,7 @@ namespace Amatsukaze.Lib
             }
         }
 
-        public BitmapFrame GetImage(byte bg)
+        public object GetImage(byte bg)
         {
             int stride = Width * 3;
             byte[] buffer = new byte[stride * Height];
@@ -472,8 +477,7 @@ namespace Amatsukaze.Lib
                     LogoFile_GetImage(Ptr, pbuffer, stride, bg);
                 }
             }
-            return BitmapFrame.Create(BitmapSource.Create(
-                Width, Height, 96, 96, PixelFormats.Bgr24, null, buffer, stride));
+            return BitmapManager.CreateBitmapFromRgb(buffer, Width, Height, stride);
         }
 
         public void Save(string filepath)
@@ -502,13 +506,13 @@ namespace Amatsukaze.Lib
         public IntPtr Ptr { private set; get; }
 
         #region Natives
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr TsSlimFilter_Create(IntPtr ctx, int videoPid);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void TsSlimFilter_Delete(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll", CharSet = CharSet.Unicode)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern bool TsSlimFilter_Exec(IntPtr ptr, string srcpath, string dstpath, TsSlimCallback cb);
         #endregion
 
@@ -585,13 +589,13 @@ namespace Amatsukaze.Lib
         }
 
         #region Natives
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr CPUInfo_Create();
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern void CPUInfo_Delete(IntPtr ptr);
 
-        [DllImport("Amatsukaze.dll")]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern IntPtr CPUInfo_GetData(IntPtr ptr, int tag, out int count);
         #endregion
 

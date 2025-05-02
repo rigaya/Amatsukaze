@@ -882,6 +882,39 @@ namespace Amatsukaze.Models
 
         private async Task<EncodeServer> MakeEncodeServer()
         {
+            // Windows環境での初期化
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                // Windows専用の実装をセットアップ
+                try 
+                {
+                    // WpfBitmapFactoryとWindowsSystemUtilityはWindowsでのみ利用可能なクラス
+                    // これらの実装をリフレクションで探して、存在すれば初期化する
+                    var wpfBitmapFactoryType = Type.GetType("Amatsukaze.Win.WpfBitmapFactory, AmatsukazeServerWin");
+                    var windowsSystemUtilityType = Type.GetType("Amatsukaze.Win.WindowsSystemUtility, AmatsukazeServerWin");
+                    
+                    if (wpfBitmapFactoryType != null && windowsSystemUtilityType != null)
+                    {
+                        var bitmapFactory = Activator.CreateInstance(wpfBitmapFactoryType);
+                        var systemUtility = Activator.CreateInstance(windowsSystemUtilityType);
+                        
+                        // 見つかった実装をセット
+                        typeof(Amatsukaze.Lib.BitmapManager)
+                            .GetMethod("SetBitmapFactory")
+                            .Invoke(null, new[] { bitmapFactory });
+                        
+                        typeof(Amatsukaze.Lib.SystemUtility)
+                            .GetMethod("SetSystemUtility")
+                            .Invoke(null, new[] { systemUtility });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AddLog($"Windows専用実装の初期化に失敗: {ex.Message}");
+                    // 初期化に失敗しても続行する
+                }
+            }
+
             var server = new EncodeServer(0, new ClientAdapter(this), null);
             await server.Init();
             return server;

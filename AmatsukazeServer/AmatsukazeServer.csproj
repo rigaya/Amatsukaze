@@ -1,15 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputType>Library</OutputType>
     <RootNamespace>Amatsukaze</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <UseWindowsForms>true</UseWindowsForms>
-    <UseWPF>true</UseWPF>
-    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+    <DefineConstants>WINDOWS</DefineConstants>
+  </PropertyGroup>
+  
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <OutputPath>..\x64\Debug\</OutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -38,12 +41,23 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
+    <Compile Remove="**\*Windows*.cs" />
+    <None Include="**\*Windows*.cs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="LivetCask.Core" Version="4.0.2" />
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+    <PackageReference Include="log4net" Version="2.0.15" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="System.Threading.Tasks.Dataflow" Version="7.0.0" />
   </ItemGroup>
+  
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <PackageReference Include="PresentationCore" Version="4.6.0" />
+    <PackageReference Include="PresentationFramework" Version="4.6.0" />
+    <PackageReference Include="WindowsBase" Version="4.6.0" />
+  </ItemGroup>
+  
   <ItemGroup>
     <Content Include="Properties\AssemblyInfo.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
@@ -56,21 +70,13 @@
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Clarius.TransformOnBuild" Version="1.22.0" />
-    <PackageReference Include="DynamicJson" Version="1.2.0.0" />
-    <PackageReference Include="LivetCask" Version="4.0.2" />
-    <PackageReference Include="log4net" Version="2.0.15" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
-    <PackageReference Include="System.Threading.Tasks.Dataflow" Version="7.0.0" />
-  </ItemGroup>
-  <PropertyGroup>
-    <PreBuildEvent>"$(SolutionDir)AmatsukazeServer\Version.bat" "$(SolutionDir)AmatsukazeServer\Version.t4"</PreBuildEvent>
-  </PropertyGroup>
+  <Target Name="GenerateVersionInfo" BeforeTargets="BeforeBuild">
+    <Exec Condition="'$(OS)' == 'Windows_NT'" Command="Version.bat Version.t4" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="./Version.sh Version.t4" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
   <PropertyGroup>
     <TextTransformPath>$(VsInstallRoot)\Common7\IDE\TextTransform.exe</TextTransformPath>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
   <Import Project="..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets" Condition="Exists('..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets')" />
 </Project>

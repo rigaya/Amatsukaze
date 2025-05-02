@@ -1,15 +1,15 @@
-﻿using Livet;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server
 {
-    public class Client : NotificationObject
+    public class Client : NotificationBase
     {
         private ClientManager manager;
         private TcpClient client;
@@ -114,7 +114,7 @@ namespace Amatsukaze.Server
         }
     }
 
-    public class ClientManager : NotificationObject, IUserClient
+    public class ClientManager : NotificationBase, IUserClient
     {
         private TcpListener listener;
         private bool finished = false;

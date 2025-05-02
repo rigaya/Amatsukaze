@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Media.Imaging;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server
 {
@@ -225,20 +225,20 @@ namespace Amatsukaze.Server
             { RPCMethodId.CancelItem, typeof(string) }
         };
 
-        private static List<BitmapFrame> GetImage(object obj)
+        private static List<object> GetImage(object obj)
         {
             if(obj is LogoData)
             {
-                return new List<BitmapFrame> { ((LogoData)obj).Image };
+                return new List<object> { ((LogoData)obj).Image };
             }
             if(obj is DrcsImage)
             {
-                return new List<BitmapFrame> { ((DrcsImage)obj).Image };
+                return new List<object> { ((DrcsImage)obj).Image };
             }
             if(obj is DrcsImageUpdate)
             {
                 var update = (DrcsImageUpdate)obj;
-                var ret = new List<BitmapFrame>();
+                var ret = new List<object>();
                 if(update.Image != null)
                 {
                     ret.Add(update.Image.Image);
@@ -255,7 +255,7 @@ namespace Amatsukaze.Server
             return null;
         }
 
-        private static Action<List<BitmapFrame>> ImageSetter(object obj)
+        private static Action<List<object>> ImageSetter(object obj)
         {
             if (obj is LogoData)
             {
@@ -304,9 +304,7 @@ namespace Amatsukaze.Server
                     if(image[i] != null)
                     {
                         var ms2 = new MemoryStream();
-                        var encoder = new PngBitmapEncoder();
-                        encoder.Frames.Add(image[i]);
-                        encoder.Save(ms2);
+                        BitmapManager.SaveBitmapAsPng(image[i], ms2);
                         data.Add(ms2.ToArray());
                     }
                     else
@@ -343,7 +341,7 @@ namespace Amatsukaze.Server
             var setter = ImageSetter(arg);
             if (setter != null)
             {
-                List<BitmapFrame> images = new List<BitmapFrame>();
+                List<object> images = new List<object>();
                 for(int i = 1; i < data.Count; ++i)
                 {
                     if(data[i].Length == 0)
@@ -352,7 +350,7 @@ namespace Amatsukaze.Server
                     }
                     else
                     {
-                        images.Add(BitmapFrame.Create(data[i]));
+                        images.Add(BitmapManager.CreateBitmapFromByteArray(data[i].ToArray()));
                     }
                 }
                 setter(images);

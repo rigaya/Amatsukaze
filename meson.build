@@ -110,22 +110,27 @@ if get_option('build_csharp_projects')
     dotnet_check = run_command('sh', '-c', 'which dotnet >/dev/null 2>&1 && echo true || echo false', check : false)
     if dotnet_check.returncode() == 0 and dotnet_check.stdout().strip() == 'true'
       use_dotnet = true
-      message('Using .NET Core/.NET 5+ for building C# projects')
+      message('Using .NET Core/.NET for building C# projects')
     else
       message('Using Mono for building C# projects')
     endif
     
-    if use_dotnet
-      # .NET Core/.NET 5+ でのビルド
-      subdir('AmatsukazeServer')
-      subdir('AmatsukazeServerCLI')
-      subdir('AmatsukazeAddTask')
-    else
-      # Monoでのビルド
-      subdir('AmatsukazeServer')
-      subdir('AmatsukazeServerCLI')
-      subdir('AmatsukazeAddTask')
+    # プロジェクトのビルド（SDKスタイルのcsprojを使用）
+    # 明示的な依存関係の順序でビルド
+    # 最初にAmatsukazeServerをビルド
+    subdir('AmatsukazeServer')
+    
+    # AmatsukazeServerの変数をエクスポート
+    build_target_server = AmatsukazeServer_build_target_server
+    
+    # Windows向けプロジェクトを条件付きでビルド
+    if host_machine.system() == 'windows'
+      subdir('AmatsukazeServerWin')
     endif
+    
+    # 他のC#プロジェクト
+    subdir('AmatsukazeServerCLI')
+    subdir('AmatsukazeAddTask')
   else
     message('C# compiler not found, skipping C# projects')
   endif

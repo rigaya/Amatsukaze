@@ -1,0 +1,120 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "AmatsukazeCLI: デバッグ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/AmatsukazeCLI/AmatsukazeCLI",
+            "args": [
+                "--print-prefix",
+                "time",
+                "-i",
+                "${input:inputFile}",
+                "-s",
+                "23608",
+                "--drcs",
+                "${input:drcsMap}",
+                "-w",
+                "${input:tempDir}",
+                "--cmoutmask",
+                "2",
+                "-o",
+                "${input:outputFile}",
+                "-et",
+                "QSVEnc",
+                "-e",
+                "qsvencc",
+                "-j",
+                "${input:encJson}",
+                "-eo",
+                "--icq 23 -u 1 --bframes 2 --gop-len 90 --tff --vpp-deinterlace normal",
+                "-fmt",
+                "mp4",
+                "--use-mkv-when-sub-exists",
+                "--cm-quality-offset",
+                "4",
+                "-eb",
+                "16",
+                "--chapter",
+                "-f",
+                "${input:avsFile}",
+                "--subtitles",
+                "--jls-cmd",
+                "${input:jlsCmd}",
+                "--ignore-no-logo",
+                "--ignore-no-drcsmap",
+                "--parallel-logo-analysis",
+                "--no-remove-tmp",
+                "--pmt-cut",
+                "0.02:0.02",
+                "--logo",
+                "${input:logoFile}"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "gdbのプリティプリントを有効化",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "AmatsukazeCLI: ビルド",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "inputFile",
+            "type": "promptString",
+            "description": "入力TSファイルのパスを入力してください",
+            "default": "$HOME/SummerPockets02.ts"
+        },
+        {
+            "id": "outputFile",
+            "type": "promptString",
+            "description": "出力MP4ファイルのパスを入力してください",
+            "default": "$HOME/AmatsukazeOut/SummerPockets02.mp4"
+        },
+        {
+            "id": "drcsMap",
+            "type": "promptString",
+            "description": "DRCSマップファイルのパスを入力してください",
+            "default": "$HOME/Amatsukaze/drcs/drcs_map.txt"
+        },
+        {
+            "id": "tempDir",
+            "type": "promptString",
+            "description": "一時ディレクトリのパスを入力してください",
+            "default": "$HOME/AmatsukazeTemp"
+        },
+        {
+            "id": "encJson",
+            "type": "promptString",
+            "description": "エンコード設定JSONファイルのパスを入力してください",
+            "default": "$HOME/AmatsukazeOut/SummerPockets02-enc.json"
+        },
+        {
+            "id": "avsFile",
+            "type": "promptString",
+            "description": "AVSファイルのパスを入力してください",
+            "default": "$HOME/Amatsukaze/avscache/1D74F3D8.avs"
+        },
+        {
+            "id": "jlsCmd",
+            "type": "promptString",
+            "description": "JLコマンドファイルのパスを入力してください",
+            "default": "$HOME/Amatsukaze/JL/JL_標準.txt"
+        },
+        {
+            "id": "logoFile",
+            "type": "promptString",
+            "description": "ロゴファイルのパスを入力してください",
+            "default": "$HOME/Amatsukaze/logo/SID23608-2.lgd"
+        }
+    ]
+} 

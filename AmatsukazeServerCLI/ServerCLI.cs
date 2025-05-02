@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server
 {
@@ -9,6 +10,20 @@ namespace Amatsukaze.Server
         {
             try
             {
+                // プラットフォームに応じた初期化
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                {
+                    // Linux環境の場合
+                    BitmapManager.SetBitmapFactory(new DefaultBitmapFactory());
+                    SystemUtility.SetImplementation(new DefaultSystemUtility());
+                }
+                else
+                {
+                    // Windows環境の場合
+                    // DLLとして直接WindowsSystemUtilityを参照できないため、ここでは何もしない
+                    // EncodeServerのコンストラクタでLinux環境ではないと判断され、初期化されない
+                }
+
                 // ログパスを設定
                 log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
                 log4net.Config.XmlConfigurator.Configure(new FileInfo(

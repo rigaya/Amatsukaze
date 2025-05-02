@@ -117,7 +117,7 @@ namespace Amatsukaze.Server
                     s.WriteObject(fs, Queue);
                 }
                 // ファイル置き換え
-                Util.MoveFileEx(tmp, path, 11);
+                StorageUtility.MoveFileWithOverwrite(tmp, path);
             }
         }
 

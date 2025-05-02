@@ -1,6 +1,5 @@
 ﻿#define PROFILE
 using Amatsukaze.Lib;
-using Livet;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,11 +11,10 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using System.Windows;
 
 namespace Amatsukaze.Server
 {
-    public class EncodeServer : NotificationObject, IEncodeServer, ISleepCancel, IDisposable
+    public class EncodeServer : NotificationBase, IEncodeServer, ISleepCancel, IDisposable
     {
         [DataContract]
         public class AppData : IExtensibleDataObject
@@ -101,7 +99,7 @@ namespace Amatsukaze.Server
         private Task drcsThread;
         private BufferBlock<int> drcsQ = new BufferBlock<int>();
 
-        private PreventSuspendContext preventSuspend;
+        private IDisposable preventSuspend;
 
         // プロファイル未選択状態のダミープロファイル
         public ProfileSetting PendingProfile { get; private set; }
@@ -225,6 +223,13 @@ namespace Amatsukaze.Server
             var prof = new Profile();
 #endif
             this.finishRequested = finishRequested;
+
+            // クロスプラットフォーム対応の実装をセットアップ（Windowsでなければ）
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+            {
+                BitmapManager.SetBitmapFactory(new DefaultBitmapFactory());
+                SystemUtility.SetImplementation(new DefaultSystemUtility());
+            }
 
             queueManager = new QueueManager(this);
             drcsManager = new DRCSManager(this);
@@ -2629,7 +2634,7 @@ namespace Amatsukaze.Server
             ulong available = 0;
             ulong total = 0;
             ulong free = 0;
-            Util.GetDiskFreeSpaceEx(path, out available, out total, out free);
+            StorageUtility.GetDiskFreeSpace(path, out available, out total, out free);
             return new DiskItem() { Capacity = (long)total, Free = (long)available, Path = path };
         }
 
@@ -2995,7 +3000,7 @@ namespace Amatsukaze.Server
                 // サスペンドを抑止
                 if (preventSuspend == null)
                 {
-                    preventSuspend = new PreventSuspendContext();
+                    preventSuspend = SystemUtility.CreatePreventSuspendContext();
                 }
             }
         }

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Windows.Media.Imaging;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server
 {
@@ -26,7 +26,7 @@ namespace Amatsukaze.Server
             public string LogPath; // ログファイルパス
         }
 
-        private Dictionary<string, BitmapFrame> drcsImageCache = new Dictionary<string, BitmapFrame>();
+        private Dictionary<string, object> drcsImageCache = new Dictionary<string, object>();
         private Dictionary<string, DrcsImage> drcsMap = new Dictionary<string, DrcsImage>();
         private Dictionary<string, DrcsSource> drcsSourceMap = new Dictionary<string, DrcsSource>();
         private List<LogItem> logQueue = new List<LogItem>();
@@ -115,7 +115,7 @@ namespace Amatsukaze.Server
             }
         }
 
-        private BitmapFrame LoadImage(string imgpath)
+        private object LoadImage(string imgpath)
         {
             if (drcsImageCache.ContainsKey(imgpath))
             {
@@ -123,7 +123,7 @@ namespace Amatsukaze.Server
             }
             try
             {
-                var img = BitmapFrame.Create(new MemoryStream(File.ReadAllBytes(imgpath)));
+                var img = BitmapManager.CreateBitmapFromFile(imgpath);
                 drcsImageCache.Add(imgpath, img);
                 return img;
             }
@@ -460,7 +460,7 @@ namespace Amatsukaze.Server
                                 "DRCSマッピングファイル書き込みに失敗", e);
                         }
                         // ファイル置き換え
-                        Util.MoveFileEx(tmppath, filepath, 11);
+                        StorageUtility.MoveFileWithOverwrite(tmppath, filepath);
                     }
 
                     await server.Client.OnDrcsData(new DrcsImageUpdate()

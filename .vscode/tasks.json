@@ -1,0 +1,64 @@
+{
+    "tasks": [
+        {
+            "label": "AmatsukazeCLI: デバッグビルド",
+            "type": "shell",
+            "command": "meson",
+            "args": [
+                "setup",
+                "--buildtype=debug",
+                "--prefix=${workspaceFolder}/build",
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "AmatsukazeCLI: ビルド",
+            "type": "shell",
+            "command": "ninja",
+            "args": [
+                "-C",
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "dependsOn": [
+                "AmatsukazeCLI: デバッグビルド"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "AmatsukazeCLI: クリーン",
+            "type": "shell",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "version": "2.0.0"
+}

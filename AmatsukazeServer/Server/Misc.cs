@@ -1,5 +1,4 @@
 ﻿using Amatsukaze.Lib;
-using Livet;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -18,7 +17,6 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using System.Windows.Forms;
 
 namespace Amatsukaze.Server
 {
@@ -218,18 +216,6 @@ namespace Amatsukaze.Server
             return (int)ts.TotalHours + "時間" + ts.ToString("mm\\分ss\\秒");
         }
 
-        [return: MarshalAs(UnmanagedType.Bool)]
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern bool GetDiskFreeSpaceEx(
-            string lpDirectoryName, 
-            out ulong lpFreeBytesAvailable, 
-            out ulong lpTotalNumberOfBytes, 
-            out ulong lpTotalNumberOfFreeBytes);
-
-        [return: MarshalAs(UnmanagedType.Bool)]
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
-
         public static string CreateTmpFile(string baseDir)
         {
             for(int code = Environment.TickCount & 0xFFFFFF, 
@@ -309,12 +295,11 @@ namespace Amatsukaze.Server
             var files = Directory.EnumerateFiles(dir, "*.wav").ToArray();
             if (files.Length == 0) return;
             var file = files[Environment.TickCount % files.Length];
-            var player = new System.Media.SoundPlayer(file);
-            player.Play();
+            SoundUtility.PlaySound(file);
         }
     }
 
-    public abstract class ConsoleTextBase : NotificationObject
+    public abstract class ConsoleTextBase : NotificationBase
     {
         public abstract void OnAddLine(string text);
         public abstract void OnReplaceLine(string text);
@@ -663,13 +648,7 @@ namespace Amatsukaze.Server
         public static FileStream CreateStandaloneMailslot()
         {
             var path = GetStandaloneMailslotName(Directory.GetCurrentDirectory());
-            // -1: MAILSLOT_WAIT_FOREVER
-            var handle = Lib.WinAPI.CreateMailslot(path, 0, -1, IntPtr.Zero);
-            if(handle.IsInvalid)
-            {
-                throw new IOException("Failed to create mailslot");
-            }
-            return new FileStream(handle, FileAccess.Read, 1, true);
+            return SystemUtility.CreateMailslot(path);
         }
 
         public static async Task WaitStandaloneMailslot(FileStream fs)
@@ -682,24 +661,17 @@ namespace Amatsukaze.Server
 
         public static async Task TerminateStandalone(string rootDir)
         {
+            var path = GetStandaloneMailslotName(rootDir);
             while (true)
             {
-                // FileStreamの引数にmailslot名を渡すとエラーになってしまうので
-                // CreateFileを直接呼び出す
-                var handle = Lib.WinAPI.CreateFile(GetStandaloneMailslotName(rootDir),
-                    FileDesiredAccess.GenericWrite,
-                    FileShareMode.FileShareRead | FileShareMode.FileShareWrite,
-                    IntPtr.Zero, FileCreationDisposition.OpenExisting, 0, IntPtr.Zero);
-                if (handle.IsInvalid)
+                if (SystemUtility.TestMailslot(path))
                 {
-                    return;
+                    await Task.Delay(10 * 1000);
                 }
-                using(var fs = new FileStream(handle, FileAccess.Write))
+                else
                 {
-                    byte[] buf = new byte[1] { 0 };
-                    fs.Write(buf, 0, 1);
+                    break;
                 }
-                await Task.Delay(10 * 1000);
             }
         }
 
@@ -1709,12 +1681,12 @@ namespace Amatsukaze.Server
 
             if(Action == FinishAction.Shutdown)
             {
-                WinAPI.AdjustToken();
-                WinAPI.ExitWindowsEx(WinAPI.ExitWindows.EWX_POWEROFF, 0);
+                Lib.SystemUtility.AdjustToken();
+                Lib.SystemUtility.ExitWindowsEx(Lib.ExitWindows.EWX_POWEROFF, 0);
             }
             else
             {
-                Application.SetSuspendState(ActionPowerState, false, false);
+                SystemUtility.SetSuspendState(ActionPowerState, false, false);
             }
         }
     }
