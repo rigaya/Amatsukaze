@@ -138,7 +138,7 @@ namespace Amatsukaze.Server
         private Task WriteLine(string line)
         {
             var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line + "\n";
-            return WriteTextBytes(Encoding.Default.GetBytes(formatted));
+            return WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(formatted));
         }
 
         private Task ClientQueueUpdate(QueueUpdate update)
@@ -946,6 +946,12 @@ namespace Amatsukaze.Server
                     }));
             }
             return Task.FromResult(0);
+        }
+
+        private Task WriteTextBytes(QueueState state, QueueItem item, string text)
+        {
+            string formatted = String.Format(text, state, item.Id, Path.GetFileName(item.SrcPath));
+            return WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(formatted));
         }
     }
 }

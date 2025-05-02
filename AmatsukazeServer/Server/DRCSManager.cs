@@ -212,7 +212,7 @@ namespace Amatsukaze.Server
                 {
                     continue;
                 }
-                foreach(var line in File.ReadAllLines(log.LogPath, Encoding.Default))
+                foreach(var line in File.ReadAllLines(log.LogPath, Util.AmatsukazeDefaultEncoding))
                 {
                     string md5;
                     TimeSpan elapsed;

@@ -135,6 +135,27 @@ namespace Amatsukaze.Server
     {
         public static List<Action<string>> LogHandlers = new List<Action<string>>();
 
+        static Util()
+        {
+            // エンコーディングプロバイダを登録
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+            // OSに応じてデフォルトエンコーディングを設定
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Windowsの場合はCP932
+                AmatsukazeDefaultEncoding = Encoding.GetEncoding(932);
+            }
+            else
+            {
+                // Linux/macOSの場合はUTF-8
+                AmatsukazeDefaultEncoding = Encoding.UTF8;
+            }
+        }
+
+        // アプリケーション全体で使用するデフォルトエンコーディング
+        public static readonly Encoding AmatsukazeDefaultEncoding;
+
         public static string ErrorMessage(int parallelId, string mes, Exception e)
         {
             string message = "";
@@ -335,7 +356,7 @@ namespace Amatsukaze.Server
 
         private void OutLine()
         {
-            string text = Encoding.Default.GetString(rawtext.ToArray());
+            string text = Util.AmatsukazeDefaultEncoding.GetString(rawtext.ToArray());
             string svtav1_encoding = @"Encoding frame\s+[0-9]+\s+[0-9]*\.?[0-9]+ kbps ";
             if (isCR)
             {
@@ -1485,7 +1506,7 @@ namespace Amatsukaze.Server
         //（同じスクリプトがあればそのパス、なければ作る）
         public static string GetAvsFilePath(FilterSetting filter, Setting setting, string cacheRoot)
         {
-            var textBytes = Encoding.Default.GetBytes(AvsScriptCreator.FilterToString(filter, setting));
+            var textBytes = Util.AmatsukazeDefaultEncoding.GetBytes(AvsScriptCreator.FilterToString(filter, setting));
             var code = GetHashCode(textBytes);
 
             if(Directory.Exists(cacheRoot) == false)

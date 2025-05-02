@@ -456,6 +456,8 @@ namespace Amatsukaze.Server
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
                 RedirectStandardInput = false,
+                StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
+                StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
                 CreateNoWindow = true
             };
 

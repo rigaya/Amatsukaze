@@ -162,7 +162,8 @@ namespace Amatsukaze.Server
                         // 終了
                         return;
                     }
-                    await WriteTextBytes(Encoding.Default.GetBytes(line + "\n"));
+                    // CP932を明示的に使用
+                    await WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(line + "\n"));
                 }
             }
             catch (Exception e)
@@ -283,7 +284,7 @@ namespace Amatsukaze.Server
                     process = p;
 
                     // 起動コマンドをログ出力
-                    await WriteTextBytes(Encoding.Default.GetBytes(exename + " " + args + "\n"));
+                    await WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(exename + " " + args + "\n"));
 
                     await Task.WhenAll(
                         GetRenamed(result, p.Process.StandardOutput),
@@ -639,8 +640,7 @@ namespace Amatsukaze.Server
             }
         }
 
-        private static Encoding defaultEncoding = Encoding.GetEncoding(
-            Encoding.Default.CodePage, new EncoderExceptionFallback(), new DecoderExceptionFallback());
+        private static Encoding defaultEncoding = Util.AmatsukazeDefaultEncoding;
 
         // システムデフォルトエンコーディングで変換可能な文字列か？
         private static bool IsEncodableString(string str)
@@ -930,6 +930,8 @@ namespace Amatsukaze.Server
                     RedirectStandardError = true,
                     RedirectStandardOutput = true,
                     RedirectStandardInput = false,
+                    StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
+                    StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
                     CreateNoWindow = true
                 };
 
@@ -969,7 +971,7 @@ namespace Amatsukaze.Server
                             }
 
                             // 起動コマンドをログ出力
-                            await WriteTextBytes(Encoding.Default.GetBytes(exename + " " + args + "\n"));
+                            await WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(exename + " " + args + "\n"));
 
                             // サスペンドチェック
                             if (Suspended)
@@ -1036,7 +1038,7 @@ namespace Amatsukaze.Server
                 // ログを整形したテキストに置き換える
                 if (item.IsCheck == false && profile.DisableLogFile == false)
                 {
-                    using (var fs = new StreamWriter(File.Create(logpath), Encoding.Default))
+                    using (var fs = new StreamWriter(File.Create(logpath), Util.AmatsukazeDefaultEncoding))
                     {
                         foreach (var str in logText.TextLines)
                         {
@@ -1051,7 +1053,7 @@ namespace Amatsukaze.Server
                     : server.GetLogFileBase(start);
                 Directory.CreateDirectory(Path.GetDirectoryName(logbase));
                 string dstlog = logbase + ".txt";
-                using (var fs = new StreamWriter(File.Create(dstlog), Encoding.Default))
+                using (var fs = new StreamWriter(File.Create(dstlog), Util.AmatsukazeDefaultEncoding))
                 {
                     foreach (var str in logText.TextLines)
                     {
@@ -1187,7 +1189,7 @@ namespace Amatsukaze.Server
 
         private async Task MoveWithRetry(ServerSupport.MoveFileItem item)
         {
-            Func<string, Task> Print = s => WriteTextBytes(Encoding.Default.GetBytes(s));
+            Func<string, Task> Print = s => WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(s));
 
             int MAX_RETRY = 10 * 60;
             int retry = 0;
@@ -1465,6 +1467,11 @@ namespace Amatsukaze.Server
             {
                 item = null;
             }
+        }
+
+        private Task WriteTextBytes(string text)
+        {
+            return WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(text));
         }
     }
 }

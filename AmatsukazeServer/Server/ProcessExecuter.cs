@@ -24,6 +24,12 @@ namespace Amatsukaze.Server
 
         private IntPtr[] SuspendedThreads;
 
+        static NormalProcess()
+        {
+            // コードページエンコーディングを登録
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        }
+
         public NormalProcess(ProcessStartInfo psi)
         {
             Process = System.Diagnostics.Process.Start(psi);
@@ -109,6 +115,7 @@ namespace Amatsukaze.Server
         {
             try
             {
+                // バイト配列を直接読み取り
                 byte[] buffer = new byte[1024];
                 while (true)
                 {
@@ -120,6 +127,7 @@ namespace Amatsukaze.Server
                     }
                     if (OnOutput != null)
                     {
+                        // そのままバイト配列を渡す
                         await OnOutput(buffer, 0, readBytes);
                     }
                 }

@@ -547,7 +547,7 @@ namespace Amatsukaze.Server
             {
                 return "ログファイルが見つかりません。パス: " + logpath;
             }
-            return File.ReadAllText(logpath, Encoding.Default);
+            return File.ReadAllText(logpath, Util.AmatsukazeDefaultEncoding);
         }
 
         private string GetCheckHistoryFilePath()
@@ -567,7 +567,7 @@ namespace Amatsukaze.Server
             {
                 return "ログファイルが見つかりません。パス: " + logpath;
             }
-            return File.ReadAllText(logpath, Encoding.Default);
+            return File.ReadAllText(logpath, Util.AmatsukazeDefaultEncoding);
         }
 
         private string GetLogoDirectoryPath()

@@ -218,7 +218,7 @@ namespace Amatsukaze.ViewModels
 
             try
             {
-                File.WriteAllText(saveFileDialog.FileName, sb.ToString(), Encoding.Default);
+                File.WriteAllText(saveFileDialog.FileName, sb.ToString(), Util.AmatsukazeDefaultEncoding);
             }
             catch (Exception e)
             {
