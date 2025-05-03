@@ -1677,7 +1677,8 @@ namespace Amatsukaze.Server
                     if(profile.FilterOption == FilterOption.Setting)
                     {
                         sb.Append(" -f \"")
-                            .Append(Path.Combine(GetAvsDirectoryPath(), profile.FilterPath))
+                            .Append(CachedAvsScript.GetAvsFilePath(
+                                profile.FilterSetting, setting, GetAvsCacheDirectoryPath()))
                             .Append("\"");
                     }
                     else if(profile.FilterOption == FilterOption.Custom)
