@@ -101,6 +101,29 @@ public:
 protected:
     AutoBuffer buffer;
 };
+
+// 安全なsnprintfラッパー関数
+template<typename... Args>
+inline int safe_snprintf(char* buffer, size_t bufferSize, const char* format, const Args&... args) {
+    // 引数がない場合は%sでラップして空文字列を渡す
+    if constexpr(sizeof...(args) == 0) {
+        return snprintf(buffer, bufferSize, "%s", format);
+    } else {
+        return snprintf(buffer, bufferSize, format, args...);
+    }
+}
+
+// 安全なswprintfラッパー関数
+template<typename... Args>
+inline int safe_swprintf(wchar_t* buffer, size_t bufferSize, const wchar_t* format, const Args&... args) {
+    // 引数がない場合は%sでラップして空文字列を渡す
+    if constexpr(sizeof...(args) == 0) {
+        return swprintf(buffer, bufferSize, L"%s", format);
+    } else {
+        return swprintf(buffer, bufferSize, format, args...);
+    }
+}
+
 }
 
 template <typename ... Args>
@@ -111,7 +134,7 @@ std::string StringFormat(const char* fmt, const Args& ... args) {
     if (size > 0) {
         str.reserve(size + 1); // null終端を足す
         str.resize(size);
-        snprintf(&str[0], str.size() + 1, fmt, string_internal::MakeArg(ctx, args) ...);
+        string_internal::safe_snprintf(&str[0], str.size() + 1, fmt, string_internal::MakeArg(ctx, args) ...);
     }
     return str;
 }
@@ -124,7 +147,7 @@ std::wstring StringFormat(const wchar_t* fmt, const Args& ... args) {
     if (size > 0) {
         str.reserve(size + 1); // null終端を足す
         str.resize(size);
-        swprintf(&str[0], str.size() + 1, fmt, string_internal::MakeArgW(ctx, args) ...);
+        string_internal::safe_swprintf(&str[0], str.size() + 1, fmt, string_internal::MakeArgW(ctx, args) ...);
     }
     return str;
 }
@@ -137,7 +160,7 @@ public:
         size_t size = _scprintf(fmt, string_internal::MakeArg(ctx, args) ...);
         if (size > 0) {
             auto mc = buffer.space((int)((size + 1) * sizeof(char))); // null終端を足す
-            snprintf(reinterpret_cast<char*>(mc.data), mc.length / sizeof(char),
+            string_internal::safe_snprintf(reinterpret_cast<char*>(mc.data), mc.length / sizeof(char),
                 fmt, string_internal::MakeArg(ctx, args) ...);
         }
         buffer.extend((int)(size * sizeof(char)));
@@ -155,7 +178,7 @@ public:
         size_t size = _scwprintf(fmt, string_internal::MakeArgW(ctx, args) ...);
         if (size > 0) {
             auto mc = buffer.space((int)((size + 1) * sizeof(wchar_t))); // null終端を足す
-            swprintf(reinterpret_cast<wchar_t*>(mc.data), mc.length / sizeof(wchar_t),
+            string_internal::safe_swprintf(reinterpret_cast<wchar_t*>(mc.data), mc.length / sizeof(wchar_t),
                 fmt, string_internal::MakeArgW(ctx, args) ...);
         }
         buffer.extend((int)(size * sizeof(wchar_t)));

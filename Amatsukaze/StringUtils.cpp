@@ -80,7 +80,7 @@ void StringLiner::Flush() {
 
 bool StringLiner::SearchLineBreak() {
     const uint8_t* ptr = buffer.ptr();
-    for (int i = searchIdx; i < buffer.size(); ++i) {
+    for (int i = searchIdx; i < (int)buffer.size(); ++i) {
         if (ptr[i] == '\n') {
             int len = i;
             int brlen = 1;

@@ -740,7 +740,7 @@ enum NicoJKType {
     NICOJK_MAX
 };
 
-#include "avisynth.h"
+#include "AviSynthWrapper.h"
 
 void DeleteScriptEnvironment(IScriptEnvironment2* env);
 

@@ -143,7 +143,7 @@ void AMTFilterVideoEncoder::encode(
 
     int bufsize = outfmt_.width * outfmt_.height * 3;
 
-    if (timeCodes.size() > 0 && vi_.num_frames != timeCodes.size() - 1) {
+    if (timeCodes.size() > 0 && vi_.num_frames != (int)timeCodes.size() - 1) {
         THROW(RuntimeException, "フレーム数が合いません");
     }
 

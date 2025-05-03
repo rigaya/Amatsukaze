@@ -55,7 +55,7 @@ libfaad_args = []
 if host_machine.system() == 'windows'
   libfaad_args += ['-DWIN32', '-D_WIN32']
 else
-  libfaad_args += ['-DHAVE_CONFIG_H=1']
+  libfaad_args += ['-DHAVE_CONFIG_H=1', '-w']
 endif
 
 # 静的ライブラリのビルド

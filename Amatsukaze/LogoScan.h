@@ -695,7 +695,7 @@ class LogoFrame : AMTObject {
         if (trims.size() == 0 || (trims.size() % 2) != 0) {
             targetAll = { { 0, vi.num_frames - 1 } };
         } else {
-            for (int i = 0; i < trims.size() / 2; i++) {
+            for (int i = 0; i < (int)trims.size() / 2; i++) {
                 targetAll.push_back({ trims[i * 2], trims[i * 2 + 1] });
             }
         }

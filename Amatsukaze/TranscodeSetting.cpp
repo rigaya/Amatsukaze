@@ -1191,7 +1191,7 @@ tstring ConfigWrapper::getOptions(
             // QSVEnc/NVEnc
             if (conf.autoBitrate) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
-                std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(optionFilePath.c_str(), _T("w")), fclose);
+                std::unique_ptr<FILE, std::function<void(FILE*)>> fp(_tfopen(optionFilePath.c_str(), _T("w")), [](FILE* f) { if (f) fclose(f); });
                 for (int i = 0; i < (int)zones.size(); ++i) {
                     const auto& zone = zones[i];
                     fprintf(fp.get(), " --dynamic-rc %d:%d,vbr=%d\n",
@@ -1201,7 +1201,7 @@ tstring ConfigWrapper::getOptions(
             } else if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
                 bool addOptFileCmd = false;
-                std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(optionFilePath.c_str(), _T("w")), fclose);
+                std::unique_ptr<FILE, std::function<void(FILE*)>> fp(_tfopen(optionFilePath.c_str(), _T("w")), [](FILE* f) { if (f) fclose(f); });
                 if (rcMode->isBitrateMode) {
                     for (int i = 0; i < (int)zones.size(); ++i) {
                         const auto& zone = zones[i];

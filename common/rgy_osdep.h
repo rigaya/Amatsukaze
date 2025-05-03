@@ -186,7 +186,9 @@ static inline size_t strnlen_s(const char *str, size_t maxlen) {
 #define vswprintf_s vswprintf
 #define _strnicmp strncasecmp
 #define stricmp strcasecmp
+#ifndef _stricmp
 #define _stricmp stricmp
+#endif
 #define wcsicmp wcscasecmp
 #define _wcsicmp wcsicmp
 

@@ -121,7 +121,7 @@ void CMAnalyze::applyPmtCut(
         if (next > 0) {
             prev = next - 1;
         }
-        if (next == sceneChanges.size()) {
+        if (next == (int)sceneChanges.size()) {
             next = prev;
         }
         //ctx.infoF("%d,%d,%d,%d,%d", pidChanges[i], next, sceneChanges[next], prev, sceneChanges[prev]);
@@ -258,7 +258,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
 
     if (trims.size() > 0 && (trims.size() % 2) == 0) {
         ctx.infoF("解析範囲");
-        for (int i = 0; i < trims.size() / 2; i++) {
+        for (int i = 0; i < (int)trims.size() / 2; i++) {
             ctx.infoF(" %6d-%6d", trims[2 * i], trims[2 * i + 1]);
         }
     }

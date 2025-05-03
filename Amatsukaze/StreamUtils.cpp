@@ -9,11 +9,6 @@
 #include "StreamUtils.h"
 
 #include "rgy_util.h"
-RGY_DISABLE_WARNING_PUSH
-RGY_DISABLE_WARNING_STR("-Wsign-compare")
-#include "avisynth.h"
-#pragma comment(lib, "avisynth.lib")
-RGY_DISABLE_WARNING_POP
 
 const char* CMTypeToString(CMType cmtype) {
     if (cmtype == CMTYPE_CM) return "CM";

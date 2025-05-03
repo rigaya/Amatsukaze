@@ -251,6 +251,7 @@ private:
     class MyVideoWriter : public VideoWriter {
     public:
         MyVideoWriter(EncodeWriter* this_, VideoFormat fmt, int bufsize);
+        virtual ~MyVideoWriter();
     protected:
         virtual void onWrite(MemoryChunk mc);
     private:

@@ -9,7 +9,7 @@ scripts_dir = meson.current_source_dir() / 'scripts'
 # コンパイラフラグ
 cpp_args = []
 if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
-  cpp_args += ['-pthread', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unknown-pragmas', '-Wno-unused-variable', '-Wno-unused-but-set-variable']
+  cpp_args += ['-pthread', '-Wno-multichar', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unused-variable', '-Wno-unknown-pragmas', '-Wno-unused-but-set-variable']
 endif
 
 # Shift-JIS文字コード用のコンパイラフラグ（特定のファイルのみに使用）

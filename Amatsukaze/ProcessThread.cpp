@@ -246,12 +246,14 @@ void EventBaseSubProcess::drain_thread(bool isErr) {
     }
 }
 
-StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling)
-    : EventBaseSubProcess(args, disablePowerThrottoling)
-    , bufferLines(bufferLines)
-    , isUtf8(isUtf8)
-    , outLiner(this, false)
-    , errLiner(this, true) {}
+StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling) :
+    EventBaseSubProcess(args, disablePowerThrottoling),
+    isUtf8(isUtf8),
+    bufferLines(bufferLines),
+    outLiner(this, false),
+    errLiner(this, true),
+    mtx(),
+    lastLines() {}
 
 StdRedirectedSubProcess::~StdRedirectedSubProcess() {
     if (isUtf8) {
@@ -287,7 +289,7 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
 
     if (bufferLines > 0) {
         std::lock_guard<std::mutex> lock(mtx);
-        if (lastLines.size() > bufferLines) {
+        if ((int)lastLines.size() > bufferLines) {
             lastLines.pop_front();
         }
         lastLines.push_back(line);

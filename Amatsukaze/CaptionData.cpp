@@ -172,7 +172,8 @@ EXIT:
     // Linux版の実装（OpenSSL）
     MD5_CTX md5Context;
     unsigned char digest[16];
-    
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     if (!MD5_Init(&md5Context)) {
         goto EXIT;
     }
@@ -192,7 +193,7 @@ EXIT:
         hash[i * 2 + 0] = digits[digest[i] >> 4];
         hash[i * 2 + 1] = digits[digest[i] & 0x0F];
     }
-    
+    #pragma GCC diagnostic pop
     bRet = TRUE;
 EXIT:
     // OpenSSLではコンテキストの明示的な解放は不要

@@ -639,7 +639,7 @@ void av::Y4MParser::inputData(MemoryChunk mc) {
         }
         if (y4mcur == 2) {
             // フレームデータ
-            if (y4mbuf.size() < frameSize) {
+            if ((int)y4mbuf.size() < frameSize) {
                 break;
             }
             y4mbuf.trimHead(frameSize);
@@ -735,6 +735,9 @@ const std::deque<std::vector<char>>& av::EncodeWriter::getLastLines() {
 av::EncodeWriter::MyVideoWriter::MyVideoWriter(EncodeWriter* this_, VideoFormat fmt, int bufsize)
     : VideoWriter(fmt, bufsize)
     , this_(this_) {}
+
+av::EncodeWriter::MyVideoWriter::~MyVideoWriter() {
+}
 /* virtual */ void av::EncodeWriter::MyVideoWriter::onWrite(MemoryChunk mc) {
     this_->onVideoWrite(mc);
 }

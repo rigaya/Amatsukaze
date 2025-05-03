@@ -544,7 +544,7 @@ private:
 #else
         auto str = char_to_wstring(cShiftJIS, 932);
         int Length = (int)str.size();
-        for (size_t i = 0; i < Length; i++) {
+        for (int i = 0; i < Length; i++) {
             lpszDst[i] = str[i];
         }
 #endif

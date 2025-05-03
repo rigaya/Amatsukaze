@@ -567,11 +567,11 @@ static void amatsukaze_av_log_callback(
     if (tmp_pp) {
         int logtype = level / 8;
         const char* level_str =
-            (logtype >= sizeof(log_levels) / sizeof(log_levels[0]))
+            (logtype >= (int)(sizeof(log_levels) / sizeof(log_levels[0])))
             ? "unk" : log_levels[logtype];
         fprintf(stderr, "FFMPEG [%s] %s", level_str, buf);
     } else {
-        fprintf(stderr, buf);
+        fprintf(stderr, "%s",buf);
     }
     if (print_prefix) {
         fflush(stderr);

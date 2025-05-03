@@ -717,7 +717,7 @@ void DoBadThing() {
         CaptionSRTFormatter formatterSRT(ctx);
         NicoJKFormatter formatterNicoJK(ctx);
         const auto& capList = reformInfo.getEncodeFile(key).captionList;
-        for (int lang = 0; lang < capList.size(); ++lang) {
+        for (int lang = 0; lang < (int)capList.size(); ++lang) {
             auto ass = formatterASS.generate(capList[lang]);
             auto srt = formatterSRT.generate(capList[lang]);
             WriteUTF8File(setting.getTmpASSFilePath(key, lang), ass);
@@ -1053,7 +1053,7 @@ void SubtitleDetectorSplitter::readAll(int maxframes) {
         readBytes = srcfile.read(buffer);
         inputTsData(MemoryChunk(buffer.data, readBytes));
         totalRead += readBytes;
-    } while (totalRead < end && !hasSubtltle_ && videoFrameList_.size() < maxframes);
+    } while (totalRead < end && !hasSubtltle_ && (int)videoFrameList_.size() < maxframes);
 }
 
 bool SubtitleDetectorSplitter::getHasSubtitle() const {
@@ -1116,7 +1116,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
         readBytes = srcfile.read(buffer);
         inputTsData(MemoryChunk(buffer.data, readBytes));
         totalRead += readBytes;
-    } while (totalRead < end && videoFrameList_.size() < maxframes);
+    } while (totalRead < end && (int)videoFrameList_.size() < maxframes);
 }
 
 // TsSplitter仮想関数 //

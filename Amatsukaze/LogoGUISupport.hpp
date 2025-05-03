@@ -101,26 +101,31 @@ class GUIMediaFile : public AMTObject {
     }
 
 public:
-    GUIMediaFile(AMTContext& ctx, const tchar* filepath, int serviceid)
-        : AMTObject(ctx)
-        , inputCtx(filepath)
-        , width(-1)
-        , height(-1)
-        , swsctx(nullptr) {
-            {
-                File file(tstring(filepath), _T("rb"));
-                fileSize = file.size();
-            }
-            if (avformat_find_stream_info(inputCtx(), NULL) < 0) {
-                THROW(FormatException, "avformat_find_stream_info failed");
-            }
-            videoStream = av::GetVideoStream(inputCtx(), serviceid);
-            if (videoStream == NULL) {
-                THROW(FormatException, "Could not find video stream ...");
-            }
-            lastDecodeFrame = -1;
-            MakeCodecContext();
-            DecodeOneFrame(0);
+    GUIMediaFile(AMTContext& ctx, const tchar* filepath, int serviceid) :
+        AMTObject(ctx),
+        inputCtx(filepath),
+        codecCtx(),
+        videoStream(nullptr),
+        swsctx(nullptr),
+        lastDecodeFrame(-1),
+        fileSize(0),
+        prevframe(),
+        width(-1),
+        height(-1) {
+        {
+            File file(tstring(filepath), _T("rb"));
+            fileSize = file.size();
+        }
+        if (avformat_find_stream_info(inputCtx(), NULL) < 0) {
+            THROW(FormatException, "avformat_find_stream_info failed");
+        }
+        videoStream = av::GetVideoStream(inputCtx(), serviceid);
+        if (videoStream == NULL) {
+            THROW(FormatException, "Could not find video stream ...");
+        }
+        lastDecodeFrame = -1;
+        MakeCodecContext();
+        DecodeOneFrame(0);
     }
 
     ~GUIMediaFile() {

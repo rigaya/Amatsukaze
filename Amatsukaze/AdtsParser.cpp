@@ -359,7 +359,7 @@ void AdtsParser::createChannelsMap() {
     };
 
     channelsMap.clear();
-    for (int i = 0; i < sizeof(table) / sizeof(table[0]); ++i) {
+    for (int i = 0; i < (int)(sizeof(table) / sizeof(table[0])); ++i) {
         int64_t canonical = channelCanonical(table[i].numElem, table[i].elems);
         ASSERT(channelsMap.find(canonical) == channelsMap.end());
         channelsMap[canonical] = table[i].channels;
@@ -433,7 +433,7 @@ void DualMonoSplitter::inputPacket(MemoryChunk frame) {
             writer.byteAlign<0>();
             writer.flush();
 
-            if (buf.size() != frame_length) {
+            if ((int)buf.size() != frame_length) {
                 THROW(RuntimeException, "サイズが合わない");
             }
 

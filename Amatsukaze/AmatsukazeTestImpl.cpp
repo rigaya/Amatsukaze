@@ -51,7 +51,7 @@
 /* static */ int test::ReadBits(AMTContext& ctx, const ConfigWrapper& setting) {
     uint8_t data[16];
     srand(0);
-    for (int i = 0; i < sizeof(data); ++i) data[i] = rand();
+    for (int i = 0; i < (int)sizeof(data); ++i) data[i] = rand();
 
     //uint16_t a = read16(data);
     //uint32_t b = read24(data);
@@ -171,8 +171,6 @@
         return 1;
     }
 
-    printf("samplerate=%d, channels=%d\n", samplerate, channels);
-
     for (int i = 0; i < (int)readBytes; ) {
         NeAACDecFrameInfo frameInfo;
         void* samples = NeAACDecDecode(hAacDec, &frameInfo, buf.get() + i, (unsigned long)readBytes - i);
@@ -198,7 +196,7 @@
             int testLength = (int)testBytes - i - 8;
             const uint16_t* pTest = (const uint16_t*)(testbuf.get() + i + 8);
             const uint16_t* pDec = (const uint16_t*)decoded.ptr();
-            if (testLength != decoded.size()) {
+            if (testLength != (int)decoded.size()) {
                 fprintf(stderr, "結果のサイズが合いません\n");
                 return 1;
             }
@@ -391,7 +389,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
         for (int i = 0; i < (int)keys.size(); ++i) {
             auto key = keys[i];
             auto& capList = reformInfo.getEncodeFile(key).captionList;
-            for (int lang = 0; lang < capList.size(); ++lang) {
+            for (int lang = 0; lang < (int)capList.size(); ++lang) {
                 WriteUTF8File(
                     setting.getTmpASSFilePath(key, lang),
                     formatterASS.generate(capList[lang]));

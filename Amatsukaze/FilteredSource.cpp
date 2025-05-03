@@ -40,6 +40,8 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
             (prevFrame_ != nullptr) ? *prevFrame_ : *frame, *frame));
         encoder.inputFrame(*frame);
         break;
+    default:
+        break;
     }
 
     prevFrame_ = std::move(frame);
@@ -453,7 +455,7 @@ void AMTFilterSource::trimInput(EncodeFileKey key,
     auto& sb = script_.Get();
     if (trimZones.size() > 1 ||
         trimZones[0].startFrame != 0 ||
-        trimZones[0].endFrame != (srcFrames.size() - 1)) {
+        trimZones[0].endFrame != (int)srcFrames.size() - 1) {
         // Trimが必要
         for (int i = 0; i < (int)trimZones.size(); ++i) {
             if (i > 0) sb.append("++");
@@ -637,7 +639,7 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     std::vector<double> units(nblocks(numFrames, UNIT_FRAMES));
     for (int i = 0; i < (int)units.size(); ++i) {
         auto start = timeCodes.begin() + i * UNIT_FRAMES;
-        auto end = ((i + 1) * UNIT_FRAMES < timeCodes.size()) ? start + UNIT_FRAMES : timeCodes.end() - 1;
+        auto end = ((i + 1) * UNIT_FRAMES < (int)timeCodes.size()) ? start + UNIT_FRAMES : timeCodes.end() - 1;
         double sum = (*end - *start) / 1000.0 * fpsNum / fpsDenom;
         double invfps = sum / (int)(end - start);
         units[i] = (invfps - 1.0) * timeFactor + 1.0;
@@ -774,7 +776,7 @@ double AdjustVFRBitrate(const std::vector<double>& timeCodes, int fpsNum, int fp
 
 AVSValue __cdecl AMTExec(AVSValue args, void* user_data, IScriptEnvironment* env) {
     auto cmd = StringFormat(_T("%s"), args[1].AsString());
-    PRINTF(StringFormat("AMTExec: %s\n", cmd).c_str());
+    PRINTF("%s", StringFormat("AMTExec: %s\n", cmd).c_str());
     StdRedirectedSubProcess proc(cmd);
     proc.join();
     return args[0];

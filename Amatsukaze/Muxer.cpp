@@ -19,7 +19,7 @@
             subExists = true;
         }
     }
-    for (int lang = 0; lang < reformInfo.getEncodeFile(key).captionList.size(); ++lang) {
+    for (int lang = 0; lang < (int)reformInfo.getEncodeFile(key).captionList.size(); ++lang) {
         auto srcass = setting.getTmpASSFilePath(key, lang);
         if (File::exists(srcass)) {
             subExists = true;
@@ -136,7 +136,7 @@ void AMTMuxder::mux(EncodeFileKey key,
             }
         }
     }
-    for (int lang = 0; lang < fileIn.captionList.size(); ++lang) {
+    for (int lang = 0; lang < (int)fileIn.captionList.size(); ++lang) {
         auto srcass = setting_.getTmpASSFilePath(key, lang);
         if (muxFormat == FORMAT_MKV) {
             subsFiles.push_back(srcass);

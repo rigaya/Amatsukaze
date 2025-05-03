@@ -209,7 +209,7 @@ class StdRedirectedSubProcess : public EventBaseSubProcess {
 public:
     StdRedirectedSubProcess(const tstring& args, const int bufferLines = 0, const bool isUtf8 = false, const bool disablePowerThrottoling = false);
 
-    ~StdRedirectedSubProcess();
+    virtual ~StdRedirectedSubProcess();
 
     const std::deque<std::vector<char>>& getLastLines();
 

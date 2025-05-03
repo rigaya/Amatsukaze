@@ -477,7 +477,7 @@ bool PsiSection::parse() {
 
 bool PsiSection::check() const {
     if (!PsiConstantHeader::check()) return false;
-    if (length != section_length() + 3) return false;
+    if (length != (size_t)((size_t)section_length() + 3)) return false;
     if (section_syntax_indicator()) {
         if (ctx.getCRC()->calc(data, (int)length, 0xFFFFFFFFUL)) return false;
     }

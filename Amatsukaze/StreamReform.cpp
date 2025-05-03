@@ -99,19 +99,44 @@ StreamReformInfo::StreamReformInfo(
     std::vector<FileAudioFrameInfo>& audioFrameList,
     std::vector<CaptionItem>& captionList,
     std::vector<StreamEvent>& streamEventList,
-    std::vector<TimeInfo>& timeList)
-    : AMTObject(ctx)
-    , numVideoFile_(numVideoFile)
-    , videoFrameList_(std::move(videoFrameList))
-    , audioFrameList_(std::move(audioFrameList))
-    , captionItemList_(std::move(captionList))
-    , streamEventList_(std::move(streamEventList))
-    , timeList_(std::move(timeList))
-    , isVFR_(false)
-    , hasRFF_(false)
-    , srcTotalDuration_()
-    , outTotalDuration_()
-    , firstFrameTime_() {}
+    std::vector<TimeInfo>& timeList) :
+    AMTObject(ctx),
+    numVideoFile_(numVideoFile),
+    videoFrameList_(std::move(videoFrameList)),
+    audioFrameList_(std::move(audioFrameList)),
+    captionItemList_(std::move(captionList)),
+    streamEventList_(std::move(streamEventList)),
+    timeList_(std::move(timeList)),
+    nicoJKList_(),
+    isEncodeAudio_(false),
+    isTsreplace_(false),
+    isVFR_(false),
+    hasRFF_(false),
+    modifiedPTS_(),
+    modifiedAudioPTS_(),
+    modifiedCaptionPTS_(),
+    audioFrameDuration_(),
+    ordredVideoFrame_(),
+    dataPTS_(),
+    streamEventPTS_(),
+    captionDuration_(),
+    indexAudioFrameList_(),
+    format_(),
+    formatStartIndex_(),
+    fileFormatId_(),
+    fileFormatStartIndex_(),
+    filterFrameList_(),
+    filterAudioFrameList_(),
+    filterSrcSize_(),
+    filterSrcDuration_(),
+    fileDivs_(),
+    frameFormatId_(),
+    outFileKeys_(),
+    outFiles_(),
+    firstFrameTime_(),
+    audioFileOffsets_(),
+    srcTotalDuration_(),
+    outTotalDuration_() {}
 
 // 1. コンストラクト直後に呼ぶ
 // splitSub: メイン以外のフォーマットを結合しない
@@ -196,7 +221,7 @@ std::vector<int> StreamReformInfo::getPidChangedList(int videoFileIndex) const {
 int StreamReformInfo::getMainVideoFileIndex() const {
     int maxFrames = 0, maxIndex = 0;
     for (int i = 0; i < (int)filterFrameList_.size(); ++i) {
-        if (maxFrames < filterFrameList_[i].size()) {
+        if (maxFrames < (int)filterFrameList_[i].size()) {
             maxFrames = (int)filterFrameList_[i].size();
             maxIndex = i;
         }
@@ -525,10 +550,10 @@ void StreamReformInfo::reformMain(bool splitSub) {
         // 変更を反映
         switch (ev.type) {
         case PID_TABLE_CHANGED:
-            if (curAudioFormats.size() < ev.numAudio) {
+            if ((int)curAudioFormats.size() < ev.numAudio) {
                 curAudioFormats.resize(ev.numAudio);
             }
-            if (curFormat.audioFormat.size() != ev.numAudio) {
+            if ((int)curFormat.audioFormat.size() != ev.numAudio) {
                 curFormat.audioFormat.resize(ev.numAudio);
                 for (int i = 0; i < ev.numAudio; ++i) {
                     curFormat.audioFormat[i] = curAudioFormats[i];
@@ -771,7 +796,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
     for (int video = 0; video < numVideoFile_; ++video) {
         int numEncoders = getNumEncoders(video);
         for (int format = 0; format < numEncoders; ++format) {
-            for (int div = 0; div < fileDivs_[video].size() - 1; ++div) {
+            for (int div = 0; div < (int)fileDivs_[video].size() - 1; ++div) {
                 for (CMType cmtype : cmtypes) {
                     outFileKeys_.push_back(EncodeFileKey(video, format, div, cmtype));
                 }
@@ -1011,6 +1036,8 @@ double StreamReformInfo::getSourceFrameDuration(int index, int nextIndex) {
             duration = frameDiff * 3;
             hasRFF_ = true;
             break;
+        default:
+            break;
         }
     }
 
@@ -1223,7 +1250,7 @@ void StreamReformInfo::genCaptionStream() {
                 auto end = getFrameIndex(duration.endPTS);
                 if (start < end) { // 1フレーム以上表示時間のある場合のみ
                     int langIndex = captionItemList_[i].langIndex;
-                    if (langIndex >= file.captionList.size()) { // 言語が足りない場合は広げる
+                    if (langIndex >= (int)file.captionList.size()) { // 言語が足りない場合は広げる
                         file.captionList.resize(langIndex + 1);
                     }
                     OutCaptionLine outcap = {

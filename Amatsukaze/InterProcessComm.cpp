@@ -104,7 +104,7 @@ void ResourceManger::write(MemoryChunk mc) const {
     }
 #else
     ssize_t written = 0;
-    while (written < mc.length) {
+    while (written < (ssize_t)mc.length) {
         ssize_t result = ::write(outPipe, mc.data + written, mc.length - written);
         if (result < 0) {
             THROW(RuntimeException, "failed to write to stdin pipe");
@@ -126,7 +126,7 @@ void ResourceManger::read(MemoryChunk mc) const {
     }
 #else
     ssize_t offset = 0;
-    while (offset < mc.length) {
+    while (offset < (ssize_t)mc.length) {
         ssize_t result = ::read(inPipe, mc.data + offset, mc.length - offset);
         if (result < 0) {
             THROW(RuntimeException, "failed to read from pipe");

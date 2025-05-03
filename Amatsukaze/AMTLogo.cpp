@@ -8,11 +8,7 @@
 
 #include "AMTLogo.h"
 #include "rgy_util.h"
-RGY_DISABLE_WARNING_PUSH
-RGY_DISABLE_WARNING_STR("-Wsign-compare")
-#include "avisynth.h"
-#pragma comment(lib, "avisynth.lib")
-RGY_DISABLE_WARNING_POP
+#include "AviSynthWrapper.h"
 
 logo::LogoHeader::LogoHeader() {}
 

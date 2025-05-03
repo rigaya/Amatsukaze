@@ -168,6 +168,7 @@ private:
 class TsPacketHandler {
 public:
     virtual void onTsPacket(int64_t clock, TsPacket packet) = 0;
+    virtual ~TsPacketHandler() = default;
 };
 
 class PesParser : public TsPacketHandler {
@@ -580,7 +581,7 @@ class TsPacketSelector : public AMTObject {
 public:
     TsPacketSelector(AMTContext& ctx);
 
-    ~TsPacketSelector();
+    virtual ~TsPacketSelector();
 
     void setHandler(TsPacketSelectorHandler* handler);
 

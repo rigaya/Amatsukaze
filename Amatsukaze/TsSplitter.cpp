@@ -30,6 +30,8 @@ void VideoFrameParser::setStreamFormat(VIDEO_STREAM_FORMAT streamFormat) {
         case VS_H265:
             parser = &hevcparser;
             break;
+        default:
+            break;
         }
         reset();
         videoStreamFormat = streamFormat;
