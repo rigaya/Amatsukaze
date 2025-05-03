@@ -1873,19 +1873,33 @@ namespace Amatsukaze.Server
 
         private static void CheckPath(string name, string path)
         {
-            if(!string.IsNullOrEmpty(path) && !File.Exists(path))
+            if (string.IsNullOrEmpty(path))
+                return;
+
+            if (File.Exists(path))
+                return;
+
+            // Linux環境の場合、PATHもチェック
+            if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
-                throw new InvalidOperationException(name + "パスが無効です: " + path);
+                var pathEnv = Environment.GetEnvironmentVariable("PATH");
+                if (!string.IsNullOrEmpty(pathEnv))
+                {
+                    foreach (var dir in pathEnv.Split(':'))
+                    {
+                        var fullPath = Path.Combine(dir, path);
+                        if (File.Exists(fullPath))
+                            return;
+                    }
+                }
             }
+
+            throw new InvalidOperationException(name + "パスが無効です: " + path);
         }
 
         private static void CheckSetting(ProfileSetting profile, Setting setting)
         {
-            if (!File.Exists(setting.AmatsukazePath))
-            {
-                throw new InvalidOperationException(
-                    "AmtasukazeCLIパスが無効です: " + setting.AmatsukazePath);
-            }
+            CheckPath("AmatsukazeCLI", setting.AmatsukazePath);
 
             if(setting.WorkPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
             {
