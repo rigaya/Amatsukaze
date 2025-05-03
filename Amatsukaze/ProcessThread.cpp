@@ -8,6 +8,7 @@
 
 #include "ProcessThread.h"
 #include "rgy_thread_affinity.h"
+#include "cpu_info.h"
 
 // コマンドライン文字列を引数リストに分割するヘルパー関数
 std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
@@ -353,13 +354,53 @@ CPUInfo::CPUInfo() {
         ptr += info->Size;
     }
 }
+#else
+CPUInfo::CPUInfo() {
+    const auto cpuInfo = get_cpu_info();
+    intptr_t allcoremask = 0;
+    // Core
+    for (int i = 0; i < MAX_CORE_COUNT; i++) {
+        if (cpuInfo.proc_list[i].mask == 0) {
+            break;
+        }
+        GROUP_AFFINITY af = GROUP_AFFINITY();
+        af.Mask = (intptr_t)cpuInfo.proc_list[i].mask;
+        data[PROC_TAG_CORE].push_back(af);
+        allcoremask |= cpuInfo.proc_list[i].mask;
+    }
+    // とりあえず適当に埋める
+    {
+        GROUP_AFFINITY af = GROUP_AFFINITY();
+        af.Mask = allcoremask;
+        data[PROC_TAG_NUMA].push_back(af);
+    }
+    // L2
+    for (int i = 0; i < MAX_CORE_COUNT; i++) {
+        if (cpuInfo.caches[(int)RGYCacheLevel::L2][i].mask == 0) {
+            break;
+        }
+        GROUP_AFFINITY af = GROUP_AFFINITY();
+        af.Mask = (intptr_t)cpuInfo.caches[(int)RGYCacheLevel::L2][i].mask;
+        data[PROC_TAG_L2].push_back(af);
+    }
+    // L3
+    for (int i = 0; i < MAX_CORE_COUNT; i++) {
+        if (cpuInfo.caches[(int)RGYCacheLevel::L3][i].mask == 0) {
+            break;
+        }
+        GROUP_AFFINITY af = GROUP_AFFINITY();
+        af.Mask = (intptr_t)cpuInfo.caches[(int)RGYCacheLevel::L3][i].mask;
+        data[PROC_TAG_L3].push_back(af);
+    } 
+}
+#endif // defined(_WIN32) || defined(_WIN64)
 
 const GROUP_AFFINITY* CPUInfo::GetData(PROCESSOR_INFO_TAG tag, int* count) {
     *count = (int)data[tag].size();
     return data[tag].data();
 }
 
-extern "C" __declspec(dllexport) void* CPUInfo_Create(AMTContext * ctx) {
+extern "C" AMATSUKAZE_API void* CPUInfo_Create(AMTContext * ctx) {
     try {
         return new CPUInfo();
     } catch (const Exception& exception) {
@@ -368,13 +409,14 @@ extern "C" __declspec(dllexport) void* CPUInfo_Create(AMTContext * ctx) {
     return nullptr;
 }
 
-extern "C" __declspec(dllexport) void CPUInfo_Delete(CPUInfo * ptr) { delete ptr; }
+extern "C" AMATSUKAZE_API void CPUInfo_Delete(CPUInfo * ptr) { delete ptr; }
 
-extern "C" __declspec(dllexport) const GROUP_AFFINITY * CPUInfo_GetData(CPUInfo * ptr, int tag, int* count) {
+extern "C" AMATSUKAZE_API const GROUP_AFFINITY * CPUInfo_GetData(CPUInfo * ptr, int tag, int* count) {
     return ptr->GetData((PROCESSOR_INFO_TAG)tag, count);
 }
 
 bool SetCPUAffinity(int group, uint64_t mask) {
+#if defined(_WIN32) || defined(_WIN64)
     if (mask == 0) {
         return true;
     }
@@ -385,5 +427,7 @@ bool SetCPUAffinity(int group, uint64_t mask) {
     // プロセスが複数のグループにまたがってると↓はエラーになるらしい
     SetProcessAffinityMask(GetCurrentProcess(), (DWORD_PTR)mask);
     return result;
-}
+#else
+    return true;
 #endif // defined(_WIN32) || defined(_WIN64)
+}

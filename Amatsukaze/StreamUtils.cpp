@@ -136,6 +136,6 @@ void WriteUTF8File(const tstring& filename, const std::wstring& text) {
 }
 
 // C API for P/Invoke
-extern "C" __declspec(dllexport) AMTContext * AMTContext_Create() { return new AMTContext(); }
-extern "C" __declspec(dllexport) void ATMContext_Delete(AMTContext * ptr) { delete ptr; }
-extern "C" __declspec(dllexport) const char* AMTContext_GetError(AMTContext * ptr) { return ptr->getError().c_str(); }
+extern "C" AMATSUKAZE_API AMTContext * AMTContext_Create() { return new AMTContext(); }
+extern "C" AMATSUKAZE_API void ATMContext_Delete(AMTContext * ptr) { delete ptr; }
+extern "C" AMATSUKAZE_API const char* AMTContext_GetError(AMTContext * ptr) { return ptr->getError().c_str(); }

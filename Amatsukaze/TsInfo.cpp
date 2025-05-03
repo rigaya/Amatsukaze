@@ -486,28 +486,28 @@ int TsInfo::ReadTS(File& srcfile) {
 }
 
 // C API for P/Invoke
-extern "C" __declspec(dllexport) void* TsInfo_Create(AMTContext * ctx) { return new TsInfo(*ctx); }
-extern "C" __declspec(dllexport) void TsInfo_Delete(TsInfo * ptr) { delete ptr; }
-extern "C" __declspec(dllexport) int TsInfo_ReadFile(TsInfo * ptr, const tchar * filepath) { return ptr->ReadFileFromC(filepath); }
-extern "C" __declspec(dllexport) int TsInfo_HasServiceInfo(TsInfo * ptr) { return ptr->HasServiceInfo(); }
-extern "C" __declspec(dllexport) void TsInfo_GetDay(TsInfo * ptr, int* y, int* m, int* d) { ptr->GetDay(y, m, d); }
-extern "C" __declspec(dllexport) void TsInfo_GetTime(TsInfo * ptr, int* h, int* m, int* s) { return ptr->GetTime(h, m, s); }
-extern "C" __declspec(dllexport) int TsInfo_GetNumProgram(TsInfo * ptr) { return ptr->GetNumProgram(); }
-extern "C" __declspec(dllexport) void TsInfo_GetProgramInfo(TsInfo * ptr, int i, int* progId, int* hasVideo, int* videoPid, int* numContent) {
+extern "C" AMATSUKAZE_API void* TsInfo_Create(AMTContext * ctx) { return new TsInfo(*ctx); }
+extern "C" AMATSUKAZE_API void TsInfo_Delete(TsInfo * ptr) { delete ptr; }
+extern "C" AMATSUKAZE_API int TsInfo_ReadFile(TsInfo * ptr, const tchar * filepath) { return ptr->ReadFileFromC(filepath); }
+extern "C" AMATSUKAZE_API int TsInfo_HasServiceInfo(TsInfo * ptr) { return ptr->HasServiceInfo(); }
+extern "C" AMATSUKAZE_API void TsInfo_GetDay(TsInfo * ptr, int* y, int* m, int* d) { ptr->GetDay(y, m, d); }
+extern "C" AMATSUKAZE_API void TsInfo_GetTime(TsInfo * ptr, int* h, int* m, int* s) { return ptr->GetTime(h, m, s); }
+extern "C" AMATSUKAZE_API int TsInfo_GetNumProgram(TsInfo * ptr) { return ptr->GetNumProgram(); }
+extern "C" AMATSUKAZE_API void TsInfo_GetProgramInfo(TsInfo * ptr, int i, int* progId, int* hasVideo, int* videoPid, int* numContent) {
     return ptr->GetProgramInfo(i, progId, hasVideo, videoPid, numContent);
 }
-extern "C" __declspec(dllexport) void TsInfo_GetVideoFormat(TsInfo * ptr, int i, int* stream, int* width, int* height, int* sarW, int* sarH) {
+extern "C" AMATSUKAZE_API void TsInfo_GetVideoFormat(TsInfo * ptr, int i, int* stream, int* width, int* height, int* sarW, int* sarH) {
     return ptr->GetVideoFormat(i, stream, width, height, sarW, sarH);
 }
-extern "C" __declspec(dllexport) void TsInfo_GetContentNibbles(TsInfo * ptr, int i, int ci, int *level1, int *level2, int* user1, int* user2) {
+extern "C" AMATSUKAZE_API void TsInfo_GetContentNibbles(TsInfo * ptr, int i, int ci, int *level1, int *level2, int* user1, int* user2) {
     return ptr->GetContentNibbles(i, ci, level1, level2, user1, user2);
 }
-extern "C" __declspec(dllexport) int TsInfo_GetNumService(TsInfo * ptr) { return ptr->GetNumService(); }
-extern "C" __declspec(dllexport) int TsInfo_GetServiceId(TsInfo * ptr, int i) { return ptr->GetServiceId(i); }
-extern "C" __declspec(dllexport) const wchar_t* TsInfo_GetProviderName(TsInfo * ptr, int i) { return ptr->GetProviderName(i); }
-extern "C" __declspec(dllexport) const wchar_t* TsInfo_GetServiceName(TsInfo * ptr, int i) { return ptr->GetServiceName(i); }
-extern "C" __declspec(dllexport) const wchar_t* TsInfo_GetEventName(TsInfo * ptr, int i) { return ptr->GetEventName(i); }
-extern "C" __declspec(dllexport) const wchar_t* TsInfo_GetEventText(TsInfo * ptr, int i) { return ptr->GetEventText(i); }
+extern "C" AMATSUKAZE_API int TsInfo_GetNumService(TsInfo * ptr) { return ptr->GetNumService(); }
+extern "C" AMATSUKAZE_API int TsInfo_GetServiceId(TsInfo * ptr, int i) { return ptr->GetServiceId(i); }
+extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetProviderName(TsInfo * ptr, int i) { return ptr->GetProviderName(i); }
+extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetServiceName(TsInfo * ptr, int i) { return ptr->GetServiceName(i); }
+extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetEventName(TsInfo * ptr, int i) { return ptr->GetEventName(i); }
+extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetEventText(TsInfo * ptr, int i) { return ptr->GetEventText(i); }
 
 typedef bool(*TS_SLIM_CALLBACK)();
 
@@ -542,6 +542,6 @@ bool TsSlimFilter::exec(const tchar* srcpath, const tchar* dstpath, TS_SLIM_CALL
     return false;
 }
 
-extern "C" __declspec(dllexport) void* TsSlimFilter_Create(AMTContext * ctx, int videoPid) { return new TsSlimFilter(*ctx, videoPid); }
-extern "C" __declspec(dllexport) void TsSlimFilter_Delete(TsSlimFilter * ptr) { delete ptr; }
-extern "C" __declspec(dllexport) bool TsSlimFilter_Exec(TsSlimFilter * ptr, const tchar * srcpath, const tchar * dstpath, TS_SLIM_CALLBACK cb) { return ptr->exec(srcpath, dstpath, cb); }
+extern "C" AMATSUKAZE_API void* TsSlimFilter_Create(AMTContext * ctx, int videoPid) { return new TsSlimFilter(*ctx, videoPid); }
+extern "C" AMATSUKAZE_API void TsSlimFilter_Delete(TsSlimFilter * ptr) { delete ptr; }
+extern "C" AMATSUKAZE_API bool TsSlimFilter_Exec(TsSlimFilter * ptr, const tchar * srcpath, const tchar * dstpath, TS_SLIM_CALLBACK cb) { return ptr->exec(srcpath, dstpath, cb); }

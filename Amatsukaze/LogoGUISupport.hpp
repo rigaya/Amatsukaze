@@ -162,7 +162,7 @@ public:
 
 } // namespace av
 
-extern "C" __declspec(dllexport) void* MediaFile_Create(AMTContext * ctx, const tchar * filepath, int serviceid) {
+extern "C" AMATSUKAZE_API void* MediaFile_Create(AMTContext * ctx, const tchar * filepath, int serviceid) {
     try {
         return new av::GUIMediaFile(*ctx, filepath, serviceid);
     } catch (const Exception& exception) {
@@ -170,12 +170,12 @@ extern "C" __declspec(dllexport) void* MediaFile_Create(AMTContext * ctx, const 
     }
     return nullptr;
 }
-extern "C" __declspec(dllexport) void MediaFile_Delete(av::GUIMediaFile * ptr) { delete ptr; }
-extern "C" __declspec(dllexport) int MediaFile_DecodeFrame(
+extern "C" AMATSUKAZE_API void MediaFile_Delete(av::GUIMediaFile * ptr) { delete ptr; }
+extern "C" AMATSUKAZE_API int MediaFile_DecodeFrame(
     av::GUIMediaFile * ptr, float pos, int* pwidth, int* pheight) {
     return ptr->decodeFrame(pos, pwidth, pheight);
 }
-extern "C" __declspec(dllexport) void MediaFile_GetFrame(
+extern "C" AMATSUKAZE_API void MediaFile_GetFrame(
     av::GUIMediaFile * ptr, uint8_t * rgb, int width, int height) {
     ptr->getFrame(rgb, width, height);
 }
@@ -252,7 +252,7 @@ public:
 
 } // namespace logo
 
-extern "C" __declspec(dllexport) void* LogoFile_Create(AMTContext * ctx, const tchar * filepath) {
+extern "C" AMATSUKAZE_API void* LogoFile_Create(AMTContext * ctx, const tchar * filepath) {
     try {
         return new logo::GUILogoFile(*ctx, filepath);
     } catch (const Exception& exception) {
@@ -260,16 +260,16 @@ extern "C" __declspec(dllexport) void* LogoFile_Create(AMTContext * ctx, const t
     }
     return nullptr;
 }
-extern "C" __declspec(dllexport) void LogoFile_Delete(logo::GUILogoFile * ptr) { delete ptr; }
-extern "C" __declspec(dllexport) int LogoFile_GetWidth(logo::GUILogoFile * ptr) { return ptr->getWidth(); }
-extern "C" __declspec(dllexport) int LogoFile_GetHeight(logo::GUILogoFile * ptr) { return ptr->getHeight(); }
-extern "C" __declspec(dllexport) int LogoFile_GetX(logo::GUILogoFile * ptr) { return ptr->getX(); }
-extern "C" __declspec(dllexport) int LogoFile_GetY(logo::GUILogoFile * ptr) { return ptr->getY(); }
-extern "C" __declspec(dllexport) int LogoFile_GetImgWidth(logo::GUILogoFile * ptr) { return ptr->getImgWidth(); }
-extern "C" __declspec(dllexport) int LogoFile_GetImgHeight(logo::GUILogoFile * ptr) { return ptr->getImgHeight(); }
-extern "C" __declspec(dllexport) int LogoFile_GetServiceId(logo::GUILogoFile * ptr) { return ptr->getServiceId(); }
-extern "C" __declspec(dllexport) void LogoFile_SetServiceId(logo::GUILogoFile * ptr, int serviceId) { ptr->setServiceId(serviceId); }
-extern "C" __declspec(dllexport) const char* LogoFile_GetName(logo::GUILogoFile * ptr) { return ptr->getName(); }
-extern "C" __declspec(dllexport) void LogoFile_SetName(logo::GUILogoFile * ptr, const char* name) { ptr->setName(name); }
-extern "C" __declspec(dllexport) void LogoFile_GetImage(logo::GUILogoFile * ptr, uint8_t * rgb, int stride, uint8_t bg) { ptr->getImage(rgb, stride, bg); }
-extern "C" __declspec(dllexport) int LogoFile_Save(logo::GUILogoFile * ptr, const tchar * filename) { return ptr->save(filename); }
+extern "C" AMATSUKAZE_API void LogoFile_Delete(logo::GUILogoFile * ptr) { delete ptr; }
+extern "C" AMATSUKAZE_API int LogoFile_GetWidth(logo::GUILogoFile * ptr) { return ptr->getWidth(); }
+extern "C" AMATSUKAZE_API int LogoFile_GetHeight(logo::GUILogoFile * ptr) { return ptr->getHeight(); }
+extern "C" AMATSUKAZE_API int LogoFile_GetX(logo::GUILogoFile * ptr) { return ptr->getX(); }
+extern "C" AMATSUKAZE_API int LogoFile_GetY(logo::GUILogoFile * ptr) { return ptr->getY(); }
+extern "C" AMATSUKAZE_API int LogoFile_GetImgWidth(logo::GUILogoFile * ptr) { return ptr->getImgWidth(); }
+extern "C" AMATSUKAZE_API int LogoFile_GetImgHeight(logo::GUILogoFile * ptr) { return ptr->getImgHeight(); }
+extern "C" AMATSUKAZE_API int LogoFile_GetServiceId(logo::GUILogoFile * ptr) { return ptr->getServiceId(); }
+extern "C" AMATSUKAZE_API void LogoFile_SetServiceId(logo::GUILogoFile * ptr, int serviceId) { ptr->setServiceId(serviceId); }
+extern "C" AMATSUKAZE_API const char* LogoFile_GetName(logo::GUILogoFile * ptr) { return ptr->getName(); }
+extern "C" AMATSUKAZE_API void LogoFile_SetName(logo::GUILogoFile * ptr, const char* name) { ptr->setName(name); }
+extern "C" AMATSUKAZE_API void LogoFile_GetImage(logo::GUILogoFile * ptr, uint8_t * rgb, int stride, uint8_t bg) { ptr->getImage(rgb, stride, bg); }
+extern "C" AMATSUKAZE_API int LogoFile_Save(logo::GUILogoFile * ptr, const tchar * filename) { return ptr->save(filename); }

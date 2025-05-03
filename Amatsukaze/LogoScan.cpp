@@ -1187,7 +1187,7 @@ float logo::LogoFrame::getLogoRatio() const {
 }
 
 // C API for P/Invoke
-extern "C" __declspec(dllexport) int ScanLogo(AMTContext * ctx,
+extern "C" AMATSUKAZE_API int ScanLogo(AMTContext * ctx,
     const tchar * srcpath, int serviceid, const tchar * workfile, const tchar * dstpath,
     int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
     logo::LOGO_ANALYZE_CB cb) {

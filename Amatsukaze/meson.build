@@ -74,38 +74,7 @@ if host_machine.system() == 'windows'
 else # Linux
   os_specific_libs += ['dl', 'pthread']
   amatsukaze_cpp_args = cpp_args + ['-DAMTSUKAZE_API=__attribute__((visibility("default")))', '-DWINAPI=', '-DAMATSUKAZE2DLL', '-fvisibility=hidden']
-  
-  # シンボルバージョニングファイルの作成
-  version_script_path = meson.current_build_dir() / 'Amatsukaze.version'
-  # すでに作成したファイルを使用
-  if run_command('test', '-f', version_script_path, check: false).returncode() != 0
-    # ファイルが存在しない場合は作成
-    version_script_content = '''AMATSUKAZE_1.0 {
-  global:
-    InitAmatsukaze;
-    GetFilterSourceInfo;
-    GetTSPacket;
-    GetVideoFrame;
-    GetAudioFrame;
-    GetCaptionFrame;
-    GetStreamsInfo;
-    GetVideoInfo;
-    TermAmatsukaze;
-    AvisynthPluginInit3;
-    AmatsukazeCLI;
-    InitAmatsukazeDLL;
-  local:
-    *;
-};
-'''
-    configure_file(
-      output: 'Amatsukaze.version',
-      command: ['sh', '-c', 'echo "' + version_script_content + '" > @OUTPUT@'],
-      capture: false
-    )
-  endif
-  
-  amatsukaze_link_args = ['-Wl,--version-script,' + version_script_path]
+  amatsukaze_link_args = []
 endif
 
 # AVXとAVX2のためのカスタムターゲット

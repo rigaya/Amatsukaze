@@ -245,7 +245,13 @@ enum PROCESSOR_INFO_TAG {
     PROC_TAG_COUNT
 };
 
-#if defined(_WIN32) || defined(_WIN64)
+#if !(defined(_WIN32) || defined(_WIN64))
+typedef struct _GROUP_AFFINITY {
+    intptr_t   Mask;
+    uint16_t   Group;
+    uint16_t   Reserved[3];
+} GROUP_AFFINITY, *PGROUP_AFFINITY;
+#endif
 class CPUInfo {
     std::vector<GROUP_AFFINITY> data[PROC_TAG_COUNT];
 public:
@@ -254,13 +260,4 @@ public:
 };
 
 bool SetCPUAffinity(int group, uint64_t mask);
-#else
-// Linuxでは未実装
-class CPUInfo {
-public:
-    CPUInfo() {}
-    const void* GetData(PROCESSOR_INFO_TAG tag, int* count) { *count = 0; return nullptr; }
-};
 
-inline bool SetCPUAffinity(int, uint64_t) { return true; }
-#endif
