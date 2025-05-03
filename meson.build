@@ -99,40 +99,28 @@ subdir('AmatsukazeCLI')
 
 # C#プロジェクトのビルドを追加（Linux対応）
 if get_option('build_csharp_projects')
-  cs_compiler = find_program('csc', 'dotnet', 'mcs', required : false)
+  dotnet = find_program('dotnet', required : false)
   
-  if cs_compiler.found()
-    message('C# compiler found, will build C# projects')
+  if dotnet.found()
+    message('dotnet found, will build C# projects using solution file')
     
-    # dotnetコマンドが見つかったかを確認する別の方法
-    use_dotnet = false
-    # 古いバージョンのmesonでも動作するようにする
-    dotnet_check = run_command('sh', '-c', 'which dotnet >/dev/null 2>&1 && echo true || echo false', check : false)
-    if dotnet_check.returncode() == 0 and dotnet_check.stdout().strip() == 'true'
-      use_dotnet = true
-      message('Using .NET Core/.NET for building C# projects')
-    else
-      message('Using Mono for building C# projects')
-    endif
+    # ビルド設定（リリースビルドと出力先ディレクトリを指定）
+    solution_file = meson.current_source_dir() / 'AmatsukazeLinux.sln'
+    output_dir = meson.current_build_dir()
     
-    # プロジェクトのビルド（SDKスタイルのcsprojを使用）
-    # 明示的な依存関係の順序でビルド
-    # 最初にAmatsukazeServerをビルド
-    subdir('AmatsukazeServer')
-    
-    # AmatsukazeServerの変数をエクスポート
-    build_target_server = AmatsukazeServer_build_target_server
-    
-    # Windows向けプロジェクトを条件付きでビルド
-    if host_machine.system() == 'windows'
-      subdir('AmatsukazeServerWin')
-    endif
-    
-    # 他のC#プロジェクト
-    subdir('AmatsukazeServerCLI')
-    subdir('AmatsukazeAddTask')
+    # ソリューションファイルをビルド
+    amatsukaze_cs_targets = custom_target('AmatsukazeLinux',
+      output : ['AmatsukazeServer.dll', 'AmatsukazeServerCLI.dll', 'AmatsukazeAddTask.dll'],
+      command : [
+        dotnet, 'build',
+        solution_file,
+        '-c', 'Release',
+        '-o', output_dir,
+      ],
+      build_by_default : true
+    )
   else
-    message('C# compiler not found, skipping C# projects')
+    message('dotnet not found, skipping C# projects')
   endif
 endif
 
