@@ -466,13 +466,13 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     // muxerのデフォルト値
     if (conf.muxerPath.size() == 0) {
         if (conf.format == FORMAT_MP4) {
-            conf.muxerPath = _T("muxer.exe");
+            conf.muxerPath = _T("muxer") + exeAppendix;
         } else if (conf.format == FORMAT_MKV) {
-            conf.muxerPath = _T("mkvmerge.exe");
+            conf.muxerPath = _T("mkvmerge") + exeAppendix;
         } else if (conf.format == FORMAT_TSREPLACE) {
-            conf.muxerPath = _T("tsreplace.exe");
+            conf.muxerPath = _T("tsreplace") + exeAppendix;
         } else {
-            conf.muxerPath = _T("tsmuxer.exe");
+            conf.muxerPath = _T("tsmuxer") + exeAppendix;
         }
     }
 
