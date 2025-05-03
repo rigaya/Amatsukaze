@@ -338,7 +338,7 @@ std::vector<tstring> AMTFilterSource::GetSuitablePlugins(const tstring& basepath
     }
     std::vector<tstring> result(pluginMap.size());
     std::transform(pluginMap.begin(), pluginMap.end(), result.begin(),
-        [&](const std::pair<tstring, tstring>& entry) { return basepath + _T("\\") + entry.second; });
+        [&](const std::pair<tstring, tstring>& entry) { return PathCombineS(basepath, entry.second); });
     return result;
 }
 
@@ -357,9 +357,9 @@ void AMTFilterSource::InitEnv() {
     }
     auto moduleDir = GetModuleDirectory();
     // Amatsukaze用オートロードフォルダを追加
-    sb.append("AddAutoloadDir(\"%s\\plugins64\")\n", moduleDir);
+    sb.append("AddAutoloadDir(\"%s\")\n", PathCombineS(moduleDir, _T("plugins64")));
     // AutoSelectプラグインをロード
-    for (auto& path : GetSuitablePlugins(moduleDir + _T("\\plugins64\\AutoSelected"))) {
+    for (auto& path : GetSuitablePlugins(PathCombineS(PathCombineS(moduleDir, _T("plugins64")), _T("AutoSelected")))) {
         sb.append("LoadPlugin(\"%s\")\n", path);
     }
     // メモリ節約オプションを有効にする

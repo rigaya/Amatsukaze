@@ -48,9 +48,16 @@ DEFINE_EXCEPTION(TestException)
 #undef DEFINE_EXCEPTION
 
 namespace core_utils {
+// プラットフォームに応じた区切り文字を定義
+#if defined(_WIN32) || defined(_WIN64)
+constexpr char PATH_SEPARATOR = '\\';
+#else
+constexpr char PATH_SEPARATOR = '/';
+#endif
+
 constexpr const char* str_end(const char *str) { return *str ? str_end(str + 1) : str; }
-constexpr bool str_slant(const char *str) { return *str == '\\' ? true : (*str ? str_slant(str + 1) : false); }
-constexpr const char* r_slant(const char* str) { return *str == '\\' ? (str + 1) : r_slant(str - 1); }
+constexpr bool str_slant(const char *str) { return *str == PATH_SEPARATOR ? true : (*str ? str_slant(str + 1) : false); }
+constexpr const char* r_slant(const char* str) { return *str == PATH_SEPARATOR ? (str + 1) : r_slant(str - 1); }
 constexpr const char* file_name(const char* str) { return str_slant(str) ? r_slant(str_end(str)) : str; }
 }
 
