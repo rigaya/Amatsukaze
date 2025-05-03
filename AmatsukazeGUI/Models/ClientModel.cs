@@ -952,7 +952,7 @@ namespace Amatsukaze.Models
 
         private string GetSettingFilePath()
         {
-            return "config\\AmatsukazeClient.xml";
+            return Path.Combine("config", "AmatsukazeClient.xml");
         }
 
         private void LoadAppData()
@@ -1119,7 +1119,7 @@ namespace Amatsukaze.Models
 
         private void PlaySound(string name)
         {
-            Util.PlayRandomSound("sound\\" + name);
+            Util.PlayRandomSound(Path.Combine("sound", name));
         }
 
         public Task OnUIData(UIData data)

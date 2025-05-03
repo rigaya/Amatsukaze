@@ -368,7 +368,7 @@ namespace Amatsukaze.Server
                                         Mode = req.Mode,
                                         SrcPath = additem.Path,
                                         Hash = additem.Hash,
-                                        DstPath = outitem.DstPath + "\\" + outname,
+                                        DstPath = Path.Combine(outitem.DstPath, outname),
                                         StreamFormat = (VideoStreamFormat)prog.Stream,
                                         ServiceId = prog.ServiceId,
                                         ImageWidth = prog.Width,
@@ -411,7 +411,7 @@ namespace Amatsukaze.Server
                                             {
                                                 Server = server,
                                                 Phase = ScriptPhase.OnAdd,
-                                                ScriptPath = server.GetBatDirectoryPath() + "\\" + req.AddQueueBat,
+                                                ScriptPath = Path.Combine(server.GetBatDirectoryPath(), req.AddQueueBat),
                                                 Item = item,
                                                 Prog = prog,
                                                 OnOutput = WriteTextBytes
@@ -760,7 +760,7 @@ namespace Amatsukaze.Server
                             var movedDir = (target.State == QueueState.Failed) ? 
                                 ServerSupport.FAIL_DIR : 
                                 ServerSupport.SUCCESS_DIR;
-                            var movedPath = dirPath + "\\" + movedDir + "\\" + Path.GetFileName(target.SrcPath);
+                            var movedPath = Path.Combine(dirPath, movedDir, Path.GetFileName(target.SrcPath));
                             if (File.Exists(movedPath))
                             {
                                 // EDCB関連ファイルも移動したかどうかは分からないが、あれば戻す
@@ -901,7 +901,7 @@ namespace Amatsukaze.Server
 
                 // ！！！削除！！！
                 var dirPath = Path.GetDirectoryName(target.SrcPath);
-                var movedPath = dirPath + "\\" + ServerSupport.SUCCESS_DIR + "\\" + Path.GetFileName(target.SrcPath);
+                var movedPath = Path.Combine(dirPath, ServerSupport.SUCCESS_DIR, Path.GetFileName(target.SrcPath));
                 if (File.Exists(movedPath))
                 {
                     // EDCB関連ファイルも移動したかどうかは分からないが、あれば消す

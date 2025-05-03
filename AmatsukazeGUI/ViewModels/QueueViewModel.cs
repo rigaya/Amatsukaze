@@ -343,7 +343,7 @@ namespace Amatsukaze.ViewModels
             if (File.Exists(filepath) == false)
             {
                 // failedに入っているかもしれないのでそっちも見る
-                filepath = Path.GetDirectoryName(file.SrcPath) + "\\failed\\" + Path.GetFileName(file.SrcPath);
+                filepath = Path.Combine(Path.GetDirectoryName(file.SrcPath), "failed", Path.GetFileName(file.SrcPath));
                 if (File.Exists(filepath) == false)
                 {
                     MessageBox.Show("ファイルが見つかりません");

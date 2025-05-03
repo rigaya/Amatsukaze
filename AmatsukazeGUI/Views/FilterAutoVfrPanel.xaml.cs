@@ -32,7 +32,9 @@ namespace Amatsukaze.Views
 
         private void Hyperlink_PluginFolder(object sender, RequestNavigateEventArgs e)
         {
-            var path = System.IO.Path.GetDirectoryName(typeof(FilterYadifPanel).Assembly.Location) + "\\plugins64";
+            var path = Path.Combine(
+                System.IO.Path.GetDirectoryName(typeof(FilterYadifPanel).Assembly.Location),
+                "plugins64");
             System.Diagnostics.Process.Start(path);
         }
 

@@ -281,8 +281,8 @@ namespace Amatsukaze.ViewModels
                 if(App.Option.SlimTs)
                 {
                     int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-                    tmpTs = App.Option.WorkPath + "\\slimts-" + pid + ".ts";
-                    deleteOnCloseFile = new FileStream(App.Option.WorkPath + "\\slimts-" + pid,
+                    tmpTs = Path.Combine(App.Option.WorkPath, "slimts-" + pid + ".ts");
+                    deleteOnCloseFile = new FileStream(Path.Combine(App.Option.WorkPath, "slimts-" + pid),
                         FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
                     currentTask = Model.MakeSlimFile(App.Option.FilePath, tmpTs, App.Option.ServiceId);
                     await currentTask;

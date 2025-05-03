@@ -254,7 +254,7 @@ namespace Amatsukaze.Server
             {
                 Directory.CreateDirectory(basePath);
 
-                string srcpath = basePath + "\\" + srcname;
+                string srcpath = Path.Combine(basePath, srcname);
                 using (File.Create(srcpath)) { }
 
                 string exename = "cscript.exe";
@@ -697,7 +697,7 @@ namespace Amatsukaze.Server
                 {
                     Server = server,
                     Phase = ScriptPhase.PreEncode,
-                    ScriptPath = server.GetBatDirectoryPath() + "\\" + profile.PreBatchFile,
+                    ScriptPath = Path.Combine(server.GetBatDirectoryPath(), profile.PreBatchFile),
                     Item = item,
                     OnOutput = WriteTextBytes
                 })
@@ -1259,8 +1259,8 @@ namespace Amatsukaze.Server
                 }
 
                 var srcDir = Path.GetDirectoryName(item.SrcPath);
-                var succeededDir = srcDir + "\\" + ServerSupport.SUCCESS_DIR;
-                var failedDir = srcDir + "\\" + ServerSupport.FAIL_DIR;
+                var succeededDir = Path.Combine(srcDir, ServerSupport.SUCCESS_DIR);
+                var failedDir = Path.Combine(srcDir, ServerSupport.FAIL_DIR);
 
                 if (item.IsBatch)
                 {
@@ -1322,7 +1322,7 @@ namespace Amatsukaze.Server
                         {
                             Server = server,
                             Phase = ScriptPhase.PostEncode,
-                            ScriptPath = server.GetBatDirectoryPath() + "\\" + item.Profile.PostBatchFile,
+                            ScriptPath = Path.Combine(server.GetBatDirectoryPath(), item.Profile.PostBatchFile),
                             Item = item,
                             Log = (item.IsCheck) ? null : logItem, // IsCheckの場合は、CheckLogItemが来るので互換性がない
                             RelatedFiles = new List<string>(),
@@ -1348,8 +1348,8 @@ namespace Amatsukaze.Server
                                     try
                                     {
                                         // ソースパスは拡張子を含むがdstは含まない
-                                        var srcBody = Path.GetDirectoryName(item.SrcPath) + "\\" + Path.GetFileNameWithoutExtension(item.SrcPath);
-                                        var dstBody = Path.GetDirectoryName(dstpath) + "\\" + Path.GetFileName(dstpath);
+                                        var srcBody = Path.Combine(Path.GetDirectoryName(item.SrcPath), Path.GetFileNameWithoutExtension(item.SrcPath));
+                                        var dstBody = Path.Combine(Path.GetDirectoryName(dstpath), Path.GetFileName(dstpath));
                                         foreach (var ext in ServerSupport
                                             .GetFileExtentions(null, item.Profile.MoveEDCBFiles))
                                         {
@@ -1389,7 +1389,7 @@ namespace Amatsukaze.Server
 
                                         if (scriptExecuter != null)
                                         {
-                                            scriptExecuter.MovedSrcPath = failedDir + "\\" + Path.GetFileName(item.SrcPath);
+                                            scriptExecuter.MovedSrcPath = Path.Combine(failedDir, Path.GetFileName(item.SrcPath));
                                         }
                                     }
                                     else
@@ -1399,7 +1399,7 @@ namespace Amatsukaze.Server
 
                                         if (scriptExecuter != null)
                                         {
-                                            scriptExecuter.MovedSrcPath = succeededDir + "\\" + Path.GetFileName(item.SrcPath);
+                                            scriptExecuter.MovedSrcPath = Path.Combine(succeededDir, Path.GetFileName(item.SrcPath));
                                         }
                                     }
                                 }

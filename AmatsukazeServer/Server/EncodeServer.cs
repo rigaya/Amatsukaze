@@ -505,37 +505,37 @@ namespace Amatsukaze.Server
         #region Path
         private string GetSettingFilePath()
         {
-            return "config\\AmatsukazeServer.xml";
+            return Path.Combine("config", "AmatsukazeServer.xml");
         }
 
         private string GetUIStateFilePath()
         {
-            return "config\\UIState.xml";
+            return Path.Combine("config", "UIState.xml");
         }
 
         private string GetAutoSelectFilePath()
         {
-            return "config\\AutoSelectProfile.xml";
+            return Path.Combine("config", "AutoSelectProfile.xml");
         }
 
         internal string GetQueueFilePath()
         {
-            return "data\\Queue.xml";
+            return Path.Combine("data", "Queue.xml");
         }
 
         private string GetHistoryFilePathV1()
         {
-            return "data\\EncodeHistory.xml";
+            return Path.Combine("data", "EncodeHistory.xml");
         }
 
         private string GetHistoryFilePathV2()
         {
-            return "data\\EncodeHistoryV2.xml";
+            return Path.Combine("data", "EncodeHistoryV2.xml");
         }
 
         internal string GetLogFileBase(DateTime start)
         {
-            return "data\\logs\\" + start.ToString("yyyy-MM-dd_HHmmss.fff");
+            return Path.Combine("data", "logs", start.ToString("yyyy-MM-dd_HHmmss.fff"));
         }
 
         private string ReadLogFIle(DateTime start)
@@ -550,12 +550,12 @@ namespace Amatsukaze.Server
 
         private string GetCheckHistoryFilePath()
         {
-            return "data\\CheckHistory.xml";
+            return Path.Combine("data", "CheckHistory.xml");
         }
 
         internal string GetCheckLogFileBase(DateTime start)
         {
-            return "data\\checklogs\\" + start.ToString("yyyy-MM-dd_HHmmss.fff");
+            return Path.Combine("data", "checklogs", start.ToString("yyyy-MM-dd_HHmmss.fff"));
         }
 
         private string ReadCheckLogFIle(DateTime start)
@@ -575,7 +575,7 @@ namespace Amatsukaze.Server
 
         private string GetLogoFilePath(string fileName)
         {
-            return GetLogoDirectoryPath() + "\\" + fileName;
+            return Path.Combine(GetLogoDirectoryPath(), fileName);
         }
 
         private string GetJLDirectoryPath()
@@ -615,7 +615,7 @@ namespace Amatsukaze.Server
 
         private string GetDRCSImagePath(string dirPath, string md5)
         {
-            return dirPath + "\\" + md5 + ".bmp";
+            return Path.Combine(dirPath, md5 + ".bmp");
         }
 
         internal string GetDRCSMapPath()
@@ -625,7 +625,7 @@ namespace Amatsukaze.Server
 
         internal string GetDRCSMapPath(string dirPath)
         {
-            return dirPath + "\\drcs_map.txt";
+            return Path.Combine(dirPath, "drcs_map.txt");
         }
 
         private string GetProfileDirectoryPath()
@@ -635,7 +635,7 @@ namespace Amatsukaze.Server
 
         private string GetProfilePath(string dirpath, string name)
         {
-            return dirpath + "\\" + name + ".profile";
+            return Path.Combine(dirpath, name + ".profile");
         }
         #endregion
 
@@ -1649,8 +1649,7 @@ namespace Amatsukaze.Server
                     if(profile.FilterOption == FilterOption.Setting)
                     {
                         sb.Append(" -f \"")
-                            .Append(CachedAvsScript.GetAvsFilePath(
-                                profile.FilterSetting, setting, GetAvsCacheDirectoryPath()))
+                            .Append(Path.Combine(GetAvsDirectoryPath(), profile.FilterPath))
                             .Append("\"");
                     }
                     else if(profile.FilterOption == FilterOption.Custom)
@@ -1658,14 +1657,14 @@ namespace Amatsukaze.Server
                         if (string.IsNullOrEmpty(profile.FilterPath) == false)
                         {
                             sb.Append(" -f \"")
-                                .Append(GetAvsDirectoryPath() + "\\" + profile.FilterPath)
+                                .Append(Path.Combine(GetAvsDirectoryPath(), profile.FilterPath))
                                 .Append("\"");
                         }
 
                         if (string.IsNullOrEmpty(profile.PostFilterPath) == false)
                         {
                             sb.Append(" -pf \"")
-                                .Append(GetAvsDirectoryPath() + "\\" + profile.PostFilterPath)
+                                .Append(Path.Combine(GetAvsDirectoryPath(), profile.PostFilterPath))
                                 .Append("\"");
                         }
                     }
@@ -1727,7 +1726,7 @@ namespace Amatsukaze.Server
                 if (string.IsNullOrEmpty(jlscommand) == false)
                 {
                     sb.Append(" --jls-cmd \"")
-                        .Append(GetJLDirectoryPath() + "\\" + jlscommand)
+                        .Append(Path.Combine(GetJLDirectoryPath(), jlscommand))
                         .Append("\"");
                 }
                 if (string.IsNullOrEmpty(jlsopt) == false)
@@ -1806,7 +1805,7 @@ namespace Amatsukaze.Server
                 }
                 if (string.IsNullOrEmpty(profile.PreEncodeBatchFile) == false)
                 {
-                    sb.Append(" --pre-enc-bat \"").Append(batDir + "\\" + profile.PreEncodeBatchFile).Append("\"");
+                    sb.Append(" --pre-enc-bat \"").Append(Path.Combine(batDir, profile.PreEncodeBatchFile)).Append("\"");
                 }
 
                 if (logofiles != null)
@@ -1862,7 +1861,7 @@ namespace Amatsukaze.Server
                 try
                 {
                     // 拡張子なしファイルがある場合は使用中なので除く
-                    var meta = AppData_.setting.ActualWorkPath + "\\" + Path.GetFileNameWithoutExtension(file);
+                    var meta = Path.Combine(AppData_.setting.ActualWorkPath, Path.GetFileNameWithoutExtension(file));
                     if(!File.Exists(meta))
                     {
                         File.Delete(file);
@@ -3206,7 +3205,7 @@ namespace Amatsukaze.Server
             var localClientRunning = ClientManager?.HasLocalClient() ?? true;
             if (localClientRunning == false)
             {
-                Util.PlayRandomSound("sound\\" + name);
+                Util.PlayRandomSound(Path.Combine("sound", name));
             }
         }
 

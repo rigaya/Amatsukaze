@@ -108,7 +108,7 @@ namespace Amatsukaze.Server
                     if (filename.Length == 36 && Path.GetExtension(filename).ToLower() == ".bmp")
                     {
                         string md5 = filename.Substring(0, 32);
-                        File.Copy(imgpath, dirPath + "\\" + RevertHash(md5) + ".bmp");
+                        File.Copy(imgpath, Path.Combine(dirPath, RevertHash(md5) + ".bmp"));
                     }
                 }
 

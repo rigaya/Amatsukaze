@@ -322,7 +322,7 @@ namespace Amatsukaze.AddTask
                 if (string.IsNullOrEmpty(option.RemoteDir) == false)
                 {
                     // これはサーバからのアクセス用パスなので"\\"で区切る
-                    srcpath = option.RemoteDir + "\\" + Path.GetFileName(srcpath);
+                    srcpath = Path.Combine(option.RemoteDir, Path.GetFileName(srcpath));
                 }
 
                 Console.WriteLine(srcpath + " を追加します");

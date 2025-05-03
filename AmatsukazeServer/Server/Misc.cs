@@ -221,7 +221,7 @@ namespace Amatsukaze.Server
             for(int code = Environment.TickCount & 0xFFFFFF, 
                 end = code + 0x1000; code != end; ++code)
             {
-                string path = baseDir + "\\amt" + code;
+                string path = Path.Combine(baseDir, "amt" + code);
                 try
                 {
                     using (FileStream fs = new FileStream(path, FileMode.CreateNew))
@@ -631,7 +631,7 @@ namespace Amatsukaze.Server
             }
             try
             {
-                return new FileStream("data\\Server.lock",
+                return new FileStream(Path.Combine("data", "Server.lock"),
                     FileMode.Create, FileAccess.ReadWrite, FileShare.None);
             }
             catch(Exception)
@@ -642,7 +642,7 @@ namespace Amatsukaze.Server
 
         private static string GetStandaloneMailslotName(string rootDir)
         {
-            return @"\\.\mailslot\" + rootDir.Replace(':', '_') + @"\Amatsukaze";
+            return Path.Combine(@"\\.\mailslot", rootDir.Replace(':', '_'), "Amatsukaze");
         }
 
         public static FileStream CreateStandaloneMailslot()
@@ -677,8 +677,8 @@ namespace Amatsukaze.Server
 
         public static void LaunchLocalServer(int port, string rootDir)
         {
-            var exename = Path.GetDirectoryName(typeof(ServerSupport).Assembly.Location) + "\\" +
-                (Environment.UserInteractive ? "AmatsukazeGUI.exe" : "AmatsukazeServerCLI.exe");
+            var exename = Path.Combine(Path.GetDirectoryName(typeof(ServerSupport).Assembly.Location),
+                (Environment.UserInteractive ? "AmatsukazeGUI.exe" : "AmatsukazeServerCLI.exe"));
             var args = "-l server -p " + port;
             Process.Start(new ProcessStartInfo(exename, args)
             {
@@ -1068,8 +1068,8 @@ namespace Amatsukaze.Server
             string srcDir = Path.GetDirectoryName(file);
             return ServerSupport.GetFileExtentions(tsext, withEDCB).Select(ext => new MoveFileItem()
                 {
-                    SrcPath = srcDir + "\\" + body + ext,
-                    DstPath = dstDir + "\\" + body + ext
+                    SrcPath = Path.Combine(srcDir, body + ext),
+                    DstPath = Path.Combine(dstDir, body + ext)
                 })
                 .Where(pair => File.Exists(pair.SrcPath))
                 .ToList();
@@ -1090,7 +1090,7 @@ namespace Amatsukaze.Server
             string srcDir = Path.GetDirectoryName(file);
             foreach (var ext in ServerSupport.GetFileExtentions(tsext, withEDCB))
             {
-                string srcPath = srcDir + "\\" + body + ext;
+                string srcPath = Path.Combine(srcDir, body + ext);
                 if (File.Exists(srcPath))
                 {
                     File.Delete(srcPath);
@@ -1358,7 +1358,10 @@ namespace Amatsukaze.Server
                     int parallel = filter.AutoVfrParallel;
                     var fname = filter.AutoVfrFast ? "Auto_Vfr_Fast" : "Auto_Vfr";
                     var crop = filter.AutoVfrFast ? "" : ",IsCrop=" + (filter.AutoVfrCrop ? "true" : "false");
-                    var concatarg = "C:\\Windows\\System32\\cmd.exe /c copy " +
+                    // WindowsとLinuxでコマンドのパスが違うので、パスを取得する
+                    var cmdpath = Environment.OSVersion.Platform == PlatformID.Win32NT ?
+                        "C:\\Windows\\System32\\cmd.exe /c copy " : "/bin/bash -c cp ";
+                    var concatarg = cmdpath +
                         string.Join("+", Enumerable.Range(1, parallel).Select(i => "$DQ\"+AMT_TMP+\".autovfr" + i + ".log$DQ")) +
                         " $DQ\"+AMT_TMP+\".autovfr.log$DQ ";
                     var autovfrarg = "$DQ" + setting.AutoVfrPath +
@@ -1373,7 +1376,7 @@ namespace Amatsukaze.Server
                     concatarg = concatarg.Replace("$DQ", "\"+Chr(34)+\"").Replace("+\"\"+", "+");
                     autovfrarg = autovfrarg.Replace("$DQ", "\"+Chr(34)+\"").Replace("+\"\"+", "+");
 
-                    sb.AppendLine("Import(\"" + Path.GetDirectoryName(setting.AutoVfrPath) + "\\" + fname + ".avs\")");
+                    sb.AppendLine("Import(\"" + Path.Combine(Path.GetDirectoryName(setting.AutoVfrPath), fname + ".avs") + "\")");
                     sb.AppendLine("AMT_PRE_PROC = (AMT_PASS < 2)");
                     sb.AppendLine("logp = AMT_TMP + \".autovfr.log\"");
                     sb.AppendLine("defp = AMT_TMP + \".autovfr.def\"");
@@ -1471,7 +1474,7 @@ namespace Amatsukaze.Server
 
         private static string CodeToName(uint code, string cacheRoot)
         {
-            return cacheRoot + "\\" + code.ToString("X8") + ".avs";
+            return Path.Combine(cacheRoot, code.ToString("X8") + ".avs");
         }
 
         // settingのスクリプトファイルへのパスを返す

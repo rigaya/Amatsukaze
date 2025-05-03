@@ -269,8 +269,8 @@ namespace Amatsukaze.Models
         public async Task Analyze(string filepath, int serviceid, string workpath, Point pt, Size sz, int thy, int maxFrames)
         {
             int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-            string workfile = workpath + "\\logotmp" + pid + ".dat";
-            string tmppath = workpath + "\\logotmp" + pid + ".lgd";
+            string workfile = Path.Combine(workpath, "logotmp" + pid + ".dat");
+            string tmppath = Path.Combine(workpath, "logotmp" + pid + ".lgd");
 
             // 2の倍数にする
             int imgx = (int)Math.Floor(pt.X / 2) * 2;
@@ -312,7 +312,7 @@ namespace Amatsukaze.Models
                                 logo.Name = "情報なし";
                             }
 
-                            logopath = workpath + "\\logo" + pid + ".lgd";
+                            logopath = Path.Combine(workpath, "logo" + pid + ".lgd");
                             logo.Save(logopath);
                         }
 
@@ -351,10 +351,10 @@ namespace Amatsukaze.Models
         {
             string dirpath = "logo";
             Directory.CreateDirectory(dirpath);
-            string prefix = dirpath + "\\SID" + Logo.ServiceId.ToString() + "-";
+            string prefix = Path.Combine(dirpath, "SID" + Logo.ServiceId.ToString() + "-");
             for(int i = 1; i <= 1000; ++i)
             {
-                string path = prefix + i + ".lgd";
+                string path = Path.Combine(prefix, i + ".lgd");
                 try
                 {
                     File.Copy(logopath, path);

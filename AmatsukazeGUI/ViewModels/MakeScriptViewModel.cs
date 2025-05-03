@@ -174,7 +174,8 @@ namespace Amatsukaze.ViewModels
             {
                 sb.Append("rem _EDCBX_DIRECT_\r\n");
             }
-            sb.AppendFormat("\"{0}\\AmatsukazeAddTask.exe\"", exe)
+            var pathdelemiter = Environment.OSVersion.Platform == PlatformID.Win32NT ? "\\" : "/";
+            sb.AppendFormat("\"{0}{1}AmatsukazeAddTask.exe\"", exe, pathdelemiter)
                 .AppendFormat(" -r \"{0}\"", cur)
                 .AppendFormat(" -f \"{0}FilePath{0}\" -ip \"{1}\"", direct ? "%" : "$", ip)
                 .AppendFormat(" -p {0}", port)
@@ -209,7 +210,9 @@ namespace Amatsukaze.ViewModels
 
             var saveFileDialog = new SaveFileDialog();
             saveFileDialog.FilterIndex = 1;
-            saveFileDialog.Filter = "バッチファイル(.bat)|*.bat|All Files (*.*)|*.*";
+            saveFileDialog.Filter = Environment.OSVersion.Platform == PlatformID.Win32NT
+                ? "バッチファイル(.bat)|*.bat|All Files (*.*)|*.*"
+                : "バッチファイル(.sh)|*.sh|All Files (*.*)|*.*";
             bool? result = saveFileDialog.ShowDialog();
             if (result != true)
             {

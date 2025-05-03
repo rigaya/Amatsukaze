@@ -114,8 +114,7 @@ if get_option('build_csharp_projects')
       command : [
         dotnet, 'build',
         solution_file,
-        '-c', 'Release',
-        '-o', output_dir,
+        '-c', 'Release'
       ],
       build_by_default : true
     )

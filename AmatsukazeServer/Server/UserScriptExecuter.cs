@@ -191,8 +191,9 @@ namespace Amatsukaze.Server
 
             try
             {
+                var delemiter = Environment.OSVersion.Platform == PlatformID.Win32NT ? '\\' : '/';
                 var mainNoExt = Path.GetFileName(Log.DstPath);
-                var list = Log.OutPath.Select(s => s.Replace('/', '\\')).Where(path =>
+                var list = Log.OutPath.Select(s => s.Replace('/', delemiter)).Where(path =>
                 {
                     var type = fileType(Path.GetFileName(path).Substring(mainNoExt.Length));
                     return (mask & type) != 0;
@@ -255,7 +256,7 @@ namespace Amatsukaze.Server
                                 else
                                 {
                                     var outdir = (rpc.arg as string).TrimEnd(Path.DirectorySeparatorChar);
-                                    Item.DstPath = outdir + "\\" + Path.GetFileName(Item.DstPath);
+                                    Item.DstPath = Path.Combine(outdir, Path.GetFileName(Item.DstPath));
                                     ret = "成功";
                                 }
                                 break;
@@ -465,7 +466,7 @@ namespace Amatsukaze.Server
             var exeDir = Path.GetDirectoryName(typeof(UserScriptExecuter).Assembly.Location);
             // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
             psi.EnvironmentVariables["path"] =
-                exeDir + ";" + exeDir + "\\cmd" + ";" + psi.EnvironmentVariables["path"];
+                exeDir + ";" + exeDir + "cmd" + ";" + psi.EnvironmentVariables["path"];
 
             // パラメータを環境変数に追加
             SetupEnv(psi.EnvironmentVariables);

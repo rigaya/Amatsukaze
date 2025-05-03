@@ -45,15 +45,15 @@ namespace Amatsukaze
             // StartupUriの設定
             if (Option.LaunchType == LaunchType.Server || Option.LaunchType == LaunchType.Debug)
             {
-                this.StartupUri = new Uri("Views\\ServerWindow.xaml", UriKind.Relative);
+                this.StartupUri = new Uri(Path.Combine("Views", "ServerWindow.xaml"), UriKind.Relative);
             }
             else if(Option.LaunchType == LaunchType.Logo)
             {
-                this.StartupUri = new Uri("Views\\LogoAnalyzeWindow.xaml", UriKind.Relative);
+                this.StartupUri = new Uri(Path.Combine("Views", "LogoAnalyzeWindow.xaml"), UriKind.Relative);
             }
             else 
             {
-                this.StartupUri = new Uri("Views\\MainWindow.xaml", UriKind.Relative);
+                this.StartupUri = new Uri(Path.Combine("Views", "MainWindow.xaml"), UriKind.Relative);
             }
         }
 
