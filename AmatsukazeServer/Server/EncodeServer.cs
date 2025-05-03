@@ -777,9 +777,24 @@ namespace Amatsukaze.Server
             foreach (var path in Directory.GetFiles(basePath))
             {
                 var fname = Path.GetFileName(path);
-                if (fname.StartsWith(pattern) && fname.EndsWith(".exe"))
+                if (fname.StartsWith(pattern)
+                    && (Environment.OSVersion.Platform != PlatformID.Win32NT || fname.EndsWith(".exe"))
+                    && IsExecutableByCurrentUser(path))
                 {
                     return path;
+                }
+            }
+            if (Environment.OSVersion.Platform == PlatformID.Unix)
+            {
+                // PATH環境変数を参照して、パスを探す
+                var path = Environment.GetEnvironmentVariable("PATH");
+                foreach (var p in path.Split(':'))
+                {
+                    var fullPath = Path.Combine(p, pattern);
+                    if (IsExecutableByCurrentUser(fullPath))
+                    {
+                        return pattern;
+                    }
                 }
             }
             return null;
@@ -907,6 +922,10 @@ namespace Amatsukaze.Server
                 //nullの場合は、exeListの先頭のものを返す
                 maxPath = exeList[0].Path;
             }
+            if (string.IsNullOrEmpty(maxPath))
+            {
+                return GetExePath(basePath, pattern);
+            }
             return maxPath;
         }
         private string GetBasePath()
@@ -916,10 +935,11 @@ namespace Amatsukaze.Server
 
         private Setting SetDefaultPath(Setting setting)
         {
+            string exeDefaultAppendix = (Environment.OSVersion.Platform == PlatformID.Win32NT) ? ".exe" : "";
             string basePath = GetBasePath();
             if (string.IsNullOrEmpty(setting.AmatsukazePath))
             {
-                setting.AmatsukazePath = Path.Combine(basePath, "AmatsukazeCLI.exe");
+                setting.AmatsukazePath = Path.Combine(basePath, "AmatsukazeCLI" + exeDefaultAppendix);
             }
             if (string.IsNullOrEmpty(setting.X264Path))
             {
@@ -935,19 +955,27 @@ namespace Amatsukaze.Server
             }
             if (string.IsNullOrEmpty(setting.MuxerPath))
             {
-                setting.MuxerPath = Path.Combine(basePath, "muxer.exe");
+                setting.MuxerPath = (Environment.OSVersion.Platform == PlatformID.Win32NT) 
+                    ? Path.Combine(basePath, "muxer" + exeDefaultAppendix)
+                    : GetExePath(basePath, "muxer");
             }
             if (string.IsNullOrEmpty(setting.MKVMergePath))
             {
-                setting.MKVMergePath = Path.Combine(basePath, "mkvmerge.exe");
+                setting.MKVMergePath = (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                    ? Path.Combine(basePath, "mkvmerge" + exeDefaultAppendix)
+                    : GetExePath(basePath, "mkvmerge");
             }
             if (string.IsNullOrEmpty(setting.MP4BoxPath))
             {
-                setting.MP4BoxPath = Path.Combine(basePath, "mp4box.exe");
+                setting.MP4BoxPath = (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                    ? Path.Combine(basePath, "mp4box" + exeDefaultAppendix)
+                    : GetExePath(basePath, "MP4Box");
             }
             if (string.IsNullOrEmpty(setting.TimelineEditorPath))
             {
-                setting.TimelineEditorPath = Path.Combine(basePath, "timelineeditor.exe");
+                setting.TimelineEditorPath = (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                    ? Path.Combine(basePath, "timelineeditor" + exeDefaultAppendix)
+                    : GetExePath(basePath, "timelineeditor");
             }
             if (string.IsNullOrEmpty(setting.ChapterExePath))
             {
@@ -3432,6 +3460,36 @@ namespace Amatsukaze.Server
         {
             finishRequested?.Invoke();
             return Task.FromResult(0);
+        }
+
+        public static bool IsExecutableByCurrentUser(string path)
+        {
+            if (!System.IO.File.Exists(path))
+                return false;
+
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                return true; // Windowsでは、ファイルが存在するかどうかを確認するだけで十分
+            }
+            try {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/bin/sh",
+                    Arguments = $"-c \"test -x '{path}'\"",
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (var process = System.Diagnostics.Process.Start(psi))
+                {
+                    process.WaitForExit();
+                    return process.ExitCode == 0;
+                }
+            } catch (Exception) {
+                return false;
+            }
         }
     }
 }
