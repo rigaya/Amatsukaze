@@ -1332,6 +1332,10 @@ namespace Amatsukaze.Server
         public byte[] MacAddress { get; set; }
         [DataMember]
         public string Version { get; set; }
+        [DataMember]
+        public string Platform { get; set; }
+        [DataMember]
+        public int CharSet { get; set; }
     }
 
     [DataContract]

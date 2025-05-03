@@ -3139,7 +3139,9 @@ namespace Amatsukaze.Server
                 {
                     HostName = Dns.GetHostName(),
                     MacAddress = ClientManager?.GetMacAddress(),
-                    Version = Version
+                    Version = Version,
+                    Platform = Environment.OSVersion.Platform.ToString(),
+                    CharSet = Util.AmatsukazeDefaultEncoding.CodePage
                 },
                 AddQueueBatFiles = AddQueueBatFiles,
                 PreBatFiles = PreBatFiles,

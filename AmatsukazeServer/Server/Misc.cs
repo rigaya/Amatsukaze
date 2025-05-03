@@ -154,6 +154,16 @@ namespace Amatsukaze.Server
         // アプリケーション全体で使用するデフォルトエンコーディング
         public static readonly Encoding AmatsukazeDefaultEncoding;
 
+        public static byte[] ConvertEncoding(byte[] data, Encoding srcEncoding, Encoding dstEncoding)
+        {
+            if (srcEncoding == dstEncoding)
+            {
+                return data;
+            }
+            string text = srcEncoding.GetString(data);
+            return dstEncoding.GetBytes(text);
+        }
+
         public static string ErrorMessage(int parallelId, string mes, Exception e)
         {
             string message = "";

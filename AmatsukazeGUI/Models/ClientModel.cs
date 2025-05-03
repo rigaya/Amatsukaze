@@ -1350,15 +1350,16 @@ namespace Amatsukaze.Models
 
         public Task OnConsoleUpdate(ConsoleUpdate update)
         {
+            byte[] convertedData = Util.ConvertEncoding(update.data, Encoding.GetEncoding(serverInfo.CharSet), Util.AmatsukazeDefaultEncoding);
             if(update.index == -1)
             {
                 // キュー追加コンソール
-                AddQueueConsole.AddBytes(update.data, 0, update.data.Length);
+                AddQueueConsole.AddBytes(convertedData, 0, convertedData.Length);
             }
             else
             {
                 ensureConsoleNum(update.index);
-                ConsoleList[update.index].AddBytes(update.data, 0, update.data.Length);
+                ConsoleList[update.index].AddBytes(convertedData, 0, convertedData.Length);
             }
             return Task.FromResult(0);
         }
