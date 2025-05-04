@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Amatsukaze.Lib
 {
@@ -381,7 +382,7 @@ namespace Amatsukaze.Lib
         private static extern IntPtr LogoFile_GetName(IntPtr ptr);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
-        private static extern void LogoFile_SetName(IntPtr ptr, string name);
+        private static extern void LogoFile_SetName(IntPtr ptr, IntPtr name);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static unsafe extern void LogoFile_GetImage(IntPtr ptr, byte* buf, int stride, byte bg);
@@ -453,12 +454,48 @@ namespace Amatsukaze.Lib
             }
         }
 
+        private static string ConvertFromCP932(IntPtr ptr) {
+            if (ptr == IntPtr.Zero) return string.Empty;
+            
+            // 文字列の長さを取得
+            int length = 0;
+            while (Marshal.ReadByte(ptr, length) != 0) length++;
+            
+            // バイト配列にコピー
+            byte[] bytes = new byte[length];
+            Marshal.Copy(ptr, bytes, 0, length);
+            
+            // CP932からUTF-16に変換
+            return Encoding.GetEncoding(932).GetString(bytes);
+        }
+
+        private static IntPtr ConvertToCP932(string str) {
+            if (string.IsNullOrEmpty(str)) return IntPtr.Zero;
+            
+            // UTF-16からCP932に変換
+            byte[] bytes = Encoding.GetEncoding(932).GetBytes(str);
+            
+            // 終端のnullを含むメモリを確保
+            IntPtr ptr = Marshal.AllocHGlobal(bytes.Length + 1);
+            Marshal.Copy(bytes, 0, ptr, bytes.Length);
+            Marshal.WriteByte(ptr, bytes.Length, 0); // null終端
+            
+            return ptr;
+        }
+
         public string Name {
             get {
-                return Marshal.PtrToStringAnsi(LogoFile_GetName(Ptr));
+                return ConvertFromCP932(LogoFile_GetName(Ptr));
             }
             set {
-                LogoFile_SetName(Ptr, value);
+                IntPtr ptr = ConvertToCP932(value);
+                try {
+                    LogoFile_SetName(Ptr, ptr);
+                } finally {
+                    if (ptr != IntPtr.Zero) {
+                        Marshal.FreeHGlobal(ptr);
+                    }
+                }
             }
         }
 
