@@ -2925,23 +2925,37 @@ namespace Amatsukaze.Server
             string prefix = Path.Combine(dirpath, "SID" + logoData.ServiceId.ToString() + "-");
             try
             {
-                var waits = new List<Task>();
-                for(int i = 1; i <= 1000; ++i)
+                bool fileAlreadyExists = false;
                 {
-                    string path = prefix + i + ".lgd";
-                    if (File.Exists(path)) {
-                        continue;
-                    }
-                    try
+                    string path = prefix + logoData.LogoIdx + ".lgd";
+                    if (File.Exists(path))
                     {
-                        File.WriteAllBytes(path, logoData.Data);
-                        message = "ロゴファイルを保存しました: " + path;
-                        break;
+                        // ファイルが存在する場合は、そのファイルとデータを比較
+                        var data = File.ReadAllBytes(path);
+                        if (data.SequenceEqual(logoData.Data))
+                        {
+                            fileAlreadyExists = true; // もうすでに同じデータがある場合はファイルを作成しない
+                        }
                     }
-                    catch(IOException) { }
                 }
-                //waits.Add(Client.OnLogoFile(logoData));
-                waits.Add(NotifyMessage(message, false));
+                var waits = new List<Task>();
+                if (!fileAlreadyExists) {
+                    for(int i = 1; i <= 1000; ++i)
+                    {
+                        string path = prefix + i + ".lgd";
+                        if (File.Exists(path)) {
+                            continue;
+                        }
+                        try
+                        {
+                            File.WriteAllBytes(path, logoData.Data);
+                            message = "ロゴファイルを保存しました: " + path;
+                            break;
+                        }
+                        catch(IOException) { }
+                    }
+                    waits.Add(NotifyMessage(message, false));
+                }
                 return Task.WhenAll(waits);
             }
             catch (Exception e)

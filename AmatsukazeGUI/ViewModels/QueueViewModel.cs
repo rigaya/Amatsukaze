@@ -379,7 +379,8 @@ namespace Amatsukaze.ViewModels
                                     var logoFileData = new LogoFileData
                                     {
                                         Data = logoData,
-                                        ServiceId = file.ServiceId
+                                        ServiceId = file.ServiceId,
+                                        LogoIdx = logoIdx
                                     };
                                     Model.Server?.SendLogoFile(logoFileData);
                                 }

@@ -18,6 +18,8 @@ namespace Amatsukaze.Server
         
         [DataMember]
         public int ServiceId { get; set; }
+        [DataMember]
+        public int LogoIdx { get; set; }
     }
 
     public interface IAddTaskServer
