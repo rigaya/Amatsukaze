@@ -953,6 +953,18 @@ namespace Amatsukaze.Server
             {
                 setting.SVTAV1Path = GetEncoderExePath(basePath, EncoderType.SVTAV1);
             }
+            if (string.IsNullOrEmpty(setting.QSVEncPath))
+            {
+                setting.QSVEncPath = GetExePath(basePath, "qsvencc");
+            }
+            if (string.IsNullOrEmpty(setting.NVEncPath))
+            {
+                setting.NVEncPath = GetExePath(basePath, "nvencc");
+            }
+            if (string.IsNullOrEmpty(setting.VCEEncPath))
+            {
+                setting.VCEEncPath = GetExePath(basePath, "vceencc");
+            }
             if (string.IsNullOrEmpty(setting.MuxerPath))
             {
                 setting.MuxerPath = (Environment.OSVersion.Platform == PlatformID.Win32NT) 
@@ -988,6 +1000,14 @@ namespace Amatsukaze.Server
             if (string.IsNullOrEmpty(setting.TsReplacePath))
             {
                 setting.TsReplacePath = GetExePath(basePath, "tsreplace");
+            }
+            if (string.IsNullOrEmpty(setting.FdkaacPath))
+            {
+                setting.FdkaacPath = GetExePath(basePath, "fdkaac");
+            }
+            if (string.IsNullOrEmpty(setting.OpusEncPath))
+            {
+                setting.OpusEncPath = GetExePath(basePath, "opusenc");
             }
             return setting;
         }
