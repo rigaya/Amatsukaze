@@ -25,7 +25,6 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
   - GPU版のAvisynthのフィルタを使用できる?
     - Avisynth+はCUDA対応しているらしいが、AvisynthNeoと互換性があるのかどうか…
   - 設定画面へのドラッグドロップ
-  - 音声エンコード
 
 - Linux対応困難
   - AmatsukazeGUI
@@ -39,7 +38,6 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
 
 
 ## インストール手順
-
 
 ### 依存パッケージのインストール
 
@@ -81,92 +79,112 @@ make -j$(nproc)
 sudo make install
 ```
 
-### x264, x265, svt-av1
+### 必要な実行ファイルとプラグインのインストール
 
-```bash
-sudo apt install x264 x265 svt-av1
-```
+- x264, x265, svt-av1
 
-### mp4box
+  ```bash
+  sudo apt install x264 x265 svt-av1
+  ```
 
-```bash
-git clone https://github.com/gpac/gpac.git && cd gpac
-./configure --static-bin
-make -j$(nproc)
-sudo make install
-```
+- mp4box
 
-### mkvmerge
+  ```bash
+  git clone https://github.com/gpac/gpac.git && cd gpac
+  ./configure --static-bin
+  make -j$(nproc)
+  sudo make install
+  ```
 
-```bash
-sudo apt install mkvtoolnix
-```
+- mkvmerge
 
-### chapter_exe
+  ```bash
+  sudo apt install mkvtoolnix
+  ```
 
-```bash
-git clone https://github.com/tobitti0/chapter_exe
-cd chapter_exe/src
-sudo install -D -t /usr/local/bin chapter_exe
-```
+- L-SMASH (muxer, timelineeditor)
 
-### join_logo_scp
+  ```bash
+  git clone https://github.com/l-smash/l-smash.git
+  cd l-smash/
+  ./configure --disable-shared
+  make -j$(nproc)
+  sudo make install
+  ```
 
-```bash
-git clone https://github.com/tobitti0/join_logo_scp
-cd join_logo_scp/src
-sudo install -D -t /usr/local/bin join_logo_scp
-```
+- chapter_exe
 
-### L-SMASH (muxer, timelineeditor)
+  ```bash
+  git clone https://github.com/tobitti0/chapter_exe
+  cd chapter_exe/src
+  sudo install -D -t /usr/local/bin chapter_exe
+  ```
 
-```bash
-git clone https://github.com/l-smash/l-smash.git
-cd l-smash/
-./configure
-make -j$(nproc)
-sudo make install
-```
+- join_logo_scp
 
-### fdkaac
+  ```bash
+  git clone https://github.com/tobitti0/join_logo_scp
+  cd join_logo_scp/src
+  sudo install -D -t /usr/local/bin join_logo_scp
+  ```
 
-```bash
-git clone https://github.com/mstorsjo/fdk-aac.git
-cd fdk-aac
-./autogen.sh
-./configure
-make -j$(nproc)
-sudo make install
-cd ..
+- fdkaac
 
-git clone https://github.com/nu774/fdkaac.git
-cd fdkaac
-autoreconf -i
-./configure
-make -j$(nproc)
-sudo make install
-```
+  ```bash
+  git clone https://github.com/mstorsjo/fdk-aac.git
+  cd fdk-aac
+  ./autogen.sh
+  ./configure --disable-shared
+  make -j$(nproc)
+  sudo make install
+  cd ..
+  
+  git clone https://github.com/nu774/fdkaac.git
+  cd fdkaac
+  autoreconf -i
+  ./configure
+  make -j$(nproc)
+  sudo make install
+  ```
 
-### opusenc
+- opusenc
 
-```bash
-sudo apt install opus-tools
-```
+  ```bash
+  sudo apt install opus-tools
+  ```
 
-### yadif
+- yadif
 
-```bash
-git clone https://github.com/Asd-g/yadifmod2
-cd yadifmod2
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
-```
+  ```bash
+  git clone https://github.com/Asd-g/yadifmod2
+  cd yadifmod2
+  mkdir build && cd build
+  cmake ..
+  make -j$(nproc)
+  sudo make install
+  ```
+
+- TIVTC
+
+  ```bash
+  git clone https://github.com/pinterf/TIVTC
+  cd TIVTC/src
+  cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S .
+  cmake --build build
+  sudo make install
+  ```
 
 ### Amatsukaze本体のビルドとインストール
 
 下記では、Amatsukazeを ```$HOME/Amatsukaze``` にインストールする例を示します。
+
+```./install_linux.sh``` により下記が自動的に実行されます。
+
+- AmatsuakzeCLIのビルド
+- AmatsuakzeServer, AmatsuakzeServerCLI, AmatsuakzeAddTask のビルド
+- インストール先への実行ファイルの配置
+- yadif, TIVTC 等プラグインの exe_files/plugins64 へのリンク作成
+  
 
 ```bash
 git clone https://github.com/rigaya/Amatsukaze.git --recursive

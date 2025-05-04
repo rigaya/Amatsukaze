@@ -33,9 +33,27 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/Amatsukaze/libAmatsukaze.
 
 # プラグインのインストール
 echo "プラグインをインストールします..."
+# libyadifmod2*.so をインストール
 for plugin in /usr/local/lib/avisynth/libyadifmod2*.so; do
     if [ -e "$plugin" ]; then
         ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
+        echo "プラグインへのリンクを作成しました: $plugin"
+    fi
+done
+
+# libtivtc.so をインストール
+for plugin in /usr/local/lib/avisynth/libtivtc.so; do
+    if [ -e "$plugin" ]; then
+        ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
+        echo "プラグインへのリンクを作成しました: $plugin"
+    fi
+done
+
+# libtdeint.so をインストール
+for plugin in /usr/local/lib/avisynth/libtdeint.so; do
+    if [ -e "$plugin" ]; then
+        ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
+        echo "プラグインへのリンクを作成しました: $plugin"
     fi
 done
 
