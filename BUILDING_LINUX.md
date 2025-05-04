@@ -1,33 +1,53 @@
-# Linux向けAmatsukazeCLIビルド手順
+# Linux向けAmatsukazeServer
 
-このドキュメントでは、AmatsukazeCLIをLinux環境でビルドするための詳細な手順を説明します。
+**注意**
+現在建設中でたぶん対応しきれていない箇所が多く、バグだらけです。
 
 ## 概要
 
-AmatsukazeCLIはもともとWindows向けのMPEG2-TS変換ツールですが、このビルド手順ではmesonビルドシステムを使用してLinux環境でビルドできるようにしています。
+AmatsukazeServerCLI と AmatsukazeCLI、AmatsukazeAddTask をLinux対応作業中です。
 
-主な依存関係：
-- common（共通ユーティリティライブラリ）
-- Caption（字幕処理ライブラリ）
-- FFmpeg（メディア処理ライブラリ - システムから提供）
-- OpenSSL（暗号化ライブラリ - MD5ハッシュ計算に使用）
+AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応していないようなので、Linux対応は難しいです。
 
-## システム要件
+そのため、LinuxでAmatsukazeServerCLIを起動して、WindowsからAmatsukazeGUIで接続する形を想定しています。
 
-- Linux OS（Ubuntu 20.04以上推奨）
-- C++17対応コンパイラ
-- meson & ninja ビルドシステム
-- pkg-config
-- FFmpegライブラリ（libavcodec, libavformat, libavutil, libswscale, libswresample）
-- OpenSSLライブラリとヘッダーファイル
+また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
 
-## 依存パッケージのインストール
+## 作業状況と作業予定
 
-### Ubuntu / Debian系
+- Linux対応済み
+  - AmatsukazeCLI (Windows: cp932, Linux: utf8)
+    - AvisynthのフィルタはひとまずCPU版は動作確認
+  - AmatsukazeServerCLI
+  - AmatsukazeAddTask
+
+- 今後Linux対応できるかも?
+  - GPU版のAvisynthのフィルタを使用できる?
+    - Avisynth+はCUDA対応しているらしいが、AvisynthNeoと互換性があるのかどうか…
+  - 設定画面へのドラッグドロップ
+  - 音声エンコード
+
+- Linux対応困難
+  - AmatsukazeGUI
+  - エンコード中の一時停止
+
+- その他対応予定なし
+  - エンコード後、スリープ・シャットダウン
+  - スレッドアフィニティの指定
+  - ffmpegに対する独自拡張の取り込み
+  - 他のエンコーダの追加等
+
+
+## インストール手順
+
+
+### 依存パッケージのインストール
+
+#### Ubuntu / Debian系
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git meson ninja-build pkg-config \
+sudo apt install -y build-essential git cmake meson ninja-build pkg-config \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libssl-dev libz-dev
 
@@ -38,10 +58,10 @@ sudo apt update
 sudo apt install -y dotnet-sdk-8.0
 ```
 
-### Fedora / RHEL / CentOS系
+#### Fedora / RHEL / CentOS系
 
 ```bash
-sudo dnf install -y gcc gcc-c++ git meson ninja-build pkg-config \
+sudo dnf install -y gcc gcc-c++ git cmake meson ninja-build pkg-config \
     ffmpeg-devel openssl-devel libz-devel
 
 # .NET
@@ -57,7 +77,7 @@ git clone https://github.com/AviSynth/AviSynthPlus.git
 cd AviSynthPlus
 mkdir build && cd build
 cmake ..
-make
+make -j$(nproc)
 sudo make install
 ```
 
@@ -72,7 +92,7 @@ sudo apt install x264 x265 svt-av1
 ```bash
 git clone https://github.com/gpac/gpac.git && cd gpac
 ./configure --static-bin
-make -j8
+make -j$(nproc)
 sudo make install
 ```
 
@@ -98,45 +118,80 @@ cd join_logo_scp/src
 sudo install -D -t /usr/local/bin join_logo_scp
 ```
 
-### L-SMASH
+### L-SMASH (muxer, timelineeditor)
 
 ```bash
 git clone https://github.com/l-smash/l-smash.git
 cd l-smash/
 ./configure
-make
+make -j$(nproc)
 sudo make install
 ```
 
-## Amatsukazeのビルド
+### fdkaac
+
+```bash
+git clone https://github.com/mstorsjo/fdk-aac.git
+cd fdk-aac
+./autogen.sh
+./configure
+make -j$(nproc)
+sudo make install
+cd ..
+
+git clone https://github.com/nu774/fdkaac.git
+cd fdkaac
+autoreconf -i
+./configure
+make -j$(nproc)
+sudo make install
+```
+
+### opusenc
+
+```bash
+sudo apt install opus-tools
+```
+
+### yadif
+
+```bash
+git clone https://github.com/Asd-g/yadifmod2
+cd yadifmod2
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+sudo make install
+```
+
+### Amatsukaze本体のビルドとインストール
+
+下記では、Amatsukazeを ```$HOME/Amatsukaze``` にインストールする例を示します。
 
 ```bash
 git clone https://github.com/rigaya/Amatsukaze.git --recursive
 cd Amatsukaze
-mkdir -p build && cd build
-meson setup .. --prefix=$HOME/Amatsukaze
-ninja install
+./install_linux.sh $HOME/Amatsukaze
 ```
 
 ## 実行方法
 
-ビルドしたAmatsukazeCLIは以下のように実行できます：
+### AmatsukazeServerCLI の実行
+
+ビルドしたAmatsukazeServerCLIを下記のように実行します。
 
 ```bash
-./AmatsukazeCLI/AmatsukazeCLI -i <input.ts> -o <output.mp4>
+cd $HOME/Amatsukaze
+./AmatsukazeServer.sh
 ```
 
-または、インストールした場合：
+### タスクの追加
 
 ```bash
-AmatsukazeCLI -i <input.ts> -o <output.mp4>
+cd $HOME/Amatsukaze
+./exe_files/AmatsukazeAddTask -f <対象ファイル名> -o <出力フォルダ> -s <プロファイル名>
 ```
 
-詳細なコマンドラインオプションを確認するには：
-
-```bash
-./AmatsukazeCLI/AmatsukazeCLI --help
-```
 
 ## 注意事項
 
@@ -144,17 +199,5 @@ AmatsukazeCLI -i <input.ts> -o <output.mp4>
    - 一部のWindowsに依存する機能は制限または無効化されています
    - ffmpegはシステムライブラリを使用します
    - GUI機能は利用できません
-
-2. **デバッグ方法**:
-   - デバッグビルドを行うには: `meson setup --buildtype=debug ..`
-   - トレースログを有効にするには: `-v` オプションを追加
-
-3. **ビルド設定のカスタマイズ**:
-   - オプション機能の無効化: `meson setup -Doption=false ..`
-   - ビルド設定の変更: `meson configure -Doption=value`
-
-## 開発情報
-
-このLinux版ビルドは開発中です。問題や提案がある場合は、GitHubのIssueトラッカーで報告してください。
-
-プロジェクトの改善にご協力いただける場合は、プルリクエストを歓迎します。
+   - 必ず ```dotnet publish``` して利用してください。
+   
