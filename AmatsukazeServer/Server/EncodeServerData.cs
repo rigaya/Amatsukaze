@@ -778,7 +778,13 @@ namespace Amatsukaze.Server
         public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode == ProcMode.CMCheck; } }
         public bool IsTest { get { return Mode == ProcMode.Test; } }
 
-        public string DirName { get { return Path.GetDirectoryName(SrcPath); } }
+        public string DirName { 
+            get { 
+                var dir = Path.GetDirectoryName(SrcPath);
+                var delimiter = SrcPath.Contains('\\') ? '\\' : '/';
+                return dir?.Replace(Path.DirectorySeparatorChar, delimiter);
+            } 
+        }
         public string FileName { get { return Path.GetFileName(SrcPath); } }
 
         public bool IsActive {
