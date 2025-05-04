@@ -1052,6 +1052,11 @@ namespace Amatsukaze.Models
             });
         }
 
+        public Task SendLogoFile(LogoFileData logoFile)
+        {
+            return Server?.SendLogoFile(logoFile);
+        }
+
         public Task SendFinishSetting()
         {
             return Server?.SetCommonData(new CommonData()

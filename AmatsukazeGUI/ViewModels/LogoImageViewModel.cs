@@ -80,9 +80,9 @@ namespace Amatsukaze.ViewModels
         {
             try
             {
-                Model.CopyLogoFile();
+                int ret = Model.CopyLogoFile();
                 Model.ClearLogo();
-                Application.Current.Shutdown();
+                Application.Current.Shutdown(-1 * ret);
             }
             catch(IOException exception)
             {

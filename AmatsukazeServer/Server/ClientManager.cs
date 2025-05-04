@@ -300,6 +300,9 @@ namespace Amatsukaze.Server
                 case RPCMethodId.RequestDrcsImages:
                     server.RequestDrcsImages();
                     break;
+                case RPCMethodId.SendLogoFile:
+                    server.SendLogoFile((LogoFileData)arg);
+                    break;
             }
         }
 

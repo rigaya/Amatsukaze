@@ -10,6 +10,16 @@ using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server
 {
+    [DataContract]
+    public class LogoFileData
+    {
+        [DataMember]
+        public byte[] Data { get; set; }
+        
+        [DataMember]
+        public int ServiceId { get; set; }
+    }
+
     public interface IAddTaskServer
     {
         Task AddQueue(AddQueueRequest dir);
@@ -39,6 +49,7 @@ namespace Amatsukaze.Server
         Task RequestLogFile(LogFileRequest req);
         Task RequestLogoData(string fileName);
         Task RequestDrcsImages();
+        Task SendLogoFile(LogoFileData logoData);
     }
 
     public interface IAddTaskClient
@@ -96,6 +107,7 @@ namespace Amatsukaze.Server
         RequestLogFile,
         RequestLogoData,
         RequestDrcsImages,
+        SendLogoFile,
 
         OnUIData = 200,
         OnConsoleUpdate,
@@ -204,6 +216,7 @@ namespace Amatsukaze.Server
             { RPCMethodId.RequestLogFile, typeof(LogFileRequest) },
             { RPCMethodId.RequestLogoData, typeof(string) },
             { RPCMethodId.RequestDrcsImages, null },
+            { RPCMethodId.SendLogoFile, typeof(LogoFileData) },
 
             { RPCMethodId.OnUIData, typeof(UIData) },
             { RPCMethodId.OnConsoleUpdate, typeof(ConsoleUpdate) },
@@ -567,6 +580,11 @@ namespace Amatsukaze.Server
         public Task RequestDrcsImages()
         {
             return Server.RequestDrcsImages();
+        }
+
+        public Task SendLogoFile(LogoFileData logoData)
+        {
+            return Server.SendLogoFile(Copy(logoData));
         }
     }
 }

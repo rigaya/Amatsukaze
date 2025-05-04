@@ -18,6 +18,7 @@ namespace Amatsukaze.Models
 
         private AMTContext context;
         private MediaFile mediafile;
+        private ClientModel clientModel;
 
         private string logopath;
 
@@ -193,6 +194,11 @@ namespace Amatsukaze.Models
             var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく必要がある
         }
 
+        public void SetClientModel(ClientModel clientModel)
+        {
+            this.clientModel = clientModel;
+        }
+
         public void Close()
         {
             if(mediafile != null)
@@ -349,18 +355,19 @@ namespace Amatsukaze.Models
         }
 
         // 失敗するとIOExceptionが飛ぶ
-        public void CopyLogoFile()
+        public int CopyLogoFile()
         {
             string dirpath = "logo";
             Directory.CreateDirectory(dirpath);
             string prefix = Path.Combine(dirpath, "SID" + Logo.ServiceId.ToString() + "-");
+            
             for(int i = 1; i <= 1000; ++i)
             {
                 string path = prefix + i + ".lgd";
                 try
                 {
                     File.Copy(logopath, path);
-                    return;
+                    return i;
                 }
                 catch(IOException) { }
             }

@@ -357,7 +357,37 @@ namespace Amatsukaze.ViewModels
             {
                 args += " --slimts";
             }
-            System.Diagnostics.Process.Start(apppath, args);
+            var process = System.Diagnostics.Process.Start(apppath, args);
+            if (process != null)
+            {
+                process.EnableRaisingEvents = true;
+                process.Exited += async (sender, e) =>
+                {
+                    var exitCode = process.ExitCode;
+                    await DispatcherHelper.UIDispatcher.InvokeAsync(() =>
+                    {
+                        if (exitCode < 0) // ロゴが生成された
+                        {
+                            int logoIdx = Math.Abs(exitCode); // 戻り値の逆符号がロゴの数字を表す
+                            var logopath = Path.Combine("logo", "SID" + file.ServiceId.ToString() + "-" + logoIdx + ".lgd");
+                            if (File.Exists(logopath))
+                            {
+                                // サーバーに転送
+                                if (Model.Server != null)
+                                {
+                                    byte[] logoData = File.ReadAllBytes(logopath);
+                                    var logoFileData = new LogoFileData
+                                    {
+                                        Data = logoData,
+                                        ServiceId = file.ServiceId
+                                    };
+                                    Model.Server?.SendLogoFile(logoFileData);
+                                }
+                            }
+                        }
+                    });
+                };
+            }
         }
 
         private async Task<bool> ConfirmRetryCompleted(IEnumerable<DisplayQueueItem> items, string retry)

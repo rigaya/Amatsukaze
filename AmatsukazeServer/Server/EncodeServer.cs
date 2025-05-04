@@ -2917,6 +2917,39 @@ namespace Amatsukaze.Server
             }
         }
 
+        public Task SendLogoFile(LogoFileData logoData)
+        {
+            string dirpath = "logo";
+            var message = "ロゴファイルの保存に失敗しました。";
+            Directory.CreateDirectory(dirpath);
+            string prefix = Path.Combine(dirpath, "SID" + logoData.ServiceId.ToString() + "-");
+            try
+            {
+                var waits = new List<Task>();
+                for(int i = 1; i <= 1000; ++i)
+                {
+                    string path = prefix + i + ".lgd";
+                    if (File.Exists(path)) {
+                        continue;
+                    }
+                    try
+                    {
+                        File.WriteAllBytes(path, logoData.Data);
+                        message = "ロゴファイルを保存しました: " + path;
+                        break;
+                    }
+                    catch(IOException) { }
+                }
+                //waits.Add(Client.OnLogoFile(logoData));
+                waits.Add(NotifyMessage(message, false));
+                return Task.WhenAll(waits);
+            }
+            catch (Exception e)
+            {
+                return NotifyError(e.Message, false);
+            }
+        }
+
         public Task AddQueue(AddQueueRequest req)
         {
             queueQ.Post(req);

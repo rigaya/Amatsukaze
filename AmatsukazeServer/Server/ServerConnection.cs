@@ -153,6 +153,11 @@ namespace Amatsukaze.Server
         {
             return Send(RPCMethodId.RequestLogoData, fileName);
         }
+
+        public Task SendLogoFile(LogoFileData logoData)
+        {
+            return Send(RPCMethodId.SendLogoFile, logoData);
+        }
     }
 
     public class ServerConnection : AbstracrtServerConnection
