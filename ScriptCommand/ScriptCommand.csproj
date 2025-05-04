@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <RootNamespace>Amatsukaze.Command</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -8,21 +8,17 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <OutputPath>..\x64\Debug\</OutputPath>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
     <OutputPath>..\x64\Release\</OutputPath>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug2|x64'">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\x64\Debug2\</OutputPath>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release2|x64'">
     <OutputPath>bin\x64\Release2\</OutputPath>
     <Optimize>true</Optimize>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
     <Compile Update="Properties\AssemblyInfo.cs">
@@ -47,16 +43,4 @@
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
   </ItemGroup>
-  <PropertyGroup>
-    <PostBuildEvent>mkdir "$(OutputPath)cmd"
-copy /Y /B "$(OutputPath)$(AssemblyName).exe" "$(OutputPath)cmd\AddTag.exe"
-copy /Y /B "$(OutputPath)$(AssemblyName).exe" "$(OutputPath)cmd\SetOutDir.exe"
-copy /Y /B "$(OutputPath)$(AssemblyName).exe" "$(OutputPath)cmd\SetPriority.exe"
-copy /Y /B "$(OutputPath)$(AssemblyName).exe" "$(OutputPath)cmd\GetOutFiles.exe"
-copy /Y /B "$(OutputPath)$(AssemblyName).exe" "$(OutputPath)cmd\CancelItem.exe"</PostBuildEvent>
-  </PropertyGroup>
-  <PropertyGroup>
-    <TextTransformPath>$(VsInstallRoot)\Common7\IDE\TextTransform.exe</TextTransformPath>
-  </PropertyGroup>
-  <Import Project="..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets" Condition="Exists('..\packages\Clarius.TransformOnBuild.1.22.0\build\Clarius.TransformOnBuild.targets')" />
 </Project>

@@ -32,7 +32,7 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/AmatsukazeCLI/AmatsukazeC
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/Amatsukaze/libAmatsukaze.so"
 
 # プラグインのインストール
-echo "プラグインをインストールします..."
+echo "プラグインへのリンクを作成します... -> ${INSTALL_DIR}/exe_files/plugins64/"
 # libyadifmod2*.so をインストール
 for plugin in /usr/local/lib/avisynth/libyadifmod2*.so; do
     if [ -e "$plugin" ]; then
@@ -63,6 +63,23 @@ if ! dotnet publish AmatsukazeLinux.sln -o "${INSTALL_DIR}/exe_files"; then
     echo ".NET アプリケーションの公開に失敗しました"
     exit 1
 fi
+
+# ScriptCommand の展開
+mkdir -p "${INSTALL_DIR}/exe_files/cmd"
+for cmd in AddTag SetOutDir SetPriority GetOutFiles CancelItem; do
+    # ScriptCommandで始まるすべてのファイルに対して処理を行う
+    for src_file in "${INSTALL_DIR}/exe_files/ScriptCommand"*; do
+        if [ -f "$src_file" ]; then
+            # ファイル名からScriptCommand部分を除去し、新しいコマンド名に置換
+            dst_file="${INSTALL_DIR}/exe_files/cmd/${cmd}${src_file#${INSTALL_DIR}/exe_files/ScriptCommand}"
+            cp "$src_file" "$dst_file"
+        fi
+        # ファイル名がScriptCommandそのもののときだけメッセージを表示
+        if [ "$src_file" = "${INSTALL_DIR}/exe_files/ScriptCommand" ]; then
+            echo "コマンドを作成しました: ${cmd} -> ${INSTALL_DIR}/exe_files/cmd/"
+        fi
+    done
+done
 
 echo "インストールが完了しました"
 

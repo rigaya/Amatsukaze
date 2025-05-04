@@ -76,7 +76,7 @@ namespace Amatsukaze.Command
             //（CLRはDLLをロードするときに環境変数PATHやカレントディレクトリは見ないことに注意）
             AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
             {
-                var dir = Path.GetDirectoryName(typeof(ScriptCommand).Assembly.Location);
+                var dir = System.AppContext.BaseDirectory; //Path.GetDirectoryName(typeof(ScriptCommand).Assembly.Location);
                 return System.Reflection.Assembly.LoadFrom(Path.GetDirectoryName(dir) + 
                     "\\" + new System.Reflection.AssemblyName(e.Name).Name + ".dll");
             };
