@@ -13,6 +13,7 @@ BUILD_DIR="${2:-build}"
 
 # インストール先ディレクトリの作成
 mkdir -p "${INSTALL_DIR}/exe_files"
+mkdir -p "${INSTALL_DIR}/exe_files/plugins64"
 
 # ビルドディレクトリの作成とビルド
 echo "ビルドを開始します..."
@@ -26,8 +27,17 @@ fi
 
 # 実行ファイルのインストール
 echo "実行ファイルをインストールします..."
-cp "${BUILD_DIR}/AmatsukazeCLI/AmatsukazeCLI" "${INSTALL_DIR}/exe_files/"
-cp "${BUILD_DIR}/Amatsukaze/libAmatsukaze.so" "${INSTALL_DIR}/exe_files/"
+install -D -t "${INSTALL_DIR}/exe_files" ./scripts/AmatsukazeServer.sh
+install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/AmatsukazeCLI/AmatsukazeCLI"
+install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/Amatsukaze/libAmatsukaze.so"
+
+# プラグインのインストール
+echo "プラグインをインストールします..."
+for plugin in /usr/local/lib/avisynth/libyadifmod2*.so; do
+    if [ -e "$plugin" ]; then
+        ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
+    fi
+done
 
 # .NET アプリケーションの公開
 echo ".NET アプリケーションを公開します..."
