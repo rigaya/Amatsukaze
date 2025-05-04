@@ -10,6 +10,8 @@ namespace Amatsukaze.Server
         {
             try
             {
+                var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく
+
                 // ログパスを設定
                 log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
                 log4net.Config.XmlConfigurator.Configure(new FileInfo(

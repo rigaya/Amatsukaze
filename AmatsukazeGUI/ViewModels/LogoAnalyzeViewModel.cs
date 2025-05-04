@@ -17,6 +17,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Threading.Tasks;
 using Microsoft.Win32;
+using Amatsukaze.Server;
 
 namespace Amatsukaze.ViewModels
 {
@@ -262,6 +263,8 @@ namespace Amatsukaze.ViewModels
                 MessageBox.Show("一時フォルダの作成に失敗: " + App.Option.WorkPath + "\r\n" + exception.Message);
                 return false;
             }
+
+            var logoCharSet = Util.AmatsukazeDefaultEncoding; // とりあえず呼んでおく
 
             try
             {
