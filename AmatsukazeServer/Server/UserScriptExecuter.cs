@@ -450,7 +450,9 @@ namespace Amatsukaze.Server
 
         public async Task Execute()
         {
-            var psi = new ProcessStartInfo("cmd.exe", "/C \"" + ScriptPath + "\"")
+            var cmd = Environment.OSVersion.Platform == PlatformID.Win32NT ? "cmd.exe" : "sh";
+            var cmd_opt = Environment.OSVersion.Platform == PlatformID.Win32NT ? "/C" : "-c";
+            var psi = new ProcessStartInfo(cmd, cmd_opt + " \"" + ScriptPath + "\"")
             {
                 UseShellExecute = false,
                 WorkingDirectory = Directory.GetCurrentDirectory(),
@@ -465,8 +467,8 @@ namespace Amatsukaze.Server
             // exe_filesをパスに追加
             var exeDir = Path.GetDirectoryName(typeof(UserScriptExecuter).Assembly.Location);
             // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
-            psi.EnvironmentVariables["path"] =
-                exeDir + ";" + exeDir + "cmd" + ";" + psi.EnvironmentVariables["path"];
+            psi.EnvironmentVariables["PATH"] =
+                exeDir + ";" + exeDir + "cmd" + ";" + psi.EnvironmentVariables["PATH"];
 
             // パラメータを環境変数に追加
             SetupEnv(psi.EnvironmentVariables);

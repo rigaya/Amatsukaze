@@ -2398,9 +2398,14 @@ namespace Amatsukaze.Server
                             batDirTime = lastModified;
 
                             var files = Directory.GetFiles(batpath)
-                                .Where(f =>
-                                    f.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
+                                .Where(f => {
+                                    if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX) {
+                                        return f.EndsWith(".sh", StringComparison.OrdinalIgnoreCase);
+                                    } else {
+                                        return f.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
+                                               f.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase);
+                                    }
+                                })
                                 .Select(f => Path.GetFileName(f));
 
                             AddQueueBatFiles = files
