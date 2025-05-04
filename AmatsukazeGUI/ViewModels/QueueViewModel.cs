@@ -333,26 +333,37 @@ namespace Amatsukaze.ViewModels
                 return;
             }
             var file = item.Model;
-            var workpath = Model.Setting.WorkPath;
-            if (Directory.Exists(workpath) == false)
-            {
-                MessageBox.Show("一時ファイルフォルダがアクセスできる場所に設定されていないため起動できません");
-                return;
-            }
-            string filepath = file.SrcPath;
-            if (File.Exists(filepath) == false
-                && Model.ServerInfo.Platform != PlatformID.Unix.ToString()) // サーバーがLinuxの場合はファイルのチェックをスキップ
-            {
-                // failedに入っているかもしれないのでそっちも見る
-                filepath = Path.Combine(Path.GetDirectoryName(file.SrcPath), "failed", Path.GetFileName(file.SrcPath));
-                if (File.Exists(filepath) == false)
+            var args = "-l logo --serviceid " + file.ServiceId;
+            if (Model.ServerInfo.Platform == PlatformID.Unix.ToString()) {
+                // Windowsのユーザーの標準の一時フォルダを使用
+                var tempdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
+                if (Directory.Exists(tempdir) == false)
                 {
-                    MessageBox.Show("ファイルが見つかりません");
+                    // tempdirがない場合はファイルを保存するフォルダを作成
+                    Directory.CreateDirectory(tempdir);
+                }
+                args += " --work \"" + tempdir + "\"";
+            } else {
+                var workpath = Model.Setting.WorkPath;
+                if (Directory.Exists(workpath) == false)
+                {
+                    MessageBox.Show("一時ファイルフォルダがアクセスできる場所に設定されていないため起動できません");
                     return;
                 }
+                string filepath = file.SrcPath;
+                if (File.Exists(filepath) == false) // サーバーがLinuxの場合はファイルのチェックをスキップ
+                {
+                    // failedに入っているかもしれないのでそっちも見る
+                    filepath = Path.Combine(Path.GetDirectoryName(file.SrcPath), "failed", Path.GetFileName(file.SrcPath));
+                    if (File.Exists(filepath) == false)
+                    {
+                        MessageBox.Show("ファイルが見つかりません");
+                        return;
+                    }
+                }
+                args += " --file \"" + filepath + "\" --work \"" + workpath + "\"";
             }
-            var apppath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            var args = "-l logo --file \"" + filepath + "\" --work \"" + workpath + "\" --serviceid " + file.ServiceId;
+            var apppath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName; // 実行ファイル名を取得する
             if (slimts)
             {
                 args += " --slimts";
