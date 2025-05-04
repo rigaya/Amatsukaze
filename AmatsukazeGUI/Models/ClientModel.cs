@@ -55,6 +55,10 @@ namespace Amatsukaze.Models
         private string currentNewProfile;
         private string currentNewAutoSelect;
 
+        public ServerInfo ServerInfo {
+            get { return serverInfo; }
+        }
+
         public bool IsStandalone {
             get {
                 return App.Option.LaunchType == LaunchType.Standalone;

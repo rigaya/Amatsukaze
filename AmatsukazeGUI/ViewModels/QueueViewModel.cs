@@ -340,7 +340,8 @@ namespace Amatsukaze.ViewModels
                 return;
             }
             string filepath = file.SrcPath;
-            if (File.Exists(filepath) == false)
+            if (File.Exists(filepath) == false
+                && Model.ServerInfo.Platform != PlatformID.Unix.ToString()) // サーバーがLinuxの場合はファイルのチェックをスキップ
             {
                 // failedに入っているかもしれないのでそっちも見る
                 filepath = Path.Combine(Path.GetDirectoryName(file.SrcPath), "failed", Path.GetFileName(file.SrcPath));
