@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace Amatsukaze.Server
 {
@@ -150,11 +151,28 @@ namespace Amatsukaze.Server
         {
             if(Process != null && Process.HasExited == false)
             {
-                string taskkill = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "taskkill.exe");
+                string processName;
+                string arguments;
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    processName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "taskkill.exe");
+                    arguments = string.Format("/PID {0} /T /F", Process.Id);
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    processName = "kill";
+                    arguments = $"-9 {Process.Id}";
+                }
+                else
+                {
+                    return;
+                }
+
                 using (var procKiller = new System.Diagnostics.Process())
                 {
-                    procKiller.StartInfo.FileName = taskkill;
-                    procKiller.StartInfo.Arguments = string.Format("/PID {0} /T /F", Process.Id);
+                    procKiller.StartInfo.FileName = processName;
+                    procKiller.StartInfo.Arguments = arguments;
                     procKiller.StartInfo.CreateNoWindow = true;
                     procKiller.StartInfo.UseShellExecute = false;
                     procKiller.Start();
