@@ -52,6 +52,7 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
 ```bash
 sudo apt update
 sudo apt install -y build-essential git cmake meson ninja-build pkg-config \
+    autoconf automake libtool \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libssl-dev libz-dev
 
