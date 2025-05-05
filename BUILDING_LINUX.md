@@ -13,6 +13,10 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
 
 また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
 
+## 想定動作環境
+
+- x64のLinux環境
+
 ## 作業状況と作業予定
 
 - Linux対応済み
@@ -25,6 +29,7 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
   - GPU版のAvisynthのフィルタを使用できる?
     - Avisynth+はCUDA対応しているらしいが、AvisynthNeoと互換性があるのかどうか…
   - 設定画面へのドラッグドロップ
+    - Windows-Linuxの対応関係を設定できればあるいは…?
 
 - Linux対応困難
   - AmatsukazeGUI
@@ -35,6 +40,7 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
   - スレッドアフィニティの指定
   - ffmpegに対する独自拡張の取り込み
   - 他のエンコーダの追加等
+  - SCRename によるリネーム機能
 
 
 ## インストール手順
@@ -56,16 +62,6 @@ sudo apt update
 sudo apt install -y dotnet-sdk-8.0
 ```
 
-#### Fedora / RHEL / CentOS系
-
-```bash
-sudo dnf install -y gcc gcc-c++ git cmake meson ninja-build pkg-config \
-    ffmpeg-devel openssl-devel libz-devel
-
-# .NET
-sudo dnf install -y dotnet-sdk-8.0
-```
-
 ### AviSynthのインストール
 
 Linuxでは、AviSynth+をインストールする必要があります。
@@ -81,98 +77,135 @@ sudo make install
 
 ### 必要な実行ファイルとプラグインのインストール
 
-- x264, x265, svt-av1
+- エンコーダ
 
-  ```bash
-  sudo apt install x264 x265 svt-av1
-  ```
-
-- mp4box
-
-  ```bash
-  git clone https://github.com/gpac/gpac.git && cd gpac
-  ./configure --static-bin
-  make -j$(nproc)
-  sudo make install
-  ```
-
-- mkvmerge
-
-  ```bash
-  sudo apt install mkvtoolnix
-  ```
-
-- L-SMASH (muxer, timelineeditor)
-
-  ```bash
-  git clone https://github.com/l-smash/l-smash.git
-  cd l-smash/
-  ./configure --disable-shared
-  make -j$(nproc)
-  sudo make install
-  ```
-
-- chapter_exe
-
-  ```bash
-  git clone https://github.com/tobitti0/chapter_exe
-  cd chapter_exe/src
-  sudo install -D -t /usr/local/bin chapter_exe
-  ```
-
-- join_logo_scp
-
-  ```bash
-  git clone https://github.com/tobitti0/join_logo_scp
-  cd join_logo_scp/src
-  sudo install -D -t /usr/local/bin join_logo_scp
-  ```
-
-- fdkaac
-
-  ```bash
-  git clone https://github.com/mstorsjo/fdk-aac.git
-  cd fdk-aac
-  ./autogen.sh
-  ./configure --disable-shared
-  make -j$(nproc)
-  sudo make install
-  cd ..
+  - x264, x265, svt-av1
   
-  git clone https://github.com/nu774/fdkaac.git
-  cd fdkaac
-  autoreconf -i
-  ./configure
-  make -j$(nproc)
-  sudo make install
-  ```
+    ```bash
+    sudo apt install x264 x265 svt-av1
+    ```
+  
+  - qsvencc, nvencc, vceencc
+  
+    - ドライバも含めたインストール方法
+      - [qsvencc](https://github.com/rigaya/QSVEnc/blob/master/Install.ja.md) ([ダウンロード先](https://github.com/rigaya/QSVEnc/releases))
+      - [nvencc](https://github.com/rigaya/NVEnc/blob/master/Install.ja.md)  ([ダウンロード先](https://github.com/rigaya/NVEnc/releases))
+      - [vceencc](https://github.com/rigaya/VCEEnc/blob/master/Install.ja.md) ([ダウンロード先](https://github.com/rigaya/VCEEnc/releases))
+  
+    ```bash
+    # qsvencc
+    sudo apt install ./qsvencc_x.xx_Ubuntu2x.04_amd64.deb
+    
+    # nvencc
+    sudo apt install ./nvencc_x.xx_Ubuntu2x.04_amd64.deb
+    
+    # vceencc
+    sudo apt install ./vceencc_x.xx_Ubuntu2x.04_amd64.deb
+    ```
 
-- opusenc
+- muxer
 
-  ```bash
-  sudo apt install opus-tools
-  ```
+  - mp4box
+  
+    ```bash
+    git clone https://github.com/gpac/gpac.git
+    cd gpac
+    ./configure --static-bin
+    make -j$(nproc)
+    sudo make install
+    ```
+  
+  - mkvmerge
+  
+    ```bash
+    sudo apt install mkvtoolnix
+    ```
+  
+  - L-SMASH (muxer, timelineeditor)
+  
+    ```bash
+    git clone https://github.com/l-smash/l-smash.git
+    cd l-smash/
+    ./configure
+    make -j$(nproc)
+    sudo make install
+    ```
 
-- yadif
+  - tsreplace
 
-  ```bash
-  git clone https://github.com/Asd-g/yadifmod2
-  cd yadifmod2
-  mkdir build && cd build
-  cmake ..
-  make -j$(nproc)
-  sudo make install
-  ```
+    [ダウンロード先](https://github.com/rigaya/tsreplace/releases)
 
-- TIVTC
+    ```bash
+    sudo apt install ./tsreplace_x.xx_Ubuntu2x.04_amd64.deb
+    ```
 
-  ```bash
-  git clone https://github.com/pinterf/TIVTC
-  cd TIVTC/src
-  cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S .
-  cmake --build build
-  sudo make install
-  ```
+- CM/ロゴ解析等
+
+  - chapter_exe
+  
+    ```bash
+    git clone https://github.com/tobitti0/chapter_exe
+    cd chapter_exe/src
+    sudo install -D -t /usr/local/bin chapter_exe
+    ```
+  
+  - join_logo_scp
+  
+    ```bash
+    git clone https://github.com/tobitti0/join_logo_scp
+    cd join_logo_scp/src
+    sudo install -D -t /usr/local/bin join_logo_scp
+    ```
+
+- 音声エンコーダ
+
+  - fdkaac
+  
+    ```bash
+    git clone https://github.com/mstorsjo/fdk-aac.git
+    cd fdk-aac
+    ./autogen.sh
+    ./configure --disable-shared
+    make -j$(nproc)
+    sudo make install
+    cd ..
+    
+    git clone https://github.com/nu774/fdkaac.git
+    cd fdkaac
+    autoreconf -i
+    ./configure
+    make -j$(nproc)
+    sudo make install
+    ```
+  
+  - opusenc
+  
+    ```bash
+    sudo apt install opus-tools
+    ```
+
+- Avisynthプラグイン
+
+  - yadif
+  
+    ```bash
+    git clone https://github.com/Asd-g/yadifmod2
+    cd yadifmod2
+    mkdir build && cd build
+    cmake ..
+    make -j$(nproc)
+    sudo make install
+    ```
+  
+  - TIVTC
+  
+    ```bash
+    git clone https://github.com/pinterf/TIVTC
+    cd TIVTC/src
+    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S .
+    cmake --build build
+    sudo make install
+    ```
 
 ### Amatsukaze本体のビルドとインストール
 
@@ -210,12 +243,12 @@ cd $HOME/Amatsukaze
 ./exe_files/AmatsukazeAddTask -f <対象ファイル名> -o <出力フォルダ> -s <プロファイル名>
 ```
 
-
 ## 注意事項
 
 1. **既知の制限**:
-   - 一部のWindowsに依存する機能は制限または無効化されています
-   - ffmpegはシステムライブラリを使用します
-   - GUI機能は利用できません
+   - 一部のWindowsに依存する機能は制限または無効化されています。
+   - ffmpegはシステムライブラリを使用します。
+   - GUI機能はLinuxでは利用できません。
    - 必ず ```dotnet publish``` して利用してください。
+   - ロゴ解析は、AmatsukazeGUI(Windows側)で行います。tsファイルの場所をWindows側で選択できるようにしてください。
    
