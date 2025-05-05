@@ -466,9 +466,11 @@ namespace Amatsukaze.Server
 
             // exe_filesをパスに追加
             var exeDir = Path.GetDirectoryName(typeof(UserScriptExecuter).Assembly.Location);
+
             // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
+            var envPathDelim = Environment.OSVersion.Platform == PlatformID.Win32NT ? ";" : ":";
             psi.EnvironmentVariables["PATH"] =
-                exeDir + ";" + exeDir + "cmd" + ";" + psi.EnvironmentVariables["PATH"];
+                exeDir + envPathDelim + Path.Combine(exeDir, "cmd") + envPathDelim + psi.EnvironmentVariables["PATH"];
 
             // パラメータを環境変数に追加
             SetupEnv(psi.EnvironmentVariables);
