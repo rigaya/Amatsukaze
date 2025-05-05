@@ -220,20 +220,20 @@ static inline int _vscprintf(const char * format, va_list pargs) {
 }
 
 static inline int _vscwprintf(const WCHAR * format, va_list pargs) {
-    wchar_t *buffer = nullptr;
     int retval = -1;
     int buf_size = 1024;
+    wchar_t *buffer = (wchar_t*)malloc(buf_size * sizeof(wchar_t));
     while (buf_size < 1024 * 1024) {
         va_list argcopy;
         va_copy(argcopy, pargs);
-        buffer = (wchar_t*)realloc(buffer, buf_size * sizeof(wchar_t));
-        int ret = swprintf(buffer, buf_size, format, argcopy);
+        int ret = vswprintf(buffer, buf_size, format, argcopy);
         va_end(argcopy);
-        if (retval >= 0){
+        if (ret >= 0){
             retval = ret;
             break;
         }
         buf_size *= 2;
+        buffer = (wchar_t*)realloc(buffer, buf_size * sizeof(wchar_t));
     }
     if (buffer != nullptr) {
         free(buffer);
