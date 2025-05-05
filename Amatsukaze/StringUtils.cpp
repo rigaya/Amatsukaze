@@ -100,7 +100,10 @@ bool StringLiner::SearchLineBreak() {
 std::vector<char> utf8ToString(const uint8_t* ptr, int sz) {
     auto w = char_to_wstring(std::string(reinterpret_cast<const char*>(ptr), sz), CP_UTF8);
     auto ret = wstring_to_string(w, CP_ACP);
-    return std::vector<char>(ret.begin(), ret.end());
+    std::vector<char> vec(ret.length() + 1, 0);
+    vec.resize(ret.length());
+    memcpy(vec.data(), ret.data(), ret.length());
+    return vec;
 }
 
 bool starts_with(const std::wstring& str, const std::wstring& test) {

@@ -16,7 +16,9 @@
         return std::string();
     }
     auto utf8str = wstring_to_string(tchar_to_wstring(str), CP_UTF8);
-    std::vector<char> utf8 = std::vector<char>(utf8str.begin(), utf8str.end());
+    std::vector<char> utf8(utf8str.length() + 1, 0);
+    utf8.resize(utf8str.length());
+    memcpy(utf8.data(), utf8str.data(), utf8str.length());
     std::vector<char> ret;
     for (char c : utf8) {
         switch (c) {

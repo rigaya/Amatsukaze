@@ -285,7 +285,9 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
         fprintf(SUBPROC_OUT, "\n");
         fflush(SUBPROC_OUT);
     } else {
-        line = std::vector<char>(ptr, ptr + len);
+        line.resize(len + 1, 0);
+        line.resize(len);
+        memcpy(line.data(), ptr, len);
     }
 
     if (bufferLines > 0) {
