@@ -352,11 +352,61 @@ enum {
 };
 
 static void SetThreadPriority(pthread_t thread, int priority) {
-    return; //何もしない
+#ifdef __linux__
+    int nice_value;
+    switch (priority) {
+        case THREAD_PRIORITY_HIGHEST:
+            nice_value = -20;
+            break;
+        case THREAD_PRIORITY_ABOVE_NORMAL:
+            nice_value = -10;
+            break;
+        case THREAD_PRIORITY_NORMAL:
+            nice_value = 0;
+            break;
+        case THREAD_PRIORITY_BELOW_NORMAL:
+            nice_value = 10;
+            break;
+        case THREAD_PRIORITY_LOWEST:
+            nice_value = 19;
+            break;
+        case THREAD_PRIORITY_IDLE:
+            nice_value = 19;
+            break;
+        default:
+            return;
+    }
+    setpriority(PRIO_PTHREAD, (id_t)thread, nice_value);
+#endif
 }
 
-static void SetPriorityClass(pid_t thread, int priority) {
-    return; //何もしない
+static void SetPriorityClass(pid_t pid, int priority) {
+#ifdef __linux__
+    int nice_value;
+    switch (priority) {
+        case THREAD_PRIORITY_HIGHEST:
+            nice_value = -20;
+            break;
+        case THREAD_PRIORITY_ABOVE_NORMAL:
+            nice_value = -10;
+            break;
+        case THREAD_PRIORITY_NORMAL:
+            nice_value = 0;
+            break;
+        case THREAD_PRIORITY_BELOW_NORMAL:
+            nice_value = 10;
+            break;
+        case THREAD_PRIORITY_LOWEST:
+            nice_value = 19;
+            break;
+        case THREAD_PRIORITY_IDLE:
+            nice_value = 19;
+            break;
+        default:
+            return;
+    }
+    setpriority(PRIO_PROCESS, pid, nice_value);
+#endif
 }
 
 static int getStdInKey() {
