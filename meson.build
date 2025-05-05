@@ -12,12 +12,6 @@ if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_
   cpp_args += ['-pthread', '-Wno-multichar', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unused-variable', '-Wno-unknown-pragmas', '-Wno-unused-but-set-variable']
 endif
 
-# Shift-JIS文字コード用のコンパイラフラグ（特定のファイルのみに使用）
-cpp_args_cp932 = cpp_args + []
-if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
-  cpp_args_cp932 += ['-fexec-charset=cp932']
-endif
-
 # SIMD 拡張命令セット用のコンパイルフラグ
 sse2_args = cpp_args + ['-msse2']
 ssse3_args = cpp_args + ['-mssse3']
