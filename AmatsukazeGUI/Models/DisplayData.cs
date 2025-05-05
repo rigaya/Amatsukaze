@@ -2749,6 +2749,20 @@ namespace Amatsukaze.Models
             RaisePropertyChanged("RunHours");
         }
 
+        private bool _isServerLinux = false;
+
+        #region IsServerLinux変更通知プロパティ
+        public bool IsServerLinux {
+            get { return _isServerLinux; }
+            set {
+                if (_isServerLinux == value)
+                    return;
+                _isServerLinux = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region WorkPath変更通知プロパティ
         public string WorkPath
         {

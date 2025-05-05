@@ -1324,6 +1324,7 @@ namespace Amatsukaze.Models
                 serverInfo = data.ServerInfo;
                 RaisePropertyChanged("ServerHostName");
                 RaisePropertyChanged("ServerVersion");
+                _Setting.IsServerLinux = serverInfo.Platform == PlatformID.Unix.ToString();
             }
             if (data.AddQueueBatFiles != null)
             {
