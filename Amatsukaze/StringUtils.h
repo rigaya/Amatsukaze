@@ -46,17 +46,17 @@ FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag);
 
 namespace string_internal {
 
-static std::vector<wchar_t> si_to_wstring(const char *str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); vec.resize(ret.length()); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<wchar_t> si_to_wstring(const std::string& str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); vec.resize(ret.length()); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<wchar_t> si_to_wstring(const char *str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<wchar_t> si_to_wstring(const std::string& str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
 
-static std::vector<wchar_t> si_to_wstring(const wchar_t *str) { auto ret = std::wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); vec.resize(ret.length()); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<wchar_t> si_to_wstring(const std::wstring& str) { std::vector<wchar_t> vec(str.length() + 1, 0); vec.resize(str.length()); memcpy(vec.data(), str.data(), str.length()); return vec; }
+static std::vector<wchar_t> si_to_wstring(const wchar_t *str) { auto ret = std::wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<wchar_t> si_to_wstring(const std::wstring& str) { std::vector<wchar_t> vec(str.length() + 1, 0); memcpy(vec.data(), str.data(), str.length()); return vec; }
 
-static std::vector<char> si_to_string(const wchar_t *str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); vec.resize(ret.length()); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<char> si_to_string(const std::wstring& str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); vec.resize(ret.length()); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<char> si_to_string(const wchar_t *str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<char> si_to_string(const std::wstring& str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
 
-static std::vector<char> si_to_string(const char *str) { auto ret = std::string(str); std::vector<char> vec(ret.length() + 1, 0); vec.resize(ret.length()); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<char> si_to_string(const std::string& str) { std::vector<char> vec(str.length() + 1, 0); vec.resize(str.length()); memcpy(vec.data(), str.data(), str.length()); return vec; }
+static std::vector<char> si_to_string(const char *str) { auto ret = std::string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<char> si_to_string(const std::string& str) { std::vector<char> vec(str.length() + 1, 0); memcpy(vec.data(), str.data(), str.length()); return vec; }
 
 
 class MakeArgContext {
@@ -166,7 +166,7 @@ public:
             size_t size = _scprintf(fmt, string_internal::MakeArg(ctx, args) ...);
             if (size > 0) {
                 auto mc = buffer.space((int)((size + 1) * sizeof(char))); // null終端を足す
-                string_internal::safe_snprintf(reinterpret_cast<char*>(mc.data), mc.length / sizeof(char),
+                snprintf(reinterpret_cast<char*>(mc.data), mc.length / sizeof(char),
                     fmt, string_internal::MakeArg(ctx, args) ...);
             }
             buffer.extend((int)(size * sizeof(char)));
@@ -190,7 +190,7 @@ public:
             int size = _scwprintf(fmt, string_internal::MakeArgW(ctx, args) ...);
             if (size > 0) {
                 auto mc = buffer.space((int)((size + 1) * sizeof(wchar_t))); // null終端を足す
-                size = string_internal::safe_swprintf(reinterpret_cast<wchar_t*>(mc.data), mc.length / sizeof(wchar_t),
+                size = swprintf(reinterpret_cast<wchar_t*>(mc.data), mc.length / sizeof(wchar_t),
                         fmt, string_internal::MakeArgW(ctx, args) ...);
                 buffer.extend((int)(size * sizeof(wchar_t)));
             }
