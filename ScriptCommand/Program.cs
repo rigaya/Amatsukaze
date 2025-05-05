@@ -43,7 +43,9 @@ namespace Amatsukaze.Command
             }
 
             // 自分のexe名がコマンドになる
-            var exeName = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
+            // コマンドライン引数はdll名が入ってしまっているので、
+            // コマンド名を取得するためにProcess.GetCurrentProcess().ProcessNameを使用
+            var exeName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
             if (exeName == "AddTag")
             {
                 DoCommand(RPCMethodId.AddTag, args);
@@ -77,8 +79,22 @@ namespace Amatsukaze.Command
             AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
             {
                 var dir = System.AppContext.BaseDirectory; //Path.GetDirectoryName(typeof(ScriptCommand).Assembly.Location);
-                return System.Reflection.Assembly.LoadFrom(Path.GetDirectoryName(dir) + 
-                    "\\" + new System.Reflection.AssemblyName(e.Name).Name + ".dll");
+                // dirの終わりが区切り文字なら削除
+                if (dir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+                {
+                    dir = dir.Substring(0, dir.Length - 1);
+                }
+                // cmdディレクトリの親ディレクトリ（exe_files）を取得
+                var parentDir = Path.GetDirectoryName(dir);
+                var dllPath = Path.Combine(parentDir,
+                    new System.Reflection.AssemblyName(e.Name).Name + ".dll");
+                
+                if (File.Exists(dllPath))
+                {
+                    return System.Reflection.Assembly.LoadFrom(dllPath);
+                }
+                
+                return null;
             };
 
             CommandMain(args);

@@ -66,19 +66,12 @@ fi
 
 # ScriptCommand の展開
 mkdir -p "${INSTALL_DIR}/exe_files/cmd"
+for src_file in "${INSTALL_DIR}/exe_files/ScriptCommand."*; do
+    cp "$src_file" "${INSTALL_DIR}/exe_files/cmd/"
+done
 for cmd in AddTag SetOutDir SetPriority GetOutFiles CancelItem; do
-    # ScriptCommandで始まるすべてのファイルに対して処理を行う
-    for src_file in "${INSTALL_DIR}/exe_files/ScriptCommand"*; do
-        if [ -f "$src_file" ]; then
-            # ファイル名からScriptCommand部分を除去し、新しいコマンド名に置換
-            dst_file="${INSTALL_DIR}/exe_files/cmd/${cmd}${src_file#${INSTALL_DIR}/exe_files/ScriptCommand}"
-            cp "$src_file" "$dst_file"
-        fi
-        # ファイル名がScriptCommandそのもののときだけメッセージを表示
-        if [ "$src_file" = "${INSTALL_DIR}/exe_files/ScriptCommand" ]; then
-            echo "コマンドを作成しました: ${cmd} -> ${INSTALL_DIR}/exe_files/cmd/"
-        fi
-    done
+    cp "${INSTALL_DIR}/exe_files/ScriptCommand" "${INSTALL_DIR}/exe_files/cmd/${cmd}"
+    echo "コマンドを作成しました: ${cmd} -> ${INSTALL_DIR}/exe_files/cmd/"
 done
 
 echo "インストールが完了しました"
