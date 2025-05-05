@@ -430,6 +430,7 @@ bool SetCPUAffinity(int group, uint64_t mask) {
     SetProcessAffinityMask(GetCurrentProcess(), (DWORD_PTR)mask);
     return result;
 #else
+    SetProcessAffinityMask(GetCurrentProcess(), (DWORD_PTR)mask);
     return true;
 #endif // defined(_WIN32) || defined(_WIN64)
 }
