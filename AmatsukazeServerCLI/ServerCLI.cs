@@ -1,6 +1,9 @@
 ﻿using System;
 using System.IO;
 using Amatsukaze.Lib;
+using log4net;
+using log4net.Appender;
+using log4net.Layout;
 
 namespace Amatsukaze.Server
 {
@@ -16,6 +19,20 @@ namespace Amatsukaze.Server
                 log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
                 log4net.Config.XmlConfigurator.Configure(new FileInfo(
                     Path.Combine(System.AppContext.BaseDirectory, "Log4net.Config.xml")));
+
+                // ConsoleAppender（標準エラー出力）を作成
+                var consoleAppender = new ConsoleAppender
+                {
+                    Target = "Console.Error",
+                    Layout = new PatternLayout("%date [%logger] %message%newline"),
+                    Name = "ConsoleError"
+                };
+                consoleAppender.ActivateOptions();
+
+                var loggerUserScript = (log4net.Repository.Hierarchy.Logger)LogManager.GetLogger("UserScript").Logger;
+                loggerUserScript.AddAppender(consoleAppender);
+                var loggerServer = (log4net.Repository.Hierarchy.Logger)LogManager.GetLogger("Server").Logger;
+                loggerServer.AddAppender(consoleAppender);
 
                 TaskSupport.SetSynchronizationContext();
                 GUIOPtion option = new GUIOPtion(args);
