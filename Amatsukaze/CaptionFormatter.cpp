@@ -110,10 +110,10 @@ void CaptionASSFormatter::fragment(float scalex, float scaley, const std::wstrin
 
     if (attr.getMC().length > 0) {
         // オーバーライドコード出力
-        sb.append(L"{%s}", attr.str());
+        sb.append(L"{%ls}", attr.str());
         attr.clear();
     }
-    sb.append(L"%s", text);
+    sb.append(L"%ls", text);
 }
 
 void CaptionASSFormatter::time(double t) {
@@ -206,7 +206,7 @@ std::wstring CaptionSRTFormatter::generate(const std::vector<OutCaptionLine>& li
 void CaptionSRTFormatter::pushLine() {
     auto str = linebuf.str();
     if (str.size() > 0) {
-        sb.append(L"%s\n", str);
+        sb.append(L"%ls\n", str);
         linebuf.clear();
     }
 }
@@ -255,6 +255,6 @@ void CaptionSRTFormatter::item(const OutCaptionLine& line) {
         int begin = fmts[i].pos;
         int end = (i + 1 < nfrags) ? fmts[i + 1].pos : (int)text.size();
         auto fragtext = std::wstring(text.begin() + begin, text.begin() + end);
-        linebuf.append(L"%s", fragtext);
+        linebuf.append(L"%ls", fragtext);
     }
 }
