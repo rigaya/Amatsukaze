@@ -99,12 +99,16 @@ namespace Amatsukaze.Models
                 {
                     return serverInfo.HostName + ":" + ServerPort;
                 }
-                return serverInfo.HostName; ;
+                return serverInfo.HostName;
             }
         }
 
         public string ServerVersion {
             get { return serverInfo.Version; }
+        }
+        public bool IsServerLinux
+        {
+            get { return serverInfo.Platform == PlatformID.Unix.ToString(); }
         }
 
         public ObservableCollection<DisplayConsole> ConsoleList { get; } = new ObservableCollection<DisplayConsole>();
@@ -1324,7 +1328,8 @@ namespace Amatsukaze.Models
                 serverInfo = data.ServerInfo;
                 RaisePropertyChanged("ServerHostName");
                 RaisePropertyChanged("ServerVersion");
-                _Setting.IsServerLinux = serverInfo.Platform == PlatformID.Unix.ToString();
+                RaisePropertyChanged("IsServerLinux");
+                _Setting.IsServerLinux = IsServerLinux;
             }
             if (data.AddQueueBatFiles != null)
             {

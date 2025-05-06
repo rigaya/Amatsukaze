@@ -253,8 +253,28 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,3" Text="リネーム"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,3" Text="リネーム">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="" Margin="0,3"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="実行前バッチ" Margin="0,6"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="エンコード前バッチ" Margin="0,6"/>
@@ -263,12 +283,32 @@
                 <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="SCRenameによるリネームを行う" 
                               IsChecked="{Binding Model.SelectedProfile.EnableRename, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              ToolTip="SCRenameで適切なファイル名を取得してエンコード後、そのファイル名を設定します" />
+                              ToolTip="SCRenameで適切なファイル名を取得してエンコード後、そのファイル名を設定します">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
 
                     <TextBox Margin="0,3" Height="40" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.RenameFormat, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              VerticalAlignment="Top"
-                             ToolTip="空欄にするとデフォルト書式を設定します"/>
+                             ToolTip="空欄にするとデフォルト書式を設定します">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
 
                     <CheckBox Height="16" Margin="0,3"  Content="ジャンルごとにフォルダ分け" 
                               IsChecked="{Binding Model.SelectedProfile.EnableGunreFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -436,7 +476,29 @@
                         </StackPanel.Style>
                         <ComboBox Margin="0,3" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120" Height="22" 
                               ItemsSource="{Binding Model.SelectedProfile.AudioEncoderList}"
-                              SelectedIndex="{Binding Model.SelectedProfile.AudioEncoderTypeInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                              SelectedIndex="{Binding Model.SelectedProfile.AudioEncoderTypeInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.Resources>
+                                <Style TargetType="ComboBoxItem">
+                                    <Style.Triggers>
+                                        <!-- NeroAAC = 4, qaac = 5 -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Model.Setting.IsServerLinux, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}}" Value="True" />
+                                                <Condition Binding="{Binding}" Value="NeroAAC" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Model.Setting.IsServerLinux, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}}" Value="True" />
+                                                <Condition Binding="{Binding}" Value="qaac" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ComboBox.Resources>
+                        </ComboBox>
                         <StackPanel Orientation="Horizontal">
                             <TextBox Width="50" Height="22" Margin="4,0"
                                  IsEnabled="{Binding Model.SelectedProfile.EnableAudioBitrate}"
@@ -452,8 +514,27 @@
                     </StackPanel>
                 </StackPanel>
 
-                <TextBlock Grid.Row="6" HorizontalAlignment="Left" Text="ニコニコ実況コメント" VerticalAlignment="Top" Margin="0,45.667,0,0"/>
+                <TextBlock Grid.Row="6" HorizontalAlignment="Left" Text="ニコニコ実況コメント" VerticalAlignment="Top" Margin="0,45.667,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <StackPanel Grid.Row="6" Grid.Column="1" Margin="10,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>

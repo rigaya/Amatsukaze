@@ -139,7 +139,7 @@ namespace Amatsukaze.Server
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
             // OSに応じてデフォルトエンコーディングを設定
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (IsServerWindows())
             {
                 // Windowsの場合はCP932
                 AmatsukazeDefaultEncoding = Encoding.GetEncoding(932);
@@ -149,6 +149,15 @@ namespace Amatsukaze.Server
                 // Linux/macOSの場合はUTF-8
                 AmatsukazeDefaultEncoding = Encoding.UTF8;
             }
+        }
+
+        public static bool IsServerLinux()
+        {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+        }
+        public static bool IsServerWindows()
+        {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         }
 
         // アプリケーション全体で使用するデフォルトエンコーディング
