@@ -65,7 +65,17 @@
                     <CheckBox Height="16" Margin="0,3"  Content="開始時に一時フォルダを空にする" 
                               IsChecked="{Binding Model.Setting.ClearWorkDirOnStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="エンコード中はスリープしないようにする" 
-                              IsChecked="{Binding Model.Setting.SupressSleep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                              IsChecked="{Binding Model.Setting.SupressSleep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
                     <CheckBox Height="16" Margin="0,3"  Content="Amatsukaze起動時にアクティブなアイテムがあるときはキューを停止する" 
                               IsChecked="{Binding Model.Setting.PauseOnStarted, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
@@ -84,13 +94,73 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="TimelineEditorパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="ChapterExeパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="JoinLogoScpパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="NicoConvASSパス"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="NicoConvASSパス">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="tsreplaceパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="tsMuxeRパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="SCRename.vbsパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="AutoVfr.exeパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="neroAacEnc.exeパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="qaac.exeパス"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="tsMuxeRパス">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="SCRename.vbsパス">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="AutoVfr.exeパス">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="neroAacEnc.exeパス">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="qaac.exeパス">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="fdkaac.exeパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,6" Text="opusenc.exeパス"/>
                 </StackPanel>
@@ -112,7 +182,17 @@
                         <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearTimelineEditorPathCommand}"/>
                         <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearChapterExepathCommand}"/>
                         <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearJoinLogoScpPathCommand}"/>
-                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}"/>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                         <Border Height="28"/>
                         <Border Height="28"/>
                         <Border Height="28"/>
@@ -133,13 +213,73 @@
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.TimelineEditorPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.ChapterExePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.JoinLogoScpPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.TsReplacePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.TsMuxeRPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.SCRenamePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.AutoVfrPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.NeroAacEncPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.QaacPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.TsMuxeRPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.SCRenamePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.AutoVfrPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.NeroAacEncPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.QaacPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.FdkaacPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,3" Text="{Binding Model.Setting.OpusEncPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                     </StackPanel>
@@ -193,18 +333,41 @@
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="エンコード後設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,10,0,0">
-                    <CheckBox  Margin="0,4" Height="16" Content="エンコード後シャットダウンの選択肢を有効化"
-                               IsChecked="{Binding Model.Setting.EnableShutdownAction, Mode=TwoWay}"
-                               ToolTip="誤操作を防ぐためデフォルトではシャットダウンを選択できないようになっています。"/>
-                    <CheckBox  Margin="0,4" Height="16"  Content="指定プロセス実行中にスリープ・休止・シャットダウンを行わない"
-                               IsChecked="{Binding Model.Setting.noActionExe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                               ToolTip="指定の名前のプロセスがあった場合に、&#xA;エンコード後にスリープ等を行わないようにします。&#xA;録画等、PCをオンにしておく必要がある場合に&#xA;誤ってオフにしてしまうのを防止します。"/>
+                    <CheckBox Margin="0,4" Height="16" Content="エンコード後シャットダウンの選択肢を有効化"
+                              IsChecked="{Binding Model.Setting.EnableShutdownAction, Mode=TwoWay}"
+                              ToolTip="誤操作を防ぐためデフォルトではシャットダウンを選択できないようになっています。">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
+                    <CheckBox Margin="0,4" Height="16" Content="指定プロセス実行中にスリープ・休止・シャットダウンを行わない"
+                              IsChecked="{Binding Model.Setting.noActionExe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="指定の名前のプロセスがあった場合に、&#xA;エンコード後にスリープ等を行わないようにします。&#xA;録画等、PCをオンにしておく必要がある場合に&#xA;誤ってオフにしてしまうのを防止します。">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
                     <DockPanel>
                         <DockPanel.Style>
                             <Style TargetType="DockPanel">
                                 <Setter Property="Visibility" Value="Visible"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.noActionExe}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                     </DataTrigger>
                                 </Style.Triggers>
