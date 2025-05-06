@@ -2070,6 +2070,17 @@ namespace Amatsukaze.Server
                     {
                         throw new ArgumentException("リネームフォーマットが設定されていません");
                     }
+                    if (!Util.IsServerWindows())
+                    {
+                        profile.EnableRename = false;
+                    }
+                }
+                if (profile.EnableNicoJK)
+                {
+                    if (!Util.IsServerWindows())
+                    {
+                        profile.EnableNicoJK = false;
+                    }
                 }
 
                 if(profile.FilterOption == FilterOption.Setting &&
