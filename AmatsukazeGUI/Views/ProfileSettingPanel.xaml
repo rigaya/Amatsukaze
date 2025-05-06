@@ -476,29 +476,7 @@
                         </StackPanel.Style>
                         <ComboBox Margin="0,3" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120" Height="22" 
                               ItemsSource="{Binding Model.SelectedProfile.AudioEncoderList}"
-                              SelectedIndex="{Binding Model.SelectedProfile.AudioEncoderTypeInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <ComboBox.Resources>
-                                <Style TargetType="ComboBoxItem">
-                                    <Style.Triggers>
-                                        <!-- NeroAAC = 4, qaac = 5 -->
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding Model.Setting.IsServerLinux, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}}" Value="True" />
-                                                <Condition Binding="{Binding}" Value="NeroAAC" />
-                                            </MultiDataTrigger.Conditions>
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </MultiDataTrigger>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding Model.Setting.IsServerLinux, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}}" Value="True" />
-                                                <Condition Binding="{Binding}" Value="qaac" />
-                                            </MultiDataTrigger.Conditions>
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </MultiDataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ComboBox.Resources>
-                        </ComboBox>
+                              SelectedIndex="{Binding Model.SelectedProfile.AudioEncoderTypeInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <StackPanel Orientation="Horizontal">
                             <TextBox Width="50" Height="22" Margin="4,0"
                                  IsEnabled="{Binding Model.SelectedProfile.EnableAudioBitrate}"

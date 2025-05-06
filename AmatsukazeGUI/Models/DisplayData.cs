@@ -2127,7 +2127,14 @@ namespace Amatsukaze.Models
             get { return new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" }; }
         }
         public string[] AudioEncoderList {
-            get { return new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" }; }
+            get { 
+                if (Model?.Setting?.IsServerLinux ?? false) {
+                    return new string[] { "fdkaac", "opusenc" };
+                } else {
+                    return new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" };
+                }
+            }
+
         }
 
         #region IsModified変更通知プロパティ
@@ -2759,6 +2766,7 @@ namespace Amatsukaze.Models
                     return;
                 _isServerLinux = value;
                 RaisePropertyChanged();
+                RaisePropertyChanged("AudioEncoderList");
             }
         }
         #endregion
