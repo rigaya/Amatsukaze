@@ -778,13 +778,13 @@ namespace Amatsukaze.Server
             {
                 var fname = Path.GetFileName(path);
                 if (fname.StartsWith(pattern)
-                    && (Environment.OSVersion.Platform != PlatformID.Win32NT || fname.EndsWith(".exe"))
+                    && (!Util.IsServerWindows() || fname.EndsWith(".exe"))
                     && IsExecutableByCurrentUser(path))
                 {
                     return path;
                 }
             }
-            if (Environment.OSVersion.Platform == PlatformID.Unix)
+            if (Util.IsServerLinux())
             {
                 // PATH環境変数を参照して、パスを探す
                 var path = Environment.GetEnvironmentVariable("PATH");
@@ -935,7 +935,7 @@ namespace Amatsukaze.Server
 
         private Setting SetDefaultPath(Setting setting)
         {
-            string exeDefaultAppendix = (Environment.OSVersion.Platform == PlatformID.Win32NT) ? ".exe" : "";
+            string exeDefaultAppendix = Util.IsServerWindows() ? ".exe" : "";
             string basePath = GetBasePath();
             if (string.IsNullOrEmpty(setting.AmatsukazePath))
             {
@@ -967,25 +967,25 @@ namespace Amatsukaze.Server
             }
             if (string.IsNullOrEmpty(setting.MuxerPath))
             {
-                setting.MuxerPath = (Environment.OSVersion.Platform == PlatformID.Win32NT) 
+                setting.MuxerPath = (Util.IsServerWindows()) 
                     ? Path.Combine(basePath, "muxer" + exeDefaultAppendix)
                     : GetExePath(basePath, "muxer");
             }
             if (string.IsNullOrEmpty(setting.MKVMergePath))
             {
-                setting.MKVMergePath = (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                setting.MKVMergePath = (Util.IsServerWindows())
                     ? Path.Combine(basePath, "mkvmerge" + exeDefaultAppendix)
                     : GetExePath(basePath, "mkvmerge");
             }
             if (string.IsNullOrEmpty(setting.MP4BoxPath))
             {
-                setting.MP4BoxPath = (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                setting.MP4BoxPath = (Util.IsServerWindows())
                     ? Path.Combine(basePath, "mp4box" + exeDefaultAppendix)
                     : GetExePath(basePath, "MP4Box");
             }
             if (string.IsNullOrEmpty(setting.TimelineEditorPath))
             {
-                setting.TimelineEditorPath = (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                setting.TimelineEditorPath = (Util.IsServerWindows())
                     ? Path.Combine(basePath, "timelineeditor" + exeDefaultAppendix)
                     : GetExePath(basePath, "timelineeditor");
             }
@@ -1929,7 +1929,7 @@ namespace Amatsukaze.Server
                 return;
 
             // Linux環境の場合、PATHもチェック
-            if (Environment.OSVersion.Platform == PlatformID.Unix)
+            if (Util.IsServerLinux())
             {
                 var pathEnv = Environment.GetEnvironmentVariable("PATH");
                 if (!string.IsNullOrEmpty(pathEnv))
@@ -2430,11 +2430,11 @@ namespace Amatsukaze.Server
 
                             var files = Directory.GetFiles(batpath)
                                 .Where(f => {
-                                    if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX) {
-                                        return f.EndsWith(".sh", StringComparison.OrdinalIgnoreCase);
-                                    } else {
+                                    if (Util.IsServerWindows()) {
                                         return f.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
                                                f.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase);
+                                    } else {
+                                        return f.EndsWith(".sh", StringComparison.OrdinalIgnoreCase);
                                     }
                                 })
                                 .Select(f => Path.GetFileName(f));
@@ -3553,10 +3553,11 @@ namespace Amatsukaze.Server
             if (!System.IO.File.Exists(path))
                 return false;
 
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            if (Util.IsServerWindows())
             {
                 return true; // Windowsでは、ファイルが存在するかどうかを確認するだけで十分
             }
+            // Linuxでは、ファイルが実行可能かどうかを確認する
             try {
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {

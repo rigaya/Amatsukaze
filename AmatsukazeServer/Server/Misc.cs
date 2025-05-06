@@ -696,8 +696,9 @@ namespace Amatsukaze.Server
 
         public static void LaunchLocalServer(int port, string rootDir)
         {
+            var exeDefaultAppendix = Util.IsServerWindows() ? "exe" : "";
             var exename = Path.Combine(Path.GetDirectoryName(typeof(ServerSupport).Assembly.Location),
-                (Environment.UserInteractive ? "AmatsukazeGUI.exe" : "AmatsukazeServerCLI.exe"));
+                (Environment.UserInteractive ? "AmatsukazeGUI" + exeDefaultAppendix : "AmatsukazeServerCLI" + exeDefaultAppendix));
             var args = "-l server -p " + port;
             Process.Start(new ProcessStartInfo(exename, args)
             {
@@ -1378,7 +1379,7 @@ namespace Amatsukaze.Server
                     var fname = filter.AutoVfrFast ? "Auto_Vfr_Fast" : "Auto_Vfr";
                     var crop = filter.AutoVfrFast ? "" : ",IsCrop=" + (filter.AutoVfrCrop ? "true" : "false");
                     // WindowsとLinuxでコマンドのパスが違うので、パスを取得する
-                    var cmdpath = Environment.OSVersion.Platform == PlatformID.Win32NT ?
+                    var cmdpath = Util.IsServerWindows() ?
                         "C:\\Windows\\System32\\cmd.exe /c copy " : "/bin/bash -c cp ";
                     var concatarg = cmdpath +
                         string.Join("+", Enumerable.Range(1, parallel).Select(i => "$DQ\"+AMT_TMP+\".autovfr" + i + ".log$DQ")) +

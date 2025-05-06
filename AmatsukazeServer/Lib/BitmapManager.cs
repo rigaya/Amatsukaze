@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Amatsukaze.Server;
 
 namespace Amatsukaze.Lib
 {
@@ -34,7 +35,7 @@ namespace Amatsukaze.Lib
                     return;
 
                 // Windows環境での初期化
-                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                if (Util.IsServerWindows())
                 {
                     // Windows専用の実装をセットアップ
                     try

@@ -191,7 +191,7 @@ namespace Amatsukaze.Server
 
             try
             {
-                var delemiter = Environment.OSVersion.Platform == PlatformID.Win32NT ? '\\' : '/';
+                var delemiter = Util.IsServerWindows() ? '\\' : '/';
                 var mainNoExt = Path.GetFileName(Log.DstPath);
                 var list = Log.OutPath.Select(s => s.Replace('/', delemiter)).Where(path =>
                 {
@@ -450,8 +450,8 @@ namespace Amatsukaze.Server
 
         public async Task Execute()
         {
-            var cmd = Environment.OSVersion.Platform == PlatformID.Win32NT ? "cmd.exe" : "sh";
-            var cmd_opt = Environment.OSVersion.Platform == PlatformID.Win32NT ? "/C" : "-c";
+            var cmd = Util.IsServerWindows() ? "cmd.exe" : "sh";
+            var cmd_opt = Util.IsServerWindows() ? "/C" : "-c";
             var psi = new ProcessStartInfo(cmd, cmd_opt + " \"" + ScriptPath + "\"")
             {
                 UseShellExecute = false,
@@ -468,7 +468,7 @@ namespace Amatsukaze.Server
             var exeDir = Path.GetDirectoryName(typeof(UserScriptExecuter).Assembly.Location);
 
             // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
-            var envPathDelim = Environment.OSVersion.Platform == PlatformID.Win32NT ? ";" : ":";
+            var envPathDelim = Util.IsServerWindows() ? ";" : ":";
             psi.EnvironmentVariables["PATH"] =
                 exeDir + envPathDelim + Path.Combine(exeDir, "cmd") + envPathDelim + psi.EnvironmentVariables["PATH"];
 

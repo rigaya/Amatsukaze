@@ -334,7 +334,7 @@ namespace Amatsukaze.ViewModels
             }
             var file = item.Model;
             var args = "-l logo --serviceid " + file.ServiceId;
-            if (Model.ServerInfo.Platform == PlatformID.Unix.ToString()) {
+            if (Model.IsServerLinux) {
                 // Windowsのユーザーの標準の一時フォルダを使用
                 var tempdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
                 if (Directory.Exists(tempdir) == false)
