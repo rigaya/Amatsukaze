@@ -649,12 +649,13 @@ namespace Amatsukaze.Models
         #endregion
 
         #region FinishActionList変更通知プロパティ
+        private static string[] FinishActionListNone { get { return new string[] { "何もしない" }; } }
         private static string[] FinishActionListNoShutdown { get { return new string[] { "何もしない", "スリープ", "休止状態" }; } }
         private static string[] FinishActionListWithShutdown { get { return new string[] { "何もしない", "スリープ", "休止状態", "シャットダウン" }; } }
         private string[] _FinishActionList;
 
         public string[] FinishActionList {
-            get { return _FinishActionList; }
+            get { return (IsServerLinux) ? FinishActionListNone : _FinishActionList; }
             set { 
                 if (_FinishActionList == value)
                     return;
@@ -1329,6 +1330,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("ServerHostName");
                 RaisePropertyChanged("ServerVersion");
                 RaisePropertyChanged("IsServerLinux");
+                RaisePropertyChanged("FinishActionList");
                 _Setting.IsServerLinux = IsServerLinux;
             }
             if (data.AddQueueBatFiles != null)
