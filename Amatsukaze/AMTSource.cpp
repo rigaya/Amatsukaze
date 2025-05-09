@@ -235,9 +235,14 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
     }
 
     // LinuxではAvisynthPlusを使うので設定できなそう?
-#if defined(_WIN32) || defined(_WIN64)
+#if AVISYNTH_MODE == AVISYNTH_NEO
     // フレームタイプ
     ret->SetProperty("FrameType", top->pict_type);
+#elif AVISYNTH_MODE == AVISYNTH_PLUS
+    auto avsmap = env->getFramePropsRW(ret.frame);
+    env->propSetInt(avsmap, "FrameType", top->pict_type, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+#else
+    static_assert(false, "Invalid AVISYNTH_MODE");
 #endif
 
 #ifndef AMATSUKAZE2DLL
