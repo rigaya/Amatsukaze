@@ -31,31 +31,40 @@ install -D -t "${INSTALL_DIR}/exe_files" ./scripts/AmatsukazeServer.sh
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/AmatsukazeCLI/AmatsukazeCLI"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/Amatsukaze/libAmatsukaze.so"
 
+# プラグインのインストール関数
+install_plugin() {
+    local plugin_pattern="$1"
+    local target_dir="${INSTALL_DIR}/exe_files/plugins64/"
+    
+    for plugin in $plugin_pattern; do
+        if [ -e "$plugin" ]; then
+            local plugin_name=$(basename "$plugin")
+            local target_path="${target_dir}${plugin_name}"
+            
+            # 既存のファイルやリンクが存在しない場合のみリンクを作成
+            if [ ! -e "$target_path" ]; then
+                ln -sf "$plugin" "$target_dir"
+                echo "プラグインへのリンクを作成しました: $plugin"
+            else
+                echo "既に存在するためスキップします: $plugin_name"
+            fi
+        fi
+    done
+}
+
 # プラグインのインストール
 echo "プラグインへのリンクを作成します... -> ${INSTALL_DIR}/exe_files/plugins64/"
-# libyadifmod2*.so をインストール
-for plugin in /usr/local/lib/avisynth/libyadifmod2*.so; do
-    if [ -e "$plugin" ]; then
-        ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
-        echo "プラグインへのリンクを作成しました: $plugin"
-    fi
-done
 
-# libtivtc.so をインストール
-for plugin in /usr/local/lib/avisynth/libtivtc.so; do
-    if [ -e "$plugin" ]; then
-        ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
-        echo "プラグインへのリンクを作成しました: $plugin"
-    fi
-done
-
-# libtdeint.so をインストール
-for plugin in /usr/local/lib/avisynth/libtdeint.so; do
-    if [ -e "$plugin" ]; then
-        ln -sf "$plugin" "${INSTALL_DIR}/exe_files/plugins64/"
-        echo "プラグインへのリンクを作成しました: $plugin"
-    fi
-done
+# 各プラグインのインストール
+install_plugin "/usr/local/lib/avisynth/libyadifmod2*.so"
+install_plugin "/usr/local/lib/avisynth/libtivtc.so"
+install_plugin "/usr/local/lib/avisynth/libtdeint.so"
+install_plugin "/usr/local/lib/avisynth/KUtil.so"
+install_plugin "/usr/local/lib/avisynth/KFM.so"
+install_plugin "/usr/local/lib/avisynth/nnedi3.so"
+install_plugin "/usr/local/lib/avisynth/mt_masktools.so"
+install_plugin "/usr/local/lib/avisynth/KTGMC.so"
+install_plugin "/usr/local/lib/avisynth/AvsCUDA.so"
 
 # .NET アプリケーションの公開
 echo ".NET アプリケーションを公開します..."
