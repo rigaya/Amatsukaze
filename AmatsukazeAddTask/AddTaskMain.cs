@@ -125,7 +125,7 @@ namespace Amatsukaze.AddTask
                 }
                 else if (arg == "-f" || arg == "--file")
                 {
-                    FilePath = args[i + 1];
+                    FilePath = Path.GetFullPath(args[i + 1]);
                     ++i;
                 }
                 else if (arg == "--item-id")
@@ -160,7 +160,7 @@ namespace Amatsukaze.AddTask
                 }
                 else if (arg == "-o" || arg == "--outdir")
                 {
-                    OutPath = args[i + 1];
+                    OutPath = Path.GetFullPath(args[i + 1]);
                     ++i;
                 }
                 else if (arg == "-d" || arg == "--nasdir")
