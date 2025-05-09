@@ -50,7 +50,7 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git cmake meson ninja-build pkg-config \
+sudo apt install -y build-essential git wget curl cmake meson ninja-build pkg-config \
     autoconf automake libtool \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libssl-dev libz-dev
@@ -62,17 +62,17 @@ sudo apt update
 sudo apt install -y dotnet-sdk-8.0
 ```
 
+
 ### AviSynthのインストール
 
 Linuxでは、AviSynth+をインストールする必要があります。
 
 ```bash
-git clone https://github.com/AviSynth/AviSynthPlus.git
-cd AviSynthPlus
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
+(git clone https://github.com/AviSynth/AviSynthPlus.git
+  && cd AviSynthPlus && mkdir build && cd build
+  && cmake -DENABLE_CUDA=ON ..
+  && make -j$(nproc)
+  && sudo make install)
 ```
 
 ### 必要な実行ファイルとプラグインのインストール
@@ -82,25 +82,41 @@ sudo make install
   - x264, x265, svt-av1
   
     ```bash
-    sudo apt install x264 x265 svt-av1
+    sudo apt install -y x264 x265 svt-av1
     ```
   
   - qsvencc, nvencc, vceencc
   
     - ドライバも含めたインストール方法
-      - [qsvencc](https://github.com/rigaya/QSVEnc/blob/master/Install.ja.md) ([ダウンロード先](https://github.com/rigaya/QSVEnc/releases))
-      - [nvencc](https://github.com/rigaya/NVEnc/blob/master/Install.ja.md)  ([ダウンロード先](https://github.com/rigaya/NVEnc/releases))
-      - [vceencc](https://github.com/rigaya/VCEEnc/blob/master/Install.ja.md) ([ダウンロード先](https://github.com/rigaya/VCEEnc/releases))
+      - [qsvencc](https://github.com/rigaya/QSVEnc/blob/master/Install.ja.md)
+      - [nvencc](https://github.com/rigaya/NVEnc/blob/master/Install.ja.md)
+      - [vceencc](https://github.com/rigaya/VCEEnc/blob/master/Install.ja.md)
+
+    - 最新版のパッケージインストールは下記
+
+      Ubuntu24.04 のところは対象OSにあわせて適宜置き換えてください。
   
     ```bash
     # qsvencc
-    sudo apt install ./qsvencc_x.xx_Ubuntu2x.04_amd64.deb
+    (curl -s https://api.github.com/repos/rigaya/QSVEnc/releases/latest \
+      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | wget -i - -O qsvencc.deb \
+      && sudo apt install -y ./qsvencc.deb \
+      && rm ./qsvencc.deb)
     
     # nvencc
-    sudo apt install ./nvencc_x.xx_Ubuntu2x.04_amd64.deb
+    (curl -s https://api.github.com/repos/rigaya/NVEnc/releases/latest \
+      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | wget -i - -O nvencc.deb \
+      && sudo apt install -y ./nvencc.deb \
+      && rm ./nvencc.deb)
     
     # vceencc
-    sudo apt install ./vceencc_x.xx_Ubuntu2x.04_amd64.deb
+    (curl -s https://api.github.com/repos/rigaya/VCEEnc/releases/latest \
+      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | wget -i - -O vceencc.deb \
+      && sudo apt install -y ./vceencc.deb \
+      && rm ./vceencc.deb)
     ```
 
 - muxer
@@ -108,11 +124,11 @@ sudo make install
   - mp4box
   
     ```bash
-    git clone https://github.com/gpac/gpac.git
-    cd gpac
-    ./configure --static-bin
-    make -j$(nproc)
-    sudo make install
+    (git clone https://github.com/gpac/gpac.git \
+      && cd gpac \
+      && ./configure --static-bin \
+      && make -j$(nproc) \
+      && sudo make install)
     ```
   
   - mkvmerge
@@ -124,19 +140,21 @@ sudo make install
   - L-SMASH (muxer, timelineeditor)
   
     ```bash
-    git clone https://github.com/l-smash/l-smash.git
-    cd l-smash/
-    ./configure
-    make -j$(nproc)
-    sudo make install
+    (git clone https://github.com/l-smash/l-smash.git \
+      && cd l-smash \
+      && ./configure \
+      && make -j$(nproc) \
+      && sudo make install)
     ```
 
   - tsreplace
 
-    [ダウンロード先](https://github.com/rigaya/tsreplace/releases)
-
     ```bash
-    sudo apt install ./tsreplace_x.xx_Ubuntu2x.04_amd64.deb
+    (curl -s https://api.github.com/repos/rigaya/tsreplace/releases/latest \
+      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | wget -i - -O tsreplace.deb \
+      && sudo apt install -y ./tsreplace.deb \
+      && rm ./tsreplace.deb)
     ```
 
 - CM/ロゴ解析等
@@ -144,17 +162,19 @@ sudo make install
   - chapter_exe
   
     ```bash
-    git clone https://github.com/tobitti0/chapter_exe
-    cd chapter_exe/src
-    sudo install -D -t /usr/local/bin chapter_exe
+    (git clone https://github.com/rigaya/chapter_exe \
+      && cd chapter_exe/src \
+      && make -j$(nproc) \
+      && sudo install -D -t /usr/local/bin chapter_exe)
     ```
   
   - join_logo_scp
   
     ```bash
-    git clone https://github.com/tobitti0/join_logo_scp
-    cd join_logo_scp/src
-    sudo install -D -t /usr/local/bin join_logo_scp
+    (git clone https://github.com/tobitti0/join_logo_scp \
+      && cd join_logo_scp/src \
+      && make -j$(nproc) \
+      && sudo install -D -t /usr/local/bin join_logo_scp)
     ```
 
 - 音声エンコーダ
@@ -162,26 +182,25 @@ sudo make install
   - fdkaac
   
     ```bash
-    git clone https://github.com/mstorsjo/fdk-aac.git
-    cd fdk-aac
-    ./autogen.sh
-    ./configure --disable-shared
-    make -j$(nproc)
-    sudo make install
-    cd ..
-    
-    git clone https://github.com/nu774/fdkaac.git
-    cd fdkaac
-    autoreconf -i
-    ./configure
-    make -j$(nproc)
-    sudo make install
+    (git clone https://github.com/mstorsjo/fdk-aac.git \
+      && cd fdk-aac \
+      && ./autogen.sh \
+      && ./configure --disable-shared --prefix=$(pwd)/fdk-aac-libs \
+      && make -j$(nproc) \
+      && make install \
+      && cd .. \
+      && git clone https://github.com/nu774/fdkaac.git \
+      && cd fdkaac \
+      && autoreconf -i \
+      && PKG_CONFIG_PATH=../fdk-aac/fdk-aac-libs/lib/pkgconfig ./configure \
+      && make -j$(nproc) \
+      && sudo make install)
     ```
   
   - opusenc
   
     ```bash
-    sudo apt install opus-tools
+    sudo apt install -y opus-tools
     ```
 
 - Avisynthプラグイン
@@ -189,22 +208,21 @@ sudo make install
   - yadif
   
     ```bash
-    git clone https://github.com/Asd-g/yadifmod2
-    cd yadifmod2
-    mkdir build && cd build
-    cmake ..
-    make -j$(nproc)
-    sudo make install
+    (git clone https://github.com/Asd-g/yadifmod2 \
+      && cd yadifmod2 \
+      && mkdir build && cd build && cmake .. \
+      && make -j$(nproc) \
+      && sudo make install)
     ```
   
   - TIVTC
   
     ```bash
-    git clone https://github.com/pinterf/TIVTC
-    cd TIVTC/src
-    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S .
-    cmake --build build
-    sudo make install
+    (git clone https://github.com/pinterf/TIVTC \
+      && cd TIVTC/src \
+      && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S . \
+      && cmake --build build \
+      && sudo make install)
     ```
 
 ### Amatsukaze本体のビルドとインストール
