@@ -239,7 +239,7 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
     // フレームタイプ
     ret->SetProperty("FrameType", top->pict_type);
 #elif AVISYNTH_MODE == AVISYNTH_PLUS
-    auto avsmap = env->getFramePropsRW(ret.frame);
+    auto avsmap = env->getFramePropsRW(ret);
     env->propSetInt(avsmap, "FrameType", top->pict_type, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
 #else
     static_assert(false, "Invalid AVISYNTH_MODE");
