@@ -70,7 +70,7 @@ if host_machine.system() == 'windows'
 else # Linux
   os_specific_libs += ['dl', 'pthread']
   amatsukaze_cpp_args = cpp_args + ['-DAMTSUKAZE_API=__attribute__((visibility("default")))', '-DWINAPI=', '-DAMATSUKAZE2DLL', '-fvisibility=hidden']
-  amatsukaze_link_args = []
+  amatsukaze_link_args = [ '-Wl,-Bsymbolic' ] # ffmpegの静的リンクに必要
 endif
 
 # AVXとAVX2のためのカスタムターゲット
