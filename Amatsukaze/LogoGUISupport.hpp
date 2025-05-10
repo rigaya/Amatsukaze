@@ -70,7 +70,7 @@ class GUIMediaFile : public AMTObject {
                     THROW(FormatException, "avcodec_send_packet failed");
                 }
                 while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
-#ifdef AMATSUKAZE2DLL
+#if LIBAVUTIL_VERSION_MAJOR >= 58
                     const int key_frame = (frame()->flags & AV_FRAME_FLAG_KEY) != 0;
 #else
                     const int key_frame = frame()->key_frame;

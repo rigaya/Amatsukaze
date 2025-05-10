@@ -92,7 +92,7 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
 }
 
 /* static */ PICTURE_TYPE getPictureTypeFromAVFrame(AVFrame* frame) {
-#ifdef AMATSUKAZE2DLL
+#if LIBAVUTIL_VERSION_MAJOR >= 58
     const bool interlaced = (frame->flags & AV_FRAME_FLAG_INTERLACED) != 0;
     const bool tff = (frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) != 0;
 #else

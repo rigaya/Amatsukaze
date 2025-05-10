@@ -485,7 +485,7 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
         // シーク後最初のフレームでないならOK
         if (lastDecodeFrame != -1) return true;
         // キーフレームならOK
-#ifdef AMATSUKAZE2DLL
+#if LIBAVUTIL_VERSION_MAJOR >= 58
         if (frame()->flags & AV_FRAME_FLAG_KEY) return true;
 #else
         if (frame()->key_frame) return true;

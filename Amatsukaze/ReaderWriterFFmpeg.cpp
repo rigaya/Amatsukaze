@@ -279,7 +279,7 @@ const AVCodec* av::VideoReader::getHWAccelCodec(AVCodecID vcodecId, const Decode
 
 void av::VideoReader::onFrame(Frame& frame) {
     if (fieldMode_) {
-#ifdef AMATSUKAZE2DLL
+#if LIBAVUTIL_VERSION_MAJOR >= 58
         const bool interlaced = (frame()->flags & AV_FRAME_FLAG_INTERLACED) != 0;
         const bool tff = (frame()->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) != 0;
 #else
@@ -329,7 +329,7 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     }
 
     fmt_.format = srcFormat;
-#ifdef AMATSUKAZE2DLL
+#if LIBAVUTIL_VERSION_MAJOR >= 58
     fmt_.progressive = (frame->flags & AV_FRAME_FLAG_INTERLACED) == 0;
 #else
     fmt_.progressive = !(frame->interlaced_frame);
