@@ -91,29 +91,29 @@ subdir('TVCaptionMod2/Caption_src')
 subdir('Amatsukaze')
 subdir('AmatsukazeCLI')
 
-# C#プロジェクトのビルドを追加（Linux対応）
-if get_option('build_csharp_projects')
-  dotnet = find_program('dotnet', required : false)
-  
-  if dotnet.found()
-    message('dotnet found, will build C# projects using solution file')
-    
-    # ビルド設定（リリースビルドと出力先ディレクトリを指定）
-    solution_file = meson.current_source_dir() / 'AmatsukazeLinux.sln'
-    output_dir = meson.current_build_dir()
-    
-    # ソリューションファイルをビルド
-    amatsukaze_cs_targets = custom_target('AmatsukazeLinux',
-      output : ['AmatsukazeServer.dll', 'AmatsukazeServerCLI.dll', 'AmatsukazeAddTask.dll'],
-      command : [
-        dotnet, 'build',
-        solution_file,
-        '-c', 'Release'
-      ],
-      build_by_default : true
-    )
-  else
-    message('dotnet not found, skipping C# projects')
-  endif
-endif
+## C#プロジェクトのビルドを追加（Linux対応）
+#if get_option('build_csharp_projects')
+#  dotnet = find_program('dotnet', required : false)
+#  
+#  if dotnet.found()
+#    message('dotnet found, will build C# projects using solution file')
+#    
+#    # ビルド設定（リリースビルドと出力先ディレクトリを指定）
+#    solution_file = meson.current_source_dir() / 'AmatsukazeLinux.sln'
+#    output_dir = meson.current_build_dir()
+#    
+#    # ソリューションファイルをビルド
+#    amatsukaze_cs_targets = custom_target('AmatsukazeLinux',
+#      output : ['AmatsukazeServer.dll', 'AmatsukazeServerCLI.dll', 'AmatsukazeAddTask.dll'],
+#      command : [
+#        dotnet, 'build',
+#        solution_file,
+#        '-c', 'Release'
+#      ],
+#      build_by_default : true
+#    )
+#  else
+#    message('dotnet not found, skipping C# projects')
+#  endif
+#endif
 
