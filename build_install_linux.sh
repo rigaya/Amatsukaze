@@ -38,7 +38,9 @@ cd build_ffnk
 if [ ! -d "ffmpeg_nekopanda" ]; then
   (git clone --depth 1 https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
     && cd ffmpeg_nekopanda \
-    && ./configure --prefix=`pwd`/build --enable-pic --disable-inline-asm --disable-xlib --disable-lzma --disable-bzlib --enable-gpl --enable-version3 --disable-programs --disable-doc --disable-network --disable-devices \
+    && wget https://git.ffmpeg.org/gitweb/ffmpeg.git/commitdiff_plain/effadce6c756247ea8bae32dc13bb3e6f464f0eb -O patch0.diff \
+    && patch -p1 < patch0.diff \
+    && ./configure --prefix=`pwd`/build --enable-pic --extra-cflags="-Wno-attributes" --as=yasm --disable-xlib --disable-lzma --disable-bzlib --enable-gpl --enable-version3 --disable-programs --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
     && make install) || exit 1
 fi
@@ -147,10 +149,12 @@ if [ $SKIP_PLUGINS -eq 0 ]; then
     install_plugin "/usr/local/lib/avisynth/libyadifmod2*.so"
     install_plugin "/usr/local/lib/avisynth/libtivtc.so"
     install_plugin "/usr/local/lib/avisynth/libtdeint.so"
+    install_plugin "/usr/local/lib/avisynth/librgtools.so"
     install_plugin "/usr/local/lib/avisynth/KUtil.so"
     install_plugin "/usr/local/lib/avisynth/KFM.so"
     install_plugin "/usr/local/lib/avisynth/nnedi3.so"
     install_plugin "/usr/local/lib/avisynth/mt_masktools.so"
+    install_plugin "/usr/local/lib/avisynth/libmasktools2.so"
     install_plugin "/usr/local/lib/avisynth/KTGMC.so"
     install_plugin "/usr/local/lib/avisynth/AvsCUDA.so"
 else

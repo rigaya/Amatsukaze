@@ -50,7 +50,7 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config \
+sudo apt install -y build-essential git wget curl nasm yasm cmake meson ninja-build pkg-config \
     autoconf automake libtool \
     libssl-dev libz-dev
 
@@ -221,6 +221,26 @@ Linuxでは、AviSynth+をインストールする必要があります。
       && cd TIVTC/src \
       && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S . \
       && cmake --build build \
+      && sudo make install)
+    ```
+
+  - masktools
+
+    ```bash
+    (git clone https://github.com/pinterf/masktools.git \
+      && cd masktools \
+      && mkdir build && cd build && cmake .. \
+      && make -j$(nproc) \
+      && sudo make install)
+    ```
+
+  - RgTools
+
+    ```bash
+    (git clone https://github.com/pinterf/RgTools.git \
+      && cd RgTools \
+      && mkdir build && cd build && cmake .. \
+      && make -j$(nproc) \
       && sudo make install)
     ```
 
