@@ -15,32 +15,26 @@ typedef int (*AmatsukazeCLIFunc)(int argc, const TCHAR* argv[]);
 
 int _tmain(int argc, const TCHAR* argv[]) {
     int loadTarget = 0;
-#if defined(_WIN32) || defined(_WIN64)
     for (int iarg = 1; iarg < argc; iarg++) {
-        if (wcscmp(argv[iarg], L"--loadv2") == 0) {
+        if (_tcscmp(argv[iarg], _T("--loadv2")) == 0) {
             loadTarget = 1;
         }
     }
-
+#if defined(_WIN32) || defined(_WIN64)
     static const wchar_t* dllnames[] = { L"Amatsukaze.dll", L"Amatsukaze2.dll" };
     auto hModule = RGY_LOAD_LIBRARY(dllnames[loadTarget]);
-#else
-    auto exePath = PathCombineS(getExeDir(), _T("libAmatsukaze.so"));
-    auto hModule = RGY_LOAD_LIBRARY(exePath.c_str());
     if (hModule == NULL) {
-        static const TCHAR* dllnames[] = { _T("./libAmatsukaze.so"), _T("../lib/libAmatsukaze.so"), _T("libAmatsukaze.so") };
-        for (int i = 0; i < _countof(dllnames); i++) {
-            hModule = RGY_LOAD_LIBRARY(dllnames[i]);
-            if (hModule != NULL) {
-                break;
-            }
-        }
-    }
-#endif
-    if (hModule == NULL) {
-        std::wcerr << L"Failed to load libAmatsukaze.so" << std::endl;
+        std::wcerr << L"Failed to load " << dllnames[loadTarget] << std::endl;
         return -1;
     }
+#else
+    std::vector<std::string> dllnames = { PathCombineS(getExeDir(), _T("libAmatsukaze.so")), PathCombineS(getExeDir(), _T("libAmatsukaze2.so")) };
+    auto hModule = RGY_LOAD_LIBRARY(dllnames[loadTarget].c_str());
+    if (hModule == NULL) {
+        std::cerr << "Failed to load " << dllnames[loadTarget] << std::endl;
+        return -1;
+    }
+#endif
     AmatsukazeCLIFunc AmatsukazeCLI = (AmatsukazeCLIFunc)RGY_GET_PROC_ADDRESS(hModule, "AmatsukazeCLI");
     if (AmatsukazeCLI == NULL) {
         std::wcerr << L"Failed to find AmatsukazeCLI function" << std::endl;
