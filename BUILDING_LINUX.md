@@ -50,9 +50,8 @@ AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応してい�
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git wget curl cmake meson ninja-build pkg-config \
+sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config \
     autoconf automake libtool \
-    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libssl-dev libz-dev
 
 # .NET
@@ -229,18 +228,18 @@ Linuxでは、AviSynth+をインストールする必要があります。
 
 下記では、Amatsukazeを ```$HOME/Amatsukaze``` にインストールする例を示します。
 
-```./install_linux.sh``` により下記が自動的に実行されます。
+```./build_install_linux.sh``` により下記が自動的に実行されます。
 
 - AmatsuakzeCLIのビルド
+  - 地デジ/BS用 libAmatsukaze.so
+  - BS4K用 libAmatsukaze2.so
 - AmatsuakzeServer, AmatsuakzeServerCLI, AmatsuakzeAddTask のビルド
 - インストール先への実行ファイルの配置
-- yadif, TIVTC 等プラグインの exe_files/plugins64 へのリンク作成
-  
 
 ```bash
 git clone https://github.com/rigaya/Amatsukaze.git --recursive
 cd Amatsukaze
-./install_linux.sh $HOME/Amatsukaze
+./build_install_linux.sh $HOME/Amatsukaze
 ```
 
 ## 実行方法
