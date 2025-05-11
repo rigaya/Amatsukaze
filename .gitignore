@@ -14,6 +14,7 @@ Debug/
 Release/
 Debug2/
 Release2/
+build/
 
 /ffmpeg_lgpl
 /publish
