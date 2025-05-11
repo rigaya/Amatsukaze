@@ -46,7 +46,7 @@ if [ ! -d "ffmpeg_nekopanda" ]; then
 fi
 
 # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
-(meson setup --pkg-config-path `pwd`/ffmpeg_nekopanda/build/lib/pkgconfig ../.. && ninja) || exit 1
+(meson setup --buildtype release --pkg-config-path `pwd`/ffmpeg_nekopanda/build/lib/pkgconfig ../.. && ninja) || exit 1
 cd ..
 
 # ----- BS4K向け ffmpeg_6.1.2ベースのAmatsukazeCLIのビルド -----
@@ -64,7 +64,7 @@ if [ ! -d "ffmpeg-6.1.2" ]; then
 fi
 
 # ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う
-(meson setup --pkg-config-path `pwd`/ffmpeg-6.1.2/build/lib/pkgconfig ../.. && ninja) || exit 1
+(meson setup --buildtype release --pkg-config-path `pwd`/ffmpeg-6.1.2/build/lib/pkgconfig ../.. && ninja) || exit 1
 cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
 cd ..
 
