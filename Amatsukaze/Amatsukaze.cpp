@@ -27,7 +27,9 @@ extern "C" AMATSUKAZE_API int AmatsukazeCLI(int argc, const tchar* argv[]) {
 
 extern "C" AMATSUKAZE_API void InitAmatsukazeDLL() {
     // FFMPEGライブラリ初期化
-    //av_register_all();
+#if LIBAVFORMAT_VERSION_MAJOR < 59
+    av_register_all();
+#endif
 #if ENABLE_FFMPEG_FILTER
     //avfilter_register_all();
 #endif
@@ -43,7 +45,9 @@ extern "C" AMATSUKAZE_API const char* AvisynthPluginInit3(IScriptEnvironment* en
 
     if (g_av_initialized == false) {
         // FFMPEGライブラリ初期化
-        //av_register_all();
+#if LIBAVFORMAT_VERSION_MAJOR < 59
+        av_register_all();
+#endif
 #if ENABLE_FFMPEG_FILTER
         //avfilter_register_all();
 #endif
