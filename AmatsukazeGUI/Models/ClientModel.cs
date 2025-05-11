@@ -518,6 +518,7 @@ namespace Amatsukaze.Models
                 if (_Setting != null)
                     _Setting.PropertyChanged -= SettingChanged;
                 _Setting = value;
+                _Setting.IsServerLinux = IsServerLinux; // 明示的に更新する
                 _Setting.PropertyChanged += SettingChanged;
                 RaisePropertyChanged("CurrentClusters");
                 RaisePropertyChanged();
