@@ -36,7 +36,7 @@ fi
 # ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
 cd build_ffnk
 if [ ! -d "ffmpeg_nekopanda" ]; then
-  (git clone --depth 1 https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
+  (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
     && cd ffmpeg_nekopanda \
     && wget https://git.ffmpeg.org/gitweb/ffmpeg.git/commitdiff_plain/effadce6c756247ea8bae32dc13bb3e6f464f0eb -O patch0.diff \
     && patch -p1 < patch0.diff \
