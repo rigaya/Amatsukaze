@@ -82,7 +82,7 @@ jobs:
           docker build --build-arg LOCAL_USER_ID=${{ steps.prep.outputs.local_user_id }} --build-arg LOCAL_GROUP_ID=${{ steps.prep.outputs.local_group_id }} --tag ${{ steps.prep.outputs.tagged_image }} --platform linux/${{ matrix.arch }} --file ${{ env.DOCKER_FILE }} ./
           docker run -dit --rm -v ${{ steps.prep.outputs.output_dir }}:/output -u "$(id -u):$(id -g)" --name build_pkg ${{ steps.prep.outputs.tagged_image }}
           docker exec build_pkg ./scripts/build.sh buildAmatsukaze/Amatsukaze
-          docker exec build_pkg sh -c "cd buildAmatsukaze/Amatsukaze; tar -Jcf ../../Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz ."
+          docker exec build_pkg sh -c "cd buildAmatsukaze/Amatsukaze; tar -Jcvf /output/Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz ."
           echo "pkg_name=Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz" >> $GITHUB_OUTPUT
 
       - name: Calc hash
