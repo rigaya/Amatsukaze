@@ -1,0 +1,46 @@
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive \
+    OSVER=ubuntu2404 \
+    LOCAL_USER_ID=1000 \
+    LOCAL_GROUP_ID=1000 \
+    DOTNET_DEB_NAME=https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
+    AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.0/avisynthcudafilters_0.7.0-1_amd64_Ubuntu24.04.deb
+
+RUN apt update \
+    && apt-get install -y \
+      sudo \
+      wget \
+      curl \
+      git \
+      cmake \
+      nasm \
+      yasm \
+      meson \
+      ninja-build \
+      pkg-config \
+      checkinstall \
+      autoconf \
+      automake \
+      libtool \
+      libssl-dev \
+      libz-dev \
+      build-essential \
+    && wget -q ${DOTNET_DEB_NAME} -O packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb \
+    && apt update \
+    && apt-get install -y dotnet-sdk-8.0 \
+    && wget -q ${AVISYNTHPLUS_DEB_NAME} -O avisynthcudafilters.deb \
+    && dpkg -i avisynthcudafilters.deb \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm packages-microsoft-prod.deb avisynth.deb
+
+RUN useradd -u $LOCAL_USER_ID -m --user-group --shell /bin/bash rigaya
+RUN groupmod -g $LOCAL_GROUP_ID rigaya
+WORKDIR /home/rigaya
+COPY . .
+RUN chown -R rigaya:rigaya .
+USER rigaya
+    
+
