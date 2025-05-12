@@ -72,6 +72,7 @@ mkdir -p "${INSTALL_DIR}/exe_files"
 mkdir -p "${INSTALL_DIR}/exe_files/plugins64"
 mkdir -p "${INSTALL_DIR}/logo"
 mkdir -p "${INSTALL_DIR}/profile"
+mkdir -p "${INSTALL_DIR}/scripts"
 touch "${INSTALL_DIR}/drcs/drcs_map.txt"
 
 # 実行ファイルのインストール
@@ -104,5 +105,6 @@ cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
 cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
 cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
 cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
+cp -r scripts/*            "${INSTALL_DIR}/scripts/"
 
 echo "インストールが完了しました"
