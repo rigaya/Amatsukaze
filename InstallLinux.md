@@ -262,14 +262,34 @@ Linuxでは、AviSynth+をインストールする必要があります。
 
 ここでは```$HOME/Amatsukaze```にインストールしたものとして記述しています。
 
-### AmatsukazeServerCLI の実行
+### Linuxでのサーバー(AmatsukazeServerCLI)の起動
 
-ビルドしたAmatsukazeServerCLIを下記のように実行します。
+下記のように実行します。
 
 ```bash
 cd $HOME/Amatsukaze
 ./AmatsukazeServer.sh
 ```
+
+<img src="./data/AmatsukazeServerLinuxStart_01.png" width="480">
+
+サーバーが開始されたと出ればOKです。
+
+### Windowsからの接続
+
+その後、Windowsから ```AmatsukazeClient.vbs``` を実行して接続します。
+
+下記画面が表示されたら、サーバー側のIPアドレスを入力し、「OK」をクリックします。
+
+<img src="./data/AmatsukazeServerLinuxStart_02.png" width="240">
+
+その後、設定画面左下の「更新」をクリックすると、サーバー情報でウィンドウが更新されます。
+
+<img src="./data/AmatsukazeServerLinuxStart_03.png" width="160">
+
+初回接続時は基本設定を行ってください。実行ファイルのパスに関しては、exe_files以下、あるいは PATH に含まれる実行ファイルは、右下「適用」ボタンをクリックすると自動で入力されます。
+
+<img src="./data/AmatsukazeServerLinuxStart_04.png" width="480">
 
 ### タスクの追加
 
@@ -277,6 +297,10 @@ cd $HOME/Amatsukaze
 cd $HOME/Amatsukaze
 ./exe_files/AmatsukazeAddTask -f <対象ファイル名> -o <出力フォルダ> -s <プロファイル名>
 ```
+
+プロファイル名は、設定画面のプロファイルタブの使用したいプロファイル名を指定します。
+
+<img src="./data/AmatsukazeServerLinuxStart_05.png" width="480">
 
 ## 注意事項
 
