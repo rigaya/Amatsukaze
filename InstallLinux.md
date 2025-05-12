@@ -15,10 +15,10 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 ## Linux対応状況
 
 - Linux対応済み
-  - AmatsukazeCLI (Windows: cp932, Linux: utf8)
-    - AvisynthのフィルタはひとまずCPU版は動作確認
+  - AmatsukazeCLI
   - AmatsukazeServerCLI
   - AmatsukazeAddTask
+  - ScriptCommand
   
   まだ対応しきれていない箇所がまだあるかもしれません…
 
@@ -257,7 +257,6 @@ Linuxでは、AviSynth+をインストールする必要があります。
     ```bash
     sudo apt install -y opus-tools
     ```
-
 
 ## 実行方法
 
