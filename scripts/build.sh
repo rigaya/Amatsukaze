@@ -76,7 +76,7 @@ touch "${INSTALL_DIR}/drcs/drcs_map.txt"
 
 # 実行ファイルのインストール
 echo "実行ファイルをインストールします..."
-install -D -t "${INSTALL_DIR}/exe_files" ./scripts/AmatsukazeServer.sh
+install -D -t "${INSTALL_DIR}" ./scripts/AmatsukazeServer.sh
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeCLI/AmatsukazeCLI"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/libAmatsukaze.so"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
@@ -98,5 +98,11 @@ for cmd in AddTag SetOutDir SetPriority GetOutFiles CancelItem; do
     cp "${INSTALL_DIR}/exe_files/ScriptCommand" "${INSTALL_DIR}/exe_files/cmd/${cmd}"
     echo "コマンドを作成しました: ${cmd} -> ${INSTALL_DIR}/exe_files/cmd/"
 done
+
+# defaultファイルのコピー
+cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
+cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
+cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
+cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
 
 echo "インストールが完了しました"
