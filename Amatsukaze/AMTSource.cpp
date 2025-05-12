@@ -266,17 +266,33 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
             if (top->pict_type != AV_PICTURE_TYPE_B) {
                 nonBQPTable = qpframe;
             }
+#if AVISYNTH_MODE == AVISYNTH_NEO
             ret->SetProperty("QP_Table", qpframe);
             ret->SetProperty("QP_Table_Non_B", nonBQPTable);
             ret->SetProperty("QP_Stride", qp_stride ? qpframe->GetPitch() : 0);
             ret->SetProperty("QP_ScaleType", qp_scale_type);
-
+#elif AVISYNTH_MODE == AVISYNTH_PLUS
+            int error;
+            auto avsmap = env->getFramePropsRW(ret);
+            env->propSetFrame(avsmap, "QP_Table", qpframe, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+            env->propSetFrame(avsmap, "QP_Table_Non_B", nonBQPTable, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+            env->propSetInt(avsmap, "QP_Stride", qp_stride ? qpframe->GetPitch() : 0, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+            env->propSetInt(avsmap, "QP_ScaleType", qp_scale_type, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+#else
+            static_assert(false, "Invalid AVISYNTH_MODE");
+#endif
             PVideoFrame dcframe = env->NewVideoFrame(qpvi);
             auto dc_table_data = av_frame_get_side_data(top, AV_FRAME_DATA_MB_DC_TABLE_DATA);
             if (dc_table_data) {
                 env->BitBlt(dcframe->GetWritePtr(), dcframe->GetPitch(),
                     (const BYTE*)dc_table_data->data, qpvi.width, qpvi.width, qpvi.height);
+#if AVISYNTH_MODE == AVISYNTH_NEO
                 ret->SetProperty("DC_Table", dcframe);
+#elif AVISYNTH_MODE == AVISYNTH_PLUS
+                env->propSetFrame(avsmap, "DC_Table", dcframe, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+#else
+            static_assert(false, "Invalid AVISYNTH_MODE");
+#endif
             }
         }
     }
