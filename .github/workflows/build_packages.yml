@@ -55,6 +55,18 @@ jobs:
         with:
           submodules: true
           fetch-depth: 0
+      - name: Set version name
+        id: rev
+        run: |
+          cd ${{ github.workspace }}
+          REVCOUNT=`git rev-list --count HEAD`
+          echo "rev_count=${REVCOUNT}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" =~ "refs/tags/" ]]; then
+            VERSION=$(echo ${{ github.ref }} | sed -e "s#refs/tags/##g")
+          else
+            VERSION=r${REVCOUNT}
+          fi
+          echo "version_name=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Create Output Dir
         run: |
@@ -69,10 +81,10 @@ jobs:
         run: |
           docker build --build-arg LOCAL_USER_ID=${{ steps.prep.outputs.local_user_id }} --build-arg LOCAL_GROUP_ID=${{ steps.prep.outputs.local_group_id }} --tag ${{ steps.prep.outputs.tagged_image }} --platform linux/${{ matrix.arch }} --file ${{ env.DOCKER_FILE }} ./
           docker run -dit --rm -v ${{ steps.prep.outputs.output_dir }}:/output -u "$(id -u):$(id -g)" --name build_pkg ${{ steps.prep.outputs.tagged_image }}
-          docker exec build_pkg ./build.sh $HOME/Amatsukaze
-          docker exec build_pkg tar -Jcf Amatsukaze_${{ matrix.osver }}_${{ steps.prep.outputs.version }}.tar.xz $HOME/Amatsukaze/
-          docker exec build_pkg tar -Jcf Amatsukaze_${{ matrix.osver }}_${{ steps.prep.outputs.version }}.tar.xz ${{ steps.prep.outputs.output_dir }}/
-          echo "pkg_name=Amatsukaze_${{ matrix.osver }}_${{ steps.prep.outputs.version }}.tar.xz" >> $GITHUB_OUTPUT
+          docker exec build_pkg ./scripts/build.sh buildAmatsukaze/Amatsukaze
+          docker exec build_pkg tar -Jcf Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz buildAmatsukaze/Amatsukaze/
+          docker exec build_pkg tar -Jcf Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz ${{ steps.prep.outputs.output_dir }}/
+          echo "pkg_name=Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz" >> $GITHUB_OUTPUT
 
       - name: Calc hash
         id: calc_hash
