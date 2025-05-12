@@ -2,25 +2,14 @@
 
 # 引数のチェック
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 installdir [builddir] [--skip-plugins]"
+    echo "Usage: $0 installdir [builddir]"
     echo "  installdir: インストール先ディレクトリ"
     echo "  builddir: ビルド用ディレクトリ (省略時は 'build')"
-    echo "  --skip-plugins: プラグインのインストールをスキップ"
     exit 1
 fi
 
 INSTALL_DIR="$1"
 BUILD_DIR="${2:-build}"
-SKIP_PLUGINS=0
-
-# オプションの処理
-for arg in "$@"; do
-    case "$arg" in
-        --skip-plugins)
-            SKIP_PLUGINS=1
-            ;;
-    esac
-done
 
 # buildディレクトリがない場合は作成
 if [ ! -d "${BUILD_DIR}" ]; then
@@ -38,7 +27,7 @@ cd build_ffnk
 if [ ! -d "ffmpeg_nekopanda" ]; then
   (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
     && cd ffmpeg_nekopanda \
-    && wget https://git.ffmpeg.org/gitweb/ffmpeg.git/commitdiff_plain/effadce6c756247ea8bae32dc13bb3e6f464f0eb -O patch0.diff \
+    && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
     && patch -p1 < patch0.diff \
     && ./configure --prefix=`pwd`/build --enable-pic --extra-cflags="-Wno-attributes" --as=yasm --disable-xlib --disable-lzma --disable-bzlib --enable-gpl --enable-version3 --disable-programs --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
@@ -109,56 +98,5 @@ for cmd in AddTag SetOutDir SetPriority GetOutFiles CancelItem; do
     cp "${INSTALL_DIR}/exe_files/ScriptCommand" "${INSTALL_DIR}/exe_files/cmd/${cmd}"
     echo "コマンドを作成しました: ${cmd} -> ${INSTALL_DIR}/exe_files/cmd/"
 done
-
-
-# プラグインのインストール関数
-install_plugin() {
-    local plugin_pattern="$1"
-    local target_dir="${INSTALL_DIR}/exe_files/plugins64/"
-    
-    for plugin in $plugin_pattern; do
-        if [ -e "$plugin" ]; then
-            local plugin_name=$(basename "$plugin")
-            local target_path="${target_dir}${plugin_name}"
-            
-            # 既存のファイルやリンクが存在しない場合のみリンクを作成
-            if [ ! -e "$target_path" ]; then
-                ln -sf "$plugin" "$target_dir"
-                echo "プラグインへのリンクを作成しました: $plugin"
-            else
-                echo "既に存在するためスキップします: $plugin_name"
-            fi
-        fi
-    done
-}
-
-# JLファイルのインストール
-if [ ! -d "${INSTALL_DIR}/JL" ]; then
-    (mkdir -p "${INSTALL_DIR}/JL" \
-        && wget https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz \
-        && tar -xf Ver4.1.0_Linux.tar.gz \
-        && cp -r join_logo_scp-Ver4.1.0_Linux/JL/* "${INSTALL_DIR}/JL/" \
-        && rm -rf join_logo_scp-Ver4.1.0_Linux Ver4.1.0_Linux.tar.gz) || exit 1
-fi
-
-# プラグインのインストール
-if [ $SKIP_PLUGINS -eq 0 ]; then
-    echo "プラグインへのリンクを作成します... -> ${INSTALL_DIR}/exe_files/plugins64/"
-
-    # 各プラグインのインストール
-    install_plugin "/usr/local/lib/avisynth/libyadifmod2*.so"
-    install_plugin "/usr/local/lib/avisynth/libtivtc.so"
-    install_plugin "/usr/local/lib/avisynth/libtdeint.so"
-    install_plugin "/usr/local/lib/avisynth/librgtools.so"
-    install_plugin "/usr/local/lib/avisynth/KUtil.so"
-    install_plugin "/usr/local/lib/avisynth/KFM.so"
-    install_plugin "/usr/local/lib/avisynth/nnedi3.so"
-    install_plugin "/usr/local/lib/avisynth/mt_masktools.so"
-    install_plugin "/usr/local/lib/avisynth/libmasktools2.so"
-    install_plugin "/usr/local/lib/avisynth/KTGMC.so"
-    install_plugin "/usr/local/lib/avisynth/AvsCUDA.so"
-else
-    echo "プラグインのインストールをスキップします"
-fi
 
 echo "インストールが完了しました"

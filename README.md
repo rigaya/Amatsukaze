@@ -46,11 +46,16 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 
 ### 対応環境
 
-Windows 10/11 (64bit)
+- Windows 10/11 (64bit)
+- Linux (x64)
+
+  Linux環境では一部機能に制限があります。
 
 ### インストール方法
 
 配布7zを解凍
+
+Linuxでのインストール方法は[こちら](./InstallLinux.md)。
 
 ### アンインストール方法
 

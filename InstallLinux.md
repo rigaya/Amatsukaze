@@ -1,80 +1,136 @@
 # Linux向けAmatsukazeServer
 
-**注意**
-現在建設中でたぶん対応しきれていない箇所が多く、バグだらけです。
-
 ## 概要
 
-AmatsukazeServerCLI と AmatsukazeCLI、AmatsukazeAddTask をLinux対応作業中です。
+AmatsukazeServerCLI と AmatsukazeCLI、AmatsukazeAddTask をLinux対応しました。ディレクトリ構造はWindowsとほぼ同等としています。
 
-AmatsukazeGUIは.NETのWPFが使われており、WPFはLinuxに対応していないようなので、Linux対応は難しいです。
+AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、WPFはLinuxに対応していないようなので、Linux対応は難しいです。
 
-そのため、LinuxでAmatsukazeServerCLIを起動して、WindowsからAmatsukazeGUIで接続する形を想定しています。
-
-また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
+そのため、LinuxでAmatsukazeServerCLIを起動して、WindowsからAmatsukazeGUIで接続する形になります。また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
 
 ## 想定動作環境
 
 - x64のLinux環境
 
-## 作業状況と作業予定
+## Linux対応状況
 
 - Linux対応済み
   - AmatsukazeCLI (Windows: cp932, Linux: utf8)
     - AvisynthのフィルタはひとまずCPU版は動作確認
   - AmatsukazeServerCLI
   - AmatsukazeAddTask
+  
+  まだ対応しきれていない箇所がまだあるかもしれません…
 
-- 今後Linux対応できるかも?
-  - GPU版のAvisynthのフィルタを使用できる?
-    - Avisynth+はCUDA対応しているらしいが、AvisynthNeoと互換性があるのかどうか…
-  - 設定画面へのドラッグドロップ
-    - Windows-Linuxの対応関係を設定できればあるいは…?
+- 未対応
+  - ニコニコ実況コメント関連機能
 
-- Linux対応困難
-  - AmatsukazeGUI
+    まったく詳しくないので、方法があれば教えてください...
+
+- 対応予定なし
+  - AmatsukazeGUI (操作ウィンドウ)
+  - 設定画面へのドラッグドロップによるタスク追加
   - エンコード中の一時停止
-
-- その他対応予定なし
   - エンコード後、スリープ・シャットダウン
-  - ffmpegに対する独自拡張の取り込み
-  - 他のエンコーダの追加等
   - SCRename によるリネーム機能
-
+  - インタレ解除のうち、 D3DVPとAutoVfr
+  - 音声エンコーダのうち、neroaacとqaac
+  - 他のエンコーダの追加等
 
 ## インストール手順
 
 ### 依存パッケージのインストール
 
-#### Ubuntu / Debian系
-
 ```bash
 sudo apt update
-sudo apt install -y build-essential git wget curl nasm yasm cmake meson ninja-build pkg-config \
-    autoconf automake libtool \
-    libssl-dev libz-dev
-
-# .NET
-wget https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-sudo dpkg -i ./packages-microsoft-prod.deb
-sudo apt update
-sudo apt install -y dotnet-sdk-8.0
+sudo apt install -y openssl zlib1g
 ```
-
 
 ### AviSynthのインストール
 
 Linuxでは、AviSynth+をインストールする必要があります。
 
 ```bash
-(git clone https://github.com/AviSynth/AviSynthPlus.git
-  && cd AviSynthPlus && mkdir build && cd build
-  && cmake -DENABLE_CUDA=ON ..
-  && make -j$(nproc)
-  && sudo make install)
+(curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
+  | grep "browser_download_url.*deb" | grep "avisynth_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+  | wget -i - -O avisynth.deb \
+  && sudo apt install -y ./avisynth.deb \
+  && rm ./avisynth.deb)
 ```
 
-### 必要な実行ファイルとプラグインのインストール
+### AviSynthCUDAFiltersのインストール
+
+```bash
+(curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
+  | grep "browser_download_url.*deb" | grep "avisynthcudafilters_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+  | wget -i - -O avisynthcudafilters.deb \
+  && sudo apt install -y ./avisynthcudafilters.deb \
+  && rm ./avisynthcudafilters.deb)
+```
+
+### その他必要なAvisynthプラグインのインストール
+
+- yadif
+
+  ```bash
+  (git clone https://github.com/Asd-g/yadifmod2 \
+    && cd yadifmod2 \
+    && mkdir build && cd build && cmake .. \
+    && make -j$(nproc) \
+    && sudo make install)
+  ```
+
+- TIVTC
+
+  ```bash
+  (git clone https://github.com/pinterf/TIVTC \
+    && cd TIVTC/src \
+    && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S . \
+    && cmake --build build \
+    && sudo make install)
+  ```
+
+- masktools
+
+  ```bash
+  (git clone https://github.com/pinterf/masktools.git \
+    && cd masktools \
+    && mkdir build && cd build && cmake .. \
+    && make -j$(nproc) \
+    && sudo make install)
+  ```
+
+- RgTools
+
+  ```bash
+  (git clone https://github.com/pinterf/RgTools.git \
+    && cd RgTools \
+    && mkdir build && cd build && cmake .. \
+    && make -j$(nproc) \
+    && sudo make install)
+  ```
+
+### Amatsukazeのインストール
+
+- Amatsukazeの配置
+  [こちら](https://github.com/rigaya/Amatsukaze/releases)からAmatsukazeのアーカイブをダウンロードして展開してください。
+  展開先は使用するユーザーが読み書きできる権限のあるディレクトリとしてください。(下記では ```$HOME/Amatsukaze```)
+
+  ```bash
+  wget https://github.com/rigaya/Amatsukaze/releases/download/<version>/Amatsukaze_<version>_Ubuntuxx.xx.tar.xz
+  tar xf Amatsukaze_<version>_Ubuntuxx.xx.tar.xz -C $HOME/Amatsukaze
+  ```
+
+- 各Avisynthプラグインへのリンクの作成
+
+  ```./scripts/install.sh```を実行するとリンクが```exe_files/plugins64```に自動的に作成されます。
+
+  ```bash
+  cd $HOME/Amatsukaze
+  ./scripts/install.sh
+  ```
+
+### 必要な実行ファイルのインストール
 
 - エンコーダ
 
@@ -202,67 +258,10 @@ Linuxでは、AviSynth+をインストールする必要があります。
     sudo apt install -y opus-tools
     ```
 
-- Avisynthプラグイン
-
-  - yadif
-  
-    ```bash
-    (git clone https://github.com/Asd-g/yadifmod2 \
-      && cd yadifmod2 \
-      && mkdir build && cd build && cmake .. \
-      && make -j$(nproc) \
-      && sudo make install)
-    ```
-  
-  - TIVTC
-  
-    ```bash
-    (git clone https://github.com/pinterf/TIVTC \
-      && cd TIVTC/src \
-      && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S . \
-      && cmake --build build \
-      && sudo make install)
-    ```
-
-  - masktools
-
-    ```bash
-    (git clone https://github.com/pinterf/masktools.git \
-      && cd masktools \
-      && mkdir build && cd build && cmake .. \
-      && make -j$(nproc) \
-      && sudo make install)
-    ```
-
-  - RgTools
-
-    ```bash
-    (git clone https://github.com/pinterf/RgTools.git \
-      && cd RgTools \
-      && mkdir build && cd build && cmake .. \
-      && make -j$(nproc) \
-      && sudo make install)
-    ```
-
-### Amatsukaze本体のビルドとインストール
-
-下記では、Amatsukazeを ```$HOME/Amatsukaze``` にインストールする例を示します。
-
-```./build_install_linux.sh``` により下記が自動的に実行されます。
-
-- AmatsuakzeCLIのビルド
-  - 地デジ/BS用 libAmatsukaze.so
-  - BS4K用 libAmatsukaze2.so
-- AmatsuakzeServer, AmatsuakzeServerCLI, AmatsuakzeAddTask のビルド
-- インストール先への実行ファイルの配置
-
-```bash
-git clone https://github.com/rigaya/Amatsukaze.git --recursive
-cd Amatsukaze
-./build_install_linux.sh $HOME/Amatsukaze
-```
 
 ## 実行方法
+
+ここでは```$HOME/Amatsukaze```にインストールしたものとして記述しています。
 
 ### AmatsukazeServerCLI の実行
 
@@ -282,10 +281,5 @@ cd $HOME/Amatsukaze
 
 ## 注意事項
 
-1. **既知の制限**:
-   - 一部のWindowsに依存する機能は制限または無効化されています。
-   - ffmpegはシステムライブラリを使用します。
-   - GUI機能はLinuxでは利用できません。
-   - 必ず ```dotnet publish``` して利用してください。
-   - ロゴ解析は、AmatsukazeGUI(Windows側)で行います。tsファイルの場所をWindows側で選択できるようにしてください。
+- ロゴ解析は、AmatsukazeGUI(Windows側)で行います。tsファイルの場所をWindows側で選択できるようにしてください。
    
