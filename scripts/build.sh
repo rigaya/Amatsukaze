@@ -8,6 +8,9 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
+SCRIPT_DIR=`dirname $0`
+SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
+
 INSTALL_DIR="$1"
 BUILD_DIR="${2:-build}"
 # buildディレクトリがない場合は作成
@@ -32,6 +35,18 @@ if [ ! -d "libvpl-2.15.0" ]; then
     sed -i 's/-lvpl/-lvpl -lstdc++/g' ${BUILD_DIR}/baselibs/lib/pkgconfig/vpl.pc
 fi
 
+# media-sdkのビルド
+if [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
+    (wget https://github.com/Intel-Media-SDK/MediaSDK/archive/refs/tags/intel-mediasdk-22.5.4.tar.gz -O intel-media-sdk.tar.gz \
+    && tar xf intel-media-sdk.tar.gz \
+    && rm intel-media-sdk.tar.gz \
+    && cd MediaSDK-intel-mediasdk-22.5.4/api/mfx_dispatch/linux \
+    && patch < ${SCRIPT_DIR}/mfx.diff \
+    && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
+    && cd _build && make -j$(nproc) \
+    && make install) || exit 1
+fi
+
 if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
     (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
     && tar xf nv-codec-headers.tar.gz \
@@ -51,7 +66,7 @@ if [ ! -d "ffmpeg_nekopanda" ]; then
     && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
     && patch -p1 < patch0.diff \
     && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec --enable-libmfx \
       --enable-gpl --enable-version3 \
       --disable-autodetect --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
