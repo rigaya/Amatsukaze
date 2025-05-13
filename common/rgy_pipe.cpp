@@ -35,81 +35,6 @@
 #include <io.h>
 #include <cstring>
 
-// コマンドライン文字列を引数リストに分割するヘルパー関数
-std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
-    std::vector<tstring> args;
-
-#if defined(_WIN32) || defined(_WIN64)
-    // Windows版の実装
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(cmdLine.c_str(), &argc);
-    if (argv) {
-        for (int i = 0; i < argc; i++) {
-            args.push_back(argv[i]);
-        }
-        LocalFree(argv);
-    }
-#else
-    // Linux/Unix版の実装
-    // 単純なシェル風の解析を行う
-    const auto isSpace = [](tchar c) { return c == _T(' ') || c == _T('\t'); };
-
-    bool inQuote = false;
-    tchar quoteChar = 0;
-    tstring currentArg;
-
-    for (size_t i = 0; i < cmdLine.length(); i++) {
-        tchar c = cmdLine[i];
-
-        // クオート処理
-        if (c == _T('\'') || c == _T('"')) {
-            if (!inQuote) {
-                inQuote = true;
-                quoteChar = c;
-            } else if (c == quoteChar) {
-                inQuote = false;
-                quoteChar = 0;
-            } else {
-                currentArg += c;
-            }
-            continue;
-        }
-
-        // バックスラッシュによるエスケープ
-        if (c == _T('\\') && i + 1 < cmdLine.length()) {
-            tchar nextChar = cmdLine[i + 1];
-            if (nextChar == _T('\'') || nextChar == _T('"') || nextChar == _T('\\')) {
-                currentArg += nextChar;
-                i++; // 次の文字をスキップ
-                continue;
-            }
-        }
-
-        // 空白文字の処理
-        if (isSpace(c) && !inQuote) {
-            if (!currentArg.empty()) {
-                args.push_back(currentArg);
-                currentArg.clear();
-            }
-        } else {
-            currentArg += c;
-        }
-    }
-
-    // 最後の引数を追加
-    if (!currentArg.empty()) {
-        args.push_back(currentArg);
-    }
-#endif
-
-    // 空のリストにならないように、少なくとも空の引数を1つ入れる
-    if (args.empty()) {
-        args.push_back(_T(""));
-    }
-
-    return args;
-}
-
 RGYPipeProcessWin::RGYPipeProcessWin() :
     RGYPipeProcess(),
     m_pi() {
@@ -420,4 +345,79 @@ std::unique_ptr<RGYPipeProcess> createRGYPipeProcess() {
     auto process = std::make_unique<RGYPipeProcessLinux>();
 #endif
     return std::move(process);
+}
+
+// コマンドライン文字列を引数リストに分割するヘルパー関数
+std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
+    std::vector<tstring> args;
+
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows版の実装
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(cmdLine.c_str(), &argc);
+    if (argv) {
+        for (int i = 0; i < argc; i++) {
+            args.push_back(argv[i]);
+        }
+        LocalFree(argv);
+    }
+#else
+    // Linux/Unix版の実装
+    // 単純なシェル風の解析を行う
+    const auto isSpace = [](TCHAR c) { return c == _T(' ') || c == _T('\t'); };
+
+    bool inQuote = false;
+    TCHAR quoteChar = 0;
+    tstring currentArg;
+
+    for (size_t i = 0; i < cmdLine.length(); i++) {
+        TCHAR c = cmdLine[i];
+
+        // クオート処理
+        if (c == _T('\'') || c == _T('"')) {
+            if (!inQuote) {
+                inQuote = true;
+                quoteChar = c;
+            } else if (c == quoteChar) {
+                inQuote = false;
+                quoteChar = 0;
+            } else {
+                currentArg += c;
+            }
+            continue;
+        }
+
+        // バックスラッシュによるエスケープ
+        if (c == _T('\\') && i + 1 < cmdLine.length()) {
+            TCHAR nextChar = cmdLine[i + 1];
+            if (nextChar == _T('\'') || nextChar == _T('"') || nextChar == _T('\\')) {
+                currentArg += nextChar;
+                i++; // 次の文字をスキップ
+                continue;
+            }
+        }
+
+        // 空白文字の処理
+        if (isSpace(c) && !inQuote) {
+            if (!currentArg.empty()) {
+                args.push_back(currentArg);
+                currentArg.clear();
+            }
+        } else {
+            currentArg += c;
+        }
+    }
+
+    // 最後の引数を追加
+    if (!currentArg.empty()) {
+        args.push_back(currentArg);
+    }
+#endif
+
+    // 空のリストにならないように、少なくとも空の引数を1つ入れる
+    if (args.empty()) {
+        args.push_back(_T(""));
+    }
+
+    return args;
 }
