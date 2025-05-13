@@ -85,7 +85,7 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/li
 
 # .NET アプリケーションの公開
 echo ".NET アプリケーションを公開します..."
-if ! dotnet publish AmatsukazeLinux.sln -c Release -r linux-x64 --self-contained true -o "${INSTALL_DIR}/exe_files"; then
+if ! dotnet publish AmatsukazeLinux.sln -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
     echo ".NET アプリケーションの公開に失敗しました"
     exit 1
 fi

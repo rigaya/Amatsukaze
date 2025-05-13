@@ -363,7 +363,7 @@ namespace Amatsukaze.ViewModels
                 }
                 args += " --file \"" + filepath + "\" --work \"" + workpath + "\"";
             }
-            var apppath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName; // 実行ファイル名を取得する
+            var apppath = Environment.ProcessPath; // 実行ファイル名を取得する
             if (slimts)
             {
                 args += " --slimts";

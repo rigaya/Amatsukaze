@@ -96,7 +96,7 @@ namespace Amatsukaze.ViewModels
         public async void MakeBatchFile()
         {
             string cur = Directory.GetCurrentDirectory();
-            string exe = Path.GetDirectoryName(GetType().Assembly.Location);
+            string exe = AppContext.BaseDirectory;
             string dst = Model.MakeScriptData.OutDir?.TrimEnd(Path.DirectorySeparatorChar);
             string prof = DisplayProfile.GetProfileName(Model.MakeScriptData.SelectedProfile);
             string bat = Model.MakeScriptData.Model.AddQueueBat;

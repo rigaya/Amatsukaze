@@ -106,7 +106,7 @@ namespace Amatsukaze.ViewModels
             {
                 Process.Start(new ProcessStartInfo()
                 {
-                    FileName = Assembly.GetEntryAssembly().Location,
+                    FileName = Environment.ProcessPath,
                     Arguments = "--launch client",
                 });
             }

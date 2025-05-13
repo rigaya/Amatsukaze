@@ -697,7 +697,7 @@ namespace Amatsukaze.Server
         public static void LaunchLocalServer(int port, string rootDir)
         {
             var exeDefaultAppendix = Util.IsServerWindows() ? "exe" : "";
-            var exename = Path.Combine(Path.GetDirectoryName(typeof(ServerSupport).Assembly.Location),
+            var exename = Path.Combine(AppContext.BaseDirectory,
                 (Environment.UserInteractive ? "AmatsukazeGUI" + exeDefaultAppendix : "AmatsukazeServerCLI" + exeDefaultAppendix));
             var args = "-l server -p " + port;
             Process.Start(new ProcessStartInfo(exename, args)

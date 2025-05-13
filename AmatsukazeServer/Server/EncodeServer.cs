@@ -188,10 +188,31 @@ namespace Amatsukaze.Server
 
         public Dictionary<int, ServiceSettingElement> ServiceMap { get { return AppData_.services.ServiceMap; } }
 
+        private static readonly string version;
+
+        static EncodeServer()
+        {
+            try
+            {
+                var exePath = Process.GetCurrentProcess().MainModule.FileName;
+                if (!string.IsNullOrEmpty(exePath))
+                {
+                    version = FileVersionInfo.GetVersionInfo(exePath).FileVersion;
+                }
+                else
+                {
+                    version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+                }
+            }
+            catch
+            {
+                version = "0.0.0.0";
+            }
+        }
+
         public string Version {
             get {
-                return FileVersionInfo.GetVersionInfo(
-                        Assembly.GetExecutingAssembly().Location).FileVersion;
+                return version;
             }
         }
 

@@ -465,7 +465,7 @@ namespace Amatsukaze.Server
             };
 
             // exe_filesをパスに追加
-            var exeDir = Path.GetDirectoryName(typeof(UserScriptExecuter).Assembly.Location);
+            var exeDir = AppContext.BaseDirectory;
 
             // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
             var envPathDelim = Util.IsServerWindows() ? ";" : ":";
