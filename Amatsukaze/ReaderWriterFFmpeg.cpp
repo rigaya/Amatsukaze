@@ -136,12 +136,9 @@ AVFilterInOut*& av::FilterInOut::operator()() {
 av::WriteIOContext::WriteIOContext(int bufsize)
     : ctx_() {
     unsigned char* buffer = (unsigned char*)av_malloc(bufsize);
-#if AMATSUKAZE2DLL
     void *func_ptr = (void *)write_packet_;
-    ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, (int (*)(void *, uint8_t *, int))(write_packet_), NULL);
-#else
-    ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, write_packet_, NULL);
-#endif
+    //RGYArgN<関数引数のインデックス, decltype(関数名)>::type で関数引数の型がとれる
+    ctx_ = avio_alloc_context(buffer, bufsize, 1, this, NULL, (RGYArgN<5, decltype(avio_alloc_context)>::type)(write_packet_), NULL);
 }
 av::WriteIOContext::~WriteIOContext() {
     av_free(ctx_->buffer);
