@@ -8,6 +8,8 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 
 そのため、LinuxでAmatsukazeServerCLIを起動して、WindowsからAmatsukazeGUIで接続する形になります。また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
 
+<img src="./data/AmatsukazeServerLinuxStart_00.png" width="640">
+
 ## 想定動作環境
 
 - x64のLinux環境
