@@ -35,6 +35,81 @@
 #include <io.h>
 #include <cstring>
 
+// コマンドライン文字列を引数リストに分割するヘルパー関数
+std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
+    std::vector<tstring> args;
+
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows版の実装
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(cmdLine.c_str(), &argc);
+    if (argv) {
+        for (int i = 0; i < argc; i++) {
+            args.push_back(argv[i]);
+        }
+        LocalFree(argv);
+    }
+#else
+    // Linux/Unix版の実装
+    // 単純なシェル風の解析を行う
+    const auto isSpace = [](tchar c) { return c == _T(' ') || c == _T('\t'); };
+
+    bool inQuote = false;
+    tchar quoteChar = 0;
+    tstring currentArg;
+
+    for (size_t i = 0; i < cmdLine.length(); i++) {
+        tchar c = cmdLine[i];
+
+        // クオート処理
+        if (c == _T('\'') || c == _T('"')) {
+            if (!inQuote) {
+                inQuote = true;
+                quoteChar = c;
+            } else if (c == quoteChar) {
+                inQuote = false;
+                quoteChar = 0;
+            } else {
+                currentArg += c;
+            }
+            continue;
+        }
+
+        // バックスラッシュによるエスケープ
+        if (c == _T('\\') && i + 1 < cmdLine.length()) {
+            tchar nextChar = cmdLine[i + 1];
+            if (nextChar == _T('\'') || nextChar == _T('"') || nextChar == _T('\\')) {
+                currentArg += nextChar;
+                i++; // 次の文字をスキップ
+                continue;
+            }
+        }
+
+        // 空白文字の処理
+        if (isSpace(c) && !inQuote) {
+            if (!currentArg.empty()) {
+                args.push_back(currentArg);
+                currentArg.clear();
+            }
+        } else {
+            currentArg += c;
+        }
+    }
+
+    // 最後の引数を追加
+    if (!currentArg.empty()) {
+        args.push_back(currentArg);
+    }
+#endif
+
+    // 空のリストにならないように、少なくとも空の引数を1つ入れる
+    if (args.empty()) {
+        args.push_back(_T(""));
+    }
+
+    return args;
+}
+
 RGYPipeProcessWin::RGYPipeProcessWin() :
     RGYPipeProcess(),
     m_pi() {
@@ -76,7 +151,7 @@ int RGYPipeProcessWin::startPipes() {
     return 0;
 }
 
-int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
     BOOL Inherit = FALSE;
     DWORD flag = priority;
     STARTUPINFO si;
@@ -89,7 +164,7 @@ int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir
     if (m_pipe.stdOut.mode)
         si.hStdOutput = m_pipe.stdOut.h_write;
     if (m_pipe.stdErr.mode)
-        si.hStdError = ((m_pipe.stdErr.mode & (PIPE_MODE_ENABLE|PIPE_MODE_MUXED)) == (PIPE_MODE_ENABLE | PIPE_MODE_MUXED)) ? m_pipe.stdOut.h_write : m_pipe.stdErr.h_write;
+        si.hStdError = ((m_pipe.stdErr.mode & (PIPE_MODE_ENABLE | PIPE_MODE_MUXED)) == (PIPE_MODE_ENABLE | PIPE_MODE_MUXED)) ? m_pipe.stdOut.h_write : m_pipe.stdErr.h_write;
     if (m_pipe.stdIn.mode)
         si.hStdInput = m_pipe.stdIn.h_read;
     si.dwFlags |= STARTF_USESTDHANDLES;
@@ -101,13 +176,6 @@ int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir
     }
     if (hidden)
         flag |= CREATE_NO_WINDOW;
-
-    tstring cmd_line;
-    for (auto arg : args) {
-        if (!arg.empty()) {
-            cmd_line += tstring(arg) + _T(" ");
-        }
-    }
 
     int ret = (CreateProcess(NULL, (TCHAR *)cmd_line.c_str(), NULL, NULL, Inherit, flag, NULL, exedir, &si, &m_pi)) ? 0 : 1;
     m_phandle = m_pi.hProcess;
@@ -139,6 +207,16 @@ int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir
         }
     }
     return ret;
+}
+
+int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+    tstring cmd_line;
+    for (auto arg : args) {
+        if (!arg.empty()) {
+            cmd_line += _T("\"") + tstring(arg) + _T("\" ");
+        }
+    }
+    return run(cmd_line, exedir, priority, hidden, minimized);
 }
 
 size_t RGYPipeProcessWin::stdInFpWrite(const void *data, const size_t dataSize) {

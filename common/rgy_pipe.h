@@ -36,6 +36,8 @@
 #include "rgy_util.h"
 #include "rgy_tchar.h"
 
+std::vector<tstring> SplitCommandLine(const tstring& cmdLine);
+
 enum RGYPipeMode : uint32_t {
     PIPE_MODE_DISABLE   = 0x00,
     PIPE_MODE_ENABLE    = 0x01,
@@ -99,6 +101,7 @@ public:
         m_pipe.stdOut.mode = stdout_;
         m_pipe.stdErr.mode = stderr_;
     };
+    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) = 0;
     virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) = 0;
     virtual void close() = 0;
     virtual bool processAlive() = 0;
@@ -127,6 +130,7 @@ public:
     RGYPipeProcessWin();
     virtual ~RGYPipeProcessWin();
 
+    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
     virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
     virtual void close() override;
     virtual bool processAlive() override;
@@ -158,6 +162,7 @@ public:
     RGYPipeProcessLinux();
     virtual ~RGYPipeProcessLinux();
 
+    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
     virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
     virtual void close() override;
     virtual bool processAlive() override;

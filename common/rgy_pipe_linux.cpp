@@ -67,6 +67,12 @@ int RGYPipeProcessLinux::startPipes() {
     return 0;
 }
 
+
+int RGYPipeProcessLinux::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+    std::vector<tstring> argsList = SplitCommandLine(cmd_line);
+    return run(argsList, exedir, priority, hidden, minimized);
+}
+
 int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
     startPipes();
 
