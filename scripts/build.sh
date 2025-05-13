@@ -10,7 +10,6 @@ fi
 
 INSTALL_DIR="$1"
 BUILD_DIR="${2:-build}"
-
 # buildディレクトリがない場合は作成
 if [ ! -d "${BUILD_DIR}" ]; then
     mkdir "${BUILD_DIR}"
@@ -18,18 +17,43 @@ fi
 
 # buildディレクトリに移動
 cd "${BUILD_DIR}"
-if [ ! -d "build_ffnk" ]; then
-    mkdir build_ffnk
+# BUILD_DIR をフルパスに
+BUILD_DIR=`pwd`
+
+# libvplのビルド
+if [ ! -d "libvpl-2.15.0" ]; then
+    (wget https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz -O libvpl.tar.gz \
+    && tar xf libvpl.tar.gz \
+    && rm libvpl.tar.gz \
+    && cd libvpl-2.15.0 \
+    && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
+    && cd _build && make -j$(nproc) \
+    && make install) || exit 1
+    sed -i 's/-lvpl/-lvpl -lstdc++/g' ${BUILD_DIR}/baselibs/lib/pkgconfig/vpl.pc
+fi
+
+if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
+    (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
+    && tar xf nv-codec-headers.tar.gz \
+    && rm nv-codec-headers.tar.gz \
+    && cd nv-codec-headers-12.2.72.0 \
+    && make PREFIX=${BUILD_DIR}/baselibs install) || exit 1
 fi
 
 # ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
+if [ ! -d "build_ffnk" ]; then
+    mkdir build_ffnk
+fi
 cd build_ffnk
 if [ ! -d "ffmpeg_nekopanda" ]; then
   (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
     && cd ffmpeg_nekopanda \
     && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
     && patch -p1 < patch0.diff \
-    && ./configure --prefix=`pwd`/build --enable-pic --extra-cflags="-Wno-attributes" --as=yasm --disable-xlib --disable-lzma --disable-bzlib --enable-gpl --enable-version3 --disable-programs --disable-doc --disable-network --disable-devices \
+    && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
+      --enable-gpl --enable-version3 \
+      --disable-autodetect --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
     && make install) || exit 1
 fi
@@ -47,7 +71,10 @@ if [ ! -d "ffmpeg-6.1.2" ]; then
   (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
     && tar -xf ffmpeg-6.1.2.tar.xz \
     && cd ffmpeg-6.1.2 \
-    && ./configure --prefix=`pwd`/build --enable-pic --disable-xlib --disable-lzma --disable-bzlib --enable-gpl --enable-version3 --disable-programs --disable-doc --disable-network --disable-devices \
+    && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec --enable-libvpl \
+      --enable-gpl --enable-version3 \
+      --disable-autodetect --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
     && make install) || exit 1
 fi
