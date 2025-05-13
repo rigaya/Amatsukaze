@@ -46,17 +46,17 @@ FILE* fsopenT(const char* FileName, const char* Mode, int ShFlag);
 
 namespace string_internal {
 
-static std::vector<wchar_t> si_to_wstring(const char *str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<wchar_t> si_to_wstring(const std::string& str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<wchar_t> si_to_wstring(const char *str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length() * sizeof(wchar_t)); return vec; }
+static std::vector<wchar_t> si_to_wstring(const std::string& str) { auto ret = char_to_wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length() * sizeof(wchar_t)); return vec; }
 
-static std::vector<wchar_t> si_to_wstring(const wchar_t *str) { auto ret = std::wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<wchar_t> si_to_wstring(const std::wstring& str) { std::vector<wchar_t> vec(str.length() + 1, 0); memcpy(vec.data(), str.data(), str.length()); return vec; }
+static std::vector<wchar_t> si_to_wstring(const wchar_t *str) { auto ret = std::wstring(str); std::vector<wchar_t> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length() * sizeof(wchar_t)); return vec; }
+static std::vector<wchar_t> si_to_wstring(const std::wstring& str) { std::vector<wchar_t> vec(str.length() + 1, 0); memcpy(vec.data(), str.data(), str.length() * sizeof(wchar_t)); return vec; }
 
-static std::vector<char> si_to_string(const wchar_t *str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<char> si_to_string(const std::wstring& str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
+static std::vector<char> si_to_string(const wchar_t *str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length() * sizeof(char)); return vec; }
+static std::vector<char> si_to_string(const std::wstring& str) { auto ret = wstring_to_string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length() * sizeof(char)); return vec; }
 
-static std::vector<char> si_to_string(const char *str) { auto ret = std::string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length()); return vec; }
-static std::vector<char> si_to_string(const std::string& str) { std::vector<char> vec(str.length() + 1, 0); memcpy(vec.data(), str.data(), str.length()); return vec; }
+static std::vector<char> si_to_string(const char *str) { auto ret = std::string(str); std::vector<char> vec(ret.length() + 1, 0); memcpy(vec.data(), ret.data(), ret.length() * sizeof(char)); return vec; }
+static std::vector<char> si_to_string(const std::string& str) { std::vector<char> vec(str.length() + 1, 0); memcpy(vec.data(), str.data(), str.length() * sizeof(char)); return vec; }
 
 
 class MakeArgContext {

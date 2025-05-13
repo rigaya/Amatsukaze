@@ -102,7 +102,7 @@ std::vector<char> utf8ToString(const uint8_t* ptr, int sz) {
     auto ret = wstring_to_string(w, CP_ACP);
     std::vector<char> vec(ret.length() + 1, 0);
     vec.resize(ret.length());
-    memcpy(vec.data(), ret.data(), ret.length());
+    memcpy(vec.data(), ret.data(), ret.length() * sizeof(char));
     return vec;
 }
 
