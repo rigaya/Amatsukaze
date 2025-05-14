@@ -13,5 +13,3 @@ dotnet publish AmatsukazeGUI/AmatsukazeGUI.csproj -r win-x64 -c Release --self-c
 
 echo Publishing .NET project ScriptCommand...
 dotnet publish ScriptCommand/ScriptCommand.csproj -r win-x64 -c Release --self-contained=true -p:PublishSingleFile=true -o ./publish/win-x64
-
-pause

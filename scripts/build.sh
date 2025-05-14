@@ -19,12 +19,15 @@ if [ ! -d "${BUILD_DIR}" ]; then
 fi
 
 # buildディレクトリに移動
-cd "${BUILD_DIR}"
+cd "${BUILD_DIR}" || exit 1
 # BUILD_DIR をフルパスに
 BUILD_DIR=`pwd`
 
+echo "${BUILD_DIR} にインストールを行います。"
+
 # libvplのビルド
 if [ ! -d "libvpl-2.15.0" ]; then
+    echo "libvpl のビルドを行います。"
     (wget https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz -O libvpl.tar.gz \
     && tar xf libvpl.tar.gz \
     && rm libvpl.tar.gz \
@@ -37,6 +40,7 @@ fi
 
 # media-sdkのビルド
 if [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
+    echo "Intel MediaSDK のビルドを行います。"
     (wget https://github.com/Intel-Media-SDK/MediaSDK/archive/refs/tags/intel-mediasdk-22.5.4.tar.gz -O intel-media-sdk.tar.gz \
     && tar xf intel-media-sdk.tar.gz \
     && rm intel-media-sdk.tar.gz \
@@ -48,6 +52,7 @@ if [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
 fi
 
 if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
+    echo "nv-codec-headers のビルドを行います。"
     (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
     && tar xf nv-codec-headers.tar.gz \
     && rm nv-codec-headers.tar.gz \
@@ -61,7 +66,8 @@ if [ ! -d "build_ffnk" ]; then
 fi
 cd build_ffnk
 if [ ! -d "ffmpeg_nekopanda" ]; then
-  (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
+    echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
+    (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
     && cd ffmpeg_nekopanda \
     && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
     && patch -p1 < patch0.diff \
@@ -74,6 +80,7 @@ if [ ! -d "ffmpeg_nekopanda" ]; then
 fi
 
 # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
+echo "AmatsukazeCLI (地デジ/BS向け) のビルドを行います。"
 (meson setup --buildtype release --pkg-config-path `pwd`/ffmpeg_nekopanda/build/lib/pkgconfig ../.. && ninja) || exit 1
 cd ..
 
@@ -83,6 +90,7 @@ if [ ! -d "build_ff612" ]; then
 fi
 cd build_ff612
 if [ ! -d "ffmpeg-6.1.2" ]; then
+    echo "ffmpeg (BS4K向け) のビルドを行います。"
   (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
     && tar -xf ffmpeg-6.1.2.tar.xz \
     && cd ffmpeg-6.1.2 \
@@ -95,11 +103,13 @@ if [ ! -d "ffmpeg-6.1.2" ]; then
 fi
 
 # ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う
+echo "AmatsukazeCLI (BS4K向け) のビルドを行います。"
 (meson setup --buildtype release --pkg-config-path `pwd`/ffmpeg-6.1.2/build/lib/pkgconfig ../.. && ninja) || exit 1
 cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
 cd ..
 
 # dotnet の AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルド
+echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルドを行います。"
 cd ..
 (dotnet build AmatsukazeLinux.sln) || exit 1
 
@@ -133,6 +143,7 @@ if ! dotnet publish AmatsukazeLinux.sln -c Release -r linux-x64 --self-contained
 fi
 
 # ScriptCommand の展開
+echo "ScriptCommand を展開します..."
 mkdir -p "${INSTALL_DIR}/exe_files/cmd"
 for src_file in "${INSTALL_DIR}/exe_files/ScriptCommand."*; do
     cp "$src_file" "${INSTALL_DIR}/exe_files/cmd/"

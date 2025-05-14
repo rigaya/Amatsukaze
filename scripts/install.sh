@@ -1,17 +1,23 @@
 #!/bin/sh
 
 # 引数のチェック
-if [ $# -lt 1 ]; then
-    echo "Usage: $0 installdir"
-    echo "  installdir: インストール先ディレクトリ"
-    exit 1
+if [ "$1" = "-h" ]; then
+    echo "Usage: $0 [installdir]"
+    echo "  installdir: インストール先ディレクトリ（省略時はカレントディレクトリ）"
+    exit 0
 fi
 
-INSTALL_DIR="$1"
+if [ $# -lt 1 ]; then
+    INSTALL_DIR="."
+else
+    INSTALL_DIR="$1"
+fi
+
 SKIP_PLUGINS=0
 
 # JLファイルのインストール
 if [ ! -d "${INSTALL_DIR}/JL" ]; then
+    echo "JLファイルのインストールを開始します..."
     (mkdir -p "${INSTALL_DIR}/JL" \
         && wget https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz \
         && tar -xf Ver4.1.0_Linux.tar.gz \
@@ -64,5 +70,8 @@ if [ $SKIP_PLUGINS -eq 0 ]; then
 else
     echo "プラグインのインストールをスキップします"
 fi
+
+# スクリプトへの実行権限付与
+find ${INSTALL_DIR}/bat -name "*.sh" | xargs chmod u+x
 
 echo "インストールが完了しました"
