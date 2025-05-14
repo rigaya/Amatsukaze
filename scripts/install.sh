@@ -34,13 +34,13 @@ install_plugin() {
     # すでにtarget_dirにファイルが存在する場合はスキップ
     if [ -e "${target_dir}${plugin_pattern}" ]; then
         echo "既に存在するためスキップします"
-        exit 0
+        return 0
     fi
 
     # ファイルが存在しない場合はエラー
     if [ ! -e "${search_dir}${plugin_pattern}" ]; then
         echo "プラグインが見つかりません: ${search_dir}${plugin_pattern}"
-        exit 1
+        return 1
     fi
 
     for plugin in ${search_dir}${plugin_pattern}; do
@@ -49,6 +49,7 @@ install_plugin() {
             echo "プラグインへのリンクを作成しました: $plugin"
         fi
     done
+    return 0
 }
 
 # プラグインのインストール
@@ -72,6 +73,6 @@ else
 fi
 
 # スクリプトへの実行権限付与
-find ${INSTALL_DIR}/bat -name "*.sh" | xargs chmod u+x
+find ${INSTALL_DIR}/bat -type f -name "*.sh" | xargs chmod u+x
 
 echo "インストールが完了しました"
