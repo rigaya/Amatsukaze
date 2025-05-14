@@ -94,7 +94,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Amatsukaze_${{ matrix.osver }}_${{ matrix.pkgtype }}
+          name: Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}
           path: ${{ steps.build_exec.outputs.pkg_name }}
 
       - name: Upload Release Asset
