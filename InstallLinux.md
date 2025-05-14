@@ -31,6 +31,7 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 
 - 対応予定なし
   - AmatsukazeGUI (操作ウィンドウ)
+    - ロゴ解析含む
   - 設定画面へのドラッグドロップによるタスク追加
   - エンコード中の一時停止
   - エンコード後、スリープ・シャットダウン
@@ -48,9 +49,21 @@ sudo apt update
 sudo apt install -y openssl zlib1g
 ```
 
-### AviSynthのインストール
+### AviSynth+/AvisynthCUDAFiltersのインストール
 
-Linuxでは、AviSynth+をインストールする必要があります。
+[こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版をダウンロードします。
+
+CUDAを使用する場合、CUDAを有効にしてビルドした下記AviSynth+をインストールする必要があります。
+- avisynth_<version>_amd64_Ubuntuxx.xx.deb
+- avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
+
+```bash
+sudo apt install -y ./avisynth_<version>_amd64_Ubuntuxx.xx.deb
+sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
+```
+
+<details>
+<summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
 
 ```bash
 (curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
@@ -58,17 +71,14 @@ Linuxでは、AviSynth+をインストールする必要があります。
   | wget -i - -O avisynth.deb \
   && sudo apt install -y ./avisynth.deb \
   && rm ./avisynth.deb)
-```
 
-### AviSynthCUDAFiltersのインストール
-
-```bash
 (curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
   | grep "browser_download_url.*deb" | grep "avisynthcudafilters_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
   | wget -i - -O avisynthcudafilters.deb \
   && sudo apt install -y ./avisynthcudafilters.deb \
   && rm ./avisynthcudafilters.deb)
 ```
+</details>
 
 ### その他必要なAvisynthプラグインのインストール
 
@@ -144,15 +154,17 @@ Linuxでは、AviSynth+をインストールする必要があります。
   
   - qsvencc, nvencc, vceencc
   
-    - ドライバも含めたインストール方法
+    hwエンコードを使用する場合、qsvencc (Intel GPU), nvencc (NVIDIA GPU), vceencc (AMD GPU)を使用します。
+  
+    - ドライバも含めたインストール方法は下記リンク先を参照してください。
       - [qsvencc](https://github.com/rigaya/QSVEnc/blob/master/Install.ja.md)
       - [nvencc](https://github.com/rigaya/NVEnc/blob/master/Install.ja.md)
       - [vceencc](https://github.com/rigaya/VCEEnc/blob/master/Install.ja.md)
-
-    - 最新版のパッケージインストールは下記
-
-      Ubuntu24.04 のところは対象OSにあわせて適宜置き換えてください。
   
+    <details>
+    <summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
+
+    Ubuntu24.04 のところは対象OSにあわせて適宜置き換えてください。
     ```bash
     # qsvencc
     (curl -s https://api.github.com/repos/rigaya/QSVEnc/releases/latest \
@@ -175,6 +187,7 @@ Linuxでは、AviSynth+をインストールする必要があります。
       && sudo apt install -y ./vceencc.deb \
       && rm ./vceencc.deb)
     ```
+    </details>
 
 - muxer
 
@@ -205,6 +218,15 @@ Linuxでは、AviSynth+をインストールする必要があります。
     ```
 
   - tsreplace
+  
+    [こちら](https://github.com/rigaya/tsreplace/releases)から最新版をダウンロードしてインストールします。
+
+    ```bash
+    sudo apt install -y ./tsreplace_<version>_amd64_Ubuntuxx.xx.deb
+    ```
+  
+    <details>
+    <summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
 
     ```bash
     (curl -s https://api.github.com/repos/rigaya/tsreplace/releases/latest \
@@ -213,6 +235,7 @@ Linuxでは、AviSynth+をインストールする必要があります。
       && sudo apt install -y ./tsreplace.deb \
       && rm ./tsreplace.deb)
     ```
+    </details>
 
 - CM/ロゴ解析等
 
@@ -289,7 +312,7 @@ cd $HOME/Amatsukaze
 
 <img src="./data/AmatsukazeServerLinuxStart_03.png" width="160">
 
-初回接続時は基本設定を行ってください。実行ファイルのパスに関しては、exe_files以下、あるいは PATH に含まれる実行ファイルは、右下「適用」ボタンをクリックすると自動で入力されます。
+初回接続時は基本設定を行ってください。実行ファイルのパスに関しては、exe_files以下、あるいは PATH に含まれる実行ファイルは、右下「適用」ボタンをクリックすると自動で入力されます。 PATH に含まれる実行ファイルは、ファイル名のみの記述で構いません。
 
 <img src="./data/AmatsukazeServerLinuxStart_04.png" width="480">
 
