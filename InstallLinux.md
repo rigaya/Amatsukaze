@@ -42,10 +42,16 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 
 ## インストール手順
 
-### 依存パッケージのインストール
+### ビルドツールインストール
 
 ```bash
 sudo apt update
+sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool
+```
+
+### 依存パッケージのインストール
+
+```bash
 sudo apt install -y openssl zlib1g
 ```
 

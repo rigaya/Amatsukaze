@@ -4,8 +4,7 @@
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git wget curl nasm yasm cmake meson ninja-build pkg-config \
-    autoconf automake libtool \
+sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool \
     libssl-dev libz-dev
 
 # .NET
