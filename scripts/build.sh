@@ -160,4 +160,14 @@ cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
 cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
 cp -r scripts/*            "${INSTALL_DIR}/scripts/"
 
+# JLファイルのインストール
+if [ ! -d "${INSTALL_DIR}/JL" ]; then
+    echo "JLファイルのインストールを開始します..."
+    (mkdir -p "${INSTALL_DIR}/JL" \
+        && wget https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz \
+        && tar -xf Ver4.1.0_Linux.tar.gz \
+        && cp -r join_logo_scp-Ver4.1.0_Linux/JL/* "${INSTALL_DIR}/JL/" \
+        && rm -rf join_logo_scp-Ver4.1.0_Linux Ver4.1.0_Linux.tar.gz) || exit 1
+fi
+
 echo "インストールが完了しました"
