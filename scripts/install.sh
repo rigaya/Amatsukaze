@@ -37,18 +37,17 @@ install_plugin() {
         return 0
     fi
 
-    # ファイルが存在しない場合はエラー
-    if [ ! -e "${search_dir}${plugin_pattern}" ]; then
+    # プラグインの存在確認
+    if ! ls ${search_dir}${plugin_pattern} >/dev/null 2>&1; then
         echo "プラグインが見つかりません: ${search_dir}${plugin_pattern}"
         return 1
     fi
 
-    for plugin in ${search_dir}${plugin_pattern}; do
-        if [ -e "$plugin" ]; then
-            ln -sf "$plugin" "$target_dir"
-            echo "プラグインへのリンクを作成しました: $plugin"
-        fi
+    find ${search_dir} -name "${plugin_pattern}" | while read plugin; do
+        ln -sf "$plugin" "$target_dir"
+        echo "プラグインへのリンクを作成しました: $plugin"
     done
+
     return 0
 }
 
