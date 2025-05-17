@@ -13,6 +13,8 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 ## 想定動作環境
 
 - x64のLinux環境
+  
+  とりあえずバイナリ配布はUbuntu 22.04、24.04 (x64)向けです。
 
 ## Linux対応状況
 
@@ -40,9 +42,14 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
   - 音声エンコーダのうち、neroaacとqaac
   - 他のエンコーダの追加等
 
+> [!NOTE]
+> ロゴ生成もAmatsukazeGUI側の機能なので、これはWindows側で行う必要があります。生成したデータはServer(Linux)側に転送できるようにしています。
+
 ## インストール手順
 
 ### ビルドツールインストール
+
+エンコーダやmuxer、CM解析ツールのビルドに使用します。
 
 ```bash
 sudo apt update
@@ -50,6 +57,8 @@ sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build p
 ```
 
 ### 依存パッケージのインストール
+
+AmatsukazeCLIの実行に必要です。
 
 ```bash
 sudo apt install -y openssl zlib1g
@@ -142,7 +151,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
 - Amatsukazeの配置
   [こちら](https://github.com/rigaya/Amatsukaze/releases)からAmatsukazeのアーカイブをダウンロードして展開してください。
-  展開先は使用するユーザーが読み書きできる権限のあるディレクトリとしてください。(下記では ```$HOME/Amatsukaze```)
+  **展開先は実行するユーザーが読み書きできる権限のあるディレクトリとしてください。** (下記では ```$HOME/Amatsukaze```)
 
   ```bash
   wget https://github.com/rigaya/Amatsukaze/releases/download/<version>/Amatsukaze_<version>_Ubuntuxx.xx.tar.xz
@@ -151,7 +160,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
 - 各Avisynthプラグインへのリンクの作成
 
-  ```./scripts/install.sh```を実行するとリンクが```exe_files/plugins64```に自動的に作成されます。
+  ```./scripts/install.sh```を実行するとインストール済みの各Avisynthプラグインへのリンクが```exe_files/plugins64```に自動的に作成されます。
 
   ```bash
   cd $HOME/Amatsukaze
@@ -320,7 +329,7 @@ cd $HOME/Amatsukaze
 
 その後、Windowsから ```AmatsukazeClient.vbs``` を実行して接続します。
 
-下記画面が表示されたら、サーバー側のIPアドレスを入力し、「OK」をクリックします。
+下記画面が表示されたら、```ifconfig```コマンド等で確認できるサーバー側のIPアドレスを入力し、「OK」をクリックします。
 
 <img src="./data/AmatsukazeServerLinuxStart_02.png" width="240">
 
@@ -334,6 +343,8 @@ cd $HOME/Amatsukaze
 
 ### タスクの追加
 
+タスクの追加はLinux側で、AmatsukazeAddTask を使って行います。
+
 ```bash
 cd $HOME/Amatsukaze
 ./exe_files/AmatsukazeAddTask -f <対象ファイル名> -o <出力フォルダ> -s <プロファイル名>
@@ -342,8 +353,3 @@ cd $HOME/Amatsukaze
 プロファイル名は、設定画面のプロファイルタブの使用したいプロファイル名を指定します。
 
 <img src="./data/AmatsukazeServerLinuxStart_05.png" width="480">
-
-## 注意事項
-
-- ロゴ解析は、AmatsukazeGUI(Windows側)で行います。tsファイルの場所をWindows側で選択できるようにしてください。
-   
