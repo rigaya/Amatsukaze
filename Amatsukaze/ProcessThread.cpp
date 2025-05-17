@@ -202,15 +202,14 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
     std::vector<char> line;
     if (isUtf8) {
         line = utf8ToString(ptr, len);
-        // 変換する場合はここで出力
-        fwrite(line.data(), line.size(), 1, SUBPROC_OUT);
-        fprintf(SUBPROC_OUT, "\n");
-        fflush(SUBPROC_OUT);
     } else {
         line.resize(len + 1, 0);
         line.resize(len);
         memcpy(line.data(), ptr, len);
     }
+    std::string br((char *)ptr + len, brlen);
+    fprintf(SUBPROC_OUT, "%s%s", line.data(), br.c_str());
+    fflush(SUBPROC_OUT);
 
     if (bufferLines > 0) {
         std::lock_guard<std::mutex> lock(mtx);
@@ -224,8 +223,7 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
 void StdRedirectedSubProcess::onOut(bool isErr, MemoryChunk mc) {
     if (bufferLines > 0 || isUtf8) { // 必要がある場合のみ
         (isErr ? errLiner : outLiner).AddBytes(mc);
-    }
-    if (!isUtf8) {
+    } else {
         // 変換しない場合はここですぐに出力
         fwrite(mc.data, mc.length, 1, SUBPROC_OUT);
         fflush(SUBPROC_OUT);

@@ -81,12 +81,28 @@ void StringLiner::Flush() {
 bool StringLiner::SearchLineBreak() {
     const uint8_t* ptr = buffer.ptr();
     for (int i = searchIdx; i < (int)buffer.size(); ++i) {
-        if (ptr[i] == '\n') {
+        if (ptr[i] == '\n' || ptr[i] == '\r') {
             int len = i;
             int brlen = 1;
             if (len > 0 && ptr[len - 1] == '\r') {
                 --len; ++brlen;
             }
+#if !(defined(_WIN32) || defined(_WIN64))
+            static const char *const LOG_COLOR[] = {
+                "\x1b[36m", //水色
+                "\x1b[32m", //緑
+                "\x1b[39m", //デフォルト
+                "\x1b[33m", //黄色
+                "\x1b[31m", //赤
+            };
+            for (int i = 0; i < _countof(LOG_COLOR); i++) {
+                const auto color_len = strlen(LOG_COLOR[i]);
+                while (len >= color_len && memcmp(ptr, LOG_COLOR[i], color_len) == 0) {
+                    ptr += color_len;
+                    len -= color_len;
+                }
+            }
+#endif
             OnTextLine(ptr, len, brlen);
             buffer.trimHead(i + 1);
             searchIdx = 0;
