@@ -92,4 +92,7 @@ bool rgy_path_is_same(const tstring& path1, const tstring& path2);
 std::vector<std::basic_string<TCHAR>> createProcessOpenedFileList(const std::vector<size_t>& list_pid);
 #endif //#if defined(_WIN32) || defined(_WIN64)
 
+std::string find_executable_in_path(const std::string& name);
+std::wstring find_executable_in_path(const std::wstring& name);
+
 #endif //__RGY_FILESYSTEM_H__

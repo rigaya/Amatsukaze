@@ -462,3 +462,45 @@ std::vector<std::basic_string<TCHAR>> createProcessOpenedFileList(const std::vec
     return list_file;
 }
 #endif //#if defined(_WIN32) || defined(_WIN64)
+
+#if defined(_WIN32) || defined(_WIN64)
+std::string find_executable_in_path(const std::string& name) {
+    char path[1024];
+    if (SearchPathA(NULL, name.c_str(), ".exe", _countof(path), path, NULL)) {
+        return path;
+    }
+    return "";
+}
+
+std::wstring find_executable_in_path(const std::wstring& name) {
+    wchar_t path[1024];
+    if (SearchPathW(NULL, name.c_str(), L".exe", _countof(path), path, NULL)) {
+        return path;
+    }
+    return L"";
+}
+#else
+std::string find_executable_in_path(const std::string& name) {
+    const char* path_env = getenv("PATH");
+    if (!path_env) {
+        return "";
+    }
+
+    std::string path_str(path_env);
+    std::stringstream ss(path_str);
+    std::string dir;
+    
+    while (std::getline(ss, dir, ':')) {
+        std::string full_path = dir + "/" + name;
+        if (access(full_path.c_str(), X_OK) == 0) {
+            return full_path;
+        }
+    }
+    return "";
+}
+
+std::wstring find_executable_in_path(const std::wstring& name) {
+    return char_to_wstring(find_executable_in_path(wstring_to_string(name)));
+}
+#endif //#if defined(_WIN32) || defined(_WIN64)
+

@@ -24,35 +24,25 @@ tstring GetModuleDirectory() {
 }
 
 std::wstring SearchExe(const std::wstring& name) {
-#if defined(_WIN32) || defined(_WIN64)
-    wchar_t buf[AMT_MAX_PATH] = { 0 };
-    if (!SearchPathW(0, name.c_str(), 0, AMT_MAX_PATH, buf, 0)) {
+    if (rgy_file_exists(name)) {
         return name;
     }
-    return buf;
-#else
-    auto ret = get_file_list_with_filter(L"./", name);
+    auto ret = find_executable_in_path(name);
     if (ret.size() > 0) {
-        return ret[0];
+        return ret;
     }
     return name;
-#endif
 }
 
 std::string SearchExe(const std::string& name) {
-#if defined(_WIN32) || defined(_WIN64)
-    char buf[AMT_MAX_PATH] = { 0 };
-    if (!SearchPathA(0, name.c_str(), 0, AMT_MAX_PATH, buf, 0)) {
+    if (rgy_file_exists(name)) {
         return name;
     }
-    return buf;
-#else
-    auto ret = get_file_list_with_filter("./", name);
+    auto ret = find_executable_in_path(name);
     if (ret.size() > 0) {
-        return ret[0];
+        return ret;
     }
     return name;
-#endif
 }
 
 //std::wstring GetDirectoryPath(const std::wstring& name)nin {
