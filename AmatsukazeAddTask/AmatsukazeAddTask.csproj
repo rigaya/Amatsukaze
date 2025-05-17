@@ -39,6 +39,10 @@
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
+  <Target Name="GenerateVersionInfo" BeforeTargets="BeforeBuild">
+    <Exec Condition="'$(OS)' == 'Windows_NT'" Command="..\AmatsukazeServer\Version.bat" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="../AmatsukazeServer/Version.sh" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
   <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />

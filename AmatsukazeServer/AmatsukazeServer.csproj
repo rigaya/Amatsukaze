@@ -58,8 +58,8 @@
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
   <Target Name="GenerateVersionInfo" BeforeTargets="BeforeBuild">
-    <Exec Condition="'$(OS)' == 'Windows_NT'" Command="Version.bat Version.t4" WorkingDirectory="$(MSBuildProjectDirectory)" />
-    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="./Version.sh Version.t4" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Condition="'$(OS)' == 'Windows_NT'" Command="Version.bat" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="./Version.sh" WorkingDirectory="$(MSBuildProjectDirectory)" />
   </Target>
   <PropertyGroup>
     <PlatformTarget>AnyCPU</PlatformTarget>

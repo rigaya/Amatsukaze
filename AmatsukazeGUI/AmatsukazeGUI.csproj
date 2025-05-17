@@ -84,6 +84,10 @@
   <ItemGroup>
     <Compile Remove="Views\DrcsImagePanel.xaml.cs" />
   </ItemGroup>
+  <Target Name="GenerateVersionInfo" BeforeTargets="BeforeBuild">
+    <Exec Condition="'$(OS)' == 'Windows_NT'" Command="..\AmatsukazeServer\Version.bat" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="../AmatsukazeServer/Version.sh" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
   <ItemGroup>
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
