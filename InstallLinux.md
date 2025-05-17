@@ -118,6 +118,16 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     && sudo make install)
   ```
 
+- mvtools
+
+  ```bash
+  (git clone https://github.com/pinterf/mvtools.git \
+    && cd mvtools \
+    && mkdir build && cd build && cmake .. \
+    && make -j$(nproc) \
+    && sudo make install)
+  ```
+
 - RgTools
 
   ```bash

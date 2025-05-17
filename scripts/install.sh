@@ -52,6 +52,7 @@ if [ $SKIP_PLUGINS -eq 0 ]; then
     install_plugin "mt_masktools.so"
     install_plugin "KTGMC.so"
     install_plugin "AvsCUDA.so"
+    install_plugin "libmvtools2.so"
     install_plugin "libmasktools2.so"
     install_plugin "libyadifmod2*.so"
     install_plugin "libtivtc.so"
