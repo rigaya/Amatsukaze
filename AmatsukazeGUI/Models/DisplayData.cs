@@ -2129,7 +2129,7 @@ namespace Amatsukaze.Models
         public string[] AudioEncoderList {
             get { 
                 if (Model?.Setting?.IsServerLinux ?? false) {
-                    return new string[] { "fdkaac", "opusenc" };
+                    return new string[] { "----", "----", "fdkaac", "opusenc" };
                 } else {
                     return new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" };
                 }
