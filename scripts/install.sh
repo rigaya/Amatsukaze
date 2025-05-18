@@ -55,6 +55,7 @@ if [ $SKIP_PLUGINS -eq 0 ]; then
     install_plugin "libmvtools2.so"
     install_plugin "libmasktools2.so"
     install_plugin "libyadifmod2*.so"
+    install_plugin "libnnedi3.so"
     install_plugin "libtivtc.so"
     install_plugin "libtdeint.so"
     install_plugin "librgtools.so"
