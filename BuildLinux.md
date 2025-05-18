@@ -16,15 +16,13 @@ sudo apt install -y dotnet-sdk-8.0
 
 ## AviSynthのインストール
 
-Linuxでは、AviSynth+をインストールする必要があります。
+Linuxでは、AviSynth+をインストールする必要があります。[こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードしてインストールしてください。
 
 ```bash
-(curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
-  | grep "browser_download_url.*deb" | grep "avisynth_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-  | wget -i - -O avisynth.deb \
-  && sudo apt install -y ./avisynth.deb \
-  && rm ./avisynth.deb)
+sudo apt install -y ./avisynth_<version>_amd64_Ubuntuxx.xx.deb
 ```
+
+自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。
 
 ## Amatsukaze本体のビルド
 
@@ -41,4 +39,16 @@ Linuxでは、AviSynth+をインストールする必要があります。
 git clone https://github.com/rigaya/Amatsukaze.git --recursive
 cd Amatsukaze
 ./scripts/build.sh $HOME/Amatsukaze
+```
+
+
+## 各Avisynthプラグインへのリンクの作成
+  
+実際にAmatsuakzeを使用するには、各種Avisynthプラグインをインストール後、```exe_files/plugins64```にそのリンクを作成する必要があります。
+
+```./scripts/install.sh```を実行するとインストール済みの各Avisynthプラグインへのリンクが```exe_files/plugins64```に自動的に作成されます。
+
+```bash
+cd $HOME/Amatsukaze
+./scripts/install.sh
 ```

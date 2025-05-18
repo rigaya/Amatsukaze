@@ -66,7 +66,7 @@ sudo apt install -y openssl zlib1g
 
 ### AviSynth+/AvisynthCUDAFiltersのインストール
 
-[こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版をダウンロードします。
+[こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードします。なお、自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。
 
 CUDAを使用する場合、CUDAを有効にしてビルドした下記AviSynth+をインストールする必要があります。
 - avisynth_<version>_amd64_Ubuntuxx.xx.deb
@@ -149,7 +149,10 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
 ### Amatsukazeのインストール
 
-- Amatsukazeの配置
+- Amatsukazeのアーカイブの展開
+
+  ここではビルド済みアーカイブを展開してインストールする方法を示します。自ビルドする場合は[こちら](./BuildLinux.md)を参考にしてください。
+
   [こちら](https://github.com/rigaya/Amatsukaze/releases)からAmatsukazeのアーカイブをダウンロードして展開してください。
   **展開先は実行するユーザーが読み書きできる権限のあるディレクトリとしてください。** (下記では ```$HOME/Amatsukaze```)
 
