@@ -757,18 +757,11 @@ namespace Amatsukaze.Models
             QTGMC = new FilterQTGMCViewModel() { Data = data };
             Yadif = new FilterYadifViewModel() { Data = data };
             AutoVfr = new FilterAutoVfrViewModel() { Data = data };
-
-            if (Model?.Setting?.IsServerLinux ?? false) {
-                DeinterlaceList = new DeinterlaceAlgorithmViewModel[]
-                {
-                    KFM, QTGMC, Yadif
-                };
-            } else {
-                DeinterlaceList = new DeinterlaceAlgorithmViewModel[]
-                {
-                    KFM, D3DVP, QTGMC, Yadif, AutoVfr
-                };
-            }
+            
+            DeinterlaceList = new DeinterlaceAlgorithmViewModel[]
+            {
+                KFM, D3DVP, QTGMC, Yadif, AutoVfr
+            };
         }
 
         #region EnableCUDA変更通知プロパティ
