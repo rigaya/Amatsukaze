@@ -18,7 +18,7 @@ SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) 
     thSetPowerThrottling() {
     
     // RGYPipeProcessの初期化（標準入出力のモード設定）
-    process_->init(PIPE_MODE_ENABLE | PIPE_MODE_ENABLE_FP, PIPE_MODE_ENABLE | PIPE_MODE_ENABLE_FP, PIPE_MODE_ENABLE | PIPE_MODE_ENABLE_FP);
+    process_->init(PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
     
     // プロセス起動
     if (process_->run(args, nullptr, 0, false, false) != 0) {
@@ -39,7 +39,7 @@ void SubProcess::write(MemoryChunk mc) {
         THROW(RuntimeException, "buffer too large");
     }
     
-    size_t bytesWritten = process_->stdInFpWrite(mc.data, mc.length);
+    size_t bytesWritten = process_->stdInWrite(mc.data, mc.length);
     if (bytesWritten != mc.length) {
         THROW(RuntimeException, "failed to write to stdin pipe (bytes written mismatch)");
     }

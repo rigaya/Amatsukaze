@@ -45,8 +45,8 @@ RGYPipeProcessWin::~RGYPipeProcessWin() {
 }
 
 int RGYPipeProcessWin::startPipes() {
-    SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
     if (m_pipe.stdOut.mode & PIPE_MODE_ENABLE) {
+        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
         if (!CreatePipe(&m_pipe.stdOut.h_read, &m_pipe.stdOut.h_write, &sa, m_pipe.stdOut.bufferSize) ||
             !SetHandleInformation(m_pipe.stdOut.h_read, HANDLE_FLAG_INHERIT, 0))
             return 1;
@@ -56,6 +56,7 @@ int RGYPipeProcessWin::startPipes() {
         }
     }
     if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE) {
+        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
         if (!CreatePipe(&m_pipe.stdErr.h_read, &m_pipe.stdErr.h_write, &sa, m_pipe.stdErr.bufferSize) ||
             !SetHandleInformation(m_pipe.stdErr.h_read, HANDLE_FLAG_INHERIT, 0))
             return 1;
@@ -65,6 +66,7 @@ int RGYPipeProcessWin::startPipes() {
         }
     }
     if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
+        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
         if (!CreatePipe(&m_pipe.stdIn.h_read, &m_pipe.stdIn.h_write, &sa, m_pipe.stdIn.bufferSize) ||
             !SetHandleInformation(m_pipe.stdIn.h_write, HANDLE_FLAG_INHERIT, 0))
             return 1;
@@ -190,6 +192,21 @@ int RGYPipeProcessWin::stdErrFpClose() {
     return ret;
 }
 
+int RGYPipeProcessWin::stdInWrite(const void *data, const size_t dataSize) {
+    DWORD pipe_write = 0;
+    if (!WriteFile(m_pipe.stdIn.h_write, data, (DWORD)dataSize, &pipe_write, NULL)) {
+        return -1;
+    }
+    if (dataSize != pipe_write) {
+        return -1;
+    }
+    return (int)pipe_write;
+}
+
+int RGYPipeProcessWin::stdInWrite(const std::vector<uint8_t>& buffer) {
+    return stdInWrite(buffer.data(), buffer.size());
+}
+
 int RGYPipeProcessWin::stdOutRead(std::vector<uint8_t>& buffer) {
     auto read_from_pipe = [&]() {
         DWORD pipe_read = 0;
@@ -200,7 +217,10 @@ int RGYPipeProcessWin::stdOutRead(std::vector<uint8_t>& buffer) {
             if (!ReadFile(m_pipe.stdOut.h_read, read_buf, sizeof(read_buf), &pipe_read, NULL)) {
                 return -1;
             }
-            buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+            // パイプはWriteFileにゼロを渡すとReadFileがゼロで帰ってくることがある
+            if (pipe_read > 0) {
+                buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+            }
         //}
         return (int)pipe_read;
     };
@@ -219,11 +239,14 @@ int RGYPipeProcessWin::stdErrRead(std::vector<uint8_t>& buffer) {
         //if (!PeekNamedPipe(m_pipe.stdErr.h_read, NULL, 0, NULL, &pipe_read, NULL))
         //    return -1;
         //if (pipe_read) {
-            char read_buf[64 * 1024] = { 0 };
+            char read_buf[4 * 1024] = { 0 };
             if (!ReadFile(m_pipe.stdErr.h_read, read_buf, sizeof(read_buf), &pipe_read, NULL)) {
                 return -1;
             }
-            buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+            // パイプはWriteFileにゼロを渡すとReadFileがゼロで帰ってくることがある
+            if (pipe_read > 0) {
+                buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+            }
         //}
         return (int)pipe_read;
     };
