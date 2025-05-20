@@ -117,6 +117,15 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     && sudo make install)
   ```
 
+- nnedi3
+
+  ```bash
+  (git clone -b avsp https://github.com/rigaya/NNEDI3.git \
+    && cd NNEDI3 && mkdir build && cd build && meson setup .. \
+    && ninja \
+    && sudo ninja install)
+  ```
+
 - masktools
 
   ```bash
