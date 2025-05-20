@@ -48,10 +48,10 @@ if [ $SKIP_PLUGINS -eq 0 ]; then
     # 各プラグインのインストール
     install_plugin "KUtil.so"
     install_plugin "KFM.so"
-    install_plugin "nnedi3.so"
-    install_plugin "mt_masktools.so"
+    install_plugin "KNNEDI3.so"
     install_plugin "KTGMC.so"
     install_plugin "AvsCUDA.so"
+    install_plugin "mt_masktools.so"
     install_plugin "libmvtools2.so"
     install_plugin "libmasktools2.so"
     install_plugin "libyadifmod2*.so"
