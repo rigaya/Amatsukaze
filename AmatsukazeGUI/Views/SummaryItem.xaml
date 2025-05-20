@@ -88,6 +88,9 @@
                             <Setter Property="Background" Value="Yellow"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding DataContext.Model.Setting.IsServerLinux, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Button.Style>
