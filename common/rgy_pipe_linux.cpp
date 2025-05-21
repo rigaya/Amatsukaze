@@ -179,22 +179,22 @@ int RGYPipeProcessLinux::stdInFpClose() {
 }
 
 int RGYPipeProcessLinux::stdInWrite(const void *data, const size_t dataSize) {
-    int bytes_written = 0;
-    while (bytes_written < dataSize) {
-        int result = write(m_pipe.stdIn.h_write, (const char *)data + bytes_written, dataSize - bytes_written);
+    ssize_t bytes_written = 0;
+    while (bytes_written < (ssize_t)dataSize) {
+        ssize_t result = write(m_pipe.stdIn.h_write, (const char *)data + bytes_written, dataSize - bytes_written);
         if (result <= 0) {
             return -1;
         }
         bytes_written += result;
     }
-    return (int)dataSize;
+    return (int)bytes_written;
 }
 
 int RGYPipeProcessLinux::stdInWrite(const std::vector<uint8_t>& buffer) {
     return stdInWrite(buffer.data(), buffer.size());
 }
 
-int RGYPipeProcessLinux::stdOutRead(std::vector<uint8_t>& buffer, uint32_t chunkSize) {
+int RGYPipeProcessLinux::stdOutRead(std::vector<uint8_t>& buffer) {
     auto read_from_pipe = [&]() {
         char read_buf[512 * 1024];
         int pipe_read = (int)read(m_pipe.stdOut.h_read, read_buf, _countof(read_buf));
@@ -212,7 +212,7 @@ int RGYPipeProcessLinux::stdOutRead(std::vector<uint8_t>& buffer, uint32_t chunk
     }
     return ret < 0 ? -1 : (int)buffer.size();
 }
-int RGYPipeProcessLinux::stdErrRead(std::vector<uint8_t>& buffer, uint32_t chunkSize) {
+int RGYPipeProcessLinux::stdErrRead(std::vector<uint8_t>& buffer) {
     auto read_from_pipe = [&]() {
         char read_buf[4096];
         int pipe_read = (int)read(m_pipe.stdErr.h_read, read_buf, _countof(read_buf));
