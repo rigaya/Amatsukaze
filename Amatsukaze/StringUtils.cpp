@@ -96,7 +96,7 @@ bool StringLiner::SearchLineBreak() {
                 "\x1b[31m", //赤
             };
             for (int i = 0; i < _countof(LOG_COLOR); i++) {
-                const auto color_len = strlen(LOG_COLOR[i]);
+                const auto color_len = (int)strlen(LOG_COLOR[i]);
                 while (len >= color_len && memcmp(ptr, LOG_COLOR[i], color_len) == 0) {
                     ptr += color_len;
                     len -= color_len;
