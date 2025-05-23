@@ -106,6 +106,7 @@ public:
     virtual void close() = 0;
     virtual bool processAlive() = 0;
     virtual std::string getOutput() = 0;
+    virtual int stdInClose() = 0;
     virtual int stdInWrite(const void *data, const size_t dataSize) = 0;
     virtual int stdInWrite(const std::vector<uint8_t>& buffer) = 0;
     virtual int stdOutRead(std::vector<uint8_t>& buffer) = 0;
@@ -137,6 +138,7 @@ public:
     virtual void close() override;
     virtual bool processAlive() override;
     virtual std::string getOutput() override;
+    virtual int stdInClose() override;
     virtual int stdInWrite(const void *data, const size_t dataSize) override;
     virtual int stdInWrite(const std::vector<uint8_t>& buffer) override;
     virtual int stdOutRead(std::vector<uint8_t>& buffer) override;
@@ -171,6 +173,7 @@ public:
     virtual void close() override;
     virtual bool processAlive() override;
     virtual std::string getOutput() override;
+    virtual int stdInClose() override;
     virtual int stdInWrite(const void *data, const size_t dataSize) override;
     virtual int stdInWrite(const std::vector<uint8_t>& buffer) override;
     virtual int stdOutRead(std::vector<uint8_t>& buffer) override;

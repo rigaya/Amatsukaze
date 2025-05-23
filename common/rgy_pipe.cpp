@@ -146,6 +146,14 @@ int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir
     return run(cmd_line, exedir, priority, hidden, minimized);
 }
 
+int RGYPipeProcessWin::stdInClose() {
+    if (m_pipe.stdIn.h_write) {
+        CloseHandle(m_pipe.stdIn.h_write);
+        m_pipe.stdIn.h_write = nullptr;
+    }
+    return 0;
+}
+
 size_t RGYPipeProcessWin::stdInFpWrite(const void *data, const size_t dataSize) {
     return _fwrite_nolock(data, 1, dataSize, m_pipe.stdIn.fp);
 }

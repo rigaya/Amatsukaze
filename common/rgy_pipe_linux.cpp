@@ -160,6 +160,16 @@ void RGYPipeProcessLinux::close() {
     }
 }
 
+int RGYPipeProcessLinux::stdInClose() {
+    int ret = 0;
+    if (m_pipe.stdIn.h_write) {
+        ret = ::close(m_pipe.stdIn.h_write);
+        m_pipe.stdIn.h_write = 0;
+        m_pipe.stdIn.fp = nullptr;
+    }
+    return ret;
+}
+
 size_t RGYPipeProcessLinux::stdInFpWrite(const void *data, const size_t dataSize) {
     return fwrite(data, 1, dataSize, m_pipe.stdIn.fp);
 }
@@ -183,6 +193,10 @@ int RGYPipeProcessLinux::stdInWrite(const void *data, const size_t dataSize) {
     while (bytes_written < (ssize_t)dataSize) {
         ssize_t result = write(m_pipe.stdIn.h_write, (const char *)data + bytes_written, dataSize - bytes_written);
         if (result <= 0) {
+            if (result < 0 && errno == EINTR) {
+                // シグナルによって中断された場合はリトライ
+                continue;
+            }
             return -1;
         }
         bytes_written += result;
