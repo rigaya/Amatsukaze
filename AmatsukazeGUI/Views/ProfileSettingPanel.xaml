@@ -253,28 +253,8 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,3" Text="リネーム">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,3" Text="リネーム" />
+                    <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式" />
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="" Margin="0,3"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="実行前バッチ" Margin="0,6"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="エンコード前バッチ" Margin="0,6"/>
@@ -283,32 +263,12 @@
                 <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="SCRenameによるリネームを行う" 
                               IsChecked="{Binding Model.SelectedProfile.EnableRename, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              ToolTip="SCRenameで適切なファイル名を取得してエンコード後、そのファイル名を設定します">
-                        <CheckBox.Style>
-                            <Style TargetType="CheckBox">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </CheckBox.Style>
-                    </CheckBox>
+                              ToolTip="SCRenameで適切なファイル名を取得してエンコード後、そのファイル名を設定します" />
 
                     <TextBox Margin="0,3" Height="40" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.RenameFormat, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              VerticalAlignment="Top"
-                             ToolTip="空欄にするとデフォルト書式を設定します">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBox.Style>
-                    </TextBox>
+                             ToolTip="空欄にするとデフォルト書式を設定します" />
 
                     <CheckBox Height="16" Margin="0,3"  Content="ジャンルごとにフォルダ分け" 
                               IsChecked="{Binding Model.SelectedProfile.EnableGunreFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

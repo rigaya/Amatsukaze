@@ -204,15 +204,21 @@ namespace Amatsukaze.Server
 
         private static string MakeSCRenameArgs(string screnamepath, string format, string filepath)
         {
+            var ext = Path.GetExtension(screnamepath).ToLower();
             var sb = new StringBuilder();
-            sb.Append("//nologo //U") // 文字化けを防ぐためUnicodeで出力させる
-                .Append(" \"")
+
+            if (ext == ".vbs")
+            {
+                sb.Append("//nologo //U "); // 文字化けを防ぐためUnicodeで出力させる
+            }
+            sb.Append("\"")
                 .Append(screnamepath)
                 .Append("\" \"")
                 .Append(filepath)
                 .Append("\" \"")
                 .Append(format)
                 .Append("\"");
+
             return sb.ToString();
         }
 
@@ -233,6 +239,7 @@ namespace Amatsukaze.Server
             var serviceName = item.ServiceName;
 
             var ext = ".ts";
+            var scriptExt = Path.GetExtension(screnamepath).ToLower();
 
             // 情報がある時はその情報を元にファイル名を作成
             // ないときはファイル名をそのまま使う
@@ -257,8 +264,28 @@ namespace Amatsukaze.Server
                 string srcpath = Path.Combine(basePath, srcname);
                 using (File.Create(srcpath)) { }
 
-                string exename = "cscript.exe";
+                string exename;
                 string args = MakeSCRenameArgs(screnamepath, format, srcpath);
+
+                if (scriptExt == ".vbs")
+                {
+                    exename = "cscript.exe";
+                }
+                else if (scriptExt == ".py")
+                {
+                    if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                    {
+                        exename = "py";
+                    }
+                    else
+                    {
+                        exename = "python3";
+                    }
+                }
+                else
+                {
+                    throw new ArgumentException($"Unsupported script type: {scriptExt}");
+                }
 
                 var psi = new ProcessStartInfo(exename, args)
                 {
@@ -267,10 +294,16 @@ namespace Amatsukaze.Server
                     RedirectStandardError = true,
                     RedirectStandardOutput = true,
                     RedirectStandardInput = false,
-                    StandardErrorEncoding = Encoding.Unicode,
-                    StandardOutputEncoding = Encoding.Unicode,
+                    StandardErrorEncoding = scriptExt == ".vbs" ? Encoding.Unicode : Encoding.UTF8,
+                    StandardOutputEncoding = scriptExt == ".vbs" ? Encoding.Unicode : Encoding.UTF8,
                     CreateNoWindow = true
                 };
+
+                // Pythonの場合は出力エンコーディングをUTF-8に固定
+                if (scriptExt == ".py")
+                {
+                    psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
+                }
 
                 // キャンセルチェック
                 if(item.State == QueueState.Canceled)

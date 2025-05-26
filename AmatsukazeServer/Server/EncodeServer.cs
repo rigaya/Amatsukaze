@@ -2085,15 +2085,11 @@ namespace Amatsukaze.Server
                     if(fileName.Equals("SCRename.bat", StringComparison.OrdinalIgnoreCase) ||
                         fileName.Equals("SCRenameEDCB.bat", StringComparison.OrdinalIgnoreCase))
                     {
-                        throw new ArgumentException("SCRenameはbatファイルではなくvbsファイルへのパスを設定してください");
+                        throw new ArgumentException("SCRenameはbatファイルではなくvbs/pyファイルへのパスを設定してください");
                     }
                     if (string.IsNullOrEmpty(profile.RenameFormat))
                     {
                         throw new ArgumentException("リネームフォーマットが設定されていません");
-                    }
-                    if (!Util.IsServerWindows())
-                    {
-                        profile.EnableRename = false;
                     }
                 }
                 if (profile.EnableNicoJK)
