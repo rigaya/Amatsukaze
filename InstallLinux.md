@@ -37,7 +37,6 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
   - 設定画面へのドラッグドロップによるタスク追加
   - エンコード中の一時停止
   - エンコード後、スリープ・シャットダウン
-  - SCRename によるリネーム機能
   - インタレ解除のうち、 D3DVPとAutoVfr
   - 音声エンコーダのうち、neroaacとqaac
   - 他のエンコーダの追加等
@@ -319,6 +318,10 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     ```bash
     sudo apt install -y opus-tools
     ```
+
+- リネーム
+
+  - [SCRename.py](https://github.com/rigaya/SCRenamePy)を使用してください。(SCRename.vbsはLinuxでは使用できません)
 
 ## 実行方法
 
