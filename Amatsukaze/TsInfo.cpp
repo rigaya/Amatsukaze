@@ -236,6 +236,9 @@ void TsInfoParser::onSDT(PsiSection section) {
                     if (servicedesc.parse()) {
                         info.provider = GetAribString(servicedesc.service_provider_name());
                         info.name = GetAribString(servicedesc.service_name());
+                        // UTF-8に変換
+                        info.provider_utf8 = wstring_to_string(info.provider, CP_UTF8);
+                        info.name_utf8 = wstring_to_string(info.name, CP_UTF8);
                         break;
                     }
                 }
@@ -264,6 +267,9 @@ void TsInfoParser::onEIT(PsiSection section) {
                         if (seventdesc.parse()) {
                             info.eventName = GetAribString(seventdesc.event_name());
                             info.text = GetAribString(seventdesc.text());
+                            // UTF-8に変換
+                            info.eventName_utf8 = wstring_to_string(info.eventName, CP_UTF8);
+                            info.text_utf8 = wstring_to_string(info.text, CP_UTF8);
                         }
                     } else if (descs[i].tag() == 0x54) { // コンテント記述子
                         ContentDescriptor contentdesc(descs[i]);
@@ -444,20 +450,20 @@ int TsInfo::GetServiceId(int i) {
 }
 
 // IntPtrで受け取ってMarshal.PtrToStringUniで変換
-const wchar_t* TsInfo::GetProviderName(int i) {
-    return parser.getServiceList()[i].provider.c_str();
+const char* TsInfo::GetProviderName(int i) {
+    return parser.getServiceList()[i].provider_utf8.c_str();
 }
 
-const wchar_t* TsInfo::GetServiceName(int i) {
-    return parser.getServiceList()[i].name.c_str();
+const char* TsInfo::GetServiceName(int i) {
+    return parser.getServiceList()[i].name_utf8.c_str();
 }
 
-const wchar_t* TsInfo::GetEventName(int i) {
-    return parser.getContent(i).eventName.c_str();
+const char* TsInfo::GetEventName(int i) {
+    return parser.getContent(i).eventName_utf8.c_str();
 }
 
-const wchar_t* TsInfo::GetEventText(int i) {
-    return parser.getContent(i).text.c_str();
+const char* TsInfo::GetEventText(int i) {
+    return parser.getContent(i).text_utf8.c_str();
 }
 
 std::vector<int> TsInfo::getSetPids() const {
@@ -504,10 +510,10 @@ extern "C" AMATSUKAZE_API void TsInfo_GetContentNibbles(TsInfo * ptr, int i, int
 }
 extern "C" AMATSUKAZE_API int TsInfo_GetNumService(TsInfo * ptr) { return ptr->GetNumService(); }
 extern "C" AMATSUKAZE_API int TsInfo_GetServiceId(TsInfo * ptr, int i) { return ptr->GetServiceId(i); }
-extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetProviderName(TsInfo * ptr, int i) { return ptr->GetProviderName(i); }
-extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetServiceName(TsInfo * ptr, int i) { return ptr->GetServiceName(i); }
-extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetEventName(TsInfo * ptr, int i) { return ptr->GetEventName(i); }
-extern "C" AMATSUKAZE_API const wchar_t* TsInfo_GetEventText(TsInfo * ptr, int i) { return ptr->GetEventText(i); }
+extern "C" AMATSUKAZE_API const char* TsInfo_GetProviderName(TsInfo * ptr, int i) { return ptr->GetProviderName(i); }
+extern "C" AMATSUKAZE_API const char* TsInfo_GetServiceName(TsInfo * ptr, int i) { return ptr->GetServiceName(i); }
+extern "C" AMATSUKAZE_API const char* TsInfo_GetEventName(TsInfo * ptr, int i) { return ptr->GetEventName(i); }
+extern "C" AMATSUKAZE_API const char* TsInfo_GetEventText(TsInfo * ptr, int i) { return ptr->GetEventText(i); }
 
 typedef bool(*TS_SLIM_CALLBACK)();
 

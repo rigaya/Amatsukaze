@@ -27,6 +27,8 @@ struct ServiceInfo {
     int serviceId;
     std::wstring provider;
     std::wstring name;
+    std::string provider_utf8;
+    std::string name_utf8;
 };
 
 struct ContentNibbles {
@@ -40,6 +42,8 @@ struct ContentInfo {
     int serviceId;
     std::wstring eventName;
     std::wstring text;
+    std::string eventName_utf8;
+    std::string text_utf8;
     std::vector<ContentNibbles> nibbles;
 };
 
@@ -177,14 +181,14 @@ public:
 
     int GetServiceId(int i);
 
-    // IntPtrで受け取ってMarshal.PtrToStringUniで変換
-    const wchar_t* GetProviderName(int i);
+    // UTF-8文字列を返す
+    const char* GetProviderName(int i);
 
-    const wchar_t* GetServiceName(int i);
+    const char* GetServiceName(int i);
 
-    const wchar_t* GetEventName(int i);
+    const char* GetEventName(int i);
 
-    const wchar_t* GetEventText(int i);
+    const char* GetEventText(int i);
 
     std::vector<int> getSetPids() const;
 

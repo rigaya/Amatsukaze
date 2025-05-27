@@ -225,8 +225,8 @@ namespace Amatsukaze.Lib
                         out prog.ServiceId, out prog.HasVideo, out prog.VideoPid, out numContent);
                     TsInfo_GetVideoFormat(Ptr, i,
                         out prog.Stream, out prog.Width, out prog.Height, out prog.SarW, out prog.SarH);
-                    prog.EventName = Marshal.PtrToStringUni(TsInfo_GetEventName(Ptr, i));
-                    prog.EventText = Marshal.PtrToStringUni(TsInfo_GetEventText(Ptr, i));
+                    prog.EventName = Marshal.PtrToStringUTF8(TsInfo_GetEventName(Ptr, i));
+                    prog.EventText = Marshal.PtrToStringUTF8(TsInfo_GetEventText(Ptr, i));
                     prog.Content = Enumerable.Range(0, numContent)
                         .Select(ci => {
                             ContentNibbles data = new ContentNibbles();
@@ -253,8 +253,8 @@ namespace Amatsukaze.Lib
             return Enumerable.Range(0, TsInfo_GetNumService(Ptr))
                 .Select(i => new Service() {
                     ServiceId = TsInfo_GetServiceId(Ptr, i),
-                    ProviderName = Marshal.PtrToStringUni(TsInfo_GetProviderName(Ptr, i)),
-                    ServiceName = Marshal.PtrToStringUni(TsInfo_GetServiceName(Ptr, i))
+                    ProviderName = Marshal.PtrToStringUTF8(TsInfo_GetProviderName(Ptr, i)),
+                    ServiceName = Marshal.PtrToStringUTF8(TsInfo_GetServiceName(Ptr, i))
                 }).ToArray();
         }
     }
