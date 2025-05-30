@@ -528,9 +528,6 @@ void TempDirectory::Initialize() {
             path_ = path;
             break;
         }
-        if (errno != EEXIST) {
-            break;
-        }
     }
     if (path_.size() == 0) {
         THROW(IOException, "一時ディレクトリ作成失敗");

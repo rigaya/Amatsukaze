@@ -123,10 +123,10 @@ std::wstring PathCombineS(const std::wstring& dir, const std::wstring& filename)
     return std::filesystem::path(dir).append(filename).wstring();
 }
 //フォルダがあればOK、なければ作成する
-bool CreateDirectoryRecursive(const char *dir) {
+bool CreateDirectoryRecursive(const char *dir, const bool errorIfAlreadyExists) {
     auto targetDir = std::filesystem::path(strlen(dir) ? dir : ".");
     if (std::filesystem::exists(targetDir)) {
-        return true;
+        return (errorIfAlreadyExists) ? false : true;
     }
     try {
         return std::filesystem::create_directories(targetDir);
@@ -134,10 +134,10 @@ bool CreateDirectoryRecursive(const char *dir) {
         return false;
     }
 }
-bool CreateDirectoryRecursive(const wchar_t *dir) {
+bool CreateDirectoryRecursive(const wchar_t *dir, const bool errorIfAlreadyExists) {
     auto targetDir = std::filesystem::path(wcslen(dir) ? dir : L".");
     if (std::filesystem::exists(targetDir)) {
-        return true;
+        return (errorIfAlreadyExists) ? false : true;
     }
     try {
         return std::filesystem::create_directories(targetDir);

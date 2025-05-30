@@ -64,10 +64,10 @@ int rmdirT(const char* dirname) {
 }
 
 int mkdirT(const wchar_t* dirname) {
-    return CreateDirectoryRecursive(dirname) ? 0 : -1;
+    return CreateDirectoryRecursive(dirname, true) ? 0 : -1;
 }
 int mkdirT(const char* dirname) {
-    return CreateDirectoryRecursive(dirname) ? 0 : -1;
+    return CreateDirectoryRecursive(dirname, true) ? 0 : -1;
 }
 
 int removeT(const wchar_t* dirname) {
