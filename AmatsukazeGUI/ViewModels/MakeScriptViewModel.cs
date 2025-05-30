@@ -174,8 +174,8 @@ namespace Amatsukaze.ViewModels
             {
                 sb.Append("rem _EDCBX_DIRECT_\r\n");
             }
-            var pathdelemiter = Util.IsServerWindows() ? "\\" : "/";
-            sb.AppendFormat("\"{0}{1}AmatsukazeAddTask.exe\"", exe, pathdelemiter)
+            var AmatsukazeAddTaskPath = Path.Combine(exe, Util.IsServerWindows() ? "AmatsukazeAddTask.exe" : "AmatsukazeAddTask");
+            sb.AppendFormat("\"{0}\"", AmatsukazeAddTaskPath)
                 .AppendFormat(" -r \"{0}\"", cur)
                 .AppendFormat(" -f \"{0}FilePath{0}\" -ip \"{1}\"", direct ? "%" : "$", ip)
                 .AppendFormat(" -p {0}", port)
