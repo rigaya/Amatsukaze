@@ -49,6 +49,8 @@ int RGYPipeProcessLinux::startPipes() {
         if (m_pipe.stdOut.mode & PIPE_MODE_ENABLE_FP) {
             m_pipe.stdOut.fp = fdopen(m_pipe.stdOut.h_read, "r");
         }
+        auto bufsize = m_pipe.stdOut.bufferSize ? m_pipe.stdOut.bufferSize : RGY_PIPE_STDOUT_BUFSIZE_DEFAULT;
+        m_stdOutBuffer.resize(bufsize);
     }
     if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE) {
         if (-1 == (pipe((int *)&m_pipe.stdErr.h_read)))
@@ -56,6 +58,8 @@ int RGYPipeProcessLinux::startPipes() {
         if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE_FP) {
             m_pipe.stdErr.fp = fdopen(m_pipe.stdErr.h_read, "r");
         }
+        auto bufsize = m_pipe.stdErr.bufferSize ? m_pipe.stdErr.bufferSize : RGY_PIPE_STDERR_BUFSIZE_DEFAULT;
+        m_stdErrBuffer.resize(bufsize);
     }
     if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
         if (-1 == (pipe((int *)&m_pipe.stdIn.h_read)))
@@ -210,10 +214,9 @@ int RGYPipeProcessLinux::stdInWrite(const std::vector<uint8_t>& buffer) {
 
 int RGYPipeProcessLinux::stdOutRead(std::vector<uint8_t>& buffer) {
     auto read_from_pipe = [&]() {
-        char read_buf[512 * 1024];
-        int pipe_read = (int)read(m_pipe.stdOut.h_read, read_buf, _countof(read_buf));
+        int pipe_read = (int)read(m_pipe.stdOut.h_read, m_stdOutBuffer.data(), m_stdOutBuffer.size());
         if (pipe_read <= 0) return -1;
-        buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+        buffer.insert(buffer.end(), m_stdOutBuffer.data(), m_stdOutBuffer.data() + pipe_read);
         return (int)pipe_read;
     };
 
@@ -228,10 +231,9 @@ int RGYPipeProcessLinux::stdOutRead(std::vector<uint8_t>& buffer) {
 }
 int RGYPipeProcessLinux::stdErrRead(std::vector<uint8_t>& buffer) {
     auto read_from_pipe = [&]() {
-        char read_buf[4096];
-        int pipe_read = (int)read(m_pipe.stdErr.h_read, read_buf, _countof(read_buf));
+        int pipe_read = (int)read(m_pipe.stdErr.h_read, m_stdErrBuffer.data(), m_stdErrBuffer.size());
         if (pipe_read <= 0) return -1;
-        buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+        buffer.insert(buffer.end(), m_stdErrBuffer.data(), m_stdErrBuffer.data() + pipe_read);
         return (int)pipe_read;
     };
 

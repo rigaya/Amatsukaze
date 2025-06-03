@@ -54,6 +54,8 @@ int RGYPipeProcessWin::startPipes() {
             && (m_pipe.stdOut.fp = _fdopen(_open_osfhandle((intptr_t)m_pipe.stdOut.h_read, _O_BINARY), "rb")) == NULL) {
             return 1;
         }
+        auto bufsize = m_pipe.stdOut.bufferSize ? m_pipe.stdOut.bufferSize : RGY_PIPE_STDOUT_BUFSIZE_DEFAULT;
+        m_stdOutBuffer.resize(bufsize);
     }
     if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE) {
         SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
@@ -64,6 +66,8 @@ int RGYPipeProcessWin::startPipes() {
             && (m_pipe.stdErr.fp = _fdopen(_open_osfhandle((intptr_t)m_pipe.stdErr.h_read, _O_BINARY), "rb")) == NULL) {
             return 1;
         }
+        auto bufsize = m_pipe.stdErr.bufferSize ? m_pipe.stdErr.bufferSize : RGY_PIPE_STDERR_BUFSIZE_DEFAULT;
+        m_stdErrBuffer.resize(bufsize);
     }
     if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
         SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
@@ -221,13 +225,12 @@ int RGYPipeProcessWin::stdOutRead(std::vector<uint8_t>& buffer) {
         //if (!PeekNamedPipe(m_pipe.stdOut.h_read, NULL, 0, NULL, &pipe_read, NULL))
         //    return -1;
         //if (pipe_read) {
-            char read_buf[512 * 1024] = { 0 };
-            if (!ReadFile(m_pipe.stdOut.h_read, read_buf, sizeof(read_buf), &pipe_read, NULL)) {
+            if (!ReadFile(m_pipe.stdOut.h_read, m_stdOutBuffer.data(), (DWORD)m_stdOutBuffer.size(), &pipe_read, NULL)) {
                 return -1;
             }
             // パイプはWriteFileにゼロを渡すとReadFileがゼロで帰ってくることがある
             if (pipe_read > 0) {
-                buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+                buffer.insert(buffer.end(), m_stdOutBuffer.data(), m_stdOutBuffer.data() + pipe_read);
             }
         //}
         return (int)pipe_read;
@@ -247,13 +250,12 @@ int RGYPipeProcessWin::stdErrRead(std::vector<uint8_t>& buffer) {
         //if (!PeekNamedPipe(m_pipe.stdErr.h_read, NULL, 0, NULL, &pipe_read, NULL))
         //    return -1;
         //if (pipe_read) {
-            char read_buf[4 * 1024] = { 0 };
-            if (!ReadFile(m_pipe.stdErr.h_read, read_buf, sizeof(read_buf), &pipe_read, NULL)) {
+            if (!ReadFile(m_pipe.stdErr.h_read, m_stdErrBuffer.data(), (DWORD)m_stdErrBuffer.size(), &pipe_read, NULL)) {
                 return -1;
             }
             // パイプはWriteFileにゼロを渡すとReadFileがゼロで帰ってくることがある
             if (pipe_read > 0) {
-                buffer.insert(buffer.end(), read_buf, read_buf + pipe_read);
+                buffer.insert(buffer.end(), m_stdErrBuffer.data(), m_stdErrBuffer.data() + pipe_read);
             }
         //}
         return (int)pipe_read;

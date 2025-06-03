@@ -18,6 +18,8 @@ SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) 
     thSetPowerThrottling() {
     // RGYPipeProcessの初期化（標準入出力のモード設定）
     process_->init(PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
+    process_->setStdOutBufferSize(4 * 1024);
+    process_->setStdErrBufferSize(4 * 1024);
     
     // プロセス起動
     if (process_->run(args, nullptr, 0, false, false) != 0) {
