@@ -93,5 +93,6 @@
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
+    <Resource Include="ServerIcon.ico" />
   </ItemGroup>
 </Project>

@@ -28,7 +28,12 @@ namespace Amatsukaze.Components
         private void Initialize()
         {
             notifyIcon = new TaskbarIcon();
-            notifyIcon.IconSource = Application.Current.MainWindow?.Icon;
+            try {
+                notifyIcon.IconSource = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/AmatsukazeGUI;component/ServerIcon.ico"));
+            }
+            finally
+            {
+            }
             notifyIcon.ToolTipText = "AmatsukazeServer";
             notifyIcon.TrayMouseDoubleClick += NotifyIcon_TrayMouseDoubleClick;
         }
