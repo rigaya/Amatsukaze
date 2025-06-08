@@ -204,16 +204,19 @@ namespace Amatsukaze.Server
 
         private static string MakeSCRenameArgs(string screnamepath, string format, string filepath)
         {
-            var ext = Path.GetExtension(screnamepath).ToLower();
+            var ext = (screnamepath.Length > 0) ? Path.GetExtension(screnamepath).ToLower() : "";
             var sb = new StringBuilder();
 
             if (ext == ".vbs")
             {
                 sb.Append("//nologo //U "); // 文字化けを防ぐためUnicodeで出力させる
             }
+            if (screnamepath.Length > 0) {
+                sb.Append("\"")
+                    .Append(screnamepath)
+                    .Append("\" ");
+            }
             sb.Append("\"")
-                .Append(screnamepath)
-                .Append("\" \"")
                 .Append(filepath)
                 .Append("\" \"")
                 .Append(format)
@@ -265,7 +268,6 @@ namespace Amatsukaze.Server
                 using (File.Create(srcpath)) { }
 
                 string exename;
-                string args = MakeSCRenameArgs(screnamepath, format, srcpath);
 
                 if (scriptExt == ".vbs")
                 {
@@ -284,8 +286,10 @@ namespace Amatsukaze.Server
                 }
                 else
                 {
-                    throw new ArgumentException($"Unsupported script type: {scriptExt}");
+                    exename = screnamepath;
                 }
+
+                string args = MakeSCRenameArgs(exename == screnamepath ? "" : screnamepath, format, srcpath);
 
                 var psi = new ProcessStartInfo(exename, args)
                 {
@@ -300,7 +304,7 @@ namespace Amatsukaze.Server
                 };
 
                 // Pythonの場合は出力エンコーディングをUTF-8に固定
-                if (scriptExt == ".py")
+                if (scriptExt != ".vbs")
                 {
                     psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
                 }
