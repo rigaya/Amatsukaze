@@ -1258,10 +1258,8 @@ tstring ConfigWrapper::getOptions(
         case ENCODER_QSVENC:
         case ENCODER_NVENC:
         case ENCODER_VCEENC:
-            sb.append(_T(" --frames %d"), numFrames);
-            break;
         case ENCODER_SVTAV1:
-            sb.append(_T(" -n %d"), numFrames);
+            sb.append(_T(" --frames %d"), numFrames);
             break;
         default:
             break;
