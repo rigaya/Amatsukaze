@@ -1030,6 +1030,10 @@ namespace Amatsukaze.Server
             {
                 setting.OpusEncPath = GetExePath(basePath, "opusenc");
             }
+            if (string.IsNullOrEmpty(setting.NicoConvASSPath))
+            {
+                setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
+            }
             return setting;
         }
 
