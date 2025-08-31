@@ -711,6 +711,10 @@ bool ConfigWrapper::isChapterEnabled() const {
     return conf.chapter;
 }
 
+bool ConfigWrapper::isOutputChapterEnabled() const {
+    return conf.outputChapter;
+}
+
 bool ConfigWrapper::isSubtitlesEnabled() const {
     return conf.subtitles;
 }

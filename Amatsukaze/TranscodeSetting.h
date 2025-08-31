@@ -209,6 +209,7 @@ struct Config {
     bool twoPass;
     bool autoBitrate;
     bool chapter;
+    bool outputChapter;
     bool subtitles;
     int nicojkmask;
     bool nicojk18;
@@ -319,6 +320,8 @@ public:
     bool isAutoBitrate() const;
 
     bool isChapterEnabled() const;
+
+    bool isOutputChapterEnabled() const;
 
     bool isSubtitlesEnabled() const;
 

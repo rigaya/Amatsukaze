@@ -282,6 +282,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool DisableChapter { get; set; }
         [DataMember]
+        public bool OutputChapter { get; set; }
+        [DataMember]
         public bool DisableSubs { get; set; }
         [DataMember]
         public bool IgnoreNoDrcsMap { get; set; }

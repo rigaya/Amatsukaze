@@ -205,6 +205,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.numEncodeBufferFrames = 16;
     conf.tsreplaceRemoveTypeD = false;
     conf.useMKVWhenSubExist = false;
+    conf.outputChapter = false;
     bool nicojk = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -303,6 +304,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.useMKVWhenSubExist = true;
         } else if (key == _T("--chapter")) {
             conf.chapter = true;
+        } else if (key == _T("--output-chapter")) {
+            conf.outputChapter = true;
         } else if (key == _T("--subtitles")) {
             conf.subtitles = true;
         } else if (key == _T("--nicojk")) {

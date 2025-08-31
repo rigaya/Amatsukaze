@@ -1456,6 +1456,23 @@ namespace Amatsukaze.Models
                 if (Data.DisableChapter == value)
                     return;
                 Data.DisableChapter = value;
+                // チャプター・CM解析を無効にする場合は、チャプター別ファイル出力も無効にする
+                if (value)
+                {
+                    OutputChapter = false;
+                }
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region OutputChapter変更通知プロパティ
+        public bool OutputChapter {
+            get { return Data.OutputChapter; }
+            set {
+                if (Data.OutputChapter == value)
+                    return;
+                Data.OutputChapter = value;
                 RaisePropertyChanged();
             }
         }

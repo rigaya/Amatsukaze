@@ -112,8 +112,8 @@ void AMTMuxder::mux(EncodeFileKey key,
         auto path = setting_.getTmpChapterPath(key);
         if (File::exists(path)) {
             chapterFile = path;
-            if (muxFormat == FORMAT_TSREPLACE) {
-                //tsreplaceの場合は、チャプターファイルを別ファイルとしてコピー
+            if (muxFormat == FORMAT_TSREPLACE || setting_.isOutputChapterEnabled()) {
+                //tsreplaceの場合、または--output-chapterが指定された場合は、チャプターファイルを別ファイルとしてコピー
                 auto dstchapter = setting_.getOutChapterPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
                 File::copy(chapterFile, dstchapter);
             }

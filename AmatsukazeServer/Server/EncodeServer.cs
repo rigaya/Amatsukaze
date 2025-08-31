@@ -1697,6 +1697,10 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --chapter");
                     }
+                    if (profile.OutputChapter)
+                    {
+                        sb.Append(" --output-chapter");
+                    }
                     if (profile.EnableNicoJK)
                     {
                         sb.Append(" --nicojk");
