@@ -230,7 +230,8 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
   - mp4box
   
     ```bash
-    (git clone https://github.com/gpac/gpac.git \
+    (sudo apt install libz-dev \
+      && git clone https://github.com/gpac/gpac.git \
       && cd gpac \
       && ./configure --static-bin \
       && make -j$(nproc) \
