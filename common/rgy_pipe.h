@@ -108,8 +108,8 @@ public:
     void setStdErrBufferSize(uint32_t size) {
         m_pipe.stdErr.bufferSize = size;
     }
-    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) = 0;
-    virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) = 0;
+    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console = false) = 0;
+    virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console = false) = 0;
     virtual void close() = 0;
     virtual bool processAlive() = 0;
     virtual std::string getOutput() = 0;
@@ -142,9 +142,9 @@ public:
     RGYPipeProcessWin();
     virtual ~RGYPipeProcessWin();
 
-    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
-    virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
-    virtual void close() override;
+    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console = false) override;
+    virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console = false) override;
+    virtual void close() override;  
     virtual bool processAlive() override;
     virtual std::string getOutput() override;
     virtual int stdInClose() override;
@@ -177,8 +177,8 @@ public:
     RGYPipeProcessLinux();
     virtual ~RGYPipeProcessLinux();
 
-    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
-    virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) override;
+    virtual int run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console = false) override;
+    virtual int run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console = false) override;
     virtual void close() override;
     virtual bool processAlive() override;
     virtual std::string getOutput() override;

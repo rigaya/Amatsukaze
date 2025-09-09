@@ -401,7 +401,7 @@ tstring GetDirectoryName(const tstring& path) {
         // 標準入出力は不要なので全て無効化
         process->init(PIPE_MODE_DISABLE, PIPE_MODE_DISABLE, PIPE_MODE_DISABLE);
         std::vector<tstring> args = { tempBatchPath };
-        int runResult = process->run(args, setting.getTmpDir().c_str(), 0, false, true); // 最小化で実行
+        int runResult = process->run(args, setting.getTmpDir().c_str(), 0, false, true, true); // 最小化で実行
         if (runResult != 0) {
             return -1;
         }

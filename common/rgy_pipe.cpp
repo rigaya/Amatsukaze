@@ -82,7 +82,7 @@ int RGYPipeProcessWin::startPipes() {
     return 0;
 }
 
-int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console) {
     BOOL Inherit = FALSE;
     DWORD flag = priority;
     STARTUPINFO si;
@@ -107,6 +107,8 @@ int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_
     }
     if (hidden)
         flag |= CREATE_NO_WINDOW;
+    if (new_console)
+        flag |= CREATE_NEW_CONSOLE;
 
     int ret = (CreateProcess(NULL, (TCHAR *)cmd_line.c_str(), NULL, NULL, Inherit, flag, NULL, exedir, &si, &m_pi)) ? 0 : 1;
     m_phandle = m_pi.hProcess;
@@ -140,14 +142,14 @@ int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_
     return ret;
 }
 
-int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+int RGYPipeProcessWin::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console) {
     tstring cmd_line;
     for (auto arg : args) {
         if (!arg.empty()) {
             cmd_line += _T("\"") + tstring(arg) + _T("\" ");
         }
     }
-    return run(cmd_line, exedir, priority, hidden, minimized);
+    return run(cmd_line, exedir, priority, hidden, minimized, new_console);
 }
 
 int RGYPipeProcessWin::stdInClose() {

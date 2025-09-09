@@ -72,12 +72,12 @@ int RGYPipeProcessLinux::startPipes() {
 }
 
 
-int RGYPipeProcessLinux::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+int RGYPipeProcessLinux::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console) {
     std::vector<tstring> argsList = SplitCommandLine(cmd_line);
-    return run(argsList, exedir, priority, hidden, minimized);
+    return run(argsList, exedir, priority, hidden, minimized, new_console);
 }
 
-int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized) {
+int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console) {
     startPipes();
 
     m_phandle = fork();
