@@ -59,8 +59,8 @@ namespace Amatsukaze.Server
 
         private FinishActionRunner finishActionRunner;
 
-        private LogData logData = new LogData();
-        private CheckLogData checkLogData = new CheckLogData();
+        private LogData logData = new LogData() { Items = new List<LogItem>() };
+        private CheckLogData checkLogData = new CheckLogData() { Items = new List<CheckLogItem>() };
         private SortedDictionary<string, DiskItem> diskMap = new SortedDictionary<string, DiskItem>();
 
         internal readonly AffinityCreator affinityCreator = new AffinityCreator();
@@ -3298,7 +3298,7 @@ namespace Amatsukaze.Server
             {
                 QueueData = new QueueData()
                 {
-                    Items = queueManager.Queue
+                    Items = queueManager.Queue ?? new List<QueueItem>()
                 }
             });
         }

@@ -1205,7 +1205,8 @@ namespace Amatsukaze.Models
             if(data.LogData != null)
             {
                 LogItems.Clear();
-                foreach (var item in data.LogData.Items.Reverse<LogItem>())
+                var logItems = data.LogData.Items ?? new List<LogItem>();
+                foreach (var item in logItems.Reverse<LogItem>())
                 {
                     LogItems.Add(item);
                 }
@@ -1217,7 +1218,8 @@ namespace Amatsukaze.Models
             if(data.CheckLogData != null)
             {
                 CheckLogItems.Clear();
-                foreach (var item in data.CheckLogData.Items.Reverse<CheckLogItem>())
+                var checkItems = data.CheckLogData.Items ?? new List<CheckLogItem>();
+                foreach (var item in checkItems.Reverse<CheckLogItem>())
                 {
                     CheckLogItems.Add(item);
                 }
