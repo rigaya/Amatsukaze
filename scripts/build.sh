@@ -2,9 +2,10 @@
 
 # 引数のチェック
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 installdir [builddir]"
+    echo "Usage: $0 installdir [builddir] [--debug]"
     echo "  installdir: インストール先ディレクトリ"
     echo "  builddir: ビルド用ディレクトリ (省略時は 'build')"
+    echo "  --debug: デバッグビルドを実行 (省略時はリリースビルド)"
     exit 1
 fi
 
@@ -13,6 +14,19 @@ SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
 
 INSTALL_DIR="$1"
 BUILD_DIR="${2:-build}"
+
+# デバッグビルドのオプションをチェック
+DEBUG_BUILD=false
+if [ "$2" = "--debug" ] || [ "$3" = "--debug" ]; then
+    DEBUG_BUILD=true
+    echo "デバッグビルドモードで実行します"
+    # builddirが--debugの場合はデフォルト値を使用
+    if [ "$2" = "--debug" ]; then
+        BUILD_DIR="build"
+    fi
+else
+    echo "リリースビルドモードで実行します"
+fi
 # buildディレクトリがない場合は作成
 if [ ! -d "${BUILD_DIR}" ]; then
     mkdir "${BUILD_DIR}"
@@ -109,9 +123,15 @@ cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
 cd ..
 
 # dotnet の AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルド
-echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルドを行います。"
-cd ..
-(dotnet build AmatsukazeLinux.sln) || exit 1
+if [ "$DEBUG_BUILD" = true ]; then
+    echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のデバッグビルドを行います。"
+    cd ..
+    (dotnet build AmatsukazeLinux.sln -c Debug) || exit 1
+else
+    echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のリリースビルドを行います。"
+    cd ..
+    (dotnet build AmatsukazeLinux.sln -c Release) || exit 1
+fi
 
 
 # ----- インストール -----
@@ -136,10 +156,18 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/li
 
 
 # .NET アプリケーションの公開
-echo ".NET アプリケーションを公開します..."
-if ! dotnet publish AmatsukazeLinux.sln -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
-    echo ".NET アプリケーションの公開に失敗しました"
-    exit 1
+if [ "$DEBUG_BUILD" = true ]; then
+    echo ".NET アプリケーションをデバッグモードで公開します..."
+    if ! dotnet publish AmatsukazeLinux.sln -c Debug -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
+        echo ".NET アプリケーションの公開に失敗しました"
+        exit 1
+    fi
+else
+    echo ".NET アプリケーションをリリースモードで公開します..."
+    if ! dotnet publish AmatsukazeLinux.sln -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
+        echo ".NET アプリケーションの公開に失敗しました"
+        exit 1
+    fi
 fi
 
 # ScriptCommand の展開

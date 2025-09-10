@@ -82,6 +82,26 @@ namespace Amatsukaze.Server
         ServiceSetting = (1 << 7),
     }
 
+    // ServerRequestのデバッグ用拡張メソッド
+    public static class ServerRequestExtensions
+    {
+        public static string ToDebugString(this ServerRequest req)
+        {
+            var flags = new List<string>();
+            
+            if ((req & ServerRequest.Setting) != 0) flags.Add("Setting");
+            if ((req & ServerRequest.Queue) != 0) flags.Add("Queue");
+            if ((req & ServerRequest.Log) != 0) flags.Add("Log");
+            if ((req & ServerRequest.CheckLog) != 0) flags.Add("CheckLog");
+            if ((req & ServerRequest.Console) != 0) flags.Add("Console");
+            if ((req & ServerRequest.State) != 0) flags.Add("State");
+            if ((req & ServerRequest.FreeSpace) != 0) flags.Add("FreeSpace");
+            if ((req & ServerRequest.ServiceSetting) != 0) flags.Add("ServiceSetting");
+            
+            return flags.Count > 0 ? string.Join(" | ", flags) : "None";
+        }
+    }
+
     public struct ReqResource
     {
         public int CPU, HDD, GPU;

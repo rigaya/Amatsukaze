@@ -289,7 +289,9 @@ namespace Amatsukaze.Server
                     server.EndServer();
                     break;
                 case RPCMethodId.Request:
+                    Debug.Print($"[ClientManager] Request処理開始: {((ServerRequest)arg).ToDebugString()}");
                     server.Request((ServerRequest)arg);
+                    Debug.Print($"[ClientManager] Request処理完了: {((ServerRequest)arg).ToDebugString()}");
                     break;
                 case RPCMethodId.RequestLogFile:
                     server.RequestLogFile((LogFileRequest)arg);

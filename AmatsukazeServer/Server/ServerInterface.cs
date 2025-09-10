@@ -389,7 +389,7 @@ namespace Amatsukaze.Server
             return new RPCInfo() { id = id, arg = arg };
         }
 
-        public static Task RefreshRequest(this IEncodeServer server)
+        public static Task (this IEncodeServer server)
         {
             return Task.WhenAll(
                     server.Request(ServerRequest.Setting | 
@@ -546,6 +546,7 @@ namespace Amatsukaze.Server
 
         public Task Request(ServerRequest req)
         {
+            Debug.Print($"[ServerInterface] Request転送: {req.ToDebugString()}");
             return Server.Request(Copy(req));
         }
 

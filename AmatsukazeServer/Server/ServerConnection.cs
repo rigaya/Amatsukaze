@@ -26,13 +26,20 @@ namespace Amatsukaze.Server
         {
             if (client != null)
             {
+                Debug.Print($"[ServerConnection] 送信: {id}, データサイズ: {(obj != null ? obj.GetType().Name : "null")}");
                 byte[] bytes = RPCTypes.Serialize(id, obj);
                 await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+                Debug.Print($"[ServerConnection] 送信完了: {id}, バイト数: {bytes.Length}");
+            }
+            else
+            {
+                Debug.Print($"[ServerConnection] 送信失敗: クライアントが接続されていません ({id})");
             }
         }
 
         internal void OnRequestReceived(RPCMethodId methodId, object arg)
         {
+            Debug.Print($"[ServerConnection] 受信: {methodId}, データタイプ: {(arg != null ? arg.GetType().Name : "null")}");
             switch (methodId)
             {
                 case RPCMethodId.OnUIData:
@@ -136,6 +143,7 @@ namespace Amatsukaze.Server
 
         public Task Request(ServerRequest req)
         {
+            Debug.Print($"[Client] Request送信: {req.ToDebugString()}");
             return Send(RPCMethodId.Request, req);
         }
 

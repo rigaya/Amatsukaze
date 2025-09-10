@@ -361,54 +361,115 @@ namespace Amatsukaze.Server
         // コンストラクタはasyncにできないのでasyncする処理は分離
         public async Task Init()
         {
+            Debug.Print("[Init] 初期化処理を開始します");
+            
 #if PROFILE
             var prof = new Profile();
 #endif
             // 古いバージョンからの更新処理
-            UpdateFromOldVersion();
+            Debug.Print("[Init] 古いバージョンからの更新処理を開始します");
+            try
+            {
+                UpdateFromOldVersion();
+                Debug.Print("[Init] 古いバージョンからの更新処理が完了しました");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[Init] 古いバージョンからの更新処理でエラーが発生しました: {ex.Message}");
+                throw;
+            }
+            
 #if PROFILE
             prof.PrintTime("EncodeServer A");
 #endif
             // エンコードを開始する前にログは読み込んでおく
-            logFile = new DataFile<LogItem>(GetHistoryFilePathV2());
-            checkLogFile = new DataFile<CheckLogItem>(GetCheckHistoryFilePath());
+            Debug.Print("[Init] ログファイルの初期化を開始します");
+            try
+            {
+                logFile = new DataFile<LogItem>(GetHistoryFilePathV2());
+                checkLogFile = new DataFile<CheckLogItem>(GetCheckHistoryFilePath());
+                Debug.Print("[Init] ログファイルオブジェクトの作成が完了しました");
 
-            logData.Items = await logFile.Read();
-            checkLogData.Items = await checkLogFile.Read();
+                logData.Items = await logFile.Read();
+                checkLogData.Items = await checkLogFile.Read();
+                Debug.Print($"[Init] ログデータの読み込みが完了しました (logData: {logData.Items.Count}件, checkLogData: {checkLogData.Items.Count}件)");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[Init] ログファイルの初期化でエラーが発生しました: {ex.Message}");
+                throw;
+            }
+            
 #if PROFILE
             prof.PrintTime("EncodeServer B");
 #endif
             // キュー状態を戻す
-            queueManager.LoadAppData();
-            if (AppData_.setting.PauseOnStarted && queueManager.Queue.Any(s => s.IsActive))
+            Debug.Print("[Init] キュー状態の復元を開始します");
+            try
             {
-                // アクティブなアイテムがある状態から開始する場合はキューを凍結する
-                QueuePaused = true;
-                workerPool.SetPause(true, false);
-                queueManager.UpdateQueueItems(null);
+                queueManager.LoadAppData();
+                Debug.Print("[Init] キュー状態の復元が完了しました");
+                
+                if (AppData_.setting.PauseOnStarted && queueManager.Queue.Any(s => s.IsActive))
+                {
+                    // アクティブなアイテムがある状態から開始する場合はキューを凍結する
+                    Debug.Print("[Init] アクティブなアイテムがあるためキューを凍結します");
+                    QueuePaused = true;
+                    workerPool.SetPause(true, false);
+                    queueManager.UpdateQueueItems(null);
+                    Debug.Print("[Init] キューの凍結が完了しました");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[Init] キュー状態の復元でエラーが発生しました: {ex.Message}");
+                throw;
             }
 
             // DRCS文字情報解析に回す
-            foreach (var item in logData.Items)
+            Debug.Print("[Init] DRCS文字情報解析の準備を開始します");
+            try
             {
-                drcsManager.AddLogFile(GetLogFileBase(item.EncodeStartDate) + ".txt",
-                    item.SrcPath, item.EncodeFinishDate);
+                foreach (var item in logData.Items)
+                {
+                    drcsManager.AddLogFile(GetLogFileBase(item.EncodeStartDate) + ".txt",
+                        item.SrcPath, item.EncodeFinishDate);
+                }
+                foreach (var item in checkLogData.Items)
+                {
+                    drcsManager.AddLogFile(GetCheckLogFileBase(item.CheckStartDate) + ".txt",
+                        item.SrcPath, item.CheckStartDate);
+                }
+                Debug.Print($"[Init] DRCS文字情報解析の準備が完了しました (logData: {logData.Items.Count}件, checkLogData: {checkLogData.Items.Count}件)");
             }
-            foreach (var item in checkLogData.Items)
+            catch (Exception ex)
             {
-                drcsManager.AddLogFile(GetCheckLogFileBase(item.CheckStartDate) + ".txt",
-                    item.SrcPath, item.CheckStartDate);
+                Debug.Print($"[Init] DRCS文字情報解析の準備でエラーが発生しました: {ex.Message}");
+                throw;
             }
+            
 #if PROFILE
             prof.PrintTime("EncodeServer C");
 #endif
-            watchFileThread = WatchFileThread();
-            saveSettingThread = SaveSettingThread();
-            queueThread = QueueThread();
-            drcsThread = DrcsThread();
+            Debug.Print("[Init] バックグラウンドスレッドの開始を開始します");
+            try
+            {
+                watchFileThread = WatchFileThread();
+                saveSettingThread = SaveSettingThread();
+                queueThread = QueueThread();
+                drcsThread = DrcsThread();
+                Debug.Print("[Init] バックグラウンドスレッドの開始が完了しました");
+            }
+            catch (Exception ex)
+            {
+                Debug.Print($"[Init] バックグラウンドスレッドの開始でエラーが発生しました: {ex.Message}");
+                throw;
+            }
+            
 #if PROFILE
             prof.PrintTime("EncodeServer D");
 #endif
+            Debug.Print("[Init] 初期化処理が正常に完了しました");
         }
 
         #region IDisposable Support
@@ -3236,60 +3297,97 @@ namespace Amatsukaze.Server
 #region Request
         private async Task RequestSetting()
         {
-            await Client.OnCommonData(new CommonData() {
-                Setting = AppData_.setting,
-                UIState = UIState_,
-                JlsCommandFiles = JlsCommandFiles,
-                MainScriptFiles = MainScriptFiles,
-                PostScriptFiles = PostScriptFiles,
-                CpuClusters = affinityCreator.GetClusters(),
-                ServerInfo = new ServerInfo()
+            Debug.Print("[RequestSetting] 設定データの送信を開始します");
+            
+            try
+            {
+                // CommonDataの送信
+                Debug.Print("[RequestSetting] CommonDataの準備を開始します");
+                var commonData = new CommonData() {
+                    Setting = AppData_.setting,
+                    UIState = UIState_,
+                    JlsCommandFiles = JlsCommandFiles,
+                    MainScriptFiles = MainScriptFiles,
+                    PostScriptFiles = PostScriptFiles,
+                    CpuClusters = affinityCreator.GetClusters(),
+                    ServerInfo = new ServerInfo()
+                    {
+                        HostName = Dns.GetHostName(),
+                        MacAddress = ClientManager?.GetMacAddress(),
+                        Version = Version,
+                        Platform = Environment.OSVersion.Platform.ToString(),
+                        CharSet = Util.AmatsukazeDefaultEncoding.CodePage
+                    },
+                    AddQueueBatFiles = AddQueueBatFiles,
+                    PreBatFiles = PreBatFiles,
+                    PostBatFiles = PostBatFiles,
+                    FinishSetting = AppData_.finishSetting
+                };
+                Debug.Print($"[RequestSetting] CommonDataの準備が完了しました (JlsCommandFiles: {JlsCommandFiles?.Count ?? 0}件, MainScriptFiles: {MainScriptFiles?.Count ?? 0}件, PostScriptFiles: {PostScriptFiles?.Count ?? 0}件)");
+                
+                await Client.OnCommonData(commonData);
+                Debug.Print("[RequestSetting] CommonDataの送信が完了しました");
+
+                // プロファイル
+                Debug.Print("[RequestSetting] プロファイルの送信を開始します");
+                Debug.Print("[RequestSetting] プロファイルをクリアします");
+                await Client.OnProfile(new ProfileUpdate()
                 {
-                    HostName = Dns.GetHostName(),
-                    MacAddress = ClientManager?.GetMacAddress(),
-                    Version = Version,
-                    Platform = Environment.OSVersion.Platform.ToString(),
-                    CharSet = Util.AmatsukazeDefaultEncoding.CodePage
-                },
-                AddQueueBatFiles = AddQueueBatFiles,
-                PreBatFiles = PreBatFiles,
-                PostBatFiles = PostBatFiles,
-                FinishSetting = AppData_.finishSetting
-            });
-
-            // プロファイル
-            await Client.OnProfile(new ProfileUpdate()
-            {
-                Type = UpdateType.Clear
-            });
-            foreach (var profile in profiles.Values.ToArray())
-            {
-                await Client.OnProfile(new ProfileUpdate() {
-                    Profile = profile,
-                    Type = UpdateType.Update
+                    Type = UpdateType.Clear
                 });
-            }
+                Debug.Print("[RequestSetting] プロファイルのクリアが完了しました");
+                
+                var profileArray = profiles.Values.ToArray();
+                Debug.Print($"[RequestSetting] {profileArray.Length}件のプロファイルを送信します");
+                for (int i = 0; i < profileArray.Length; i++)
+                {
+                    var profile = profileArray[i];
+                    Debug.Print($"[RequestSetting] プロファイル送信中 ({i + 1}/{profileArray.Length}): {profile.Name}");
+                    await Client.OnProfile(new ProfileUpdate() {
+                        Profile = profile,
+                        Type = UpdateType.Update
+                    });
+                }
+                Debug.Print("[RequestSetting] プロファイルの送信が完了しました");
 
-            // 自動選択
-            await Client.OnAutoSelect(new AutoSelectUpdate()
-            {
-                Type = UpdateType.Clear
-            });
-            foreach (var profile in autoSelects.Values.ToArray())
-            {
+                // 自動選択
+                Debug.Print("[RequestSetting] 自動選択の送信を開始します");
+                Debug.Print("[RequestSetting] 自動選択をクリアします");
                 await Client.OnAutoSelect(new AutoSelectUpdate()
                 {
-                    Profile = profile,
-                    Type = UpdateType.Update
+                    Type = UpdateType.Clear
                 });
-            }
+                Debug.Print("[RequestSetting] 自動選択のクリアが完了しました");
+                
+                var autoSelectArray = autoSelects.Values.ToArray();
+                Debug.Print($"[RequestSetting] {autoSelectArray.Length}件の自動選択を送信します");
+                for (int i = 0; i < autoSelectArray.Length; i++)
+                {
+                    var profile = autoSelectArray[i];
+                    Debug.Print($"[RequestSetting] 自動選択送信中 ({i + 1}/{autoSelectArray.Length}): {profile.Name}");
+                    await Client.OnAutoSelect(new AutoSelectUpdate()
+                    {
+                        Profile = profile,
+                        Type = UpdateType.Update
+                    });
+                }
+                Debug.Print("[RequestSetting] 自動選択の送信が完了しました");
 
-            // プロファイルがないと関連付けできないため、
-            // プロファイルを送った後にこれを送る
-            await Client.OnCommonData(new CommonData()
+                // MakeScriptDataの送信
+                Debug.Print("[RequestSetting] MakeScriptDataの送信を開始します");
+                await Client.OnCommonData(new CommonData()
+                {
+                    MakeScriptData = AppData_.scriptData,
+                });
+                Debug.Print("[RequestSetting] MakeScriptDataの送信が完了しました");
+                
+                Debug.Print("[RequestSetting] 設定データの送信が正常に完了しました");
+            }
+            catch (Exception ex)
             {
-                MakeScriptData = AppData_.scriptData,
-            });
+                Debug.Print($"[RequestSetting] 設定データの送信でエラーが発生しました: {ex.Message}");
+                throw;
+            }
         }
 
         private Task RequestQueue()
@@ -3431,37 +3529,65 @@ namespace Amatsukaze.Server
 
         public async Task Request(ServerRequest req)
         {
-            if ((req & ServerRequest.Setting) != 0)
+            Debug.Print($"[Server] Request受信: {req.ToDebugString()}");
+            
+            try
             {
-                await RequestSetting();
+                if ((req & ServerRequest.Setting) != 0)
+                {
+                    Debug.Print("[Server] Setting要求を処理中...");
+                    await RequestSetting();
+                    Debug.Print("[Server] Setting要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.Queue) != 0)
+                {
+                    Debug.Print("[Server] Queue要求を処理中...");
+                    await RequestQueue();
+                    Debug.Print("[Server] Queue要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.Log) != 0)
+                {
+                    Debug.Print("[Server] Log要求を処理中...");
+                    await RequestLog();
+                    Debug.Print("[Server] Log要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.CheckLog) != 0)
+                {
+                    Debug.Print("[Server] CheckLog要求を処理中...");
+                    await RequestCheckLog();
+                    Debug.Print("[Server] CheckLog要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.Console) != 0)
+                {
+                    Debug.Print("[Server] Console要求を処理中...");
+                    await RequestConsole();
+                    Debug.Print("[Server] Console要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.State) != 0)
+                {
+                    Debug.Print("[Server] State要求を処理中...");
+                    await RequestState();
+                    Debug.Print("[Server] State要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.FreeSpace) != 0)
+                {
+                    Debug.Print("[Server] FreeSpace要求を処理中...");
+                    await RequestFreeSpace();
+                    Debug.Print("[Server] FreeSpace要求の処理が完了しました");
+                }
+                if ((req & ServerRequest.ServiceSetting) != 0)
+                {
+                    Debug.Print("[Server] ServiceSetting要求を処理中...");
+                    await RequestServiceSetting();
+                    Debug.Print("[Server] ServiceSetting要求の処理が完了しました");
+                }
+                
+                Debug.Print($"[Server] Request処理が正常に完了しました: {req.ToDebugString()}");
             }
-            if ((req & ServerRequest.Queue) != 0)
+            catch (Exception ex)
             {
-                await RequestQueue();
-            }
-            if ((req & ServerRequest.Log) != 0)
-            {
-                await RequestLog();
-            }
-            if ((req & ServerRequest.CheckLog) != 0)
-            {
-                await RequestCheckLog();
-            }
-            if ((req & ServerRequest.Console) != 0)
-            {
-                await RequestConsole();
-            }
-            if ((req & ServerRequest.State) != 0)
-            {
-                await RequestState();
-            }
-            if ((req & ServerRequest.FreeSpace) != 0)
-            {
-                await RequestFreeSpace();
-            }
-            if ((req & ServerRequest.ServiceSetting) != 0)
-            {
-                await RequestServiceSetting();
+                Debug.Print($"[Server] Request処理でエラーが発生しました: {req.ToDebugString()}, エラー: {ex.Message}");
+                throw;
             }
         }
 #endregion

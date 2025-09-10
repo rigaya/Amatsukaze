@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using Amatsukaze.Lib;
 using log4net;
@@ -14,6 +15,10 @@ namespace Amatsukaze.Server
             try
             {
                 var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく
+
+                // Debug.Printの出力を標準エラー出力に表示するためのリスナーを追加
+                Debug.Listeners.Add(new TextWriterTraceListener(Console.Error));
+                Debug.AutoFlush = true;
 
                 // ログパスを設定
                 log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
