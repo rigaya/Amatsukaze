@@ -60,7 +60,9 @@ if [ $SKIP_PLUGINS -eq 0 ]; then
     install_plugin "libtdeint.so"
     install_plugin "librgtools.so"
     # かつてインストールしてしまったものを削除 (KNNEDI3.soに改名した)
-    rm ${INSTALL_DIR}/exe_files/plugins64/nnedi3.so
+    if [ -e ${INSTALL_DIR}/exe_files/plugins64/nnedi3.so ]; then
+        rm ${INSTALL_DIR}/exe_files/plugins64/nnedi3.so
+    fi
 else
     echo "プラグインのインストールをスキップします"
 fi
