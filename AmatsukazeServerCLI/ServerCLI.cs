@@ -17,8 +17,8 @@ namespace Amatsukaze.Server
                 var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく
 
                 // Debug.Printの出力を標準エラー出力に表示するためのリスナーを追加
-                Debug.Listeners.Add(new TextWriterTraceListener(Console.Error));
-                Debug.AutoFlush = true;
+                Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));
+                Trace.AutoFlush = true;
 
                 // ログパスを設定
                 log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();
