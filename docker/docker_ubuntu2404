@@ -7,6 +7,10 @@ ARG DEBIAN_FRONTEND=noninteractive \
     DOTNET_DEB_NAME=https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
     AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.0/avisynth_3.7.5-1_amd64_Ubuntu24.04.deb
 
+ENV LANG=ja_JP.UTF-8
+ENV LC_ALL=ja_JP.UTF-8
+ENV LC_CTYPE=ja_JP.UTF-8
+
 RUN apt update \
     && apt-get install -y \
       sudo \
@@ -26,6 +30,10 @@ RUN apt update \
       libssl-dev \
       libz-dev \
       build-essential \
+      locales \
+    && locale-gen ja_JP.UTF-8 \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=ja_JP.UTF-8 \
     && wget -q ${DOTNET_DEB_NAME} -O packages-microsoft-prod.deb \
     && dpkg -i packages-microsoft-prod.deb \
     && apt update \
