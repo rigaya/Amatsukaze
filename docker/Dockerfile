@@ -280,7 +280,7 @@ RUN if [ "$BUILD_MODE" = "debug" ]; then \
         # リリースモード: 指定されたUbuntuバージョン用のアーカイブを自動ダウンロード
         curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
         | grep "browser_download_url.*tar.xz" | grep "Ubuntu${UBUNTU_VERSION}" | cut -d : -f 2,3 | tr -d \" \
-        | wget -i - -O - | tar -xJ -C /app; \
+        | wget -i - -O - | tar -xJ -C /app \
         && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi; \
     fi
 
