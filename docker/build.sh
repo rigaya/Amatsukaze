@@ -96,6 +96,16 @@ if [[ "$BUILD_MODE" == "debug" ]]; then
     FULL_IMAGE_NAME="${IMAGE_NAME}:${TAG}-debug"
 fi
 
+# 共通のDockerコマンドオプション
+COMMON_DOCKER_OPTS="-e UID=\$(id -u) -e GID=\$(id -g) \\
+  -v \`pwd\`/bat:/app/bat \\
+  -v \`pwd\`/config:/app/config \\
+  -v \`pwd\`/input:/app/input \\
+  -v \`pwd\`/logo:/app/logo \\
+  -v \`pwd\`/output:/app/output \\
+  -v \`pwd\`/profile:/app/profile \\
+  -v /tmp:/tmp"
+
 echo "=== Amatsukaze Docker ビルド ==="
 echo "ビルドモード: $BUILD_MODE"
 echo "イメージ名: $FULL_IMAGE_NAME"
@@ -136,16 +146,16 @@ if eval $BUILD_CMD; then
     echo "=== 使用方法 ==="
     if [[ "$BUILD_MODE" == "debug" ]]; then
         echo "デバッグモードでコンテナを起動:"
-        echo "  docker run -it --rm $FULL_IMAGE_NAME"
+        echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME"
         echo ""
         echo "デバッグビルドスクリプトを実行:"
-        echo "  docker run -it --rm $FULL_IMAGE_NAME /app/debug-build.sh"
+        echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME /app/debug-build.sh"
     else
         echo "リリースモードでコンテナを起動:"
-        echo "  docker run -d --name amatsukaze $FULL_IMAGE_NAME"
+        echo "  docker run -d --name amatsukaze $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME"
         echo ""
         echo "対話的にコンテナを起動:"
-        echo "  docker run -it --rm $FULL_IMAGE_NAME /bin/bash"
+        echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME /bin/bash"
     fi
 else
     echo "❌ ビルドに失敗しました"
