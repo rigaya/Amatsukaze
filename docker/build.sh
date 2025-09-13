@@ -126,12 +126,29 @@ setup_directories() {
     else
         echo "ℹ️  profileディレクトリは既に存在します"
     fi
+
+    # drcsディレクトリのコピー
+    if [[ ! -d "$CURRENT_DIR/drcs" ]]; then
+        if [[ -d "$DEFAULTS_DIR/drcs" ]]; then
+            cp -r "$DEFAULTS_DIR/drcs" "$CURRENT_DIR/"
+            echo "✅ drcsディレクトリをコピーしました"
+        else
+            echo "⚠️  $DEFAULTS_DIR/drcs が見つかりません"
+        fi
+    else
+        if [[ ! -f "$CURRENT_DIR/drcs/drcs_map.txt" ]]; then
+            cp "$DEFAULTS_DIR/drcs/drcs_map.txt" "$CURRENT_DIR/drcs/drcs_map.txt"
+            echo "✅ drcs_map.txtをコピーしました"
+        else
+            echo "ℹ️  drcsディレクトリは既に存在します"
+        fi
+    fi
     
     # 必要なディレクトリの作成
     echo ""
     echo "--- ディレクトリの作成 ---"
     
-    local dirs=("JL" "config" "input" "logo" "output" "drcs")
+    local dirs=("JL" "config" "input" "logo" "output")
     for dir in "${dirs[@]}"; do
         if [[ ! -d "$CURRENT_DIR/$dir" ]]; then
             mkdir -p "$CURRENT_DIR/$dir"
@@ -152,7 +169,8 @@ if [[ "$BUILD_MODE" == "debug" ]]; then
 fi
 
 # 共通のDockerコマンドオプション
-COMMON_DOCKER_OPTS="-e UID=\$(id -u) -e GID=\$(id -g) \\
+COMMON_DOCKER_OPTS="-p 32768:32768 \\
+  -e UID=\$(id -u) -e GID=\$(id -g) \\
   -v \`pwd\`/bat:/app/bat \\
   -v \`pwd\`/config:/app/config \\
   -v \`pwd\`/drcs:/app/drcs \\
