@@ -9,8 +9,6 @@ set -e
 BUILD_MODE="release"
 IMAGE_NAME="amatsukaze"
 TAG="latest"
-UBUNTU_VERSION="24.04"
-ARCH="amd64"
 NO_CACHE=false
 
 # ヘルプメッセージ
@@ -25,8 +23,6 @@ Amatsukaze Docker ビルドスクリプト
     -m, --mode MODE        ビルドモード (release|debug) [デフォルト: release]
     -n, --name NAME        イメージ名 [デフォルト: amatsukaze]
     -t, --tag TAG          タグ [デフォルト: latest]
-    -u, --ubuntu VERSION   Ubuntuバージョン [デフォルト: 24.04]
-    -a, --arch ARCH        アーキテクチャ [デフォルト: amd64]
     --no-cache             キャッシュを使用しない
     -h, --help             このヘルプを表示
 
@@ -60,14 +56,6 @@ while [[ $# -gt 0 ]]; do
             TAG="$2"
             shift 2
             ;;
-        -u|--ubuntu)
-            UBUNTU_VERSION="$2"
-            shift 2
-            ;;
-        -a|--arch)
-            ARCH="$2"
-            shift 2
-            ;;
         --no-cache)
             NO_CACHE=true
             shift
@@ -90,6 +78,73 @@ if [[ "$BUILD_MODE" != "release" && "$BUILD_MODE" != "debug" ]]; then
     exit 1
 fi
 
+# ディレクトリセットアップ関数
+setup_directories() {
+    echo "=== ディレクトリセットアップ ==="
+    
+    # build.shのディレクトリを取得
+    DOCKERFILE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    DEFAULTS_DIR="$DOCKERFILE_DIR/../defaults"
+    CURRENT_DIR="$(pwd)"
+    
+    # ディレクトリのコピー
+    echo ""
+    echo "--- ディレクトリのコピー ---"
+    
+    # avsディレクトリのコピー
+    if [[ ! -d "$CURRENT_DIR/avs" ]]; then
+        if [[ -d "$DEFAULTS_DIR/avs" ]]; then
+            cp -r "$DEFAULTS_DIR/avs" "$CURRENT_DIR/"
+            echo "✅ avsディレクトリをコピーしました"
+        else
+            echo "⚠️  $DEFAULTS_DIR/avs が見つかりません"
+        fi
+    else
+        echo "ℹ️  avsディレクトリは既に存在します"
+    fi
+    
+    # batディレクトリのコピー（bat_linuxから）
+    if [[ ! -d "$CURRENT_DIR/bat" ]]; then
+        if [[ -d "$DEFAULTS_DIR/bat_linux" ]]; then
+            cp -r "$DEFAULTS_DIR/bat_linux" "$CURRENT_DIR/bat"
+            echo "✅ batディレクトリをコピーしました"
+        else
+            echo "⚠️  $DEFAULTS_DIR/bat_linux が見つかりません"
+        fi
+    else
+        echo "ℹ️  batディレクトリは既に存在します"
+    fi
+    
+    # profileディレクトリのコピー
+    if [[ ! -d "$CURRENT_DIR/profile" ]]; then
+        if [[ -d "$DEFAULTS_DIR/profile" ]]; then
+            cp -r "$DEFAULTS_DIR/profile" "$CURRENT_DIR/"
+            echo "✅ profileディレクトリをコピーしました"
+        else
+            echo "⚠️  $DEFAULTS_DIR/profile が見つかりません"
+        fi
+    else
+        echo "ℹ️  profileディレクトリは既に存在します"
+    fi
+    
+    # 必要なディレクトリの作成
+    echo ""
+    echo "--- ディレクトリの作成 ---"
+    
+    local dirs=("JL" "config" "input" "logo" "output" "drcs")
+    for dir in "${dirs[@]}"; do
+        if [[ ! -d "$CURRENT_DIR/$dir" ]]; then
+            mkdir -p "$CURRENT_DIR/$dir"
+            echo "✅ $dirディレクトリを作成しました"
+        else
+            echo "ℹ️  $dirディレクトリは既に存在します"
+        fi
+    done
+    
+    echo "================================"
+    echo ""
+}
+
 # 完全なイメージ名の構築
 FULL_IMAGE_NAME="${IMAGE_NAME}:${TAG}"
 if [[ "$BUILD_MODE" == "debug" ]]; then
@@ -100,7 +155,9 @@ fi
 COMMON_DOCKER_OPTS="-e UID=\$(id -u) -e GID=\$(id -g) \\
   -v \`pwd\`/bat:/app/bat \\
   -v \`pwd\`/config:/app/config \\
+  -v \`pwd\`/drcs:/app/drcs \\
   -v \`pwd\`/input:/app/input \\
+  -v \`pwd\`/JL:/app/JL \\
   -v \`pwd\`/logo:/app/logo \\
   -v \`pwd\`/output:/app/output \\
   -v \`pwd\`/profile:/app/profile \\
@@ -109,8 +166,6 @@ COMMON_DOCKER_OPTS="-e UID=\$(id -u) -e GID=\$(id -g) \\
 echo "=== Amatsukaze Docker ビルド ==="
 echo "ビルドモード: $BUILD_MODE"
 echo "イメージ名: $FULL_IMAGE_NAME"
-echo "Ubuntuバージョン: $UBUNTU_VERSION"
-echo "アーキテクチャ: $ARCH"
 echo "キャッシュなし: $NO_CACHE"
 echo "================================"
 
@@ -123,8 +178,6 @@ fi
 # ビルドコマンドの構築
 BUILD_CMD="docker build"
 BUILD_CMD="$BUILD_CMD --build-arg BUILD_MODE=$BUILD_MODE"
-BUILD_CMD="$BUILD_CMD --build-arg UBUNTU_VERSION=$UBUNTU_VERSION"
-BUILD_CMD="$BUILD_CMD --build-arg ARCH=$ARCH"
 BUILD_CMD="$BUILD_CMD -t $FULL_IMAGE_NAME"
 
 if [[ "$NO_CACHE" == "true" ]]; then
@@ -140,22 +193,17 @@ echo ""
 if eval $BUILD_CMD; then
     echo ""
     echo "✅ ビルドが完了しました: $FULL_IMAGE_NAME"
+
+    # ディレクトリセットアップの実行
+    setup_directories
     
     # 使用方法の表示
     echo ""
-    echo "=== 使用方法 ==="
+    echo "=== コンテナの起動方法 ==="
     if [[ "$BUILD_MODE" == "debug" ]]; then
-        echo "デバッグモードでコンテナを起動:"
         echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME"
-        echo ""
-        echo "デバッグビルドスクリプトを実行:"
-        echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME /app/debug-build.sh"
     else
-        echo "リリースモードでコンテナを起動:"
         echo "  docker run -d --name amatsukaze $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME"
-        echo ""
-        echo "対話的にコンテナを起動:"
-        echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME /bin/bash"
     fi
 else
     echo "❌ ビルドに失敗しました"
