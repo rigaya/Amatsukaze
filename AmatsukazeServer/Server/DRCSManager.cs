@@ -63,6 +63,14 @@ namespace Amatsukaze.Server
 
         public void UpdateFromOldVersion()
         {
+            // Linux環境では実施しない
+            // 古い環境はLinuxでは存在しないはず
+            // またコンテナ実行時にバインドしているdrcsディレクトリをMoveすると例外が発生してしまう
+            if (Util.IsServerLinux())
+            {
+                return;
+            }
+
             // DRCS文字の並びを変更する
             var dirPath = server.GetDRCSDirectoryPath();
             var oldDirPath = dirPath + ".old";
