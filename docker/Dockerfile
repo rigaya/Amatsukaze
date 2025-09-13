@@ -171,6 +171,7 @@ RUN apt-get update && apt-get install -y \
     gpg \
     curl \
     wget \
+    git \
     xz-utils \
     locales \
     openssl \
@@ -184,7 +185,6 @@ RUN apt-get update && apt-get install -y \
         apt-get install -y \
         gosu \
         build-essential \
-        git \
         nasm \
         cmake \
         meson \
@@ -273,6 +273,12 @@ WORKDIR /app
 
 # ディレクトリ構造の作成
 RUN mkdir -p /app/bat /app/config /app/exe_files/plugins64 /app/input /app/logo /app/output /app/profile /app/temp
+
+# SCRename.py
+RUN git clone --depth 1 https://github.com/rigaya/SCRenamePy.git tmp_SCRenamePy \
+    && mkdir -p exe_files/SCRenamePy \
+    && mv tmp_SCRenamePy/SCRename.* exe_files/SCRenamePy/ \
+    && rm -rf tmp_SCRenamePy
 
 # Amatsukazeのインストール（モードに応じて切り替え）
 RUN if [ "$BUILD_MODE" = "debug" ]; then \
