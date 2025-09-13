@@ -143,12 +143,24 @@ setup_directories() {
             echo "ℹ️  drcsディレクトリは既に存在します"
         fi
     fi
+
+    # JLディレクトリのコピー
+    if [[ ! -d "$CURRENT_DIR/JL" ]]; then
+        (wget -q https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz -O JL.tar.gz \
+            && tar -xf JL.tar.gz \
+            && mv join_logo_scp-Ver4.1.0_Linux/JL "$CURRENT_DIR/" \
+            && rm -rf join_logo_scp-Ver4.1.0_Linux/ join_logo_scp-Ver4.1.0_Linux JL.tar.gz \
+            && echo "✅ JLディレクトリを作成しました" \
+        )
+    else
+        echo "ℹ️  JLディレクトリは既に存在します"
+    fi
     
     # 必要なディレクトリの作成
     echo ""
     echo "--- ディレクトリの作成 ---"
     
-    local dirs=("JL" "config" "input" "logo" "output")
+    local dirs=("config" "input" "logo" "output")
     for dir in "${dirs[@]}"; do
         if [[ ! -d "$CURRENT_DIR/$dir" ]]; then
             mkdir -p "$CURRENT_DIR/$dir"
