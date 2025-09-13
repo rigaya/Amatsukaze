@@ -297,6 +297,12 @@ RUN if [ "$BUILD_MODE" = "debug" ]; then \
         chmod +x /app/debug-build.sh; \
     fi
 
+# エントリーポイントスクリプトを作成
+RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
+    echo 'chown -R "$UID:$GID" /app' >> /app/entrypoint.sh && \
+    echo 'exec gosu "$UID:$GID" "$@"' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
 # デフォルトコマンド（モードに応じて切り替え）
-ENTRYPOINT ["sh", "-c", "chown -R \"$UID:$GID\" /app && exec gosu \"$UID:$GID\" \"$@\""]
+ENTRYPOINT ["./entrypoint.sh"]
 CMD if [ "$BUILD_MODE" = "debug" ]; then /bin/bash; else ./AmatsukazeServer.sh; fi
