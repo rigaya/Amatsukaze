@@ -306,10 +306,16 @@ RUN if [ "$BUILD_MODE" = "debug" ]; then \
     fi
 
 # エントリーポイントスクリプトを作成
-RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
-    echo 'chown -R "$UID:$GID" /app' >> /app/entrypoint.sh && \
-    echo 'exec gosu "$UID:$GID" "$@"' >> /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
+RUN echo '#!/bin/bash' > /app/entrypoint.sh \
+    && echo 'set -e' >> /app/entrypoint.sh \
+    && echo 'DEFAULT_UID=${UID:-1000}; DEFAULT_GID=${GID:-1000};' >> /app/entrypoint.sh \
+    && echo 'if ! getent group "$DEFAULT_GID" >/dev/null 2>&1; then groupadd -g "$DEFAULT_GID" appgroup; fi' >> /app/entrypoint.sh \
+    && echo 'if ! getent group "$RENDER_GID" >/dev/null 2>&1; then groupadd -g "$RENDER_GID" render; fi' >> /app/entrypoint.sh \
+    && echo 'if ! getent passwd "$DEFAULT_UID" >/dev/null 2>&1; then useradd -u "$DEFAULT_UID" -g "$DEFAULT_GID" -m -s /bin/bash appuser; fi' >> /app/entrypoint.sh \
+    && echo 'chown -R "$DEFAULT_UID:$DEFAULT_GID" /app' >> /app/entrypoint.sh \
+    && echo 'usermod -aG render,video `id -nu ${DEFAULT_UID}`' >> /app/entrypoint.sh \
+    && echo 'exec gosu "$DEFAULT_UID" "$@"' >> /app/entrypoint.sh \
+    && chmod +x /app/entrypoint.sh
 
 # デフォルトコマンド（モードに応じて切り替え）
 ENTRYPOINT ["./entrypoint.sh"]

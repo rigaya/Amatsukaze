@@ -182,7 +182,9 @@ fi
 
 # 共通のDockerコマンドオプション
 COMMON_DOCKER_OPTS="-p 32768:32768 \\
-  -e UID=\$(id -u) -e GID=\$(id -g) \\
+  -e UID=\$(id -u) -e GID=\$(id -g) -e RENDER_GID=\$(getent group render | cut -d: -f3) \\
+  --device=/dev/dri \\
+  --gpus 'all,\"capabilities=compute,utility,video\"' \\
   -v \`pwd\`/bat:/app/bat \\
   -v \`pwd\`/config:/app/config \\
   -v \`pwd\`/drcs:/app/drcs \\
