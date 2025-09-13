@@ -227,9 +227,11 @@ RUN curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/lat
     && rm ./avisynthcudafilters.deb
 
 # Intel GPU用ドライバインストール
-RUN curl -fsSL https://repositories.intel.com/gpu/intel-graphics.key | gpg --dearmor -o /usr/share/keyrings/intel-graphics-keyring.gpg && \
-    apt-get update && apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends
+RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
+    && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble unified" \
+    && tee /etc/apt/sources.list.d/intel-gpu-noble.list \
+    && apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-opencl-dev
 
 # debファイルからインストールするエンコーダ
 # qsvencc, nvencc, vceenccのインストール
