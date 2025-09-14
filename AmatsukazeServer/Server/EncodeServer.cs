@@ -58,6 +58,7 @@ namespace Amatsukaze.Server
         private WorkerPool workerPool;
 
         private FinishActionRunner finishActionRunner;
+        private BatchFileRunner batchFileRunner;
 
         private LogData logData = new LogData() { Items = new List<LogItem>() };
         private CheckLogData checkLogData = new CheckLogData() { Items = new List<CheckLogItem>() };
@@ -316,10 +317,28 @@ namespace Amatsukaze.Server
                         preventSuspend.Dispose();
                         preventSuspend = null;
                     }
+
+                    // バッチファイル実行（設定されている場合）
+                    if (AppData_.setting.ExecuteBatchAfterQueue && !string.IsNullOrEmpty(AppData_.setting.BatchFileAfterQueuePath))
+                    {
+                        try
+                        {
+                            batchFileRunner = new BatchFileRunner(AppData_.setting.BatchFileAfterQueuePath);
+                            await batchFileRunner.WaitForCompletion();
+                        }
+                        catch (Exception ex)
+                        {
+                            // バッチファイル実行エラーをログに記録
+                            System.Diagnostics.Debug.WriteLine($"バッチファイル実行に失敗しました: {ex.Message}");
+                        }
+                    }
+
+                    // sleep/シャットダウン処理（設定されている場合）
                     if (AppData_.finishSetting.Action != FinishAction.None
                         && (!AppData_.setting.NoActionExe || !FinishActionRunner.CheckNoActionExeExists(AppData_.setting.NoActionExeList)))
                     {
-                        await CancelSleep(); // 2重に走るのは回避する
+                        // 2重に走るのは回避する
+                        await CancelSleep();
                         finishActionRunner = new FinishActionRunner(
                             AppData_.finishSetting.Action, AppData_.finishSetting.Seconds, AppData_.setting.NoActionExe, AppData_.setting.NoActionExeList);
                         SleepCancel = new FinishSetting()
@@ -506,6 +525,18 @@ namespace Amatsukaze.Server
                                 worker.CancelCurrentItem();
                             }
                         }
+                    }
+
+                    // バッチファイルランナーとFinishActionRunnerをキャンセル
+                    if (batchFileRunner != null)
+                    {
+                        batchFileRunner.Cancel();
+                        batchFileRunner = null;
+                    }
+                    if (finishActionRunner != null)
+                    {
+                        finishActionRunner.Canceled = true;
+                        finishActionRunner = null;
                     }
 
                     queueQ.Complete();
@@ -3134,11 +3165,25 @@ namespace Amatsukaze.Server
 
         public Task CancelSleep()
         {
+            bool needsUpdate = false;
+
+            if(batchFileRunner != null)
+            {
+                batchFileRunner.Cancel();
+                batchFileRunner = null;
+                needsUpdate = true;
+            }
+
             if(finishActionRunner != null)
             {
                 finishActionRunner.Canceled = true;
                 finishActionRunner = null;
                 SleepCancel = new FinishSetting();
+                needsUpdate = true;
+            }
+
+            if(needsUpdate)
+            {
                 return Client?.OnUIData(new UIData()
                 {
                     SleepCancel = SleepCancel

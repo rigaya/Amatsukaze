@@ -534,6 +534,11 @@ namespace Amatsukaze.Server
         [DataMember]
         public int DeleteOldLogsDays { get; set; }
 
+        [DataMember]
+        public bool ExecuteBatchAfterQueue { get; set; }
+        [DataMember]
+        public string BatchFileAfterQueuePath { get; set; }
+
         public ExtensionDataObject ExtensionData { get; set; }
 
         public string ActualWorkPath

@@ -382,6 +382,44 @@
                                      ToolTip="このリスト中の実行ファイル名のプロセスが存在する場合、スリープ等を行いません(前方一致)。&#xA;なお、大文字・小文字は区別しません。"/>
                         </StackPanel>
                     </DockPanel>
+                    <CheckBox Margin="0,4" Height="16" Content="キューの処理終了後バッチファイルを実行する"
+                              IsChecked="{Binding Model.Setting.ExecuteBatchAfterQueue, Mode=TwoWay}"
+                              ToolTip="全てのキューの処理が終了した後に指定したバッチファイルを実行します。">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
+                    <DockPanel>
+                        <DockPanel.Style>
+                            <Style TargetType="DockPanel">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.Setting.ExecuteBatchAfterQueue}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DockPanel.Style>
+                        <StackPanel>
+                            <DockPanel Margin="2">
+                                <TextBlock VerticalAlignment="Top" Text="バッチファイルのパス"/>
+                            </DockPanel>
+                            <DockPanel Margin="2">
+                                <TextBox HorizontalAlignment="Left" Width="300" Margin="10,0,0,0" 
+                                         Text="{Binding Model.Setting.BatchFileAfterQueuePath, Mode=TwoWay}"
+                                         ToolTip="実行するバッチファイルのフルパスを指定してください。"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </DockPanel>
                 </StackPanel>
 
 

@@ -3492,6 +3492,34 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region ExecuteBatchAfterQueue変更通知プロパティ
+        public bool ExecuteBatchAfterQueue
+        {
+            get { return Model.ExecuteBatchAfterQueue; }
+            set
+            {
+                if (Model.ExecuteBatchAfterQueue == value)
+                    return;
+                Model.ExecuteBatchAfterQueue = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region BatchFileAfterQueuePath変更通知プロパティ
+        public string BatchFileAfterQueuePath
+        {
+            get { return Model.BatchFileAfterQueuePath; }
+            set
+            {
+                if (Model.BatchFileAfterQueuePath == value)
+                    return;
+                Model.BatchFileAfterQueuePath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
     }
 
     public class DisplayFinishSetting : NotificationObject

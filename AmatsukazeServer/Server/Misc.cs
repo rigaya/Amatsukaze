@@ -1714,6 +1714,77 @@ namespace Amatsukaze.Server
         }
     }
 
+    public class BatchFileRunner
+    {
+        public string BatchFilePath { get; private set; }
+        private Task Thread;
+        public bool Canceled;
+        public bool Completed { get; private set; }
+
+        public BatchFileRunner(string batchFilePath)
+        {
+            if (string.IsNullOrEmpty(batchFilePath))
+            {
+                throw new ArgumentException("バッチファイルパスが指定されていません", nameof(batchFilePath));
+            }
+            BatchFilePath = batchFilePath;
+            Thread = Run();
+        }
+
+        private async Task Run()
+        {
+            try
+            {
+                if (Canceled) return;
+
+                if (!File.Exists(BatchFilePath))
+                {
+                    throw new FileNotFoundException($"バッチファイルが見つかりません: {BatchFilePath}");
+                }
+
+                var cmd = Util.IsServerWindows() ? "cmd.exe" : "sh";
+                var cmd_opt = Util.IsServerWindows() ? "/C" : "-c";
+                var startInfo = new ProcessStartInfo(cmd, cmd_opt + " \"" + BatchFilePath + "\"")
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = Directory.GetCurrentDirectory(),
+                    StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
+                    StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
+                    CreateNoWindow = true,
+                };
+
+                using (var process = Process.Start(startInfo))
+                {
+                    if (process != null)
+                    {
+                        await Task.Run(() => process.WaitForExit());
+                    }
+                }
+
+                Completed = true;
+            }
+            catch (Exception ex)
+            {
+                // ログ出力など、エラーハンドリングを行う
+                System.Diagnostics.Debug.WriteLine($"バッチファイル実行エラー: {ex.Message}");
+                Completed = true; // エラーでも完了扱いにして次の処理に進む
+            }
+        }
+
+        public async Task WaitForCompletion()
+        {
+            if (Thread != null)
+            {
+                await Thread;
+            }
+        }
+
+        public void Cancel()
+        {
+            Canceled = true;
+        }
+    }
+
     public static class Extentions
     {
         public static TValue GetOrDefault<TKey, TValue>(
