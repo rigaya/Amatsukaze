@@ -183,9 +183,13 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearTsReplacePathCommand}"/>
+                        <Border Height="28"/>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearSCRenamePathCommand}"/>
                         <Border Height="28"/>
                         <Border Height="28"/>
-                        <Border Height="28"/>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearFdkaacPathCommand}"/>
+                        <Button Height="20" Content="クリア" Margin="4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearOpusEncPathCommand}"/>
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Bottom" TextWrapping="Wrap" Margin="5"
                                Text="右に「クリア」ボタンのある項目はAmatsukazeに同梱されているファイルがあります。「クリア」後「適用」すると同梱ファイルへのパスが設定されます。通常、問題なければ同梱ファイルを使ってください。「クリア」ボタンのない項目は同梱ファイルがないので、必要に応じて入手してパスを設定してください。"/>

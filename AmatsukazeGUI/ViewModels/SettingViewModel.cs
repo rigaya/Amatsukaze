@@ -287,6 +287,90 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearTsReplacePathCommand
+        private ViewModelCommand _ClearTsReplacePathCommand;
+
+        public ViewModelCommand ClearTsReplacePathCommand
+        {
+            get
+            {
+                if (_ClearTsReplacePathCommand == null)
+                {
+                    _ClearTsReplacePathCommand = new ViewModelCommand(ClearTsReplacePath);
+                }
+                return _ClearTsReplacePathCommand;
+            }
+        }
+
+        public void ClearTsReplacePath()
+        {
+            Model.Setting.TsReplacePath = null;
+        }
+        #endregion
+
+        #region ClearSCRenamePathCommand
+        private ViewModelCommand _ClearSCRenamePathCommand;
+
+        public ViewModelCommand ClearSCRenamePathCommand
+        {
+            get
+            {
+                if (_ClearSCRenamePathCommand == null)
+                {
+                    _ClearSCRenamePathCommand = new ViewModelCommand(ClearSCRenamePath);
+                }
+                return _ClearSCRenamePathCommand;
+            }
+        }
+
+        public void ClearSCRenamePath()
+        {
+            Model.Setting.SCRenamePath = null;
+        }
+        #endregion
+
+        #region ClearFdkaacPathCommand
+        private ViewModelCommand _ClearFdkaacPathCommand;
+
+        public ViewModelCommand ClearFdkaacPathCommand
+        {
+            get
+            {
+                if (_ClearFdkaacPathCommand == null)
+                {
+                    _ClearFdkaacPathCommand = new ViewModelCommand(ClearFdkaacPath);
+                }
+                return _ClearFdkaacPathCommand;
+            }
+        }
+
+        public void ClearFdkaacPath()
+        {
+            Model.Setting.FdkaacPath = null;
+        }
+        #endregion
+
+        #region ClearOpusEncPathCommand
+        private ViewModelCommand _ClearOpusEncPathCommand;
+
+        public ViewModelCommand ClearOpusEncPathCommand
+        {
+            get
+            {
+                if (_ClearOpusEncPathCommand == null)
+                {
+                    _ClearOpusEncPathCommand = new ViewModelCommand(ClearOpusEncPath);
+                }
+                return _ClearOpusEncPathCommand;
+            }
+        }
+
+        public void ClearOpusEncPath()
+        {
+            Model.Setting.OpusEncPath = null;
+        }
+        #endregion
+
         #region DeleteNoActionExeCommand
         private ViewModelCommand _DeleteNoActionExeCommand;
 
