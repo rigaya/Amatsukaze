@@ -75,6 +75,7 @@ namespace Amatsukaze.Server
         private List<string> PreBatFiles = new List<string>();
         private List<string> PostBatFiles = new List<string>();
         private List<string> PreEncodeBatFiles = new List<string>();
+        private List<string> QueueFinishBatFiles = new List<string>();
         private DRCSManager drcsManager;
 
         private UIState UIState_ = new UIState() { OutputPathHistory = new List<string>() };
@@ -305,10 +306,12 @@ namespace Amatsukaze.Server
                     await RequestState(StateChangeEvent.WorkersStarted);
                 },
                 OnFinish = async ()=> {
+                    Debug.Print($"[QueueFinish] キュー終了処理開始");
                     NowEncoding = false;
                     Progress = 1;
                     if(disposedValue)
                     {
+                        Debug.Print($"[QueueFinish] アプリケーション終了中、処理をスキップ");
                         return;
                     }
                     await RequestState(StateChangeEvent.WorkersFinished);
@@ -319,24 +322,58 @@ namespace Amatsukaze.Server
                     }
 
                     // バッチファイル実行（設定されている場合）
+                    Debug.Print($"[QueueFinish] ExecuteBatchAfterQueue: {AppData_.setting.ExecuteBatchAfterQueue}");
+                    Debug.Print($"[QueueFinish] BatchFileAfterQueuePath: '{AppData_.setting.BatchFileAfterQueuePath}'");
+                    
                     if (AppData_.setting.ExecuteBatchAfterQueue && !string.IsNullOrEmpty(AppData_.setting.BatchFileAfterQueuePath))
                     {
                         try
                         {
-                            batchFileRunner = new BatchFileRunner(AppData_.setting.BatchFileAfterQueuePath);
+                            // 相対名（bat一覧からの選択）の場合はbatディレクトリ配下に解決
+                            string path = AppData_.setting.BatchFileAfterQueuePath;
+                            string resolved = path;
+                            try
+                            {
+                                if (!Path.IsPathRooted(path))
+                                {
+                                    resolved = Path.Combine(GetBatDirectoryPath(), path);
+                                    Debug.Print($"[QueueFinish] 相対パスを解決: '{path}' -> '{resolved}'");
+                                }
+                                else
+                                {
+                                    Debug.Print($"[QueueFinish] 絶対パスを使用: '{resolved}'");
+                                }
+                            }
+                            catch(Exception ex) 
+                            { 
+                                Debug.Print($"[QueueFinish] パス解決エラー: {ex.Message}");
+                            }
+
+                            Debug.Print($"[QueueFinish] バッチファイル実行開始: '{resolved}'");
+                            batchFileRunner = new BatchFileRunner(resolved);
                             await batchFileRunner.WaitForCompletion();
+                            Debug.Print($"[QueueFinish] バッチファイル実行完了");
                         }
                         catch (Exception ex)
                         {
                             // バッチファイル実行エラーをログに記録
-                            System.Diagnostics.Debug.WriteLine($"バッチファイル実行に失敗しました: {ex.Message}");
+                            Debug.Print($"[QueueFinish] バッチファイル実行に失敗しました: {ex.Message}");
+                            Debug.Print($"[QueueFinish] スタックトレース: {ex.StackTrace}");
                         }
+                    }
+                    else
+                    {
+                        Debug.Print($"[QueueFinish] バッチファイル実行をスキップ (設定無効またはパス未指定)");
                     }
 
                     // sleep/シャットダウン処理（設定されている場合）
+                    Debug.Print($"[QueueFinish] FinishAction: {AppData_.finishSetting.Action}");
+                    Debug.Print($"[QueueFinish] NoActionExe: {AppData_.setting.NoActionExe}");
+                    
                     if (AppData_.finishSetting.Action != FinishAction.None
                         && (!AppData_.setting.NoActionExe || !FinishActionRunner.CheckNoActionExeExists(AppData_.setting.NoActionExeList)))
                     {
+                        Debug.Print($"[QueueFinish] sleep/シャットダウン処理開始");
                         // 2重に走るのは回避する
                         await CancelSleep();
                         finishActionRunner = new FinishActionRunner(
@@ -350,7 +387,14 @@ namespace Amatsukaze.Server
                         {
                             SleepCancel = SleepCancel
                         });
+                        Debug.Print($"[QueueFinish] sleep/シャットダウン処理設定完了");
                     }
+                    else
+                    {
+                        Debug.Print($"[QueueFinish] sleep/シャットダウン処理をスキップ");
+                    }
+                    
+                    Debug.Print($"[QueueFinish] キュー終了処理完了");
                 },
                 OnError = (id, mes, e) =>
                 {
@@ -2569,13 +2613,16 @@ namespace Amatsukaze.Server
                                 .Where(f => f.StartsWith("実行後_")).ToList();
                             PreEncodeBatFiles = files
                                 .Where(f => f.StartsWith("エンコード前_")).ToList();
+                            QueueFinishBatFiles = files
+                                .Where(f => f.StartsWith("キュー完了後_")).ToList();
 
                             await Client.OnCommonData(new CommonData()
                             {
                                 AddQueueBatFiles = AddQueueBatFiles,
                                 PreBatFiles = PreBatFiles,
                                 PreEncodeBatFiles = PreEncodeBatFiles,
-                                PostBatFiles = PostBatFiles
+                                PostBatFiles = PostBatFiles,
+                                QueueFinishBatFiles = QueueFinishBatFiles
                             });
                         }
                     }

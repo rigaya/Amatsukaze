@@ -352,6 +352,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region QueueFinishBatFiles変更通知プロパティ
+        private List<string> _QueueFinishBatFiles;
+
+        public List<string> QueueFinishBatFiles {
+            get { return _QueueFinishBatFiles; }
+            set { 
+                if (_QueueFinishBatFiles == value)
+                    return;
+                _QueueFinishBatFiles = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region CurrentOperationResult変更通知プロパティ
         private string _CurrentOperationResult;
 
@@ -1351,6 +1365,10 @@ namespace Amatsukaze.Models
             if (data.PostBatFiles != null)
             {
                 PostBatFiles = new string[] { "なし" }.Concat(data.PostBatFiles).ToList();
+            }
+            if (data.QueueFinishBatFiles != null)
+            {
+                QueueFinishBatFiles = new string[] { "なし" }.Concat(data.QueueFinishBatFiles).ToList();
             }
             if (data.FinishSetting != null)
             {

@@ -385,15 +385,6 @@
                     <CheckBox Margin="0,4" Height="16" Content="キューの処理終了後バッチファイルを実行する"
                               IsChecked="{Binding Model.Setting.ExecuteBatchAfterQueue, Mode=TwoWay}"
                               ToolTip="全てのキューの処理が終了した後に指定したバッチファイルを実行します。">
-                        <CheckBox.Style>
-                            <Style TargetType="CheckBox">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </CheckBox.Style>
                     </CheckBox>
                     <DockPanel>
                         <DockPanel.Style>
@@ -403,22 +394,16 @@
                                     <DataTrigger Binding="{Binding Model.Setting.ExecuteBatchAfterQueue}" Value="False">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </DockPanel.Style>
-                        <StackPanel>
-                            <DockPanel Margin="2">
-                                <TextBlock VerticalAlignment="Top" Text="バッチファイルのパス"/>
-                            </DockPanel>
-                            <DockPanel Margin="2">
-                                <TextBox HorizontalAlignment="Left" Width="300" Margin="10,0,0,0" 
-                                         Text="{Binding Model.Setting.BatchFileAfterQueuePath, Mode=TwoWay}"
-                                         ToolTip="実行するバッチファイルのフルパスを指定してください。"/>
-                            </DockPanel>
-                        </StackPanel>
+                        <DockPanel Margin="2">
+                            <TextBlock VerticalAlignment="Center" Text="バッチファイルのパス" Width="120"/>
+                            <ComboBox Height="22" Width="300" Margin="10,0,0,0"
+                                      ItemsSource="{Binding Model.QueueFinishBatFiles}"
+                                      SelectedItem="{Binding Model.Setting.BatchFileAfterQueuePath, Mode=TwoWay}"
+                                      ToolTip="サーバーのbatフォルダの 'キュー完了後_xxx' から選択します。"/>
+                        </DockPanel>
                     </DockPanel>
                 </StackPanel>
 

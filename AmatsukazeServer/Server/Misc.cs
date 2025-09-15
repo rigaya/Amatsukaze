@@ -122,7 +122,7 @@ namespace Amatsukaze.Server
 
     public class Debug
     {
-        [Conditional("DEBUG")]
+        //[Conditional("DEBUG")]
         public static void Print(string str)
         {
             Util.AddLog(str, null);
@@ -1735,7 +1735,13 @@ namespace Amatsukaze.Server
         {
             try
             {
-                if (Canceled) return;
+                Debug.Print($"[BatchFileRunner] 実行開始: '{BatchFilePath}'");
+                
+                if (Canceled) 
+                {
+                    Debug.Print($"[BatchFileRunner] キャンセルされました");
+                    return;
+                }
 
                 if (!File.Exists(BatchFilePath))
                 {
@@ -1744,29 +1750,41 @@ namespace Amatsukaze.Server
 
                 var cmd = Util.IsServerWindows() ? "cmd.exe" : "sh";
                 var cmd_opt = Util.IsServerWindows() ? "/C" : "-c";
-                var startInfo = new ProcessStartInfo(cmd, cmd_opt + " \"" + BatchFilePath + "\"")
+                var commandLine = cmd_opt + " \"" + BatchFilePath + "\"";
+                
+                Debug.Print($"[BatchFileRunner] コマンド: '{cmd}' {commandLine}");
+                Debug.Print($"[BatchFileRunner] 作業ディレクトリ: '{Directory.GetCurrentDirectory()}'");
+                
+                var startInfo = new ProcessStartInfo(cmd, commandLine)
                 {
                     UseShellExecute = false,
                     WorkingDirectory = Directory.GetCurrentDirectory(),
-                    StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
-                    StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
                     CreateNoWindow = true,
                 };
 
+                Debug.Print($"[BatchFileRunner] プロセス開始");
                 using (var process = Process.Start(startInfo))
                 {
                     if (process != null)
                     {
+                        Debug.Print($"[BatchFileRunner] プロセスID: {process.Id}");
                         await Task.Run(() => process.WaitForExit());
+                        Debug.Print($"[BatchFileRunner] プロセス終了コード: {process.ExitCode}");
+                    }
+                    else
+                    {
+                        Debug.Print($"[BatchFileRunner] プロセス開始に失敗");
                     }
                 }
 
                 Completed = true;
+                Debug.Print($"[BatchFileRunner] 実行完了");
             }
             catch (Exception ex)
             {
                 // ログ出力など、エラーハンドリングを行う
-                System.Diagnostics.Debug.WriteLine($"バッチファイル実行エラー: {ex.Message}");
+                Debug.Print($"[BatchFileRunner] バッチファイル実行エラー: {ex.Message}");
+                Debug.Print($"[BatchFileRunner] スタックトレース: {ex.StackTrace}");
                 Completed = true; // エラーでも完了扱いにして次の処理に進む
             }
         }

@@ -1474,6 +1474,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public List<string> PostBatFiles { get; set; }
         [DataMember]
+        public List<string> QueueFinishBatFiles { get; set; }
+        [DataMember]
         public FinishSetting FinishSetting { get; set; }
     }
 
