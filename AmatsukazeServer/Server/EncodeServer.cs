@@ -3417,7 +3417,9 @@ namespace Amatsukaze.Server
                     },
                     AddQueueBatFiles = AddQueueBatFiles,
                     PreBatFiles = PreBatFiles,
+                    PreEncodeBatFiles = PreEncodeBatFiles,
                     PostBatFiles = PostBatFiles,
+                    QueueFinishBatFiles = QueueFinishBatFiles,
                     FinishSetting = AppData_.finishSetting
                 };
                 Debug.Print($"[RequestSetting] CommonDataの準備が完了しました (JlsCommandFiles: {JlsCommandFiles?.Count ?? 0}件, MainScriptFiles: {MainScriptFiles?.Count ?? 0}件, PostScriptFiles: {PostScriptFiles?.Count ?? 0}件)");
