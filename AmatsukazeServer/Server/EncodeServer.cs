@@ -885,9 +885,10 @@ namespace Amatsukaze.Server
         }
         #endregion
 
-        private static string GetExePath(string basePath, string pattern)
+        private static string GetExePath(string basePath, string pattern, bool recursive = false)
         {
-            foreach (var path in Directory.GetFiles(basePath))
+            System.IO.SearchOption option = recursive ? System.IO.SearchOption.AllDirectories : System.IO.SearchOption.TopDirectoryOnly;
+            foreach (var path in Directory.GetFiles(basePath, "*", option))
             {
                 var fname = Path.GetFileName(path);
                 if (fname.StartsWith(pattern)
@@ -1125,6 +1126,10 @@ namespace Amatsukaze.Server
             if (string.IsNullOrEmpty(setting.NicoConvASSPath))
             {
                 setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
+            }
+            if (string.IsNullOrEmpty(setting.SCRenamePath))
+            {
+                setting.SCRenamePath = GetExePath(basePath, "SCRename", true);
             }
             return setting;
         }
