@@ -1,0 +1,1 @@
+#!/bin/bashecho "キュー動作終了: $(date)" >> data\queue_fin.txt

@@ -3509,12 +3509,13 @@ namespace Amatsukaze.Models
         #region BatchFileAfterQueuePath変更通知プロパティ
         public string BatchFileAfterQueuePath
         {
-            get { return Model.BatchFileAfterQueuePath; }
+            get { return string.IsNullOrEmpty(Model.BatchFileAfterQueuePath) ? "なし" : Model.BatchFileAfterQueuePath; }
             set
             {
-                if (Model.BatchFileAfterQueuePath == value)
+                var val = (value == "なし") ? "" : value;
+                if (Model.BatchFileAfterQueuePath == val)
                     return;
-                Model.BatchFileAfterQueuePath = value;
+                Model.BatchFileAfterQueuePath = val;
                 RaisePropertyChanged();
             }
         }
