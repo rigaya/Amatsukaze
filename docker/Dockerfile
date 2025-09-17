@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && apt-get autoremove -y
 
-FROM builder AS build_tools
+FROM builder AS builder_tools
 
 # AviSynth+のインストール
 RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_Ubuntu${UBUNTU_VERSION}.deb -O avisynth.deb \
@@ -372,9 +372,9 @@ RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCR
     && rm -rf tmp_SCRenamePy
 
 # ビルド段階から必要なファイルをコピー
-COPY --from=builder /usr/local/lib /usr/local/lib
-COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
+COPY --from=builder_tools /usr/local/lib /usr/local/lib
+COPY --from=builder_tools /usr/local/bin /usr/local/bin
+COPY --from=builder_tools /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
 COPY --from=builder_x264 /usr/local/bin /usr/local/bin
 COPY --from=builder_x265 /usr/local/bin /usr/local/bin
 COPY --from=builder_svtav1 /usr/local/bin /usr/local/bin
