@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CMD=$(basename "$0")
+if [[ "$CMD" == "ScriptCommand" ]]; then
+  if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 <AddTag|SetOutDir|SetPriority|GetOutFiles|CancelItem> [args...]" >&2
+    exit 1
+  fi
+  SUB="$1"; shift
+else
+  SUB="$CMD"
+fi
+exec "$(dirname "$0")/../ScriptCommand" "$SUB" "$@"
+
+

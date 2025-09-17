@@ -42,34 +42,37 @@ namespace Amatsukaze.Command
                 return;
             }
 
-            // 自分のexe名がコマンドになる
+            // 自分のexe名がコマンドになる + 第1引数でのサブコマンド指定にも対応
             // コマンドライン引数はdll名が入ってしまっているので、
-            // コマンド名を取得するためにProcess.GetCurrentProcess().ProcessNameを使用
+            // コマンド名を取得するためにProcess.GetCurrentProcess().ProcessNameを基本とし、
+            // 未対応名だった場合は args[0] をコマンド名として解釈する
             var exeName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
-            if (exeName == "AddTag")
+
+            bool TryResolve(string name, out RPCMethodId id)
             {
-                DoCommand(RPCMethodId.AddTag, args);
+                if (name == "AddTag") { id = RPCMethodId.AddTag; return true; }
+                if (name == "SetOutDir") { id = RPCMethodId.SetOutDir; return true; }
+                if (name == "SetPriority") { id = RPCMethodId.SetPriority; return true; }
+                if (name == "GetOutFiles") { id = RPCMethodId.GetOutFiles; return true; }
+                if (name == "CancelItem") { id = RPCMethodId.CancelItem; return true; }
+                id = default;
+                return false;
             }
-            else if (exeName == "SetOutDir")
+
+            if (TryResolve(exeName, out var methodByExe))
             {
-                DoCommand(RPCMethodId.SetOutDir, args);
+                DoCommand(methodByExe, args);
+                return;
             }
-            else if (exeName == "SetPriority")
+
+            if (args.Length >= 1 && TryResolve(args[0], out var methodByArg))
             {
-                DoCommand(RPCMethodId.SetPriority, args);
+                var forwarded = args.Skip(1).ToArray();
+                DoCommand(methodByArg, forwarded);
+                return;
             }
-            else if (exeName == "GetOutFiles")
-            {
-                DoCommand(RPCMethodId.GetOutFiles, args);
-            }
-            else if (exeName == "CancelItem")
-            {
-                DoCommand(RPCMethodId.CancelItem, args);
-            }
-            else
-            {
-                Console.WriteLine("不明なコマンドです");
-            }
+
+            Console.WriteLine("不明なコマンドです");
         }
 
         static void Main(string[] args)

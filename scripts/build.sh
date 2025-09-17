@@ -169,24 +169,26 @@ else
         exit 1
     fi
 fi
-
-# ScriptCommand の展開
-echo "ScriptCommand を展開します..."
-mkdir -p "${INSTALL_DIR}/exe_files/cmd"
-for src_file in "${INSTALL_DIR}/exe_files/ScriptCommand."*; do
-    cp "$src_file" "${INSTALL_DIR}/exe_files/cmd/"
-done
-for cmd in AddTag SetOutDir SetPriority GetOutFiles CancelItem; do
-    cp "${INSTALL_DIR}/exe_files/ScriptCommand" "${INSTALL_DIR}/exe_files/cmd/${cmd}"
-    echo "コマンドを作成しました: ${cmd} -> ${INSTALL_DIR}/exe_files/cmd/"
-done
-
 # defaultファイルのコピー
 cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
 cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
-cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
+# exe_files: cmd_linux は cmd に、cmd_win はコピーしない、その他はそのまま
+mkdir -p "${INSTALL_DIR}/exe_files/cmd"
+for src in defaults/exe_files/*; do
+  base=`basename "$src"`
+  if [ "$base" = "cmd_linux" ] || [ "$base" = "cmd_win" ]; then
+    continue
+  fi
+  cp -r "$src" "${INSTALL_DIR}/exe_files/"
+done
+cp -r defaults/exe_files/cmd_linux/* "${INSTALL_DIR}/exe_files/cmd/"
 cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
 cp -r scripts/*            "${INSTALL_DIR}/scripts/"
+
+# ラッパースクリプトに実行権限を付与
+if [ -d "${INSTALL_DIR}/exe_files/cmd" ]; then
+  chmod +x "${INSTALL_DIR}/exe_files/cmd"/* || true
+fi
 
 # JLファイルのインストール
 if [ ! -d "${INSTALL_DIR}/JL" ]; then
