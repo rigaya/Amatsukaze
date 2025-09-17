@@ -33,12 +33,15 @@ ENV JOIN_LOGO_SCP_VER=Ver4.1.0_Linux
 ENV FDK_AAC_REV=d8e6b1a3aa606c450241632b64b703f21ea31ce3
 ENV FDKAAC_VER=v1.0.6
 
+ENV X264_REV=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
+
 # ビルドツールのインストール
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
-    wget \
     curl \
+    wget \
+    p7zip-full \
     nasm \
     cmake \
     meson \
@@ -47,8 +50,6 @@ RUN apt-get update && apt-get install -y \
     autoconf \
     automake \
     libtool \
-    curl \
-    wget \
     openssl \
     zlib1g \
     libz-dev \
@@ -160,6 +161,17 @@ RUN git clone https://github.com/mstorsjo/fdk-aac.git \
     && make -j$(nproc) \
     && make install
 
+# x264
+RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
+    && cd AutoBuildForAviUtlPlugins/x264 \
+    && curl -o test_8.7z -L https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250825/test_8.7z \
+    && 7z x test_8.7z \
+    && mv test.yuv test_1280x720.yuv \
+    && chmod u+x build_x264.sh \
+    && YUV_PATH=`pwd`/test_1280x720.yuv CC=gcc CXX=g++ INSTALL_DIR=/usr/local X264_REV=${X264_REV} ./build_x264.sh \
+    && cd ../.. \
+    && rm -rf AutoBuildForAviUtlPlugins
+
 # ビルド段階のクリーンアップ
 RUN rm -rf /tmp/plugins \
     && rm -rf /var/cache/apt/* \
@@ -169,9 +181,7 @@ RUN rm -rf /tmp/plugins \
     && rm -rf /usr/share/locale/* \
     && rm -rf /usr/share/info/*
 
-FROM builder AS builder_x264
-
-ENV X264_REV=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
+FROM ubuntu:22.04 AS builder_x265
 
 # ビルドツールのインストール
 RUN apt-get update && apt-get install -y \
@@ -179,43 +189,17 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     curl \
+    p7zip-full \
     nasm \
-    cmake \
     pkg-config \
-    p7zip \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && apt-get autoremove -y
-
-RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
-    && cd AutoBuildForAviUtlPlugins/x264 \
-    && curl -o test_8.7z -L https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250825/test_8.7z \
-    && 7z x test_8.7z \
-    && mv test.yuv test_1280x720.yuv \
-    && chmod u+x build_x264.sh \
-    && YUV_PATH=`pwd`/test_1280x720.yuv CC=clang CXX=clang++ INSTALL_DIR=/usr/local X264_REV=${X264_REV} ./build_x264.sh \
-    && cd ../.. \
-    && rm -rf AutoBuildForAviUtlPlugins
-
-FROM builder AS builder_x265
-
-ENV X265_REV=8f11c33acc267ba3f1d2bde60a6aa906e494cbde
-
-# ビルドツールのインストール
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    wget \
-    curl \
-    nasm \
     cmake \
     clang \
     llvm \
-    pkg-config \
-    p7zip \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && apt-get autoremove -y
+
+ENV X265_REV=8f11c33acc267ba3f1d2bde60a6aa906e494cbde
 
 RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
     && cd AutoBuildForAviUtlPlugins/x265 \
@@ -226,9 +210,7 @@ RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildF
     && cd ../.. \
     && rm -rf AutoBuildForAviUtlPlugins
 
-FROM builder AS builder_svtav1
-
-ENV SVTAV1_REV=fad71e85581225ee219a5f90b3862fc5b69cb21a
+FROM ubuntu:22.04 AS builder_svtav1
 
 # ビルドツールのインストール
 RUN apt-get update && apt-get install -y \
@@ -236,15 +218,17 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     curl \
+    p7zip-full \
     nasm \
+    pkg-config \
     cmake \
     clang \
     llvm \
-    pkg-config \
-    p7zip \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && apt-get autoremove -y
+
+ENV SVTAV1_REV=fad71e85581225ee219a5f90b3862fc5b69cb21a
 
 RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
     && cd AutoBuildForAviUtlPlugins/svtav1 \
@@ -281,7 +265,7 @@ ENV QSVENCC_VER=8.00
 ENV NVENCC_VER=9.03
 ENV VCEENCC_VER=9.00
 ENV TSREPLACE_VER=0.16
-ENV AVISYNTHCUDAFILTERS_VER=0.7.1
+ENV AVISYNTHCUDAFILTERS_VER=0.7.2
 ENV AVISYNTH_VER=3.7.5
 
 # 実行に必要なパッケージのみインストール（デバッグモードの場合はビルドツールも含める）
@@ -292,6 +276,10 @@ RUN apt-get update && apt-get install -y \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${UBUNTU_NAME} unified" \
       | tee /etc/apt/sources.list.d/intel-gpu-${UBUNTU_NAME}.list \
+    && curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr/share/keyrings/rocm-keyring.gpg \
+    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/amdgpu/5.7.1/ubuntu/ jammy main' > /etc/apt/sources.list.d/amdgpu.list \
+    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/amdgpu/5.7.1/ubuntu/ jammy proprietary' > /etc/apt/sources.list.d/amdgpu-proprietary.list \
+    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/rocm/apt/5.7.1 jammy main' > /etc/apt/sources.list.d/rocm.list \
     && apt-get update && apt-get upgrade -y \
     ca-certificates \
     gosu \
@@ -372,10 +360,9 @@ RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCR
     && rm -rf tmp_SCRenamePy
 
 # ビルド段階から必要なファイルをコピー
-COPY --from=builder_tools /usr/local/lib /usr/local/lib
-COPY --from=builder_tools /usr/local/bin /usr/local/bin
-COPY --from=builder_tools /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
-COPY --from=builder_x264 /usr/local/bin /usr/local/bin
+COPY --from=builder /usr/local/lib /usr/local/lib
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
 COPY --from=builder_x265 /usr/local/bin /usr/local/bin
 COPY --from=builder_svtav1 /usr/local/bin /usr/local/bin
 

@@ -1,6 +1,5 @@
 # Dockerでの利用方法
 
-
 ## 前提条件
 
 ### NVIDIA Driverのインストール
@@ -90,7 +89,9 @@ sudo systemctl restart docker
 
 ```sh
 cd docker
+# ディレクトリ構成の作成
 ./setup.sh
+# 必要に応じてvolumesのマウント対象等を調整
 vi compose.yml
 ```
 
