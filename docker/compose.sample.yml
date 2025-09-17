@@ -1,0 +1,37 @@
+services:
+    amatsukaze:
+        image: amatsukaze
+        container_name: amatsukaze
+        build:
+          context: ./
+          dockerfile: Dockerfile
+        restart: always
+        ports:
+          - "32768:32768"
+        environment:
+          - RUN_UID=${RUN_UID:-1000}
+          - RUN_GID=${RUN_GID:-1000}
+        volumes:
+          - ./bat:/app/bat
+          - ./config:/app/config
+          - ./drcs:/app/drcs
+          - ./JL:/app/JL
+          - ./logo:/app/logo
+          - ./profile:/app/profile
+          - ./recorded:/app/recorded
+          - ./encoded:/app/output
+          - /tmp:/tmp
+        # QSVEncC/VCEEncCを使うための設定
+        # /dev/driが環境にない場合は無効化が必要
+        devices:
+          - /dev/dri:/dev/dri
+        # CUDA/NVEncCを使うための設定
+        # ホスト側にNVIDIA Graphics DriverとNVIDIA Container Toolkitのインストールが必要
+        # NVIDIA GPUが環境にない場合は無効化が必要
+        deploy:
+          resources:
+            reservations:
+              devices:
+                - driver: nvidia
+                  count: all
+                  capabilities: [compute, utility, video]

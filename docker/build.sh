@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Amatsukaze Docker ビルドスクリプト
+# Amatsukaze Docker Compose ビルド・起動スクリプト
 # リリースモードとデバッグモードの両方に対応
 
 set -e
@@ -14,7 +14,7 @@ NO_CACHE=false
 # ヘルプメッセージ
 show_help() {
     cat << EOF
-Amatsukaze Docker ビルドスクリプト
+Amatsukaze Docker Compose ビルド・起動スクリプト
 
 使用方法:
     $0 [オプション]
@@ -27,16 +27,13 @@ Amatsukaze Docker ビルドスクリプト
     -h, --help             このヘルプを表示
 
 例:
-    # リリースモードでビルド
+    # リリースモードでビルド・起動
     $0
 
-    # デバッグモードでビルド
+    # デバッグモードでビルド・起動
     $0 --mode debug
 
-    # 特定のタグでビルド
-    $0 --tag v1.0.0
-
-    # キャッシュなしでビルド
+    # キャッシュなしでビルド・起動
     $0 --no-cache
 EOF
 }
@@ -180,22 +177,19 @@ if [[ "$BUILD_MODE" == "debug" ]]; then
     FULL_IMAGE_NAME="${IMAGE_NAME}:${TAG}-debug"
 fi
 
-# 共通のDockerコマンドオプション
-COMMON_DOCKER_OPTS="-p 32768:32768 \\
-  -e UID=\$(id -u) -e GID=\$(id -g) -e RENDER_GID=\$(getent group render | cut -d: -f3) \\
-  --device=/dev/dri \\
-  --gpus 'all,\"capabilities=compute,utility,video\"' \\
-  -v \`pwd\`/bat:/app/bat \\
-  -v \`pwd\`/config:/app/config \\
-  -v \`pwd\`/drcs:/app/drcs \\
-  -v \`pwd\`/input:/app/input \\
-  -v \`pwd\`/JL:/app/JL \\
-  -v \`pwd\`/logo:/app/logo \\
-  -v \`pwd\`/output:/app/output \\
-  -v \`pwd\`/profile:/app/profile \\
-  -v /tmp:/tmp"
+# compose.ymlファイルの存在確認
+if [[ ! -f "compose.yml" && ! -f "docker-compose.yml" ]]; then
+    if [[ -f "compose.sample.yml" ]]; then
+        echo "⚠️  compose.ymlファイルが見つかりません。compose.sample.ymlをコピーします..."
+        cp compose.sample.yml compose.yml
+        echo "✅ compose.ymlファイルを作成しました"
+    else
+        echo "❌ compose.ymlファイルまたはcompose.sample.ymlが見つかりません"
+        exit 1
+    fi
+fi
 
-echo "=== Amatsukaze Docker ビルド ==="
+echo "=== Amatsukaze Docker Compose ビルド・起動 ==="
 echo "ビルドモード: $BUILD_MODE"
 echo "イメージ名: $FULL_IMAGE_NAME"
 echo "キャッシュなし: $NO_CACHE"
@@ -208,15 +202,12 @@ if [[ ! -f "Dockerfile" ]]; then
 fi
 
 # ビルドコマンドの構築
-BUILD_CMD="docker build"
+BUILD_CMD="docker compose build"
 BUILD_CMD="$BUILD_CMD --build-arg BUILD_MODE=$BUILD_MODE"
-BUILD_CMD="$BUILD_CMD -t $FULL_IMAGE_NAME"
 
 if [[ "$NO_CACHE" == "true" ]]; then
     BUILD_CMD="$BUILD_CMD --no-cache"
 fi
-
-BUILD_CMD="$BUILD_CMD ."
 
 echo "実行コマンド: $BUILD_CMD"
 echo ""
@@ -229,13 +220,24 @@ if eval $BUILD_CMD; then
     # ディレクトリセットアップの実行
     setup_directories
     
-    # 使用方法の表示
     echo ""
-    echo "=== コンテナの起動方法 ==="
-    if [[ "$BUILD_MODE" == "debug" ]]; then
-        echo "  docker run -it --rm $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME"
+    echo "=== コンテナを起動 ==="
+    if docker compose up -d; then
+        echo "✅ コンテナが起動しました"
+        echo ""
+        echo "=== アクセス情報 ==="
+        echo "Amatsukaze Server: http://localhost:32768"
+        echo ""
+        echo "=== その他のコマンド例 ==="
+        echo "  ログ表示: docker compose logs -f"
+        echo "  停止: docker compose down"
+        echo "  再起動: docker compose restart"
+        if [[ "$BUILD_MODE" == "debug" ]]; then
+            echo "  シェル実行: docker compose exec amatsukaze /bin/bash"
+        fi
     else
-        echo "  docker run -d --name amatsukaze $COMMON_DOCKER_OPTS $FULL_IMAGE_NAME"
+        echo "❌ コンテナの起動に失敗しました"
+        exit 1
     fi
 else
     echo "❌ ビルドに失敗しました"
