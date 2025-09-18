@@ -5,6 +5,7 @@ using Amatsukaze.Lib;
 using log4net;
 using log4net.Appender;
 using log4net.Layout;
+using System.Runtime.Loader;
 
 namespace Amatsukaze.Server
 {
@@ -54,7 +55,48 @@ namespace Amatsukaze.Server
 
                         // この時点でtaskが完了していなくてもEnterMessageLoop()で続きが処理される
 
-                        TaskSupport.EnterMessageLoop();
+                        // Ctrl+C やプロセス終了時にグレースフルシャットダウンする
+                        bool exiting = false;
+                        ConsoleCancelEventHandler cancelHandler = (s, e) =>
+                        {
+                            if (exiting)
+                            {
+                                // 2回目以降は即時終了を許可
+                                e.Cancel = false;
+                                return;
+                            }
+                            exiting = true;
+                            e.Cancel = true; // 自前で終了処理を行う
+                            server.EndServer();
+                        };
+                        EventHandler processExitHandler = (s, e) =>
+                        {
+                            if (exiting) return;
+                            exiting = true;
+                            server.EndServer();
+                        };
+                        Action<AssemblyLoadContext> unloadingHandler = _ =>
+                        {
+                            if (exiting) return;
+                            exiting = true;
+                            server.EndServer();
+                        };
+
+                        Console.CancelKeyPress += cancelHandler; // SIGINT/Ctrl+C
+                        AppDomain.CurrentDomain.ProcessExit += processExitHandler; // プロセス終了
+                        AssemblyLoadContext.Default.Unloading += unloadingHandler; // SIGTERM 
+
+                        try
+                        {
+                            TaskSupport.EnterMessageLoop();
+                        }
+                        finally
+                        {
+                            // ハンドラを解除
+                            Console.CancelKeyPress -= cancelHandler;
+                            AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
+                            AssemblyLoadContext.Default.Unloading -= unloadingHandler;
+                        }
 
                         // この時点では"継続"を処理する人がいないので、
                         // task.Wait()はデッドロックするので呼べないことに注意
