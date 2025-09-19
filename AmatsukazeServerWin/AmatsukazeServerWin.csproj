@@ -9,6 +9,7 @@
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <OutputPath>..\x64\Debug\</OutputPath>

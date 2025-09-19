@@ -5,6 +5,7 @@
     <RootNamespace>Amatsukaze.AddTask</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <StartupObject>Amatsukaze.AddTask.AddTaskMain</StartupObject>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <OutputPath>..\x64\Debug\</OutputPath>
