@@ -11,7 +11,7 @@ TSファイルをエンコードしてmp4やmkvにするソフトです。
 ### 対応入力フォーマット
 
 - コンテナ: MPEG2-TS 188バイトパケット
-- 映像: MPEG2, H264
+- 映像: MPEG2, H264, HEVC
 - 音声: MPEG2-AAC
 
 これだけです。
@@ -19,6 +19,23 @@ TSファイルをエンコードしてmp4やmkvにするソフトです。
 ### 対応エンコーダ
 
 x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
+
+### 対応環境
+
+- Windows 10/11 (x64)
+- Linux (x64)
+
+  Linux環境では一部機能に制限があります。
+
+### インストール方法
+
+配布7zを解凍
+
+Linuxでのインストール方法は[こちら](./doc/InstallLinux.md)。
+
+### アンインストール方法
+
+フォルダごと削除
 
 ### 実装されている機能
 
@@ -44,30 +61,13 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 - 複数エンコーダの並列実行およびスケジューリング
 - EDCBからの録画後自動エンコード
 
-### 対応環境
-
-- Windows 10/11 (64bit)
-- Linux (x64)
-
-  Linux環境では一部機能に制限があります。
-
-### インストール方法
-
-配布7zを解凍
-
-Linuxでのインストール方法は[こちら](./InstallLinux.md)。
-
-### アンインストール方法
-
-フォルダごと削除
-
 ## 使い方
 
 ### 1. 初回起動からエンコードまで
 
 まずは、起動してエンコードしてみましょう。
 
-#### 1-1. "Amatsukaze.vbs"を起動
+#### 1-1. "Amatsukaze.bat"を起動
 
 <img src="https://i.imgur.com/SFTasoX.png" width="206">
 
@@ -237,6 +237,34 @@ ver0.4.0.0よりエンコード設定はプロファイルに保存されます�
 プロファイルは`profile`フォルダに保存されます。
 他のAmatsukazeで保存したプロファイルを`profile`フォルダに入れてやればプロファイルが追加されて選べるようになります。
 
+エンコード設定では、下記マクロが使用可能です。エンコード設定に記載すると、実行時に置き換えられて実行します。
+
+| マクロ                        | 説明 |
+|:--                           |:--|
+| ```@IMAGE_WIDTH@``` | 映像幅 |
+| ```@IMAGE_HEIGHT@``` | 映像高さ |
+| ```@SERVICE_ID@``` | サービスID |
+| ```@AMT_ENCODER@``` | エンコーダー名 |
+| ```@AMT_AUDIO_ENCODER@``` | 音声エンコーダー名 |
+| ```@AMT_TEMP_DIR@``` | 一時ディレクトリパス |
+| ```@AMT_TEMP_VIDEO@``` | 一時映像ファイルパス |
+| ```@AMT_TEMP_AUDIO@``` | 一時音声ファイルパス（0番） |
+| ```@AMT_TEMP_AUDIO_0@``` | 一時音声ファイルパス（0番） |
+| ```@AMT_TEMP_AUDIO_1@``` | 一時音声ファイルパス（1番） |
+| ```@AMT_TEMP_CHAPTER@``` | 一時チャプターファイルパス |
+| ```@AMT_TEMP_TIMECODE@``` | 一時タイムコードファイルパス |
+| ```@AMT_TEMP_ASS@``` | 一時ASS字幕ファイルパス（0番） |
+| ```@AMT_TEMP_ASS_0@``` | 一時ASS字幕ファイルパス（0番） |
+| ```@AMT_TEMP_ASS_1@``` | 一時ASS字幕ファイルパス（1番） |
+| ```@AMT_TEMP_SRT@``` | 一時SRT字幕ファイルパス（0番） |
+| ```@AMT_TEMP_SRT_0@``` | 一時SRT字幕ファイルパス（0番） |
+| ```@AMT_TEMP_SRT_1@``` | 一時SRT字幕ファイルパス（1番） |
+| ```@AMT_TEMP_ASS_NICOJK_720S@``` | 一時NicoJK ASSファイルパス（720p S） |
+| ```@AMT_TEMP_ASS_NICOJK_720T@``` | 一時NicoJK ASSファイルパス（720p T） |
+| ```@AMT_TEMP_ASS_NICOJK_1080S@``` | 一時NicoJK ASSファイルパス（1080p S） |
+| ```@AMT_TEMP_ASS_NICOJK_1080T@``` | 一時NicoJK ASSファイルパス（1080p T） |
+
+
 ### プロファイル自動選択
 
 ver0.5.0.0より、ファイルによって適用するプロファイルを自動で選択する、プロファイル自動選択が利用できます。「自動選択」パネルで、条件と選択するプロファイルを設定して、ファイル追加時のプロファイル選択で、この自動選択プロファイルを選択すると、プロファイルが設定した条件で自動選択されます。自動選択プロファイルは、プロファイル選択時は、 `自動選択_` で始まる名前になっています。例えば、自動選択「デフォルト」は、プロファイル選択時は、「自動選択_デフォルト」となっています。
@@ -260,7 +288,18 @@ TSファイルによっては、うまくロゴが採取できないことがあ
 
 あと、ロゴ生成ウィンドウはいくつでも起動できるので、
 待つのが嫌なら、どうぞいくつでも同時に走らせてください。
-（ただし、ちょっとHDDがやばいかもｗ）
+
+#### join_logo_scp 実行時の環境変数
+
+join_logo_scp実行時には、下記環境変数が設定されており、join_logo_scp側で使用できます。
+
+| 変数名 | 説明 | 出力例 |
+|:--|:--|:--|
+| CLI_IN_PATH | CLI用入力ファイルパス（設定されたソースファイルパス） | `Y:/キャプチャ/サイレント・ウィッチ　沈黙の魔女の隠しごと #01 「同期が来たりて無茶を言う」 (MX).ts` |
+| TS_IN_PATH | 元のTSファイルパス（オリジナルソースファイルパス） | `Y:/キャプチャ/サイレント・ウィッチ　沈黙の魔女の隠しごと #01 「同期が来たりて無茶を言う」 (MX).ts` |
+| CLI_OUT_PATH | CLI用出力ファイルパス | `Y:/キャプチャ/encoded/サイレント・ウィッチ　沈黙の魔女の隠しごと #01 「同期が来たりて無茶を言う」 (MX).mp4` |
+| SERVICE_ID | サービスID（チャンネルID） | `23608` |
+
 
 ### チャンネルごとの設定
 
@@ -348,7 +387,7 @@ EDCBがサービスで動いてて、EpgTimerもAmatsukazeサーバも立ち上�
 
 NicoConvAssのパラメータを設定したい場合は、NicoConvAss.exeを起動して設定してください。
 
-### [バッチファイル実行機能](https://github.com/nekopanda/Amatsukaze/wiki/%E3%83%90%E3%83%83%E3%83%81%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E5%AE%9F%E8%A1%8C%E6%A9%9F%E8%83%BD)
+### [バッチファイル実行機能](./doc/RunBat.md)
 
 ## CM位置入力
 
@@ -403,7 +442,6 @@ KFMDeintでは、30fpsソース上で、きれいなフィールドが2フィー
 
 D3DVPは、GPUのインタレ解除機能を使ったインタレ解除です。
 PCで再生するときと同等の品質でインタレ解除します。
-Windows 8以降のみ対応しています。**Windows 7では使えません。**
 
 GPU指定自動の場合は、プライマリディスプレイに接続したGPUでインタレ解除します。
 インタレ解除に使用するGPUを指定したい場合は、"Intel","NVIDIA","Radeon"を用意したので、
@@ -556,11 +594,10 @@ BatchHashChecker.exeで出力mp4(or mkv)ファイルのハッシュチェック�
 
 - VFRな入力（ワンセグなど）には対応していません
 （VFR出力には対応しています。）
-- 「通常」出力でQSVEnc,NVEncを使用した場合、CMビットレート倍率は適用されません
-（x264,x265はzoneオプションで適用します）
+- 「通常」出力でVCEEncを使用した場合、CMビットレート倍率は適用されません
+（x264,x265はzoneオプションで、QSVEnc,NVEncは--dynamic-rcで適用します）
 - HEVCはインタレ保持に対応していないので、
 インタレ解除しないでHEVCを使おうとするとエラーになります。
-- QSVEncやNVEncの古いバージョンは高ビット入力に不具合があるので、注意してください。
 
 ## ライセンス
 
@@ -577,13 +614,13 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 ## 同梱&依存ライブラリ
 - [FFmpeg](https://github.com/nekopanda/FFmpeg/tree/amatsukaze)(デブロッキングフィルタの精度を上げるため、少し改造しています)
 - [FAAD2](http://www.audiocoding.com/faad2.html)
-- [L-SMASH](https://github.com/l-smash/l-smash)
-- [x264](https://www.videolan.org/developers/x264.html)
-- [x265](https://bitbucket.org/Nekopanda/x265)（本家版はzonesを多く指定すると落ちるバグがあるので少し改造しています）
-- [Ut Video Codec Suite](http://umezawa.dyndns.info/wordpress/)
+- [L-SMASH](https://github.com/rigaya/l-smash)
+- [x264](https://code.videolan.org/videolan/x264)
+- [x265](https://bitbucket.org/multicoreware/x265_git)（本家版はzonesを多く指定すると落ちるバグがあるので少し[改造しています](https://github.com/rigaya/AutoBuildForAviUtlPlugins/tree/master/x265/patch))
+- [svt-av1](https://gitlab.com/AOMediaCodec/SVT-AV1)
 - [AviSynthNeo](https://github.com/nekopanda/AviSynthPlus)
-- [join_logo_scp 改造版](https://github.com/nekopanda/join_logo_scp)(DivFileコマンドを追加しました([改造元](https://mevius.5ch.net/test/read.cgi/avi/1484985868/794)))
-- [chapter_exe 改造版](https://github.com/nekopanda/chapter_exe)（VFWに依存しないでAvisynthスクリプトを読めるように改造しています）
+- [join_logo_scp](https://github.com/yobibi/join_logo_scp), [Linux版](https://github.com/tobitti0/join_logo_scp)
+- [chapter_exe 改造版](https://github.com/nekopanda/chapter_exe)（VFWに依存しないでAvisynthスクリプトを読めるように改造しています）, [Linux版](https://github.com/rigaya/chapter_exe)
 - [Livet](http://ugaya40.hateblo.jp/entry/Livet)
 - [MP4Box](https://gpac.wp.imt.fr/mp4box/)
 - [Caption.dll](https://github.com/nekopanda/TVCaptionMod2)（使いやすいように少し改造しています）
@@ -599,7 +636,7 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 - [NNEDI3](https://github.com/jpsdr/NNEDI3)
 - [mvtools](https://github.com/pinterf/mvtools)
 - [masktools](https://github.com/pinterf/masktools)
-- [AvsCUDA,KTGMC,KNNEDI3,KFM](https://github.com/nekopanda/AviSynthCUDAFilters)
+- [AvsCUDA,KTGMC,KNNEDI3,KFM](https://github.com/rigaya/AviSynthCUDAFilters)
 - [SMDegrain](http://avisynth.nl/index.php/SMDegrain)
 - [D3DVP](https://github.com/nekopanda/D3DVP)
 
@@ -644,44 +681,5 @@ gitでバージョンを取得するので、gitにパスを通した状態で�
 
 # Linuxビルド手順
 
-AmatsukazeCLIをLinux環境でビルドするには以下の手順に従ってください。
-
-## 必要なパッケージのインストール
-
-Ubuntuの場合：
-
-```bash
-sudo apt update
-sudo apt install build-essential meson ninja-build pkg-config libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
-```
-
-## ビルド方法
-
-以下のコマンドでビルドします：
-
-```bash
-# ビルドディレクトリを作成
-mkdir -p build && cd build
-
-# Mesonプロジェクトの設定
-meson setup ..
-
-# ビルド実行
-ninja
-
-# インストール（オプション）
-sudo ninja install
-```
-
-## 実行方法
-
-```bash
-./AmatsukazeCLI/AmatsukazeCLI -i <input.ts> -o <output.mp4>
-```
-
-## 注意事項
-
-- このLinuxビルドは開発中です。すべての機能が完全に動作するわけではありません。
-- ffmpegはシステムライブラリを使用します。適切なバージョンのffmpegがインストールされていることを確認してください。
-- Windows固有の機能は一部制限がある可能性があります。
+Linuxでのビルド方法は[こちら](./doc/BuildLinux.md)。
 
