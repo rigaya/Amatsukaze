@@ -9,6 +9,7 @@ namespace Amatsukaze.Components
         private TaskbarIcon notifyIcon;
         public Window Window;
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string Text {
             get { return notifyIcon.ToolTipText; }
             set { notifyIcon.ToolTipText = value; }

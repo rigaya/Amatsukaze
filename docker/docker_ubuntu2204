@@ -4,7 +4,6 @@ ARG DEBIAN_FRONTEND=noninteractive \
     OSVER=ubuntu2204 \
     LOCAL_USER_ID=1000 \
     LOCAL_GROUP_ID=1000 \
-    DOTNET_DEB_NAME=https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
     AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.0/avisynth_3.7.5-1_amd64_Ubuntu22.04.deb
 
 ENV LANG=ja_JP.UTF-8
@@ -16,6 +15,7 @@ RUN apt update \
   sudo \
   wget \
   curl \
+  software-properties-common \
   git \
   cmake \
   nasm \
@@ -34,15 +34,14 @@ RUN apt update \
 && locale-gen ja_JP.UTF-8 \
 && locale-gen en_US.UTF-8 \
 && update-locale LANG=ja_JP.UTF-8 \
-&& wget -q ${DOTNET_DEB_NAME} -O packages-microsoft-prod.deb \
-&& dpkg -i packages-microsoft-prod.deb \
+&& add-apt-repository ppa:dotnet/backports \
 && apt update \
-&& apt-get install -y dotnet-sdk-8.0 \
+&& apt-get install -y dotnet-sdk-9.0 \
 && wget -q ${AVISYNTHPLUS_DEB_NAME} -O avisynth.deb \
 && dpkg -i avisynth.deb \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/* \
-&& rm packages-microsoft-prod.deb avisynth.deb
+&& rm avisynth.deb
 
 RUN useradd -u $LOCAL_USER_ID -m --user-group --shell /bin/bash rigaya
 RUN groupmod -g $LOCAL_GROUP_ID rigaya
