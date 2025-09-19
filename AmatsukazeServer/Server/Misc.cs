@@ -766,6 +766,7 @@ namespace Amatsukaze.Server
                     OutputMask = 1,
                     DisableChapter = true, // デフォルトはチャプター解析無効
                     DisableSubs = true, // デフォルトは字幕無効
+                    DisableHashCheck = true,
                     FilterSetting = DefaultFilterSetting()
                 };
             }
