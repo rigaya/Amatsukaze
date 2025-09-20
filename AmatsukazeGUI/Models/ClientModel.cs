@@ -18,6 +18,7 @@ using System.ComponentModel;
 using System.Net;
 using System.Windows.Shell;
 using System.Text.Json;
+using Microsoft.Win32;
 
 namespace Amatsukaze.Models
 {
@@ -35,6 +36,8 @@ namespace Amatsukaze.Models
             public int ServerPort;
             [DataMember]
             public byte[] windowPlacement;
+            [DataMember]
+            public string ThemePreference; // "Auto" | "Standard" | "Light" | "Dark"
 
             public ExtensionDataObject ExtensionData { get; set; }
         }
@@ -105,6 +108,22 @@ namespace Amatsukaze.Models
 
         public string ServerVersion {
             get { return serverInfo.Version; }
+        }
+        
+        // Theme preferences
+        public string ThemePreference
+        {
+            get { return appData?.ThemePreference ?? "Auto"; }
+            set
+            {
+                var val = string.IsNullOrEmpty(value) ? "Auto" : value;
+                if (appData.ThemePreference == val)
+                    return;
+                appData.ThemePreference = val;
+                RaisePropertyChanged();
+                SaveAppData();
+                ApplyTheme();
+            }
         }
         public bool IsServerLinux
         {
@@ -700,6 +719,7 @@ namespace Amatsukaze.Models
             AddQueueConsole = new SimpleDisplayConsole(Setting);
 
             LoadAppData();
+            ApplyTheme();
             requestLogoThread = RequestLogoThread();
         }
 
@@ -987,12 +1007,17 @@ namespace Amatsukaze.Models
                 appData = new ClientData();
                 appData.ServerIP = "localhost";
                 appData.ServerPort = ServerSupport.DEFAULT_PORT;
+                appData.ThemePreference = "Auto";
                 return;
             }
             using (FileStream fs = new FileStream(path, FileMode.Open))
             {
                 var s = new DataContractSerializer(typeof(ClientData));
                 appData = (ClientData)s.ReadObject(fs);
+                if (string.IsNullOrEmpty(appData.ThemePreference))
+                {
+                    appData.ThemePreference = "Auto";
+                }
             }
         }
 
@@ -1010,6 +1035,63 @@ namespace Amatsukaze.Models
         public Task SendSetting()
         {
             return Server?.SetCommonData(new CommonData() { Setting = Setting.Model });
+        }
+
+        public void SetThemePreference(string preference)
+        {
+            appData.ThemePreference = preference; // "Auto", "Standard", "Light", "Dark"
+            SaveAppData();
+            ApplyTheme();
+        }
+
+        private void ApplyTheme()
+        {
+            // Ensure Fluent resources are present (App.xaml merges them)
+            // Map preference to ThemeMode
+            var pref = appData?.ThemePreference ?? "Auto";
+            System.Windows.ThemeMode mode;
+            switch (pref)
+            {
+                case "Standard":
+                    mode = System.Windows.ThemeMode.None;
+                    break;
+                case "Light":
+                    mode = System.Windows.ThemeMode.Light;
+                    break;
+                case "Dark":
+                    mode = System.Windows.ThemeMode.Dark;
+                    break;
+                case "Auto":
+                default:
+                    // Follow OS Apps theme. If Light => None (legacy), if Dark => Dark
+                    var appsUseLight = GetWindowsAppsUseLightTheme();
+                    mode = appsUseLight ? System.Windows.ThemeMode.None : System.Windows.ThemeMode.Dark;
+                    break;
+            }
+            if (Application.Current != null)
+            {
+                Application.Current.ThemeMode = mode;
+            }
+        }
+
+        private static bool GetWindowsAppsUseLightTheme()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"))
+                {
+                    if (key != null)
+                    {
+                        var value = key.GetValue("AppsUseLightTheme");
+                        if (value is int i)
+                        {
+                            return i != 0;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return true; // default to light
         }
 
         public Task SendMakeScriptData()

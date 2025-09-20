@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <StartupObject>Amatsukaze.App</StartupObject>
-    <NoWarn>CA1416</NoWarn>
+    <NoWarn>CA1416;WPF0001</NoWarn>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">

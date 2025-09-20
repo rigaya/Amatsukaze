@@ -82,7 +82,7 @@
         <Grid x:Name="templateRoot" SnapsToDevicePixels="True">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition MinWidth="{DynamicResource {x:Static SystemParameters.VerticalScrollBarWidthKey}}" Width="0"/>
+                <ColumnDefinition MinWidth="18" Width="0"/>
             </Grid.ColumnDefinitions>
             <Popup x:Name="PART_Popup" AllowsTransparency="True" Grid.ColumnSpan="2" 
                        IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" 
@@ -125,13 +125,13 @@
                                     Background="{TemplateBinding Background}" 
                                     CornerRadius="5"
                                     SnapsToDevicePixels="True">
-                            <Border x:Name="splitBorder"
+                                <Border x:Name="splitBorder"
                                         BorderBrush="Transparent"
                                         BorderThickness="1"
                                         HorizontalAlignment="Right"
                                         Margin="0" 
                                         SnapsToDevicePixels="True" 
-                                        Width="{DynamicResource {x:Static SystemParameters.VerticalScrollBarWidthKey}}">
+                                        Width="18">
                                 <Path x:Name="Arrow" Data="F1M0,0L2.667,2.66665 5.3334,0 5.3334,-1.78168 2.6667,0.88501 0,-1.78168 0,0z" Fill="#FF606060" HorizontalAlignment="Center" Margin="0" VerticalAlignment="Center"/>
                             </Border>
                         </Border>
@@ -276,6 +276,40 @@
         <Setter Property="BorderBrush" Value="Gray"/>
         <Setter Property="BorderThickness" Value="0.5"/>
         <Setter Property="Background" Value="Transparent"/>
+        <!-- つまみ領域確保のため内側余白を少し広げる -->
+        <Setter Property="Padding" Value="4,0,22,0"/>
+        <Setter Property="MinHeight" Value="22"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Fluent(ライト/ダーク)適用時のTextBoxテキスト下欠け/縦位置ずれ対策。
+         既存Height=22指定に合わせ、Paddingを0、MinHeightを0、垂直中央寄せにする。 -->
+    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- 既定CheckBoxスタイル(Fluent時の縦位置/余白を微調整) -->
+    <Style x:Key="BaseCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Setter Property="Margin" Value="0,4"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <!-- アプリ全体のCheckBox既定値を統一（高さ・縦位置を一定化） -->
+    <Style TargetType="CheckBox" BasedOn="{StaticResource BaseCheckBoxStyle}">
+        <Setter Property="Height" Value="22"/>
+    </Style>
+
+    <!-- Linux時に非表示にするCheckBox用スタイル（既定にBasedOnして見た目は統一） -->
+    <Style x:Key="CheckBoxHideOnLinux" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
+                <Setter Property="Visibility" Value="Collapsed"/>
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
     <DataTemplate DataType="{x:Type m:DisplayProfile}">
