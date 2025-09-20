@@ -12,7 +12,8 @@
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="350"
              d:DataContext="{d:DesignInstance {x:Type vm:QueueViewModel}}"
-             Loaded="UserControl_Loaded">
+             Loaded="UserControl_Loaded"
+             Background="{DynamicResource AMT.ControlBackgroundBrush}">
 
     <UserControl.Resources>
         <ResourceDictionary Source="CommonResources.xaml"/>
@@ -70,8 +71,8 @@
                                                 </TransformGroup.Children>
                                             </TransformGroup>
                                         </Grid.LayoutTransform>
-                                        <Ellipse x:Name="circle" HorizontalAlignment="Center" Height="19" Stroke="DarkGray" VerticalAlignment="Center" Width="19"/>
-                                        <Path x:Name="arrow" Data="M 1,1.5 L 4.5,5 L 8,1.5" HorizontalAlignment="Center" SnapsToDevicePixels="false" Stroke="#666" StrokeThickness="2" VerticalAlignment="Center"/>
+                                        <Ellipse x:Name="circle" HorizontalAlignment="Center" Height="19" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" VerticalAlignment="Center" Width="19"/>
+                                        <Path x:Name="arrow" Data="M 1,1.5 L 4.5,5 L 8,1.5" HorizontalAlignment="Center" SnapsToDevicePixels="false" Stroke="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" StrokeThickness="2" VerticalAlignment="Center"/>
                                     </Grid>
                                     <ContentPresenter HorizontalAlignment="Center" Margin="0,4,0,0" Grid.Row="1" RecognizesAccessKey="True" SnapsToDevicePixels="True" VerticalAlignment="Top"/>
                                 </Grid>
@@ -81,13 +82,13 @@
                                     <Setter Property="Data" TargetName="arrow" Value="M 1,4.5  L 4.5,1  L 8,4.5"/>
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="true">
-                                    <Setter Property="Stroke" TargetName="circle" Value="#FF3C7FB1"/>
-                                    <Setter Property="Stroke" TargetName="arrow" Value="#222"/>
+                                    <Setter Property="Stroke" TargetName="circle" Value="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
+                                    <Setter Property="Stroke" TargetName="arrow" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="true">
-                                    <Setter Property="Stroke" TargetName="circle" Value="#FF526C7B"/>
+                                    <Setter Property="Stroke" TargetName="circle" Value="{DynamicResource {x:Static SystemColors.AccentColorDark1BrushKey}}"/>
                                     <Setter Property="StrokeThickness" TargetName="circle" Value="1.5"/>
-                                    <Setter Property="Stroke" TargetName="arrow" Value="#FF003366"/>
+                                    <Setter Property="Stroke" TargetName="arrow" Value="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -114,8 +115,8 @@
                                                 </TransformGroup.Children>
                                             </TransformGroup>
                                         </Grid.LayoutTransform>
-                                        <Ellipse x:Name="circle" HorizontalAlignment="Center" Height="19" Stroke="DarkGray" VerticalAlignment="Center" Width="19"/>
-                                        <Path x:Name="arrow" Data="M 1,1.5 L 4.5,5 L 8,1.5" HorizontalAlignment="Center" SnapsToDevicePixels="false" Stroke="#666" StrokeThickness="2" VerticalAlignment="Center"/>
+                                        <Ellipse x:Name="circle" HorizontalAlignment="Center" Height="19" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" VerticalAlignment="Center" Width="19"/>
+                                        <Path x:Name="arrow" Data="M 1,1.5 L 4.5,5 L 8,1.5" HorizontalAlignment="Center" SnapsToDevicePixels="false" Stroke="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" StrokeThickness="2" VerticalAlignment="Center"/>
                                     </Grid>
                                     <ContentPresenter Grid.Column="1" HorizontalAlignment="Left" Margin="4,0,0,0" RecognizesAccessKey="True" SnapsToDevicePixels="True" VerticalAlignment="Center"/>
                                 </Grid>
@@ -125,13 +126,13 @@
                                     <Setter Property="Data" TargetName="arrow" Value="M 1,4.5  L 4.5,1  L 8,4.5"/>
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="true">
-                                    <Setter Property="Stroke" TargetName="circle" Value="#FF3C7FB1"/>
-                                    <Setter Property="Stroke" TargetName="arrow" Value="#222"/>
+                                    <Setter Property="Stroke" TargetName="circle" Value="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
+                                    <Setter Property="Stroke" TargetName="arrow" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="true">
-                                    <Setter Property="Stroke" TargetName="circle" Value="#FF526C7B"/>
+                                    <Setter Property="Stroke" TargetName="circle" Value="{DynamicResource {x:Static SystemColors.AccentColorDark1BrushKey}}"/>
                                     <Setter Property="StrokeThickness" TargetName="circle" Value="1.5"/>
-                                    <Setter Property="Stroke" TargetName="arrow" Value="#FF003366"/>
+                                    <Setter Property="Stroke" TargetName="arrow" Value="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -158,8 +159,8 @@
                                                 </TransformGroup.Children>
                                             </TransformGroup>
                                         </Grid.LayoutTransform>
-                                        <Ellipse x:Name="circle" HorizontalAlignment="Center" Height="19" Stroke="DarkGray" VerticalAlignment="Center" Width="19"/>
-                                        <Path x:Name="arrow" Data="M 1,1.5 L 4.5,5 L 8,1.5" HorizontalAlignment="Center" SnapsToDevicePixels="false" Stroke="#666" StrokeThickness="2" VerticalAlignment="Center"/>
+                                        <Ellipse x:Name="circle" HorizontalAlignment="Center" Height="19" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" VerticalAlignment="Center" Width="19"/>
+                                        <Path x:Name="arrow" Data="M 1,1.5 L 4.5,5 L 8,1.5" HorizontalAlignment="Center" SnapsToDevicePixels="false" Stroke="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" StrokeThickness="2" VerticalAlignment="Center"/>
                                     </Grid>
                                     <ContentPresenter HorizontalAlignment="Center" Margin="0,4,0,0" Grid.Row="1" RecognizesAccessKey="True" SnapsToDevicePixels="True" VerticalAlignment="Top"/>
                                 </Grid>
@@ -187,7 +188,7 @@
                     <Setter.Value>
                         <ControlTemplate>
                             <Border>
-                                <Rectangle Margin="0" SnapsToDevicePixels="true" Stroke="Black" StrokeThickness="1" StrokeDashArray="1 2"/>
+                                <Rectangle Margin="0" SnapsToDevicePixels="true" Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" StrokeThickness="1" StrokeDashArray="1 2"/>
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>
@@ -308,7 +309,9 @@
                         <TextBlock Text="検索" VerticalAlignment="Center"/>
                         <Button DockPanel.Dock="Right" Content="☓" Width="18" Command="{Binding ClearSearchWordCommand}" 
                             IsTabStop="False" Focusable="False" ToolTip="フィルタをクリア"/>
-                        <TextBox Margin="3,0" FontSize="14" Text="{Binding SearchWord, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Margin="3,0" FontSize="14" Text="{Binding SearchWord, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Background="{DynamicResource AMT.ControlBackgroundBrush}"
+                                 Foreground="{DynamicResource AMT.ControlForegroundBrush}"/>
                     </DockPanel>
                 </DockPanel>
             </Expander.Header>
@@ -601,7 +604,7 @@
                         </Button.Style>
                     </Button>
                 </DockPanel>
-                <Border Style="{StaticResource ScheduledStopStyle}" Background="White" Opacity="0.85" IsHitTestVisible="False"/>
+                <Border Style="{StaticResource ScheduledStopStyle}" Background="{DynamicResource AMT.ControlBackgroundBrush}" Opacity="0.85" IsHitTestVisible="False"/>
                 <TextBlock Style="{StaticResource ScheduledStopStyle}" VerticalAlignment="Center" TextAlignment="Center" FontWeight="Bold" Text="稼働時間設定により停止中です" IsHitTestVisible="False"/>
             </Grid>
         </DockPanel>
@@ -823,7 +826,9 @@
                 SelectionMode="Extended"
                 Loaded="QueueList_Loaded"
                 Unloaded="QueueList_Unloaded"
-                ScrollViewer.ScrollChanged="QueueList_ScrollChanged" >
+                ScrollViewer.ScrollChanged="QueueList_ScrollChanged"
+                Background="{DynamicResource AMT.ControlBackgroundBrush}"
+                Foreground="{DynamicResource AMT.ControlForegroundBrush}">
                 <i:Interaction.Behaviors>
                     <c:DragBehavior OnlyEvent="True" OnDropAt="{Binding DropAtCommand}" />
                 </i:Interaction.Behaviors>
@@ -863,7 +868,7 @@
                             <Setter.Value>
                                 <ControlTemplate TargetType="{x:Type ContentControl}">
                                     <Border Background="{TemplateBinding Background}">
-                                        <Border BorderBrush="MediumSlateBlue" BorderThickness="{TemplateBinding BorderThickness}"
+                                        <Border BorderBrush="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}" BorderThickness="{TemplateBinding BorderThickness}"
                                                 Background="{TemplateBinding BorderBrush}">
                                             <ContentPresenter Margin="{TemplateBinding BorderThickness, Converter={StaticResource NegateValueConverter}}"/>
                                         </Border>
@@ -873,29 +878,29 @@
                         </Setter>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsComplete}" Value="True">
-                                <Setter Property="Background" Value="#A0FFFF"/>
+                                <Setter Property="Background" Value="{DynamicResource AMT.StateCompleteBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AMT.StateCompleteForegroundBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsEncoding}" Value="True">
-                                <Setter Property="Background" Value="Green"/>
+                                <Setter Property="Background" Value="{DynamicResource AMT.StateEncodingBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AMT.StateEncodingForegroundBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsError}" Value="True">
-                                <Setter Property="Background" Value="Red"/>
+                                <Setter Property="Background" Value="{DynamicResource AMT.StateErrorBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AMT.StateErrorForegroundBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsPending}" Value="True">
-                                <Setter Property="Background" Value="Yellow"/>
+                                <Setter Property="Background" Value="{DynamicResource AMT.StatePendingBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AMT.StatePendingForegroundBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsCanceled}" Value="True">
-                                <Setter Property="Foreground" Value="Gray"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AMT.StateCanceledForegroundBrush}"/>
                             </DataTrigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter Property="BorderThickness" Value="4"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="BorderBrush">
-                                    <Setter.Value>
-                                        <SolidColorBrush Color="Plum" Opacity="0.5"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
                             </Trigger>
                         </Style.Triggers>
                     </Style>

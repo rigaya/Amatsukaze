@@ -8,8 +8,13 @@
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
              d:DataContext="{d:DesignInstance {x:Type vm:LogFileViewModel}}">
+    <UserControl.Resources>
+        <ResourceDictionary Source="CommonResources.xaml"/>
+    </UserControl.Resources>
     <Grid>
-        <TextBox TextWrapping="Wrap" Text="{Binding Model.CurrentLogFile}" IsReadOnly="True" VerticalScrollBarVisibility="Auto">
+        <TextBox TextWrapping="Wrap" Text="{Binding Model.CurrentLogFile}" IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                 Background="{DynamicResource AMT.ControlBackgroundBrush}"
+                 Foreground="{DynamicResource AMT.ControlForegroundBrush}">
             <TextBox.Style>
                 <Style TargetType="TextBox">
                     <Style.Triggers>
@@ -20,7 +25,7 @@
                 </Style>
             </TextBox.Style>
         </TextBox>
-        <Border BorderBrush="DarkGray" BorderThickness="1">
+        <Border BorderBrush="{DynamicResource AMT.BorderBrush}" BorderThickness="1">
             <Border.Style>
                 <Style TargetType="Border">
                     <Style.Triggers>

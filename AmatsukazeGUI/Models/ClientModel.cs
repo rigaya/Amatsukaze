@@ -19,6 +19,7 @@ using System.Net;
 using System.Windows.Shell;
 using System.Text.Json;
 using Microsoft.Win32;
+using System.Windows.Media;
 
 namespace Amatsukaze.Models
 {
@@ -1063,14 +1064,92 @@ namespace Amatsukaze.Models
                     break;
                 case "Auto":
                 default:
-                    // Follow OS Apps theme. If Light => None (legacy), if Dark => Dark
+                    // OSのアプリテーマに追随（Light/Dark）
                     var appsUseLight = GetWindowsAppsUseLightTheme();
-                    mode = appsUseLight ? System.Windows.ThemeMode.None : System.Windows.ThemeMode.Dark;
+                    mode = appsUseLight ? System.Windows.ThemeMode.Light : System.Windows.ThemeMode.Dark;
                     break;
             }
             if (Application.Current != null)
             {
                 Application.Current.ThemeMode = mode;
+                UpdateThemeResources(mode, pref);
+            }
+        }
+
+        // テーマ共通ブラシ(AMT.*)を ThemeMode/Preference に応じて更新
+        private static void UpdateThemeResources(System.Windows.ThemeMode mode, string pref)
+        {
+            var rd = Application.Current?.Resources;
+            if (rd == null) return;
+
+            // 基本色: 標準は従来配色、Light/DarkはFluent準拠気味
+            bool isDark = mode == System.Windows.ThemeMode.Dark;
+            bool isStandard = pref == "Standard";
+
+            Color bg = isDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xFF, 0xFF, 0xFF);
+            Color fg = isDark ? Color.FromRgb(0xEE, 0xEE, 0xEE) : Color.FromRgb(0x00, 0x00, 0x00);
+            Color border = isDark ? Color.FromRgb(0x5A, 0x5A, 0x5A) : Color.FromRgb(0xAB, 0xAD, 0xB3);
+            Color light = isDark ? Color.FromRgb(0x38, 0x38, 0x38) : Color.FromRgb(0xE5, 0xE5, 0xE5);
+            Color dark = isDark ? Color.FromRgb(0x30, 0x30, 0x30) : Color.FromRgb(0xCF, 0xCF, 0xCF);
+            Color popup = bg;
+            Color header = isStandard ? Color.FromRgb(0xF0, 0xFF, 0xFF) : (isDark ? Color.FromRgb(0x2A, 0x2A, 0x2A) : Color.FromRgb(0xF6, 0xF6, 0xF6));
+            Color selection = isStandard ? Color.FromRgb(0xAA, 0x88, 0xCC) : (isDark ? Color.FromRgb(0x33, 0x66, 0x99) : Color.FromRgb(0x2B, 0x88, 0xF7));
+            Color selectionFg = isDark ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF);
+
+            // アクセント: 標準では無効（従来配色を保つ）、Light/DarkではOSアクセント
+            Brush accentBrush = isStandard
+                ? new SolidColorBrush(Color.FromRgb(0x56, 0x9D, 0xE5))
+                : (Brush)SystemParameters.WindowGlassBrush ?? SystemColors.AccentColorBrush;
+
+            rd["AMT.ControlBackgroundBrush"] = new SolidColorBrush(bg);
+            rd["AMT.ControlForegroundBrush"] = new SolidColorBrush(fg);
+            rd["AMT.BorderBrush"] = new SolidColorBrush(border);
+            rd["AMT.ControlLightBrush"] = new SolidColorBrush(light);
+            rd["AMT.ControlDarkBrush"] = new SolidColorBrush(dark);
+            rd["AMT.PopupBackgroundBrush"] = new SolidColorBrush(popup);
+            rd["AMT.HeaderBackgroundBrush"] = new SolidColorBrush(header);
+            rd["AMT.SelectionBrush"] = new SolidColorBrush(selection);
+            rd["AMT.SelectionForegroundBrush"] = new SolidColorBrush(selectionFg);
+            rd["AMT.DisabledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
+            rd["AMT.AccentBrush"] = accentBrush;
+
+            // Queue 状態色
+            if (isStandard)
+            {
+                rd["AMT.StateCompleteBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0xA0, 0xFF, 0xFF));
+                rd["AMT.StateCompleteForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StateEncodingBackgroundBrush"] = new SolidColorBrush(Colors.Green);
+                rd["AMT.StateEncodingForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StateErrorBackgroundBrush"] = new SolidColorBrush(Colors.Red);
+                rd["AMT.StateErrorForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StatePendingBackgroundBrush"] = new SolidColorBrush(Colors.Yellow);
+                rd["AMT.StatePendingForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StateCanceledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0xC0, 0xC0, 0xC0));
+            }
+            else if (isDark)
+            {
+                rd["AMT.StateCompleteBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0x12, 0x3F, 0x5E));
+                rd["AMT.StateCompleteForegroundBrush"] = new SolidColorBrush(Colors.White);
+                rd["AMT.StateEncodingBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0x2E, 0x8B, 0x57));
+                rd["AMT.StateEncodingForegroundBrush"] = new SolidColorBrush(Colors.White);
+                rd["AMT.StateErrorBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0x88, 0x11, 0x00));
+                rd["AMT.StateErrorForegroundBrush"] = new SolidColorBrush(Colors.White);
+                rd["AMT.StatePendingBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0xB8, 0x86, 0x0B));
+                rd["AMT.StatePendingForegroundBrush"] = new SolidColorBrush(Colors.White);
+                rd["AMT.StateCanceledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x69, 0x69, 0x69));
+            }
+            else
+            {
+                // Light
+                rd["AMT.StateCompleteBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0xA0, 0xFF, 0xFF));
+                rd["AMT.StateCompleteForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StateEncodingBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0x98, 0xFB, 0x98));
+                rd["AMT.StateEncodingForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StateErrorBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0xFF, 0x63, 0x47));
+                rd["AMT.StateErrorForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StatePendingBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xF3, 0x9D));
+                rd["AMT.StatePendingForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x00, 0x00, 0x00));
+                rd["AMT.StateCanceledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x69, 0x69, 0x69));
             }
         }
 

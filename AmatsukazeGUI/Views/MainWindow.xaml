@@ -141,7 +141,7 @@
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ItemsControl">
-                                            <Border Background="Azure">
+                                            <Border Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
                                                 <WrapPanel IsItemsHost="True" />
                                             </Border>
                                         </ControlTemplate>
@@ -201,7 +201,7 @@
             </ContentControl>
             <TextBlock x:Name="resultText" Text="{Binding Model.CurrentOperationResult}"
                        Margin="10,0" Grid.Column="1" VerticalAlignment="Center"
-                       Foreground="{Binding StatusForeColor}"
+                       Foreground="{DynamicResource AMT.ControlForegroundBrush}"
                        Background="{Binding StatusBackColor}"/>
         </DockPanel>
     </Grid>

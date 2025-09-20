@@ -55,7 +55,7 @@
             </StackPanel.Resources>
             <Grid>
                 <TextBlock HorizontalAlignment="Center" Margin="2">
-                    <Run Text="（エンコード設定）" Foreground="White"/><Run FontSize="18" Text="プロファイル"/><Run Text="（エンコード設定）"/>
+                    <Run Text="（エンコード設定）" Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/><Run FontSize="18" Text="プロファイル"/><Run Text="（エンコード設定）"/>
                 </TextBlock>
             </Grid>
             <ComboBox SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" Height="25"
@@ -98,7 +98,7 @@
             </DockPanel>
         </StackPanel>
         
-        <TextBlock Margin="2" TextWrapping="Wrap" Text="{Binding Description}" Foreground="Red"/>
+        <TextBlock Margin="2" TextWrapping="Wrap" Text="{Binding Description}" Foreground="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
         
         <Button Margin="2" Height="Auto" Command="{Binding OkCommand, Mode=OneWay}">
             <TextBlock TextAlignment="Center" TextWrapping="Wrap">

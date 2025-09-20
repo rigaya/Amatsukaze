@@ -8,12 +8,13 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ItemsControl">
-                    <Border Background="Azure">
+                    <Border Background="{DynamicResource AMT.HeaderBackgroundBrush}">
                         <UniformGrid Rows="1" IsItemsHost="True" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
         <Setter Property="ItemTemplate">
             <Setter.Value>
                 <DataTemplate>
@@ -29,7 +30,7 @@
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="{x:Type ContentControl}">
-                                <Border BorderThickness="0.5" BorderBrush="Gray" CornerRadius="5" Background="{TemplateBinding Background}">
+                                <Border BorderThickness="0.5" BorderBrush="{DynamicResource AMT.BorderBrush}" CornerRadius="5" Background="{TemplateBinding Background}">
                                     <ContentPresenter />
                                 </Border>
                             </ControlTemplate>
@@ -37,17 +38,19 @@
                     </Setter>
                     <Style.Triggers>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="Plum" />
+                            <Setter Property="Background" Value="{DynamicResource AMT.SelectionBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource AMT.SelectionForegroundBrush}" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="LightGray" />
+                            <Setter Property="Background" Value="{DynamicResource AMT.ControlLightBrush}" />
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsSelected" Value="True"/>
                                 <Condition Property="IsMouseOver" Value="True"/>
                             </MultiTrigger.Conditions>
-                            <Setter Property="Background" Value="DarkGray" />
+                            <Setter Property="Background" Value="{DynamicResource AMT.AccentBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource AMT.SelectionForegroundBrush}" />
                         </MultiTrigger>
                     </Style.Triggers>
                 </Style>
@@ -55,23 +58,36 @@
         </Setter>
     </Style>
 
+    <!-- 既定のテキスト色をテーマの前景に統一 -->
+    <Style TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
+    </Style>
+
+    <!-- GroupBox の枠色・前景をテーマに合わせる -->
+    <Style TargetType="GroupBox">
+        <Setter Property="BorderBrush" Value="{DynamicResource AMT.BorderBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+
     <Style x:Key="ButtonStyle" TargetType="ButtonBase">
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ButtonBase">
-                    <Border BorderThickness="0.5" BorderBrush="Gray" CornerRadius="5" Background="{TemplateBinding Background}">
+                    <Border BorderThickness="0.5" BorderBrush="{DynamicResource AMT.BorderBrush}" CornerRadius="5" Background="{TemplateBinding Background}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-        <Setter Property="Background" Value="White"/>
+        <Setter Property="Background" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="LightGray" />
+                <Setter Property="Background" Value="{DynamicResource AMT.ControlLightBrush}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="Gray" />
+                <Setter Property="Foreground" Value="{DynamicResource AMT.DisabledForegroundBrush}" />
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -89,9 +105,9 @@
                        Margin="1" PopupAnimation="None" Placement="Bottom"
                        MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
                 <Border x:Name="DropDownBorder"
-                            BorderBrush="Gray" 
+                            BorderBrush="{DynamicResource AMT.BorderBrush}" 
                             BorderThickness="1" 
-                            Background="White">
+                            Background="{DynamicResource AMT.PopupBackgroundBrush}">
                     <ScrollViewer x:Name="DropDownScrollViewer">
                         <Grid x:Name="grid" RenderOptions.ClearTypeHint="Enabled">
                             <Canvas x:Name="canvas" HorizontalAlignment="Left" Height="0" VerticalAlignment="Top" Width="0">
@@ -132,7 +148,7 @@
                                         Margin="0" 
                                         SnapsToDevicePixels="True" 
                                         Width="18">
-                                <Path x:Name="Arrow" Data="F1M0,0L2.667,2.66665 5.3334,0 5.3334,-1.78168 2.6667,0.88501 0,-1.78168 0,0z" Fill="#FF606060" HorizontalAlignment="Center" Margin="0" VerticalAlignment="Center"/>
+                                <Path x:Name="Arrow" Data="F1M0,0L2.667,2.66665 5.3334,0 5.3334,-1.78168 2.6667,0.88501 0,-1.78168 0,0z" Fill="{DynamicResource AMT.ControlForegroundBrush}" HorizontalAlignment="Center" Margin="0" VerticalAlignment="Center"/>
                             </Border>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -143,99 +159,79 @@
                                     <Condition Binding="{Binding IsPressed, RelativeSource={RelativeSource Self}}" Value="false"/>
                                     <Condition Binding="{Binding IsEnabled, RelativeSource={RelativeSource Self}}" Value="true"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot" Value="White"/>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FFABADB3"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.BorderBrush}"/>
                                 <Setter Property="Background" TargetName="splitBorder" Value="Transparent"/>
                                 <Setter Property="BorderBrush" TargetName="splitBorder" Value="Transparent"/>
                             </MultiDataTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Fill" TargetName="Arrow" Value="Black"/>
+                                <Setter Property="Fill" TargetName="Arrow" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
                             </Trigger>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="true"/>
                                     <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType={x:Type ComboBox}}}" Value="false"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot">
-                                    <Setter.Value>
-                                        <LinearGradientBrush EndPoint="0,1" StartPoint="0,0">
-                                            <GradientStop Color="#FFECF4FC" Offset="0"/>
-                                            <GradientStop Color="#FFDCECFC" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FF7EB4EA"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlLightBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.AccentBrush}"/>
                             </MultiDataTrigger>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="true"/>
                                     <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType={x:Type ComboBox}}}" Value="true"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot" Value="White"/>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FF7EB4EA"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.AccentBrush}"/>
                                 <Setter Property="Background" TargetName="splitBorder">
                                     <Setter.Value>
-                                        <LinearGradientBrush EndPoint="0,1" StartPoint="0,0">
-                                            <GradientStop Color="#FFEBF4FC" Offset="0"/>
-                                            <GradientStop Color="#FFDCECFC" Offset="1"/>
-                                        </LinearGradientBrush>
+                                        <SolidColorBrush Color="{DynamicResource {x:Static SystemColors.ControlLightColorKey}}"/>
                                     </Setter.Value>
                                 </Setter>
-                                <Setter Property="BorderBrush" TargetName="splitBorder" Value="#FF7EB4EA"/>
+                                <Setter Property="BorderBrush" TargetName="splitBorder" Value="{DynamicResource AMT.AccentBrush}"/>
                             </MultiDataTrigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Fill" TargetName="Arrow" Value="Black"/>
+                                <Setter Property="Fill" TargetName="Arrow" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
                             </Trigger>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsPressed, RelativeSource={RelativeSource Self}}" Value="true"/>
                                     <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType={x:Type ComboBox}}}" Value="false"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot">
-                                    <Setter.Value>
-                                        <LinearGradientBrush EndPoint="0,1" StartPoint="0,0">
-                                            <GradientStop Color="#FFDAECFC" Offset="0"/>
-                                            <GradientStop Color="#FFC4E0FC" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FF569DE5"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlDarkBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.AccentBrush}"/>
                             </MultiDataTrigger>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsPressed, RelativeSource={RelativeSource Self}}" Value="true"/>
                                     <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType={x:Type ComboBox}}}" Value="true"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot" Value="White"/>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FF569DE5"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.AccentBrush}"/>
                                 <Setter Property="Background" TargetName="splitBorder">
                                     <Setter.Value>
-                                        <LinearGradientBrush EndPoint="0,1" StartPoint="0,0">
-                                            <GradientStop Color="#FFDAEBFC" Offset="0"/>
-                                            <GradientStop Color="#FFC4E0FC" Offset="1"/>
-                                        </LinearGradientBrush>
+                                        <SolidColorBrush Color="{DynamicResource {x:Static SystemColors.ControlLightColorKey}}"/>
                                     </Setter.Value>
                                 </Setter>
-                                <Setter Property="BorderBrush" TargetName="splitBorder" Value="#FF569DE5"/>
+                                <Setter Property="BorderBrush" TargetName="splitBorder" Value="{DynamicResource AMT.AccentBrush}"/>
                             </MultiDataTrigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Fill" TargetName="Arrow" Value="#FFBFBFBF"/>
+                                <Setter Property="Fill" TargetName="Arrow" Value="{DynamicResource AMT.DisabledForegroundBrush}"/>
                             </Trigger>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsEnabled, RelativeSource={RelativeSource Self}}" Value="false"/>
                                     <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType={x:Type ComboBox}}}" Value="false"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot" Value="#FFF0F0F0"/>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FFD9D9D9"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlLightBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.BorderBrush}"/>
                             </MultiDataTrigger>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsEnabled, RelativeSource={RelativeSource Self}}" Value="false"/>
                                     <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType={x:Type ComboBox}}}" Value="true"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" TargetName="templateRoot" Value="White"/>
-                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="#FFBFBFBF"/>
+                                <Setter Property="Background" TargetName="templateRoot" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+                                <Setter Property="BorderBrush" TargetName="templateRoot" Value="{DynamicResource AMT.BorderBrush}"/>
                                 <Setter Property="Background" TargetName="splitBorder" Value="Transparent"/>
                                 <Setter Property="BorderBrush" TargetName="splitBorder" Value="Transparent"/>
                             </MultiDataTrigger>
@@ -273,11 +269,12 @@
 
     <Style TargetType="ComboBox">
         <Setter Property="Template" Value="{StaticResource MyComboboxTemplate}"/>
-        <Setter Property="BorderBrush" Value="Gray"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AMT.BorderBrush}"/>
         <Setter Property="BorderThickness" Value="0.5"/>
-        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Background" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
         <!-- つまみ領域確保のため内側余白を少し広げる -->
-        <Setter Property="Padding" Value="4,0,22,0"/>
+        <Setter Property="Padding" Value="6,0,24,0"/>
         <Setter Property="MinHeight" Value="22"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>

@@ -1,0 +1,35 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- アプリ内共通のテーマブラシ（ApplyThemeで上書き） -->
+    <SolidColorBrush x:Key="AMT.ControlBackgroundBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="AMT.ControlForegroundBrush" Color="#FF000000"/>
+    <SolidColorBrush x:Key="AMT.BorderBrush" Color="#FFABADB3"/>
+    <SolidColorBrush x:Key="AMT.ControlLightBrush" Color="#FFE5E5E5"/>
+    <SolidColorBrush x:Key="AMT.ControlDarkBrush" Color="#FFCFCFCF"/>
+    <SolidColorBrush x:Key="AMT.PopupBackgroundBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="AMT.AccentBrush" Color="#FF569DE5"/>
+    <SolidColorBrush x:Key="AMT.AccentLightBrush" Color="#FF7EB4EA"/>
+    <SolidColorBrush x:Key="AMT.DisabledForegroundBrush" Color="#FF808080"/>
+    <SolidColorBrush x:Key="AMT.HeaderBackgroundBrush" Color="#F0FFFF"/> <!-- Azure -->
+    <SolidColorBrush x:Key="AMT.SelectionBrush" Color="#DDAA88CC"/> <!-- Plum 近似 -->
+    <SolidColorBrush x:Key="AMT.SelectionForegroundBrush" Color="#FFFFFFFF"/>
+
+    <!-- Queue 状態色（背景/前景）: 初期値は Standard 想定 -->
+    <SolidColorBrush x:Key="AMT.StateCompleteBackgroundBrush" Color="#A0FFFF"/>
+    <SolidColorBrush x:Key="AMT.StateCompleteForegroundBrush" Color="#000000"/>
+
+    <SolidColorBrush x:Key="AMT.StateEncodingBackgroundBrush" Color="Green"/>
+    <SolidColorBrush x:Key="AMT.StateEncodingForegroundBrush" Color="#000000"/>
+
+    <SolidColorBrush x:Key="AMT.StateErrorBackgroundBrush" Color="Red"/>
+    <SolidColorBrush x:Key="AMT.StateErrorForegroundBrush" Color="#000000"/>
+
+    <SolidColorBrush x:Key="AMT.StatePendingBackgroundBrush" Color="Yellow"/>
+    <SolidColorBrush x:Key="AMT.StatePendingForegroundBrush" Color="#000000"/>
+
+    <!-- Canceled は前景のみ変更 -->
+    <SolidColorBrush x:Key="AMT.StateCanceledForegroundBrush" Color="Gray"/>
+
+</ResourceDictionary>
+

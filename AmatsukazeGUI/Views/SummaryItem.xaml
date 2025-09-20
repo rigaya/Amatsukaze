@@ -27,10 +27,11 @@
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
-                    <Setter Property="Background" Value="White"/>
+                    <Setter Property="Background" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
                     <Style.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="LightGray" />
+                            <Setter Property="Background" Value="{DynamicResource AMT.ControlLightBrush}" />
                         </Trigger>
                     </Style.Triggers>
                 </Style>

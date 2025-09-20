@@ -140,10 +140,27 @@ namespace Amatsukaze.ViewModels
 
         #region StatucColor変更通知プロパティ
         public Brush StatusBackColor {
-            get { return Model.IsCurrentResultFail ? Brushes.DarkRed : Brushes.White; }
+            get {
+                if (Model.IsCurrentResultFail)
+                {
+                    // テーマ連動のエラー背景（なければ DarkRed）
+                    return (Application.Current?.Resources["AMT.StateErrorBackgroundBrush"] as Brush)
+                           ?? Brushes.DarkRed;
+                }
+                // 成功時は帯を出さない（Transparent）
+                return Brushes.Transparent;
+            }
         }
         public Brush StatusForeColor {
-            get { return Model.IsCurrentResultFail ? Brushes.White : Brushes.Black; }
+            get {
+                if (Model.IsCurrentResultFail)
+                {
+                    return (Application.Current?.Resources["AMT.StateErrorForegroundBrush"] as Brush)
+                           ?? Brushes.White;
+                }
+                return (Application.Current?.Resources["AMT.ControlForegroundBrush"] as Brush)
+                       ?? Brushes.Black;
+            }
         }
         #endregion
 
