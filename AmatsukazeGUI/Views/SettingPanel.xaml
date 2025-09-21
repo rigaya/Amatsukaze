@@ -111,7 +111,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="JoinLogoScpパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="NicoConvASSパス">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -123,7 +123,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="tsreplaceパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="tsMuxeRパス">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -135,7 +135,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="SCRename.vbs/pyパス" />
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="AutoVfr.exeパス">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -146,7 +146,7 @@
                     </TextBlock>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="neroAacEnc.exeパス">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -157,7 +157,7 @@
                     </TextBlock>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="qaac.exeパス">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -189,7 +189,7 @@
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearJoinLogoScpPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}">
                             <Button.Style>
-                                <Style TargetType="Button">
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -225,7 +225,7 @@
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.JoinLogoScpPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -237,7 +237,7 @@
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.TsReplacePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.TsMuxeRPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -249,7 +249,7 @@
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.SCRenamePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop" />
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.AutoVfrPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -260,7 +260,7 @@
                         </TextBox>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.NeroAacEncPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -271,7 +271,7 @@
                         </TextBox>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.QaacPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{c:MultiStyle . ExtendDuration}">
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
