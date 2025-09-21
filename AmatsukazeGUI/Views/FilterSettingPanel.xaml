@@ -36,11 +36,11 @@
             <Button Margin="6,2" HorizontalAlignment="Right" Width="150" Height="20"
                     Content="フィルタをテキストでコピー" Command="{Binding CopyFilterTextCommand}"/>
         </DockPanel>
-        <GroupBox>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
-                <CheckBox Margin="0,2" Content="インターレース解除" IsChecked="{Binding EnableDeinterlace, Mode=TwoWay}"/>
+                <CheckBox Margin="0,0" MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}" Content="インターレース解除" IsChecked="{Binding EnableDeinterlace, Mode=TwoWay}"/>
             </GroupBox.Header>
-            <DockPanel>
+            <DockPanel Margin="0,8,0,2">
                 <DockPanel DockPanel.Dock="Top">
                     <TextBlock VerticalAlignment="Center" Text="解除方法"/>
                     <ComboBox Margin="4,0" Height="22"
@@ -75,9 +75,9 @@
                 </ContentControl>
             </DockPanel>
         </GroupBox>
-        <GroupBox>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
-                <CheckBox Margin="0,2" Content="デブロッキング" IsChecked="{Binding EnableDeblock, Mode=TwoWay}">
+                <CheckBox Margin="0,0" MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}" Content="デブロッキング" IsChecked="{Binding EnableDeblock, Mode=TwoWay}">
                     <CheckBox.ToolTip>
                         <TextBlock>
                             MPEG2ソースのQP値に従ってノイズリダクションフィルタを適用します。
@@ -87,7 +87,7 @@
                     </CheckBox.ToolTip>
                 </CheckBox>
             </GroupBox.Header>
-            <DockPanel>
+            <DockPanel Margin="0,8,0,2">
                 <TextBlock VerticalAlignment="Center" Text="強度"/>
                 <ComboBox Margin="4,0" Width="120"  Height="22"
                           ItemsSource="{Binding DeblockStrengthList}"
@@ -128,27 +128,27 @@
                 <Border/>
             </DockPanel>
         </GroupBox>
-        <GroupBox>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
-                <CheckBox Margin="0,2" Content="リサイズ" 
+                <CheckBox Margin="0,0" MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}" Content="リサイズ" 
                           IsChecked="{Binding EnableResize, Mode=TwoWay}"/>
             </GroupBox.Header>
-            <DockPanel HorizontalAlignment="Left">
+            <DockPanel HorizontalAlignment="Left" Margin="0,8,0,2">
                 <DockPanel Margin="4,0">
-                    <TextBlock Margin="0,2" VerticalAlignment="Center" Text="横"/>
-                    <TextBox Margin="0,2" Width="50"
+                    <TextBlock Margin="2,2" VerticalAlignment="Center" Text="横"/>
+                    <TextBox Margin="0,2" Width="80"
                          Text="{Binding ResizeWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          IsEnabled="{Binding EnableResize}"/>
-                    <TextBlock Margin="0,2" VerticalAlignment="Center" Text="x縦"/>
-                    <TextBox Margin="0,2" Width="50"
+                    <TextBlock Margin="2,2" VerticalAlignment="Center" Text="x縦"/>
+                    <TextBox Margin="0,2" Width="80"
                          Text="{Binding ResizeHeight, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          IsEnabled="{Binding EnableResize}"/>
                 </DockPanel>
                 <Border Width="9"/>
-                <Button Content="1280x720" Margin="4,0" CommandParameter="1280x720"
+                <Button Content="1280x720" Margin="4,0" Padding="4,0" CommandParameter="1280x720"
                         Command="{Binding SetWidthHeightCommand}"
                         IsEnabled="{Binding EnableResize}"/>
-                <Button Content="1920x1080" Margin="4,0" CommandParameter="1920x1080"
+                <Button Content="1920x1080" Margin="4,0" Padding="4,0" CommandParameter="1920x1080"
                         Command="{Binding SetWidthHeightCommand}"
                         IsEnabled="{Binding EnableResize}"/>
             </DockPanel>

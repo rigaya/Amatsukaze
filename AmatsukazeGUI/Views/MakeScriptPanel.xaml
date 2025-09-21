@@ -28,8 +28,8 @@
 
     <ScrollViewer>
         <StackPanel>
-            <GroupBox Header="EDCB用録画後実行バッチ">
-                <StackPanel Margin="5">
+            <GroupBox Header="EDCB用録画後実行バッチ" Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
+                <StackPanel Margin="5,8,5,5">
                     <DockPanel Margin="3">
                         <DockPanel.Resources>
                             <DataTemplate DataType="{x:Type m:DisplayAutoSelect}">
@@ -55,11 +55,12 @@
                           SelectedItem="{Binding Model.MakeScriptData.AddQueueBat, Mode=TwoWay}"/>
                     </DockPanel>
 
-                    <GroupBox>
+                    <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
                         <GroupBox.Header>
-                            <CheckBox Margin="3" Content="TSをNASにコピーしてそれをソース指定する" IsChecked="{Binding Model.MakeScriptData.IsNasEnabled, Mode=TwoWay}" />
+                            <CheckBox  Margin="0,0" MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
+                                Content="TSをNASにコピーしてそれをソース指定する" IsChecked="{Binding Model.MakeScriptData.IsNasEnabled, Mode=TwoWay}" />
                         </GroupBox.Header>
-                        <StackPanel IsEnabled="{Binding Model.MakeScriptData.IsNasEnabled}">
+                        <StackPanel IsEnabled="{Binding Model.MakeScriptData.IsNasEnabled}" Margin="0,8,0,2">
                             <DockPanel Margin="3">
                                 <TextBlock Text="コピー先:" />
                                 <TextBox Drop="TextBox_Drop" PreviewDragOver="TextBox_PreviewDragOver" IsEnabled="{Binding Model.MakeScriptData.IsNasEnabled}"
@@ -88,7 +89,7 @@
                 </StackPanel>
             </GroupBox>
         
-            <GroupBox Header="Amatsukazeサーバ操作">
+            <GroupBox Header="Amatsukazeサーバ操作" Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
                 <StackPanel Margin="5">
                     <Button Content="Amatsukazeサーバを停止" Height="25" Margin="5" IsEnabled="{Binding IsRemoteClient}" Command="{Binding StopServerCommand}"/>
                     <TextBlock Text="ローカルPCのサーバのみ停止できます。" HorizontalAlignment="Center"/>

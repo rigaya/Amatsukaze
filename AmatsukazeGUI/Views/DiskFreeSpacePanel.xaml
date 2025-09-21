@@ -14,10 +14,10 @@
                 <DataTemplate DataType="vm:DiskItemViewModel">
                     <Grid Margin="2">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="15"/>
-                            <RowDefinition Height="15"/>
+                            <RowDefinition Height="20"/>
+                            <RowDefinition Height="20"/>
                         </Grid.RowDefinitions>
-                        <TextBlock>
+                        <TextBlock Margin="2">
                             ディスク: <Run Text="{Binding Model.Path}"/>
                             <Run Text="{Binding DisplayOccupied, Mode=OneWay}" />/<Run Text="{Binding DisplayCapacity, Mode=OneWay}" />
                         </TextBlock>

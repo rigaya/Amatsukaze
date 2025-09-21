@@ -72,6 +72,13 @@
                         <ComboBoxItem Content="標準" Tag="Standard"/>
                         <ComboBoxItem Content="ライト" Tag="Light"/>
                         <ComboBoxItem Content="ダーク" Tag="Dark"/>
+                        <ComboBox.ToolTip>
+                            <TextBlock>
+                                テーマを選択すると、アプリ全体のテーマが変わります。
+                                <LineBreak/>「自動」を選択すると、Windowsのアプリテーマに追随します。
+                                <LineBreak/> <Run Foreground="Red">注意：完全な反映にはアプリの再起動が必要です。</Run>
+                            </TextBlock>
+                        </ComboBox.ToolTip>
                     </ComboBox>
                     <TextBox Margin="0,4" Height="23" 
                              Text="{Binding Model.Setting.WorkPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

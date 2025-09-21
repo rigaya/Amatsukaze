@@ -358,6 +358,8 @@
     <!-- 既定CheckBoxスタイル(Fluent時の縦位置/余白を微調整) -->
     <Style x:Key="BaseCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
         <Setter Property="Margin" Value="0,0"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="Padding" Value="4,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
