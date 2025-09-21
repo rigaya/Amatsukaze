@@ -1066,7 +1066,7 @@ namespace Amatsukaze.Models
                 default:
                     // OSのアプリテーマに追随（Light/Dark）
                     var appsUseLight = GetWindowsAppsUseLightTheme();
-                    mode = appsUseLight ? System.Windows.ThemeMode.Light : System.Windows.ThemeMode.Dark;
+                    mode = appsUseLight ? System.Windows.ThemeMode.None : System.Windows.ThemeMode.Dark;
                     break;
             }
             if (Application.Current != null)
@@ -1096,8 +1096,8 @@ namespace Amatsukaze.Models
             Color dark = isDark ? Color.FromRgb(0x30, 0x30, 0x30) : Color.FromRgb(0xCF, 0xCF, 0xCF);
             Color popup = bg;
             Color header = isStandard ? Color.FromRgb(0xF0, 0xFF, 0xFF) : (isDark ? Color.FromRgb(0x2A, 0x2A, 0x2A) : Color.FromRgb(0xF6, 0xF6, 0xF6));
-            Color selection = isStandard ? Color.FromRgb(0xAA, 0x88, 0xCC) : (isDark ? Color.FromRgb(0x33, 0x66, 0x99) : Color.FromRgb(0x2B, 0x88, 0xF7));
-            Color selectionFg = isDark ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF);
+            Color selection = isStandard ? Color.FromRgb(0xDA, 0x9E, 0xDA) : (isDark ? Color.FromRgb(0x33, 0x66, 0x99) : Color.FromRgb(0x2B, 0x88, 0xF7));
+            Color selectionFg = isStandard ? Color.FromRgb(0x00, 0x00, 0x00) : (isDark ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF));
 
             // アクセント: 標準では無効（従来配色を保つ）、Light/DarkではOSアクセント
             Brush accentBrush = isStandard
