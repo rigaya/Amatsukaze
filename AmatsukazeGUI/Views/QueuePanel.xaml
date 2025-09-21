@@ -317,35 +317,65 @@
             </Expander.Header>
             <DockPanel>
                 <GroupBox DockPanel.Dock="Top" Header="検索項目">
+                    <GroupBox.Resources>
+                        <!-- このGroupBox内のCheckBoxだけをコンパクト化（Fluent既定の余白/最小サイズを抑制） -->
+                        <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
+                            <Setter Property="MinWidth" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,2"/>
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                        </Style>
+                    </GroupBox.Resources>
                     <WrapPanel>
-                        <CheckBox Margin="0,0" FontSize="11" Content="ファイル名" IsChecked="{Binding SearchChecks[0].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="チャンネル" IsChecked="{Binding SearchChecks[1].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="プロファイル" IsChecked="{Binding SearchChecks[2].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="ジャンル" IsChecked="{Binding SearchChecks[3].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="状態" IsChecked="{Binding SearchChecks[4].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="モード" IsChecked="{Binding SearchChecks[5].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="すべて" IsChecked="{Binding SearchCheckAll, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="ファイル名" IsChecked="{Binding SearchChecks[0].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="チャンネル" IsChecked="{Binding SearchChecks[1].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="プロファイル" IsChecked="{Binding SearchChecks[2].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="ジャンル" IsChecked="{Binding SearchChecks[3].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="状態" IsChecked="{Binding SearchChecks[4].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="モード" IsChecked="{Binding SearchChecks[5].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="すべて" IsChecked="{Binding SearchCheckAll, Mode=TwoWay}"/>
                     </WrapPanel>
                 </GroupBox>
                 <GroupBox DockPanel.Dock="Top" Header="状態">
+                    <GroupBox.Resources>
+                        <!-- このGroupBox内のCheckBoxだけをコンパクト化（Fluent既定の余白/最小サイズを抑制） -->
+                        <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
+                            <Setter Property="MinWidth" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,2"/>
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                        </Style>
+                    </GroupBox.Resources>
                     <WrapPanel>
-                        <CheckBox Margin="0,0" FontSize="11" Content="待ち" IsChecked="{Binding StateChecks[0].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="ペンディング" IsChecked="{Binding StateChecks[1].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="実行中" IsChecked="{Binding StateChecks[2].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="キャンセル" IsChecked="{Binding StateChecks[3].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="完了" IsChecked="{Binding StateChecks[4].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="失敗" IsChecked="{Binding StateChecks[5].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Content="すべて" IsChecked="{Binding StateCheckAll, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="待ち" IsChecked="{Binding StateChecks[0].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="ペンディング" IsChecked="{Binding StateChecks[1].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="実行中" IsChecked="{Binding StateChecks[2].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="キャンセル" IsChecked="{Binding StateChecks[3].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="完了" IsChecked="{Binding StateChecks[4].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="失敗" IsChecked="{Binding StateChecks[5].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Content="すべて" IsChecked="{Binding StateCheckAll, Mode=TwoWay}"/>
                     </WrapPanel>
                 </GroupBox>
                 <GroupBox DockPanel.Dock="Top" Header="優先度">
+                    <GroupBox.Resources>
+                        <!-- このGroupBox内のCheckBoxだけをコンパクト化（Fluent既定の余白/最小サイズを抑制） -->
+                        <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
+                            <Setter Property="MinWidth" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,2"/>
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                        </Style>
+                    </GroupBox.Resources>
                     <WrapPanel>
-                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="1" IsChecked="{Binding PriorityChecks[0].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="2" IsChecked="{Binding PriorityChecks[1].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="3" IsChecked="{Binding PriorityChecks[2].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="4" IsChecked="{Binding PriorityChecks[3].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="5" IsChecked="{Binding PriorityChecks[4].Value, Mode=TwoWay}"/>
-                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="すべて" IsChecked="{Binding PriorityCheckAll, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Padding="6,0" Content="1" IsChecked="{Binding PriorityChecks[0].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Padding="6,0" Content="2" IsChecked="{Binding PriorityChecks[1].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Padding="6,0" Content="3" IsChecked="{Binding PriorityChecks[2].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Padding="6,0" Content="4" IsChecked="{Binding PriorityChecks[3].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Padding="6,0" Content="5" IsChecked="{Binding PriorityChecks[4].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" Padding="6,0" Content="すべて" IsChecked="{Binding PriorityCheckAll, Mode=TwoWay}"/>
                     </WrapPanel>
                 </GroupBox>
                 <WrapPanel HorizontalAlignment="Left" Margin="6,0">
