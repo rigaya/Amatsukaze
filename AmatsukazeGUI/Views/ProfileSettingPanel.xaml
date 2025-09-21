@@ -76,13 +76,28 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition />
                 </Grid.RowDefinitions>
 
-                <StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="エンコーダ"/>
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,28" Height="32">エンコーダ<LineBreak/>追加オプション</TextBlock>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="0">
                     <StackPanel>
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
@@ -96,17 +111,18 @@
                         </StackPanel.Style>
                         <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="SAR比"/>
                     </StackPanel>
-
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" TextAlignment="Right" Height="32">JoinLogoScp<LineBreak/>コマンドファイル</TextBlock>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0" Height="16" Text="オプション"/>
+                </StackPanel>
+                <StackPanel Grid.Row="4" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="chapter_exeオプション"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Margin="10,0">
-                    <StackPanel.Resources>
-                        <CollectionViewSource x:Key="NullList" Source="{x:Static m:NullValue.Array}"/>
-                        <CollectionViewSource x:Key="JLSCommandList" Source="{Binding Model.JlsCommandFiles}"/>
-                    </StackPanel.Resources>
+                <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0">
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Content="プロファイル設定をテキストでコピー" Height="20"
                                 Command="{Binding Model.SelectedProfile.CopySettingTextCommand}"/>
@@ -120,6 +136,8 @@
                              VerticalAlignment="Top"
                              ToolTip="入力ファイルの解像度、アスペクト比、インタレースフラグ、&#xA;フレームレート、カラーマトリクス等は（自動ビットレートONの場合はビットレート設定も）&#xA;自動で追加されるので不要です。"/>
 
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0">
                     <StackPanel>
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
@@ -143,7 +161,13 @@
                                 ToolTip="SAR比をmux時に指定します"/>
                         </DockPanel>
                     </StackPanel>
+                </StackPanel>
 
+                <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0">
+                    <StackPanel.Resources>
+                        <CollectionViewSource x:Key="NullList" Source="{x:Static m:NullValue.Array}"/>
+                        <CollectionViewSource x:Key="JLSCommandList" Source="{Binding Model.JlsCommandFiles}"/>
+                    </StackPanel.Resources>
                     <ComboBox Margin="0,3" Height="22" 
                       SelectedItem="{Binding Model.SelectedProfile.JLSCommandFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" 
                           ToolTip="CM判定に使います。">
@@ -159,6 +183,8 @@
                             </CompositeCollection>
                         </ComboBox.ItemsSource>
                     </ComboBox>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Grid.Column="1" Margin="10,0">
                     <DockPanel>
                         <CheckBox Content="チャンネル設定に従う" DockPanel.Dock="Right" VerticalAlignment="Center"
                                   IsChecked="{Binding Model.SelectedProfile.EnableJLSOption, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}"/>
@@ -166,20 +192,30 @@
                                  Text="{Binding Model.SelectedProfile.JLSOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding Model.SelectedProfile.EnableJLSOption, Mode=OneWay}"/>
                     </DockPanel>
+                </StackPanel>
+                <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,0">
                     <TextBox Margin="0,3" ToolTip="chapter_exeのオプション"
                              Text="{Binding Model.SelectedProfile.ChapterExeOptions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
                 </StackPanel>
 
-                <StackPanel Grid.Row="1">
-                    <TextBlock Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" TextWrapping="Wrap" Text="MPEG2デコーダ"/>
-                    <TextBlock Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" TextWrapping="Wrap" Text="H264デコーダ"/>
-                    <TextBlock Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" TextWrapping="Wrap" Text="HEVCデコーダ"/>
-                    <TextBlock Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="出力フォーマット"/>
-                    <TextBlock Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="出力選択"/>
+                <StackPanel Grid.Row="5" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" TextWrapping="Wrap" Text="MPEG2デコーダ"/>
                 </StackPanel>
-                <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0">
-                    <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
+                <StackPanel Grid.Row="6" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" TextWrapping="Wrap" Text="H264デコーダ"/>
+                </StackPanel>
+                <StackPanel Grid.Row="7" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" TextWrapping="Wrap" Text="HEVCデコーダ"/>
+                </StackPanel>
+                <StackPanel Grid.Row="8" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="出力フォーマット"/>
+                </StackPanel>
+                <StackPanel Grid.Row="9" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="出力選択"/>
+                </StackPanel>
+                <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,0">
+                    <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
                        ItemsSource="{Binding Model.SelectedProfile.Mpeg2DecoderList}"
                           SelectedIndex="{Binding Model.SelectedProfile.Mpeg2DecoderInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                         <ComboBox.ToolTip>
@@ -191,19 +227,22 @@
                             </TextBlock>
                         </ComboBox.ToolTip>
                     </ComboBox>
-
-                    <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
+                </StackPanel>
+                <StackPanel Grid.Row="6" Grid.Column="1" Margin="10,0">
+                    <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
                       ItemsSource="{Binding Model.SelectedProfile.H264DecoderList}"
                           SelectedIndex="{Binding Model.SelectedProfile.H264DecoderInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                        ToolTip="CUVIDの方が速いです。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
-
-                    <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
+                </StackPanel>
+                <StackPanel Grid.Row="7" Grid.Column="1" Margin="10,0">
+                    <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
                       ItemsSource="{Binding Model.SelectedProfile.HEVCDecoderList}"
                           SelectedIndex="{Binding Model.SelectedProfile.HEVCDecoderInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                        ToolTip="CUVIDの方が速いです。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
-
+                </StackPanel>
+                <StackPanel Grid.Row="8" Grid.Column="1" Margin="10,0">
                     <DockPanel>
-                        <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,3" Width="120" Height="22"
+                        <ComboBox Margin="0,3" Width="120" Height="22"
                            ItemsSource="{Binding Model.SelectedProfile.FormatList}" 
                            SelectedIndex="{Binding Model.SelectedProfile.OutputFormatInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                            ToolTip="MP4の場合、ASS字幕は別ファイルとして出力されます"/>
@@ -241,52 +280,68 @@
                         </StackPanel>
 
                     </DockPanel>
-
-                    <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="130" Height="22"
+                </StackPanel>
+                <StackPanel Grid.Row="9" Grid.Column="1" Margin="10,0">
+                    <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="130" Height="22"
                        ItemsSource="{Binding Model.SelectedProfile.OutputOptionList}" 
                        SelectedItem="{Binding Model.SelectedProfile.OutputMask, Mode=TwoWay}"
                        ToolTip="CMカットの精度は100%ではありません"
                        IsEnabled="{Binding Model.SelectedProfile.OutputOptionEnabled}"
                     />
-
-
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" Grid.Column="0">
+                <StackPanel Grid.Row="10" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,3" Text="リネーム" />
+                </StackPanel>
+                <StackPanel Grid.Row="11" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Margin="0,15" Text="SCRename書式" />
+                </StackPanel>
+                <StackPanel Grid.Row="12" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="" Margin="0,3"/>
+                </StackPanel>
+                <StackPanel Grid.Row="13" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="実行前バッチ" Margin="0,6"/>
+                </StackPanel>
+                <StackPanel Grid.Row="14" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="エンコード前バッチ" Margin="0,6"/>
+                </StackPanel>
+                <StackPanel Grid.Row="15" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="16" VerticalAlignment="Center" Text="実行後バッチ" Margin="0,6"/>
                 </StackPanel>
-                <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0">
+                <StackPanel Grid.Row="10" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="SCRenameによるリネームを行う" 
                               IsChecked="{Binding Model.SelectedProfile.EnableRename, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               ToolTip="SCRenameで適切なファイル名を取得してエンコード後、そのファイル名を設定します" />
-
+                </StackPanel>
+                <StackPanel Grid.Row="11" Grid.Column="1" Margin="10,0">
                     <TextBox Margin="0,3" Height="40" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.RenameFormat, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              VerticalAlignment="Top"
                              ToolTip="空欄にするとデフォルト書式を設定します" />
-
+                </StackPanel>
+                <StackPanel Grid.Row="12" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="ジャンルごとにフォルダ分け" 
                               IsChecked="{Binding Model.SelectedProfile.EnableGunreFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               ToolTip="SCRenameで名前が取得できた場合はフォルダ分けされません。" />
-
+                </StackPanel>
+                <StackPanel Grid.Row="13" Grid.Column="1" Margin="10,0">
                     <ComboBox Height="22" Margin="0,3" ToolTip="エンコード実行直前に実行するバッチファイル"
                               ItemsSource="{Binding Model.PreBatFiles}"
                               SelectedItem="{Binding Model.SelectedProfile.PreBatchFile, Mode=TwoWay}" />
+                </StackPanel>
+                <StackPanel Grid.Row="14" Grid.Column="1" Margin="10,0">
                     <ComboBox Height="22" Margin="0,3" ToolTip="エンコード開始直前に実行するバッチファイル"
                               ItemsSource="{Binding Model.PreEncodeBatFiles}"
                               SelectedItem="{Binding Model.SelectedProfile.PreEncodeBatchFile, Mode=TwoWay}" />
+                </StackPanel>
+                <StackPanel Grid.Row="15" Grid.Column="1" Margin="10,0">
                     <ComboBox Height="22" Margin="0,3" ToolTip="エンコード実行後に実行するバッチファイル"
                               ItemsSource="{Binding Model.PostBatFiles}"
                               SelectedItem="{Binding Model.SelectedProfile.PostBatchFile, Mode=TwoWay}" />
                 </StackPanel>
 
-                <TextBlock Grid.Row="3" HorizontalAlignment="Left" Text="フィルタ設定" VerticalAlignment="Center"/>
-                <StackPanel Grid.Row="3" Grid.Column="1" Margin="10,4">
+                <TextBlock Grid.Row="16" HorizontalAlignment="Left" Text="フィルタ設定" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="16" Grid.Column="1" Margin="10,4">
                     <ComboBox Margin="0,3" Height="22"
                               ItemsSource="{Binding Model.SelectedProfile.FilterOptions}"
                               SelectedIndex="{Binding Model.SelectedProfile.FilterOption, Mode=TwoWay}">
@@ -326,8 +381,8 @@
                     </ContentPresenter>
                 </StackPanel>
 
-                <TextBlock Grid.Row="4" HorizontalAlignment="Left" Text="ビットレート設定" VerticalAlignment="Top" Margin="0,76.667,0,0"/>
-                <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,4">
+                <TextBlock Grid.Row="17" HorizontalAlignment="Left" Text="ビットレート設定" VerticalAlignment="Top" Margin="0,76.667,0,0"/>
+                <StackPanel Grid.Row="17" Grid.Column="1" Margin="10,4">
                     <CheckBox Margin="0,4" Content="2パスエンコード"
                           IsChecked="{Binding Model.SelectedProfile.TwoPass, Mode=TwoWay}" VerticalAlignment="Top"/>
                     <DockPanel Margin="0,4">
@@ -402,8 +457,8 @@
                     </Grid>
                 </StackPanel>
 
-                <TextBlock Grid.Row="5" HorizontalAlignment="Right" Text="音声エンコード" VerticalAlignment="Top" Margin="0,4"/>
-                <StackPanel Grid.Row="5" Margin="0,24,0,0">
+                <TextBlock Grid.Row="18" HorizontalAlignment="Right" Text="音声エンコード" VerticalAlignment="Top" Margin="0,4"/>
+                <StackPanel Grid.Row="18" Margin="0,24,0,0">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Visible"/>
@@ -414,13 +469,13 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <TextBlock Grid.Row="5" Height="16" HorizontalAlignment="Right" Margin="0,4" 
+                    <TextBlock Grid.Row="18" Height="16" HorizontalAlignment="Right" Margin="0,4" 
                                Text="音声エンコーダ" VerticalAlignment="Top"/>
-                    <TextBlock Grid.Row="5" Height="16" HorizontalAlignment="Right" Margin="0,4" 
+                    <TextBlock Grid.Row="18" Height="16" HorizontalAlignment="Right" Margin="0,4" 
                                Text="音声ビットレート" VerticalAlignment="Top"/>
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,8" Height="32">音声エンコーダ<LineBreak/>追加オプション</TextBlock>
                 </StackPanel>
-                <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,0">
+                <StackPanel Grid.Row="18" Grid.Column="1" Margin="10,0">
                     <CheckBox Content="音声をエンコードする" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,4"
                                   IsChecked="{Binding Model.SelectedProfile.EnableAudioEncode, Mode=TwoWay}"/>
                     <StackPanel>
@@ -452,7 +507,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <TextBlock Grid.Row="6" HorizontalAlignment="Left" Text="ニコニコ実況コメント" VerticalAlignment="Top" Margin="0,45.667,0,0">
+                <TextBlock Grid.Row="19" HorizontalAlignment="Left" Text="ニコニコ実況コメント" VerticalAlignment="Top" Margin="0,45.667,0,0">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
@@ -463,7 +518,7 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <StackPanel Grid.Row="6" Grid.Column="1" Margin="10,0">
+                <StackPanel Grid.Row="19" Grid.Column="1" Margin="10,0">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
                             <Style.Triggers>
@@ -524,10 +579,10 @@
                     </Grid>
                 </StackPanel>
 
-                <StackPanel Grid.Row="7" Grid.Column="0">
+                <StackPanel Grid.Row="20" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,80" Text="その他の設定"/>
                 </StackPanel>
-                <StackPanel Grid.Row="7" Grid.Column="1" Margin="10,0">
+                <StackPanel Grid.Row="20" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="関連ファイル(*.err,*.program.txtなど)もコピー/移動する" 
                               IsChecked="{Binding Model.SelectedProfile.MoveEDCBFiles, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               ToolTip="これらのファイルも一緒にコピー・移動されるようになります。" />
@@ -587,7 +642,7 @@
                     </CheckBox>
                 </StackPanel>
 
-                <StackPanel Grid.Row="8" Grid.Column="0" Margin="0,20,0,0"
+                <StackPanel Grid.Row="21" Grid.Column="0" Margin="0,20,0,0"
                             Visibility="{Binding IsExpanded, ElementName=detailSettingPanel, Converter={StaticResource BoolVisibilityConverter}}">
                     <TextBlock Height="16" Margin="0,4" />
                     <TextBlock Height="16" Margin="0,4" />
@@ -595,7 +650,7 @@
                         追加ロゴ消し用<LineBreak/>ロゴリスト
                     </TextBlock>
                 </StackPanel>
-                <Expander Grid.Row="8" Grid.Column="1" x:Name="detailSettingPanel" Header="詳細設定">
+                <Expander Grid.Row="21" Grid.Column="1" x:Name="detailSettingPanel" Header="詳細設定">
                     <StackPanel>
                         <CheckBox Height="16" Margin="0,3"  Content="メイン以外のフォーマットは結合しない"
                             IsChecked="{Binding Model.SelectedProfile.SplitSub, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
@@ -622,13 +677,13 @@
                     </StackPanel>
                 </Expander>
 
-                <StackPanel Grid.Row="9" Grid.Column="0">
+                <StackPanel Grid.Row="22" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Left" Margin="0,40">
                         スケジューリング<LineBreak/>リソース設定
                     </TextBlock>
                 </StackPanel>
 
-                <StackPanel Grid.Row="9" Grid.Column="1" Margin="0,5,0,0">
+                <StackPanel Grid.Row="22" Grid.Column="1" Margin="0,5,0,0">
                     <StackPanel.Resources>
                         <l:VisibilityAndBooleanConverter x:Key="VisibilityAndBooleanConverter"
                                                          ConvertWhenTrue="Visible" ConvertWhenFalse="Collapsed"/>
