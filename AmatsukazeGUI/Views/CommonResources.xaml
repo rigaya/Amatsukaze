@@ -94,7 +94,8 @@
 
     <Style TargetType="Button" BasedOn="{StaticResource ButtonStyle}"/>
 
-    <ControlTemplate x:Key="MyComboboxTemplate" TargetType="{x:Type ComboBox}">
+    <!-- 標準テーマ用の ComboBox テンプレート（従来風） -->
+    <ControlTemplate x:Key="MyComboboxTemplateStandard" TargetType="{x:Type ComboBox}">
         <Grid x:Name="templateRoot" SnapsToDevicePixels="True">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -267,16 +268,42 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
-    <Style TargetType="ComboBox">
-        <Setter Property="Template" Value="{StaticResource MyComboboxTemplate}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource AMT.BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0.5"/>
+    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="Background" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
-        <!-- つまみ領域確保のため内側余白を少し広げる -->
-        <Setter Property="Padding" Value="6,0,24,0"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AMT.BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,0,28,0"/>
         <Setter Property="MinHeight" Value="22"/>
+        <Setter Property="MinWidth" Value="60"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Style.Triggers>
+            <!-- 標準テーマのときだけ従来テンプレートを適用 -->
+            <!-- ライト/ダークのときは適用しない(そうしないとおかしな描画になる) -->
+            <DataTrigger Binding="{Binding Source={x:Static Application.Current}, Path=Resources[AMT.IsStandardTheme]}" Value="True">
+                <Setter Property="Template" Value="{StaticResource MyComboboxTemplateStandard}"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ドロップダウン内の項目配色（ライト/ダーク連動） -->
+    <Style TargetType="{x:Type ComboBoxItem}" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource AMT.ControlLightBrush}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource AMT.SelectionBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource AMT.SelectionForegroundBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource AMT.DisabledForegroundBrush}"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- Fluent(ライト/ダーク)適用時のTextBoxテキスト下欠け/縦位置ずれ対策。
