@@ -59,7 +59,7 @@
         </DockPanel>
         <DockPanel Style="{StaticResource ExtendDuration}">
             <TextBlock Margin="4" Text="VFRフレームタイミング" VerticalAlignment="Center"/>
-            <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="80" Height="22"
+            <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
                        ItemsSource="{Binding VFRFpsList}" 
                        SelectedIndex="{Binding VFRFps, Mode=TwoWay}"
                        ToolTip="24fpsフレームのフレーム時刻に影響します"/>

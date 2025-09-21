@@ -317,7 +317,7 @@
 
     <!-- 既定CheckBoxスタイル(Fluent時の縦位置/余白を微調整) -->
     <Style x:Key="BaseCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
-        <Setter Property="Margin" Value="0,4"/>
+        <Setter Property="Margin" Value="0,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
@@ -332,6 +332,21 @@
         <Style.Triggers>
             <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
                 <Setter Property="Visibility" Value="Collapsed"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Fluent(ライト/ダーク)時のListBoxアイテムをコンパクトにする -->
+    <Style x:Key="AMT.CompactListBoxItemStyle" TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+        <Setter Property="Padding" Value="4,1"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <!-- 既定のListBoxに対し、標準テーマ以外(Fluentライト/ダーク)のときだけコンテナスタイルを上書き -->
+    <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource {x:Type ListBox}}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Source={x:Static Application.Current}, Path=Resources[AMT.IsStandardTheme]}" Value="False">
+                <Setter Property="ItemContainerStyle" Value="{StaticResource AMT.CompactListBoxItemStyle}"/>
             </DataTrigger>
         </Style.Triggers>
     </Style>

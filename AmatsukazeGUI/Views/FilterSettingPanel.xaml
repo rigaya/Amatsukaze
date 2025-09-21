@@ -9,7 +9,7 @@
              xmlns:c="clr-namespace:Amatsukaze.Components" 
              xmlns:local="clr-namespace:Amatsukaze.Views"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300"
+             d:DesignHeight="300" d:DesignWidth="420"
              d:DataContext="{d:DesignInstance {x:Type m:DisplayFilterSetting}}">
     
     <UserControl.Resources>
@@ -33,7 +33,7 @@
                     </TextBlock>
                 </CheckBox.ToolTip>
             </CheckBox>
-            <Button Margin="8,2" HorizontalAlignment="Right" Width="120" Height="20"
+            <Button Margin="6,2" HorizontalAlignment="Right" Width="150" Height="20"
                     Content="フィルタをテキストでコピー" Command="{Binding CopyFilterTextCommand}"/>
         </DockPanel>
         <GroupBox>
@@ -104,7 +104,7 @@
                     </ComboBox.ToolTip>
                 </ComboBox>
                 <TextBlock VerticalAlignment="Center" Text="品質"/>
-                <ComboBox Margin="4,0" Width="60"  Height="22"
+                <ComboBox Margin="4,0" Width="100"  Height="22"
                           ItemsSource="{Binding DeblockQualityList}"
                           SelectedIndex="{Binding DeblockQuality, Mode=TwoWay}"
                           IsEnabled="{Binding EnableDeblock}">

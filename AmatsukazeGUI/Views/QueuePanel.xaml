@@ -10,7 +10,7 @@
              xmlns:c="clr-namespace:Amatsukaze.Components" 
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="350"
+             d:DesignHeight="300" d:DesignWidth="480"
              d:DataContext="{d:DesignInstance {x:Type vm:QueueViewModel}}"
              Loaded="UserControl_Loaded"
              Background="{DynamicResource AMT.ControlBackgroundBrush}">
@@ -318,34 +318,34 @@
             <DockPanel>
                 <GroupBox DockPanel.Dock="Top" Header="検索項目">
                     <WrapPanel>
-                        <CheckBox Content="ファイル名" IsChecked="{Binding SearchChecks[0].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="チャンネル" IsChecked="{Binding SearchChecks[1].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="プロファイル" IsChecked="{Binding SearchChecks[2].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="ジャンル" IsChecked="{Binding SearchChecks[3].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="状態" IsChecked="{Binding SearchChecks[4].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="モード" IsChecked="{Binding SearchChecks[5].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="すべて" IsChecked="{Binding SearchCheckAll, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="ファイル名" IsChecked="{Binding SearchChecks[0].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="チャンネル" IsChecked="{Binding SearchChecks[1].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="プロファイル" IsChecked="{Binding SearchChecks[2].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="ジャンル" IsChecked="{Binding SearchChecks[3].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="状態" IsChecked="{Binding SearchChecks[4].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="モード" IsChecked="{Binding SearchChecks[5].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="すべて" IsChecked="{Binding SearchCheckAll, Mode=TwoWay}"/>
                     </WrapPanel>
                 </GroupBox>
                 <GroupBox DockPanel.Dock="Top" Header="状態">
                     <WrapPanel>
-                        <CheckBox Content="待ち" IsChecked="{Binding StateChecks[0].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="ペンディング" IsChecked="{Binding StateChecks[1].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="実行中" IsChecked="{Binding StateChecks[2].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="キャンセル" IsChecked="{Binding StateChecks[3].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="完了" IsChecked="{Binding StateChecks[4].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="失敗" IsChecked="{Binding StateChecks[5].Value, Mode=TwoWay}"/>
-                        <CheckBox Content="すべて" IsChecked="{Binding StateCheckAll, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="待ち" IsChecked="{Binding StateChecks[0].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="ペンディング" IsChecked="{Binding StateChecks[1].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="実行中" IsChecked="{Binding StateChecks[2].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="キャンセル" IsChecked="{Binding StateChecks[3].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="完了" IsChecked="{Binding StateChecks[4].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="失敗" IsChecked="{Binding StateChecks[5].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Content="すべて" IsChecked="{Binding StateCheckAll, Mode=TwoWay}"/>
                     </WrapPanel>
                 </GroupBox>
                 <GroupBox DockPanel.Dock="Top" Header="優先度">
                     <WrapPanel>
-                        <CheckBox Padding="6,0" Content="1" IsChecked="{Binding PriorityChecks[0].Value, Mode=TwoWay}"/>
-                        <CheckBox Padding="6,0" Content="2" IsChecked="{Binding PriorityChecks[1].Value, Mode=TwoWay}"/>
-                        <CheckBox Padding="6,0" Content="3" IsChecked="{Binding PriorityChecks[2].Value, Mode=TwoWay}"/>
-                        <CheckBox Padding="6,0" Content="4" IsChecked="{Binding PriorityChecks[3].Value, Mode=TwoWay}"/>
-                        <CheckBox Padding="6,0" Content="5" IsChecked="{Binding PriorityChecks[4].Value, Mode=TwoWay}"/>
-                        <CheckBox Padding="6,0" Content="すべて" IsChecked="{Binding PriorityCheckAll, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="1" IsChecked="{Binding PriorityChecks[0].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="2" IsChecked="{Binding PriorityChecks[1].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="3" IsChecked="{Binding PriorityChecks[2].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="4" IsChecked="{Binding PriorityChecks[3].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="5" IsChecked="{Binding PriorityChecks[4].Value, Mode=TwoWay}"/>
+                        <CheckBox Margin="0,0" FontSize="11" Padding="6,0" Content="すべて" IsChecked="{Binding PriorityCheckAll, Mode=TwoWay}"/>
                     </WrapPanel>
                 </GroupBox>
                 <WrapPanel HorizontalAlignment="Left" Margin="6,0">
@@ -367,7 +367,7 @@
                     <TextBlock VerticalAlignment="Center">操作パネル</TextBlock>
                     <DockPanel Grid.Column="1">
                         <TextBlock VerticalAlignment="Center">表示</TextBlock>
-                        <Slider Margin="3,0" Height="20" Maximum="2" Value="{Binding Model.Setting.ListStyle, Mode=TwoWay}"
+                        <Slider Margin="3,0" Height="26" Maximum="2" Value="{Binding Model.Setting.ListStyle, Mode=TwoWay}"
                             VerticalAlignment="Center" HorizontalAlignment="Stretch" ToolTip="表示切り替え"/>
                     </DockPanel>
                 </Grid>
@@ -468,7 +468,7 @@
         <DockPanel DockPanel.Dock="Bottom" Margin="6,0">
             <DockPanel DockPanel.Dock="Right">
                 <TextBlock Height="16" Text="エンコード後"/>
-                <ComboBox IsReadOnly="True" Width="90" Height="22"
+                <ComboBox IsReadOnly="True" Width="135" Height="22"
                     ItemsSource="{Binding Model.FinishActionList}"
                     SelectedIndex="{Binding Model.FinishSetting.Action, Mode=TwoWay}"/>
             </DockPanel>

@@ -31,7 +31,7 @@
             <CheckBox VerticalAlignment="Center" Content="30fps部分にAutoVfr.iniで設定した関数を使う" IsChecked="{Binding Enable30A, Mode=TwoWay}" />
             <WrapPanel>
                 <TextBlock VerticalAlignment="Center" Text="SKIP "/>
-                <TextBox VerticalAlignment="Center" Width="30"
+                <TextBox VerticalAlignment="Center" Width="60"
                          Text="{Binding Skip, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                     <TextBox.ToolTip>
                         <TextBlock>

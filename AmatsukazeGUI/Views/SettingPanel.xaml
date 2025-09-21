@@ -10,7 +10,7 @@
              xmlns:c="clr-namespace:Amatsukaze.Components" 
              xmlns:Models="clr-namespace:Amatsukaze.Models" x:Class="Amatsukaze.Views.SettingPanel" 
              mc:Ignorable="d" 
-             d:DesignHeight="1300" d:DesignWidth="500" d:Background="White"
+             d:DesignHeight="1900" d:DesignWidth="500" d:Background="White"
              d:DataContext="{d:DesignInstance {x:Type vm:SettingViewModel}}">
     
     <UserControl.Resources>
@@ -318,7 +318,7 @@
                         </DockPanel.Resources>
                         <CheckBox DockPanel.Dock="Left" VerticalAlignment="Center" Content="デフォルト値を使う" Margin="0,0" Height="22" IsChecked="{Binding Model.Setting.EnableX265VFRTimeFactor, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}"/>
                         <TextBlock DockPanel.Dock="Right" TextWrapping="Wrap" Width="30" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding Model.Setting.EnableX265VFRTimeFactor, Mode=OneWay, Converter={StaticResource VisibilityAndBooleanConverter}}" Text="{Binding Model.Setting.X265VFRTimeFactor, StringFormat=N2}"/>
-                        <Slider Margin="3,4" Height="26" SmallChange="0.01" Maximum="1" Minimum="0" Value="{Binding Model.Setting.X265VFRTimeFactor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Model.Setting.EnableX265VFRTimeFactor, Mode=OneWay}" LargeChange="0.01" TickFrequency="0.1"/>
+                        <Slider Margin="8,4,2,4" Height="26" SmallChange="0.01" Maximum="1" Minimum="0" Value="{Binding Model.Setting.X265VFRTimeFactor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Model.Setting.EnableX265VFRTimeFactor, Mode=OneWay}" LargeChange="0.01" TickFrequency="0.1"/>
                     </DockPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="4" Grid.Column="1">
@@ -333,7 +333,7 @@
                 <StackPanel Grid.Row="7" Grid.Column="1">
                     <DockPanel Margin="12,0,0,0">
                         <CheckBox  Margin="0,4" Height="22" IsChecked="{Binding Model.Setting.DeleteOldLogs, Mode=TwoWay}"/>
-                        <TextBox Width="30" Height="22" Margin="4,0" HorizontalAlignment="Left" VerticalAlignment="Center" Text="{Binding Model.Setting.DeleteOldLogsDays, Mode=TwoWay, StringFormat=\{0:D\}}" />
+                        <TextBox Width="50" Height="22" Margin="4,0" HorizontalAlignment="Left" VerticalAlignment="Center" Text="{Binding Model.Setting.DeleteOldLogsDays, Mode=TwoWay, StringFormat=\{0:D\}}" />
                         <TextBlock VerticalAlignment="Center" Text="日経過したログファイルを自動削除する"/>
                     </DockPanel>
                 </StackPanel>
@@ -459,7 +459,7 @@
                 </StackPanel>
                 <StackPanel Grid.Row="10" Grid.Column="1">
 
-                    <ComboBox IsReadOnly="True" Width="100" HorizontalAlignment="Left" Margin="10,3,0,0" Height="22" ItemsSource="{Binding Model.ProcessPriorityList}" SelectedIndex="{Binding Model.Setting.ProcessPriority, Mode=TwoWay}" ToolTip="「通常以下」または「低」推奨です"/>
+                    <ComboBox IsReadOnly="True" Width="150" HorizontalAlignment="Left" Margin="10,3,0,0" Height="22" ItemsSource="{Binding Model.ProcessPriorityList}" SelectedIndex="{Binding Model.Setting.ProcessPriority, Mode=TwoWay}" ToolTip="「通常以下」または「低」推奨です"/>
 
                 </StackPanel>
                 <StackPanel Grid.Row="11" Grid.Column="1">
@@ -475,7 +475,7 @@
                                 <Border />
                             </ControlTemplate>
                         </DockPanel.Resources>
-                        <ComboBox IsReadOnly="True" Width="70" Height="22" ItemsSource="{Binding Model.AffinityList}" SelectedIndex="{Binding Model.Setting.AffinitySetting, Mode=TwoWay}" ToolTip="コア数の多いCPUではアフィニティを設定したほうが性能が良くなる場合があります。&#xA;L3キャッシュごとに割り当てれば、だいだいベストな性能が出ます。&#xA;GroupはWindowsのプロセッサーグループです。"/>
+                        <ComboBox IsReadOnly="True" Width="120" Height="22" ItemsSource="{Binding Model.AffinityList}" SelectedIndex="{Binding Model.Setting.AffinitySetting, Mode=TwoWay}" ToolTip="コア数の多いCPUではアフィニティを設定したほうが性能が良くなる場合があります。&#xA;L3キャッシュごとに割り当てれば、だいだいベストな性能が出ます。&#xA;GroupはWindowsのプロセッサーグループです。"/>
                         <ContentControl Margin="5,0,0,0" VerticalAlignment="Center">
                             <ContentControl.Style>
                                 <Style TargetType="ContentControl">
@@ -534,7 +534,7 @@
                                IsChecked="{Binding Model.Setting.EnableRunHours, Mode=TwoWay}"/>
                     <DockPanel>
                         <TextBlock VerticalAlignment="Center" Text="停止中は"/>
-                        <ComboBox Width="200" IsEnabled="{Binding Model.Setting.EnableRunHours}"
+                        <ComboBox Width="270" IsEnabled="{Binding Model.Setting.EnableRunHours}"
                                   ItemsSource="{Binding Model.Setting.RunHoursSuspendEncodersList}"
                                   SelectedIndex="{Binding Model.Setting.RunHoursSuspendEncodersIndex, Mode=TwoWay}" />
                         <TextBlock VerticalAlignment="Center" Text="を停止する"/>
@@ -555,7 +555,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type m:DisplayRunHour}">
-                                    <CheckBox Margin="4,0" Height="16"
+                                    <CheckBox Margin="0,0" Height="16"
                                               Content="{Binding HourText}"
                                               IsChecked="{Binding Enabled, Mode=TwoWay}"/>
                                 </DataTemplate>
