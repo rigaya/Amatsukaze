@@ -401,4 +401,15 @@
 
     <c:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
     <c:NegateValueConverter x:Key="NegateValueConverter"/>
+
+    <!-- GridSplitter の見た目をテーマ連動のブラシで統一 -->
+    <Style TargetType="GridSplitter" BasedOn="{StaticResource {x:Type GridSplitter}}">
+        <Setter Property="Background" Value="{DynamicResource AMT.SplitterBrush}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource AMT.SplitterHoverBrush}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 </ResourceDictionary>

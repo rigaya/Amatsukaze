@@ -7,6 +7,9 @@
     <SolidColorBrush x:Key="AMT.BorderBrush" Color="#FFABADB3"/>
     <SolidColorBrush x:Key="AMT.ControlLightBrush" Color="#FFE5E5E5"/>
     <SolidColorBrush x:Key="AMT.ControlDarkBrush" Color="#FFCFCFCF"/>
+    <!-- GridSplitter 用ブラシ（既定値。実値は UpdateThemeResources で上書き） -->
+    <SolidColorBrush x:Key="AMT.SplitterBrush" Color="#FFCFCFCF"/>
+    <SolidColorBrush x:Key="AMT.SplitterHoverBrush" Color="#FFAAAAAA"/>
     <SolidColorBrush x:Key="AMT.PopupBackgroundBrush" Color="#FFFFFFFF"/>
     <SolidColorBrush x:Key="AMT.AccentBrush" Color="#FF569DE5"/>
     <SolidColorBrush x:Key="AMT.AccentLightBrush" Color="#FF7EB4EA"/>

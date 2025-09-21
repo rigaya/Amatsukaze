@@ -1118,6 +1118,19 @@ namespace Amatsukaze.Models
             rd["AMT.DisabledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
             rd["AMT.AccentBrush"] = accentBrush;
 
+            // GridSplitter の色（ライト/ダークで見やすいトーンに調整）
+            // 標準: 既存コントロールダーク/ライトに近い中間色
+            // ダーク: 明度を抑えた中間グレー + ホバー時はやや明るく
+            // ライト: 既存と同等の中間色 + ホバー時は少し濃く
+            Color splitter = isStandard
+                ? Color.FromRgb(0xCF, 0xCF, 0xCF)
+                : (isDark ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0xC8, 0xC8, 0xC8));
+            Color splitterHover = isStandard
+                ? Color.FromRgb(0xAA, 0xAA, 0xAA)
+                : (isDark ? Color.FromRgb(0x77, 0x77, 0x77) : Color.FromRgb(0x9E, 0x9E, 0x9E));
+            rd["AMT.SplitterBrush"] = new SolidColorBrush(splitter);
+            rd["AMT.SplitterHoverBrush"] = new SolidColorBrush(splitterHover);
+
             // Queue 状態色
             if (isStandard)
             {
