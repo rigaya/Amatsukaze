@@ -63,11 +63,51 @@
         <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
     </Style>
 
-    <!-- GroupBox の枠色・前景をテーマに合わせる -->
+    <!-- GroupBox の枠線をシンプルな細い単線に統一（ライト/ダーク両対応） -->
     <Style TargetType="GroupBox">
         <Setter Property="BorderBrush" Value="{DynamicResource AMT.BorderBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
+        <!-- 背景は透明にして親の背景となじませる（Light時の色ズレ防止） -->
         <Setter Property="Background" Value="Transparent"/>
+        <!-- ヘッダ専用の背景色を差し替え可能にする（既定はControl背景） -->
+        <Setter Property="Tag" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GroupBox">
+                    <Grid SnapsToDevicePixels="True" ClipToBounds="True">
+                        <!-- 枠線。本体の上部に6pxの余白を作り、ヘッダを上に重ねる -->
+                        <Border x:Name="OuterBorder"
+                                Margin="0,10,0,0"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                Background="{TemplateBinding Background}"/>
+
+                        <!-- コンテンツ領域。ヘッダ分だけ上に余白 -->
+                        <ContentPresenter x:Name="PART_Content"
+                                          Margin="8,18,8,8"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch"/>
+
+                        <!-- ヘッダ。周囲背景色と同化させて枠の上に乗せる -->
+                        <Border x:Name="HeaderBackground"
+                                Background="{TemplateBinding Tag}"
+                                Padding="4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Margin="12,-1,0,0">
+                            <ContentPresenter x:Name="PART_Header"
+                                              ContentSource="Header"
+                                              RecognizesAccessKey="True"
+                                              SnapsToDevicePixels="True"/>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="ButtonStyle" TargetType="ButtonBase">

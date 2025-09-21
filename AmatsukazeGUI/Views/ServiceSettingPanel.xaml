@@ -48,7 +48,7 @@
 
             <Border Width="6" DockPanel.Dock="Left"/>
 
-            <GroupBox DockPanel.Dock="Top" Header="JoinLogoScpコマンドファイル">
+            <GroupBox DockPanel.Dock="Top" Header="JoinLogoScpコマンドファイル" Tag="{DynamicResource AMT.BackgroundBaseBrush}">
                 <DockPanel>
                     <ComboBox DockPanel.Dock="Top" HorizontalAlignment="Stretch" Margin="3"
                               ItemsSource="{Binding Model.JlsCommandFiles}"

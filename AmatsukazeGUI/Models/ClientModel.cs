@@ -1088,7 +1088,6 @@ namespace Amatsukaze.Models
             // XAML側のDataTriggerで参照するテーマ種別フラグ
             rd["AMT.IsStandardTheme"] = isStandard;
 
-
             Color bg = isDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xFF, 0xFF, 0xFF);
             Color fg = isDark ? Color.FromRgb(0xEE, 0xEE, 0xEE) : Color.FromRgb(0x00, 0x00, 0x00);
             Color border = isDark ? Color.FromRgb(0x5A, 0x5A, 0x5A) : Color.FromRgb(0xAB, 0xAD, 0xB3);
@@ -1099,11 +1098,14 @@ namespace Amatsukaze.Models
             Color selection = isStandard ? Color.FromRgb(0xDA, 0x9E, 0xDA) : (isDark ? Color.FromRgb(0x33, 0x66, 0x99) : Color.FromRgb(0x2B, 0x88, 0xF7));
             Color selectionFg = isStandard ? Color.FromRgb(0x00, 0x00, 0x00) : (isDark ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF));
 
+            Color bgBase = isStandard ? Color.FromRgb(0xF0, 0xFF, 0xFF) : (isDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF2, 0xF2, 0xF2));
+
             // アクセント: 標準では無効（従来配色を保つ）、Light/DarkではOSアクセント
             Brush accentBrush = isStandard
                 ? new SolidColorBrush(Color.FromRgb(0x56, 0x9D, 0xE5))
                 : (Brush)SystemParameters.WindowGlassBrush ?? SystemColors.AccentColorBrush;
 
+            rd["AMT.BackgroundBaseBrush"] = new SolidColorBrush(bgBase);
             rd["AMT.ControlBackgroundBrush"] = new SolidColorBrush(bg);
             rd["AMT.ControlForegroundBrush"] = new SolidColorBrush(fg);
             rd["AMT.BorderBrush"] = new SolidColorBrush(border);
