@@ -36,22 +36,22 @@
                                 <TextBlock>自動選択_<Run Text="{Binding Path=Model.Name}"/></TextBlock>
                             </DataTemplate>
                         </DockPanel.Resources>
-                        <ComboBox Width="40" Height="22" HorizontalAlignment="Left" DockPanel.Dock="Right" 
+                        <ComboBox Width="40" Height="22" Margin="5,0" HorizontalAlignment="Left" DockPanel.Dock="Right" 
                                   ItemsSource="{Binding Model.PriorityList}" 
                                   SelectedItem="{Binding Model.MakeScriptData.Priority, Mode=TwoWay}"/>
                         <TextBlock Text="優先度:" VerticalAlignment="Center" DockPanel.Dock="Right"/>
                         <TextBlock Text="プロファイル" VerticalAlignment="Center"/>
                         <ComboBox SelectedItem="{Binding Model.MakeScriptData.SelectedProfile, Mode=TwoWay}"
-                                  Height="22" ItemsSource="{Binding Model.SelectableProfiles}" />
+                                  Height="22" Margin="5,0" ItemsSource="{Binding Model.SelectableProfiles}" />
                     </DockPanel>
                     <DockPanel Margin="3">
                         <TextBlock Text="出力先:" />
-                        <TextBox Drop="TextBox_Drop" PreviewDragOver="TextBox_PreviewDragOver"
+                        <TextBox Drop="TextBox_Drop" PreviewDragOver="TextBox_PreviewDragOver" Margin="5,0"
                                  Text="{Binding Model.MakeScriptData.OutDir, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </DockPanel>
                     <DockPanel>
-                        <TextBlock Text="追加時バッチ" VerticalAlignment="Center" Margin="5,0"/>
-                        <ComboBox ItemsSource="{Binding Model.AddQueueBatFiles}" Height="22"
+                        <TextBlock Text="追加時バッチ" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding Model.AddQueueBatFiles}" Height="22" Margin="5,0"
                           SelectedItem="{Binding Model.MakeScriptData.AddQueueBat, Mode=TwoWay}"/>
                     </DockPanel>
 
