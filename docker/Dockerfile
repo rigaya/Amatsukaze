@@ -33,8 +33,6 @@ ENV JOIN_LOGO_SCP_VER=Ver4.1.0_Linux
 ENV FDK_AAC_REV=d8e6b1a3aa606c450241632b64b703f21ea31ce3
 ENV FDKAAC_VER=v1.0.6
 
-ENV X264_REV=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
-
 # ビルドツールのインストール
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -57,8 +55,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && apt-get autoremove -y
-
-FROM builder AS builder_tools
 
 # AviSynth+のインストール
 RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_Ubuntu${UBUNTU_VERSION}.deb -O avisynth.deb \
@@ -161,17 +157,6 @@ RUN git clone https://github.com/mstorsjo/fdk-aac.git \
     && make -j$(nproc) \
     && make install
 
-# x264
-RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
-    && cd AutoBuildForAviUtlPlugins/x264 \
-    && curl -o test_8.7z -L https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250825/test_8.7z \
-    && 7z x test_8.7z \
-    && mv test.yuv test_1280x720.yuv \
-    && chmod u+x build_x264.sh \
-    && YUV_PATH=`pwd`/test_1280x720.yuv CC=gcc CXX=g++ INSTALL_DIR=/usr/local X264_REV=${X264_REV} ./build_x264.sh \
-    && cd ../.. \
-    && rm -rf AutoBuildForAviUtlPlugins
-
 # ビルド段階のクリーンアップ
 RUN rm -rf /tmp/plugins \
     && rm -rf /var/cache/apt/* \
@@ -180,66 +165,6 @@ RUN rm -rf /tmp/plugins \
     && rm -rf /usr/share/man/* \
     && rm -rf /usr/share/locale/* \
     && rm -rf /usr/share/info/*
-
-FROM ubuntu:22.04 AS builder_x265
-
-# ビルドツールのインストール
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    wget \
-    curl \
-    p7zip-full \
-    nasm \
-    pkg-config \
-    cmake \
-    clang \
-    llvm \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && apt-get autoremove -y
-
-ENV X265_REV=8f11c33acc267ba3f1d2bde60a6aa906e494cbde
-
-RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
-    && cd AutoBuildForAviUtlPlugins/x265 \
-    && curl -o test_8.7z -L https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250825/test_8.7z \
-    && 7z x test_8.7z \
-    && chmod u+x build_x265.sh \
-    && YUV_PATH=`pwd`/test.yuv CC=clang CXX=clang++ INSTALL_DIR=/usr/local X265_REV=${X265_REV} ./build_x265.sh \
-    && cd ../.. \
-    && rm -rf AutoBuildForAviUtlPlugins
-
-FROM ubuntu:22.04 AS builder_svtav1
-
-# ビルドツールのインストール
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    wget \
-    curl \
-    p7zip-full \
-    nasm \
-    pkg-config \
-    cmake \
-    clang \
-    llvm \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && apt-get autoremove -y
-
-ENV SVTAV1_REV=fad71e85581225ee219a5f90b3862fc5b69cb21a
-
-RUN git clone https://github.com/rigaya/AutoBuildForAviUtlPlugins.git AutoBuildForAviUtlPlugins \
-    && cd AutoBuildForAviUtlPlugins/svtav1 \
-    && curl -o test_8.7z -L https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250825/test_8.7z \
-    && curl -o test_10.7z -L https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250825/test_10.7z \
-    && 7z x test_8.7z \
-    && 7z x test_10.7z \
-    && chmod u+x build_svtav1.sh \
-    && YUV_PATH=`pwd`/test.yuv YUV_PATH_10=`pwd`/test_10.yuv INSTALL_DIR=/usr/local CC=clang CXX=clang++ SVTAV1_REV=${SVTAV1_REV} ./build_svtav1.sh \
-    && cd ../.. \
-    && rm -rf AutoBuildForAviUtlPlugins
 
 # 実行段階
 FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04 AS runtime
@@ -359,12 +284,18 @@ RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCR
     && mv tmp_SCRenamePy/SCRename.* exe_files/SCRenamePy/ \
     && rm -rf tmp_SCRenamePy
 
+RUN wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250920-103550/x264_3223_amd64_linux.tar.xz -O x264.tar.xz \
+    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250920-103550/x265_4.1+190_amd64_linux.tar.xz -O x265.tar.xz \
+    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250920-103550/SvtAv1EncApp_3.1.0-113_amd64_linux.tar.xz -O svt-av1.tar.xz \
+    && tar -xf x264.tar.xz -C /app/exe_files \
+    && tar -xf x265.tar.xz -C /app/exe_files \
+    && tar -xf svt-av1.tar.xz -C /app/exe_files \
+    && rm x264.tar.xz x265.tar.xz svt-av1.tar.xz
+
 # ビルド段階から必要なファイルをコピー
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
-COPY --from=builder_x265 /usr/local/bin /usr/local/bin
-COPY --from=builder_svtav1 /usr/local/bin /usr/local/bin
 
 # Amatsukazeのインストール（モードに応じて切り替え）
 #RUN if [ "$BUILD_MODE" = "debug" ]; then \
