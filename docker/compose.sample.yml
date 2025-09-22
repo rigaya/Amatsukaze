@@ -20,8 +20,8 @@ services:
           - ./JL:/app/JL
           - ./logo:/app/logo
           - ./profile:/app/profile
-          - ./recorded:/app/recorded
-          - ./encoded:/app/output
+          - ./input:/app/input
+          - ./output:/app/output
           - /tmp:/tmp
         # QSVEncC/VCEEncCを使うための設定
         # /dev/driが環境にない場合は無効化が必要
