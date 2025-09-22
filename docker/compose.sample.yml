@@ -9,9 +9,11 @@ services:
         ports:
           - "32768:32768"
         environment:
-          - RUN_UID=${RUN_UID:-1000}
-          - RUN_GID=${RUN_GID:-1000}
+          # Amatsukazeを実行するユーザーIDとグループIDを指定
+          - RUN_UID=1000
+          - RUN_GID=1000
         volumes:
+          - ./avs:/app/avs
           - ./bat:/app/bat
           - ./config:/app/config
           - ./drcs:/app/drcs
