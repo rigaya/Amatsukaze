@@ -1,20 +1,21 @@
 #!/bin/bash
 
-# IN_PATH ‚ÍŠÂ‹«•Ï”‚Ü‚½‚ÍƒXƒNƒŠƒvƒgˆø”‚©‚ç“n‚·
+# IN_PATH ã¯ç’°å¢ƒå¤‰æ•°ã¾ãŸã¯ã‚¹ã‚¯ãƒªãƒ—ãƒˆå¼•æ•°ã‹ã‚‰æ¸¡ã™
 IN_PATH="${IN_PATH:-$1}"
 
-# ƒfƒBƒŒƒNƒgƒŠ•”•ª‚ğæ“¾
+# ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªéƒ¨åˆ†ã‚’å–å¾—
 IN_DIR="$(dirname "$IN_PATH")"
 
-# succeededƒfƒBƒŒƒNƒgƒŠ‚ª1‚Âã‚É‚ ‚é‚©Šm”F
-if [ -d "$IN_DIR/../succeeded" ]; then
-    mv "${IN_PATH}.err" "$IN_DIR/.."
-    mv "${IN_PATH}.program.txt" "$IN_DIR/.."
-    mv "${IN_PATH}.trim.avs" "$IN_DIR/.."
+# succeededãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªãŒ1ã¤ä¸Šã«ã‚ã‚‹ã‹ç¢ºèª
+if [ -d "$IN_DIR/../succeeded" ] || [ -d "$IN_DIR/../failed" ]; then
+    if [ -e "${IN_PATH}.err" ]; then
+        mv "${IN_PATH}.err" "$IN_DIR/.."
+    fi
+    if [ -e "${IN_PATH}.program.txt" ]; then
+        mv "${IN_PATH}.program.txt" "$IN_DIR/.."
+    fi
+    if [ -e "${IN_PATH}.trim.avs" ]; then
+        mv "${IN_PATH}.trim.avs" "$IN_DIR/.."
+    fi
     mv "$IN_PATH" "$IN_DIR/.."
-    rmdir "$IN_DIR/../succeeded"
-    rmdir "$IN_DIR/../failed"
-elif [ -d "$IN_DIR/succeeded" ]; then
-    rmdir "$IN_DIR/succeeded"
-    rmdir "$IN_DIR/failed"
 fi
