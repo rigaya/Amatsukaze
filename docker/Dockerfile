@@ -297,23 +297,17 @@ COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
 
-# Amatsukazeのインストール（モードに応じて切り替え）
-#RUN if [ "$BUILD_MODE" = "debug" ]; then \
-#        # デバッグモード: ソースコードをクローン
-#        git clone -b linux http://192.168.0.24:8080/git/rigaya/Amatsukaze.git --recursive /app/Amatsukaze-src; \
-#    else \
-#        # リリースモード: 指定されたUbuntuバージョン用のアーカイブを自動ダウンロード
-#        curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
-#        | grep "browser_download_url.*tar.xz" | grep "Ubuntu${UBUNTU_VERSION}" | cut -d : -f 2,3 | tr -d \" \
-#        | wget -i - -O - | tar -xJ -C /app \
-#        && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi; \
-#    fi
+# Amatsukazeのインストール
+curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
+        | grep "browser_download_url.*tar.xz" | grep "Ubuntu${UBUNTU_VERSION}" | cut -d : -f 2,3 | tr -d \" \
+        | wget -i - -O - | tar -xJ -C /app \
+        && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi
 
 # for debug
-COPY Amatsukaze_Ubuntu22.04_r823.tar.xz /app
-RUN tar -xJf Amatsukaze_Ubuntu22.04_r823.tar.xz -C /app \
-    && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi \
-    && rm Amatsukaze_Ubuntu22.04_r823.tar.xz
+#COPY Amatsukaze_Ubuntu22.04_r845.tar.xz /app
+#RUN tar -xJf Amatsukaze_Ubuntu22.04_r845.tar.xz -C /app \
+#    && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi \
+#    && rm Amatsukaze_Ubuntu22.04_r845.tar.xz
 
 # デバッグ用のシェルスクリプトを作成（デバッグモードの場合のみ）
 RUN if [ "$BUILD_MODE" = "debug" ]; then \
