@@ -1087,6 +1087,7 @@ namespace Amatsukaze.Models
             bool isStandard = pref == "Standard";
             // XAML側のDataTriggerで参照するテーマ種別フラグ
             rd["AMT.IsStandardTheme"] = isStandard;
+            rd["AMT.IsDarkTheme"] = isDark;
 
             Color bg = isDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xFF, 0xFF, 0xFF);
             Color fg = isDark ? Color.FromRgb(0xEE, 0xEE, 0xEE) : Color.FromRgb(0x00, 0x00, 0x00);

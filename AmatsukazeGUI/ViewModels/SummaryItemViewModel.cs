@@ -15,6 +15,7 @@ using Amatsukaze.Models;
 using System.Windows.Media;
 using Amatsukaze.Server;
 using System.Collections;
+using System.Windows;
 
 namespace Amatsukaze.ViewModels
 {
@@ -65,6 +66,14 @@ namespace Amatsukaze.ViewModels
         private Brush gray = new SolidColorBrush(Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0));
         private Brush middle = new SolidColorBrush(Colors.Gray);
         private Brush black = new SolidColorBrush(Colors.Black);
+        private Brush white = new SolidColorBrush(Colors.White);
+
+        private Brush GetActiveBrush()
+        {
+            var isDarkObj = Application.Current?.Resources?["AMT.IsDarkTheme"];
+            bool isDark = (isDarkObj is bool b) && b;
+            return isDark ? white : black;
+        }
 
         public ClientModel Model { get; set; }
 
@@ -88,7 +97,7 @@ namespace Amatsukaze.ViewModels
 
         public void Initialize()
         {
-            _ForeColor = black;
+            _ForeColor = GetActiveBrush();
 
             CompositeDisposable.Add(new PropertyChangedEventListener(Data, (sender, e) =>
             {
@@ -112,7 +121,7 @@ namespace Amatsukaze.ViewModels
             }
             else
             {
-                ForeColor = black;
+                ForeColor = GetActiveBrush();
             }
         }
 
