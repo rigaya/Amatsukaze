@@ -38,7 +38,7 @@ RUN apt update \
 && apt update \
 && apt-get install -y dotnet-sdk-9.0 \
 && wget -q ${AVISYNTHPLUS_DEB_NAME} -O avisynth.deb \
-&& dpkg -i avisynth.deb \
+&& apt-get install ./avisynth.deb \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/* \
 && rm avisynth.deb
