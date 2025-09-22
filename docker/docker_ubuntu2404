@@ -4,7 +4,7 @@ ARG DEBIAN_FRONTEND=noninteractive \
     OSVER=ubuntu2404 \
     LOCAL_USER_ID=1000 \
     LOCAL_GROUP_ID=1000 \
-    AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.0/avisynth_3.7.5-1_amd64_Ubuntu24.04.deb
+    AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.3/avisynth_3.7.5-1_amd64_Ubuntu24.04.deb
 
 ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8
