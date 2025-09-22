@@ -95,7 +95,7 @@
 
                 <StackPanel Grid.Row="0" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6" Height="16" Text="エンコーダ"/>
-                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,28" Height="32">エンコーダ<LineBreak/>追加オプション</TextBlock>
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,28" Height="36">エンコーダ<LineBreak/>追加オプション</TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Row="1" Grid.Column="0">
                     <StackPanel>
@@ -113,7 +113,7 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" TextAlignment="Right" Height="32">JoinLogoScp<LineBreak/>コマンドファイル</TextBlock>
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" TextAlignment="Right" Height="36">JoinLogoScp<LineBreak/>コマンドファイル</TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Row="3" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0" Height="16" Text="オプション"/>
@@ -411,15 +411,15 @@
                             </CheckBox.ToolTip>
                         </CheckBox>
                         <TextBlock Text="a" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                        <TextBox Width="50" Height="22" Margin="4,0"
+                        <TextBox Width="80" Height="22" Margin="4,0"
                                  IsEnabled="{Binding IsChecked, ElementName=autoBitrateCheck}"
                                  Text="{Binding Model.SelectedProfile.BitrateA, Mode=TwoWay, StringFormat=\{0:F\}}" />
                         <TextBlock Text="b" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                        <TextBox Width="50" Height="22" Margin="4,0"
+                        <TextBox Width="80" Height="22" Margin="4,0"
                                  IsEnabled="{Binding IsChecked, ElementName=autoBitrateCheck}"
                                  Text="{Binding Model.SelectedProfile.BitrateB, Mode=TwoWay, StringFormat=\{0:F\}}" />
                         <TextBlock Text="h264" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                        <TextBox Width="50" Height="22" Margin="4,0"
+                        <TextBox Width="80" Height="22" Margin="4,0"
                                  IsEnabled="{Binding IsChecked, ElementName=autoBitrateCheck}"
                                  Text="{Binding Model.SelectedProfile.BitrateH264, Mode=TwoWay, StringFormat=\{0:F\}}" />
                         <Border/>
@@ -458,23 +458,6 @@
                 </StackPanel>
 
                 <TextBlock Grid.Row="18" HorizontalAlignment="Right" Text="音声エンコード" VerticalAlignment="Top" Margin="0,4"/>
-                <StackPanel Grid.Row="18" Margin="0,24,0,0">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="Visibility" Value="Visible"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Model.SelectedProfile.EnableAudioEncode}" Value="False">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-                    <TextBlock Grid.Row="18" Height="16" HorizontalAlignment="Right" Margin="0,4" 
-                               Text="音声エンコーダ" VerticalAlignment="Top"/>
-                    <TextBlock Grid.Row="18" Height="16" HorizontalAlignment="Right" Margin="0,4" 
-                               Text="音声ビットレート" VerticalAlignment="Top"/>
-                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,8" Height="32">音声エンコーダ<LineBreak/>追加オプション</TextBlock>
-                </StackPanel>
                 <StackPanel Grid.Row="18" Grid.Column="1" Margin="10,0">
                     <CheckBox Content="音声をエンコードする" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,4"
                                   IsChecked="{Binding Model.SelectedProfile.EnableAudioEncode, Mode=TwoWay}"/>
@@ -489,21 +472,38 @@
                                 </Style.Triggers>
                             </Style>
                         </StackPanel.Style>
-                        <ComboBox Margin="0,3" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120" Height="22" 
+                        <Grid HorizontalAlignment="Stretch" Margin="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition MinWidth="200"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Height="16" HorizontalAlignment="Right" Margin="4" 
+                               Text="音声エンコーダ" VerticalAlignment="Top"/>
+                            <TextBlock Grid.Row="1" Height="16" HorizontalAlignment="Center" Margin="4" 
+                               Text="音声ビットレート" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="9,4,4,4">音声エンコーダ<LineBreak/>追加オプション</TextBlock>
+
+                            <ComboBox Grid.Column="1" Margin="4" HorizontalAlignment="Left" Width="180" Height="22" 
                               ItemsSource="{Binding Model.SelectedProfile.AudioEncoderList}"
                               SelectedIndex="{Binding Model.SelectedProfile.AudioEncoderTypeInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBox Width="70" Height="22" Margin="4,0"
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                <TextBox Width="90" Height="22" Margin="4"
                                  IsEnabled="{Binding Model.SelectedProfile.EnableAudioBitrate}"
                                  Text="{Binding Model.SelectedProfile.AudioBitrateInKbps, Mode=TwoWay, StringFormat=\{0:D\}}" />
-                            <TextBlock Text="kbps" VerticalAlignment="Center"/>
-                            <CheckBox x:Name="audioBitrateCheck" Content="ビットレートを指定しない" 
-                                      DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0"
+                                <TextBlock Text="kbps" VerticalAlignment="Center"/>
+                                <CheckBox x:Name="audioBitrateCheck" Content="ビットレートを指定しない" 
+                                      VerticalAlignment="Center" Margin="8,0,0,0"
                                       IsChecked="{Binding Model.SelectedProfile.EnableAudioBitrate, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}"/>
-                        </StackPanel>
-                        <TextBox Margin="0,3" Height="40" TextWrapping="Wrap"
+                            </StackPanel>
+                            <TextBox Grid.Row="2" Grid.Column="1" Margin="4" Height="40" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.AudioEncoderOption, Mode=TwoWay}"
-                             VerticalAlignment="Top"/>
+                             VerticalAlignment="Center" Grid.ColumnSpan="2"/>
+                        </Grid>
                     </StackPanel>
                 </StackPanel>
 
@@ -616,10 +616,10 @@
                               IsChecked="{Binding Model.SelectedProfile.EnablePmtCut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                         <WrapPanel Orientation="Horizontal">
                             <TextBlock Text="最初から"/>
-                            <TextBox Width="30" IsEnabled="{Binding Model.SelectedProfile.EnablePmtCut, Mode=OneWay}"
+                            <TextBox Width="40" IsEnabled="{Binding Model.SelectedProfile.EnablePmtCut, Mode=OneWay}"
                                      Text="{Binding Model.SelectedProfile.PmtCutHeadRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="%と最後から"/>
-                            <TextBox Width="30" IsEnabled="{Binding Model.SelectedProfile.EnablePmtCut, Mode=OneWay}"
+                            <TextBox Width="40" IsEnabled="{Binding Model.SelectedProfile.EnablePmtCut, Mode=OneWay}"
                                      Text="{Binding Model.SelectedProfile.PmtCutTailRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="%に"/>
                             <TextBlock Text="PMT更新がある場合はCMとする"/>
@@ -636,7 +636,7 @@
                         </CheckBox.ToolTip>
                         <WrapPanel Orientation="Horizontal">
                             <TextBlock Text="ロゴ最長フェードフレーム数:"/>
-                            <TextBox Width="40" IsEnabled="{Binding Model.SelectedProfile.EnableMaxFadeLength, Mode=OneWay}"
+                            <TextBox Width="72" Margin="4,0" IsEnabled="{Binding Model.SelectedProfile.EnableMaxFadeLength, Mode=OneWay}"
                                      Text="{Binding Model.SelectedProfile.MaxFadeLength, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </WrapPanel>
                     </CheckBox>
@@ -646,7 +646,7 @@
                             Visibility="{Binding IsExpanded, ElementName=detailSettingPanel, Converter={StaticResource BoolVisibilityConverter}}">
                     <TextBlock Height="16" Margin="0,4" />
                     <TextBlock Height="16" Margin="0,4" />
-                    <TextBlock Height="32" Margin="0,4" HorizontalAlignment="Right" TextAlignment="Right">
+                    <TextBlock Height="36" Margin="0,4" HorizontalAlignment="Right" TextAlignment="Right">
                         追加ロゴ消し用<LineBreak/>ロゴリスト
                     </TextBlock>
                 </StackPanel>
@@ -669,7 +669,7 @@
                             <TextBlock DockPanel.Dock="Right" Width="30"
                                 VerticalAlignment="Center" HorizontalAlignment="Center"
                                 Text="{Binding Model.SelectedProfile.NumEncodeBufferFrames}"/>
-                            <Slider Margin="3,2" Height="18"
+                            <Slider Margin="8,2,3,2" Height="26"
                             SmallChange="1" Maximum="54" Minimum="1"
                             Value="{Binding Model.SelectedProfile.NumEncodeBufferFramesIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                             LargeChange="4" TickFrequency="1"/>
@@ -689,7 +689,7 @@
                                                          ConvertWhenTrue="Visible" ConvertWhenFalse="Collapsed"/>
                     </StackPanel.Resources>
                     <DockPanel>
-                        <Border Width="90"/>
+                        <Border Width="120"/>
                         <TextBlock Width="50" Text="CPU" TextAlignment="Center"/>
                         <TextBlock Width="50" Text="HDD" TextAlignment="Center"/>
                         <TextBlock Width="50" Text="GPU" TextAlignment="Center"/>
