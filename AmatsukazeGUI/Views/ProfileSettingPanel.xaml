@@ -134,6 +134,8 @@
                     <TextBox Margin="0,3" Height="85" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.EncoderOption, Mode=TwoWay}"
                              VerticalAlignment="Top"
+                             VerticalContentAlignment="Top"
+                             TextAlignment="Left"
                              ToolTip="入力ファイルの解像度、アスペクト比、インタレースフラグ、&#xA;フレームレート、カラーマトリクス等は（自動ビットレートONの場合はビットレート設定も）&#xA;自動で追加されるので不要です。"/>
 
                 </StackPanel>
