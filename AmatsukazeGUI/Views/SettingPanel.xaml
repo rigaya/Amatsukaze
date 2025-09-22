@@ -76,7 +76,7 @@
                             <TextBlock>
                                 テーマを選択すると、アプリ全体のテーマが変わります。
                                 <LineBreak/>「自動」を選択すると、Windowsのアプリテーマに追随します。
-                                <LineBreak/> <Run Foreground="Red">注意：完全な反映にはアプリの再起動が必要です。</Run>
+                                <LineBreak/> <Run Foreground="Coral">注意：完全な反映にはアプリの再起動が必要です。</Run>
                             </TextBlock>
                         </ComboBox.ToolTip>
                     </ComboBox>
