@@ -330,6 +330,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool[] NicoJKFormats { get; set; }
         [DataMember]
+        public bool DisableMoveInputFile { get; set; }
+        [DataMember]
         public bool MoveEDCBFiles { get; set; }
         [DataMember]
         public bool NoRemoveTmp { get; set; }

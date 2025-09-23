@@ -1743,6 +1743,12 @@ namespace Amatsukaze.Models
                     data.Profile.X264Option, data.Profile.X265Option,
                     data.Profile.QSVEncOption, data.Profile.NVEncOption);
                 profile.EncoderTypeInt = (int)data.Profile.EncoderType;
+                profile.ForceSAR = data.Profile.ForceSAR;
+                profile.ForceSARWidth = data.Profile.ForceSARWidth;
+                profile.ForceSARHeight = data.Profile.ForceSARHeight;
+                profile.PreBatchFile = data.Profile.PreBatchFile;
+                profile.PreEncodeBatchFile = data.Profile.PreEncodeBatchFile;
+                profile.PostBatchFile = data.Profile.PostBatchFile;
                 profile.CustomFilter.FilterPath = data.Profile.FilterPath;
                 profile.CustomFilter.PostFilterPath = data.Profile.PostFilterPath;
                 profile.AutoBuffer = data.Profile.AutoBuffer;
@@ -1758,9 +1764,13 @@ namespace Amatsukaze.Models
                 profile.EnableJLSOption = data.Profile.EnableJLSOption;
                 profile.ChapterExeOptions = data.Profile.ChapterExeOption;
                 profile.DisableChapter = data.Profile.DisableChapter;
+                profile.OutputChapter = data.Profile.OutputChapter;
                 profile.DisableSubs = data.Profile.DisableSubs;
                 profile.IgnoreNoDrcsMap = data.Profile.IgnoreNoDrcsMap;
+                profile.LooseLogoDetection = data.Profile.LooseLogoDetection;
+                profile.IgnoreNoLogo = data.Profile.IgnoreNoLogo;
                 profile.NoDelogo = data.Profile.NoDelogo;
+                profile.ParallelLogoAnalysis = data.Profile.ParallelLogoAnalysis;
                 profile.EnableNicoJK = data.Profile.EnableNicoJK;
                 profile.IgnoreNicoJKError = data.Profile.IgnoreNicoJKError;
                 profile.NicoJK18 = data.Profile.NicoJK18;
@@ -1769,13 +1779,19 @@ namespace Amatsukaze.Models
                 profile.NicoJKFormat720T = data.Profile.NicoJKFormats[1];
                 profile.NicoJKFormat1080S = data.Profile.NicoJKFormats[2];
                 profile.NicoJKFormat1080T = data.Profile.NicoJKFormats[3];
-                profile.MoveEDCBFiles = data.Profile.MoveEDCBFiles;
+                profile.MoveInputFile = !data.Profile.DisableMoveInputFile;
+                profile.MoveEDCBFiles = profile.MoveInputFile ? data.Profile.MoveEDCBFiles : false;
+                profile.NoRemoveTmp = data.Profile.NoRemoveTmp;
+                profile.DisableLogFile = data.Profile.DisableLogFile;
+                profile.EnableMaxFadeLength = data.Profile.EnableMaxFadeLength;
+                profile.MaxFadeLength = data.Profile.MaxFadeLength;
                 profile.SystemAviSynthPlugin = data.Profile.SystemAviSynthPlugin;
                 profile.DisableHashCheck = data.Profile.DisableHashCheck;
                 profile.Mpeg2DecoderInt = (int)data.Profile.Mpeg2Decoder;
                 profile.H264DecoderInt = (int)data.Profile.H264Deocder;
                 profile.OutputFormatInt = (int)data.Profile.OutputFormat;
                 profile.UseMKVWhenSubExists = data.Profile.UseMKVWhenSubExists;
+                profile.TsreplaceRemoveTypeD = data.Profile.TsreplaceRemoveTypeD;
                 profile.EnableGunreFolder = data.Profile.EnableGunreFolder;
                 profile.EnableRename = data.Profile.EnableRename;
                 profile.RenameFormat = data.Profile.RenameFormat;
@@ -1817,6 +1833,10 @@ namespace Amatsukaze.Models
                         SelectedProfile = profile;
                     }
                 }
+                profile.AdditionalEraseLogo = data.Profile.AdditionalEraseLogo;
+                profile.EnableAudioEncode = data.Profile.EnableAudioEncode;
+                profile.AudioEncoderTypeInt = (int)data.Profile.AudioEncoderType;
+                profile.AudioBitrateInKbps = data.Profile.AudioBitrateInKbps;
 
                 profile.PreEncodeBatchFile = data.Profile.PreEncodeBatchFile;
             }

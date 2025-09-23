@@ -1414,7 +1414,8 @@ namespace Amatsukaze.Server
 
                             // キャンセルの場合、削除されている可能性がある
                             // 自分がキャンセルされている場合は、移動しない
-                            if (item.State != QueueState.Canceled && sameItems.All(s => s.State != QueueState.Canceled))
+                            // MoveInputFileが無効の場合も移動しない
+                            if (!item.Profile.DisableMoveInputFile && item.State != QueueState.Canceled && sameItems.All(s => s.State != QueueState.Canceled))
                             {
                                 try
                                 {

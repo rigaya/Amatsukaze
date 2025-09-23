@@ -1654,9 +1654,32 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region MoveInputFile変更通知プロパティ
+        public bool MoveInputFile {
+            get {
+                bool MoveInputFile = !Data.DisableMoveInputFile;
+                return MoveInputFile; 
+            }
+            set {
+                bool DisableMoveInputFile = !value;
+                if (Data.DisableMoveInputFile == DisableMoveInputFile)
+                    return;
+                if (DisableMoveInputFile) {
+                    MoveEDCBFiles = false;
+                }
+                Data.DisableMoveInputFile = DisableMoveInputFile;
+                RaisePropertyChanged();
+                // MoveInputFileが変更されたときにMoveEDCBFilesの変更も通知
+                RaisePropertyChanged("MoveEDCBFiles");
+            }
+        }
+        #endregion
+
         #region MoveEDCBFiles変更通知プロパティ
         public bool MoveEDCBFiles {
-            get { return Data.MoveEDCBFiles; }
+            get { 
+                return Data.MoveEDCBFiles; 
+            }
             set {
                 if (Data.MoveEDCBFiles == value)
                     return;
@@ -1954,6 +1977,9 @@ namespace Amatsukaze.Models
                     return;
                 Data.PostBatchFile = val;
                 RaisePropertyChanged();
+                // PostBatchFileが変更されたときにMoveInputFileとMoveEDCBFilesの変更も通知
+                RaisePropertyChanged("MoveInputFile");
+                RaisePropertyChanged("MoveEDCBFiles");
             }
         }
         #endregion

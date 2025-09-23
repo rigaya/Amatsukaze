@@ -585,8 +585,12 @@
                     <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,80" Text="その他の設定"/>
                 </StackPanel>
                 <StackPanel Grid.Row="20" Grid.Column="1" Margin="10,0">
+                    <CheckBox Height="16" Margin="0,3"  Content="処理の終了後、入力ファイルを別フォルダに移動する" 
+                              IsChecked="{Binding Model.SelectedProfile.MoveInputFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="エンコード処理完了後、入力ファイルを別フォルダに移動します。" />
                     <CheckBox Height="16" Margin="0,3"  Content="関連ファイル(*.err,*.program.txtなど)もコピー/移動する" 
                               IsChecked="{Binding Model.SelectedProfile.MoveEDCBFiles, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding Model.SelectedProfile.MoveInputFile}"
                               ToolTip="これらのファイルも一緒にコピー・移動されるようになります。" />
                     <CheckBox Height="16" Margin="0,3"  Content="チャプター・CM解析を無効にする" 
                               IsChecked="{Binding Model.SelectedProfile.DisableChapter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
