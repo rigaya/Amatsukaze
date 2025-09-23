@@ -16,6 +16,7 @@ services:
           - ./avs:/app/avs
           - ./bat:/app/bat
           - ./config:/app/config
+          - ./data:/app/data
           - ./drcs:/app/drcs
           - ./JL:/app/JL
           - ./logo:/app/logo

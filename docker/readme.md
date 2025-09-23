@@ -162,6 +162,7 @@ AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プ�
 | Amatsuakze avsファイル  | ```./avs```     | ```./app/avs```     |
 | Amatsuakze batファイル  | ```./bat```     | ```./app/bat```     |
 | Amatsuakze 設定ファイル | ```./config```  | ```./app/config```  |
+| Amatsuakze ログファイル | ```./data```    | ```./app/data```    |
 | Amatsuakze drcs外字     | ```./drcs```    | ```./app/drcs```    |
 | Amatsuakze JLファイル   | ```./JL```      | ```./app/JL```      |
 | Amatsuakze ロゴデータ   | ```./logo```    | ```./app/logo```    |

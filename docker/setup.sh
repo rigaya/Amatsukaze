@@ -135,7 +135,7 @@ setup_directories() {
     echo ""
     echo "--- ディレクトリの作成 ---"
     
-    local dirs=("config" "input" "logo" "output")
+    local dirs=("config" "data" "input" "logo" "output")
     for dir in "${dirs[@]}"; do
         if [[ ! -d "$CURRENT_DIR/$dir" ]]; then
             mkdir -p "$CURRENT_DIR/$dir"
