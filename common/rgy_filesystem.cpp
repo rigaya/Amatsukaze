@@ -116,6 +116,23 @@ std::wstring PathRemoveExtensionS(const std::wstring& path) {
     return path.substr(0, lastdot);
 }
 #endif //#if defined(_WIN32) || defined(_WIN64)
+std::string PathRemoveBackslashS(const std::string& path) {
+    auto p = std::filesystem::path(path);
+    if (p.has_filename() || p.empty()) {
+        return p.string();
+    }
+    return p.parent_path().string();
+}
+#if defined(_WIN32) || defined(_WIN64)
+std::wstring PathRemoveBackslashS(const std::wstring& path) {
+    auto p = std::filesystem::path(path);
+    if (p.has_filename() || p.empty()) {
+        return p.wstring();
+    }
+    return p.parent_path().wstring();
+}
+#endif //#if defined(_WIN32) || defined(_WIN64)
+
 std::string PathCombineS(const std::string& dir, const std::string& filename) {
     return std::filesystem::path(dir).append(filename).string();
 }

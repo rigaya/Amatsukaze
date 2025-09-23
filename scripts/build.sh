@@ -172,16 +172,7 @@ fi
 # defaultファイルのコピー
 cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
 cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
-# exe_files: cmd_linux は cmd に、cmd_win はコピーしない、その他はそのまま
-mkdir -p "${INSTALL_DIR}/exe_files/cmd"
-for src in defaults/exe_files/*; do
-  base=`basename "$src"`
-  if [ "$base" = "cmd_linux" ] || [ "$base" = "cmd_win" ]; then
-    continue
-  fi
-  cp -r "$src" "${INSTALL_DIR}/exe_files/"
-done
-cp -r defaults/exe_files/cmd_linux/* "${INSTALL_DIR}/exe_files/cmd/"
+cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
 cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
 cp -r scripts/*            "${INSTALL_DIR}/scripts/"
 

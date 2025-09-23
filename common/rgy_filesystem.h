@@ -36,6 +36,7 @@
 #if defined(_WIN32) || defined(_WIN64)
 bool rgy_get_filesize(const wchar_t *filepath, uint64_t *filesize);
 std::wstring PathRemoveExtensionS(const std::wstring& path);
+std::wstring PathRemoveBackslashS(const std::wstring& path);
 std::wstring PathGetFilename(const std::wstring& path);
 std::vector<tstring> get_file_list(const tstring& pattern, const tstring& dir);
 void rgy_file_remove(const wchar_t *path);
@@ -66,6 +67,7 @@ bool rgy_directory_exists(const std::wstring& directorypath);
 bool rgy_get_filesize(const char *filepath, uint64_t *filesize);
 std::pair<int, std::string> PathRemoveFileSpecFixed(const std::string& path);
 std::string PathRemoveExtensionS(const std::string& path);
+std::string PathRemoveBackslashS(const std::string& path);
 bool CreateDirectoryRecursive(const char *dir, const bool errorIfAlreadyExists = false);
 bool CreateDirectoryRecursive(const wchar_t *dir, const bool errorIfAlreadyExists = false);
 std::string PathGetFilename(const std::string& path);
