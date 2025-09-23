@@ -2507,6 +2507,7 @@ namespace Amatsukaze.Models
 
             text.KeyValue("2パス", Data.TwoPass);
             text.KeyValue("CMビットレート倍率", Data.BitrateCM.ToString());
+            text.KeyValue("CM品質オフセット", Data.CMQualityOffset.ToString());
             text.KeyValue("自動ビットレート指定", Data.AutoBuffer);
             text.KeyValue("自動ビットレート係数", string.Format("{0}:{1}:{2}", Data.Bitrate.A, Data.Bitrate.B, Data.Bitrate.H264));
             text.KeyValue("ニコニコ実況コメントを有効にする", Data.EnableNicoJK);
@@ -2514,7 +2515,10 @@ namespace Amatsukaze.Models
             text.KeyValue("NicoJKログから優先的にコメントを取得する", Data.NicoJKLog);
             text.KeyValue("NicoJK18サーバからコメントを取得する", Data.NicoJK18);
             text.KeyValue("コメント出力フォーマット", Data.NicoJKFormatMask.ToString());
+            text.KeyValue("入力ファイルの移動を無効にする", Data.DisableMoveInputFile);
             text.KeyValue("関連ファイル(*.err,*.program.txt)も処理", Data.MoveEDCBFiles);
+            text.KeyValue("チャプターを無効にする", Data.DisableChapter);
+            text.KeyValue("チャプターを出力する", Data.OutputChapter);
             text.KeyValue("字幕を無効にする", Data.DisableSubs);
             text.KeyValue("マッピングにないDRCS外字は無視する", Data.IgnoreNoDrcsMap);
             text.KeyValue("ロゴ検出判定しきい値を低くする", Data.LooseLogoDetection);
@@ -2529,6 +2533,26 @@ namespace Amatsukaze.Models
             text.KeyValue("PMT更新によるCM認識", Data.EnablePmtCut
                 ? string.Format("{0}:{1}", Data.PmtCutHeadRate, Data.PmtCutTailRate) : "なし");
             text.KeyValue("ロゴ最長フェードフレーム数指定", Data.EnableMaxFadeLength ? Data.MaxFadeLength.ToString() : "なし");
+            text.KeyValue("tsreplaceでTypeDを削除する", Data.TsreplaceRemoveTypeD);
+            text.KeyValue("tsreplaceでビデオを置換する", Data.TSReplaceVideo);
+            text.KeyValue("JoinLogoScpオプションを有効にする", Data.EnableJLSOption);
+            text.KeyValue("エンコードアフィニティを無視する", Data.IgnoreEncodeAffinity);
+            text.KeyValue("エンコードバッファフレーム数", Data.NumEncodeBufferFrames.ToString());
+            text.KeyValue("追加ロゴ消去", Data.AdditionalEraseLogo ?? "なし");
+            text.KeyValue("音声エンコードを有効にする", Data.EnableAudioEncode);
+            if (Data.EnableAudioEncode)
+            {
+                text.KeyValue("音声エンコーダ", AudioEncoderList[(int)Data.AudioEncoderType]);
+                text.KeyValue("NeroAACオプション", Data.NeroAacOption ?? "なし");
+                text.KeyValue("qaacオプション", Data.QaacOption ?? "なし");
+                text.KeyValue("fdkaacオプション", Data.FdkaacOption ?? "なし");
+                text.KeyValue("opusencオプション", Data.OpusEncOption ?? "なし");
+                text.KeyValue("音声ビットレートを有効にする", Data.EnableAudioBitrate);
+                if (Data.EnableAudioBitrate)
+                {
+                    text.KeyValue("音声ビットレート", Data.AudioBitrateInKbps.ToString() + "kbps");
+                }
+            }
             text.KeyTable("スケジューリングリソース設定", GetResourceString());
             return text.ToString();
         }
