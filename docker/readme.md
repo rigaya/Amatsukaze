@@ -119,17 +119,29 @@ vi compose.yml
 docker compose up -d
 ```
 
-## 接続
+## Windowsからの接続
 
-WindowsでAmatsukazeClientを起動し、コンテナを実行中のPCのIPアドレスに接続してください。
+Windowsから ```AmatsukazeClient.bat``` を実行して接続します。
 
-  (ポートはデフォルトでは32768)
+下記画面が表示されたら、```ipconfig```コマンド等で確認できるサーバー側のIPアドレスを入力し、「OK」をクリックします。
+
+<img src="../data/AmatsukazeServerLinuxStart_02.png" width="240">
+
+その後、設定画面左下の「更新」をクリックすると、サーバー情報でウィンドウが更新されます。
+
+<img src="../data/AmatsukazeServerLinuxStart_03.png" width="160">
+
+初回接続時は基本設定を行ってください。実行ファイルのパスに関しては、exe_files以下、あるいは PATH に含まれる実行ファイルは、右下「適用」ボタンをクリックすると自動で入力されます。 PATH に含まれる実行ファイルは、ファイル名のみの記述で構いません。
+
+<img src="../data/AmatsukazeServerLinuxStart_04.png" width="480">
 
 ## タスクの追加
 
+```AmatsukazeAddTask```でタスク追加を行います。このとき、```-o``` と ```-f``` は、docker内からどう見えているかを考慮してパスを置き換える必要があります。
+
+入力ファイルを ```./input``` に置いたとき、下記のようにタスク追加すると ```./output``` に出力されます。
+
 ```sh
-# -o と -f は、docker内からどう見えているかを考慮してパスを置き換える必要があります。
-# 入力ファイルを ./input に置いたとき、下記のようにタスク追加すると ./output に出力されます。
 #  (コンテナ外) ./input  -> (コンテナ内) /app/input
 #  (コンテナ外) ./output -> (コンテナ内) /app/output
 AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プロファイル名> -o /app/output -f /app/input/<入力tsファイル名>
@@ -137,7 +149,7 @@ AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プ�
 
 ## 設定
 
-デフォルトの設定は下記のとおりです。必要に応じて変更してください。
+デフォルトの設定は下記のとおりです。必要に応じて```compose.yml```を編集して変更してください。
 
 | | ポート |
 |:--|:--:|

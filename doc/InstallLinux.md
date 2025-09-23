@@ -8,7 +8,7 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 
 そのため、LinuxでAmatsukazeServerCLIを起動して、WindowsからAmatsukazeGUIで接続する形になります。また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
 
-<img src="./data/AmatsukazeServerLinuxStart_00.png" width="640">
+<img src="../data/AmatsukazeServerLinuxStart_00.png" width="640">
 
 ## 想定動作環境
 
@@ -343,25 +343,25 @@ cd $HOME/Amatsukaze
 ./AmatsukazeServer.sh
 ```
 
-<img src="./data/AmatsukazeServerLinuxStart_01.png" width="480">
+<img src="../data/AmatsukazeServerLinuxStart_01.png" width="480">
 
 サーバーが開始されたと出ればOKです。
 
 ### Windowsからの接続
 
-その後、Windowsから ```AmatsukazeClient.vbs``` を実行して接続します。
+その後、Windowsから ```AmatsukazeClient.bat``` を実行して接続します。
 
 下記画面が表示されたら、```ifconfig```コマンド等で確認できるサーバー側のIPアドレスを入力し、「OK」をクリックします。
 
-<img src="./data/AmatsukazeServerLinuxStart_02.png" width="240">
+<img src="../data/AmatsukazeServerLinuxStart_02.png" width="240">
 
 その後、設定画面左下の「更新」をクリックすると、サーバー情報でウィンドウが更新されます。
 
-<img src="./data/AmatsukazeServerLinuxStart_03.png" width="160">
+<img src="../data/AmatsukazeServerLinuxStart_03.png" width="160">
 
 初回接続時は基本設定を行ってください。実行ファイルのパスに関しては、exe_files以下、あるいは PATH に含まれる実行ファイルは、右下「適用」ボタンをクリックすると自動で入力されます。 PATH に含まれる実行ファイルは、ファイル名のみの記述で構いません。
 
-<img src="./data/AmatsukazeServerLinuxStart_04.png" width="480">
+<img src="../data/AmatsukazeServerLinuxStart_04.png" width="480">
 
 ### タスクの追加
 
