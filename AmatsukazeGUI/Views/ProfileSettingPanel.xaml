@@ -244,7 +244,7 @@
                 </StackPanel>
                 <StackPanel Grid.Row="8" Grid.Column="1" Margin="10,0">
                     <DockPanel>
-                        <ComboBox Margin="0,3" Width="120" Height="22"
+                        <ComboBox Margin="0,3" Width="160" Height="22"
                            ItemsSource="{Binding Model.SelectedProfile.FormatList}" 
                            SelectedIndex="{Binding Model.SelectedProfile.OutputFormatInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                            ToolTip="MP4の場合、ASS字幕は別ファイルとして出力されます"/>
@@ -284,7 +284,7 @@
                     </DockPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="9" Grid.Column="1" Margin="10,0">
-                    <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="130" Height="22"
+                    <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="160" Height="22"
                        ItemsSource="{Binding Model.SelectedProfile.OutputOptionList}" 
                        SelectedItem="{Binding Model.SelectedProfile.OutputMask, Mode=TwoWay}"
                        ToolTip="CMカットの精度は100%ではありません"
