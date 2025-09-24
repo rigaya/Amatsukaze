@@ -318,6 +318,9 @@
         <Setter Property="MinWidth" Value="60"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
         <Style.Triggers>
             <!-- 標準テーマのときだけ従来テンプレートを適用 -->
             <!-- ライト/ダークのときは適用しない(そうしないとおかしな描画になる) -->
