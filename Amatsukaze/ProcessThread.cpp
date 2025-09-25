@@ -198,6 +198,63 @@ void StdRedirectedSubProcess::SpStringLiner::OnTextLine(const uint8_t* ptr, int 
     pThis->onTextLine(isErr, ptr, len, brlen);
 }
 
+// ANSIエスケープシーケンスとカラーコードを除去するヘルパー関数
+std::vector<char> removeAnsiEscapeSequences(const std::vector<char>& input) {
+    std::vector<char> output;
+    output.reserve(input.size());
+    
+    bool inEscape = false;
+    bool inCSI = false; // Control Sequence Introducer (\033[ or \x1b[)
+    bool inOSC = false; // Operating System Command (\033] or \x1b])
+    
+    for (size_t i = 0; i < input.size(); ++i) {
+        char c = input[i];
+        
+        if (!inEscape && !inCSI && !inOSC) {
+            if (c == '\033' || c == '\x1b') { // ESC文字
+                inEscape = true;
+            } else if (c >= '\x00' && c <= '\x1F' && c != '\t' && c != '\n' && c != '\r') {
+                // 制御文字を除去（タブ、改行、復帰文字は除く）
+                // 何もしない（スキップ）
+            } else {
+                output.push_back(c);
+            }
+        } else if (inEscape) {
+            if (c == '[') {
+                inCSI = true;
+                inEscape = false;
+            } else if (c == ']') {
+                inOSC = true;
+                inEscape = false;
+            } else if (c >= '@' && c <= '~') {
+                // 2文字エスケープシーケンス終了
+                inEscape = false;
+            } else if (c >= ' ' && c <= '/') {
+                // 中間文字、パラメータ文字は続行
+            } else {
+                // その他の文字でエスケープ終了
+                inEscape = false;
+            }
+        } else if (inCSI) {
+            if (c >= '@' && c <= '~') {
+                // CSI シーケンス終了文字
+                inCSI = false;
+            }
+            // パラメータ文字（数字、セミコロン、スペースなど）や中間文字は無視して続行
+        } else if (inOSC) {
+            if (c == '\007' || (c == '\033' && i + 1 < input.size() && input[i + 1] == '\\')) {
+                // OSC終了：BEL文字 または ESC\ 
+                inOSC = false;
+                if (c == '\033') {
+                    ++i; // '\'をスキップ
+                }
+            }
+        }
+    }
+    
+    return output;
+}
+
 void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len, int brlen) {
     std::vector<char> line;
     if (isUtf8) {
@@ -207,6 +264,17 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
         line.resize(len);
         memcpy(line.data(), ptr, len);
     }
+    
+    // エラー出力の場合はANSIエスケープシーケンスを除去
+    if (isErr) {
+        line = removeAnsiEscapeSequences(line);
+    }
+    
+    // nullターミネートを確保
+    if (line.empty() || line.back() != '\0') {
+        line.push_back('\0');
+    }
+    
     std::string br((char *)ptr + len, brlen);
     fprintf(SUBPROC_OUT, "%s%s", line.data(), br.c_str());
     fflush(SUBPROC_OUT);
@@ -216,7 +284,12 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
         if ((int)lastLines.size() > bufferLines) {
             lastLines.pop_front();
         }
-        lastLines.push_back(line);
+        // バッファには終端文字を含めない
+        std::vector<char> bufferLine = line;
+        if (!bufferLine.empty() && bufferLine.back() == '\0') {
+            bufferLine.pop_back();
+        }
+        lastLines.push_back(bufferLine);
     }
 }
 
