@@ -39,6 +39,8 @@ namespace Amatsukaze.Models
             public byte[] windowPlacement;
             [DataMember]
             public string ThemePreference; // "Auto" | "Standard" | "Light" | "Dark"
+            [DataMember]
+            public double FontSize; // アプリ全体の既定フォントサイズ
 
             public ExtensionDataObject ExtensionData { get; set; }
         }
@@ -124,6 +126,22 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged();
                 SaveAppData();
                 ApplyTheme();
+            }
+        }
+
+        // フォントサイズ設定
+        public double AppFontSize
+        {
+            get { return (appData != null && appData.FontSize > 0) ? appData.FontSize : UIConstants.DefaultFontSize; }
+            set
+            {
+                var v = (value <= 0) ? UIConstants.DefaultFontSize : value;
+                if (appData.FontSize == v)
+                    return;
+                appData.FontSize = v;
+                RaisePropertyChanged();
+                SaveAppData();
+                ApplyFontSize();
             }
         }
         public bool IsServerLinux
@@ -721,6 +739,7 @@ namespace Amatsukaze.Models
 
             LoadAppData();
             ApplyTheme();
+            ApplyFontSize();
             requestLogoThread = RequestLogoThread();
         }
 
@@ -1009,6 +1028,7 @@ namespace Amatsukaze.Models
                 appData.ServerIP = "localhost";
                 appData.ServerPort = ServerSupport.DEFAULT_PORT;
                 appData.ThemePreference = "Auto";
+                appData.FontSize = UIConstants.DefaultFontSize;
                 return;
             }
             using (FileStream fs = new FileStream(path, FileMode.Open))
@@ -1018,6 +1038,10 @@ namespace Amatsukaze.Models
                 if (string.IsNullOrEmpty(appData.ThemePreference))
                 {
                     appData.ThemePreference = "Auto";
+                }
+                if (appData.FontSize <= 0)
+                {
+                    appData.FontSize = UIConstants.DefaultFontSize;
                 }
             }
         }
@@ -1074,6 +1098,13 @@ namespace Amatsukaze.Models
                 Application.Current.ThemeMode = mode;
                 UpdateThemeResources(mode, pref);
             }
+        }
+
+        private void ApplyFontSize()
+        {
+            if (Application.Current == null) return;
+            double size = (appData != null && appData.FontSize > 0) ? appData.FontSize : UIConstants.DefaultFontSize;
+            Application.Current.Resources["AMT.FontSize"] = size;
         }
 
         // テーマ共通ブラシ(AMT.*)を ThemeMode/Preference に応じて更新

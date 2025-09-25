@@ -2,7 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:Amatsukaze.Views"
                     xmlns:m="clr-namespace:Amatsukaze.Models"
-                    xmlns:c="clr-namespace:Amatsukaze.Components">
+                    xmlns:c="clr-namespace:Amatsukaze.Components"
+                    xmlns:System="clr-namespace:System;assembly=mscorlib">
 
     <Style x:Key="HeaderMenuStyle" TargetType="ListBox">
         <Setter Property="Template">
@@ -61,6 +62,7 @@
     <!-- 既定のテキスト色をテーマの前景に統一 -->
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
     </Style>
 
     <!-- GroupBox の枠線をシンプルな細い単線に統一（ライト/ダーク両対応） -->
@@ -122,6 +124,7 @@
         </Setter>
         <Setter Property="Background" Value="{DynamicResource AMT.ControlBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AMT.ControlForegroundBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{DynamicResource AMT.ControlLightBrush}" />
@@ -321,6 +324,7 @@
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
         <Style.Triggers>
             <!-- 標準テーマのときだけ従来テンプレートを適用 -->
             <!-- ライト/ダークのときは適用しない(そうしないとおかしな描画になる) -->
@@ -356,6 +360,7 @@
         <Setter Property="MinHeight" Value="0"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
     </Style>
 
     <!-- 既定CheckBoxスタイル(Fluent時の縦位置/余白を微調整) -->
@@ -365,6 +370,7 @@
         <Setter Property="Padding" Value="4,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
     </Style>
 
     <!-- アプリ全体のCheckBox既定値を統一（高さ・縦位置を一定化） -->
@@ -389,11 +395,20 @@
     </Style>
     <!-- 既定のListBoxに対し、標準テーマ以外(Fluentライト/ダーク)のときだけコンテナスタイルを上書き -->
     <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource {x:Type ListBox}}">
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
         <Style.Triggers>
             <DataTrigger Binding="{Binding Source={x:Static Application.Current}, Path=Resources[AMT.IsStandardTheme]}" Value="False">
                 <Setter Property="ItemContainerStyle" Value="{StaticResource AMT.CompactListBoxItemStyle}"/>
             </DataTrigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- タブとその項目 -->
+    <Style TargetType="{x:Type TabControl}" BasedOn="{StaticResource {x:Type TabControl}}">
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
+    </Style>
+    <Style TargetType="{x:Type TabItem}" BasedOn="{StaticResource {x:Type TabItem}}">
+        <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
     </Style>
 
     <DataTemplate DataType="{x:Type m:DisplayProfile}">

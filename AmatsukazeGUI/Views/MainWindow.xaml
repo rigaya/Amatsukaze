@@ -8,6 +8,7 @@
         xmlns:vm="clr-namespace:Amatsukaze.ViewModels"
         xmlns:c="clr-namespace:Amatsukaze.Components"
         Title="{Binding WindowCaption, Mode=OneWay}" Height="550" Width="850"
+        FontSize="{DynamicResource AMT.FontSize}"
         SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
     
     <i:Interaction.Behaviors>

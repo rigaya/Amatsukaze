@@ -10,7 +10,7 @@
              xmlns:c="clr-namespace:Amatsukaze.Components" 
              xmlns:Models="clr-namespace:Amatsukaze.Models" x:Class="Amatsukaze.Views.SettingPanel" 
              mc:Ignorable="d" 
-             d:DesignHeight="1900" d:DesignWidth="500" d:Background="White"
+             d:DesignHeight="1900" d:DesignWidth="600" d:Background="White"
              d:DataContext="{d:DesignInstance {x:Type vm:SettingViewModel}}">
     
     <UserControl.Resources>
@@ -67,7 +67,12 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Margin="12,2,0,0">
-                    <ComboBox Margin="0,4" Height="22" SelectedValuePath="Tag" SelectedValue="{Binding Model.ThemePreference, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" HorizontalAlignment="Left" Width="180" Margin="0,4,8,4" Height="22" SelectedValuePath="Tag" SelectedValue="{Binding Model.ThemePreference, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                         <ComboBoxItem Content="自動" Tag="Auto"/>
                         <ComboBoxItem Content="標準" Tag="Standard"/>
                         <ComboBoxItem Content="ライト" Tag="Light"/>
@@ -79,7 +84,22 @@
                                 <LineBreak/> <Run Foreground="Coral">注意：完全な反映にはアプリの再起動が必要です。</Run>
                             </TextBlock>
                         </ComboBox.ToolTip>
-                    </ComboBox>
+                        </ComboBox>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,0,0">
+                            <TextBlock Text="フォントサイズ" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Width="110" Margin="0,4" Height="22" SelectedValuePath="Tag" SelectedValue="{Binding Model.AppFontSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                <ComboBoxItem Content="小" Tag="10"/>
+                                <ComboBoxItem Content="やや小" Tag="11"/>
+                                <ComboBoxItem Content="標準" Tag="12"/>
+                                <ComboBoxItem Content="やや大" Tag="13"/>
+                                <ComboBoxItem Content="大" Tag="14"/>
+                                <ComboBoxItem Content="特大" Tag="16"/>
+                                <ComboBox.ToolTip>
+                                    <TextBlock>アプリ全体の既定フォントサイズを変更します。</TextBlock>
+                                </ComboBox.ToolTip>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
                     <TextBox Margin="0,4" Height="23" 
                              Text="{Binding Model.Setting.WorkPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop" 

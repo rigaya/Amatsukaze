@@ -1,6 +1,8 @@
 ﻿<Application x:Class="Amatsukaze.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:System="clr-namespace:System;assembly=mscorlib"
+             xmlns:m="clr-namespace:Amatsukaze.Models"
              Startup="Application_Startup">
     <Application.Resources>
         <ResourceDictionary>
@@ -8,6 +10,9 @@
                 <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
                 <ResourceDictionary Source="Views/ThemeResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <!-- アプリ全体の既定フォントサイズ（各ViewのDynamicResource参照元）
+                 初期値は数値リテラル。起動時にコードから UIConstants で上書きする。 -->
+            <System:Double x:Key="AMT.FontSize">12</System:Double>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
