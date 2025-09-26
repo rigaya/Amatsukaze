@@ -131,9 +131,9 @@ Windowsから ```AmatsukazeClient.bat``` を実行して接続します。
 
 <img src="../data/AmatsukazeServerLinuxStart_03.png" width="160">
 
-初回接続時は基本設定を行ってください。実行ファイルのパスに関しては、exe_files以下、あるいは PATH に含まれる実行ファイルは、右下「適用」ボタンをクリックすると自動で入力されます。 PATH に含まれる実行ファイルは、ファイル名のみの記述で構いません。
+初回接続時は基本設定を行ってください。docker版では利用可能な実行ファイルはすべて導入済みです。PATHに追加されているものは実行ファイル名単体での指定で問題ありません。
 
-<img src="../data/AmatsukazeServerLinuxStart_04.png" width="480">
+<img src="../data/AmatsukazeServerLinuxStartDocker.png" width="480">
 
 ## タスクの追加
 

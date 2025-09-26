@@ -74,8 +74,8 @@ sudo apt install -y openssl zlib1g
 [こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードします。なお、自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。
 
 CUDAを使用する場合、CUDAを有効にしてビルドした下記AviSynth+をインストールする必要があります。
-- avisynth_<version>_amd64_Ubuntuxx.xx.deb
-- avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
+- avisynth_&lt;version&gt;_amd64_Ubuntuxx.xx.deb
+- avisynthcudafilters_&lt;version&gt;_amd64_Ubuntuxx.xx.deb
 
 ```bash
 sudo apt install -y ./avisynth_<version>_amd64_Ubuntuxx.xx.deb

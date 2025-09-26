@@ -69,7 +69,7 @@ Linuxでのインストール方法は[こちら](./doc/InstallLinux.md)。
 
 #### 1-1. "Amatsukaze.bat"を起動
 
-<img src="https://i.imgur.com/SFTasoX.png" width="206">
+<img src="./data/AmatsukazeStartBat.png" width="320">
 
 #### 1-2. 「キュー」タブにTSファイルをドラッグ&ドロップ
 
@@ -117,7 +117,7 @@ CRF22にしてみました。プロファイルの設定を変更したら、「
 
 #### 3-1. 「基本設定」タブでQSVEncCへのパスを設定
 
-QSVは同梱されていないので、rigaya氏のサイトから入手して、以下のように「基本設定」タブでパスを設定してください。
+QSVは同梱されていないので、[こちら](https://github.com/rigaya/QSVEnc/releases)から入手して、以下のように「基本設定」タブでパスを設定してください。
 
 <img src="https://i.imgur.com/dPjEfp6.png" width="570">
 
@@ -128,12 +128,13 @@ QSVは同梱されていないので、rigaya氏のサイトから入手して�
 
 「プロファイル」タブに戻って、エンコーダを「QSVEnc」、追加オプションを入力します。「適用」ボタンも忘れずに。
 
-<img src="https://i.imgur.com/0bzLXG4.png" width="515">
+<img src="./data/AmatsukazeStartQSVEnc.png" width="515">
 
-"--la-icq"モードは古いCPUだとサポートされていないので、注意してください。
 エンコーダのオプションが間違っていると、Amatsukazeによるエンコードは開始しますが、エンコーダ（QSVEncC）を立ち上げたところで、エラーを吐いて終了します。
 
 #### Note: 同じような手順でNVEncも設定できます。
+
+NVEncの入手先は[こちら](https://github.com/rigaya/NVEnc/releases)。
 
 <img src="https://i.imgur.com/aEDxg7r.png" width="463">←NVEncのパス設定
 
@@ -387,7 +388,21 @@ EDCBがサービスで動いてて、EpgTimerもAmatsukazeサーバも立ち上�
 
 NicoConvAssのパラメータを設定したい場合は、NicoConvAss.exeを起動して設定してください。
 
-### [バッチファイル実行機能](./doc/RunBat.md)
+### バッチファイル実行機能
+
+Amatsukazeでは下記タイミングでバッチファイルを実行できます。
+
+batフォルダに指定のプリフィックスを付けてバッチファイルを置くと、GUIから選択できるようになります。
+
+| 実行タイミング | プリフィックス | 設定箇所 | 実行主体 |
+|:--|:--|:--|:--|
+| TSファイル追加時 | 追加時_       | TSファイルドロップ画面 | AmatsukazeServer |
+| 実行前           | 実行前_       | プロファイル           | AmatsukazeServer |
+| エンコード前     | エンコード前_ | プロファイル           | AmatsukazeCLI    |
+| 実行後           | 実行後_       | プロファイル           | AmatsukazeServer |
+| キュー完了後     | キュー完了後_  | 基本設定              | AmatsukazeServer |
+
+batファイルの中では、環境変数で対象のファイル名等を取得できるほか、専用のコマンドが利用可能です。詳細は[こちらをご確認ください](./doc/RunBat.md)。
 
 ## CM位置入力
 
