@@ -3,9 +3,12 @@
 #include "rgy_pipe.h"
 #include "rgy_filesystem.h"
 #include <thread>
+#include <io.h>
+#include <fcntl.h>
 
 int _tmain(int argc, TCHAR **argv) {
-
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
     try {
         // 自身のフルパスを取得
         const tstring modulePath = getExePathW();
