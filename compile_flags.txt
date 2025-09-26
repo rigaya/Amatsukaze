@@ -1,0 +1,6 @@
+-std=c++17
+-I./
+-I./include/
+-I./include_gpl/
+-I./include_win/
+-I./common/
