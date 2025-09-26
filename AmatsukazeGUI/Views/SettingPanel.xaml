@@ -93,7 +93,6 @@
                                 <ComboBoxItem Content="標準" Tag="12"/>
                                 <ComboBoxItem Content="やや大" Tag="13"/>
                                 <ComboBoxItem Content="大" Tag="14"/>
-                                <ComboBoxItem Content="特大" Tag="16"/>
                                 <ComboBox.ToolTip>
                                     <TextBlock>アプリ全体の既定フォントサイズを変更します。</TextBlock>
                                 </ComboBox.ToolTip>
