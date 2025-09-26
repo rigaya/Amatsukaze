@@ -1115,7 +1115,9 @@ namespace Amatsukaze.Models
 
             // 基本色: 標準は従来配色、Light/DarkはFluent準拠気味
             bool isDark = mode == System.Windows.ThemeMode.Dark;
-            bool isStandard = pref == "Standard";
+            // 「自動」かつ OS がライトのときも ThemeMode.None になるため、
+            // その場合は従来の「標準」扱いにする
+            bool isStandard = mode == System.Windows.ThemeMode.None;
             // XAML側のDataTriggerで参照するテーマ種別フラグ
             rd["AMT.IsStandardTheme"] = isStandard;
             rd["AMT.IsDarkTheme"] = isDark;
