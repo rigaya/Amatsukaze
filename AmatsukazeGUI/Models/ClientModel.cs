@@ -1132,7 +1132,7 @@ namespace Amatsukaze.Models
             Color selection = isStandard ? Color.FromRgb(0xDA, 0x9E, 0xDA) : (isDark ? Color.FromRgb(0x33, 0x66, 0x99) : Color.FromRgb(0x2B, 0x88, 0xF7));
             Color selectionFg = isStandard ? Color.FromRgb(0x00, 0x00, 0x00) : (isDark ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF));
 
-            Color bgBase = isStandard ? Color.FromRgb(0xF0, 0xFF, 0xFF) : (isDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF2, 0xF2, 0xF2));
+            Color bgBase = isStandard ? Color.FromRgb(0xFF, 0xFF, 0xFF) : (isDark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF2, 0xF2, 0xF2));
 
             // アクセント: 標準では無効（従来配色を保つ）、Light/DarkではOSアクセント
             Brush accentBrush = isStandard
