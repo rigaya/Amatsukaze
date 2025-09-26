@@ -1,0 +1,41 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/include_gpl",
+                "${workspaceFolder}/include_win",
+                "${workspaceFolder}/common",
+                "${workspaceFolder}/ffmpeg_lgpl/include"
+            ],
+            "defines": [
+                "_CRT_SECURE_NO_WARNINGS",
+                "AVS_LINKAGE_DLLIMPORT",
+                "WIN32",
+                "_WINDOWS"
+            ],
+            "compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compilerArgs": [
+                "/execution-charset:shift_jis"
+            ]
+        },
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerArgs": [
+            ]
+        }
+    ]
+}
