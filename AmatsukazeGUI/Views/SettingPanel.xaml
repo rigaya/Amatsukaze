@@ -452,7 +452,7 @@
                         </DockPanel.Style>
                         <DockPanel Margin="2">
                             <TextBlock VerticalAlignment="Center" Text="バッチファイルのパス" Width="120"/>
-                            <ComboBox Height="22" Width="300" Margin="10,0,0,0"
+                            <ComboBox Height="22" Width="300" Margin="10,0,10,0"
                                       ItemsSource="{Binding Model.QueueFinishBatFiles}"
                                       SelectedItem="{Binding Model.Setting.BatchFileAfterQueuePath, Mode=TwoWay}"
                                       ToolTip="サーバーのbatフォルダの 'キュー完了後_xxx' から選択します。"/>
