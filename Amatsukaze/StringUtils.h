@@ -226,20 +226,20 @@ protected:
 
 std::vector<char> utf8ToString(const uint8_t* ptr, int sz);
 
-template <typename tchar>
-std::vector<std::basic_string<tchar>> split(const std::basic_string<tchar>& text, const tchar* delimiters) {
-    std::vector<std::basic_string<tchar>> ret;
-    std::vector<tchar> text_(text.begin(), text.end());
-    text_.push_back(0); // null terminate
-    char* ctx;
-    ret.emplace_back(strtok_s(text_.data(), delimiters, &ctx));
-    while (1) {
-        const char* tp = strtok_s(NULL, delimiters, &ctx);
-        if (tp == nullptr) break;
-        ret.emplace_back(tp);
-    }
-    return ret;
-}
+//template <typename tchar>
+//std::vector<std::basic_string<tchar>> split(const std::basic_string<tchar>& text, const tchar* delimiters) {
+//    std::vector<std::basic_string<tchar>> ret;
+//    std::vector<tchar> text_(text.begin(), text.end());
+//    text_.push_back(0); // null terminate
+//    tchar* ctx;
+//    ret.emplace_back(_tcstok_s(text_.data(), delimiters, &ctx));
+//    while (1) {
+//        const tchar* tp = _tcstok_s(NULL, delimiters, &ctx);
+//        if (tp == nullptr) break;
+//        ret.emplace_back(tp);
+//    }
+//    return ret;
+//}
 
 bool starts_with(const std::wstring& str, const std::wstring& test);
 bool starts_with(const std::string& str, const std::string& test);

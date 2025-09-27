@@ -332,7 +332,6 @@ std::wstring str_replace(std::wstring str, const std::wstring& from, const std::
 #endif //#if defined(_WIN32) || defined(_WIN64)
 
 #pragma warning (pop)
-#if defined(_WIN32) || defined(_WIN64)
 std::vector<std::wstring> split(const std::wstring &str, const std::wstring &delim, bool bTrim) {
     std::vector<std::wstring> res;
     size_t current = 0, found, delimlen = delim.size();
@@ -355,7 +354,6 @@ std::vector<std::wstring> split(const std::wstring &str, const std::wstring &del
     }
     return res;
 }
-#endif //#if defined(_WIN32) || defined(_WIN64)
 
 std::vector<std::string> split(const std::string &str, const std::string &delim, bool bTrim) {
     std::vector<std::string> res;

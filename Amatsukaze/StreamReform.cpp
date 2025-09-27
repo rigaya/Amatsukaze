@@ -1009,7 +1009,7 @@ double StreamReformInfo::getSourceFrameDuration(int index, int nextIndex) {
     const auto& format = format_[formatId];
     double frameDiff = format.videoFormat.frameRateDenom * MPEG_CLOCK_HZ / (double)format.videoFormat.frameRateNum;
 
-    double duration;
+    double duration = 0.0;
     if (isVFR_) { // VFR
         if (nextIndex == -1) {
             duration = 0; // 最後のフレーム

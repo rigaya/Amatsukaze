@@ -79,6 +79,7 @@ public:
     BitReader(MemoryChunk data)
         : data(data)
         , offset(0)
+        , current(0)
         , filled(0) {
         fill();
     }

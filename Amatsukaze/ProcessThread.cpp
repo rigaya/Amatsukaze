@@ -243,7 +243,7 @@ std::vector<char> removeAnsiEscapeSequences(const std::vector<char>& input) {
             // パラメータ文字（数字、セミコロン、スペースなど）や中間文字は無視して続行
         } else if (inOSC) {
             if (c == '\007' || (c == '\033' && i + 1 < input.size() && input[i + 1] == '\\')) {
-                // OSC終了：BEL文字 または ESC\ 
+                // OSC終了：BEL文字 または ESC 
                 inOSC = false;
                 if (c == '\033') {
                     ++i; // '\'をスキップ

@@ -32,6 +32,7 @@ struct EncoderOptionInfo {
     int selectEvery;
     std::string rcMode;
     double rcModeValue[3];
+    int parallel;
 };
 
 struct EncoderRCMode {

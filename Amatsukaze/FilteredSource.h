@@ -65,6 +65,9 @@ public:
         EncodeFileKey key,
         const ResourceManger& rm);
 
+    // Clone from an existing preprocessed instance and rebuild only runtime env
+    AMTFilterSource(AMTContext& ctx, const AMTFilterSource& source);
+
     ~AMTFilterSource();
 
     const PClip& getClip() const;

@@ -839,6 +839,9 @@ void DoBadThing() {
                 ctx.infoF("VFRタイミング: %d fps", fileOut.vfrTimingFps);
                 fileOut.timecode = setting.getAvsTimecodePath(key);
             }
+            if (eoInfo.parallel > 1) {
+                ctx.infoF("分割エンコード: %d", eoInfo.parallel);
+            }
 
             std::vector<int> pass;
             if (setting.isTwoPass()) {
@@ -863,8 +866,13 @@ void DoBadThing() {
             // QSV/NV/VCEEncではプロセス内で自動的に最適なように設定されるため不要
             const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
             AMTFilterVideoEncoder encoder(ctx, std::max(4, setting.getNumEncodeBufferFrames()));
+            // 並列GetFrame用にフィルタチェーンを構築するファクトリを渡す
+            // 既存のfilterSourceの前処理結果（スクリプト）を再利用して環境を再構築
+            auto filterFactory = [&]() -> std::unique_ptr<AMTFilterSource> {
+                return std::unique_ptr<AMTFilterSource>(new AMTFilterSource(ctx, filterSource));
+            };
             encoder.encode(filterClip, outfmt,
-                timeCodes, encoderArgs, disablePowerThrottoling, env);
+                timeCodes, encoderArgs, eoInfo.parallel, disablePowerThrottoling, env, filterFactory);
         } catch (const AvisynthError& avserror) {
             THROWF(AviSynthException, "%s", avserror.msg);
         }

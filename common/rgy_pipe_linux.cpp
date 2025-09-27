@@ -275,7 +275,7 @@ int RGYPipeProcessLinux::stdErrFpClose() {
     return ret;
 }
 
-tstring RGYPipeProcessLinux::getOutput() {
+std::string RGYPipeProcessLinux::getOutput() {
     std::string outstr;
     std::vector<uint8_t> bufferOut, bufferErr;
     while (stdOutRead(bufferOut) >= 0
@@ -301,7 +301,7 @@ tstring RGYPipeProcessLinux::getOutput() {
         outstr += (const char *)bufferErr.data();
         bufferErr.clear();
     }
-    return char_to_tstring(outstr);
+    return outstr;
 }
 
 bool RGYPipeProcessLinux::processAlive() {

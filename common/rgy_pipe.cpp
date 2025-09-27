@@ -456,3 +456,122 @@ std::vector<tstring> SplitCommandLine(const tstring& cmdLine) {
 
     return args;
 }
+
+// ========== RGYAnonymousPipe ==========
+
+RGYAnonymousPipe::RGYAnonymousPipe()
+#if defined(_WIN32) || defined(_WIN64)
+    : m_read(nullptr), m_write(nullptr)
+#else
+    : m_read(0), m_write(0)
+#endif
+{
+}
+
+RGYAnonymousPipe::~RGYAnonymousPipe() {
+    closeRead();
+    closeWrite();
+}
+
+int RGYAnonymousPipe::create(bool inheritReadHandle, bool inheritWriteHandle, uint32_t bufferSize) {
+#if defined(_WIN32) || defined(_WIN64)
+    SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+    HANDLE hRead = NULL, hWrite = NULL;
+    if (!CreatePipe(&hRead, &hWrite, &sa, bufferSize)) {
+        return 1;
+    }
+    // 継承可否設定
+    if (!SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, inheritReadHandle ? HANDLE_FLAG_INHERIT : 0)) {
+        CloseHandle(hRead); CloseHandle(hWrite); return 1;
+    }
+    if (!SetHandleInformation(hWrite, HANDLE_FLAG_INHERIT, inheritWriteHandle ? HANDLE_FLAG_INHERIT : 0)) {
+        CloseHandle(hRead); CloseHandle(hWrite); return 1;
+    }
+    m_read = hRead;
+    m_write = hWrite;
+    return 0;
+#else
+    int fds[2] = { 0, 0 };
+    if (pipe(fds) != 0) {
+        return 1;
+    }
+    // Linuxではfork+execの際、デフォルトでfdは継承される。
+    // 特に設定は不要（必要ならfcntl(FD_CLOEXEC)で明示的に切る）。
+    m_read = fds[0];
+    m_write = fds[1];
+    (void)inheritReadHandle;
+    (void)inheritWriteHandle;
+    (void)bufferSize;
+    return 0;
+#endif
+}
+
+int RGYAnonymousPipe::write(const void *data, const size_t dataSize) {
+#if defined(_WIN32) || defined(_WIN64)
+    if (!m_write) return -1;
+    DWORD written = 0;
+    if (!WriteFile(m_write, data, (DWORD)dataSize, &written, NULL)) {
+        return -1;
+    }
+    return (int)written;
+#else
+    if (!m_write) return -1;
+    ssize_t bytes_written = 0;
+    while (bytes_written < (ssize_t)dataSize) {
+        ssize_t result = ::write(m_write, (const char*)data + bytes_written, dataSize - bytes_written);
+        if (result <= 0) {
+            if (result < 0 && errno == EINTR) continue;
+            return -1;
+        }
+        bytes_written += result;
+    }
+    return (int)bytes_written;
+#endif
+}
+
+int RGYAnonymousPipe::read(void *data, const size_t dataSize) {
+#if defined(_WIN32) || defined(_WIN64)
+    if (!m_read) return -1;
+    DWORD readBytes = 0;
+    if (!ReadFile(m_read, data, (DWORD)dataSize, &readBytes, NULL)) {
+        return -1;
+    }
+    return (int)readBytes;
+#else
+    if (!m_read) return -1;
+    ssize_t ret = ::read(m_read, data, dataSize);
+    if (ret < 0) {
+        if (errno == EINTR) return 0; // 中断時は0相当（再試行可）
+        return -1;
+    }
+    return (int)ret;
+#endif
+}
+
+int RGYAnonymousPipe::closeRead() {
+#if defined(_WIN32) || defined(_WIN64)
+    if (m_read) { CloseHandle(m_read); m_read = nullptr; }
+    return 0;
+#else
+    if (m_read) { ::close(m_read); m_read = 0; }
+    return 0;
+#endif
+}
+
+int RGYAnonymousPipe::closeWrite() {
+#if defined(_WIN32) || defined(_WIN64)
+    if (m_write) { CloseHandle(m_write); m_write = nullptr; }
+    return 0;
+#else
+    if (m_write) { ::close(m_write); m_write = 0; }
+    return 0;
+#endif
+}
+
+unsigned long long RGYAnonymousPipe::childReadableHandleValue() const {
+#if defined(_WIN32) || defined(_WIN64)
+    return (unsigned long long)(uintptr_t)m_read;
+#else
+    return (unsigned long long)m_read;
+#endif
+}

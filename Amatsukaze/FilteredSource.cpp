@@ -269,6 +269,24 @@ AMTFilterSource::~AMTFilterSource() {
     env_ = nullptr;
 }
 
+AMTFilterSource::AMTFilterSource(AMTContext& ctx, const AMTFilterSource& source)
+    : AMTObject(ctx)
+    , setting_(source.setting_)
+    , env_(make_unique_ptr(CreateScriptEnvironment2()))
+    , vfrTimingFps_(source.vfrTimingFps_) {
+    // 既存インスタンスのスクリプト全文を新しい環境で再評価してフィルタグラフを再構築
+    script_.Clear();
+    auto& sb = script_.Get();
+    sb.append("%s", source.getScript().c_str());
+    script_.Apply(env_.get());
+    filter_ = env_->GetVar("last").AsClip();
+
+    // メタデータをコピー（スレッドごとに環境は別）
+    outfmt_ = source.outfmt_;
+    outZones_ = source.outZones_;
+    timeCodes_ = source.timeCodes_;
+}
+
 const PClip& AMTFilterSource::getClip() const {
     return filter_;
 }

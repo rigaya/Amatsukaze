@@ -12,6 +12,7 @@
 #include "ReaderWriterFFmpeg.h"
 #include "TranscodeSetting.h"
 #include "FilteredSource.h"
+#include <functional>
 
 class Y4MWriter {
     static const char* getPixelFormat(VideoInfo vi);
@@ -20,7 +21,6 @@ public:
     void inputFrame(const PVideoFrame& frame);
 protected:
     virtual void onWrite(MemoryChunk mc) = 0;
-private:
     int n;
     int nc;
     std::string header;
@@ -40,6 +40,8 @@ public:
 
     const std::deque<std::vector<char>>& getLastLines();
 
+    void onVideoWrite(MemoryChunk mc);
+
 private:
     class MyVideoWriter : public Y4MWriter {
     public:
@@ -52,8 +54,6 @@ private:
 
     std::unique_ptr<MyVideoWriter> y4mWriter_;
     std::unique_ptr<StdRedirectedSubProcess> process_;
-
-    void onVideoWrite(MemoryChunk mc);
 };
 
 class AMTFilterVideoEncoder : public AMTObject {
@@ -63,8 +63,9 @@ public:
 
     void encode(
         PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
-        const std::vector<tstring>& encoderOptions, const bool disablePowerThrottoling,
-        IScriptEnvironment* env);
+        const std::vector<tstring>& encoderOptions, const int pipeParallel,
+        const bool disablePowerThrottoling, IScriptEnvironment* env,
+        const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory = nullptr);
 
 private:
 
@@ -80,7 +81,7 @@ private:
     VideoInfo vi_;
     VideoFormat outfmt_;
     std::unique_ptr<Y4MEncodeWriter> encoder_;
-
+    int pipeParallel_;
     SpDataPumpThread thread_;
 };
 

@@ -8,6 +8,8 @@
 
 #include "Encoder.h"
 #include "EncoderOptionParser.h"
+#include <atomic>
+#include "rgy_pipe.h"
 
 /* static */ const char* Y4MWriter::getPixelFormat(VideoInfo vi) {
     if (vi.Is420()) {
@@ -136,8 +138,8 @@ AMTFilterVideoEncoder::AMTFilterVideoEncoder(
 
 void AMTFilterVideoEncoder::encode(
     PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
-    const std::vector<tstring>& encoderOptions, const bool disablePowerThrottoling,
-    IScriptEnvironment* env) {
+    const std::vector<tstring>& encoderOptions, const int pipeParallel, const bool disablePowerThrottoling,
+    IScriptEnvironment* env, const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory) {
     vi_ = source->GetVideoInfo();
     outfmt_ = outfmt;
 
@@ -148,29 +150,187 @@ void AMTFilterVideoEncoder::encode(
     }
 
     int npass = (int)encoderOptions.size();
-    for (int i = 0; i < npass; ++i) {
+    for (int i = 0; i < npass; i++) {
         ctx.infoF("%d/%dパス エンコード開始 予定フレーム数: %d", i + 1, npass, vi_.num_frames);
 
         const tstring& args = encoderOptions[i];
 
-        ctx.info("[エンコーダ起動]");
-        ctx.infoF("%s", args);
+        // 並列パイプ用の準備 (OS非依存)
+        const bool useParallel = (pipeParallel > 0);
+        struct ParallelPipeInfo {
+            RGYAnonymousPipe pipe;
+            int startFrame;
+            int endFrame; // [start, end)
 
-        // 初期化
-        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, args, vi_, outfmt_, disablePowerThrottoling));
+            ParallelPipeInfo() : pipe(), startFrame(-1), endFrame(-1) {};
+        };
+        std::vector<ParallelPipeInfo> pinfo;
+        tstring argsWithParallel = args;
+        if (useParallel) {
+            // フレーム範囲を分割
+            const int mp = pipeParallel;
+            pinfo.resize(mp);
+            for (int p = 0; p < mp; p++) {
+                pinfo[p].startFrame = vi_.num_frames * p / mp;
+                pinfo[p].endFrame = vi_.num_frames * (p + 1) / mp;
+            }
+
+            // 無名パイプ生成 (読み取り側を子プロセスに継承させる)
+            StringBuilderT chunkSb;
+            chunkSb.append(_T(" --parallel mp=%d,chunk-handles="), mp);
+            bool first = true;
+            for (int p = 0; p < mp; p++) {
+                if (pinfo[p].pipe.create(true, false, 0) != 0) {
+                    THROW(RuntimeException, "匿名パイプの生成に失敗");
+                }
+                if (!first) {
+                    chunkSb.append(_T(":"));
+                }
+                first = false;
+                // 子プロセスに継承される読み取りハンドル値を渡す
+                chunkSb.append(_T("%llu#%d"), pinfo[p].pipe.childReadableHandleValue(), pinfo[p].startFrame);
+            }
+            argsWithParallel += chunkSb.str();
+        }
+        ctx.info("[エンコーダ起動]");
+        ctx.infoF("%s", argsWithParallel);
+
+        // 初期化（子プロセス起動）
+        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling));
+        // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）
+        if (useParallel) {
+            for (auto& pi : pinfo) {
+                pi.pipe.closeRead();
+            }
+        }
 
         Stopwatch sw;
-        // エンコードスレッド開始
-        thread_.start();
         sw.start();
 
         bool error = false;
+        std::atomic<bool> anyError(false);
 
         try {
-            // エンコード
-            for (int i = 0; i < vi_.num_frames; ++i) {
-                auto frame = source->GetFrame(i, env);
-                thread_.put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+            if (useParallel) { // 並列エンコード時
+                // Y4Mヘッダのみを標準入力に送るヘルパークラス
+                class StdinHeaderWriter : public Y4MWriter {
+                public:
+                    StdinHeaderWriter(Y4MEncodeWriter* encoder, VideoInfo vi, VideoFormat fmt)
+                        : Y4MWriter(vi, fmt), encoder_(encoder) {}
+                    void writeHeaderOnly() {
+                        // ヘッダーのみを送信（フレームデータは送らない）
+                        if (n == 0) {
+                            buffer.add(MemoryChunk((uint8_t*)header.data(), header.size()));
+                            onWrite(buffer.get());
+                            buffer.clear();
+                            n++; // ヘッダー送信済みフラグ
+                        }
+                    }
+                protected:
+                    virtual void onWrite(MemoryChunk mc) override {
+                        encoder_->onVideoWrite(mc);
+                    }
+                private:
+                    Y4MEncodeWriter* encoder_;
+                };
+
+                // パイプごとのY4M書き込みスレッド
+                class PipeY4MWriter : public Y4MWriter {
+                public:
+                    PipeY4MWriter(RGYAnonymousPipe* pipe, VideoInfo vi, VideoFormat fmt)
+                        : Y4MWriter(vi, fmt), pipe_(pipe) {}
+                protected:
+                    virtual void onWrite(MemoryChunk mc) override {
+                        if (mc.length == 0) return;
+                        if (pipe_->write(mc.data, mc.length) != (int)mc.length) {
+                            THROW(RuntimeException, "並列パイプへの書き込みに失敗");
+                        }
+                    }
+                private:
+                    RGYAnonymousPipe* pipe_;
+                };
+
+                class SegmentPumpThread : public DataPumpThread<std::unique_ptr<PVideoFrame>, true> {
+                public:
+                    SegmentPumpThread(PipeY4MWriter* writer, std::atomic<bool>* anyError)
+                        : DataPumpThread(8)
+                        , writer_(writer)
+                        , anyError_(anyError) {}
+                protected:
+                    virtual void OnDataReceived(std::unique_ptr<PVideoFrame>&& data) override {
+                        if (anyError_ && anyError_->load()) {
+                            THROW(RuntimeException, "他スレッドでエラー発生");
+                        }
+                        try {
+                            writer_->inputFrame(*data);
+                        } catch (Exception&) {
+                            if (anyError_) anyError_->store(true);
+                            throw; // DataPumpThread 側でerror_に反映される
+                        }
+                    }
+                private:
+                    PipeY4MWriter* writer_;
+                    std::atomic<bool>* anyError_;
+                };
+
+                // 標準入力にY4Mヘッダを送信 (エンコーダの親スレッドが読み取って初期化に使う)
+                StdinHeaderWriter headerWriter(encoder_.get(), vi_, outfmt_);
+                headerWriter.writeHeaderOnly();
+
+                // ライタとスレッド生成
+                std::vector<std::unique_ptr<PipeY4MWriter>> writers;
+                std::vector<std::unique_ptr<SegmentPumpThread>> pumps;
+                writers.reserve((int)pinfo.size());
+                pumps.reserve((int)pinfo.size());
+                for (auto& pi : pinfo) {
+                    writers.emplace_back(new PipeY4MWriter(&pi.pipe, vi_, outfmt_));
+                    pumps.emplace_back(new SegmentPumpThread(writers.back().get(), &anyError));
+                }
+
+                // 各セグメント専用のフィルタチェーンで取得・配送
+                // 各スレッドでfilterSourceを構築し、そのGetFrameでstart-endの範囲を取得
+                std::vector<std::thread> workers;
+                workers.reserve((int)pinfo.size());
+                for (int p = 0; p < (int)pinfo.size(); p++) {
+                    workers.emplace_back([&](const int threadId) {
+                        try {
+                            // スレッド内で独自のフィルタチェーンを構築
+                            std::unique_ptr<AMTFilterSource> localFilter = filterSourceFactory();
+                            IScriptEnvironment2* localenv = localFilter->getEnv();
+                            PClip localClip = localFilter->getClip(); // fallback
+                            pumps[threadId]->start();
+                            for (int fi = pinfo[threadId].startFrame; fi < pinfo[threadId].endFrame && !anyError.load(); ++fi) {
+                                auto frame = localClip->GetFrame(fi, localenv);
+                                pumps[threadId]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                            }
+                            pumps[threadId]->join();
+                        } catch (const AvisynthError& avserror) {
+                            ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+                            anyError.store(true);
+                        } catch (Exception&) {
+                            anyError.store(true);
+                        }
+                    }, p);
+                }
+                for (auto& th : workers) th.join();
+
+                // スレッド終了を待つ
+                for (auto& pump : pumps) {
+                    pump->join();
+                }
+
+                // 書き込みハンドルを閉じる (EOF 通知)
+                for (auto& pi : pinfo) {
+                    pi.pipe.closeWrite();
+                }
+            } else {
+                // 既存の単一パイプ処理
+                thread_.start();
+                for (int i = 0; i < vi_.num_frames; ++i) {
+                    auto frame = source->GetFrame(i, env);
+                    thread_.put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                }
+                thread_.join();
             }
         } catch (const AvisynthError& avserror) {
             ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
@@ -179,10 +339,8 @@ void AMTFilterVideoEncoder::encode(
             error = true;
         }
 
-        // エンコードスレッドを終了して自分に引き継ぐ
-        thread_.join();
-
-        // 残ったフレームを処理
+        // 子プロセスの終了待ち（stdinはfinishで閉じる）。
+        // 並列モードでは独自パイプは既に閉じ済み。
         encoder_->finish();
 
         if (error) {
@@ -192,8 +350,13 @@ void AMTFilterVideoEncoder::encode(
         encoder_ = nullptr;
         sw.stop();
 
-        double prod, cons; thread_.getTotalWait(prod, cons);
-        ctx.infoF("Total: %.2fs, FilterWait: %.2fs, EncoderWait: %.2fs", sw.getTotal(), prod, cons);
+        // 単一パイプ時のみ従来の待ち時間統計を出す
+        if (pipeParallel <= 1) {
+            double prod, cons; thread_.getTotalWait(prod, cons);
+            ctx.infoF("Total: %.2fs, FilterWait: %.2fs, EncoderWait: %.2fs", sw.getTotal(), prod, cons);
+        } else {
+            ctx.infoF("Total: %.2fs (parallel mp=%d)", sw.getTotal(), pipeParallel);
+        }
     }
 }
 AMTFilterVideoEncoder::SpDataPumpThread::SpDataPumpThread(AMTFilterVideoEncoder* this_, int bufferingFrames)

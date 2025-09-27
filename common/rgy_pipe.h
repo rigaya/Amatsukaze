@@ -32,8 +32,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
-#include "rgy_osdep.h"
-#include "rgy_util.h"
+#include <limits>
+#include "rgy_osdep.h" // requires HANDLE / fd typedefs
+#ifdef __cplusplus
+#include <memory>
+#endif
 #include "rgy_tchar.h"
 
 std::vector<tstring> SplitCommandLine(const tstring& cmdLine);
@@ -170,7 +173,7 @@ protected:
 #else
 
 #ifndef INFINITE
-#define INFINITE (UINT_MAX)
+#define INFINITE (std::numeric_limits<uint32_t>::max())
 #endif
 class RGYPipeProcessLinux : public RGYPipeProcess {
 public:
@@ -203,5 +206,43 @@ protected:
 #endif //#if defined(_WIN32) || defined(_WIN64)
 
 std::unique_ptr<RGYPipeProcess> createRGYPipeProcess();
+
+// 共通無名パイプ (Windows: HANDLE, Linux: fd)
+// C++ のみ
+#ifdef __cplusplus
+class RGYAnonymousPipe {
+public:
+    RGYAnonymousPipe();
+    ~RGYAnonymousPipe();
+
+    // 継承可否を個別に指定 (通常: 読み取り側のみ継承可、書き込み側は継承不可)
+    // bufferSize (Windowsのみ有効)
+    int create(bool inheritReadHandle = true, bool inheritWriteHandle = false, uint32_t bufferSize = 0);
+
+    // 書き込み
+    // 戻り値: 書き込んだバイト数、失敗時 -1
+    int write(const void *data, const size_t dataSize);
+
+    // 読み取り
+    // 戻り値: 読み取ったバイト数、EOF/ブロック時は0、失敗時 -1
+    int read(void *data, const size_t dataSize);
+
+    // クローズ
+    int closeRead();
+    int closeWrite();
+
+    // ハンドル取得
+    PIPE_HANDLE readHandle() const { return m_read; }
+    PIPE_HANDLE writeHandle() const { return m_write; }
+
+    // 子プロセスで読み取りに使用されるハンドル値を文字列埋め込み用に返す
+    // Windows: HANDLE値、Linux: fd番号
+    unsigned long long childReadableHandleValue() const;
+
+private:
+    PIPE_HANDLE m_read;
+    PIPE_HANDLE m_write;
+};
+#endif // __cplusplus
 
 #endif //__RGY_PIPE_H__

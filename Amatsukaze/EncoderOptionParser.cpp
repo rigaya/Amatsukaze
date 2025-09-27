@@ -259,6 +259,63 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
         info.rcMode = "qvbr";
         info.rcModeValue[0] = qvbr_quality;
     }
+    if (encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC || encoder == ENCODER_VCEENC) {
+        info.parallel = 0;
+        
+        // --parallelオプションの解析
+        for (int i = 0; i < argc; i++) {
+            const auto& arg = argv[i];
+            const auto& next = (i + 1 < argc) ? argv[i + 1] : L"";
+            
+            if (arg == L"--parallel") {
+                if (i + 1 >= argc || next[0] == L'-') {
+                    // パラメータなしの場合はデフォルト値（0）のまま
+                    continue;
+                }
+                i++; // 次の引数をスキップ
+                
+                for (const auto &param : split(next, L",")) {
+                    auto pos = param.find_first_of(L"=");
+                    if (pos != std::wstring::npos) {
+                        auto param_arg = param.substr(0, pos);
+                        auto param_val = param.substr(pos + 1);
+                        std::transform(param_arg.begin(), param_arg.end(), param_arg.begin(), ::tolower);
+                        
+                        if (param_arg == L"mp") {
+                            if (param_val == L"auto") {
+                                info.parallel = -1;
+                            } else {
+                                try {
+                                    info.parallel = std::stoi(param_val);
+                                } catch (...) {
+                                    // エラー時はデフォルト値（0）のまま
+                                }
+                            }
+                            continue;
+                        }
+                        // 他のパラメータ（id, chunks, chunk-handles, cache）は処理しない
+                    } else {
+                        // パラメータ名なしの場合
+                        if (param == L"auto") {
+                            info.parallel = -1;
+                        } else {
+                            try {
+                                info.parallel = std::stoi(param);
+                            } catch (...) {
+                                // エラー時はデフォルト値（0）のまま
+                            }
+                        }
+                        continue;
+                    }
+                }
+                break; // --parallelオプションが見つかったらループを抜ける
+            }
+        }
+        // Amastukazeからは自動設定が難しいので、とりあえず2並列として処理する
+        if (info.parallel < 0) {
+            info.parallel = 2;
+        }
+    }
 
     return info;
 }
