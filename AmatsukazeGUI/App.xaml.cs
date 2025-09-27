@@ -95,12 +95,12 @@ namespace Amatsukaze
             e.Handled = false; // 既定のクラッシュ動作に任せる
         }
 
-        private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+        private void TaskScheduler_UnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
         {
             LogException(e.Exception, "TaskScheduler.UnobservedTaskException");
         }
 
-        private static void LogException(Exception? ex, string source)
+        private static void LogException(Exception ex, string source)
         {
             try
             {
