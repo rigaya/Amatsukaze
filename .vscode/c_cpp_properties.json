@@ -13,7 +13,9 @@
                 "_CRT_SECURE_NO_WARNINGS",
                 "AVS_LINKAGE_DLLIMPORT",
                 "WIN32",
-                "_WINDOWS"
+                "_WINDOWS",
+                "_UNICODE",
+                "UNICODE"
             ],
             "compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe",
             "cStandard": "c17",
