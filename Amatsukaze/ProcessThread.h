@@ -33,7 +33,7 @@ std::vector<tstring> SplitCommandLine(const tstring& cmdLine);
 class ThreadBase {
 public:
     ThreadBase() : thread_() {}
-    ~ThreadBase() {
+    virtual ~ThreadBase() {
     }
     void start() {
         thread_ = std::thread([this]() { run(); });
@@ -61,7 +61,7 @@ public:
         , finished_(false)
         , error_(false) {}
 
-    ~DataPumpThread() {
+    virtual ~DataPumpThread() {
         if (isRunning()) {
             THROW(InvalidOperationException, "call join() before destroy object ...");
         }
@@ -85,6 +85,12 @@ public:
         }
         data_.emplace_back(amount, std::move(data));
         current_ += amount;
+    }
+
+    void force_clear() {
+        std::unique_lock<std::mutex> lock(critical_section_);
+        data_.clear();
+        current_ = 0;
     }
 
     void start() {

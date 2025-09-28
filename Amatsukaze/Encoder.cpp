@@ -256,10 +256,13 @@ void AMTFilterVideoEncoder::encode(
                         : DataPumpThread(8)
                         , writer_(writer)
                         , anyError_(anyError) {}
+                    virtual ~SegmentPumpThread() {
+                    }
                 protected:
                     virtual void OnDataReceived(std::unique_ptr<PVideoFrame>&& data) override {
                         if (anyError_ && anyError_->load()) {
-                            THROW(RuntimeException, "他スレッドでエラー発生");
+                            //THROW(RuntimeException, "他スレッドでエラー発生");
+                            return;
                         }
                         try {
                             writer_->inputFrame(*data);
@@ -274,8 +277,8 @@ void AMTFilterVideoEncoder::encode(
                 };
 
                 // 標準入力にY4Mヘッダを送信 (エンコーダの親スレッドが読み取って初期化に使う)
-                StdinHeaderWriter headerWriter(encoder_.get(), vi_, outfmt_);
-                headerWriter.writeHeaderOnly();
+                auto headerWriter = std::unique_ptr<StdinHeaderWriter>(new StdinHeaderWriter(encoder_.get(), vi_, outfmt_));
+                headerWriter->writeHeaderOnly();
 
                 // ライタとスレッド生成
                 std::vector<std::unique_ptr<PipeY4MWriter>> writers;
@@ -294,35 +297,50 @@ void AMTFilterVideoEncoder::encode(
                 for (int p = 0; p < (int)pinfo.size(); p++) {
                     workers.emplace_back([&](const int threadId) {
                         try {
-                            // スレッド内で独自のフィルタチェーンを構築
                             std::unique_ptr<AMTFilterSource> localFilter = filterSourceFactory();
                             IScriptEnvironment2* localenv = localFilter->getEnv();
-                            PClip localClip = localFilter->getClip(); // fallback
-                            pumps[threadId]->start();
-                            for (int fi = pinfo[threadId].startFrame; fi < pinfo[threadId].endFrame && !anyError.load(); ++fi) {
-                                auto frame = localClip->GetFrame(fi, localenv);
-                                pumps[threadId]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                            try {
+                                // スレッド内で独自のフィルタチェーンを構築
+                                PClip localClip = localFilter->getClip(); // fallback
+                                pumps[threadId]->start();
+                                for (int fi = pinfo[threadId].startFrame; fi < pinfo[threadId].endFrame && !anyError.load(); fi++) {
+                                    auto frame = localClip->GetFrame(fi, localenv);
+                                    pumps[threadId]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                                }
+                            } catch (const AvisynthError& avserror) {
+                                ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+                                anyError.store(true);
+                            } catch (Exception&) {
+                                anyError.store(true);
                             }
                             pumps[threadId]->join();
-                        } catch (const AvisynthError& avserror) {
-                            ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
-                            anyError.store(true);
+                            // localenvがあるうちにデータ(PVideoFrame)をクリアする
+                            // そうしないとpumps[threadId]内のデータの破棄時に例外が発生してしまう
+                            pumps[threadId]->force_clear();
                         } catch (Exception&) {
                             anyError.store(true);
                         }
+                        pinfo[threadId].pipe.closeWrite();
                     }, p);
                 }
-                for (auto& th : workers) th.join();
+                for (size_t p = 0; p < workers.size(); p++) {
+                    workers[p].join();
+                }
 
                 // スレッド終了を待つ
-                for (auto& pump : pumps) {
-                    pump->join();
+                for (size_t p = 0; p < pumps.size(); p++) {
+                    pumps[p]->join();
                 }
 
                 // 書き込みハンドルを閉じる (EOF 通知)
                 for (auto& pi : pinfo) {
                     pi.pipe.closeWrite();
                 }
+                workers.clear();
+                pumps.clear();
+                writers.clear();
+                headerWriter.reset();
+                error |= anyError.load();
             } else {
                 // 既存の単一パイプ処理
                 thread_.start();
@@ -336,6 +354,8 @@ void AMTFilterVideoEncoder::encode(
             ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
             error = true;
         } catch (Exception&) {
+            error = true;
+        } catch (...) {
             error = true;
         }
 

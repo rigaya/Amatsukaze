@@ -372,6 +372,12 @@ bool RGYPipeProcessWin::processAlive() {
 
 #endif //defined(_WIN32) || defined(_WIN64)
 
+#if !(defined(_WIN32) || defined(_WIN64))
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#endif
+
 
 std::unique_ptr<RGYPipeProcess> createRGYPipeProcess() {
 #if defined(_WIN32) || defined(_WIN64)
@@ -492,15 +498,32 @@ int RGYAnonymousPipe::create(bool inheritReadHandle, bool inheritWriteHandle, ui
     return 0;
 #else
     int fds[2] = { 0, 0 };
+#if defined(O_CLOEXEC)
+    // まず両端に close-on-exec を付けて作成
+    if (pipe2(fds, O_CLOEXEC) != 0) {
+        return 1;
+    }
+#else
     if (pipe(fds) != 0) {
         return 1;
     }
-    // Linuxではfork+execの際、デフォルトでfdは継承される。
-    // 特に設定は不要（必要ならfcntl(FD_CLOEXEC)で明示的に切る）。
+    // 競合回避のため、一旦両端に FD_CLOEXEC を付与
+    int fl0 = fcntl(fds[0], F_GETFD);
+    if (fl0 != -1) fcntl(fds[0], F_SETFD, fl0 | FD_CLOEXEC);
+    int fl1 = fcntl(fds[1], F_GETFD);
+    if (fl1 != -1) fcntl(fds[1], F_SETFD, fl1 | FD_CLOEXEC);
+#endif
+    // 子プロセスに継承させたい端のみ FD_CLOEXEC を外す
+    if (inheritReadHandle) {
+        int fl = fcntl(fds[0], F_GETFD);
+        if (fl != -1) fcntl(fds[0], F_SETFD, fl & ~FD_CLOEXEC);
+    }
+    if (inheritWriteHandle) {
+        int fl = fcntl(fds[1], F_GETFD);
+        if (fl != -1) fcntl(fds[1], F_SETFD, fl & ~FD_CLOEXEC);
+    }
     m_read = fds[0];
     m_write = fds[1];
-    (void)inheritReadHandle;
-    (void)inheritWriteHandle;
     (void)bufferSize;
     return 0;
 #endif
