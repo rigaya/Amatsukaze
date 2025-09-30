@@ -359,6 +359,7 @@
         <Setter Property="Padding" Value="0"/>
         <Setter Property="MinHeight" Value="0"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="AllowDrop" Value="True"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="FontSize" Value="{DynamicResource AMT.FontSize}"/>
     </Style>
