@@ -1152,6 +1152,13 @@ namespace Amatsukaze.Models
             rd["AMT.DisabledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
             rd["AMT.AccentBrush"] = accentBrush;
 
+            // 挿入インジケータ(ドラッグ時の挿入線)の色
+            // 標準: 黒 / ライト: 黒に近い灰色 / ダーク: 明るめの灰色
+            Color insertIndicator = isStandard
+                ? Color.FromRgb(0x00, 0x00, 0x00)
+                : (isDark ? Color.FromRgb(0xDD, 0xDD, 0xDD) : Color.FromRgb(0x33, 0x33, 0x33));
+            rd["AMT.InsertIndicatorBrush"] = new SolidColorBrush(insertIndicator);
+
             // GridSplitter の色（ライト/ダークで見やすいトーンに調整）
             // 標準: 既存コントロールダーク/ライトに近い中間色
             // ダーク: 明度を抑えた中間グレー + ホバー時はやや明るく

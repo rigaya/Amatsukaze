@@ -9,5 +9,5 @@
 	x:Name="UserControl"
 	d:DesignWidth="100">
 
-    <Border Background="Black" Height="2"/>
+    <Border Background="{DynamicResource AMT.InsertIndicatorBrush}" Height="2"/>
 </UserControl>
