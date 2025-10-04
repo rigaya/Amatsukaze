@@ -29,9 +29,13 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 
 ### インストール方法
 
+#### Windows
+
 配布7zを解凍
 
-Linuxでのインストール方法は[こちら](./doc/InstallLinux.md)。
+#### Linux
+
+[こちら](./doc/InstallLinux.md)を確認してください。
 
 ### アンインストール方法
 
@@ -45,6 +49,7 @@ Linuxでのインストール方法は[こちら](./doc/InstallLinux.md)。
 - 字幕をSRTやASSに変換
 - ニコニコ実況や2ch実況のコメントをASS字幕として追加（NicoConvAssが必要）
 - 独自Avisynthソースクリップによる安定したチャプター・CM解析
+- ts構造を維持した映像部分のみの圧縮 (tsreplace使用)
 - CMと本編の分離出力
 - CMに本編とは別のビットレートを適用（一部エンコーダで制限あり）
 - 複数話構成の番組を各話で分割
@@ -59,6 +64,7 @@ Linuxでのインストール方法は[こちら](./doc/InstallLinux.md)。
 - 高ビットフィルタ処理およびエンコード
 - MPEG2ソースの量子化パラメータを使ったノイズリダクション
 - 複数エンコーダの並列実行およびスケジューリング
+- HWエンコードでのファイル分割並列エンコード(--parallel)
 - EDCBからの録画後自動エンコード
 
 ## 使い方
@@ -353,6 +359,15 @@ MP4はASSに対応していないためSRTのみが組み込まれ、ASSは別�
 付属のフィルタにKFMによるVFR出力があります。
 Amatsukazeでは、VFRで24fps判定されたフレームのタイミングを60fpsと120fpsから選択できます。
 60fpsタイミングは、TSソースのタイミングをなるべく忠実に再現した、23プルダウンと同等のタイミングで出力します。120fpsタイミングの場合、24fpsフレームは、120fpsのタイミングに沿って等間隔で出力されます。
+
+### ファイル分割並列エンコード
+
+QSVEnc/NVEnc/VCEEnc使用時には、エンコーダ追加オプションで ```--parallel``` を使用することでファイル分割並列エンコードが可能です。使用する場合、エンコーダ追加オプションに```--parallel 2```などのように並列数を指定してください。
+
+マルチGPU環境はもちろん、ひとつのGPUにエンコーダが複数搭載されている場合に、これを活用して並列エンコードを行うことで高速化が可能です。
+
+↓ ひとつのファイルのエンコードで複数のGPUを使用
+<img src="./data/amatsukaze_20251004_parallel_KFM.png" width="718">
 
 ### EDCBから自動エンコード
 
@@ -659,6 +674,8 @@ Amatsukazeと同梱&依存ライブラリはすべて64bitに統一されてい�
 
 ## ビルド方法
 
+### Windows ビルド手順
+
 FFmpeg（ライブラリ）が必要です。
 ビルド例は[こちら](https://github.com/rigaya/build_scripts/tree/master/ffmpeg_dll)。
 ```bash
@@ -667,18 +684,22 @@ build_ffmpeg_dll.sh -aur -t swscale
 
 vcpkgをインストールします。
 
+```bat
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 bootstrap-vcpkg.bat
 vcpkg integrate install
+```
 
 次にzlibをインストールします。
 
+```bat
 vcpkg install zlib:x64-windows-static
+```
 
 
 BatchHashCheckerにはOpenSSLが必要です。
-```bash
+```bat
 vcpkg install openssl:x64-windows-static
 ```
 
@@ -694,7 +715,7 @@ googletest/googletest/msvc/gtest-md.slnを開いて、ビルドしてくださ�
 
 gitでバージョンを取得するので、gitにパスを通した状態で、gitリポジトリでビルドする必要があります。
 
-# Linuxビルド手順
+### Linux ビルド手順
 
 Linuxでのビルド方法は[こちら](./doc/BuildLinux.md)。
 
