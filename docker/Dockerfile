@@ -230,6 +230,7 @@ RUN apt-get update && apt-get install -y \
         && rm ./tsreplace.deb \
     && if [ "$BUILD_MODE" = "debug" ]; then \
         apt-get install -y \
+        software-properties-common \
         build-essential \
         nasm \
         cmake \
@@ -251,13 +252,11 @@ RUN locale-gen ja_JP.UTF-8 \
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=ja_JP.UTF-8
 
-# .NET SDK 8.0のインストール（デバッグモードの場合のみ）
+# .NET SDK 9.0のインストール（デバッグモードの場合のみ）
 RUN if [ "$BUILD_MODE" = "debug" ]; then \
-        wget https://packages.microsoft.com/config/ubuntu/${UBUNTU_VERSION}/packages-microsoft-prod.deb -O packages-microsoft-prod.deb \
-        && dpkg -i ./packages-microsoft-prod.deb \
-        && rm ./packages-microsoft-prod.deb \
-        && apt-get update \
-        && apt-get install -y dotnet-sdk-8.0 \
+        && apt add-apt-repository ppa:dotnet/backports \
+        && apt update \
+        && apt install -y dotnet-sdk-9.0 \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 
