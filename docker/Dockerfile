@@ -186,9 +186,9 @@ ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8
 ENV LC_CTYPE=ja_JP.UTF-8
 
-ENV QSVENCC_VER=8.00
-ENV NVENCC_VER=9.03
-ENV VCEENCC_VER=9.00
+ENV QSVENCC_VER=8.01
+ENV NVENCC_VER=9.04
+ENV VCEENCC_VER=9.01
 ENV TSREPLACE_VER=0.16
 ENV AVISYNTHCUDAFILTERS_VER=0.7.3
 ENV AVISYNTH_VER=3.7.5
@@ -198,6 +198,7 @@ RUN apt-get update && apt-get install -y \
     gpg \
     curl \
     wget \
+    software-properties-common \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${UBUNTU_NAME} unified" \
       | tee /etc/apt/sources.list.d/intel-gpu-${UBUNTU_NAME}.list \
@@ -285,7 +286,7 @@ RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCR
 
 RUN wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250927-083302/x264_3223_amd64_linux.tar.xz -O x264.tar.xz \
     && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250927-083302/x265_4.1+191_amd64_linux.tar.xz -O x265.tar.xz \
-    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250927-083302/SvtAv1EncApp_3.1.0-126_amd64_linux.tar.xz -O svt-av1.tar.xz \
+    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20251004-072930/SvtAv1EncApp_3.1.0-150_amd64_linux.tar.xz -O svt-av1.tar.xz \
     && tar -xf x264.tar.xz -C /app/exe_files \
     && tar -xf x265.tar.xz -C /app/exe_files \
     && tar -xf svt-av1.tar.xz -C /app/exe_files \
