@@ -71,10 +71,19 @@ void AMTSplitter::readAll() {
     auto buffer_ptr = std::unique_ptr<uint8_t[]>(new uint8_t[BUFSIZE]);
     MemoryChunk buffer(buffer_ptr.get(), BUFSIZE);
     File srcfile(setting_.getSrcFilePath(), _T("rb"));
+    // 入力TSそのままのコピーを作成 (WebVTT出力ON または tsreplace時)
+    const bool needCopyTS = setting_.isWebVTTEnabled() || (setting_.getFormat() == FORMAT_TSREPLACE);
+    std::unique_ptr<File> rawts;
+    if (needCopyTS) {
+        rawts.reset(new File(setting_.getTmpRawTSPath(), _T("wb")));
+    }
     srcFileSize_ = srcfile.size();
     size_t readBytes;
     do {
         readBytes = srcfile.read(buffer);
+        if (readBytes > 0 && rawts) {
+            rawts->write(MemoryChunk(buffer.data, readBytes));
+        }
         inputTsData(MemoryChunk(buffer.data, readBytes));
     } while (readBytes == buffer.length);
 }
@@ -359,7 +368,7 @@ tstring GetDirectoryName(const tstring& path) {
             return -1;
         }
 
-        const auto outPath = setting.getOutFileBaseWithoutPrefix() + _T(".") + setting.getOutputExtention(setting.getFormat());
+        const auto outPath = StringFormat(_T("%s.%s"), setting.getOutFileBaseWithoutPrefix().c_str(), setting.getOutputExtention(setting.getFormat()));
 
         SetTemporaryEnvironmentVariable tmpvar;
         tmpvar.set(_T("CLI_IN_PATH"), setting.getSrcFilePath().c_str());
@@ -578,6 +587,29 @@ void DoBadThing() {
         reformInfo.serialize(setting.getStreamInfoPath());
     }
 
+    // tsreadexでトレースを取得 (WebVTT出力時のみ)
+    if (setting.isWebVTTEnabled()) {
+        ctx.info("[tsreadex 解析]");
+        File stdoutf(setting.getTmpTsReadExDumpPath(), _T("wb"));
+        tstring args = StringFormat(_T("\"%s\" -n -1 -r - \"%s\""), setting.getTsReadExPath().c_str(), setting.getTmpRawTSPath().c_str());
+        ctx.infoF("tsreadex コマンド: %s", args.c_str());
+        class MyTsReadEx : public EventBaseSubProcess {
+        public:
+            MyTsReadEx(const tstring& args, File* out) : EventBaseSubProcess(args), out(out) {}
+        protected:
+            File* out;
+            virtual void onOut(bool isErr, MemoryChunk mc) {
+                if (!isErr && out) out->write(mc);
+            }
+        };
+        MyTsReadEx process(args, &stdoutf);
+        int exitCode = process.join();
+        if (exitCode != 0) {
+            THROWF(FormatException, "tsreadexがエラーコード(%d)を返しました", exitCode);
+        }
+        ctx.infoF("tsreadex 完了: %.2f秒", sw.getAndReset());
+    }
+
     // スクランブルパケットチェック
     double scrambleRatio = (double)numScramblePackets / (double)numTotalPackets;
     if (scrambleRatio > 0.01) {
@@ -735,6 +767,12 @@ void DoBadThing() {
                 auto text = formatterNicoJK.generate(headerLines[(int)jktype], dialogues[(int)jktype]);
                 file.write(MemoryChunk((uint8_t*)text.data(), text.size()));
             }
+        }
+        // 字幕構築 + (必要なら) WebVTT生成
+        try {
+            reformInfo.genWebVTT(key, setting);
+        } catch (const Exception& e) {
+            ctx.warnF("WebVTT生成に失敗: %s", e.message());
         }
     }
     ctx.infoF("字幕ファイル生成完了: %.2f秒", sw.getAndReset());

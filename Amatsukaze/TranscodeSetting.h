@@ -238,6 +238,11 @@ struct Config {
     tstring joinLogoScpPath;
     tstring joinLogoScpCmdPath;
     tstring joinLogoScpOptions;
+    // WebVTT生成用ツール
+    tstring tsreadexPath;
+    tstring b24tovttPath;
+    tstring psisiarcPath;
+    bool webvtt;
     int cmoutmask;
     tstring trimavsPath;
     // 検出モード用
@@ -383,6 +388,17 @@ public:
 
     tstring getTrimAVSPath() const;
 
+    bool isWebVTTEnabled() const;
+
+    tstring getTsReadExPath() const;
+    tstring getB24ToVttPath() const;
+    tstring getPsisiarcPath() const;
+    tstring getTmpRawTSPath() const;
+    tstring getTmpTsReadExDumpPath() const;
+    tstring getTmpB24CutChapterPath(EncodeFileKey key) const;
+    tstring getTmpVTTFilePath(EncodeFileKey key, int langindex) const;
+    tstring getTmpPSCFilePath(EncodeFileKey key) const;
+
     const std::vector<CMType>& getCMTypes() const;
 
     const std::vector<NicoJKType>& getNicoJKTypes() const;
@@ -476,6 +492,10 @@ public:
     tstring getOutFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
     tstring getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx, NicoJKType jktype) const;
+
+    tstring getOutWebVTTPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx) const;
+
+    tstring getOutPSCFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
     tstring getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 

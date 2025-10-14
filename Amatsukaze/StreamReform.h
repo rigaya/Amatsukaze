@@ -405,6 +405,10 @@ private:
     std::pair<int, double> elapsedTime(double modPTS) const;
 
     void genCaptionStream();
+
+public:
+    // WebVTT生成 (tsreadexのトレースとb24tovttを使用)
+    void genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting);
 };
 
 

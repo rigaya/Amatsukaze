@@ -81,6 +81,10 @@ static void printHelp(const tchar* bin) {
         "  --jls <パス>         join_logo_scp.exeへのパス\n"
         "  --jls-cmd <パス>    join_logo_scpのコマンドファイルへのパス\n"
         "  --jls-option <オプション>    join_logo_scpのコマンドファイルへのパス\n"
+        "  --tsreadex <パス>    tsreadex.exeへのパス\n"
+        "  --b24tovtt <パス>    b24tovtt.exeへのパス\n"
+        "  --psisiarc <パス>    psisiarc.exeへのパス\n"
+        "  --webvtt           WebVTTを生成する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
         "  --nicoass <パス>     NicoConvASSへのパス\n"
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
@@ -183,6 +187,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.mkvmergePath = _T("mkvmerge") + exeAppendix;
     conf.chapterExePath = _T("chapter_exe") + exeAppendix;
     conf.joinLogoScpPath = _T("join_logo_scp") + exeAppendix;
+    conf.tsreadexPath = _T("tsreadex") + exeAppendix;
+    conf.b24tovttPath = _T("b24tovtt") + exeAppendix;
+    conf.psisiarcPath = _T("psisiarc") + exeAppendix;
     conf.nicoConvAssPath = _T("NicoConvASS") + exeAppendix;
     conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
@@ -207,6 +214,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.useMKVWhenSubExist = false;
     conf.outputChapter = false;
     bool nicojk = false;
+    conf.webvtt = false;
 
     for (int i = 1; i < argc; ++i) {
         tstring key = argv[i];
@@ -394,12 +402,20 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.joinLogoScpCmdPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--jls-option")) {
             conf.joinLogoScpOptions = getParam(argc, argv, i++);
+        } else if (key == _T("--tsreadex")) {
+            conf.tsreadexPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--b24tovtt")) {
+            conf.b24tovttPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--psisiarc")) {
+            conf.psisiarcPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--trimavs")) {
             conf.trimavsPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--nicoass")) {
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--nicojk18")) {
             conf.nicojk18 = true;
+        } else if (key == _T("--webvtt")) {
+            conf.webvtt = true;
         } else if (key == _T("--nicojklog")) {
             conf.useNicoJKLog = true;
         } else if (key == _T("-om") || key == _T("--cmoutmask")) {

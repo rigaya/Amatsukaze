@@ -835,6 +835,22 @@ tstring ConfigWrapper::getTrimAVSPath() const {
     return conf.trimavsPath;
 }
 
+bool ConfigWrapper::isWebVTTEnabled() const {
+    return conf.webvtt;
+}
+
+tstring ConfigWrapper::getTsReadExPath() const {
+    return conf.tsreadexPath;
+}
+
+tstring ConfigWrapper::getB24ToVttPath() const {
+    return conf.b24tovttPath;
+}
+
+tstring ConfigWrapper::getPsisiarcPath() const {
+    return conf.psisiarcPath;
+}
+
 const std::vector<CMType>& ConfigWrapper::getCMTypes() const {
     return cmtypes;
 }
@@ -1004,6 +1020,29 @@ tstring ConfigWrapper::getTmpChapterPath(EncodeFileKey key) const {
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
 }
 
+tstring ConfigWrapper::getTmpRawTSPath() const {
+    return regtmp(StringFormat(_T("%s/raw.ts"), tmpDir.path()));
+}
+
+tstring ConfigWrapper::getTmpTsReadExDumpPath() const {
+    return regtmp(StringFormat(_T("%s/tsreadex_dump.txt"), tmpDir.path()));
+}
+
+tstring ConfigWrapper::getTmpB24CutChapterPath(EncodeFileKey key) const {
+    return regtmp(StringFormat(_T("%s/b24cut%d-%d-%d%s.txt"),
+        tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpVTTFilePath(EncodeFileKey key, int langindex) const {
+    return regtmp(StringFormat(_T("%s/vtt%d-%d-%d-%d%s.vtt"),
+        tmpDir.path(), key.video, key.format, key.div, langindex, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpPSCFilePath(EncodeFileKey key) const {
+    return regtmp(StringFormat(_T("%s/vtt%d-%d-%d%s.psc"),
+        tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
+}
+
 tstring ConfigWrapper::getTmpNicoJKXMLPath() const {
     return regtmp(StringFormat(_T("%s/nicojk.xml"), tmpDir.path()));
 }
@@ -1081,6 +1120,23 @@ tstring ConfigWrapper::getOutASSPath(EncodeFileKey key, EncodeFileKey keyMax, EN
         sb.append(_T("-%d"), langidx);
     }
     sb.append(_T(".ass"));
+    return sb.str();
+}
+
+tstring ConfigWrapper::getOutWebVTTPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx) const {
+    StringBuilderT sb;
+    sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
+    if (langidx > 0) {
+        sb.append(_T("-%d"), langidx);
+    }
+    sb.append(_T(".vtt"));
+    return sb.str();
+}
+
+tstring ConfigWrapper::getOutPSCFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const {
+    StringBuilderT sb;
+    sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
+    sb.append(_T(".psc"));
     return sb.str();
 }
 
@@ -1319,6 +1375,10 @@ void ConfigWrapper::dump() const {
     }
     ctx.infoF("字幕: %s", conf.subtitles ? "有効" : "無効");
     if (conf.subtitles) {
+        ctx.infoF("WebVTT出力: %s", conf.webvtt ? "有効" : "無効");
+        ctx.infoF("tsreadexパス: %s", conf.tsreadexPath);
+        ctx.infoF("b24tovttパス: %s", conf.b24tovttPath);
+        ctx.infoF("psisiarcパス: %s", conf.psisiarcPath);
         ctx.infoF("DRCSマッピング: %s", conf.drcsMapPath);
     }
     if (conf.serviceId > 0) {

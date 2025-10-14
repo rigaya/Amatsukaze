@@ -8,6 +8,10 @@
 
 #include "StreamReform.h"
 #include <cmath>
+#include <regex>
+#include <fstream>
+#include "ProcessThread.h"
+#include "TranscodeSetting.h"
 
 FileAudioFrameInfo::FileAudioFrameInfo()
     : AudioFrameInfo()
@@ -1274,6 +1278,164 @@ void StreamReformInfo::genCaptionStream() {
                     file.nicojkList[t].push_back(outcomment);
                 }
             }
+        }
+    }
+}
+
+void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting) {
+    ctx.info("[WebVTT生成]");
+    // 1) tsreadex_dump.txt から最初のPCRを抽出
+    int64_t firstPcr = 0;
+    {
+        std::ifstream ifs(setting.getTmpTsReadExDumpPath());
+        if (!ifs) {
+            THROW(RuntimeException, "tsreadex_dump.txtを開けません");
+        }
+        std::regex re("pcrpid=0x[0-9A-Fa-f]+;pcr=([0-9]+)");
+        std::smatch m;
+        std::string line;
+        bool found = false;
+        while (std::getline(ifs, line)) {
+            if (std::regex_search(line, m, re) && m.size() >= 2) {
+                firstPcr = std::stoll(m[1].str());
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            THROW(RuntimeException, "tsreadex_dump.txtからPCRが取得できません");
+        }
+    }
+    ctx.infoF("tsreadex_dump.txtからPCRが取得できました: %lld", firstPcr);
+
+    // 出力ファイルごとに処理（delayは各ファイルの先頭PTSとPCRの差から計算）
+    //    Nero/OGM形式: CHAPTERxx / CHAPTERxxNAME
+    const auto& file = outFiles_.at(key.key());
+    const auto& srcFrames = filterFrameList_[key.video];
+    const auto& frames = file.videoFrames;
+    std::vector<double> frameTimes;
+
+    auto pred = [&](const int& f, double mid) { return srcFrames[f].pts < mid; };
+    auto getFrameIndex = [&](double pts) {
+        return std::lower_bound(frames.begin(), frames.end(), pts, pred) - frames.begin();
+    };
+
+    double curTime = 0.0;
+    for (int i = 0; i < (int)frames.size(); i++) {
+        frameTimes.push_back(curTime);
+        curTime += srcFrames[frames[i]].frameDuration;
+    }
+    frameTimes.push_back(curTime);
+
+    // delay計算（90kHz -> ms）
+    const int64_t delayMs = (int64_t)(((double)firstPcr - dataPTS_[0]) / (MPEG_CLOCK_HZ / 1000));
+
+    // 出力対象の映像範囲に基づき、字幕を削る範囲（補集合）ごとに ix/ox を出力
+    // b24tovttのチャプターは入力トレース時間基準（PCR基準）なので、
+    // ptsからfirstPcrを引いた時間を用いる
+    StringBuilder sb;
+    int chapIndex = 1;
+    auto writeChap = [&](double t90k, const char* name) {
+        int totalMs = (int)std::round(t90k * 1000.0 / MPEG_CLOCK_HZ);
+        int h = totalMs / 3600000; totalMs %= 3600000;
+        int m = totalMs / 60000; totalMs %= 60000;
+        int s = totalMs / 1000; int ms = totalMs % 1000;
+        sb.append("CHAPTER%02d=%02d:%02d:%02d.%03d\n", chapIndex, h, m, s, ms);
+        sb.append("CHAPTER%02dNAME=%s\n", chapIndex, name);
+        chapIndex++;
+    };
+
+    if (!frames.empty()) {
+        // まず保持セグメント（映像が存在する区間）を抽出
+        struct KeepSeg { double start; double end; };
+        std::vector<KeepSeg> keepSegs;
+        int segStart = 0;
+        for (int i = 1; i <= (int)frames.size(); i++) {
+            bool boundary = (i == (int)frames.size()) || (frames[i] != frames[i - 1] + 1);
+            if (boundary) {
+                int startIdx = frames[segStart];
+                int endIdx = frames[i - 1];
+                double startPts = srcFrames[startIdx].pts - (double)dataPTS_[0]; // 90kHz基準
+                double endPts = srcFrames[endIdx].pts + srcFrames[endIdx].frameDuration - (double)dataPTS_[0]; // 終了はフレーム末尾
+                if (endPts > startPts) {
+                    keepSegs.push_back({ startPts, endPts });
+                }
+                segStart = i;
+            }
+        }
+
+        // 入力全体（このファイルの基準）での末尾時刻（90kHz基準）
+        double totalEnd = 0.0;
+        if (!srcFrames.empty()) {
+            const auto& last = srcFrames.back();
+            totalEnd = (last.pts + last.frameDuration) - (double)dataPTS_[0];
+        }
+
+        // 保持セグメントの補集合（削除区間）を ix/ox で出力
+        double prev = 0.0;
+        for (const auto& seg : keepSegs) {
+            if (seg.start > prev) {
+                writeChap(prev, "ix");
+                writeChap(seg.start, "ox");
+            }
+            prev = seg.end;
+        }
+        if (totalEnd > prev) {
+            writeChap(prev, "ix");
+            writeChap(totalEnd, "ox");
+        }
+    } else {
+        // 保持フレームがない場合は全期間削除
+        if (!srcFrames.empty()) {
+            const auto& last = srcFrames.back();
+            double totalEnd = (last.pts + last.frameDuration) - (double)dataPTS_[0];
+            if (totalEnd > 0.0) {
+                writeChap(0.0, "ix");
+                writeChap(totalEnd, "ox");
+            }
+        }
+    }
+
+    // チャプターファイルを書き出し
+    auto chapterPath = setting.getTmpB24CutChapterPath(key);
+    WriteUTF8File(chapterPath, sb.str());
+
+    // psisiarc実行（チャプター生成後、langループの外）
+    {
+        auto rawts = setting.getTmpRawTSPath();
+        auto psc = setting.getTmpPSCFilePath(key);
+        tstring cmd = StringFormat(_T("\"%s\" -r arib-data -c \"%s\" \"%s\" \"%s\""),
+            setting.getPsisiarcPath(), setting.getTmpB24CutChapterPath(key), rawts, psc);
+        ctx.infoF("psisiarc コマンド: %s", cmd.c_str());
+        SubProcess proc(cmd);
+        int exitCode = proc.join();
+        if (exitCode != 0) {
+            ctx.warnF("psisiarcがエラーコード(%d)を返しました", exitCode);
+        }
+    }
+
+    // 5) b24tovtt実行: 標準入力にtsreadex_dump.txt、出力はvtt
+    for (int lang = 0; lang < (int)file.captionList.size(); lang++) {
+        auto outVtt = setting.getTmpVTTFilePath(key, lang);
+        tstring cmd = StringFormat(_T("\"%s\" -l %d -d %lld -c \"%s\" \"%s\""),
+            setting.getB24ToVttPath(), lang + 1, (long long int)delayMs, setting.getTmpB24CutChapterPath(key), outVtt);
+        ctx.infoF("b24tovtt コマンド: %s", cmd.c_str());
+        // 入力: tsreadex_dump を標準入力に流す
+        SubProcess proc(cmd);
+        {
+            File stdinFile(setting.getTmpTsReadExDumpPath(), _T("rb"));
+            const int CHUNK = 1 << 20;
+            auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[CHUNK]);
+            MemoryChunk mc(buf.get(), CHUNK);
+            size_t rb;
+            while ((rb = stdinFile.read(mc)) > 0) {
+                proc.write(MemoryChunk(mc.data, rb));
+            }
+        }
+        proc.finishWrite();
+        int exitCode = proc.join();
+        if (exitCode != 0) {
+            ctx.warnF("b24tovttがエラーコード(%d)を返しました", exitCode);
         }
     }
 }

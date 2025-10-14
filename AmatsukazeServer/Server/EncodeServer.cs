@@ -1155,6 +1155,18 @@ namespace Amatsukaze.Server
             {
                 setting.JoinLogoScpPath = GetExePath(basePath, "join_logo_scp");
             }
+            if (string.IsNullOrEmpty(setting.TsReadExPath))
+            {
+                setting.TsReadExPath = GetExePath(basePath, "tsreadex");
+            }
+            if (string.IsNullOrEmpty(setting.B24ToVttPath))
+            {
+                setting.B24ToVttPath = GetExePath(basePath, "b24tovtt");
+            }
+            if (string.IsNullOrEmpty(setting.PsisiarcPath))
+            {
+                setting.PsisiarcPath = GetExePath(basePath, "psisiarc");
+            }
             if (string.IsNullOrEmpty(setting.TsReplacePath))
             {
                 setting.TsReplacePath = GetExePath(basePath, "tsreplace");
@@ -1940,6 +1952,17 @@ namespace Amatsukaze.Server
                 if (!profile.DisableSubs)
                 {
                     sb.Append(" --subtitles");
+                    if (profile.EnableWebVTT)
+                    {
+                        sb.Append(" --webvtt");
+                        sb.Append(" --tsreadex \"")
+                            .Append(setting.TsReadExPath)
+                            .Append("\" --b24tovtt \"")
+                            .Append(setting.B24ToVttPath)
+                            .Append("\" --psisiarc \"")
+                            .Append(setting.PsisiarcPath)
+                            .Append("\"");
+                    }
                 }
 
                 if (string.IsNullOrEmpty(jlscommand) == false)

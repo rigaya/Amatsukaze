@@ -1490,6 +1490,18 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region EnableWebVTT変更通知プロパティ
+        public bool EnableWebVTT {
+            get { return Data.EnableWebVTT; }
+            set {
+                if (Data.EnableWebVTT == value)
+                    return;
+                Data.EnableWebVTT = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region IgnoreNoDrcsMap変更通知プロパティ
         public bool IgnoreNoDrcsMap {
             get { return Data.IgnoreNoDrcsMap; }
@@ -3056,6 +3068,45 @@ namespace Amatsukaze.Models
                 if (Model.JoinLogoScpPath == value)
                     return;
                 Model.JoinLogoScpPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TsReadExPath変更通知プロパティ
+
+        public string TsReadExPath {
+            get { return Model.TsReadExPath; }
+            set { 
+                if (Model.TsReadExPath == value)
+                    return;
+                Model.TsReadExPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region B24ToVttPath変更通知プロパティ
+
+        public string B24ToVttPath {
+            get { return Model.B24ToVttPath; }
+            set { 
+                if (Model.B24ToVttPath == value)
+                    return;
+                Model.B24ToVttPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region PsisiarcPath変更通知プロパティ
+
+        public string PsisiarcPath {
+            get { return Model.PsisiarcPath; }
+            set {
+                if (Model.PsisiarcPath == value)
+                    return;
+                Model.PsisiarcPath = value;
                 RaisePropertyChanged();
             }
         }

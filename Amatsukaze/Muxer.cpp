@@ -152,6 +152,19 @@ void AMTMuxder::mux(EncodeFileKey key,
             subsFiles.push_back(srcsrt);
             subsTitles.push_back(_T("SRT"));
         }
+        // webvttは別ファイルとしてコピー
+        auto srcwebvtt = setting_.getTmpVTTFilePath(key, lang);
+        if (File::exists(srcwebvtt)) {
+            auto dstwebvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang);
+            File::copy(srcwebvtt, dstwebvtt);
+            fileOut.outSubs.push_back(dstwebvtt);
+        }
+    }
+    // pscファイルは別ファイルとしてコピー
+    auto srcpsc = setting_.getTmpPSCFilePath(key);
+    if (File::exists(srcpsc)) {
+        auto dstpsc = setting_.getOutPSCFilePath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
+        File::copy(srcpsc, dstpsc);
     }
 
     const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, (muxFormat == FORMAT_TSREPLACE) ? FORMAT_MP4 : muxFormat);

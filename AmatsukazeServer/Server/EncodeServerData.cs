@@ -306,6 +306,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool DisableSubs { get; set; }
         [DataMember]
+        public bool EnableWebVTT { get; set; }
+        [DataMember]
         public bool IgnoreNoDrcsMap { get; set; }
         [DataMember]
         public bool LooseLogoDetection { get; set; }
@@ -455,6 +457,12 @@ namespace Amatsukaze.Server
         public string ChapterExePath { get; set; }
         [DataMember]
         public string JoinLogoScpPath { get; set; }
+        [DataMember]
+        public string TsReadExPath { get; set; }
+        [DataMember]
+        public string B24ToVttPath { get; set; }
+        [DataMember]
+        public string PsisiarcPath { get; set; }
         [DataMember]
         public string NicoConvASSPath { get; set; }
         [DataMember]

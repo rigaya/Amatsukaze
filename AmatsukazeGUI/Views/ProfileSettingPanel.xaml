@@ -600,6 +600,8 @@
                               ToolTip="チャプターファイルを別ファイルとして出力します。「チャプター・CM解析を無効にする」がオンの場合は無効になります。" />
                     <CheckBox Height="16" Margin="0,3"  Content="字幕を無効にする"
                               IsChecked="{Binding Model.SelectedProfile.DisableSubs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Height="16" Margin="0,3"  Content="WebVTTを生成する"
+                              IsChecked="{Binding Model.SelectedProfile.EnableWebVTT, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="マッピングにないDRCS外字は無視する"
                               IsChecked="{Binding Model.SelectedProfile.IgnoreNoDrcsMap, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="ロゴ検出判定しきい値を低くする" 

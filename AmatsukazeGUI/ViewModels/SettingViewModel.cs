@@ -266,6 +266,65 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearTsreadexPathCommand
+        private ViewModelCommand _ClearTsreadexPathCommand;
+        
+        public ViewModelCommand ClearTsreadexPathCommand
+        {
+            get {
+                if (_ClearTsreadexPathCommand == null)
+                {
+                    _ClearTsreadexPathCommand = new ViewModelCommand(ClearTsreadexPath);
+                }
+                return _ClearTsreadexPathCommand;
+            }
+        }
+        public void ClearTsreadexPath()
+        {
+            Model.Setting.TsReadExPath = null;
+        }
+        #endregion
+
+        #region ClearB24tovttPathCommand
+
+        private ViewModelCommand _ClearB24tovttPathCommand;
+
+        public ViewModelCommand ClearB24tovttPathCommand
+        {
+            get {
+                if (_ClearB24tovttPathCommand == null)
+                {
+                    _ClearB24tovttPathCommand = new ViewModelCommand(ClearB24tovttPath);
+                }
+                return _ClearB24tovttPathCommand;
+            }
+        }
+        public void ClearB24tovttPath()
+        {
+            Model.Setting.B24ToVttPath = null;
+        }
+        #endregion
+
+        #region ClearPsisiarcPathCommand
+
+        private ViewModelCommand _ClearPsisiarcPathCommand;
+
+        public ViewModelCommand ClearPsisiarcPathCommand
+        {
+            get {
+                if (_ClearPsisiarcPathCommand == null)
+                {
+                    _ClearPsisiarcPathCommand = new ViewModelCommand(ClearPsisiarcPath);
+                }
+                return _ClearPsisiarcPathCommand;
+            }
+        }
+        public void ClearPsisiarcPath()
+        {
+            Model.Setting.PsisiarcPath = null;
+        }
+        #endregion
+
         #region ClearNicoConvASSPathCommand
         private ViewModelCommand _ClearNicoConvASSPathCommand;
 
