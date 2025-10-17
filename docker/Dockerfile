@@ -164,19 +164,19 @@ RUN git clone https://github.com/mstorsjo/fdk-aac.git \
 RUN git clone --depth=1 --branch ${TSREADEX_VER} https://github.com/xtne6f/tsreadex.git \
     && cd tsreadex \
     && make -j$(nproc) \
-    && make install
+    && install -D -t /usr/local/bin tsreadex
 
 # psisiarc
 RUN git clone --depth=1 --branch ${PSISIARC_VER} https://github.com/xtne6f/psisiarc.git \
     && cd psisiarc \
     && make -j$(nproc) \
-    && make install
+    && install -D -t /usr/local/bin psisiarc
 
 # b24tovtt
 RUN git clone --depth=1 --branch ${B24TOVTT_VER} https://github.com/xtne6f/b24tovtt.git \
     && cd b24tovtt \
     && make -j$(nproc) \
-    && make install
+    && install -D -t /usr/local/bin b24tovtt
 
 # ビルド段階のクリーンアップ
 RUN rm -rf /tmp/plugins \

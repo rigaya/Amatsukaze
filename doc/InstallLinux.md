@@ -288,7 +288,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     (git clone https://github.com/xtne6f/tsreadex.git \
       && cd tsreadex \
       && make -j$(nproc) \
-      && sudo make install)
+      && sudo install -D -t /usr/local/bin tsreadex)
     ```
 
   - psisiarc
@@ -297,7 +297,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     (git clone https://github.com/xtne6f/psisiarc.git \
     && cd psisiarc \
     && make -j$(nproc) \
-    && sudo make install)
+    && sudo install -D -t /usr/local/bin psisiarc)
     ```
 
   - b24tovtt
@@ -306,7 +306,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     (git clone https://github.com/xtne6f/b24tovtt.git \
     && cd b24tovtt \
     && make -j$(nproc) \
-    && sudo make install)
+    && sudo install -D -t /usr/local/bin b24tovtt)
     ```
 
 - CM/ロゴ解析等
