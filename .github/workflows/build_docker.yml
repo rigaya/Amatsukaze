@@ -30,22 +30,16 @@ jobs:
           chmod +x ./setup.sh
           ./setup.sh
 
-      - name: Disable GPU-related blocks in compose.yml
+      - name: Install yq
+        run: |
+          YQ_VERSION=v4.44.3
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Disable GPU-related blocks in compose.yml (safe delete)
         working-directory: docker
         run: |
-          # コメント行を除外しつつ、devices と deploy ブロックを無効化
-          # devices: とその配下のインデントされた行をコメントアウト
-          awk 'BEGIN{inblk=0} \
-               /^\s*devices:\s*$/ {print "# "$0; inblk=1; next} \
-               { if(inblk==1){ if(match($0,/^\s+- /)){ print "# "$0; next } else { inblk=0 } } } \
-               {print $0}' compose.yml > compose.tmp && mv compose.tmp compose.yml
-
-          # deploy: resources: reservations: devices: 以下の nvidia ブロックをコメントアウト
-          awk 'BEGIN{inblk=0} \
-               /^\s*deploy:\s*$/ {print "# "$0; inblk=1; next} \
-               { if(inblk==1){ if(match($0,/^\s+(resources:|reservations:|devices:|- |driver:|count:|capabilities:)/)){ print "# "$0; next } else { inblk=0 } } } \
-               {print $0}' compose.yml > compose.tmp && mv compose.tmp compose.yml
-
+          yq -i 'del(.services.amatsukaze.devices, .services.amatsukaze.deploy)' compose.yml
           echo "== composed compose.yml =="
           sed -n '1,200p' compose.yml
 
