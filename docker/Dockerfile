@@ -32,6 +32,9 @@ ENV CHAPTER_EXE_REV=32880d45f088e574285a101e6a49b032bb04f6ea
 ENV JOIN_LOGO_SCP_VER=Ver4.1.0_Linux
 ENV FDK_AAC_REV=d8e6b1a3aa606c450241632b64b703f21ea31ce3
 ENV FDKAAC_VER=v1.0.6
+ENV TSREADEX_VER=master-240517
+ENV PSISIARC_VER=master-230324
+ENV B24TOVTT_VER=master-220402
 
 # ビルドツールのインストール
 RUN apt-get update && apt-get install -y \
@@ -154,6 +157,24 @@ RUN git clone https://github.com/mstorsjo/fdk-aac.git \
     && cd fdkaac \
     && autoreconf -i \
     && PKG_CONFIG_PATH=../fdk-aac/fdk-aac-libs/lib/pkgconfig ./configure \
+    && make -j$(nproc) \
+    && make install
+
+# tsreadex
+RUN git clone --depth=1 --branch ${TSREADEX_VER} https://github.com/xtne6f/tsreadex.git \
+    && cd tsreadex \
+    && make -j$(nproc) \
+    && make install
+
+# psisiarc
+RUN git clone --depth=1 --branch ${PSISIARC_VER} https://github.com/xtne6f/psisiarc.git \
+    && cd psisiarc \
+    && make -j$(nproc) \
+    && make install
+
+# b24tovtt
+RUN git clone --depth=1 --branch ${B24TOVTT_VER} https://github.com/xtne6f/b24tovtt.git \
+    && cd b24tovtt \
     && make -j$(nproc) \
     && make install
 

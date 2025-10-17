@@ -280,6 +280,35 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     ```
     </details>
 
+- 字幕処理等
+
+  - tsreadex
+    
+    ```bash
+    (git clone https://github.com/xtne6f/tsreadex.git \
+      && cd tsreadex \
+      && make -j$(nproc) \
+      && sudo make install)
+    ```
+
+  - psisiarc
+    
+    ```bash
+    (git clone https://github.com/xtne6f/psisiarc.git \
+    && cd psisiarc \
+    && make -j$(nproc) \
+    && sudo make install)
+    ```
+
+  - b24tovtt
+    
+    ```bash
+    (git clone https://github.com/xtne6f/b24tovtt.git \
+    && cd b24tovtt \
+    && make -j$(nproc) \
+    && sudo make install)
+    ```
+
 - CM/ロゴ解析等
 
   - chapter_exe
