@@ -1,0 +1,57 @@
+name: Docker build test
+
+on:
+  push:
+    branches:
+    - master
+    - linux
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Show Docker info
+        run: |
+          docker version
+          docker info
+
+      - name: Prepare working dirs via setup.sh
+        working-directory: docker
+        run: |
+          chmod +x ./setup.sh
+          ./setup.sh
+
+      - name: Disable GPU-related blocks in compose.yml
+        working-directory: docker
+        run: |
+          # コメント行を除外しつつ、devices と deploy ブロックを無効化
+          # devices: とその配下のインデントされた行をコメントアウト
+          awk 'BEGIN{inblk=0} \
+               /^\s*devices:\s*$/ {print "# "$0; inblk=1; next} \
+               { if(inblk==1){ if(match($0,/^\s+- /)){ print "# "$0; next } else { inblk=0 } } } \
+               {print $0}' compose.yml > compose.tmp && mv compose.tmp compose.yml
+
+          # deploy: resources: reservations: devices: 以下の nvidia ブロックをコメントアウト
+          awk 'BEGIN{inblk=0} \
+               /^\s*deploy:\s*$/ {print "# "$0; inblk=1; next} \
+               { if(inblk==1){ if(match($0,/^\s+(resources:|reservations:|devices:|- |driver:|count:|capabilities:)/)){ print "# "$0; next } else { inblk=0 } } } \
+               {print $0}' compose.yml > compose.tmp && mv compose.tmp compose.yml
+
+          echo "== composed compose.yml =="
+          sed -n '1,200p' compose.yml
+
+      - name: Build images with docker compose
+        working-directory: docker
+        run: |
+          docker compose build
+
+
