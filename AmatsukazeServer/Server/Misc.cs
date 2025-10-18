@@ -1018,6 +1018,13 @@ namespace Amatsukaze.Server
 
         public static string ParseProfileName(string name, out bool autoSelect)
         {
+            if (string.IsNullOrEmpty(name))
+            {
+                // 防御: null/空はデフォルト扱いにする
+                Console.WriteLine("[ParseProfileName] name = null, select default profile name");
+                autoSelect = false;
+                return GetDefaultProfileName();
+            }
             if (name.StartsWith(AUTO_PREFIX))
             {
                 autoSelect = true;
