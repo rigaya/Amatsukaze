@@ -209,9 +209,46 @@ namespace Amatsukaze.Server
         private async Task Connect()
         {
             Close();
-            client = new TcpClient();
-            await client.ConnectAsync(serverIp, port);
-            Util.AddLog("サーバ(" + serverIp + ":" + port + ")に接続しました", null);
+
+            try
+            {
+                IPAddress parsed;
+                IPAddress ipv4Address = null;
+                if (IPAddress.TryParse(serverIp, out parsed))
+                {
+                    if (parsed.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        ipv4Address = parsed;
+                    }
+                }
+                if (ipv4Address == null)
+                {
+                    var addresses = Dns.GetHostAddresses(serverIp);
+                    foreach (var address in addresses)
+                    {
+                        if (address.AddressFamily == AddressFamily.InterNetwork)
+                        {
+                            ipv4Address = address;
+                            break;
+                        }
+                    }
+                }
+                if (ipv4Address == null)
+                {
+                    throw new Exception();
+                }
+
+                client = new TcpClient(AddressFamily.InterNetwork);
+                await client.ConnectAsync(ipv4Address, port);
+                Util.AddLog("サーバ(" + ipv4Address.ToString() + ":" + port + ")に接続しました", null);
+            }
+            catch
+            {
+                // フォールバック: 従来の接続方式
+                client = new TcpClient();
+                await client.ConnectAsync(serverIp, port);
+                Util.AddLog("サーバ(" + serverIp + ":" + port + ")に接続しました", null);
+            }
             stream = client.GetStream();
 
             // 接続後一通りデータを要求する
@@ -313,7 +350,43 @@ namespace Amatsukaze.Server
         public void Connect(string serverIp, int port)
         {
             Close();
-            client = new TcpClient(serverIp, port);
+
+            try
+            {
+                IPAddress parsed;
+                IPAddress ipv4Address = null;
+                if (IPAddress.TryParse(serverIp, out parsed))
+                {
+                    if (parsed.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        ipv4Address = parsed;
+                    }
+                }
+                if (ipv4Address == null)
+                {
+                    var addresses = Dns.GetHostAddresses(serverIp);
+                    foreach (var address in addresses)
+                    {
+                        if (address.AddressFamily == AddressFamily.InterNetwork)
+                        {
+                            ipv4Address = address;
+                            break;
+                        }
+                    }
+                }
+                if (ipv4Address == null)
+                {
+                    throw new Exception();
+                }
+
+                client = new TcpClient(AddressFamily.InterNetwork);
+                client.Connect(new IPEndPoint(ipv4Address, port));
+            }
+            catch
+            {
+                // フォールバック: 従来の接続方式
+                client = new TcpClient(serverIp, port);
+            }
             stream = client.GetStream();
         }
 

@@ -14,7 +14,7 @@ namespace Amatsukaze.AddTask
     public class GUIOPtion
     {
         public int ServerPort = ServerSupport.DEFAULT_PORT;
-        public string ServerIP = "localhost";
+        public string ServerIP = "127.0.0.1";
         public string AmatsukazeRoot;
 
         public string FilePath;
