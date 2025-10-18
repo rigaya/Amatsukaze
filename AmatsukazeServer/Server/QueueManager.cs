@@ -277,6 +277,26 @@ namespace Amatsukaze.Server
 
             addQueueCanceled = false;
 
+            // 受信内容のログ出力（デバッグ用）
+            try
+            {
+                var firstOutput = (req.Outputs != null && req.Outputs.Count > 0) ? req.Outputs[0] : null;
+                var firstTarget = (req.Targets != null && req.Targets.Count > 0) ? req.Targets[0] : null;
+                var msg = string.Format(
+                    "[AddQueue/Receive] DirPath='{0}', Targets={1}, FirstTarget='{2}', OutDir='{3}', Profile='{4}', Priority={5}, Mode={6}, RequestId='{7}', AddQueueBat='{8}'",
+                    req.DirPath ?? "<null>",
+                    req.Targets?.Count ?? 0,
+                    firstTarget?.Path ?? "<null>",
+                    firstOutput?.DstPath ?? "<null>",
+                    firstOutput?.Profile ?? "<null>",
+                    firstOutput?.Priority ?? 0,
+                    req.Mode,
+                    req.RequestId ?? "<null>",
+                    req.AddQueueBat ?? "<null>");
+                Debug.Print(msg);
+            }
+            catch { }
+
             // ユーザ操作でない場合はログを記録する
             bool enableLog = (req.Mode == ProcMode.AutoBatch);
 

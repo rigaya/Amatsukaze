@@ -326,6 +326,16 @@ namespace Amatsukaze.AddTask
                 }
 
                 Console.WriteLine(srcpath + " を追加します");
+                // 送信内容の事前ログ
+                Console.WriteLine(
+                    "[AddTask] Send AddQueue: DirPath='{0}', Target='{1}', OutDir='{2}', Profile='{3}', Priority={4}, Mode={5}, AddQueueBat='{6}'",
+                    Path.GetDirectoryName(srcpath),
+                    srcpath,
+                    option.OutPath,
+                    option.Profile ?? "<null>",
+                    option.Priority,
+                    ProcMode.AutoBatch,
+                    option.AddQueueBat ?? "<null>");
 
                 // リクエストを生成
                 addRequest = new AddQueueRequest()
@@ -350,6 +360,12 @@ namespace Amatsukaze.AddTask
             }
             else if (option.ItemID >= 0)
             {
+                // 送信内容の事前ログ
+                Console.WriteLine(
+                    "[AddTask] Send ChangeItem: ItemId='{0}', ChangeType='{1}'",
+                    option.ItemID,
+                    option.ChangeType);
+
                 resetRequest = new ChangeItemData()
                 {
                     ItemId = option.ItemID,
