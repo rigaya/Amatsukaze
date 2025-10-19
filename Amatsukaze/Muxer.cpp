@@ -219,7 +219,7 @@ void AMTMuxder::mux(EncodeFileKey key,
     auto args = makeMuxerArgs(
         setting_.getEncoder(), setting_.getUserSAR(), muxFormat, muxerPath,
         setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
-        setting_.getSrcFilePath(),
+        (File::exists(setting_.getTmpRawTSPath()) ? setting_.getTmpRawTSPath() : setting_.getSrcFilePath()),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
         vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
