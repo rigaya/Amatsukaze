@@ -1,5 +1,6 @@
 /.vs
 /lib
+/.vscode/settings.json
 
 /*.VC.VC.opendb
 /*.VC.db
