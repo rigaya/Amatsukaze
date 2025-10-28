@@ -389,18 +389,18 @@ namespace Amatsukaze.Server
             return new RPCInfo() { id = id, arg = arg };
         }
 
-        public static Task RefreshRequest(this IEncodeServer server)
+        public static async Task RefreshRequest(this IEncodeServer server)
         {
-            return Task.WhenAll(
-                    server.Request(ServerRequest.Setting | 
-                    ServerRequest.Queue |
-                    ServerRequest.Log |
-                    ServerRequest.CheckLog |
-                    ServerRequest.Console |
-                    ServerRequest.State |
-                    ServerRequest.FreeSpace |
-                    ServerRequest.ServiceSetting),
-                    server.RequestDrcsImages());
+            // 同一NetworkStreamへの並列送信による破損を避けるため逐次送信
+            await server.Request(ServerRequest.Setting |
+                                 ServerRequest.Queue |
+                                 ServerRequest.Log |
+                                 ServerRequest.CheckLog |
+                                 ServerRequest.Console |
+                                 ServerRequest.State |
+                                 ServerRequest.FreeSpace |
+                                 ServerRequest.ServiceSetting);
+            await server.RequestDrcsImages();
         }
     }
 
