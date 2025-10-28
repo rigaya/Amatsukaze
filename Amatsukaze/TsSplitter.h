@@ -70,8 +70,11 @@ public:
 
     virtual void onAudioFormatChanged(AudioFormat fmt) = 0;
 
+    void setLanguage(const std::string& lang);
+
 private:
     AudioFormat format;
+    std::string language;
 
     std::vector<AudioFrameData> frameData;
 

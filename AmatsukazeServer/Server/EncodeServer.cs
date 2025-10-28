@@ -1167,6 +1167,14 @@ namespace Amatsukaze.Server
             {
                 setting.PsisiarcPath = GetExePath(basePath, "psisiarc");
             }
+            if (string.IsNullOrEmpty(setting.WhisperPath))
+            {
+                setting.WhisperPath = GetExePath(basePath, "faster-whisper");
+                if (string.IsNullOrEmpty(setting.WhisperPath))
+                {
+                    setting.WhisperPath = GetExePath(basePath, "whisper");
+                }
+            }
             if (string.IsNullOrEmpty(setting.TsReplacePath))
             {
                 setting.TsReplacePath = GetExePath(basePath, "tsreplace");
@@ -1952,6 +1960,56 @@ namespace Amatsukaze.Server
                 if (!profile.DisableSubs)
                 {
                     sb.Append(" --subtitles");
+                    // 字幕モード
+                    string subModeStr = "arib";
+                    if (profile.SubMode != SubtitleMode.Arib)
+                    {
+                        switch (profile.SubMode)
+                        {
+                            case SubtitleMode.WhisperFallback: subModeStr = "whisper-fallback"; break;
+                            case SubtitleMode.WhisperAlways: subModeStr = "whisper-always"; break;
+                            case SubtitleMode.Arib:
+                            default: subModeStr = "arib"; break;
+                        }
+                        sb.Append(" --sub-mode ").Append(subModeStr);
+                    }
+
+                    if (string.IsNullOrEmpty(setting.WhisperPath) == false)
+                    {
+                        sb.Append(" --whisper \"")
+                            .Append(setting.WhisperPath)
+                            .Append("\"");
+                    }
+                    if (profile.WhisperModel != WhisperModelType.Unspecified)
+                    {
+                        string whisperModelStr = null;
+                        var whisperModel = profile.WhisperModel;
+                        if (whisperModel == WhisperModelType.Auto)
+                        {
+                            whisperModel = WhisperModelType.AutoCurrent;
+                        }
+                        switch (whisperModel)
+                        {
+                            case WhisperModelType.Small: whisperModelStr = "small"; break;
+                            case WhisperModelType.Medium: whisperModelStr = "medium"; break;
+                            case WhisperModelType.LargeV1: whisperModelStr = "large-v1"; break;
+                            case WhisperModelType.LargeV2: whisperModelStr = "large-v2"; break;
+                            case WhisperModelType.LargeV3: whisperModelStr = "large-v3"; break;
+                            case WhisperModelType.LargeV3Turbo: whisperModelStr = "large-v3-turbo"; break;
+                        }
+                        if (string.IsNullOrEmpty(whisperModelStr) == false)
+                        {
+                            sb.Append(" --whisper-model \"")
+                                .Append(whisperModelStr)
+                                .Append("\"");
+                        }
+                    }
+                    if (string.IsNullOrEmpty(profile.WhisperOption) == false)
+                    {
+                        sb.Append(" --whisper-option \"")
+                            .Append(profile.WhisperOption)
+                            .Append("\"");
+                    }
                     if (profile.EnableWebVTT)
                     {
                         sb.Append(" --webvtt");
@@ -2176,6 +2234,12 @@ namespace Amatsukaze.Server
             CheckPath("neroAacEnc", setting.NeroAacEncPath);
             CheckPath("qaac", setting.QaacPath);
             CheckPath("fdkaac", setting.FdkaacPath);
+            CheckPath("opusenc", setting.OpusEncPath);
+
+            CheckPath("b24tovtt", setting.B24ToVttPath);
+            CheckPath("tsreadex", setting.TsReadExPath);
+            CheckPath("psisiarc", setting.PsisiarcPath);
+            CheckPath("whisper", setting.WhisperPath);
 
             if (profile != null)
             {
@@ -2288,6 +2352,32 @@ namespace Amatsukaze.Server
                     if (string.IsNullOrEmpty(audioEncoderPath))
                     {
                         throw new ArgumentException("音声エンコーダパスが設定されていません");
+                    }
+                }
+
+                if (!profile.DisableSubs)
+                {
+                    if (profile.EnableWebVTT)
+                    {
+                        if (string.IsNullOrEmpty(setting.B24ToVttPath))
+                        {
+                            throw new ArgumentException("b24tovttパスが設定されていません");
+                        }
+                        if (string.IsNullOrEmpty(setting.TsReadExPath))
+                        {
+                            throw new ArgumentException("tsreadexパスが設定されていません");
+                        }
+                        if (string.IsNullOrEmpty(setting.PsisiarcPath))
+                        {
+                            throw new ArgumentException("psisiarcパスが設定されていません");
+                        }
+                    }
+                    if (profile.SubMode != SubtitleMode.Arib)
+                    {
+                        if (string.IsNullOrEmpty(setting.WhisperPath))
+                        {
+                            throw new ArgumentException("Whisperパスが設定されていません");
+                        }
                     }
                 }
             }

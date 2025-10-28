@@ -1502,6 +1502,44 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region SubMode変更通知プロパティ
+        public int SubMode {
+            get { return (int)Data.SubMode; }
+            set {
+                if ((int)Data.SubMode == value)
+                    return;
+                Data.SubMode = (Amatsukaze.Server.SubtitleMode)value;
+                RaisePropertyChanged();
+                RaisePropertyChanged("IsWhisperMode");
+            }
+        }
+        public bool IsWhisperMode { get { return Data.SubMode != Amatsukaze.Server.SubtitleMode.Arib; } }
+        #endregion
+
+        #region WhisperModel変更通知プロパティ
+        public int WhisperModel {
+            get { return (int)Data.WhisperModel; }
+            set {
+                if ((int)Data.WhisperModel == value)
+                    return;
+                Data.WhisperModel = (Amatsukaze.Server.WhisperModelType)value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region WhisperOption変更通知プロパティ
+        public string WhisperOption {
+            get { return Data.WhisperOption; }
+            set {
+                if (Data.WhisperOption == value)
+                    return;
+                Data.WhisperOption = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region IgnoreNoDrcsMap変更通知プロパティ
         public bool IgnoreNoDrcsMap {
             get { return Data.IgnoreNoDrcsMap; }
@@ -2181,6 +2219,13 @@ namespace Amatsukaze.Models
         public string[] FormatList {
             get { return new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" }; }
         }
+
+        public string[] SubtitleModeList {
+            get { return new string[] { "標準", "tsに字幕がない場合Whisperで生成", "常にWhisperで生成" }; }
+        }
+        public string[] WhisperModelList {
+            get { return new string[] { "自動", "未指定", "small", "medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo" }; }
+        }
         public string[] AudioEncoderList {
             get { 
                 if (Model?.Setting?.IsServerLinux ?? false) {
@@ -2532,6 +2577,21 @@ namespace Amatsukaze.Models
             text.KeyValue("チャプターを無効にする", Data.DisableChapter);
             text.KeyValue("チャプターを出力する", Data.OutputChapter);
             text.KeyValue("字幕を無効にする", Data.DisableSubs);
+            if (!Data.DisableSubs)
+            {
+                text.KeyValue("WebVTTを生成する", Data.EnableWebVTT);
+                text.KeyValue("字幕モード", SubtitleModeList[(int)Data.SubMode]);
+                if (Data.SubMode != Amatsukaze.Server.SubtitleMode.Arib)
+                {
+                    var wm = Data.WhisperModel;
+                    if (wm == Amatsukaze.Server.WhisperModelType.Auto)
+                    {
+                        wm = Amatsukaze.Server.WhisperModelType.AutoCurrent;
+                    }
+                    text.KeyValue("whisper-model", (wm == Amatsukaze.Server.WhisperModelType.Unspecified) ? "なし" : WhisperModelList[(int)wm]);
+                    text.KeyValue("whisper-option", Data.WhisperOption ?? "なし");
+                }
+            }
             text.KeyValue("マッピングにないDRCS外字は無視する", Data.IgnoreNoDrcsMap);
             text.KeyValue("ロゴ検出判定しきい値を低くする", Data.LooseLogoDetection);
             text.KeyValue("ロゴ検出に失敗しても処理を続行する", Data.IgnoreNoLogo);
@@ -3223,6 +3283,20 @@ namespace Amatsukaze.Models
                 if (Model.OpusEncPath == value)
                     return;
                 Model.OpusEncPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region WhisperPath変更通知プロパティ
+        public string WhisperPath
+        {
+            get { return Model.WhisperPath; }
+            set
+            {
+                if (Model.WhisperPath == value)
+                    return;
+                Model.WhisperPath = value;
                 RaisePropertyChanged();
             }
         }

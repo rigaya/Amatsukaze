@@ -66,6 +66,13 @@ enum ENUM_FORMAT {
     FORMAT_TSREPLACE,
 };
 
+// 字幕生成モード
+enum SUBTITLE_MODE {
+    SUBMODE_ARIB = 0,            // ARIB字幕を使用
+    SUBMODE_WHISPER_FALLBACK,    // ARIBが無い場合のみwhisperで生成
+    SUBMODE_WHISPER_ALWAYS       // 常にwhisperで生成
+};
+
 struct BitrateSetting {
     double a, b;
     double h264;
@@ -199,6 +206,14 @@ struct Config {
     tstring timelineditorPath;
     tstring mp4boxPath;
     tstring mkvmergePath;
+    // Whisper 実行ファイルのパス
+    tstring whisperPath;
+    // Whisper モデル名
+    tstring whisperModel;
+    // Whisper 追加オプション
+    tstring whisperOption;
+    // 字幕生成モード
+    SUBTITLE_MODE subtitleMode;
     tstring nicoConvAssPath;
     tstring nicoConvChSidPath;
     tstring preEncBatchFile;
@@ -313,6 +328,10 @@ public:
     tstring getMp4BoxPath() const;
 
     tstring getMkvMergePath() const;
+    tstring getWhisperPath() const;
+    tstring getWhisperModel() const;
+    tstring getWhisperOption() const;
+    SUBTITLE_MODE getSubtitleMode() const;
 
     tstring getNicoConvAssPath() const;
 
@@ -398,6 +417,11 @@ public:
     tstring getTmpB24CutChapterPath(EncodeFileKey key) const;
     tstring getTmpVTTFilePath(EncodeFileKey key, int langindex) const;
     tstring getTmpPSCFilePath(EncodeFileKey key) const;
+
+    tstring getTmpWhisperDir() const;
+    tstring getTmpWhisperJsonPath(EncodeFileKey key, int aindex) const;
+    tstring getTmpWhisperSrtPath(EncodeFileKey key, int aindex) const;
+    tstring getTmpWhisperVttPath(EncodeFileKey key, int aindex) const;
 
     const std::vector<CMType>& getCMTypes() const;
 

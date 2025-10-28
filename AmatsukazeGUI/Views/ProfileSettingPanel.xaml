@@ -581,10 +581,70 @@
                     </Grid>
                 </StackPanel>
 
+                <!-- 字幕ブロック -->
                 <StackPanel Grid.Row="20" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,80" Text="その他の設定"/>
+                    <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,20" Text="字幕"/>
                 </StackPanel>
                 <StackPanel Grid.Row="20" Grid.Column="1" Margin="10,0">
+                    <CheckBox Height="16" Margin="0,3"  Content="字幕を無効にする"
+                              IsChecked="{Binding Model.SelectedProfile.DisableSubs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <StackPanel x:Name="subtitleOptionsPanel">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.SelectedProfile.DisableSubs}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+
+                        <CheckBox Height="16" Margin="0,3"  Content="WebVTTを生成する"
+                                  IsChecked="{Binding Model.SelectedProfile.EnableWebVTT, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="字幕モード" VerticalAlignment="Center"/>
+                            <ComboBox Margin="8,0,24,0"
+                                      ItemsSource="{Binding Model.SelectedProfile.SubtitleModeList}"
+                                      SelectedIndex="{Binding Model.SelectedProfile.SubMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </WrapPanel>
+                        <Grid x:Name="whisperBlock" Margin="0,6,0,6">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.SelectedProfile.IsWhisperMode}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="whisper-model" VerticalAlignment="Center" Margin="0,2,0,0"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Width="220" Margin="8,2,0,0"
+                                      VerticalAlignment="Center" HorizontalAlignment="Left"
+                                      ItemsSource="{Binding Model.SelectedProfile.WhisperModelList}"
+                                      SelectedIndex="{Binding Model.SelectedProfile.WhisperModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="whisper-option" VerticalAlignment="Center" Margin="0,2,0,0"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Width="320" Margin="8,2,0,0"
+                                     VerticalAlignment="Center" HorizontalAlignment="Left"
+                                     Text="{Binding Model.SelectedProfile.WhisperOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- その他の設定ブロック -->
+                <StackPanel Grid.Row="21" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,80" Text="その他の設定"/>
+                </StackPanel>
+                <StackPanel Grid.Row="21" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="処理の終了後、入力ファイルを別フォルダに移動する" 
                               IsChecked="{Binding Model.SelectedProfile.MoveInputFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               ToolTip="エンコード処理完了後、入力ファイルを別フォルダ(succeeded/failed)に移動します。" />
@@ -598,10 +658,6 @@
                               IsChecked="{Binding Model.SelectedProfile.OutputChapter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               IsEnabled="{Binding Model.SelectedProfile.DisableChapter, Converter={StaticResource InverseBooleanConverter}}"
                               ToolTip="チャプターファイルを別ファイルとして出力します。「チャプター・CM解析を無効にする」がオンの場合は無効になります。" />
-                    <CheckBox Height="16" Margin="0,3"  Content="字幕を無効にする"
-                              IsChecked="{Binding Model.SelectedProfile.DisableSubs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <CheckBox Height="16" Margin="0,3"  Content="WebVTTを生成する"
-                              IsChecked="{Binding Model.SelectedProfile.EnableWebVTT, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="マッピングにないDRCS外字は無視する"
                               IsChecked="{Binding Model.SelectedProfile.IgnoreNoDrcsMap, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="ロゴ検出判定しきい値を低くする" 
@@ -650,7 +706,7 @@
                     </CheckBox>
                 </StackPanel>
 
-                <StackPanel Grid.Row="21" Grid.Column="0" Margin="0,20,0,0"
+                <StackPanel Grid.Row="22" Grid.Column="0" Margin="0,20,0,0"
                             Visibility="{Binding IsExpanded, ElementName=detailSettingPanel, Converter={StaticResource BoolVisibilityConverter}}">
                     <TextBlock Height="16" Margin="0,4" />
                     <TextBlock Height="16" Margin="0,4" />
@@ -658,7 +714,7 @@
                         追加ロゴ消し用<LineBreak/>ロゴリスト
                     </TextBlock>
                 </StackPanel>
-                <Expander Grid.Row="21" Grid.Column="1" x:Name="detailSettingPanel" Header="詳細設定">
+                <Expander Grid.Row="22" Grid.Column="1" x:Name="detailSettingPanel" Header="詳細設定">
                     <StackPanel>
                         <CheckBox Height="16" Margin="0,3"  Content="メイン以外のフォーマットは結合しない"
                             IsChecked="{Binding Model.SelectedProfile.SplitSub, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
@@ -685,13 +741,13 @@
                     </StackPanel>
                 </Expander>
 
-                <StackPanel Grid.Row="22" Grid.Column="0">
+                <StackPanel Grid.Row="23" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Left" Margin="0,40">
                         スケジューリング<LineBreak/>リソース設定
                     </TextBlock>
                 </StackPanel>
 
-                <StackPanel Grid.Row="22" Grid.Column="1" Margin="0,5,0,0">
+                <StackPanel Grid.Row="23" Grid.Column="1" Margin="0,5,0,0">
                     <StackPanel.Resources>
                         <l:VisibilityAndBooleanConverter x:Key="VisibilityAndBooleanConverter"
                                                          ConvertWhenTrue="Visible" ConvertWhenFalse="Collapsed"/>

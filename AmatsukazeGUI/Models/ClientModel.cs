@@ -1807,6 +1807,9 @@ namespace Amatsukaze.Models
                 profile.OutputChapter = data.Profile.OutputChapter;
                 profile.DisableSubs = data.Profile.DisableSubs;
                 profile.EnableWebVTT = data.Profile.EnableWebVTT;
+                profile.SubMode = (int)data.Profile.SubMode;
+                profile.WhisperModel = (int)data.Profile.WhisperModel;
+                profile.WhisperOption = data.Profile.WhisperOption;
                 profile.IgnoreNoDrcsMap = data.Profile.IgnoreNoDrcsMap;
                 profile.LooseLogoDetection = data.Profile.LooseLogoDetection;
                 profile.IgnoreNoLogo = data.Profile.IgnoreNoLogo;

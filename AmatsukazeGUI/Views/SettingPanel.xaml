@@ -140,6 +140,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="tsreadexパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="b24tovttパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="psisiarcパス"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="whisperパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="NicoConvASSパス">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
@@ -221,6 +222,7 @@
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearTsreadexPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearB24tovttPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearPsisiarcPathCommand}"/>
+                        <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearWhisperPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
@@ -260,6 +262,7 @@
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.TsReadExPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.B24ToVttPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.PsisiarcPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
+                        <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.WhisperPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
                                 <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">

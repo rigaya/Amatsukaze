@@ -701,9 +701,10 @@ int getNumAudioChannels(AUDIO_CHANNELS channels);
 struct AudioFormat {
     AUDIO_CHANNELS channels;
     int sampleRate;
+    std::string language;
 
     bool operator==(const AudioFormat& o) const {
-        return (channels == o.channels && sampleRate == o.sampleRate);
+        return (channels == o.channels && sampleRate == o.sampleRate && language == o.language);
     }
     bool operator!=(const AudioFormat& o) const {
         return !(*this == o);

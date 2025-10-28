@@ -85,6 +85,10 @@ static void printHelp(const tchar* bin) {
         "  --b24tovtt <パス>    b24tovtt.exeへのパス\n"
         "  --psisiarc <パス>    psisiarc.exeへのパス\n"
         "  --webvtt           WebVTTを生成する\n"
+        "  --sub-mode <mode>  字幕生成モード[arib] (arib|whisper-fallback|whisper-always)\n"
+        "  --whisper <パス>   whisper実行ファイルへのパス\n"
+        "  --whisper-model <モデル> whisperのモデル名\n"
+        "  --whisper-option <オプション> whisperへ渡す追加オプション\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
         "  --nicoass <パス>     NicoConvASSへのパス\n"
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
@@ -215,6 +219,10 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.outputChapter = false;
     bool nicojk = false;
     conf.webvtt = false;
+    conf.subtitleMode = SUBMODE_ARIB;
+    conf.whisperPath = _T("");
+    conf.whisperModel = _T("");
+    conf.whisperOption = _T("");
 
     for (int i = 1; i < argc; ++i) {
         tstring key = argv[i];
@@ -416,6 +424,18 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.nicojk18 = true;
         } else if (key == _T("--webvtt")) {
             conf.webvtt = true;
+        } else if (key == _T("--sub-mode")) {
+            const auto arg = getParam(argc, argv, i++);
+            if (arg == _T("arib")) conf.subtitleMode = SUBMODE_ARIB;
+            else if (arg == _T("whisper-fallback")) conf.subtitleMode = SUBMODE_WHISPER_FALLBACK;
+            else if (arg == _T("whisper-always")) conf.subtitleMode = SUBMODE_WHISPER_ALWAYS;
+            else THROWF(ArgumentException, "--sub-modeの指定が間違っています");
+        } else if (key == _T("--whisper")) {
+            conf.whisperPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--whisper-model")) {
+            conf.whisperModel = getParam(argc, argv, i++);
+        } else if (key == _T("--whisper-option")) {
+            conf.whisperOption = getParam(argc, argv, i++);
         } else if (key == _T("--nicojklog")) {
             conf.useNicoJKLog = true;
         } else if (key == _T("-om") || key == _T("--cmoutmask")) {

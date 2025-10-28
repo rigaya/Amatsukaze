@@ -687,6 +687,22 @@ tstring ConfigWrapper::getMkvMergePath() const {
     return conf.mkvmergePath;
 }
 
+tstring ConfigWrapper::getWhisperPath() const {
+    return conf.whisperPath;
+}
+
+tstring ConfigWrapper::getWhisperModel() const {
+    return conf.whisperModel;
+}
+
+tstring ConfigWrapper::getWhisperOption() const {
+    return conf.whisperOption;
+}
+
+SUBTITLE_MODE ConfigWrapper::getSubtitleMode() const {
+    return conf.subtitleMode;
+}
+
 tstring ConfigWrapper::getNicoConvAssPath() const {
     return conf.nicoConvAssPath;
 }
@@ -1041,6 +1057,30 @@ tstring ConfigWrapper::getTmpVTTFilePath(EncodeFileKey key, int langindex) const
 tstring ConfigWrapper::getTmpPSCFilePath(EncodeFileKey key) const {
     return regtmp(StringFormat(_T("%s/vtt%d-%d-%d%s.psc"),
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
+}
+
+// Whisper (字幕生成) 用一時ディレクトリ
+tstring ConfigWrapper::getTmpWhisperDir() const {
+    auto dir = StringFormat(_T("%s/whisper"), tmpDir.path());
+    // ディレクトリ作成 (既に存在してもOK)
+    mkdirT(dir.c_str());
+    return dir;
+}
+
+// WhisperのJSON出力ファイル
+tstring ConfigWrapper::getTmpWhisperJsonPath(EncodeFileKey key, int aindex) const {
+    return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.json"),
+        getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpWhisperSrtPath(EncodeFileKey key, int aindex) const {
+    return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.srt"),
+        getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpWhisperVttPath(EncodeFileKey key, int aindex) const {
+    return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.vtt"),
+        getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
 }
 
 tstring ConfigWrapper::getTmpNicoJKXMLPath() const {

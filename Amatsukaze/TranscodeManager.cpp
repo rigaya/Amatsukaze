@@ -12,6 +12,8 @@
 #include "AdtsParser.h"
 #include "PacketCache.h"
 #include "rgy_pipe.h"
+#include "rgy_language.h"
+#include "Subtitle.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
@@ -742,41 +744,7 @@ void DoBadThing() {
         }
     }
 
-    ctx.info("[字幕ファイル生成]");
-    for (int i = 0; i < (int)keys.size(); ++i) {
-        auto key = keys[i];
-        CaptionASSFormatter formatterASS(ctx);
-        CaptionSRTFormatter formatterSRT(ctx);
-        NicoJKFormatter formatterNicoJK(ctx);
-        const auto& capList = reformInfo.getEncodeFile(key).captionList;
-        for (int lang = 0; lang < (int)capList.size(); ++lang) {
-            auto ass = formatterASS.generate(capList[lang]);
-            auto srt = formatterSRT.generate(capList[lang]);
-            WriteUTF8File(setting.getTmpASSFilePath(key, lang), ass);
-            if (srt.size() > 0) {
-                // SRTはCP_STR_SMALLしかなかった場合など出力がない場合があり、
-                // 空ファイルはmux時にエラーになるので、1行もない場合は出力しない
-                WriteUTF8File(setting.getTmpSRTFilePath(key, lang), srt);
-            }
-        }
-        if (nicoOK) {
-            const auto& headerLines = nicoJK.getHeaderLines();
-            const auto& dialogues = reformInfo.getEncodeFile(key).nicojkList;
-            for (NicoJKType jktype : setting.getNicoJKTypes()) {
-                File file(setting.getTmpNicoJKASSPath(key, jktype), _T("w"));
-                auto text = formatterNicoJK.generate(headerLines[(int)jktype], dialogues[(int)jktype]);
-                file.write(MemoryChunk((uint8_t*)text.data(), text.size()));
-            }
-        }
-        // 字幕構築 + (必要なら) WebVTT生成
-        try {
-            reformInfo.genWebVTT(key, setting);
-        } catch (const Exception& e) {
-            ctx.warnF("WebVTT生成に失敗: %s", e.message());
-        }
-    }
-    ctx.infoF("字幕ファイル生成完了: %.2f秒", sw.getAndReset());
-
+    std::vector<std::pair<tstring, std::string>> audioFiles; // 音声ファイルとその言語コード(ISO-639)
     if (setting.isEncodeAudio()) {
         ctx.info("[音声エンコード]");
         for (int i = 0; i < (int)keys.size(); i++) {
@@ -791,6 +759,7 @@ void DoBadThing() {
             auto format = reformInfo.getFormat(key);
             auto audioFrames = reformInfo.getWaveInput(reformInfo.getEncodeFile(key).audioFrames[0]);
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
+            audioFiles.push_back(std::make_pair(outpath, format.audioFormat[0].language));
         }
     } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreplaceの場合は音声ファイルを作らない
         ctx.info("[音声出力]");
@@ -814,6 +783,8 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             splitter.inputPacket(audioCache[frameIndex]);
                         }
+                        audioFiles.push_back(std::make_pair(filepath0, fmt.audioFormat[asrc].language));
+                        audioFiles.push_back(std::make_pair(filepath1, std::string()));
                     } else {
                         if (isDualMono) {
                             ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
@@ -823,16 +794,105 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             file.write(audioCache[frameIndex]);
                         }
+                        audioFiles.push_back(std::make_pair(filepath, fmt.audioFormat[asrc].language));
                     }
                 }
             }
         }
     }
 
+    ctx.info("[字幕ファイル生成]");
+    for (int i = 0; i < (int)keys.size(); i++) {
+        auto key = keys[i];
+        CaptionASSFormatter formatterASS(ctx);
+        CaptionSRTFormatter formatterSRT(ctx);
+        NicoJKFormatter formatterNicoJK(ctx);
+        const auto& capList = reformInfo.getEncodeFile(key).captionList;
+        for (int lang = 0; lang < (int)capList.size(); lang++) {
+            auto ass = formatterASS.generate(capList[lang]);
+            auto srt = formatterSRT.generate(capList[lang]);
+            WriteUTF8File(setting.getTmpASSFilePath(key, lang), ass);
+            if (srt.size() > 0) {
+                // SRTはCP_STR_SMALLしかなかった場合など出力がない場合があり、
+                // 空ファイルはmux時にエラーになるので、1行もない場合は出力しない
+                WriteUTF8File(setting.getTmpSRTFilePath(key, lang), srt);
+            }
+        }
+        if (nicoOK) {
+            const auto& headerLines = nicoJK.getHeaderLines();
+            const auto& dialogues = reformInfo.getEncodeFile(key).nicojkList;
+            for (NicoJKType jktype : setting.getNicoJKTypes()) {
+                File file(setting.getTmpNicoJKASSPath(key, jktype), _T("w"));
+                auto text = formatterNicoJK.generate(headerLines[(int)jktype], dialogues[(int)jktype]);
+                file.write(MemoryChunk((uint8_t*)text.data(), text.size()));
+            }
+        }
+        // 字幕構築 + (必要なら) WebVTT生成
+        try {
+            if (setting.isWebVTTEnabled()) {
+                reformInfo.genWebVTT(key, setting);
+            }
+        } catch (const Exception& e) {
+            ctx.warnF("WebVTT生成に失敗: %s", e.message());
+        }
+
+        // Whisperによる字幕生成 (モード制御 + 複数音声)
+        try {
+            if (setting.getSubtitleMode() != SUBMODE_ARIB) {
+                SubtitleGenerator whisperGen(ctx);
+                const auto& fileIn = reformInfo.getEncodeFile(key);
+                const auto wdir    = setting.getTmpWhisperDir();
+                const auto wavPath = setting.getWaveFilePath();
+                const auto whisper = setting.getWhisperPath();
+                // 追加オプション組み立て
+                StringBuilderT opt;
+                if (setting.getWhisperModel().size() > 0) opt.append(_T("--model %s"), setting.getWhisperModel());
+                if (setting.getWhisperOption().size() > 0) {
+                    if (opt.str().size() > 0) opt.append(_T(" "));
+                    opt.append(_T("%s"), setting.getWhisperOption());
+                }
+                const tstring extraOpt = opt.str();
+                const bool fallbackOnly = (setting.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK);
+                const bool haveArib = (reformInfo.getEncodeFile(key).captionList.size() > 0);
+                const bool shouldRun = (!fallbackOnly) || (fallbackOnly && !haveArib);
+                if (shouldRun) {
+                    for (int aindex = 0; aindex < (int)audioFiles.size(); aindex++) {
+                        const tstring& aPath = audioFiles[aindex].first;
+                        const std::string& lang3 = audioFiles[aindex].second;
+                        // 音声トラックごとの言語コードを2文字コードに変換できた場合は --language を付与
+                        tstring perOpt = extraOpt;
+                        if (!lang3.empty()) {
+                            const std::string lang2 = rgy_lang_2letter_6391(lang3);
+                            if (!lang2.empty()) {
+                                if (perOpt.size() > 0) perOpt += _T(" ");
+                                perOpt += _T("--language ");
+                                perOpt += char_to_tstring(lang2);
+                            }
+                        }
+                        whisperGen.runWhisper(whisper, aPath, wdir, perOpt, true);
+                        const auto srtPath = setting.getTmpWhisperSrtPath(key, aindex);
+                        const auto vttPath = setting.getTmpWhisperVttPath(key, aindex);
+                        // 空ファイルになっていたら削除する
+                        uint64_t filesize = 0;
+                        if (rgy_file_exists(srtPath) && rgy_get_filesize(srtPath.c_str(), &filesize) && filesize == 0) {
+                            rgy_file_remove(srtPath.c_str());
+                        }
+                        if (rgy_file_exists(vttPath) && rgy_get_filesize(vttPath.c_str(), &filesize) && filesize == 0) {
+                            rgy_file_remove(vttPath.c_str());
+                        }
+                    }
+                }
+            }
+        } catch (const Exception& e) {
+            ctx.warnF("Whisper字幕生成に失敗: %s", e.message());
+        }
+    }
+    ctx.infoF("字幕ファイル生成完了: %.2f秒", sw.getAndReset());
+
     auto argGen = std::unique_ptr<EncoderArgumentGenerator>(new EncoderArgumentGenerator(setting, reformInfo));
 
     sw.start();
-    for (int i = 0; i < (int)keys.size(); ++i) {
+    for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
         auto& fileOut = outFileInfo[i];
         const CMAnalyze* cma = cmanalyze[key.video].get();
@@ -893,7 +953,7 @@ void DoBadThing() {
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
             // VFRフレームタイミングが120fpsか
             std::vector<tstring> encoderArgs;
-            for (int i = 0; i < (int)pass.size(); ++i) {
+            for (int i = 0; i < (int)pass.size(); i++) {
                 encoderArgs.push_back(
                     argGen->GenEncoderOptions(
                         outvi.num_frames,
@@ -923,7 +983,7 @@ void DoBadThing() {
     sw.start();
     int64_t totalOutSize = 0;
     auto muxer = std::unique_ptr<AMTMuxder>(new AMTMuxder(ctx, setting, reformInfo));
-    for (int i = 0; i < (int)keys.size(); ++i) {
+    for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
 
         ctx.infoF("[Mux開始] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));

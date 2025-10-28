@@ -430,6 +430,25 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearWhisperPathCommand
+        private ViewModelCommand _ClearWhisperPathCommand;
+
+        public ViewModelCommand ClearWhisperPathCommand {
+            get {
+                if (_ClearWhisperPathCommand == null)
+                {
+                    _ClearWhisperPathCommand = new ViewModelCommand(ClearWhisperPath);
+                }
+                return _ClearWhisperPathCommand;
+            }
+        }
+
+        public void ClearWhisperPath()
+        {
+            Model.Setting.WhisperPath = null;
+        }
+        #endregion
+
         #region DeleteNoActionExeCommand
         private ViewModelCommand _DeleteNoActionExeCommand;
 

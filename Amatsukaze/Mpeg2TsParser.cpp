@@ -419,6 +419,29 @@ bool StreamIdentifierDescriptor::parse() {
     component_tag_ = payload.data[0];
     return true;
 }
+ISO639LanguageDescriptor::ISO639LanguageDescriptor(Descriptor desc) : desc(desc) {}
+
+bool ISO639LanguageDescriptor::parse() {
+    langs.clear();
+    MemoryChunk payload = desc.payload();
+    if (payload.length < 4) return false;
+    int offset = 0;
+    while (offset + 4 <= (int)payload.length) {
+        ISO639Language lang;
+        lang.code[0] = (char)payload.data[offset + 0];
+        lang.code[1] = (char)payload.data[offset + 1];
+        lang.code[2] = (char)payload.data[offset + 2];
+        lang.code[3] = '\0';
+        lang.audio_type = payload.data[offset + 3];
+        langs.push_back(lang);
+        offset += 4;
+    }
+    return langs.size() > 0;
+}
+
+int ISO639LanguageDescriptor::numElems() const { return (int)langs.size(); }
+
+ISO639Language ISO639LanguageDescriptor::get(int i) const { return langs[i]; }
 ContentElement::ContentElement(uint8_t* ptr) : ptr(ptr) {}
 
 uint8_t ContentElement::content_nibble_level_1() { return bsm(ptr[0], 4, 4); }
@@ -978,7 +1001,19 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
                 videoEs.stype = stream_type;
                 videoEs.pid = elem.elementary_PID();
             } else if (isAudio(stream_type)) {
-                audioEs.emplace_back(stream_type, elem.elementary_PID());
+                PMTESInfo ai(stream_type, elem.elementary_PID());
+                auto descs = ParseDescriptors(elem.descriptor());
+                for (int di = 0; di < (int)descs.size(); ++di) {
+                    if (descs[di].tag() == 0x0A) { // ISO 639 language descriptor
+                        ISO639LanguageDescriptor langdesc(descs[di]);
+                        if (langdesc.parse() && langdesc.numElems() > 0) {
+                            auto l = langdesc.get(0);
+                            ai.language = std::string(l.code);
+                        }
+                        break;
+                    }
+                }
+                audioEs.emplace_back(ai);
             } else if (isCaption(stream_type)) {
                 auto descs = ParseDescriptors(elem.descriptor());
                 for (int i = 0; i < (int)descs.size(); ++i) {

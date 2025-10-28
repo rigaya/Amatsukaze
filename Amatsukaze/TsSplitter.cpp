@@ -94,6 +94,11 @@ AudioFrameParser::AudioFrameParser(AMTContext&ctx)
 
     adtsParser.inputFrame(payload, frameData, PTS);
 
+    // 言語を付与
+    for (auto &fd : frameData) {
+        fd.format.language = language;
+    }
+
     if (frameData.size() > 0) {
         const AudioFrameData& frame = frameData[0];
 
@@ -106,6 +111,7 @@ AudioFrameParser::AudioFrameParser(AMTContext&ctx)
         onAudioPesPacket(clock, frameData, packet);
     }
 }
+void AudioFrameParser::setLanguage(const std::string& lang) { language = lang; }
 CaptionParser::CaptionParser(AMTContext&ctx)
     : AMTObject(ctx)
     , PesParser()
@@ -478,6 +484,11 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
             int audioIdx = int(audioParsers.size());
             audioParsers.push_back(new SpAudioFrameParser(ctx, *this, audioIdx));
             ctx.infoF("音声パーサ %d を追加", audioIdx);
+        }
+
+        // 言語設定を反映
+        for (size_t i = 0; i < numAudios && i < audioParsers.size(); ++i) {
+            audioParsers[i]->setLanguage(audio[i].language);
         }
     }
 }

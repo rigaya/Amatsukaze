@@ -246,6 +246,25 @@ private:
     uint8_t component_tag_;
 };
 
+struct ISO639Language {
+    char code[4];
+    uint8_t audio_type;
+};
+
+struct ISO639LanguageDescriptor {
+    ISO639LanguageDescriptor(Descriptor desc);
+
+    bool parse();
+
+    int numElems() const;
+
+    ISO639Language get(int i) const;
+
+private:
+    Descriptor desc;
+    std::vector<ISO639Language> langs;
+};
+
 struct ContentElement {
     ContentElement(uint8_t* ptr);
 
@@ -552,6 +571,7 @@ private:
 struct PMTESInfo {
     int stype;
     int pid;
+    std::string language;
 
     PMTESInfo();
     PMTESInfo(int stype, int pid);

@@ -44,6 +44,7 @@
     <ClInclude Include="rgy_env.h" />
     <ClInclude Include="rgy_event.h" />
     <ClInclude Include="rgy_filesystem.h" />
+    <ClInclude Include="rgy_language.h" />
     <ClInclude Include="rgy_memmem.h" />
     <ClInclude Include="rgy_osdep.h" />
     <ClInclude Include="rgy_pipe.h" />
@@ -80,6 +81,7 @@
     <ClCompile Include="rgy_env.cpp" />
     <ClCompile Include="rgy_event.cpp" />
     <ClCompile Include="rgy_filesystem.cpp" />
+    <ClCompile Include="rgy_language.cpp" />
     <ClCompile Include="rgy_memmem.cpp" />
     <ClCompile Include="rgy_memmem_avx2.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>

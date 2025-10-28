@@ -63,6 +63,29 @@ namespace Amatsukaze.Server
         TSREPLACE,
     }
 
+    // 字幕モード
+    public enum SubtitleMode
+    {
+        Arib = 0,
+        WhisperFallback = 1,
+        WhisperAlways = 2
+    }
+
+    // Whisper モデル選択
+    public enum WhisperModelType
+    {
+        Auto = 0,
+        Unspecified,
+        Small,
+        Medium,
+        LargeV1,
+        LargeV2,
+        LargeV3,
+        LargeV3Turbo,
+
+        AutoCurrent = LargeV3Turbo,
+    }
+
     public enum FinishAction
     {
         None, Suspend, Hibernate, Shutdown
@@ -307,6 +330,16 @@ namespace Amatsukaze.Server
         public bool DisableSubs { get; set; }
         [DataMember]
         public bool EnableWebVTT { get; set; }
+
+        // 字幕生成モード
+        [DataMember]
+        public SubtitleMode SubMode { get; set; }
+        // Whisperのモデル
+        [DataMember]
+        public WhisperModelType WhisperModel { get; set; }
+        // Whisperの追加オプション
+        [DataMember]
+        public string WhisperOption { get; set; }
         [DataMember]
         public bool IgnoreNoDrcsMap { get; set; }
         [DataMember]
@@ -481,6 +514,10 @@ namespace Amatsukaze.Server
         public string FdkaacPath { get; set; }
         [DataMember]
         public string OpusEncPath { get; set; }
+
+        // Whisper 実行ファイルパス
+        [DataMember]
+        public string WhisperPath { get; set; }
 
         [DataMember]
         public string WorkPath { get; set; }

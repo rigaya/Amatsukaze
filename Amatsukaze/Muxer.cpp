@@ -136,28 +136,47 @@ void AMTMuxder::mux(EncodeFileKey key,
             }
         }
     }
-    for (int lang = 0; lang < (int)fileIn.captionList.size(); ++lang) {
-        auto srcass = setting_.getTmpASSFilePath(key, lang);
-        if (muxFormat == FORMAT_MKV) {
-            subsFiles.push_back(srcass);
-            subsTitles.push_back(_T("ASS"));
-        } else { // MP4,M2TSの場合は別ファイルとしてコピー
-            auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang, (NicoJKType)0);
-            File::copy(srcass, dstsub);
-            fileOut.outSubs.push_back(dstsub);
+    // ARIB生成字幕 (ASS/SRT/WebVTT)
+    if (setting_.getSubtitleMode() == SUBMODE_ARIB || setting_.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK) {
+        for (int lang = 0; lang < (int)fileIn.captionList.size(); ++lang) {
+            auto srcass = setting_.getTmpASSFilePath(key, lang);
+            if (muxFormat == FORMAT_MKV) {
+                subsFiles.push_back(srcass);
+                subsTitles.push_back(_T("ASS"));
+            } else { // MP4,M2TSの場合は別ファイルとしてコピー
+                auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang, (NicoJKType)0);
+                File::copy(srcass, dstsub);
+                fileOut.outSubs.push_back(dstsub);
+            }
+            auto srcsrt = setting_.getTmpSRTFilePath(key, lang);
+            if (File::exists(srcsrt)) {
+                subsFiles.push_back(srcsrt);
+                subsTitles.push_back(_T("SRT"));
+            }
+            auto srcwebvtt = setting_.getTmpVTTFilePath(key, lang);
+            if (File::exists(srcwebvtt)) {
+                auto dstwebvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang);
+                File::copy(srcwebvtt, dstwebvtt);
+                fileOut.outSubs.push_back(dstwebvtt);
+            }
         }
-        auto srcsrt = setting_.getTmpSRTFilePath(key, lang);
-        if (File::exists(srcsrt)) {
-            // SRTは極稀に出力されないこともあることに注意
-            subsFiles.push_back(srcsrt);
-            subsTitles.push_back(_T("SRT"));
-        }
-        // webvttは別ファイルとしてコピー
-        auto srcwebvtt = setting_.getTmpVTTFilePath(key, lang);
-        if (File::exists(srcwebvtt)) {
-            auto dstwebvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang);
-            File::copy(srcwebvtt, dstwebvtt);
-            fileOut.outSubs.push_back(dstwebvtt);
+    }
+
+    // Whisper生成字幕 (SRTのみmux対象、VTTはコピーのみ)
+    if (setting_.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting_.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK) {
+        // 既に作成済みのaudioFiles（dual mono分離後を反映）に合わせて処理
+        for (int aindex = 0; aindex < (int)audioFiles.size(); aindex++) {
+            auto srcsrt = setting_.getTmpWhisperSrtPath(key, aindex);
+            if (File::exists(srcsrt)) {
+                subsFiles.push_back(srcsrt);
+                subsTitles.push_back(_T("SRT"));
+            }
+            auto srcvtt = setting_.getTmpWhisperVttPath(key, aindex);
+            if (File::exists(srcvtt)) {
+                auto dstvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, aindex);
+                File::copy(srcvtt, dstvtt);
+                fileOut.outSubs.push_back(dstvtt);
+            }
         }
     }
     // pscファイルは別ファイルとしてコピー
