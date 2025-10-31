@@ -2955,6 +2955,93 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        private int _lastNumParallelLogoAnalysisManual = 1;
+
+        private void UpdateLastNumParallelLogoAnalysisManual()
+        {
+            if (Model.NumParallelLogoAnalysis > 0)
+            {
+                _lastNumParallelLogoAnalysisManual = Model.NumParallelLogoAnalysis;
+            }
+        }
+
+        private void NotifyNumParallelLogoAnalysisChanged()
+        {
+            RaisePropertyChanged(nameof(NumParallelLogoAnalysis));
+            RaisePropertyChanged(nameof(IsNumParallelLogoAnalysisAuto));
+            RaisePropertyChanged(nameof(IsNumParallelLogoAnalysisManual));
+            RaisePropertyChanged(nameof(NumParallelLogoAnalysisValue));
+        }
+
+        #region NumParallelLogoAnalysis変更通知プロパティ
+        public int NumParallelLogoAnalysis
+        {
+            get { return Model.NumParallelLogoAnalysis; }
+            set
+            {
+                if (Model.NumParallelLogoAnalysis == value)
+                    return;
+                Model.NumParallelLogoAnalysis = value;
+                UpdateLastNumParallelLogoAnalysisManual();
+                NotifyNumParallelLogoAnalysisChanged();
+            }
+        }
+
+        public bool IsNumParallelLogoAnalysisAuto
+        {
+            get { return Model.NumParallelLogoAnalysis <= 0; }
+            set
+            {
+                var isAuto = Model.NumParallelLogoAnalysis <= 0;
+                if (isAuto == value)
+                    return;
+
+                if (value)
+                {
+                    UpdateLastNumParallelLogoAnalysisManual();
+                    Model.NumParallelLogoAnalysis = 0;
+                }
+                else
+                {
+                    if (Model.NumParallelLogoAnalysis <= 0)
+                    {
+                        Model.NumParallelLogoAnalysis = Math.Max(1, _lastNumParallelLogoAnalysisManual);
+                    }
+                    UpdateLastNumParallelLogoAnalysisManual();
+                }
+
+                NotifyNumParallelLogoAnalysisChanged();
+            }
+        }
+
+        public bool IsNumParallelLogoAnalysisManual
+        {
+            get { return !IsNumParallelLogoAnalysisAuto; }
+        }
+
+        public int NumParallelLogoAnalysisValue
+        {
+            get
+            {
+                if (Model.NumParallelLogoAnalysis > 0)
+                {
+                    _lastNumParallelLogoAnalysisManual = Math.Max(1, Model.NumParallelLogoAnalysis);
+                    return _lastNumParallelLogoAnalysisManual;
+                }
+                return Math.Max(1, _lastNumParallelLogoAnalysisManual);
+            }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.NumParallelLogoAnalysis == newValue)
+                    return;
+                Model.NumParallelLogoAnalysis = newValue;
+                UpdateLastNumParallelLogoAnalysisManual();
+                NotifyNumParallelLogoAnalysisChanged();
+            }
+        }
+        #endregion
+
         #region AmatsukazePath変更通知プロパティ
         public string AmatsukazePath
         {

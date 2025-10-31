@@ -58,6 +58,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <StackPanel>
@@ -479,15 +480,18 @@
                     <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="エンコード最大並列数"/>
                 </StackPanel>
                 <StackPanel Grid.Row="10" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="プロセス優先度"/>
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="ロゴ解析並列数"/>
                 </StackPanel>
                 <StackPanel Grid.Row="11" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="CPUアフィニティ"/>
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="プロセス優先度"/>
                 </StackPanel>
                 <StackPanel Grid.Row="12" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text=""/>
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="CPUアフィニティ"/>
                 </StackPanel>
                 <StackPanel Grid.Row="13" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text=""/>
+                </StackPanel>
+                <StackPanel Grid.Row="14" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Top" Margin="0,4,0,0" Text="スケジューリング"/>
                 </StackPanel>
 
@@ -498,11 +502,29 @@
                     </DockPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="10" Grid.Column="1">
+                    <DockPanel Margin="10,0,0,0">
+                        <DockPanel.Resources>
+                            <l:VisibilityAndBooleanConverter x:Key="VisibilityAndBooleanConverter" ConvertWhenTrue="Visible" ConvertWhenFalse="Hidden"/>
+                        </DockPanel.Resources>
+                        <CheckBox DockPanel.Dock="Left" VerticalAlignment="Center" Content="自動" Margin="0,0" Height="22" IsChecked="{Binding Model.Setting.IsNumParallelLogoAnalysisAuto, Mode=TwoWay}"
+                            ToolTip="チェックボックスを外すと、並列ロゴ解析時の並列数を指定できます。"/>
+                        <TextBlock DockPanel.Dock="Right" TextWrapping="Wrap" Width="30" Margin="4" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                   Visibility="{Binding Model.Setting.IsNumParallelLogoAnalysisManual, Mode=OneWay, Converter={StaticResource VisibilityAndBooleanConverter}}"
+                                   Text="{Binding Model.Setting.NumParallelLogoAnalysisValue}"/>
+                        <Slider Margin="8,4,2,4" Height="26" SmallChange="1" Minimum="1"
+                                Maximum="{Binding Model.CpuCoreCount, Mode=OneWay, FallbackValue=1}"
+                                Value="{Binding Model.Setting.NumParallelLogoAnalysisValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                IsEnabled="{Binding Model.Setting.IsNumParallelLogoAnalysisManual, Mode=OneWay}"
+                                Visibility="{Binding Model.Setting.IsNumParallelLogoAnalysisManual, Mode=OneWay, Converter={StaticResource VisibilityAndBooleanConverter}}"
+                                ToolTip="並列ロゴ解析時の並列数の目安を指定できます。&#xA;ファイル分割時の余りの発生により、必ずしもその値が使用されるとは限りません。"/>
+                    </DockPanel>
+                </StackPanel>
+                <StackPanel Grid.Row="11" Grid.Column="1">
 
                     <ComboBox IsReadOnly="True" Width="150" HorizontalAlignment="Left" Margin="10,3,0,0" Height="22" ItemsSource="{Binding Model.ProcessPriorityList}" SelectedIndex="{Binding Model.Setting.ProcessPriority, Mode=TwoWay}" ToolTip="「通常以下」または「低」推奨です"/>
 
                 </StackPanel>
-                <StackPanel Grid.Row="11" Grid.Column="1">
+                <StackPanel Grid.Row="12" Grid.Column="1">
                     <DockPanel Margin="10,0,0,0">
                         <DockPanel.Resources>
                             <ControlTemplate x:Key="ShowPartitions">
@@ -530,12 +552,12 @@
                         </ContentControl>
                     </DockPanel>
                 </StackPanel>
-                <StackPanel Grid.Row="12" Grid.Column="1">
+                <StackPanel Grid.Row="13" Grid.Column="1">
 
                     <CheckBox  Height="22" Margin="10,5,0,0"  Content="リソーススケジューリングを有効にする" IsChecked="{Binding Model.Setting.SchedulingEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="エンコードフェーズごとにCPU,HDD,GPUの各資源の使用量を考慮したスケジューリングを行います。&#xA;プロファイル設定で使用リソースを設定する必要があります。" />
 
                 </StackPanel>
-                <StackPanel Grid.Row="13" Grid.Column="1">
+                <StackPanel Grid.Row="14" Grid.Column="1">
                     <DockPanel   Margin="12,0,0,0">
                         <DockPanel DockPanel.Dock="Top" IsEnabled="{Binding Model.Setting.SchedulingEnabled}">
                             <TextBlock Text="GPU数:" VerticalAlignment="Center"/>
@@ -568,8 +590,8 @@
                 </StackPanel>
 
 
-                <TextBlock Grid.Row="14" Grid.Column="0" Text="稼働時間設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                <StackPanel Grid.Row="14" Grid.Column="1" Margin="10,10,0,0">
+                <TextBlock Grid.Row="15" Grid.Column="0" Text="稼働時間設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="15" Grid.Column="1" Margin="10,10,0,0">
                     <CheckBox  Margin="0,4" Height="16"  Content="稼働時間設定を有効にする"
                                IsChecked="{Binding Model.Setting.EnableRunHours, Mode=TwoWay}"/>
                     <DockPanel>
@@ -604,8 +626,8 @@
                     </DockPanel>
                 </StackPanel>
                 <!-- Setting console font -->
-                <TextBlock Grid.Row="15" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                <DockPanel Grid.Row="15" Grid.Column="1" Margin="10,0,0,0">
+                <TextBlock Grid.Row="16" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <DockPanel Grid.Row="16" Grid.Column="1" Margin="10,0,0,0">
                     <StackPanel DockPanel.Dock="Right">
                         <Button Height="16" Content="クリア" Margin="4" Command="{Binding ClearFontFamilyCommand}"/>
                     </StackPanel>

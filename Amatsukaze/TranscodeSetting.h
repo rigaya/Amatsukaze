@@ -247,6 +247,7 @@ struct Config {
     bool looseLogoDetection;
     bool noDelogo;
     bool parallelLogoAnalysis;
+    int numParallelLogoAnalysis;
     int maxFadeLength;
     tstring chapterExePath;
     tstring chapterExeOptions;
@@ -392,6 +393,8 @@ public:
     bool isNoDelogo() const;
 
     bool isParallelLogoAnalysis() const;
+
+    int getNumParallelLogoAnalysis() const;
 
     int getMaxFadeLength() const;
 

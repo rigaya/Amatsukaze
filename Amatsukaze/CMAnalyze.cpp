@@ -248,6 +248,24 @@ std::string CMAnalyze::makePreamble() {
     return sb.str();
 }
 
+int CMAnalyze::getPreferredThreads(const int processorCount) const {
+    static const int MAX_THREADS = 15;
+    std::array<std::pair<int, int>, MAX_THREADS+1> tmp;
+    for (int i = 0; i <= MAX_THREADS; i++) {
+        const int decodeThreads = processorCount / i;
+        tmp[i] = std::make_pair(i, 
+            (processorCount - decodeThreads /*割り切れない余り*/) +
+            std::max(0, decodeThreads - 8 /*デコードスレッドが多くてもあまり意味がない*/));
+    }
+    std::sort(tmp.begin(), tmp.end(), [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+        const int bestThreads = 8;
+        if (a.second != b.second) return a.second < b.second;
+        else if (a.first != b.first) return std::abs(a.first - bestThreads) < std::abs(b.first - bestThreads);
+        return true;
+    });
+    return tmp[0].first;
+}
+
 void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
     const auto& logoPath = setting_.getLogoPath();
     const auto& eraseLogoPath = setting_.getEraseLogoPath();
@@ -263,9 +281,10 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
         }
     }
     int duration = 0;
-    const int processorCount = GetProcessorCount();
+    const int processorCount = setting_.getNumParallelLogoAnalysis() > 0 ? setting_.getNumParallelLogoAnalysis() : GetProcessorCount();
+    const int preferredThreads = (setting_.isParallelLogoAnalysis()) ? getPreferredThreads(processorCount) : 1;
     const int minFramesPerThread = 600;
-    const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(8, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
+    const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
     const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
     if (totalThreads > 1) {
         ctx.infoF("並列ロゴ解析 %d並列 x デコード%dスレッド", totalThreads, decodeThreads);

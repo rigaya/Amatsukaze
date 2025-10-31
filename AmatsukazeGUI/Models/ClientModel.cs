@@ -670,6 +670,14 @@ namespace Amatsukaze.Models
                 return CpuClusters[Setting.AffinitySetting];
             }
         }
+
+        public int CpuCoreCount
+        {
+            get
+            {
+                return Math.Max(1, Environment.ProcessorCount);
+            }
+        }
         #endregion
 
         #region ProgressState変更通知プロパティ

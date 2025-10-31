@@ -527,6 +527,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public int NumParallel { get; set; }
         [DataMember]
+        public int NumParallelLogoAnalysis { get; set; }
+        [DataMember]
         public int AffinitySetting { get; set; } // 中身はProcessGroupKind
         [DataMember]
         public int ProcessPriority { get; set; } // 0が"通常以下"

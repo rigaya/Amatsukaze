@@ -1201,7 +1201,7 @@ namespace Amatsukaze.Server
         private Setting GetDefaultSetting()
         {
             string basePath = GetBasePath();
-            return SetDefaultPath(new Setting() { NumParallel = 1, DeleteOldLogsDays = 180 });
+            return SetDefaultPath(new Setting() { NumParallel = 1, NumParallelLogoAnalysis = 0, DeleteOldLogsDays = 180 });
         }
 
 
@@ -2082,7 +2082,15 @@ namespace Amatsukaze.Server
                 }
                 if (profile.ParallelLogoAnalysis)
                 {
-                    sb.Append(" --parallel-logo-analysis");
+                    sb.Append(" --parallel-logo-analysis ");
+                    if (setting.NumParallelLogoAnalysis <= 0)
+                    {
+                        sb.Append("auto");
+                    }
+                    else
+                    {
+                        sb.Append(setting.NumParallelLogoAnalysis);
+                    }
                 }
                 if (profile.NoRemoveTmp)
                 {

@@ -74,7 +74,7 @@ static void printHelp(const tchar* bin) {
         "  --ignore-no-logo    ロゴが見つからなくても処理を続行する\n"
         "  --ignore-nicojk-error ニコニコ実況取得でエラーが発生しても処理を続行する\n"
         "  --no-delogo         ロゴ消しをしない（デフォルトはロゴがある場合は消します）\n"
-        "  --parallel-logo-analysis 並列ロゴ解析\n"
+        "  --parallel-logo-analysis auto or <数値> 並列ロゴ解析 (数値は並列数を指定)\n"
         "  --loose-logo-detection ロゴ検出判定しきい値を低くします\n"
         "  --max-fade-length <数値> ロゴの最大フェードフレーム数[16]\n"
         "  --chapter-exe <パス> chapter_exe.exeへのパス\n"
@@ -214,6 +214,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.outPipe = INVALID_HANDLE_VALUE;
     conf.maxFadeLength = 16;
     conf.numEncodeBufferFrames = 16;
+    conf.parallelLogoAnalysis = false;
+    conf.numParallelLogoAnalysis = 0;
     conf.tsreplaceRemoveTypeD = false;
     conf.useMKVWhenSubExist = false;
     conf.outputChapter = false;
@@ -382,7 +384,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("--no-delogo")) {
             conf.noDelogo = true;
         } else if (key == _T("--parallel-logo-analysis")) {
+            const auto arg = getParam(argc, argv, i++);
             conf.parallelLogoAnalysis = true;
+            conf.numParallelLogoAnalysis = (arg == _T("auto")) ? 0 : std::stoi(arg);
         } else if (key == _T("--timefactor")) {
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.x265TimeFactor);

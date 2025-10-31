@@ -98,6 +98,8 @@ private:
 
     std::string makePreamble();
 
+    int getPreferredThreads(const int processorCount) const;
+
     void logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
     tstring MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
