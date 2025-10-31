@@ -194,6 +194,7 @@ namespace Amatsukaze.Server
                     throw new EndOfStreamException();
                 }
                 readBytes += ret;
+                //Util.AddLog($"[RPCData] ReadBytes 進捗: {readBytes}/{size}", null);
             }
             return bytes;
         }
@@ -378,11 +379,13 @@ namespace Amatsukaze.Server
             var headerbytes = await RPCData.ReadBytes(ns, RPCData.HEADER_SIZE);
             var id = (RPCMethodId)BitConverter.ToInt16(headerbytes, 0);
             var csize = BitConverter.ToInt32(headerbytes, 2);
+            //Util.AddLog($"[RPCTypes] ヘッダ受信: {id}, サイズ: {csize}", null);
             //Debug.Print("Header: id=" + id + ", size=" + csize);
             object arg = null;
             if (csize > 0)
             {
                 var data = await RPCData.ReadBytes(ns, csize);
+                //Util.AddLog($"[RPCTypes] 本体受信完了: {id}, バイト数: {csize}", null);
                 //Debug.Print("Received: " + System.Text.Encoding.UTF8.GetString(data));
                 arg = Deserialize(RPCTypes.ArgumentTypes[id], data);
             }
@@ -391,7 +394,6 @@ namespace Amatsukaze.Server
 
         public static async Task RefreshRequest(this IEncodeServer server)
         {
-            // 同一NetworkStreamへの並列送信による破損を避けるため逐次送信
             await server.Request(ServerRequest.Setting |
                                  ServerRequest.Queue |
                                  ServerRequest.Log |

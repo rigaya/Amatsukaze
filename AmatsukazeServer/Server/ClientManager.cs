@@ -231,11 +231,14 @@ namespace Amatsukaze.Server
         private async Task Send(RPCMethodId id, object obj)
         {
             byte[] bytes = RPCTypes.Serialize(id, obj);
+            Util.AddLog($"[ClientManager] 送信準備: {id}, バイト数: {bytes.Length}, クライアント数: {ClientList.Count}", null);
             foreach (var client in ClientList.ToArray())
             {
                 try
                 {
+                    Util.AddLog($"[ClientManager] 送信中: {id} -> {client.RemoteIP}", null);
                     await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+                    Util.AddLog($"[ClientManager] 送信完了: {id} -> {client.RemoteIP}", null);
                     client.TotalSendCount++;
                 }
                 catch (Exception)
@@ -250,6 +253,7 @@ namespace Amatsukaze.Server
 
         internal void OnRequestReceived(Client client, RPCMethodId methodId, object arg)
         {
+            Util.AddLog($"[ClientManager] 要求受信: {methodId}, 登録クライアント数: {ClientList.Count}", null);
             switch (methodId)
             {
                 case RPCMethodId.SetProfile:
@@ -315,6 +319,7 @@ namespace Amatsukaze.Server
             {
                 receiveTask.RemoveAt(index);
                 ClientList.RemoveAt(index);
+                Util.AddLog($"[ClientManager] 接続終了: {client.RemoteIP}, 残りクライアント数: {ClientList.Count}", null);
             }
         }
 

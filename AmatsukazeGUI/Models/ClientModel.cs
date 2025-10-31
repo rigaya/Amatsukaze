@@ -61,6 +61,33 @@ namespace Amatsukaze.Models
         private string currentNewProfile;
         private string currentNewAutoSelect;
 
+        private const int ReceiveLogLimit = 5;
+        private readonly Dictionary<string, int> receiveLogCounter = new Dictionary<string, int>();
+
+        private void TraceReceive(string name, string detail = null)
+        {
+            int count = 0;
+            if (receiveLogCounter.TryGetValue(name, out count) == false)
+            {
+                count = 0;
+            }
+            count++;
+            receiveLogCounter[name] = count;
+
+            if (count <= ReceiveLogLimit)
+            {
+                var message = detail == null
+                    ? $"[ClientModel] 受信({name})#{count}"
+                    : $"[ClientModel] 受信({name})#{count}: {detail}";
+                Util.AddLog(message, null);
+
+                if (count == ReceiveLogLimit)
+                {
+                    Util.AddLog($"[ClientModel] 受信({name})ログはここまで（以降省略）", null);
+                }
+            }
+        }
+
         public ServerInfo ServerInfo {
             get { return serverInfo; }
         }
@@ -1373,6 +1400,11 @@ namespace Amatsukaze.Models
 
         public Task OnUIData(UIData data)
         {
+            TraceReceive(
+                "UIData",
+                data == null
+                    ? "null"
+                    : $"StateChange={data.StateChangeEvent?.ToString() ?? "none"}, QueueItems={data.QueueData?.Items?.Count ?? 0}, LogItems={data.LogData?.Items?.Count ?? 0}, ConsoleLines={data.ConsoleData?.text?.Count ?? 0}");
             if (data.State != null)
             {
                 IsPaused = data.State.Pause;
@@ -1509,6 +1541,9 @@ namespace Amatsukaze.Models
 
         public Task OnCommonData(CommonData data)
         {
+            TraceReceive(
+                "CommonData",
+                data == null ? "null" : $"Setting={(data.Setting != null ? "yes" : "no")}, JlsFiles={data.JlsCommandFiles?.Count ?? 0}, Disks={data.Disks?.Count ?? 0}");
             if(data.Setting != null)
             {
                 Setting = new DisplaySetting() { Model = data.Setting };
@@ -1651,6 +1686,9 @@ namespace Amatsukaze.Models
 
         public Task OnServiceSetting(ServiceSettingUpdate update)
         {
+            TraceReceive(
+                "ServiceSetting",
+                update == null ? "null" : $"Type={update.Type}, ServiceId={update.ServiceId}");
             if(update.Type == ServiceSettingUpdateType.Clear)
             {
                 _ServiceSettings.Clear();
@@ -1680,6 +1718,7 @@ namespace Amatsukaze.Models
 
         public Task OnLogoData(LogoData logoData)
         {
+            TraceReceive("LogoData", logoData?.FileName);
             var service = _ServiceSettings
                 .FirstOrDefault(s => s.Data.ServiceId == logoData.ServiceId);
             if (service != null)
@@ -1696,6 +1735,9 @@ namespace Amatsukaze.Models
 
         public Task OnDrcsData(DrcsImageUpdate update)
         {
+            TraceReceive(
+                "DrcsData",
+                update == null ? "null" : $"Type={update.Type}, Image={(update.Image != null ? "1" : "0")}, ListCount={update.ImageList?.Count ?? 0}");
             Action<DrcsImage> procItem = image => {
                 var item = drcsImageList_.FirstOrDefault(s => s.MD5 == image.MD5);
                 if (item == null)
@@ -1746,6 +1788,9 @@ namespace Amatsukaze.Models
 
         public Task OnProfile(ProfileUpdate data)
         {
+            TraceReceive(
+                "Profile",
+                data == null ? "null" : $"Type={data.Type}, Name={data.Profile?.Name ?? data.NewName ?? "(null)"}");
             if(data.Type == UpdateType.Clear)
             {
                 ProfileList.Clear();
@@ -1908,6 +1953,9 @@ namespace Amatsukaze.Models
 
         public Task OnAutoSelect(AutoSelectUpdate data)
         {
+            TraceReceive(
+                "AutoSelect",
+                data == null ? "null" : $"Type={data.Type}, Name={data.Profile?.Name ?? data.NewName ?? "(null)"}");
             if (data.Type == UpdateType.Clear)
             {
                 AutoSelectList.Clear();

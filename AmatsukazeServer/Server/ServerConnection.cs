@@ -26,20 +26,20 @@ namespace Amatsukaze.Server
         {
             if (client != null)
             {
-                Debug.Print($"[ServerConnection] 送信: {id}, データサイズ: {(obj != null ? obj.GetType().Name : "null")}");
+                Util.AddLog($"[ServerConnection] 送信: {id}, データサイズ: {(obj != null ? obj.GetType().Name : "null")}", null);
                 byte[] bytes = RPCTypes.Serialize(id, obj);
                 await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
-                Debug.Print($"[ServerConnection] 送信完了: {id}, バイト数: {bytes.Length}");
+                Util.AddLog($"[ServerConnection] 送信完了: {id}, バイト数: {bytes.Length}", null);
             }
             else
             {
-                Debug.Print($"[ServerConnection] 送信失敗: クライアントが接続されていません ({id})");
+                Util.AddLog($"[ServerConnection] 送信失敗: クライアントが接続されていません ({id})", null);
             }
         }
 
         internal void OnRequestReceived(RPCMethodId methodId, object arg)
         {
-            Debug.Print($"[ServerConnection] 受信: {methodId}, データタイプ: {(arg != null ? arg.GetType().Name : "null")}");
+            Util.AddLog($"[ServerConnection] 受信: {methodId}, データタイプ: {(arg != null ? arg.GetType().Name : "null")}", null);
             switch (methodId)
             {
                 case RPCMethodId.OnUIData:
@@ -175,6 +175,7 @@ namespace Amatsukaze.Server
         private int port;
         private bool finished = false;
         private bool reconnect = false;
+        private int receivedPacketCount = 0;
 
         public EndPoint LocalIP {
             get {
@@ -250,6 +251,7 @@ namespace Amatsukaze.Server
                 Util.AddLog("サーバ(" + serverIp + ":" + port + ")に接続しました", null);
             }
             stream = client.GetStream();
+            receivedPacketCount = 0;
 
             // 接続後一通りデータを要求する
             await this.RefreshRequest();
@@ -307,12 +309,16 @@ namespace Amatsukaze.Server
                         reconnect = false;
                         await Connect();
                     }
+                    Util.AddLog($"[ServerConnection] 受信待機開始 (受信済み:{receivedPacketCount})", null);
                     var rpc = await RPCTypes.Deserialize(stream);
+                    receivedPacketCount++;
+                    Util.AddLog($"[ServerConnection] 受信完了[{receivedPacketCount}]: {rpc.id}", null);
                     OnRequestReceived(rpc.id, rpc.arg);
                     failCount = 0;
                 }
                 catch (Exception e)
                 {
+                    Util.AddLog($"[ServerConnection] 受信処理で例外: {e.GetType().Name}: {e.Message}", e);
                     // 失敗したら一旦閉じる
                     Close();
                     if (finished)
