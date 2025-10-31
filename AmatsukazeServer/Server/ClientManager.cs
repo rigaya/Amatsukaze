@@ -159,8 +159,10 @@ namespace Amatsukaze.Server
                     while (true)
                     {
                         var client = new Client(await listener.AcceptTcpClientAsync(), this);
-                        receiveTask.Add(client.Start());
+                        Util.AddLog($"[ClientManager] 接続受付: {client.RemoteIP}, 現在クライアント数: {ClientList.Count}", null);
                         ClientList.Add(client);
+                        Util.AddLog($"[ClientManager] 接続登録完了: {client.RemoteIP}, 登録後クライアント数: {ClientList.Count}", null);
+                        receiveTask.Add(client.Start());
                         errorCount = 0;
                     }
                 }
