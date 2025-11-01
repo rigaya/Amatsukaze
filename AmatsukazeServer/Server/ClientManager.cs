@@ -233,14 +233,14 @@ namespace Amatsukaze.Server
         private async Task Send(RPCMethodId id, object obj)
         {
             byte[] bytes = RPCTypes.Serialize(id, obj);
-            Util.AddLog($"[ClientManager] 送信準備: {id}, バイト数: {bytes.Length}, クライアント数: {ClientList.Count}", null);
+            //Util.AddLog($"[ClientManager] 送信準備: {id}, バイト数: {bytes.Length}, クライアント数: {ClientList.Count}", null);
             foreach (var client in ClientList.ToArray())
             {
                 try
                 {
-                    Util.AddLog($"[ClientManager] 送信中: {id} -> {client.RemoteIP}", null);
+                    //Util.AddLog($"[ClientManager] 送信中: {id} -> {client.RemoteIP}", null);
                     await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
-                    Util.AddLog($"[ClientManager] 送信完了: {id} -> {client.RemoteIP}", null);
+                    //Util.AddLog($"[ClientManager] 送信完了: {id} -> {client.RemoteIP}", null);
                     client.TotalSendCount++;
                 }
                 catch (Exception)
@@ -295,9 +295,9 @@ namespace Amatsukaze.Server
                     server.EndServer();
                     break;
                 case RPCMethodId.Request:
-                    Debug.Print($"[ClientManager] Request処理開始: {((ServerRequest)arg).ToDebugString()}");
+                    Debug.Print($"[ClientManager] Request処理開始: {((ServerRequest)arg).ToDebugString()}, クライアント数: {ClientList.Count}");
                     server.Request((ServerRequest)arg);
-                    Debug.Print($"[ClientManager] Request処理完了: {((ServerRequest)arg).ToDebugString()}");
+                    Debug.Print($"[ClientManager] Request処理完了: {((ServerRequest)arg).ToDebugString()}, クライアント数: {ClientList.Count}");
                     break;
                 case RPCMethodId.RequestLogFile:
                     server.RequestLogFile((LogFileRequest)arg);
