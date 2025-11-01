@@ -72,10 +72,10 @@
                 <StackPanel Grid.Column="1" Margin="12,2,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition />
-                            <ColumnDefinition />
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" HorizontalAlignment="Left" Width="180" Margin="0,4,8,4" Height="22" SelectedValuePath="Tag" SelectedValue="{Binding Model.ThemePreference, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                        <ComboBox Grid.Column="0" HorizontalAlignment="Stretch" Margin="0,4,8,4" Height="22" MinWidth="140" SelectedValuePath="Tag" SelectedValue="{Binding Model.ThemePreference, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                         <ComboBoxItem Content="自動" Tag="Auto"/>
                         <ComboBoxItem Content="標準" Tag="Standard"/>
                         <ComboBoxItem Content="ライト" Tag="Light"/>
