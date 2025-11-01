@@ -46,7 +46,8 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 - 各出力mp4(mkv)が単一フォーマットになるように必要に応じて分割
 - タイムスタンプを元にAAC音声を無劣化で再構築
 - デュアルモノAACを２つのモノラルAACに無劣化分離
-- 字幕をSRTやASSに変換
+- 字幕をSRT、ASS、VTTに変換
+- Whisperによる文字起こしでSRT字幕を追加
 - ニコニコ実況や2ch実況のコメントをASS字幕として追加（NicoConvAssが必要）
 - 独自Avisynthソースクリップによる安定したチャプター・CM解析
 - ts構造を維持した映像部分のみの圧縮 (tsreplace使用)
@@ -64,7 +65,7 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 - 高ビットフィルタ処理およびエンコード
 - MPEG2ソースの量子化パラメータを使ったノイズリダクション
 - 複数エンコーダの並列実行およびスケジューリング
-- HWエンコードでのファイル分割並列エンコード(--parallel)
+- HWエンコードでのファイル分割並列エンコード(```--parallel```)
 - EDCBからの録画後自動エンコード
 
 ## 使い方
@@ -336,7 +337,7 @@ TSSplitterなどの処理により、TSファイルからこれらの情報を�
 これらの機能は、放送ソースを前提にしたものです。TSファイルが放送ソースでない場合は
 「チャプター・CM解析を無効」にすれば一応使えると思います。
 
-### 字幕
+### ARIB字幕
 
 ARIB字幕では、文字セットに定義されていない文字を、ビットマップ画像で送ってくることがあります。
 これをDRCS外字と言います。画像をSRTやASSに埋め込むのは難しいため、Amatsukzeは通常の文字に変換します。
@@ -353,6 +354,24 @@ SRT字幕はレイアウト情報はなく、文字だけです。ルビなど�
 
 MKVで出力すればSRTとASS両方がMKVファイルに組み込まれます。
 MP4はASSに対応していないためSRTのみが組み込まれ、ASSは別ファイルとして出力されます。
+
+WebVTT字幕を字幕を生成するにチェックを入れると、[b24tovtt](https://github.com/xtne6f/b24tovtt)を使用して、WebVTT形式の字幕を生成します。
+これはTvtPlayなどで読み込み可能です。
+
+別途、[b24tovtt](https://github.com/xtne6f/b24tovtt), [tsreadex](https://github.com/xtne6f/tsreadex), [psisiarc](https://github.com/xtne6f/psisiarc)をダウンロードし、
+[基本設定]タブでパスを指定してください。
+
+### Whisperによる字幕生成
+
+<img src="./data/amatsukaze_20251101_whisper.png" width="552">
+
+字幕モードで「Whisperで生成」を選択することで、音声から文字起こしによりSRT字幕を生成することができます。
+NVIDIA GPUが使用できると高速ですが、CPUでも多少時間はかかりますが現実的な時間で処理可能です。
+
+[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)からFaster-Whisper-XXLをダウンロード・展開したうえで、
+[基本設定]タブでfaster-whisper-xxlのパスを指定してください。
+
+なお、初回実行時にはモデルのダウンロードが行われるため、時間がかかります。
 
 ### VFR（可変フレームレート）
 

@@ -583,7 +583,7 @@
 
                 <!-- 字幕ブロック -->
                 <StackPanel Grid.Row="20" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,20" Text="字幕"/>
+                    <TextBlock HorizontalAlignment="Left" Height="16" Margin="0,10" Text="字幕"/>
                 </StackPanel>
                 <StackPanel Grid.Row="20" Grid.Column="1" Margin="10,0">
                     <CheckBox Height="16" Margin="0,3"  Content="字幕を無効にする"
@@ -599,13 +599,15 @@
                             </Style>
                         </StackPanel.Style>
 
-                        <CheckBox Height="16" Margin="0,3"  Content="WebVTTを生成する"
-                                  IsChecked="{Binding Model.SelectedProfile.EnableWebVTT, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <CheckBox Height="16" Margin="0,3"  Content="WebVTT字幕を生成する"
+                                  IsChecked="{Binding Model.SelectedProfile.EnableWebVTT, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="b24tovttを使用し、WebVTT字幕を生成します。"/>
                         <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
                             <TextBlock Text="字幕モード" VerticalAlignment="Center"/>
                             <ComboBox Margin="8,0,24,0"
                                       ItemsSource="{Binding Model.SelectedProfile.SubtitleModeList}"
-                                      SelectedIndex="{Binding Model.SelectedProfile.SubMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                      SelectedIndex="{Binding Model.SelectedProfile.SubMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="Whisperを使用すると音声からの文字起こしによりSRT字幕を追加できます。"/>
                         </WrapPanel>
                         <Grid x:Name="whisperBlock" Margin="0,6,0,6">
                             <Grid.Style>
@@ -630,12 +632,14 @@
                             <ComboBox Grid.Row="0" Grid.Column="1" Width="220" Margin="8,2,0,0"
                                       VerticalAlignment="Center" HorizontalAlignment="Left"
                                       ItemsSource="{Binding Model.SelectedProfile.WhisperModelList}"
-                                      SelectedIndex="{Binding Model.SelectedProfile.WhisperModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                      SelectedIndex="{Binding Model.SelectedProfile.WhisperModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="Whisperで使用するモデルを選択します。&#xA;自動ではlarge-v3-turboを使用します。&#xA;&#xA;large-v2 ... 遅いですが精度に優れます。&#xA;large-v3-turbo ... 精度と速度のバランスに優れます。" />
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="whisper-option" VerticalAlignment="Center" Margin="0,2,0,0"/>
                             <TextBox Grid.Row="1" Grid.Column="1" Width="320" Margin="8,2,0,0"
                                      VerticalAlignment="Center" HorizontalAlignment="Left"
-                                     Text="{Binding Model.SelectedProfile.WhisperOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                     Text="{Binding Model.SelectedProfile.WhisperOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Whisperで使用する追加オプションを指定します。&#xA;例: --language ja"/>
                         </Grid>
                     </StackPanel>
                 </StackPanel>
