@@ -30,6 +30,7 @@ amatsukaze_sources = [
   'StreamReform.cpp',
   'StreamUtils.cpp',
   'StringUtils.cpp',
+  'Subtitle.cpp',
   'TranscodeManager.cpp',
   'TranscodeSetting.cpp',
   'TsInfo.cpp',
