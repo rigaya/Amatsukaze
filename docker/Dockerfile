@@ -196,6 +196,7 @@ ARG UBUNTU_NAME=jammy
 ARG ARCH=amd64
 ARG BUILD_MODE=release
 ARG ENABLE_FASTER_WHISPER=0
+ARG ENABLE_VCEENCC=0
 
 # 環境変数の設定
 ENV DEBIAN_FRONTEND=noninteractive
@@ -226,30 +227,35 @@ RUN apt-get update && apt-get install -y \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${UBUNTU_NAME} unified" \
       | tee /etc/apt/sources.list.d/intel-gpu-${UBUNTU_NAME}.list \
-    && curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr/share/keyrings/rocm-keyring.gpg \
-    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/amdgpu/5.7.1/ubuntu/ jammy main' > /etc/apt/sources.list.d/amdgpu.list \
-    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/amdgpu/5.7.1/ubuntu/ jammy proprietary' > /etc/apt/sources.list.d/amdgpu-proprietary.list \
-    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/rocm/apt/5.7.1 jammy main' > /etc/apt/sources.list.d/rocm.list \
-    && apt-get update && apt-get upgrade -y \
-    ca-certificates \
-    gosu \
-    git \
-    xz-utils \
-    locales \
-    openssl \
-    zlib1g \
-    mkvtoolnix \
-    opus-tools \
-    intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-opencl-dev \
+    && if [ "$ENABLE_VCEENCC" = "1" ]; then \
+        curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr/share/keyrings/rocm-keyring.gpg \
+        && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/amdgpu/5.7.1/ubuntu/ jammy main' > /etc/apt/sources.list.d/amdgpu.list \
+        && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/amdgpu/5.7.1/ubuntu/ jammy proprietary' > /etc/apt/sources.list.d/amdgpu-proprietary.list \
+        && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/rocm-keyring.gpg] https://repo.radeon.com/rocm/apt/5.7.1 jammy main' > /etc/apt/sources.list.d/rocm.list; \
+    fi \
+    && apt-get update \
+    && apt-get install -y \
+        ca-certificates \
+        gosu \
+        git \
+        xz-utils \
+        locales \
+        openssl \
+        zlib1g \
+        mkvtoolnix \
+        opus-tools \
+        intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-opencl-dev \
     && wget https://github.com/rigaya/QSVEnc/releases/download/${QSVENCC_VER}/qsvencc_${QSVENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O qsvencc.deb \
         && apt-get install -y ./qsvencc.deb \
         && rm ./qsvencc.deb \
     && wget https://github.com/rigaya/NVEnc/releases/download/${NVENCC_VER}/nvencc_${NVENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O nvencc.deb \
         && apt-get install -y ./nvencc.deb \
         && rm ./nvencc.deb \
-    && wget https://github.com/rigaya/VCEEnc/releases/download/${VCEENCC_VER}/vceencc_${VCEENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O vceencc.deb \
+    && if [ "$ENABLE_VCEENCC" = "1" ]; then \
+        wget https://github.com/rigaya/VCEEnc/releases/download/${VCEENCC_VER}/vceencc_${VCEENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O vceencc.deb \
         && apt-get install -y ./vceencc.deb \
-        && rm ./vceencc.deb \
+        && rm ./vceencc.deb; \
+    fi \
     && wget https://github.com/rigaya/tsreplace/releases/download/${TSREPLACE_VER}/tsreplace_${TSREPLACE_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O tsreplace.deb \
         && apt-get install -y ./tsreplace.deb \
         && rm ./tsreplace.deb \
@@ -336,10 +342,10 @@ RUN curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
         && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi
 
 # for debug
-#COPY Amatsukaze_Ubuntu22.04_r845.tar.xz /app
-#RUN tar -xJf Amatsukaze_Ubuntu22.04_r845.tar.xz -C /app \
+#COPY Amatsukaze_Ubuntu22.04_r926.tar.xz /app
+#RUN tar -xJf /app/Amatsukaze_Ubuntu22.04_r926.tar.xz -C /app \
 #    && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi \
-#    && rm Amatsukaze_Ubuntu22.04_r845.tar.xz
+#    && rm /app/Amatsukaze_Ubuntu22.04_r926.tar.xz
 
 # デバッグ用のシェルスクリプトを作成（デバッグモードの場合のみ）
 RUN if [ "$BUILD_MODE" = "debug" ]; then \
