@@ -5,7 +5,6 @@ common_sources = [
   'rgy_env.cpp',
   'rgy_filesystem.cpp',
   'rgy_codepage.cpp',
-  'rgy_language.cpp',
   'rgy_memmem.cpp',
   'rgy_pipe.cpp',
   'rgy_pipe_linux.cpp',

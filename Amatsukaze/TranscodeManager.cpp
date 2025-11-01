@@ -12,7 +12,6 @@
 #include "AdtsParser.h"
 #include "PacketCache.h"
 #include "rgy_pipe.h"
-#include "rgy_language.h"
 #include "Subtitle.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
@@ -744,7 +743,7 @@ void DoBadThing() {
         }
     }
 
-    std::vector<std::pair<tstring, std::string>> audioFiles; // 音声ファイルとその言語コード(ISO-639)
+    std::vector<tstring> audioFiles; // 音声ファイルとその言語コード(ISO-639)
     if (setting.isEncodeAudio()) {
         ctx.info("[音声エンコード]");
         for (int i = 0; i < (int)keys.size(); i++) {
@@ -759,7 +758,7 @@ void DoBadThing() {
             auto format = reformInfo.getFormat(key);
             auto audioFrames = reformInfo.getWaveInput(reformInfo.getEncodeFile(key).audioFrames[0]);
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
-            audioFiles.push_back(std::make_pair(outpath, format.audioFormat[0].language));
+            audioFiles.push_back(outpath);
         }
     } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreplaceの場合は音声ファイルを作らない
         ctx.info("[音声出力]");
@@ -783,8 +782,8 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             splitter.inputPacket(audioCache[frameIndex]);
                         }
-                        audioFiles.push_back(std::make_pair(filepath0, fmt.audioFormat[asrc].language));
-                        audioFiles.push_back(std::make_pair(filepath1, std::string()));
+                        audioFiles.push_back(filepath0);
+                        audioFiles.push_back(filepath1);
                     } else {
                         if (isDualMono) {
                             ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
@@ -794,7 +793,7 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             file.write(audioCache[frameIndex]);
                         }
-                        audioFiles.push_back(std::make_pair(filepath, fmt.audioFormat[asrc].language));
+                        audioFiles.push_back(filepath);
                     }
                 }
             }
@@ -857,19 +856,7 @@ void DoBadThing() {
                 const bool shouldRun = (!fallbackOnly) || (fallbackOnly && !haveArib);
                 if (shouldRun) {
                     for (int aindex = 0; aindex < (int)audioFiles.size(); aindex++) {
-                        const tstring& aPath = audioFiles[aindex].first;
-                        const std::string& lang3 = audioFiles[aindex].second;
-                        // 音声トラックごとの言語コードを2文字コードに変換できた場合は --language を付与
-                        tstring perOpt = extraOpt;
-                        if (!lang3.empty()) {
-                            const std::string lang2 = rgy_lang_2letter_6391(lang3);
-                            if (!lang2.empty()) {
-                                if (perOpt.size() > 0) perOpt += _T(" ");
-                                perOpt += _T("--language ");
-                                perOpt += char_to_tstring(lang2);
-                            }
-                        }
-                        whisperGen.runWhisper(whisper, aPath, wdir, perOpt, true);
+                        whisperGen.runWhisper(whisper, audioFiles[aindex], wdir, extraOpt, true);
                         const auto srtPath = setting.getTmpWhisperSrtPath(key, aindex);
                         const auto vttPath = setting.getTmpWhisperVttPath(key, aindex);
                         // 空ファイルになっていたら削除する
