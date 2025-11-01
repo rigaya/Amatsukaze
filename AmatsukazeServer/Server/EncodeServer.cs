@@ -3534,7 +3534,8 @@ namespace Amatsukaze.Server
                         MacAddress = ClientManager?.GetMacAddress(),
                         Version = Version,
                         Platform = Environment.OSVersion.Platform.ToString(),
-                        CharSet = Util.AmatsukazeDefaultEncoding.CodePage
+                        CharSet = Util.AmatsukazeDefaultEncoding.CodePage,
+                        LogicalProcessorCount = Environment.ProcessorCount
                     },
                     AddQueueBatFiles = AddQueueBatFiles,
                     PreBatFiles = PreBatFiles,

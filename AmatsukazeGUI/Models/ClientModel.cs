@@ -677,6 +677,10 @@ namespace Amatsukaze.Models
         {
             get
             {
+                if (serverInfo?.LogicalProcessorCount > 0)
+                {
+                    return serverInfo.LogicalProcessorCount;
+                }
                 const int coreIndex = (int)ProcessGroupKind.Core;
                 if (CpuClusters != null && CpuClusters.Count > coreIndex && CpuClusters[coreIndex] > 0)
                 {
@@ -1618,6 +1622,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("ServerVersion");
                 RaisePropertyChanged("IsServerLinux");
                 RaisePropertyChanged("FinishActionList");
+                RaisePropertyChanged(nameof(ServerCpuCoreCount));
                 _Setting.IsServerLinux = IsServerLinux;
             }
             if (data.AddQueueBatFiles != null)

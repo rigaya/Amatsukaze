@@ -1418,6 +1418,8 @@ namespace Amatsukaze.Server
         public string Platform { get; set; }
         [DataMember]
         public int CharSet { get; set; }
+        [DataMember]
+        public int LogicalProcessorCount { get; set; }
     }
 
     [DataContract]
