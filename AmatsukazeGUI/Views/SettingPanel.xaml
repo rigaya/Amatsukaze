@@ -141,7 +141,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="tsreadexパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="b24tovttパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="psisiarcパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="whisperパス"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="Whisperパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="NicoConvASSパス">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
