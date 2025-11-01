@@ -673,7 +673,7 @@
                               IsChecked="{Binding Model.SelectedProfile.NoDelogo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="並列ロゴ解析" 
                               IsChecked="{Binding Model.SelectedProfile.ParallelLogoAnalysis, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              ToolTip="ロゴ解析を並列で行い高速化します。並列数は[基本設定]タブで設定可能です。"/>
+                              ToolTip="ロゴ解析を並列で行い高速化します。最大スレッド数は[基本設定]タブで設定可能です。"/>
                     <CheckBox Height="16" Margin="0,3"  Content="システムにインストールされているAviSynthプラグインを有効にする" 
                               IsChecked="{Binding Model.SelectedProfile.SystemAviSynthPlugin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="ログファイルを出力先に生成しない"

@@ -480,7 +480,7 @@
                     <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="エンコード最大並列数"/>
                 </StackPanel>
                 <StackPanel Grid.Row="10" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="ロゴ解析並列数"/>
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="ロゴ解析最大スレッド数"/>
                 </StackPanel>
                 <StackPanel Grid.Row="11" Grid.Column="0">
                     <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="プロセス優先度"/>
