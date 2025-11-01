@@ -5,6 +5,8 @@ services:
         build:
           context: ./
           dockerfile: Dockerfile
+          args:
+            ENABLE_FASTER_WHISPER: "0"  # Faster-Whisper-XXLを含める場合は "1" に変更
         restart: always
         ports:
           - "32768:32768"

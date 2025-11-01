@@ -195,6 +195,7 @@ ARG UBUNTU_VERSION=22.04
 ARG UBUNTU_NAME=jammy
 ARG ARCH=amd64
 ARG BUILD_MODE=release
+ARG ENABLE_FASTER_WHISPER=0
 
 # 環境変数の設定
 ENV DEBIAN_FRONTEND=noninteractive
@@ -213,6 +214,7 @@ ENV VCEENCC_VER=9.01
 ENV TSREPLACE_VER=0.16
 ENV AVISYNTHCUDAFILTERS_VER=0.7.3
 ENV AVISYNTH_VER=3.7.5
+ENV FASTER_WHISPER_VER=r245.4
 
 # 実行に必要なパッケージのみインストール（デバッグモードの場合はビルドツールも含める）
 RUN apt-get update && apt-get install -y \
@@ -220,6 +222,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     software-properties-common \
+    p7zip-full \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${UBUNTU_NAME} unified" \
       | tee /etc/apt/sources.list.d/intel-gpu-${UBUNTU_NAME}.list \
@@ -289,6 +292,14 @@ RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISY
     && wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynthcudafilters_${AVISYNTHCUDAFILTERS_VER}-1_${ARCH}_Ubuntu${UBUNTU_VERSION}.deb -O avisynthcudafilters.deb \
     && apt-get install -y ./avisynthcudafilters.deb \
     && rm ./avisynthcudafilters.deb
+
+RUN if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
+        wget https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_${FASTER_WHISPER_VER}_linux.7z -O faster-whisper.7z \
+        && mkdir -p /app/exe_files \
+        && 7z x faster-whisper.7z -o/app/exe_files/ \
+        && chmod u+x /app/exe_files/Faster-Whisper-XXL/faster-whisper-xxl \
+        && rm faster-whisper.7z; \
+    fi
 
 # ライブラリパスの設定
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
