@@ -1169,10 +1169,10 @@ namespace Amatsukaze.Server
             }
             if (string.IsNullOrEmpty(setting.WhisperPath))
             {
-                setting.WhisperPath = GetExePath(basePath, "faster-whisper");
+                setting.WhisperPath = GetExePath(basePath, "faster-whisper", true);
                 if (string.IsNullOrEmpty(setting.WhisperPath))
                 {
-                    setting.WhisperPath = GetExePath(basePath, "whisper");
+                    setting.WhisperPath = GetExePath(basePath, "whisper", true);
                 }
             }
             if (string.IsNullOrEmpty(setting.TsReplacePath))
