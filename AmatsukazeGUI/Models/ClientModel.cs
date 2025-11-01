@@ -20,6 +20,7 @@ using System.Windows.Shell;
 using System.Text.Json;
 using Microsoft.Win32;
 using System.Windows.Media;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Models
 {
@@ -652,12 +653,13 @@ namespace Amatsukaze.Models
 
         public List<int> CpuClusters {
             get { return _AffinityClusters; }
-            set { 
+            set {
                 if (_AffinityClusters == value)
                     return;
                 _AffinityClusters = value;
                 RaisePropertyChanged();
                 RaisePropertyChanged("CurrentClusters");
+                RaisePropertyChanged(nameof(ServerCpuCoreCount));
             }
         }
 
@@ -671,10 +673,15 @@ namespace Amatsukaze.Models
             }
         }
 
-        public int CpuCoreCount
+        public int ServerCpuCoreCount
         {
             get
             {
+                const int coreIndex = (int)ProcessGroupKind.Core;
+                if (CpuClusters != null && CpuClusters.Count > coreIndex && CpuClusters[coreIndex] > 0)
+                {
+                    return CpuClusters[coreIndex];
+                }
                 return Math.Max(1, Environment.ProcessorCount);
             }
         }

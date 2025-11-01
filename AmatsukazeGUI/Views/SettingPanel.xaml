@@ -512,7 +512,7 @@
                                    Visibility="{Binding Model.Setting.IsNumParallelLogoAnalysisManual, Mode=OneWay, Converter={StaticResource VisibilityAndBooleanConverter}}"
                                    Text="{Binding Model.Setting.NumParallelLogoAnalysisValue}"/>
                         <Slider Margin="8,4,2,4" Height="26" SmallChange="1" Minimum="1"
-                                Maximum="{Binding Model.CpuCoreCount, Mode=OneWay, FallbackValue=1}"
+                                Maximum="{Binding Model.ServerCpuCoreCount, Mode=OneWay, FallbackValue=1}"
                                 Value="{Binding Model.Setting.NumParallelLogoAnalysisValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 IsEnabled="{Binding Model.Setting.IsNumParallelLogoAnalysisManual, Mode=OneWay}"
                                 Visibility="{Binding Model.Setting.IsNumParallelLogoAnalysisManual, Mode=OneWay, Converter={StaticResource VisibilityAndBooleanConverter}}"
