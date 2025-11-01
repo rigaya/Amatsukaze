@@ -251,11 +251,12 @@ std::string CMAnalyze::makePreamble() {
 int CMAnalyze::getPreferredThreads(const int processorCount) const {
     static const int MAX_THREADS = 15;
     std::array<std::pair<int, int>, MAX_THREADS+1> tmp;
-    for (int i = 0; i <= MAX_THREADS; i++) {
+    tmp[0] = std::make_pair(0, std::numeric_limits<int>::max()); // 0並列は無視
+    for (int i = 1; i <= MAX_THREADS; i++) {
         const int decodeThreads = processorCount / i;
         tmp[i] = std::make_pair(i, 
-            (processorCount - decodeThreads /*割り切れない余り*/) +
-            std::max(0, decodeThreads - 8 /*デコードスレッドが多くてもあまり意味がない*/));
+            (processorCount % i /*割り切れない余り*/) +
+            std::max(0, decodeThreads - 4 /*デコードスレッドが多くてもあまり意味がない*/));
     }
     std::sort(tmp.begin(), tmp.end(), [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
         const int bestThreads = 8;
@@ -285,7 +286,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     const int preferredThreads = (setting_.isParallelLogoAnalysis()) ? getPreferredThreads(processorCount) : 1;
     const int minFramesPerThread = 600;
     const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
-    const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 4 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
+    const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 8 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
     if (totalThreads > 1) {
         ctx.infoF("並列ロゴ解析 %d並列 x デコード%dスレッド", totalThreads, decodeThreads);
     }
