@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Amatsukaze.Server
@@ -37,6 +38,7 @@ namespace Amatsukaze.Server
 
         private PipeCommunicator pipes = new PipeCommunicator();
         private NormalProcess process;
+        private CancellationTokenSource exclusiveWaitCts;
 
         private string PhaseString {
             get {
@@ -450,46 +452,88 @@ namespace Amatsukaze.Server
 
         public async Task Execute()
         {
-            var cmd = Util.IsServerWindows() ? "cmd.exe" : "sh";
-            var cmd_opt = Util.IsServerWindows() ? "/C" : "-c";
-            var psi = new ProcessStartInfo(cmd, cmd_opt + " \"" + ScriptPath + "\"")
+            SemaphoreSlim exclusiveSemaphore = null;
+            bool exclusiveLockAcquired = false;
+            try
             {
-                UseShellExecute = false,
-                WorkingDirectory = Directory.GetCurrentDirectory(),
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                RedirectStandardInput = false,
-                StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
-                StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
-                CreateNoWindow = true
-            };
+                exclusiveSemaphore = Server?.GetScriptSemaphore(Phase);
+                if (exclusiveSemaphore != null)
+                {
+                    exclusiveWaitCts = new CancellationTokenSource();
+                    try
+                    {
+                        Debug.Print($"[UserScriptExecuter] Exclusive wait開始({PhaseString}): '{ScriptPath}'");
+                        await exclusiveSemaphore.WaitAsync(exclusiveWaitCts.Token).ConfigureAwait(false);
+                        exclusiveLockAcquired = true;
+                        Debug.Print($"[UserScriptExecuter] Exclusive lock取得({PhaseString}): '{ScriptPath}'");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Debug.Print($"[UserScriptExecuter] Exclusive waitキャンセル({PhaseString}): '{ScriptPath}'");
+                        return;
+                    }
+                }
 
-            // exe_filesをパスに追加
-            var exeDir = AppContext.BaseDirectory;
+                var cmd = Util.IsServerWindows() ? "cmd.exe" : "sh";
+                var cmd_opt = Util.IsServerWindows() ? "/C" : "-c";
+                var psi = new ProcessStartInfo(cmd, cmd_opt + " \"" + ScriptPath + "\"")
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = Directory.GetCurrentDirectory(),
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardInput = false,
+                    StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
+                    StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
+                    CreateNoWindow = true
+                };
 
-            // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
-            var envPathDelim = Util.IsServerWindows() ? ";" : ":";
-            psi.EnvironmentVariables["PATH"] =
-                exeDir + envPathDelim + Path.Combine(exeDir, "cmd") + envPathDelim + psi.EnvironmentVariables["PATH"];
+                // exe_filesをパスに追加
+                var exeDir = AppContext.BaseDirectory;
 
-            // パラメータを環境変数に追加
-            SetupEnv(psi.EnvironmentVariables);
+                // Specialized.StringDictionaryのkeyはcase insensitiveであることに注意
+                var envPathDelim = Util.IsServerWindows() ? ";" : ":";
+                psi.EnvironmentVariables["PATH"] =
+                    exeDir + envPathDelim + Path.Combine(exeDir, "cmd") + envPathDelim + psi.EnvironmentVariables["PATH"];
 
-            using (process = new NormalProcess(psi)
+                // パラメータを環境変数に追加
+                SetupEnv(psi.EnvironmentVariables);
+
+                using (process = new NormalProcess(psi)
+                {
+                    OnOutput = OnOutput
+                })
+                {
+                    pipes.DisposeLocalCopyOfClientHandle();
+
+                    await Task.WhenAll(
+                        process.WaitForExitAsync(),
+                        RunCommandHost()).ConfigureAwait(false);
+                }
+            }
+            finally
             {
-                OnOutput = OnOutput
-            })
-            {
-                pipes.DisposeLocalCopyOfClientHandle();
-
-                await Task.WhenAll(
-                    process.WaitForExitAsync(),
-                    RunCommandHost());
+                if (exclusiveLockAcquired && exclusiveSemaphore != null)
+                {
+                    exclusiveSemaphore.Release();
+                    Debug.Print($"[UserScriptExecuter] Exclusive lock解放({PhaseString}): '{ScriptPath}'");
+                }
+                exclusiveWaitCts?.Dispose();
+                exclusiveWaitCts = null;
+                process = null;
             }
         }
 
         public void Canel()
         {
+            try
+            {
+                exclusiveWaitCts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 既に完了している場合は無視
+            }
             process?.Canel();
         }
 

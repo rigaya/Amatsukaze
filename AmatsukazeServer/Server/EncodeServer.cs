@@ -9,6 +9,7 @@ using System.Net;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -59,6 +60,8 @@ namespace Amatsukaze.Server
 
         private FinishActionRunner finishActionRunner;
         private BatchFileRunner batchFileRunner;
+        private readonly SemaphoreSlim addScriptSemaphore = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim encodeScriptSemaphore = new SemaphoreSlim(1, 1);
 
         private LogData logData = new LogData() { Items = new List<LogItem>() };
         private CheckLogData checkLogData = new CheckLogData() { Items = new List<CheckLogItem>() };
@@ -80,6 +83,16 @@ namespace Amatsukaze.Server
 
         private UIState UIState_ = new UIState() { OutputPathHistory = new List<string>() };
         private OrderedSet<string> OutPathHistory = new OrderedSet<string>();
+
+        internal SemaphoreSlim GetScriptSemaphore(ScriptPhase phase)
+        {
+            if (!(AppData_?.setting?.ExclusiveBatExec ?? false))
+            {
+                return null;
+            }
+
+            return phase == ScriptPhase.OnAdd ? addScriptSemaphore : encodeScriptSemaphore;
+        }
 
         // キューに追加されるTSを解析するスレッド
         private Task queueThread;
@@ -582,6 +595,9 @@ namespace Amatsukaze.Server
                         finishActionRunner.Canceled = true;
                         finishActionRunner = null;
                     }
+
+                    addScriptSemaphore.Dispose();
+                    encodeScriptSemaphore.Dispose();
 
                     queueQ.Complete();
                     watchFileQ.Complete();
@@ -2110,6 +2126,10 @@ namespace Amatsukaze.Server
                 if (string.IsNullOrEmpty(trimavs) == false)
                 {
                     sb.Append(" --trimavs \"").Append(trimavs).Append("\"");
+                }
+                if (AppData_.setting.ExclusiveBatExec)
+                {
+                    sb.Append(" --exclusive-bat-exec");
                 }
                 if (string.IsNullOrEmpty(profile.PreEncodeBatchFile) == false)
                 {

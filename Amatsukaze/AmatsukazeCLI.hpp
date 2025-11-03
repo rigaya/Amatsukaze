@@ -492,6 +492,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             } else {
                 THROWF(ArgumentException, "--print-prefixの指定が間違っています");
             }
+        } else if (key == _T("--exclusive-bat-exec")) {
+            conf.exclusiveBatExec = true;
         } else if (key == _T("--pre-enc-bat")) {
             conf.preEncBatchFile = pathNormalize(getParam(argc, argv, i++));
         } else if (key.size() == 0) {

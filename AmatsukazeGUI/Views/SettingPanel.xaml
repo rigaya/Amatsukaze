@@ -59,6 +59,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <StackPanel>
@@ -489,10 +490,13 @@
                     <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text="CPUアフィニティ"/>
                 </StackPanel>
                 <StackPanel Grid.Row="13" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text=""/>
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Top" Margin="0,4,0,0" Text="スケジューリング"/>
                 </StackPanel>
                 <StackPanel Grid.Row="14" Grid.Column="0">
-                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Top" Margin="0,4,0,0" Text="スケジューリング"/>
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text=""/>
+                </StackPanel>
+                <StackPanel Grid.Row="15" Grid.Column="0">
+                    <TextBlock HorizontalAlignment="Right" Height="22" VerticalAlignment="Center" Margin="0,4" Text=""/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="9" Grid.Column="1">
@@ -553,11 +557,16 @@
                     </DockPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="13" Grid.Column="1">
+                    <CheckBox Height="22" Margin="10,5,0,0" Content="各バッチファイルを並列実行しない"
+                              IsChecked="{Binding Model.Setting.ExclusiveBatExec, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="実行前、エンコード前、実行後のバッチファイルを並列実行しないようにします。&#xA;(同時にひとつずつしか実行されなくなります)"/>
+                </StackPanel>
+                <StackPanel Grid.Row="14" Grid.Column="1">
 
                     <CheckBox  Height="22" Margin="10,5,0,0"  Content="リソーススケジューリングを有効にする" IsChecked="{Binding Model.Setting.SchedulingEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="エンコードフェーズごとにCPU,HDD,GPUの各資源の使用量を考慮したスケジューリングを行います。&#xA;プロファイル設定で使用リソースを設定する必要があります。" />
 
                 </StackPanel>
-                <StackPanel Grid.Row="14" Grid.Column="1">
+                <StackPanel Grid.Row="15" Grid.Column="1">
                     <DockPanel   Margin="12,0,0,0">
                         <DockPanel DockPanel.Dock="Top" IsEnabled="{Binding Model.Setting.SchedulingEnabled}">
                             <TextBlock Text="GPU数:" VerticalAlignment="Center"/>
@@ -590,8 +599,8 @@
                 </StackPanel>
 
 
-                <TextBlock Grid.Row="15" Grid.Column="0" Text="稼働時間設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                <StackPanel Grid.Row="15" Grid.Column="1" Margin="10,10,0,0">
+                <TextBlock Grid.Row="16" Grid.Column="0" Text="稼働時間設定" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="16" Grid.Column="1" Margin="10,10,0,0">
                     <CheckBox  Margin="0,4" Height="16"  Content="稼働時間設定を有効にする"
                                IsChecked="{Binding Model.Setting.EnableRunHours, Mode=TwoWay}"/>
                     <DockPanel>
@@ -626,8 +635,8 @@
                     </DockPanel>
                 </StackPanel>
                 <!-- Setting console font -->
-                <TextBlock Grid.Row="16" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                <DockPanel Grid.Row="16" Grid.Column="1" Margin="10,0,0,0">
+                <TextBlock Grid.Row="17" Grid.Column="0" Text="コンソールフォント" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <DockPanel Grid.Row="17" Grid.Column="1" Margin="10,0,0,0">
                     <StackPanel DockPanel.Dock="Right">
                         <Button Height="16" Content="クリア" Margin="4" Command="{Binding ClearFontFamilyCommand}"/>
                     </StackPanel>

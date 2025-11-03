@@ -45,6 +45,7 @@
     <ClInclude Include="rgy_event.h" />
     <ClInclude Include="rgy_filesystem.h" />
     <ClInclude Include="rgy_memmem.h" />
+    <ClInclude Include="rgy_mutex.h" />
     <ClInclude Include="rgy_osdep.h" />
     <ClInclude Include="rgy_pipe.h" />
     <ClInclude Include="rgy_simd.h" />
@@ -101,6 +102,7 @@
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AdvancedVectorExtensions512</EnableEnhancedInstructionSet>
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release2|x64'">AdvancedVectorExtensions512</EnableEnhancedInstructionSet>
     </ClCompile>
+    <ClCompile Include="rgy_mutex.cpp" />
     <ClCompile Include="rgy_pipe.cpp" />
     <ClCompile Include="rgy_pipe_linux.cpp" />
     <ClCompile Include="rgy_simd.cpp" />

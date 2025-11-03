@@ -651,6 +651,10 @@ tstring ConfigWrapper::getAudioEncoderOptions() const {
     return conf.audioEncoderOptions;
 }
 
+bool ConfigWrapper::isExclusiveBatExec() const {
+    return conf.exclusiveBatExec;
+}
+
 tstring ConfigWrapper::getPreEncBatchFile() const {
     return conf.preEncBatchFile;
 }

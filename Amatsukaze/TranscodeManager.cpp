@@ -12,6 +12,7 @@
 #include "AdtsParser.h"
 #include "PacketCache.h"
 #include "rgy_pipe.h"
+#include "rgy_mutex.h"
 #include "Subtitle.h"
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
@@ -890,8 +891,15 @@ void DoBadThing() {
         if (!setting.getPreEncBatchFile().empty()) {
             ctx.infoF("[エンコード前バッチファイル] %d/%d", i + 1, (int)keys.size());
             ctx.infoF("%s", setting.getPreEncBatchFile().c_str());
-            if (executeBatchFile(setting.getPreEncBatchFile(), filterSource.getFormat(), setting, key, serviceId)) {
-                THROW(RuntimeException, "エンコード前バッチファイルの実行に失敗しました");
+            std::unique_ptr<RGYMutex> mutexOpt;
+            if (setting.isExclusiveBatExec()) {
+                mutexOpt = std::make_unique<RGYMutex>("AmatsukazeCLIPreEncodeBatMutex");
+            }
+            {
+                std::unique_ptr<RGYMutex::Guard> guard = (mutexOpt ? std::make_unique<RGYMutex::Guard>(*mutexOpt) : nullptr);
+                if (executeBatchFile(setting.getPreEncBatchFile(), filterSource.getFormat(), setting, key, serviceId)) {
+                    THROW(RuntimeException, "エンコード前バッチファイルの実行に失敗しました");
+                }
             }
         }
 

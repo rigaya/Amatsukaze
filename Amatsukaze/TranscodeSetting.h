@@ -216,6 +216,7 @@ struct Config {
     SUBTITLE_MODE subtitleMode;
     tstring nicoConvAssPath;
     tstring nicoConvChSidPath;
+    bool exclusiveBatExec;
     tstring preEncBatchFile;
     ENUM_FORMAT format;
     bool tsreplaceRemoveTypeD;
@@ -311,6 +312,8 @@ public:
     tstring getAudioEncoderPath() const;
 
     tstring getAudioEncoderOptions() const;
+
+    bool isExclusiveBatExec() const;
 
     tstring getPreEncBatchFile() const;
 

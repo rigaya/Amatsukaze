@@ -3754,6 +3754,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region ExclusiveBatExec変更通知プロパティ
+        public bool ExclusiveBatExec
+        {
+            get { return Model.ExclusiveBatExec; }
+            set
+            {
+                if (Model.ExclusiveBatExec == value)
+                    return;
+                Model.ExclusiveBatExec = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region ExecuteBatchAfterQueue変更通知プロパティ
         public bool ExecuteBatchAfterQueue
         {

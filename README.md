@@ -644,7 +644,7 @@ BatchHashChecker.exeで出力mp4(or mkv)ファイルのハッシュチェック�
 - VFRな入力（ワンセグなど）には対応していません
 （VFR出力には対応しています。）
 - 「通常」出力でVCEEncを使用した場合、CMビットレート倍率は適用されません
-（x264,x265はzoneオプションで、QSVEnc,NVEncは--dynamic-rcで適用します）
+（x264,x265は```--zone```オプションで、QSVEnc,NVEncは```--dynamic-rc```で適用します）
 - HEVCはインタレ保持に対応していないので、
 インタレ解除しないでHEVCを使おうとするとエラーになります。
 
@@ -682,14 +682,31 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 - [LSMASH Works](https://github.com/VFR-maniac/L-SMASH-Works)
 - [QTGMC](http://avisynth.nl/index.php/QTGMC)
 - [RgTools](https://github.com/pinterf/RgTools)
-- [NNEDI3](https://github.com/jpsdr/NNEDI3)
+- [NNEDI3](https://github.com/rigaya/NNEDI3)
 - [mvtools](https://github.com/pinterf/mvtools)
-- [masktools](https://github.com/pinterf/masktools)
+- [masktools](https://github.com/rigaya/masktools)
 - [AvsCUDA,KTGMC,KNNEDI3,KFM](https://github.com/rigaya/AviSynthCUDAFilters)
 - [SMDegrain](http://avisynth.nl/index.php/SMDegrain)
 - [D3DVP](https://github.com/nekopanda/D3DVP)
 
 Amatsukazeと同梱&依存ライブラリはすべて64bitに統一されています。
+
+## オプションのアプリケーション
+
+- [QSVEnc](https://github.com/rigaya/QSVEnc)
+- [NVEnc](https://github.com/rigaya/NVEnc)
+- [VCEEnc](https://github.com/rigaya/VCEEnc)
+- [tsreadex](https://github.com/xtne6f/tsreadex)
+- [b24tovtt](https://github.com/xtne6f/b24tovtt)
+- [psisiarc](https://github.com/xtne6f/psisiarc)
+- [Whisper](https://github.com/Purfview/whisper-standalone-win)
+- [tsreplace](https://github.com/rigaya/tsreplace)
+- [tsMuxeR](https://github.com/justdan96/tsMuxer)
+- SCRename/[SCRenamePy](https://github.com/rigaya/SCRenamePy)
+- [neroaacenc](https://www.videohelp.com/software/Nero-AAC-Codec)
+- [qaac](https://github.com/nu774/qaac)
+- [fdkaac](https://github.com/nu774/fdkaac)
+- [opusenc](https://opus-codec.org)
 
 ## ビルド方法
 
