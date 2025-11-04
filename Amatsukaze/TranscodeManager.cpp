@@ -761,7 +761,8 @@ void DoBadThing() {
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
             audioFiles.push_back(outpath);
         }
-    } else if (setting.getFormat() != FORMAT_TSREPLACE) { // tsreplaceの場合は音声ファイルを作らない
+    } else if (setting.getFormat() != FORMAT_TSREPLACE
+        || (setting.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK)) { // tsreplaceの場合は音声ファイルを作らない
         ctx.info("[音声出力]");
         PacketCache audioCache(ctx, setting.getAudioFilePath(), reformInfo.getAudioFileOffsets(), 12, 4);
         for (int i = 0; i < (int)keys.size(); i++) {
@@ -812,10 +813,12 @@ void DoBadThing() {
             auto ass = formatterASS.generate(capList[lang]);
             auto srt = formatterSRT.generate(capList[lang]);
             WriteUTF8File(setting.getTmpASSFilePath(key, lang), ass);
+            ctx.infoF("字幕ファイル出力: %s", setting.getTmpASSFilePath(key, lang).c_str());
             if (srt.size() > 0) {
                 // SRTはCP_STR_SMALLしかなかった場合など出力がない場合があり、
                 // 空ファイルはmux時にエラーになるので、1行もない場合は出力しない
                 WriteUTF8File(setting.getTmpSRTFilePath(key, lang), srt);
+                ctx.infoF("字幕ファイル出力: %s", setting.getTmpSRTFilePath(key, lang).c_str());
             }
         }
         if (nicoOK) {
@@ -838,7 +841,7 @@ void DoBadThing() {
 
         // Whisperによる字幕生成 (モード制御 + 複数音声)
         try {
-            if (setting.getSubtitleMode() != SUBMODE_ARIB) {
+            if (setting.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK) {
                 SubtitleGenerator whisperGen(ctx);
                 const auto& fileIn = reformInfo.getEncodeFile(key);
                 const auto wdir    = setting.getTmpWhisperDir();

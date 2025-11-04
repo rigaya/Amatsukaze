@@ -1180,6 +1180,26 @@ tstring ConfigWrapper::getOutWebVTTPath(EncodeFileKey key, EncodeFileKey keyMax,
     return sb.str();
 }
 
+tstring ConfigWrapper::getOutSrtGenPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx) const {
+    StringBuilderT sb;
+    sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
+    if (langidx > 0) {
+        sb.append(_T("-%d"), langidx);
+    }
+    sb.append(_T("-gen.srt"));
+    return sb.str();
+}
+
+tstring ConfigWrapper::getOutWebVTTGenPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec, int langidx) const {
+    StringBuilderT sb;
+    sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
+    if (langidx > 0) {
+        sb.append(_T("-%d"), langidx);
+    }
+    sb.append(_T("-gen.vtt"));
+    return sb.str();
+}
+
 tstring ConfigWrapper::getOutPSCFilePath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const {
     StringBuilderT sb;
     sb.append(_T("%s"), getOutFileBase(key, keyMax, format, codec));
@@ -1423,9 +1443,11 @@ void ConfigWrapper::dump() const {
     ctx.infoF("字幕: %s", conf.subtitles ? "有効" : "無効");
     if (conf.subtitles) {
         ctx.infoF("WebVTT出力: %s", conf.webvtt ? "有効" : "無効");
-        ctx.infoF("tsreadexパス: %s", conf.tsreadexPath);
-        ctx.infoF("b24tovttパス: %s", conf.b24tovttPath);
-        ctx.infoF("psisiarcパス: %s", conf.psisiarcPath);
+        if (conf.webvtt) {
+            ctx.infoF("tsreadexパス: %s", conf.tsreadexPath);
+            ctx.infoF("b24tovttパス: %s", conf.b24tovttPath);
+            ctx.infoF("psisiarcパス: %s", conf.psisiarcPath);
+        }
         ctx.infoF("DRCSマッピング: %s", conf.drcsMapPath);
     }
     if (conf.serviceId > 0) {

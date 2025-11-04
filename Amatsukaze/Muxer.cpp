@@ -84,7 +84,8 @@ void AMTMuxder::mux(EncodeFileKey key,
     std::vector<tstring> audioFiles;
     if (setting_.isEncodeAudio()) {
         audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
-    } else if (setting_.getFormat() != FORMAT_TSREPLACE) { // tsreaplceの場合は音声ファイルを作らない
+    } else if (setting_.getFormat() != FORMAT_TSREPLACE
+        || (setting_.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting_.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK)) {
         for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); asrc++) {
             const std::vector<int>& frameList = fileIn.audioFrames[asrc];
             if (frameList.size() > 0) {
@@ -137,28 +138,26 @@ void AMTMuxder::mux(EncodeFileKey key,
         }
     }
     // ARIB生成字幕 (ASS/SRT/WebVTT)
-    if (setting_.getSubtitleMode() == SUBMODE_ARIB || setting_.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK) {
-        for (int lang = 0; lang < (int)fileIn.captionList.size(); ++lang) {
-            auto srcass = setting_.getTmpASSFilePath(key, lang);
-            if (muxFormat == FORMAT_MKV) {
-                subsFiles.push_back(srcass);
-                subsTitles.push_back(_T("ASS"));
-            } else { // MP4,M2TSの場合は別ファイルとしてコピー
-                auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang, (NicoJKType)0);
-                File::copy(srcass, dstsub);
-                fileOut.outSubs.push_back(dstsub);
-            }
-            auto srcsrt = setting_.getTmpSRTFilePath(key, lang);
-            if (File::exists(srcsrt)) {
-                subsFiles.push_back(srcsrt);
-                subsTitles.push_back(_T("SRT"));
-            }
-            auto srcwebvtt = setting_.getTmpVTTFilePath(key, lang);
-            if (File::exists(srcwebvtt)) {
-                auto dstwebvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang);
-                File::copy(srcwebvtt, dstwebvtt);
-                fileOut.outSubs.push_back(dstwebvtt);
-            }
+    for (int lang = 0; lang < (int)fileIn.captionList.size(); ++lang) {
+        auto srcass = setting_.getTmpASSFilePath(key, lang);
+        if (muxFormat == FORMAT_MKV) {
+            subsFiles.push_back(srcass);
+            subsTitles.push_back(_T("ASS"));
+        } else { // MP4,M2TSの場合は別ファイルとしてコピー
+            auto dstsub = setting_.getOutASSPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang, (NicoJKType)0);
+            File::copy(srcass, dstsub);
+            fileOut.outSubs.push_back(dstsub);
+        }
+        auto srcsrt = setting_.getTmpSRTFilePath(key, lang);
+        if (File::exists(srcsrt)) {
+            subsFiles.push_back(srcsrt);
+            subsTitles.push_back(_T("SRT"));
+        }
+        auto srcwebvtt = setting_.getTmpVTTFilePath(key, lang);
+        if (File::exists(srcwebvtt)) {
+            auto dstwebvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, lang);
+            File::copy(srcwebvtt, dstwebvtt);
+            fileOut.outSubs.push_back(dstwebvtt);
         }
     }
 
@@ -168,12 +167,18 @@ void AMTMuxder::mux(EncodeFileKey key,
         for (int aindex = 0; aindex < (int)audioFiles.size(); aindex++) {
             auto srcsrt = setting_.getTmpWhisperSrtPath(key, aindex);
             if (File::exists(srcsrt)) {
-                subsFiles.push_back(srcsrt);
-                subsTitles.push_back(_T("SRT"));
+                if (muxFormat == FORMAT_TSREPLACE) {
+                    auto dstsrt = setting_.getOutSrtGenPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, aindex);
+                    File::copy(srcsrt, dstsrt);
+                    fileOut.outSubs.push_back(dstsrt);
+                } else {
+                    subsFiles.push_back(srcsrt);
+                    subsTitles.push_back(_T("SRT"));
+                }
             }
             auto srcvtt = setting_.getTmpWhisperVttPath(key, aindex);
             if (File::exists(srcvtt)) {
-                auto dstvtt = setting_.getOutWebVTTPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, aindex);
+                auto dstvtt = setting_.getOutWebVTTGenPath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format, aindex);
                 File::copy(srcvtt, dstvtt);
                 fileOut.outSubs.push_back(dstvtt);
             }
