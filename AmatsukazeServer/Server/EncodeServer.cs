@@ -1188,7 +1188,7 @@ namespace Amatsukaze.Server
                 setting.WhisperPath = GetExePath(basePath, "faster-whisper", true);
                 if (string.IsNullOrEmpty(setting.WhisperPath))
                 {
-                    setting.WhisperPath = GetExePath(basePath, "whisper", true);
+                    setting.WhisperPath = GetExePath(basePath, "whisper-cli", true);
                 }
             }
             if (string.IsNullOrEmpty(setting.TsReplacePath))

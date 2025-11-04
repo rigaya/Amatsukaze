@@ -20,6 +20,10 @@ public:
     void runWhisper(const tstring& whisperPath,
                     const tstring& audioPath,
                     const tstring& outDir,
+                    const tstring& outFileWithoutExt,
                     const tstring& extraOptions,
                     bool isUtf8Log = true);
 };
+
+
+bool exeIsWhisperCpp(const tstring& whisperPath);

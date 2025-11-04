@@ -14,6 +14,132 @@
 #include "rgy_pipe.h"
 #include "rgy_mutex.h"
 #include "Subtitle.h"
+#include "WaveWriter.h"
+
+namespace {
+
+struct WhisperAudioEntry {
+    int keyIndex;
+    EncodeFileKey key;
+    int localIndex;
+    tstring audioPath;
+    int audioSourceIndex;
+    int dualMonoChannel; // -1: original stereo, 0/1: dual mono channel selection
+};
+
+static tstring createWhisperWaveInput(AMTContext& ctx,
+                                      const ConfigWrapper& setting,
+                                      const StreamReformInfo& reformInfo,
+                                      const WhisperAudioEntry& entry) {
+    const int bytesPerSample = 2;
+    const int srcChannels = 2; // AMTSplitter outputs 16bit stereo PCM for whisper input
+    const int destChannels = (entry.dualMonoChannel >= 0) ? 1 : srcChannels;
+
+    if (entry.audioSourceIndex < 0) {
+        ctx.warn("Whisper入力wav作成: 音声インデックスが不正です");
+        return tstring();
+    }
+
+    const auto& key = entry.key;
+    const auto& fileIn = reformInfo.getEncodeFile(key);
+    if (entry.audioSourceIndex >= (int)fileIn.audioFrames.size()) {
+        ctx.warnF("Whisper入力wav作成: 音声%d-%dで音声インデックス%dが範囲外です", key.video, key.format, entry.audioSourceIndex);
+        return tstring();
+    }
+
+    const auto& frameIndexList = fileIn.audioFrames[entry.audioSourceIndex];
+    if (frameIndexList.empty()) {
+        ctx.warnF("Whisper入力wav作成: 音声%d-%d-%dにフレームが存在しません", key.video, key.format, entry.audioSourceIndex);
+        return tstring();
+    }
+
+    auto waveFrames = reformInfo.getWaveInput(frameIndexList);
+    if (waveFrames.empty()) {
+        ctx.warnF("Whisper入力wav作成: 音声%d-%d-%dのwave情報が取得できません", key.video, key.format, entry.audioSourceIndex);
+        return tstring();
+    }
+
+    int samplesPerFrame = 0;
+    for (const auto& frame : waveFrames) {
+        if (frame.waveLength > 0) {
+            samplesPerFrame = (int)(frame.waveLength / (bytesPerSample * srcChannels));
+            break;
+        }
+    }
+    if (samplesPerFrame == 0) {
+        samplesPerFrame = 1024;
+    }
+
+    int64_t totalSamples = 0;
+    for (const auto& frame : waveFrames) {
+        int frameSamples = (frame.waveLength > 0)
+            ? (int)(frame.waveLength / (bytesPerSample * srcChannels))
+            : samplesPerFrame;
+        totalSamples += frameSamples;
+    }
+
+    const auto fmt = reformInfo.getFormat(key);
+    int sampleRate = 48000;
+    if (entry.audioSourceIndex < (int)fmt.audioFormat.size() && fmt.audioFormat[entry.audioSourceIndex].sampleRate > 0) {
+        sampleRate = fmt.audioFormat[entry.audioSourceIndex].sampleRate;
+    }
+
+    const tstring wavPath = setting.getTmpWhisperWavPath(key, entry.localIndex);
+    std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(wavPath.c_str(), _T("wb")), &fclose);
+    if (!fp) {
+        ctx.warnF("Whisper入力wav作成: ファイルを開けません (%s)", wavPath.c_str());
+        return tstring();
+    }
+
+    writeWaveHeader(fp.get(), destChannels, sampleRate, bytesPerSample * 8, totalSamples);
+
+    File sourceWave(setting.getWaveFilePath(), _T("rb"));
+    std::vector<uint8_t> srcBuffer;
+    std::vector<uint8_t> dstBuffer;
+
+    for (const auto& frame : waveFrames) {
+        int frameSamples = (frame.waveLength > 0)
+            ? (int)(frame.waveLength / (bytesPerSample * srcChannels))
+            : samplesPerFrame;
+        if (frameSamples <= 0) {
+            continue;
+        }
+
+        size_t srcBytes = (size_t)frameSamples * bytesPerSample * srcChannels;
+        srcBuffer.assign(srcBytes, 0);
+        if (frame.waveLength > 0) {
+            sourceWave.seek(frame.waveOffset, SEEK_SET);
+            MemoryChunk chunk(srcBuffer.data(), frame.waveLength);
+            if (frame.waveLength > 0) {
+                sourceWave.read(chunk);
+            }
+            if ((size_t)frame.waveLength < srcBytes) {
+                std::fill(srcBuffer.begin() + frame.waveLength, srcBuffer.end(), 0);
+            }
+        }
+
+        if (destChannels == srcChannels) {
+            if (fwrite(srcBuffer.data(), srcBytes, 1, fp.get()) != 1) {
+                THROWF(IOException, "Whisper入力wav作成: 書き込みに失敗 (%s)", wavPath.c_str());
+            }
+        } else {
+            dstBuffer.resize((size_t)frameSamples * bytesPerSample);
+            const int channelIndex = (entry.dualMonoChannel >= 0 && entry.dualMonoChannel < srcChannels) ? entry.dualMonoChannel : 0;
+            const int16_t* srcSamples = reinterpret_cast<const int16_t*>(srcBuffer.data());
+            int16_t* dstSamples = reinterpret_cast<int16_t*>(dstBuffer.data());
+            for (int s = 0; s < frameSamples; s++) {
+                dstSamples[s] = srcSamples[s * srcChannels + channelIndex];
+            }
+            if (fwrite(dstBuffer.data(), dstBuffer.size(), 1, fp.get()) != 1) {
+                THROWF(IOException, "Whisper入力wav作成: 書き込みに失敗 (%s)", wavPath.c_str());
+            }
+        }
+    }
+
+    return wavPath;
+}
+
+} // namespace
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
@@ -744,7 +870,8 @@ void DoBadThing() {
         }
     }
 
-    std::vector<tstring> audioFiles; // 音声ファイルとその言語コード(ISO-639)
+    std::vector<WhisperAudioEntry> whisperAudioEntries;
+    std::vector<int> whisperLocalIndex(keys.size(), 0);
     if (setting.isEncodeAudio()) {
         ctx.info("[音声エンコード]");
         for (int i = 0; i < (int)keys.size(); i++) {
@@ -759,7 +886,7 @@ void DoBadThing() {
             auto format = reformInfo.getFormat(key);
             auto audioFrames = reformInfo.getWaveInput(reformInfo.getEncodeFile(key).audioFrames[0]);
             EncodeAudio(ctx, args, setting.getWaveFilePath(), format.audioFormat[0], audioFrames);
-            audioFiles.push_back(outpath);
+            whisperAudioEntries.push_back({ i, key, 0, outpath, 0, -1 });
         }
     } else if (setting.getFormat() != FORMAT_TSREPLACE
         || (setting.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK)) { // tsreplaceの場合は音声ファイルを作らない
@@ -776,26 +903,24 @@ void DoBadThing() {
                     if (!setting.isEncodeAudio() && isDualMono) {
                         // デュアルモノは2つのAACに分離
                         ctx.infoF("音声%d-%dはデュアルモノなので2つのAACファイルに分離します", fileIn.outKey.format, asrc);
+                        const int adst0 = adst++;
+                        const int adst1 = adst++;
                         SpDualMonoSplitter splitter(ctx);
-                        const tstring filepath0 = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
-                        const tstring filepath1 = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
-                        splitter.open(0, filepath0);
-                        splitter.open(1, filepath1);
-                        for (int frameIndex : frameList) {
-                            splitter.inputPacket(audioCache[frameIndex]);
-                        }
-                        audioFiles.push_back(filepath0);
-                        audioFiles.push_back(filepath1);
+                        const tstring filepath0 = setting.getIntAudioFilePath(key, adst0, setting.getAudioEncoder());
+                        whisperAudioEntries.push_back({ i, key, adst0, filepath0, asrc, 0 });
+                        const tstring filepath1 = setting.getIntAudioFilePath(key, adst1, setting.getAudioEncoder());
+                        whisperAudioEntries.push_back({ i, key, adst1, filepath1, asrc, 1 });
                     } else {
                         if (isDualMono) {
                             ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
                         }
-                        const tstring filepath = setting.getIntAudioFilePath(key, adst++, setting.getAudioEncoder());
+                        const int adst0 = adst++;
+                        const tstring filepath = setting.getIntAudioFilePath(key, adst0, setting.getAudioEncoder());
+                        whisperAudioEntries.push_back({ i, key, adst0, filepath, asrc, -1 });
                         File file(filepath, _T("wb"));
                         for (int frameIndex : frameList) {
                             file.write(audioCache[frameIndex]);
                         }
-                        audioFiles.push_back(filepath);
                     }
                 }
             }
@@ -843,9 +968,7 @@ void DoBadThing() {
         try {
             if (setting.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK) {
                 SubtitleGenerator whisperGen(ctx);
-                const auto& fileIn = reformInfo.getEncodeFile(key);
                 const auto wdir    = setting.getTmpWhisperDir();
-                const auto wavPath = setting.getWaveFilePath();
                 const auto whisper = setting.getWhisperPath();
                 // 追加オプション組み立て
                 StringBuilderT opt;
@@ -859,10 +982,36 @@ void DoBadThing() {
                 const bool haveArib = (reformInfo.getEncodeFile(key).captionList.size() > 0);
                 const bool shouldRun = (!fallbackOnly) || (fallbackOnly && !haveArib);
                 if (shouldRun) {
-                    for (int aindex = 0; aindex < (int)audioFiles.size(); aindex++) {
-                        whisperGen.runWhisper(whisper, audioFiles[aindex], wdir, extraOpt, true);
-                        const auto srtPath = setting.getTmpWhisperSrtPath(key, aindex);
-                        const auto vttPath = setting.getTmpWhisperVttPath(key, aindex);
+                    const bool isWhisperCpp = exeIsWhisperCpp(whisper);
+                    for (const auto& entry : whisperAudioEntries) {
+                        if (entry.keyIndex != i) {
+                            continue;
+                        }
+
+                        tstring whisperInput = entry.audioPath;
+                        if (isWhisperCpp && !_tcheck_ext(whisperInput.c_str(), _T(".wav"))) {
+                            try {
+                                tstring wavInput = createWhisperWaveInput(ctx, setting, reformInfo, entry);
+                                if (!wavInput.empty()) {
+                                    whisperInput = wavInput;
+                                } else {
+                                    ctx.warnF("whisper-cpp用のwav生成に失敗したため、元の音声を使用します: %s", whisperInput.c_str());
+                                }
+                            } catch (const Exception& e) {
+                                ctx.warnF("whisper-cpp用wav生成中に例外: %s", e.message());
+                                ctx.warnF("元の音声を使用します: %s", whisperInput.c_str());
+                            }
+                        }
+
+                        if (whisperInput.empty()) {
+                            ctx.warn("Whisper字幕生成: 音声入力パスが空のためスキップします");
+                            continue;
+                        }
+
+                        whisperGen.runWhisper(whisper, whisperInput, wdir,
+                            setting.getTmpWhisperFilenameWithoutExt(entry.key, entry.localIndex), extraOpt, true);
+                        const auto srtPath = setting.getTmpWhisperSrtPath(entry.key, entry.localIndex);
+                        const auto vttPath = setting.getTmpWhisperVttPath(entry.key, entry.localIndex);
                         // 空ファイルになっていたら削除する
                         uint64_t filesize = 0;
                         if (rgy_file_exists(srtPath) && rgy_get_filesize(srtPath.c_str(), &filesize) && filesize == 0) {

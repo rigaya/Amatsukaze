@@ -1,5 +1,11 @@
 ﻿
 #include "Subtitle.h"
+#include "rgy_filesystem.h"
+
+bool exeIsWhisperCpp(const tstring& whisperPath) {
+    const tstring whisperFileName = PathGetFilename(whisperPath);
+    return (whisperFileName.find(_T("whisper-cli")) != tstring::npos);
+}
 
 SubtitleGenerator::SubtitleGenerator(AMTContext& ctx)
     : AMTObject(ctx) {}
@@ -7,20 +13,32 @@ SubtitleGenerator::SubtitleGenerator(AMTContext& ctx)
 void SubtitleGenerator::runWhisper(const tstring& whisperPath,
                                    const tstring& audioPath,
                                    const tstring& outDir,
+                                   const tstring& outFileWithoutExt,
                                    const tstring& extraOptions,
                                    bool isUtf8Log) {
+    const bool isWhisperCpp = exeIsWhisperCpp(whisperPath);
+
     StringBuilderT sb;
-    // 実行ファイルパスはConfigWrapperから取得したものをそのまま用いる
     sb.append(_T("\"%s\""), whisperPath);
-    sb.append(_T(" \"%s\""), audioPath);
-    sb.append(_T(" --output_dir \"%s\""), outDir);
-    sb.append(_T(" -f srt vtt"));
+    if (isWhisperCpp) {
+        sb.append(_T(" -f \"%s\""), audioPath);
+        sb.append(_T(" --output-file \"%s\""), outFileWithoutExt);
+        sb.append(_T(" -osrt -ovtt"));
+        if (!rgy_directory_exists(outDir)) {
+            CreateDirectoryRecursive(outDir.c_str());
+        }
+    } else {
+        sb.append(_T(" \"%s\""), audioPath);
+        sb.append(_T(" --output_dir \"%s\""), outDir);
+        sb.append(_T(" -f srt vtt"));
+    }
     if (extraOptions.size() > 0) {
         sb.append(_T(" %s"), extraOptions);
     }
 
     const tstring cmd = sb.str();
     ctx.info("[Whisper起動]");
+    ctx.infoF("Whisper type: %s", isWhisperCpp ? _T("whisper-cpp") : _T("faster-whisper"));
     ctx.infoF("%s", cmd);
 
     // ログ取りつつ起動

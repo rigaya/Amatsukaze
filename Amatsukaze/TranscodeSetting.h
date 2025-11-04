@@ -426,7 +426,9 @@ public:
 
     tstring getTmpWhisperDir() const;
     tstring getTmpWhisperJsonPath(EncodeFileKey key, int aindex) const;
+    tstring getTmpWhisperFilenameWithoutExt(EncodeFileKey key, int aindex) const;
     tstring getTmpWhisperSrtPath(EncodeFileKey key, int aindex) const;
+    tstring getTmpWhisperWavPath(EncodeFileKey key, int aindex) const;
     tstring getTmpWhisperVttPath(EncodeFileKey key, int aindex) const;
 
     const std::vector<CMType>& getCMTypes() const;

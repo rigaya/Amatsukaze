@@ -1080,8 +1080,18 @@ tstring ConfigWrapper::getTmpWhisperJsonPath(EncodeFileKey key, int aindex) cons
         getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
 }
 
+tstring ConfigWrapper::getTmpWhisperFilenameWithoutExt(EncodeFileKey key, int aindex) const {
+    return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s"),
+        getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
+}
+
 tstring ConfigWrapper::getTmpWhisperSrtPath(EncodeFileKey key, int aindex) const {
     return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.srt"),
+        getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpWhisperWavPath(EncodeFileKey key, int aindex) const {
+    return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.wav"),
         getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
 }
 
