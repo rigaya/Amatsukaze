@@ -632,12 +632,27 @@
                             <ComboBox Grid.Row="0" Grid.Column="1" Width="220" Margin="8,2,0,0"
                                       VerticalAlignment="Center" HorizontalAlignment="Left"
                                       ItemsSource="{Binding Model.SelectedProfile.WhisperModelList}"
-                                      SelectedIndex="{Binding Model.SelectedProfile.WhisperModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                      ToolTip="Whisperで使用するモデルを選択します。&#xA;自動ではlarge-v3-turboを使用します。&#xA;&#xA;large-v2 ... 遅いですが精度に優れます。&#xA;large-v3-turbo ... 精度と速度のバランスに優れます。" />
+                                      SelectedIndex="{Binding Model.SelectedProfile.WhisperModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                <ComboBox.ToolTip>
+                                    <TextBlock>faster-whisperで使用するモデルを選択します。
+                                        <LineBreak/>自動ではlarge-v3-turboを使用します。
+                                        <LineBreak/>
+                                        <LineBreak/>- large-v2 ... 遅いですが精度に優れます。
+                                        <LineBreak/>- large-v3-turbo ... 精度と速度のバランスに優れます。
+                                        <LineBreak/>
+                                        <LineBreak/>この設定欄はfaster-whisper用です。
+                                        <LineBreak/>whisper.cpp(whisper-cli)を使用する場合は
+                                        <LineBreak/>ここでは「未指定」を選択し、
+                                        <LineBreak/>whisper-optionでモデルを指定してください。
+                                    </TextBlock>
+                                </ComboBox.ToolTip>
+                            </ComboBox>
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="whisper-option" VerticalAlignment="Center" Margin="0,2,0,0"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Width="320" Margin="8,2,0,0"
-                                     VerticalAlignment="Center" HorizontalAlignment="Left"
+                            <TextBox Grid.Row="1" Grid.Column="1" Margin="8,2,8,0"
+                                     HorizontalAlignment="Stretch"
+                                     TextWrapping="Wrap" AcceptsReturn="True" MinLines="3"
+                                     VerticalScrollBarVisibility="Auto"
                                      Text="{Binding Model.SelectedProfile.WhisperOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      ToolTip="Whisperで使用する追加オプションを指定します。&#xA;例: --language ja"/>
                         </Grid>
