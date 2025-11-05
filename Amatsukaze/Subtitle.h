@@ -22,6 +22,7 @@ public:
                     const tstring& outDir,
                     const tstring& outFileWithoutExt,
                     const tstring& extraOptions,
+                    bool enableVtt,
                     bool isUtf8Log = true);
 };
 

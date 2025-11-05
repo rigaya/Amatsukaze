@@ -15,6 +15,7 @@ void SubtitleGenerator::runWhisper(const tstring& whisperPath,
                                    const tstring& outDir,
                                    const tstring& outFileWithoutExt,
                                    const tstring& extraOptions,
+                                   bool enableVtt,
                                    bool isUtf8Log) {
     const bool isWhisperCpp = exeIsWhisperCpp(whisperPath);
 
@@ -23,14 +24,20 @@ void SubtitleGenerator::runWhisper(const tstring& whisperPath,
     if (isWhisperCpp) {
         sb.append(_T(" -f \"%s\""), audioPath);
         sb.append(_T(" --output-file \"%s\""), outFileWithoutExt);
-        sb.append(_T(" -osrt -ovtt"));
+        sb.append(_T(" -osrt"));
+        if (enableVtt) {
+            sb.append(_T(" -ovtt"));
+        }
         if (!rgy_directory_exists(outDir)) {
             CreateDirectoryRecursive(outDir.c_str());
         }
     } else {
         sb.append(_T(" \"%s\""), audioPath);
         sb.append(_T(" --output_dir \"%s\""), outDir);
-        sb.append(_T(" -f srt vtt"));
+        sb.append(_T(" -f srt"));
+        if (enableVtt) {
+            sb.append(_T(" vtt"));
+        }
     }
     if (extraOptions.size() > 0) {
         sb.append(_T(" %s"), extraOptions);

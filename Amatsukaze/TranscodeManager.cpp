@@ -1009,7 +1009,7 @@ void DoBadThing() {
                         }
 
                         whisperGen.runWhisper(whisper, whisperInput, wdir,
-                            setting.getTmpWhisperFilenameWithoutExt(entry.key, entry.localIndex), extraOpt, true);
+                            setting.getTmpWhisperFilenameWithoutExt(entry.key, entry.localIndex), extraOpt, setting.isWebVTTEnabled(), true);
                         const auto srtPath = setting.getTmpWhisperSrtPath(entry.key, entry.localIndex);
                         const auto vttPath = setting.getTmpWhisperVttPath(entry.key, entry.localIndex);
                         // 空ファイルになっていたら削除する
