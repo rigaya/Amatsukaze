@@ -150,7 +150,7 @@ namespace Amatsukaze.Server
                 var numStr = m.Groups[2].Value;
                 var cmStr = m.Groups[5].Value;
                 var ext = m.Groups[7].Value;
-                bool isSubs = (ext == ".ass") || (ext == ".srt");
+                bool isSubs = (ext == ".ass") || (ext == ".srt") || (ext == ".vtt");
                 int number = (numStr.Length == 0) ? 0 : int.Parse(numStr);
                 bool isCM = (cmStr.Length > 0);
                 if (number == 0)
