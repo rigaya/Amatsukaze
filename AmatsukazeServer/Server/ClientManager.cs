@@ -152,7 +152,15 @@ namespace Amatsukaze.Server
             {
                 listener = new TcpListener(IPAddress.Any, port);
                 listener.Start();
-                Util.AddLog("サーバ開始しました。ポート: " + port, null);
+                try
+                {
+                    var local = (listener.LocalEndpoint as IPEndPoint)?.ToString() ?? "<unknown>";
+                    Util.AddLog($"サーバ開始しました。ポート: {port} (LocalEndPoint={local})", null);
+                }
+                catch
+                {
+                    Util.AddLog("サーバ開始しました。ポート: " + port, null);
+                }
 
                 try
                 {

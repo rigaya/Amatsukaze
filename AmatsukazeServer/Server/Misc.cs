@@ -648,13 +648,16 @@ namespace Amatsukaze.Server
             {
                 Directory.CreateDirectory("data");
             }
+            var lockPath = Path.Combine("data", "Server.lock");
+            Util.AddLog($"[GetLock] cwd='{Directory.GetCurrentDirectory()}', lock='{lockPath}', pid={Process.GetCurrentProcess().Id}, proc='{Process.GetCurrentProcess().ProcessName}'", null);
             try
             {
                 return new FileStream(Path.Combine("data", "Server.lock"),
                     FileMode.Create, FileAccess.ReadWrite, FileShare.None);
             }
-            catch(Exception)
+            catch(Exception e)
             {
+                Util.AddLog($"[GetLock] lock acquisition failed: {e.Message}", e);
                 throw new MultipleInstanceException();
             }
         }
@@ -681,14 +684,17 @@ namespace Amatsukaze.Server
         public static async Task TerminateStandalone(string rootDir)
         {
             var path = GetStandaloneMailslotName(rootDir);
+            Util.AddLog($"[TerminateStandalone] mailslot='{path}', exists={SystemUtility.TestMailslot(path)}", null);
             while (true)
             {
                 if (SystemUtility.TestMailslot(path))
                 {
+                    Util.AddLog("[TerminateStandalone] Server detected. Waiting 10s...", null);
                     await Task.Delay(10 * 1000);
                 }
                 else
                 {
+                    Util.AddLog("[TerminateStandalone] No server detected. Proceed.", null);
                     break;
                 }
             }
@@ -700,10 +706,36 @@ namespace Amatsukaze.Server
             var exename = Path.Combine(AppContext.BaseDirectory,
                 (Environment.UserInteractive ? "AmatsukazeGUI" + exeDefaultAppendix : "AmatsukazeServerCLI" + exeDefaultAppendix));
             var args = "-l server -p " + port;
+            Util.AddLog($"[LaunchLocalServer] UserInteractive={Environment.UserInteractive}, exe='{exename}', args='{args}', workdir='{rootDir}'", null);
             Process.Start(new ProcessStartInfo(exename, args)
             {
                 WorkingDirectory = rootDir,
             });
+        }
+
+        // サーバ（serverモード）が既に稼働しているかをロックファイルで推定する
+        public static bool IsServerProcessRunning(string rootDir)
+        {
+            try
+            {
+                var dataDir = Path.Combine(rootDir ?? "", "data");
+                var lockPath = Path.Combine(dataDir, "Server.lock");
+                if (!Directory.Exists(dataDir))
+                {
+                    return false;
+                }
+                // 共有なしで一瞬だけ開ければ未起動（すぐ閉じる）
+                using (var fs = new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    fs.Close();
+                    return false;
+                }
+            }
+            catch
+            {
+                // 共有できなければ誰かが保持している = 稼働中とみなす
+                return true;
+            }
         }
 
         public static bool IsLocalIP(string ip)

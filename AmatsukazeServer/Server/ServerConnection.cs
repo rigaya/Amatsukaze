@@ -359,6 +359,7 @@ namespace Amatsukaze.Server
 
             try
             {
+                Console.WriteLine("[AddTask] [Connect] resolve start: host='{0}', port={1}", serverIp, port);
                 IPAddress parsed;
                 IPAddress ipv4Address = null;
                 if (IPAddress.TryParse(serverIp, out parsed))
@@ -371,6 +372,7 @@ namespace Amatsukaze.Server
                 if (ipv4Address == null)
                 {
                     var addresses = Dns.GetHostAddresses(serverIp);
+                    Console.WriteLine("[AddTask] [Connect] resolved addresses: {0}", string.Join(", ", Array.ConvertAll(addresses, a => a.ToString())));
                     foreach (var address in addresses)
                     {
                         if (address.AddressFamily == AddressFamily.InterNetwork)
@@ -382,28 +384,47 @@ namespace Amatsukaze.Server
                 }
                 if (ipv4Address == null)
                 {
-                    throw new Exception();
+                    throw new Exception("IPv4 address not found");
                 }
 
                 client = new TcpClient(AddressFamily.InterNetwork);
-                client.Connect(new IPEndPoint(ipv4Address, port));
+                var ep = new IPEndPoint(ipv4Address, port);
+                Console.WriteLine("[AddTask] [Connect] try IPv4 connect: {0}", ep);
+                client.Connect(ep);
+                Console.WriteLine("[AddTask] [Connect] connected: {0} -> {1}", (IPEndPoint)client.Client.LocalEndPoint, ep);
             }
-            catch
+            catch(Exception ex1)
             {
                 // フォールバック: 従来の接続方式
+                Console.WriteLine("[AddTask] [Connect] IPv4 connect failed: {0}: {1}. fallback to TcpClient(host,port)",
+                    ex1.GetType().Name, ex1.Message);
                 client = new TcpClient(serverIp, port);
+                Console.WriteLine("[AddTask] [Connect] TcpClient(host,port) connected: {0} -> {1}",
+                    (IPEndPoint)client.Client.LocalEndPoint, (IPEndPoint)client.Client.RemoteEndPoint);
             }
             stream = client.GetStream();
         }
 
         private void Close()
         {
-            if (client != null)
+            try
             {
-                stream.Close();
-                client.Close();
-                client = null;
+                if (stream != null)
+                {
+                    stream.Close();
+                    stream = null;
+                }
             }
+            catch { }
+            try
+            {
+                if (client != null)
+                {
+                    client.Close();
+                    client = null;
+                }
+            }
+            catch { }
         }
 
         private async Task Send(RPCMethodId id, AddQueueRequest obj)

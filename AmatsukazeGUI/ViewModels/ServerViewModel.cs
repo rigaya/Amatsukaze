@@ -120,6 +120,7 @@ namespace Amatsukaze.ViewModels
             }
             catch(MultipleInstanceException)
             {
+                Util.AddLog($"[GUI] MultipleInstance in ServerViewModel.GetGlobalLock. PID={Process.GetCurrentProcess().Id}, cwd='{Directory.GetCurrentDirectory()}'", null);
                 var message = new InformationMessage(
                     "多重起動を検知しました",
                     "AmatsukazeServer",
@@ -150,7 +151,14 @@ namespace Amatsukaze.ViewModels
             {
                 if (disposing)
                 {
-                    Server.Dispose();
+                    try
+                    {
+                        Server?.Dispose();
+                        Server = null;
+                        lockFile?.Dispose();
+                        lockFile = null;
+                    }
+                    catch { }
                 }
                 disposed = true;
             }

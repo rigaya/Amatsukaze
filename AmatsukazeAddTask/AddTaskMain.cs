@@ -396,20 +396,39 @@ namespace Amatsukaze.AddTask
                 try
                 {
                     // サーバに接続
-                    server.Connect(option.ServerIP, option.ServerPort);
+                    var connectIp = option.ServerIP;
+                    if (string.Equals(connectIp, "localhost", StringComparison.OrdinalIgnoreCase))
+                    {
+                        connectIp = "127.0.0.1";
+                    }
+                    Console.WriteLine("[AddTask] Try connect: {0}:{1}", connectIp, option.ServerPort);
+                    server.Connect(connectIp, option.ServerPort);
+                    Console.WriteLine("[AddTask] Connect succeeded");
                 }
                 catch(Exception e0)
                 {
+                    Console.WriteLine("[AddTask] Connect failed: {0}: {1}", e0.GetType().Name, e0.Message);
                     Console.WriteLine(e0.StackTrace);
                     // サーバに繋がらなかった
 
                     // ローカルの場合は、起動を試みる
                     if (isLocal)
                     {
+                        Console.WriteLine("[AddTask] Local: attempt launch. Root='{0}', Port={1}", option.AmatsukazeRoot, option.ServerPort);
                         await ServerSupport.TerminateStandalone(option.AmatsukazeRoot);
-                        ServerSupport.LaunchLocalServer(option.ServerPort, option.AmatsukazeRoot);
+                        Console.WriteLine("[AddTask] TerminateStandalone completed.");
+                        // 既に起動中（起動処理中を含む）なら二重起動を避ける
+                        if (ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot) == false)
+                        {
+                            ServerSupport.LaunchLocalServer(option.ServerPort, option.AmatsukazeRoot);
+                        }
+                        else
+                        {
+                            Console.WriteLine("[AddTask] Server seems running (lock held). Skip launch.");
+                        }
 
                         // 10秒待つ
+                        Console.WriteLine("[AddTask] LaunchLocalServer invoked. Waiting 10s...");
                         await Task.Delay(10 * 1000);
                     }
                     else

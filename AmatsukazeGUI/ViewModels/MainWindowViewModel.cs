@@ -262,6 +262,7 @@ namespace Amatsukaze.ViewModels
             }
             catch(MultipleInstanceException)
             {
+                System.Diagnostics.Debug.WriteLine($"[GUI] MultipleInstance in MainWindowViewModel.Initialize. PID={System.Diagnostics.Process.GetCurrentProcess().Id}, cwd='{System.IO.Directory.GetCurrentDirectory()}'");
                 var message = new InformationMessage(
                     "多重起動を検知しました。\r\n"+
                     "サーバが起動している場合はAmatsukazeClientで接続してみてください。",
