@@ -77,6 +77,14 @@
                     <VirtualizingStackPanel IsVirtualizing="True"/>
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="Margin" Value="2"/>
+                    <Setter Property="MinHeight" Value="0"/>
+                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                </Style>
+            </ListBox.ItemContainerStyle>
             <ListBox.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="選択項目をコピー" Click="MenuItem_Click" />
@@ -85,7 +93,9 @@
             </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                               LineStackingStrategy="BlockLineHeight"
+                               LineHeight="{Binding FontSize, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
