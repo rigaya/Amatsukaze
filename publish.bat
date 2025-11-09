@@ -1,15 +1,33 @@
 @echo off
+
+del .\publish\win-x64\*.dll
+del .\publish\win-x64\*.dll.config
+del .\publish\win-x64\*.exe
+del .\publish\win-x64\*.pdb
+
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" x64
+
 echo Building solution with MSBuild...
-msbuild Amatsukaze.sln /p:Configuration=Release /p:Platform=x64
+msbuild Amatsukaze.sln /p:Configuration=Release /p:Platform=x64 /m
+if errorlevel 1 exit /b %ERRORLEVEL%
 
-echo Publishing .NET project AmatsukazeAddTask...
-dotnet publish AmatsukazeAddTask/AmatsukazeAddTask.csproj -r win-x64 -c Release --self-contained=true -p:PublishSingleFile=true -o ./publish/win-x64
+echo Publishing .NET projects in parallel via Publish.proj...
+msbuild Publish.proj /m
+if errorlevel 1 exit /b %ERRORLEVEL%
 
-echo Publishing .NET project AmatsukazeServerCLI...
-dotnet publish AmatsukazeServerCLI/AmatsukazeServerCLI.csproj -r win-x64 -c Release --self-contained=true -p:PublishSingleFile=true -o ./publish/win-x64
+echo Collecting published artifacts into a single folder...
+set MERGED_DIR=.\publish\win-x64
 
-echo Publishing .NET project AmatsukazeGUI...
-dotnet publish AmatsukazeGUI/AmatsukazeGUI.csproj -r win-x64 -c Release --self-contained=true -p:PublishSingleFile=true -o ./publish/win-x64
+set SRC_BASE=.\publish\win-x64
 
-echo Publishing .NET project ScriptCommand...
-dotnet publish ScriptCommand/ScriptCommand.csproj -r win-x64 -c Release --self-contained=true -p:PublishSingleFile=true -o ./publish/win-x64
+rem robocopy returns codes <8 for success; treat >=8 as failure
+if exist "%SRC_BASE%\AmatsukazeAddTask" robocopy "%SRC_BASE%\AmatsukazeAddTask" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
+if errorlevel 8 exit /b %ERRORLEVEL%
+if exist "%SRC_BASE%\AmatsukazeServerCLI" robocopy "%SRC_BASE%\AmatsukazeServerCLI" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
+if errorlevel 8 exit /b %ERRORLEVEL%
+if exist "%SRC_BASE%\AmatsukazeGUI" robocopy "%SRC_BASE%\AmatsukazeGUI" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
+if errorlevel 8 exit /b %ERRORLEVEL%
+if exist "%SRC_BASE%\ScriptCommand" robocopy "%SRC_BASE%\ScriptCommand" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
+if errorlevel 8 exit /b %ERRORLEVEL%
+
+echo Done. Merged outputs are in %MERGED_DIR%.

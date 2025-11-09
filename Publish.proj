@@ -1,0 +1,26 @@
+<Project DefaultTargets="PublishAll" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <PublishProjects Include="AmatsukazeAddTask\AmatsukazeAddTask.csproj" />
+    <PublishProjects Include="AmatsukazeServerCLI\AmatsukazeServerCLI.csproj" />
+    <PublishProjects Include="AmatsukazeGUI\AmatsukazeGUI.csproj" />
+    <PublishProjects Include="ScriptCommand\ScriptCommand.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Configuration>Release</Configuration>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishRoot>$(MSBuildThisFileDirectory)publish\win-x64\</PublishRoot>
+  </PropertyGroup>
+
+  <Target Name="PublishAll">
+    <MSBuild
+      Projects="@(PublishProjects)"
+      Targets="Restore;Publish"
+      BuildInParallel="true"
+      Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration);SelfContained=$(SelfContained);PublishSingleFile=$(PublishSingleFile);PublishDir=$(PublishRoot)%(Filename)\">
+    </MSBuild>
+  </Target>
+</Project>
+
