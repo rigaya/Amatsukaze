@@ -21,12 +21,11 @@ if %ERRORLEVEL% NEQ 0 (
   goto :RETRY_GEN
 )
 
-if exist "%OUTPUT%" (
-  fc /b "%TEMPFILE%" "%OUTPUT%" >nul
-  if %ERRORLEVEL% EQU 0 (
-    del "%TEMPFILE%" >nul 2>&1
-    exit /b 0
-  )
+if not exist "%OUTPUT%" goto :RETRY_MOVE
+fc /b "%TEMPFILE%" "%OUTPUT%" >nul 2>&1
+if %ERRORLEVEL% == 0 (
+  del "%TEMPFILE%" >nul 2>&1
+  exit /b 0
 )
 
 REM 差分がある場合のみ上書き（ビルド並列時のロックを想定してリトライ）

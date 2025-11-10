@@ -19,10 +19,10 @@ exit /b 0
 )
 
 fc /b "%_TMP%" "%_DST%" >nul
-if errorlevel 1 (
-move /y "%_TMP%" "%_DST%" >nul
+if %ERRORLEVEL% == 0 (
+    del "%_TMP%" >nul 2>&1
 ) else (
-del "%_TMP%" >nul 2>&1
+    move /y "%_TMP%" "%_DST%" >nul
 )
 
 endlocal
