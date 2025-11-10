@@ -980,15 +980,26 @@ namespace Amatsukaze.Models
             RaisePropertyChanged("ConsoleText");
         }
 
-        private void AddLog(string text)
-        {
-            var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + text;
-            if (ClientLog.Count > 400)
-            {
-                ClientLog.RemoveAt(0);
-            }
-            ClientLog.Add(formatted);
-        }
+		private void AddLog(string text)
+		{
+			var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + text;
+			Action update = () =>
+			{
+				if (ClientLog.Count > 400)
+				{
+					ClientLog.RemoveAt(0);
+				}
+				ClientLog.Add(formatted);
+			};
+			if (Application.Current?.Dispatcher?.CheckAccess() == true)
+			{
+				update();
+			}
+			else
+			{
+				Application.Current?.Dispatcher?.BeginInvoke((Action)(() => update()));
+			}
+		}
 
         private async Task<EncodeServer> MakeEncodeServer()
         {
