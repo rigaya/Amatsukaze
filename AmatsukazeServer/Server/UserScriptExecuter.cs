@@ -460,18 +460,8 @@ namespace Amatsukaze.Server
                 if (exclusiveSemaphore != null)
                 {
                     exclusiveWaitCts = new CancellationTokenSource();
-                    try
-                    {
-                        Debug.Print($"[UserScriptExecuter] Exclusive wait開始({PhaseString}): '{ScriptPath}'");
-                        await exclusiveSemaphore.WaitAsync(exclusiveWaitCts.Token).ConfigureAwait(false);
-                        exclusiveLockAcquired = true;
-                        Debug.Print($"[UserScriptExecuter] Exclusive lock取得({PhaseString}): '{ScriptPath}'");
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        Debug.Print($"[UserScriptExecuter] Exclusive waitキャンセル({PhaseString}): '{ScriptPath}'");
-                        return;
-                    }
+                    await exclusiveSemaphore.WaitAsync(exclusiveWaitCts.Token).ConfigureAwait(false);
+                    exclusiveLockAcquired = true;
                 }
 
                 var cmd = Util.IsServerWindows() ? "cmd.exe" : "sh";
@@ -516,7 +506,6 @@ namespace Amatsukaze.Server
                 if (exclusiveLockAcquired && exclusiveSemaphore != null)
                 {
                     exclusiveSemaphore.Release();
-                    Debug.Print($"[UserScriptExecuter] Exclusive lock解放({PhaseString}): '{ScriptPath}'");
                 }
                 exclusiveWaitCts?.Dispose();
                 exclusiveWaitCts = null;
