@@ -83,6 +83,10 @@ public:
         return time;
     }
 
+    JSTTime getStartTime() const {
+        return startTime;
+    }
+
     std::vector<int> getSetPids() const {
         return handlerTable.getSetPids();
     }
@@ -168,6 +172,11 @@ public:
     void GetDay(int* y, int* m, int* d);
 
     void GetTime(int* h, int* m, int* s);
+
+    // EITのstart_timeを取得（存在しない場合は未定義値）
+    void GetStartDay(int* y, int* m, int* d);
+
+    void GetStartTime(int* h, int* m, int* s);
 
     int GetNumProgram();
 

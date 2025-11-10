@@ -134,6 +134,12 @@ namespace Amatsukaze.Lib
         private static extern void TsInfo_GetTime(IntPtr ptr, out int h, out int m, out int s);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern void TsInfo_GetStartDay(IntPtr ptr, out int y, out int m, out int d);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern void TsInfo_GetStartTime(IntPtr ptr, out int h, out int m, out int s);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TsInfo_GetNumProgram(IntPtr ptr);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
@@ -245,6 +251,26 @@ namespace Amatsukaze.Lib
             TsInfo_GetDay(Ptr, out year, out month, out day);
             TsInfo_GetTime(Ptr, out hour, out minute, out second);
             return new DateTime(year, month, day, hour, minute, second);
+        }
+
+        // EIT(start_time)。不正値の場合は MinValue を返す
+        public DateTime GetEITStartTime()
+        {
+            int year, month, day, hour, minute, second;
+            TsInfo_GetStartDay(Ptr, out year, out month, out day);
+            TsInfo_GetStartTime(Ptr, out hour, out minute, out second);
+            try
+            {
+                if (year <= 1 || month <= 0 || day <= 0)
+                {
+                    return DateTime.MinValue;
+                }
+                return new DateTime(year, month, day, hour, minute, second);
+            }
+            catch
+            {
+                return DateTime.MinValue;
+            }
         }
 
         // ServiceInfoがある場合のみ

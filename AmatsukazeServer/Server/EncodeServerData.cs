@@ -812,6 +812,8 @@ namespace Amatsukaze.Server
         public int ImageHeight { get; set; }
         [DataMember]
         public DateTime TsTime { get; set; }
+        [DataMember]
+        public DateTime EITStartTime { get; set; }
 
         [DataMember]
         public string FailReason { get; set; }

@@ -237,7 +237,7 @@ namespace Amatsukaze.Server
         private async Task<string> SCRename(string screnamepath, string tmppath, string format, QueueItem item)
         {
             var filename = item.FileName;
-            var time = item.TsTime;
+            var time = (item.EITStartTime > new DateTime(2000, 1, 1)) ? item.EITStartTime : item.TsTime;
             var eventName = item.EventName;
             var serviceName = item.ServiceName;
 

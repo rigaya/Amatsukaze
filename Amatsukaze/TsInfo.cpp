@@ -376,10 +376,12 @@ void TsInfo::ReadFile(const tchar* filepath) {
         return;
     }
     bool isScrampbled = (ret == 2);
+    bool noEITButProgramOK = (ret == 3);
     // ダメだったらファイルの先頭付近を読む
     srcfile.seek(srcfile.size() / 30, SEEK_SET);
     ret = ReadTS(srcfile);
-    if (ret == 0) {
+    // 2回目でEITが取れた or 取れなくてもProgramOKなら成功
+    if (ret == 0 || ret == 3) {
         return;
     }
     if (isScrampbled) {
@@ -410,6 +412,27 @@ void TsInfo::GetDay(int* y, int* m, int* d) {
 
 void TsInfo::GetTime(int* h, int* m, int* s) {
     parser.getTime().getTime(*h, *m, *s);
+}
+
+void TsInfo::GetStartDay(int* y, int* m, int* d) {
+    auto st = parser.getStartTime();
+    // EITの未定義時刻は40bit全ビット1（0xFFFFFFFFFF）。また0は未取得扱い。
+    const uint64_t MASK40 = ((1ULL << 40) - 1);
+    if (st.time == 0 || (st.time & MASK40) == MASK40) {
+        *y = 0; *m = 0; *d = 0;
+        return;
+    }
+    st.getDay(*y, *m, *d);
+}
+
+void TsInfo::GetStartTime(int* h, int* m, int* s) {
+    auto st = parser.getStartTime();
+    const uint64_t MASK40 = ((1ULL << 40) - 1);
+    if (st.time == 0 || (st.time & MASK40) == MASK40) {
+        *h = 0; *m = 0; *s = 0;
+        return;
+    }
+    st.getTime(*h, *m, *s);
 }
 
 int TsInfo::GetNumProgram() {
@@ -484,9 +507,15 @@ int TsInfo::ReadTS(File& srcfile) {
         readBytes = srcfile.read(buffer);
         packetParser.inputTS(MemoryChunk(buffer.data, readBytes));
         if (parser.isOK()) return 0;
+        // EITが1つでも取得でき、かつServiceInfo(TDT/TOT, SDT)があるなら成功とする
+        if (parser.hasServiceInfo() && parser.getStartTime().time != 0) return 0;
         totalRead += readBytes;
     } while (readBytes == buffer.length && totalRead < MAX_BYTES);
-    if (parser.isProgramOK()) return 0;
+    if (parser.isProgramOK()) {
+        // EIT(start_time)未取得なら「再試行を促すコード(3)」を返す
+        if (parser.getStartTime().time == 0) return 3;
+        return 0;
+    }
     if (parser.isScrampbled()) return 2;
     return 1;
 }
@@ -498,6 +527,8 @@ extern "C" AMATSUKAZE_API int TsInfo_ReadFile(TsInfo * ptr, const tchar * filepa
 extern "C" AMATSUKAZE_API int TsInfo_HasServiceInfo(TsInfo * ptr) { return ptr->HasServiceInfo(); }
 extern "C" AMATSUKAZE_API void TsInfo_GetDay(TsInfo * ptr, int* y, int* m, int* d) { ptr->GetDay(y, m, d); }
 extern "C" AMATSUKAZE_API void TsInfo_GetTime(TsInfo * ptr, int* h, int* m, int* s) { return ptr->GetTime(h, m, s); }
+extern "C" AMATSUKAZE_API void TsInfo_GetStartDay(TsInfo * ptr, int* y, int* m, int* d) { ptr->GetStartDay(y, m, d); }
+extern "C" AMATSUKAZE_API void TsInfo_GetStartTime(TsInfo * ptr, int* h, int* m, int* s) { return ptr->GetStartTime(h, m, s); }
 extern "C" AMATSUKAZE_API int TsInfo_GetNumProgram(TsInfo * ptr) { return ptr->GetNumProgram(); }
 extern "C" AMATSUKAZE_API void TsInfo_GetProgramInfo(TsInfo * ptr, int i, int* progId, int* hasVideo, int* videoPid, int* numContent) {
     return ptr->GetProgramInfo(i, progId, hasVideo, videoPid, numContent);

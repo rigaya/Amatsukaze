@@ -595,7 +595,7 @@ SDTElement SDT::get(int i) const {
     return elems[i];
 }
 
-JSTTime::JSTTime() {}
+JSTTime::JSTTime() : time(0) {}
 JSTTime::JSTTime(uint64_t time) : time(time) {}
 
 void JSTTime::getDay(int& y, int& m, int& d) {

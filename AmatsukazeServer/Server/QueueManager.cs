@@ -360,6 +360,7 @@ namespace Amatsukaze.Server
 
                                 var serviceName = "不明";
                                 var tsTime = DateTime.MinValue;
+                                var eitStartTime = info.GetEITStartTime();
                                 if (info.HasServiceInfo)
                                 {
                                     var service = info.GetServiceList().Where(s => s.ServiceId == prog.ServiceId).FirstOrDefault();
@@ -394,6 +395,7 @@ namespace Amatsukaze.Server
                                         ImageWidth = prog.Width,
                                         ImageHeight = prog.Height,
                                         TsTime = tsTime,
+                                        EITStartTime = eitStartTime,
                                         ServiceName = serviceName,
                                         EventName = prog.EventName,
                                         State = QueueState.LogoPending,
