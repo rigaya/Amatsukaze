@@ -27,6 +27,15 @@ if [ "$2" = "--debug" ] || [ "$3" = "--debug" ]; then
 else
     echo "リリースビルドモードで実行します"
 fi
+# 依存のみビルドオプション
+DEPS_ONLY=false
+if [ "$2" = "--deps-only" ] || [ "$3" = "--deps-only" ]; then
+    DEPS_ONLY=true
+    # builddirが--deps-onlyの場合はデフォルト値を使用
+    if [ "$2" = "--deps-only" ]; then
+        BUILD_DIR="build"
+    fi
+fi
 # buildディレクトリがない場合は作成
 if [ ! -d "${BUILD_DIR}" ]; then
     mkdir "${BUILD_DIR}"
@@ -37,10 +46,36 @@ cd "${BUILD_DIR}" || exit 1
 # BUILD_DIR をフルパスに
 BUILD_DIR=`pwd`
 
+# 依存のみビルドして終了
+if [ "${DEPS_ONLY}" = "true" ]; then
+    echo "依存のみをビルドします (DEST=${INSTALL_DIR})"
+    "${SCRIPT_DIR}/build_dep.sh" "${INSTALL_DIR}"
+    exit 0
+fi
+
+# /amt の事前ビルド検出とリンク設定
+AMT_BASELIBS_DIR=${AMT_BASELIBS_DIR:-/amt/baselibs}
+AMT_PKGCONFIG_FFNK_DIR=${AMT_PKGCONFIG_FFNK_DIR:-/amt/ffmpeg_nekopanda/build/lib/pkgconfig}
+AMT_PKGCONFIG_FF612_DIR=${AMT_PKGCONFIG_FF612_DIR:-/amt/ffmpeg_612/build/lib/pkgconfig}
+USE_PREBUILT_BASELIBS=0
+USE_PREBUILT_FFNK=0
+USE_PREBUILT_FF612=0
+if [ -d "${AMT_BASELIBS_DIR}" ]; then
+    ln -sfn "${AMT_BASELIBS_DIR}" "${BUILD_DIR}/baselibs"
+    export PKG_CONFIG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig:${PKG_CONFIG_PATH}"
+    USE_PREBUILT_BASELIBS=1
+fi
+if [ -d "${AMT_PKGCONFIG_FFNK_DIR}" ]; then
+    USE_PREBUILT_FFNK=1
+fi
+if [ -d "${AMT_PKGCONFIG_FF612_DIR}" ]; then
+    USE_PREBUILT_FF612=1
+fi
+
 echo "${BUILD_DIR} にインストールを行います。"
 
 # libvplのビルド
-if [ ! -d "libvpl-2.15.0" ]; then
+if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "libvpl-2.15.0" ]; then
     echo "libvpl のビルドを行います。"
     (wget https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz -O libvpl.tar.gz \
     && tar xf libvpl.tar.gz \
@@ -51,9 +86,12 @@ if [ ! -d "libvpl-2.15.0" ]; then
     && make install) || exit 1
     sed -i 's/-lvpl/-lvpl -lstdc++/g' ${BUILD_DIR}/baselibs/lib/pkgconfig/vpl.pc
 fi
+if [ "${USE_PREBUILT_BASELIBS}" = "1" ]; then
+    echo "prebuilt baselibs を使用します。libvpl のビルドをスキップします。"
+fi
 
 # media-sdkのビルド
-if [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
+if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
     echo "Intel MediaSDK のビルドを行います。"
     (wget https://github.com/Intel-Media-SDK/MediaSDK/archive/refs/tags/intel-mediasdk-22.5.4.tar.gz -O intel-media-sdk.tar.gz \
     && tar xf intel-media-sdk.tar.gz \
@@ -64,14 +102,21 @@ if [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
     && cd _build && make -j$(nproc) \
     && make install) || exit 1
 fi
+if [ "${USE_PREBUILT_BASELIBS}" = "1" ]; then
+    echo "prebuilt baselibs を使用します。MediaSDK のビルドをスキップします。"
+fi
 
 if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
-    echo "nv-codec-headers のビルドを行います。"
-    (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
-    && tar xf nv-codec-headers.tar.gz \
-    && rm nv-codec-headers.tar.gz \
-    && cd nv-codec-headers-12.2.72.0 \
-    && make PREFIX=${BUILD_DIR}/baselibs install) || exit 1
+    if [ "${USE_PREBUILT_BASELIBS}" != "1" ]; then
+        echo "nv-codec-headers のビルドを行います。"
+        (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
+        && tar xf nv-codec-headers.tar.gz \
+        && rm nv-codec-headers.tar.gz \
+        && cd nv-codec-headers-12.2.72.0 \
+        && make PREFIX=${BUILD_DIR}/baselibs install) || exit 1
+    else
+        echo "prebuilt baselibs を使用します。nv-codec-headers のビルドをスキップします。"
+    fi
 fi
 
 # ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
@@ -79,7 +124,7 @@ if [ ! -d "build_ffnk" ]; then
     mkdir build_ffnk
 fi
 cd build_ffnk
-if [ ! -d "ffmpeg_nekopanda" ]; then
+if [ ! -d "ffmpeg_nekopanda" ] && [ "${USE_PREBUILT_FFNK}" != "1" ]; then
     echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
     (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
     && cd ffmpeg_nekopanda \
@@ -95,7 +140,11 @@ fi
 
 # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
 echo "AmatsukazeCLI (地デジ/BS向け) のビルドを行います。"
-(meson setup --buildtype release --pkg-config-path `pwd`/ffmpeg_nekopanda/build/lib/pkgconfig ../.. && ninja) || exit 1
+FFNK_PKGCFG_PATH="`pwd`/ffmpeg_nekopanda/build/lib/pkgconfig"
+if [ "${USE_PREBUILT_FFNK}" = "1" ]; then
+    FFNK_PKGCFG_PATH="${AMT_PKGCONFIG_FFNK_DIR}"
+fi
+(meson setup --buildtype release --pkg-config-path "${FFNK_PKGCFG_PATH}" ../.. && ninja) || exit 1
 cd ..
 
 # ----- BS4K向け ffmpeg_6.1.2ベースのAmatsukazeCLIのビルド -----
@@ -103,7 +152,7 @@ if [ ! -d "build_ff612" ]; then
     mkdir build_ff612
 fi
 cd build_ff612
-if [ ! -d "ffmpeg-6.1.2" ]; then
+if [ ! -d "ffmpeg-6.1.2" ] && [ "${USE_PREBUILT_FF612}" != "1" ]; then
     echo "ffmpeg (BS4K向け) のビルドを行います。"
   (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
     && tar -xf ffmpeg-6.1.2.tar.xz \
@@ -118,7 +167,11 @@ fi
 
 # ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う
 echo "AmatsukazeCLI (BS4K向け) のビルドを行います。"
-(meson setup --buildtype release --pkg-config-path `pwd`/ffmpeg-6.1.2/build/lib/pkgconfig ../.. && ninja) || exit 1
+FF612_PKGCFG_PATH="`pwd`/ffmpeg-6.1.2/build/lib/pkgconfig"
+if [ "${USE_PREBUILT_FF612}" = "1" ]; then
+  FF612_PKGCFG_PATH="${AMT_PKGCONFIG_FF612_DIR}"
+fi
+(meson setup --buildtype release --pkg-config-path "${FF612_PKGCFG_PATH}" ../.. && ninja) || exit 1
 cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
 cd ..
 

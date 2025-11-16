@@ -1,53 +1,25 @@
-FROM ubuntu:22.04
+ARG GHCR_OWNER=rigaya
+FROM ghcr.io/${GHCR_OWNER}/amatsukaze-builder:ubuntu2204
 
 ARG DEBIAN_FRONTEND=noninteractive \
     OSVER=ubuntu2204 \
-    LOCAL_USER_ID=1000 \
-    LOCAL_GROUP_ID=1000 \
     AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.3/avisynth_3.7.5-1_amd64_Ubuntu22.04.deb
 
 ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8
 ENV LC_CTYPE=ja_JP.UTF-8
+USER root
+RUN apt-get update \
+    && wget -q ${AVISYNTHPLUS_DEB_NAME} -O avisynth.deb \
+    && apt-get install -y ./avisynth.deb \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm avisynth.deb
 
-RUN apt update \
-&& apt-get install -y \
-  sudo \
-  wget \
-  curl \
-  software-properties-common \
-  git \
-  cmake \
-  nasm \
-  yasm \
-  meson \
-  ninja-build \
-  pkg-config \
-  checkinstall \
-  autoconf \
-  automake \
-  libtool \
-  libssl-dev \
-  libz-dev \
-  build-essential \
-  locales \
-&& locale-gen ja_JP.UTF-8 \
-&& locale-gen en_US.UTF-8 \
-&& update-locale LANG=ja_JP.UTF-8 \
-&& add-apt-repository ppa:dotnet/backports \
-&& apt update \
-&& apt-get install -y dotnet-sdk-9.0 \
-&& wget -q ${AVISYNTHPLUS_DEB_NAME} -O avisynth.deb \
-&& apt-get install ./avisynth.deb \
-&& apt-get clean \
-&& rm -rf /var/lib/apt/lists/* \
-&& rm avisynth.deb
+WORKDIR /work
 
-RUN useradd -u $LOCAL_USER_ID -m --user-group --shell /bin/bash rigaya
-RUN groupmod -g $LOCAL_GROUP_ID rigaya
-WORKDIR /home/rigaya
-COPY . .
-RUN chown -R rigaya:rigaya .
-USER rigaya
+ENV AMT_BASELIBS_DIR=/amt/baselibs
+ENV AMT_PKGCONFIG_FFNK_DIR=/amt/ffmpeg_nekopanda/build/lib/pkgconfig
+ENV AMT_PKGCONFIG_FF612_DIR=/amt/ffmpeg_612/build/lib/pkgconfig
 
 

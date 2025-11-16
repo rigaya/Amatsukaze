@@ -40,15 +40,11 @@ jobs:
           TAG=$(echo $GITHUB_SHA | head -c7)
           NPROC=$(grep 'processor' /proc/cpuinfo | wc -l)
           OUTPUT_DIR=`pwd`/output
-          LOCAL_USER_ID=$(id -u)
-          LOCAL_GROUP_ID=$(id -g)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "tagged_image=${IMAGE}:${TAG}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "nproc=${NPROC}" >> $GITHUB_OUTPUT
           echo "output_dir=${OUTPUT_DIR}" >> $GITHUB_OUTPUT
-          echo "local_user_id=${LOCAL_USER_ID}" >> $GITHUB_OUTPUT
-          echo "local_group_id=${LOCAL_GROUP_ID}" >> $GITHUB_OUTPUT
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -79,10 +75,17 @@ jobs:
       - name: Build Exec
         id: build_exec
         run: |
-          docker build --build-arg LOCAL_USER_ID=${{ steps.prep.outputs.local_user_id }} --build-arg LOCAL_GROUP_ID=${{ steps.prep.outputs.local_group_id }} --tag ${{ steps.prep.outputs.tagged_image }} --platform linux/${{ matrix.arch }} --file ${{ env.DOCKER_FILE }} ./
-          docker run -dit --rm -v ${{ steps.prep.outputs.output_dir }}:/output -u "$(id -u):$(id -g)" --name build_pkg ${{ steps.prep.outputs.tagged_image }}
-          docker exec build_pkg ./scripts/build.sh buildAmatsukaze/Amatsukaze
-          docker exec build_pkg sh -c "cd buildAmatsukaze/Amatsukaze; tar -Jcvf /output/Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz ."
+          docker build \
+            --build-arg GHCR_OWNER=${{ github.repository_owner }} \
+            --tag ${{ steps.prep.outputs.tagged_image }} \
+            --platform linux/${{ matrix.arch }} \
+            --file ${{ env.DOCKER_FILE }} ./
+          docker run -dit --rm \
+            -v ${{ github.workspace }}:/work \
+            -v ${{ steps.prep.outputs.output_dir }}:/output \
+            --name build_pkg ${{ steps.prep.outputs.tagged_image }}
+          docker exec build_pkg bash -lc "cd /work && ./scripts/build.sh buildAmatsukaze/Amatsukaze"
+          docker exec build_pkg bash -lc "cd /work/buildAmatsukaze/Amatsukaze && tar -Jcvf /output/Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz ."
           cp ${{ steps.prep.outputs.output_dir }}/Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz .
           echo "pkg_name=Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz" >> $GITHUB_OUTPUT
 
