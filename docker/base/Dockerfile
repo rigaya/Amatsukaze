@@ -44,7 +44,7 @@ WORKDIR /work
 
 # /amt に依存をプリインストール（--deps-only）
 RUN mkdir -p /amt
-RUN --mount=type=bind,source=.,target=/src bash -lc 'cd /src && ./scripts/build.sh /amt --deps-only'
+RUN --mount=type=bind,source=.,target=/src,readonly bash -lc 'mkdir -p /tmp/work && cd /tmp/work && /src/scripts/build.sh /amt --deps-only && touch /amt/.ready && rm -rf /tmp/work'
 
 # 環境情報
 ENV AMT_BASELIBS_DIR=/amt/baselibs

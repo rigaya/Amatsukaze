@@ -72,6 +72,21 @@ if [ -d "${AMT_PKGCONFIG_FF612_DIR}" ]; then
     USE_PREBUILT_FF612=1
 fi
 
+# フォールバック検出（ENV未設定でも /amt がある場合を考慮）
+if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ -d "/amt/baselibs/lib/pkgconfig" ]; then
+    ln -sfn "/amt/baselibs" "${BUILD_DIR}/baselibs"
+    export PKG_CONFIG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig:${PKG_CONFIG_PATH}"
+    USE_PREBUILT_BASELIBS=1
+fi
+if [ "${USE_PREBUILT_FFNK}" != "1" ] && [ -d "/amt/ffmpeg_nekopanda/build/lib/pkgconfig" ]; then
+    AMT_PKGCONFIG_FFNK_DIR="/amt/ffmpeg_nekopanda/build/lib/pkgconfig"
+    USE_PREBUILT_FFNK=1
+fi
+if [ "${USE_PREBUILT_FF612}" != "1" ] && [ -d "/amt/ffmpeg_612/build/lib/pkgconfig" ]; then
+    AMT_PKGCONFIG_FF612_DIR="/amt/ffmpeg_612/build/lib/pkgconfig"
+    USE_PREBUILT_FF612=1
+fi
+
 echo "${BUILD_DIR} にインストールを行います。"
 
 # libvplのビルド

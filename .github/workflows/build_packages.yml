@@ -75,6 +75,8 @@ jobs:
       - name: Build Exec
         id: build_exec
         run: |
+          # Ensure latest base image tag is pulled (avoid stale cache)
+          docker pull ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:${{ matrix.dockerimg }} || true
           docker build \
             --build-arg GHCR_OWNER=${{ github.repository_owner }} \
             --tag ${{ steps.prep.outputs.tagged_image }} \
