@@ -8,6 +8,9 @@ set -e
 DEST_ROOT="${1:-}"
 BUILD_DIR="$(pwd)"
 
+SCRIPT_DIR=`dirname $0`
+SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
+
 is_amt_dest=0
 if [ -n "${DEST_ROOT}" ] && [ "${DEST_ROOT}" = "/amt" ]; then
   is_amt_dest=1
@@ -48,7 +51,7 @@ if [ ! -d "${BUILD_DIR}/MediaSDK-intel-mediasdk-22.5.4" ]; then
     && tar xf intel-media-sdk.tar.gz \
     && rm intel-media-sdk.tar.gz \
     && cd MediaSDK-intel-mediasdk-22.5.4/api/mfx_dispatch/linux \
-    && patch < "${BUILD_DIR}/scripts/mfx.diff" \
+    && patch < "${SCRIPT_DIR}/mfx.diff" \
     && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${BASELIBS_DIR}" \
     && cd _build && make -j"$(nproc)" \
     && make install
