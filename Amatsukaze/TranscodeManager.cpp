@@ -910,6 +910,11 @@ void DoBadThing() {
                         whisperAudioEntries.push_back({ i, key, adst0, filepath0, asrc, 0 });
                         const tstring filepath1 = setting.getIntAudioFilePath(key, adst1, setting.getAudioEncoder());
                         whisperAudioEntries.push_back({ i, key, adst1, filepath1, asrc, 1 });
+                        splitter.open(0, filepath0);
+                        splitter.open(1, filepath1);
+                        for (int frameIndex : frameList) {
+                            splitter.inputPacket(audioCache[frameIndex]);
+                        }
                     } else {
                         if (isDualMono) {
                             ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
