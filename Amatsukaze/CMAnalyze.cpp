@@ -89,14 +89,17 @@ void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, 
 
     // AVSファイルからCM区間を読む
     readTrimAVS(videoFileIndex, numFrames);
+    ctx.infoF("trimAVS読み込み完了");
 
     // シーンチェンジ
     readSceneChanges(videoFileIndex);
+    ctx.infoF("シーンチェンジ読み込み完了");
 
     // 分割情報
     readDiv(videoFileIndex, numFrames);
-
+    ctx.infoF("分割情報読み込み完了");
     makeCMZones(numFrames);
+    ctx.infoF("CM区間生成完了");
 }
 
 // PMT変更情報からCM追加認識
@@ -182,6 +185,7 @@ void CMAnalyze::applyPmtCut(
 
     // cmzonesに反映
     makeCMZones(numFrames);
+    ctx.infoF("CM区間反映完了");
 }
 
 void CMAnalyze::inputTrimAVS(int numFrames, const tstring& trimavsPath) {

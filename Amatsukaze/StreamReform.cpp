@@ -405,6 +405,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
         framePtsMap_[videoFrameList_[i].PTS] = i;
     }
     */
+    ctx.info("[ファイル分割/timestamp計算]");
 
     // VFR検出
     isVFR_ = false;
@@ -606,6 +607,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     formatStartIndex_.push_back((int)format_.size());
 
     // frameSectionIdを生成
+    ctx.info("frameSectionId生成");
     std::vector<int> outFormatFrames(format_.size());
     std::vector<int> frameSectionId(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); ++i) {
@@ -665,12 +667,14 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // frameFormatId_を生成
+    ctx.info("frameFormatId_生成");
     frameFormatId_.resize(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); ++i) {
         frameFormatId_[i] = sectionFileList[frameSectionId[i]];
     }
 
     // フィルタ用入力フレームリスト生成
+    ctx.info("フィルタ用入力フレームリスト生成");
     filterFrameList_ = std::vector<std::vector<FilterSourceFrame>>(numVideoFile_);
     for (int videoId = 0; videoId < (int)numVideoFile_; ++videoId) {
         int keyFrame = -1;
@@ -742,6 +746,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // indexAudioFrameList_を作成
+    ctx.info("indexAudioFrameList_生成");
     int numMaxAudio = 1;
     for (int i = 0; i < (int)format_.size(); ++i) {
         numMaxAudio = std::max(numMaxAudio, (int)format_[i].audioFormat.size());
@@ -757,6 +762,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // audioFileOffsets_を生成
+    ctx.info("audioFileOffsets_生成");
     audioFileOffsets_.resize(audioFrameList_.size() + 1);
     for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
         audioFileOffsets_[i] = audioFrameList_[i].fileOffset;
@@ -765,6 +771,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     audioFileOffsets_.back() = lastFrame.fileOffset + lastFrame.codedDataSize;
 
     // 時間情報
+    ctx.info("時間情報生成");
     srcTotalDuration_ = dataPTS_.back() - dataPTS_.front();
     if (timeList_.size() > 0) {
         auto ti = timeList_[0];

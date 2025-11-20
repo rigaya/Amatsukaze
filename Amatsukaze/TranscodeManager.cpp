@@ -784,6 +784,7 @@ void DoBadThing() {
         // ファイル読み込み情報を保存
         auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
         auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
+        ctx.infoF("ソースファイル読み込み用データ保存: %s", amtsPath.c_str());
         av::SaveAMTSource(amtsPath,
             setting.getIntVideoFilePath(videoFileIndex),
             setting.getWaveFilePath(),
@@ -791,10 +792,12 @@ void DoBadThing() {
             reformInfo.getFilterSourceFrames(videoFileIndex),
             reformInfo.getFilterSourceAudioFrames(videoFileIndex),
             setting.getDecoderSetting());
+        ctx.infoF("ソースファイル読み込み用データ保存完了");
     }
 
     // ロゴ・CM解析
     rm.wait(HOST_CMD_CMAnalyze);
+    ctx.infoF("[ロゴ・CM解析]");
     sw.start();
     std::vector<std::pair<size_t, bool>> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
