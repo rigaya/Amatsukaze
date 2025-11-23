@@ -95,6 +95,7 @@ static void printHelp(const tchar* bin) {
         "                      1 : 通常\n"
         "                      2 : CMをカット\n"
         "                      4 : CMのみ出力\n"
+        "                      8 : 前後のCMのみカット\n"
         "                      ORも可 例) 6: 本編とCMを分離\n"
         "  --nicojk18          ニコニコ実況コメントをnicojk18サーバから取得\n"
         "  --nicojklog         ニコニコ実況コメントをNicoJKログフォルダから取得\n"

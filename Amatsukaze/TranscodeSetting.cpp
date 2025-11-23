@@ -294,7 +294,9 @@ bool sarValid(const std::pair<int, int>& sar) {
     const std::vector<tstring>& inSubs,
     const std::vector<tstring>& subsTitles,
     const tstring& metapath,
-    const bool tsreplaceRemoveTypeD) {
+    const bool tsreplaceRemoveTypeD,
+    bool tsreplaceEdgeTrim,
+    int64_t tsreplaceDelay) {
     std::vector<std::pair<tstring, bool>> ret;
 
     StringBuilderT sb;
@@ -461,6 +463,10 @@ bool sarValid(const std::pair<int, int>& sar) {
         sb.append(_T(" -i \"%s\""), srcTSFilePath);
         sb.append(_T(" -r \"%s\""), tmppath);
         sb.append(_T(" --replace-format mp4"));
+        if (tsreplaceEdgeTrim) {
+            sb.append(_T(" --end-at-replace-eof"));
+            sb.append(_T(" --replace-delay %lld"), (long long)tsreplaceDelay);
+        }
         if (tsreplaceRemoveTypeD) {
             sb.append(_T(" --remove-typed"));
         }
@@ -491,16 +497,28 @@ bool sarValid(const std::pair<int, int>& sar) {
 }
 
 /* static */ const char* cmOutMaskToString(int outmask) {
-    switch (outmask) {
-    case 1: return "通常";
-    case 2: return "CMをカット";
-    case 3: return "通常出力とCMカット出力";
-    case 4: return "CMのみ";
-    case 5: return "通常出力とCM出力";
-    case 6: return "本編とCMを分離";
-    case 7: return "通常,本編,CM全出力";
+    struct OptionDesc {
+        int bit;
+        const char* text;
+    };
+    static const OptionDesc OPTIONS[] = {
+        { 1, "通常" },
+        { 2, "CMをカット" },
+        { 4, "CMのみ出力" },
+        { 8, "前後のCMのみカット" },
+    };
+    static thread_local std::string desc;
+    desc.clear();
+    for (const auto& opt : OPTIONS) {
+        if ((outmask & opt.bit) != 0) {
+            if (desc.size()) desc.append("/");
+            desc.append(opt.text);
+        }
     }
-    return "不明";
+    if (desc.empty()) {
+        return (outmask == 0) ? "なし" : "不明";
+    }
+    return desc.c_str();
 }
 TempDirectory::TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp)
     : AMTObject(ctx)
@@ -557,6 +575,7 @@ tstring TempDirectory::genPath(const tstring& base, int code) {
     switch (cmtype) {
     case CMTYPE_CM: return "-cm";
     case CMTYPE_NONCM: return "-main";
+    case CMTYPE_EDGE_TRIM: return "-edge";
     case CMTYPE_BOTH: return "";
     default: break;
     }

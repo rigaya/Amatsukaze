@@ -537,6 +537,7 @@ enum CMType {
     CMTYPE_BOTH = 0,
     CMTYPE_NONCM = 1,
     CMTYPE_CM = 2,
+    CMTYPE_EDGE_TRIM = 3,
     CMTYPE_MAX
 };
 

@@ -7,6 +7,7 @@
 */
 
 #include "Muxer.h"
+#include <cmath>
 
 /* static */ ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting) {
     if (!setting.getUseMKVWhenSubExist() || setting.getFormat() == FORMAT_MKV) {
@@ -47,6 +48,24 @@ void AMTMuxder::mux(EncodeFileKey key,
     auto fmt = reformInfo_.getFormat(key);
     auto muxFormat = getActualOutputFormat(key, reformInfo_, setting_);
     auto vfmt = fileOut.vfmt;
+
+    bool tsreplaceEdgeTrim = false;
+    int64_t tsreplaceDelay = 0;
+    if (muxFormat == FORMAT_TSREPLACE && key.cm == CMTYPE_EDGE_TRIM) {
+        if (!fileIn.videoFrames.empty()) {
+            const auto& filterFrames = reformInfo_.getFilterSourceFrames(key.video);
+            int firstIndex = fileIn.videoFrames.front();
+            if (firstIndex >= 0 && firstIndex < (int)filterFrames.size()) {
+                double firstPts = filterFrames[firstIndex].pts;
+                double basePts = reformInfo_.getFirstDataPTS();
+                tsreplaceDelay = (int64_t)std::llround(firstPts - basePts);
+                if (tsreplaceDelay < 0) {
+                    tsreplaceDelay = 0;
+                }
+                tsreplaceEdgeTrim = true;
+            }
+        }
+    }
 
     if (eoInfo.selectEvery > 1) {
         // エンコーダで間引く場合があるので、それを反映する
@@ -248,7 +267,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
-        setting_.getTsreplaceRemoveTypeD());
+        setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay);
 
     for (int i = 0; i < (int)args.size(); ++i) {
         ctx.infoF("%s", args[i].first);
@@ -293,7 +312,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
-        std::vector<tstring>(), std::vector<tstring>(), tstring(), false);
+        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0);
     ctx.info("[Mux開始]");
     ctx.infoF("%s", args[0].first);
 

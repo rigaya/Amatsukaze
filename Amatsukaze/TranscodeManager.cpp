@@ -685,8 +685,8 @@ void DoBadThing() {
     }
     if (setting.getFormat() == FORMAT_TSREPLACE) {
         auto cmtypes = setting.getCMTypes();
-        if (cmtypes.size() != 1 || cmtypes[0] != CMTYPE_BOTH) {
-            THROW(FormatException, "tsreplaceはCMカットに対応していません");
+        if (cmtypes.size() != 1 || (cmtypes[0] != CMTYPE_BOTH && cmtypes[0] != CMTYPE_EDGE_TRIM)) {
+            THROW(FormatException, "tsreplaceは前後CMカット以外のCMカットに対応していません");
         }
         if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265) {
             THROW(FormatException, "tsreplaceはH.264/H.265以外には対応していません");
@@ -784,7 +784,7 @@ void DoBadThing() {
         // ファイル読み込み情報を保存
         auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
         auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
-        ctx.infoF("ソースファイル読み込み用データ保存: %s", amtsPath.c_str());
+        ctx.infoF("ソースファイル読み込み用データ保存[%d/%d]: %s", videoFileIndex + 1, numVideoFiles, amtsPath.c_str());
         av::SaveAMTSource(amtsPath,
             setting.getIntVideoFilePath(videoFileIndex),
             setting.getWaveFilePath(),
@@ -792,7 +792,7 @@ void DoBadThing() {
             reformInfo.getFilterSourceFrames(videoFileIndex),
             reformInfo.getFilterSourceAudioFrames(videoFileIndex),
             setting.getDecoderSetting());
-        ctx.infoF("ソースファイル読み込み用データ保存完了");
+        ctx.infoF("ソースファイル読み込み用データ保存完了[%d/%d]", videoFileIndex + 1, numVideoFiles);
     }
 
     // ロゴ・CM解析

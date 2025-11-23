@@ -186,6 +186,8 @@ public:
 
     int getMainVideoFileIndex() const;
 
+    double getFirstDataPTS() const;
+
     // フィルタ入力映像フレーム
     const std::vector<FilterSourceFrame>& getFilterSourceFrames(int videoFileIndex) const;
 

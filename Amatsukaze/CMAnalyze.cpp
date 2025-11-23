@@ -27,6 +27,7 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
 
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
+        ctx.infoF("チャプター・CM解析開始");
         const bool logoOffJL = logoOffInJL(videoFileIndex);
         if (logoOffJL) {
             ctx.info("チャプター・CM解析にロゴを使用しません。");
@@ -238,6 +239,7 @@ tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputForma
     const tstring avspath = (forChapterExe) ? setting_.getTmpSourceAVS8bitPath(videoFileIndex) : setting_.getTmpSourceAVSPath(videoFileIndex);
     File file(avspath, _T("w"));
     file.write(sb.getMC());
+    ctx.infoF("AVSファイル作成完了: %s", avspath.c_str());
     return avspath;
 }
 

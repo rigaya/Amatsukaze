@@ -1868,23 +1868,27 @@ namespace Amatsukaze.Models
                 if ((int)Data.OutputFormat == value)
                     return;
                 Data.OutputFormat = (FormatType)value;
+                bool outputMaskChanged = false;
                 if (Data.OutputFormat == FormatType.TSREPLACE)
                 {
-                    Data.OutputMask = 1;
+                    if (!TsreplaceOutputMasks.Contains(Data.OutputMask))
+                    {
+                        Data.OutputMask = TsreplaceOutputMasks[0];
+                        outputMaskChanged = true;
+                    }
                 }
                 UpdateWarningText();
                 RaisePropertyChanged();
-                if (Data.OutputFormat == FormatType.TSREPLACE)
+                RaisePropertyChanged("OutputOptionList");
+                if (outputMaskChanged || Data.OutputFormat == FormatType.TSREPLACE)
                 {
                     RaisePropertyChanged("OutputMask");
                 }
-                RaisePropertyChanged("OutputOptionEnabled");
                 RaisePropertyChanged("TsreplaceSelected");
             }
         }
         #endregion
 
-        public bool OutputOptionEnabled { get { return Data.OutputFormat != FormatType.TSREPLACE; } }
         public bool TsreplaceSelected { get { return Data.OutputFormat == FormatType.TSREPLACE; } }
 
         #region UseMKVWhenSubExists変更通知プロパティ
@@ -2196,6 +2200,7 @@ namespace Amatsukaze.Models
         public string[] HEVCDecoderList {
             get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
         }
+        private static readonly int[] TsreplaceOutputMasks = new int[] { 1, 8 };
         public DisplayOutputMask[] OutputOptionList_ = new DisplayOutputMask[]
         {
             new DisplayOutputMask()
@@ -2213,9 +2218,20 @@ namespace Amatsukaze.Models
             new DisplayOutputMask()
             {
                 Name = "CMのみ", Mask = 4
+            },
+            new DisplayOutputMask()
+            {
+                Name = "前後のCMのみカット", Mask = 8
             }
         };
-        public DisplayOutputMask[] OutputOptionList { get { return OutputOptionList_; } }
+        public DisplayOutputMask[] OutputOptionList {
+            get {
+                if (Data.OutputFormat == FormatType.TSREPLACE) {
+                    return OutputOptionList_.Where(opt => TsreplaceOutputMasks.Contains(opt.Mask)).ToArray();
+                }
+                return OutputOptionList_;
+            }
+        }
         public string[] FormatList {
             get { return new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" }; }
         }

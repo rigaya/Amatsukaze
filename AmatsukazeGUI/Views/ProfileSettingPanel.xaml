@@ -288,7 +288,6 @@
                        ItemsSource="{Binding Model.SelectedProfile.OutputOptionList}" 
                        SelectedItem="{Binding Model.SelectedProfile.OutputMask, Mode=TwoWay}"
                        ToolTip="CMカットの精度は100%ではありません"
-                       IsEnabled="{Binding Model.SelectedProfile.OutputOptionEnabled}"
                     />
                 </StackPanel>
 

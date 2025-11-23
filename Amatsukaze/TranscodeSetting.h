@@ -134,7 +134,9 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const std::vector<tstring>& inSubs,
     const std::vector<tstring>& subsTitles,
     const tstring& metapath,
-    const bool tsreplaceRemoveTypeD);
+    const bool tsreplaceRemoveTypeD,
+    bool tsreplaceEdgeTrim,
+    int64_t tsreplaceDelay);
 
 tstring makeTimelineEditorArgs(
     const tstring& binpath,

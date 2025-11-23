@@ -233,6 +233,11 @@ int StreamReformInfo::getMainVideoFileIndex() const {
     return maxIndex;
 }
 
+double StreamReformInfo::getFirstDataPTS() const {
+    if (dataPTS_.empty()) return 0.0;
+    return dataPTS_.front();
+}
+
 // フィルタ入力映像フレーム
 const std::vector<FilterSourceFrame>& StreamReformInfo::getFilterSourceFrames(int videoFileIndex) const {
     return filterFrameList_[videoFileIndex];
@@ -802,6 +807,21 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         }
     }
 
+    // ファイルごとの前後CM除去範囲
+    std::vector<std::pair<int, int>> edgeTrimRanges(numVideoFile_, std::make_pair(0, 0));
+    for (int video = 0; video < numVideoFile_; ++video) {
+        const auto& frameList = filterFrameList_[video];
+        int head = 0;
+        while (head < (int)frameList.size() && frameList[head].cmType == CMTYPE_CM) {
+            ++head;
+        }
+        int tail = (int)frameList.size();
+        while (tail > head && frameList[tail - 1].cmType == CMTYPE_CM) {
+            --tail;
+        }
+        edgeTrimRanges[video] = std::make_pair(head, tail);
+    }
+
     // ファイルリスト生成
     outFileKeys_.clear();
     for (int video = 0; video < numVideoFile_; ++video) {
@@ -869,9 +889,20 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         const auto& frameList = filterFrameList_[key.video];
         int start = fileDivs_[key.video][key.div];
         int end = fileDivs_[key.video][key.div + 1];
-        for (int i = start; i < end; ++i) {
+        int rangeStart = start;
+        int rangeEnd = end;
+        bool useEdgeTrim = (key.cm == CMTYPE_EDGE_TRIM);
+        if (useEdgeTrim) {
+            auto trimRange = edgeTrimRanges[key.video];
+            rangeStart = std::max(rangeStart, trimRange.first);
+            rangeEnd = std::min(rangeEnd, trimRange.second);
+            if (rangeStart >= rangeEnd) {
+                continue;
+            }
+        }
+        for (int i = rangeStart; i < rangeEnd; ++i) {
             if (foramtId == frameFormatId_[frameList[i].frameIndex]) {
-                if (key.cm == CMTYPE_BOTH || key.cm == frameList[i].cmType) {
+                if (useEdgeTrim || key.cm == CMTYPE_BOTH || key.cm == frameList[i].cmType) {
                     file.videoFrames.push_back(i);
                 }
             }

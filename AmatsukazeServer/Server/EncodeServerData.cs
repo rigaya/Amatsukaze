@@ -1179,17 +1179,15 @@ namespace Amatsukaze.Server
         public string DisplayTrimAVS { get { return TrimAVS ? "○" : "☓"; } }
         public string DisplayOutputMask {
             get {
-                switch(OutputMask)
-                {
-                    case 1: return "通常";
-                    case 2: return "CMをカット";
-                    case 3: return "通常+CMカット";
-                    case 4: return "CMのみ";
-                    case 5: return "通常+CM";
-                    case 6: return "本編とCMを分離";
-                    case 7: return "通常+本編+CM";
+                var labels = new List<string>();
+                if ((OutputMask & 1) != 0) labels.Add("通常");
+                if ((OutputMask & 2) != 0) labels.Add("CMをカット");
+                if ((OutputMask & 4) != 0) labels.Add("CMのみ出力");
+                if ((OutputMask & 8) != 0) labels.Add("前後のCMのみカット");
+                if (labels.Count == 0) {
+                    return (OutputMask == 0) ? "なし" : "不明";
                 }
-                return "通常";
+                return string.Join("/", labels);
             }
         }
         public string DisplayService { get { return ServiceName + "(" + ServiceId + ")"; } }

@@ -13,6 +13,7 @@
 const char* CMTypeToString(CMType cmtype) {
     if (cmtype == CMTYPE_CM) return "CM";
     if (cmtype == CMTYPE_NONCM) return "本編";
+    if (cmtype == CMTYPE_EDGE_TRIM) return "前後CMカット";
     return "";
 }
 
