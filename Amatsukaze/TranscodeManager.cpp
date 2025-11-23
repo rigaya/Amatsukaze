@@ -918,6 +918,8 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             splitter.inputPacket(audioCache[frameIndex]);
                         }
+                        ctx.infoF("音声%d-%d[0]出力 -> %s", fileIn.outKey.format, asrc, filepath0.c_str());
+                        ctx.infoF("音声%d-%d[1]出力 -> %s", fileIn.outKey.format, asrc, filepath1.c_str());
                     } else {
                         if (isDualMono) {
                             ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
@@ -929,6 +931,7 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             file.write(audioCache[frameIndex]);
                         }
+                        ctx.infoF("音声%d-%d出力 -> %s", fileIn.outKey.format, asrc, filepath.c_str());
                     }
                 }
             }
