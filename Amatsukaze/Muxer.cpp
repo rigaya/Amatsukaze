@@ -123,8 +123,9 @@ void AMTMuxder::mux(EncodeFileKey key,
     }
 
     // 映像ファイル
-    tstring encVideoFile;
-    encVideoFile = setting_.getEncVideoFilePath(key);
+    tstring encVideoFile = setting_.getEncVideoFilePath(key);
+    uint64_t encVideoFileSize = 0;
+    rgy_get_filesize(encVideoFile.c_str(), &encVideoFileSize);
 
     // チャプターファイル
     tstring chapterFile;
@@ -274,6 +275,16 @@ void AMTMuxder::mux(EncodeFileKey key,
         StdRedirectedSubProcess muxer(args[i].first, 0, args[i].second);
         int ret = muxer.join();
         if (ret != 0) {
+            // mkvmerge使用時、戻り値"1"は警告扱いにしたいが、
+            // 実際にmux結果ファイルが正常に出力されていることを確認してから成功扱いにする。
+            if (muxFormat == FORMAT_MKV && ret == 1) {
+                uint64_t outSize = 0;
+                if (encVideoFileSize > 0 && rgy_get_filesize(outPath.c_str(), &outSize) && outSize >= encVideoFileSize) {
+                    ctx.warnF("mkvmergeから警告コード 1 が返されましたが、出力ファイルは正常に作成されました。(output: %lld bytes, input video: %lld bytes)",
+                                (long long)outSize, (long long)encVideoFileSize);
+                    continue;
+                }
+            }
             THROWF(RuntimeException, "mux failed (exit code: %d)", ret);
         }
         // mp4boxがコンソール出力のコードページを変えてしまうので戻す
