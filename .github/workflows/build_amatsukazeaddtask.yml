@@ -55,27 +55,31 @@ jobs:
               set -e
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
-              apt-get install -y wget apt-transport-https software-properties-common p7zip-full
+              apt-get install -y wget apt-transport-https software-properties-common git
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
               dpkg -i packages-microsoft-prod.deb
               rm packages-microsoft-prod.deb
               apt-get update
               apt-get install -y dotnet-sdk-9.0
+              git config --global --add safe.directory /work
               dotnet publish AmatsukazeAddTask/AmatsukazeAddTask.csproj \
                 -c Release \
                 -r linux-${{ matrix.arch }} \
                 --self-contained true \
                 -p:Platform=AnyCPU \
                 -p:PublishSingleFile=true \
-                -o /work/publish/${{ matrix.arch }}
-              cd /work/publish/${{ matrix.arch }}
-              PKG_NAME=\"AmatsukazeAddTask_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.7z\"
-              7z a \"${PKG_NAME}\" .
-            "
+                -o /work/publish/${{ matrix.arch }}"
 
-          PKG_NAME="AmatsukazeAddTask_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.7z"
+          # コンテナ外（GitHub Actions ランナー側）で tar.xz による圧縮を実行
+          sudo apt-get update
+          sudo apt-get install -y xz-utils
+
+          cd "${PUBLISH_DIR}"
+          PKG_NAME="AmatsukazeAddTask_Linux_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.tar.xz"
+          tar --exclude='*.pdb' -cJf "../${PKG_NAME}" ./*
+
           echo "pkg_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
-          echo "pkg_path=${GITHUB_WORKSPACE}/publish/${{ matrix.arch }}/${PKG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "pkg_path=${GITHUB_WORKSPACE}/publish/${PKG_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
