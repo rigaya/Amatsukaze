@@ -16,6 +16,7 @@ namespace Amatsukaze.AddTask
         public int ServerPort = ServerSupport.DEFAULT_PORT;
         public string ServerIP = "127.0.0.1";
         public string AmatsukazeRoot;
+        public ProcMode ProcMode = ProcMode.AutoBatch;
 
         public string FilePath;
         public string OutPath;
@@ -45,6 +46,9 @@ namespace Amatsukaze.AddTask
                 "  -s|--setting <プロファイル名> エンコード設定プロファイル\r\n" +
                 "  -b|--bat <バッチファイル名> 追加時実行バッチ\r\n" +
                 "  --priority <優先度>     優先度\r\n" +
+                "  --proc-mode <mode>      タスクの処理モード(batch|auto|test|drcs|cm)\r\n" +
+                "                          batch: 一括バッチ, auto: 自動バッチ(デフォルト)\r\n" +
+                "                          test: テストエンコードのみ, drcs: DRCS解析のみ, cm: CM解析のみ\r\n" +
                 "  -o|--outdir <パス>      出力先ディレクトリ\r\n" +
                 "  -d|--nasdir <パス>      NASのTSファイル置き場\r\n" +
                 "  --remote-dir <パス>     サーバから入力ファイルにアクセスするときのディレクトリパス\r\n" +
@@ -78,6 +82,28 @@ namespace Amatsukaze.AddTask
                 "  --subnet <サブネットマスク>  Wake On Lan用サブネットマスク\r\n" +
                 "  --mac <MACアドレス>  Wake On Lan用MACアドレス\r\n";
             Console.WriteLine(help);
+        }
+
+        public ProcMode GetProcMode(string arg)
+        {
+            switch (arg.ToLowerInvariant())
+            {
+                case "batch":
+                    return ProcMode.Batch;
+                case "auto":
+                case "autobatch":
+                    return ProcMode.AutoBatch;
+                case "test":
+                    return ProcMode.Test;
+                case "drcs":
+                case "drcscheck":
+                    return ProcMode.DrcsCheck;
+                case "cm":
+                case "cmcheck":
+                    return ProcMode.CMCheck;
+                default:
+                    throw new Exception("不正なモード名です");
+            }
         }
 
         public ChangeItemType GetChangeItemType(string arg)
@@ -121,6 +147,11 @@ namespace Amatsukaze.AddTask
                 else if (arg == "-ip" || arg == "--ip")
                 {
                     ServerIP = args[i + 1];
+                    ++i;
+                }
+                else if (arg == "--proc-mode")
+                {
+                    ProcMode = GetProcMode(args[i + 1]);
                     ++i;
                 }
                 else if (arg == "-f" || arg == "--file")
@@ -348,7 +379,7 @@ namespace Amatsukaze.AddTask
                     option.OutPath,
                     option.Profile ?? "<null>",
                     option.Priority,
-                    ProcMode.AutoBatch,
+                    option.ProcMode,
                     option.AddQueueBat ?? "<null>");
 
                 // リクエストを生成
@@ -367,7 +398,7 @@ namespace Amatsukaze.AddTask
                     Targets = new List<AddQueueItem>() {
                         new AddQueueItem() { Path = srcpath, Hash = hash }
                     },
-                    Mode = ProcMode.AutoBatch,
+                    Mode = option.ProcMode,
                     RequestId = UniqueId(),
                     AddQueueBat = option.AddQueueBat
                 };
