@@ -1,0 +1,93 @@
+name: Build AmatsukazeAddTask Linux Packages
+
+on:
+  push:
+    branches:
+      - linux
+    tags:
+      - '*'
+
+jobs:
+  build:
+    name: Build AmatsukazeAddTask
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+          - arch: arm64
+
+    env:
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Set version name
+        id: version
+        run: |
+          cd "${GITHUB_WORKSPACE}"
+          REVCOUNT=$(git rev-list --count HEAD)
+          echo "rev_count=${REVCOUNT}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="r${REVCOUNT}"
+          fi
+          echo "version_name=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish AmatsukazeAddTask
+        id: publish
+        run: |
+          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/${{ matrix.arch }}"
+          mkdir -p "${PUBLISH_DIR}"
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ubuntu:20.04 \
+            bash -lc "
+              set -e
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y wget apt-transport-https software-properties-common p7zip-full
+              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+              dpkg -i packages-microsoft-prod.deb
+              rm packages-microsoft-prod.deb
+              apt-get update
+              apt-get install -y dotnet-sdk-9.0
+              dotnet publish AmatsukazeAddTask/AmatsukazeAddTask.csproj \
+                -c Release \
+                -r linux-${{ matrix.arch }} \
+                --self-contained true \
+                -p:Platform=AnyCPU \
+                -p:PublishSingleFile=true \
+                -o /work/publish/${{ matrix.arch }}
+              cd /work/publish/${{ matrix.arch }}
+              PKG_NAME=\"AmatsukazeAddTask_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.7z\"
+              7z a \"${PKG_NAME}\" .
+            "
+
+          PKG_NAME="AmatsukazeAddTask_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.7z"
+          echo "pkg_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "pkg_path=${GITHUB_WORKSPACE}/publish/${{ matrix.arch }}/${PKG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmatsukazeAddTask_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}
+          path: ${{ steps.publish.outputs.pkg_path }}
+
+      - name: Upload Release Asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            ${{ steps.publish.outputs.pkg_path }}
