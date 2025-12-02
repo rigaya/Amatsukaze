@@ -193,12 +193,23 @@ namespace Amatsukaze.AddTask
                 {
                     var outArg = args[i + 1];
 
-                    // Windows のルートドライブ (例: C:\) または Linux のルート (例: /path)
-                    // から始まっている場合は、そのまま使用する。
+                    // Windows のルートドライブ (例: C:\) ／ UNC パス (例: \\server\share)
+                    // または Linux のルート (例: /path) から始まっている場合は、そのまま使用する。
                     // それ以外の場合のみ、ローカル環境に合わせてフルパスへ変換する。
-                    if ((outArg.Length >= 3 && char.IsLetter(outArg[0]) && outArg[1] == ':' &&
-                         (outArg[2] == '\\' || outArg[2] == '/')) // Windows ドライブ指定
-                        || (outArg.StartsWith("/")))             // Linux ルート
+                    bool isWindowsDriveRoot =
+                        outArg.Length >= 3 &&
+                        char.IsLetter(outArg[0]) &&
+                        outArg[1] == ':' &&
+                        (outArg[2] == '\\' || outArg[2] == '/'); // Windows ドライブ指定
+
+                    bool isUncPath =
+                        outArg.Length >= 2 &&
+                        ((outArg[0] == '\\' && outArg[1] == '\\') ||
+                         (outArg[0] == '/'  && outArg[1] == '/')); // UNC パス (\\server\share, //server/share)
+
+                    bool isLinuxRoot = outArg.StartsWith("/");      // Linux ルート
+
+                    if (isWindowsDriveRoot || isUncPath || isLinuxRoot)
                     {
                         OutPath = outArg;
                     }
