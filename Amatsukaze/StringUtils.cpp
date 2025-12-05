@@ -73,19 +73,27 @@ void StringLiner::AddBytes(MemoryChunk utf8) {
 
 void StringLiner::Flush() {
     if (buffer.size() > 0) {
-        OnTextLine(buffer.ptr(), (int)buffer.size(), 0);
+        OnTextLine(buffer.ptr(), (int)buffer.size(), 0, false);
         buffer.clear();
+        searchIdx = 0;
     }
 }
 
 bool StringLiner::SearchLineBreak() {
     const uint8_t* ptr = buffer.ptr();
-    for (int i = searchIdx; i < (int)buffer.size(); ++i) {
-        if (ptr[i] == '\n' || ptr[i] == '\r') {
+    int bufSize = (int)buffer.size();
+    for (int i = searchIdx; i < bufSize; ++i) {
+        const uint8_t c = ptr[i];
+        if (c == '\n' || c == '\r') {
+            bool endsWithCROnly = false;
             int len = i;
             int brlen = 1;
-            if (len > 0 && ptr[len - 1] == '\r') {
-                --len; ++brlen;
+            if (c == '\r') {
+                if (i + 1 < bufSize && ptr[i + 1] == '\n') {
+                    brlen = 2;
+                } else {
+                    endsWithCROnly = true;
+                }
             }
 #if !(defined(_WIN32) || defined(_WIN64))
             static const char *const LOG_COLOR[] = {
@@ -103,8 +111,8 @@ bool StringLiner::SearchLineBreak() {
                 }
             }
 #endif
-            OnTextLine(ptr, len, brlen);
-            buffer.trimHead(i + 1);
+            OnTextLine(ptr, len, brlen, endsWithCROnly);
+            buffer.trimHead(i + brlen);
             searchIdx = 0;
             return true;
         }

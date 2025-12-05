@@ -53,7 +53,7 @@ bool NicoJK::MySubProcess::isFail() const {
     return errConv.nlines > 0;
 }
 NicoJK::MySubProcess::OutConv::OutConv(bool isErr) : nlines(0), isErr(isErr) {}
-/* virtual */ void NicoJK::MySubProcess::OutConv::OnTextLine(const uint8_t* ptr, int len, int brlen) {
+/* virtual */ void NicoJK::MySubProcess::OutConv::OnTextLine(const uint8_t* ptr, int len, int brlen, bool /*endedWithCarriageReturnOnly*/) {
     std::vector<char> line = utf8ToString(ptr, len);
     line.push_back('\n');
     fwrite(line.data(), line.size(), 1, SUBPROC_OUT);

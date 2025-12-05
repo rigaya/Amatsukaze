@@ -51,7 +51,7 @@ private:
             int nlines;
         protected:
             bool isErr;
-            virtual void OnTextLine(const uint8_t* ptr, int len, int brlen);
+            virtual void OnTextLine(const uint8_t* ptr, int len, int brlen, bool endedWithCarriageReturnOnly);
         };
 
         OutConv outConv, errConv;

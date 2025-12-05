@@ -240,6 +240,7 @@ struct Config {
     DecoderSetting decoderSetting;
     int audioBitrateInKbps;
     int numEncodeBufferFrames;
+    int encoderParallel;
     // CM解析用設定
     std::vector<tstring> logoPath;
     std::vector<tstring> eraseLogoPath;
@@ -378,6 +379,8 @@ public:
     int getAudioBitrateInKbps() const;
 
     int getNumEncodeBufferFrames() const;
+
+    int getEncoderParallel() const;
 
     const std::vector<tstring>& getLogoPath() const;
 

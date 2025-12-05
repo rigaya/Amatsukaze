@@ -169,14 +169,17 @@ void EventBaseSubProcess::drain_thread(bool isErr) {
     }
 }
 
-StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling) :
+StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling, bool captureOnly, LineCallback lineCallback) :
     EventBaseSubProcess(args, disablePowerThrottoling),
     isUtf8(isUtf8),
     bufferLines(bufferLines),
+    captureOnly(captureOnly),
+    lineCallback_(lineCallback),
     outLiner(this, false),
     errLiner(this, true),
     mtx(),
-    lastLines() {}
+    lastLines(),
+    capturedLines() {}
 
 StdRedirectedSubProcess::~StdRedirectedSubProcess() {
     if (isUtf8) {
@@ -191,11 +194,44 @@ const std::deque<std::vector<char>>& StdRedirectedSubProcess::getLastLines() {
     return lastLines;
 }
 
-StdRedirectedSubProcess::SpStringLiner::SpStringLiner(StdRedirectedSubProcess* pThis, bool isErr)
-    : pThis(pThis), isErr(isErr) {}
+const std::vector<std::vector<char>>& StdRedirectedSubProcess::getCapturedLines() const {
+    return capturedLines;
+}
 
-void StdRedirectedSubProcess::SpStringLiner::OnTextLine(const uint8_t* ptr, int len, int brlen) {
-    pThis->onTextLine(isErr, ptr, len, brlen);
+StdRedirectedSubProcess::SpStringLiner::SpStringLiner(StdRedirectedSubProcess* pThis, bool isErr)
+    : pThis(pThis)
+    , isErr(isErr)
+    , lastLineWasCROnly(false) {}
+
+void StdRedirectedSubProcess::SpStringLiner::OnTextLine(const uint8_t* ptr, int len, int brlen, bool endedWithCarriageReturnOnly) {
+    // StringLiner から渡される endedWithCarriageReturnOnly は
+    // 「その行の末尾が単独の '\r' だったかどうか」だけを見る。
+    //
+    // しかし SVT-AV1 のように「'\r' を最初に出してから進捗文字列を続ける」
+    // 出力パターンでは、ストリーム中は
+    //
+    //   1) 「長さ 0 で endedWithCarriageReturnOnly == true」の行
+    //   2) 続く「Encoding: ...」の行 (endedWithCarriageReturnOnly == false)
+    //
+    // という 2 つの OnTextLine 呼び出しに分割されるため、
+    // 2) の進捗文字列側では endedWithCarriageReturnOnly が false のままになってしまう。
+    //
+    // そこで、
+    //   - 直前に「長さ 0 かつ endedWithCarriageReturnOnly == true」の行があった場合
+    //   - その直後に届いた「len > 0 の行」
+    // を「進捗行」とみなせるよう、フラグを前後の呼び出し間で伝搬させる。
+
+    bool effectiveEndedWithCROnly = endedWithCarriageReturnOnly;
+    if (!effectiveEndedWithCROnly && lastLineWasCROnly && len > 0) {
+        // 直前に CR のみの行が来ており、今回はその直後の実際の文字列なので、
+        // 「CR のみで終わった行に対応する進捗行」として扱う。
+        effectiveEndedWithCROnly = true;
+    }
+
+    pThis->onTextLine(isErr, ptr, len, brlen, effectiveEndedWithCROnly);
+
+    // 「今回の行が CR のみの行か」を記録しておき、次回に活かす。
+    lastLineWasCROnly = (len == 0 && endedWithCarriageReturnOnly);
 }
 
 // ANSIエスケープシーケンスとカラーコードを除去するヘルパー関数
@@ -255,7 +291,7 @@ std::vector<char> removeAnsiEscapeSequences(const std::vector<char>& input) {
     return output;
 }
 
-void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len, int brlen) {
+void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len, int brlen, bool endedWithCarriageReturnOnly) {
     std::vector<char> line;
     if (isUtf8) {
         line = utf8ToString(ptr, len);
@@ -276,8 +312,26 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
     }
     
     std::string br((char *)ptr + len, brlen);
-    fprintf(SUBPROC_OUT, "%s%s", line.data(), br.c_str());
-    fflush(SUBPROC_OUT);
+    bool isProgressLine = (endedWithCarriageReturnOnly && isErr);
+    if (lineCallback_) {
+        std::vector<char> callbackLine = line;
+        if (!callbackLine.empty() && callbackLine.back() == '\0') {
+            callbackLine.pop_back();
+        }
+        lineCallback_(isErr, callbackLine, isProgressLine);
+    }
+    if (captureOnly) {
+        if (!isProgressLine) {
+            std::vector<char> bufferLine = line;
+            if (!bufferLine.empty() && bufferLine.back() == '\0') {
+                bufferLine.pop_back();
+            }
+            capturedLines.push_back(std::move(bufferLine));
+        }
+    } else {
+        fprintf(SUBPROC_OUT, "%s%s", line.data(), br.c_str());
+        fflush(SUBPROC_OUT);
+    }
 
     if (bufferLines > 0) {
         std::lock_guard<std::mutex> lock(mtx);

@@ -1918,6 +1918,7 @@ namespace Amatsukaze.Models
                 profile.EnablePmtCut = data.Profile.EnablePmtCut;
                 profile.PmtCutHeadRate = data.Profile.PmtCutHeadRate;
                 profile.PmtCutTailRate = data.Profile.PmtCutTailRate;
+                profile.EncoderParallel = data.Profile.EncoderParallel;
                 for (int i = 0; i < DisplayResource.MAX; ++i)
                 {
                     profile.Resources[i].Resource = data.Profile.ReqResources[i];

@@ -410,6 +410,8 @@ namespace Amatsukaze.Server
         public FilterSetting FilterSetting { get; set; }
         [DataMember]
         public int NumEncodeBufferFrames { get; set; }
+        [DataMember]
+        public int EncoderParallel { get; set; }
 
         [DataMember]
         public string AdditionalEraseLogo { get; set; }

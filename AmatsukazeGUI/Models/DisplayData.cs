@@ -1288,6 +1288,21 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region EncoderParallel変更通知プロパティ
+        public int EncoderParallel
+        {
+            get { return Data.EncoderParallel; }
+            set
+            {
+                if (Data.EncoderParallel == value)
+                    return;
+                Data.EncoderParallel = value;
+                UpdateWarningText();
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region SplitSub変更通知プロパティ
         public bool SplitSub {
             get { return Data.SplitSub; }
@@ -2200,6 +2215,11 @@ namespace Amatsukaze.Models
         public string[] HEVCDecoderList {
             get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
         }
+
+        // エンコード分割並列数 (1～8) 用のリスト
+        public int[] EncoderParallelList {
+            get { return new int[] { 1, 2, 3, 4, 5, 6, 7, 8 }; }
+        }
         private static readonly int[] TsreplaceOutputMasks = new int[] { 1, 8 };
         public DisplayOutputMask[] OutputOptionList_ = new DisplayOutputMask[]
         {
@@ -2395,6 +2415,10 @@ namespace Amatsukaze.Models
             if (Data.EncoderType == EncoderType.SVTAV1 && Data.TwoPass)
             {
                 sb.Append("SVTAV1は2パスに対応していません\r\n");
+            }
+            if (Data.TwoPass && Data.EncoderParallel > 1)
+            {
+                sb.Append("2パスエンコード時はエンコード分割並列を使用できません (分割並列数は1として扱われます)\r\n");
             }
             if (Data.EnableNicoJK && Data.NicoJKFormats.Any(s => s) == false)
             {
@@ -2625,6 +2649,7 @@ namespace Amatsukaze.Models
             text.KeyValue("tsreplaceでビデオを置換する", Data.TSReplaceVideo);
             text.KeyValue("JoinLogoScpオプションを有効にする", Data.EnableJLSOption);
             text.KeyValue("エンコードアフィニティを無視する", Data.IgnoreEncodeAffinity);
+            text.KeyValue("エンコード分割並列数", Data.EncoderParallel.ToString());
             text.KeyValue("エンコードバッファフレーム数", Data.NumEncodeBufferFrames.ToString());
             text.KeyValue("追加ロゴ消去", Data.AdditionalEraseLogo ?? "なし");
             text.KeyValue("音声エンコードを有効にする", Data.EnableAudioEncode);

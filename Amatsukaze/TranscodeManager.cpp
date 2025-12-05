@@ -565,9 +565,13 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
     tstring timecodepath,
     int vfrTimingFps,
     EncodeFileKey key, int pass, int serviceID,
-    const EncoderOptionInfo& eoInfo) {
+    const EncoderOptionInfo& eoInfo,
+    const tstring& outPathOverride) {
     VIDEO_STREAM_FORMAT srcFormat = reformInfo_.getVideoStreamFormat();
     double srcBitrate = getSourceBitrate(key.video);
+    const tstring outPath = (outPathOverride.size() > 0)
+        ? outPathOverride
+        : setting_.getEncVideoFilePath(key);
     return makeEncoderArgs(
         setting_.getEncoder(),
         setting_.getEncoderPath(),
@@ -579,7 +583,7 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
         timecodepath,
         vfrTimingFps,
         setting_.getFormat(),
-        setting_.getEncVideoFilePath(key));
+        outPath);
 }
 
 // src, target
@@ -678,6 +682,11 @@ void DoBadThing() {
 
     auto eoInfo = ParseEncoderOption(setting.getEncoder(), setting.getEncoderOptions());
     PrintEncoderInfo(ctx, eoInfo);
+    const int cliParallel = setting.getEncoderParallel();
+    const int encoderParallel = (cliParallel > 1) ? cliParallel : ((eoInfo.parallel > 1) ? eoInfo.parallel : 1);
+    if (setting.isTwoPass() && encoderParallel > 1) {
+        THROW(ArgumentException, "2passエンコード時は分割エンコードを使用できません (--enc-parallel / --parallel は無効です)");
+    }
 
     // チェック
     if (!isNoEncode && !setting.isFormatVFRSupported() && eoInfo.afsTimecode) {
@@ -1095,40 +1104,36 @@ void DoBadThing() {
                 ctx.infoF("VFRタイミング: %d fps", fileOut.vfrTimingFps);
                 fileOut.timecode = setting.getAvsTimecodePath(key);
             }
-            if (eoInfo.parallel > 1) {
-                ctx.infoF("分割エンコード: %d", eoInfo.parallel);
+            if (encoderParallel > 1) {
+                ctx.infoF("分割エンコード: %d", encoderParallel);
             }
 
-            std::vector<int> pass;
+            std::vector<int> passList;
             if (setting.isTwoPass()) {
-                pass.push_back(1);
-                pass.push_back(2);
+                passList.push_back(1);
+                passList.push_back(2);
             } else {
-                pass.push_back(-1);
+                passList.push_back(-1);
             }
 
             auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, eoInfo, outvi);
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
-            // VFRフレームタイミングが120fpsか
-            std::vector<tstring> encoderArgs;
-            for (int i = 0; i < (int)pass.size(); i++) {
-                encoderArgs.push_back(
-                    argGen->GenEncoderOptions(
-                        outvi.num_frames,
-                        outfmt, bitrateZones, vfrBitrateScale,
-                        fileOut.timecode, fileOut.vfrTimingFps, key, pass[i], serviceId, eoInfo));
-            }
+            const tstring baseTimecodePath = fileOut.timecode;
+            const tstring baseOutputPath = setting.getEncVideoFilePath(key);
             // x264, x265, SVT-AV1のときはdisablePowerThrottoling=trueとする
             // QSV/NV/VCEEncではプロセス内で自動的に最適なように設定されるため不要
             const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
-            AMTFilterVideoEncoder encoder(ctx, std::max(4, setting.getNumEncodeBufferFrames()));
+            AMTFilterVideoEncoder encoder(ctx, setting, std::max(4, setting.getNumEncodeBufferFrames()));
             // 並列GetFrame用にフィルタチェーンを構築するファクトリを渡す
             // 既存のfilterSourceの前処理結果（スクリプト）を再利用して環境を再構築
             auto filterFactory = [&]() -> std::unique_ptr<AMTFilterSource> {
                 return std::unique_ptr<AMTFilterSource>(new AMTFilterSource(ctx, filterSource));
             };
             encoder.encode(filterClip, outfmt,
-                timeCodes, encoderArgs, eoInfo.parallel, disablePowerThrottoling, env, filterFactory);
+                timeCodes, *argGen, passList, bitrateZones, vfrBitrateScale,
+                baseTimecodePath, fileOut.vfrTimingFps, baseOutputPath,
+                key, serviceId, eoInfo, encoderParallel, disablePowerThrottoling,
+                env, filterFactory, setting.getEncoder());
         } catch (const AvisynthError& avserror) {
             THROWF(AviSynthException, "%s", avserror.msg);
         }

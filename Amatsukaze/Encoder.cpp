@@ -9,7 +9,85 @@
 #include "Encoder.h"
 #include "EncoderOptionParser.h"
 #include <atomic>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 #include "rgy_pipe.h"
+#include "StringUtils.h"
+#include <cmath>
+#include "TranscodeManager.h"
+#include "rgy_filesystem.h"
+
+namespace {
+
+bool isNativeParallelEncoder(ENUM_ENCODER encoder) {
+    return encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC || encoder == ENCODER_VCEENC;
+}
+
+bool isSoftwareSplitEncoder(ENUM_ENCODER encoder) {
+    return encoder == ENCODER_X264 || encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1;
+}
+
+tstring appendChunkSuffix(const tstring& path, int chunkIndex) {
+    return strsprintf(_T("%s.chunk%d%s"), PathRemoveExtensionS(path).c_str(), chunkIndex, rgy_get_extension(path).c_str());
+}
+
+std::vector<BitrateZone> sliceBitrateZones(const std::vector<BitrateZone>& zones, int chunkStart, int chunkEnd) {
+    std::vector<BitrateZone> result;
+    for (const auto& zone : zones) {
+        const int interStart = std::max(zone.startFrame, chunkStart);
+        const int interEnd = std::min(zone.endFrame, chunkEnd);
+        if (interStart >= interEnd) {
+            continue;
+        }
+        BitrateZone chunkZone = zone;
+        chunkZone.startFrame = interStart - chunkStart;
+        chunkZone.endFrame = interEnd - chunkStart;
+        result.push_back(chunkZone);
+    }
+    return result;
+}
+
+tstring createChunkTimecodeFile(const tstring& basePath, int chunkIndex, int startFrame, int endFrame, const std::vector<double>& timeCodes, AMTContext& ctx) {
+    if (basePath.size() == 0 || timeCodes.size() == 0 || endFrame <= startFrame) {
+        return _T("");
+    }
+    tstring chunkPath = appendChunkSuffix(basePath, chunkIndex);
+    ctx.registerTmpFile(chunkPath);
+    File file(chunkPath, _T("wb"));
+    const char header[] = "# timecode format v2\n";
+    file.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
+    const double base = timeCodes[startFrame];
+    for (int frame = startFrame; frame < endFrame; frame++) {
+        const int64_t value = (int64_t)std::llround(timeCodes[frame] - base);
+        std::string line = std::to_string((long long)value);
+        line.push_back('\n');
+        file.write(MemoryChunk((uint8_t*)line.data(), (int)line.size()));
+    }
+    return chunkPath;
+}
+
+void concatenateChunkOutputs(const tstring& finalPath, const std::vector<tstring>& chunkPaths) {
+    if (chunkPaths.empty()) {
+        return;
+    }
+    std::vector<uint8_t> buffer(4 * 1024 * 1024);
+    File finalFile(finalPath, _T("wb"));
+    for (const auto& chunk : chunkPaths) {
+        File chunkFile(chunk, _T("rb"));
+        while (true) {
+            MemoryChunk mc(buffer.data(), (int)buffer.size());
+            size_t bytes = chunkFile.read(mc);
+            if (bytes == 0) {
+                break;
+            }
+            finalFile.write(MemoryChunk(buffer.data(), (int)bytes));
+        }
+    }
+}
+
+} // anonymous namespace
 
 /* static */ const char* Y4MWriter::getPixelFormat(VideoInfo vi) {
     if (vi.Is420()) {
@@ -64,12 +142,12 @@ void Y4MWriter::inputFrame(const PVideoFrame& frame) {
     }
     buffer.add(MemoryChunk((uint8_t*)frameHeader.data(), frameHeader.size()));
     int yuv[] = { PLANAR_Y, PLANAR_U, PLANAR_V };
-    for (int c = 0; c < nc; ++c) {
+    for (int c = 0; c < nc; c++) {
         const uint8_t* plane = frame->GetReadPtr(yuv[c]);
         int pitch = frame->GetPitch(yuv[c]);
         int height = frame->GetHeight(yuv[c]);
         int rowsize = frame->GetRowSize(yuv[c]);
-        for (int y = 0; y < height; ++y) {
+        for (int y = 0; y < height; y++) {
             buffer.add(MemoryChunk((uint8_t*)plane + y * pitch, rowsize));
         }
         onWrite(buffer.get());
@@ -82,10 +160,10 @@ void Y4MWriter::inputFrame(const PVideoFrame& frame) {
     if (vi.Is444()) return "424";
     return "Unknown";
 }
-Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling)
+Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly, StdRedirectedSubProcess::LineCallback lineCallback)
     : AMTObject(ctx)
     , y4mWriter_(new MyVideoWriter(this, vi, fmt))
-    , process_(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling)) {
+    , process_(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, lineCallback)) {
     ctx.infoF("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps",
         getYUV(vi), vi.BitsPerComponent(), fmt.progressive ? "progressive" : "tff",
         fmt.width, fmt.height, fmt.sarWidth, fmt.sarHeight, vi.fps_numerator, vi.fps_denominator);
@@ -119,6 +197,10 @@ void Y4MEncodeWriter::finish() {
 const std::deque<std::vector<char>>& Y4MEncodeWriter::getLastLines() {
     return process_->getLastLines();
 }
+
+const std::vector<std::vector<char>>& Y4MEncodeWriter::getCapturedLines() const {
+    return process_->getCapturedLines();
+}
 Y4MEncodeWriter::MyVideoWriter::MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo vi, VideoFormat fmt)
     : Y4MWriter(vi, fmt)
     , this_(this_) {}
@@ -130,16 +212,396 @@ void Y4MEncodeWriter::onVideoWrite(MemoryChunk mc) {
     process_->write(mc);
 }
 AMTFilterVideoEncoder::AMTFilterVideoEncoder(
-    AMTContext&ctx, int numEncodeBufferFrames)
+    AMTContext&ctx, const ConfigWrapper& setting, int numEncodeBufferFrames)
     : AMTObject(ctx)
+    , vi_()
+    , outfmt_()
+    , setting_(setting)
+    , encoder_()
+    , pipeParallel_(0)
     , thread_(this, numEncodeBufferFrames) {
     ctx.infoF("バッファリングフレーム数: %d", numEncodeBufferFrames);
 }
 
+void AMTFilterVideoEncoder::encodeSWParallel(
+    EncoderArgumentGenerator& argGen,
+    const std::vector<double>& timeCodes,
+    const std::vector<BitrateZone>& bitrateZones,
+    double vfrBitrateScale,
+    const tstring& timecodePath,
+    int vfrTimingFps,
+    const tstring& baseOutputPath,
+    EncodeFileKey key,
+    int serviceId,
+    const EncoderOptionInfo& eoInfo,
+    int currentPass,
+    int passIndex,
+    int actualParallel,
+    bool disablePowerThrottoling,
+    const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory) {
+    if (!filterSourceFactory) {
+        THROW(RuntimeException, "分割エンコードにはfilterSourceFactoryが必要です");
+    }
+    const int mp = actualParallel;
+    struct ChunkTask {
+        int startFrame = 0;
+        int endFrame = 0;
+        tstring args;
+        tstring outputPath;
+    };
+    std::vector<ChunkTask> chunks(mp);
+    std::vector<tstring> chunkOutputs;
+    chunkOutputs.reserve(mp);
+
+    for (int p = 0; p < mp; p++) {
+        auto& chunk = chunks[p];
+        chunk.startFrame = vi_.num_frames * p / mp;
+        chunk.endFrame = vi_.num_frames * (p + 1) / mp;
+        const int chunkFrames = chunk.endFrame - chunk.startFrame;
+        auto chunkZones = sliceBitrateZones(bitrateZones, chunk.startFrame, chunk.endFrame);
+        tstring chunkTimecodePath;
+        if (timecodePath.size() > 0) {
+            chunkTimecodePath = createChunkTimecodeFile(timecodePath, passIndex * mp + p, chunk.startFrame, chunk.endFrame, timeCodes, ctx);
+        }
+        chunk.outputPath = appendChunkSuffix(baseOutputPath, passIndex * mp + p);
+        ctx.registerTmpFile(chunk.outputPath);
+        chunk.args = argGen.GenEncoderOptions(
+            chunkFrames,
+            outfmt_, std::move(chunkZones), vfrBitrateScale,
+            chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath);
+        chunkOutputs.push_back(chunk.outputPath);
+    }
+
+    class ChunkLogManager {
+    public:
+        ChunkLogManager(AMTContext& ctx, int count)
+            : ctx_(ctx)
+            , entries_(count)
+            , stop_(false)
+            , finishedCount_(0) {}
+
+        StdRedirectedSubProcess::LineCallback makeCallback(int idx) {
+            return [this, idx](bool isErr, const std::vector<char>& line, bool isProgress) {
+                std::lock_guard<std::mutex> lock(entries_[idx].mtx);
+                if (isProgress) {
+                    entries_[idx].lastProgress.assign(line.begin(), line.end());
+                    entries_[idx].hasProgress = true;
+                } else {
+                    entries_[idx].logs.emplace_back(line.begin(), line.end());
+                }
+                progressCv_.notify_all();
+            };
+        }
+
+        void start() {
+            progressThread_ = std::thread([this]() { progressLoop(); });
+        }
+
+        void markFinished(int idx) {
+            {
+                std::lock_guard<std::mutex> lock(entries_[idx].mtx);
+                entries_[idx].finished = true;
+            }
+            finishedCount_.fetch_add(1);
+            progressCv_.notify_all();
+        }
+
+        void stop() {
+            {
+                std::lock_guard<std::mutex> lock(progressMutex_);
+                stop_ = true;
+            }
+            progressCv_.notify_all();
+            if (progressThread_.joinable()) {
+                progressThread_.join();
+            }
+        }
+
+        void dumpLogs() {
+            for (size_t idx = 0; idx < entries_.size(); ++idx) {
+                std::lock_guard<std::mutex> lock(entries_[idx].mtx);
+                for (const auto& line : entries_[idx].logs) {
+                    ctx_.infoF("[chunk%d] %s", (int)idx, line.c_str());
+                }
+            }
+        }
+
+    private:
+        struct Entry {
+            std::mutex mtx;
+            std::vector<std::string> logs;
+            std::string lastProgress;
+            bool hasProgress = false;
+            bool finished = false;
+        };
+
+        bool allFinished() const {
+            return finishedCount_.load() == (int)entries_.size();
+        }
+
+        void progressLoop() {
+            size_t offset = 0;
+            while (true) {
+                {
+                    std::lock_guard<std::mutex> lock(progressMutex_);
+                    if (stop_) break;
+                }
+                bool printed = false;
+                for (size_t attempt = 0; attempt < entries_.size(); ++attempt) {
+                    size_t idx = (offset + attempt) % entries_.size();
+                    std::unique_lock<std::mutex> lock(entries_[idx].mtx);
+                    if (entries_[idx].finished) {
+                        continue;
+                    }
+                    std::string message = entries_[idx].hasProgress ? entries_[idx].lastProgress : std::string("Running...");
+                    lock.unlock();
+                    ctx_.progressF("[chunk%d] %s", (int)idx, message.c_str());
+                    offset = idx + 1;
+                    printed = true;
+                    break;
+                }
+                if (allFinished()) {
+                    break;
+                }
+                std::unique_lock<std::mutex> lock(progressMutex_);
+                progressCv_.wait_for(lock, std::chrono::seconds(1), [this]() { return stop_.load(); });
+                if (stop_.load()) {
+                    break;
+                }
+                if (!printed && entries_.empty()) {
+                    break;
+                }
+            }
+        }
+
+        AMTContext& ctx_;
+        std::vector<Entry> entries_;
+        std::mutex progressMutex_;
+        std::condition_variable progressCv_;
+        std::atomic<bool> stop_;
+        std::atomic<int> finishedCount_;
+        std::thread progressThread_;
+    };
+
+    ChunkLogManager logManager(ctx, mp);
+    logManager.start();
+    bool logStopped = false;
+    auto stopLogs = [&]() {
+        if (!logStopped) {
+            logManager.stop();
+            logManager.dumpLogs();
+            logStopped = true;
+        }
+    };
+
+    ctx.info("[エンコーダ起動]");
+    for (int p = 0; p < mp; p++) {
+        ctx.infoF("[chunk %d] %s", p, chunks[p].args.c_str());
+    }
+
+    class ChunkPumpThread : public DataPumpThread<std::unique_ptr<PVideoFrame>, true> {
+    public:
+        ChunkPumpThread(Y4MEncodeWriter* encoder, std::atomic<bool>* anyError)
+            : DataPumpThread(8)
+            , encoder_(encoder)
+            , anyError_(anyError) {}
+    protected:
+        virtual void OnDataReceived(std::unique_ptr<PVideoFrame>&& data) override {
+            if (anyError_ && anyError_->load()) {
+                return;
+            }
+            try {
+                encoder_->inputFrame(*data);
+            } catch (Exception&) {
+                if (anyError_) anyError_->store(true);
+                throw;
+            }
+        }
+    private:
+        Y4MEncodeWriter* encoder_;
+        std::atomic<bool>* anyError_;
+    };
+
+    Stopwatch sw;
+    sw.start();
+
+    bool error = false;
+    std::atomic<bool> anyError(false);
+    std::vector<std::unique_ptr<Y4MEncodeWriter>> chunkEncoders(mp);
+    std::vector<std::unique_ptr<ChunkPumpThread>> chunkPumps;
+    chunkPumps.reserve(mp);
+    std::vector<std::thread> workers;
+    workers.reserve(mp);
+    std::vector<std::shared_ptr<AMTFilterSource>> chunkFilters(mp);
+    double totalEncodeTime = 0.0;
+
+    try {
+        try {
+            for (int p = 0; p < mp; p++) {
+                chunkEncoders[p] = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(
+                    ctx, chunks[p].args, vi_, outfmt_, disablePowerThrottoling, true, logManager.makeCallback(p)));
+                chunkPumps.emplace_back(new ChunkPumpThread(chunkEncoders[p].get(), &anyError));
+                chunkPumps.back()->start();
+            }
+
+            for (int p = 0; p < mp; p++) {
+                workers.emplace_back([&, p]() {
+                    try {
+                        std::shared_ptr<AMTFilterSource> localFilter(filterSourceFactory().release());
+                        chunkFilters[p] = localFilter;
+                        IScriptEnvironment2* localenv = localFilter->getEnv();
+                        PClip localClip = localFilter->getClip();
+                        for (int fi = chunks[p].startFrame; fi < chunks[p].endFrame && !anyError.load(); ++fi) {
+                            auto frame = localClip->GetFrame(fi, localenv);
+                            chunkPumps[p]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                        }
+                    } catch (const AvisynthError& avserror) {
+                        ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+                        anyError.store(true);
+                    } catch (Exception&) {
+                        anyError.store(true);
+                    }
+                    chunkPumps[p]->join();
+                    chunkPumps[p]->force_clear();
+                    chunkFilters[p].reset();
+                });
+            }
+
+            for (auto& worker : workers) {
+                worker.join();
+            }
+        } catch (const AvisynthError& avserror) {
+            ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+            error = true;
+        } catch (Exception&) {
+            error = true;
+        } catch (...) {
+            error = true;
+        }
+
+        if (anyError.load()) {
+            error = true;
+        }
+
+        for (int p = 0; p < mp; p++) {
+            if (chunkEncoders[p]) {
+                chunkEncoders[p]->finish();
+            }
+            logManager.markFinished(p);
+        }
+        stopLogs();
+
+        if (error) {
+            THROW(RuntimeException, "エンコード中に不明なエラーが発生");
+        }
+
+        // エンコード全体の経過時間を計測
+        sw.stop();
+        totalEncodeTime = sw.getTotal();
+        ctx.infoF("%d並列エンコード完了 %.2fs", mp, totalEncodeTime);
+
+        if (setting_.getEncoder() == ENCODER_SVTAV1) {
+            // SVT-AV1 はバイナリ連結できないため、mp4boxを使用してチャンクを結合する
+            const tstring mp4boxPath = setting_.getMp4BoxPath();
+            const tstring tmpDir = setting_.getTmpDir();
+
+            if (mp4boxPath.size() == 0) {
+                THROW(RuntimeException, "SVT-AV1の分割エンコード結合に必要なmp4boxのパスが設定されていません");
+            }
+
+            auto runMp4BoxWithLogging = [&](const tstring& cmdLine) {
+                ctx.infoF("MP4Box コマンド: %s", cmdLine.c_str());
+                StdRedirectedSubProcess proc(cmdLine, 0, true, false, true);
+                int ret = proc.join();
+                const auto& lines = proc.getCapturedLines();
+                if (!lines.empty()) {
+                    ctx.info("MP4Box 出力↓↓↓↓↓↓");
+                    for (auto v : lines) {
+                        auto line = v;
+                        line.push_back('\0');
+                        ctx.infoF("%s", line.data());
+                    }
+                    ctx.info("MP4Box 出力↑↑↑↑↑↑");
+                }
+                // mp4boxがコンソール出力のコードページを変えてしまうので戻す
+                ctx.setDefaultCP();
+                if (ret != 0) {
+                    THROWF(RuntimeException, "MP4Box結合処理がエラーコード(%d)を返しました", ret);
+                }
+            };
+
+            // まず各チャンクの生AV1出力を個別のMP4に変換
+            std::vector<tstring> chunkMp4List;
+            chunkMp4List.reserve(chunkOutputs.size());
+            for (const auto& chunkPath : chunkOutputs) {
+                tstring chunkMp4 = chunkPath + _T(".mp4");
+                ctx.registerTmpFile(chunkMp4);
+
+                StringBuilderT sb;
+                sb.append(_T("\"%s\""), mp4boxPath.c_str());
+                sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
+                sb.append(_T(" -tmp \"%s\""), tmpDir.c_str());
+                sb.append(_T(" -add \"%s#video:name=Video:forcesync"), chunkPath.c_str());
+                if (outfmt_.fixedFrameRate) {
+                    sb.append(_T(":fps=%d/%d"), outfmt_.frameRateNum, outfmt_.frameRateDenom);
+                }
+                sb.append(_T("\""));
+                sb.append(_T(" -new \"%s\""), chunkMp4.c_str());
+
+                runMp4BoxWithLogging(sb.str());
+                chunkMp4List.push_back(chunkMp4);
+            }
+
+            // 生成したMP4をmp4boxで結合して最終出力(baseOutputPath)とする
+            if (!chunkMp4List.empty()) {
+                StringBuilderT sb;
+                sb.append(_T("\"%s\""), mp4boxPath.c_str());
+                sb.append(_T(" -tmp \"%s\""), tmpDir.c_str());
+                // 1つ目を-add、以降を-catで連結
+                sb.append(_T(" -add \"%s#video:name=Video:forcesync\""), chunkMp4List[0].c_str());
+                for (size_t i = 1; i < chunkMp4List.size(); ++i) {
+                    sb.append(_T(" -cat \"%s\""), chunkMp4List[i].c_str());
+                }
+                sb.append(_T(" -new \"%s\""), baseOutputPath.c_str());
+
+                runMp4BoxWithLogging(sb.str());
+            }
+        } else {
+            // x264/x265など従来通りバイナリ連結
+            concatenateChunkOutputs(baseOutputPath, chunkOutputs);
+        }
+    } catch (...) {
+        stopLogs();
+        throw;
+    }
+    chunkFilters.clear();
+    // 実効fps, 実効ビットレートを計算して表示
+    const double effectiveFps = (totalEncodeTime > 0.0)
+        ? (vi_.num_frames / totalEncodeTime)
+        : 0.0;
+    // 実効bitrateはbaseOutputPathのファイルサイズから算出する
+    // 分母はduration
+    const double duration = vi_.num_frames / (double)vi_.fps_numerator;
+    uint64_t fileSize = 0;
+    if (!rgy_get_filesize(baseOutputPath.c_str(), &fileSize)) {
+        ctx.infoF("%d並列エンコード 実効速度: %.2f fps", mp, effectiveFps);
+    } else if (fileSize == 0) {
+        THROW(RuntimeException, "出力映像ファイルサイズが0です");
+    } else {
+        const double effectiveBitrate = fileSize * 8 / (duration * 1000.0);
+        ctx.infoF("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: %.2f kbps", mp, effectiveFps, effectiveBitrate);
+    }
+}
+
 void AMTFilterVideoEncoder::encode(
     PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
-    const std::vector<tstring>& encoderOptions, const int pipeParallel, const bool disablePowerThrottoling,
-    IScriptEnvironment* env, const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory) {
+    EncoderArgumentGenerator& argGen, const std::vector<int>& passList,
+    const std::vector<BitrateZone>& bitrateZones, double vfrBitrateScale,
+    const tstring& timecodePath, int vfrTimingFps, const tstring& baseOutputPath,
+    EncodeFileKey key, int serviceId, const EncoderOptionInfo& eoInfo,
+    const int pipeParallel, const bool disablePowerThrottoling,
+    IScriptEnvironment* env, const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory,
+    ENUM_ENCODER encoderType) {
     vi_ = source->GetVideoInfo();
     outfmt_ = outfmt;
 
@@ -149,14 +611,35 @@ void AMTFilterVideoEncoder::encode(
         THROW(RuntimeException, "フレーム数が合いません");
     }
 
-    int npass = (int)encoderOptions.size();
+    const bool wantsParallel = pipeParallel > 1;
+    const bool nativeParallel = wantsParallel && isNativeParallelEncoder(encoderType);
+    const bool softwareParallel = wantsParallel && !nativeParallel && isSoftwareSplitEncoder(encoderType);
+    const int actualParallel = (nativeParallel || softwareParallel) ? pipeParallel : 1;
+
+    const int npass = (int)passList.size();
     for (int i = 0; i < npass; i++) {
+        const int currentPass = passList[i];
         ctx.infoF("%d/%dパス エンコード開始 予定フレーム数: %d", i + 1, npass, vi_.num_frames);
 
-        const tstring& args = encoderOptions[i];
+        if (softwareParallel) {
+            if (npass > 1) {
+                THROW(RuntimeException, "分割エンコードは2passと同時に使用できません");
+            }
+            encodeSWParallel(
+                argGen, timeCodes, bitrateZones, vfrBitrateScale,
+                timecodePath, vfrTimingFps, baseOutputPath,
+                key, serviceId, eoInfo, currentPass, i,
+                actualParallel, disablePowerThrottoling, filterSourceFactory);
+            continue;
+        }
+
+        tstring args = argGen.GenEncoderOptions(
+            vi_.num_frames,
+            outfmt_, bitrateZones, vfrBitrateScale,
+            timecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, baseOutputPath);
 
         // 並列パイプ用の準備 (OS非依存)
-        const bool useParallel = (pipeParallel > 0);
+        const bool useParallel = nativeParallel;
         struct ParallelPipeInfo {
             RGYAnonymousPipe pipe;
             int startFrame;
@@ -168,7 +651,7 @@ void AMTFilterVideoEncoder::encode(
         tstring argsWithParallel = args;
         if (useParallel) {
             // フレーム範囲を分割
-            const int mp = pipeParallel;
+            const int mp = actualParallel;
             pinfo.resize(mp);
             for (int p = 0; p < mp; p++) {
                 pinfo[p].startFrame = vi_.num_frames * p / mp;
@@ -344,7 +827,7 @@ void AMTFilterVideoEncoder::encode(
             } else {
                 // 既存の単一パイプ処理
                 thread_.start();
-                for (int i = 0; i < vi_.num_frames; ++i) {
+                for (int i = 0; i < vi_.num_frames; i++) {
                     auto frame = source->GetFrame(i, env);
                     thread_.put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
                 }
@@ -371,11 +854,11 @@ void AMTFilterVideoEncoder::encode(
         sw.stop();
 
         // 単一パイプ時のみ従来の待ち時間統計を出す
-        if (pipeParallel <= 1) {
+        if (actualParallel <= 1) {
             double prod, cons; thread_.getTotalWait(prod, cons);
             ctx.infoF("Total: %.2fs, FilterWait: %.2fs, EncoderWait: %.2fs", sw.getTotal(), prod, cons);
         } else {
-            ctx.infoF("Total: %.2fs (parallel mp=%d)", sw.getTotal(), pipeParallel);
+            ctx.infoF("Total: %.2fs (parallel mp=%d)", sw.getTotal(), actualParallel);
         }
     }
 }
@@ -449,7 +932,7 @@ void AMTSimpleVideoEncoder::onFileOpen(AVFormatContext *fmt) {
     audioMap_ = std::vector<int>(fmt->nb_streams, -1);
     if (pass_ <= 1) { // 2パス目は出力しない
         audioCount_ = 0;
-        for (int i = 0; i < (int)fmt->nb_streams; ++i) {
+        for (int i = 0; i < (int)fmt->nb_streams; i++) {
             if (fmt->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
                 audioFiles_.emplace_back(new AudioFileWriter(
                     fmt->streams[i], setting_.getIntAudioFilePath(EncodeFileKey(), audioCount_, setting_.getAudioEncoder()), 8 * 1024));
@@ -477,7 +960,7 @@ void AMTSimpleVideoEncoder::processAllData(int pass) {
     encoder_->finish();
 
     if (pass_ <= 1) { // 2パス目は出力しない
-        for (int i = 0; i < audioCount_; ++i) {
+        for (int i = 0; i < audioCount_; i++) {
             audioFiles_[i]->flush();
         }
         audioFiles_.clear();

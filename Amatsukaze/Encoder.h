@@ -14,6 +14,8 @@
 #include "FilteredSource.h"
 #include <functional>
 
+class EncoderArgumentGenerator;
+
 class Y4MWriter {
     static const char* getPixelFormat(VideoInfo vi);
 public:
@@ -31,7 +33,7 @@ protected:
 class Y4MEncodeWriter : AMTObject, NonCopyable {
     static const char* getYUV(VideoInfo vi);
 public:
-    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling);
+    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly = false, StdRedirectedSubProcess::LineCallback lineCallback = StdRedirectedSubProcess::LineCallback());
     ~Y4MEncodeWriter();
 
     void inputFrame(const PVideoFrame& frame);
@@ -39,6 +41,8 @@ public:
     void finish();
 
     const std::deque<std::vector<char>>& getLastLines();
+
+    const std::vector<std::vector<char>>& getCapturedLines() const;
 
     void onVideoWrite(MemoryChunk mc);
 
@@ -59,15 +63,35 @@ private:
 class AMTFilterVideoEncoder : public AMTObject {
 public:
     AMTFilterVideoEncoder(
-        AMTContext&ctx, int numEncodeBufferFrames);
+        AMTContext&ctx, const ConfigWrapper& setting, int numEncodeBufferFrames);
 
     void encode(
         PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
-        const std::vector<tstring>& encoderOptions, const int pipeParallel,
-        const bool disablePowerThrottoling, IScriptEnvironment* env,
-        const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory = nullptr);
+        EncoderArgumentGenerator& argGen, const std::vector<int>& passList,
+        const std::vector<BitrateZone>& bitrateZones, double vfrBitrateScale,
+        const tstring& timecodePath, int vfrTimingFps, const tstring& baseOutputPath,
+        EncodeFileKey key, int serviceId, const EncoderOptionInfo& eoInfo,
+        const int pipeParallel, const bool disablePowerThrottoling, IScriptEnvironment* env,
+        const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory = nullptr,
+        ENUM_ENCODER encoderType = ENCODER_X264);
 
 private:
+    void encodeSWParallel(
+        EncoderArgumentGenerator& argGen,
+        const std::vector<double>& timeCodes,
+        const std::vector<BitrateZone>& bitrateZones,
+        double vfrBitrateScale,
+        const tstring& timecodePath,
+        int vfrTimingFps,
+        const tstring& baseOutputPath,
+        EncodeFileKey key,
+        int serviceId,
+        const EncoderOptionInfo& eoInfo,
+        int currentPass,
+        int passIndex,
+        int actualParallel,
+        bool disablePowerThrottoling,
+        const std::function<std::unique_ptr<AMTFilterSource>()>& filterSourceFactory);
 
     class SpDataPumpThread : public DataPumpThread<std::unique_ptr<PVideoFrame>, true> {
     public:
@@ -80,6 +104,7 @@ private:
 
     VideoInfo vi_;
     VideoFormat outfmt_;
+    const ConfigWrapper& setting_;
     std::unique_ptr<Y4MEncodeWriter> encoder_;
     int pipeParallel_;
     SpDataPumpThread thread_;

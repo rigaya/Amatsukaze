@@ -219,7 +219,7 @@ protected:
     AutoBuffer buffer;
     int searchIdx;
 
-    virtual void OnTextLine(const uint8_t* ptr, int len, int brlen) = 0;
+    virtual void OnTextLine(const uint8_t* ptr, int len, int brlen, bool endedWithCarriageReturnOnly) = 0;
 
     bool SearchLineBreak();
 };

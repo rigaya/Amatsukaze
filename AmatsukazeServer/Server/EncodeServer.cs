@@ -1866,6 +1866,10 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" -eb ").Append(profile.NumEncodeBufferFrames);
                     }
+                    if (profile.EncoderParallel > 1 && !profile.TwoPass)
+                    {
+                        sb.Append(" --enc-parallel ").Append(profile.EncoderParallel);
+                    }
                     if (profile.SplitSub)
                     {
                         sb.Append(" --splitsub");

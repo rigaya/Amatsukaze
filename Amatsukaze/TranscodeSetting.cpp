@@ -598,6 +598,9 @@ ConfigWrapper::ConfigWrapper(
     : AMTObject(ctx)
     , conf(conf)
     , tmpDir(ctx, conf.workDir, conf.noRemoveTmp) {
+    if (this->conf.encoderParallel <= 0) {
+        this->conf.encoderParallel = 1;
+    }
     for (int cmtypei = 0; cmtypei < CMTYPE_MAX; ++cmtypei) {
         if (conf.cmoutmask & (1 << cmtypei)) {
             cmtypes.push_back((CMType)cmtypei);
@@ -804,6 +807,10 @@ int ConfigWrapper::getAudioBitrateInKbps() const {
 
 int ConfigWrapper::getNumEncodeBufferFrames() const {
     return conf.numEncodeBufferFrames;
+}
+
+int ConfigWrapper::getEncoderParallel() const {
+    return conf.encoderParallel;
 }
 
 const std::vector<tstring>& ConfigWrapper::getLogoPath() const {
@@ -1452,6 +1459,7 @@ void ConfigWrapper::dump() const {
     ctx.infoF("エンコード/出力: %s/%s",
         conf.twoPass ? "2パス" : "1パス",
         cmOutMaskToString(conf.cmoutmask));
+    ctx.infoF("エンコード分割並列: %d", conf.encoderParallel);
     ctx.infoF("チャプター解析: %s%s",
         conf.chapter ? "有効" : "無効",
         (conf.chapter && conf.ignoreNoLogo) ? "" : "（ロゴ必須）");

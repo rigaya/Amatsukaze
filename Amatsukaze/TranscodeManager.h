@@ -130,7 +130,8 @@ public:
         tstring timecodepath,
         int vfrTimingFps,
         EncodeFileKey key, int pass, int serviceID,
-        const EncoderOptionInfo& eoInfo);
+        const EncoderOptionInfo& eoInfo,
+        const tstring& outPathOverride = tstring());
 
     // src, target
     std::pair<double, double> printBitrate(AMTContext& ctx, EncodeFileKey key) const;

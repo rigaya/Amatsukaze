@@ -833,6 +833,10 @@ namespace Amatsukaze.Server
             {
                 profile.NumEncodeBufferFrames = 16;
             }
+            if (profile.EncoderParallel <= 0)
+            {
+                profile.EncoderParallel = 1;
+            }
             return profile;
         }
 

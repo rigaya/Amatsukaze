@@ -11,6 +11,7 @@
 #include <thread>
 #include <deque>
 #include <string>
+#include <functional>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -213,11 +214,15 @@ private:
 
 class StdRedirectedSubProcess : public EventBaseSubProcess {
 public:
-    StdRedirectedSubProcess(const tstring& args, const int bufferLines = 0, const bool isUtf8 = false, const bool disablePowerThrottoling = false);
+    using LineCallback = std::function<void(bool isErr, const std::vector<char>& line, bool isProgress)>;
+
+    StdRedirectedSubProcess(const tstring& args, const int bufferLines = 0, const bool isUtf8 = false, const bool disablePowerThrottoling = false, bool captureOnly = false, LineCallback lineCallback = LineCallback());
 
     virtual ~StdRedirectedSubProcess();
 
     const std::deque<std::vector<char>>& getLastLines();
+
+    const std::vector<std::vector<char>>& getCapturedLines() const;
 
 private:
     class SpStringLiner : public StringLiner {
@@ -226,17 +231,23 @@ private:
         SpStringLiner(StdRedirectedSubProcess* pThis, bool isErr);
     protected:
         bool isErr;
-        virtual void OnTextLine(const uint8_t* ptr, int len, int brlen);
+        // 直前に「内容なし + '\r'のみ」の行が来たかどうか
+        // (SVT-AV1 のように '\r' を行頭に出力してから進捗文字列を続けるパターン対応用)
+        bool lastLineWasCROnly = false;
+        virtual void OnTextLine(const uint8_t* ptr, int len, int brlen, bool endedWithCarriageReturnOnly);
     };
 
     bool isUtf8;
     int bufferLines;
+    bool captureOnly;
+    LineCallback lineCallback_;
     SpStringLiner outLiner, errLiner;
 
     std::mutex mtx;
     std::deque<std::vector<char>> lastLines;
+    std::vector<std::vector<char>> capturedLines;
 
-    void onTextLine(bool isErr, const uint8_t* ptr, int len, int brlen);
+    void onTextLine(bool isErr, const uint8_t* ptr, int len, int brlen, bool endedWithCarriageReturnOnly);
 
     virtual void onOut(bool isErr, MemoryChunk mc);
 };
