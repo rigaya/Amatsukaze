@@ -2030,6 +2030,10 @@ namespace Amatsukaze.Server
                             .Append(profile.WhisperOption)
                             .Append("\"");
                     }
+                    if (profile.WhisperParallel)
+                    {
+                        sb.Append(" --whisper-parallel");
+                    }
                     if (profile.EnableWebVTT)
                     {
                         sb.Append(" --webvtt");

@@ -90,6 +90,7 @@ static void printHelp(const tchar* bin) {
         "  --whisper <パス>   whisper実行ファイルへのパス\n"
         "  --whisper-model <モデル> whisperのモデル名\n"
         "  --whisper-option <オプション> whisperへ渡す追加オプション\n"
+        "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
         "  --nicoass <パス>     NicoConvASSへのパス\n"
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
@@ -228,6 +229,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.whisperPath = _T("");
     conf.whisperModel = _T("");
     conf.whisperOption = _T("");
+    conf.whisperParallel = false;
 
     for (int i = 1; i < argc; ++i) {
         tstring key = argv[i];
@@ -450,6 +452,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.whisperModel = getParam(argc, argv, i++);
         } else if (key == _T("--whisper-option")) {
             conf.whisperOption = getParam(argc, argv, i++);
+        } else if (key == _T("--whisper-parallel")) {
+            conf.whisperParallel = true;
         } else if (key == _T("--nicojklog")) {
             conf.useNicoJKLog = true;
         } else if (key == _T("-om") || key == _T("--cmoutmask")) {

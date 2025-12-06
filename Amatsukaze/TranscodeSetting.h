@@ -214,6 +214,8 @@ struct Config {
     tstring whisperModel;
     // Whisper 追加オプション
     tstring whisperOption;
+    // Whisper を映像エンコードと並列実行するかどうか
+    bool whisperParallel;
     // 字幕生成モード
     SUBTITLE_MODE subtitleMode;
     tstring nicoConvAssPath;
@@ -339,6 +341,7 @@ public:
     tstring getWhisperModel() const;
     tstring getWhisperOption() const;
     SUBTITLE_MODE getSubtitleMode() const;
+    bool isWhisperParallelEnabled() const;
 
     tstring getNicoConvAssPath() const;
 

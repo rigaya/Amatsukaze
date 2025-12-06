@@ -1555,6 +1555,18 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region WhisperParallel変更通知プロパティ
+        public bool WhisperParallel {
+            get { return Data.WhisperParallel; }
+            set {
+                if (Data.WhisperParallel == value)
+                    return;
+                Data.WhisperParallel = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region IgnoreNoDrcsMap変更通知プロパティ
         public bool IgnoreNoDrcsMap {
             get { return Data.IgnoreNoDrcsMap; }
@@ -2630,6 +2642,7 @@ namespace Amatsukaze.Models
                     }
                     text.KeyValue("whisper-model", (wm == Amatsukaze.Server.WhisperModelType.Unspecified) ? "なし" : WhisperModelList[(int)wm]);
                     text.KeyValue("whisper-option", Data.WhisperOption ?? "なし");
+                    text.KeyValue("Whisper並列実行", Data.WhisperParallel);
                 }
             }
             text.KeyValue("マッピングにないDRCS外字は無視する", Data.IgnoreNoDrcsMap);

@@ -883,6 +883,16 @@ void DoBadThing() {
     }
 
     std::vector<WhisperAudioEntry> whisperAudioEntries;
+    struct WhisperTask {
+        int keyIndex;
+        EncodeFileKey key;
+        int localIndex;
+        WhisperProcessParam param;
+        tstring srtPath;
+        tstring vttPath;
+        std::unique_ptr<StdRedirectedSubProcess> process;
+    };
+    std::vector<WhisperTask> whisperTasks;
     std::vector<int> whisperLocalIndex(keys.size(), 0);
     if (setting.isEncodeAudio()) {
         ctx.info("[音声エンコード]");
@@ -1027,18 +1037,48 @@ void DoBadThing() {
                             ctx.warn("Whisper字幕生成: 音声入力パスが空のためスキップします");
                             continue;
                         }
-
-                        whisperGen.runWhisper(whisper, whisperInput, wdir,
-                            setting.getTmpWhisperFilenameWithoutExt(entry.key, entry.localIndex), extraOpt, setting.isWebVTTEnabled(), true);
+                        const tstring outFileWithoutExt = setting.getTmpWhisperFilenameWithoutExt(entry.key, entry.localIndex);
                         const auto srtPath = setting.getTmpWhisperSrtPath(entry.key, entry.localIndex);
                         const auto vttPath = setting.getTmpWhisperVttPath(entry.key, entry.localIndex);
-                        // 空ファイルになっていたら削除する
-                        uint64_t filesize = 0;
-                        if (rgy_file_exists(srtPath) && rgy_get_filesize(srtPath.c_str(), &filesize) && filesize == 0) {
-                            rgy_file_remove(srtPath.c_str());
-                        }
-                        if (rgy_file_exists(vttPath) && rgy_get_filesize(vttPath.c_str(), &filesize) && filesize == 0) {
-                            rgy_file_remove(vttPath.c_str());
+
+                        if (setting.isWhisperParallelEnabled()) {
+                            // 並列実行: ここではタスクだけ登録し、実際のプロセス起動はエンコード直前に行う
+                            WhisperTask task;
+                            task.keyIndex = i;
+                            task.key = entry.key;
+                            task.localIndex = entry.localIndex;
+                            task.param.whisperPath = whisper;
+                            task.param.audioPath = whisperInput;
+                            task.param.outDir = wdir;
+                            task.param.outFileWithoutExt = outFileWithoutExt;
+                            task.param.extraOptions = extraOpt;
+                            task.param.enableVtt = setting.isWebVTTEnabled();
+                            task.param.isUtf8Log = true;
+                            task.param.captureOnly = true;
+                            task.srtPath = srtPath;
+                            task.vttPath = vttPath;
+                            task.process = nullptr;
+                            whisperTasks.push_back(std::move(task));
+                        } else {
+                            // 従来どおり同期実行（構造体で一括指定）
+                            WhisperProcessParam param;
+                            param.whisperPath       = whisper;
+                            param.audioPath         = whisperInput;
+                            param.outDir            = wdir;
+                            param.outFileWithoutExt = outFileWithoutExt;
+                            param.extraOptions      = extraOpt;
+                            param.enableVtt         = setting.isWebVTTEnabled();
+                            param.isUtf8Log         = true;
+                            param.captureOnly       = false;
+                            whisperGen.runWhisper(param);
+                            // 空ファイルになっていたら削除する
+                            uint64_t filesize = 0;
+                            if (rgy_file_exists(srtPath) && rgy_get_filesize(srtPath.c_str(), &filesize) && filesize == 0) {
+                                rgy_file_remove(srtPath.c_str());
+                            }
+                            if (rgy_file_exists(vttPath) && rgy_get_filesize(vttPath.c_str(), &filesize) && filesize == 0) {
+                                rgy_file_remove(vttPath.c_str());
+                            }
                         }
                     }
                 }
@@ -1123,12 +1163,24 @@ void DoBadThing() {
             // x264, x265, SVT-AV1のときはdisablePowerThrottoling=trueとする
             // QSV/NV/VCEEncではプロセス内で自動的に最適なように設定されるため不要
             const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
+
             AMTFilterVideoEncoder encoder(ctx, setting, std::max(4, setting.getNumEncodeBufferFrames()));
             // 並列GetFrame用にフィルタチェーンを構築するファクトリを渡す
             // 既存のfilterSourceの前処理結果（スクリプト）を再利用して環境を再構築
             auto filterFactory = [&]() -> std::unique_ptr<AMTFilterSource> {
                 return std::unique_ptr<AMTFilterSource>(new AMTFilterSource(ctx, filterSource));
             };
+
+            // Whisper並列実行時は、最初のキーのエンコード直前にすべてのWhisperタスクを起動する
+            if (setting.isWhisperParallelEnabled() && i == 0 && !whisperTasks.empty()) {
+                SubtitleGenerator whisperGen(ctx);
+                for (auto& task : whisperTasks) {
+                    if (!task.process) {
+                        task.process = whisperGen.startWhisperProcess(task.param);
+                    }
+                }
+            }
+
             encoder.encode(filterClip, outfmt,
                 timeCodes, *argGen, passList, bitrateZones, vfrBitrateScale,
                 baseTimecodePath, fileOut.vfrTimingFps, baseOutputPath,
@@ -1141,6 +1193,44 @@ void DoBadThing() {
     ctx.infoF("エンコード完了: %.2f秒", sw.getAndReset());
 
     argGen = nullptr;
+
+    // Whisper並列実行時はここで完了待ち＆ログ出力を行う
+    if (setting.isWhisperParallelEnabled() && !whisperTasks.empty()) {
+        ctx.info("[Whisper字幕生成: 並列処理の完了待ち]");
+        for (auto& task : whisperTasks) {
+            if (!task.process) {
+                continue;
+            }
+            int ret = task.process->join();
+
+            const auto& lines = task.process->getCapturedLines();
+            if (!lines.empty()) {
+                ctx.info("↓↓↓↓↓↓Whisper出力↓↓↓↓↓↓");
+                for (const auto& v : lines) {
+                    std::vector<char> buf = v;
+                    if (buf.empty() || buf.back() != '\0') {
+                        buf.push_back('\0');
+                    }
+                    ctx.infoF("%s", buf.data());
+                }
+                ctx.info("↑↑↑↑↑↑Whisper出力↑↑↑↑↑↑");
+            }
+
+            if (ret != 0) {
+                ctx.warnF("Whisper字幕生成に失敗 (終了コード: 0x%x)", ret);
+                continue;
+            }
+
+            // 正常終了時のみ、空SRT/VTTファイルの削除を行う
+            uint64_t filesize = 0;
+            if (rgy_file_exists(task.srtPath) && rgy_get_filesize(task.srtPath.c_str(), &filesize) && filesize == 0) {
+                rgy_file_remove(task.srtPath.c_str());
+            }
+            if (rgy_file_exists(task.vttPath) && rgy_get_filesize(task.vttPath.c_str(), &filesize) && filesize == 0) {
+                rgy_file_remove(task.vttPath.c_str());
+            }
+        }
+    }
 
     rm.wait(HOST_CMD_Mux);
     sw.start();

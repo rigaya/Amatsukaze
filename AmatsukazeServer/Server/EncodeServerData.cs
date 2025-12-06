@@ -340,6 +340,9 @@ namespace Amatsukaze.Server
         // Whisperの追加オプション
         [DataMember]
         public string WhisperOption { get; set; }
+        // Whisperを映像エンコードと並列実行するかどうか
+        [DataMember]
+        public bool WhisperParallel { get; set; }
         [DataMember]
         public bool IgnoreNoDrcsMap { get; set; }
         [DataMember]

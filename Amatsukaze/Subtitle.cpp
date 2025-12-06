@@ -10,13 +10,12 @@ bool exeIsWhisperCpp(const tstring& whisperPath) {
 SubtitleGenerator::SubtitleGenerator(AMTContext& ctx)
     : AMTObject(ctx) {}
 
-void SubtitleGenerator::runWhisper(const tstring& whisperPath,
+static tstring buildWhisperCommand(const tstring& whisperPath,
                                    const tstring& audioPath,
                                    const tstring& outDir,
                                    const tstring& outFileWithoutExt,
                                    const tstring& extraOptions,
-                                   bool enableVtt,
-                                   bool isUtf8Log) {
+                                   bool enableVtt) {
     const bool isWhisperCpp = exeIsWhisperCpp(whisperPath);
 
     StringBuilderT sb;
@@ -43,14 +42,45 @@ void SubtitleGenerator::runWhisper(const tstring& whisperPath,
         sb.append(_T(" %s"), extraOptions);
     }
 
-    const tstring cmd = sb.str();
+    return sb.str();
+}
+
+std::unique_ptr<StdRedirectedSubProcess> SubtitleGenerator::startWhisperProcess(const WhisperProcessParam& param) {
+    const bool isWhisperCpp = exeIsWhisperCpp(param.whisperPath);
+    const tstring cmd = buildWhisperCommand(param.whisperPath, param.audioPath, param.outDir,
+        param.outFileWithoutExt, param.extraOptions, param.enableVtt);
+
     ctx.info("[Whisper起動]");
     ctx.infoF("Whisper type: %s", isWhisperCpp ? _T("whisper-cpp") : _T("faster-whisper"));
     ctx.infoF("%s", cmd);
 
     // ログ取りつつ起動
-    auto process = std::unique_ptr<StdRedirectedSubProcess>(
-        new StdRedirectedSubProcess(cmd, 10, isUtf8Log));
+    return std::unique_ptr<StdRedirectedSubProcess>(
+        new StdRedirectedSubProcess(cmd, 10, param.isUtf8Log, false, param.captureOnly));
+}
+
+void SubtitleGenerator::runWhisper(const tstring& whisperPath,
+                                   const tstring& audioPath,
+                                   const tstring& outDir,
+                                   const tstring& outFileWithoutExt,
+                                   const tstring& extraOptions,
+                                   bool enableVtt,
+                                   bool isUtf8Log) {
+    WhisperProcessParam param;
+    param.whisperPath       = whisperPath;
+    param.audioPath         = audioPath;
+    param.outDir            = outDir;
+    param.outFileWithoutExt = outFileWithoutExt;
+    param.extraOptions      = extraOptions;
+    param.enableVtt         = enableVtt;
+    param.isUtf8Log         = isUtf8Log;
+    param.captureOnly       = false;
+
+    runWhisper(param);
+}
+
+void SubtitleGenerator::runWhisper(const WhisperProcessParam& param) {
+    auto process = startWhisperProcess(param);
 
     // 実行完了待ち
     int ret = process->join();

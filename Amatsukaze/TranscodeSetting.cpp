@@ -729,6 +729,10 @@ SUBTITLE_MODE ConfigWrapper::getSubtitleMode() const {
     return conf.subtitleMode;
 }
 
+bool ConfigWrapper::isWhisperParallelEnabled() const {
+    return conf.whisperParallel;
+}
+
 tstring ConfigWrapper::getNicoConvAssPath() const {
     return conf.nicoConvAssPath;
 }

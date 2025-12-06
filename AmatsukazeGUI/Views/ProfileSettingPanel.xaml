@@ -633,6 +633,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="whisper-model" VerticalAlignment="Center" Margin="0,2,0,0"/>
@@ -662,6 +663,11 @@
                                      VerticalScrollBarVisibility="Auto"
                                      Text="{Binding Model.SelectedProfile.WhisperOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      ToolTip="Whisperで使用する追加オプションを指定します。&#xA;例: --language ja"/>
+
+                            <CheckBox Grid.Row="2" Grid.Column="1" Margin="8,4,8,0"
+                                      Content="Whisper処理を映像エンコードと並列実行する"
+                                      IsChecked="{Binding Model.SelectedProfile.WhisperParallel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="Whisperによる字幕生成を映像エンコード処理と並列で実行します。"/>
                         </Grid>
                     </StackPanel>
                 </StackPanel>

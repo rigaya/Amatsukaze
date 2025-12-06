@@ -1886,6 +1886,7 @@ namespace Amatsukaze.Models
                 profile.SubMode = (int)data.Profile.SubMode;
                 profile.WhisperModel = (int)data.Profile.WhisperModel;
                 profile.WhisperOption = data.Profile.WhisperOption;
+                profile.WhisperParallel = data.Profile.WhisperParallel;
                 profile.IgnoreNoDrcsMap = data.Profile.IgnoreNoDrcsMap;
                 profile.LooseLogoDetection = data.Profile.LooseLogoDetection;
                 profile.IgnoreNoLogo = data.Profile.IgnoreNoLogo;
