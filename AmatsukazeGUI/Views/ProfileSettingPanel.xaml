@@ -144,7 +144,7 @@
                               VerticalAlignment="Center"
                               ItemsSource="{Binding Model.SelectedProfile.EncoderParallelList}"
                               SelectedItem="{Binding Model.SelectedProfile.EncoderParallel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              ToolTip="1 で分割なし、2 以上でファイル分割並列エンコードを有効にします。2パスエンコード時は使用できません。"/>
+                              ToolTip="1 で分割なし、2 以上でファイル分割並列エンコードを有効にします。&#xA;2パスエンコード時は使用できません。&#xA;&#xA;環境によりますが増やしすぎると逆効果になる場合が多いため、&#xA;必要最低限の数字とするのがおすすめです。"/>
 
                 </StackPanel>
                 <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0">
