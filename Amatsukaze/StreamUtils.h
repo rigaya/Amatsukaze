@@ -480,7 +480,7 @@ private:
 
     std::map<std::string, std::wstring> drcsMap;
 
-    void printWithTimePrefix(const char* str) const {
+    void printWithTimePrefix(const char* str, const char *endchar = "\n") const {
         time_t rawtime;
         char buffer[80];
 
@@ -488,7 +488,7 @@ private:
         tm * timeinfo = localtime(&rawtime);
 
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-        PRINTF("%s %s\n", buffer, str);
+        PRINTF("%s %s%s", buffer, str, endchar);
     }
 
     void print(const char* str, AMT_LOG_LEVEL level) const {
@@ -502,7 +502,7 @@ private:
 
     void printProgress(const char* str) const {
         if (timePrefix) {
-            printWithTimePrefix(str);
+            printWithTimePrefix(str, "\r");
         } else {
             PRINTF("AMT %s\r", str);
         }
