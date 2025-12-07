@@ -301,9 +301,10 @@ RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISY
 
 RUN if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
         wget https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_${FASTER_WHISPER_VER}_linux.7z -O faster-whisper.7z \
-        && mkdir -p /app/exe_files \
-        && 7z x faster-whisper.7z -o/app/exe_files/ \
-        && chmod u+x /app/exe_files/Faster-Whisper-XXL/faster-whisper-xxl \
+        && mkdir -p /opt /app/exe_files \
+        && 7z x faster-whisper.7z -o/opt/ \
+        && chmod 755 /opt/ \
+        && ln -s /opt/Faster-Whisper-XXL /app/exe_files/Faster-Whisper-XXL \
         && rm faster-whisper.7z; \
     fi
 
@@ -357,22 +358,32 @@ RUN if [ "$BUILD_MODE" = "debug" ]; then \
     fi
 
 # エントリーポイントスクリプトを作成
-RUN echo '#!/bin/bash' > /app/entrypoint.sh \
-    && echo 'set -e' >> /app/entrypoint.sh \
-    && echo 'DEFAULT_UID=${RUN_UID:-1000}; DEFAULT_GID=${RUN_GID:-1000};' >> /app/entrypoint.sh \
-    && echo 'if ! getent group "$DEFAULT_GID" >/dev/null 2>&1; then groupadd -g "$DEFAULT_GID" appgroup; fi' >> /app/entrypoint.sh \
-    && echo 'ls -l /dev/dri/' >> /app/entrypoint.sh \
-    && echo 'if [ -c /dev/dri/renderD128 ]; then' >> /app/entrypoint.sh \
-    && echo '  RENDER_GID=$(stat -c "%g" /dev/dri/renderD128 2>/dev/null || echo "")' >> /app/entrypoint.sh \
-    && echo '  echo "RENDER_GID: $RENDER_GID"' >> /app/entrypoint.sh \
-    && echo '  if [ -n "$RENDER_GID" ] && [ "$RENDER_GID" != "" ]; then' >> /app/entrypoint.sh \
-    && echo '    if ! getent group "$RENDER_GID" >/dev/null 2>&1; then groupadd -g "$RENDER_GID" render; fi' >> /app/entrypoint.sh \
-    && echo '  fi' >> /app/entrypoint.sh \
-    && echo 'fi' >> /app/entrypoint.sh \
-    && echo 'if ! getent passwd "$DEFAULT_UID" >/dev/null 2>&1; then useradd -u "$DEFAULT_UID" -g "$DEFAULT_GID" -m -s /bin/bash appuser; fi' >> /app/entrypoint.sh \
-    && echo 'chown -R "$DEFAULT_UID:$DEFAULT_GID" /app' >> /app/entrypoint.sh \
-    && echo 'usermod -aG render,video `id -nu ${DEFAULT_UID}`' >> /app/entrypoint.sh \
-    && echo 'exec gosu "$DEFAULT_UID" "$@"' >> /app/entrypoint.sh \
+RUN cat <<'EOF' > /app/entrypoint.sh
+#!/bin/bash
+set -e
+umask 022
+
+DEFAULT_UID=${RUN_UID:-1000}; DEFAULT_GID=${RUN_GID:-1000};
+if ! getent group "$DEFAULT_GID" >/dev/null 2>&1; then groupadd -g "$DEFAULT_GID" appgroup; fi
+
+ls -l /dev/dri/
+if [ -c /dev/dri/renderD128 ]; then
+  RENDER_GID=$(stat -c "%g" /dev/dri/renderD128 2>/dev/null || echo "")
+  echo "RENDER_GID: $RENDER_GID"
+  if [ -n "$RENDER_GID" ] && [ "$RENDER_GID" != "" ]; then
+    if ! getent group "$RENDER_GID" >/dev/null 2>&1; then groupadd -g "$RENDER_GID" render; fi
+  fi
+fi
+
+if ! getent passwd "$DEFAULT_UID" >/dev/null 2>&1; then useradd -u "$DEFAULT_UID" -g "$DEFAULT_GID" -m -s /bin/bash appuser; fi
+chown -R --no-dereference "$DEFAULT_UID:$DEFAULT_GID" /app
+if [ -d /opt/Faster-Whisper-XXL ]; then
+  find /opt/Faster-Whisper-XXL -type d -exec chown "$DEFAULT_UID:$DEFAULT_GID" {} +
+fi
+usermod -aG render,video "$(id -nu "${DEFAULT_UID}")"
+exec gosu "$DEFAULT_UID" "$@"
+EOF
+RUN sed -i 's/\r$//' /app/entrypoint.sh \
     && chmod +x /app/entrypoint.sh
 
 # デフォルトコマンド（モードに応じて切り替え）
