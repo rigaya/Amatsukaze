@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 #include "rgy_pipe.h"
 #include "rgy_tchar.h"
 
@@ -43,9 +44,20 @@ RGYPipeProcessLinux::~RGYPipeProcessLinux() {
 }
 
 int RGYPipeProcessLinux::startPipes() {
+    auto set_cloexec = [](int fd) {
+        int flags = fcntl(fd, F_GETFD);
+        if (flags == -1) return -1;
+        return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+    };
+
     if (m_pipe.stdOut.mode & PIPE_MODE_ENABLE) {
         if (-1 == (pipe((int *)&m_pipe.stdOut.h_read)))
             return 1;
+        // fork/exec 後に子プロセスへ継承されないよう close-on-exec を設定
+        if (set_cloexec((int)m_pipe.stdOut.h_read) == -1
+            || set_cloexec((int)m_pipe.stdOut.h_write) == -1) {
+            return 1;
+        }
         if (m_pipe.stdOut.mode & PIPE_MODE_ENABLE_FP) {
             m_pipe.stdOut.fp = fdopen(m_pipe.stdOut.h_read, "r");
         }
@@ -55,6 +67,10 @@ int RGYPipeProcessLinux::startPipes() {
     if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE) {
         if (-1 == (pipe((int *)&m_pipe.stdErr.h_read)))
             return 1;
+        if (set_cloexec((int)m_pipe.stdErr.h_read) == -1
+            || set_cloexec((int)m_pipe.stdErr.h_write) == -1) {
+            return 1;
+        }
         if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE_FP) {
             m_pipe.stdErr.fp = fdopen(m_pipe.stdErr.h_read, "r");
         }
@@ -64,6 +80,10 @@ int RGYPipeProcessLinux::startPipes() {
     if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
         if (-1 == (pipe((int *)&m_pipe.stdIn.h_read)))
             return 1;
+        if (set_cloexec((int)m_pipe.stdIn.h_read) == -1
+            || set_cloexec((int)m_pipe.stdIn.h_write) == -1) {
+            return 1;
+        }
         if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE_FP) {
             m_pipe.stdIn.fp = fdopen(m_pipe.stdIn.h_write, "w");
         }
