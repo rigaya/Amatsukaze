@@ -33,6 +33,7 @@ namespace Amatsukaze.Server
 
         // 実行後用
         public LogItem Log;
+        public CheckLogItem CheckLog;
         public List<string> RelatedFiles; // コピーしたEDCB関連ファイル
         public string MovedSrcPath; // 移動したソースファイルのパス
 
@@ -443,6 +444,13 @@ namespace Amatsukaze.Server
                 env.Add("NUM_INCIDENT", Log.Incident.ToString());
                 env.Add("JSON_PATH", Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".json"));
                 env.Add("LOG_PATH", Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".log"));
+            }
+            else if(CheckLog != null)
+            {
+                env.Add("SUCCESS", CheckLog.Success ? "1" : "0");
+                env.Add("ERROR_MESSAGE", CheckLog.Reason ?? "");
+                env.Add("JSON_PATH", Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".json"));
+                env.Add("LOG_PATH", Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".log"));
             }
 
             // パイプ通信用
