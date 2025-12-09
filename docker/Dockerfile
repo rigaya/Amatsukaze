@@ -379,6 +379,7 @@ if ! getent passwd "$DEFAULT_UID" >/dev/null 2>&1; then useradd -u "$DEFAULT_UID
 chown -R --no-dereference "$DEFAULT_UID:$DEFAULT_GID" /app
 if [ -d /opt/Faster-Whisper-XXL ]; then
   find /opt/Faster-Whisper-XXL -type d -exec chown "$DEFAULT_UID:$DEFAULT_GID" {} +
+  chmod ugo+rx /opt/Faster-Whisper-XXL/faster-whisper-xxl
 fi
 usermod -aG render,video "$(id -nu "${DEFAULT_UID}")"
 exec gosu "$DEFAULT_UID" "$@"
