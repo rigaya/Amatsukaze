@@ -33,6 +33,17 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
 
 配布7zを解凍
 
+なお、下記フォルダ(およびその下のフォルダ)に展開するのは避けてください。
+
+- C:\Windows
+- C:\Program Files
+- C:\Program Files (x86)
+- C:\Users\Public
+- C:\Boot
+- C:\PerfLogs
+- C:\Recovery
+- 日本語を含むディレクトリ
+
 #### Linux
 
 [こちら](./doc/InstallLinux.md)を確認してください。
