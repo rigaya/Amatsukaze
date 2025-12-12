@@ -188,7 +188,7 @@ RUN rm -rf /tmp/plugins \
     && rm -rf /usr/share/info/*
 
 # 実行段階
-FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:11.8.0-base-ubuntu22.04 AS runtime
 
 # 変数の定義（実行段階でも使用）
 ARG UBUNTU_VERSION=22.04
@@ -245,6 +245,7 @@ RUN apt-get update && apt-get install -y \
         mkvtoolnix \
         opus-tools \
         intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-opencl-dev \
+        cuda-nvrtc-11-8 libnpp-11-8 \
     && wget https://github.com/rigaya/QSVEnc/releases/download/${QSVENCC_VER}/qsvencc_${QSVENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O qsvencc.deb \
         && apt-get install -y ./qsvencc.deb \
         && rm ./qsvencc.deb \
