@@ -29,6 +29,24 @@ bool isSoftwareSplitEncoder(ENUM_ENCODER encoder) {
     return encoder == ENCODER_X264 || encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1;
 }
 
+// 実際の動画尺(秒)を取得する
+// - VFR の場合は timeCodes (ms、要素数=フレーム数+1) を優先する
+// - timeCodes が無い/不正な場合は fps から算出する (CFR向け)
+double calcDurationSec(const VideoInfo& vi, const std::vector<double>& timeCodes) {
+    if (!timeCodes.empty() && (int)timeCodes.size() == vi.num_frames + 1) {
+        const double startMs = timeCodes.front();
+        const double endMs = timeCodes.back();
+        const double durationMs = endMs - startMs;
+        if (durationMs > 0.0 && std::isfinite(durationMs)) {
+            return durationMs / 1000.0;
+        }
+    }
+    if (vi.fps_numerator > 0) {
+        return vi.num_frames * vi.fps_denominator / (double)vi.fps_numerator;
+    }
+    return 0.0;
+}
+
 tstring appendChunkSuffix(const tstring& path, int chunkIndex) {
     return strsprintf(_T("%s.chunk%d%s"), PathRemoveExtensionS(path).c_str(), chunkIndex, rgy_get_extension(path).c_str());
 }
@@ -581,12 +599,14 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         : 0.0;
     // 実効bitrateはbaseOutputPathのファイルサイズから算出する
     // 分母はduration
-    const double duration = vi_.num_frames / (double)vi_.fps_numerator;
+    const double duration = calcDurationSec(vi_, timeCodes);
     uint64_t fileSize = 0;
     if (!rgy_get_filesize(baseOutputPath.c_str(), &fileSize)) {
         ctx.infoF("%d並列エンコード 実効速度: %.2f fps", mp, effectiveFps);
     } else if (fileSize == 0) {
         THROW(RuntimeException, "出力映像ファイルサイズが0です");
+    } else if (duration <= 0.0) {
+        ctx.infoF("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: (duration不明)", mp, effectiveFps);
     } else {
         const double effectiveBitrate = fileSize * 8 / (duration * 1000.0);
         ctx.infoF("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: %.2f kbps", mp, effectiveFps, effectiveBitrate);
