@@ -764,6 +764,35 @@ namespace Amatsukaze.Models
             };
         }
 
+        // SVT-AV1入力ビット深度 (0=自動, 8, 10)
+        public string[] SvtAv1BitDepthList { get; } = new string[]
+        {
+            "自動", "8", "10"
+        };
+
+        // ComboBox SelectedIndex 用 (0->自動, 1->8, 2->10)
+        public int SvtAv1BitDepthInt
+        {
+            get
+            {
+                switch (Data.SvtAv1BitDepth)
+                {
+                    case 8: return 1;
+                    case 10: return 2;
+                    default: return 0;
+                }
+            }
+            set
+            {
+                int idx = (value < 0) ? 0 : value;
+                int bd = (idx == 1) ? 8 : (idx == 2) ? 10 : 0;
+                if (Data.SvtAv1BitDepth == bd)
+                    return;
+                Data.SvtAv1BitDepth = bd;
+                RaisePropertyChanged();
+            }
+        }
+
         #region EnableCUDA変更通知プロパティ
         public bool EnableCUDA
         {
@@ -982,7 +1011,7 @@ namespace Amatsukaze.Models
         {
             try
             {
-                Clipboard.SetText(AvsScriptCreator.FilterToString(Data, Model.Setting.Model));
+                Clipboard.SetText(AvsScriptCreator.FilterToString(Data, Model.Setting.Model, false));
             }
             catch { }
         }

@@ -1336,9 +1336,11 @@ namespace Amatsukaze.Server
             return null;
         }
 
-        public static string FilterToString(FilterSetting filter, Setting setting)
+        public static string FilterToString(FilterSetting filter, Setting setting, bool overrideBitDepth)
         {
             StringBuilder sb = new StringBuilder();
+            int svtAv1BitDepth = filter.SvtAv1BitDepth;
+            bool overrideSvtAv1BitDepth = (svtAv1BitDepth == 8 || svtAv1BitDepth == 10) && overrideBitDepth;
 
             if (filter.EnableCUDA)
             {
@@ -1478,9 +1480,9 @@ namespace Amatsukaze.Server
             }
 
             // ポストプロセス
-            if (filter.EnableResize || filter.EnableTemporalNR || 
-                filter.EnableDeband || filter.EnableEdgeLevel ||
-                filter.EnableDeblock)
+            bool enablePostProcessConvert = (filter.EnableResize || filter.EnableTemporalNR ||
+                filter.EnableDeband || filter.EnableEdgeLevel);
+            if (enablePostProcessConvert || filter.EnableDeblock)
             {
                 if (filter.EnableDeblock)
                 {
@@ -1492,8 +1494,7 @@ namespace Amatsukaze.Server
                         GetDeblockOption(filter.DeblockStrength) + ",sharp=" +
                         filter.DeblockSharpen + ")");
                 }
-                if (filter.EnableResize || filter.EnableTemporalNR ||
-                    filter.EnableDeband || filter.EnableEdgeLevel)
+                if (enablePostProcessConvert)
                 {
                     sb.AppendLine("ConvertBits(14)");
                     if (filter.EnableResize)
@@ -1512,10 +1513,20 @@ namespace Amatsukaze.Server
                     {
                         sb.AppendLine("KEdgeLevel(16, 10, 2)");
                     }
-                    sb.AppendLine("ConvertBits(10, dither=0)");
+                    sb.AppendLine("ConvertBits(" + (overrideSvtAv1BitDepth ? svtAv1BitDepth : 10) + ", dither=0)");
                     sb.AppendLine("if(IsProcess(\"AvsPmod.exe\")) { ConvertBits(8, dither=0) }");
                 }
+                else if (overrideSvtAv1BitDepth)
+                {
+                    // ポストプロセスは有効だが ConvertBits(10) が出ない場合は末尾に挿入
+                    sb.AppendLine("ConvertBits(" + svtAv1BitDepth + ")");
+                }
                 sb.AppendLine(filter.EnableCUDA ? "OnCUDA(2, AMT_DEV)" : "Prefetch(4)");
+            }
+            else if (overrideSvtAv1BitDepth)
+            {
+                // ポストプロセスが行われないときは最後に挿入
+                sb.AppendLine("ConvertBits(" + svtAv1BitDepth + ")");
             }
 
             return sb.ToString();
@@ -1543,9 +1554,9 @@ namespace Amatsukaze.Server
 
         // settingのスクリプトファイルへのパスを返す
         //（同じスクリプトがあればそのパス、なければ作る）
-        public static string GetAvsFilePath(FilterSetting filter, Setting setting, string cacheRoot)
+        public static string GetAvsFilePath(FilterSetting filter, Setting setting, bool overrideBitDepth, string cacheRoot)
         {
-            var textBytes = Util.AmatsukazeDefaultEncoding.GetBytes(AvsScriptCreator.FilterToString(filter, setting));
+            var textBytes = Util.AmatsukazeDefaultEncoding.GetBytes(AvsScriptCreator.FilterToString(filter, setting, overrideBitDepth));
             var code = GetHashCode(textBytes);
 
             if(Directory.Exists(cacheRoot) == false)

@@ -1908,7 +1908,7 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" -f \"")
                             .Append(CachedAvsScript.GetAvsFilePath(
-                                profile.FilterSetting, setting, GetAvsCacheDirectoryPath()))
+                                profile.FilterSetting, setting, profile.EncoderType == EncoderType.SVTAV1, GetAvsCacheDirectoryPath()))
                             .Append("\"");
                     }
                     else if(profile.FilterOption == FilterOption.Custom)

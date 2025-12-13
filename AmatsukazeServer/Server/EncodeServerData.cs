@@ -243,6 +243,8 @@ namespace Amatsukaze.Server
         public bool EnableDeband;
         [DataMember]
         public bool EnableEdgeLevel;
+        [DataMember]
+        public int SvtAv1BitDepth;
 
         public ExtensionDataObject ExtensionData { get; set; }
     }
