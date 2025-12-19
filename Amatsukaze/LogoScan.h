@@ -393,7 +393,7 @@ class LogoAnalyzer : AMTObject {
                 // fade値ループ
                 float minResult = std::numeric_limits<float>::max();
                 int minFadeIndex = 0;
-                for (int fi = 0; fi < numFade; ++fi) {
+                for (int fi = 0; fi < numFade; fi++) {
                     float fade = 0.1f * fi;
                     // ロゴを評価
                     float result = std::abs(deintLogo.EvaluateLogo(memDeint.get(), maxv, fade, memWork.get()));
@@ -416,7 +416,7 @@ class LogoAnalyzer : AMTObject {
         // 評価値を集約
         // とりあえず出してみる
         std::vector<int> numMinFades(numFade);
-        for (int i = 0; i < numFrames; ++i) {
+        for (int i = 0; i < numFrames; i++) {
             numMinFades[minFades[i]]++;
         }
         int maxi = (int)(std::max_element(numMinFades.begin(), numMinFades.end()) - numMinFades.begin());
@@ -430,7 +430,7 @@ class LogoAnalyzer : AMTObject {
             int offV = offU + scanUVw * scanUVh;
 
             // 全フレームループ
-            for (int i = 0; i < numFrames; ++i) {
+            for (int i = 0; i < numFrames; i++) {
                 memScanData.resize(creator->getFrameSize(i));
                 creator->getFrame(i, memScanData.data());
                 // ロゴのあるフレームだけAddFrame

@@ -1445,7 +1445,7 @@ namespace Amatsukaze.Models
                 ProgressState = IsRunning ? TaskbarItemProgressState.Normal : TaskbarItemProgressState.None;
                 ProgressValue = data.State.Progress;
 
-                for (int i = 0; i < data.State.EncoderSuspended.Length; ++i)
+                for (int i = 0; i < data.State.EncoderSuspended.Length; i++)
                 {
                     if (i < ConsoleList.Count)
                     {
@@ -1725,7 +1725,7 @@ namespace Amatsukaze.Models
                 _ServiceSettings.Clear();
                 return Task.FromResult(0);
             }
-            for(int i = 0; i < _ServiceSettings.Count; ++i)
+            for(int i = 0; i < _ServiceSettings.Count; i++)
             {
                 if(_ServiceSettings[i].Data.ServiceId == update.ServiceId)
                 {
@@ -1921,7 +1921,7 @@ namespace Amatsukaze.Models
                 profile.PmtCutHeadRate = data.Profile.PmtCutHeadRate;
                 profile.PmtCutTailRate = data.Profile.PmtCutTailRate;
                 profile.EncoderParallel = data.Profile.EncoderParallel;
-                for (int i = 0; i < DisplayResource.MAX; ++i)
+                for (int i = 0; i < DisplayResource.MAX; i++)
                 {
                     profile.Resources[i].Resource = data.Profile.ReqResources[i];
                 }

@@ -282,7 +282,7 @@ void TsPacketParser::reset() {
 
 // numPacket個分のパケットの同期バイトが合っているかチェック
 bool TsPacketParser::checkSyncByte(uint8_t* ptr, int numPacket) {
-    for (int i = 0; i < numPacket; ++i) {
+    for (int i = 0; i < numPacket; i++) {
         if (ptr[TS_PACKET_LENGTH * i] != TS_SYNC_BYTE) {
             return false;
         }
@@ -926,7 +926,7 @@ void TsPacketSelector::onPatUpdated(PsiSection section) {
         int patTSID = pat.TSID();
         std::vector<int> sids;
         std::vector<int> pids;
-        for (int i = 0; i < pat.numElems(); ++i) {
+        for (int i = 0; i < pat.numElems(); i++) {
             PATElement elem = pat.get(i);
             if (!elem.is_network_PID()) {
                 sids.push_back(elem.program_number());
@@ -971,7 +971,7 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
         PMTESInfo videoEs(-1, -1);
         std::vector<PMTESInfo> audioEs;
         PMTESInfo captionEs(-1, -1);
-        for (int i = 0; i < pmt.numElems(); ++i) {
+        for (int i = 0; i < pmt.numElems(); i++) {
             PMTElement elem = pmt.get(i);
             uint8_t stream_type = elem.stream_type();
             if (isVideo(stream_type) && videoEs.stype == -1) {
@@ -981,7 +981,7 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
                 audioEs.emplace_back(stream_type, elem.elementary_PID());
             } else if (isCaption(stream_type)) {
                 auto descs = ParseDescriptors(elem.descriptor());
-                for (int i = 0; i < (int)descs.size(); ++i) {
+                for (int i = 0; i < (int)descs.size(); i++) {
                     if (descs[i].tag() == 0x52) { // ストリーム識別記述子
                         StreamIdentifierDescriptor streamdesc(descs[i]);
                         if (streamdesc.parse()) {
@@ -1022,7 +1022,7 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
 
         table->add(videoEs.pid, &videoDelegator);
         ensureAudioDelegators(int(audioEs.size()));
-        for (int i = 0; i < int(audioEs.size()); ++i) {
+        for (int i = 0; i < int(audioEs.size()); i++) {
             table->add(audioEs[i].pid, audioDelegators[i]);
         }
         if (captionEs.pid != -1) {
@@ -1180,12 +1180,12 @@ void TsPacketSelector::printPMT(const PMT& pmt) {
     }
 
     const char* content = NULL;
-    for (int i = 0; i < pmt.numElems(); ++i) {
+    for (int i = 0; i < pmt.numElems(); i++) {
         PMTElement elem = pmt.get(i);
         // コンポーネントタグを取得
         int component_tag = -1;
         auto descs = ParseDescriptors(elem.descriptor());
-        for (int i = 0; i < (int)descs.size(); ++i) {
+        for (int i = 0; i < (int)descs.size(); i++) {
             if (descs[i].tag() == 0x52) { // ストリーム識別記述子
                 StreamIdentifierDescriptor streamdesc(descs[i]);
                 if (streamdesc.parse()) {

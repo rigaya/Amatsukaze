@@ -159,7 +159,7 @@ void CaptionItem::Write(const File& file) const {
 
     static const char* digits = "0123456789ABCDEF";
     hash.resize(32);
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 16; i++) {
         hash[i * 2 + 0] = digits[bHash[i] >> 4];
         hash[i * 2 + 1] = digits[bHash[i] & 0x0F];
     }
@@ -189,7 +189,7 @@ EXIT:
     // ハッシュ値を16進数文字列に変換
     static const char* digits = "0123456789ABCDEF";
     hash.resize(32);
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 16; i++) {
         hash[i * 2 + 0] = digits[digest[i] >> 4];
         hash[i * 2 + 1] = digits[digest[i] & 0x0F];
     }
@@ -221,7 +221,7 @@ EXIT:
 
 /* static */ int StrlenWoLoSurrogate(LPCWSTR str) {
     int len = 0;
-    for (; *str; ++str) {
+    for (; *str; str++) {
         if ((*str & 0xFC00) != 0xDC00) ++len;
     }
     return len;
@@ -312,7 +312,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
     line->posX = caption.wPosX;
     line->posY = caption.wPosY;
 
-    for (DWORD i = 0; i < caption.dwListCount; ++i) {
+    for (DWORD i = 0; i < caption.dwListCount; i++) {
         const CAPTION_CHAR_DATA_DLL &charData = caption.pstCharList[i];
 
         float charW, charH, dirW, dirH;
@@ -330,10 +330,10 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
             LPCWSTR pszDrcsStr = NULL;
             WCHAR szHalf[2] = {};
             if (drcsCount != 0 || fSearchHalf) {
-                for (int j = 0; j < (int)srctext.size(); ++j) {
+                for (int j = 0; j < (int)srctext.size(); j++) {
                     if (0xEC00 <= srctext[j] && srctext[j] <= 0xECFF) {
                         // DRCS
-                        for (DWORD k = 0; k < drcsCount; ++k) {
+                        for (DWORD k = 0; k < drcsCount; k++) {
                             if (pDrcsList[k].dwUCS == srctext[j]) {
                                 pDrcs = &pDrcsList[k];
                                 if (pDrcsList[k].bmiHeader.biWidth == charW &&
@@ -375,7 +375,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                             break;
                         }
                     } else if (fSearchHalf) {
-                        for (int k = 0; HALF_F_LIST[k]; ++k) {
+                        for (int k = 0; HALF_F_LIST[k]; k++) {
                             wchar_t r = HALF_R_LIST[k];
                             if ((r != L'A' && r != L'a') &&
                                 (r != L'0') &&

@@ -149,7 +149,7 @@ CaptionParser::CaptionParser(AMTContext&ctx)
             if (GetDRCSPatternCP(ucLangTag, &drcsList, &drcsCount) != TRUE) {
                 drcsCount = 0;
             }
-            for (DWORD i = 0; i < capCount; ++i) {
+            for (DWORD i = 0; i < capCount; i++) {
                 captions.emplace_back(
                     fomatter.ProcessCaption(PTS, ucLangTag,
                         capList + i, capCount - i, drcsList, drcsCount));
@@ -420,7 +420,7 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
 // なにもしない場合は負の値の返す
 /* virtual */ int TsSplitter::onPidSelect(int TSID, const std::vector<int>& pids) {
     ctx.info("[PAT更新]");
-    for (int i = 0; i < int(pids.size()); ++i) {
+    for (int i = 0; i < int(pids.size()); i++) {
         if (preferedServiceId == pids[i]) {
             selectedServiceId = pids[i];
             ctx.infoF("サービス %d を選択", selectedServiceId);
@@ -431,7 +431,7 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
         // サービス指定があるのに該当サービスがなかったらエラーとする
         StringBuilder sb;
         sb.append("サービスID: ");
-        for (int i = 0; i < (int)pids.size(); ++i) {
+        for (int i = 0; i < (int)pids.size(); i++) {
             sb.append("%s%d", (i > 0) ? ", " : "", pids[i]);
         }
         sb.append(" 指定サービスID: %d", preferedServiceId);

@@ -127,7 +127,7 @@ void NicoJK::makeT(NicoJKType srcType, NicoJKType dstType) {
             // 変更後
             // Style: white,MS PGothic,28,&H70ffffff,&H70ffffff,&H70000000,&H70000000,-1,0,0,0,200,200,0,0.00,1,1,0,7,20,20,40,1
             auto tokens = split(str, ",");
-            for (int i = 3; i < 7; ++i) {
+            for (int i = 3; i < 7; i++) {
                 // 透明度
                 tokens[i][2] = '7';
                 tokens[i][3] = '0';
@@ -136,7 +136,7 @@ void NicoJK::makeT(NicoJKType srcType, NicoJKType dstType) {
             tokens[17] = "0"; // Shadowなし
 
             StringBuilder sb;
-            for (int i = 0; i < (int)tokens.size(); ++i) {
+            for (int i = 0; i < (int)tokens.size(); i++) {
                 sb.append("%s%s", i ? "," : "", tokens[i]);
             }
             auto tmp = sb.str();
@@ -175,7 +175,7 @@ bool NicoJK::nicoConvASS(ConvMode mode, size_t startTime) {
     NicoJKType type_t[] = { NICOJK_720T , NICOJK_1080T };
 
     int typemask = setting_.getNicoJKMask();
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 2; i++) {
         if (mask_i[i] & typemask) {
             auto args = MakeNicoConvASSArgs(mode, startTime, type_s[i]);
             ctx.infoF("%s", args);
@@ -201,7 +201,7 @@ bool NicoJK::nicoConvASS(ConvMode mode, size_t startTime) {
 
 void NicoJK::readASS() {
     int typemask = setting_.getNicoJKMask();
-    for (int i = 0; i < NICOJK_MAX; ++i) {
+    for (int i = 0; i < NICOJK_MAX; i++) {
         if ((1 << i) & typemask) {
             File file(setting_.getTmpNicoJKASSPath((NicoJKType)i), _T("r"));
             std::string str;

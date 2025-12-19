@@ -50,7 +50,7 @@ void bms(T& v, U data, int shift, int mask) {
 template<int bytes, typename T>
 T readN(const uint8_t* ptr) {
     T r = 0;
-    for (int i = 0; i < bytes; ++i) {
+    for (int i = 0; i < bytes; i++) {
         r = r | (T(ptr[i]) << ((bytes - i - 1) * 8));
     }
     return r;
@@ -63,7 +63,7 @@ static uint64_t read48(const uint8_t* ptr) { return readN<6, uint64_t>(ptr); }
 
 template<int bytes, typename T>
 void writeN(uint8_t* ptr, T w) {
-    for (int i = 0; i < bytes; ++i) {
+    for (int i = 0; i < bytes; i++) {
         ptr[i] = uint8_t(w >> ((bytes - i - 1) * 8));
     }
 }
@@ -272,7 +272,7 @@ public:
     }
 
     uint32_t calc(const uint8_t* data, int length, uint32_t crc) const {
-        for (int i = 0; i < length; ++i) {
+        for (int i = 0; i < length; i++) {
             crc = (crc << 8) ^ table[(crc >> 24) ^ data[i]];
         }
         return crc;
@@ -284,9 +284,9 @@ private:
     uint32_t table[256];
 
     static void createTable(uint32_t* table, uint32_t exp) {
-        for (int i = 0; i < 256; ++i) {
+        for (int i = 0; i < 256; i++) {
             uint32_t crc = i << 24;
-            for (int j = 0; j < 8; ++j) {
+            for (int j = 0; j < 8; j++) {
                 if (crc & 0x80000000UL) {
                     crc = (crc << 1) ^ exp;
                 } else {
@@ -756,15 +756,15 @@ void CopyYV12(T* dst, const T* srcY, const T* srcU, const T* srcV, int pitchY, i
     int heightUV = height >> 1;
 
     T* dstp = dst;
-    for (int y = 0; y < height; ++y) {
+    for (int y = 0; y < height; y++) {
         memcpy(dstp, &srcY[y * pitchY], width * sizeof(T));
         dstp += width;
     }
-    for (int y = 0; y < heightUV; ++y) {
+    for (int y = 0; y < heightUV; y++) {
         memcpy(dstp, &srcU[y * pitchUV], widthUV * sizeof(T));
         dstp += widthUV;
     }
-    for (int y = 0; y < heightUV; ++y) {
+    for (int y = 0; y < heightUV; y++) {
         memcpy(dstp, &srcV[y * pitchUV], widthUV * sizeof(T));
         dstp += widthUV;
     }

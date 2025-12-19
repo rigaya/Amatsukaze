@@ -59,7 +59,7 @@ void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFo
             PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
         }
         const auto& eraseLogoPath = setting_.getEraseLogoPath();
-        for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
+        for (int i = 0; i < (int)eraseLogoPath.size(); i++) {
             ctx.infoF("追加ロゴ%d: %s", i + 1, eraseLogoPath[i]);
             PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
         }
@@ -117,7 +117,7 @@ void CMAnalyze::applyPmtCut(
     std::vector<int> matchedPoints;
 
     // picChangesに近いsceneChangesを見つける
-    for (int i = 1; i < (int)pidChanges.size(); ++i) {
+    for (int i = 1; i < (int)pidChanges.size(); i++) {
         int next = (int)(std::lower_bound(
             sceneChanges.begin(), sceneChanges.end(),
             pidChanges[i]) - sceneChanges.begin());
@@ -149,7 +149,7 @@ void CMAnalyze::applyPmtCut(
     // 前後カット部分を算出
     int maxCutFrames0 = (int)(rates[0] * numFrames);
     int maxCutFrames1 = numFrames - (int)(rates[1] * numFrames);
-    for (int i = 0; i < (int)matchedPoints.size(); ++i) {
+    for (int i = 0; i < (int)matchedPoints.size(); i++) {
         if (matchedPoints[i] < maxCutFrames0) {
             validStart = std::max(validStart, matchedPoints[i]);
         }
@@ -349,7 +349,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
         }
     }
 
-    for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
+    for (int i = 0; i < (int)eraseLogoPath.size(); i++) {
         logof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex, i), (int)logoPath.size() + i);
     }
 }
@@ -428,7 +428,7 @@ void CMAnalyze::readTrimAVS(std::string str, int numFrames) {
     std::sregex_iterator end;
 
     trims.clear();
-    for (; iter != end; ++iter) {
+    for (; iter != end; iter++) {
         trims.push_back(std::stoi((*iter)[1].str()));
         trims.push_back(std::stoi((*iter)[2].str()) + 1);
     }
@@ -503,7 +503,7 @@ void CMAnalyze::makeCMZones(int numFrames) {
     split.push_front(0);
     split.push_back(numFrames);
 
-    for (int i = 1; i < (int)split.size(); ++i) {
+    for (int i = 1; i < (int)split.size(); i++) {
         if (split[i] < split[i - 1]) {
             THROW(FormatException, "join_logo_scp.exeの出力AVSファイルが不正です");
         }
@@ -572,7 +572,7 @@ std::vector<MakeChapter::JlsElement> MakeChapter::readJls(const tstring& jlspath
 
 void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> elements) {
     // isCut, isCMフラグを生成
-    for (int i = 0; i < (int)elements.size(); ++i) {
+    for (int i = 0; i < (int)elements.size(); i++) {
         auto& e = elements[i];
         int trimIdx = (int)(std::lower_bound(trims.begin(), trims.end(), (e.frameStart + e.frameEnd) / 2) - trims.begin());
         e.isCut = !(trimIdx % 2);
@@ -582,7 +582,7 @@ void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> eleme
 
     // 余分なものはマージ
     JlsElement cur = elements[0];
-    for (int i = 1; i < (int)elements.size(); ++i) {
+    for (int i = 1; i < (int)elements.size(); i++) {
         auto& e = elements[i];
         bool isMerge = false;
         if (cur.isCut && e.isCut) {
@@ -603,7 +603,7 @@ void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> eleme
     // コメントをチャプター名に変更
     int nChapter = -1;
     bool prevCM = true;
-    for (int i = 0; i < (int)chapters.size(); ++i) {
+    for (int i = 0; i < (int)chapters.size(); i++) {
         auto& c = chapters[i];
         if (c.isCut) {
             if (c.isCM || c.isOld) c.comment = "CM";
@@ -637,7 +637,7 @@ std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey 
 
     // チャプターを分割後のフレーム番号に変換
     std::vector<JlsElement> cvtChapters;
-    for (int i = 0; i < (int)chapters.size(); ++i) {
+    for (int i = 0; i < (int)chapters.size(); i++) {
         const auto& c = chapters[i];
         JlsElement fc = c;
         fc.frameStart = (int)(std::lower_bound(outFrames.begin(), outFrames.end(), c.frameStart) - outFrames.begin());
@@ -650,7 +650,7 @@ std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey 
     int fps = (int)std::round((float)vfmt.frameRateNum / vfmt.frameRateDenom);
     std::vector<JlsElement> fileChapters;
     JlsElement cur = { 0 };
-    for (int i = 0; i < (int)cvtChapters.size(); ++i) {
+    for (int i = 0; i < (int)cvtChapters.size(); i++) {
         auto& c = cvtChapters[i];
         if (c.frameEnd - c.frameStart < fps * 2) { // 2秒以下のチャプターは消す
             cur.frameEnd = c.frameEnd;
@@ -680,7 +680,7 @@ void MakeChapter::writeChapter(const std::vector<JlsElement>& chapters, EncodeFi
 
     StringBuilder sb;
     int sumframes = 0;
-    for (int i = 0; i < (int)chapters.size(); ++i) {
+    for (int i = 0; i < (int)chapters.size(); i++) {
         auto& c = chapters[i];
 
         ctx.infoF("%5d: %s", c.frameStart, c.comment.c_str());

@@ -54,7 +54,7 @@ void FpsPrinter::updateProgress(bool last) {
     } else {
         float sumtime = 0;
         int sumcount = 0;
-        for (int i = 0; i < (int)times.size(); ++i) {
+        for (int i = 0; i < (int)times.size(); i++) {
             sumtime += times[i].span;
             sumcount += times[i].count;
         }

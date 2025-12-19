@@ -72,7 +72,7 @@ void RFFExtractor::inputFrame(av::EncodeWriter& encoder, std::unique_ptr<av::Fra
     int pixel_shift = (desc->comp[0].depth > 8) ? 1 : 0;
     int nplanes = (dst->format != AV_PIX_FMT_NV12) ? 3 : 2;
 
-    for (int i = 0; i < nplanes; ++i) {
+    for (int i = 0; i < nplanes; i++) {
         int hshift = (i > 0 && dst->format != AV_PIX_FMT_NV12) ? desc->log2_chroma_w : 0;
         int vshift = (i > 0) ? desc->log2_chroma_h : 0;
         int wbytes = (dst->width >> hshift) << pixel_shift;
@@ -200,7 +200,7 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
         auto res = rm.wait(HOST_CMD_Filter);
 
         int pass = 0;
-        for (; pass < 4; ++pass) {
+        for (; pass < 4; pass++) {
             if (!FilterPass(pass, res.gpuIndex, key, reformInfo, logopath)) {
                 break;
             }
@@ -333,7 +333,7 @@ std::vector<tstring> AMTFilterSource::GetSuitablePlugins(const tstring& basepath
     std::vector<std::vector<Plugin>> categoryList(categories.size());
     for (tstring filename : GetDirectoryFiles(basepath, _T("*.dll"))) {
         std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-        for (int i = 0; i < (int)categories.size(); ++i) {
+        for (int i = 0; i < (int)categories.size(); i++) {
             const auto& category = categories[i];
             if (ends_with(filename, category)) {
                 auto baseName = filename.substr(0, filename.size() - category.size());
@@ -399,7 +399,7 @@ void AMTFilterSource::ReadAllFrames(int pass) {
     sw.start();
     int prevFrames = 0;
 
-    for (int i = 0; i < vi.num_frames; ++i) {
+    for (int i = 0; i < vi.num_frames; i++) {
         PVideoFrame frame = clip->GetFrame(i, env_.get());
         double elapsed = sw.current();
         if (elapsed >= 1.0) {
@@ -437,7 +437,7 @@ void AMTFilterSource::defineMakeSource(
         eraseLogo(logopath, setting_.getTmpLogoFramePath(key.video), true);
     }
     const auto& eraseLogoPath = setting_.getEraseLogoPath();
-    for (int i = 0; i < (int)eraseLogoPath.size(); ++i) {
+    for (int i = 0; i < (int)eraseLogoPath.size(); i++) {
         eraseLogo(eraseLogoPath[i], setting_.getTmpLogoFramePath(key.video, i), false);
     }
     if (numEraseLogo > 0) {
@@ -460,7 +460,7 @@ void AMTFilterSource::trimInput(EncodeFileKey key,
     std::vector<EncoderZone> trimZones;
     EncoderZone zone;
     zone.startFrame = outFrames.front();
-    for (int i = 1; i < (int)outFrames.size(); ++i) {
+    for (int i = 1; i < (int)outFrames.size(); i++) {
         if (outFrames[i] != outFrames[i - 1] + 1) {
             zone.endFrame = outFrames[i - 1];
             trimZones.push_back(zone);
@@ -475,7 +475,7 @@ void AMTFilterSource::trimInput(EncodeFileKey key,
         trimZones[0].startFrame != 0 ||
         trimZones[0].endFrame != (int)srcFrames.size() - 1) {
         // Trimが必要
-        for (int i = 0; i < (int)trimZones.size(); ++i) {
+        for (int i = 0; i < (int)trimZones.size(); i++) {
             if (i > 0) sb.append("++");
             // Trimのlast_frame==0は末尾まですべてという意味なので、0のときは例外処理
             // endFrame >= startFrameなので、endFrame==0のときはstartFrame==0
@@ -523,7 +523,7 @@ void AMTFilterSource::MakeZones(
 
     // このencoderIndex用のゾーンを作成
     outZones_.clear();
-    for (int i = 0; i < (int)zones.size(); ++i) {
+    for (int i = 0; i < (int)zones.size(); i++) {
         EncoderZone newZone = {
           (int)(std::lower_bound(outFrames.begin(), outFrames.end(), zones[i].startFrame) - outFrames.begin()),
           (int)(std::lower_bound(outFrames.begin(), outFrames.end(), zones[i].endFrame) - outFrames.begin())
@@ -570,14 +570,14 @@ void AMTFilterSource::MakeZones(
     if (timeCodes_.size()) {
         // VFRタイムスタンプをoutZonesに反映させる
         double tick = (double)infmt.frameRateDenom / infmt.frameRateNum;
-        for (int i = 0; i < (int)outZones_.size(); ++i) {
+        for (int i = 0; i < (int)outZones_.size(); i++) {
             outZones_[i].startFrame = (int)(std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].startFrame * tick * 1000) - timeCodes_.begin());
             outZones_[i].endFrame = (int)(std::lower_bound(timeCodes_.begin(), timeCodes_.end(), outZones_[i].endFrame * tick * 1000) - timeCodes_.begin());
         }
     } else if (numSrcFrames != numOutFrames) {
         // フレーム数が変わっている場合はゾーンを引き伸ばす
         double scale = (double)numOutFrames / numSrcFrames;
-        for (int i = 0; i < (int)outZones_.size(); ++i) {
+        for (int i = 0; i < (int)outZones_.size(); i++) {
             outZones_[i].startFrame = std::max(0, std::min(numOutFrames, (int)std::round(outZones_[i].startFrame * scale)));
             outZones_[i].endFrame = std::max(0, std::min(numOutFrames, (int)std::round(outZones_[i].endFrame * scale)));
         }
@@ -615,7 +615,7 @@ AMTDecimate::AMTDecimate(PClip source, const std::string& duration, IScriptEnvir
     vi.num_frames = (int)durations.size();
     framesMap.resize(durations.size());
     framesMap[0] = 0;
-    for (int i = 0; i < (int)durations.size() - 1; ++i) {
+    for (int i = 0; i < (int)durations.size() - 1; i++) {
         framesMap[i + 1] = framesMap[i] + durations[i];
     }
 }
@@ -655,7 +655,7 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     int numFrames = (int)timeCodes.size() - 1;
     // 8フレームごとの平均ビットレートを計算
     std::vector<double> units(nblocks(numFrames, UNIT_FRAMES));
-    for (int i = 0; i < (int)units.size(); ++i) {
+    for (int i = 0; i < (int)units.size(); i++) {
         auto start = timeCodes.begin() + i * UNIT_FRAMES;
         auto end = ((i + 1) * UNIT_FRAMES < (int)timeCodes.size()) ? start + UNIT_FRAMES : timeCodes.end() - 1;
         double sum = (*end - *start) / 1000.0 * fpsNum / fpsDenom;
@@ -663,11 +663,11 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
         units[i] = (invfps - 1.0) * timeFactor + 1.0;
     }
     // cmzonesを適用
-    for (int i = 0; i < (int)cmzones.size(); ++i) {
+    for (int i = 0; i < (int)cmzones.size(); i++) {
         // 半端部分はCMゾーンを小さくる方向に丸める
         int start = nblocks(cmzones[i].startFrame, UNIT_FRAMES);
         int end = cmzones[i].endFrame / UNIT_FRAMES;
-        for (int k = start; k < end; ++k) {
+        for (int k = start; k < end; k++) {
             units[k] *= bitrateCM;
         }
     }
@@ -678,7 +678,7 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     double cur = units[0];
     blocks.push_back(Block{ 0, 1, cur, 0 });
     // 同じビットレートの連続はまとめる
-    for (int i = 1; i < (int)units.size(); ++i) {
+    for (int i = 1; i < (int)units.size(); i++) {
         if (units[i] != cur) {
             cur = units[i];
             blocks.push_back(Block{ i, (int)blocks.size() + 1, cur, 0 });
@@ -689,7 +689,7 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
 
     auto sumDiff = [&](int start, int end, double avg) {
         double diff = 0;
-        for (int i = start; i < end; ++i) {
+        for (int i = start; i < end; i++) {
             diff += std::abs(units[i] - avg);
         }
         return diff;
@@ -734,7 +734,7 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     int heapSize = (int)blocks.size() - 2;
     int numZones = heapSize;
     std::vector<int> indices(heapSize);
-    for (int i = 0; i < heapSize; ++i) indices[i] = i;
+    for (int i = 0; i < heapSize; i++) indices[i] = i;
     std::make_heap(indices.begin(), indices.begin() + heapSize, comp);
     double totalCost = 0;
     while ((totalCost < totalCostLimit && numZones > targetNumZones) ||
@@ -803,7 +803,7 @@ AMTOrderedParallel::AMTOrderedParallel(AVSValue clips, IScriptEnvironment* env)
     : GenericVideoFilter(clips[0].AsClip())
     , clips_(clips.ArraySize()) {
     int maxFrames = 0;
-    for (int i = 0; i < clips.ArraySize(); ++i) {
+    for (int i = 0; i < clips.ArraySize(); i++) {
         clips_[i].clip = clips[i].AsClip();
         clips_[i].numFrames = clips_[i].clip->GetVideoInfo().num_frames;
         maxFrames = std::max(maxFrames, clips_[i].numFrames);

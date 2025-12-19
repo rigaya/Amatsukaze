@@ -136,58 +136,58 @@ namespace Amatsukaze.AddTask
             // デフォルトはexeのあるディレクトリの１つ上
             AmatsukazeRoot = Path.GetDirectoryName(System.AppContext.BaseDirectory);
 
-            for (int i = 0; i < args.Length; ++i)
+            for (int i = 0; i < args.Length; i++)
             {
                 string arg = args[i];
                 if (arg == "-p" || arg == "--port")
                 {
                     ServerPort = int.Parse(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-ip" || arg == "--ip")
                 {
                     ServerIP = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--proc-mode")
                 {
                     ProcMode = GetProcMode(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-f" || arg == "--file")
                 {
                     FilePath = Path.GetFullPath(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--item-id")
                 {
                     ItemID = int.Parse(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--action")
                 {
                     ChangeType = GetChangeItemType(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--remote-dir")
                 {
                     RemoteDir = args[i + 1].TrimEnd(Path.DirectorySeparatorChar);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-s" || arg == "--setting")
                 {
                     Profile = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-b" || arg == "--bat")
                 {
                     AddQueueBat = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--priority")
                 {
                     Priority = int.Parse(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-o" || arg == "--outdir")
                 {
@@ -217,17 +217,17 @@ namespace Amatsukaze.AddTask
                     {
                         OutPath = Path.GetFullPath(outArg);
                     }
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-d" || arg == "--nasdir")
                 {
                     NasDir = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "-r" || arg == "--amt-root")
                 {
                     AmatsukazeRoot = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--no-move")
                 {
@@ -244,7 +244,7 @@ namespace Amatsukaze.AddTask
                 else if (arg == "--subnet")
                 {
                     Subnet = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--mac")
                 {
@@ -256,7 +256,7 @@ namespace Amatsukaze.AddTask
                     {
                         throw new Exception("MACアドレスが不正です");
                     }
-                    ++i;
+                    i++;
                 }
             }
 
@@ -442,7 +442,7 @@ namespace Amatsukaze.AddTask
             bool isLocal = !IsRunningOnMono() && ServerSupport.IsLocalIP(option.ServerIP);
             int maxRetry = isLocal ? 3 : 5;
 
-            for (int i = 0; i < maxRetry; ++i)
+            for (int i = 0; i < maxRetry; i++)
             {
                 if(i > 0)
                 {

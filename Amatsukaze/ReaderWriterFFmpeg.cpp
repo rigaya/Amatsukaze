@@ -14,7 +14,7 @@ int av::GetFFmpegThreads(int preferred, int height) {
 }
 
 AVStream* av::GetVideoStream(AVFormatContext* pCtx) {
-    for (int i = 0; i < (int)pCtx->nb_streams; ++i) {
+    for (int i = 0; i < (int)pCtx->nb_streams; i++) {
         if (pCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             return pCtx->streams[i];
         }
@@ -23,10 +23,10 @@ AVStream* av::GetVideoStream(AVFormatContext* pCtx) {
 }
 
 AVStream* av::GetVideoStream(AVFormatContext* ctx, int serviceid) {
-    for (int i = 0; i < (int)ctx->nb_programs; ++i) {
+    for (int i = 0; i < (int)ctx->nb_programs; i++) {
         if (ctx->programs[i]->program_num == serviceid) {
             auto prog = ctx->programs[i];
-            for (int s = 0; s < (int)prog->nb_stream_indexes; ++s) {
+            for (int s = 0; s < (int)prog->nb_stream_indexes; s++) {
                 auto stream = ctx->streams[prog->stream_index[s]];
                 if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
                     return stream;
@@ -379,7 +379,7 @@ void av::VideoReader::onFirstFrame(AVStream *stream, AVFrame *frame) {
     int pixel_shift = (desc->comp[0].depth > 8) ? 1 : 0;
     int nplanes = (dst->format != AV_PIX_FMT_NV12) ? 3 : 2;
 
-    for (int i = 0; i < nplanes; ++i) {
+    for (int i = 0; i < nplanes; i++) {
         int hshift = (i > 0 && dst->format != AV_PIX_FMT_NV12) ? desc->log2_chroma_w : 0;
         int vshift = (i > 0) ? desc->log2_chroma_h : 0;
         int wbytes = (dst->width >> hshift) << pixel_shift;
@@ -784,7 +784,7 @@ VideoFormat av::EncodeWriter::getEncoderInputVideoFormat(VideoFormat format) {
     int pixel_shift = (desc->comp[0].depth > 8) ? 1 : 0;
     int nplanes = (src->format != AV_PIX_FMT_NV12) ? 3 : 2;
 
-    for (int i = 0; i < nplanes; ++i) {
+    for (int i = 0; i < nplanes; i++) {
         int hshift = (i > 0 && src->format != AV_PIX_FMT_NV12) ? desc->log2_chroma_w : 0;
         int vshift = (i > 0) ? desc->log2_chroma_h : 0;
         int wbytes = (src->width >> hshift) << pixel_shift;

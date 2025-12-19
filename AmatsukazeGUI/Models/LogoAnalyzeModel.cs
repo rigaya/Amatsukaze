@@ -361,7 +361,7 @@ namespace Amatsukaze.Models
             Directory.CreateDirectory(dirpath);
             string prefix = Path.Combine(dirpath, "SID" + Logo.ServiceId.ToString() + "-");
             
-            for(int i = 1; i <= 1000; ++i)
+            for(int i = 1; i <= 1000; i++)
             {
                 string path = prefix + i + ".lgd";
                 try

@@ -165,7 +165,7 @@ void AMTSource::MakeVideoInfo(const VideoFormat& vfmt, const AudioFormat& afmt) 
     if (audioFrames.size() > 0) {
         audioSamplesPerFrame = 1024;
         // waveLengthはゼロのこともあるので注意
-        for (int i = 0; i < (int)audioFrames.size(); ++i) {
+        for (int i = 0; i < (int)audioFrames.size(); i++) {
             if (audioFrames[i].waveLength != 0) {
                 audioSamplesPerFrame = audioFrames[i].waveLength / 4; // 16bitステレオ前提
                 break;
@@ -547,7 +547,7 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
 }
 
 void AMTSource::registerFailedFrames(int begin, int end, int replace, IScriptEnvironment* env) {
-    for (int f = begin; f < end; ++f) {
+    for (int f = begin; f < end; f++) {
         failedMap[f] = replace;
     }
     // デコード不可フレーム数が１割を超える場合はエラーとする
@@ -653,7 +653,7 @@ PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
     } else {
         // シークしてデコードする
         int keyNum = frames[n].keyFrame;
-        for (int i = 0; ; ++i) {
+        for (int i = 0; ; i++) {
             int64_t fileOffset = frames[keyNum].fileOffset / 188 * 188;
             if (av_seek_frame(inputCtx(), -1, fileOffset, AVSEEK_FLAG_BYTE) < 0) {
                 THROW(FormatException, "av_seek_frame failed");
@@ -700,7 +700,7 @@ void __stdcall AMTSource::GetAudio(void* buf, int64_t start, int64_t count, IScr
     uint8_t* ptr = (uint8_t*)buf;
     for (int64_t frameIndex = start / audioSamplesPerFrame, frameOffset = start % audioSamplesPerFrame;
         count > 0 && frameIndex < (int64_t)audioFrames.size();
-        ++frameIndex, frameOffset = 0) {
+        frameIndex++, frameOffset = 0) {
         // このフレームで埋めるべきバイト数
         int readBytes = std::min<int>(
             (int)(frameWaveLength - frameOffset * sampleBytes),

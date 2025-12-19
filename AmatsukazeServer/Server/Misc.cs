@@ -1,4 +1,4 @@
-﻿using Amatsukaze.Lib;
+using Amatsukaze.Lib;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -43,13 +43,13 @@ namespace Amatsukaze.Server
 
         public GUIOPtion(string[] args)
         {
-            for (int i = 0; i < args.Length; ++i)
+            for (int i = 0; i < args.Length; i++)
             {
                 string arg = args[i];
                 if (arg == "-p" || arg == "--port")
                 {
                     ServerPort = int.Parse(args[i + 1]);
-                    ++i;
+                    i++;
                 }
                 else if(arg == "-l" || arg == "--launch")
                 {
@@ -81,17 +81,17 @@ namespace Amatsukaze.Server
                 else if(arg == "-r" || arg == "--root")
                 {
                     RootDir = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if(arg == "--file")
                 {
                     FilePath = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if (arg == "--work")
                 {
                     WorkPath = args[i + 1];
-                    ++i;
+                    i++;
                 }
                 else if(arg == "--slimts")
                 {
@@ -100,7 +100,7 @@ namespace Amatsukaze.Server
                 else if (arg == "--serviceid")
                 {
                     ServiceId = int.Parse(args[i + 1]);
-                    ++i;
+                    i++;
                 }
             }
         }
@@ -238,7 +238,7 @@ namespace Amatsukaze.Server
         public static string CreateTmpFile(string baseDir)
         {
             for(int code = Environment.TickCount & 0xFFFFFF, 
-                end = code + 0x1000; code != end; ++code)
+                end = code + 0x1000; code != end; code++)
             {
                 string path = Path.Combine(baseDir, "amt" + code);
                 try
@@ -268,7 +268,7 @@ namespace Amatsukaze.Server
 
         public static string CreateDstFile(string baseName, string ext)
         {
-            for (int i = 0; i < 0x1000; ++i)
+            for (int i = 0; i < 0x1000; i++)
             {
                 string fname = baseName + CreateSuffix(i);
                 string path = fname + ext;
@@ -335,7 +335,7 @@ namespace Amatsukaze.Server
 
         public void AddBytes(byte[] buf, int offset, int count)
         {
-            for (int i = 0; i < count; ++i)
+            for (int i = 0; i < count; i++)
             {
                 if (buf[i] == '\n' || buf[i] == '\r' || buf[i] == 0x08)
                 {
@@ -441,7 +441,7 @@ namespace Amatsukaze.Server
                 masks[(int)ProcessGroupKind.NUMA] = cpuInfo.Get(ProcessGroupKind.NUMA);
                 masks[(int)ProcessGroupKind.Group] = cpuInfo.Get(ProcessGroupKind.Group);
                 // ないところは前のをコピー
-                for (int i = 1; i < masks.Length; ++i)
+                for (int i = 1; i < masks.Length; i++)
                 {
                     if ((masks[i]?.Length ?? 0) == 0)
                     {
@@ -528,7 +528,7 @@ namespace Amatsukaze.Server
             var writeQ = new BufferBlock<Buffer>();
 
             // バッファは適当に4つ
-            for(int i = 0; i < 4; ++i)
+            for(int i = 0; i < 4; i++)
             {
                 bufferQ.Post(new Buffer() { buffer = new byte[2 * 1024 * 1024] });
             }
@@ -597,7 +597,7 @@ namespace Amatsukaze.Server
             // 簡易版なのでハッシュチェックなし
             var dic = new Dictionary<string, byte[]>();
             string[] lines = File.ReadAllLines(path);
-            for(int i = 0; i < lines.Length; ++i)
+            for(int i = 0; i < lines.Length; i++)
             {
                 string line = lines[i];
                 if(i + 1 == lines.Length && line.Length <= HASH_LENGTH * 2 + 2)
@@ -1565,7 +1565,7 @@ namespace Amatsukaze.Server
             }
 
             // 同じファイルを探す
-            for (uint newCode = code; ; ++newCode)
+            for (uint newCode = code; ; newCode++)
             {
                 var fileName = CodeToName(newCode, cacheRoot);
                 if (File.Exists(fileName))
@@ -1583,7 +1583,7 @@ namespace Amatsukaze.Server
             }
 
             // ない場合は作って返す
-            for (uint newCode = code; ; ++newCode)
+            for (uint newCode = code; ; newCode++)
             {
                 var fileName = CodeToName(newCode, cacheRoot);
                 if (File.Exists(fileName))

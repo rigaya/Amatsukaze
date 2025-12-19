@@ -82,7 +82,7 @@ void StringLiner::Flush() {
 bool StringLiner::SearchLineBreak() {
     const uint8_t* ptr = buffer.ptr();
     int bufSize = (int)buffer.size();
-    for (int i = searchIdx; i < bufSize; ++i) {
+    for (int i = searchIdx; i < bufSize; i++) {
         const uint8_t c = ptr[i];
         if (c == '\n' || c == '\r') {
             bool endsWithCROnly = false;
@@ -165,7 +165,7 @@ bool ends_with(const tstring & value, const tstring & ending) {
 /* static */ tstring pathRemoveExtension(const tstring& path) {
     const tchar* exts[] = { _T(".mp4"), _T(".mkv"), _T(".m2ts"), _T(".ts"), nullptr };
     const tchar* c_path = path.c_str();
-    for (int i = 0; exts[i]; ++i) {
+    for (int i = 0; exts[i]; i++) {
         size_t extlen = strlenT(exts[i]);
         if (path.size() > extlen) {
             if (stricmpT(c_path + (path.size() - extlen), exts[i]) == 0) {

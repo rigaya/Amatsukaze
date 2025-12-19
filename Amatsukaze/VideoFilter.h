@@ -68,8 +68,8 @@ private:
 		int width = frames[0]->width;
 		int height = frames[0]->height;
 
-		for (int y = 0; y < height; ++y) {
-			for (int x = 0; x < width; ++x) {
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
 				int cy = interlaced ? (((y >> 1) & ~1) | (y & 1)) : (y >> 1);
 				int cx = x >> 1;
 
@@ -78,7 +78,7 @@ private:
 				T V = getPixel<T>(frames[mid], 2, cx, cy);
 
 				float sumKernel = 0.0f;
-				for (int i = 0; i < NFRAMES_; ++i) {
+				for (int i = 0; i < NFRAMES_; i++) {
 					T rY = getPixel<T>(frames[i], 0, x, y);
 					T rU = getPixel<T>(frames[i], 1, cx, cy);
 					T rV = getPixel<T>(frames[i], 2, cx, cy);
@@ -94,7 +94,7 @@ private:
 				float dY = 0.5f;
 				float dU = 0.5f;
 				float dV = 0.5f;
-				for (int i = 0; i < NFRAMES_; ++i) {
+				for (int i = 0; i < NFRAMES_; i++) {
 					T rY = getPixel<T>(frames[i], 0, x, y);
 					T rU = getPixel<T>(frames[i], 1, cx, cy);
 					T rV = getPixel<T>(frames[i], 2, cx, cy);

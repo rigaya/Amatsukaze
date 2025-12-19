@@ -2370,7 +2370,7 @@ namespace Amatsukaze.Models
                 .Select(s => int.Parse(s)).ToArray();
             if (raw.Length == DisplayResource.MAX * 3)
             {
-                for (int i = 0; i < DisplayResource.MAX; ++i)
+                for (int i = 0; i < DisplayResource.MAX; i++)
                 {
                     Resources[i].CPU = raw[i * 3 + 0];
                     Resources[i].HDD = raw[i * 3 + 1];

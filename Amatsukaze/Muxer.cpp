@@ -20,7 +20,7 @@
             subExists = true;
         }
     }
-    for (int lang = 0; lang < (int)reformInfo.getEncodeFile(key).captionList.size(); ++lang) {
+    for (int lang = 0; lang < (int)reformInfo.getEncodeFile(key).captionList.size(); lang++) {
         auto srcass = setting.getTmpASSFilePath(key, lang);
         if (File::exists(srcass)) {
             subExists = true;
@@ -158,7 +158,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         }
     }
     // ARIB生成字幕 (ASS/SRT/WebVTT)
-    for (int lang = 0; lang < (int)fileIn.captionList.size(); ++lang) {
+    for (int lang = 0; lang < (int)fileIn.captionList.size(); lang++) {
         auto srcass = setting_.getTmpASSFilePath(key, lang);
         if (muxFormat == FORMAT_MKV) {
             subsFiles.push_back(srcass);
@@ -270,7 +270,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
         setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay);
 
-    for (int i = 0; i < (int)args.size(); ++i) {
+    for (int i = 0; i < (int)args.size(); i++) {
         ctx.infoF("%s", args[i].first);
         StdRedirectedSubProcess muxer(args[i].first, 0, args[i].second);
         int ret = muxer.join();
@@ -311,7 +311,7 @@ AMTSimpleMuxder::AMTSimpleMuxder(
 void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
     // Mux
     std::vector<tstring> audioFiles;
-    for (int i = 0; i < audioCount; ++i) {
+    for (int i = 0; i < audioCount; i++) {
         audioFiles.push_back(setting_.getIntAudioFilePath(EncodeFileKey(), i, setting_.getAudioEncoder()));
     }
     tstring encVideoFile = setting_.getEncVideoFilePath(EncodeFileKey());

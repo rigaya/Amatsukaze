@@ -16,7 +16,7 @@
 
     const uint32_t* table = crc.getTable();
 
-    for (int i = 0; i < 256; ++i) {
+    for (int i = 0; i < 256; i++) {
         fprintf(stderr, "0x%08x%c", table[i], ((i + 1) % 8) ? ',' : '\n');
     }
 
@@ -51,7 +51,7 @@
 /* static */ int test::ReadBits(AMTContext& ctx, const ConfigWrapper& setting) {
     uint8_t data[16];
     srand(0);
-    for (int i = 0; i < (int)sizeof(data); ++i) data[i] = rand();
+    for (int i = 0; i < (int)sizeof(data); i++) data[i] = rand();
 
     //uint16_t a = read16(data);
     //uint32_t b = read24(data);
@@ -72,18 +72,18 @@
     int delCnt = 0;
 
     AutoBuffer ab;
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 10000; i++) {
         int addNum = rand();
         int delNum = rand();
 
-        for (int c = 0; c < addNum; ++c) {
+        for (int c = 0; c < addNum; c++) {
             buf[c] = addCnt++;
         }
         //fprintf(stderr, "Add %d\n", addNum);
         ab.add(MemoryChunk(buf.get(), addNum));
 
         uint8_t *data = ab.ptr();
-        for (int c = 0; c < (int)ab.size(); ++c) {
+        for (int c = 0; c < (int)ab.size(); c++) {
             if (data[c] != ((delCnt + c) & 0xFF)) {
                 fprintf(stderr, "[CheckAutoBuffer] Result does not match\n");
                 return 1;
@@ -201,7 +201,7 @@
                 return 1;
             }
             // AACのデコード結果は小数なので丸め誤差を考慮して
-            for (int c = 0; c < testLength / 2; ++c) {
+            for (int c = 0; c < testLength / 2; c++) {
                 if ((std::abs((int)pTest[c] - (int)pDec[c]) > 1)) {
                     fprintf(stderr, "デコード結果が合いません\n");
                     return 1;
@@ -234,8 +234,8 @@
     int nChannels = 1;
 
     uint8_t* samples = (uint8_t*)malloc(writeSeconds * sampleRate * nChannels * (bitsPerSample / 2));
-    for (int i = 0; i < writeSeconds * sampleRate; ++i) {
-        for (int c = 0; c < nChannels; ++c) {
+    for (int i = 0; i < writeSeconds * sampleRate; i++) {
+        for (int c = 0; c < nChannels; c++) {
             samples[i * nChannels + c] = (i % sampleRate);
         }
     }
@@ -386,10 +386,10 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
         CaptionASSFormatter formatterASS(ctx);
         CaptionSRTFormatter formatterSRT(ctx);
         const auto& keys = reformInfo.getOutFileKeys();
-        for (int i = 0; i < (int)keys.size(); ++i) {
+        for (int i = 0; i < (int)keys.size(); i++) {
             auto key = keys[i];
             auto& capList = reformInfo.getEncodeFile(key).captionList;
-            for (int lang = 0; lang < (int)capList.size(); ++lang) {
+            for (int lang = 0; lang < (int)capList.size(); lang++) {
                 WriteUTF8File(
                     setting.getTmpASSFilePath(key, lang),
                     formatterASS.generate(capList[lang]));
@@ -474,14 +474,14 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
     std::vector<double> durations;
     double elapsed = 0;
     double tick = 1000.0 * 1001 / 60000;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 30; i++) {
         durations.push_back(elapsed); elapsed += tick * 2;
         durations.push_back(elapsed); elapsed += tick * 3;
     }
-    for (int i = 0; i < 40; ++i) {
+    for (int i = 0; i < 40; i++) {
         durations.push_back(elapsed); elapsed += tick * 1;
     }
-    for (int i = 0; i < 50; ++i) {
+    for (int i = 0; i < 50; i++) {
         durations.push_back(elapsed); elapsed += tick * 2;
     }
     std::vector<EncoderZone> cmzones;
@@ -532,7 +532,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
 /* static */ int test::ResourceTest(AMTContext& ctx, const ConfigWrapper& setting) {
     srand((int)time(0));
     ResourceManger rm(ctx, setting.getInPipe(), setting.getOutPipe());
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 10000; i++) {
         ctx.infoF("Test Loop: %d", i);
         rm.wait(HOST_CMD_TSAnalyze);
         std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));

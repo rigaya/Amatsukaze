@@ -233,7 +233,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.whisperParallel = false;
     conf.copyTrimAVS = false;
 
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc; i++) {
         tstring key = argv[i];
         if (key == _T("--loadv2")) {
             ; // skip

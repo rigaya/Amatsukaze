@@ -446,7 +446,7 @@ namespace Amatsukaze.Server
                     Name = a.Name,
                     MainGenres = new SortedList<int, MainGenre>()
                 };
-                for (int l1 = 0; l1 < a.Table.Length; ++l1)
+                for (int l1 = 0; l1 < a.Table.Length; l1++)
                 {
                     var b = a.Table[l1];
                     var l1Data = new MainGenre()
@@ -460,7 +460,7 @@ namespace Amatsukaze.Server
                         Name = b.Name,
                         SubGenres = new SortedList<int, SubGenre>()
                     };
-                    for (int l2 = 0; l2 < b.Table.Length; ++l2)
+                    for (int l2 = 0; l2 < b.Table.Length; l2++)
                     {
                         if (b.Table[l2] != null)
                         {

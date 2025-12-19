@@ -215,9 +215,9 @@ public:
         float bgU = 0.5389f * (bg - bgY);
         float bgV = 0.6350f * (bg - bgY);
 
-        for (int y = 0; y < header.h; ++y) {
+        for (int y = 0; y < header.h; y++) {
             uint8_t* line = rgb + y * stride;
-            for (int x = 0; x < header.w; ++x) {
+            for (int x = 0; x < header.w; x++) {
                 int UVx = (x >> header.logUVx);
                 int UVy = (y >> header.logUVy);
                 float aY = logoAY[x + y * header.w];

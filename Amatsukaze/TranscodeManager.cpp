@@ -240,7 +240,7 @@ void AMTSplitter::printInteraceCount() {
     std::vector<std::pair<int64_t, int>> modifiedPTS;
     int64_t videoBasePTS = videoFrameList_[0].PTS;
     int64_t prevPTS = videoFrameList_[0].PTS;
-    for (int i = 0; i < int(videoFrameList_.size()); ++i) {
+    for (int i = 0; i < int(videoFrameList_.size()); i++) {
         int64_t PTS = videoFrameList_[i].PTS;
         int64_t modPTS = prevPTS + int64_t((int32_t(PTS) - int32_t(prevPTS)));
         modifiedPTS.emplace_back(modPTS, i);
@@ -254,7 +254,7 @@ void AMTSplitter::printInteraceCount() {
     // フレームリストを出力
     FILE* framesfp = fopen("frames.txt", "w");
     fprintf(framesfp, "FrameNumber,DecodeFrameNumber,PTS,Duration,FRAME_TYPE,PIC_TYPE,IsGOPStart\n");
-    for (int i = 0; i < (int)modifiedPTS.size(); ++i) {
+    for (int i = 0; i < (int)modifiedPTS.size(); i++) {
         int64_t PTS = modifiedPTS[i].first;
         int decodeIndex = modifiedPTS[i].second;
         const VideoFrameInfo& frame = videoFrameList_[decodeIndex];
@@ -617,7 +617,7 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
     std::vector<BitrateZone> bitrateZones;
     if (timeCodes.size() == 0 || setting.isEncoderSupportVFR()) {
         // VFRでない、または、エンコーダがVFRをサポートしている -> VFR用に調整する必要がない
-        for (int i = 0; i < (int)cmzones.size(); ++i) {
+        for (int i = 0; i < (int)cmzones.size(); i++) {
             bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
         }
     } else {
@@ -789,7 +789,7 @@ void DoBadThing() {
     std::vector<std::unique_ptr<CMAnalyze>> cmanalyze;
 
     // ソースファイル読み込み用データ保存
-    for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
+    for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; videoFileIndex++) {
         // ファイル読み込み情報を保存
         auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
         auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
@@ -810,7 +810,7 @@ void DoBadThing() {
     sw.start();
     std::vector<std::pair<size_t, bool>> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
-    for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; ++videoFileIndex) {
+    for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; videoFileIndex++) {
         cmanalyze.push_back(std::make_unique<CMAnalyze>(ctx, setting));
         const auto& inputVideofmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0)).videoFormat;
         const int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
@@ -891,7 +891,7 @@ void DoBadThing() {
     std::vector<EncodeFileOutput> outFileInfo(keys.size());
 
     ctx.info("[チャプター生成]");
-    for (int i = 0; i < (int)keys.size(); ++i) {
+    for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
         if (chapterMakers[key.video]) {
             chapterMakers[key.video]->exec(key);
@@ -1277,7 +1277,7 @@ void DoBadThing() {
         sb.append("{ ")
             .append("\"srcpath\": \"%s\", ", toJsonString(setting.getSrcFilePath()))
             .append("\"outfiles\": [");
-        for (int i = 0; i < (int)keys.size(); ++i) {
+        for (int i = 0; i < (int)keys.size(); i++) {
             if (i > 0) sb.append(", ");
             const auto& file = reformInfo.getEncodeFile(keys[i]);
             const auto& info = outFileInfo[i];
@@ -1285,7 +1285,7 @@ void DoBadThing() {
                 toJsonString(setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(keys[i], reformInfo, setting), eoInfo.format)), (int)info.srcBitrate,
                 std::isnan(info.targetBitrate) ? -1 : (int)info.targetBitrate, info.fileSize);
             sb.append("\"subs\": [");
-            for (int s = 0; s < (int)info.outSubs.size(); ++s) {
+            for (int s = 0; s < (int)info.outSubs.size(); s++) {
                 if (s > 0) sb.append(", ");
                 sb.append("\"%s\"", toJsonString(info.outSubs[s]));
             }
@@ -1293,7 +1293,7 @@ void DoBadThing() {
         }
         sb.append("]")
             .append(", \"logofiles\": [");
-        for (int i = 0; i < reformInfo.getNumVideoFile(); ++i) {
+        for (int i = 0; i < reformInfo.getNumVideoFile(); i++) {
             if (i > 0) sb.append(", ");
             sb.append("\"%s\"", toJsonString(cmanalyze[i]->getLogoPath()));
         }
@@ -1306,7 +1306,7 @@ void DoBadThing() {
         sb.append(", \"audiodiff\": ");
         audioDiffInfo.printToJson(sb);
         sb.append(", \"error\": {");
-        for (int i = 0; i < AMT_ERR_MAX; ++i) {
+        for (int i = 0; i < AMT_ERR_MAX; i++) {
             if (i > 0) sb.append(", ");
             sb.append("\"%s\": %d", AMT_ERROR_NAMES[i], ctx.getErrorCount((AMT_ERROR_COUNTER)i));
         }

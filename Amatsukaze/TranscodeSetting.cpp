@@ -323,7 +323,7 @@ bool sarValid(const std::pair<int, int>& sar) {
             }
         }
         sb.append(_T("\""));
-        for (int i = 0; i < (int)inAudios.size(); ++i) {
+        for (int i = 0; i < (int)inAudios.size(); i++) {
             sb.append(_T(" -add \"%s\"#audio:name=Audio%d"), inAudios[i], i);
         }
         if (needChapter && !needTimecode) {
@@ -331,7 +331,7 @@ bool sarValid(const std::pair<int, int>& sar) {
             needChapter = false;
         }
         if (needSubs && !needTimecode) {
-            for (int i = 0; i < (int)inSubs.size(); ++i) {
+            for (int i = 0; i < (int)inSubs.size(); i++) {
                 if (subsTitles[i] == _T("SRT")) { // mp4はSRTのみ
                     sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
                 }
@@ -363,7 +363,7 @@ bool sarValid(const std::pair<int, int>& sar) {
             sb.append(_T("\"%s\" -brand mp42 -ab mp41 -ab iso2"), mp4boxpath);
             sb.append(_T(" -add \"%s\""), dst);
             sb.append(_T(" -tmp \"%s\""), tmpdir);
-            for (int i = 0; i < (int)inSubs.size(); ++i) {
+            for (int i = 0; i < (int)inSubs.size(); i++) {
                 if (subsTitles[i] == _T("SRT")) { // mp4はSRTのみ
                     sb.append(_T(" -add \"%s#:name=%s\""), inSubs[i], subsTitles[i]);
                 }
@@ -412,7 +412,7 @@ bool sarValid(const std::pair<int, int>& sar) {
         for (const auto& inAudio : inAudios) {
             sb.append(_T(" \"%s\""), inAudio);
         }
-        for (int i = 0; i < (int)inSubs.size(); ++i) {
+        for (int i = 0; i < (int)inSubs.size(); i++) {
             sb.append(_T(" --track-name \"0:%s\" \"%s\""), subsTitles[i], inSubs[i]);
         }
 
@@ -540,7 +540,7 @@ TempDirectory::~TempDirectory() {
 void TempDirectory::Initialize() {
     if (initialized_) return;
 
-    for (int code = (int)time(NULL) & 0xFFFFFF; code > 0; ++code) {
+    for (int code = (int)time(NULL) & 0xFFFFFF; code > 0; code++) {
         auto path = genPath(path_, code);
         if (mkdirT(path.c_str()) == 0) {
             path_ = path;
@@ -601,12 +601,12 @@ ConfigWrapper::ConfigWrapper(
     if (this->conf.encoderParallel <= 0) {
         this->conf.encoderParallel = 1;
     }
-    for (int cmtypei = 0; cmtypei < CMTYPE_MAX; ++cmtypei) {
+    for (int cmtypei = 0; cmtypei < CMTYPE_MAX; cmtypei++) {
         if (conf.cmoutmask & (1 << cmtypei)) {
             cmtypes.push_back((CMType)cmtypei);
         }
     }
-    for (int nicotypei = 0; nicotypei < NICOJK_MAX; ++nicotypei) {
+    for (int nicotypei = 0; nicotypei < NICOJK_MAX; nicotypei++) {
         if (conf.nicojkmask & (1 << nicotypei)) {
             nicojktypes.push_back((NicoJKType)nicotypei);
         }
@@ -1345,7 +1345,7 @@ tstring ConfigWrapper::getOptions(
             if (std::find_if(zones.begin(), zones.end(), [](const auto& z) { return z.bitrate != 1.0; }) != zones.end()) {
                 sb.append(_T(" --zones "));
                 bool zoneAdded = false;
-                for (int i = 0; i < (int)zones.size(); ++i) {
+                for (int i = 0; i < (int)zones.size(); i++) {
                     const auto& zone = zones[i];
                     if (zone.bitrate != 1.0) { 
                         sb.append(_T("%s%d,%d,b=%.3g"), (zoneAdded) ? "/" : "",
@@ -1360,7 +1360,7 @@ tstring ConfigWrapper::getOptions(
             if (conf.autoBitrate) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
                 std::unique_ptr<FILE, std::function<void(FILE*)>> fp(_tfopen(optionFilePath.c_str(), _T("w")), [](FILE* f) { if (f) fclose(f); });
-                for (int i = 0; i < (int)zones.size(); ++i) {
+                for (int i = 0; i < (int)zones.size(); i++) {
                     const auto& zone = zones[i];
                     fprintf(fp.get(), " --dynamic-rc %d:%d,vbr=%d\n",
                         zone.startFrame, zone.endFrame - 1, (int)std::round(targetBitrate * zone.bitrate));
@@ -1371,7 +1371,7 @@ tstring ConfigWrapper::getOptions(
                 bool addOptFileCmd = false;
                 std::unique_ptr<FILE, std::function<void(FILE*)>> fp(_tfopen(optionFilePath.c_str(), _T("w")), [](FILE* f) { if (f) fclose(f); });
                 if (rcMode->isBitrateMode) {
-                    for (int i = 0; i < (int)zones.size(); ++i) {
+                    for (int i = 0; i < (int)zones.size(); i++) {
                         const auto& zone = zones[i];
                         fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
                             zone.startFrame, zone.endFrame - 1, rcMode->name,
@@ -1379,7 +1379,7 @@ tstring ConfigWrapper::getOptions(
                         addOptFileCmd = true;
                     }
                 } else {
-                    for (int i = 0; i < (int)zones.size(); ++i) {
+                    for (int i = 0; i < (int)zones.size(); i++) {
                         const auto& zone = zones[i];
                         if (zone.qualityOffset == 0.0) continue;
                         addOptFileCmd = true;
@@ -1472,7 +1472,7 @@ void ConfigWrapper::dump() const {
         conf.chapter ? "有効" : "無効",
         (conf.chapter && conf.ignoreNoLogo) ? "" : "（ロゴ必須）");
     if (conf.chapter) {
-        for (int i = 0; i < (int)conf.logoPath.size(); ++i) {
+        for (int i = 0; i < (int)conf.logoPath.size(); i++) {
             ctx.infoF("logo%d: %s", (i + 1), conf.logoPath[i]);
         }
     }

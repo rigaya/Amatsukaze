@@ -335,7 +335,7 @@ private:
         // ラップアラウンドしないPTSを生成
         modifiedPTS.resize(frames.size());
         int64_t prevPTS = modifiedFirstPTS;
-        for (int i = 0; i < int(frames.size()); ++i) {
+        for (int i = 0; i < int(frames.size()); i++) {
             int64_t PTS = frames[i].PTS;
             if (PTS == -1) {
                 // PTSがない
@@ -348,7 +348,7 @@ private:
         }
 
         // ストリームが戻っている場合は処理できないのでエラーとする
-        for (int i = 1; i < int(frames.size()); ++i) {
+        for (int i = 1; i < int(frames.size()); i++) {
             if (modifiedPTS[i] - modifiedPTS[i - 1] < -60 * MPEG_CLOCK_HZ) {
                 // 1分以上戻っている
                 ctx.incrementCounter(AMT_ERR_NON_CONTINUOUS_PTS);

@@ -329,7 +329,7 @@ namespace Amatsukaze.ViewModels
                 Model.CancelScanning = true;
 
                 // 3秒待つ
-                for(int i = 0; i < 12 && currentTask != null; ++i)
+                for(int i = 0; i < 12 && currentTask != null; i++)
                 {
                     await Task.Delay(250);
                 }

@@ -31,7 +31,7 @@ struct PsPackHeader {
         if (reader.read<2>() != 3) return false;
         reader.skip(5);
         uint8_t pack_stuffing_length = reader.read<3>();
-        for (int i = 0; i < pack_stuffing_length; ++i) {
+        for (int i = 0; i < pack_stuffing_length; i++) {
             if (reader.read<8>() != 0xFF) return false;
         }
 

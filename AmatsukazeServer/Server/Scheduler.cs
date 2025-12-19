@@ -191,7 +191,7 @@ namespace Amatsukaze.Server
                 }
                 else
                 {
-                    for(int id = 0; id < numParallel; ++id)
+                    for(int id = 0; id < numParallel; id++)
                     {
                         if(workers[id].State == State.InActive)
                         {
@@ -308,7 +308,7 @@ namespace Amatsukaze.Server
         {
             List<QueueItem> tmp = new List<QueueItem>();
             // Queue状態以外のアイテムの削除
-            for(int i = 0; i < queue.Length; ++i)
+            for(int i = 0; i < queue.Length; i++)
             {
                 var level = queue[i];
                 var priority = i + 1;
@@ -337,7 +337,7 @@ namespace Amatsukaze.Server
                 AddQueue(item);
             }
             // ないkeyは消す
-            for (int i = 0; i < queue.Length; ++i)
+            for (int i = 0; i < queue.Length; i++)
             {
                 var level = queue[i];
                 foreach(var key in level.Keys.Where(key => !level[key].Any()).ToArray())

@@ -201,8 +201,8 @@ void logo::LogoData::Save(const tstring& filepath, const LogoHeader* header) {
     // ベース部分作成
     int wUV = w >> logUVx;
     std::vector<LOGO_PIXEL> basedata(header->w * header->h);
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
             int off = x + y * w;
             int offUV = (x >> logUVx) + (y >> logUVy) * wUV;
             ToOutLGP(basedata[off], aY[off], bY[off], aU[offUV], bU[offUV], aV[offUV], bV[offUV]);

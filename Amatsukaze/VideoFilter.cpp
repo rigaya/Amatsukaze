@@ -50,7 +50,7 @@ void TemporalNRFilter::init(int temporalDistance, int threshold, bool interlaced
     }
 
     AVFrame* frames[MAX_NFRAMES];
-    for (int i = 0, f = (int)frames_.size() - NFRAMES_; i < NFRAMES_; ++i, ++f) {
+    for (int i = 0, f = (int)frames_.size() - NFRAMES_; i < NFRAMES_; i++, f++) {
         frames[i] = (*frames_[std::max(f, 0)])();
     }
     sendFrame(TNRFilter(frames, frames_[frames_.size() - half]->frameIndex_));
@@ -64,7 +64,7 @@ void TemporalNRFilter::init(int temporalDistance, int threshold, bool interlaced
     AVFrame* frames[MAX_NFRAMES];
 
     while (frames_.size() > half) {
-        for (int i = 0; i < NFRAMES_; ++i) {
+        for (int i = 0; i < NFRAMES_; i++) {
             frames[i] = (*frames_[std::min(i, (int)frames_.size() - 1)])();
         }
         sendFrame(TNRFilter(frames, frames_[half]->frameIndex_));
@@ -96,7 +96,7 @@ std::unique_ptr<av::Frame> TemporalNRFilter::TNRFilter(AVFrame** frames, int fra
     int thresh = DIFFMAX_ << (desc->comp[0].depth - 8);
 
     float kernel[MAX_NFRAMES];
-    for (int i = 0; i < NFRAMES_; ++i) {
+    for (int i = 0; i < NFRAMES_; i++) {
         kernel[i] = 1;
     }
 

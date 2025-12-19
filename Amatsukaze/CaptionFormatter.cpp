@@ -28,7 +28,7 @@ std::wstring CaptionASSFormatter::generate(const std::vector<OutCaptionLine>& li
     PlayResX = lines[0].line->planeW;
     PlayResY = lines[0].line->planeH;
     header();
-    for (int i = 0; i < (int)lines.size(); ++i) {
+    for (int i = 0; i < (int)lines.size(); i++) {
         item(lines[i]);
     }
     return sb.str();
@@ -77,7 +77,7 @@ void CaptionASSFormatter::item(const OutCaptionLine& line) {
     int nfrags = (int)fmts.size();
     auto& text = line.line->text;
 
-    for (int i = 0; i < nfrags; ++i) {
+    for (int i = 0; i < nfrags; i++) {
         int begin = fmts[i].pos;
         int end = (i + 1 < nfrags) ? fmts[i + 1].pos : (int)text.size();
         auto& fmt = fmts[i];
@@ -196,7 +196,7 @@ std::wstring CaptionSRTFormatter::generate(const std::vector<OutCaptionLine>& li
     prevEnd = -1;
     prevPosY = -1;
 
-    for (int i = 0; i < (int)lines.size(); ++i) {
+    for (int i = 0; i < (int)lines.size(); i++) {
         item(lines[i]);
     }
     pushLine();
@@ -231,7 +231,7 @@ void CaptionSRTFormatter::item(const OutCaptionLine& line) {
     int nfrags = (int)fmts.size();
     auto& text = line.line->text;
 
-    for (int i = 0; i < nfrags; ++i) {
+    for (int i = 0; i < nfrags; i++) {
         if (fmts[i].sizeMode == CP_STR_SMALL) {
             // 小サイズは出力しない
             continue;

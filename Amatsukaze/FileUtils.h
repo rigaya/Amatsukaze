@@ -182,7 +182,7 @@ private:
 template <typename T>
 void WriteArray(const File& file, const std::vector<T>& arr) {
     file.writeValue((int)arr.size());
-    for (int i = 0; i < (int)arr.size(); ++i) {
+    for (int i = 0; i < (int)arr.size(); i++) {
         arr[i].Write(file);
     }
 }
@@ -191,7 +191,7 @@ template <typename T>
 std::vector<T> ReadArray(const File& file) {
     int num = file.readValue<int>();
     std::vector<T> ret(num);
-    for (int i = 0; i < num; ++i) {
+    for (int i = 0; i < num; i++) {
         ret[i] = T::Read(file);
     }
     return ret;
@@ -202,8 +202,8 @@ void WriteGrayBitmap(const std::string& path, int w, int h, F pixels) {
 
     int stride = (3 * w + 3) & ~3;
     auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[h * stride]);
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
             uint8_t* ptr = &buf[3 * x + (h - y - 1) * stride];
             ptr[0] = ptr[1] = ptr[2] = pixels(x, y);
         }

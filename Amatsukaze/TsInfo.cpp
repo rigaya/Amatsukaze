@@ -31,7 +31,7 @@ void TsInfoParser::inputTsPacket(int64_t clock, TsPacket packet) {
 
 bool TsInfoParser::isProgramOK() const {
     if (!patOK) return false;
-    for (int i = 0; i < numPrograms; ++i) {
+    for (int i = 0; i < numPrograms; i++) {
         // 全プログラムのパケットがあるとは限らないので
         // 1つでも映像のあるプログラムが取得できればOKとする
         if (programList[i].programOK && programList[i].hasVideo) return true;
@@ -42,7 +42,7 @@ bool TsInfoParser::isProgramOK() const {
 bool TsInfoParser::isScrampbled() const {
     bool hasScrambleNG = false;
     bool hasOKVideo = false;
-    for (int i = 0; i < numPrograms; ++i) {
+    for (int i = 0; i < numPrograms; i++) {
         if (!programList[i].programOK && programList[i].hasVideo && programList[i].hasScramble) {
             // スクランブルで映像情報が取得できなかった
             hasScrambleNG = true;
@@ -57,10 +57,10 @@ bool TsInfoParser::isScrampbled() const {
 }
 
 bool TsInfoParser::isOK() const {
-    for (int i = 0; i < numPrograms; ++i) {
+    for (int i = 0; i < numPrograms; i++) {
         if (programList[i].programOK == false) return false;
     }
-    for (int i = 0; i < numPrograms; ++i) {
+    for (int i = 0; i < numPrograms; i++) {
         // 映像ありサービスでイベント情報がないのはダメ
         if (programList[i].hasVideo && programList[i].eventOK == false) return false;
     }
@@ -78,7 +78,7 @@ void TsInfoParser::AddConstantHandler(int pid) {
 }
 
 TsInfoParser::ProgramItem* TsInfoParser::getProgramItem(int programId) {
-    for (int i = 0; i < (int)numPrograms; ++i) {
+    for (int i = 0; i < (int)numPrograms; i++) {
         if (programList[i].programId == programId) {
             return &programList[i];
         }
@@ -130,7 +130,7 @@ void TsInfoParser::onPAT(PsiSection section) {
         }
 #endif
         std::vector<PATElement> programs;
-        for (int i = 0; i < pat.numElems(); ++i) {
+        for (int i = 0; i < pat.numElems(); i++) {
             auto elem = pat.get(i);
             int pn = elem.program_number();
             if (pn != 0) {
@@ -142,7 +142,7 @@ void TsInfoParser::onPAT(PsiSection section) {
         if ((int)programList.size() < numPrograms) {
             programList.resize(programs.size());
         }
-        for (int i = 0; i < (int)programs.size(); ++i) {
+        for (int i = 0; i < (int)programs.size(); i++) {
             int pid = programs[i].PID();
             if (programList[i].pmtHandler == nullptr) {
                 programList[i].pmtHandler =
@@ -164,7 +164,7 @@ void TsInfoParser::onPMT(int pid, PsiSection section) {
         if (item != nullptr && item->pmtPid == pid) { // PMT-PIDが合ってるかもチェック
             // 映像をみつける
             item->hasVideo = false;
-            for (int i = 0; i < pmt.numElems(); ++i) {
+            for (int i = 0; i < pmt.numElems(); i++) {
                 PMTElement elem = pmt.get(i);
                 uint8_t stream_type = elem.stream_type();
                 VIDEO_STREAM_FORMAT type = VS_UNKNOWN;
@@ -184,7 +184,7 @@ void TsInfoParser::onPMT(int pid, PsiSection section) {
 
                     // 同じvideoPidのプログラムを探す
                     ProgramItem* top = nullptr;
-                    for (int i = 0; i < (int)numPrograms; ++i) {
+                    for (int i = 0; i < (int)numPrograms; i++) {
                         if (programList[i].videoPid == videoPid &&
                             programList[i].videoHandler != nullptr) {
                             top = &programList[i];
@@ -225,12 +225,12 @@ void TsInfoParser::onSDT(PsiSection section) {
     SDT sdt(section);
     if (section.current_next_indicator() && sdt.parse() && sdt.check()) {
         serviceList.clear();
-        for (int i = 0; i < sdt.numElems(); ++i) {
+        for (int i = 0; i < sdt.numElems(); i++) {
             ServiceInfo info;
             auto elem = sdt.get(i);
             info.serviceId = elem.service_id();
             auto descs = ParseDescriptors(elem.descriptor());
-            for (int i = 0; i < (int)descs.size(); ++i) {
+            for (int i = 0; i < (int)descs.size(); i++) {
                 if (descs[i].tag() == 0x48) { // サービス記述子
                     ServiceDescriptor servicedesc(descs[i]);
                     if (servicedesc.parse()) {
@@ -261,7 +261,7 @@ void TsInfoParser::onEIT(PsiSection section) {
                 startTime = elem.start_time();
                 auto descs = ParseDescriptors(elem.descriptor());
                 ContentInfo info;
-                for (int i = 0; i < (int)descs.size(); ++i) {
+                for (int i = 0; i < (int)descs.size(); i++) {
                     if (descs[i].tag() == 0x4D) { // 短形式イベント記述子
                         ShortEventDescriptor seventdesc(descs[i]);
                         if (seventdesc.parse()) {
@@ -275,7 +275,7 @@ void TsInfoParser::onEIT(PsiSection section) {
                         ContentDescriptor contentdesc(descs[i]);
                         if (contentdesc.parse()) {
                             int num = contentdesc.numElems();
-                            for (int i = 0; i < num; ++i) {
+                            for (int i = 0; i < num; i++) {
                                 auto data_i = contentdesc.get(i);
                                 ContentNibbles data;
                                 data.content_nibble_level_1 = data_i.content_nibble_level_1();
@@ -288,7 +288,7 @@ void TsInfoParser::onEIT(PsiSection section) {
                     }
                 }
                 // 同じPIDのプログラムは全て上書き
-                for (int i = 0; i < (int)programList.size(); ++i) {
+                for (int i = 0; i < (int)programList.size(); i++) {
                     if (programList[i].videoPid == item->videoPid) {
                         programList[i].contentInfo = info;
                         programList[i].contentInfo.serviceId = programList[i].programId;
@@ -341,7 +341,7 @@ void TsInfoParser::SpVideoFrameParser::onTsPacket(int64_t clock, TsPacket packet
     if (packet.transport_scrambling_control()) {
         // スクランブルパケット
         if (item->hasScramble == false) {
-            for (int i = 0; i < (int)this_.programList.size(); ++i) {
+            for (int i = 0; i < (int)this_.programList.size(); i++) {
                 if (this_.programList[i].videoPid == item->videoPid) {
                     this_.programList[i].hasScramble = true;
                 }
@@ -355,7 +355,7 @@ void TsInfoParser::SpVideoFrameParser::onTsPacket(int64_t clock, TsPacket packet
 void TsInfoParser::SpVideoFrameParser::onVideoPesPacket(int64_t clock, const std::vector<VideoFrameInfo>& frames, PESPacket packet) {}
 void TsInfoParser::SpVideoFrameParser::onVideoFormatChanged(VideoFormat fmt) {
     // 同じPIDのプログラムは全て上書き
-    for (int i = 0; i < (int)this_.programList.size(); ++i) {
+    for (int i = 0; i < (int)this_.programList.size(); i++) {
         if (this_.programList[i].videoPid == item->videoPid) {
             this_.programList[i].videoFormat = fmt;
             this_.programList[i].programOK = true;

@@ -49,7 +49,7 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
 
     int audioSamplesPerFrame = 1024;
     // waveLengthはゼロのこともあるので注意
-    for (int i = 0; i < (int)audioFrames.size(); ++i) {
+    for (int i = 0; i < (int)audioFrames.size(); i++) {
         if (audioFrames[i].waveLength != 0) {
             audioSamplesPerFrame = audioFrames[i].waveLength / 4; // 16bitステレオ前提
             break;
@@ -62,7 +62,7 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     MemoryChunk mc = buffer.space(frameWaveLength);
     mc.length = frameWaveLength;
 
-    for (size_t i = 0; i < audioFrames.size(); ++i) {
+    for (size_t i = 0; i < audioFrames.size(); i++) {
         if (audioFrames[i].waveLength != 0) {
             // waveがあるなら読む
             srcFile.seek(audioFrames[i].waveOffset, SEEK_SET);

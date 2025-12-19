@@ -84,7 +84,7 @@ const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const std::string& str) {
     std::wsregex_iterator it(wstr.begin(), wstr.end(), re);
     std::wsregex_iterator end;
     std::vector<std::wstring> argv;
-    for (; it != end; ++it) {
+    for (; it != end; it++) {
         if ((*it)[2].matched) {
             argv.push_back((*it)[2].str());
         } else if ((*it)[3].matched) {
@@ -197,7 +197,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 std::wsregex_iterator it(next.begin(), next.end(), re);
                 std::wsregex_iterator end;
                 std::vector<std::wstring> argv;
-                for (; it != end; ++it) {
+                for (; it != end; it++) {
                     auto key = (*it)[1].str();
                     auto val = (*it)[2].str();
                     std::transform(val.begin(), val.end(), val.begin(), ::tolower);
@@ -229,7 +229,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 std::wsregex_iterator it(next.begin(), next.end(), re);
                 std::wsregex_iterator end;
                 std::vector<std::wstring> argv;
-                for (; it != end; ++it) {
+                for (; it != end; it++) {
                     auto key = (*it)[1].str();
                     auto val = (*it)[3].str();
                     if (val.length()) {

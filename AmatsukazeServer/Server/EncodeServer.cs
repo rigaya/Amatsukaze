@@ -3298,7 +3298,7 @@ namespace Amatsukaze.Server
                 }
                 var waits = new List<Task>();
                 if (!fileAlreadyExists) {
-                    for(int i = 1; i <= 1000; ++i)
+                    for(int i = 1; i <= 1000; i++)
                     {
                         string path = prefix + i + ".lgd";
                         if (File.Exists(path)) {
@@ -3875,7 +3875,7 @@ namespace Amatsukaze.Server
                     if (old.LogoSettings.Count == update.Data.LogoSettings.Count)
                     {
                         // ロゴのExitsフラグだけはこちらのデータを継承させる
-                        for (int i = 0; i < old.LogoSettings.Count; ++i)
+                        for (int i = 0; i < old.LogoSettings.Count; i++)
                         {
                             update.Data.LogoSettings[i].Exists = old.LogoSettings[i].Exists;
                         }

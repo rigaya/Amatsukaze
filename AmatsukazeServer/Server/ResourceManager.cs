@@ -86,7 +86,7 @@ namespace Amatsukaze.Server
 
         private int AllocateEncoderIndex()
         {
-            for(int i = 0; ; ++i)
+            for(int i = 0; ; i++)
             {
                 if(!encodeIds.Contains(i))
                 {

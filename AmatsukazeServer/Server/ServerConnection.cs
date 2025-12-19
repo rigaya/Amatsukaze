@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -331,7 +331,7 @@ namespace Amatsukaze.Server
                         Util.AddLog("接続エラー: ", e);
                         Util.AddLog(nextWaitSec.ToString() + "秒後にリトライします", null);
                         failReason = e.Message;
-                        ++failCount;
+                        failCount++;
                     }
                 }
             }

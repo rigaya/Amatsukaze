@@ -114,7 +114,7 @@ void ConcatFiles(const std::vector<tstring>& srcpaths, const tstring& dstpath) {
     enum { BUF_SIZE = 16 * 1024 * 1024 };
     auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[BUF_SIZE]);
     File dstfile(dstpath, _T("wb"));
-    for (int i = 0; i < (int)srcpaths.size(); ++i) {
+    for (int i = 0; i < (int)srcpaths.size(); i++) {
         File srcfile(srcpaths[i], _T("rb"));
         while (true) {
             size_t readBytes = srcfile.read(MemoryChunk(buf.get(), BUF_SIZE));

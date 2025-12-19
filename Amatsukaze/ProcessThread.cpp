@@ -243,7 +243,7 @@ std::vector<char> removeAnsiEscapeSequences(const std::vector<char>& input) {
     bool inCSI = false; // Control Sequence Introducer (\033[ or \x1b[)
     bool inOSC = false; // Operating System Command (\033] or \x1b])
     
-    for (size_t i = 0; i < input.size(); ++i) {
+    for (size_t i = 0; i < input.size(); i++) {
         char c = input[i];
         
         if (!inEscape && !inCSI && !inOSC) {
@@ -381,7 +381,7 @@ CPUInfo::CPUInfo() {
             }
             break;
         case RelationGroup:
-            for (int i = 0; i < info->Group.ActiveGroupCount; ++i) {
+            for (int i = 0; i < info->Group.ActiveGroupCount; i++) {
                 GROUP_AFFINITY af = GROUP_AFFINITY();
                 af.Group = i;
                 af.Mask = info->Group.GroupInfo[i].ActiveProcessorMask;

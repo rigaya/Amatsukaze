@@ -315,7 +315,7 @@ namespace Amatsukaze.Server
             var image = GetImage(obj);
             if (image != null)
             {
-                for(int i = 0; i < image.Count; ++i)
+                for(int i = 0; i < image.Count; i++)
                 {
                     if(image[i] != null)
                     {
@@ -358,7 +358,7 @@ namespace Amatsukaze.Server
             if (setter != null)
             {
                 List<object> images = new List<object>();
-                for(int i = 1; i < data.Count; ++i)
+                for(int i = 1; i < data.Count; i++)
                 {
                     if(data[i].Length == 0)
                     {

@@ -119,7 +119,7 @@ AdtsParser::~AdtsParser() {
 
     int ibytes = 0;
     bytesConsumed_ = 0;
-    for (; ibytes < (int)frame.length - 1; ++ibytes) {
+    for (; ibytes < (int)frame.length - 1; ibytes++) {
         uint16_t syncword = (read16(&frame.data[ibytes]) >> 4);
         if (syncword != 0xFFF) {
             syncOK = false;
@@ -235,7 +235,7 @@ AdtsParser::~AdtsParser() {
 
     // デコードデータのポインタを入れる
     uint8_t* decodedData = decodedBuffer.ptr();
-    for (int i = 0; i < (int)info.size(); ++i) {
+    for (int i = 0; i < (int)info.size(); i++) {
         info[i].decodedData = (uint16_t*)decodedData;
         decodedData += info[i].decodedDataSize;
     }
@@ -298,7 +298,7 @@ int64_t AdtsParser::channelCanonical(int numElem, const uint8_t* elems) {
     if (numElem > 20) {
         numElem = 20;
     }
-    for (int i = 0; i < numElem; ++i) {
+    for (int i = 0; i < numElem; i++) {
         canonical = (canonical << 3) | elems[i];
     }
     return canonical;
@@ -359,7 +359,7 @@ void AdtsParser::createChannelsMap() {
     };
 
     channelsMap.clear();
-    for (int i = 0; i < (int)(sizeof(table) / sizeof(table[0])); ++i) {
+    for (int i = 0; i < (int)(sizeof(table) / sizeof(table[0])); i++) {
         int64_t canonical = channelCanonical(table[i].numElem, table[i].elems);
         ASSERT(channelsMap.find(canonical) == channelsMap.end());
         channelsMap[canonical] = table[i].channels;
@@ -394,7 +394,7 @@ void DualMonoSplitter::inputPacket(MemoryChunk frame) {
             THROWF(FormatException, "デュアルモノAACのエレメント数不正 %d != 2", frameInfo.fr_ch_ele);
         }
 
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; i++) {
             BitWriter writer(buf);
 
             int start_bits = frameInfo.element_start[i];

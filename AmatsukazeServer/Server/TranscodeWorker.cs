@@ -1150,7 +1150,7 @@ namespace Amatsukaze.Server
                         if (needCopy)
                         {
                             log.SrcPath = item.SrcPath;
-                            for (int i = 0; i < log.OutPath.Count; ++i)
+                            for (int i = 0; i < log.OutPath.Count; i++)
                             {
                                 string outpath = dstpath + log.OutPath[i].Substring(localdst.Length);
                                 if (hashEnabled)
@@ -1176,7 +1176,7 @@ namespace Amatsukaze.Server
                     if (item.IsTest)
                     {
                         // 出力ファイルを削除
-                        for(int retry = 0; ; ++retry)
+                        for(int retry = 0; ; retry++)
                         {
                             // 終了直後は消せないことがあるので、リトライする
                             try

@@ -157,10 +157,10 @@ time_t StreamReformInfo::getFirstFrameTime() const {
 
 // 2. ニコニコ実況コメントを取得したら呼ぶ
 void StreamReformInfo::SetNicoJKList(const std::array<std::vector<NicoJKLine>, NICOJK_MAX>& nicoJKList) {
-    for (int t = 0; t < NICOJK_MAX; ++t) {
+    for (int t = 0; t < NICOJK_MAX; t++) {
         nicoJKList_[t].resize(nicoJKList[t].size());
         double startTime = dataPTS_.front();
-        for (int i = 0; i < (int)nicoJKList[t].size(); ++i) {
+        for (int i = 0; i < (int)nicoJKList[t].size(); i++) {
             auto& src = nicoJKList[t][i];
             auto& dst = nicoJKList_[t][i];
             // 開始映像オフセットを加算
@@ -177,7 +177,7 @@ void StreamReformInfo::SetNicoJKList(const std::array<std::vector<NicoJKLine>, N
 void StreamReformInfo::applyCMZones(int videoFileIndex, const std::vector<EncoderZone>& cmzones, const std::vector<int>& divs) {
     auto& frames = filterFrameList_[videoFileIndex];
     for (auto zone : cmzones) {
-        for (int i = zone.startFrame; i < zone.endFrame; ++i) {
+        for (int i = zone.startFrame; i < zone.endFrame; i++) {
             frames[i].cmType = CMTYPE_CM;
         }
     }
@@ -206,7 +206,7 @@ VIDEO_STREAM_FORMAT StreamReformInfo::getVideoStreamFormat() const {
 std::vector<int> StreamReformInfo::getPidChangedList(int videoFileIndex) const {
     std::vector<int> ret;
     auto& frames = filterFrameList_[videoFileIndex];
-    for (int i = 0; i < (int)streamEventList_.size(); ++i) {
+    for (int i = 0; i < (int)streamEventList_.size(); i++) {
         if (streamEventList_[i].type == PID_TABLE_CHANGED) {
             FilterSourceFrame tmp = FilterSourceFrame();
             tmp.pts = streamEventPTS_[i];
@@ -224,7 +224,7 @@ std::vector<int> StreamReformInfo::getPidChangedList(int videoFileIndex) const {
 
 int StreamReformInfo::getMainVideoFileIndex() const {
     int maxFrames = 0, maxIndex = 0;
-    for (int i = 0; i < (int)filterFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)filterFrameList_.size(); i++) {
         if (maxFrames < (int)filterFrameList_[i].size()) {
             maxFrames = (int)filterFrameList_[i].size();
             maxIndex = i;
@@ -323,7 +323,7 @@ std::pair<double, double> StreamReformInfo::getInOutDuration() const {
 // 音声フレーム番号リストからFilterAudioFrameリストに変換
 std::vector<FilterAudioFrame> StreamReformInfo::getWaveInput(const std::vector<int>& frameList) const {
     std::vector<FilterAudioFrame> ret;
-    for (int i = 0; i < (int)frameList.size(); ++i) {
+    for (int i = 0; i < (int)frameList.size(); i++) {
         FilterAudioFrame frame = { 0 };
         auto& info = audioFrameList_[frameList[i]];
         frame.frameIndex = frameList[i];
@@ -336,14 +336,14 @@ std::vector<FilterAudioFrame> StreamReformInfo::getWaveInput(const std::vector<i
 
 void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> getFileName) const {
     ctx.info("[出力ファイル]");
-    for (int i = 0; i < (int)outFileKeys_.size(); ++i) {
+    for (int i = 0; i < (int)outFileKeys_.size(); i++) {
         ctx.infoF("%d: %s", i, getFileName(outFileKeys_[i]));
     }
 
     ctx.info("[入力->出力マッピング]");
     double fromPTS = dataPTS_[0];
     int prevFileId = 0;
-    for (int i = 0; i < (int)ordredVideoFrame_.size(); ++i) {
+    for (int i = 0; i < (int)ordredVideoFrame_.size(); i++) {
         int ordered = ordredVideoFrame_[i];
         double pts = modifiedPTS_[ordered];
         int fileId = frameFormatId_[ordered];
@@ -406,7 +406,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
 
     /*
     // framePtsMap_を作成（すぐに作れるので）
-    for (int i = 0; i < int(videoFrameList_.size()); ++i) {
+    for (int i = 0; i < int(videoFrameList_.size()); i++) {
         framePtsMap_[videoFrameList_[i].PTS] = i;
     }
     */
@@ -414,7 +414,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
 
     // VFR検出
     isVFR_ = false;
-    for (int i = 0; i < int(videoFrameList_.size()); ++i) {
+    for (int i = 0; i < int(videoFrameList_.size()); i++) {
         if (videoFrameList_[i].format.fixedFrameRate == false) {
             isVFR_ = true;
             break;
@@ -435,7 +435,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
     int64_t modifiedStartPTS[3];
     int64_t prevPTS = startPTSs[0];
-    for (int i = 0; i < int(startPTSs.size()); ++i) {
+    for (int i = 0; i < int(startPTSs.size()); i++) {
         int64_t PTS = startPTSs[i];
         int64_t modPTS = prevPTS + int64_t((int32_t(PTS) - int32_t(prevPTS)));
         modifiedStartPTS[i] = modPTS;
@@ -449,14 +449,14 @@ void StreamReformInfo::reformMain(bool splitSub) {
 
     // audioFrameDuration_を生成
     audioFrameDuration_.resize(audioFrameList_.size());
-    for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)audioFrameList_.size(); i++) {
         const auto& frame = audioFrameList_[i];
         audioFrameDuration_[i] = (frame.numSamples * MPEG_CLOCK_HZ) / (double)frame.format.sampleRate;
     }
 
     // ptsOrdredVideoFrame_を生成
     ordredVideoFrame_.resize(videoFrameList_.size());
-    for (int i = 0; i < (int)videoFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)videoFrameList_.size(); i++) {
         ordredVideoFrame_[i] = i;
     }
     std::sort(ordredVideoFrame_.begin(), ordredVideoFrame_.end(), [&](int a, int b) {
@@ -493,7 +493,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     // ストリームイベントのPTSを計算
     double endPTS = curMax + 1;
     streamEventPTS_.resize(streamEventList_.size());
-    for (int i = 0; i < (int)streamEventList_.size(); ++i) {
+    for (int i = 0; i < (int)streamEventList_.size(); i++) {
         auto& ev = streamEventList_[i];
         double pts = -1;
         if (ev.type == PID_TABLE_CHANGED || ev.type == VIDEO_FORMAT_CHANGED) {
@@ -543,7 +543,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
         curFromPTS = -1;
         curVideoFromPTS = -1;
         };
-    for (int i = 0; i < (int)streamEventList_.size(); ++i) {
+    for (int i = 0; i < (int)streamEventList_.size(); i++) {
         auto& ev = streamEventList_[i];
         double pts = streamEventPTS_[i];
         if (pts >= endPTS) {
@@ -565,7 +565,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
             }
             if ((int)curFormat.audioFormat.size() != ev.numAudio) {
                 curFormat.audioFormat.resize(ev.numAudio);
-                for (int i = 0; i < ev.numAudio; ++i) {
+                for (int i = 0; i < ev.numAudio; i++) {
                     curFormat.audioFormat[i] = curAudioFormats[i];
                 }
                 if (curFromPTS == -1) {
@@ -615,7 +615,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     ctx.info("frameSectionId生成");
     std::vector<int> outFormatFrames(format_.size());
     std::vector<int> frameSectionId(videoFrameList_.size());
-    for (int i = 0; i < int(videoFrameList_.size()); ++i) {
+    for (int i = 0; i < int(videoFrameList_.size()); i++) {
         double pts = modifiedPTS_[i];
         // 区間を探す
         int sectionId = int(std::partition_point(startPtsList.begin(), startPtsList.end(),
@@ -641,7 +641,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
 
         fileFormatStartIndex_.push_back(0);
         for (int i = 0, mainFileId = -1, nextFileId = 0, videoId = 0;
-            i < (int)sectionFormatList.size(); ++i) {
+            i < (int)sectionFormatList.size(); i++) {
             int vid = format_[sectionFormatList[i]].videoFileId;
             if (videoId != vid) {
                 fileFormatStartIndex_.push_back(nextFileId);
@@ -660,11 +660,11 @@ void StreamReformInfo::reformMain(bool splitSub) {
         }
         fileFormatStartIndex_.push_back((int)fileFormatId_.size());
     } else {
-        for (int i = 0; i < (int)sectionFormatList.size(); ++i) {
+        for (int i = 0; i < (int)sectionFormatList.size(); i++) {
             // ファイルとフォーマットは同じ
             sectionFileList[i] = sectionFormatList[i];
         }
-        for (int i = 0; i < (int)format_.size(); ++i) {
+        for (int i = 0; i < (int)format_.size(); i++) {
             // ファイルとフォーマットは恒等変換
             fileFormatId_.push_back(i);
         }
@@ -674,21 +674,21 @@ void StreamReformInfo::reformMain(bool splitSub) {
     // frameFormatId_を生成
     ctx.info("frameFormatId_生成");
     frameFormatId_.resize(videoFrameList_.size());
-    for (int i = 0; i < int(videoFrameList_.size()); ++i) {
+    for (int i = 0; i < int(videoFrameList_.size()); i++) {
         frameFormatId_[i] = sectionFileList[frameSectionId[i]];
     }
 
     // フィルタ用入力フレームリスト生成
     ctx.info("フィルタ用入力フレームリスト生成");
     filterFrameList_ = std::vector<std::vector<FilterSourceFrame>>(numVideoFile_);
-    for (int videoId = 0; videoId < (int)numVideoFile_; ++videoId) {
+    for (int videoId = 0; videoId < (int)numVideoFile_; videoId++) {
         int keyFrame = -1;
         std::vector<FilterSourceFrame>& list = filterFrameList_[videoId];
 
         const auto& format = format_[formatStartIndex_[videoId]].videoFormat;
         double timePerFrame = format.frameRateDenom * MPEG_CLOCK_HZ / (double)format.frameRateNum;
 
-        for (int i = 0; i < (int)videoFrameList_.size(); ++i) {
+        for (int i = 0; i < (int)videoFrameList_.size(); i++) {
             int ordered = ordredVideoFrame_[i];
             int formatId = fileFormatId_[frameFormatId_[ordered]];
             if (format_[formatId].videoFileId == videoId) {
@@ -753,11 +753,11 @@ void StreamReformInfo::reformMain(bool splitSub) {
     // indexAudioFrameList_を作成
     ctx.info("indexAudioFrameList_生成");
     int numMaxAudio = 1;
-    for (int i = 0; i < (int)format_.size(); ++i) {
+    for (int i = 0; i < (int)format_.size(); i++) {
         numMaxAudio = std::max(numMaxAudio, (int)format_[i].audioFormat.size());
     }
     indexAudioFrameList_.resize(numMaxAudio);
-    for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)audioFrameList_.size(); i++) {
         // 短すぎてセクションとして認識されなかった部分に
         // numMaxAudioを超える音声データが存在する可能性がある
         // 音声数を超えている音声フレームは無視する
@@ -769,7 +769,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     // audioFileOffsets_を生成
     ctx.info("audioFileOffsets_生成");
     audioFileOffsets_.resize(audioFrameList_.size() + 1);
-    for (int i = 0; i < (int)audioFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)audioFrameList_.size(); i++) {
         audioFileOffsets_[i] = audioFrameList_[i].fileOffset;
     }
     const auto& lastFrame = audioFrameList_.back();
@@ -799,7 +799,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
 
 void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
     // CM解析がないときはfileDivs_が設定されていないのでここで設定
-    for (int i = 0; i < numVideoFile_; ++i) {
+    for (int i = 0; i < numVideoFile_; i++) {
         auto& divs = fileDivs_[i];
         if (divs.size() == 0) {
             divs.push_back(0);
@@ -809,7 +809,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
 
     // ファイルごとの前後CM除去範囲
     std::vector<std::pair<int, int>> edgeTrimRanges(numVideoFile_, std::make_pair(0, 0));
-    for (int video = 0; video < numVideoFile_; ++video) {
+    for (int video = 0; video < numVideoFile_; video++) {
         const auto& frameList = filterFrameList_[video];
         int head = 0;
         while (head < (int)frameList.size() && frameList[head].cmType == CMTYPE_CM) {
@@ -824,10 +824,10 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
 
     // ファイルリスト生成
     outFileKeys_.clear();
-    for (int video = 0; video < numVideoFile_; ++video) {
+    for (int video = 0; video < numVideoFile_; video++) {
         int numEncoders = getNumEncoders(video);
-        for (int format = 0; format < numEncoders; ++format) {
-            for (int div = 0; div < (int)fileDivs_[video].size() - 1; ++div) {
+        for (int format = 0; format < numEncoders; format++) {
+            for (int div = 0; div < (int)fileDivs_[video].size() - 1; div++) {
                 for (CMType cmtype : cmtypes) {
                     outFileKeys_.push_back(EncodeFileKey(video, format, div, cmtype));
                 }
@@ -839,7 +839,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
     filterSrcSize_ = std::vector<int64_t>(numVideoFile_, 0);
     filterSrcDuration_ = std::vector<double>(numVideoFile_, 0);
     std::vector<double> fileFormatDuration(fileFormatId_.size(), 0);
-    for (int i = 0; i < (int)videoFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)videoFrameList_.size(); i++) {
         int ordered = ordredVideoFrame_[i];
         const auto& frame = videoFrameList_[ordered];
         int fileFormatId = frameFormatId_[ordered];
@@ -863,7 +863,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
     // 最も時間の長いフォーマット(出力)がゼロ。それ以外は順番通り
     std::vector<int> formatOutIndex(fileFormatId_.size());
     formatOutIndex[maxId] = 0;
-    for (int i = 0, cnt = 1; i < (int)formatOutIndex.size(); ++i) {
+    for (int i = 0, cnt = 1; i < (int)formatOutIndex.size(); i++) {
         if (i != maxId) {
             formatOutIndex[i] = cnt++;
         }
@@ -900,7 +900,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
                 continue;
             }
         }
-        for (int i = rangeStart; i < rangeEnd; ++i) {
+        for (int i = rangeStart; i < rangeEnd; i++) {
             if (foramtId == frameFormatId_[frameList[i].frameIndex]) {
                 if (useEdgeTrim || key.cm == CMTYPE_BOTH || key.cm == frameList[i].cmType) {
                     file.videoFrames.push_back(i);
@@ -910,7 +910,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
 
         // 時間を計算
         file.duration = 0;
-        for (int i = 0; i < (int)file.videoFrames.size(); ++i) {
+        for (int i = 0; i < (int)file.videoFrames.size(); i++) {
             file.duration += frameList[file.videoFrames[i]].frameDuration;
         }
     }
@@ -924,7 +924,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
 
 void StreamReformInfo::registerOrGetFormat(OutVideoFormat& format) {
     // すでにあるのから探す
-    for (int i = formatStartIndex_.back(); i < (int)format_.size(); ++i) {
+    for (int i = formatStartIndex_.back(); i < (int)format_.size(); i++) {
         if (isEquealFormat(format_[i], format)) {
             format.formatId = i;
             return;
@@ -939,7 +939,7 @@ bool StreamReformInfo::isEquealFormat(const OutVideoFormat& a, const OutVideoFor
     if (a.videoFormat != b.videoFormat) return false;
     if (isEncodeAudio_ || isTsreplace_) return true;
     if (a.audioFormat.size() != b.audioFormat.size()) return false;
-    for (int i = 0; i < (int)a.audioFormat.size(); ++i) {
+    for (int i = 0; i < (int)a.audioFormat.size(); i++) {
         if (a.audioFormat[i] != b.audioFormat[i]) {
             return false;
         }
@@ -957,7 +957,7 @@ AudioDiffInfo StreamReformInfo::initAudioDiffInfo() {
 // フィルタ入力から音声構築
 AudioDiffInfo StreamReformInfo::genAudioStream() {
     // 各ファイルの音声構築
-    for (int v = 0; v < (int)outFileKeys_.size(); ++v) {
+    for (int v = 0; v < (int)outFileKeys_.size(); v++) {
         auto key = outFileKeys_[v];
         int formatId = fileFormatStartIndex_[key.video] + key.format;
         auto& file = outFiles_[key.key()];
@@ -969,7 +969,7 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
         state.time = 0;
         state.audioState.resize(numAudio);
         state.audioFrameList.resize(numAudio);
-        for (int i = 0; i < (int)file.videoFrames.size(); ++i) {
+        for (int i = 0; i < (int)file.videoFrames.size(); i++) {
             const auto& frame = srcFrames[file.videoFrames[i]];
             addVideoFrame(state, audioFormats, frame.pts, frame.frameDuration, nullptr);
         }
@@ -979,16 +979,16 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
     // 音ズレ統計情報のためもう1パス実行
     AudioDiffInfo adiff = initAudioDiffInfo();
     std::vector<OutFileState> states(fileFormatId_.size());
-    for (int i = 0; i < (int)states.size(); ++i) {
+    for (int i = 0; i < (int)states.size(); i++) {
         int numAudio = (int)format_[fileFormatId_[i]].audioFormat.size();
         states[i].formatId = i;
         states[i].time = 0;
         states[i].audioState.resize(numAudio);
         states[i].audioFrameList.resize(numAudio);
     }
-    for (int videoId = 0; videoId < numVideoFile_; ++videoId) {
+    for (int videoId = 0; videoId < numVideoFile_; videoId++) {
         const auto& frameList = filterFrameList_[videoId];
-        for (int i = 0; i < (int)frameList.size(); ++i) {
+        for (int i = 0; i < (int)frameList.size(); i++) {
             const auto& frame = frameList[i];
             int fileFormatId = frameFormatId_[frame.frameIndex];
             const auto& audioFormats = format_[fileFormatId_[fileFormatId]].audioFormat;
@@ -1004,7 +1004,7 @@ void StreamReformInfo::genWaveAudioStream() {
     // 全映像フレームを追加
     ctx.info("[CM判定用音声構築]");
     filterAudioFrameList_.resize(numVideoFile_);
-    for (int videoId = 0; videoId < (int)numVideoFile_; ++videoId) {
+    for (int videoId = 0; videoId < (int)numVideoFile_; videoId++) {
         OutFileState file = { 0 };
         file.formatId = -1;
         file.time = 0;
@@ -1017,7 +1017,7 @@ void StreamReformInfo::genWaveAudioStream() {
         // AviSynthがVFRに対応していないので、CFR前提で問題ない
         double timePerFrame = format.videoFormat.frameRateDenom * MPEG_CLOCK_HZ / (double)format.videoFormat.frameRateNum;
 
-        for (int i = 0; i < (int)frames.size(); ++i) {
+        for (int i = 0; i < (int)frames.size(); i++) {
             double endPts = frames[i].pts + timePerFrame;
             file.time += timePerFrame;
 
@@ -1032,7 +1032,7 @@ void StreamReformInfo::genWaveAudioStream() {
         }
 
         auto& list = file.audioFrameList[0];
-        for (int i = 0; i < (int)list.size(); ++i) {
+        for (int i = 0; i < (int)list.size(); i++) {
             FilterAudioFrame frame = { 0 };
             auto& info = audioFrameList_[list[i]];
             frame.frameIndex = list[i];
@@ -1094,7 +1094,7 @@ void StreamReformInfo::addVideoFrame(OutFileState& file,
 
     ASSERT(audioFormat.size() == file.audioFrameList.size());
     ASSERT(audioFormat.size() == file.audioState.size());
-    for (int i = 0; i < (int)audioFormat.size(); ++i) {
+    for (int i = 0; i < (int)audioFormat.size(); i++) {
         // file.timeまで音声を進める
         auto& audioState = file.audioState[i];
         if (audioState.time >= file.time) {
@@ -1160,7 +1160,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
     const auto& frameList = indexAudioFrameList_[index];
     int nskipped = 0;
 
-    for (int i = state.lastFrame + 1; i < (int)frameList.size(); ++i) {
+    for (int i = state.lastFrame + 1; i < (int)frameList.size(); i++) {
         int frameIndex = frameList[i];
         const auto& frame = audioFrameList_[frameIndex];
         double modPTS = modifiedAudioPTS_[frameIndex];
@@ -1211,7 +1211,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
             ++adiff->totalUniquAudioFrames;
         }
 
-        for (int t = 0; t < nframes; ++t) {
+        for (int t = 0; t < nframes; t++) {
             // 統計情報
             if (adiff) {
                 double diff = std::abs(modPTS - pts);
@@ -1249,7 +1249,7 @@ std::pair<int, double> StreamReformInfo::elapsedTime(double modPTS) const {
 void StreamReformInfo::genCaptionStream() {
     ctx.info("[字幕構築]");
 
-    for (int v = 0; v < (int)outFileKeys_.size(); ++v) {
+    for (int v = 0; v < (int)outFileKeys_.size(); v++) {
         auto key = outFileKeys_[v];
         auto& file = outFiles_[key.key()];
         const auto& srcFrames = filterFrameList_[key.video];
@@ -1277,7 +1277,7 @@ void StreamReformInfo::genCaptionStream() {
             };
 
         double curTime = 0.0;
-        for (int i = 0; i < (int)frames.size(); ++i) {
+        for (int i = 0; i < (int)frames.size(); i++) {
             frameTimes.push_back(curTime);
             curTime += srcFrames[frames[i]].frameDuration;
         }
@@ -1285,7 +1285,7 @@ void StreamReformInfo::genCaptionStream() {
         frameTimes.push_back(curTime);
 
         // 字幕を生成
-        for (int i = 0; i < (int)captionItemList_.size(); ++i) {
+        for (int i = 0; i < (int)captionItemList_.size(); i++) {
             if (captionItemList_[i].line) { // クリア以外
                 auto duration = captionDuration_[i];
                 auto start = getFrameIndex(duration.startPTS);
@@ -1304,9 +1304,9 @@ void StreamReformInfo::genCaptionStream() {
         }
 
         // ニコニコ実況コメントを生成
-        for (int t = 0; t < NICOJK_MAX; ++t) {
+        for (int t = 0; t < NICOJK_MAX; t++) {
             auto& srcList = nicoJKList_[t];
-            for (int i = 0; i < (int)srcList.size(); ++i) {
+            for (int i = 0; i < (int)srcList.size(); i++) {
                 auto item = srcList[i];
                 // 開始がこのファイルに含まれているか
                 if (containsPTS(item.start)) {

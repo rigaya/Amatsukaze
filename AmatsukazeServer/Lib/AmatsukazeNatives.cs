@@ -702,7 +702,7 @@ namespace Amatsukaze.Lib
             var ptr = CPUInfo_GetData(Ptr, (int)kind, out count);
             var ret = new ProcessGroup[count];
             int size = Marshal.SizeOf(typeof(GROUP_AFFINITY));
-            for(int i = 0; i < count; ++i)
+            for(int i = 0; i < count; i++)
             {
                 var item = (GROUP_AFFINITY)Marshal.PtrToStructure(ptr, typeof(GROUP_AFFINITY));
                 ret[i].Group = item.Group;

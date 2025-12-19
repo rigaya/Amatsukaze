@@ -1,4 +1,4 @@
-﻿using Amatsukaze.Lib;
+using Amatsukaze.Lib;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -350,7 +350,7 @@ namespace Amatsukaze.Server
                         var list = info.GetProgramList();
                         var videopids = new List<int>();
                         int numFiles = 0;
-                        for (int i = 0; i < list.Length; ++i)
+                        for (int i = 0; i < list.Length; i++)
                         {
                             var prog = list[i];
                             if (prog.HasVideo &&
@@ -450,7 +450,7 @@ namespace Amatsukaze.Server
                                             }
                                         }
 
-                                        ++numFiles;
+                                        numFiles++;
                                     }
 
                                     addItems.Add(item);
@@ -693,7 +693,7 @@ namespace Amatsukaze.Server
 
         private void UpdateQueueOrder()
         {
-            for(int i = 0; i < Queue.Count; ++i)
+            for(int i = 0; i < Queue.Count; i++)
             {
                 Queue[i].Order = i;
             }

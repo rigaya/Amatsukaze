@@ -21,7 +21,7 @@ void H264HRDParameters::read(BitReader& reader) {
     cpb_size_scale = reader.read<4>();
 
     bit_rate_value_minus1.clear();
-    for (int i = 0; i <= (int)cpb_cnt_minus1; ++i) {
+    for (int i = 0; i <= (int)cpb_cnt_minus1; i++) {
         H264HRDBitRate rate;
         rate.read(reader);
         bit_rate_value_minus1.push_back(rate);
@@ -43,7 +43,7 @@ bool H264SequenceParameterSet::parse(uint8_t *data, int length) {
     BitReader reader(MemoryChunk(data, length));
     try {
         profile_idc = reader.read<8>();
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < 6; i++) {
             constraint_set_flag[i] = reader.read<1>();
         }
         reader.skip(2); // reserved_zero_2bits
@@ -61,7 +61,7 @@ bool H264SequenceParameterSet::parse(uint8_t *data, int length) {
             seq_scaling_matrix_present_flag = reader.read<1>();
             if (seq_scaling_matrix_present_flag) {
                 int i_end = (chroma_format_idc != 3) ? 8 : 12;
-                for (int i = 0; i < i_end; ++i) {
+                for (int i = 0; i < i_end; i++) {
                     uint8_t flag = reader.read<1>();
                     if (flag) {
                         if (i < 6) {
@@ -83,7 +83,7 @@ bool H264SequenceParameterSet::parse(uint8_t *data, int length) {
             reader.readExpGolomSigned(); // offset_for_non_ref_pic
             reader.readExpGolomSigned(); // offset_for_top_to_bottom_field
             int num_ref_frames_in_pic_order_cnt_cycle = reader.readExpGolom();
-            for (int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; ++i) {
+            for (int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++) {
                 reader.readExpGolomSigned(); // offset_for_ref_frame[i]
             }
         }
@@ -233,7 +233,7 @@ void H264SequenceParameterSet::getSARFromIdc(int idc, int& w, int& h) {
 void H264SequenceParameterSet::scailng_list(BitReader& reader, int sizeOfScalingList) {
     int lastScale = 8;
     int nextScale = 8;
-    for (int j = 0; j < sizeOfScalingList; ++j) {
+    for (int j = 0; j < sizeOfScalingList; j++) {
         if (nextScale != 0) {
             int delta_scale = reader.readExpGolomSigned();
             nextScale = (lastScale + delta_scale + 256) % 256;
@@ -394,7 +394,7 @@ void H264SuplementaryEnhancementInformation::buffering_period(BitReader& reader_
 
     uint32_t seq_parameter_set_id = reader.readExpGolom();
     if (nal_hrd_parameters_present_flag) {
-        for (int i = 0; i <= cpb_cnt_minus1; ++i) {
+        for (int i = 0; i <= cpb_cnt_minus1; i++) {
             H264InitialCpbRemoval removal;
             removal.initial_cpb_removal_delay = reader.readn(
                 initial_cpb_removal_delay_length_minus1 + 1);
@@ -430,7 +430,7 @@ void H264SuplementaryEnhancementInformation::pan_scan_rect(BitReader& reader_ori
     pan_scan_rect_cancel_flag = reader.read<1>();
     if (!pan_scan_rect_cancel_flag) {
         pan_scan_cnt_minus1 = reader.readExpGolom();
-        for (int i = 0; i <= (int)pan_scan_cnt_minus1; ++i) {
+        for (int i = 0; i <= (int)pan_scan_cnt_minus1; i++) {
             RECT rect;
             rect.left = reader.readExpGolom();
             rect.right = reader.readExpGolom();
@@ -488,11 +488,11 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
     int codedDataSize = 0;
 
     int numNalUnits = (int)nalUnits.size();
-    for (int i = 0; i < numNalUnits; ++i) {
+    for (int i = 0; i < numNalUnits; i++) {
         codedDataSize += nalUnits[i].length;
     }
 
-    for (int i = 0; i < numNalUnits; ++i) {
+    for (int i = 0; i < numNalUnits; i++) {
         NalUnit nalUnit = nalUnits[i];
         int payloadLength = nalUnit.length;
         uint8_t* ptr = buffer.ptr() + nalUnit.offset;
@@ -717,7 +717,7 @@ void H264VideoParser::storeBuffer(MemoryChunk frame) {
     int lastNonZero = 0;
     int unitStartOrig = 0;
     int lastNonZeroOrig = 0;
-    for (int i = 2; i < (int)frame.length; ++i) {
+    for (int i = 2; i < (int)frame.length; i++) {
         uint8_t inByte = frame.data[i];
         n3bytes = ((n3bytes & 0xFFFF) << 8) | inByte;
         if (n3bytes == 0x03) {

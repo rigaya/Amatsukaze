@@ -336,7 +336,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         }
 
         void dumpLogs() {
-            for (size_t idx = 0; idx < entries_.size(); ++idx) {
+            for (size_t idx = 0; idx < entries_.size(); idx++) {
                 std::lock_guard<std::mutex> lock(entries_[idx].mtx);
                 for (const auto& line : entries_[idx].logs) {
                     ctx_.infoF("[chunk%d] %s", (int)idx, line.c_str());
@@ -365,7 +365,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                     if (stop_) break;
                 }
                 bool printed = false;
-                for (size_t attempt = 0; attempt < entries_.size(); ++attempt) {
+                for (size_t attempt = 0; attempt < entries_.size(); attempt++) {
                     size_t idx = (offset + attempt) % entries_.size();
                     std::unique_lock<std::mutex> lock(entries_[idx].mtx);
                     if (entries_[idx].finished) {
@@ -469,7 +469,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                         chunkFilters[p] = localFilter;
                         IScriptEnvironment2* localenv = localFilter->getEnv();
                         PClip localClip = localFilter->getClip();
-                        for (int fi = chunks[p].startFrame; fi < chunks[p].endFrame && !anyError.load(); ++fi) {
+                        for (int fi = chunks[p].startFrame; fi < chunks[p].endFrame && !anyError.load(); fi++) {
                             auto frame = localClip->GetFrame(fi, localenv);
                             chunkPumps[p]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
                         }
@@ -577,7 +577,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                 sb.append(_T(" -tmp \"%s\""), tmpDir.c_str());
                 // 1つ目を-add、以降を-catで連結
                 sb.append(_T(" -add \"%s#video:name=Video:forcesync\""), chunkMp4List[0].c_str());
-                for (size_t i = 1; i < chunkMp4List.size(); ++i) {
+                for (size_t i = 1; i < chunkMp4List.size(); i++) {
                     sb.append(_T(" -cat \"%s\""), chunkMp4List[i].c_str());
                 }
                 sb.append(_T(" -new \"%s\""), baseOutputPath.c_str());
