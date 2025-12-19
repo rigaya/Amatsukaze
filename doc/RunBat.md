@@ -71,18 +71,20 @@ batフォルダに指定のプリフィックスを付けてバッチファイ�
 
 ### 実行後のみで有効
 
-| 変数名 | 説明 | 出力例 |
-|:--|:--|:--|
-| SUCCESS | 成功=1,失敗=0 | `1` |
-| ERROR_MESSAGE | エラーメッセージ（失敗したときのみ） | （空） |
-| IN_DURATION | 入力ファイルの再生時間 | `1806.405` |
-| OUT_DURATION | 出力ファイルの再生時間 | `1806.405` |
-| IN_SIZE | 入力ファイルのサイズ（バイト単位） | `2321108348` |
-| OUT_SIZE | 出力ファイルのサイズ（バイト単位） | `600557423` |
-| LOGO_FILE | ロゴファイルパス | `SID23608-1.lgd` |
-| NUM_INCIDENT | インシデント数 | `0` |
-| JSON_PATH | 出力JSONパス | `C:\ProgramEx\Amatsukaze\data\logs\2025-09-19_102809.387.json` |
-| LOG_PATH | ログファイルパス | `C:\ProgramEx\Amatsukaze\data\logs\2025-09-19_102809.387.log` |
+一部変数は、CM解析のみ」モードでは設定されません。
+
+| 変数名 | 説明 | CM解析のみで有効 | 出力例 |
+|:--|:--|:--:|:--|
+| SUCCESS | 成功=1,失敗=0 | Yes | `1` |
+| ERROR_MESSAGE | エラーメッセージ（失敗したときのみ） | Yes | （空） |
+| IN_DURATION | 入力ファイルの再生時間 | NO | `1806.405` |
+| OUT_DURATION | 出力ファイルの再生時間 | NO | `1806.405` |
+| IN_SIZE | 入力ファイルのサイズ（バイト単位） | NO | `2321108348` |
+| OUT_SIZE | 出力ファイルのサイズ（バイト単位） | NO | `600557423` |
+| LOGO_FILE | ロゴファイルパス | NO | `SID23608-1.lgd` |
+| NUM_INCIDENT | インシデント数 | NO | `0` |
+| JSON_PATH | 出力JSONパス | Yes | `C:\ProgramEx\Amatsukaze\data\logs\2025-09-19_102809.387.json` |
+| LOG_PATH | ログファイルパス | Yes | `C:\ProgramEx\Amatsukaze\data\logs\2025-09-19_102809.387.log` |
 
 ### エンコード前で有効
 
