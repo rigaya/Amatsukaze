@@ -2120,7 +2120,7 @@ namespace Amatsukaze.Server
                 {
                     sb.Append(" --no-remove-tmp");
                 }
-                if (profile.CopyTrimAVS)
+                if (setting.CopyTrimAVS)
                 {
                     sb.Append(" --copy-trimavs");
                 }

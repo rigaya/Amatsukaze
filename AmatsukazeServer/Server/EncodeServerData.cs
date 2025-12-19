@@ -377,9 +377,6 @@ namespace Amatsukaze.Server
         public bool NoRemoveTmp { get; set; }
         [DataMember]
         public bool DisableLogFile { get; set; }
-        // CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする
-        [DataMember]
-        public bool CopyTrimAVS { get; set; }
 
         [DataMember]
         public bool EnableMaxFadeLength { get; set; }
@@ -555,6 +552,9 @@ namespace Amatsukaze.Server
         public bool LogoPendAsError { get; set; }
         [DataMember]
         public bool DumpFilter { get; set; }
+        // CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする
+        [DataMember]
+        public bool CopyTrimAVS { get; set; }
         [DataMember]
         public bool SchedulingEnabled { get; set; }
         [DataMember]

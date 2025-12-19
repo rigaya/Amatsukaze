@@ -773,9 +773,6 @@
                                      Text="{Binding Model.SelectedProfile.MaxFadeLength, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </WrapPanel>
                     </CheckBox>
-                    <CheckBox Height="16" Margin="0,3"
-                              Content="CM解析のみ実行の際にtrimn.avsを入力ディレクトリにコピーする"
-                              IsChecked="{Binding Model.SelectedProfile.CopyTrimAVS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
 
                 <StackPanel Grid.Row="23" Grid.Column="0" Margin="0,20,0,0"

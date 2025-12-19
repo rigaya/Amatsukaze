@@ -1879,18 +1879,6 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        #region CopyTrimAVS変更通知プロパティ
-        public bool CopyTrimAVS {
-            get { return Data.CopyTrimAVS; }
-            set {
-                if (Data.CopyTrimAVS == value)
-                    return;
-                Data.CopyTrimAVS = value;
-                RaisePropertyChanged();
-            }
-        }
-        #endregion
-
         #region Mpeg2DecoderInt変更通知プロパティ
         public int Mpeg2DecoderInt {
             get { return (int)Data.Mpeg2Decoder; }
@@ -3655,6 +3643,20 @@ namespace Amatsukaze.Models
                 if (Model.DumpFilter == value)
                     return;
                 Model.DumpFilter = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region CopyTrimAVS変更通知プロパティ
+        public bool CopyTrimAVS
+        {
+            get { return Model.CopyTrimAVS; }
+            set
+            {
+                if (Model.CopyTrimAVS == value)
+                    return;
+                Model.CopyTrimAVS = value;
                 RaisePropertyChanged();
             }
         }
