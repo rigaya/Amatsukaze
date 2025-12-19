@@ -267,6 +267,8 @@ struct Config {
     bool webvtt;
     int cmoutmask;
     tstring trimavsPath;
+    // CM解析のみ実行時にtrim%d.avsを入力ディレクトリへコピーする
+    bool copyTrimAVS;
     // 検出モード用
     int maxframes;
     // ホストプロセスとの通信用
@@ -420,6 +422,7 @@ public:
     tstring getJoinLogoScpOptions() const;
 
     tstring getTrimAVSPath() const;
+    bool isCopyTrimAVSEnabled() const;
 
     bool isWebVTTEnabled() const;
 

@@ -1,4 +1,4 @@
-﻿using Amatsukaze.Components;
+using Amatsukaze.Components;
 using Amatsukaze.Server;
 using Livet;
 using Livet.Commands;
@@ -1874,6 +1874,18 @@ namespace Amatsukaze.Models
                 if (Data.DisableLogFile == value)
                     return;
                 Data.DisableLogFile = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region CopyTrimAVS変更通知プロパティ
+        public bool CopyTrimAVS {
+            get { return Data.CopyTrimAVS; }
+            set {
+                if (Data.CopyTrimAVS == value)
+                    return;
+                Data.CopyTrimAVS = value;
                 RaisePropertyChanged();
             }
         }

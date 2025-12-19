@@ -1,4 +1,4 @@
-﻿#define PROFILE
+#define PROFILE
 using Amatsukaze.Lib;
 using System;
 using System.Collections.Generic;
@@ -2119,6 +2119,10 @@ namespace Amatsukaze.Server
                 if (profile.NoRemoveTmp)
                 {
                     sb.Append(" --no-remove-tmp");
+                }
+                if (profile.CopyTrimAVS)
+                {
+                    sb.Append(" --copy-trimavs");
                 }
                 if(profile.EnablePmtCut)
                 {

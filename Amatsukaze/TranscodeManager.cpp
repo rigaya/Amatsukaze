@@ -859,6 +859,22 @@ void DoBadThing() {
     }
 
     if (isNoEncode) {
+        if (setting.isCopyTrimAVSEnabled()) {
+            ctx.info("[CM解析のみ] trim*.avsを入力ディレクトリにコピー");
+            for (int vindex = 0; vindex < numVideoFiles; vindex++) {
+                const auto srcTrim = setting.getTmpTrimAVSPath(vindex);
+                if (File::exists(srcTrim)) {
+                    const auto dstTrim = StringFormat(_T("%s.trim%d.avs"),
+                        setting.getSrcFileOriginalPath().c_str(), vindex);
+                    if (!rgy_file_copy(srcTrim, dstTrim, true)) {
+                        ctx.warnF("[CM解析のみ] trim%d.avsのコピーに失敗: %s -> %s",
+                            vindex, srcTrim.c_str(), dstTrim.c_str());
+                    } else {
+                        ctx.infoF("[CM解析のみ] trim%d.avsコピー: %s", vindex, dstTrim.c_str());
+                    }
+                }
+            }
+        }
         // CM解析のみならここで終了
         return;
     }

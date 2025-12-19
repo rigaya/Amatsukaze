@@ -92,6 +92,7 @@ static void printHelp(const tchar* bin) {
         "  --whisper-option <オプション> whisperへ渡す追加オプション\n"
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
+        "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"
         "  --nicoass <パス>     NicoConvASSへのパス\n"
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
         "                      1 : 通常\n"
@@ -230,6 +231,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.whisperModel = _T("");
     conf.whisperOption = _T("");
     conf.whisperParallel = false;
+    conf.copyTrimAVS = false;
 
     for (int i = 1; i < argc; ++i) {
         tstring key = argv[i];
@@ -434,6 +436,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.psisiarcPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--trimavs")) {
             conf.trimavsPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--copy-trimavs")) {
+            conf.copyTrimAVS = true;
         } else if (key == _T("--nicoass")) {
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--nicojk18")) {

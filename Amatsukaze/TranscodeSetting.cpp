@@ -888,6 +888,10 @@ tstring ConfigWrapper::getTrimAVSPath() const {
     return conf.trimavsPath;
 }
 
+bool ConfigWrapper::isCopyTrimAVSEnabled() const {
+    return conf.copyTrimAVS;
+}
+
 bool ConfigWrapper::isWebVTTEnabled() const {
     return conf.webvtt;
 }
@@ -1500,6 +1504,9 @@ void ConfigWrapper::dump() const {
         decoderToString(conf.decoderSetting.mpeg2),
         decoderToString(conf.decoderSetting.h264),
         decoderToString(conf.decoderSetting.hevc));
+    if (conf.mode == _T("cm")) {
+        ctx.infoF("trim.avsをコピー: %s", conf.copyTrimAVS ? "有効" : "無効");
+    }
 }
 
 void ConfigWrapper::CreateTempDir() {
