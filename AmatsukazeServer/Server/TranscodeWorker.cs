@@ -142,7 +142,8 @@ namespace Amatsukaze.Server
 
             byte[] newbuf = new byte[length];
             Array.Copy(buffer, newbuf, length);
-            return server.Client.OnConsoleUpdate(new ConsoleUpdate() { index = Id, data = newbuf });
+            return WithDelayLog("OnConsoleUpdate", () => server.Client.OnConsoleUpdate(new ConsoleUpdate() { index = Id, data = newbuf }),
+                TimeSpan.FromSeconds(5), string.Format("bytes={0}", length));
         }
 
         private Task WriteTextBytes(byte[] buffer)
@@ -540,6 +541,38 @@ namespace Amatsukaze.Server
                 BitConverter.GetBytes(mask)));
         }
 
+        private int GetJobId()
+        {
+            return item?.Id ?? -1;
+        }
+
+        private async Task WithDelayLog(string label, Func<Task> action, TimeSpan warnThreshold, string detail = null)
+        {
+            var sw = Stopwatch.StartNew();
+            await action();
+            sw.Stop();
+            if (sw.Elapsed >= warnThreshold)
+            {
+                Util.AddLog(Id, string.Format("WARN Job{0} {1} slow: {2:F1}s{3}",
+                    GetJobId(), label, sw.Elapsed.TotalSeconds,
+                    string.IsNullOrEmpty(detail) ? "" : " " + detail));
+            }
+        }
+
+        private async Task<T> WithDelayLog<T>(string label, Func<Task<T>> action, TimeSpan warnThreshold, string detail = null)
+        {
+            var sw = Stopwatch.StartNew();
+            var result = await action();
+            sw.Stop();
+            if (sw.Elapsed >= warnThreshold)
+            {
+                Util.AddLog(Id, string.Format("WARN Job{0} {1} slow: {2:F1}s{3}",
+                    GetJobId(), label, sw.Elapsed.TotalSeconds,
+                    string.IsNullOrEmpty(detail) ? "" : " " + detail));
+            }
+            return result;
+        }
+
         private async Task HostThread(PipeCommunicator pipes, bool ignoreResource)
         {
             if (!server.AppData_.setting.SchedulingEnabled)
@@ -571,6 +604,9 @@ namespace Amatsukaze.Server
                     var nowait = (cmd & ResourcePhase.NoWait) != 0;
                     cmd &= ~ResourcePhase.NoWait;
                     var reqEncoderIndex = (!ignoreAffinity) && (cmd == ResourcePhase.Encode);
+
+                    Util.AddLog(Id, string.Format("INFO Job{0} PhaseRequest cmd={1} nowait={2} ignoreResource={3} reqEncoderIndex={4}",
+                        GetJobId(), cmd, nowait, ignoreResource, reqEncoderIndex));
 
                     // リソース確保
                     if (ignoreResource)
@@ -628,7 +664,9 @@ namespace Amatsukaze.Server
                         Phase = (resource != null) ? cmd : ResourcePhase.Max,
                         Resource = resource
                     };
-                    await server.Client.OnEncodeState(State);
+                    var phaseInfo = string.Format("phase={0} gpu={1} group={2} mask=0x{3:X}", State.Phase, gpuIndex, group, mask);
+                    await WithDelayLog("OnEncodeState", () => server.Client.OnEncodeState(State), TimeSpan.FromSeconds(5), phaseInfo);
+                    Util.AddLog(Id, string.Format("INFO Job{0} OnEncodeState {1}", GetJobId(), phaseInfo));
                 }
             }
             catch(Exception)
