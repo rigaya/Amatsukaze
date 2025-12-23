@@ -168,7 +168,8 @@ namespace Amatsukaze.Server
             }
             catch (Exception e)
             {
-                Debug.Print("RedirectOut exception " + e.Message);
+                // ToString() でスタックトレースまで出す
+                Debug.Print("RedirectOut exception " + e.ToString());
             }
         }
 
@@ -198,7 +199,8 @@ namespace Amatsukaze.Server
             }
             catch (Exception e)
             {
-                Debug.Print("RedirectOut exception " + e.Message);
+                // ToString() でスタックトレースまで出す
+                Debug.Print("GetRenamed exception " + e.ToString());
             }
         }
 

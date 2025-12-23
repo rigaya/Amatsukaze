@@ -329,7 +329,8 @@ namespace Amatsukaze.Server
             {
                 receiveTask.RemoveAt(index);
                 ClientList.RemoveAt(index);
-                Util.AddLog($"[ClientManager] 接続終了: {client.RemoteIP}, 残りクライアント数: {ClientList.Count}", null);
+                // client.Close() 済みだと client.RemoteIP が null 参照になる可能性があるため参照しない
+                Util.AddLog($"[ClientManager] 接続終了: index={index}, HostName={client?.HostName ?? "<null>"}:{client?.Port ?? -1}, 残りクライアント数: {ClientList.Count}", null);
             }
         }
 

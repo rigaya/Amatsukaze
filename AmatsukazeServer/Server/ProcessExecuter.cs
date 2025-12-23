@@ -126,16 +126,19 @@ namespace Amatsukaze.Server
                         // 終了
                         return;
                     }
-                    if (OnOutput != null)
+                    // OnOutput は別スレッドから差し替え/破棄され得るので、ローカルに退避してレースを避ける
+                    var onOutput = OnOutput;
+                    if (onOutput != null)
                     {
                         // そのままバイト配列を渡す
-                        await OnOutput(buffer, 0, readBytes);
+                        await onOutput(buffer, 0, readBytes);
                     }
                 }
             }
             catch (Exception e)
             {
-                Debug.Print("RedirectOut exception " + e.Message);
+                // ToString() でスタックトレースまで出す
+                Debug.Print("RedirectOut exception " + e.ToString());
             }
         }
 
