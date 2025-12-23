@@ -80,6 +80,12 @@ public:
             if (PERF) producer.start();
             cond_full_.wait(lock);
             if (PERF) producer.stop();
+            if (error_) {
+                THROW(RuntimeException, "DataPumpThread error");
+            }
+            if (finished_) {
+                THROW(InvalidOperationException, "DataPumpThread is already finished");
+            }
         }
         if (data_.size() == 0) {
             cond_empty_.notify_one();
@@ -106,6 +112,8 @@ public:
             std::unique_lock<std::mutex> lock(critical_section_);
             finished_ = true;
             cond_empty_.notify_one();
+            // put() 側が maximum_ 待ちで停止している可能性があるので解除する
+            cond_full_.notify_all();
         }
         ThreadBase::join();
     }
@@ -161,7 +169,13 @@ private:
                 try {
                     OnDataReceived(std::move(data));
                 } catch (Exception&) {
-                    error_ = true;
+                    {
+                        std::unique_lock<std::mutex> lock(critical_section_);
+                        error_ = true;
+                        // put() が待機している場合に解除する
+                        cond_full_.notify_all();
+                        cond_empty_.notify_all();
+                    }
                 }
             }
         }

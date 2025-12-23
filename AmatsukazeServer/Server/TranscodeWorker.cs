@@ -555,7 +555,7 @@ namespace Amatsukaze.Server
             {
                 Util.AddLog(Id, string.Format("WARN Job{0} {1} slow: {2:F1}s{3}",
                     GetJobId(), label, sw.Elapsed.TotalSeconds,
-                    string.IsNullOrEmpty(detail) ? "" : " " + detail));
+                    string.IsNullOrEmpty(detail) ? "" : " " + detail), null);
             }
         }
 
@@ -568,7 +568,7 @@ namespace Amatsukaze.Server
             {
                 Util.AddLog(Id, string.Format("WARN Job{0} {1} slow: {2:F1}s{3}",
                     GetJobId(), label, sw.Elapsed.TotalSeconds,
-                    string.IsNullOrEmpty(detail) ? "" : " " + detail));
+                    string.IsNullOrEmpty(detail) ? "" : " " + detail), null);
             }
             return result;
         }
@@ -606,7 +606,7 @@ namespace Amatsukaze.Server
                     var reqEncoderIndex = (!ignoreAffinity) && (cmd == ResourcePhase.Encode);
 
                     Util.AddLog(Id, string.Format("INFO Job{0} PhaseRequest cmd={1} nowait={2} ignoreResource={3} reqEncoderIndex={4}",
-                        GetJobId(), cmd, nowait, ignoreResource, reqEncoderIndex));
+                        GetJobId(), cmd, nowait, ignoreResource, reqEncoderIndex), null);
 
                     // リソース確保
                     if (ignoreResource)
@@ -666,7 +666,7 @@ namespace Amatsukaze.Server
                     };
                     var phaseInfo = string.Format("phase={0} gpu={1} group={2} mask=0x{3:X}", State.Phase, gpuIndex, group, mask);
                     await WithDelayLog("OnEncodeState", () => server.Client.OnEncodeState(State), TimeSpan.FromSeconds(5), phaseInfo);
-                    Util.AddLog(Id, string.Format("INFO Job{0} OnEncodeState {1}", GetJobId(), phaseInfo));
+                    Util.AddLog(Id, string.Format("INFO Job{0} OnEncodeState {1}", GetJobId(), phaseInfo), null);
                 }
             }
             catch(Exception)

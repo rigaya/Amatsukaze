@@ -47,9 +47,12 @@ void SubProcess::write(MemoryChunk mc) {
 
 size_t SubProcess::readErr(MemoryChunk mc) {
     if (bufferStdErr.size() > 0) {
-        memcpy(mc.data, bufferStdErr.data(), bufferStdErr.size());
-        bufferStdErr.clear();
-        return bufferStdErr.size();
+        const size_t bytesToCopy = std::min(bufferStdErr.size(), (size_t)mc.length);
+        if (bytesToCopy > 0) {
+            memcpy(mc.data, bufferStdErr.data(), bytesToCopy);
+            bufferStdErr.erase(bufferStdErr.begin(), bufferStdErr.begin() + bytesToCopy);
+        }
+        return bytesToCopy;
     }
     int bytesRead = process_->stdErrRead(bufferStdErr);
     if (bytesRead < 0) {
@@ -67,9 +70,12 @@ size_t SubProcess::readErr(MemoryChunk mc) {
 
 size_t SubProcess::readOut(MemoryChunk mc) {
     if (bufferStdOut.size() > 0) {
-        memcpy(mc.data, bufferStdOut.data(), bufferStdOut.size());
-        bufferStdOut.clear();
-        return bufferStdOut.size();
+        const size_t bytesToCopy = std::min(bufferStdOut.size(), (size_t)mc.length);
+        if (bytesToCopy > 0) {
+            memcpy(mc.data, bufferStdOut.data(), bytesToCopy);
+            bufferStdOut.erase(bufferStdOut.begin(), bufferStdOut.begin() + bytesToCopy);
+        }
+        return bytesToCopy;
     }
     int bytesRead = process_->stdOutRead(bufferStdOut);
     if (bytesRead < 0) {
