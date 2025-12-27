@@ -40,6 +40,8 @@ public:
 
     void finish();
 
+    void closeInput();
+
     const std::deque<std::vector<char>>& getLastLines();
 
     const std::vector<std::vector<char>>& getCapturedLines() const;

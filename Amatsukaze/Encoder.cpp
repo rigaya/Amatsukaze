@@ -212,6 +212,12 @@ void Y4MEncodeWriter::finish() {
     }
 }
 
+void Y4MEncodeWriter::closeInput() {
+    if (y4mWriter_ != NULL) {
+        process_->finishWrite();
+    }
+}
+
 const std::deque<std::vector<char>>& Y4MEncodeWriter::getLastLines() {
     return process_->getLastLines();
 }
@@ -501,6 +507,14 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             error = true;
         }
 
+        // まず全エンコーダの入力を閉じる。
+        // これをせずに順番に join() してしまうと、ハンドル継承が発生している場合に
+        // stdin のクローズ待ちとハンドル継承によるパイプクローズ待ちでデッドロックする可能性がある。
+        for (int p = 0; p < mp; p++) {
+            if (chunkEncoders[p]) {
+                chunkEncoders[p]->closeInput();
+            }
+        }
         for (int p = 0; p < mp; p++) {
             if (chunkEncoders[p]) {
                 chunkEncoders[p]->finish();

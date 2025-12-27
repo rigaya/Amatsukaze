@@ -31,6 +31,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <vector>
 #include <limits>
 #include "rgy_osdep.h" // requires HANDLE / fd typedefs
@@ -169,6 +170,7 @@ public:
 protected:
     virtual int startPipes() override;
     PROCESS_INFORMATION m_pi;
+    std::optional<int> m_exitCode;
 };
 #else
 

@@ -106,6 +106,8 @@ void SubProcess::runSetPowerThrottling() {
 }
 
 int SubProcess::join() {
+    // join() はデストラクタ経由などで複数回呼ばれる可能性があるため冪等にする。
+    // (EventBaseSubProcess は明示的に join() されることが多く、基底デストラクタでも join() が呼ばれる)
     if (process_) {
         if (thSetPowerThrottling) {
             thSetPowerThrottling->abortThread();
@@ -113,6 +115,10 @@ int SubProcess::join() {
         
         exitCode_ = process_->waitAndGetExitCode();
         process_->close();
+        // close() 後も process_ が残っていると、2回目以降の join() で
+        // 既に CloseHandle 済みの HANDLE 値を WaitForSingleObject してしまい、
+        // HANDLE 値が別オブジェクトとして再利用されている場合に永久待ちとなり得る。
+        process_.reset();
     }
     return exitCode_;
 }

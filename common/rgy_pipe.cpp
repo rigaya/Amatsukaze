@@ -34,10 +34,12 @@
 #include <fcntl.h>
 #include <io.h>
 #include <cstring>
+#include <mutex>
 
 RGYPipeProcessWin::RGYPipeProcessWin() :
     RGYPipeProcess(),
-    m_pi() {
+    m_pi(),
+    m_exitCode() {
 }
 
 RGYPipeProcessWin::~RGYPipeProcessWin() {
@@ -46,9 +48,9 @@ RGYPipeProcessWin::~RGYPipeProcessWin() {
 
 int RGYPipeProcessWin::startPipes() {
     if (m_pipe.stdOut.mode & PIPE_MODE_ENABLE) {
-        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
         if (!CreatePipe(&m_pipe.stdOut.h_read, &m_pipe.stdOut.h_write, &sa, m_pipe.stdOut.bufferSize) ||
-            !SetHandleInformation(m_pipe.stdOut.h_read, HANDLE_FLAG_INHERIT, 0))
+            !SetHandleInformation(m_pipe.stdOut.h_write, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
             return 1;
         if ((m_pipe.stdOut.mode & PIPE_MODE_ENABLE_FP)
             && (m_pipe.stdOut.fp = _fdopen(_open_osfhandle((intptr_t)m_pipe.stdOut.h_read, _O_BINARY), "rb")) == NULL) {
@@ -58,9 +60,9 @@ int RGYPipeProcessWin::startPipes() {
         m_stdOutBuffer.resize(bufsize);
     }
     if (m_pipe.stdErr.mode & PIPE_MODE_ENABLE) {
-        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
         if (!CreatePipe(&m_pipe.stdErr.h_read, &m_pipe.stdErr.h_write, &sa, m_pipe.stdErr.bufferSize) ||
-            !SetHandleInformation(m_pipe.stdErr.h_read, HANDLE_FLAG_INHERIT, 0))
+            !SetHandleInformation(m_pipe.stdErr.h_write, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
             return 1;
         if ((m_pipe.stdErr.mode & PIPE_MODE_ENABLE_FP)
             && (m_pipe.stdErr.fp = _fdopen(_open_osfhandle((intptr_t)m_pipe.stdErr.h_read, _O_BINARY), "rb")) == NULL) {
@@ -70,9 +72,9 @@ int RGYPipeProcessWin::startPipes() {
         m_stdErrBuffer.resize(bufsize);
     }
     if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
-        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+        SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
         if (!CreatePipe(&m_pipe.stdIn.h_read, &m_pipe.stdIn.h_write, &sa, m_pipe.stdIn.bufferSize) ||
-            !SetHandleInformation(m_pipe.stdIn.h_write, HANDLE_FLAG_INHERIT, 0))
+            !SetHandleInformation(m_pipe.stdIn.h_read, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
             return 1;
         if ((m_pipe.stdIn.mode & PIPE_MODE_ENABLE_FP)
             && (m_pipe.stdIn.fp = _fdopen(_open_osfhandle((intptr_t)m_pipe.stdIn.h_write, _O_BINARY), "wb")) == NULL) {
@@ -83,6 +85,10 @@ int RGYPipeProcessWin::startPipes() {
 }
 
 int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console) {
+    // プロセス起動時のハンドル継承を防止するため、プロセス起動処理をミューテックスで保護する。
+    static std::mutex mtx_create_process;
+    std::lock_guard<std::mutex> lock(mtx_create_process);
+
     BOOL Inherit = FALSE;
     DWORD flag = priority;
     STARTUPINFO si;
@@ -303,9 +309,13 @@ int RGYPipeProcessWin::wait(uint32_t timeout) {
 }
 
 int RGYPipeProcessWin::waitAndGetExitCode() {
+    if (!m_phandle) {
+        return m_exitCode.value_or(-1);
+    }
     if (WaitForSingleObject(m_phandle, INFINITE) == WAIT_OBJECT_0) {
         DWORD exitCode = 0;
         if (GetExitCodeProcess(m_phandle, &exitCode)) {
+            m_exitCode = (int)exitCode;
             return (int)exitCode;
         }
     }
@@ -354,6 +364,9 @@ void RGYPipeProcessWin::close() {
         CloseHandle(m_pi.hProcess);
         m_pi.hProcess = nullptr;
     }
+    // m_pi.hProcess を閉じたら、同じ値の HANDLE が別オブジェクトとして再利用されうるため、
+    // WaitForSingleObject に渡してしまわないよう m_phandle もクリアしておく。
+    m_phandle = nullptr;
     if (m_pi.hThread) {
         CloseHandle(m_pi.hThread);
         m_pi.hThread = nullptr;
@@ -481,7 +494,7 @@ RGYAnonymousPipe::~RGYAnonymousPipe() {
 
 int RGYAnonymousPipe::create(bool inheritReadHandle, bool inheritWriteHandle, uint32_t bufferSize) {
 #if defined(_WIN32) || defined(_WIN64)
-    SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+    SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
     HANDLE hRead = NULL, hWrite = NULL;
     if (!CreatePipe(&hRead, &hWrite, &sa, bufferSize)) {
         return 1;
