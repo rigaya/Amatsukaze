@@ -7,6 +7,7 @@
 */
 
 #include <future>
+#include <atomic>
 #include "CMAnalyze.h"
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
@@ -267,10 +268,12 @@ int CMAnalyze::getPreferredThreads(const int processorCount) const {
     std::sort(tmp.begin(), tmp.end(), [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
         const int bestThreads = 8;
         if (a.second != b.second) return a.second < b.second;
-        else if (a.first != b.first) return std::abs(a.first - bestThreads) < std::abs(b.first - bestThreads);
-        return true;
+        const int da = std::abs(a.first - bestThreads);
+        const int db = std::abs(b.first - bestThreads);
+        if (da != db) return da < db;
+        return a.first < b.first;
     });
-    return tmp[0].first;
+    return std::max(tmp[0].first, 1);
 }
 
 void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
@@ -288,14 +291,14 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
         }
     }
     int duration = 0;
+    std::atomic<int> startThreads = 0;
     const int processorCount = setting_.getNumParallelLogoAnalysis() > 0 ? setting_.getNumParallelLogoAnalysis() : GetProcessorCount();
     const int preferredThreads = (setting_.isParallelLogoAnalysis()) ? getPreferredThreads(processorCount) : 1;
     const int minFramesPerThread = 600;
     const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
     const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 8 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
-    if (totalThreads > 1) {
-        ctx.infoF("並列ロゴ解析 %d並列 x デコード%dスレッド", totalThreads, decodeThreads);
-    }
+    ctx.infoF("ロゴ解析 %d並列 x デコード%dスレッド", totalThreads, decodeThreads);
+
     std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
     for (int ith = 0; ith < totalThreads; ith++) {
         logoScanThreads.push_back(std::async(std::launch::async, [&](const int threadID) {
@@ -311,20 +314,40 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
                 auto vi = clip->GetVideoInfo();
                 if (threadID == 0) {
                     logof.setClipInfo(clip);
-                    duration = vi.num_frames * vi.fps_denominator / vi.fps_numerator;
+                    duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
                 }
-
+                startThreads++;
                 logof.scanFrames(clip, trims, threadID, totalThreads, env.get());
             } catch (const AvisynthError& avserror) {
+                startThreads++;
                 return std::pair<int, std::string>{ 1, avserror.msg };
+            } catch (const std::exception& e) {
+                startThreads++;
+                return std::pair<int, std::string>{ 1, e.what() };
+            } catch (...) {
+                startThreads++;
+                return std::pair<int, std::string>{ 1, "unknown exception" };
             }
             return std::pair<int, std::string>{ 0, "" };
         }, ith));
-        // duration が設定されるまで2スレッド目以降の起動を待機する
-        if (ith == 0) {
-            while (duration == 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        const auto waitStart = std::chrono::steady_clock::now();
+        while (startThreads.load() <= ith) {
+            if (logoScanThreads[ith].wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                break;
             }
+            if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60)) {
+                THROWF(AviSynthException, "logo scan #%d: timeout waiting for clip info", ith);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        // thread が startThreads を設定せずに終了した場合はここでエラーを回収して中断する
+        if (startThreads.load() <= ith
+            && logoScanThreads[ith].wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            const auto& result = logoScanThreads[ith].get();
+            if (result.first != 0) {
+                THROWF(AviSynthException, "logo scan #%d: %s", ith, result.second.c_str());
+            }
+            THROWF(AviSynthException, "logo scan #%d: clip info was not initialized", ith);
         }
     }
     for (size_t ith = 0; ith < logoScanThreads.size(); ith++) {
