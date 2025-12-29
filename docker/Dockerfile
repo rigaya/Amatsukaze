@@ -367,12 +367,14 @@ umask 022
 DEFAULT_UID=${RUN_UID:-1000}; DEFAULT_GID=${RUN_GID:-1000};
 if ! getent group "$DEFAULT_GID" >/dev/null 2>&1; then groupadd -g "$DEFAULT_GID" appgroup; fi
 
-ls -l /dev/dri/
-if [ -c /dev/dri/renderD128 ]; then
-  RENDER_GID=$(stat -c "%g" /dev/dri/renderD128 2>/dev/null || echo "")
-  echo "RENDER_GID: $RENDER_GID"
-  if [ -n "$RENDER_GID" ] && [ "$RENDER_GID" != "" ]; then
-    if ! getent group "$RENDER_GID" >/dev/null 2>&1; then groupadd -g "$RENDER_GID" render; fi
+if [ -d /dev/dri ]; then
+  ls -l /dev/dri/ || true
+  if [ -c /dev/dri/renderD128 ]; then
+    RENDER_GID=$(stat -c "%g" /dev/dri/renderD128 2>/dev/null || echo "")
+    echo "RENDER_GID: $RENDER_GID"
+    if [ -n "$RENDER_GID" ] && [ "$RENDER_GID" != "" ]; then
+      if ! getent group "$RENDER_GID" >/dev/null 2>&1; then groupadd -g "$RENDER_GID" render; fi
+    fi
   fi
 fi
 
@@ -382,7 +384,12 @@ if [ -d /opt/Faster-Whisper-XXL ]; then
   find /opt/Faster-Whisper-XXL -type d -exec chown "$DEFAULT_UID:$DEFAULT_GID" {} +
   chmod ugo+rx /opt/Faster-Whisper-XXL/faster-whisper-xxl
 fi
-usermod -aG render,video "$(id -nu "${DEFAULT_UID}")"
+GROUPS_TO_ADD=()
+if getent group video >/dev/null 2>&1; then GROUPS_TO_ADD+=("video"); fi
+if getent group render >/dev/null 2>&1; then GROUPS_TO_ADD+=("render"); fi
+if [ ${#GROUPS_TO_ADD[@]} -gt 0 ]; then
+  usermod -aG "$(IFS=,; echo "${GROUPS_TO_ADD[*]}")" "$(id -nu "${DEFAULT_UID}")"
+fi
 exec gosu "$DEFAULT_UID" "$@"
 EOF
 RUN sed -i 's/\r$//' /app/entrypoint.sh \
