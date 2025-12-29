@@ -3867,7 +3867,20 @@ namespace Amatsukaze.Server
         {
             var serviceMap = AppData_.services.ServiceMap;
             var message = "サービスが見つかりません";
-            if(serviceMap.ContainsKey(update.ServiceId))
+            if (!serviceMap.ContainsKey(update.ServiceId) &&
+                update.Type == ServiceSettingUpdateType.Update &&
+                update.Data != null)
+            {
+                // 未登録ServiceIdへのUpdateは新規追加として扱う
+                if (update.Data.LogoSettings == null)
+                {
+                    update.Data.LogoSettings = new List<LogoSetting>();
+                }
+                serviceMap[update.ServiceId] = update.Data;
+                settingUpdated = true;
+                message = "サービス「" + update.Data.ServiceName + "」を追加しました";
+            }
+            else if(serviceMap.ContainsKey(update.ServiceId))
             {
                 if (update.Type == ServiceSettingUpdateType.Update)
                 {

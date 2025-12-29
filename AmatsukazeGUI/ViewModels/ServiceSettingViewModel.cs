@@ -226,5 +226,60 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region AddServiceSettingCommand
+        private ViewModelCommand _AddServiceSettingCommand;
+
+        public ViewModelCommand AddServiceSettingCommand
+        {
+            get
+            {
+                if (_AddServiceSettingCommand == null)
+                {
+                    _AddServiceSettingCommand = new ViewModelCommand(AddServiceSetting);
+                }
+                return _AddServiceSettingCommand;
+            }
+        }
+
+        public async void AddServiceSetting()
+        {
+            if (Model == null)
+            {
+                return;
+            }
+
+            var vm = new NewServiceSettingViewModel()
+            {
+                Model = Model,
+                IsDuplicateSid = sid => Model.ServiceSettings.Any(s => s?.Data?.ServiceId == sid),
+            };
+
+            await Messenger.RaiseAsync(new TransitionMessage(
+                typeof(Views.NewServiceSettingWindow), vm, TransitionMode.Modal, "FromServiceSetting"));
+
+            if (!vm.Success)
+            {
+                return;
+            }
+
+            var element = new ServiceSettingElement()
+            {
+                ServiceId = vm.ServiceId,
+                ServiceName = vm.ServiceName,
+                DisableCMCheck = false,
+                JLSCommand = Model.JlsCommandFiles?.FirstOrDefault(),
+                JLSOption = "",
+                LogoSettings = new List<LogoSetting>(),
+            };
+
+            await (Model.Server?.SetServiceSetting(new ServiceSettingUpdate()
+            {
+                Type = ServiceSettingUpdateType.Update,
+                ServiceId = element.ServiceId,
+                Data = element,
+            }) ?? System.Threading.Tasks.Task.FromResult(0));
+        }
+        #endregion
+
     }
 }

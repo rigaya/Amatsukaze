@@ -1,7 +1,7 @@
 ﻿<UserControl x:Class="Amatsukaze.Views.ServiceSettingPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:l="http://schemas.livet-mvvm.net/2011/wpf"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
@@ -11,6 +11,12 @@
              mc:Ignorable="d" 
              d:DesignHeight="600"
              d:DataContext="{d:DesignInstance {x:Type vm:ServiceSettingViewModel}}">
+
+    <i:Interaction.Triggers>
+        <l:InteractionMessageTrigger Messenger="{Binding Messenger}" MessageKey="FromServiceSetting">
+            <l:TransitionInteractionMessageAction InvokeActionOnlyWhenWindowIsActive="False"/>
+        </l:InteractionMessageTrigger>
+    </i:Interaction.Triggers>
 
     <DockPanel>
         <DockPanel.Resources>
@@ -39,8 +45,9 @@
                 <TextBlock DockPanel.Dock="Top" HorizontalAlignment="Left" Margin="3" Text="サービス（チャンネル）"/>
                 <ListBox ItemsSource="{Binding Model.ServiceSettings}" SelectedIndex="{Binding SelectedServiceIndex, Mode=TwoWay}">
                     <ListBox.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                             <MenuItem Header="選択中のサービス設定を削除" Command="{Binding RemoveServiceSettingCommand}" />
+                            <MenuItem Header="サービス設定を追加..." Command="{Binding AddServiceSettingCommand}" />
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
@@ -68,7 +75,7 @@
             </DockPanel>
             <ListBox ItemsSource="{Binding SelectedServiceItem.LogoList}" SelectedIndex="{Binding SelectedLogoIndex, Mode=TwoWay}">
                 <ListBox.ContextMenu>
-                    <ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                         <MenuItem Header="「ロゴなし」を追加" Command="{Binding AddNoLogoCommand}" />
                         <MenuItem Header="選択中の「ロゴなし」を削除" Command="{Binding RemoveNoLogoCommand}" />
                     </ContextMenu>

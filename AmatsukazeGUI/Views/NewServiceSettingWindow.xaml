@@ -1,0 +1,72 @@
+<Window x:Class="Amatsukaze.Views.NewServiceSettingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:l="http://schemas.livet-mvvm.net/2011/wpf"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+        xmlns:vm="clr-namespace:Amatsukaze.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance {x:Type vm:NewServiceSettingViewModel}}"
+        Title="{Binding Caption}" Height="190" Width="420" Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <ResourceDictionary Source="CommonResources.xaml"/>
+    </Window.Resources>
+
+    <i:Interaction.Triggers>
+        <i:EventTrigger EventName="ContentRendered">
+            <l:LivetCallMethodAction MethodTarget="{Binding}" MethodName="Initialize"/>
+        </i:EventTrigger>
+
+        <i:EventTrigger EventName="Closed">
+            <l:DataContextDisposeAction/>
+        </i:EventTrigger>
+
+        <l:InteractionMessageTrigger MessageKey="Close" Messenger="{Binding Messenger}">
+            <l:WindowInteractionMessageAction InvokeActionOnlyWhenWindowIsActive="False"/>
+        </l:InteractionMessageTrigger>
+    </i:Interaction.Triggers>
+
+    <StackPanel Margin="10">
+        <TextBlock Margin="0,0,0,8" TextWrapping="Wrap">
+            サービス設定を追加します。サービス名とチャンネルSIDを入力してください。
+        </TextBlock>
+
+        <Grid Margin="0,0,0,6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,8,6" VerticalAlignment="Center" Text="サービス名"/>
+            <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,6"
+                     Text="{Binding ServiceName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding OkCommand, Mode=OneWay}"/>
+                </TextBox.InputBindings>
+            </TextBox>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center" Text="チャンネルSID"/>
+            <TextBox Grid.Row="1" Grid.Column="1"
+                     Text="{Binding SidText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding OkCommand, Mode=OneWay}"/>
+                </TextBox.InputBindings>
+            </TextBox>
+        </Grid>
+
+        <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" Text="{Binding Description}" Foreground="Red"/>
+
+        <StackPanel Orientation="Horizontal" FlowDirection="RightToLeft">
+            <Button Content="キャンセル" Width="90" Margin="4,0,0,0" Command="{Binding CancelCommand}"/>
+            <Button Content="OK" Width="90" Margin="4,0,0,0" Command="{Binding OkCommand}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>
+
+
