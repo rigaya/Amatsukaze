@@ -73,7 +73,9 @@
                 <Button Margin="2" DockPanel.Dock="Right" Width="160" Content="「ロゴなし」を追加" Command="{Binding AddNoLogoCommand}"/>
                 <TextBlock Text="ロゴファイル" Margin="3" VerticalAlignment="Center"/>
             </DockPanel>
-            <ListBox ItemsSource="{Binding SelectedServiceItem.LogoList}" SelectedIndex="{Binding SelectedLogoIndex, Mode=TwoWay}">
+            <ListBox ItemsSource="{Binding SelectedServiceItem.LogoList}" SelectedIndex="{Binding SelectedLogoIndex, Mode=TwoWay}"
+                     Background="Transparent"
+                     AllowDrop="True" PreviewDragEnter="LogoList_PreviewDragOver" PreviewDragOver="LogoList_PreviewDragOver" Drop="LogoList_Drop">
                 <ListBox.ContextMenu>
                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                         <MenuItem Header="「ロゴなし」を追加" Command="{Binding AddNoLogoCommand}" />

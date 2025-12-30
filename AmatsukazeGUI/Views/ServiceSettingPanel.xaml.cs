@@ -29,5 +29,40 @@ namespace Amatsukaze.Views
         {
             Mouse.Capture(null);
         }
+
+        private void LogoList_PreviewDragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = DragDropEffects.None;
+            var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+            if (files != null &&
+                files.Any(f => string.Equals(System.IO.Path.GetExtension(f), ".lgd", StringComparison.OrdinalIgnoreCase)))
+            {
+                e.Effects = DragDropEffects.Copy;
+            }
+
+            e.Handled = true;
+        }
+
+        private async void LogoList_Drop(object sender, DragEventArgs e)
+        {
+            var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+            if (files == null)
+            {
+                return;
+            }
+
+            var lgdFiles = files
+                .Where(f => string.Equals(System.IO.Path.GetExtension(f), ".lgd", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (lgdFiles.Length == 0)
+            {
+                return;
+            }
+
+            if (DataContext is Amatsukaze.ViewModels.ServiceSettingViewModel vm)
+            {
+                await vm.ImportLogoFilesAsync(lgdFiles);
+            }
+        }
     }
 }

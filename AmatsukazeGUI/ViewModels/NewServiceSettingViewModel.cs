@@ -22,6 +22,24 @@ namespace Amatsukaze.ViewModels
         {
         }
 
+        #region IsSidLocked変更通知プロパティ
+        private bool _IsSidLocked;
+
+        public bool IsSidLocked
+        {
+            get { return _IsSidLocked; }
+            set
+            {
+                if (_IsSidLocked == value)
+                {
+                    return;
+                }
+                _IsSidLocked = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         private string Validate()
         {
             if (string.IsNullOrWhiteSpace(_ServiceName))

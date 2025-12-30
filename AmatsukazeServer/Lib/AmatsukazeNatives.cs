@@ -417,6 +417,9 @@ namespace Amatsukaze.Lib
         private static extern int LogoFile_Save(IntPtr ptr, string filename);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
+        private static extern int LogoFile_ConvertAviUtlToExtended(IntPtr ctx, string srcpath, string dstpath, int serviceId, int imgw, int imgh);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int ScanLogo(IntPtr ctx, string srcpath, int serviceid, string workfile, string dstpath,
             int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
         #endregion
@@ -544,6 +547,14 @@ namespace Amatsukaze.Lib
             if(LogoFile_Save(Ptr, filepath) == 0)
             {
                 throw new IOException(Ctx.GetError());
+            }
+        }
+
+        public static void ConvertAviUtlToExtended(AMTContext ctx, string srcpath, string dstpath, int serviceId, int imgw, int imgh)
+        {
+            if (LogoFile_ConvertAviUtlToExtended(ctx.Ptr, srcpath, dstpath, serviceId, imgw, imgh) == 0)
+            {
+                throw new IOException(ctx.GetError());
             }
         }
 

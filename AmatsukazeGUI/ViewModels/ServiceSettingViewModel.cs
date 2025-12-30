@@ -12,7 +12,11 @@ using Livet.EventListeners;
 using Livet.Messaging.Windows;
 
 using Amatsukaze.Models;
+using Amatsukaze.Lib;
 using Amatsukaze.Server;
+using System.IO;
+using System.Threading.Tasks;
+using System.Windows;
 
 namespace Amatsukaze.ViewModels
 {
@@ -280,6 +284,310 @@ namespace Amatsukaze.ViewModels
             }) ?? System.Threading.Tasks.Task.FromResult(0));
         }
         #endregion
+
+        public async Task ImportLogoFilesAsync(IEnumerable<string> paths)
+        {
+            if (Model?.Server == null)
+            {
+                MessageBox.Show("サーバーに接続されていません。");
+                return;
+            }
+
+            var lgdFiles = (paths ?? Array.Empty<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToArray();
+            if (lgdFiles.Length == 0)
+            {
+                return;
+            }
+
+            async Task<int?> EnsureServiceForSidAsync(int? fixedSid, bool lockSid)
+            {
+                // 既に選択されているならそれを使う
+                if (SelectedServiceItem != null)
+                {
+                    return SelectedServiceItem.Data.ServiceId;
+                }
+
+                var vm = new NewServiceSettingViewModel()
+                {
+                    Model = Model,
+                    IsDuplicateSid = sid => Model.ServiceSettings.Any(s => s?.Data?.ServiceId == sid),
+                };
+                if (fixedSid.HasValue)
+                {
+                    vm.SidText = fixedSid.Value.ToString();
+                    vm.IsSidLocked = lockSid;
+                }
+
+                await Messenger.RaiseAsync(new TransitionMessage(
+                    typeof(Views.NewServiceSettingWindow), vm, TransitionMode.Modal, "FromServiceSetting"));
+
+                if (!vm.Success)
+                {
+                    return null;
+                }
+
+                var element = new ServiceSettingElement()
+                {
+                    ServiceId = vm.ServiceId,
+                    ServiceName = vm.ServiceName,
+                    DisableCMCheck = false,
+                    JLSCommand = Model.JlsCommandFiles?.FirstOrDefault(),
+                    JLSOption = "",
+                    LogoSettings = new List<LogoSetting>(),
+                };
+
+                await Model.Server.SetServiceSetting(new ServiceSettingUpdate()
+                {
+                    Type = ServiceSettingUpdateType.Update,
+                    ServiceId = element.ServiceId,
+                    Data = element,
+                });
+
+                // 追加したサービスを選択状態にする
+                var idx = -1;
+                for (int i = 0; i < Model.ServiceSettings.Count; i++)
+                {
+                    if (Model.ServiceSettings[i]?.Data?.ServiceId == element.ServiceId)
+                    {
+                        idx = i;
+                        break;
+                    }
+                }
+                if (idx >= 0)
+                {
+                    SelectedServiceIndex = idx;
+                }
+
+                return element.ServiceId;
+            }
+
+            // .lgdの形式に応じて処理分岐（拡張形式: ServiceId一致条件で登録 / AviUtl形式: 変換して登録）
+            using var ctx = new AMTContext();
+            int? aviutlImgW = null;
+            int? aviutlImgH = null;
+            foreach (var srcPath in lgdFiles)
+            {
+                try
+                {
+                    if (!File.Exists(srcPath))
+                    {
+                        continue;
+                    }
+
+                    // まず拡張形式として開けるか試す（開ければServiceIdを持つ）
+                    int? extendedSid = null;
+                    string extendedServiceName = null;
+                    try
+                    {
+                        using (var logo = new LogoFile(ctx, srcPath))
+                        {
+                            extendedSid = logo.ServiceId;
+                            extendedServiceName = logo.Name;
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        // AviUtl形式（ベースのみ）として扱う
+                        extendedSid = null;
+                    }
+
+                    if (extendedSid.HasValue)
+                    {
+                        // Amatsukaze拡張形式
+                        var fileSid = extendedSid.Value;
+                        string NormalizeServiceName(string name)
+                        {
+                            if (string.IsNullOrWhiteSpace(name))
+                            {
+                                return name;
+                            }
+                            var s = name.Trim();
+                            // 末尾が "(...)" の場合は括弧部分を落とす（直前に空白があればそれも除去）
+                            if (s.EndsWith(")"))
+                            {
+                                var idx = s.LastIndexOf('(');
+                                if (idx >= 0 && idx < s.Length - 1)
+                                {
+                                    s = s.Substring(0, idx).TrimEnd();
+                                }
+                            }
+                            return s;
+                        }
+
+                        if (SelectedServiceItem != null)
+                        {
+                            var selectedSid = SelectedServiceItem.Data.ServiceId;
+                            if (selectedSid != fileSid)
+                            {
+                                // 変更: 不一致の場合は一致するサービスへ選択を切り替えて追加する
+                                var idx = -1;
+                                for (int i = 0; i < Model.ServiceSettings.Count; i++)
+                                {
+                                    if (Model.ServiceSettings[i]?.Data?.ServiceId == fileSid)
+                                    {
+                                        idx = i;
+                                        break;
+                                    }
+                                }
+                                if (idx >= 0)
+                                {
+                                    SelectedServiceIndex = idx;
+                                }
+                                else
+                                {
+                                    // 一致するサービスが無い場合は、拡張lgdのサービス名で自動登録する
+                                    var element = new ServiceSettingElement()
+                                    {
+                                        ServiceId = fileSid,
+                                        ServiceName = string.IsNullOrWhiteSpace(extendedServiceName) ? $"SID{fileSid}" : NormalizeServiceName(extendedServiceName),
+                                        DisableCMCheck = false,
+                                        JLSCommand = Model.JlsCommandFiles?.FirstOrDefault(),
+                                        JLSOption = "",
+                                        LogoSettings = new List<LogoSetting>(),
+                                    };
+
+                                    await Model.Server.SetServiceSetting(new ServiceSettingUpdate()
+                                    {
+                                        Type = ServiceSettingUpdateType.Update,
+                                        ServiceId = element.ServiceId,
+                                        Data = element,
+                                    });
+
+                                    // 追加したサービスを選択状態にする
+                                    var createdIdx = -1;
+                                    for (int i = 0; i < Model.ServiceSettings.Count; i++)
+                                    {
+                                        if (Model.ServiceSettings[i]?.Data?.ServiceId == element.ServiceId)
+                                        {
+                                            createdIdx = i;
+                                            break;
+                                        }
+                                    }
+                                    if (createdIdx >= 0)
+                                    {
+                                        SelectedServiceIndex = createdIdx;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // サービス未選択なら、同じServiceIDのサービスがあればそこへ、無ければ固定SIDで新規作成
+                            var exists = Model.ServiceSettings.Any(s => s?.Data?.ServiceId == fileSid);
+                            if (exists)
+                            {
+                                // そのサービスを選択しておく（UI反映）
+                                for (int i = 0; i < Model.ServiceSettings.Count; i++)
+                                {
+                                    if (Model.ServiceSettings[i]?.Data?.ServiceId == fileSid)
+                                    {
+                                        SelectedServiceIndex = i;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // 拡張lgdにはサービス名もあるため、ユーザー入力なしで自動登録する
+                                var element = new ServiceSettingElement()
+                                {
+                                    ServiceId = fileSid,
+                                    ServiceName = string.IsNullOrWhiteSpace(extendedServiceName) ? $"SID{fileSid}" : NormalizeServiceName(extendedServiceName),
+                                    DisableCMCheck = false,
+                                    JLSCommand = Model.JlsCommandFiles?.FirstOrDefault(),
+                                    JLSOption = "",
+                                    LogoSettings = new List<LogoSetting>(),
+                                };
+
+                                await Model.Server.SetServiceSetting(new ServiceSettingUpdate()
+                                {
+                                    Type = ServiceSettingUpdateType.Update,
+                                    ServiceId = element.ServiceId,
+                                    Data = element,
+                                });
+
+                                // 追加したサービスを選択状態にする
+                                var idx = -1;
+                                for (int i = 0; i < Model.ServiceSettings.Count; i++)
+                                {
+                                    if (Model.ServiceSettings[i]?.Data?.ServiceId == element.ServiceId)
+                                    {
+                                        idx = i;
+                                        break;
+                                    }
+                                }
+                                if (idx >= 0)
+                                {
+                                    SelectedServiceIndex = idx;
+                                }
+                            }
+                        }
+
+                        // 拡張形式はServiceIdを書き換えず、そのまま送る（送信パラメータもロゴのServiceIdに合わせる）
+                        var data = File.ReadAllBytes(srcPath);
+                        await Model.Server.SendLogoFile(new LogoFileData()
+                        {
+                            Data = data,
+                            ServiceId = fileSid,
+                            LogoIdx = 1
+                        });
+                    }
+                    else
+                    {
+                        // AviUtl形式（ベースのみ）: 変換して送信する。サービスIDは選択中（または新規追加）を使う。
+                        var targetSid = await EnsureServiceForSidAsync(null, lockSid: false);
+                        if (!targetSid.HasValue)
+                        {
+                            continue;
+                        }
+
+                        var tmpPath = Path.Combine(Path.GetTempPath(), "amatsukaze-import-" + Guid.NewGuid().ToString("N") + ".lgd");
+                        try
+                        {
+                            if (aviutlImgW == null || aviutlImgH == null)
+                            {
+                                var resVM = new LogoResolutionViewModel();
+                                await Messenger.RaiseAsync(new TransitionMessage(
+                                    typeof(Views.LogoResolutionWindow), resVM, TransitionMode.Modal, "FromServiceSetting"));
+                                if (!resVM.Success)
+                                {
+                                    continue;
+                                }
+                                aviutlImgW = resVM.ImgW;
+                                aviutlImgH = resVM.ImgH;
+                            }
+
+                            LogoFile.ConvertAviUtlToExtended(ctx, srcPath, tmpPath, targetSid.Value, aviutlImgW.Value, aviutlImgH.Value);
+
+                            var data = File.ReadAllBytes(tmpPath);
+                            await Model.Server.SendLogoFile(new LogoFileData()
+                            {
+                                Data = data,
+                                ServiceId = targetSid.Value,
+                                LogoIdx = 1
+                            });
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                if (File.Exists(tmpPath))
+                                {
+                                    File.Delete(tmpPath);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+        }
 
     }
 }
