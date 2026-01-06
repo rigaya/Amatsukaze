@@ -7,7 +7,118 @@
 */
 
 #include "FilteredSource.h"
+#include <algorithm>
+#include <cmath>
 #include <string>
+
+namespace {
+
+struct PtsGapOffsetFunc {
+    double tickMs = 0.0;                 // nominal ms per frame (CFR timeline)
+    std::vector<double> offsets;         // offsets[k] in ms at t = k * tickMs
+
+    bool valid() const {
+        return tickMs > 0.0 && std::isfinite(tickMs) && !offsets.empty();
+    }
+
+    // time t is in the same timeline as timeCodes (ms, starting at 0)
+    double at(const double t) const {
+        if (!valid()) return 0.0;
+        if (!(t > 0.0) || !std::isfinite(t)) return offsets.front();
+        const double maxT = (offsets.size() - 1) * tickMs;
+        if (t >= maxT) return offsets.back();
+        const double pos = t / tickMs;
+        const int idx = std::max(0, std::min((int)offsets.size() - 2, (int)std::floor(pos)));
+        const double frac = std::max(0.0, std::min(1.0, pos - idx));
+        return offsets[idx] + (offsets[idx + 1] - offsets[idx]) * frac;
+    }
+};
+
+static int inferVfrTimingFps(const std::vector<double>& timeCodes) {
+    if (timeCodes.empty()) return 0;
+    double minDiff = timeCodes.back();
+    int best = 0;
+    double epsilon = timeCodes.size() * 10e-10;
+    for (auto fps : { 60, 120, 240 }) {
+        double mult = fps / 1001.0;
+        double inv = 1.0 / mult;
+        double diff = 0;
+        for (auto ts : timeCodes) {
+            diff += std::abs(inv * std::round(ts * mult) - ts);
+        }
+        if (diff < minDiff - epsilon) {
+            best = fps;
+            minDiff = diff;
+        }
+    }
+    return best;
+}
+
+static void writeTimecodeV2(const tstring& path, const std::vector<double>& timeCodes) {
+    if (path.size() == 0 || timeCodes.size() < 2) return;
+    File file(path, _T("wb"));
+    const char header[] = "# timecode format v2\n";
+    file.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
+    // timecode v2: 1行=各フレーム開始時刻(ms). 最終フレーム末尾は含めない。
+    const int n = (int)timeCodes.size() - 1;
+    for (int i = 0; i < n; i++) {
+        const int64_t value = (int64_t)std::llround(timeCodes[i]);
+        std::string line = std::to_string((long long)value);
+        line.push_back('\n');
+        file.write(MemoryChunk((uint8_t*)line.data(), (int)line.size()));
+    }
+}
+
+static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo, EncodeFileKey key, const double tickMs, AMTContext& ctx) {
+    PtsGapOffsetFunc func;
+    func.tickMs = tickMs;
+    if (!(tickMs > 0.0) || !std::isfinite(tickMs)) {
+        return func;
+    }
+    const auto& outFrames = reformInfo.getEncodeFile(key).videoFrames;
+    const auto& srcFrames = reformInfo.getFilterSourceFrames(key.video);
+    if (outFrames.empty() || srcFrames.empty()) {
+        return func;
+    }
+    const int firstIndex = outFrames.front();
+    if (firstIndex < 0 || firstIndex >= (int)srcFrames.size()) {
+        return func;
+    }
+    const double basePts = srcFrames[firstIndex].pts;
+    func.offsets.resize(outFrames.size(), 0.0);
+    double prev = 0.0;
+    double maxGap = 0.0;
+    const double LOG_EPS_MS = 1.0; // 1ms以上の増分のみログ（細かな丸め誤差は無視）
+    for (int k = 0; k < (int)outFrames.size(); k++) {
+        const int idx = outFrames[k];
+        if (idx < 0 || idx >= (int)srcFrames.size()) {
+            func.offsets[k] = prev;
+            continue;
+        }
+        const double tPtsMs = (srcFrames[idx].pts - basePts) * 1000.0 / MPEG_CLOCK_HZ;
+        const double tCfrMs = k * tickMs;
+        double off = tPtsMs - tCfrMs;
+        if (!std::isfinite(off)) {
+            off = prev;
+        }
+        // drop補正は「時間の穴」を足す方向なので、単調非減少に丸める
+        off = std::max(off, prev);
+        const double delta = off - prev;
+        if (delta >= LOG_EPS_MS) {
+            ctx.infoF("tsreplace drop補正: +%.3f ms (累積 %.3f ms) at frame=%d (src=%d, tCFR=%.3f ms, tPTS=%.3f ms)",
+                delta, off, k, idx, tCfrMs, tPtsMs);
+        }
+        func.offsets[k] = off;
+        prev = off;
+        maxGap = std::max(maxGap, off);
+    }
+    if (maxGap > 0.5) {
+        ctx.infoF("tsreplace drop補正: 推定ギャップ合計 %.3f ms", maxGap);
+    }
+    return func;
+}
+
+} // namespace
 
 void RFFExtractor::clear() {
     prevFrame_ = nullptr;
@@ -255,6 +366,68 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
         MakeZones(key, zones, reformInfo);
 
         MakeOutFormat(reformInfo.getFormat(key).videoFormat);
+
+        // tsreplace時は、入力TS(PCR/PTS)時間軸に同期させるため、
+        // 既存のVFR timecode(フィルタ生成)を保持しつつdropギャップ分を加算補正する。
+        if (setting_.getFormat() == FORMAT_TSREPLACE && filter_ != nullptr) {
+            const auto vi = filter_->GetVideoInfo();
+            const int nframes = vi.num_frames;
+            if (nframes > 0) {
+                // 入力側の nominal tick (CFR timeline) はフィルタ入力フォーマットに合わせる
+                const auto& infmt = reformInfo.getFormat(key).videoFormat;
+                const double tickMs = (infmt.frameRateNum > 0)
+                    ? (infmt.frameRateDenom * 1000.0 / (double)infmt.frameRateNum)
+                    : (1000.0 / 30.0);
+                const auto offsetFunc = buildPtsGapOffsetFunc(reformInfo, key, tickMs, ctx);
+
+                // drop補正が不要（ギャップが実質0）の場合は、timecodeの生成/上書きを行わない
+                // - フィルタが既にtimecodeを生成している場合は、そのまま利用する（調整はしない）
+                // - timecodeが無い場合は、tsreplaceのために新規生成もしない（元動作維持）
+                const double DROP_CORR_EPS_MS = 1.0;
+                const bool needDropCorrection = offsetFunc.valid() && (offsetFunc.offsets.back() >= DROP_CORR_EPS_MS);
+                if (!needDropCorrection) {
+                    // 既存 timeCodes_ を変更しない
+                } else {
+                    // timeCodes_ が無い/不正なら、まずCFRとして生成しておく
+                    if (timeCodes_.empty() || (int)timeCodes_.size() != nframes + 1) {
+                        const double tick = (vi.fps_numerator > 0)
+                            ? (vi.fps_denominator * 1000.0 / (double)vi.fps_numerator)
+                            : (1000.0 / 30.0);
+                        timeCodes_.resize(nframes + 1);
+                        for (int i = 0; i <= nframes; i++) {
+                            timeCodes_[i] = i * tick;
+                        }
+                    }
+                    // 0起点に正規化
+                    const double base = timeCodes_.front();
+                    if (base != 0.0) {
+                        for (auto& t : timeCodes_) t -= base;
+                    }
+
+                    std::vector<double> corrected(timeCodes_.size(), 0.0);
+                    double prev = 0.0;
+                    for (size_t i = 0; i < timeCodes_.size(); i++) {
+                        const double t = timeCodes_[i];
+                        double c = t + offsetFunc.at(t);
+                        if (!std::isfinite(c)) c = prev;
+                        c = std::max(c, prev);
+                        corrected[i] = c;
+                        prev = c;
+                    }
+                    // 0起点に再正規化（安全のため）
+                    const double cbase = corrected.front();
+                    if (cbase != 0.0) {
+                        for (auto& t : corrected) t -= cbase;
+                    }
+                    timeCodes_ = std::move(corrected);
+                    if (vfrTimingFps_ == 0) {
+                        vfrTimingFps_ = inferVfrTimingFps(timeCodes_);
+                    }
+                    // timecodeファイルを上書き出力（timelineeditor / tsreplaceへ渡す）
+                    writeTimecodeV2(setting_.getAvsTimecodePath(key), timeCodes_);
+                }
+            }
+        }
     } catch (const AvisynthError& avserror) {
         // デバッグ用にスクリプトは保存しておく
         writeScriptFile(key);

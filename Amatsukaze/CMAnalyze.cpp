@@ -8,6 +8,8 @@
 
 #include <future>
 #include <atomic>
+#include <algorithm>
+#include <cmath>
 #include "CMAnalyze.h"
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
@@ -696,19 +698,41 @@ std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey 
 }
 
 void MakeChapter::writeChapter(const std::vector<JlsElement>& chapters, EncodeFileKey key) {
-    auto& vfmt = reformInfo.getFormat(key).videoFormat;
-    float frameMs = (float)vfmt.frameRateDenom / vfmt.frameRateNum * 1000.0f;
-
     ctx.infoF("ファイル: %d-%d-%d %s", key.video, key.format, key.div, CMTypeToString(key.cm));
 
     StringBuilder sb;
-    int sumframes = 0;
     for (int i = 0; i < (int)chapters.size(); i++) {
         auto& c = chapters[i];
 
         ctx.infoF("%5d: %s", c.frameStart, c.comment.c_str());
 
-        int ms = (int)std::round(sumframes * frameMs);
+        int ms = 0;
+        if (setting.getFormat() == FORMAT_TSREPLACE) {
+            // tsreplace時のみ:
+            // 出力フレーム列(Trim/CM適用後)に対する経過時間(ms)を、フレームごとのframeDuration(90kHz)から算出する。
+            // drop(PTSギャップ)がある場合も、StreamReform側でframeDurationに反映されるので同期が維持できる。
+            const auto& outFrames = reformInfo.getEncodeFile(key).videoFrames;
+            const auto& srcFrames = reformInfo.getFilterSourceFrames(key.video);
+            std::vector<double> prefixMs(outFrames.size() + 1, 0.0);
+            for (size_t k = 0; k < outFrames.size(); k++) {
+                const int idx = outFrames[k];
+                double dur90k = 0.0;
+                if (idx >= 0 && idx < (int)srcFrames.size()) {
+                    dur90k = srcFrames[idx].frameDuration;
+                }
+                if (!(dur90k > 0.0) || !std::isfinite(dur90k)) {
+                    dur90k = 0.0;
+                }
+                prefixMs[k + 1] = prefixMs[k] + dur90k * 1000.0 / MPEG_CLOCK_HZ;
+            }
+            const int start = std::max(0, std::min((int)outFrames.size(), c.frameStart));
+            ms = (int)std::llround(prefixMs[start]);
+        } else {
+            // 従来動作: 固定fpsで積算
+            auto& vfmt = reformInfo.getFormat(key).videoFormat;
+            float frameMs = (float)vfmt.frameRateDenom / vfmt.frameRateNum * 1000.0f;
+            ms = (int)std::round(c.frameStart * frameMs);
+        }
         int s = ms / 1000;
         int m = s / 60;
         int h = m / 60;
@@ -719,8 +743,6 @@ void MakeChapter::writeChapter(const std::vector<JlsElement>& chapters, EncodeFi
 
         sb.append("CHAPTER%02d=%02d:%02d:%02d.%03d\n", (i + 1), h, m, s, ss);
         sb.append("CHAPTER%02dNAME=%s\n", (i + 1), c.comment);
-
-        sumframes += c.frameEnd - c.frameStart;
     }
 
     File file(setting.getTmpChapterPath(key), _T("w"));

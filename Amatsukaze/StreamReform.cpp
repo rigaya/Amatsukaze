@@ -748,6 +748,22 @@ void StreamReformInfo::reformMain(bool splitSub) {
                 }
             }
         }
+
+        // tsreplace時のみ:
+        // PTS差分からフレーム表示時間を再計算し、dropによるギャップを保持する
+        // - list は表示順(pts昇順)に構築されている前提
+        // - 従来の固定 timePerFrame を上書きする
+        if (isTsreplace_ && list.size() >= 1) {
+            for (size_t j = 0; j + 1 < list.size(); j++) {
+                const double dur = list[j + 1].pts - list[j].pts;
+                const bool valid = (dur > 0.0) && std::isfinite(dur);
+                list[j].frameDuration = valid ? dur : timePerFrame;
+                list[j].framePTS = (int64_t)std::llround(list[j].pts);
+            }
+            // 最終フレームは次が無いので nominal を採用
+            list.back().frameDuration = timePerFrame;
+            list.back().framePTS = (int64_t)std::llround(list.back().pts);
+        }
     }
 
     // indexAudioFrameList_を作成

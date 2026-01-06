@@ -896,6 +896,20 @@ void DoBadThing() {
         if (setting.isCopyTrimAVSEnabled()) {
             copyTrimAVSForCMOnly(ctx, setting, reformInfo, numVideoFiles);
         }
+        if (setting.isOutputChapterEnabled()) {
+            ctx.info("[チャプター生成]");
+            for (const auto& key : reformInfo.getOutFileKeys()) {
+                const auto& fileIn = reformInfo.getEncodeFile(key);
+                if (fileIn.duration >= MPEG_CLOCK_HZ /*1秒以下なら出力しない*/ && chapterMakers[key.video]) {
+                    chapterMakers[key.video]->exec(key);
+                    const auto path = setting.getTmpChapterPath(key);
+                    if (File::exists(path)) {
+                        const auto dstchapter = setting.getOutChapterPath(fileIn.key, fileIn.keyMax, setting.getFormat(), eoInfo.format);
+                        File::copy(path, dstchapter);
+                    }
+                }
+            }
+        }
         return; // CM解析のみならここで終了
     }
 
