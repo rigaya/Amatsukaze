@@ -1524,6 +1524,13 @@ namespace Amatsukaze.Server
                         }
                     }
 
+                    // プロファイルの情報を出力先にテキストとして保存
+                    if (item.Profile.SaveProfileText)
+                    {
+                        var profileString = item.Profile.ToLongString();
+                        File.WriteAllText(Path.Combine(Path.GetDirectoryName(item.DstPath), "profile.txt"), profileString);
+                    }
+
                     if (item.IsCheck)
                     {
                         waitList.Add(server.AddCheckLog(logItem));
