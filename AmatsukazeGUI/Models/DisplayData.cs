@@ -370,10 +370,7 @@ namespace Amatsukaze.Models
     {
         public override string Name { get { return "D3DVP"; } }
 
-        public static string[] GPUList { get; } = new string[]
-        {
-            "自動", "Intel", "NVIDIA", "Radeon"
-        };
+        public static string[] GPUList { get; } = Server.ProfileSettingExtensions.D3DVPGPUList;
 
         #region GPU変更通知プロパティ
         public int GPU
@@ -394,10 +391,7 @@ namespace Amatsukaze.Models
     {
         public override string Name { get { return "QTGMC"; } }
 
-        public static string[] PresetList { get; } = new string[]
-        {
-            "自動", "Faster", "Fast", "Medium", "Slow", "Slower"
-        };
+        public static string[] PresetList { get; } = Server.ProfileSettingExtensions.QTGMCPresetList;
 
         #region Preset変更通知プロパティ
         public int Preset
@@ -446,10 +440,7 @@ namespace Amatsukaze.Models
             }
         }
         #endregion
-        public static string[] FPSList { get; } = new string[]
-        {
-            "VFR", "VFR(30fps上限)", "24fps", "60fps", "SVPによる60fps化"
-        };
+        public static string[] FPSList { get; } = Server.ProfileSettingExtensions.FilterFPSList;
 
         #region SelectedFPS変更通知プロパティ
         public static FilterFPS[] FPSListData = new FilterFPS[]
@@ -470,7 +461,7 @@ namespace Amatsukaze.Models
         #endregion
 
         public static string[] VFRFpsList {
-            get { return new string[] { "60fps", "120fps" }; }
+            get { return Server.ProfileSettingExtensions.VFRFpsList; }
         }
 
         #region VFRFps変更通知プロパティ
@@ -821,16 +812,10 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        public static string[] DeblockQualityList { get; } = new string[]
-        {
-            "高(4)", "中(3)", "低(2)"
-        };
+        public static string[] DeblockQualityList { get; } = Server.ProfileSettingExtensions.DeblockQualityList;
 
         #region DeblockQuality変更通知プロパティ
-        public static int[] DeblockQualityListData = new int[]
-        {
-            4, 3, 2
-        };
+        public static int[] DeblockQualityListData { get; } = Server.ProfileSettingExtensions.DeblockQualityListData;
         public int DeblockQuality {
             get { return Array.IndexOf(DeblockQualityListData, Data.DeblockQuality); }
             set {
@@ -844,10 +829,7 @@ namespace Amatsukaze.Models
         #endregion
 
         #region DeblockStrength変更通知プロパティ
-        public static string[] DeblockStrengthList { get; } = new string[]
-        {
-            "強", "中", "弱", "低ビットレート用弱"
-        };
+        public static string[] DeblockStrengthList { get; } = Server.ProfileSettingExtensions.DeblockStrengthList;
 
         public int DeblockStrength
         {
@@ -1879,6 +1861,18 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region SaveProfileText変更通知プロパティ
+        public bool SaveProfileText {
+            get { return Data.SaveProfileText; }
+            set {
+                if (Data.SaveProfileText == value)
+                    return;
+                Data.SaveProfileText = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region Mpeg2DecoderInt変更通知プロパティ
         public int Mpeg2DecoderInt {
             get { return (int)Data.Mpeg2Decoder; }
@@ -2245,16 +2239,16 @@ namespace Amatsukaze.Models
         #endregion
 
         public string[] EncoderList {
-            get { return new string[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVT-AV1" }; }
+            get { return Server.ProfileSettingExtensions.EncoderList; }
         }
         public string[] Mpeg2DecoderList {
-            get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
+            get { return Server.ProfileSettingExtensions.Mpeg2DecoderList; }
         }
         public string[] H264DecoderList {
-            get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
+            get { return Server.ProfileSettingExtensions.H264DecoderList; }
         }
         public string[] HEVCDecoderList {
-            get { return new string[] { "デフォルト", "QSV", "CUVID" }; }
+            get { return Server.ProfileSettingExtensions.HEVCDecoderList; }
         }
 
         // エンコード分割並列数 (1～8) 用のリスト
@@ -2294,21 +2288,21 @@ namespace Amatsukaze.Models
             }
         }
         public string[] FormatList {
-            get { return new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" }; }
+            get { return Server.ProfileSettingExtensions.FormatList; }
         }
 
         public string[] SubtitleModeList {
-            get { return new string[] { "標準", "tsに字幕がない場合Whisperで生成", "常にWhisperで生成" }; }
+            get { return Server.ProfileSettingExtensions.SubtitleModeList; }
         }
         public string[] WhisperModelList {
-            get { return new string[] { "自動", "未指定", "small", "medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo" }; }
+            get { return Server.ProfileSettingExtensions.WhisperModelList; }
         }
         public string[] AudioEncoderList {
             get { 
                 if (Model?.Setting?.IsServerLinux ?? false) {
                     return new string[] { "----", "----", "fdkaac", "opusenc" };
                 } else {
-                    return new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" };
+                    return Server.ProfileSettingExtensions.AudioEncoderList;
                 }
             }
 
@@ -2557,159 +2551,7 @@ namespace Amatsukaze.Models
 
         public string ToLongString()
         {
-            var text = new FormatText();
-            text.KeyValue("プロファイル名", Data.Name);
-            text.KeyValue("更新日時", Data.LastUpdate.ToString("yyyy年MM月dd日 hh:mm:ss"));
-            text.KeyValue("エンコーダ", EncoderList[(int)Data.EncoderType]);
-            text.KeyValue("エンコーダ追加オプション", EncoderOption);
-            if (Data.EncoderType == EncoderType.SVTAV1 && Data.ForceSAR)
-            {
-                text.KeyValue("SAR比上書き", string.Format("{0}:{1}", Data.ForceSARWidth, Data.ForceSARHeight));
-            }
-            text.KeyValue("JoinLogoScpコマンドファイル", Data.JLSCommandFile ?? "チャンネル設定に従う");
-            text.KeyValue("JoinLogoScpオプション", Data.JLSOption ?? "チャンネル設定に従う");
-            text.KeyValue("chapter_exeオプション", Data.ChapterExeOption);
-
-            text.KeyValue("MPEG2デコーダ", Mpeg2DecoderList[(int)Data.Mpeg2Decoder]);
-            text.KeyValue("H264デコーダ", H264DecoderList[(int)Data.H264Deocder]);
-            text.KeyValue("HEVCデコーダ", HEVCDecoderList[(int)Data.HEVCDecoder]);
-            text.KeyValue("出力フォーマット", FormatList[(int)Data.OutputFormat]);
-            text.KeyValue("出力フォーマット-字幕がある時MKV出力する", Data.UseMKVWhenSubExists);
-            text.KeyValue("出力選択", OutputMask.Name);
-            text.KeyValue("SCRenameによるリネームを行う", Data.EnableRename);
-            text.KeyValue("SCRename書式", Data.RenameFormat);
-            text.KeyValue("ジャンルごとにフォルダ分け", Data.EnableGunreFolder);
-
-            text.KeyValue("実行前バッチ", Data.PreBatchFile ?? "なし");
-            text.KeyValue("エンコ前バッチ", Data.PreEncodeBatchFile ?? "なし");
-            text.KeyValue("実行後バッチ", Data.PostBatchFile ?? "なし");
-
-            if (Data.FilterOption == Server.FilterOption.None)
-            {
-                text.KeyValue("フィルタ", "なし");
-            }
-            else if (Data.FilterOption == Server.FilterOption.Setting)
-            {
-                text.KeyValue("フィルタ-CUDAで処理", Data.FilterSetting.EnableCUDA);
-                text.KeyValue("フィルタ-インターレース解除", Data.FilterSetting.EnableDeinterlace);
-                if (Data.FilterSetting.EnableDeinterlace)
-                {
-                    text.KeyValue("フィルタ-インターレース解除方法", Filter.SelectedDeinterlace.Name);
-                    switch (Data.FilterSetting.DeinterlaceAlgorithm)
-                    {
-                        case DeinterlaceAlgorithm.KFM:
-                            text.KeyValue("フィルタ-SMDegrainによるNR", Data.FilterSetting.KfmEnableNr);
-                            text.KeyValue("フィルタ-DecombUCF", Data.FilterSetting.KfmEnableUcf);
-                            text.KeyValue("フィルタ-出力fps", FilterKFMViewModel.FPSList[Filter.KFM.SelectedFPS]);
-                            text.KeyValue("フィルタ-VFRフレームタイミング", FilterKFMViewModel.VFRFpsList[Filter.KFM.VFRFps]);
-                            break;
-                        case DeinterlaceAlgorithm.D3DVP:
-                            text.KeyValue("フィルタ-使用GPU", FilterD3DVPViewModel.GPUList[(int)Data.FilterSetting.D3dvpGpu]);
-                            break;
-                        case DeinterlaceAlgorithm.QTGMC:
-                            text.KeyValue("フィルタ-QTGMCプリセット", FilterQTGMCViewModel.PresetList[(int)Data.FilterSetting.QtgmcPreset]);
-                            break;
-                        case DeinterlaceAlgorithm.Yadif:
-                            text.KeyValue("フィルタ-出力fps", FilterYadifViewModel.FPSList[Filter.Yadif.SelectedFPS]);
-                            break;
-                        case DeinterlaceAlgorithm.AutoVfr:
-                            text.KeyValue("フィルタ-30fpsを使用する", Filter.AutoVfr.Enable30F);
-                            text.KeyValue("フィルタ-60fpsを使用する", Filter.AutoVfr.Enable60F);
-                            text.KeyValue("フィルタ-SKIP", Filter.AutoVfr.Skip.ToString());
-                            text.KeyValue("フィルタ-REF", Filter.AutoVfr.Ref.ToString());
-                            text.KeyValue("フィルタ-CROP", Filter.AutoVfr.EnableCrop);
-                            break;
-                    }
-                }
-                text.KeyValue("フィルタ-デブロッキング", Data.FilterSetting.EnableDeblock);
-                if (Data.FilterSetting.EnableDeblock)
-                {
-                    text.KeyValue("フィルタ-デブロッキング強度", DisplayFilterSetting.DeblockStrengthList[(int)Data.FilterSetting.DeblockStrength]);
-                    text.KeyValue("フィルタ-デブロッキング品質", DisplayFilterSetting.DeblockQualityList[Filter.DeblockQuality]);
-                }
-                text.KeyValue("フィルタ-リサイズ", Data.FilterSetting.EnableResize);
-                if (Data.FilterSetting.EnableResize)
-                {
-                    text.KeyValue("フィルタ-リサイズ-縦", Data.FilterSetting.ResizeWidth.ToString());
-                    text.KeyValue("フィルタ-リサイズ-横", Data.FilterSetting.ResizeHeight.ToString());
-                }
-                text.KeyValue("フィルタ-時間軸安定化", Data.FilterSetting.EnableTemporalNR);
-                text.KeyValue("フィルタ-バンディング低減", Data.FilterSetting.EnableDeband);
-                text.KeyValue("フィルタ-エッジ強調", Data.FilterSetting.EnableEdgeLevel);
-            }
-            else
-            {
-                text.KeyValue("メインフィルタ", Data.FilterPath);
-                text.KeyValue("ポストフィルタ", Data.PostFilterPath);
-            }
-
-            text.KeyValue("2パス", Data.TwoPass);
-            text.KeyValue("CMビットレート倍率", Data.BitrateCM.ToString());
-            text.KeyValue("CM品質オフセット", Data.CMQualityOffset.ToString());
-            text.KeyValue("自動ビットレート指定", Data.AutoBuffer);
-            text.KeyValue("自動ビットレート係数", string.Format("{0}:{1}:{2}", Data.Bitrate.A, Data.Bitrate.B, Data.Bitrate.H264));
-            text.KeyValue("ニコニコ実況コメントを有効にする", Data.EnableNicoJK);
-            text.KeyValue("ニコニコ実況コメントのエラーを無視する", Data.IgnoreNicoJKError);
-            text.KeyValue("NicoJKログから優先的にコメントを取得する", Data.NicoJKLog);
-            text.KeyValue("NicoJK18サーバからコメントを取得する", Data.NicoJK18);
-            text.KeyValue("コメント出力フォーマット", Data.NicoJKFormatMask.ToString());
-            text.KeyValue("入力ファイルの移動を無効にする", Data.DisableMoveInputFile);
-            text.KeyValue("関連ファイル(*.err,*.program.txt)も処理", Data.MoveEDCBFiles);
-            text.KeyValue("チャプターを無効にする", Data.DisableChapter);
-            text.KeyValue("チャプターを出力する", Data.OutputChapter);
-            text.KeyValue("字幕を無効にする", Data.DisableSubs);
-            if (!Data.DisableSubs)
-            {
-                text.KeyValue("WebVTTを生成する", Data.EnableWebVTT);
-                text.KeyValue("字幕モード", SubtitleModeList[(int)Data.SubMode]);
-                if (Data.SubMode != Amatsukaze.Server.SubtitleMode.Arib)
-                {
-                    var wm = Data.WhisperModel;
-                    if (wm == Amatsukaze.Server.WhisperModelType.Auto)
-                    {
-                        wm = Amatsukaze.Server.WhisperModelType.AutoCurrent;
-                    }
-                    text.KeyValue("whisper-model", (wm == Amatsukaze.Server.WhisperModelType.Unspecified) ? "なし" : WhisperModelList[(int)wm]);
-                    text.KeyValue("whisper-option", Data.WhisperOption ?? "なし");
-                    text.KeyValue("Whisper並列実行", Data.WhisperParallel);
-                }
-            }
-            text.KeyValue("マッピングにないDRCS外字は無視する", Data.IgnoreNoDrcsMap);
-            text.KeyValue("ロゴ検出判定しきい値を低くする", Data.LooseLogoDetection);
-            text.KeyValue("ロゴ検出に失敗しても処理を続行する", Data.IgnoreNoLogo);
-            text.KeyValue("ロゴ消ししない", Data.NoDelogo);
-            text.KeyValue("並列ロゴ解析", Data.ParallelLogoAnalysis);
-            text.KeyValue("メインフォーマット以外は結合しない", Data.SplitSub);
-            text.KeyValue("システムにインストールされているAviSynthプラグインを有効にする", Data.SystemAviSynthPlugin);
-            text.KeyValue("ネットワーク越しに転送する場合のハッシュチェックを無効にする", Data.DisableHashCheck);
-            text.KeyValue("ログファイルを出力先に生成しない", Data.DisableLogFile);
-            text.KeyValue("一時ファイルを削除せずに残す", Data.NoRemoveTmp);
-            text.KeyValue("PMT更新によるCM認識", Data.EnablePmtCut
-                ? string.Format("{0}:{1}", Data.PmtCutHeadRate, Data.PmtCutTailRate) : "なし");
-            text.KeyValue("ロゴ最長フェードフレーム数指定", Data.EnableMaxFadeLength ? Data.MaxFadeLength.ToString() : "なし");
-            text.KeyValue("tsreplaceでTypeDを削除する", Data.TsreplaceRemoveTypeD);
-            text.KeyValue("tsreplaceでビデオを置換する", Data.TSReplaceVideo);
-            text.KeyValue("JoinLogoScpオプションを有効にする", Data.EnableJLSOption);
-            text.KeyValue("エンコードアフィニティを無視する", Data.IgnoreEncodeAffinity);
-            text.KeyValue("エンコード分割並列数", Data.EncoderParallel.ToString());
-            text.KeyValue("エンコードバッファフレーム数", Data.NumEncodeBufferFrames.ToString());
-            text.KeyValue("追加ロゴ消去", Data.AdditionalEraseLogo ?? "なし");
-            text.KeyValue("音声エンコードを有効にする", Data.EnableAudioEncode);
-            if (Data.EnableAudioEncode)
-            {
-                text.KeyValue("音声エンコーダ", AudioEncoderList[(int)Data.AudioEncoderType]);
-                text.KeyValue("NeroAACオプション", Data.NeroAacOption ?? "なし");
-                text.KeyValue("qaacオプション", Data.QaacOption ?? "なし");
-                text.KeyValue("fdkaacオプション", Data.FdkaacOption ?? "なし");
-                text.KeyValue("opusencオプション", Data.OpusEncOption ?? "なし");
-                text.KeyValue("音声ビットレートを有効にする", Data.EnableAudioBitrate);
-                if (Data.EnableAudioBitrate)
-                {
-                    text.KeyValue("音声ビットレート", Data.AudioBitrateInKbps.ToString() + "kbps");
-                }
-            }
-            text.KeyTable("スケジューリングリソース設定", GetResourceString());
-            return text.ToString();
+            return Data.ToLongString();
         }
     }
 

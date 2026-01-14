@@ -1904,6 +1904,7 @@ namespace Amatsukaze.Models
                 profile.MoveEDCBFiles = profile.MoveInputFile ? data.Profile.MoveEDCBFiles : false;
                 profile.NoRemoveTmp = data.Profile.NoRemoveTmp;
                 profile.DisableLogFile = data.Profile.DisableLogFile;
+                profile.SaveProfileText = data.Profile.SaveProfileText;
                 profile.EnableMaxFadeLength = data.Profile.EnableMaxFadeLength;
                 profile.MaxFadeLength = data.Profile.MaxFadeLength;
                 profile.SystemAviSynthPlugin = data.Profile.SystemAviSynthPlugin;
