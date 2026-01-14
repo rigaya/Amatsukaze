@@ -1,4 +1,4 @@
-﻿using Amatsukaze.Lib;
+using Amatsukaze.Lib;
 using Codeplex.Data;
 using log4net;
 using System;
@@ -1508,6 +1508,13 @@ namespace Amatsukaze.Server
                             scriptExecuter.Dispose();
                             currentScriptLog = null;
                         }
+                    }
+
+                    // プロファイルの情報を出力先にテキストとして保存
+                    if (item.Profile.SaveProfileText)
+                    {
+                        var profileString = item.Profile.ToLongString();
+                        File.WriteAllText(Path.Combine(Path.GetDirectoryName(item.DstPath), "profile.txt"), profileString);
                     }
 
                     if (item.IsCheck)

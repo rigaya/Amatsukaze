@@ -377,6 +377,8 @@ namespace Amatsukaze.Server
         public bool NoRemoveTmp { get; set; }
         [DataMember]
         public bool DisableLogFile { get; set; }
+        [DataMember]
+        public bool SaveProfileText { get; set; }
 
         [DataMember]
         public bool EnableMaxFadeLength { get; set; }
@@ -452,6 +454,293 @@ namespace Amatsukaze.Server
                 }
                 return mask;
             }
+        }
+    }
+
+    // 文字列リソース（列挙体に対応する文字列配列）
+    public static class ProfileSettingExtensions
+    {
+        public static string[] EncoderList { get; } = new string[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVT-AV1" };
+        public static string[] Mpeg2DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
+        public static string[] H264DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
+        public static string[] HEVCDecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
+        public static string[] FormatList { get; } = new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" };
+        public static string[] SubtitleModeList { get; } = new string[] { "標準", "tsに字幕がない場合Whisperで生成", "常にWhisperで生成" };
+        public static string[] WhisperModelList { get; } = new string[] { "自動", "未指定", "small", "medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo" };
+        public static string[] AudioEncoderList { get; } = new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" };
+        public static string[] DeinterlaceAlgorithmNames { get; } = new string[] { "KFM", "D3DVP", "QTGMC", "Yadif", "AutoVfr" };
+        public static string[] D3DVPGPUList { get; } = new string[] { "自動", "Intel", "NVIDIA", "Radeon" };
+        public static string[] QTGMCPresetList { get; } = new string[] { "自動", "Faster", "Fast", "Medium", "Slow", "Slower" };
+        // FilterFPS列挙体の順序: VFR, CFR24, CFR30, CFR60, SVP, VFR30
+        public static string[] FilterFPSList { get; } = new string[] { "VFR", "24fps", "30fps", "60fps", "SVPによる60fps化", "VFR(30fps上限)" };
+        public static string[] DeblockStrengthList { get; } = new string[] { "強", "中", "弱", "低ビットレート用弱" };
+        public static string[] DeblockQualityList { get; } = new string[] { "高(4)", "中(3)", "低(2)" };
+        public static int[] DeblockQualityListData { get; } = new int[] { 4, 3, 2 };
+        public static string[] VFRFpsList { get; } = new string[] { "60fps", "120fps" };
+
+        // OutputMaskのマッピング（マスク値から名前へ）
+        public static string GetOutputMaskName(int mask)
+        {
+            switch (mask)
+            {
+                case 1: return "通常";
+                case 2: return "CMをカット";
+                case 4: return "CMのみ";
+                case 6: return "本編とCMを分離";
+                case 8: return "前後のCMのみカット";
+                default: return mask.ToString();
+            }
+        }
+
+        // FilterFPSから文字列への変換（KFM用）
+        public static string GetFilterFPSString(FilterFPS fps)
+        {
+            switch (fps)
+            {
+                case FilterFPS.VFR: return "VFR";
+                case FilterFPS.VFR30: return "VFR(30fps上限)";
+                case FilterFPS.CFR24: return "24fps";
+                case FilterFPS.CFR60: return "60fps";
+                case FilterFPS.SVP: return "SVPによる60fps化";
+                default: return fps.ToString();
+            }
+        }
+
+        // FilterFPSから文字列への変換（Yadif用）
+        public static string GetYadifFPSString(FilterFPS fps)
+        {
+            switch (fps)
+            {
+                case FilterFPS.CFR24: return "24fps";
+                case FilterFPS.CFR30: return "30fps";
+                case FilterFPS.CFR60: return "60fps";
+                default: return fps.ToString();
+            }
+        }
+
+        // DeblockQualityから文字列への変換
+        public static string GetDeblockQualityString(int quality)
+        {
+            int idx = Array.IndexOf(DeblockQualityListData, quality);
+            if (idx >= 0 && idx < DeblockQualityList.Length)
+            {
+                return DeblockQualityList[idx];
+            }
+            return quality.ToString();
+        }
+
+        // エンコーダオプションを取得
+        public static string GetEncoderOption(ProfileSetting profile)
+        {
+            switch (profile.EncoderType)
+            {
+                case EncoderType.x264: return profile.X264Option;
+                case EncoderType.x265: return profile.X265Option;
+                case EncoderType.QSVEnc: return profile.QSVEncOption;
+                case EncoderType.NVEnc: return profile.NVEncOption;
+                case EncoderType.VCEEnc: return profile.VCEEncOption;
+                case EncoderType.SVTAV1: return profile.SVTAV1Option;
+                default: return null;
+            }
+        }
+
+        // リソース文字列を生成
+        public static string GetResourceString(ProfileSetting profile)
+        {
+            var sb = new StringBuilder();
+            if (profile.ReqResources != null)
+            {
+                foreach (var res in profile.ReqResources)
+                {
+                    sb.Append(res.CPU).Append(":")
+                        .Append(res.HDD).Append(":")
+                        .Append(res.GPU).AppendLine();
+                }
+            }
+            return sb.ToString();
+        }
+
+        // ToLongString()拡張メソッド
+        public static string ToLongString(this ProfileSetting profile)
+        {
+            var sb = new StringBuilder();
+
+            // KeyValueヘルパー関数
+            Action<string, string> keyValue = (key, value) =>
+            {
+                sb.Append(key).Append(": ").Append(value).AppendLine();
+            };
+
+            Action<string, bool> keyValueBool = (key, value) =>
+            {
+                sb.Append(key).Append(": ").Append(value ? "Yes" : "No").AppendLine();
+            };
+
+            Action<string, string> keyTable = (key, value) =>
+            {
+                sb.Append(key).Append(": ").AppendLine();
+                foreach (var line in value.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => "\t" + s))
+                {
+                    sb.Append(line).AppendLine();
+                }
+            };
+
+            keyValue("プロファイル名", profile.Name);
+            keyValue("更新日時", profile.LastUpdate.ToString("yyyy年MM月dd日 hh:mm:ss"));
+            keyValue("エンコーダ", EncoderList[(int)profile.EncoderType]);
+            keyValue("エンコーダ追加オプション", GetEncoderOption(profile) ?? "");
+            if (profile.EncoderType == EncoderType.SVTAV1 && profile.ForceSAR)
+            {
+                keyValue("SAR比上書き", string.Format("{0}:{1}", profile.ForceSARWidth, profile.ForceSARHeight));
+            }
+            keyValue("エンコード分割並列数", profile.EncoderParallel.ToString());
+            keyValue("JoinLogoScpコマンドファイル", profile.JLSCommandFile ?? "チャンネル設定に従う");
+            keyValue("JoinLogoScpオプション", profile.JLSOption ?? "チャンネル設定に従う");
+            keyValue("chapter_exeオプション", profile.ChapterExeOption ?? "");
+
+            keyValue("MPEG2デコーダ", Mpeg2DecoderList[(int)profile.Mpeg2Decoder]);
+            keyValue("H264デコーダ", H264DecoderList[(int)profile.H264Deocder]);
+            keyValue("HEVCデコーダ", HEVCDecoderList[(int)profile.HEVCDecoder]);
+            keyValue("出力フォーマット", FormatList[(int)profile.OutputFormat]);
+            keyValueBool("出力フォーマット-字幕がある時MKV出力する", profile.UseMKVWhenSubExists);
+            keyValue("出力選択", GetOutputMaskName(profile.OutputMask));
+            keyValueBool("SCRenameによるリネームを行う", profile.EnableRename);
+            keyValue("SCRename書式", profile.RenameFormat ?? "");
+            keyValueBool("ジャンルごとにフォルダ分け", profile.EnableGunreFolder);
+
+            keyValue("実行前バッチ", profile.PreBatchFile ?? "なし");
+            keyValue("エンコ前バッチ", profile.PreEncodeBatchFile ?? "なし");
+            keyValue("実行後バッチ", profile.PostBatchFile ?? "なし");
+
+            if (profile.FilterOption == FilterOption.None)
+            {
+                keyValue("フィルタ", "なし");
+            }
+            else if (profile.FilterOption == FilterOption.Setting)
+            {
+                keyValueBool("フィルタ-CUDAで処理", profile.FilterSetting.EnableCUDA);
+                keyValueBool("フィルタ-インターレース解除", profile.FilterSetting.EnableDeinterlace);
+                if (profile.FilterSetting.EnableDeinterlace)
+                {
+                    keyValue("フィルタ-インターレース解除方法", DeinterlaceAlgorithmNames[(int)profile.FilterSetting.DeinterlaceAlgorithm]);
+                    switch (profile.FilterSetting.DeinterlaceAlgorithm)
+                    {
+                        case DeinterlaceAlgorithm.KFM:
+                            keyValueBool("フィルタ-SMDegrainによるNR", profile.FilterSetting.KfmEnableNr);
+                            keyValueBool("フィルタ-DecombUCF", profile.FilterSetting.KfmEnableUcf);
+                            keyValue("フィルタ-出力fps", GetFilterFPSString(profile.FilterSetting.KfmFps));
+                            keyValue("フィルタ-VFRフレームタイミング", VFRFpsList[profile.FilterSetting.KfmVfr120fps ? 1 : 0]);
+                            break;
+                        case DeinterlaceAlgorithm.D3DVP:
+                            keyValue("フィルタ-使用GPU", D3DVPGPUList[(int)profile.FilterSetting.D3dvpGpu]);
+                            break;
+                        case DeinterlaceAlgorithm.QTGMC:
+                            keyValue("フィルタ-QTGMCプリセット", QTGMCPresetList[(int)profile.FilterSetting.QtgmcPreset]);
+                            break;
+                        case DeinterlaceAlgorithm.Yadif:
+                            keyValue("フィルタ-出力fps", GetYadifFPSString(profile.FilterSetting.YadifFps));
+                            break;
+                        case DeinterlaceAlgorithm.AutoVfr:
+                            keyValueBool("フィルタ-30fpsを使用する", profile.FilterSetting.AutoVfr30F);
+                            keyValueBool("フィルタ-60fpsを使用する", profile.FilterSetting.AutoVfr60F);
+                            keyValue("フィルタ-SKIP", profile.FilterSetting.AutoVfrSkip.ToString());
+                            keyValue("フィルタ-REF", profile.FilterSetting.AutoVfrRef.ToString());
+                            keyValueBool("フィルタ-CROP", profile.FilterSetting.AutoVfrCrop);
+                            break;
+                    }
+                }
+                keyValueBool("フィルタ-デブロッキング", profile.FilterSetting.EnableDeblock);
+                if (profile.FilterSetting.EnableDeblock)
+                {
+                    keyValue("フィルタ-デブロッキング強度", DeblockStrengthList[(int)profile.FilterSetting.DeblockStrength]);
+                    keyValue("フィルタ-デブロッキング品質", GetDeblockQualityString(profile.FilterSetting.DeblockQuality));
+                    keyValueBool("フィルタ-デブロッキングシャープ化", profile.FilterSetting.DeblockSharpen);
+                }
+                keyValueBool("フィルタ-リサイズ", profile.FilterSetting.EnableResize);
+                if (profile.FilterSetting.EnableResize)
+                {
+                    keyValue("フィルタ-リサイズ-縦", profile.FilterSetting.ResizeWidth.ToString());
+                    keyValue("フィルタ-リサイズ-横", profile.FilterSetting.ResizeHeight.ToString());
+                }
+                keyValueBool("フィルタ-時間軸安定化", profile.FilterSetting.EnableTemporalNR);
+                keyValueBool("フィルタ-バンディング低減", profile.FilterSetting.EnableDeband);
+                keyValueBool("フィルタ-エッジ強調", profile.FilterSetting.EnableEdgeLevel);
+            }
+            else
+            {
+                keyValue("メインフィルタ", profile.FilterPath ?? "");
+                keyValue("ポストフィルタ", profile.PostFilterPath ?? "");
+            }
+
+            keyValueBool("2パス", profile.TwoPass);
+            keyValue("CMビットレート倍率", profile.BitrateCM.ToString());
+            keyValue("CM品質オフセット", profile.CMQualityOffset.ToString());
+            keyValueBool("自動ビットレート指定", profile.AutoBuffer);
+            keyValue("自動ビットレート係数", string.Format("{0}:{1}:{2}", profile.Bitrate.A, profile.Bitrate.B, profile.Bitrate.H264));
+            keyValueBool("ニコニコ実況コメントを有効にする", profile.EnableNicoJK);
+            keyValueBool("ニコニコ実況コメントのエラーを無視する", profile.IgnoreNicoJKError);
+            keyValueBool("NicoJKログから優先的にコメントを取得する", profile.NicoJKLog);
+            keyValueBool("NicoJK18サーバからコメントを取得する", profile.NicoJK18);
+            keyValue("コメント出力フォーマット", profile.NicoJKFormatMask.ToString());
+            keyValueBool("入力ファイルの移動を無効にする", profile.DisableMoveInputFile);
+            keyValueBool("関連ファイル(*.err,*.program.txt)も処理", profile.MoveEDCBFiles);
+            keyValueBool("チャプターを無効にする", profile.DisableChapter);
+            keyValueBool("チャプターを出力する", profile.OutputChapter);
+            keyValueBool("字幕を無効にする", profile.DisableSubs);
+            if (!profile.DisableSubs)
+            {
+                keyValueBool("WebVTTを生成する", profile.EnableWebVTT);
+                keyValue("字幕モード", SubtitleModeList[(int)profile.SubMode]);
+                if (profile.SubMode != SubtitleMode.Arib)
+                {
+                    var wm = profile.WhisperModel;
+                    if (wm == WhisperModelType.Auto)
+                    {
+                        wm = WhisperModelType.AutoCurrent;
+                    }
+                    keyValue("whisper-model", (wm == WhisperModelType.Unspecified) ? "なし" : WhisperModelList[(int)wm]);
+                    keyValue("whisper-option", profile.WhisperOption ?? "なし");
+                    keyValueBool("Whisper並列実行", profile.WhisperParallel);
+                }
+            }
+            keyValueBool("マッピングにないDRCS外字は無視する", profile.IgnoreNoDrcsMap);
+            keyValueBool("ロゴ検出判定しきい値を低くする", profile.LooseLogoDetection);
+            keyValueBool("ロゴ検出に失敗しても処理を続行する", profile.IgnoreNoLogo);
+            keyValueBool("ロゴ消ししない", profile.NoDelogo);
+            keyValueBool("並列ロゴ解析", profile.ParallelLogoAnalysis);
+            keyValueBool("メインフォーマット以外は結合しない", profile.SplitSub);
+            keyValueBool("システムにインストールされているAviSynthプラグインを有効にする", profile.SystemAviSynthPlugin);
+            keyValueBool("ネットワーク越しに転送する場合のハッシュチェックを無効にする", profile.DisableHashCheck);
+            keyValueBool("ログファイルを出力先に生成しない", profile.DisableLogFile);
+            keyValueBool("一時ファイルを削除せずに残す", profile.NoRemoveTmp);
+            keyValue("PMT更新によるCM認識", profile.EnablePmtCut
+                ? string.Format("{0}:{1}", profile.PmtCutHeadRate, profile.PmtCutTailRate) : "なし");
+            keyValue("ロゴ最長フェードフレーム数指定", profile.EnableMaxFadeLength ? profile.MaxFadeLength.ToString() : "なし");
+            keyValueBool("tsreplaceでTypeDを削除する", profile.TsreplaceRemoveTypeD);
+            keyValueBool("tsreplaceでビデオを置換する", profile.TSReplaceVideo);
+            keyValueBool("JoinLogoScpオプションを有効にする", profile.EnableJLSOption);
+            keyValueBool("エンコードアフィニティを無視する", profile.IgnoreEncodeAffinity);
+            keyValue("エンコードバッファフレーム数", profile.NumEncodeBufferFrames.ToString());
+            keyValue("追加ロゴ消去", profile.AdditionalEraseLogo ?? "なし");
+            keyValueBool("音声エンコードを有効にする", profile.EnableAudioEncode);
+            if (profile.EnableAudioEncode)
+            {
+                keyValue("音声エンコーダ", AudioEncoderList[(int)profile.AudioEncoderType]);
+                keyValue("NeroAACオプション", profile.NeroAacOption ?? "なし");
+                keyValue("qaacオプション", profile.QaacOption ?? "なし");
+                keyValue("fdkaacオプション", profile.FdkaacOption ?? "なし");
+                keyValue("opusencオプション", profile.OpusEncOption ?? "なし");
+                keyValueBool("音声ビットレートを有効にする", profile.EnableAudioBitrate);
+                if (profile.EnableAudioBitrate)
+                {
+                    keyValue("音声ビットレート", profile.AudioBitrateInKbps.ToString() + "kbps");
+                }
+            }
+            keyTable("スケジューリングリソース設定", GetResourceString(profile));
+
+            return sb.ToString();
         }
     }
 
