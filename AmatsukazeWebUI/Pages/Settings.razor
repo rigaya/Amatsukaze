@@ -1,0 +1,92 @@
+@page "/settings"
+@using System.Text.Json
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h3>Settings</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+</p>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else
+{
+    <h4>Common Setting (raw)</h4>
+    <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@_settingJson</pre>
+
+    <h4>Finish Setting</h4>
+    @if (_finishSetting == null)
+    {
+        <p>No data.</p>
+    }
+    else
+    {
+        <table class="table">
+            <tr><th>Action</th><td>@(_finishSetting.Action ?? "-")</td></tr>
+            <tr><th>Seconds</th><td>@_finishSetting.Seconds</td></tr>
+            <tr><th>NoActionExe</th><td>@_finishSetting.NoActionExe</td></tr>
+            <tr><th>NoActionExeList</th><td>@(FormatList(_finishSetting.NoActionExeList))</td></tr>
+        </table>
+    }
+}
+
+@code {
+    private string? _error;
+    private bool _loading = true;
+    private string _settingJson = "{}";
+    private FinishSetting? _finishSetting;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _settingJson = "{}";
+        _finishSetting = null;
+
+        var settingTask = Api.GetSettingAsync();
+        var systemTask = Api.GetSystemAsync();
+
+        await Task.WhenAll(settingTask, systemTask);
+
+        var settingRes = await settingTask;
+        var systemRes = await systemTask;
+
+        if (!settingRes.Ok)
+        {
+            _error = settingRes.Error ?? "Failed to load settings.";
+        }
+        else if (settingRes.Data.ValueKind != JsonValueKind.Undefined && settingRes.Data.ValueKind != JsonValueKind.Null)
+        {
+            _settingJson = JsonSerializer.Serialize(settingRes.Data, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+        }
+
+        if (!systemRes.Ok && string.IsNullOrEmpty(_error))
+        {
+            _error = systemRes.Error ?? "Failed to load system data.";
+        }
+        else
+        {
+            _finishSetting = systemRes.Data?.FinishSetting;
+        }
+
+        _loading = false;
+    }
+
+    private static string FormatList(List<string>? items)
+    {
+        return items == null || items.Count == 0 ? "-" : string.Join(", ", items);
+    }
+}

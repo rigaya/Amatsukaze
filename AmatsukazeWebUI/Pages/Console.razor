@@ -1,0 +1,61 @@
+@page "/console"
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h3>Console</h3>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else if (_view == null)
+{
+    <p>No data.</p>
+}
+else
+{
+    @if (_view.Consoles.Count == 0)
+    {
+        <p>No consoles.</p>
+    }
+    else
+    {
+        @foreach (var console in _view.Consoles)
+        {
+            <div style="margin-bottom: 1rem;">
+                <div><strong>Console @console.Id</strong> @if (!string.IsNullOrEmpty(console.Phase)) { <span>(@console.Phase)</span> }</div>
+                <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@string.Join("\n", console.Lines)</pre>
+            </div>
+        }
+    }
+
+    @if (_view.AddQueueConsole.Count > 0)
+    {
+        <h4>Add Queue</h4>
+        <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@string.Join("\n", _view.AddQueueConsole)</pre>
+    }
+}
+
+@code {
+    private ConsoleView? _view;
+    private string? _error;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.GetConsoleAsync();
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to load.";
+        }
+        else
+        {
+            _view = res.Data;
+        }
+        _loading = false;
+    }
+}

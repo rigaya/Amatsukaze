@@ -1,0 +1,109 @@
+@page "/drcs"
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@inject AmatsukazeWebUI.Api.ApiBaseAddress ApiBase
+@inject NavigationManager Nav
+
+<h3>DRCS</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+</p>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else if (_items.Count == 0)
+{
+    <p>No DRCS items.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>MD5</th>
+                <th>Map</th>
+                <th>Image</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in _items)
+            {
+                <tr>
+                    <td>@(item.Md5 ?? "-")</td>
+                    <td>@(item.MapStr ?? "-")</td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(item.ImageUrl))
+                        {
+                            <img src="@GetImageUrl(item.Md5)" alt="@item.Md5" style="max-width: 120px; max-height: 120px;" />
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private readonly List<DrcsView> _items = new();
+    private readonly Dictionary<string, string> _imageUrls = new();
+    private string? _error;
+    private bool _loading = true;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _items.Clear();
+        _imageUrls.Clear();
+
+        var res = await Api.GetDrcsAsync();
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to load DRCS.";
+        }
+        else if (res.Data != null)
+        {
+            _items.AddRange(res.Data);
+            BuildImageUrls();
+        }
+
+        _loading = false;
+    }
+
+    private void BuildImageUrls()
+    {
+        var baseUri = ApiBase.Uri;
+        if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            baseUri = new Uri(Nav.BaseUri);
+        }
+        var baseText = baseUri.ToString().TrimEnd('/');
+        foreach (var item in _items)
+        {
+            if (string.IsNullOrWhiteSpace(item.ImageUrl) || string.IsNullOrWhiteSpace(item.Md5))
+            {
+                continue;
+            }
+            var tail = item.ImageUrl.StartsWith("/", StringComparison.Ordinal) ? item.ImageUrl : "/" + item.ImageUrl;
+            _imageUrls[item.Md5] = baseText + tail;
+        }
+    }
+
+    private string GetImageUrl(string? md5)
+    {
+        if (string.IsNullOrWhiteSpace(md5))
+        {
+            return string.Empty;
+        }
+        return _imageUrls.TryGetValue(md5, out var url) ? url : string.Empty;
+    }
+}
