@@ -6,6 +6,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <StartupObject>Amatsukaze.Server.ServerCLI</StartupObject>
     <Platforms>AnyCPU;x64</Platforms>
+    <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <OutputPath>..\x64\Debug\</OutputPath>

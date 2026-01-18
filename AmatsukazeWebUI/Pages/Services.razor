@@ -1,0 +1,133 @@
+@page "/services"
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@inject AmatsukazeWebUI.Api.ApiBaseAddress ApiBase
+@inject NavigationManager Nav
+
+<h3>Services</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+</p>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else if (_services.Count == 0)
+{
+    <p>No services.</p>
+}
+else
+{
+    @foreach (var service in _services)
+    {
+        <div style="margin-bottom: 1rem;">
+            <div><strong>@(service.Name ?? "-")</strong> (Id: @service.ServiceId)</div>
+            @if (service.LogoList.Count == 0)
+            {
+                <div>No logos.</div>
+            }
+            else
+            {
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    @foreach (var logo in service.LogoList)
+                    {
+                        <div style="border: 1px solid #ddd; padding: 0.5rem;">
+                            <div>@(logo.FileName ?? "-")</div>
+                            <div>Enabled: @(logo.Enabled ? "Yes" : "No")</div>
+                            <div>Name: @(logo.LogoName ?? "-")</div>
+                            <div>Size: @(FormatSize(logo.ImageWidth, logo.ImageHeight))</div>
+                            <div>Period: @(FormatPeriod(logo.From, logo.To))</div>
+                            @if (!string.IsNullOrEmpty(logo.ImageUrl))
+                            {
+                                <img src="@GetLogoUrl(service.ServiceId, logo.LogoId)" alt="@logo.FileName" style="max-width: 200px; max-height: 120px;" />
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private readonly List<ServiceView> _services = new();
+    private readonly Dictionary<string, string> _logoUrls = new();
+    private string? _error;
+    private bool _loading = true;
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _services.Clear();
+        _logoUrls.Clear();
+
+        var res = await Api.GetServicesAsync();
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to load services.";
+        }
+        else if (res.Data != null)
+        {
+            _services.AddRange(res.Data);
+            BuildLogoUrls();
+        }
+
+        _loading = false;
+    }
+
+    private void BuildLogoUrls()
+    {
+        var baseUri = ApiBase.Uri;
+        if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            baseUri = new Uri(Nav.BaseUri);
+        }
+        var baseText = baseUri.ToString().TrimEnd('/');
+
+        foreach (var service in _services)
+        {
+            foreach (var logo in service.LogoList)
+            {
+                var path = logo.ImageUrl;
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+                var tail = path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path;
+                var url = baseText + tail;
+                _logoUrls[$"{service.ServiceId}:{logo.LogoId}"] = url;
+            }
+        }
+    }
+
+    private string GetLogoUrl(int serviceId, int logoId)
+    {
+        return _logoUrls.TryGetValue($"{serviceId}:{logoId}", out var url) ? url : string.Empty;
+    }
+
+    private static string FormatSize(int? width, int? height)
+    {
+        if (width.HasValue && height.HasValue && width.Value > 0 && height.Value > 0)
+        {
+            return $"{width.Value}x{height.Value}";
+        }
+        return "-";
+    }
+
+    private static string FormatPeriod(DateTime? from, DateTime? to)
+    {
+        if (from.HasValue && to.HasValue)
+        {
+            return $"{from.Value:yyyy/MM/dd} - {to.Value:yyyy/MM/dd}";
+        }
+        return "-";
+    }
+}

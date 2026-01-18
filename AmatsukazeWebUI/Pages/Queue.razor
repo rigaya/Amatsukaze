@@ -1,0 +1,281 @@
+@page "/queue"
+@using Amatsukaze.Shared
+@using System.Text.Json
+@inject IAmatsukazeApi Api
+@inject IJSRuntime JS
+
+<h3>Queue</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+</p>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else if (!string.IsNullOrEmpty(_actionMessage))
+{
+    <p style="color: green;">@_actionMessage</p>
+}
+else if (_view == null)
+{
+    <p>No data.</p>
+}
+else
+{
+    <div>
+        <strong>Counters</strong>
+        <div>
+            Active: @_view.Counters.Active /
+            Encoding: @_view.Counters.Encoding /
+            Complete: @_view.Counters.Complete /
+            Pending: @_view.Counters.Pending /
+            Failed: @_view.Counters.Failed /
+            Canceled: @_view.Counters.Canceled
+        </div>
+    </div>
+
+    <h4>Items</h4>
+    @if (_view.Items.Count == 0)
+    {
+        <p>No queue items.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>State</th>
+                    <th>File</th>
+                    <th>Service</th>
+                    <th>Profile</th>
+                    <th>Priority</th>
+                    <th>Progress</th>
+                    <th>Start</th>
+                    <th>Finish</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _view.Items)
+                {
+                    <tr>
+                        <td>@item.Id</td>
+                        <td>@(item.StateLabel ?? item.State ?? "-")</td>
+                        <td>@(item.FileName ?? "-")</td>
+                        <td>@(item.ServiceName ?? "-")</td>
+                        <td>
+                            <div>@(item.ProfileName ?? "-")</div>
+                            <div>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CopyProfileAsync(item)">Copy</button>
+                            </div>
+                        </td>
+                        <td>
+                            <input type="number" style="width: 4rem;" @bind="_priorityInputs[item.Id]" />
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ChangePriorityAsync(item)">Set</button>
+                        </td>
+                        <td>@item.Progress.ToString("P1")</td>
+                        <td>@(item.DisplayEncodeStart ?? item.EncodeStart?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td>
+                        <td>@(item.DisplayEncodeFinish ?? item.EncodeFinish?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td>
+                        <td>
+                            <div>
+                                <select @bind="_profileInputs[item.Id]">
+                                    <option value="">(Profile)</option>
+                                    @foreach (var name in _profileNames)
+                                    {
+                                        <option value="@name">@name</option>
+                                    }
+                                </select>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ChangeProfileAsync(item)">Change</button>
+                            </div>
+                            <div style="margin-top: 0.25rem;">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => RetryAsync(item)">Retry</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReapplyProfileAsync(item)">Reapply</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CancelAsync(item)">Cancel</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => DeleteAsync(item)">Delete</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ForceStartAsync(item)">Force</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private QueueView? _view;
+    private string? _error;
+    private bool _loading = true;
+    private string? _actionMessage;
+    private readonly Dictionary<int, string?> _profileInputs = new();
+    private readonly Dictionary<int, int> _priorityInputs = new();
+    private readonly List<JsonElement> _profiles = new();
+    private readonly List<string> _profileNames = new();
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _actionMessage = null;
+        _view = null;
+        _profiles.Clear();
+        _profileNames.Clear();
+
+        var queueTask = Api.GetQueueAsync();
+        var profilesTask = Api.GetProfilesAsync();
+
+        await Task.WhenAll(queueTask, profilesTask);
+
+        var res = await queueTask;
+        var profilesRes = await profilesTask;
+
+        if (!profilesRes.Ok)
+        {
+            _error = profilesRes.Error ?? "Failed to load profiles.";
+        }
+        else if (profilesRes.Data != null)
+        {
+            _profiles.AddRange(profilesRes.Data);
+            foreach (var profile in _profiles)
+            {
+                var name = GetProfileName(profile);
+                if (!string.IsNullOrEmpty(name))
+                {
+                    _profileNames.Add(name);
+                }
+            }
+        }
+
+        if (!res.Ok && string.IsNullOrEmpty(_error))
+        {
+            _error = res.Error ?? "Failed to load queue.";
+        }
+        else
+        {
+            _view = res.Data;
+            if (_view != null)
+            {
+                foreach (var item in _view.Items)
+                {
+                    if (!_profileInputs.ContainsKey(item.Id))
+                    {
+                        _profileInputs[item.Id] = item.ProfileName ?? "";
+                    }
+                    if (!_priorityInputs.ContainsKey(item.Id))
+                    {
+                        _priorityInputs[item.Id] = item.Priority;
+                    }
+                }
+            }
+        }
+
+        _loading = false;
+    }
+
+    private static string? GetProfileName(JsonElement profile)
+    {
+        if (profile.TryGetProperty("Name", out var nameProp))
+        {
+            return nameProp.GetString();
+        }
+        if (profile.TryGetProperty("name", out var namePropLower))
+        {
+            return namePropLower.GetString();
+        }
+        return null;
+    }
+
+    private async Task CopyProfileAsync(QueueItemView item)
+    {
+        _actionMessage = null;
+        _error = null;
+        var targetName = item.ProfileName;
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            _error = "Profile name is empty.";
+            return;
+        }
+
+        var profile = _profiles.FirstOrDefault(p => string.Equals(GetProfileName(p), targetName, StringComparison.OrdinalIgnoreCase));
+        if (profile.ValueKind == JsonValueKind.Undefined)
+        {
+            _error = "Profile not found.";
+            return;
+        }
+
+        var text = profile.GetRawText();
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            _actionMessage = "Profile copied to clipboard.";
+        }
+        catch
+        {
+            _error = "Failed to copy to clipboard.";
+        }
+    }
+
+    private Task RetryAsync(QueueItemView item)
+        => ChangeItemAsync(item, ChangeItemType.ResetState);
+
+    private Task ReapplyProfileAsync(QueueItemView item)
+        => ChangeItemAsync(item, ChangeItemType.UpdateProfile);
+
+    private Task CancelAsync(QueueItemView item)
+        => ChangeItemAsync(item, ChangeItemType.Cancel);
+
+    private Task DeleteAsync(QueueItemView item)
+        => ChangeItemAsync(item, ChangeItemType.RemoveItem);
+
+    private Task ForceStartAsync(QueueItemView item)
+        => ChangeItemAsync(item, ChangeItemType.ForceStart);
+
+    private async Task ChangePriorityAsync(QueueItemView item)
+    {
+        if (!_priorityInputs.TryGetValue(item.Id, out var priority))
+        {
+            priority = item.Priority;
+        }
+        await ChangeItemAsync(item, ChangeItemType.Priority, priority: priority);
+    }
+
+    private async Task ChangeProfileAsync(QueueItemView item)
+    {
+        if (!_profileInputs.TryGetValue(item.Id, out var profile) || string.IsNullOrWhiteSpace(profile))
+        {
+            _error = "Profile name is required.";
+            return;
+        }
+        await ChangeItemAsync(item, ChangeItemType.Profile, profile: profile);
+    }
+
+    private async Task ChangeItemAsync(QueueItemView item, ChangeItemType type, int? priority = null, string? profile = null)
+    {
+        _actionMessage = null;
+        _error = null;
+        var req = new ChangeItemData
+        {
+            ItemId = item.Id,
+            ChangeType = type,
+            Priority = priority ?? 0,
+            Profile = profile
+        };
+        var res = await Api.ChangeQueueAsync(req);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Operation failed.";
+            return;
+        }
+        _actionMessage = "Operation completed.";
+        await ReloadAsync();
+    }
+}

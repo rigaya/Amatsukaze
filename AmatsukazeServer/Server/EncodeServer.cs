@@ -1,5 +1,6 @@
 #define PROFILE
 using Amatsukaze.Lib;
+using Amatsukaze.Server.Rest;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -51,6 +52,11 @@ namespace Amatsukaze.Server
         internal IUserClient Client { get; private set; }
         public Task ServerTask { get; private set; }
         internal AppData AppData_ { get; private set; }
+
+        private readonly int serverPort;
+        private MultiUserClient multiClient;
+        private RestStateStore restState;
+        private RestApiHost restApiHost;
 
         private Action finishRequested;
 
@@ -198,7 +204,21 @@ namespace Amatsukaze.Server
         #endregion
 
         public ClientManager ClientManager {
-            get { return Client as ClientManager; }
+            get {
+                if (Client is ClientManager manager)
+                {
+                    return manager;
+                }
+                if (Client is MultiUserClient multi && multi.TryGet(out ClientManager cm))
+                {
+                    return cm;
+                }
+                return null;
+            }
+        }
+
+        internal int ServerPortForRest {
+            get { return serverPort; }
         }
 
         public Dictionary<int, ServiceSettingElement> ServiceMap { get { return AppData_.services.ServiceMap; } }
@@ -259,6 +279,7 @@ namespace Amatsukaze.Server
             var prof = new Profile();
 #endif
             this.finishRequested = finishRequested;
+            serverPort = port;
 
             queueManager = new QueueManager(this);
             drcsManager = new DRCSManager(this);
@@ -285,6 +306,17 @@ namespace Amatsukaze.Server
                 ServerTask = clientManager.Listen(port);
                 this.Client = clientManager;
                 RaisePropertyChanged("ClientManager");
+            }
+
+            multiClient = new MultiUserClient(this.Client);
+            this.Client = multiClient;
+
+            var restPort = RestApiHost.GetEnabledPort(port);
+            if (restPort > 0)
+            {
+                restState = new RestStateStore(this);
+                multiClient.Add(restState);
+                restApiHost = new RestApiHost(this, restState, restPort);
             }
 #if PROFILE
             prof.PrintTime("EncodeServer 1");
@@ -546,6 +578,19 @@ namespace Amatsukaze.Server
             prof.PrintTime("EncodeServer D");
 #endif
             Debug.Print("[Init] 初期化処理が正常に完了しました");
+
+            if (restApiHost != null)
+            {
+                try
+                {
+                    await restApiHost.StartAsync();
+                    Util.AddLog($"[REST] APIサーバを起動しました。port={RestApiHost.GetEnabledPort(serverPort)}", null);
+                }
+                catch (Exception ex)
+                {
+                    Util.AddLog($"[REST] APIサーバ起動失敗: {ex.GetType().Name}: {ex.Message}", ex);
+                }
+            }
         }
 
         #region IDisposable Support
@@ -650,6 +695,18 @@ namespace Amatsukaze.Server
                         preventSuspend = null;
                     }
 
+                    if (restApiHost != null)
+                    {
+                        try
+                        {
+                            restApiHost.StopAsync().GetAwaiter().GetResult();
+                        }
+                        catch (Exception)
+                        {
+                            // Dispose中の例外は仕方ないので無視する
+                        }
+                    }
+
                     DeleteOldLogFile();
                 }
 
@@ -749,6 +806,11 @@ namespace Amatsukaze.Server
         private string GetLogoFilePath(string fileName)
         {
             return Path.Combine(GetLogoDirectoryPath(), fileName);
+        }
+
+        internal string GetLogoFilePathForRest(string fileName)
+        {
+            return GetLogoFilePath(fileName);
         }
 
         private string GetJLDirectoryPath()
@@ -3951,6 +4013,46 @@ namespace Amatsukaze.Server
             {
                 return FatalError(
                     "ロゴファイルを開けません。パス:" + logopath, exception);
+            }
+        }
+
+        internal byte[] ReadLogoImagePng(string fileName, byte bg = 0)
+        {
+            if (fileName == LogoSetting.NO_LOGO)
+            {
+                return null;
+            }
+            string logopath = GetLogoFilePath(fileName);
+            var logofile = new LogoFile(amtcontext, logopath);
+            var image = logofile.GetImage(bg);
+            using (var ms = new MemoryStream())
+            {
+                BitmapManager.SaveBitmapAsPng(image, ms);
+                return ms.ToArray();
+            }
+        }
+
+        internal bool TryGetLogoImageSize(string fileName, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (string.IsNullOrEmpty(fileName) || fileName == LogoSetting.NO_LOGO)
+            {
+                return false;
+            }
+            try
+            {
+                string logopath = GetLogoFilePath(fileName);
+                using (var logofile = new LogoFile(amtcontext, logopath))
+                {
+                    width = logofile.ImageWidth;
+                    height = logofile.ImageHeight;
+                    return true;
+                }
+            }
+            catch (IOException)
+            {
+                return false;
             }
         }
 
