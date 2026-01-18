@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="Amatsukaze.Views.QueuePanel"
+<UserControl x:Class="Amatsukaze.Views.QueuePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
@@ -1011,6 +1011,9 @@
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
                         <MenuItem Header="ファイルの場所を開く" Style="{StaticResource MenuForSelectedItems}"
                             Command="{Binding OpenFileInExplorerCommand}"
+                            CommandParameter="{Binding SelectedItems, ElementName=QueueList}" />
+                        <MenuItem Header="出力先を開く" Style="{StaticResource MenuForSelectedItems}"
+                            Command="{Binding OpenOutputInExplorerCommand}"
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}" />
                         <MenuItem Header="ワンセグを表示しない"
                                   IsChecked="{Binding Model.Setting.HideOneSeg, Mode=TwoWay}"

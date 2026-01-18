@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 
 using Livet;
 using Livet.Commands;
@@ -940,6 +941,233 @@ namespace Amatsukaze.ViewModels
                 return;
             }
             System.Diagnostics.Process.Start("EXPLORER.EXE", "/select, \"" + file.SrcPath + "\"");
+        }
+        #endregion
+
+        #region OpenOutputInExplorerCommand
+        private ListenerCommand<IEnumerable> _OpenOutputInExplorerCommand;
+
+        public ListenerCommand<IEnumerable> OpenOutputInExplorerCommand {
+            get {
+                if (_OpenOutputInExplorerCommand == null)
+                {
+                    _OpenOutputInExplorerCommand = new ListenerCommand<IEnumerable>(OpenOutputInExplorer);
+                }
+                return _OpenOutputInExplorerCommand;
+            }
+        }
+
+        public void OpenOutputInExplorer(IEnumerable selectedItems)
+        {
+            var item = selectedItems.OfType<DisplayQueueItem>().FirstOrDefault();
+            if (item == null)
+            {
+                return;
+            }
+
+            // サーバーがLinuxの場合は無効
+            if (Model.Setting.IsServerLinux)
+            {
+                MessageBox.Show("サーバーがLinux環境の場合、出力ファイルをエクスプローラーで開くことはできません");
+                return;
+            }
+
+            // CM解析のみの実行
+            if (item.Model.Mode == ProcMode.CMCheck)
+            {
+                MessageBox.Show("CM解析のみの実行です。出力ファイルはありません。");
+                return;
+            }
+            
+            // まだ出力が完了していない場合
+            if (item.Model.State == QueueState.Queue || 
+                item.Model.State == QueueState.Encoding || 
+                item.Model.State == QueueState.LogoPending)
+            {
+                MessageBox.Show("まだ出力が完了していません");
+                return;
+            }
+            
+            // エラー終了している場合
+            if (item.Model.State == QueueState.Failed || item.Model.State == QueueState.PreFailed)
+            {
+                MessageBox.Show("エンコードが失敗しています");
+                return;
+            }
+            
+            // LogItemから出力映像ファイルを取得
+            var logItem = Model.LogItems.FirstOrDefault(log => 
+            {
+                // パスを正規化して比較（大文字小文字を無視）
+                try
+                {
+                    string normalizedLogSrcPath = string.IsNullOrEmpty(log.SrcPath) ? null : Path.GetFullPath(log.SrcPath);
+                    string normalizedItemSrcPath = string.IsNullOrEmpty(item.Model.SrcPath) ? null : Path.GetFullPath(item.Model.SrcPath);
+                    bool srcPathMatch = string.Equals(normalizedLogSrcPath, normalizedItemSrcPath, StringComparison.OrdinalIgnoreCase);
+                    
+                    string normalizedLogDstPath = string.IsNullOrEmpty(log.DstPath) ? null : Path.GetFullPath(log.DstPath);
+                    string normalizedItemDstPath = string.IsNullOrEmpty(item.Model.DstPath) ? null : Path.GetFullPath(item.Model.DstPath);
+                    bool dstPathMatch = string.Equals(normalizedLogDstPath, normalizedItemDstPath, StringComparison.OrdinalIgnoreCase);
+                    
+                    return srcPathMatch && dstPathMatch && log.EncodeStartDate == item.Model.EncodeStart;
+                }
+                catch
+                {
+                    // パス正規化に失敗した場合は従来の文字列比較にフォールバック
+                    return log.SrcPath == item.Model.SrcPath && log.DstPath == item.Model.DstPath && log.EncodeStartDate == item.Model.EncodeStart;
+                }
+            });
+
+            // logItemがあり、さらにlogItem.OutPath と logItem.DstPath がnullでない場合は、logItem.OutPath から映像ファイルを取得
+            string dstPath = null;
+            if (logItem?.OutPath != null && logItem?.DstPath != null)
+            {
+                try
+                {
+                    // GetOutFilesのロジックを参考に映像ファイルを取得
+                    var tailParser = new Regex("(-(\\d+))?(_div(\\d+))?(-cm)?(-nicojk-\\d+[ST])?(\\..+)");
+                    int MAIN = 1;
+                    int OTHER = 8;
+                    
+                    Func<string, int> fileType = tail =>
+                    {
+                        var m = tailParser.Match(tail);
+                        if (m.Success == false)
+                        {
+                            return 0;
+                        }
+                        var numStr = m.Groups[2].Value;
+                        var cmStr = m.Groups[5].Value;
+                        var ext = m.Groups[7].Value;
+                        bool isSubs = (ext == ".ass") || (ext == ".srt") || (ext == ".vtt");
+                        int number = (numStr.Length == 0) ? 0 : int.Parse(numStr);
+                        bool isCM = (cmStr.Length > 0);
+                        
+                        if (isSubs || isCM)
+                        {
+                            return 0; // 字幕ファイルやCMファイルは映像ファイルではない
+                        }
+                        
+                        return number == 0 ? MAIN : OTHER;
+                    };
+                    
+                    var delemiter = Path.DirectorySeparatorChar;
+                    var mainNoExt = Path.GetFileName(logItem.DstPath);
+                    var videoFiles = logItem.OutPath
+                        .Select(s => s.Replace('/', delemiter).Replace('\\', delemiter))
+                        .Where(path =>
+                        {
+                            var fileName = Path.GetFileName(path);
+                            if (!fileName.StartsWith(mainNoExt, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return false;
+                            }
+                            var tail = fileName.Substring(mainNoExt.Length);
+                            var type = fileType(tail);
+                            return (type == MAIN || type == OTHER);
+                        })
+                        .Where(path => File.Exists(path))
+                        .ToArray();
+                
+                    if (videoFiles.Length > 0)
+                    {
+                        // videoFiles のうち、存在する最初のものを dstPath に
+                        foreach (var file in videoFiles)
+                        {
+                            if (File.Exists(file))
+                            {
+                                dstPath = file;
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // 何もせず、従来処理に進む
+                }
+                
+                if (dstPath == null)
+                {
+                    // LogItemで見つからない場合は、従来の方法で探す
+                    try {
+                        string basePath = item.Model.DstPath;
+                        
+                        if (string.IsNullOrEmpty(basePath))
+                        {
+                            MessageBox.Show("出力先が設定されていません");
+                            return;
+                        }
+                        
+                        string searchDir = Path.GetDirectoryName(basePath);
+                        string fileNameBase = Path.GetFileName(basePath);
+                        
+                        if (string.IsNullOrEmpty(searchDir) || !Directory.Exists(searchDir))
+                        {
+                            MessageBox.Show("出力先ディレクトリが見つかりません\r\n" + basePath);
+                            return;
+                        }
+                        
+                        // 1. <basePath>[*][.mp4/.mkv/.ts] を探す
+                        string[] videoExtensions = { ".mp4", ".mkv", ".ts" };
+                        var videoFiles = Directory.GetFiles(searchDir)
+                            .Where(f => 
+                            {
+                                string fileName = Path.GetFileName(f);
+                                return fileName.StartsWith(fileNameBase, StringComparison.OrdinalIgnoreCase) &&
+                                    videoExtensions.Contains(Path.GetExtension(f).ToLowerInvariant());
+                            })
+                            .ToArray();
+                        
+                        if (videoFiles.Length > 0)
+                        {
+                            dstPath = videoFiles[0];
+                        }
+                        else
+                        {
+                            // 2. <basePath>[*] を探す
+                            var matchingFiles = Directory.GetFiles(searchDir)
+                                .Where(f => Path.GetFileName(f).StartsWith(fileNameBase, StringComparison.OrdinalIgnoreCase))
+                                .ToArray();
+                            
+                            if (matchingFiles.Length > 0)
+                            {
+                                dstPath = matchingFiles[0];
+                            }
+                            else
+                            {
+                                // 3. <basePath>のディレクトリを開く
+                                dstPath = searchDir;
+                            }
+                        }
+                    }
+                    catch (Exception s)
+                    {
+                        MessageBox.Show("出力先が見つかりません\r\n" + s.Message);
+                    }
+                }
+
+            }
+            try
+            {
+                // エクスプローラーで開く
+                if (File.Exists(dstPath))
+                {
+                    System.Diagnostics.Process.Start("EXPLORER.EXE", "/select, \"" + dstPath + "\"");
+                }
+                else if (Directory.Exists(dstPath))
+                {
+                    System.Diagnostics.Process.Start("EXPLORER.EXE", "\"" + dstPath + "\"");
+                }
+                else
+                {
+                    MessageBox.Show("出力先が見つかりません\r\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("出力ファイルの取得に失敗しました: " + ex.Message);
+            }
         }
         #endregion
 
