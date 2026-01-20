@@ -52,6 +52,9 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AmatsukazeShared\AmatsukazeShared.csproj" />
+  </ItemGroup>
   
   <ItemGroup>
     <Content Include="Log4net.Config.xml">

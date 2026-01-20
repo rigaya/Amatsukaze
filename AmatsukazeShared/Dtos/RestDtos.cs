@@ -48,6 +48,50 @@ namespace Amatsukaze.Shared
         public StatusSummary? StatusSummary { get; set; }
     }
 
+    public class OutputOptionItem
+    {
+        public string? Name { get; set; }
+        public int Mask { get; set; }
+    }
+
+    public class FilterOptionItem
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    public class ProfileOptions
+    {
+        public List<string>? EncoderList { get; set; }
+        public List<int>? EncoderParallelList { get; set; }
+        public List<string>? SvtAv1BitDepthList { get; set; }
+        public List<string>? DeinterlaceAlgorithmList { get; set; }
+        public List<string>? DeblockStrengthList { get; set; }
+        public List<string>? DeblockQualityList { get; set; }
+        public List<int>? DeblockQualityValues { get; set; }
+        public List<string>? D3dvpGpuList { get; set; }
+        public List<string>? QtgmcPresetList { get; set; }
+        public List<string>? FilterFpsList { get; set; }
+        public List<string>? VfrFpsList { get; set; }
+        public List<string>? JlsCommandFiles { get; set; }
+        public List<string>? Mpeg2DecoderList { get; set; }
+        public List<string>? H264DecoderList { get; set; }
+        public List<string>? HevcDecoderList { get; set; }
+        public List<string>? FormatList { get; set; }
+        public List<OutputOptionItem>? OutputOptionList { get; set; }
+        public List<int>? TsreplaceOutputMasks { get; set; }
+        public List<string>? PreBatFiles { get; set; }
+        public List<string>? PreEncodeBatFiles { get; set; }
+        public List<string>? PostBatFiles { get; set; }
+        public List<FilterOptionItem>? FilterOptions { get; set; }
+        public List<string>? MainScriptFiles { get; set; }
+        public List<string>? PostScriptFiles { get; set; }
+        public List<string>? SubtitleModeList { get; set; }
+        public List<string>? WhisperModelList { get; set; }
+        public List<string>? AudioEncoderList { get; set; }
+        public bool IsServerLinux { get; set; }
+    }
+
     public class QueueItemView
     {
         public int Id { get; set; }
@@ -181,6 +225,46 @@ namespace Amatsukaze.Shared
         public int ServiceId { get; set; }
         public string? Name { get; set; }
         public List<LogoView> LogoList { get; set; } = new List<LogoView>();
+    }
+
+    public class ServiceSettingView
+    {
+        public int ServiceId { get; set; }
+        public string? ServiceName { get; set; }
+        public bool DisableCMCheck { get; set; }
+        public string? JlsCommand { get; set; }
+        public string? JlsOption { get; set; }
+        public List<LogoSettingView> Logos { get; set; } = new List<LogoSettingView>();
+    }
+
+    public class LogoSettingView
+    {
+        public string? FileName { get; set; }
+        public string? LogoName { get; set; }
+        public bool Enabled { get; set; }
+        public DateTime From { get; set; }
+        public DateTime To { get; set; }
+        public bool Exists { get; set; }
+        public string? ImageUrl { get; set; }
+        public int? ImageWidth { get; set; }
+        public int? ImageHeight { get; set; }
+    }
+
+    public class ServiceOptions
+    {
+        public List<string> JlsCommandFiles { get; set; } = new List<string>();
+    }
+
+    public class LogoPeriodUpdateRequest
+    {
+        public string? FileName { get; set; }
+        public DateTime? From { get; set; }
+        public DateTime? To { get; set; }
+    }
+
+    public class LogoFileNameRequest
+    {
+        public string? FileName { get; set; }
     }
 
     public class DrcsView

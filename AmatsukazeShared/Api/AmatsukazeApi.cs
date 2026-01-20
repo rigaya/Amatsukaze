@@ -118,6 +118,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<List<JsonElement>>> GetProfilesAsync()
             => GetJsonAsync<List<JsonElement>>("/api/profiles");
 
+        public Task<ApiResult<ProfileOptions>> GetProfileOptionsAsync()
+            => GetJsonAsync<ProfileOptions>("/api/profile-options");
+
         public Task<ApiResult<bool>> AddProfileAsync(JsonElement profile)
             => PostJsonAsync("/api/profiles", profile, _ => true);
 
@@ -159,14 +162,24 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<bool>> UpdateServiceAsync(JsonElement update)
             => PostJsonAsync("/api/services/update", update, _ => true);
 
-        public async Task<ApiResult<bool>> UploadLogoAsync(int serviceId, int logoIdx, byte[] pngBytes)
+        public async Task<ApiResult<bool>> UploadLogoAsync(byte[] lgdBytes, int? serviceId, int? imgWidth, int? imgHeight)
         {
             try
             {
                 using var content = new MultipartFormDataContent();
-                content.Add(new StringContent(serviceId.ToString(CultureInfo.InvariantCulture)), "serviceId");
-                content.Add(new StringContent(logoIdx.ToString(CultureInfo.InvariantCulture)), "logoIdx");
-                content.Add(new ByteArrayContent(pngBytes), "image", "logo.png");
+                if (serviceId.HasValue)
+                {
+                    content.Add(new StringContent(serviceId.Value.ToString(CultureInfo.InvariantCulture)), "serviceId");
+                }
+                if (imgWidth.HasValue)
+                {
+                    content.Add(new StringContent(imgWidth.Value.ToString(CultureInfo.InvariantCulture)), "imgw");
+                }
+                if (imgHeight.HasValue)
+                {
+                    content.Add(new StringContent(imgHeight.Value.ToString(CultureInfo.InvariantCulture)), "imgh");
+                }
+                content.Add(new ByteArrayContent(lgdBytes), "image", "logo.lgd");
                 using var res = await http.PostAsync("/api/services/logo", content);
                 if (!res.IsSuccessStatusCode)
                 {
@@ -179,6 +192,27 @@ namespace Amatsukaze.Shared
                 return ApiResult<bool>.Fail(0, ex.Message);
             }
         }
+
+        public Task<ApiResult<List<ServiceSettingView>>> GetServiceSettingsAsync()
+            => GetJsonAsync<List<ServiceSettingView>>("/api/service-settings");
+
+        public Task<ApiResult<ServiceOptions>> GetServiceOptionsAsync()
+            => GetJsonAsync<ServiceOptions>("/api/service-options");
+
+        public Task<ApiResult<bool>> UpdateServiceLogoPeriodAsync(int serviceId, LogoPeriodUpdateRequest request)
+            => PutJsonAsync($"/api/service-settings/{serviceId}/logos/period", request, _ => true);
+
+        public Task<ApiResult<bool>> RemoveServiceLogoAsync(int serviceId, LogoFileNameRequest request)
+            => DeleteJsonAsync($"/api/service-settings/{serviceId}/logos", request);
+
+        public Task<ApiResult<bool>> AddNoLogoAsync(int serviceId)
+            => PostJsonAsync($"/api/service-settings/{serviceId}/logos/no-logo", new { }, _ => true);
+
+        public Task<ApiResult<bool>> RemoveNoLogoAsync(int serviceId)
+            => DeleteAsync($"/api/service-settings/{serviceId}/logos/no-logo");
+
+        public Task<ApiResult<bool>> RequestLogoRescanAsync()
+            => PostJsonAsync("/api/services/logo/rescan", new { }, _ => true);
 
         public Task<ApiResult<List<DrcsView>>> GetDrcsAsync()
             => GetJsonAsync<List<DrcsView>>("/api/drcs");
@@ -194,6 +228,12 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<MakeScriptData>> GetMakeScriptAsync()
             => GetJsonAsync<MakeScriptData>("/api/makescript");
+
+        public Task<ApiResult<List<string>>> GetAddQueueBatFilesAsync()
+            => GetJsonAsync<List<string>>("/api/batfiles/addqueue");
+
+        public Task<ApiResult<List<string>>> GetQueueFinishBatFilesAsync()
+            => GetJsonAsync<List<string>>("/api/batfiles/queuefinish");
 
         public Task<ApiResult<bool>> UpdateMakeScriptAsync(MakeScriptData data)
             => PutJsonAsync("/api/makescript", data, _ => true);
@@ -321,6 +361,27 @@ namespace Amatsukaze.Shared
             try
             {
                 using var res = await http.DeleteAsync(url);
+                if (!res.IsSuccessStatusCode)
+                {
+                    return ApiResult<bool>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+                }
+                return ApiResult<bool>.Success(true, (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<bool>.Fail(0, ex.Message);
+            }
+        }
+
+        private async Task<ApiResult<bool>> DeleteJsonAsync(string url, object payload)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Delete, url)
+                {
+                    Content = JsonContent.Create(payload, options: jsonOptions)
+                };
+                using var res = await http.SendAsync(request);
                 if (!res.IsSuccessStatusCode)
                 {
                     return ApiResult<bool>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());

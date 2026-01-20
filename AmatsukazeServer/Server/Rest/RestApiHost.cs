@@ -9,6 +9,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
+using Amatsukaze.Shared;
 using Amatsukaze.Lib;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -62,7 +64,6 @@ namespace Amatsukaze.Server.Rest
             {
                 return;
             }
-
             var builder = WebApplication.CreateBuilder();
             builder.Services.Configure<JsonOptions>(options =>
             {
@@ -108,17 +109,47 @@ namespace Amatsukaze.Server.Rest
             MapEndpoints(app);
 
             host = app;
-            await host.StartAsync(cancellationToken);
-            await state.RequestInitialSync(server);
+            await host.StartAsync(cancellationToken).ConfigureAwait(false);
+            await state.RequestInitialSync(server).ConfigureAwait(false);
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
             if (host != null)
             {
-                await host.StopAsync(cancellationToken);
-                host.Dispose();
-                host = null;
+                var start = DateTime.Now;
+                var stopTask = host.StopAsync(cancellationToken);
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                var completed = await Task.WhenAny(stopTask, timeoutTask).ConfigureAwait(false);
+                if (completed == stopTask)
+                {
+                    try
+                    {
+                        await stopTask.ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Util.AddLog($"[REST] StopAsync failed: {ex.GetType().Name}: {ex.Message}", ex);
+                    }
+                }
+                else
+                {
+                    Util.AddLog("[REST] StopAsync timeout -> Dispose", null);
+                }
+
+                // StopAsyncが戻らないケースがあるので、必ずDisposeして解放する
+                try
+                {
+                    host.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Util.AddLog($"[REST] Dispose failed: {ex.GetType().Name}: {ex.Message}", ex);
+                }
+                finally
+                {
+                    host = null;
+                }
             }
         }
 
@@ -246,22 +277,101 @@ namespace Amatsukaze.Server.Rest
             app.MapGet("/api/logs/check.csv", () => Results.Text(BuildCheckCsv(state.GetCheckLogs()), "text/csv", Encoding.UTF8));
 
             app.MapGet("/api/profiles", () => Results.Json(state.GetProfiles()));
+            app.MapGet("/api/profile-options", () =>
+            {
+                var isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+                var audioEncoderList = isLinux
+                    ? new List<string> { "----", "----", "fdkaac", "opusenc" }
+                    : ProfileSettingExtensions.AudioEncoderList.ToList();
+                var outputOptions = new List<OutputOptionItem>
+                {
+                    new OutputOptionItem { Name = "通常", Mask = 1 },
+                    new OutputOptionItem { Name = "CMをカット", Mask = 2 },
+                    new OutputOptionItem { Name = "本編とCMを分離", Mask = 6 },
+                    new OutputOptionItem { Name = "CMのみ", Mask = 4 },
+                    new OutputOptionItem { Name = "前後のCMのみカット", Mask = 8 }
+                };
+                var filterOptions = new List<FilterOptionItem>
+                {
+                    new FilterOptionItem { Id = (int)FilterOption.None, Name = "フィルタなし" },
+                    new FilterOptionItem { Id = (int)FilterOption.Setting, Name = "標準フィルタ" },
+                    new FilterOptionItem { Id = (int)FilterOption.Custom, Name = "カスタムフィルタ" }
+                };
+                var options = new ProfileOptions
+                {
+                    EncoderList = ProfileSettingExtensions.EncoderList.ToList(),
+                    EncoderParallelList = new List<int> { 1, 2, 3, 4, 5, 6, 7, 8 },
+                    SvtAv1BitDepthList = new List<string> { "自動", "8", "10" },
+                    DeinterlaceAlgorithmList = ProfileSettingExtensions.DeinterlaceAlgorithmNames.ToList(),
+                    DeblockStrengthList = ProfileSettingExtensions.DeblockStrengthList.ToList(),
+                    DeblockQualityList = ProfileSettingExtensions.DeblockQualityList.ToList(),
+                    DeblockQualityValues = ProfileSettingExtensions.DeblockQualityListData.ToList(),
+                    D3dvpGpuList = ProfileSettingExtensions.D3DVPGPUList.ToList(),
+                    QtgmcPresetList = ProfileSettingExtensions.QTGMCPresetList.ToList(),
+                    FilterFpsList = ProfileSettingExtensions.FilterFPSList.ToList(),
+                    VfrFpsList = ProfileSettingExtensions.VFRFpsList.ToList(),
+                    JlsCommandFiles = state.GetJlsCommandFiles(),
+                    Mpeg2DecoderList = ProfileSettingExtensions.Mpeg2DecoderList.ToList(),
+                    H264DecoderList = ProfileSettingExtensions.H264DecoderList.ToList(),
+                    HevcDecoderList = ProfileSettingExtensions.HEVCDecoderList.ToList(),
+                    FormatList = ProfileSettingExtensions.FormatList.ToList(),
+                    OutputOptionList = outputOptions,
+                    TsreplaceOutputMasks = new List<int> { 1, 8 },
+                    PreBatFiles = state.GetPreBatFiles(),
+                    PreEncodeBatFiles = state.GetPreEncodeBatFiles(),
+                    PostBatFiles = state.GetPostBatFiles(),
+                    FilterOptions = filterOptions,
+                    MainScriptFiles = state.GetMainScriptFiles(),
+                    PostScriptFiles = state.GetPostScriptFiles(),
+                    SubtitleModeList = ProfileSettingExtensions.SubtitleModeList.ToList(),
+                    WhisperModelList = ProfileSettingExtensions.WhisperModelList.ToList(),
+                    AudioEncoderList = audioEncoderList,
+                    IsServerLinux = isLinux
+                };
+                return Results.Json(options);
+            });
+            app.MapMethods("/api/profiles", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/profiles/{name}", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapPost("/api/profiles", async (HttpRequest request) =>
             {
-                var data = await request.ReadFromJsonAsync<ProfileSetting>();
+                var body = await new StreamReader(request.Body).ReadToEndAsync();
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    return Results.BadRequest("Empty body");
+                }
+                var node = System.Text.Json.Nodes.JsonNode.Parse(body);
+                RemoveExtensionData(node);
+                var normalized = node?.ToJsonString();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    return Results.BadRequest("Invalid JSON");
+                }
+                var data = JsonSerializer.Deserialize<ProfileSetting>(normalized, CreateRestJsonOptions());
                 if (data == null)
                 {
-                    return Results.BadRequest();
+                    return Results.BadRequest("Invalid JSON");
                 }
                 await server.SetProfile(new ProfileUpdate() { Type = UpdateType.Add, Profile = data });
                 return Results.Json(new { ok = true });
             });
             app.MapPut("/api/profiles/{name}", async (HttpRequest request, string name) =>
             {
-                var data = await request.ReadFromJsonAsync<ProfileSetting>();
+                var body = await new StreamReader(request.Body).ReadToEndAsync();
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    return Results.BadRequest("Empty body");
+                }
+                var node = System.Text.Json.Nodes.JsonNode.Parse(body);
+                RemoveExtensionData(node);
+                var normalized = node?.ToJsonString();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    return Results.BadRequest("Invalid JSON");
+                }
+                var data = JsonSerializer.Deserialize<ProfileSetting>(normalized, CreateRestJsonOptions());
                 if (data == null)
                 {
-                    return Results.BadRequest();
+                    return Results.BadRequest("Invalid JSON");
                 }
                 await server.SetProfile(new ProfileUpdate() { Type = UpdateType.Update, Profile = data, NewName = name != data.Name ? name : null });
                 return Results.Json(new { ok = true });
@@ -273,22 +383,48 @@ namespace Amatsukaze.Server.Rest
             });
 
             app.MapGet("/api/autoselect", () => Results.Json(state.GetAutoSelects()));
+            app.MapMethods("/api/autoselect", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/autoselect/{name}", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapPost("/api/autoselect", async (HttpRequest request) =>
             {
-                var data = await request.ReadFromJsonAsync<AutoSelectProfile>();
+                var body = await new StreamReader(request.Body).ReadToEndAsync();
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    return Results.BadRequest("Empty body");
+                }
+                var node = System.Text.Json.Nodes.JsonNode.Parse(body);
+                RemoveExtensionData(node);
+                var normalized = node?.ToJsonString();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    return Results.BadRequest("Invalid JSON");
+                }
+                var data = JsonSerializer.Deserialize<AutoSelectProfile>(normalized, CreateRestJsonOptions());
                 if (data == null)
                 {
-                    return Results.BadRequest();
+                    return Results.BadRequest("Invalid JSON");
                 }
                 await server.SetAutoSelect(new AutoSelectUpdate() { Type = UpdateType.Add, Profile = data });
                 return Results.Json(new { ok = true });
             });
             app.MapPut("/api/autoselect/{name}", async (HttpRequest request, string name) =>
             {
-                var data = await request.ReadFromJsonAsync<AutoSelectProfile>();
+                var body = await new StreamReader(request.Body).ReadToEndAsync();
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    return Results.BadRequest("Empty body");
+                }
+                var node = System.Text.Json.Nodes.JsonNode.Parse(body);
+                RemoveExtensionData(node);
+                var normalized = node?.ToJsonString();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    return Results.BadRequest("Invalid JSON");
+                }
+                var data = JsonSerializer.Deserialize<AutoSelectProfile>(normalized, CreateRestJsonOptions());
                 if (data == null)
                 {
-                    return Results.BadRequest();
+                    return Results.BadRequest("Invalid JSON");
                 }
                 await server.SetAutoSelect(new AutoSelectUpdate() { Type = UpdateType.Update, Profile = data, NewName = name != data.Name ? name : null });
                 return Results.Json(new { ok = true });
@@ -300,6 +436,11 @@ namespace Amatsukaze.Server.Rest
             });
 
             app.MapGet("/api/services", () => Results.Json(state.GetServiceViews()));
+            app.MapGet("/api/service-settings", () => Results.Json(state.GetServiceSettingViews()));
+            app.MapGet("/api/service-options", () => Results.Json(new ServiceOptions()
+            {
+                JlsCommandFiles = state.GetJlsCommandFiles()
+            }));
             app.MapPost("/api/services/update", async (HttpRequest request) =>
             {
                 var data = await request.ReadFromJsonAsync<ServiceSettingUpdate>();
@@ -311,6 +452,116 @@ namespace Amatsukaze.Server.Rest
                 return Results.Json(new { ok = true });
             });
 
+            app.MapPut("/api/service-settings/{serviceId}/logos/period", async (HttpRequest request, int serviceId) =>
+            {
+                var data = await request.ReadFromJsonAsync<LogoPeriodUpdateRequest>(CreateRestJsonOptions());
+                if (data == null || string.IsNullOrWhiteSpace(data.FileName))
+                {
+                    return Results.BadRequest();
+                }
+                if (!state.TryGetServiceSetting(serviceId, out var service) || service == null)
+                {
+                    return Results.NotFound();
+                }
+                var logo = service.LogoSettings?.FirstOrDefault(l => l.FileName == data.FileName);
+                if (logo == null)
+                {
+                    return Results.NotFound();
+                }
+                if (data.From.HasValue)
+                {
+                    logo.From = data.From.Value;
+                }
+                if (data.To.HasValue)
+                {
+                    logo.To = data.To.Value;
+                }
+                await server.SetServiceSetting(new ServiceSettingUpdate()
+                {
+                    Type = ServiceSettingUpdateType.Update,
+                    ServiceId = serviceId,
+                    Data = service
+                });
+                return Results.Json(new { ok = true });
+            });
+
+            app.MapDelete("/api/service-settings/{serviceId}/logos", async (HttpRequest request, int serviceId) =>
+            {
+                var data = await request.ReadFromJsonAsync<LogoFileNameRequest>(CreateRestJsonOptions());
+                if (data == null || string.IsNullOrWhiteSpace(data.FileName))
+                {
+                    return Results.BadRequest();
+                }
+                if (!state.TryGetServiceSetting(serviceId, out var service) || service == null)
+                {
+                    return Results.NotFound();
+                }
+                var idx = -1;
+                if (service.LogoSettings != null)
+                {
+                    for (int i = 0; i < service.LogoSettings.Count; i++)
+                    {
+                        if (service.LogoSettings[i]?.FileName == data.FileName)
+                        {
+                            idx = i;
+                            break;
+                        }
+                    }
+                }
+                if (idx < 0)
+                {
+                    return Results.NotFound();
+                }
+                await server.SetServiceSetting(new ServiceSettingUpdate()
+                {
+                    Type = ServiceSettingUpdateType.RemoveLogo,
+                    ServiceId = serviceId,
+                    RemoveLogoIndex = idx
+                });
+                return Results.Json(new { ok = true });
+            });
+
+            app.MapPost("/api/service-settings/{serviceId}/logos/no-logo", async (int serviceId) =>
+            {
+                await server.SetServiceSetting(new ServiceSettingUpdate()
+                {
+                    Type = ServiceSettingUpdateType.AddNoLogo,
+                    ServiceId = serviceId
+                });
+                return Results.Json(new { ok = true });
+            });
+
+            app.MapDelete("/api/service-settings/{serviceId}/logos/no-logo", async (int serviceId) =>
+            {
+                if (!state.TryGetServiceSetting(serviceId, out var service) || service == null)
+                {
+                    return Results.NotFound();
+                }
+                var idx = -1;
+                if (service.LogoSettings != null)
+                {
+                    for (int i = 0; i < service.LogoSettings.Count; i++)
+                    {
+                        if (service.LogoSettings[i]?.FileName == LogoSetting.NO_LOGO)
+                        {
+                            idx = i;
+                            break;
+                        }
+                    }
+                }
+                if (idx < 0)
+                {
+                    return Results.NotFound();
+                }
+                await server.SetServiceSetting(new ServiceSettingUpdate()
+                {
+                    Type = ServiceSettingUpdateType.RemoveLogo,
+                    ServiceId = serviceId,
+                    RemoveLogoIndex = idx
+                });
+                return Results.Json(new { ok = true });
+            });
+
             app.MapPost("/api/services/logo", async (HttpRequest request) =>
             {
                 if (!request.HasFormContentType)
@@ -318,29 +569,164 @@ namespace Amatsukaze.Server.Rest
                     return Results.BadRequest();
                 }
                 var form = await request.ReadFormAsync();
-                if (!int.TryParse(form["serviceId"], out var serviceId))
+                int? serviceId = null;
+                if (int.TryParse(form["serviceId"], out var parsedServiceId))
                 {
-                    return Results.BadRequest();
+                    serviceId = parsedServiceId;
                 }
-                if (!int.TryParse(form["logoIdx"], out var logoIdx))
+                int? imgw = null;
+                int? imgh = null;
+                if (int.TryParse(form["imgw"], out var parsedImgw))
                 {
-                    return Results.BadRequest();
+                    imgw = parsedImgw;
+                }
+                if (int.TryParse(form["imgh"], out var parsedImgh))
+                {
+                    imgh = parsedImgh;
                 }
                 var file = form.Files.GetFile("image");
                 if (file == null)
                 {
                     return Results.BadRequest();
                 }
+                byte[] uploadData;
                 using (var ms = new MemoryStream())
                 {
                     await file.CopyToAsync(ms);
-                    await server.SendLogoFile(new LogoFileData()
-                    {
-                        Data = ms.ToArray(),
-                        ServiceId = serviceId,
-                        LogoIdx = logoIdx
-                    });
+                    uploadData = ms.ToArray();
                 }
+                if (uploadData.Length == 0)
+                {
+                    return Results.BadRequest("Empty file.");
+                }
+
+                using var ctx = new AMTContext();
+                var tmpBase = Path.Combine(Path.GetTempPath(), "amatsukaze-logo-" + Guid.NewGuid().ToString("N"));
+                var srcPath = tmpBase + ".lgd";
+                var tmpConverted = tmpBase + "-converted.lgd";
+                try
+                {
+                    await File.WriteAllBytesAsync(srcPath, uploadData);
+                    int? extendedSid = null;
+                    string extendedServiceName = null;
+                    try
+                    {
+                        using (var logo = new LogoFile(ctx, srcPath))
+                        {
+                            extendedSid = logo.ServiceId;
+                            extendedServiceName = logo.Name;
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        extendedSid = null;
+                    }
+
+                    if (extendedSid.HasValue)
+                    {
+                        var fileSid = extendedSid.Value;
+                        try
+                        {
+                            using var verify = new LogoFile(ctx, srcPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            return Results.BadRequest("Invalid lgd file: " + ex.Message);
+                        }
+                        if (!state.TryGetServiceSetting(fileSid, out var existing) || existing == null)
+                        {
+                            string NormalizeServiceName(string name)
+                            {
+                                if (string.IsNullOrWhiteSpace(name))
+                                {
+                                    return name ?? string.Empty;
+                                }
+                                var s = name.Trim();
+                                if (s.EndsWith(")", StringComparison.Ordinal))
+                                {
+                                    var idx = s.LastIndexOf('(');
+                                    if (idx >= 0 && idx < s.Length - 1)
+                                    {
+                                        s = s.Substring(0, idx).TrimEnd();
+                                    }
+                                }
+                                return s;
+                            }
+
+                            var element = new ServiceSettingElement()
+                            {
+                                ServiceId = fileSid,
+                                ServiceName = string.IsNullOrWhiteSpace(extendedServiceName)
+                                    ? $"SID{fileSid}"
+                                    : NormalizeServiceName(extendedServiceName),
+                                DisableCMCheck = false,
+                                JLSCommand = state.GetJlsCommandFiles().FirstOrDefault(),
+                                JLSOption = "",
+                                LogoSettings = new List<LogoSetting>(),
+                            };
+                            await server.SetServiceSetting(new ServiceSettingUpdate()
+                            {
+                                Type = ServiceSettingUpdateType.Update,
+                                ServiceId = element.ServiceId,
+                                Data = element
+                            });
+                        }
+                        await server.SendLogoFile(new LogoFileData()
+                        {
+                            Data = uploadData,
+                            ServiceId = fileSid,
+                            LogoIdx = 1
+                        });
+                    }
+                    else
+                    {
+                        if (!serviceId.HasValue)
+                        {
+                            return Results.BadRequest("ServiceId is required for AviUtl lgd.");
+                        }
+                        if (!imgw.HasValue || !imgh.HasValue || imgw.Value <= 0 || imgh.Value <= 0)
+                        {
+                            return Results.BadRequest("imgw/imgh is required for AviUtl lgd.");
+                        }
+                        LogoFile.ConvertAviUtlToExtended(ctx, srcPath, tmpConverted, serviceId.Value, imgw.Value, imgh.Value);
+                        try
+                        {
+                            using var verify = new LogoFile(ctx, tmpConverted);
+                        }
+                        catch (Exception ex)
+                        {
+                            return Results.BadRequest("Invalid converted lgd file: " + ex.Message);
+                        }
+                        var convertedData = await File.ReadAllBytesAsync(tmpConverted);
+                        await server.SendLogoFile(new LogoFileData()
+                        {
+                            Data = convertedData,
+                            ServiceId = serviceId.Value,
+                            LogoIdx = 1
+                        });
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        if (File.Exists(srcPath))
+                        {
+                            File.Delete(srcPath);
+                        }
+                        if (File.Exists(tmpConverted))
+                        {
+                            File.Delete(tmpConverted);
+                        }
+                    }
+                    catch { }
+                }
+                return Results.Json(new { ok = true });
+            });
+
+            app.MapPost("/api/services/logo/rescan", () =>
+            {
+                server.RequestLogoRescan();
                 return Results.Json(new { ok = true });
             });
 
@@ -359,18 +745,45 @@ namespace Amatsukaze.Server.Rest
             app.MapGet("/api/console", () => Results.Json(state.GetConsoleView()));
 
             app.MapGet("/api/settings", () => Results.Json(state.GetSetting()));
+            app.MapMethods("/api/settings", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapPut("/api/settings", async (HttpRequest request) =>
             {
-                var data = await request.ReadFromJsonAsync<Setting>();
-                if (data == null)
+                try
                 {
-                    return Results.BadRequest();
+                    var origin = request.Headers["Origin"].ToString();
+                    var body = await new StreamReader(request.Body).ReadToEndAsync();
+                    Console.WriteLine($"[REST] PUT /api/settings Origin='{origin}' Length={body?.Length ?? 0}");
+                    if (string.IsNullOrWhiteSpace(body))
+                    {
+                        return Results.BadRequest("Empty body");
+                    }
+
+                    var node = System.Text.Json.Nodes.JsonNode.Parse(body);
+                    RemoveExtensionData(node);
+                    var normalized = node?.ToJsonString();
+                    if (string.IsNullOrWhiteSpace(normalized))
+                    {
+                        return Results.BadRequest("Invalid JSON");
+                    }
+
+                    var data = JsonSerializer.Deserialize<Setting>(normalized, CreateRestJsonOptions());
+                    if (data == null)
+                    {
+                        return Results.BadRequest("Invalid JSON");
+                    }
+                    await server.SetCommonData(new CommonData() { Setting = data });
+                    return Results.Json(new { ok = true });
                 }
-                await server.SetCommonData(new CommonData() { Setting = data });
-                return Results.Json(new { ok = true });
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[REST] PUT /api/settings Error: {ex}");
+                    return Results.Problem("Failed to update settings");
+                }
             });
 
             app.MapGet("/api/makescript", () => Results.Json(state.GetMakeScriptData()));
+            app.MapGet("/api/batfiles/addqueue", () => Results.Json(state.GetAddQueueBatFiles()));
+            app.MapGet("/api/batfiles/queuefinish", () => Results.Json(state.GetQueueFinishBatFiles()));
             app.MapPut("/api/makescript", async (HttpRequest request) =>
             {
                 var data = await request.ReadFromJsonAsync<MakeScriptData>();
@@ -648,6 +1061,45 @@ namespace Amatsukaze.Server.Rest
                 image.Save(ms, new PngEncoder());
                 return ms.ToArray();
             }
+        }
+
+        private static void RemoveExtensionData(System.Text.Json.Nodes.JsonNode node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+            if (node is System.Text.Json.Nodes.JsonObject obj)
+            {
+                var keys = obj.Select(kv => kv.Key).ToList();
+                foreach (var key in keys)
+                {
+                    if (string.Equals(key, "ExtensionData", StringComparison.OrdinalIgnoreCase))
+                    {
+                        obj.Remove(key);
+                        continue;
+                    }
+                    RemoveExtensionData(obj[key]);
+                }
+                return;
+            }
+            if (node is System.Text.Json.Nodes.JsonArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    RemoveExtensionData(item);
+                }
+            }
+        }
+
+        private static JsonSerializerOptions CreateRestJsonOptions()
+        {
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            options.Converters.Add(new JsonStringEnumConverter());
+            return options;
         }
     }
 }

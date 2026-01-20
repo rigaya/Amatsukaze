@@ -226,17 +226,25 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/li
 # .NET アプリケーションの公開
 if [ "$DEBUG_BUILD" = true ]; then
     echo ".NET アプリケーションをデバッグモードで公開します..."
-    if ! dotnet publish AmatsukazeLinux.sln -c Debug -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
-        echo ".NET アプリケーションの公開に失敗しました"
-        exit 1
-    fi
+    DOTNET_PUBLISH_CONFIG=Debug
 else
     echo ".NET アプリケーションをリリースモードで公開します..."
-    if ! dotnet publish AmatsukazeLinux.sln -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
-        echo ".NET アプリケーションの公開に失敗しました"
+    DOTNET_PUBLISH_CONFIG=Release
+fi
+
+# ソリューション全体の publish だと WebUI が PublishSingleFile に非対応のため失敗するため、
+# 実行ファイルが必要なプロジェクトのみ publish する
+DOTNET_PUBLISH_PROJECTS="
+AmatsukazeServerCLI/AmatsukazeServerCLI.csproj
+AmatsukazeAddTask/AmatsukazeAddTask.csproj
+ScriptCommand/ScriptCommand.csproj
+"
+for project in ${DOTNET_PUBLISH_PROJECTS}; do
+    if ! dotnet publish "${project}" -c "${DOTNET_PUBLISH_CONFIG}" -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
+        echo ".NET アプリケーションの公開に失敗しました (${project})"
         exit 1
     fi
-fi
+done
 # defaultファイルのコピー
 cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
 cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"

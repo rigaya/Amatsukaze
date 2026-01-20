@@ -1,0 +1,293 @@
+@page "/makescript"
+@using System.Text.Json
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h3>MakeScript</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+    @if (!string.IsNullOrEmpty(_downloadUrl))
+    {
+        <a class="btn btn-secondary" href="@_downloadUrl" download="@_downloadName">バッチファイル作成</a>
+    }
+</p>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else
+{
+    <h4>編集</h4>
+    @if (_edit == null)
+    {
+        <p>No data.</p>
+    }
+    else
+    {
+        <table class="table">
+            <tr>
+                <th>プロファイル</th>
+                <td>
+                    <select value="@_edit.Profile" @onchange="OnProfileChanged">
+                        <option value="">(None)</option>
+                        @foreach (var name in _profileNames)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>優先度</th>
+                <td>
+                    <select value="@_edit.Priority" @onchange="OnPriorityChanged">
+                        @foreach (var p in _priorities)
+                        {
+                            <option value="@p">@p</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>出力先</th>
+                <td><input value="@_edit.OutDir" @oninput="OnOutDirChanged" /></td>
+            </tr>
+            <tr>
+                <th>追加時バッチ</th>
+                <td>
+                    <select value="@_edit.AddQueueBat" @onchange="OnAddQueueBatChanged">
+                        <option value="">(None)</option>
+                        @foreach (var name in _addQueueBatFiles)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>WOL</th>
+                <td>
+                    <input type="checkbox" checked="@_edit.IsWakeOnLan" @onchange="OnWakeOnLanChanged" />
+                </td>
+            </tr>
+            <tr>
+                <th>_EDCBX_DIRECT_</th>
+                <td>
+                    <input type="checkbox" checked="@_edit.IsDirect" @onchange="OnDirectChanged" />
+                </td>
+            </tr>
+        </table>
+    }
+
+    <h4>Preview</h4>
+    @if (_preview == null)
+    {
+        <p>No preview.</p>
+    }
+    else
+    {
+        <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@(_preview.CommandLine ?? "")</pre>
+    }
+}
+
+@code {
+    private MakeScriptData? _data;
+    private MakeScriptData? _edit;
+    private MakeScriptPreview? _preview;
+    private string? _error;
+    private bool _loading = true;
+    private bool _updating;
+    private readonly List<string> _profileNames = new();
+    private readonly List<string> _addQueueBatFiles = new();
+    private readonly List<int> _priorities = new() { 1, 2, 3, 4, 5 };
+    private string? _downloadUrl;
+    private string _downloadName = "AmatsukazeAddTask.bat";
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _data = null;
+        _edit = null;
+        _preview = null;
+        _profileNames.Clear();
+        _addQueueBatFiles.Clear();
+        _downloadUrl = null;
+
+        var dataTask = Api.GetMakeScriptAsync();
+        var previewTask = Api.GetMakeScriptPreviewAsync();
+        var profileTask = Api.GetProfilesAsync();
+        var batTask = Api.GetAddQueueBatFilesAsync();
+
+        await Task.WhenAll(dataTask, previewTask, profileTask, batTask);
+
+        var dataRes = await dataTask;
+        var previewRes = await previewTask;
+        var profileRes = await profileTask;
+        var batRes = await batTask;
+
+        if (!dataRes.Ok)
+        {
+            _error = dataRes.Error ?? "Failed to load makescript.";
+        }
+        else
+        {
+            _data = dataRes.Data;
+            _edit = Clone(_data);
+        }
+
+        if (!previewRes.Ok && string.IsNullOrEmpty(_error))
+        {
+            _error = previewRes.Error ?? "Failed to load preview.";
+        }
+        else
+        {
+            _preview = previewRes.Data;
+            UpdateDownload();
+        }
+
+        if (profileRes.Ok && profileRes.Data != null)
+        {
+            foreach (var p in profileRes.Data)
+            {
+                if (p.TryGetProperty("Name", out var nameProp))
+                {
+                    var name = nameProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        _profileNames.Add(name);
+                    }
+                }
+                else if (p.TryGetProperty("name", out var namePropLower))
+                {
+                    var name = namePropLower.GetString();
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        _profileNames.Add(name);
+                    }
+                }
+            }
+        }
+
+        if (batRes.Ok && batRes.Data != null)
+        {
+            _addQueueBatFiles.AddRange(batRes.Data);
+        }
+
+        _loading = false;
+    }
+
+    private static MakeScriptData? Clone(MakeScriptData? src)
+    {
+        if (src == null)
+        {
+            return null;
+        }
+        return new MakeScriptData
+        {
+            Profile = src.Profile,
+            OutDir = src.OutDir,
+            NasDir = src.NasDir,
+            IsNasEnabled = src.IsNasEnabled,
+            IsWakeOnLan = src.IsWakeOnLan,
+            MoveAfter = src.MoveAfter,
+            ClearEncoded = src.ClearEncoded,
+            WithRelated = src.WithRelated,
+            IsDirect = src.IsDirect,
+            Priority = src.Priority,
+            AddQueueBat = src.AddQueueBat
+        };
+    }
+
+    private async Task OnProfileChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.Profile = e.Value?.ToString();
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnPriorityChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            _edit.Priority = value;
+            await UpdatePreviewAsync();
+        }
+    }
+
+    private async Task OnOutDirChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.OutDir = e.Value?.ToString();
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnAddQueueBatChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.AddQueueBat = e.Value?.ToString();
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnWakeOnLanChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.IsWakeOnLan = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnDirectChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.IsDirect = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
+    private async Task UpdatePreviewAsync()
+    {
+        if (_edit == null || _updating)
+        {
+            return;
+        }
+        _updating = true;
+        _error = null;
+        var updateRes = await Api.UpdateMakeScriptAsync(_edit);
+        if (!updateRes.Ok)
+        {
+            _error = updateRes.Error ?? "Failed to update makescript.";
+            _updating = false;
+            return;
+        }
+        var previewRes = await Api.GetMakeScriptPreviewAsync();
+        if (!previewRes.Ok)
+        {
+            _error = previewRes.Error ?? "Failed to load preview.";
+        }
+        else
+        {
+            _preview = previewRes.Data;
+            UpdateDownload();
+        }
+        _updating = false;
+    }
+
+    private void UpdateDownload()
+    {
+        if (_preview == null || string.IsNullOrWhiteSpace(_preview.CommandLine))
+        {
+            _downloadUrl = null;
+            return;
+        }
+        var content = _preview.CommandLine + "\r\n";
+        _downloadUrl = "data:text/plain;charset=utf-8," + Uri.EscapeDataString(content);
+    }
+}
