@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Amatsukaze.Lib;
+using Amatsukaze.Shared;
 
 namespace Amatsukaze.Server.Rest
 {
@@ -68,6 +69,14 @@ namespace Amatsukaze.Server.Rest
         private Setting setting;
         private UIState uiState;
         private MakeScriptData makeScriptData;
+        private List<string> addQueueBatFiles = new List<string>();
+        private List<string> queueFinishBatFiles = new List<string>();
+        private List<string> jlsCommandFiles = new List<string>();
+        private List<string> mainScriptFiles = new List<string>();
+        private List<string> postScriptFiles = new List<string>();
+        private List<string> preBatFiles = new List<string>();
+        private List<string> preEncodeBatFiles = new List<string>();
+        private List<string> postBatFiles = new List<string>();
         private List<DiskItem> disks = new List<DiskItem>();
         private List<int> cpuClusters = new List<int>();
 
@@ -256,6 +265,54 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        public List<string> GetJlsCommandFiles()
+        {
+            lock (sync)
+            {
+                return jlsCommandFiles.ToList();
+            }
+        }
+
+        public List<string> GetMainScriptFiles()
+        {
+            lock (sync)
+            {
+                return mainScriptFiles.ToList();
+            }
+        }
+
+        public List<string> GetPostScriptFiles()
+        {
+            lock (sync)
+            {
+                return postScriptFiles.ToList();
+            }
+        }
+
+        public List<string> GetPreBatFiles()
+        {
+            lock (sync)
+            {
+                return preBatFiles.ToList();
+            }
+        }
+
+        public List<string> GetPreEncodeBatFiles()
+        {
+            lock (sync)
+            {
+                return preEncodeBatFiles.ToList();
+            }
+        }
+
+        public List<string> GetPostBatFiles()
+        {
+            lock (sync)
+            {
+                return postBatFiles.ToList();
+            }
+        }
+
         public List<AutoSelectProfile> GetAutoSelects()
         {
             lock (sync)
@@ -304,6 +361,63 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        public List<ServiceSettingView> GetServiceSettingViews()
+        {
+            lock (sync)
+            {
+                return services.Values.Select(service =>
+                {
+                    var view = new ServiceSettingView()
+                    {
+                        ServiceId = service.ServiceId,
+                        ServiceName = service.ServiceName,
+                        DisableCMCheck = service.DisableCMCheck,
+                        JlsCommand = service.JLSCommand,
+                        JlsOption = service.JLSOption
+                    };
+                    if (service.LogoSettings != null)
+                    {
+                        for (int i = 0; i < service.LogoSettings.Count; i++)
+                        {
+                            var logo = service.LogoSettings[i];
+                            var logoView = new LogoSettingView()
+                            {
+                                FileName = logo.FileName,
+                                LogoName = logo.LogoName,
+                                Enabled = logo.Enabled,
+                                From = logo.From,
+                                To = logo.To,
+                                Exists = logo.Exists,
+                                ImageUrl = (logo.FileName == LogoSetting.NO_LOGO) ? null : $"/api/assets/logo/{service.ServiceId}/{i}"
+                            };
+                            if (encodeServer != null && logo.FileName != LogoSetting.NO_LOGO &&
+                                encodeServer.TryGetLogoImageSize(logo.FileName, out var w, out var h))
+                            {
+                                logoView.ImageWidth = w;
+                                logoView.ImageHeight = h;
+                            }
+                            view.Logos.Add(logoView);
+                        }
+                    }
+                    return view;
+                }).ToList();
+            }
+        }
+
+        public bool TryGetServiceSetting(int serviceId, out ServiceSettingElement service)
+        {
+            lock (sync)
+            {
+                if (services.TryGetValue(serviceId, out var existing))
+                {
+                    service = CopyService(existing);
+                    return true;
+                }
+            }
+            service = null;
+            return false;
+        }
+
         public List<DrcsView> GetDrcsViews()
         {
             lock (sync)
@@ -330,6 +444,22 @@ namespace Amatsukaze.Server.Rest
             lock (sync)
             {
                 return makeScriptData != null ? ServerSupport.DeepCopy(makeScriptData) : null;
+            }
+        }
+
+        public List<string> GetAddQueueBatFiles()
+        {
+            lock (sync)
+            {
+                return addQueueBatFiles.ToList();
+            }
+        }
+
+        public List<string> GetQueueFinishBatFiles()
+        {
+            lock (sync)
+            {
+                return queueFinishBatFiles.ToList();
             }
         }
 
@@ -568,6 +698,38 @@ namespace Amatsukaze.Server.Rest
                 if (data.MakeScriptData != null)
                 {
                     makeScriptData = ServerSupport.DeepCopy(data.MakeScriptData);
+                }
+                if (data.AddQueueBatFiles != null)
+                {
+                    addQueueBatFiles = data.AddQueueBatFiles.ToList();
+                }
+                if (data.QueueFinishBatFiles != null)
+                {
+                    queueFinishBatFiles = data.QueueFinishBatFiles.ToList();
+                }
+                if (data.JlsCommandFiles != null)
+                {
+                    jlsCommandFiles = data.JlsCommandFiles.ToList();
+                }
+                if (data.MainScriptFiles != null)
+                {
+                    mainScriptFiles = data.MainScriptFiles.ToList();
+                }
+                if (data.PostScriptFiles != null)
+                {
+                    postScriptFiles = data.PostScriptFiles.ToList();
+                }
+                if (data.PreBatFiles != null)
+                {
+                    preBatFiles = data.PreBatFiles.ToList();
+                }
+                if (data.PreEncodeBatFiles != null)
+                {
+                    preEncodeBatFiles = data.PreEncodeBatFiles.ToList();
+                }
+                if (data.PostBatFiles != null)
+                {
+                    postBatFiles = data.PostBatFiles.ToList();
                 }
                 if (data.Disks != null)
                 {

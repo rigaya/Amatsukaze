@@ -26,6 +26,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<string>> GetCheckCsvAsync();
 
         Task<ApiResult<List<JsonElement>>> GetProfilesAsync();
+        Task<ApiResult<ProfileOptions>> GetProfileOptionsAsync();
         Task<ApiResult<bool>> AddProfileAsync(JsonElement profile);
         Task<ApiResult<bool>> UpdateProfileAsync(JsonElement profile, string? newName = null);
         Task<ApiResult<bool>> RemoveProfileAsync(string name);
@@ -37,13 +38,22 @@ namespace Amatsukaze.Shared
 
         Task<ApiResult<List<ServiceView>>> GetServicesAsync();
         Task<ApiResult<bool>> UpdateServiceAsync(JsonElement update);
-        Task<ApiResult<bool>> UploadLogoAsync(int serviceId, int logoIdx, byte[] pngBytes);
+        Task<ApiResult<bool>> UploadLogoAsync(byte[] lgdBytes, int? serviceId, int? imgWidth, int? imgHeight);
+        Task<ApiResult<List<ServiceSettingView>>> GetServiceSettingsAsync();
+        Task<ApiResult<ServiceOptions>> GetServiceOptionsAsync();
+        Task<ApiResult<bool>> UpdateServiceLogoPeriodAsync(int serviceId, LogoPeriodUpdateRequest request);
+        Task<ApiResult<bool>> RemoveServiceLogoAsync(int serviceId, LogoFileNameRequest request);
+        Task<ApiResult<bool>> AddNoLogoAsync(int serviceId);
+        Task<ApiResult<bool>> RemoveNoLogoAsync(int serviceId);
+        Task<ApiResult<bool>> RequestLogoRescanAsync();
         Task<ApiResult<List<DrcsView>>> GetDrcsAsync();
         Task<ApiResult<bool>> AddDrcsAsync(JsonElement image);
 
         Task<ApiResult<JsonElement>> GetSettingAsync();
         Task<ApiResult<bool>> UpdateSettingAsync(JsonElement setting);
         Task<ApiResult<MakeScriptData>> GetMakeScriptAsync();
+        Task<ApiResult<List<string>>> GetAddQueueBatFilesAsync();
+        Task<ApiResult<List<string>>> GetQueueFinishBatFilesAsync();
         Task<ApiResult<bool>> UpdateMakeScriptAsync(MakeScriptData data);
         Task<ApiResult<MakeScriptPreview>> GetMakeScriptPreviewAsync();
         Task<ApiResult<bool>> UpdateFinishSettingAsync(FinishSetting setting);

@@ -1,12 +1,15 @@
 @page "/settings"
 @using System.Text.Json
+@using System.Text.Json.Nodes
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 
 <h3>Settings</h3>
 
 <p>
-    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
+    <button class="btn btn-secondary" @onclick="ApplyAsync" disabled="@(_loading || _setting == null)">適用</button>
+    <span>「適用」で反映。「更新」を押すと編集中の設定が失われるので注意</span>
 </p>
 
 @if (_loading)
@@ -17,32 +20,300 @@ else if (!string.IsNullOrEmpty(_error))
 {
     <p style="color: red;">@_error</p>
 }
+else if (_setting == null)
+{
+    <p>No data.</p>
+}
 else
 {
-    <h4>Common Setting (raw)</h4>
-    <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@_settingJson</pre>
+    <h4>一般</h4>
+    <table class="table">
+        <tr>
+            <th>一時フォルダ (重要)</th>
+            <td><input value="@GetStringValue(WorkPathField)" @oninput="@(e => OnStringInput(e, WorkPathField))" /></td>
+        </tr>
+        <tr>
+            <th>常時表示するディスク</th>
+            <td><input value="@GetStringValue(AlwaysShowDiskField)" @oninput="@(e => OnStringInput(e, AlwaysShowDiskField))" /></td>
+        </tr>
+        @foreach (var item in _generalBoolFields)
+        {
+            <tr>
+                <th></th>
+                <td>
+                    <label>
+                        <input type="checkbox" checked="@GetBoolValue(item.Field)" @onchange="@(e => OnBoolChange(e, item.Field))" />
+                        @item.Label
+                    </label>
+                </td>
+            </tr>
+        }
+    </table>
 
-    <h4>Finish Setting</h4>
-    @if (_finishSetting == null)
-    {
-        <p>No data.</p>
-    }
-    else
-    {
-        <table class="table">
-            <tr><th>Action</th><td>@(_finishSetting.Action ?? "-")</td></tr>
-            <tr><th>Seconds</th><td>@_finishSetting.Seconds</td></tr>
-            <tr><th>NoActionExe</th><td>@_finishSetting.NoActionExe</td></tr>
-            <tr><th>NoActionExeList</th><td>@(FormatList(_finishSetting.NoActionExeList))</td></tr>
-        </table>
-    }
+    <h4>パス</h4>
+    <table class="table">
+        @foreach (var item in _pathFields)
+        {
+            <tr>
+                <th>@item.Label</th>
+                <td><input value="@GetStringValue(item.Field)" @oninput="@(e => OnStringInput(e, item.Field))" /></td>
+            </tr>
+        }
+    </table>
+
+    <h4>動作</h4>
+    <table class="table">
+        @foreach (var item in _behaviorBoolFields)
+        {
+            <tr>
+                <th></th>
+                <td>
+                    <label>
+                        <input type="checkbox" checked="@GetBoolValue(item.Field)" @onchange="@(e => OnBoolChange(e, item.Field))" />
+                        @item.Label
+                    </label>
+                </td>
+            </tr>
+        }
+        <tr>
+            <th>古いログを削除</th>
+            <td>
+                <label>
+                    <input type="checkbox" checked="@GetBoolValue(DeleteOldLogsField)" @onchange="@(e => OnBoolChange(e, DeleteOldLogsField))" />
+                    有効
+                </label>
+                <span> 日数 </span>
+                <input type="number" style="width: 60px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" />
+            </td>
+        </tr>
+    </table>
+
+    <h4>スケジューリング</h4>
+    <table class="table">
+        <tr>
+            <th>リソーススケジューリングを有効にする</th>
+            <td>
+                <input type="checkbox" checked="@GetBoolValue(SchedulingEnabledField)" @onchange="@(e => OnBoolChange(e, SchedulingEnabledField))" />
+            </td>
+        </tr>
+        <tr>
+            <th>GPU数</th>
+            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumGpuField)" @oninput="@(e => OnIntInput(e, NumGpuField))" /></td>
+        </tr>
+    </table>
+
+    <h4>並列・優先度</h4>
+    <table class="table">
+        <tr>
+            <th>並列数</th>
+            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumParallelField)" @oninput="@(e => OnIntInput(e, NumParallelField))" /></td>
+        </tr>
+        <tr>
+            <th>ロゴ解析並列数</th>
+            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumParallelLogoField)" @oninput="@(e => OnIntInput(e, NumParallelLogoField))" /></td>
+        </tr>
+        <tr>
+            <th>プロセス優先度</th>
+            <td>
+                <select @onchange="@(e => OnIntSelect(e, ProcessPriorityField))">
+                    @for (var i = 0; i < _processPriorityOptions.Length; i++)
+                    {
+                        <option value="@i" selected="@(i == GetIntValue(ProcessPriorityField))">@_processPriorityOptions[i]</option>
+                    }
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <th>アフィニティ設定</th>
+            <td>
+                <select @onchange="@(e => OnIntSelect(e, AffinitySettingField))">
+                    @for (var i = 0; i < _affinityOptions.Length; i++)
+                    {
+                        <option value="@i" selected="@(i == GetIntValue(AffinitySettingField))">@_affinityOptions[i]</option>
+                    }
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <th>バッチ同時実行を抑止</th>
+            <td>
+                <input type="checkbox" checked="@GetBoolValue(ExclusiveBatExecField)" @onchange="@(e => OnBoolChange(e, ExclusiveBatExecField))" />
+            </td>
+        </tr>
+    </table>
+
+    <h4>X265 VFR Time Factor</h4>
+    <table class="table">
+        <tr>
+            <th>デフォルト値を使う</th>
+            <td>
+                <input type="checkbox" checked="@GetBoolValue(EnableX265VfrField)" @onchange="@(e => OnBoolChange(e, EnableX265VfrField))" />
+            </td>
+        </tr>
+        <tr>
+            <th>値</th>
+            <td><input type="number" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" /></td>
+        </tr>
+    </table>
+
+    <h4>実行時間帯</h4>
+    <table class="table">
+        <tr>
+            <th>有効</th>
+            <td><input type="checkbox" checked="@GetBoolValue(EnableRunHoursField)" @onchange="@(e => OnBoolChange(e, EnableRunHoursField))" /></td>
+        </tr>
+        <tr>
+            <th>停止中はエンコーダを停止する</th>
+            <td><input type="checkbox" checked="@GetBoolValue(RunHoursSuspendField)" @onchange="@(e => OnBoolChange(e, RunHoursSuspendField))" /></td>
+        </tr>
+        <tr>
+            <th>時間帯</th>
+            <td>
+                @for (var i = 0; i < 24; i++)
+                {
+                    <label style="margin-right: 6px;">
+                        <input type="checkbox" checked="@GetRunHour(i)" @onchange="@(e => OnRunHourChange(e, i))" />@i
+                    </label>
+                }
+            </td>
+        </tr>
+    </table>
+
+    <h4>終了処理</h4>
+    <table class="table">
+        <tr>
+            <th>エンコード後シャットダウンの選択肢を有効化</th>
+            <td><input type="checkbox" checked="@GetBoolValue(EnableShutdownField)" @onchange="@(e => OnBoolChange(e, EnableShutdownField))" /></td>
+        </tr>
+        <tr>
+            <th>指定プロセス実行中にスリープ・休止・シャットダウンを行わない</th>
+            <td><input type="checkbox" checked="@GetBoolValue(NoActionExeField)" @onchange="@(e => OnBoolChange(e, NoActionExeField))" /></td>
+        </tr>
+        @if (GetBoolValue(NoActionExeField))
+        {
+            <tr>
+                <th>対象プロセスの実行ファイル名</th>
+                <td>
+                    <input style="width: 220px;" value="@_noActionExeName" @oninput="@(e => _noActionExeName = e.Value?.ToString() ?? "")" />
+                    <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="AddNoActionExe">追加</button>
+                </td>
+            </tr>
+            <tr>
+                <th>登録済み</th>
+                <td>
+                    <select size="5" style="width: 220px;" @onchange="OnNoActionExeSelected">
+                        @for (var i = 0; i < _noActionExeList.Count; i++)
+                        {
+                            <option value="@i" selected="@(i == _selectedNoActionExeIndex)">
+                                @_noActionExeList[i]
+                            </option>
+                        }
+                    </select>
+                    <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="RemoveNoActionExe" disabled="@(_selectedNoActionExeIndex < 0)">削除</button>
+                </td>
+            </tr>
+        }
+        <tr>
+            <th>キュー完了後バッチを実行</th>
+            <td><input type="checkbox" checked="@GetBoolValue(ExecuteBatchAfterQueueField)" @onchange="@(e => OnBoolChange(e, ExecuteBatchAfterQueueField))" /></td>
+        </tr>
+        @if (GetBoolValue(ExecuteBatchAfterQueueField))
+        {
+            <tr>
+                <th>バッチファイルのパス</th>
+                <td>
+                    <select style="width: 320px;" @onchange="OnQueueFinishBatSelected">
+                        <option value="">(未選択)</option>
+                        @foreach (var item in GetQueueFinishBatOptions())
+                        {
+                            <option value="@item" selected="@(item == GetStringValue(BatchFileAfterQueuePathField))">@item</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+        }
+    </table>
 }
 
 @code {
+    private readonly (string Label, string Field)[] _generalBoolFields = new[]
+    {
+        ("開始時に一時フォルダを空にする", "ClearWorkDirOnStart"),
+        ("エンコード中はスリープしないようにする", "SupressSleep"),
+        ("Amatsukaze起動時にアクティブなアイテムがあるときはキューを停止する", "PauseOnStarted")
+    };
+
+    private readonly (string Label, string Field)[] _behaviorBoolFields = new[]
+    {
+        ("ロゴ設定がない場合はエラー扱いにする", "LogoPendAsError"),
+        ("フィルタグラフを出力する", "DumpFilter"),
+        ("ログの先頭に時刻を表示する", "PrintTimePrefix"),
+        ("CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする", "CopyTrimAVS")
+    };
+
+    private readonly (string Label, string Field)[] _pathFields = new[]
+    {
+        ("AmatsukazeCLIパス", "AmatsukazePath"),
+        ("x264パス", "X264Path"),
+        ("x265パス", "X265Path"),
+        ("SvtAv1EncAppパス", "SVTAV1Path"),
+        ("QSVEncCパス", "QSVEncPath"),
+        ("NVEncCパス", "NVEncPath"),
+        ("VCEEncCパス", "VCEEncPath"),
+        ("L-SMASH Muxerパス", "MuxerPath"),
+        ("mkvmergeパス", "MKVMergePath"),
+        ("MP4Boxパス", "MP4BoxPath"),
+        ("TimelineEditorパス", "TimelineEditorPath"),
+        ("ChapterExeパス", "ChapterExePath"),
+        ("JoinLogoScpパス", "JoinLogoScpPath"),
+        ("tsreadexパス", "TsReadExPath"),
+        ("b24tovttパス", "B24ToVttPath"),
+        ("psisiarcパス", "PsisiarcPath"),
+        ("Whisperパス", "WhisperPath"),
+        ("NicoConvASSパス", "NicoConvASSPath"),
+        ("tsreplaceパス", "TsReplacePath"),
+        ("tsMuxeRパス", "TsMuxeRPath"),
+        ("SCRename.vbs/pyパス", "SCRenamePath"),
+        ("AutoVfr.exeパス", "AutoVfrPath"),
+        ("neroAacEnc.exeパス", "NeroAacEncPath"),
+        ("qaac.exeパス", "QaacPath"),
+        ("fdkaac.exeパス", "FdkaacPath"),
+        ("opusenc.exeパス", "OpusEncPath")
+    };
+
+    private const string WorkPathField = "WorkPath";
+    private const string AlwaysShowDiskField = "AlwaysShowDisk";
+    private const string DeleteOldLogsField = "DeleteOldLogs";
+    private const string DeleteOldLogsDaysField = "DeleteOldLogsDays";
+    private const string SchedulingEnabledField = "SchedulingEnabled";
+    private const string NumGpuField = "NumGPU";
+    private const string NumParallelField = "NumParallel";
+    private const string NumParallelLogoField = "NumParallelLogoAnalysis";
+    private const string ProcessPriorityField = "ProcessPriority";
+    private const string AffinitySettingField = "AffinitySetting";
+    private const string ExclusiveBatExecField = "ExclusiveBatExec";
+    private const string EnableX265VfrField = "EnableX265VFRTimeFactor";
+    private const string X265VfrFactorField = "X265VFRTimeFactor";
+    private const string EnableRunHoursField = "EnableRunHours";
+    private const string RunHoursSuspendField = "RunHoursSuspendEncoders";
+    private const string EnableShutdownField = "EnableShutdownAction";
+    private const string NoActionExeField = "NoActionExe";
+    private const string ExecuteBatchAfterQueueField = "ExecuteBatchAfterQueue";
+    private const string BatchFileAfterQueuePathField = "BatchFileAfterQueuePath";
+    private static readonly string[] _processPriorityOptions = new[] { "通常", "通常以下", "低" };
+    private static readonly string[] _affinityOptions = new[] { "なし", "コア", "L2", "L3", "NUMA", "Group" };
     private string? _error;
     private bool _loading = true;
-    private string _settingJson = "{}";
-    private FinishSetting? _finishSetting;
+    private JsonObject? _setting;
+    private readonly Dictionary<string, string> _stringValues = new();
+    private readonly Dictionary<string, bool> _boolValues = new();
+    private readonly Dictionary<string, int> _intValues = new();
+    private readonly Dictionary<string, double> _doubleValues = new();
+    private bool[] _runHours = new bool[24];
+    private readonly List<string> _queueFinishBatFiles = new();
+    private readonly List<string> _noActionExeList = new();
+    private string _noActionExeName = "";
+    private int _selectedNoActionExeIndex = -1;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -50,16 +321,24 @@ else
     {
         _loading = true;
         _error = null;
-        _settingJson = "{}";
-        _finishSetting = null;
+        _setting = null;
+        _stringValues.Clear();
+        _boolValues.Clear();
+        _intValues.Clear();
+        _doubleValues.Clear();
+        _runHours = new bool[24];
+        _queueFinishBatFiles.Clear();
+        _noActionExeList.Clear();
+        _noActionExeName = "";
+        _selectedNoActionExeIndex = -1;
 
         var settingTask = Api.GetSettingAsync();
-        var systemTask = Api.GetSystemAsync();
+        var queueFinishTask = Api.GetQueueFinishBatFilesAsync();
 
-        await Task.WhenAll(settingTask, systemTask);
+        await Task.WhenAll(settingTask, queueFinishTask);
 
         var settingRes = await settingTask;
-        var systemRes = await systemTask;
+        var queueFinishRes = await queueFinishTask;
 
         if (!settingRes.Ok)
         {
@@ -67,26 +346,388 @@ else
         }
         else if (settingRes.Data.ValueKind != JsonValueKind.Undefined && settingRes.Data.ValueKind != JsonValueKind.Null)
         {
-            _settingJson = JsonSerializer.Serialize(settingRes.Data, new JsonSerializerOptions
+            _setting = JsonNode.Parse(settingRes.Data.GetRawText()) as JsonObject;
+            if (_setting != null)
             {
-                WriteIndented = true
-            });
+                InitializeFieldValues();
+            }
         }
 
-        if (!systemRes.Ok && string.IsNullOrEmpty(_error))
+        if (queueFinishRes.Ok && queueFinishRes.Data != null)
         {
-            _error = systemRes.Error ?? "Failed to load system data.";
+            _queueFinishBatFiles.AddRange(queueFinishRes.Data);
         }
-        else
+        else if (!queueFinishRes.Ok && string.IsNullOrEmpty(_error))
         {
-            _finishSetting = systemRes.Data?.FinishSetting;
+            _error = queueFinishRes.Error ?? "Failed to load queue finish bat files.";
         }
 
         _loading = false;
     }
 
+    private void InitializeFieldValues()
+    {
+        if (_setting == null)
+        {
+            return;
+        }
+        _stringValues[WorkPathField] = GetString(WorkPathField);
+        _stringValues[AlwaysShowDiskField] = GetString(AlwaysShowDiskField);
+        _stringValues[BatchFileAfterQueuePathField] = GetString(BatchFileAfterQueuePathField);
+        foreach (var item in _pathFields)
+        {
+            _stringValues[item.Field] = GetString(item.Field);
+        }
+        foreach (var item in _generalBoolFields)
+        {
+            _boolValues[item.Field] = GetBool(item.Field);
+        }
+        foreach (var item in _behaviorBoolFields)
+        {
+            _boolValues[item.Field] = GetBool(item.Field);
+        }
+        _boolValues[DeleteOldLogsField] = GetBool(DeleteOldLogsField);
+        _boolValues[SchedulingEnabledField] = GetBool(SchedulingEnabledField);
+        _boolValues[EnableX265VfrField] = GetBool(EnableX265VfrField);
+        _boolValues[EnableRunHoursField] = GetBool(EnableRunHoursField);
+        _boolValues[RunHoursSuspendField] = GetBool(RunHoursSuspendField);
+        _boolValues[EnableShutdownField] = GetBool(EnableShutdownField);
+        _boolValues[NoActionExeField] = GetBool(NoActionExeField);
+        _boolValues[ExecuteBatchAfterQueueField] = GetBool(ExecuteBatchAfterQueueField);
+        _boolValues[ExclusiveBatExecField] = GetBool(ExclusiveBatExecField);
+
+        _intValues[DeleteOldLogsDaysField] = GetInt(DeleteOldLogsDaysField);
+        _intValues[NumGpuField] = GetInt(NumGpuField);
+        _intValues[NumParallelField] = GetInt(NumParallelField);
+        _intValues[NumParallelLogoField] = GetInt(NumParallelLogoField);
+        _intValues[ProcessPriorityField] = GetInt(ProcessPriorityField);
+        _intValues[AffinitySettingField] = GetInt(AffinitySettingField);
+        _doubleValues[X265VfrFactorField] = GetDouble(X265VfrFactorField);
+        _runHours = GetRunHoursArray();
+        _noActionExeList.AddRange(GetStringList("NoActionExeList"));
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_setting == null)
+        {
+            return;
+        }
+        _error = null;
+
+        foreach (var kv in _stringValues)
+        {
+            SetSettingValue(kv.Key, kv.Value ?? "");
+        }
+        foreach (var kv in _boolValues)
+        {
+            SetSettingValue(kv.Key, kv.Value);
+        }
+        foreach (var kv in _intValues)
+        {
+            SetSettingValue(kv.Key, kv.Value);
+        }
+        foreach (var kv in _doubleValues)
+        {
+            SetSettingValue(kv.Key, kv.Value);
+        }
+        var runHoursArray = new JsonArray();
+        foreach (var v in _runHours)
+        {
+            runHoursArray.Add(JsonValue.Create(v));
+        }
+        SetSettingValue("RunHours", runHoursArray);
+        var noActionExeArray = new JsonArray();
+        foreach (var item in _noActionExeList)
+        {
+            noActionExeArray.Add(JsonValue.Create(item));
+        }
+        SetSettingValue("NoActionExeList", noActionExeArray);
+
+        var json = _setting.ToJsonString();
+        using var doc = JsonDocument.Parse(json);
+        var res = await Api.UpdateSettingAsync(doc.RootElement);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to update settings.";
+            return;
+        }
+        await ReloadAsync();
+    }
+
+    private string GetString(string name)
+    {
+        var node = GetSettingNode(name);
+        if (node == null)
+        {
+            return "";
+        }
+        return node.GetValue<string>();
+    }
+
+    private List<string> GetStringList(string name)
+    {
+        var node = GetSettingNode(name);
+        if (node is JsonArray arr)
+        {
+            var result = new List<string>();
+            foreach (var item in arr)
+            {
+                var value = item?.GetValue<string>();
+                if (!string.IsNullOrEmpty(value))
+                {
+                    result.Add(value);
+                }
+            }
+            return result;
+        }
+        return new List<string>();
+    }
+
+    private bool GetBool(string name)
+    {
+        var node = GetSettingNode(name);
+        if (node == null)
+        {
+            return false;
+        }
+        return node.GetValue<bool>();
+    }
+
+    private string GetStringValue(string name)
+    {
+        return _stringValues.TryGetValue(name, out var value) ? value : "";
+    }
+
+    private bool GetBoolValue(string name)
+    {
+        return _boolValues.TryGetValue(name, out var value) && value;
+    }
+
+    private void OnStringInput(ChangeEventArgs e, string name)
+    {
+        _stringValues[name] = e.Value?.ToString() ?? "";
+    }
+
+    private void OnBoolChange(ChangeEventArgs e, string name)
+    {
+        _boolValues[name] = e.Value is bool b && b;
+    }
+
+    private JsonNode? GetSettingNode(string name)
+    {
+        if (_setting == null)
+        {
+            return null;
+        }
+        if (_setting.TryGetPropertyValue(name, out var node) && node != null)
+        {
+            return node;
+        }
+        var camel = ToCamelCase(name);
+        if (_setting.TryGetPropertyValue(camel, out var nodeCamel) && nodeCamel != null)
+        {
+            return nodeCamel;
+        }
+        foreach (var kv in _setting)
+        {
+            if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return kv.Value;
+            }
+        }
+        return null;
+    }
+
+    private void SetSettingValue(string name, object value)
+    {
+        if (_setting == null)
+        {
+            return;
+        }
+        var key = name;
+        if (!_setting.ContainsKey(key))
+        {
+            var camel = ToCamelCase(name);
+            if (_setting.ContainsKey(camel))
+            {
+                key = camel;
+            }
+            else
+            {
+                foreach (var kv in _setting)
+                {
+                    if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        key = kv.Key;
+                        break;
+                    }
+                }
+            }
+        }
+        _setting[key] = JsonValue.Create(value);
+    }
+
+    private static string ToCamelCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+        if (name.Length == 1)
+        {
+            return name.ToLowerInvariant();
+        }
+        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+    }
+
     private static string FormatList(List<string>? items)
     {
         return items == null || items.Count == 0 ? "-" : string.Join(", ", items);
+    }
+
+    private void AddNoActionExe()
+    {
+        var value = _noActionExeName.Trim();
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+        var exists = false;
+        for (var i = 0; i < _noActionExeList.Count; i++)
+        {
+            if (string.Equals(_noActionExeList[i], value, StringComparison.OrdinalIgnoreCase))
+            {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists)
+        {
+            _noActionExeList.Add(value);
+        }
+        _noActionExeName = "";
+    }
+
+    private void RemoveNoActionExe()
+    {
+        if (_selectedNoActionExeIndex < 0 || _selectedNoActionExeIndex >= _noActionExeList.Count)
+        {
+            return;
+        }
+        _noActionExeList.RemoveAt(_selectedNoActionExeIndex);
+        _selectedNoActionExeIndex = -1;
+    }
+
+    private void OnNoActionExeSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var index))
+        {
+            _selectedNoActionExeIndex = index;
+        }
+    }
+
+    private List<string> GetQueueFinishBatOptions()
+    {
+        var options = new List<string>();
+        options.AddRange(_queueFinishBatFiles);
+        var current = GetStringValue(BatchFileAfterQueuePathField);
+        if (!string.IsNullOrEmpty(current) && !options.Contains(current))
+        {
+            options.Insert(0, current);
+        }
+        return options;
+    }
+
+    private void OnQueueFinishBatSelected(ChangeEventArgs e)
+    {
+        _stringValues[BatchFileAfterQueuePathField] = e.Value?.ToString() ?? "";
+    }
+
+    private int GetInt(string name)
+    {
+        var node = GetSettingNode(name);
+        if (node == null)
+        {
+            return 0;
+        }
+        return node.GetValue<int>();
+    }
+
+    private double GetDouble(string name)
+    {
+        var node = GetSettingNode(name);
+        if (node == null)
+        {
+            return 0;
+        }
+        return node.GetValue<double>();
+    }
+
+    private int GetIntValue(string name)
+    {
+        return _intValues.TryGetValue(name, out var value) ? value : 0;
+    }
+
+    private double GetDoubleValue(string name)
+    {
+        return _doubleValues.TryGetValue(name, out var value) ? value : 0;
+    }
+
+    private void OnIntInput(ChangeEventArgs e, string name)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            _intValues[name] = value;
+        }
+    }
+
+    private void OnIntSelect(ChangeEventArgs e, string name)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            _intValues[name] = value;
+        }
+    }
+
+    private void OnDoubleInput(ChangeEventArgs e, string name)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var value))
+        {
+            _doubleValues[name] = value;
+        }
+    }
+
+    private bool[] GetRunHoursArray()
+    {
+        var node = GetSettingNode("RunHours");
+        if (node is JsonArray arr && arr.Count == 24)
+        {
+            var result = new bool[24];
+            for (var i = 0; i < 24; i++)
+            {
+                result[i] = arr[i]?.GetValue<bool>() == true;
+            }
+            return result;
+        }
+        return new bool[24];
+    }
+
+    private bool GetRunHour(int index)
+    {
+        if (index < 0 || index >= _runHours.Length)
+        {
+            return false;
+        }
+        return _runHours[index];
+    }
+
+    private void OnRunHourChange(ChangeEventArgs e, int index)
+    {
+        if (index < 0 || index >= _runHours.Length)
+        {
+            return;
+        }
+        _runHours[index] = e.Value is bool b && b;
     }
 }

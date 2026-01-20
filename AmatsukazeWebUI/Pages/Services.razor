@@ -1,4 +1,6 @@
 @page "/services"
+@using System.Globalization
+@using System.Text.Json
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 @inject AmatsukazeWebUI.Api.ApiBaseAddress ApiBase
@@ -18,99 +20,559 @@ else if (!string.IsNullOrEmpty(_error))
 {
     <p style="color: red;">@_error</p>
 }
-else if (_services.Count == 0)
+else if (_serviceSettings.Count == 0)
 {
     <p>No services.</p>
 }
 else
 {
-    @foreach (var service in _services)
-    {
-        <div style="margin-bottom: 1rem;">
-            <div><strong>@(service.Name ?? "-")</strong> (Id: @service.ServiceId)</div>
-            @if (service.LogoList.Count == 0)
+    <div style="display: grid; grid-template-columns: 260px 1fr; gap: 16px;">
+        <div>
+            <div style="margin-bottom: 8px; font-weight: bold;">サービス（チャンネル）</div>
+            <ul style="list-style: none; padding: 0; margin: 0; border: 1px solid #ddd;">
+                @for (var i = 0; i < _serviceSettings.Count; i++)
+                {
+                    var item = _serviceSettings[i];
+                    var selected = _selectedServiceId == item.ServiceId;
+                    <li style="padding: 6px 8px; cursor: pointer; background: @(selected ? "#eef" : "transparent");"
+                        @onclick="() => SelectService(item.ServiceId)">
+                        <div>@(item.ServiceName ?? "-")</div>
+                        <div style="font-size: 0.85em; color: #666;">SID: @item.ServiceId</div>
+                    </li>
+                }
+            </ul>
+
+            <div style="margin-top: 12px; border-top: 1px solid #eee; padding-top: 8px;">
+                @if (!_showAddService)
+                {
+                    <button class="btn btn-secondary" @onclick="() => _showAddService = true">サービスを追加</button>
+                }
+                else
+                {
+                    <div style="display: grid; gap: 6px;">
+                        <input class="form-control" placeholder="サービス名" @bind="_newServiceName" />
+                        <input class="form-control" placeholder="チャンネルSID" @bind="_newServiceIdText" />
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn btn-primary" @onclick="AddServiceAsync">追加</button>
+                            <button class="btn btn-secondary" @onclick="CancelAddService">キャンセル</button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_addServiceError))
+                        {
+                            <div style="color: red;">@_addServiceError</div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div style="margin-top: 12px;">
+                <button class="btn btn-danger" disabled="@(_selectedService == null)" @onclick="ToggleRemoveService">
+                    @(_removeServiceConfirm ? "もう一度クリックで削除" : "選択中のサービスを削除")
+                </button>
+            </div>
+        </div>
+
+        <div>
+            @if (_selectedService == null)
             {
-                <div>No logos.</div>
+                <p>サービスを選択してください。</p>
             }
             else
             {
-                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                    @foreach (var logo in service.LogoList)
-                    {
-                        <div style="border: 1px solid #ddd; padding: 0.5rem;">
-                            <div>@(logo.FileName ?? "-")</div>
-                            <div>Enabled: @(logo.Enabled ? "Yes" : "No")</div>
-                            <div>Name: @(logo.LogoName ?? "-")</div>
-                            <div>Size: @(FormatSize(logo.ImageWidth, logo.ImageHeight))</div>
-                            <div>Period: @(FormatPeriod(logo.From, logo.To))</div>
-                            @if (!string.IsNullOrEmpty(logo.ImageUrl))
+                <div style="margin-bottom: 12px; padding: 8px; border: 1px solid #ddd;">
+                    <div style="font-weight: bold; margin-bottom: 6px;">JoinLogoScpコマンドファイル</div>
+                    <div style="display: grid; gap: 6px;">
+                        <select class="form-select" @bind="_selectedJlsCommand">
+                            <option value="">(未指定)</option>
+                            @foreach (var file in _serviceOptions.JlsCommandFiles)
                             {
-                                <img src="@GetLogoUrl(service.ServiceId, logo.LogoId)" alt="@logo.FileName" style="max-width: 200px; max-height: 120px;" />
+                                <option value="@file">@file</option>
                             }
+                        </select>
+                        <input class="form-control" placeholder="オプション" @bind="_selectedJlsOption" />
+                        <div>
+                            <button class="btn btn-primary" @onclick="ApplyJlsAsync">適用</button>
                         </div>
+                        @if (!string.IsNullOrEmpty(_jlsError))
+                        {
+                            <div style="color: red;">@_jlsError</div>
+                        }
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px; padding: 8px; border: 1px solid #ddd;">
+                    <div style="font-weight: bold; margin-bottom: 6px;">ロゴアップロード</div>
+                    <div style="display: grid; gap: 6px;">
+                        <InputFile OnChange="OnLogoFileSelected" />
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <input class="form-control" placeholder="imgw (AviUtl用)" @bind="_aviutlImgWText" />
+                            <input class="form-control" placeholder="imgh (AviUtl用)" @bind="_aviutlImgHText" />
+                        </div>
+                        <button class="btn btn-primary" disabled="@(_logoFile == null)" @onclick="UploadLogoAsync">アップロード</button>
+                        @if (!string.IsNullOrEmpty(_uploadError))
+                        {
+                            <div style="color: red;">@_uploadError</div>
+                        }
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" @onclick="AddNoLogoAsync">「ロゴなし」を追加</button>
+                    <button class="btn btn-secondary" @onclick="RemoveNoLogoAsync">選択中の「ロゴなし」を削除</button>
+                    @if (!string.IsNullOrEmpty(_logoError))
+                    {
+                        <div style="color: red;">@_logoError</div>
                     }
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 280px; gap: 16px;">
+                    <div>
+                        <div style="font-weight: bold; margin-bottom: 6px;">ロゴファイル</div>
+                        @if (_selectedService.Logos.Count == 0)
+                        {
+                            <div>No logos.</div>
+                        }
+                        else
+                        {
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                @foreach (var logo in _selectedService.Logos)
+                                {
+                                    var isSelected = string.Equals(_selectedLogoFileName, logo.FileName, StringComparison.Ordinal);
+                                    <div style="border: 1px solid #ddd; padding: 0.5rem; min-width: 200px; background: @(isSelected ? "#eef" : "transparent"); cursor: pointer;"
+                                         @onclick="() => SelectLogo(logo.FileName)">
+                                        <div>@(logo.FileName ?? "-")</div>
+                                        <div>Enabled: @(logo.Enabled ? "Yes" : "No")</div>
+                                        <div>Name: @(logo.LogoName ?? "-")</div>
+                                        <div>Size: @(FormatSize(logo.ImageWidth, logo.ImageHeight))</div>
+                                        <div>Period: @(FormatPeriod(logo.From, logo.To))</div>
+                                        @if (!string.IsNullOrEmpty(logo.ImageUrl))
+                                        {
+                                            <img src="@BuildImageUrl(logo.ImageUrl)" alt="@logo.FileName" style="max-width: 200px; max-height: 120px;" />
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div style="border: 1px solid #ddd; padding: 8px;">
+                        <div style="font-weight: bold; margin-bottom: 6px;">ロゴ期間</div>
+                        @if (_selectedLogo == null)
+                        {
+                            <div>ロゴを選択してください。</div>
+                        }
+                        else
+                        {
+                            <div style="display: grid; gap: 6px;">
+                                <input class="form-control" placeholder="開始 (YYYY/MM/DD)" @bind="_logoFromText" />
+                                <input class="form-control" placeholder="終了 (YYYY/MM/DD)" @bind="_logoToText" />
+                                <button class="btn btn-primary" @onclick="ApplyLogoPeriodAsync">適用</button>
+                                <button class="btn btn-danger" @onclick="RemoveLogoAsync">選択中ロゴを削除</button>
+                                @if (!string.IsNullOrEmpty(_periodError))
+                                {
+                                    <div style="color: red;">@_periodError</div>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
             }
         </div>
-    }
+    </div>
 }
 
 @code {
-    private readonly List<ServiceView> _services = new();
-    private readonly Dictionary<string, string> _logoUrls = new();
+    private readonly List<ServiceSettingView> _serviceSettings = new();
+    private ServiceOptions _serviceOptions = new();
     private string? _error;
     private bool _loading = true;
+
+    private int? _selectedServiceId;
+    private ServiceSettingView? _selectedService;
+
+    private bool _showAddService;
+    private string _newServiceName = "";
+    private string _newServiceIdText = "";
+    private string? _addServiceError;
+
+    private bool _removeServiceConfirm;
+
+    private string _selectedJlsCommand = "";
+    private string _selectedJlsOption = "";
+    private string? _jlsError;
+
+    private IBrowserFile? _logoFile;
+    private string? _uploadError;
+    private string _aviutlImgWText = "";
+    private string _aviutlImgHText = "";
+
+    private string? _selectedLogoFileName;
+    private LogoSettingView? _selectedLogo;
+    private string _logoFromText = "";
+    private string _logoToText = "";
+    private string? _periodError;
+    private string? _logoError;
+
+    private readonly JsonSerializerOptions _camelCase = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     protected override Task OnInitializedAsync() => ReloadAsync();
 
     private async Task ReloadAsync()
     {
         _loading = true;
         _error = null;
-        _services.Clear();
-        _logoUrls.Clear();
+        _serviceSettings.Clear();
+        _serviceOptions = new ServiceOptions();
 
-        var res = await Api.GetServicesAsync();
+        var optionsRes = await Api.GetServiceOptionsAsync();
+        if (!optionsRes.Ok)
+        {
+            _error = optionsRes.Error ?? "Failed to load service options.";
+        }
+        else if (optionsRes.Data != null)
+        {
+            _serviceOptions = optionsRes.Data;
+        }
+
+        var res = await Api.GetServiceSettingsAsync();
         if (!res.Ok)
         {
-            _error = res.Error ?? "Failed to load services.";
+            _error = res.Error ?? "Failed to load service settings.";
         }
         else if (res.Data != null)
         {
-            _services.AddRange(res.Data);
-            BuildLogoUrls();
+            _serviceSettings.AddRange(res.Data);
+        }
+
+        if (_selectedServiceId.HasValue)
+        {
+            SelectService(_selectedServiceId.Value);
+        }
+        else if (_serviceSettings.Count > 0)
+        {
+            SelectService(_serviceSettings[0].ServiceId);
         }
 
         _loading = false;
     }
 
-    private void BuildLogoUrls()
+    private void SelectService(int serviceId)
     {
+        _selectedServiceId = serviceId;
+        _selectedService = _serviceSettings.FirstOrDefault(s => s.ServiceId == serviceId);
+        _selectedLogoFileName = null;
+        _selectedLogo = null;
+        _logoFromText = "";
+        _logoToText = "";
+        _logoError = null;
+        _periodError = null;
+        _removeServiceConfirm = false;
+        _jlsError = null;
+
+        if (_selectedService != null)
+        {
+            _selectedJlsCommand = _selectedService.JlsCommand ?? "";
+            _selectedJlsOption = _selectedService.JlsOption ?? "";
+        }
+    }
+
+    private void SelectLogo(string? fileName)
+    {
+        _selectedLogoFileName = fileName;
+        _selectedLogo = _selectedService?.Logos.FirstOrDefault(l => l.FileName == fileName);
+        _periodError = null;
+        if (_selectedLogo != null)
+        {
+            _logoFromText = _selectedLogo.From == default ? "" : _selectedLogo.From.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+            _logoToText = _selectedLogo.To == default ? "" : _selectedLogo.To.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+        }
+    }
+
+    private async Task ApplyJlsAsync()
+    {
+        _jlsError = null;
+        if (_selectedService == null)
+        {
+            return;
+        }
+        var update = BuildServiceUpdate(_selectedService, _selectedJlsCommand, _selectedJlsOption);
+        var res = await Api.UpdateServiceAsync(update);
+        if (!res.Ok)
+        {
+            _jlsError = res.Error ?? "Failed to update service.";
+        }
+        await ReloadAsync();
+    }
+
+    private async Task AddServiceAsync()
+    {
+        _addServiceError = null;
+        if (string.IsNullOrWhiteSpace(_newServiceName))
+        {
+            _addServiceError = "サービス名が必要です。";
+            return;
+        }
+        if (!int.TryParse(_newServiceIdText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var sid))
+        {
+            _addServiceError = "チャンネルSIDが不正です。";
+            return;
+        }
+        var data = new
+        {
+            serviceId = sid,
+            serviceName = _newServiceName,
+            disableCMCheck = false,
+            jlsCommand = _serviceOptions.JlsCommandFiles.FirstOrDefault(),
+            jlsOption = "",
+            logoSettings = Array.Empty<object>()
+        };
+        var payload = new
+        {
+            type = "Update",
+            serviceId = sid,
+            data
+        };
+        var json = JsonSerializer.SerializeToElement(payload, _camelCase);
+        var res = await Api.UpdateServiceAsync(json);
+        if (!res.Ok)
+        {
+            _addServiceError = res.Error ?? "Failed to add service.";
+            return;
+        }
+        _showAddService = false;
+        _newServiceName = "";
+        _newServiceIdText = "";
+        await ReloadAsync();
+    }
+
+    private void CancelAddService()
+    {
+        _showAddService = false;
+        _newServiceName = "";
+        _newServiceIdText = "";
+        _addServiceError = null;
+    }
+
+    private async Task ToggleRemoveService()
+    {
+        if (_selectedService == null)
+        {
+            return;
+        }
+        if (!_removeServiceConfirm)
+        {
+            _removeServiceConfirm = true;
+            return;
+        }
+        var payload = new
+        {
+            type = "Remove",
+            serviceId = _selectedService.ServiceId
+        };
+        var json = JsonSerializer.SerializeToElement(payload, _camelCase);
+        var res = await Api.UpdateServiceAsync(json);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to remove service.";
+        }
+        _removeServiceConfirm = false;
+        await ReloadAsync();
+    }
+
+    private async Task AddNoLogoAsync()
+    {
+        _logoError = null;
+        if (_selectedService == null)
+        {
+            return;
+        }
+        var res = await Api.AddNoLogoAsync(_selectedService.ServiceId);
+        if (!res.Ok)
+        {
+            _logoError = res.Error ?? "Failed to add no-logo.";
+        }
+        await ReloadAsync();
+    }
+
+    private async Task RemoveNoLogoAsync()
+    {
+        _logoError = null;
+        if (_selectedService == null)
+        {
+            return;
+        }
+        var res = await Api.RemoveNoLogoAsync(_selectedService.ServiceId);
+        if (!res.Ok)
+        {
+            _logoError = res.Error ?? "Failed to remove no-logo.";
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyLogoPeriodAsync()
+    {
+        _periodError = null;
+        if (_selectedService == null || _selectedLogo == null || string.IsNullOrWhiteSpace(_selectedLogo.FileName))
+        {
+            return;
+        }
+        if (!TryParseDate(_logoFromText, out var from) || !TryParseDate(_logoToText, out var to))
+        {
+            _periodError = "日付は YYYY/MM/DD 形式で入力してください。";
+            return;
+        }
+        var req = new LogoPeriodUpdateRequest()
+        {
+            FileName = _selectedLogo.FileName,
+            From = from,
+            To = to
+        };
+        var res = await Api.UpdateServiceLogoPeriodAsync(_selectedService.ServiceId, req);
+        if (!res.Ok)
+        {
+            _periodError = res.Error ?? "Failed to update period.";
+        }
+        await ReloadAsync();
+    }
+
+    private async Task RemoveLogoAsync()
+    {
+        _periodError = null;
+        if (_selectedService == null || _selectedLogo == null || string.IsNullOrWhiteSpace(_selectedLogo.FileName))
+        {
+            return;
+        }
+        var req = new LogoFileNameRequest()
+        {
+            FileName = _selectedLogo.FileName
+        };
+        var res = await Api.RemoveServiceLogoAsync(_selectedService.ServiceId, req);
+        if (!res.Ok)
+        {
+            _periodError = res.Error ?? "Failed to remove logo.";
+        }
+        await ReloadAsync();
+    }
+
+    private Task OnLogoFileSelected(InputFileChangeEventArgs e)
+    {
+        _uploadError = null;
+        _logoFile = e.File;
+        return Task.CompletedTask;
+    }
+
+    private async Task UploadLogoAsync()
+    {
+        _uploadError = null;
+        if (_selectedService == null || _logoFile == null)
+        {
+            _uploadError = "サービスとロゴファイルを選択してください。";
+            return;
+        }
+        try
+        {
+            using var stream = _logoFile.OpenReadStream(50 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            int? imgw = null;
+            int? imgh = null;
+            if (!string.IsNullOrWhiteSpace(_aviutlImgWText) || !string.IsNullOrWhiteSpace(_aviutlImgHText))
+            {
+                if (!int.TryParse(_aviutlImgWText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedW) ||
+                    !int.TryParse(_aviutlImgHText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedH))
+                {
+                    _uploadError = "imgw/imgh は数値で入力してください。";
+                    return;
+                }
+                imgw = parsedW;
+                imgh = parsedH;
+            }
+
+            var res = await Api.UploadLogoAsync(ms.ToArray(), _selectedService.ServiceId, imgw, imgh);
+            if (!res.Ok)
+            {
+                _uploadError = res.Error ?? "Failed to upload logo.";
+            }
+            _logoFile = null;
+            _aviutlImgWText = "";
+            _aviutlImgHText = "";
+            if (string.IsNullOrEmpty(_uploadError))
+            {
+                var rescan = await Api.RequestLogoRescanAsync();
+                if (!rescan.Ok)
+                {
+                    _uploadError = rescan.Error ?? "Failed to request logo rescan.";
+                }
+                else
+                {
+                    await Task.Delay(500);
+                }
+            }
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _uploadError = ex.Message;
+        }
+    }
+
+    private JsonElement BuildServiceUpdate(ServiceSettingView service, string jlsCommand, string jlsOption)
+    {
+        var logos = service.Logos.Select(logo => new
+        {
+            fileName = logo.FileName,
+            logoName = logo.LogoName,
+            serviceId = service.ServiceId,
+            enabled = logo.Enabled,
+            from = logo.From,
+            to = logo.To,
+            exists = logo.Exists
+        }).ToList();
+        var data = new
+        {
+            serviceId = service.ServiceId,
+            serviceName = service.ServiceName,
+            disableCMCheck = service.DisableCMCheck,
+            jlsCommand = string.IsNullOrWhiteSpace(jlsCommand) ? null : jlsCommand,
+            jlsOption = jlsOption ?? "",
+            logoSettings = logos
+        };
+        var payload = new
+        {
+            type = "Update",
+            serviceId = service.ServiceId,
+            data
+        };
+        return JsonSerializer.SerializeToElement(payload, _camelCase);
+    }
+
+    private string BuildImageUrl(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
         var baseUri = ApiBase.Uri;
         if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
         {
             baseUri = new Uri(Nav.BaseUri);
         }
         var baseText = baseUri.ToString().TrimEnd('/');
-
-        foreach (var service in _services)
-        {
-            foreach (var logo in service.LogoList)
-            {
-                var path = logo.ImageUrl;
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    continue;
-                }
-                var tail = path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path;
-                var url = baseText + tail;
-                _logoUrls[$"{service.ServiceId}:{logo.LogoId}"] = url;
-            }
-        }
+        var tail = path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path;
+        return baseText + tail;
     }
 
-    private string GetLogoUrl(int serviceId, int logoId)
+    private static bool TryParseDate(string text, out DateTime value)
     {
-        return _logoUrls.TryGetValue($"{serviceId}:{logoId}", out var url) ? url : string.Empty;
+        value = default;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+        return DateTime.TryParseExact(text.Trim(), "yyyy/MM/dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out value)
+            || DateTime.TryParseExact(text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out value);
     }
 
     private static string FormatSize(int? width, int? height)
@@ -122,11 +584,11 @@ else
         return "-";
     }
 
-    private static string FormatPeriod(DateTime? from, DateTime? to)
+    private static string FormatPeriod(DateTime from, DateTime to)
     {
-        if (from.HasValue && to.HasValue)
+        if (from != default && to != default)
         {
-            return $"{from.Value:yyyy/MM/dd} - {to.Value:yyyy/MM/dd}";
+            return $"{from:yyyy/MM/dd} - {to:yyyy/MM/dd}";
         }
         return "-";
     }

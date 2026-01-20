@@ -699,7 +699,15 @@ namespace Amatsukaze.Server
                     {
                         try
                         {
-                            restApiHost.StopAsync().GetAwaiter().GetResult();
+                            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                            {
+                                // StopAsync内部がSynchronizationContextに捕捉されると停止が完了しないため、
+                                // ThreadPool上で実行して継続を確実に進める
+                                Task.Run(() => restApiHost.StopAsync(cts.Token)).GetAwaiter().GetResult();
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
                         }
                         catch (Exception)
                         {
@@ -3558,6 +3566,11 @@ namespace Amatsukaze.Server
                 ServiceId = newElement.ServiceId,
                 Data = newElement
             });
+        }
+
+        internal void RequestLogoRescan()
+        {
+            serviceListUpdated = true;
         }
 
 #region QueueManager

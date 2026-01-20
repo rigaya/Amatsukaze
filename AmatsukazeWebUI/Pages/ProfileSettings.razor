@@ -1,0 +1,1937 @@
+@page "/profiles"
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h3>Profile Settings</h3>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+
+<div style="margin-bottom: 8px;">
+    <span style="margin-right: 8px;">プロファイル</span>
+    <select value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
+        @foreach (var item in _profiles)
+        {
+            <option value="@item.Name">@item.Name</option>
+        }
+    </select>
+    <button class="btn btn-primary" style="margin-left: 8px;" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _draftJson == null)">適用</button>
+    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
+    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
+    <button class="btn btn-danger" style="margin-left: 4px;" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
+    @if (_confirmDelete)
+    {
+        <span style="margin-left: 6px; color: #a00;">もう一度押すと削除します</span>
+        <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="CancelDelete">キャンセル</button>
+    }
+</div>
+
+@if (_showDiscardConfirm)
+{
+    <div style="border: 1px solid #aaa; padding: 8px; margin-bottom: 8px;">
+        <div style="margin-bottom: 6px;">編集中の内容は失われます。切り替えますか？</div>
+        <button class="btn btn-sm btn-danger" @onclick="ConfirmDiscard">破棄して切替</button>
+        <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="CancelDiscard">キャンセル</button>
+    </div>
+}
+
+@if (_nameDialog != NameDialogMode.None)
+{
+    <div style="border: 1px solid #888; padding: 10px; margin-bottom: 8px;">
+        <div style="font-weight: bold; margin-bottom: 6px;">@_nameDialogTitle</div>
+        <input style="width: 260px;" value="@_nameInput" @oninput="@(e => _nameInput = e.Value?.ToString() ?? "")" />
+        <button class="btn btn-sm btn-primary" style="margin-left: 6px;" @onclick="ConfirmNameDialog">OK</button>
+        <button class="btn btn-sm btn-secondary" style="margin-left: 4px;" @onclick="CancelNameDialog">キャンセル</button>
+    </div>
+}
+
+<div style="margin-top: 8px;">
+    <span style="color: #a00;">「適用」で反映。「更新」を押すと編集中の設定が失われるので注意</span>
+</div>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (_profiles.Count == 0)
+{
+    <p>プロファイルがありません。</p>
+}
+else
+{
+    <div style="margin-top: 12px;">
+        <h4>エンコード</h4>
+        <table class="table">
+            <tr>
+                <th>エンコーダ</th>
+                <td>
+                    <select @onchange="OnEncoderChanged">
+                        @foreach (var item in GetIndexOptions(_options?.EncoderList, GetEncoderIndex()))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>エンコーダ追加オプション</th>
+                <td>
+                    <textarea style="width: 100%; height: 80px;" @oninput="OnEncoderOptionChanged">@GetEncoderOption()</textarea>
+                </td>
+            </tr>
+            <tr>
+                <th>エンコード分割並列数</th>
+                <td>
+                    <select @onchange="OnEncoderParallelChanged">
+                        @foreach (var item in GetIntOptions(_options?.EncoderParallelList, GetIntValue("EncoderParallel")))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            @if (IsForceSarEnabled())
+            {
+                <tr>
+                    <th>SAR比</th>
+                    <td>
+                        <label style="margin-right: 6px;">
+                            <input type="checkbox" checked="@GetBoolValue("ForceSAR")" @onchange="@(e => OnBoolChanged(e, "ForceSAR"))" />
+                            SAR比を上書きする
+                        </label>
+                        <input type="number" style="width: 60px;" value="@GetIntValue("ForceSARWidth")" @oninput="@(e => OnIntChanged(e, "ForceSARWidth"))" />
+                        <span> : </span>
+                        <input type="number" style="width: 60px;" value="@GetIntValue("ForceSARHeight")" @oninput="@(e => OnIntChanged(e, "ForceSARHeight"))" />
+                    </td>
+                </tr>
+                <tr>
+                    <th>入力ビット深度</th>
+                    <td>
+                        <select @onchange="OnSvtAv1BitDepthChanged">
+                            @foreach (var item in GetSvtBitDepthOptions())
+                            {
+                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+            }
+            <tr>
+                <th>JoinLogoScpコマンドファイル</th>
+                <td>
+                    <select @onchange="OnJlsCommandChanged">
+                        <option value="" selected="@string.IsNullOrEmpty(GetStringValue("JLSCommandFile"))">チャンネル設定に従う</option>
+                        @foreach (var item in GetValueOptions(_options?.JlsCommandFiles, GetStringValue("JLSCommandFile")))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>JoinLogoScpオプション</th>
+                <td>
+                    <label style="margin-right: 6px;">
+                        <input type="checkbox" checked="@(!GetBoolValue("EnableJLSOption"))" @onchange="OnJlsOptionToggle" />
+                        チャンネル設定に従う
+                    </label>
+                    <input style="width: 70%;" value="@GetStringValue("JLSOption")" @oninput="@(e => OnStringChanged(e, "JLSOption"))" disabled="@(!GetBoolValue("EnableJLSOption"))" />
+                </td>
+            </tr>
+            <tr>
+                <th>chapter_exeオプション</th>
+                <td>
+                    <input style="width: 70%;" value="@GetStringValue("ChapterExeOption")" @oninput="@(e => OnStringChanged(e, "ChapterExeOption"))" />
+                </td>
+            </tr>
+        </table>
+
+        <h4>デコーダ</h4>
+        <table class="table">
+            <tr>
+                <th>MPEG2デコーダ</th>
+                <td>
+                    <select @onchange="@(e => OnEnumChanged(e, "Mpeg2Decoder", _decoderEnumNames))">
+                        @foreach (var item in GetIndexOptions(_options?.Mpeg2DecoderList, GetEnumIndex("Mpeg2Decoder", _decoderEnumNames)))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>H264デコーダ</th>
+                <td>
+                    <select @onchange="@(e => OnEnumChanged(e, "H264Deocder", _decoderEnumNames))">
+                        @foreach (var item in GetIndexOptions(_options?.H264DecoderList, GetEnumIndex("H264Deocder", _decoderEnumNames)))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>HEVCデコーダ</th>
+                <td>
+                    <select @onchange="@(e => OnEnumChanged(e, "HEVCDecoder", _decoderEnumNames))">
+                        @foreach (var item in GetIndexOptions(_options?.HevcDecoderList, GetEnumIndex("HEVCDecoder", _decoderEnumNames)))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+        </table>
+
+        <h4>出力</h4>
+        <table class="table">
+            <tr>
+                <th>出力フォーマット</th>
+                <td>
+                    <select @onchange="OnFormatChanged">
+                        @foreach (var item in GetIndexOptions(_options?.FormatList, GetFormatIndex()))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>出力選択</th>
+                <td>
+                    <select @onchange="OnOutputMaskChanged">
+                        @foreach (var item in GetOutputMaskOptions())
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            @if (IsMp4Format())
+            {
+                <tr>
+                    <th>字幕がある場合、MKV出力する</th>
+                    <td><input type="checkbox" checked="@GetBoolValue("UseMKVWhenSubExists")" @onchange="@(e => OnBoolChanged(e, "UseMKVWhenSubExists"))" /></td>
+                </tr>
+            }
+            @if (IsTsreplaceFormat())
+            {
+                <tr>
+                    <th>データ放送を削除する</th>
+                    <td><input type="checkbox" checked="@GetBoolValue("TsreplaceRemoveTypeD")" @onchange="@(e => OnBoolChanged(e, "TsreplaceRemoveTypeD"))" /></td>
+                </tr>
+            }
+        </table>
+
+        <h4>リネーム / バッチ</h4>
+        <table class="table">
+            <tr>
+                <th>SCRenameによるリネームを行う</th>
+                <td><input type="checkbox" checked="@GetBoolValue("EnableRename")" @onchange="@(e => OnBoolChanged(e, "EnableRename"))" /></td>
+            </tr>
+            <tr>
+                <th>SCRename書式</th>
+                <td><textarea style="width: 100%; height: 60px;" @oninput="@(e => OnStringChanged(e, "RenameFormat"))">@GetStringValue("RenameFormat")</textarea></td>
+            </tr>
+            <tr>
+                <th>ジャンルごとにフォルダ分け</th>
+                <td><input type="checkbox" checked="@GetBoolValue("EnableGunreFolder")" @onchange="@(e => OnBoolChanged(e, "EnableGunreFolder"))" /></td>
+            </tr>
+            <tr>
+                <th>実行前バッチ</th>
+                <td>
+                    <select @onchange="@(e => OnStringChanged(e, "PreBatchFile"))">
+                        <option value="" selected="@string.IsNullOrEmpty(GetStringValue("PreBatchFile"))">(未選択)</option>
+                        @foreach (var item in GetValueOptions(_options?.PreBatFiles, GetStringValue("PreBatchFile")))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>エンコード前バッチ</th>
+                <td>
+                    <select @onchange="@(e => OnStringChanged(e, "PreEncodeBatchFile"))">
+                        <option value="" selected="@string.IsNullOrEmpty(GetStringValue("PreEncodeBatchFile"))">(未選択)</option>
+                        @foreach (var item in GetValueOptions(_options?.PreEncodeBatFiles, GetStringValue("PreEncodeBatchFile")))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th>実行後バッチ</th>
+                <td>
+                    <select @onchange="@(e => OnStringChanged(e, "PostBatchFile"))">
+                        <option value="" selected="@string.IsNullOrEmpty(GetStringValue("PostBatchFile"))">(未選択)</option>
+                        @foreach (var item in GetValueOptions(_options?.PostBatFiles, GetStringValue("PostBatchFile")))
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+        </table>
+
+        <h4>フィルタ設定</h4>
+        <table class="table">
+            <tr>
+                <th>フィルタ</th>
+                <td>
+                    <select @onchange="OnFilterOptionChanged">
+                        @foreach (var item in GetFilterOptions())
+                        {
+                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                        }
+                    </select>
+                </td>
+            </tr>
+            @if (IsCustomFilter())
+            {
+                <tr>
+                    <th>メインフィルタ</th>
+                    <td>
+                        <select @onchange="@(e => OnStringChanged(e, "FilterPath"))">
+                            <option value="" selected="@string.IsNullOrEmpty(GetStringValue("FilterPath"))">(未選択)</option>
+                            @foreach (var item in GetValueOptions(_options?.MainScriptFiles, GetStringValue("FilterPath")))
+                            {
+                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th>ポストフィルタ</th>
+                    <td>
+                        <select @onchange="@(e => OnStringChanged(e, "PostFilterPath"))">
+                            <option value="" selected="@string.IsNullOrEmpty(GetStringValue("PostFilterPath"))">(未選択)</option>
+                            @foreach (var item in GetValueOptions(_options?.PostScriptFiles, GetStringValue("PostFilterPath")))
+                            {
+                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+            }
+            else if (IsSettingFilter())
+            {
+                <tr>
+                    <th></th>
+                    <td>
+                        <div style="margin-bottom: 8px;">
+                            <label>
+                                <input type="checkbox" checked="@GetFilterBool("EnableCUDA")" @onchange="@(e => OnFilterBoolChanged(e, "EnableCUDA"))" />
+                                CUDAで処理
+                            </label>
+                        </div>
+                        <fieldset style="border: 1px solid #ccc; padding: 8px; margin-bottom: 8px;">
+                            <legend style="padding: 0 6px;">インターレース解除</legend>
+                            <label>
+                                <input type="checkbox" checked="@GetFilterBool("EnableDeinterlace")" @onchange="@(e => OnFilterBoolChanged(e, "EnableDeinterlace"))" />
+                                有効
+                            </label>
+                            <div style="margin-top: 6px;">
+                                <span>解除方法</span>
+                                <select style="margin-left: 6px;" @onchange="OnDeinterlaceChanged" disabled="@(!GetFilterBool("EnableDeinterlace"))">
+                                    @foreach (var item in GetIndexOptions(_options?.DeinterlaceAlgorithmList, GetDeinterlaceIndex()))
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                    }
+                                </select>
+                            </div>
+                            @if (GetFilterBool("EnableDeinterlace"))
+                            {
+                                @if (IsDeinterlace("KFM"))
+                                {
+                                    <div style="margin-top: 8px; padding-left: 12px;">
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("KfmEnableNr")" @onchange="@(e => OnFilterBoolChanged(e, "KfmEnableNr"))" />
+                                            SMDegrainによるノイズリダクション
+                                        </label>
+                                        <br />
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("KfmEnableUcf")" @onchange="@(e => OnFilterBoolChanged(e, "KfmEnableUcf"))" />
+                                            DecombUCF
+                                        </label>
+                                        <div style="margin-top: 6px;">
+                                            <span>出力fps</span>
+                                            <select style="margin-left: 6px;" @onchange="OnKfmFpsChanged">
+                                                @foreach (var item in GetKfmFpsOptions())
+                                                {
+                                                    <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div style="margin-top: 6px;">
+                                            <span>VFRフレームタイミング</span>
+                                            <select style="margin-left: 6px;" @onchange="OnKfmVfrTimingChanged">
+                                                @foreach (var item in GetIndexOptions(_options?.VfrFpsList, GetKfmVfrIndex()))
+                                                {
+                                                    <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                }
+                                else if (IsDeinterlace("D3DVP"))
+                                {
+                                    <div style="margin-top: 8px; padding-left: 12px;">
+                                        <span>使用GPU</span>
+                                        <select style="margin-left: 6px;" @onchange="OnD3dvpGpuChanged">
+                                            @foreach (var item in GetIndexOptions(_options?.D3dvpGpuList, GetD3dvpGpuIndex()))
+                                            {
+                                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                                else if (IsDeinterlace("QTGMC"))
+                                {
+                                    <div style="margin-top: 8px; padding-left: 12px;">
+                                        <span>プリセット</span>
+                                        <select style="margin-left: 6px;" @onchange="OnQtgmcPresetChanged">
+                                            @foreach (var item in GetIndexOptions(_options?.QtgmcPresetList, GetQtgmcPresetIndex()))
+                                            {
+                                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                                else if (IsDeinterlace("Yadif"))
+                                {
+                                    <div style="margin-top: 8px; padding-left: 12px;">
+                                        <span>出力fps</span>
+                                        <select style="margin-left: 6px;" @onchange="OnYadifFpsChanged">
+                                            @foreach (var item in GetYadifFpsOptions())
+                                            {
+                                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                                else if (IsDeinterlace("AutoVfr"))
+                                {
+                                    <div style="margin-top: 8px; padding-left: 12px;">
+                                        <div>
+                                            <span>並列数</span>
+                                            <input type="number" style="width: 70px; margin-left: 6px;" value="@GetFilterInt("AutoVfrParallel")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrParallel"))" />
+                                        </div>
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("AutoVfrFast")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfrFast"))" />
+                                            Fastを使う
+                                        </label>
+                                        <br />
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("AutoVfr30F")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfr30F"))" />
+                                            30fpsを使う
+                                        </label>
+                                        <br />
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("AutoVfr60F")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfr60F"))" />
+                                            60fpsを使う
+                                        </label>
+                                        <br />
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("AutoVfr24A")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfr24A"))" />
+                                            24fps部分にAutoVfr.iniで設定した関数を使う
+                                        </label>
+                                        <br />
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("AutoVfr30A")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfr30A"))" />
+                                            30fps部分にAutoVfr.iniで設定した関数を使う
+                                        </label>
+                                        <br />
+                                        <label>
+                                            <input type="checkbox" checked="@GetFilterBool("AutoVfrCrop")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfrCrop"))" />
+                                            IsCrop
+                                        </label>
+                                        <div style="margin-top: 6px;">
+                                            <span>SKIP</span>
+                                            <input type="number" style="width: 60px; margin-left: 6px;" value="@GetFilterInt("AutoVfrSkip")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrSkip"))" />
+                                        </div>
+                                        <div style="margin-top: 6px;">
+                                            <span>REF</span>
+                                            <input type="number" style="width: 60px; margin-left: 6px;" value="@GetFilterInt("AutoVfrRef")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrRef"))" />
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </fieldset>
+                        <fieldset style="border: 1px solid #ccc; padding: 8px; margin-bottom: 8px;">
+                            <legend style="padding: 0 6px;">デブロッキング</legend>
+                            <label>
+                                <input type="checkbox" checked="@GetFilterBool("EnableDeblock")" @onchange="@(e => OnFilterBoolChanged(e, "EnableDeblock"))" />
+                                有効
+                            </label>
+                            <div style="margin-top: 6px;">
+                                <span>強度</span>
+                                <select style="margin-left: 6px;" @onchange="OnDeblockStrengthChanged" disabled="@(!GetFilterBool("EnableDeblock"))">
+                                    @foreach (var item in GetIndexOptions(_options?.DeblockStrengthList, GetDeblockStrengthIndex()))
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                    }
+                                </select>
+                                <span style="margin-left: 12px;">品質</span>
+                                <select style="margin-left: 6px;" @onchange="OnDeblockQualityChanged" disabled="@(!GetFilterBool("EnableDeblock"))">
+                                    @foreach (var item in GetIndexOptions(_options?.DeblockQualityList, GetDeblockQualityIndex()))
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                    }
+                                </select>
+                                <label style="margin-left: 12px;">
+                                    <input type="checkbox" checked="@GetFilterBool("DeblockSharpen")" @onchange="@(e => OnFilterBoolChanged(e, "DeblockSharpen"))" disabled="@(!GetFilterBool("EnableDeblock"))" />
+                                    シャープ化
+                                </label>
+                            </div>
+                        </fieldset>
+                        <fieldset style="border: 1px solid #ccc; padding: 8px; margin-bottom: 8px;">
+                            <legend style="padding: 0 6px;">リサイズ</legend>
+                            <label>
+                                <input type="checkbox" checked="@GetFilterBool("EnableResize")" @onchange="@(e => OnFilterBoolChanged(e, "EnableResize"))" />
+                                有効
+                            </label>
+                            <div style="margin-top: 6px;">
+                                <span>横</span>
+                                <input type="number" style="width: 70px; margin-left: 4px;" value="@GetFilterInt("ResizeWidth")" @oninput="@(e => OnFilterIntChanged(e, "ResizeWidth"))" disabled="@(!GetFilterBool("EnableResize"))" />
+                                <span style="margin-left: 6px;">x 縦</span>
+                                <input type="number" style="width: 70px; margin-left: 4px;" value="@GetFilterInt("ResizeHeight")" @oninput="@(e => OnFilterIntChanged(e, "ResizeHeight"))" disabled="@(!GetFilterBool("EnableResize"))" />
+                                <button class="btn btn-sm btn-secondary" style="margin-left: 8px;" @onclick="() => SetResizePreset(1280, 720)" disabled="@(!GetFilterBool("EnableResize"))">1280x720</button>
+                                <button class="btn btn-sm btn-secondary" style="margin-left: 4px;" @onclick="() => SetResizePreset(1920, 1080)" disabled="@(!GetFilterBool("EnableResize"))">1920x1080</button>
+                            </div>
+                        </fieldset>
+                        <label>
+                            <input type="checkbox" checked="@GetFilterBool("EnableTemporalNR")" @onchange="@(e => OnFilterBoolChanged(e, "EnableTemporalNR"))" />
+                            時間軸安定化
+                        </label>
+                        <br />
+                        <label>
+                            <input type="checkbox" checked="@GetFilterBool("EnableDeband")" @onchange="@(e => OnFilterBoolChanged(e, "EnableDeband"))" />
+                            バンディング低減
+                        </label>
+                        <br />
+                        <label>
+                            <input type="checkbox" checked="@GetFilterBool("EnableEdgeLevel")" @onchange="@(e => OnFilterBoolChanged(e, "EnableEdgeLevel"))" />
+                            エッジ強調（アニメ用）
+                        </label>
+                    </td>
+                </tr>
+            }
+        </table>
+
+        <h4>ビットレート設定</h4>
+        <table class="table">
+            <tr>
+                <th>2パスエンコード</th>
+                <td><input type="checkbox" checked="@GetBoolValue("TwoPass")" @onchange="@(e => OnBoolChanged(e, "TwoPass"))" /></td>
+            </tr>
+            <tr>
+                <th>CMビットレート倍率</th>
+                <td><input type="number" step="0.01" style="width: 90px;" value="@GetDoubleValue("BitrateCM")" @oninput="@(e => OnDoubleChanged(e, "BitrateCM"))" /></td>
+            </tr>
+            <tr>
+                <th>CM品質オフセット</th>
+                <td><input type="number" step="0.1" style="width: 90px;" value="@GetDoubleValue("CMQualityOffset")" @oninput="@(e => OnDoubleChanged(e, "CMQualityOffset"))" /></td>
+            </tr>
+            <tr>
+                <th>自動ビットレート指定</th>
+                <td><input type="checkbox" checked="@GetBoolValue("AutoBuffer")" @onchange="@(e => OnBoolChanged(e, "AutoBuffer"))" /></td>
+            </tr>
+            <tr>
+                <th>a / b / h264</th>
+                <td>
+                    <input type="number" step="0.1" style="width: 80px;" value="@GetBitrateValue("A")" @oninput="@(e => OnBitrateChanged(e, "A"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+                    <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("B")" @oninput="@(e => OnBitrateChanged(e, "B"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+                    <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("H264")" @oninput="@(e => OnBitrateChanged(e, "H264"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+                </td>
+            </tr>
+        </table>
+
+        <h4>音声エンコード</h4>
+        <table class="table">
+            <tr>
+                <th>音声をエンコードする</th>
+                <td><input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" /></td>
+            </tr>
+            @if (GetBoolValue("EnableAudioEncode"))
+            {
+                <tr>
+                    <th>音声エンコーダ</th>
+                    <td>
+                        <select @onchange="OnAudioEncoderChanged">
+                            @foreach (var item in GetIndexOptions(_options?.AudioEncoderList, GetAudioEncoderIndex()))
+                            {
+                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th>音声ビットレート</th>
+                    <td>
+                        <input type="number" style="width: 90px;" value="@GetIntValue("AudioBitrateInKbps")" @oninput="@(e => OnIntChanged(e, "AudioBitrateInKbps"))" disabled="@(!GetBoolValue("EnableAudioBitrate"))" />
+                        <label style="margin-left: 8px;">
+                            <input type="checkbox" checked="@(!GetBoolValue("EnableAudioBitrate"))" @onchange="OnAudioBitrateToggle" />
+                            ビットレートを指定しない
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th>音声エンコーダ追加オプション</th>
+                    <td><textarea style="width: 100%; height: 60px;" @oninput="@(e => OnStringChanged(e, "AudioEncoderOption"))">@GetStringValue("AudioEncoderOption")</textarea></td>
+                </tr>
+            }
+        </table>
+
+        <h4>ニコニコ実況コメント</h4>
+        @if (_options?.IsServerLinux == true)
+        {
+            <p>Linux環境では利用できません。</p>
+        }
+        else
+        {
+            <table class="table">
+                <tr>
+                    <th>ニコニコ実況コメントを有効にする</th>
+                    <td><input type="checkbox" checked="@GetBoolValue("EnableNicoJK")" @onchange="@(e => OnBoolChanged(e, "EnableNicoJK"))" /></td>
+                </tr>
+                @if (GetBoolValue("EnableNicoJK"))
+                {
+                    <tr>
+                        <th>エラーを無視</th>
+                        <td><input type="checkbox" checked="@GetBoolValue("IgnoreNicoJKError")" @onchange="@(e => OnBoolChanged(e, "IgnoreNicoJKError"))" /></td>
+                    </tr>
+                    <tr>
+                        <th>NicoJKログから優先的にコメントを取得する</th>
+                        <td><input type="checkbox" checked="@GetBoolValue("NicoJKLog")" @onchange="@(e => OnBoolChanged(e, "NicoJKLog"))" /></td>
+                    </tr>
+                    <tr>
+                        <th>NicoJK18サーバからコメントを取得する（推奨）</th>
+                        <td><input type="checkbox" checked="@GetBoolValue("NicoJK18")" @onchange="@(e => OnBoolChanged(e, "NicoJK18"))" /></td>
+                    </tr>
+                    <tr>
+                        <th>コメント字幕出力フォーマット</th>
+                        <td>
+                            <div>
+                                <strong>1280x720</strong>
+                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat720S")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat720S"))" />通常</label>
+                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat720T")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat720T"))" />半透明</label>
+                            </div>
+                            <div style="margin-top: 6px;">
+                                <strong>1920x1080</strong>
+                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat1080S")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat1080S"))" />通常</label>
+                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat1080T")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat1080T"))" />半透明</label>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </table>
+        }
+
+        <h4>字幕</h4>
+        <table class="table">
+            <tr>
+                <th>字幕を無効にする</th>
+                <td><input type="checkbox" checked="@GetBoolValue("DisableSubs")" @onchange="@(e => OnBoolChanged(e, "DisableSubs"))" /></td>
+            </tr>
+            @if (!GetBoolValue("DisableSubs"))
+            {
+                <tr>
+                    <th>WebVTT字幕を生成する</th>
+                    <td><input type="checkbox" checked="@GetBoolValue("EnableWebVTT")" @onchange="@(e => OnBoolChanged(e, "EnableWebVTT"))" /></td>
+                </tr>
+                <tr>
+                    <th>字幕モード</th>
+                    <td>
+                        <select @onchange="OnSubtitleModeChanged">
+                            @foreach (var item in GetIndexOptions(_options?.SubtitleModeList, GetSubtitleModeIndex()))
+                            {
+                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+                @if (IsWhisperMode())
+                {
+                    <tr>
+                        <th>whisper-model</th>
+                        <td>
+                            <select @onchange="OnWhisperModelChanged">
+                                @foreach (var item in GetIndexOptions(_options?.WhisperModelList, GetWhisperModelIndex()))
+                                {
+                                    <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                }
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>whisper-option</th>
+                        <td>
+                            <textarea style="width: 100%; height: 80px;" @oninput="@(e => OnStringChanged(e, "WhisperOption"))">@GetStringValue("WhisperOption")</textarea>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Whisper処理を映像エンコードと並列実行する</th>
+                        <td><input type="checkbox" checked="@GetBoolValue("WhisperParallel")" @onchange="@(e => OnBoolChanged(e, "WhisperParallel"))" /></td>
+                    </tr>
+                }
+            }
+        </table>
+
+        <h4>その他の設定</h4>
+        <table class="table">
+            <tr><th>処理の終了後、入力ファイルを別フォルダに移動する</th><td><input type="checkbox" checked="@GetBoolValue("MoveInputFile")" @onchange="@(e => OnBoolChanged(e, "MoveInputFile"))" /></td></tr>
+            <tr><th>関連ファイル(*.err,*.program.txtなど)もコピー/移動する</th><td><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetBoolValue("MoveInputFile"))" /></td></tr>
+            <tr><th>チャプター・CM解析を無効にする</th><td><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" /></td></tr>
+            <tr><th>チャプターを別ファイルに出力する</th><td><input type="checkbox" checked="@GetBoolValue("OutputChapter")" @onchange="@(e => OnBoolChanged(e, "OutputChapter"))" disabled="@(GetBoolValue("DisableChapter"))" /></td></tr>
+            <tr><th>マッピングにないDRCS外字は無視する</th><td><input type="checkbox" checked="@GetBoolValue("IgnoreNoDrcsMap")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoDrcsMap"))" /></td></tr>
+            <tr><th>ロゴ検出判定しきい値を低くする</th><td><input type="checkbox" checked="@GetBoolValue("LooseLogoDetection")" @onchange="@(e => OnBoolChanged(e, "LooseLogoDetection"))" /></td></tr>
+            <tr><th>ロゴ検出に失敗しても処理を続行する</th><td><input type="checkbox" checked="@GetBoolValue("IgnoreNoLogo")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoLogo"))" /></td></tr>
+            <tr><th>ロゴ消ししない</th><td><input type="checkbox" checked="@GetBoolValue("NoDelogo")" @onchange="@(e => OnBoolChanged(e, "NoDelogo"))" /></td></tr>
+            <tr><th>並列ロゴ解析</th><td><input type="checkbox" checked="@GetBoolValue("ParallelLogoAnalysis")" @onchange="@(e => OnBoolChanged(e, "ParallelLogoAnalysis"))" /></td></tr>
+            <tr><th>システムにインストールされているAviSynthプラグインを有効にする</th><td><input type="checkbox" checked="@GetBoolValue("SystemAviSynthPlugin")" @onchange="@(e => OnBoolChanged(e, "SystemAviSynthPlugin"))" /></td></tr>
+            <tr><th>ログファイルを出力先に生成しない</th><td><input type="checkbox" checked="@GetBoolValue("DisableLogFile")" @onchange="@(e => OnBoolChanged(e, "DisableLogFile"))" /></td></tr>
+            <tr><th>プロファイルの情報を出力先にテキストとして保存</th><td><input type="checkbox" checked="@GetBoolValue("SaveProfileText")" @onchange="@(e => OnBoolChanged(e, "SaveProfileText"))" /></td></tr>
+            <tr><th>一時ファイルを削除せずに残す</th><td><input type="checkbox" checked="@GetBoolValue("NoRemoveTmp")" @onchange="@(e => OnBoolChanged(e, "NoRemoveTmp"))" /></td></tr>
+            <tr>
+                <th>PMT更新がある場合はCMとする</th>
+                <td>
+                    <label>
+                        <input type="checkbox" checked="@GetBoolValue("EnablePmtCut")" @onchange="@(e => OnBoolChanged(e, "EnablePmtCut"))" />
+                        最初から
+                    </label>
+                    <input type="number" style="width: 60px; margin-left: 6px;" value="@GetIntValue("PmtCutHeadRate")" @oninput="@(e => OnIntChanged(e, "PmtCutHeadRate"))" disabled="@(!GetBoolValue("EnablePmtCut"))" />
+                    <span>% と最後から </span>
+                    <input type="number" style="width: 60px;" value="@GetIntValue("PmtCutTailRate")" @oninput="@(e => OnIntChanged(e, "PmtCutTailRate"))" disabled="@(!GetBoolValue("EnablePmtCut"))" />
+                    <span>% に</span>
+                </td>
+            </tr>
+            <tr>
+                <th>ロゴ最長フェードフレーム数</th>
+                <td>
+                    <label>
+                        <input type="checkbox" checked="@GetBoolValue("EnableMaxFadeLength")" @onchange="@(e => OnBoolChanged(e, "EnableMaxFadeLength"))" />
+                        有効
+                    </label>
+                    <input type="number" style="width: 80px; margin-left: 6px;" value="@GetIntValue("MaxFadeLength")" @oninput="@(e => OnIntChanged(e, "MaxFadeLength"))" disabled="@(!GetBoolValue("EnableMaxFadeLength"))" />
+                </td>
+            </tr>
+        </table>
+
+        <h4>詳細設定</h4>
+        <table class="table">
+            <tr><th>メイン以外のフォーマットは結合しない</th><td><input type="checkbox" checked="@GetBoolValue("SplitSub")" @onchange="@(e => OnBoolChanged(e, "SplitSub"))" /></td></tr>
+            <tr><th>ネットワーク越しに転送する場合のハッシュチェックを無効にする</th><td><input type="checkbox" checked="@GetBoolValue("DisableHashCheck")" @onchange="@(e => OnBoolChanged(e, "DisableHashCheck"))" /></td></tr>
+            <tr>
+                <th>追加ロゴ消し用のロゴ</th>
+                <td><textarea style="width: 100%; height: 60px;" @oninput="@(e => OnStringChanged(e, "AdditionalEraseLogo"))">@GetStringValue("AdditionalEraseLogo")</textarea></td>
+            </tr>
+            <tr>
+                <th>バッファリングフレーム数</th>
+                <td><input type="number" style="width: 70px;" value="@GetIntValue("NumEncodeBufferFrames")" @oninput="@(e => OnIntChanged(e, "NumEncodeBufferFrames"))" /></td>
+            </tr>
+        </table>
+
+        <h4>リソース設定</h4>
+        <table class="table">
+            <tr>
+                <th></th>
+                <td>
+                    <table class="table">
+                        <thead>
+                            <tr><th>フェーズ</th><th>CPU</th><th>HDD</th><th>GPU</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in GetResourceRows())
+                            {
+                                <tr>
+                                    <td>@item.Name</td>
+                                    <td><input type="number" style="width: 70px;" value="@item.Cpu" @oninput="@(e => OnResourceChanged(e, item.Index, "CPU"))" /></td>
+                                    <td><input type="number" style="width: 70px;" value="@item.Hdd" @oninput="@(e => OnResourceChanged(e, item.Index, "HDD"))" /></td>
+                                    <td><input type="number" style="width: 70px;" value="@item.Gpu" @oninput="@(e => OnResourceChanged(e, item.Index, "GPU"))" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+            <tr><th>CPUアフィニティを無視する</th><td><input type="checkbox" checked="@GetBoolValue("IgnoreEncodeAffinity")" @onchange="@(e => OnBoolChanged(e, "IgnoreEncodeAffinity"))" /></td></tr>
+        </table>
+    </div>
+}
+
+@code {
+    private enum NameDialogMode
+    {
+        None,
+        New,
+        Rename
+    }
+
+    private sealed class ProfileEntry
+    {
+        public string Name { get; set; } = "";
+        public string RawJson { get; set; } = "";
+    }
+
+    private readonly List<ProfileEntry> _profiles = new();
+    private string? _selectedProfileName;
+    private string? _draftJson;
+    private JsonObject? _draftNode;
+    private ProfileOptions? _options;
+    private bool _loading;
+    private bool _isDirty;
+    private bool _confirmDelete;
+    private string? _error;
+    private string? _pendingProfileName;
+    private bool _showDiscardConfirm;
+
+    private NameDialogMode _nameDialog = NameDialogMode.None;
+    private string _nameDialogTitle = "";
+    private string _nameInput = "";
+    private static readonly string[] _encoderEnumNames = new[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVTAV1" };
+    private static readonly string[] _decoderEnumNames = new[] { "Default", "QSV", "CUVID" };
+    private static readonly string[] _formatEnumNames = new[] { "MP4", "MKV", "M2TS", "TS", "TSREPLACE" };
+    private static readonly string[] _filterEnumNames = new[] { "None", "Setting", "Custom" };
+    private static readonly string[] _deblockStrengthEnumNames = new[] { "Strong", "Medium", "Weak", "Weaker" };
+    private static readonly string[] _filterFpsEnumNames = new[] { "VFR", "CFR24", "CFR30", "CFR60", "SVP", "VFR30" };
+    private static readonly string[] _kfmFpsEnumNames = new[] { "VFR", "VFR30", "CFR24", "CFR60", "SVP" };
+    private static readonly string[] _yadifFpsEnumNames = new[] { "CFR24", "CFR30", "CFR60" };
+    private static readonly string[] _d3dvpGpuEnumNames = new[] { "Auto", "Intel", "NVIDIA", "Radeon" };
+    private static readonly string[] _qtgmcPresetEnumNames = new[] { "Auto", "Faster", "Fast", "Medium", "Slow", "Slower" };
+    private static readonly string[] _audioEncoderEnumNames = new[] { "NeroAac", "Qaac", "Fdkaac", "OpusEnc" };
+    private static readonly string[] _resourcePhaseNames = new[] { "TS解析", "CM解析", "フィルタ映像解析", "エンコード", "Mux" };
+
+    protected override Task OnInitializedAsync() => ReloadProfilesAsync();
+
+    private async Task ReloadProfilesAsync()
+    {
+        _loading = true;
+        _error = null;
+        _confirmDelete = false;
+
+        var prevSelected = _selectedProfileName;
+        _profiles.Clear();
+
+        var profilesTask = Api.GetProfilesAsync();
+        var optionsTask = Api.GetProfileOptionsAsync();
+        await Task.WhenAll(profilesTask, optionsTask);
+
+        var res = await profilesTask;
+        var opt = await optionsTask;
+        if (!opt.Ok)
+        {
+            _error = opt.Error ?? "Failed to load profile options.";
+        }
+        else
+        {
+            _options = opt.Data;
+        }
+
+        if (!res.Ok || res.Data == null)
+        {
+            _error = res.Error ?? "Failed to load profiles.";
+            _loading = false;
+            return;
+        }
+
+        foreach (var item in res.Data)
+        {
+            var name = GetProfileName(item);
+            _profiles.Add(new ProfileEntry
+            {
+                Name = name,
+                RawJson = item.GetRawText()
+            });
+        }
+
+        _selectedProfileName = _profiles.Any(p => p.Name == prevSelected)
+            ? prevSelected
+            : (_profiles.Count > 0 ? _profiles[0].Name : null);
+
+        LoadDraftFromSelected();
+        _loading = false;
+    }
+
+    private void LoadDraftFromSelected()
+    {
+        _draftJson = null;
+        _draftNode = null;
+        _isDirty = false;
+        if (string.IsNullOrEmpty(_selectedProfileName))
+        {
+            return;
+        }
+        var entry = _profiles.FirstOrDefault(p => p.Name == _selectedProfileName);
+        if (entry == null)
+        {
+            return;
+        }
+        _draftJson = entry.RawJson;
+        _draftNode = JsonNode.Parse(entry.RawJson) as JsonObject;
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedProfileName) || string.IsNullOrEmpty(_draftJson))
+        {
+            return;
+        }
+        _error = null;
+        _confirmDelete = false;
+
+        var json = UpdateProfileName(_draftJson, _selectedProfileName);
+        using var doc = JsonDocument.Parse(json);
+        var res = await Api.UpdateProfileAsync(doc.RootElement, _selectedProfileName);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to update profile.";
+            return;
+        }
+        await ReloadProfilesAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_confirmDelete == false)
+        {
+            _confirmDelete = true;
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_selectedProfileName))
+        {
+            return;
+        }
+
+        _error = null;
+        var res = await Api.RemoveProfileAsync(_selectedProfileName);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to delete profile.";
+            return;
+        }
+        _confirmDelete = false;
+        await ReloadProfilesAsync();
+    }
+
+    private void CancelDelete()
+    {
+        _confirmDelete = false;
+    }
+
+    private void OpenNewDialog()
+    {
+        if (string.IsNullOrEmpty(_selectedProfileName))
+        {
+            return;
+        }
+        _nameDialog = NameDialogMode.New;
+        _nameDialogTitle = "新規プロファイル名";
+        _nameInput = _selectedProfileName + "_コピー";
+    }
+
+    private void OpenRenameDialog()
+    {
+        if (string.IsNullOrEmpty(_selectedProfileName))
+        {
+            return;
+        }
+        _nameDialog = NameDialogMode.Rename;
+        _nameDialogTitle = "リネーム後の名前";
+        _nameInput = _selectedProfileName;
+    }
+
+    private async Task ConfirmNameDialog()
+    {
+        var newName = _nameInput.Trim();
+        if (string.IsNullOrEmpty(newName) || string.IsNullOrEmpty(_draftJson))
+        {
+            return;
+        }
+        _error = null;
+        _confirmDelete = false;
+
+        if (_nameDialog == NameDialogMode.New)
+        {
+            var json = UpdateProfileName(_draftJson, newName);
+            using var doc = JsonDocument.Parse(json);
+            var res = await Api.AddProfileAsync(doc.RootElement);
+            if (!res.Ok)
+            {
+                _error = res.Error ?? "Failed to add profile.";
+                return;
+            }
+            _nameDialog = NameDialogMode.None;
+            await ReloadProfilesAsync();
+            _selectedProfileName = newName;
+            LoadDraftFromSelected();
+            return;
+        }
+
+        if (_nameDialog == NameDialogMode.Rename && !string.IsNullOrEmpty(_selectedProfileName))
+        {
+            var json = UpdateProfileName(_draftJson, _selectedProfileName);
+            using var doc = JsonDocument.Parse(json);
+            var res = await Api.UpdateProfileAsync(doc.RootElement, newName);
+            if (!res.Ok)
+            {
+                _error = res.Error ?? "Failed to rename profile.";
+                return;
+            }
+            _nameDialog = NameDialogMode.None;
+            await ReloadProfilesAsync();
+            _selectedProfileName = newName;
+            LoadDraftFromSelected();
+        }
+    }
+
+    private void CancelNameDialog()
+    {
+        _nameDialog = NameDialogMode.None;
+    }
+
+    private void OnProfileChanged(ChangeEventArgs e)
+    {
+        var newName = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newName))
+        {
+            return;
+        }
+        if (_isDirty)
+        {
+            _pendingProfileName = newName;
+            _showDiscardConfirm = true;
+            return;
+        }
+        _selectedProfileName = newName;
+        LoadDraftFromSelected();
+    }
+
+    private void ConfirmDiscard()
+    {
+        if (!string.IsNullOrEmpty(_pendingProfileName))
+        {
+            _selectedProfileName = _pendingProfileName;
+        }
+        _pendingProfileName = null;
+        _showDiscardConfirm = false;
+        LoadDraftFromSelected();
+    }
+
+    private void CancelDiscard()
+    {
+        _pendingProfileName = null;
+        _showDiscardConfirm = false;
+    }
+
+    private static string GetProfileName(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("Name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
+            {
+                return nameProp.GetString() ?? "";
+            }
+            if (element.TryGetProperty("name", out var nameProp2) && nameProp2.ValueKind == JsonValueKind.String)
+            {
+                return nameProp2.GetString() ?? "";
+            }
+        }
+        return "";
+    }
+
+    private static string UpdateProfileName(string rawJson, string newName)
+    {
+        var node = JsonNode.Parse(rawJson) as JsonObject ?? new JsonObject();
+        node["Name"] = newName;
+        node["name"] = newName;
+        return node.ToJsonString();
+    }
+
+    private JsonObject? EnsureDraftNode()
+    {
+        if (_draftNode != null)
+        {
+            return _draftNode;
+        }
+        if (!string.IsNullOrEmpty(_draftJson))
+        {
+            _draftNode = JsonNode.Parse(_draftJson) as JsonObject;
+        }
+        return _draftNode;
+    }
+
+    private JsonNode? GetNode(string name)
+    {
+        var obj = EnsureDraftNode();
+        if (obj == null)
+        {
+            return null;
+        }
+        if (obj.TryGetPropertyValue(name, out var node) && node != null)
+        {
+            return node;
+        }
+        var camel = ToCamelCase(name);
+        if (obj.TryGetPropertyValue(camel, out var nodeCamel) && nodeCamel != null)
+        {
+            return nodeCamel;
+        }
+        foreach (var kv in obj)
+        {
+            if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return kv.Value;
+            }
+        }
+        return null;
+    }
+
+    private JsonObject? GetObjectNode(string name)
+    {
+        return GetNode(name) as JsonObject;
+    }
+
+    private void SetNodeValue(string name, JsonNode? value)
+    {
+        var obj = EnsureDraftNode();
+        if (obj == null)
+        {
+            return;
+        }
+        var key = name;
+        if (!obj.ContainsKey(key))
+        {
+            var camel = ToCamelCase(name);
+            if (obj.ContainsKey(camel))
+            {
+                key = camel;
+            }
+            else
+            {
+                foreach (var kv in obj)
+                {
+                    if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        key = kv.Key;
+                        break;
+                    }
+                }
+            }
+        }
+        obj[key] = value;
+        _draftJson = obj.ToJsonString();
+        _isDirty = true;
+    }
+
+    private string GetStringValue(string name)
+    {
+        var node = GetNode(name);
+        return node == null ? "" : node.GetValue<string>();
+    }
+
+    private int GetIntValue(string name)
+    {
+        var node = GetNode(name);
+        return TryGetIntFromNode(node, out var value) ? value : 0;
+    }
+
+    private bool GetBoolValue(string name)
+    {
+        var node = GetNode(name);
+        return TryGetBoolFromNode(node, out var value) && value;
+    }
+
+    private void OnStringChanged(ChangeEventArgs e, string name)
+    {
+        SetNodeValue(name, JsonValue.Create(e.Value?.ToString() ?? ""));
+    }
+
+    private void OnIntChanged(ChangeEventArgs e, string name)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            SetNodeValue(name, JsonValue.Create(value));
+        }
+    }
+
+    private void OnBoolChanged(ChangeEventArgs e, string name)
+    {
+        var value = e.Value is bool b && b;
+        SetNodeValue(name, JsonValue.Create(value));
+    }
+
+    private void OnEncoderChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        var enumName = idx >= 0 && idx < _encoderEnumNames.Length ? _encoderEnumNames[idx] : _encoderEnumNames[0];
+        SetNodeValue("EncoderType", JsonValue.Create(enumName));
+    }
+
+    private void OnEncoderOptionChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        var idx = GetEncoderIndex();
+        var name = idx switch
+        {
+            0 => "X264Option",
+            1 => "X265Option",
+            2 => "QSVEncOption",
+            3 => "NVEncOption",
+            4 => "VCEEncOption",
+            5 => "SVTAV1Option",
+            _ => "X264Option"
+        };
+        SetNodeValue(name, JsonValue.Create(value));
+    }
+
+    private void OnEncoderParallelChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            SetNodeValue("EncoderParallel", JsonValue.Create(value));
+        }
+    }
+
+    private void OnJlsCommandChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        SetNodeValue("JLSCommandFile", JsonValue.Create(value));
+    }
+
+    private void OnJlsOptionToggle(ChangeEventArgs e)
+    {
+        var checkedValue = e.Value is bool b && b;
+        SetNodeValue("EnableJLSOption", JsonValue.Create(!checkedValue));
+    }
+
+    private void OnSvtAv1BitDepthChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        var value = idx == 1 ? 8 : idx == 2 ? 10 : 0;
+        var filter = GetObjectNode("FilterSetting") ?? new JsonObject();
+        filter["SvtAv1BitDepth"] = value;
+        SetNodeValue("FilterSetting", filter);
+    }
+
+    private void OnEnumChanged(ChangeEventArgs e, string name, string[] enumNames)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= enumNames.Length)
+        {
+            idx = 0;
+        }
+        SetNodeValue(name, JsonValue.Create(enumNames[idx]));
+    }
+
+    private void OnFormatChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _formatEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetNodeValue("OutputFormat", JsonValue.Create(_formatEnumNames[idx]));
+    }
+
+    private void OnOutputMaskChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            SetNodeValue("OutputMask", JsonValue.Create(value));
+        }
+    }
+
+    private void OnFilterOptionChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _filterEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetNodeValue("FilterOption", JsonValue.Create(_filterEnumNames[idx]));
+    }
+
+    private void OnDeinterlaceChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        var list = _options?.DeinterlaceAlgorithmList ?? new List<string>();
+        if (idx < 0 || idx >= list.Count)
+        {
+            idx = 0;
+        }
+        var name = list.Count > 0 ? list[idx] : "KFM";
+        SetFilterValue("DeinterlaceAlgorithm", JsonValue.Create(name));
+    }
+
+    private void OnDeblockStrengthChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _deblockStrengthEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetFilterValue("DeblockStrength", JsonValue.Create(_deblockStrengthEnumNames[idx]));
+    }
+
+    private void OnDeblockQualityChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        var values = _options?.DeblockQualityValues ?? new List<int>();
+        if (idx < 0 || idx >= values.Count)
+        {
+            idx = 0;
+        }
+        var value = values.Count > 0 ? values[idx] : 4;
+        SetFilterValue("DeblockQuality", JsonValue.Create(value));
+    }
+
+    private void OnKfmFpsChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _kfmFpsEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetFilterValue("KfmFps", JsonValue.Create(_kfmFpsEnumNames[idx]));
+    }
+
+    private void OnKfmVfrTimingChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        SetFilterValue("KfmVfr120fps", JsonValue.Create(idx == 1));
+    }
+
+    private void OnD3dvpGpuChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _d3dvpGpuEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetFilterValue("D3dvpGpu", JsonValue.Create(_d3dvpGpuEnumNames[idx]));
+    }
+
+    private void OnQtgmcPresetChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _qtgmcPresetEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetFilterValue("QtgmcPreset", JsonValue.Create(_qtgmcPresetEnumNames[idx]));
+    }
+
+    private void OnYadifFpsChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _yadifFpsEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetFilterValue("YadifFps", JsonValue.Create(_yadifFpsEnumNames[idx]));
+    }
+
+    private void OnAudioEncoderChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        if (idx < 0 || idx >= _audioEncoderEnumNames.Length)
+        {
+            idx = 0;
+        }
+        SetNodeValue("AudioEncoderType", JsonValue.Create(_audioEncoderEnumNames[idx]));
+    }
+
+    private void OnAudioBitrateToggle(ChangeEventArgs e)
+    {
+        var checkedValue = e.Value is bool b && b;
+        SetNodeValue("EnableAudioBitrate", JsonValue.Create(!checkedValue));
+    }
+
+    private void OnSubtitleModeChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        SetNodeValue("SubMode", JsonValue.Create(idx));
+    }
+
+    private void OnWhisperModelChanged(ChangeEventArgs e)
+    {
+        var idx = ParseIndex(e.Value);
+        SetNodeValue("WhisperModel", JsonValue.Create(idx));
+    }
+
+    private int GetEncoderIndex()
+    {
+        var node = GetNode("EncoderType");
+        if (TryGetIntFromNode(node, out var idx))
+        {
+            return idx;
+        }
+        var str = TryGetStringFromNode(node, out var stringValue) ? stringValue : "";
+        if (!string.IsNullOrEmpty(str))
+        {
+            var index = Array.FindIndex(_encoderEnumNames, v => string.Equals(v, str, StringComparison.OrdinalIgnoreCase));
+            return index >= 0 ? index : 0;
+        }
+        return 0;
+    }
+
+    private string GetEncoderOption()
+    {
+        var idx = GetEncoderIndex();
+        var name = idx switch
+        {
+            0 => "X264Option",
+            1 => "X265Option",
+            2 => "QSVEncOption",
+            3 => "NVEncOption",
+            4 => "VCEEncOption",
+            5 => "SVTAV1Option",
+            _ => "X264Option"
+        };
+        return GetStringValue(name);
+    }
+
+    private bool IsForceSarEnabled()
+    {
+        return GetEncoderIndex() == 5;
+    }
+
+    private bool IsMp4Format()
+    {
+        return string.Equals(GetEnumString("OutputFormat", _formatEnumNames), "MP4", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsTsreplaceFormat()
+    {
+        return string.Equals(GetEnumString("OutputFormat", _formatEnumNames), "TSREPLACE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetEnumString(string name, string[] enumNames)
+    {
+        var node = GetNode(name);
+        if (node == null)
+        {
+            return enumNames[0];
+        }
+        var str = TryGetStringFromNode(node, out var stringValue) ? stringValue : "";
+        if (!string.IsNullOrEmpty(str))
+        {
+            return str;
+        }
+        if (TryGetIntFromNode(node, out var idx) && idx >= 0 && idx < enumNames.Length)
+        {
+            return enumNames[idx];
+        }
+        return enumNames[0];
+    }
+
+    private int GetEnumIndex(string name, string[] enumNames)
+    {
+        var current = GetEnumString(name, enumNames);
+        var idx = Array.FindIndex(enumNames, v => string.Equals(v, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetFormatIndex()
+    {
+        return GetEnumIndex("OutputFormat", _formatEnumNames);
+    }
+
+    private int GetFilterIndex()
+    {
+        return GetEnumIndex("FilterOption", _filterEnumNames);
+    }
+
+    private bool IsCustomFilter()
+    {
+        return GetFilterIndex() == 2;
+    }
+
+    private bool IsSettingFilter()
+    {
+        return GetFilterIndex() == 1;
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetIndexOptions(List<string>? list, int selectedIndex)
+    {
+        if (list == null)
+        {
+            yield break;
+        }
+        for (var i = 0; i < list.Count; i++)
+        {
+            var value = i.ToString();
+            var label = list[i];
+            yield return (value, label, i == selectedIndex);
+        }
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetValueOptions(List<string>? list, string? selected)
+    {
+        if (list == null)
+        {
+            yield break;
+        }
+        foreach (var item in list)
+        {
+            yield return (item, item, string.Equals(item, selected, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetIntOptions(List<int>? list, int selected)
+    {
+        if (list == null)
+        {
+            yield break;
+        }
+        foreach (var item in list)
+        {
+            yield return (item.ToString(), item.ToString(), item == selected);
+        }
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetOutputMaskOptions()
+    {
+        var list = _options?.OutputOptionList ?? new List<OutputOptionItem>();
+        var masks = _options?.TsreplaceOutputMasks ?? new List<int>();
+        var current = GetIntValue("OutputMask");
+        var filtered = IsTsreplaceFormat()
+            ? list.Where(item => masks.Contains(item.Mask)).ToList()
+            : list.ToList();
+        if (filtered.Count == 0)
+        {
+            yield break;
+        }
+        foreach (var item in filtered)
+        {
+            yield return (item.Mask.ToString(), item.Name ?? item.Mask.ToString(), item.Mask == current);
+        }
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetFilterOptions()
+    {
+        var current = GetFilterIndex();
+        var list = _options?.FilterOptions ?? new List<FilterOptionItem>();
+        if (list.Count == 0)
+        {
+            for (var i = 0; i < _filterEnumNames.Length; i++)
+            {
+                yield return (i.ToString(), _filterEnumNames[i], i == current);
+            }
+            yield break;
+        }
+        foreach (var item in list)
+        {
+            yield return (item.Id.ToString(), item.Name ?? item.Id.ToString(), item.Id == current);
+        }
+    }
+
+    private int GetDeinterlaceIndex()
+    {
+        var list = _options?.DeinterlaceAlgorithmList ?? new List<string>();
+        var current = GetFilterEnumString("DeinterlaceAlgorithm", list);
+        var idx = list.FindIndex(item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetDeblockStrengthIndex()
+    {
+        var current = GetFilterEnumString("DeblockStrength", _deblockStrengthEnumNames.ToList());
+        var idx = Array.FindIndex(_deblockStrengthEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetDeblockQualityIndex()
+    {
+        var current = GetFilterInt("DeblockQuality");
+        var values = _options?.DeblockQualityValues ?? new List<int>();
+        var idx = values.FindIndex(v => v == current);
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetKfmFpsIndex()
+    {
+        var current = GetFilterEnumString("KfmFps", _filterFpsEnumNames.ToList());
+        var idx = Array.FindIndex(_kfmFpsEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetKfmVfrIndex()
+    {
+        return GetFilterBool("KfmVfr120fps") ? 1 : 0;
+    }
+
+    private int GetD3dvpGpuIndex()
+    {
+        var current = GetFilterEnumString("D3dvpGpu", _d3dvpGpuEnumNames.ToList());
+        var idx = Array.FindIndex(_d3dvpGpuEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetQtgmcPresetIndex()
+    {
+        var current = GetFilterEnumString("QtgmcPreset", _qtgmcPresetEnumNames.ToList());
+        var idx = Array.FindIndex(_qtgmcPresetEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private int GetYadifFpsIndex()
+    {
+        var current = GetFilterEnumString("YadifFps", _yadifFpsEnumNames.ToList());
+        var idx = Array.FindIndex(_yadifFpsEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetKfmFpsOptions()
+    {
+        var labels = BuildFilterFpsLabelMap();
+        var idx = GetKfmFpsIndex();
+        for (var i = 0; i < _kfmFpsEnumNames.Length; i++)
+        {
+            var key = _kfmFpsEnumNames[i];
+            var label = labels.TryGetValue(key, out var text) ? text : key;
+            yield return (i.ToString(), label, i == idx);
+        }
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetYadifFpsOptions()
+    {
+        var labels = BuildFilterFpsLabelMap();
+        var idx = GetYadifFpsIndex();
+        for (var i = 0; i < _yadifFpsEnumNames.Length; i++)
+        {
+            var key = _yadifFpsEnumNames[i];
+            var label = labels.TryGetValue(key, out var text) ? text : key;
+            yield return (i.ToString(), label, i == idx);
+        }
+    }
+
+    private Dictionary<string, string> BuildFilterFpsLabelMap()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var labels = _options?.FilterFpsList ?? new List<string>();
+        for (var i = 0; i < _filterFpsEnumNames.Length; i++)
+        {
+            if (i < labels.Count)
+            {
+                map[_filterFpsEnumNames[i]] = labels[i];
+            }
+        }
+        return map;
+    }
+
+    private bool IsDeinterlace(string name)
+    {
+        var current = GetFilterEnumString("DeinterlaceAlgorithm", _options?.DeinterlaceAlgorithmList ?? new List<string>());
+        return string.Equals(current, name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int GetAudioEncoderIndex()
+    {
+        var node = GetNode("AudioEncoderType");
+        if (TryGetIntFromNode(node, out var idx))
+        {
+            return idx;
+        }
+        var str = TryGetStringFromNode(node, out var value) ? value : "";
+        if (!string.IsNullOrEmpty(str))
+        {
+            var index = Array.FindIndex(_audioEncoderEnumNames, v => string.Equals(v, str, StringComparison.OrdinalIgnoreCase));
+            return index >= 0 ? index : 0;
+        }
+        return 0;
+    }
+
+    private int GetSubtitleModeIndex()
+    {
+        return GetIntValue("SubMode");
+    }
+
+    private int GetWhisperModelIndex()
+    {
+        return GetIntValue("WhisperModel");
+    }
+
+    private bool IsWhisperMode()
+    {
+        return GetSubtitleModeIndex() >= 1;
+    }
+
+    private double GetDoubleValue(string name)
+    {
+        var node = GetNode(name);
+        return TryGetDoubleFromNode(node, out var value) ? value : 0;
+    }
+
+    private void OnDoubleChanged(ChangeEventArgs e, string name)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var value))
+        {
+            SetNodeValue(name, JsonValue.Create(value));
+        }
+    }
+
+    private double GetBitrateValue(string name)
+    {
+        var node = GetObjectNode("Bitrate")?[name];
+        return TryGetDoubleFromNode(node, out var value) ? value : 0;
+    }
+
+    private void OnBitrateChanged(ChangeEventArgs e, string name)
+    {
+        if (!double.TryParse(e.Value?.ToString(), out var value))
+        {
+            return;
+        }
+        var bitrate = GetObjectNode("Bitrate") ?? new JsonObject();
+        var key = GetMatchingKey(bitrate, name);
+        bitrate[key] = JsonValue.Create(value);
+        SetNodeValue("Bitrate", bitrate);
+    }
+
+    private string GetFilterEnumString(string name, List<string> options)
+    {
+        var node = GetFilterNode(name);
+        var str = TryGetStringFromNode(node, out var value) ? value : "";
+        if (!string.IsNullOrEmpty(str))
+        {
+            return str;
+        }
+        if (TryGetIntFromNode(node, out var idx) && idx >= 0 && idx < options.Count)
+        {
+            return options[idx];
+        }
+        return options.Count > 0 ? options[0] : "";
+    }
+
+    private JsonNode? GetFilterNode(string name)
+    {
+        var filter = GetObjectNode("FilterSetting");
+        return GetNodeFromObject(filter, name);
+    }
+
+    private bool GetFilterBool(string name)
+    {
+        var node = GetFilterNode(name);
+        return TryGetBoolFromNode(node, out var value) && value;
+    }
+
+    private int GetFilterInt(string name)
+    {
+        var node = GetFilterNode(name);
+        return TryGetIntFromNode(node, out var value) ? value : 0;
+    }
+
+    private void OnFilterBoolChanged(ChangeEventArgs e, string name)
+    {
+        var value = e.Value is bool b && b;
+        SetFilterValue(name, JsonValue.Create(value));
+    }
+
+    private void OnFilterIntChanged(ChangeEventArgs e, string name)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            SetFilterValue(name, JsonValue.Create(value));
+        }
+    }
+
+    private void SetFilterValue(string name, JsonNode? value)
+    {
+        var filter = GetObjectNode("FilterSetting") ?? new JsonObject();
+        var key = GetMatchingKey(filter, name);
+        filter[key] = value;
+        SetNodeValue("FilterSetting", filter);
+    }
+
+    private void SetResizePreset(int width, int height)
+    {
+        SetFilterValue("ResizeWidth", JsonValue.Create(width));
+        SetFilterValue("ResizeHeight", JsonValue.Create(height));
+    }
+
+    private static JsonNode? GetNodeFromObject(JsonObject? obj, string name)
+    {
+        if (obj == null)
+        {
+            return null;
+        }
+        if (obj.TryGetPropertyValue(name, out var node) && node != null)
+        {
+            return node;
+        }
+        var camel = ToCamelCase(name);
+        if (obj.TryGetPropertyValue(camel, out var nodeCamel) && nodeCamel != null)
+        {
+            return nodeCamel;
+        }
+        foreach (var kv in obj)
+        {
+            if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return kv.Value;
+            }
+        }
+        return null;
+    }
+
+    private static string GetMatchingKey(JsonObject obj, string name)
+    {
+        if (obj.ContainsKey(name))
+        {
+            return name;
+        }
+        var camel = ToCamelCase(name);
+        if (obj.ContainsKey(camel))
+        {
+            return camel;
+        }
+        foreach (var kv in obj)
+        {
+            if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return kv.Key;
+            }
+        }
+        return name;
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetSvtBitDepthOptions()
+    {
+        var list = _options?.SvtAv1BitDepthList ?? new List<string>();
+        var node = GetObjectNode("FilterSetting")?["SvtAv1BitDepth"];
+        var current = TryGetIntFromNode(node, out var value) ? value : 0;
+        var currentIndex = current == 8 ? 1 : current == 10 ? 2 : 0;
+        for (var i = 0; i < list.Count; i++)
+        {
+            yield return (i.ToString(), list[i], i == currentIndex);
+        }
+    }
+
+    private static bool TryGetIntFromNode(JsonNode? node, out int value)
+    {
+        if (node is JsonValue jsonValue && jsonValue.TryGetValue<int>(out var result))
+        {
+            value = result;
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetBoolFromNode(JsonNode? node, out bool value)
+    {
+        if (node is JsonValue jsonValue && jsonValue.TryGetValue<bool>(out var result))
+        {
+            value = result;
+            return true;
+        }
+        value = false;
+        return false;
+    }
+
+    private static bool TryGetStringFromNode(JsonNode? node, out string value)
+    {
+        if (node is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var result))
+        {
+            value = result ?? "";
+            return true;
+        }
+        value = "";
+        return false;
+    }
+
+    private static bool TryGetDoubleFromNode(JsonNode? node, out double value)
+    {
+        if (node is JsonValue jsonValue && jsonValue.TryGetValue<double>(out var result))
+        {
+            value = result;
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    private sealed class ResourceRow
+    {
+        public int Index { get; set; }
+        public string Name { get; set; } = "";
+        public int Cpu { get; set; }
+        public int Hdd { get; set; }
+        public int Gpu { get; set; }
+    }
+
+    private IEnumerable<ResourceRow> GetResourceRows()
+    {
+        var resources = GetNode("ReqResources") as JsonArray;
+        if (resources == null)
+        {
+            yield break;
+        }
+        for (var i = 0; i < resources.Count && i < _resourcePhaseNames.Length; i++)
+        {
+            var obj = resources[i] as JsonObject;
+            var cpu = TryGetIntFromNode(obj?["CPU"], out var cpuVal) ? cpuVal : 0;
+            var hdd = TryGetIntFromNode(obj?["HDD"], out var hddVal) ? hddVal : 0;
+            var gpu = TryGetIntFromNode(obj?["GPU"], out var gpuVal) ? gpuVal : 0;
+            yield return new ResourceRow
+            {
+                Index = i,
+                Name = _resourcePhaseNames[i],
+                Cpu = cpu,
+                Hdd = hdd,
+                Gpu = gpu
+            };
+        }
+    }
+
+    private void OnResourceChanged(ChangeEventArgs e, int index, string key)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+        {
+            return;
+        }
+        var resources = GetNode("ReqResources") as JsonArray ?? new JsonArray();
+        while (resources.Count <= index)
+        {
+            resources.Add(new JsonObject
+            {
+                ["CPU"] = 0,
+                ["HDD"] = 0,
+                ["GPU"] = 0
+            });
+        }
+        if (resources[index] is not JsonObject obj)
+        {
+            obj = new JsonObject();
+            resources[index] = obj;
+        }
+        obj[key] = value;
+        SetNodeValue("ReqResources", resources);
+    }
+
+    private static int ParseIndex(object? value)
+    {
+        return int.TryParse(value?.ToString(), out var idx) ? idx : 0;
+    }
+
+    private static string ToCamelCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+        if (name.Length == 1)
+        {
+            return name.ToLowerInvariant();
+        }
+        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+    }
+}
