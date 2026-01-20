@@ -708,6 +708,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
                 frame.pts = mPTS;
                 frame.frameDuration = timePerFrame; // TODO: VFR対応
                 frame.framePTS = (int64_t)mPTS;
+                frame.originalFramePTS = frame.framePTS;
                 frame.fileOffset = srcframe.fileOffset;
                 frame.keyFrame = keyFrame;
                 frame.cmType = CMTYPE_NONCM; // 最初は全部NonCMにしておく

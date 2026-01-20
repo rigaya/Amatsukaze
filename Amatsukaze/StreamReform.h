@@ -95,6 +95,7 @@ struct FilterSourceFrame {
     int frameIndex; // 内部用(DTS順フレーム番号)
     double pts; // 内部用
     double frameDuration; // 内部用
+    int64_t originalFramePTS; // AMTSource照合用(ドロップ補正前PTS)
     int64_t framePTS;
     int64_t fileOffset;
     int keyFrame;

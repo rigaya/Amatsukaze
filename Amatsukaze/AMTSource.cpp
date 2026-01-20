@@ -382,24 +382,24 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
     // ffmpegのpts wrapの仕方が謎なので下位33bitのみを見る
     //（26時間以上ある動画だと重複する可能性はあるが無視）
     int64_t pts = frame()->pts & ((int64_t(1) << 33) - 1);
-
+    // FilterSourceFrame の pts はドロップ補正後のPTSなので、ドロップ補正前のoriginalFramePTSを使って照合する
     int64_t headDiff = 0, tailDiff = 0;
     auto it = std::lower_bound(frames.begin(), frames.end(), pts, [](const FilterSourceFrame& e, int64_t pts) {
-        return e.framePTS < pts;
+        return e.originalFramePTS < pts;
         });
 
-    if (it == frames.begin() && pts < it->framePTS) {
-        headDiff = it->framePTS - pts;
+    if (it == frames.begin() && pts < it->originalFramePTS) {
+        headDiff = it->originalFramePTS - pts;
         // 小さすぎた場合は1周分追加して見る
         pts += (int64_t(1) << 33);
         it = std::lower_bound(frames.begin(), frames.end(), pts, [](const FilterSourceFrame& e, int64_t pts) {
-            return e.framePTS < pts;
+            return e.originalFramePTS < pts;
             });
     }
 
     if (it == frames.end()) {
         // 最後より後ろだった
-        tailDiff = pts - frames.back().framePTS;
+        tailDiff = pts - frames.back().originalFramePTS;
         // 前の可能性もあるので、判定
         if (headDiff == 0 || headDiff > tailDiff) {
             lastDecodeFrame = vi.num_frames;
@@ -408,7 +408,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
         return;
     }
 
-    if (it->framePTS != pts) {
+    if (it->originalFramePTS != pts) {
         // 一致するフレームがない
         ctx.incrementCounter(AMT_ERR_UNKNOWN_PTS);
         ctx.warnF("Unknown PTS frame %lld", pts);
@@ -434,7 +434,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
 
         // 次のフレームも同じフレームを参照してたらそれも出力
         auto next = it + 1;
-        if (next != frames.end() && next->framePTS == it->framePTS) {
+        if (next != frames.end() && next->originalFramePTS == it->originalFramePTS) {
             auto cachenext = frameCache.find(frameIndex + 1);
             if (cachenext != frameCache.end()) {
                 // すでにキャッシュにある
