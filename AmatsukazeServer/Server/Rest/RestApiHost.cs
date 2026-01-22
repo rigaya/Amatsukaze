@@ -181,7 +181,7 @@ namespace Amatsukaze.Server.Rest
 
             app.MapGet("/api/queue", (HttpRequest request) =>
             {
-                var filter = new QueueFilter();
+                var filter = new Amatsukaze.Shared.QueueFilter();
                 if (request.Query.TryGetValue("state", out var states))
                 {
                     filter.States.AddRange(states);
@@ -210,6 +210,16 @@ namespace Amatsukaze.Server.Rest
                     filter.HideOneSeg = hideOneSeg;
                 }
                 return Results.Json(state.GetQueueView(filter));
+            });
+
+            app.MapGet("/api/queue/changes", (HttpRequest request) =>
+            {
+                if (request.Query.TryGetValue("since", out var sinceRaw) &&
+                    long.TryParse(sinceRaw.ToString(), out var since))
+                {
+                    return Results.Json(state.GetQueueChanges(since));
+                }
+                return Results.BadRequest(new { error = "since is required." });
             });
 
             app.MapPost("/api/queue/add", async (HttpRequest request) =>

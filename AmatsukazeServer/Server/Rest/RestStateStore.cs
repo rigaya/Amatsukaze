@@ -59,6 +59,9 @@ namespace Amatsukaze.Server.Rest
         private OperationResult lastOperationResult;
 
         private List<QueueItem> queueItems = new List<QueueItem>();
+        private long queueVersion = 0;
+        private const int MaxQueueChanges = 1000;
+        private readonly List<QueueChangeRecord> queueChanges = new List<QueueChangeRecord>();
         private List<LogItem> logItems = new List<LogItem>();
         private List<CheckLogItem> checkLogItems = new List<CheckLogItem>();
 
@@ -86,6 +89,13 @@ namespace Amatsukaze.Server.Rest
         private readonly Dictionary<string, DrcsImage> drcsMap = new Dictionary<string, DrcsImage>();
 
         private string lastLogFile;
+
+        private class QueueChangeRecord
+        {
+            public long Version { get; set; }
+            public QueueChange Change { get; set; }
+        }
+
 
         public RestStateStore(EncodeServer server)
         {
@@ -149,15 +159,17 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
-        public QueueView GetQueueView(QueueFilter filter)
+        public Amatsukaze.Shared.QueueView GetQueueView(Amatsukaze.Shared.QueueFilter filter)
         {
-            filter = filter ?? new QueueFilter();
+            filter = filter ?? new Amatsukaze.Shared.QueueFilter();
             List<QueueItem> items;
             Setting currentSetting;
+            long currentVersion;
             lock (sync)
             {
                 items = queueItems.ToList();
                 currentSetting = setting;
+                currentVersion = queueVersion;
             }
 
             IEnumerable<QueueItem> filtered = items;
@@ -197,21 +209,78 @@ namespace Amatsukaze.Server.Rest
             }
 
             var list = filtered.Select(ToQueueItemView).ToList();
-            var counters = new QueueCounters()
+            var counters = BuildQueueCounters(items);
+            return new Amatsukaze.Shared.QueueView()
             {
-                Active = items.Count(s => s.IsActive),
-                Encoding = items.Count(s => s.State == QueueState.Encoding),
-                Complete = items.Count(s => s.State == QueueState.Complete),
-                Pending = items.Count(s => s.State == QueueState.LogoPending),
-                Failed = items.Count(s => s.State == QueueState.Failed || s.State == QueueState.PreFailed),
-                Canceled = items.Count(s => s.State == QueueState.Canceled)
-            };
-            return new QueueView()
-            {
+                Version = currentVersion,
                 Items = list,
                 Counters = counters,
                 Filters = filter
             };
+        }
+
+        public Amatsukaze.Shared.QueueChangesView GetQueueChanges(long sinceVersion)
+        {
+            lock (sync)
+            {
+                if (sinceVersion > queueVersion)
+                {
+                    return new Amatsukaze.Shared.QueueChangesView()
+                    {
+                        FromVersion = sinceVersion,
+                        ToVersion = queueVersion,
+                        FullSyncRequired = true,
+                        Counters = BuildQueueCounters(queueItems)
+                    };
+                }
+
+                if (queueChanges.Count == 0)
+                {
+                    if (sinceVersion == queueVersion)
+                    {
+                        return new Amatsukaze.Shared.QueueChangesView()
+                        {
+                            FromVersion = sinceVersion,
+                            ToVersion = queueVersion,
+                            FullSyncRequired = false,
+                            Counters = BuildQueueCounters(queueItems)
+                        };
+                    }
+                    return new Amatsukaze.Shared.QueueChangesView()
+                    {
+                        FromVersion = sinceVersion,
+                        ToVersion = queueVersion,
+                        FullSyncRequired = true,
+                        Counters = BuildQueueCounters(queueItems)
+                    };
+                }
+
+                var minVersion = queueChanges[0].Version;
+                if (sinceVersion < minVersion)
+                {
+                    return new Amatsukaze.Shared.QueueChangesView()
+                    {
+                        FromVersion = sinceVersion,
+                        ToVersion = queueVersion,
+                        FullSyncRequired = true,
+                        Counters = BuildQueueCounters(queueItems)
+                    };
+                }
+
+                var changes = queueChanges
+                    .Where(c => c.Version > sinceVersion)
+                    .Select(c => c.Change)
+                    .ToList();
+
+                return new Amatsukaze.Shared.QueueChangesView()
+                {
+                    FromVersion = sinceVersion,
+                    ToVersion = queueVersion,
+                    FullSyncRequired = false,
+                    Changes = changes,
+                    Counters = BuildQueueCounters(queueItems)
+                };
+            }
         }
 
         public List<LogItem> GetEncodeLogs()
@@ -468,7 +537,7 @@ namespace Amatsukaze.Server.Rest
             return new Snapshot()
             {
                 System = GetSystemSnapshot(),
-                QueueView = GetQueueView(new QueueFilter()),
+                QueueView = GetQueueView(new Amatsukaze.Shared.QueueFilter()),
                 EncodeLogs = GetEncodeLogs(),
                 CheckLogs = GetCheckLogs(),
                 ConsoleView = GetConsoleView(),
@@ -518,9 +587,9 @@ namespace Amatsukaze.Server.Rest
             };
         }
 
-        private QueueItemView ToQueueItemView(QueueItem item)
+        private Amatsukaze.Shared.QueueItemView ToQueueItemView(QueueItem item)
         {
-            return new QueueItemView()
+            return new Amatsukaze.Shared.QueueItemView()
             {
                 Id = item.Id,
                 FileName = item.FileName,
@@ -591,6 +660,7 @@ namespace Amatsukaze.Server.Rest
                 if (data.QueueData != null)
                 {
                     queueItems = data.QueueData.Items?.Select(CopyQueueItem).ToList() ?? new List<QueueItem>();
+                    ResetQueueChanges();
                 }
                 if (data.QueueUpdate != null)
                 {
@@ -598,6 +668,7 @@ namespace Amatsukaze.Server.Rest
                     if (update.Type == UpdateType.Clear)
                     {
                         queueItems.Clear();
+                        ResetQueueChanges();
                         return Task.FromResult(0);
                     }
                     var idx = queueItems.FindIndex(item => item.Id == update.Item?.Id);
@@ -606,6 +677,14 @@ namespace Amatsukaze.Server.Rest
                         if (idx >= 0)
                         {
                             queueItems.RemoveAt(idx);
+                        }
+                        if (update.Item != null)
+                        {
+                            AddQueueChange(new Amatsukaze.Shared.QueueChange()
+                            {
+                                Type = Amatsukaze.Shared.QueueChangeType.Remove,
+                                Id = update.Item.Id
+                            });
                         }
                     }
                     else if (update.Type == UpdateType.Move)
@@ -623,6 +702,15 @@ namespace Amatsukaze.Server.Rest
                                 queueItems.Insert(update.Position, item);
                             }
                         }
+                        if (update.Item != null)
+                        {
+                            AddQueueChange(new Amatsukaze.Shared.QueueChange()
+                            {
+                                Type = Amatsukaze.Shared.QueueChangeType.Move,
+                                Id = update.Item.Id,
+                                Position = update.Position
+                            });
+                        }
                     }
                     else if (update.Type == UpdateType.Add || update.Type == UpdateType.Update)
                     {
@@ -636,6 +724,11 @@ namespace Amatsukaze.Server.Rest
                             {
                                 queueItems.Add(CopyQueueItem(update.Item));
                             }
+                            AddQueueChange(new Amatsukaze.Shared.QueueChange()
+                            {
+                                Type = update.Type == UpdateType.Add ? Amatsukaze.Shared.QueueChangeType.Add : Amatsukaze.Shared.QueueChangeType.Update,
+                                Item = ToQueueItemView(update.Item)
+                            });
                         }
                     }
                 }
@@ -677,6 +770,40 @@ namespace Amatsukaze.Server.Rest
                 }
             }
             return Task.FromResult(0);
+        }
+
+        private Amatsukaze.Shared.QueueCounters BuildQueueCounters(IEnumerable<QueueItem> items)
+        {
+            var list = items as IList<QueueItem> ?? items.ToList();
+            return new Amatsukaze.Shared.QueueCounters()
+            {
+                Active = list.Count(s => s.IsActive),
+                Encoding = list.Count(s => s.State == QueueState.Encoding),
+                Complete = list.Count(s => s.State == QueueState.Complete),
+                Pending = list.Count(s => s.State == QueueState.LogoPending),
+                Failed = list.Count(s => s.State == QueueState.Failed || s.State == QueueState.PreFailed),
+                Canceled = list.Count(s => s.State == QueueState.Canceled)
+            };
+        }
+
+        private void ResetQueueChanges()
+        {
+            queueVersion++;
+            queueChanges.Clear();
+        }
+
+        private void AddQueueChange(Amatsukaze.Shared.QueueChange change)
+        {
+            queueVersion++;
+            queueChanges.Add(new QueueChangeRecord()
+            {
+                Version = queueVersion,
+                Change = change
+            });
+            if (queueChanges.Count > MaxQueueChanges)
+            {
+                queueChanges.RemoveAt(0);
+            }
         }
 
         public Task OnCommonData(CommonData data)

@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,6 +23,7 @@ namespace Amatsukaze.Shared
             {
                 PropertyNameCaseInsensitive = true
             };
+            this.jsonOptions.Converters.Add(new JsonStringEnumConverter());
         }
 
         public Task<ApiResult<Snapshot>> GetSnapshotAsync()
@@ -75,6 +77,9 @@ namespace Amatsukaze.Shared
             var url = "/api/queue" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
             return GetJsonAsync<QueueView>(url);
         }
+
+        public Task<ApiResult<QueueChangesView>> GetQueueChangesAsync(long sinceVersion)
+            => GetJsonAsync<QueueChangesView>($"/api/queue/changes?since={sinceVersion}");
 
         public Task<ApiResult<string>> AddQueueAsync(AddQueueRequest req)
             => PostJsonAsync("/api/queue/add", req, result => result.GetProperty("requestId").GetString() ?? "");
