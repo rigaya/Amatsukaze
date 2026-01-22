@@ -18,53 +18,6 @@ namespace Amatsukaze.Server.Rest
         public StatusSummary StatusSummary { get; set; }
     }
 
-    public class QueueItemView
-    {
-        public int Id { get; set; }
-        public string FileName { get; set; }
-        public string ServiceName { get; set; }
-        public string ProfileName { get; set; }
-        public string State { get; set; }
-        public string StateLabel { get; set; }
-        public int Priority { get; set; }
-        public bool IsBatch { get; set; }
-        public DateTime? EncodeStart { get; set; }
-        public DateTime? EncodeFinish { get; set; }
-        public string DisplayEncodeStart { get; set; }
-        public string DisplayEncodeFinish { get; set; }
-        public double Progress { get; set; }
-        public int ConsoleId { get; set; }
-        public int OutputMask { get; set; }
-        public bool IsTooSmall { get; set; }
-    }
-
-    public class QueueCounters
-    {
-        public int Active { get; set; }
-        public int Encoding { get; set; }
-        public int Complete { get; set; }
-        public int Pending { get; set; }
-        public int Failed { get; set; }
-        public int Canceled { get; set; }
-    }
-
-    public class QueueFilter
-    {
-        public List<string> States { get; set; } = new List<string>();
-        public string Search { get; set; }
-        public List<string> SearchTargets { get; set; } = new List<string>();
-        public DateTime? DateFrom { get; set; }
-        public DateTime? DateTo { get; set; }
-        public bool HideOneSeg { get; set; }
-    }
-
-    public class QueueView
-    {
-        public List<QueueItemView> Items { get; set; } = new List<QueueItemView>();
-        public QueueCounters Counters { get; set; } = new QueueCounters();
-        public QueueFilter Filters { get; set; } = new QueueFilter();
-    }
-
     public class LogFileMeta
     {
         public long Size { get; set; }
@@ -154,7 +107,7 @@ namespace Amatsukaze.Server.Rest
     public class Snapshot
     {
         public SystemSnapshot System { get; set; }
-        public QueueView QueueView { get; set; }
+        public Amatsukaze.Shared.QueueView QueueView { get; set; }
         public List<LogItem> EncodeLogs { get; set; }
         public List<CheckLogItem> CheckLogs { get; set; }
         public ConsoleView ConsoleView { get; set; }

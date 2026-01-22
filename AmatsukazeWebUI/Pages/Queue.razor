@@ -1,14 +1,17 @@
 @page "/queue"
 @using Amatsukaze.Shared
 @using System.Text.Json
+@using System.Threading
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <h3>Queue</h3>
 
 <p>
     <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
 </p>
+
 
 @if (_loading)
 {
@@ -65,7 +68,7 @@ else
             <tbody>
                 @foreach (var item in _view.Items)
                 {
-                    <tr>
+                    <tr @key="item.Id">
                         <td>@item.Id</td>
                         <td>@(item.StateLabel ?? item.State ?? "-")</td>
                         <td>@(item.FileName ?? "-")</td>
@@ -118,8 +121,16 @@ else
     private readonly Dictionary<int, int> _priorityInputs = new();
     private readonly List<JsonElement> _profiles = new();
     private readonly List<string> _profileNames = new();
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
+    private long _queueVersion;
+    private bool _polling;
 
-    protected override Task OnInitializedAsync() => ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        StartPolling();
+    }
 
     private async Task ReloadAsync()
     {
@@ -164,6 +175,7 @@ else
             _view = res.Data;
             if (_view != null)
             {
+                _queueVersion = _view.Version;
                 foreach (var item in _view.Items)
                 {
                     if (!_profileInputs.ContainsKey(item.Id))
@@ -179,6 +191,236 @@ else
         }
 
         _loading = false;
+    }
+
+    private void StartPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+        _pollTask = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(PollOnceAsync);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, token);
+    }
+
+    private async Task PollOnceAsync()
+    {
+        if (_loading || _view == null || _polling)
+        {
+            return;
+        }
+        _polling = true;
+        try
+        {
+            var res = await Api.GetQueueChangesAsync(_queueVersion);
+            if (!res.Ok)
+            {
+                _error = res.Error ?? "Failed to poll queue.";
+                return;
+            }
+            var data = res.Data;
+            if (data == null)
+            {
+                return;
+            }
+            if (data.FullSyncRequired)
+            {
+                await ReloadAsync();
+                return;
+            }
+            if (data.Changes.Count == 0)
+            {
+                var snapshot = await Api.GetQueueAsync();
+                if (snapshot.Ok && snapshot.Data != null)
+                {
+                    ApplyQueueSnapshot(snapshot.Data);
+                }
+                return;
+            }
+            ApplyQueueChanges(data);
+        }
+        finally
+        {
+            _polling = false;
+        }
+    }
+
+    private void ApplyQueueChanges(QueueChangesView data)
+    {
+        if (_view == null)
+        {
+            return;
+        }
+        _queueVersion = data.ToVersion;
+        _view.Counters = data.Counters ?? _view.Counters;
+        var items = _view.Items;
+
+        foreach (var change in data.Changes)
+        {
+            switch (change.Type)
+            {
+                case QueueChangeType.Add:
+                case QueueChangeType.Update:
+                    if (change.Item == null)
+                    {
+                        continue;
+                    }
+                    var existingIndex = items.FindIndex(x => x.Id == change.Item.Id);
+                    if (existingIndex >= 0)
+                    {
+                        items[existingIndex] = change.Item;
+                    }
+                    else
+                    {
+                        items.Add(change.Item);
+                    }
+                    _profileInputs[change.Item.Id] = change.Item.ProfileName ?? "";
+                    _priorityInputs[change.Item.Id] = change.Item.Priority;
+                    break;
+                case QueueChangeType.Remove:
+                    if (!change.Id.HasValue)
+                    {
+                        continue;
+                    }
+                    var removeIndex = items.FindIndex(x => x.Id == change.Id.Value);
+                    if (removeIndex >= 0)
+                    {
+                        items.RemoveAt(removeIndex);
+                    }
+                    _profileInputs.Remove(change.Id.Value);
+                    _priorityInputs.Remove(change.Id.Value);
+                    break;
+                case QueueChangeType.Move:
+                    if (!change.Id.HasValue || !change.Position.HasValue)
+                    {
+                        continue;
+                    }
+                    var moveIndex = items.FindIndex(x => x.Id == change.Id.Value);
+                    if (moveIndex < 0)
+                    {
+                        continue;
+                    }
+                    var item = items[moveIndex];
+                    items.RemoveAt(moveIndex);
+                    var targetIndex = Math.Clamp(change.Position.Value, 0, items.Count);
+                    items.Insert(targetIndex, item);
+                    break;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void ApplyQueueSnapshot(QueueView snapshot)
+    {
+        if (_view == null)
+        {
+            _view = snapshot;
+            _queueVersion = snapshot.Version;
+            return;
+        }
+        _queueVersion = snapshot.Version;
+        _view.Counters = snapshot.Counters;
+        var items = _view.Items;
+        items.Clear();
+        items.AddRange(snapshot.Items);
+        var ids = new HashSet<int>(snapshot.Items.Select(item => item.Id));
+        foreach (var item in snapshot.Items)
+        {
+            _profileInputs[item.Id] = item.ProfileName ?? "";
+            _priorityInputs[item.Id] = item.Priority;
+        }
+        var removeProfile = _profileInputs.Keys.Where(id => !ids.Contains(id)).ToList();
+        foreach (var id in removeProfile)
+        {
+            _profileInputs.Remove(id);
+        }
+        var removePriority = _priorityInputs.Keys.Where(id => !ids.Contains(id)).ToList();
+        foreach (var id in removePriority)
+        {
+            _priorityInputs.Remove(id);
+        }
+        StateHasChanged();
+    }
+
+    private bool HasQueueDiff(QueueView snapshot)
+    {
+        if (_view == null)
+        {
+            return true;
+        }
+        if (_view.Items.Count != snapshot.Items.Count)
+        {
+            return true;
+        }
+        for (var i = 0; i < snapshot.Items.Count; i++)
+        {
+            if (_view.Items[i].Id != snapshot.Items[i].Id)
+            {
+                return true;
+            }
+        }
+        var currentMap = _view.Items.ToDictionary(item => item.Id, item => item);
+        foreach (var item in snapshot.Items)
+        {
+            if (!currentMap.TryGetValue(item.Id, out var current))
+            {
+                return true;
+            }
+            if (IsQueueItemChanged(current, item))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsQueueItemChanged(QueueItemView current, QueueItemView next)
+    {
+        return current.FileName != next.FileName ||
+               current.ServiceName != next.ServiceName ||
+               current.ProfileName != next.ProfileName ||
+               current.State != next.State ||
+               current.StateLabel != next.StateLabel ||
+               current.Priority != next.Priority ||
+               current.IsBatch != next.IsBatch ||
+               current.EncodeStart != next.EncodeStart ||
+               current.EncodeFinish != next.EncodeFinish ||
+               current.DisplayEncodeStart != next.DisplayEncodeStart ||
+               current.DisplayEncodeFinish != next.DisplayEncodeFinish ||
+               current.Progress != next.Progress ||
+               current.ConsoleId != next.ConsoleId ||
+               current.OutputMask != next.OutputMask ||
+               current.IsTooSmall != next.IsTooSmall;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pollCts != null)
+        {
+            _pollCts.Cancel();
+        }
+        if (_pollTask != null)
+        {
+            try
+            {
+                await _pollTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        _pollCts?.Dispose();
     }
 
     private static string? GetProfileName(JsonElement profile)

@@ -134,9 +134,35 @@ namespace Amatsukaze.Shared
 
     public class QueueView
     {
+        public long Version { get; set; }
         public List<QueueItemView> Items { get; set; } = new List<QueueItemView>();
         public QueueCounters Counters { get; set; } = new QueueCounters();
         public QueueFilter Filters { get; set; } = new QueueFilter();
+    }
+
+    public enum QueueChangeType
+    {
+        Add,
+        Update,
+        Remove,
+        Move
+    }
+
+    public class QueueChange
+    {
+        public QueueChangeType Type { get; set; }
+        public QueueItemView? Item { get; set; }
+        public int? Id { get; set; }
+        public int? Position { get; set; }
+    }
+
+    public class QueueChangesView
+    {
+        public long FromVersion { get; set; }
+        public long ToVersion { get; set; }
+        public bool FullSyncRequired { get; set; }
+        public List<QueueChange> Changes { get; set; } = new List<QueueChange>();
+        public QueueCounters Counters { get; set; } = new QueueCounters();
     }
 
     public class LogItemView

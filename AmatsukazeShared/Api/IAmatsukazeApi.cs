@@ -14,6 +14,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<bool>> CancelSleepAsync();
 
         Task<ApiResult<QueueView>> GetQueueAsync(QueueFilter? filter = null);
+        Task<ApiResult<QueueChangesView>> GetQueueChangesAsync(long sinceVersion);
         Task<ApiResult<string>> AddQueueAsync(AddQueueRequest req);
         Task<ApiResult<bool>> ChangeQueueAsync(ChangeItemData req);
         Task<ApiResult<bool>> PauseQueueAsync(PauseRequest req);
