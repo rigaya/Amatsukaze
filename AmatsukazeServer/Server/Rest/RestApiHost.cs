@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -170,6 +171,7 @@ namespace Amatsukaze.Server.Rest
 
             app.MapGet("/api/snapshot", () => Results.Json(state.GetSnapshot()));
             app.MapGet("/api/system", () => Results.Json(state.GetSystemSnapshot()));
+            app.MapGet("/api/ui-state", () => Results.Json(state.GetUiStateView()));
             app.MapPost("/api/system/end", async () =>
             {
                 await server.EndServer();
@@ -226,7 +228,7 @@ namespace Amatsukaze.Server.Rest
 
             app.MapPost("/api/queue/add", async (HttpRequest request) =>
             {
-                var data = await request.ReadFromJsonAsync<AddQueueRequest>();
+                var data = await request.ReadFromJsonAsync<Amatsukaze.Shared.AddQueueRequest>();
                 if (data == null)
                 {
                     return Results.BadRequest();
@@ -235,7 +237,42 @@ namespace Amatsukaze.Server.Rest
                 {
                     data.RequestId = Guid.NewGuid().ToString("N");
                 }
-                await server.AddQueue(data);
+
+                if (data.Targets != null && data.Targets.Count > 0)
+                {
+                    foreach (var target in data.Targets)
+                    {
+                        if (string.IsNullOrWhiteSpace(target.Path) || !File.Exists(target.Path))
+                        {
+                            return Results.BadRequest(new { error = "Target file not found." });
+                        }
+                    }
+                }
+
+                var serverReq = new Amatsukaze.Server.AddQueueRequest
+                {
+                    DirPath = data.DirPath,
+                    Mode = (Amatsukaze.Server.ProcMode)data.Mode,
+                    RequestId = data.RequestId,
+                    AddQueueBat = data.AddQueueBat,
+                    Targets = data.Targets != null
+                        ? data.Targets.Select(t => new Amatsukaze.Server.AddQueueItem
+                        {
+                            Path = t.Path,
+                            Hash = t.Hash
+                        }).ToList()
+                        : new List<Amatsukaze.Server.AddQueueItem>(),
+                    Outputs = data.Outputs != null
+                        ? data.Outputs.Select(o => new Amatsukaze.Server.OutputInfo
+                        {
+                            DstPath = o.DstPath,
+                            Profile = o.Profile,
+                            Priority = o.Priority
+                        }).ToList()
+                        : new List<Amatsukaze.Server.OutputInfo>()
+                };
+
+                await server.AddQueue(serverReq);
                 return Results.Json(new { requestId = data.RequestId });
             });
 
@@ -279,8 +316,22 @@ namespace Amatsukaze.Server.Rest
                 var maxDirs = GetQueryInt(request, "maxDirs", 10);
                 var maxFiles = GetQueryInt(request, "maxFiles", 10);
 
-                var response = BuildPathSuggestResponse(input, extensions, allowFiles, allowDirs, maxDirs, maxFiles);
-                return Results.Json(response);
+                try
+                {
+                    var response = BuildPathSuggestResponse(input, extensions, allowFiles, allowDirs, maxDirs, maxFiles);
+                    return Results.Json(response);
+                }
+                catch (Exception ex)
+                {
+                    Debug.Print("[REST] path suggest error: " + ex);
+                    return Results.Json(new PathSuggestResponse
+                    {
+                        Input = input ?? string.Empty,
+                        BaseDir = string.Empty,
+                        Dirs = new List<PathCandidate>(),
+                        Files = new List<PathCandidate>()
+                    });
+                }
             });
 
             app.MapGet("/api/logs/file", (HttpRequest request) =>
@@ -1378,25 +1429,95 @@ namespace Amatsukaze.Server.Rest
 
         private static IEnumerable<string> SafeEnumerateDirectories(string baseDir)
         {
+            var options = new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false
+            };
+            IEnumerable<string> enumerable;
             try
             {
-                return Directory.EnumerateDirectories(baseDir);
+                enumerable = Directory.EnumerateDirectories(baseDir, "*", options);
             }
             catch
             {
-                return Array.Empty<string>();
+                yield break;
+            }
+
+            using var enumerator = enumerable.GetEnumerator();
+            var errorCount = 0;
+            while (true)
+            {
+                string current = null;
+                try
+                {
+                    if (!enumerator.MoveNext())
+                    {
+                        yield break;
+                    }
+                    current = enumerator.Current;
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
+                {
+                    errorCount++;
+                    if (errorCount >= 3)
+                    {
+                        yield break;
+                    }
+                    continue;
+                }
+                errorCount = 0;
+                if (!string.IsNullOrEmpty(current))
+                {
+                    yield return current;
+                }
             }
         }
 
         private static IEnumerable<string> SafeEnumerateFiles(string baseDir)
         {
+            var options = new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false
+            };
+            IEnumerable<string> enumerable;
             try
             {
-                return Directory.EnumerateFiles(baseDir);
+                enumerable = Directory.EnumerateFiles(baseDir, "*", options);
             }
             catch
             {
-                return Array.Empty<string>();
+                yield break;
+            }
+
+            using var enumerator = enumerable.GetEnumerator();
+            var errorCount = 0;
+            while (true)
+            {
+                string current = null;
+                try
+                {
+                    if (!enumerator.MoveNext())
+                    {
+                        yield break;
+                    }
+                    current = enumerator.Current;
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
+                {
+                    errorCount++;
+                    if (errorCount >= 3)
+                    {
+                        yield break;
+                    }
+                    continue;
+                }
+                errorCount = 0;
+                if (!string.IsNullOrEmpty(current))
+                {
+                    yield return current;
+                }
             }
         }
 

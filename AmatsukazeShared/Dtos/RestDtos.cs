@@ -48,6 +48,14 @@ namespace Amatsukaze.Shared
         public StatusSummary? StatusSummary { get; set; }
     }
 
+    public class UiStateView
+    {
+        public string? LastUsedProfile { get; set; }
+        public string? LastOutputPath { get; set; }
+        public string? LastAddQueueBat { get; set; }
+        public List<string>? OutputPathHistory { get; set; }
+    }
+
     public class OutputOptionItem
     {
         public string? Name { get; set; }

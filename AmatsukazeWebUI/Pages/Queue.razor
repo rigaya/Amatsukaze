@@ -2,6 +2,7 @@
 @using Amatsukaze.Shared
 @using System.Text.Json
 @using System.Threading
+@using System.IO
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -11,6 +12,7 @@
 
 <p>
     <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+    <button class="btn btn-success" style="margin-left: 0.5rem;" @onclick="OpenAddDialogAsync">Add Task</button>
 </p>
 
 
@@ -114,6 +116,85 @@ else
     }
 }
 
+@if (_showAddDialog)
+{
+    <div class="modal-overlay" @onclick="CloseAddDialog">
+        <div class="modal-body" @onclick:stopPropagation="true">
+            <h4>Add Queue Task</h4>
+            @if (!string.IsNullOrEmpty(_addError))
+            {
+                <p style="color: red;">@_addError</p>
+            }
+            <div class="form-row">
+                <label>Input TS</label>
+                <PathSuggestInput Value="@_addSrcPath"
+                                  ValueChanged="OnAddSrcPathChanged"
+                                  Placeholder="*.ts"
+                                  Extensions=".ts"
+                                  AllowFiles="true"
+                                  AllowDirs="true"
+                                  MaxDirs="10"
+                                  MaxFiles="10" />
+            </div>
+            <div class="form-row">
+                <label>Profile</label>
+                <select class="form-select" @bind="_addProfile">
+                    <option value="">(Select)</option>
+                    @foreach (var name in _profileNames)
+                    {
+                        <option value="@name">@name</option>
+                    }
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Output Dir</label>
+                <PathSuggestInput Value="@_addOutDir"
+                                  ValueChanged="OnAddOutDirChanged"
+                                  Placeholder="/path/to/output"
+                                  AllowFiles="false"
+                                  AllowDirs="true"
+                                  MaxDirs="10"
+                                  MaxFiles="10" />
+            </div>
+            <div class="form-row">
+                <label>Priority</label>
+                <select class="form-select" @bind="_addPriority">
+                    @foreach (var p in QueueSettingExtensions.PriorityList)
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Add Queue Bat</label>
+                <select class="form-select" @bind="_addAddQueueBat">
+                    <option value="">(None)</option>
+                    @if (_addQueueBatFiles != null)
+                    {
+                        @foreach (var name in _addQueueBatFiles)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Mode</label>
+                <select class="form-select" @bind="_addMode">
+                    @foreach (var mode in QueueSettingExtensions.QueueProcModes)
+                    {
+                        <option value="@mode">@QueueSettingExtensions.GetProcModeDisplay(mode)</option>
+                    }
+                </select>
+            </div>
+            <div style="margin-top: 1rem;">
+                <button class="btn btn-primary" @onclick="SubmitAddQueueAsync" disabled="@_adding">Add</button>
+                <button class="btn btn-secondary" style="margin-left: 0.5rem;" @onclick="CloseAddDialog" disabled="@_adding">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private QueueView? _view;
     private string? _error;
@@ -128,12 +209,28 @@ else
     private long _queueVersion;
     private string? _queueDigest;
     private bool _polling;
+    private bool _showAddDialog;
+    private string? _addError;
+    private bool _adding;
+    private string _addSrcPath = "";
+    private string _addOutDir = "";
+    private string _addProfile = "";
+    private int _addPriority = 3;
+    private string _addAddQueueBat = "";
+    private ProcMode _addMode = ProcMode.Batch;
+    private List<string>? _addQueueBatFiles;
+    private UiStateView? _uiState;
 
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
         StartPolling();
     }
+
+    private bool IsAddValid =>
+        !string.IsNullOrWhiteSpace(_addSrcPath) &&
+        !string.IsNullOrWhiteSpace(_addProfile) &&
+        !string.IsNullOrWhiteSpace(_addOutDir);
 
     private async Task ReloadAsync()
     {
@@ -195,6 +292,206 @@ else
         }
 
         _loading = false;
+    }
+
+    private async Task OpenAddDialogAsync()
+    {
+        _addError = null;
+        _showAddDialog = true;
+        await EnsureAddDialogDataAsync();
+        StateHasChanged();
+    }
+
+    private void CloseAddDialog()
+    {
+        _showAddDialog = false;
+        _addError = null;
+    }
+
+    private async Task EnsureAddDialogDataAsync()
+    {
+        if (_addQueueBatFiles == null)
+        {
+            var optionsRes = await Api.GetProfileOptionsAsync();
+            if (optionsRes.Ok)
+            {
+                _addQueueBatFiles = optionsRes.Data?.PreBatFiles;
+            }
+        }
+
+        if (_profileNames.Count == 0)
+        {
+            var profilesRes = await Api.GetProfilesAsync();
+            if (profilesRes.Ok && profilesRes.Data != null)
+            {
+                _profiles.Clear();
+                _profileNames.Clear();
+                _profiles.AddRange(profilesRes.Data);
+                foreach (var profile in _profiles)
+                {
+                    var name = GetProfileName(profile);
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        _profileNames.Add(name);
+                    }
+                }
+            }
+        }
+
+        if (_uiState == null)
+        {
+            var uiRes = await Api.GetUiStateAsync();
+            if (uiRes.Ok)
+            {
+                _uiState = uiRes.Data;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(_addProfile))
+        {
+            _addProfile = _uiState?.LastUsedProfile ?? "";
+        }
+        if (string.IsNullOrWhiteSpace(_addProfile) && _profileNames.Count > 0)
+        {
+            _addProfile = _profileNames[0];
+        }
+
+        if (string.IsNullOrWhiteSpace(_addOutDir))
+        {
+            _addOutDir = _uiState?.LastOutputPath ?? "";
+        }
+
+        if (string.IsNullOrWhiteSpace(_addAddQueueBat))
+        {
+            _addAddQueueBat = _uiState?.LastAddQueueBat ?? "";
+        }
+    }
+
+    private Task OnAddSrcPathChanged(string value)
+    {
+        _addSrcPath = value?.Trim() ?? "";
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnAddOutDirChanged(string value)
+    {
+        _addOutDir = value?.Trim() ?? "";
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task SubmitAddQueueAsync()
+    {
+        if (!IsAddValid)
+        {
+            _addError = "Required fields are missing.";
+            return;
+        }
+
+        _adding = true;
+        _addError = null;
+        try
+        {
+            var dirPath = GetParentDir(_addSrcPath);
+            var outDir = NormalizeOutputDir(_addOutDir);
+            if (string.IsNullOrWhiteSpace(outDir))
+            {
+                _addError = "Output directory is invalid.";
+                return;
+            }
+            var req = new AddQueueRequest
+            {
+                DirPath = dirPath,
+                Targets = new List<AddQueueItem>
+                {
+                    new AddQueueItem { Path = _addSrcPath }
+                },
+                Outputs = new List<OutputInfo>
+                {
+                    new OutputInfo
+                    {
+                        DstPath = outDir,
+                        Profile = _addProfile,
+                        Priority = _addPriority
+                    }
+                },
+                Mode = _addMode,
+                AddQueueBat = string.IsNullOrWhiteSpace(_addAddQueueBat) ? null : _addAddQueueBat
+            };
+
+            var res = await Api.AddQueueAsync(req);
+            if (!res.Ok)
+            {
+                _addError = TryExtractServerError(res.Error) ?? res.Error ?? "Failed to add queue item.";
+                return;
+            }
+            _showAddDialog = false;
+            await ReloadAsync();
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private static string GetParentDir(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return "";
+        }
+        var lastSlash = Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\'));
+        if (lastSlash <= 0)
+        {
+            return "";
+        }
+        return path.Substring(0, lastSlash);
+    }
+
+    private static string NormalizeOutputDir(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "";
+        }
+        var trimmed = path.Trim();
+        if (trimmed.EndsWith("/") || trimmed.EndsWith("\\"))
+        {
+            return trimmed.TrimEnd('/', '\\');
+        }
+        if (Path.HasExtension(trimmed))
+        {
+            var dir = GetParentDir(trimmed);
+            return dir;
+        }
+        return trimmed;
+    }
+
+    private static string? TryExtractServerError(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return null;
+        }
+        try
+        {
+            using var doc = JsonDocument.Parse(error);
+            if (doc.RootElement.TryGetProperty("error", out var errProp))
+            {
+                var msg = errProp.GetString();
+                return string.IsNullOrWhiteSpace(msg) ? null : msg;
+            }
+            if (doc.RootElement.TryGetProperty("detail", out var detailProp))
+            {
+                var msg = detailProp.GetString();
+                return string.IsNullOrWhiteSpace(msg) ? null : msg;
+            }
+        }
+        catch
+        {
+        }
+        return null;
     }
 
     private void StartPolling()
