@@ -1,0 +1,258 @@
+@using System.Threading
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<div class="path-suggest-input">
+    <input value="@Value"
+           placeholder="@Placeholder"
+           disabled="@Disabled"
+           @oninput="OnInputAsync"
+           @onkeydown="OnKeyDownAsync"
+           @onfocus="OnFocus"
+           @onblur="OnBlurAsync" />
+    @if (_showSuggestions)
+    {
+        <div class="path-suggest-list" @onmouseenter="OnListEnter" @onmouseleave="OnListLeave">
+            @if (_dirs.Count > 0)
+            {
+                <div class="path-suggest-group">Folders</div>
+                @for (var i = 0; i < _dirs.Count; i++)
+                {
+                    var index = i;
+                    var itemIndex = index;
+                    <div class="path-suggest-item @GetSelectedClass(itemIndex)"
+                         @onmousedown="() => Select(_dirs[index].FullPath)">
+                        [DIR] @_dirs[index].Name
+                    </div>
+                }
+            }
+            @if (_files.Count > 0)
+            {
+                <div class="path-suggest-group">Files</div>
+                @for (var i = 0; i < _files.Count; i++)
+                {
+                    var index = i;
+                    var itemIndex = _dirs.Count + index;
+                    <div class="path-suggest-item @GetSelectedClass(itemIndex)"
+                         @onmousedown="() => Select(_files[index].FullPath)">
+                        [FILE] @_files[index].Name
+                    </div>
+                }
+            }
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="path-suggest-error">@_error</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Extensions { get; set; }
+    [Parameter] public bool AllowFiles { get; set; } = true;
+    [Parameter] public bool AllowDirs { get; set; } = true;
+    [Parameter] public int MaxDirs { get; set; } = 10;
+    [Parameter] public int MaxFiles { get; set; } = 10;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+
+    private readonly List<PathCandidate> _dirs = new();
+    private readonly List<PathCandidate> _files = new();
+    private bool _showSuggestions;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private int _selectedIndex = -1;
+    private bool _hovering;
+    private bool _focused;
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+        var value = e.Value?.ToString() ?? "";
+        await ValueChanged.InvokeAsync(value);
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            ClearSuggestions();
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(200, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await FetchSuggestionsAsync(value);
+    }
+
+    private void OnFocus()
+    {
+        _focused = true;
+        if (_dirs.Count > 0 || _files.Count > 0 || !string.IsNullOrEmpty(_error))
+        {
+            _showSuggestions = true;
+        }
+    }
+
+    private async Task OnBlurAsync()
+    {
+        _focused = false;
+        await Task.Delay(100);
+        if (!_hovering && !_focused)
+        {
+            _showSuggestions = false;
+        }
+    }
+
+    private void OnListEnter()
+    {
+        _hovering = true;
+    }
+
+    private void OnListLeave()
+    {
+        _hovering = false;
+        if (!_focused)
+        {
+            _showSuggestions = false;
+        }
+    }
+
+    private async Task FetchSuggestionsAsync(string input)
+    {
+        _error = null;
+        var req = new PathSuggestRequest
+        {
+            Input = input,
+            Extensions = Extensions,
+            AllowDirs = AllowDirs,
+            AllowFiles = AllowFiles,
+            MaxDirs = MaxDirs,
+            MaxFiles = MaxFiles
+        };
+
+        var res = await Api.GetPathSuggestAsync(req);
+        if (!res.Ok || res.Data == null)
+        {
+            _dirs.Clear();
+            _files.Clear();
+            _showSuggestions = false;
+            _error = res.Error ?? "Failed to load suggestions.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _dirs.Clear();
+        _files.Clear();
+        _dirs.AddRange(res.Data.Dirs ?? new List<PathCandidate>());
+        _files.AddRange(res.Data.Files ?? new List<PathCandidate>());
+        _showSuggestions = (_dirs.Count > 0 || _files.Count > 0 || !string.IsNullOrEmpty(_error)) && _focused;
+        _selectedIndex = _showSuggestions ? 0 : -1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Select(string value)
+    {
+        await ValueChanged.InvokeAsync(value);
+        ClearSuggestions();
+    }
+
+    private void ClearSuggestions()
+    {
+        _dirs.Clear();
+        _files.Clear();
+        _showSuggestions = false;
+        _error = null;
+        _selectedIndex = -1;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetSelectedClass(int index)
+    {
+        return index == _selectedIndex ? "is-selected" : string.Empty;
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (!_showSuggestions)
+        {
+            if (e.Key == "ArrowDown" || e.Key == "ArrowUp")
+            {
+                _showSuggestions = _dirs.Count > 0 || _files.Count > 0;
+                _selectedIndex = _showSuggestions ? 0 : -1;
+                StateHasChanged();
+            }
+            return Task.CompletedTask;
+        }
+
+        var total = _dirs.Count + _files.Count;
+        if (total == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (e.Key == "ArrowDown")
+        {
+            _selectedIndex = Math.Min(_selectedIndex + 1, total - 1);
+            StateHasChanged();
+        }
+        else if (e.Key == "ArrowUp")
+        {
+            _selectedIndex = Math.Max(_selectedIndex - 1, 0);
+            StateHasChanged();
+        }
+        else if (e.Key == "Enter")
+        {
+            var selected = GetSelectedCandidate();
+            if (selected != null)
+            {
+                return Select(selected);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            _showSuggestions = false;
+            _selectedIndex = -1;
+            StateHasChanged();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private string? GetSelectedCandidate()
+    {
+        if (_selectedIndex < 0)
+        {
+            return null;
+        }
+        if (_selectedIndex < _dirs.Count)
+        {
+            return _dirs[_selectedIndex].FullPath;
+        }
+        var fileIndex = _selectedIndex - _dirs.Count;
+        if (fileIndex >= 0 && fileIndex < _files.Count)
+        {
+            return _files[fileIndex].FullPath;
+        }
+        return null;
+    }
+}
