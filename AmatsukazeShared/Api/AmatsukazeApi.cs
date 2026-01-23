@@ -252,7 +252,7 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<ConsoleView>> GetConsoleAsync()
             => GetJsonAsync<ConsoleView>("/api/console");
 
-        public Task<ApiResult<LogoAnalyzeStatus>> StartLogoAnalyzeAsync(LogoAnalyzeRequest req)
+        public Task<ApiResult<LogoAnalyzeStatus>> StartLogoAnalyzeAsync(LogoAnalyzeStartRequest req)
             => PostJsonAsync("/api/logo/analyze", req, element => element.Deserialize<LogoAnalyzeStatus>(jsonOptions) ?? new LogoAnalyzeStatus());
 
         public Task<ApiResult<LogoAnalyzeStatus>> GetLogoAnalyzeStatusAsync(string jobId)
@@ -263,6 +263,60 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<byte[]>> GetLogoAnalyzeFileAsync(string jobId)
             => GetBytesAsync($"/api/logo/analyze/{Uri.EscapeDataString(jobId)}/file");
+
+        public async Task<ApiResult<bool>> ApplyLogoAnalyzeAsync(string jobId)
+        {
+            try
+            {
+                var res = await http.PostAsync($"/api/logo/analyze/{Uri.EscapeDataString(jobId)}/apply", null);
+                if (res.IsSuccessStatusCode)
+                {
+                    return ApiResult<bool>.Success(true, (int)res.StatusCode);
+                }
+                return ApiResult<bool>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<bool>.Fail(0, ex.Message);
+            }
+        }
+
+        public async Task<ApiResult<bool>> DiscardLogoAnalyzeAsync(string jobId)
+        {
+            try
+            {
+                var res = await http.PostAsync($"/api/logo/analyze/{Uri.EscapeDataString(jobId)}/discard", null);
+                if (res.IsSuccessStatusCode)
+                {
+                    return ApiResult<bool>.Success(true, (int)res.StatusCode);
+                }
+                return ApiResult<bool>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<bool>.Fail(0, ex.Message);
+            }
+        }
+
+        public Task<ApiResult<LogoPreviewSessionResponse>> CreateLogoPreviewSessionAsync(LogoPreviewSessionRequest req)
+            => PostJsonAsync("/api/logo/preview/sessions", req, element => element.Deserialize<LogoPreviewSessionResponse>(jsonOptions) ?? new LogoPreviewSessionResponse());
+
+        public async Task<ApiResult<bool>> DeleteLogoPreviewSessionAsync(string sessionId)
+        {
+            try
+            {
+                var response = await http.DeleteAsync($"/api/logo/preview/sessions/{Uri.EscapeDataString(sessionId)}");
+                if (response.IsSuccessStatusCode)
+                {
+                    return ApiResult<bool>.Success(true, (int)response.StatusCode);
+                }
+                return ApiResult<bool>.Fail((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<bool>.Fail(0, ex.Message);
+            }
+        }
 
         private async Task<ApiResult<T>> GetJsonAsync<T>(string url)
         {

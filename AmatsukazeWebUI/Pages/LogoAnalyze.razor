@@ -1,0 +1,434 @@
+@page "/logo-analyze"
+@using Amatsukaze.Shared
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using System.Globalization
+@inject IAmatsukazeApi Api
+@inject AmatsukazeWebUI.Api.ApiBaseAddress ApiBase
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<h3>Logo Analyze</h3>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else if (!string.IsNullOrEmpty(_actionMessage))
+{
+    <p style="color: green;">@_actionMessage</p>
+}
+else if (_loading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div style="margin-bottom: 0.5rem;">
+        <button class="btn btn-outline-secondary" @onclick="BackToQueue">Back to Queue</button>
+    </div>
+
+    <div style="margin-bottom: 0.5rem;">
+        <label>Max Frames:</label>
+        <select @bind="_maxFrames">
+            @foreach (var value in _maxFramesList)
+            {
+                <option value="@value">@value</option>
+            }
+        </select>
+
+        <label style="margin-left: 1rem;">Threshold:</label>
+        <select @bind="_threshold">
+            @foreach (var value in _thresholdList)
+            {
+                <option value="@value">@value</option>
+            }
+        </select>
+    </div>
+
+    <div style="margin-bottom: 0.75rem;">
+        <button class="btn btn-primary" @onclick="StartAnalyzeAsync" disabled="@_analyzing">ロゴ解析開始</button>
+    </div>
+
+    @if (_analyzing || _lastStatus != null)
+    {
+        <div style="margin-bottom: 0.75rem;">
+            <div>Progress: @_progressDisplay</div>
+            <div>Read: @_lastStatus?.NumRead / @_lastStatus?.NumTotal (Valid: @_lastStatus?.NumValid)</div>
+            <progress value="@_progressValue" max="1" style="width: 320px;"></progress>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_resultImageUrl))
+    {
+        <div style="margin-bottom: 0.5rem;">
+            <h4>Result</h4>
+            <img src="@_resultImageUrl" style="max-width: 100%; border: 1px solid #ddd;" />
+        </div>
+        <div style="margin-bottom: 0.75rem;">
+            <button class="btn btn-primary" @onclick="ApplyResultAsync">採用</button>
+            <button class="btn btn-outline-secondary" style="margin-left: 0.5rem;" @onclick="DiscardResultAsync">キャンセル</button>
+        </div>
+    }
+
+    <div style="margin-bottom: 0.5rem;">
+        <label>Seek:</label>
+        <input type="range" min="0" max="1" step="0.01" @bind-value="Position" @bind-value:event="oninput" style="width: 360px;" />
+        <span style="margin-left: 0.5rem;">@_position.ToString("P0", CultureInfo.InvariantCulture)</span>
+    </div>
+    <div style="font-size: 0.85rem; color: #666;">
+        FrameUrl: @_frameUrl
+    </div>
+
+    <div style="display: inline-block; position: relative; border: 1px solid #ddd; padding: 4px;">
+        <img src="@_frameUrl" style="display: block; max-width: none;" @onload="OnFrameLoaded" @onerror="OnFrameError" />
+        <div style="position: absolute; inset: 4px; pointer-events: all;"
+             @onmousedown="OnMouseDown"
+             @onmousemove="OnMouseMove"
+             @onmouseup="OnMouseUp"
+             @onmouseleave="OnMouseUp">
+            <div style="@BuildRectStyle()"></div>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(_frameLoadLog))
+    {
+        <div style="font-size: 0.85rem; color: #666;">@_frameLoadLog</div>
+    }
+
+    @if (!string.IsNullOrEmpty(_resultImageUrl))
+    {
+        <div style="margin-top: 1rem;"></div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "queueItemId")]
+    public int? QueueItemId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private string? _sessionId;
+    private string _frameUrl = "";
+    private float _position = 0f;
+    private bool _dragging;
+    private double _startX;
+    private double _startY;
+    private int _rectX = 0;
+    private int _rectY = 0;
+    private int _rectW = 0;
+    private int _rectH = 0;
+    private readonly int[] _maxFramesList = new[] { 3000, 5000, 10000, 20000, 50000 };
+    private readonly int[] _thresholdList = new[] { 8, 10, 12, 15 };
+    private int _maxFrames = 20000;
+    private int _threshold = 12;
+    private bool _analyzing;
+    private string? _jobId;
+    private LogoAnalyzeStatus? _lastStatus;
+    private string _progressDisplay = "0%";
+    private double _progressValue;
+    private int _maxFramesSent;
+    private string? _resultImageUrl;
+    private string? _actionMessage;
+    private string? _frameLoadLog;
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
+        {
+            _error = "queueItemId is required.";
+            _loading = false;
+            return;
+        }
+
+        var req = new LogoPreviewSessionRequest
+        {
+            QueueItemId = QueueItemId.Value,
+            ServiceId = 0
+        };
+
+        var res = await Api.CreateLogoPreviewSessionAsync(req);
+        if (!res.Ok || res.Data?.SessionId == null)
+        {
+            _error = res.Error ?? "Failed to create preview session.";
+            _loading = false;
+            return;
+        }
+
+        _sessionId = res.Data.SessionId;
+        _frameUrl = BuildFrameUrl(_position);
+        _loading = false;
+    }
+
+    private void BackToQueue()
+    {
+        Nav.NavigateTo("queue");
+    }
+
+    private string BuildFrameUrl(float pos)
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+        {
+            return string.Empty;
+        }
+        var baseUri = ApiBase.Uri;
+        if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            baseUri = new Uri(Nav.BaseUri);
+        }
+        var baseText = baseUri.ToString().TrimEnd('/');
+        var posText = pos.ToString(CultureInfo.InvariantCulture);
+        var nonce = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+        return $"{baseText}/api/logo/preview/sessions/{_sessionId}/frame?pos={posText}&t={nonce}";
+    }
+
+    private float Position
+    {
+        get => _position;
+        set
+        {
+            if (Math.Abs(_position - value) < 0.0001f)
+            {
+                return;
+            }
+            _position = value;
+            _frameUrl = BuildFrameUrl(_position);
+            _frameLoadLog = $"frame updated: pos={_position.ToString(CultureInfo.InvariantCulture)}";
+        }
+    }
+
+    private void OnFrameLoaded()
+    {
+        _frameLoadLog = $"frame loaded: {DateTime.Now:HH:mm:ss}";
+    }
+
+    private void OnFrameError()
+    {
+        _frameLoadLog = $"frame error: {DateTime.Now:HH:mm:ss}";
+    }
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        _dragging = true;
+        _startX = e.OffsetX;
+        _startY = e.OffsetY;
+        _rectX = (int)_startX;
+        _rectY = (int)_startY;
+        _rectW = 0;
+        _rectH = 0;
+    }
+
+    private void OnMouseMove(MouseEventArgs e)
+    {
+        if (!_dragging)
+        {
+            return;
+        }
+        var curX = e.OffsetX;
+        var curY = e.OffsetY;
+        var x1 = Math.Min(_startX, curX);
+        var y1 = Math.Min(_startY, curY);
+        var x2 = Math.Max(_startX, curX);
+        var y2 = Math.Max(_startY, curY);
+        _rectX = (int)Math.Max(0, x1);
+        _rectY = (int)Math.Max(0, y1);
+        _rectW = (int)Math.Max(4, x2 - x1);
+        _rectH = (int)Math.Max(4, y2 - y1);
+    }
+
+    private void OnMouseUp(MouseEventArgs e)
+    {
+        _dragging = false;
+    }
+
+    private string BuildRectStyle()
+    {
+        if (_rectW <= 0 || _rectH <= 0)
+        {
+            return "display:none;";
+        }
+        return $"position:absolute; left:{_rectX}px; top:{_rectY}px; width:{_rectW}px; height:{_rectH}px; " +
+               "border:2px dashed #5f55ff; background:rgba(95,85,255,0.1);";
+    }
+
+    private async Task StartAnalyzeAsync()
+    {
+        _actionMessage = null;
+        if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
+        {
+            _error = "queueItemId is required.";
+            return;
+        }
+        if (_rectW <= 0 || _rectH <= 0)
+        {
+            _error = "ロゴ範囲を選択してください。";
+            return;
+        }
+
+        _error = null;
+        _resultImageUrl = null;
+
+        var req = new LogoAnalyzeStartRequest
+        {
+            QueueItemId = QueueItemId.Value,
+            X = _rectX,
+            Y = _rectY,
+            Width = _rectW,
+            Height = _rectH,
+            Threshold = _threshold,
+            MaxFrames = _maxFrames
+        };
+
+        var res = await Api.StartLogoAnalyzeAsync(req);
+        if (!res.Ok || res.Data?.JobId == null)
+        {
+            _error = res.Error ?? "Failed to start analyze.";
+            return;
+        }
+
+        _jobId = res.Data.JobId;
+        _lastStatus = res.Data;
+        _maxFramesSent = _maxFrames;
+        UpdateProgress(_lastStatus);
+        _analyzing = true;
+        StartPolling();
+    }
+
+    private void StartPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+        _pollTask = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested && _analyzing && !string.IsNullOrEmpty(_jobId))
+            {
+                var res = await Api.GetLogoAnalyzeStatusAsync(_jobId);
+                if (res.Ok && res.Data != null)
+                {
+                    _lastStatus = res.Data;
+                    UpdateProgress(_lastStatus);
+                    if (_lastStatus.Completed)
+                    {
+                        _analyzing = false;
+                        if (!string.IsNullOrEmpty(_lastStatus.ImageUrl))
+                        {
+                            _resultImageUrl = BuildImageUrl(_lastStatus.ImageUrl);
+                        }
+                        if (!string.IsNullOrEmpty(_lastStatus.Error))
+                        {
+                            _error = _lastStatus.Error;
+                        }
+                        await InvokeAsync(StateHasChanged);
+                        return;
+                    }
+                }
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(1000, token);
+            }
+        }, token);
+    }
+
+    private string BuildImageUrl(string path)
+    {
+        var baseUri = ApiBase.Uri;
+        if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            baseUri = new Uri(Nav.BaseUri);
+        }
+        var baseText = baseUri.ToString().TrimEnd('/');
+        var tail = path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path;
+        return baseText + tail;
+    }
+
+    private void UpdateProgress(LogoAnalyzeStatus? status)
+    {
+        if (status == null)
+        {
+            _progressValue = 0;
+            _progressDisplay = "Pass 1: 0%";
+            return;
+        }
+
+        int pass = 1;
+        double value = 0;
+
+        pass = status.Pass <= 0 ? 1 : status.Pass;
+        if (pass == 1)
+        {
+            if (_maxFramesSent > 0)
+            {
+                value = status.NumValid / (double)_maxFramesSent;
+            }
+            else
+            {
+                value = status.Progress > 1.0 ? status.Progress / 100.0 : status.Progress;
+            }
+        }
+        else
+        {
+            value = status.Progress > 1.0 ? status.Progress / 100.0 : status.Progress;
+        }
+
+        if (double.IsNaN(value) || double.IsInfinity(value))
+        {
+            value = 0;
+        }
+        value = Math.Max(0, Math.Min(1.0, value));
+
+        _progressValue = value;
+        _progressDisplay = $"Pass {pass}: {value * 100:0}%";
+    }
+
+    private async Task ApplyResultAsync()
+    {
+        if (string.IsNullOrEmpty(_jobId))
+        {
+            _error = "JobId is empty.";
+            return;
+        }
+        _error = null;
+        _actionMessage = null;
+        var res = await Api.ApplyLogoAnalyzeAsync(_jobId);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to apply logo.";
+            return;
+        }
+        _actionMessage = "ロゴを採用しました。";
+    }
+
+    private async Task DiscardResultAsync()
+    {
+        if (string.IsNullOrEmpty(_jobId))
+        {
+            _error = "JobId is empty.";
+            return;
+        }
+        _error = null;
+        _actionMessage = null;
+        var res = await Api.DiscardLogoAnalyzeAsync(_jobId);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to discard logo.";
+            return;
+        }
+        _actionMessage = "ロゴを破棄しました。";
+        _resultImageUrl = null;
+        _jobId = null;
+        _lastStatus = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pollCts != null)
+        {
+            _pollCts.Cancel();
+        }
+        if (!string.IsNullOrEmpty(_sessionId))
+        {
+            await Api.DeleteLogoPreviewSessionAsync(_sessionId);
+        }
+    }
+}

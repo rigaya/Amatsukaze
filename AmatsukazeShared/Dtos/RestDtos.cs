@@ -135,6 +135,7 @@ namespace Amatsukaze.Shared
     public class QueueView
     {
         public long Version { get; set; }
+        public string? Digest { get; set; }
         public List<QueueItemView> Items { get; set; } = new List<QueueItemView>();
         public QueueCounters Counters { get; set; } = new QueueCounters();
         public QueueFilter Filters { get; set; } = new QueueFilter();
@@ -161,6 +162,7 @@ namespace Amatsukaze.Shared
         public long FromVersion { get; set; }
         public long ToVersion { get; set; }
         public bool FullSyncRequired { get; set; }
+        public string? QueueViewDigest { get; set; }
         public List<QueueChange> Changes { get; set; } = new List<QueueChange>();
         public QueueCounters Counters { get; set; } = new QueueCounters();
     }
@@ -320,17 +322,26 @@ namespace Amatsukaze.Shared
         public string? CommandLine { get; set; }
     }
 
-    public class LogoAnalyzeRequest
+    public class LogoAnalyzeStartRequest
     {
-        public string? FilePath { get; set; }
-        public int ServiceId { get; set; }
-        public string? WorkPath { get; set; }
+        public int QueueItemId { get; set; }
         public int X { get; set; }
         public int Y { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public int Threshold { get; set; }
         public int MaxFrames { get; set; }
+    }
+
+    public class LogoPreviewSessionRequest
+    {
+        public int QueueItemId { get; set; }
+        public int ServiceId { get; set; }
+    }
+
+    public class LogoPreviewSessionResponse
+    {
+        public string? SessionId { get; set; }
     }
 
     public class LogoAnalyzeStatus
@@ -342,6 +353,7 @@ namespace Amatsukaze.Shared
         public int NumRead { get; set; }
         public int NumTotal { get; set; }
         public int NumValid { get; set; }
+        public int Pass { get; set; }
         public string? LogoFileName { get; set; }
         public string? ImageUrl { get; set; }
     }

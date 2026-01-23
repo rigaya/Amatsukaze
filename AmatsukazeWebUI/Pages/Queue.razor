@@ -4,6 +4,7 @@
 @using System.Threading
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 
 <h3>Queue</h3>
@@ -103,6 +104,7 @@ else
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => CancelAsync(item)">Cancel</button>
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => DeleteAsync(item)">Delete</button>
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => ForceStartAsync(item)">Force</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenLogoAnalyze(item)">Logo</button>
                             </div>
                         </td>
                     </tr>
@@ -124,6 +126,7 @@ else
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
     private long _queueVersion;
+    private string? _queueDigest;
     private bool _polling;
 
     protected override async Task OnInitializedAsync()
@@ -176,6 +179,7 @@ else
             if (_view != null)
             {
                 _queueVersion = _view.Version;
+                _queueDigest = _view.Digest;
                 foreach (var item in _view.Items)
                 {
                     if (!_profileInputs.ContainsKey(item.Id))
@@ -244,7 +248,15 @@ else
                 var snapshot = await Api.GetQueueAsync();
                 if (snapshot.Ok && snapshot.Data != null)
                 {
-                    ApplyQueueSnapshot(snapshot.Data);
+                    if (snapshot.Data.Digest != _queueDigest)
+                    {
+                        ApplyQueueSnapshot(snapshot.Data);
+                    }
+                    else
+                    {
+                        _queueVersion = snapshot.Data.Version;
+                        _queueDigest = snapshot.Data.Digest;
+                    }
                 }
                 return;
             }
@@ -263,6 +275,10 @@ else
             return;
         }
         _queueVersion = data.ToVersion;
+        if (!string.IsNullOrEmpty(data.QueueViewDigest))
+        {
+            _queueDigest = data.QueueViewDigest;
+        }
         _view.Counters = data.Counters ?? _view.Counters;
         var items = _view.Items;
 
@@ -327,82 +343,84 @@ else
         {
             _view = snapshot;
             _queueVersion = snapshot.Version;
+            _queueDigest = snapshot.Digest;
             return;
         }
         _queueVersion = snapshot.Version;
+        _queueDigest = snapshot.Digest;
         _view.Counters = snapshot.Counters;
         var items = _view.Items;
-        items.Clear();
-        items.AddRange(snapshot.Items);
-        var ids = new HashSet<int>(snapshot.Items.Select(item => item.Id));
-        foreach (var item in snapshot.Items)
+
+        var currentMap = items.ToDictionary(item => item.Id, item => item);
+        var desired = new List<QueueItemView>(snapshot.Items.Count);
+        foreach (var snap in snapshot.Items)
         {
-            _profileInputs[item.Id] = item.ProfileName ?? "";
-            _priorityInputs[item.Id] = item.Priority;
+            if (currentMap.TryGetValue(snap.Id, out var current))
+            {
+                CopyQueueItemView(current, snap);
+                desired.Add(current);
+            }
+            else
+            {
+                desired.Add(snap);
+            }
+            _profileInputs[snap.Id] = snap.ProfileName ?? "";
+            _priorityInputs[snap.Id] = snap.Priority;
         }
-        var removeProfile = _profileInputs.Keys.Where(id => !ids.Contains(id)).ToList();
-        foreach (var id in removeProfile)
+        for (var i = 0; i < desired.Count; i++)
+        {
+            if (i < items.Count && ReferenceEquals(items[i], desired[i]))
+            {
+                continue;
+            }
+            var existingIndex = items.FindIndex(i + 1, x => ReferenceEquals(x, desired[i]));
+            if (existingIndex >= 0)
+            {
+                var moving = items[existingIndex];
+                items.RemoveAt(existingIndex);
+                items.Insert(i, moving);
+            }
+            else
+            {
+                items.Insert(i, desired[i]);
+            }
+        }
+        if (items.Count > desired.Count)
+        {
+            items.RemoveRange(desired.Count, items.Count - desired.Count);
+        }
+
+        var ids = new HashSet<int>(desired.Select(item => item.Id));
+        foreach (var id in _profileInputs.Keys.Where(id => !ids.Contains(id)).ToList())
         {
             _profileInputs.Remove(id);
         }
-        var removePriority = _priorityInputs.Keys.Where(id => !ids.Contains(id)).ToList();
-        foreach (var id in removePriority)
+        foreach (var id in _priorityInputs.Keys.Where(id => !ids.Contains(id)).ToList())
         {
             _priorityInputs.Remove(id);
         }
         StateHasChanged();
     }
 
-    private bool HasQueueDiff(QueueView snapshot)
+    private static void CopyQueueItemView(QueueItemView target, QueueItemView source)
     {
-        if (_view == null)
-        {
-            return true;
-        }
-        if (_view.Items.Count != snapshot.Items.Count)
-        {
-            return true;
-        }
-        for (var i = 0; i < snapshot.Items.Count; i++)
-        {
-            if (_view.Items[i].Id != snapshot.Items[i].Id)
-            {
-                return true;
-            }
-        }
-        var currentMap = _view.Items.ToDictionary(item => item.Id, item => item);
-        foreach (var item in snapshot.Items)
-        {
-            if (!currentMap.TryGetValue(item.Id, out var current))
-            {
-                return true;
-            }
-            if (IsQueueItemChanged(current, item))
-            {
-                return true;
-            }
-        }
-        return false;
+        target.FileName = source.FileName;
+        target.ServiceName = source.ServiceName;
+        target.ProfileName = source.ProfileName;
+        target.State = source.State;
+        target.StateLabel = source.StateLabel;
+        target.Priority = source.Priority;
+        target.IsBatch = source.IsBatch;
+        target.EncodeStart = source.EncodeStart;
+        target.EncodeFinish = source.EncodeFinish;
+        target.DisplayEncodeStart = source.DisplayEncodeStart;
+        target.DisplayEncodeFinish = source.DisplayEncodeFinish;
+        target.Progress = source.Progress;
+        target.ConsoleId = source.ConsoleId;
+        target.OutputMask = source.OutputMask;
+        target.IsTooSmall = source.IsTooSmall;
     }
 
-    private static bool IsQueueItemChanged(QueueItemView current, QueueItemView next)
-    {
-        return current.FileName != next.FileName ||
-               current.ServiceName != next.ServiceName ||
-               current.ProfileName != next.ProfileName ||
-               current.State != next.State ||
-               current.StateLabel != next.StateLabel ||
-               current.Priority != next.Priority ||
-               current.IsBatch != next.IsBatch ||
-               current.EncodeStart != next.EncodeStart ||
-               current.EncodeFinish != next.EncodeFinish ||
-               current.DisplayEncodeStart != next.DisplayEncodeStart ||
-               current.DisplayEncodeFinish != next.DisplayEncodeFinish ||
-               current.Progress != next.Progress ||
-               current.ConsoleId != next.ConsoleId ||
-               current.OutputMask != next.OutputMask ||
-               current.IsTooSmall != next.IsTooSmall;
-    }
 
     public async ValueTask DisposeAsync()
     {
@@ -480,6 +498,12 @@ else
 
     private Task ForceStartAsync(QueueItemView item)
         => ChangeItemAsync(item, ChangeItemType.ForceStart);
+
+    private void OpenLogoAnalyze(QueueItemView item)
+    {
+        var url = $"logo-analyze?queueItemId={item.Id}";
+        Nav.NavigateTo(url);
+    }
 
     private async Task ChangePriorityAsync(QueueItemView item)
     {

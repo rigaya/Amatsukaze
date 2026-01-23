@@ -90,7 +90,7 @@ class GUIMediaFile : public AMTObject {
             if (ok) {
                 break;
             }
-            if (packetpos != -1) {
+            if (startpos >= 0 && packetpos != -1) {
                 if (packetpos - startpos > 50 * 1024 * 1024) {
                     // 50MB読んでもデコードできなかったら終了
                     return false;
@@ -98,6 +98,28 @@ class GUIMediaFile : public AMTObject {
             }
         }
         return ok;
+    }
+
+    int64_t GetDurationTs() {
+        if (videoStream->duration != AV_NOPTS_VALUE) {
+            return videoStream->duration;
+        }
+        if (inputCtx()->duration != AV_NOPTS_VALUE) {
+            return av_rescale_q(inputCtx()->duration, AV_TIME_BASE_Q, videoStream->time_base);
+        }
+        return -1;
+    }
+
+    bool SeekTo(float pos) {
+        if (pos < 0.0f) pos = 0.0f;
+        if (pos > 1.0f) pos = 1.0f;
+        int64_t fileOffset = int64_t(fileSize * pos);
+        if (av_seek_frame(inputCtx(), -1, fileOffset, AVSEEK_FLAG_BYTE) < 0) {
+            THROW(FormatException, "av_seek_frame failed");
+        }
+        avformat_flush(inputCtx());
+        avcodec_flush_buffers(codecCtx());
+        return true;
     }
 
 public:
@@ -142,13 +164,13 @@ public:
     bool decodeFrame(float pos, int* pwidth, int* pheight) {
         ctx.setError(Exception());
         try {
-            int64_t fileOffset = int64_t(fileSize * pos);
-            if (av_seek_frame(inputCtx(), -1, fileOffset, AVSEEK_FLAG_BYTE) < 0) {
-                THROW(FormatException, "av_seek_frame failed");
-            }
+            SeekTo(pos);
             lastDecodeFrame = -1;
-            MakeCodecContext();
-            if (DecodeOneFrame(fileOffset)) {
+            int64_t startpos = -1;
+            if (inputCtx()->pb) {
+                startpos = avio_tell(inputCtx()->pb);
+            }
+            if (DecodeOneFrame(startpos)) {
                 *pwidth = width;
                 *pheight = height;
             }

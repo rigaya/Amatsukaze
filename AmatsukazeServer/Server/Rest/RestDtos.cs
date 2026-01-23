@@ -78,17 +78,26 @@ namespace Amatsukaze.Server.Rest
         public string CommandLine { get; set; }
     }
 
-    public class LogoAnalyzeRequest
+    public class LogoAnalyzeStartRequest
     {
-        public string FilePath { get; set; }
-        public int ServiceId { get; set; }
-        public string WorkPath { get; set; }
+        public int QueueItemId { get; set; }
         public int X { get; set; }
         public int Y { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public int Threshold { get; set; }
         public int MaxFrames { get; set; }
+    }
+
+    public class LogoPreviewSessionRequest
+    {
+        public int QueueItemId { get; set; }
+        public int ServiceId { get; set; }
+    }
+
+    public class LogoPreviewSessionResponse
+    {
+        public string SessionId { get; set; }
     }
 
     public class LogoAnalyzeStatus
@@ -100,6 +109,7 @@ namespace Amatsukaze.Server.Rest
         public int NumRead { get; set; }
         public int NumTotal { get; set; }
         public int NumValid { get; set; }
+        public int Pass { get; set; }
         public string LogoFileName { get; set; }
         public string ImageUrl { get; set; }
     }

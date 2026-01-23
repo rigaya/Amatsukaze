@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 using Amatsukaze.Lib;
 using Amatsukaze.Shared;
 
@@ -210,9 +211,11 @@ namespace Amatsukaze.Server.Rest
 
             var list = filtered.Select(ToQueueItemView).ToList();
             var counters = BuildQueueCounters(items);
+            var digest = BuildQueueDigest(counters, filtered);
             return new Amatsukaze.Shared.QueueView()
             {
                 Version = currentVersion,
+                Digest = digest,
                 Items = list,
                 Counters = counters,
                 Filters = filter
@@ -223,6 +226,8 @@ namespace Amatsukaze.Server.Rest
         {
             lock (sync)
             {
+                var counters = BuildQueueCounters(queueItems);
+                var digest = BuildQueueDigest(counters, queueItems);
                 if (sinceVersion > queueVersion)
                 {
                     return new Amatsukaze.Shared.QueueChangesView()
@@ -230,6 +235,7 @@ namespace Amatsukaze.Server.Rest
                         FromVersion = sinceVersion,
                         ToVersion = queueVersion,
                         FullSyncRequired = true,
+                        QueueViewDigest = digest,
                         Counters = BuildQueueCounters(queueItems)
                     };
                 }
@@ -243,6 +249,7 @@ namespace Amatsukaze.Server.Rest
                             FromVersion = sinceVersion,
                             ToVersion = queueVersion,
                             FullSyncRequired = false,
+                            QueueViewDigest = digest,
                             Counters = BuildQueueCounters(queueItems)
                         };
                     }
@@ -251,6 +258,7 @@ namespace Amatsukaze.Server.Rest
                         FromVersion = sinceVersion,
                         ToVersion = queueVersion,
                         FullSyncRequired = true,
+                        QueueViewDigest = digest,
                         Counters = BuildQueueCounters(queueItems)
                     };
                 }
@@ -263,6 +271,7 @@ namespace Amatsukaze.Server.Rest
                         FromVersion = sinceVersion,
                         ToVersion = queueVersion,
                         FullSyncRequired = true,
+                        QueueViewDigest = digest,
                         Counters = BuildQueueCounters(queueItems)
                     };
                 }
@@ -277,6 +286,7 @@ namespace Amatsukaze.Server.Rest
                     FromVersion = sinceVersion,
                     ToVersion = queueVersion,
                     FullSyncRequired = false,
+                    QueueViewDigest = digest,
                     Changes = changes,
                     Counters = BuildQueueCounters(queueItems)
                 };
@@ -565,6 +575,21 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        public bool TryGetQueueItem(int id, out QueueItem item)
+        {
+            lock (sync)
+            {
+                var found = queueItems.FirstOrDefault(q => q.Id == id);
+                if (found == null)
+                {
+                    item = null;
+                    return false;
+                }
+                item = CopyQueueItem(found);
+                return true;
+            }
+        }
+
         private StatusSummary BuildStatusSummary()
         {
             string runningState = "停止";
@@ -784,6 +809,41 @@ namespace Amatsukaze.Server.Rest
                 Failed = list.Count(s => s.State == QueueState.Failed || s.State == QueueState.PreFailed),
                 Canceled = list.Count(s => s.State == QueueState.Canceled)
             };
+        }
+
+        private static string BuildQueueDigest(Amatsukaze.Shared.QueueCounters counters, IEnumerable<QueueItem> viewItems)
+        {
+            var sb = new StringBuilder();
+            sb.Append("A=").Append(counters.Active)
+              .Append("|E=").Append(counters.Encoding)
+              .Append("|C=").Append(counters.Complete)
+              .Append("|P=").Append(counters.Pending)
+              .Append("|F=").Append(counters.Failed)
+              .Append("|X=").Append(counters.Canceled)
+              .Append(";");
+
+            foreach (var item in viewItems)
+            {
+                sb.Append(item.Id).Append('|')
+                  .Append(item.State).Append('|')
+                  .Append(GetStateLabel(item)).Append('|')
+                  .Append(item.FileName ?? "").Append('|')
+                  .Append(item.ServiceName ?? "").Append('|')
+                  .Append(item.Profile?.Name ?? item.ProfileName ?? "").Append('|')
+                  .Append(item.Priority).Append('|')
+                  .Append(item.IsBatch ? "1" : "0").Append('|')
+                  .Append(item.EncodeStart == DateTime.MinValue ? "" : item.EncodeStart.ToUniversalTime().Ticks.ToString()).Append('|')
+                  .Append(item.EncodeFinish == DateTime.MinValue ? "" : item.EncodeFinish.ToUniversalTime().Ticks.ToString()).Append('|')
+                  .Append(item.EncodeStart.ToGUIString()).Append('|')
+                  .Append(item.EncodeFinish.ToGUIString()).Append('|')
+                  .Append(item.ConsoleId).Append('|')
+                  .Append(IsTooSmall(item) ? "1" : "0").Append(';');
+            }
+
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var hash = sha.ComputeHash(bytes);
+            return Convert.ToHexString(hash);
         }
 
         private void ResetQueueChanges()
