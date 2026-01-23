@@ -281,32 +281,32 @@ else
 
     private readonly (string Label, string Field, string? Extensions, bool AllowFiles, bool AllowDirs)[] _pathFields = new[]
     {
-        ("AmatsukazeCLIパス", "AmatsukazePath", ".exe", true, true),
-        ("x264パス", "X264Path", ".exe", true, true),
-        ("x265パス", "X265Path", ".exe", true, true),
-        ("SvtAv1EncAppパス", "SVTAV1Path", ".exe", true, true),
-        ("QSVEncCパス", "QSVEncPath", ".exe", true, true),
-        ("NVEncCパス", "NVEncPath", ".exe", true, true),
-        ("VCEEncCパス", "VCEEncPath", ".exe", true, true),
-        ("L-SMASH Muxerパス", "MuxerPath", ".exe", true, true),
-        ("mkvmergeパス", "MKVMergePath", ".exe", true, true),
-        ("MP4Boxパス", "MP4BoxPath", ".exe", true, true),
-        ("TimelineEditorパス", "TimelineEditorPath", ".exe", true, true),
-        ("ChapterExeパス", "ChapterExePath", ".exe", true, true),
-        ("JoinLogoScpパス", "JoinLogoScpPath", ".txt", true, true),
-        ("tsreadexパス", "TsReadExPath", ".exe", true, true),
-        ("b24tovttパス", "B24ToVttPath", ".exe", true, true),
-        ("psisiarcパス", "PsisiarcPath", ".exe", true, true),
-        ("Whisperパス", "WhisperPath", ".exe", true, true),
-        ("NicoConvASSパス", "NicoConvASSPath", ".exe", true, true),
-        ("tsreplaceパス", "TsReplacePath", ".exe", true, true),
-        ("tsMuxeRパス", "TsMuxeRPath", ".exe", true, true),
-        ("SCRename.vbs/pyパス", "SCRenamePath", ".vbs;.py", true, true),
-        ("AutoVfr.exeパス", "AutoVfrPath", ".exe", true, true),
-        ("neroAacEnc.exeパス", "NeroAacEncPath", ".exe", true, true),
-        ("qaac.exeパス", "QaacPath", ".exe", true, true),
-        ("fdkaac.exeパス", "FdkaacPath", ".exe", true, true),
-        ("opusenc.exeパス", "OpusEncPath", ".exe", true, true)
+        ("AmatsukazeCLIパス", "AmatsukazePath", (string?)".exe", true, true),
+        ("x264パス", "X264Path", (string?)".exe", true, true),
+        ("x265パス", "X265Path", (string?)".exe", true, true),
+        ("SvtAv1EncAppパス", "SVTAV1Path", (string?)".exe", true, true),
+        ("QSVEncCパス", "QSVEncPath", (string?)".exe", true, true),
+        ("NVEncCパス", "NVEncPath", (string?)".exe", true, true),
+        ("VCEEncCパス", "VCEEncPath", (string?)".exe", true, true),
+        ("L-SMASH Muxerパス", "MuxerPath", (string?)".exe", true, true),
+        ("mkvmergeパス", "MKVMergePath", (string?)".exe", true, true),
+        ("MP4Boxパス", "MP4BoxPath", (string?)".exe", true, true),
+        ("TimelineEditorパス", "TimelineEditorPath", (string?)".exe", true, true),
+        ("ChapterExeパス", "ChapterExePath", (string?)".exe", true, true),
+        ("JoinLogoScpパス", "JoinLogoScpPath", (string?)".txt", true, true),
+        ("tsreadexパス", "TsReadExPath", (string?)".exe", true, true),
+        ("b24tovttパス", "B24ToVttPath", (string?)".exe", true, true),
+        ("psisiarcパス", "PsisiarcPath", (string?)".exe", true, true),
+        ("Whisperパス", "WhisperPath", (string?)".exe", true, true),
+        ("NicoConvASSパス", "NicoConvASSPath", (string?)".exe", true, true),
+        ("tsreplaceパス", "TsReplacePath", (string?)".exe", true, true),
+        ("tsMuxeRパス", "TsMuxeRPath", (string?)".exe", true, true),
+        ("SCRename.vbs/pyパス", "SCRenamePath", (string?)".vbs;.py", true, true),
+        ("AutoVfr.exeパス", "AutoVfrPath", (string?)".exe", true, true),
+        ("neroAacEnc.exeパス", "NeroAacEncPath", (string?)".exe", true, true),
+        ("qaac.exeパス", "QaacPath", (string?)".exe", true, true),
+        ("fdkaac.exeパス", "FdkaacPath", (string?)".exe", true, true),
+        ("opusenc.exeパス", "OpusEncPath", (string?)".exe", true, true)
     };
 
     private const string WorkPathField = "WorkPath";
@@ -616,6 +616,11 @@ else
                     }
                 }
             }
+        }
+        if (value is JsonNode node)
+        {
+            _setting[key] = node;
+            return;
         }
         _setting[key] = JsonValue.Create(value);
     }

@@ -32,6 +32,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<SystemSnapshot>> GetSystemAsync()
             => GetJsonAsync<SystemSnapshot>("/api/system");
 
+        public Task<ApiResult<UiStateView>> GetUiStateAsync()
+            => GetJsonAsync<UiStateView>("/api/ui-state");
+
         public Task<ApiResult<bool>> EndServerAsync()
             => PostJsonAsync("/api/system/end", new { }, _ => true);
 

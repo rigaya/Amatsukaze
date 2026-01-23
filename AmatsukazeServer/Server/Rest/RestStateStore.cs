@@ -160,6 +160,26 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        public UiStateView GetUiStateView()
+        {
+            lock (sync)
+            {
+                if (uiState == null)
+                {
+                    return new UiStateView();
+                }
+                return new UiStateView
+                {
+                    LastUsedProfile = uiState.LastUsedProfile,
+                    LastOutputPath = uiState.LastOutputPath,
+                    LastAddQueueBat = uiState.LastAddQueueBat,
+                    OutputPathHistory = uiState.OutputPathHistory != null
+                        ? uiState.OutputPathHistory.ToList()
+                        : new List<string>()
+                };
+            }
+        }
+
         public Amatsukaze.Shared.QueueView GetQueueView(Amatsukaze.Shared.QueueFilter filter)
         {
             filter = filter ?? new Amatsukaze.Shared.QueueFilter();
