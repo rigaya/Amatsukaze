@@ -14,6 +14,7 @@ namespace Amatsukaze.Server.Rest
         public int NumRead { get; set; }
         public int NumTotal { get; set; }
         public int NumValid { get; set; }
+        public int MaxFrames { get; set; }
         public bool Completed { get; set; }
         public string Error { get; set; }
         public string LogoFilePath { get; set; }
@@ -22,24 +23,52 @@ namespace Amatsukaze.Server.Rest
     public class LogoAnalyzeService
     {
         private readonly EncodeServer server;
+        private readonly RestStateStore state;
         private readonly ConcurrentDictionary<string, LogoAnalyzeJob> jobs = new ConcurrentDictionary<string, LogoAnalyzeJob>();
 
-        public LogoAnalyzeService(EncodeServer server)
+        public LogoAnalyzeService(EncodeServer server, RestStateStore state)
         {
             this.server = server;
+            this.state = state;
         }
 
-        public LogoAnalyzeStatus Start(LogoAnalyzeRequest request)
+        public bool TryStart(LogoAnalyzeStartRequest request, out LogoAnalyzeStatus status, out string error)
         {
+            status = null;
+            error = null;
+
+            if (request == null || request.QueueItemId <= 0)
+            {
+                error = "QueueItemIdが不正です";
+                return false;
+            }
+            if (!state.TryGetQueueItem(request.QueueItemId, out var item) || string.IsNullOrEmpty(item.SrcPath))
+            {
+                error = "キューの入力ファイルが見つかりません";
+                return false;
+            }
+            if (!File.Exists(item.SrcPath))
+            {
+                error = "入力ファイルが存在しません";
+                return false;
+            }
+            if (item.ServiceId <= 0)
+            {
+                error = "サービスIDが取得できません";
+                return false;
+            }
+
             var job = new LogoAnalyzeJob()
             {
-                Id = Guid.NewGuid().ToString("N")
+                Id = Guid.NewGuid().ToString("N"),
+                MaxFrames = request.MaxFrames
             };
             jobs[job.Id] = job;
 
-            Task.Run(() => RunJob(job, request));
+            Task.Run(() => RunJob(job, request, item.SrcPath, item.ServiceId));
 
-            return ToStatus(job);
+            status = ToStatus(job);
+            return true;
         }
 
         public LogoAnalyzeStatus GetStatus(string id)
@@ -49,6 +78,67 @@ namespace Amatsukaze.Server.Rest
                 return ToStatus(job);
             }
             return null;
+        }
+
+        public bool TryApply(string id, out string error)
+        {
+            error = null;
+            if (!jobs.TryGetValue(id, out var job))
+            {
+                error = "ジョブが見つかりません";
+                return false;
+            }
+            if (string.IsNullOrEmpty(job.LogoFilePath) || !File.Exists(job.LogoFilePath))
+            {
+                error = "ロゴファイルが見つかりません";
+                return false;
+            }
+            try
+            {
+                int serviceId;
+                using (var ctx = new AMTContext())
+                using (var logo = new LogoFile(ctx, job.LogoFilePath))
+                {
+                    serviceId = logo.ServiceId;
+                }
+                var data = File.ReadAllBytes(job.LogoFilePath);
+                server.SendLogoFile(new LogoFileData()
+                {
+                    ServiceId = serviceId,
+                    LogoIdx = 1,
+                    Data = data
+                }).GetAwaiter().GetResult();
+                server.RequestLogoRescan();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        public bool TryDiscard(string id, out string error)
+        {
+            error = null;
+            if (!jobs.TryRemove(id, out var job))
+            {
+                error = "ジョブが見つかりません";
+                return false;
+            }
+            try
+            {
+                if (!string.IsNullOrEmpty(job.LogoFilePath) && File.Exists(job.LogoFilePath))
+                {
+                    File.Delete(job.LogoFilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+            return true;
         }
 
         public byte[] GetLogoFile(string id)
@@ -82,20 +172,11 @@ namespace Amatsukaze.Server.Rest
             return null;
         }
 
-        private void RunJob(LogoAnalyzeJob job, LogoAnalyzeRequest request)
+        private void RunJob(LogoAnalyzeJob job, LogoAnalyzeStartRequest request, string filePath, int serviceId)
         {
             try
             {
-                if (string.IsNullOrEmpty(request.FilePath) || File.Exists(request.FilePath) == false)
-                {
-                    job.Error = "入力ファイルが見つかりません";
-                    job.Completed = true;
-                    return;
-                }
-
-                var baseWork = !string.IsNullOrEmpty(request.WorkPath)
-                    ? request.WorkPath
-                    : server.AppData_?.setting?.WorkPath;
+                var baseWork = server.AppData_?.setting?.WorkPath;
                 if (string.IsNullOrEmpty(baseWork))
                 {
                     baseWork = Directory.GetCurrentDirectory();
@@ -113,7 +194,7 @@ namespace Amatsukaze.Server.Rest
 
                 using (var ctx = new AMTContext())
                 {
-                    LogoFile.ScanLogo(ctx, request.FilePath, request.ServiceId, workfile, tmppath,
+                    LogoFile.ScanLogo(ctx, filePath, serviceId, workfile, tmppath,
                         imgx, imgy, w, h, request.Threshold, request.MaxFrames, (progress, nread, total, ngather) =>
                         {
                             job.Progress = progress;
@@ -125,14 +206,14 @@ namespace Amatsukaze.Server.Rest
 
                     using (var info = new TsInfo(ctx))
                     {
-                        if (info.ReadFile(request.FilePath))
+                        if (info.ReadFile(filePath))
                         {
                             using (var logo = new LogoFile(ctx, tmppath))
                             {
                                 if (info.HasServiceInfo)
                                 {
-                                    var serviceId = logo.ServiceId;
-                                    var service = info.GetServiceList().FirstOrDefault(s => s.ServiceId == serviceId);
+                                    var logoServiceId = logo.ServiceId;
+                                    var service = info.GetServiceList().FirstOrDefault(s => s.ServiceId == logoServiceId);
                                     var date = info.GetTime().ToString("yyyy-MM-dd");
                                     if (service != null)
                                     {
@@ -171,20 +252,34 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
-        private static LogoAnalyzeStatus ToStatus(LogoAnalyzeJob job)
+    private static LogoAnalyzeStatus ToStatus(LogoAnalyzeJob job)
+    {
+        var pass = 1;
+        if (job.Completed)
         {
-            return new LogoAnalyzeStatus()
-            {
-                JobId = job.Id,
-                Completed = job.Completed,
-                Error = job.Error,
-                Progress = job.Progress,
-                NumRead = job.NumRead,
-                NumTotal = job.NumTotal,
-                NumValid = job.NumValid,
-                LogoFileName = string.IsNullOrEmpty(job.LogoFilePath) ? null : Path.GetFileName(job.LogoFilePath),
-                ImageUrl = job.Completed && !string.IsNullOrEmpty(job.LogoFilePath) ? $"/api/logo/analyze/{job.Id}/image" : null
-            };
+            pass = 3;
         }
+        else if (job.Progress >= 75.0f)
+        {
+            pass = 3;
+        }
+        else if (job.Progress >= 50.0f)
+        {
+            pass = 2;
+        }
+        return new LogoAnalyzeStatus()
+        {
+            JobId = job.Id,
+            Completed = job.Completed,
+            Error = job.Error,
+            Progress = job.Progress,
+            NumRead = job.NumRead,
+            NumTotal = job.NumTotal,
+            NumValid = job.NumValid,
+            Pass = pass,
+            LogoFileName = string.IsNullOrEmpty(job.LogoFilePath) ? null : Path.GetFileName(job.LogoFilePath),
+            ImageUrl = job.Completed && !string.IsNullOrEmpty(job.LogoFilePath) ? $"/api/logo/analyze/{job.Id}/image" : null
+        };
     }
+}
 }

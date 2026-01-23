@@ -29,6 +29,7 @@ namespace Amatsukaze.Server.Rest
         private readonly RestStateStore state;
         private readonly int port;
         private readonly LogoAnalyzeService logoAnalyze;
+        private readonly LogoPreviewService logoPreview;
         private IHost host;
 
         public static int GetEnabledPort(int serverPort)
@@ -55,7 +56,8 @@ namespace Amatsukaze.Server.Rest
             this.server = server;
             this.state = state;
             this.port = port;
-            logoAnalyze = new LogoAnalyzeService(server);
+            logoAnalyze = new LogoAnalyzeService(server, state);
+            logoPreview = new LogoPreviewService(state);
         }
 
         public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -881,12 +883,15 @@ namespace Amatsukaze.Server.Rest
 
             app.MapPost("/api/logo/analyze", async (HttpRequest request) =>
             {
-                var data = await request.ReadFromJsonAsync<LogoAnalyzeRequest>();
+                var data = await request.ReadFromJsonAsync<LogoAnalyzeStartRequest>();
                 if (data == null)
                 {
                     return Results.BadRequest();
                 }
-                var status = logoAnalyze.Start(data);
+                if (!logoAnalyze.TryStart(data, out var status, out var error))
+                {
+                    return Results.BadRequest(new { message = error ?? "ロゴ解析を開始できませんでした" });
+                }
                 return Results.Json(status);
             });
 
@@ -918,6 +923,74 @@ namespace Amatsukaze.Server.Rest
                     return Results.NotFound();
                 }
                 return Results.File(bytes, "image/png");
+            });
+
+            app.MapPost("/api/logo/analyze/{jobId}/apply", (string jobId) =>
+            {
+                if (logoAnalyze.TryApply(jobId, out var error))
+                {
+                    return Results.Ok();
+                }
+                return Results.BadRequest(new { message = error ?? "ロゴの採用に失敗しました" });
+            });
+
+            app.MapPost("/api/logo/analyze/{jobId}/discard", (string jobId) =>
+            {
+                if (logoAnalyze.TryDiscard(jobId, out var error))
+                {
+                    return Results.Ok();
+                }
+                return Results.BadRequest(new { message = error ?? "ロゴの破棄に失敗しました" });
+            });
+
+            app.MapPost("/api/logo/preview/sessions", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<LogoPreviewSessionRequest>();
+                if (data == null)
+                {
+                    return Results.BadRequest();
+                }
+                if (!logoPreview.TryCreateSession(data, out var response, out var error))
+                {
+                    return Results.BadRequest(new { message = error ?? "プレビューセッションを作成できませんでした" });
+                }
+                return Results.Json(response);
+            });
+
+            app.MapGet("/api/logo/preview/sessions/{sessionId}/frame", (HttpContext context, string sessionId, string pos) =>
+            {
+                var session = logoPreview.GetSession(sessionId);
+                if (session == null)
+                {
+                    return Results.NotFound();
+                }
+                if (!float.TryParse(pos, NumberStyles.Float, CultureInfo.InvariantCulture, out var posValue))
+                {
+                    return Results.BadRequest(new { message = "posの形式が不正です" });
+                }
+                if (posValue < 0f || posValue > 1f)
+                {
+                    return Results.BadRequest(new { message = "posは0〜1の範囲で指定してください" });
+                }
+                var bitmap = session.GetFrame(posValue);
+                if (bitmap == null)
+                {
+                    return Results.NotFound();
+                }
+                using var ms = new MemoryStream();
+                BitmapManager.SaveBitmapAsPng(bitmap, ms);
+                var bytes = ms.ToArray();
+                context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+                return Results.File(bytes, "image/png");
+            });
+
+            app.MapDelete("/api/logo/preview/sessions/{sessionId}", (string sessionId) =>
+            {
+                if (logoPreview.RemoveSession(sessionId))
+                {
+                    return Results.Ok();
+                }
+                return Results.NotFound();
             });
         }
 

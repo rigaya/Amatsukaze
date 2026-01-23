@@ -75,9 +75,9 @@ namespace Amatsukaze.Lib
                     {
                         int pixelOffset = rowOffset + x * 3;
                         pixelRowSpan[x] = new Rgb24(
-                            buffer[pixelOffset],     // R
+                            buffer[pixelOffset + 2], // R (BGR24 -> RGB)
                             buffer[pixelOffset + 1], // G
-                            buffer[pixelOffset + 2]  // B
+                            buffer[pixelOffset]      // B
                         );
                     }
                 }

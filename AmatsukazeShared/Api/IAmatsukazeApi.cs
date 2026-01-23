@@ -61,9 +61,13 @@ namespace Amatsukaze.Shared
 
         Task<ApiResult<ConsoleView>> GetConsoleAsync();
 
-        Task<ApiResult<LogoAnalyzeStatus>> StartLogoAnalyzeAsync(LogoAnalyzeRequest req);
+        Task<ApiResult<LogoAnalyzeStatus>> StartLogoAnalyzeAsync(LogoAnalyzeStartRequest req);
         Task<ApiResult<LogoAnalyzeStatus>> GetLogoAnalyzeStatusAsync(string jobId);
         Task<ApiResult<byte[]>> GetLogoAnalyzeImageAsync(string jobId);
         Task<ApiResult<byte[]>> GetLogoAnalyzeFileAsync(string jobId);
+        Task<ApiResult<bool>> ApplyLogoAnalyzeAsync(string jobId);
+        Task<ApiResult<bool>> DiscardLogoAnalyzeAsync(string jobId);
+        Task<ApiResult<LogoPreviewSessionResponse>> CreateLogoPreviewSessionAsync(LogoPreviewSessionRequest req);
+        Task<ApiResult<bool>> DeleteLogoPreviewSessionAsync(string sessionId);
     }
 }
