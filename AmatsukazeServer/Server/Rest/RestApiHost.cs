@@ -270,6 +270,19 @@ namespace Amatsukaze.Server.Rest
             app.MapGet("/api/logs/encode", () => Results.Json(state.GetEncodeLogs()));
             app.MapGet("/api/logs/check", () => Results.Json(state.GetCheckLogs()));
 
+            app.MapGet("/api/path/suggest", (HttpRequest request) =>
+            {
+                var input = request.Query["input"].ToString();
+                var extensions = request.Query["ext"].ToString();
+                var allowFiles = GetQueryBool(request, "allowFiles", true);
+                var allowDirs = GetQueryBool(request, "allowDirs", true);
+                var maxDirs = GetQueryInt(request, "maxDirs", 10);
+                var maxFiles = GetQueryInt(request, "maxFiles", 10);
+
+                var response = BuildPathSuggestResponse(input, extensions, allowFiles, allowDirs, maxDirs, maxFiles);
+                return Results.Json(response);
+            });
+
             app.MapGet("/api/logs/file", (HttpRequest request) =>
             {
                 if (request.Query.TryGetValue("encodeStart", out var encodeStart) &&
@@ -1173,6 +1186,250 @@ namespace Amatsukaze.Server.Rest
                     RemoveExtensionData(item);
                 }
             }
+        }
+
+        private static bool GetQueryBool(HttpRequest request, string key, bool fallback)
+        {
+            if (!request.Query.TryGetValue(key, out var value))
+            {
+                return fallback;
+            }
+            if (bool.TryParse(value.ToString(), out var parsed))
+            {
+                return parsed;
+            }
+            return fallback;
+        }
+
+        private static int GetQueryInt(HttpRequest request, string key, int fallback)
+        {
+            if (!request.Query.TryGetValue(key, out var value))
+            {
+                return fallback;
+            }
+            if (int.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+            return fallback;
+        }
+
+        private static PathSuggestResponse BuildPathSuggestResponse(string input, string extensions, bool allowFiles, bool allowDirs, int maxDirs, int maxFiles)
+        {
+            var response = new PathSuggestResponse
+            {
+                Input = input ?? string.Empty,
+                BaseDir = string.Empty
+            };
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return response;
+            }
+
+            var normalized = NormalizePath(input.Trim());
+            var (baseDir, needle) = SplitInput(normalized);
+            response.BaseDir = baseDir;
+
+            if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+            {
+                return response;
+            }
+
+            var extSet = ParseExtensions(extensions);
+
+            if (allowDirs && maxDirs > 0)
+            {
+                var dirs = new List<PathCandidate>();
+                foreach (var dir in SafeEnumerateDirectories(baseDir))
+                {
+                    if (!CanReadDirectory(dir))
+                    {
+                        continue;
+                    }
+                    var name = GetName(dir);
+                    if (!TryMatch(name, needle, out var startsWith, out var matchIndex))
+                    {
+                        continue;
+                    }
+                    dirs.Add(new PathCandidate
+                    {
+                        Name = name,
+                        FullPath = dir,
+                        StartsWith = startsWith,
+                        MatchIndex = matchIndex
+                    });
+                }
+                response.Dirs = OrderCandidates(dirs).Take(maxDirs).ToList();
+            }
+
+            if (allowFiles && maxFiles > 0)
+            {
+                var files = new List<PathCandidate>();
+                foreach (var file in SafeEnumerateFiles(baseDir))
+                {
+                    if (!CanReadFile(file))
+                    {
+                        continue;
+                    }
+                    if (extSet.Count > 0)
+                    {
+                        var ext = Path.GetExtension(file);
+                        if (string.IsNullOrEmpty(ext) || !extSet.Contains(ext.ToLowerInvariant()))
+                        {
+                            continue;
+                        }
+                    }
+                    var name = GetName(file);
+                    if (!TryMatch(name, needle, out var startsWith, out var matchIndex))
+                    {
+                        continue;
+                    }
+                    files.Add(new PathCandidate
+                    {
+                        Name = name,
+                        FullPath = file,
+                        StartsWith = startsWith,
+                        MatchIndex = matchIndex
+                    });
+                }
+                response.Files = OrderCandidates(files).Take(maxFiles).ToList();
+            }
+
+            return response;
+        }
+
+        private static string NormalizePath(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return string.Empty;
+            }
+            var normalized = input.Replace('\\', Path.DirectorySeparatorChar);
+            return normalized.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        }
+
+        private static (string baseDir, string needle) SplitInput(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return (string.Empty, string.Empty);
+            }
+
+            if (input.EndsWith(Path.DirectorySeparatorChar) || input.EndsWith(Path.AltDirectorySeparatorChar))
+            {
+                return (input, string.Empty);
+            }
+
+            var dir = Path.GetDirectoryName(input);
+            if (string.IsNullOrEmpty(dir))
+            {
+                return (string.Empty, input);
+            }
+
+            var baseDir = dir.EndsWith(Path.DirectorySeparatorChar) || dir.EndsWith(Path.AltDirectorySeparatorChar)
+                ? dir
+                : dir + Path.DirectorySeparatorChar;
+            var needle = input.Length >= baseDir.Length ? input.Substring(baseDir.Length) : string.Empty;
+            return (baseDir, needle);
+        }
+
+        private static HashSet<string> ParseExtensions(string extensions)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(extensions))
+            {
+                return result;
+            }
+            var parts = extensions.Split(new[] { ';', ',', '|' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                {
+                    continue;
+                }
+                var ext = trimmed.StartsWith(".") ? trimmed : "." + trimmed;
+                result.Add(ext.ToLowerInvariant());
+            }
+            return result;
+        }
+
+        private static IEnumerable<PathCandidate> OrderCandidates(List<PathCandidate> items)
+        {
+            return items
+                .OrderByDescending(item => item.StartsWith)
+                .ThenBy(item => item.MatchIndex < 0 ? int.MaxValue : item.MatchIndex)
+                .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool TryMatch(string name, string needle, out bool startsWith, out int matchIndex)
+        {
+            if (string.IsNullOrEmpty(needle))
+            {
+                startsWith = true;
+                matchIndex = 0;
+                return true;
+            }
+            startsWith = name.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+            matchIndex = name.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+            return matchIndex >= 0;
+        }
+
+        private static IEnumerable<string> SafeEnumerateDirectories(string baseDir)
+        {
+            try
+            {
+                return Directory.EnumerateDirectories(baseDir);
+            }
+            catch
+            {
+                return Array.Empty<string>();
+            }
+        }
+
+        private static IEnumerable<string> SafeEnumerateFiles(string baseDir)
+        {
+            try
+            {
+                return Directory.EnumerateFiles(baseDir);
+            }
+            catch
+            {
+                return Array.Empty<string>();
+            }
+        }
+
+        private static bool CanReadDirectory(string path)
+        {
+            try
+            {
+                using var enumerator = Directory.EnumerateFileSystemEntries(path).GetEnumerator();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool CanReadFile(string path)
+        {
+            try
+            {
+                using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetName(string path)
+        {
+            var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return Path.GetFileName(trimmed);
         }
 
         private static JsonSerializerOptions CreateRestJsonOptions()

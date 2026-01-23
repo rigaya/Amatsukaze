@@ -69,5 +69,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<bool>> DiscardLogoAnalyzeAsync(string jobId);
         Task<ApiResult<LogoPreviewSessionResponse>> CreateLogoPreviewSessionAsync(LogoPreviewSessionRequest req);
         Task<ApiResult<bool>> DeleteLogoPreviewSessionAsync(string sessionId);
+
+        Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req);
     }
 }

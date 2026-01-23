@@ -318,6 +318,37 @@ namespace Amatsukaze.Shared
             }
         }
 
+        public Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req)
+        {
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(req.Input))
+            {
+                query.Add($"input={Uri.EscapeDataString(req.Input)}");
+            }
+            if (!string.IsNullOrWhiteSpace(req.Extensions))
+            {
+                query.Add($"ext={Uri.EscapeDataString(req.Extensions)}");
+            }
+            if (req.MaxDirs > 0)
+            {
+                query.Add($"maxDirs={req.MaxDirs}");
+            }
+            if (req.MaxFiles > 0)
+            {
+                query.Add($"maxFiles={req.MaxFiles}");
+            }
+            if (!req.AllowFiles)
+            {
+                query.Add("allowFiles=false");
+            }
+            if (!req.AllowDirs)
+            {
+                query.Add("allowDirs=false");
+            }
+            var url = "/api/path/suggest" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+            return GetJsonAsync<PathSuggestResponse>(url);
+        }
+
         private async Task<ApiResult<T>> GetJsonAsync<T>(string url)
         {
             try

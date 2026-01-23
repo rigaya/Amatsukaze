@@ -30,7 +30,15 @@ else
     <table class="table">
         <tr>
             <th>一時フォルダ (重要)</th>
-            <td><input value="@GetStringValue(WorkPathField)" @oninput="@(e => OnStringInput(e, WorkPathField))" /></td>
+            <td>
+                <PathSuggestInput Value="@GetStringValue(WorkPathField)"
+                                  ValueChanged="@(v => OnStringValueChanged(v, WorkPathField))"
+                                  AllowFiles="false"
+                                  AllowDirs="true"
+                                  MaxDirs="10"
+                                  MaxFiles="0"
+                                  Disabled="@_loading" />
+            </td>
         </tr>
         <tr>
             <th>常時表示するディスク</th>
@@ -38,6 +46,10 @@ else
         </tr>
         @foreach (var item in _generalBoolFields)
         {
+            if (IsServerLinux && item.Field == SupressSleepField)
+            {
+                continue;
+            }
             <tr>
                 <th></th>
                 <td>
@@ -54,9 +66,22 @@ else
     <table class="table">
         @foreach (var item in _pathFields)
         {
+            if (IsServerLinux && IsWindowsOnlyPath(item.Field))
+            {
+                continue;
+            }
             <tr>
                 <th>@item.Label</th>
-                <td><input value="@GetStringValue(item.Field)" @oninput="@(e => OnStringInput(e, item.Field))" /></td>
+                <td>
+                    <PathSuggestInput Value="@GetStringValue(item.Field)"
+                                      ValueChanged="@(v => OnStringValueChanged(v, item.Field))"
+                                      Extensions="@GetPathExtensions(item.Field, item.Extensions)"
+                                      AllowFiles="@item.AllowFiles"
+                                      AllowDirs="@item.AllowDirs"
+                                      MaxDirs="10"
+                                      MaxFiles="10"
+                                      Disabled="@_loading" />
+                </td>
             </tr>
         }
     </table>
@@ -83,7 +108,7 @@ else
                     有効
                 </label>
                 <span> 日数 </span>
-                <input type="number" style="width: 60px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" />
+                <input type="number" style="width: 60px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" disabled="@(GetBoolValue(DeleteOldLogsField) == false)" />
             </td>
         </tr>
     </table>
@@ -98,7 +123,7 @@ else
         </tr>
         <tr>
             <th>GPU数</th>
-            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumGpuField)" @oninput="@(e => OnIntInput(e, NumGpuField))" /></td>
+            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumGpuField)" @oninput="@(e => OnIntInput(e, NumGpuField))" disabled="@(GetBoolValue(SchedulingEnabledField) == false)" /></td>
         </tr>
     </table>
 
@@ -147,12 +172,12 @@ else
         <tr>
             <th>デフォルト値を使う</th>
             <td>
-                <input type="checkbox" checked="@GetBoolValue(EnableX265VfrField)" @onchange="@(e => OnBoolChange(e, EnableX265VfrField))" />
+                <input type="checkbox" checked="@IsX265VfrDefault" @onchange="OnX265VfrDefaultChange" />
             </td>
         </tr>
         <tr>
             <th>値</th>
-            <td><input type="number" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" /></td>
+            <td><input type="number" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" disabled="@IsX265VfrDefault" /></td>
         </tr>
     </table>
 
@@ -164,7 +189,7 @@ else
         </tr>
         <tr>
             <th>停止中はエンコーダを停止する</th>
-            <td><input type="checkbox" checked="@GetBoolValue(RunHoursSuspendField)" @onchange="@(e => OnBoolChange(e, RunHoursSuspendField))" /></td>
+            <td><input type="checkbox" checked="@GetBoolValue(RunHoursSuspendField)" @onchange="@(e => OnBoolChange(e, RunHoursSuspendField))" disabled="@(GetBoolValue(EnableRunHoursField) == false)" /></td>
         </tr>
         <tr>
             <th>時間帯</th>
@@ -172,7 +197,7 @@ else
                 @for (var i = 0; i < 24; i++)
                 {
                     <label style="margin-right: 6px;">
-                        <input type="checkbox" checked="@GetRunHour(i)" @onchange="@(e => OnRunHourChange(e, i))" />@i
+                        <input type="checkbox" checked="@GetRunHour(i)" @onchange="@(e => OnRunHourChange(e, i))" disabled="@(GetBoolValue(EnableRunHoursField) == false)" />@i
                     </label>
                 }
             </td>
@@ -181,15 +206,18 @@ else
 
     <h4>終了処理</h4>
     <table class="table">
-        <tr>
-            <th>エンコード後シャットダウンの選択肢を有効化</th>
-            <td><input type="checkbox" checked="@GetBoolValue(EnableShutdownField)" @onchange="@(e => OnBoolChange(e, EnableShutdownField))" /></td>
-        </tr>
-        <tr>
-            <th>指定プロセス実行中にスリープ・休止・シャットダウンを行わない</th>
-            <td><input type="checkbox" checked="@GetBoolValue(NoActionExeField)" @onchange="@(e => OnBoolChange(e, NoActionExeField))" /></td>
-        </tr>
-        @if (GetBoolValue(NoActionExeField))
+        @if (!IsServerLinux)
+        {
+            <tr>
+                <th>エンコード後シャットダウンの選択肢を有効化</th>
+                <td><input type="checkbox" checked="@GetBoolValue(EnableShutdownField)" @onchange="@(e => OnBoolChange(e, EnableShutdownField))" /></td>
+            </tr>
+            <tr>
+                <th>指定プロセス実行中にスリープ・休止・シャットダウンを行わない</th>
+                <td><input type="checkbox" checked="@GetBoolValue(NoActionExeField)" @onchange="@(e => OnBoolChange(e, NoActionExeField))" /></td>
+            </tr>
+        }
+        @if (!IsServerLinux && GetBoolValue(NoActionExeField))
         {
             <tr>
                 <th>対象プロセスの実行ファイル名</th>
@@ -251,34 +279,34 @@ else
         ("CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする", "CopyTrimAVS")
     };
 
-    private readonly (string Label, string Field)[] _pathFields = new[]
+    private readonly (string Label, string Field, string? Extensions, bool AllowFiles, bool AllowDirs)[] _pathFields = new[]
     {
-        ("AmatsukazeCLIパス", "AmatsukazePath"),
-        ("x264パス", "X264Path"),
-        ("x265パス", "X265Path"),
-        ("SvtAv1EncAppパス", "SVTAV1Path"),
-        ("QSVEncCパス", "QSVEncPath"),
-        ("NVEncCパス", "NVEncPath"),
-        ("VCEEncCパス", "VCEEncPath"),
-        ("L-SMASH Muxerパス", "MuxerPath"),
-        ("mkvmergeパス", "MKVMergePath"),
-        ("MP4Boxパス", "MP4BoxPath"),
-        ("TimelineEditorパス", "TimelineEditorPath"),
-        ("ChapterExeパス", "ChapterExePath"),
-        ("JoinLogoScpパス", "JoinLogoScpPath"),
-        ("tsreadexパス", "TsReadExPath"),
-        ("b24tovttパス", "B24ToVttPath"),
-        ("psisiarcパス", "PsisiarcPath"),
-        ("Whisperパス", "WhisperPath"),
-        ("NicoConvASSパス", "NicoConvASSPath"),
-        ("tsreplaceパス", "TsReplacePath"),
-        ("tsMuxeRパス", "TsMuxeRPath"),
-        ("SCRename.vbs/pyパス", "SCRenamePath"),
-        ("AutoVfr.exeパス", "AutoVfrPath"),
-        ("neroAacEnc.exeパス", "NeroAacEncPath"),
-        ("qaac.exeパス", "QaacPath"),
-        ("fdkaac.exeパス", "FdkaacPath"),
-        ("opusenc.exeパス", "OpusEncPath")
+        ("AmatsukazeCLIパス", "AmatsukazePath", ".exe", true, true),
+        ("x264パス", "X264Path", ".exe", true, true),
+        ("x265パス", "X265Path", ".exe", true, true),
+        ("SvtAv1EncAppパス", "SVTAV1Path", ".exe", true, true),
+        ("QSVEncCパス", "QSVEncPath", ".exe", true, true),
+        ("NVEncCパス", "NVEncPath", ".exe", true, true),
+        ("VCEEncCパス", "VCEEncPath", ".exe", true, true),
+        ("L-SMASH Muxerパス", "MuxerPath", ".exe", true, true),
+        ("mkvmergeパス", "MKVMergePath", ".exe", true, true),
+        ("MP4Boxパス", "MP4BoxPath", ".exe", true, true),
+        ("TimelineEditorパス", "TimelineEditorPath", ".exe", true, true),
+        ("ChapterExeパス", "ChapterExePath", ".exe", true, true),
+        ("JoinLogoScpパス", "JoinLogoScpPath", ".txt", true, true),
+        ("tsreadexパス", "TsReadExPath", ".exe", true, true),
+        ("b24tovttパス", "B24ToVttPath", ".exe", true, true),
+        ("psisiarcパス", "PsisiarcPath", ".exe", true, true),
+        ("Whisperパス", "WhisperPath", ".exe", true, true),
+        ("NicoConvASSパス", "NicoConvASSPath", ".exe", true, true),
+        ("tsreplaceパス", "TsReplacePath", ".exe", true, true),
+        ("tsMuxeRパス", "TsMuxeRPath", ".exe", true, true),
+        ("SCRename.vbs/pyパス", "SCRenamePath", ".vbs;.py", true, true),
+        ("AutoVfr.exeパス", "AutoVfrPath", ".exe", true, true),
+        ("neroAacEnc.exeパス", "NeroAacEncPath", ".exe", true, true),
+        ("qaac.exeパス", "QaacPath", ".exe", true, true),
+        ("fdkaac.exeパス", "FdkaacPath", ".exe", true, true),
+        ("opusenc.exeパス", "OpusEncPath", ".exe", true, true)
     };
 
     private const string WorkPathField = "WorkPath";
@@ -300,6 +328,7 @@ else
     private const string NoActionExeField = "NoActionExe";
     private const string ExecuteBatchAfterQueueField = "ExecuteBatchAfterQueue";
     private const string BatchFileAfterQueuePathField = "BatchFileAfterQueuePath";
+    private const string SupressSleepField = "SupressSleep";
     private static readonly string[] _processPriorityOptions = new[] { "通常", "通常以下", "低" };
     private static readonly string[] _affinityOptions = new[] { "なし", "コア", "L2", "L3", "NUMA", "Group" };
     private string? _error;
@@ -314,6 +343,7 @@ else
     private readonly List<string> _noActionExeList = new();
     private string _noActionExeName = "";
     private int _selectedNoActionExeIndex = -1;
+    private bool _isServerLinux;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -334,11 +364,13 @@ else
 
         var settingTask = Api.GetSettingAsync();
         var queueFinishTask = Api.GetQueueFinishBatFilesAsync();
+        var profileOptionsTask = Api.GetProfileOptionsAsync();
 
-        await Task.WhenAll(settingTask, queueFinishTask);
+        await Task.WhenAll(settingTask, queueFinishTask, profileOptionsTask);
 
         var settingRes = await settingTask;
         var queueFinishRes = await queueFinishTask;
+        var profileOptionsRes = await profileOptionsTask;
 
         if (!settingRes.Ok)
         {
@@ -360,6 +392,15 @@ else
         else if (!queueFinishRes.Ok && string.IsNullOrEmpty(_error))
         {
             _error = queueFinishRes.Error ?? "Failed to load queue finish bat files.";
+        }
+
+        if (profileOptionsRes.Ok && profileOptionsRes.Data != null)
+        {
+            _isServerLinux = profileOptionsRes.Data.IsServerLinux;
+        }
+        else
+        {
+            _isServerLinux = false;
         }
 
         _loading = false;
@@ -509,9 +550,20 @@ else
         _stringValues[name] = e.Value?.ToString() ?? "";
     }
 
+    private void OnStringValueChanged(string value, string name)
+    {
+        _stringValues[name] = value ?? "";
+    }
+
     private void OnBoolChange(ChangeEventArgs e, string name)
     {
         _boolValues[name] = e.Value is bool b && b;
+    }
+
+    private void OnX265VfrDefaultChange(ChangeEventArgs e)
+    {
+        var useDefault = e.Value is bool b && b;
+        _boolValues[EnableX265VfrField] = !useDefault;
     }
 
     private JsonNode? GetSettingNode(string name)
@@ -584,6 +636,42 @@ else
     private static string FormatList(List<string>? items)
     {
         return items == null || items.Count == 0 ? "-" : string.Join(", ", items);
+    }
+
+    private string? GetPathExtensions(string field, string? extensions)
+    {
+        if (string.IsNullOrWhiteSpace(extensions))
+        {
+            return null;
+        }
+        if (IsServerLinux && IsExeOnlyExtensions(extensions))
+        {
+            return null;
+        }
+        return extensions;
+    }
+
+    private static bool IsExeOnlyExtensions(string extensions)
+    {
+        var parts = extensions.Split(new[] { ';', ',', '|' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                continue;
+            }
+            var ext = trimmed.StartsWith(".") ? trimmed : "." + trimmed;
+            if (!string.Equals(ext, ".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void AddNoActionExe()
@@ -729,5 +817,18 @@ else
             return;
         }
         _runHours[index] = e.Value is bool b && b;
+    }
+
+    private bool IsServerLinux => _isServerLinux;
+
+    private bool IsX265VfrDefault => !GetBoolValue(EnableX265VfrField);
+
+    private static bool IsWindowsOnlyPath(string field)
+    {
+        return field == "NicoConvASSPath"
+            || field == "TsMuxeRPath"
+            || field == "AutoVfrPath"
+            || field == "NeroAacEncPath"
+            || field == "QaacPath";
     }
 }
