@@ -1,4 +1,5 @@
 @page "/status"
+@implements IDisposable
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 
@@ -136,20 +137,25 @@ else
         _pollCts?.Cancel();
         _pollCts = new CancellationTokenSource();
         var token = _pollCts.Token;
-        _pollTask = Task.Run(async () =>
+        _pollTask = PollLoopAsync(token);
+    }
+
+    private async Task PollLoopAsync(CancellationToken token)
+    {
+        try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            try
+            while (!token.IsCancellationRequested)
             {
-                while (await timer.WaitForNextTickAsync(token))
-                {
-                    await InvokeAsync(PollOnceAsync);
-                }
+                await Task.Delay(1000, token);
+                await PollOnceAsync();
             }
-            catch (OperationCanceledException)
-            {
-            }
-        }, token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private async Task PollOnceAsync()
@@ -166,6 +172,7 @@ else
         finally
         {
             _polling = false;
+            StateHasChanged();
         }
     }
 
