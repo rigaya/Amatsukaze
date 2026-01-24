@@ -16,6 +16,7 @@ namespace Amatsukaze.Shared
 
         Task<ApiResult<QueueView>> GetQueueAsync(QueueFilter? filter = null);
         Task<ApiResult<QueueChangesView>> GetQueueChangesAsync(long sinceVersion);
+        Task<ApiResult<MessageChangesView>> GetMessageChangesAsync(long sinceId, string? page = null, string? requestId = null, string? levels = null, int max = 50);
         Task<ApiResult<string>> AddQueueAsync(AddQueueRequest req);
         Task<ApiResult<bool>> ChangeQueueAsync(ChangeItemData req);
         Task<ApiResult<bool>> PauseQueueAsync(PauseRequest req);
@@ -34,6 +35,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<bool>> RemoveProfileAsync(string name);
 
         Task<ApiResult<List<JsonElement>>> GetAutoSelectsAsync();
+        Task<ApiResult<AutoSelectOptionsView>> GetAutoSelectOptionsAsync();
         Task<ApiResult<bool>> AddAutoSelectAsync(JsonElement profile);
         Task<ApiResult<bool>> UpdateAutoSelectAsync(JsonElement profile, string? newName = null);
         Task<ApiResult<bool>> RemoveAutoSelectAsync(string name);

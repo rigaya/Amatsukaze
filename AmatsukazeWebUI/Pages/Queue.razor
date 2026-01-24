@@ -69,9 +69,18 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var item in _view.Items)
+                @for (var i = 0; i < _view.Items.Count; i++)
                 {
-                    <tr @key="item.Id">
+                    var rowIndex = i;
+                    var item = _view.Items[rowIndex];
+                    <tr @key="item.Id"
+                        draggable="true"
+                        data-queue-index="@rowIndex"
+                        ondragstart="return amatsukazeDnd.setDataWithIndex(event)"
+                        ondragenter="return amatsukazeDnd.onEnter(event)"
+                        ondragover="return amatsukazeDnd.onOver(event)"
+                        @ondrop:preventDefault="true"
+                        @ondrop="@(() => OnQueueDrop(rowIndex))">
                         <td>@item.Id</td>
                         <td>@(item.StateLabel ?? item.State ?? "-")</td>
                         <td>@(item.FileName ?? "-")</td>
@@ -821,7 +830,7 @@ else
         await ChangeItemAsync(item, ChangeItemType.Profile, profile: profile);
     }
 
-    private async Task ChangeItemAsync(QueueItemView item, ChangeItemType type, int? priority = null, string? profile = null)
+    private async Task ChangeItemAsync(QueueItemView item, ChangeItemType type, int? priority = null, string? profile = null, int? position = null)
     {
         _actionMessage = null;
         _error = null;
@@ -830,7 +839,8 @@ else
             ItemId = item.Id,
             ChangeType = type,
             Priority = priority ?? 0,
-            Profile = profile
+            Profile = profile,
+            Position = position ?? 0
         };
         var res = await Api.ChangeQueueAsync(req);
         if (!res.Ok)
@@ -840,5 +850,34 @@ else
         }
         _actionMessage = "Operation completed.";
         await ReloadAsync();
+    }
+
+    private async Task OnQueueDrop(int index)
+    {
+        if (_view == null)
+        {
+            return;
+        }
+        var fromIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getDragIndex");
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
+        if (fromIndex < 0 || fromIndex == index)
+        {
+            return;
+        }
+        var toIndex = index;
+        if (toIndex > fromIndex)
+        {
+            toIndex -= 1;
+        }
+        if (toIndex < 0)
+        {
+            toIndex = 0;
+        }
+        if (toIndex >= _view.Items.Count)
+        {
+            toIndex = _view.Items.Count - 1;
+        }
+        var item = _view.Items[fromIndex];
+        await ChangeItemAsync(item, ChangeItemType.Move, position: toIndex);
     }
 }

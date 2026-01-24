@@ -4,6 +4,53 @@
 
 <h3>Amatsukaze Status</h3>
 
+<style>
+    .status-toggle {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+        vertical-align: middle;
+    }
+    .status-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .status-toggle .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .2s;
+        border-radius: 12px;
+    }
+    .status-toggle .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .2s;
+        border-radius: 50%;
+    }
+    .status-toggle input:checked + .slider {
+        background-color: #4caf50;
+    }
+    .status-toggle input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+    .status-toggle input:disabled + .slider {
+        background-color: #999;
+        cursor: not-allowed;
+    }
+</style>
+
 @if (_loading)
 {
     <p>Loading...</p>
@@ -25,24 +72,165 @@ else
         <tr><th>State</th><td>@(_system.StatusSummary?.RunningStateLabel ?? "-")</td></tr>
         <tr><th>Progress</th><td>@(_system.State?.Progress.ToString("P1") ?? "-")</td></tr>
     </table>
+
+    <div style="margin-top: 12px; display: grid; gap: 8px;">
+        <label style="display: flex; align-items: center; gap: 8px;">
+            <span class="status-toggle">
+                <input type="checkbox"
+                       checked="@IsQueueRunning"
+                       disabled="@(_pauseBusy || _system?.State == null)"
+                       @onchange="OnToggleQueuePause" />
+                <span class="slider"></span>
+            </span>
+            <span>キュー稼働中 ↔ 停止</span>
+            <span style="color: #666;">@(_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止"))</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px;">
+            <span class="status-toggle">
+                <input type="checkbox"
+                       checked="@IsEncoderOk"
+                       disabled="@(_suspendBusy || _system?.State == null)"
+                       @onchange="OnToggleEncoderSuspend" />
+                <span class="slider"></span>
+            </span>
+            <span>エンコーダOK ↔ 一時停止</span>
+            <span style="color: #666;">@(_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止"))</span>
+        </label>
+    </div>
 }
 
 @code {
     private SystemSnapshot? _system;
     private string? _error;
     private bool _loading = true;
+    private bool _pauseBusy;
+    private bool _suspendBusy;
+    private bool _polling;
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
+
+    private bool IsQueueRunning => _system?.State != null && !_system.State.Pause;
+    private bool IsEncoderOk => _system?.State != null && !_system.State.Suspend;
 
     protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _loading = false;
+        StartPolling();
+    }
+
+    private async Task ReloadAsync()
     {
         var res = await Api.GetSystemAsync();
         if (!res.Ok)
         {
             _error = res.Error ?? "Failed to load.";
+            return;
         }
-        else
+        _error = null;
+        _system = res.Data;
+    }
+
+    private void StartPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+        _pollTask = Task.Run(async () =>
         {
-            _system = res.Data;
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(PollOnceAsync);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, token);
+    }
+
+    private async Task PollOnceAsync()
+    {
+        if (_loading || _polling)
+        {
+            return;
         }
-        _loading = false;
+        _polling = true;
+        try
+        {
+            await ReloadAsync();
+        }
+        finally
+        {
+            _polling = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _pollCts = null;
+    }
+
+    private async Task OnToggleQueuePause(ChangeEventArgs e)
+    {
+        if (_system?.State == null || _pauseBusy)
+        {
+            return;
+        }
+        _pauseBusy = true;
+        var desiredRunning = GetBoolValue(e.Value);
+        var req = new PauseRequest
+        {
+            IsQueue = true,
+            Pause = !desiredRunning
+        };
+        var res = await Api.PauseQueueAsync(req);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to update.";
+        }
+        await ReloadAsync();
+        _pauseBusy = false;
+    }
+
+    private async Task OnToggleEncoderSuspend(ChangeEventArgs e)
+    {
+        if (_system?.State == null || _suspendBusy)
+        {
+            return;
+        }
+        _suspendBusy = true;
+        var desiredOk = GetBoolValue(e.Value);
+        var req = new PauseRequest
+        {
+            IsQueue = false,
+            Index = -1,
+            Pause = !desiredOk
+        };
+        var res = await Api.PauseQueueAsync(req);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to update.";
+        }
+        await ReloadAsync();
+        _suspendBusy = false;
+    }
+
+    private static bool GetBoolValue(object? value)
+    {
+        if (value is bool b)
+        {
+            return b;
+        }
+        if (value is string s && bool.TryParse(s, out var parsed))
+        {
+            return parsed;
+        }
+        return false;
     }
 }

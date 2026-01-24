@@ -84,6 +84,29 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<QueueChangesView>> GetQueueChangesAsync(long sinceVersion)
             => GetJsonAsync<QueueChangesView>($"/api/queue/changes?since={sinceVersion}");
 
+        public Task<ApiResult<MessageChangesView>> GetMessageChangesAsync(long sinceId, string? page = null, string? requestId = null, string? levels = null, int max = 50)
+        {
+            var query = new List<string> { $"since={sinceId}" };
+            if (!string.IsNullOrEmpty(page))
+            {
+                query.Add($"page={Uri.EscapeDataString(page)}");
+            }
+            if (!string.IsNullOrEmpty(requestId))
+            {
+                query.Add($"requestId={Uri.EscapeDataString(requestId)}");
+            }
+            if (!string.IsNullOrEmpty(levels))
+            {
+                query.Add($"levels={Uri.EscapeDataString(levels)}");
+            }
+            if (max > 0)
+            {
+                query.Add($"max={max}");
+            }
+            var url = "/api/messages/changes" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+            return GetJsonAsync<MessageChangesView>(url);
+        }
+
         public Task<ApiResult<string>> AddQueueAsync(AddQueueRequest req)
             => PostJsonAsync("/api/queue/add", req, result => result.GetProperty("requestId").GetString() ?? "");
 
@@ -147,6 +170,9 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<List<JsonElement>>> GetAutoSelectsAsync()
             => GetJsonAsync<List<JsonElement>>("/api/autoselect");
+
+        public Task<ApiResult<AutoSelectOptionsView>> GetAutoSelectOptionsAsync()
+            => GetJsonAsync<AutoSelectOptionsView>("/api/autoselect/options");
 
         public Task<ApiResult<bool>> AddAutoSelectAsync(JsonElement profile)
             => PostJsonAsync("/api/autoselect", profile, _ => true);

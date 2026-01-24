@@ -63,6 +63,9 @@ namespace Amatsukaze.Server.Rest
         private long queueVersion = 0;
         private const int MaxQueueChanges = 1000;
         private readonly List<QueueChangeRecord> queueChanges = new List<QueueChangeRecord>();
+        private const int MaxMessageLog = 500;
+        private long messageVersion = 0;
+        private readonly List<MessageRecord> messageLog = new List<MessageRecord>();
         private List<LogItem> logItems = new List<LogItem>();
         private List<CheckLogItem> checkLogItems = new List<CheckLogItem>();
 
@@ -95,6 +98,12 @@ namespace Amatsukaze.Server.Rest
         {
             public long Version { get; set; }
             public QueueChange Change { get; set; }
+        }
+
+        private class MessageRecord
+        {
+            public long Id { get; set; }
+            public MessageEventView Event { get; set; }
         }
 
 
@@ -310,6 +319,69 @@ namespace Amatsukaze.Server.Rest
                     Changes = changes,
                     Counters = BuildQueueCounters(queueItems)
                 };
+            }
+        }
+
+        public Amatsukaze.Shared.MessageChangesView GetMessageChanges(long sinceId, string page, string requestId, HashSet<string> levels, int max)
+        {
+            lock (sync)
+            {
+                if (messageLog.Count == 0)
+                {
+                    return new Amatsukaze.Shared.MessageChangesView()
+                    {
+                        FromId = sinceId,
+                        ToId = messageVersion
+                    };
+                }
+
+                var minId = messageLog[0].Id;
+                var fullSyncRequired = sinceId < minId;
+                var items = messageLog
+                    .Where(r => r.Id > sinceId)
+                    .Select(r => r.Event)
+                    .Where(e => FilterMessageEvent(e, page, requestId, levels))
+                    .ToList();
+
+                bool truncated = false;
+                if (max > 0 && items.Count > max)
+                {
+                    truncated = true;
+                    items = items.Skip(items.Count - max).ToList();
+                }
+
+                return new Amatsukaze.Shared.MessageChangesView()
+                {
+                    FromId = sinceId,
+                    ToId = messageVersion,
+                    FullSyncRequired = fullSyncRequired,
+                    Truncated = truncated,
+                    Items = items
+                };
+            }
+        }
+
+        public bool TryGetMessageForRequestId(string requestId, out Amatsukaze.Shared.MessageEventView message)
+        {
+            lock (sync)
+            {
+                if (string.IsNullOrEmpty(requestId) || messageLog.Count == 0)
+                {
+                    message = null;
+                    return false;
+                }
+
+                for (int i = messageLog.Count - 1; i >= 0; i--)
+                {
+                    var evt = messageLog[i].Event;
+                    if (evt != null && string.Equals(evt.RequestId, requestId, StringComparison.Ordinal))
+                    {
+                        message = evt;
+                        return true;
+                    }
+                }
+                message = null;
+                return false;
             }
         }
 
@@ -886,6 +958,55 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        private static bool FilterMessageEvent(Amatsukaze.Shared.MessageEventView evt, string page, string requestId, HashSet<string> levels)
+        {
+            if (!string.IsNullOrEmpty(page) && !string.Equals(evt.Page, page, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            if (!string.IsNullOrEmpty(requestId) && !string.Equals(evt.RequestId, requestId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            if (levels != null && levels.Count > 0 && !levels.Contains(evt.Level))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private void AddMessageEvent(OperationResult result)
+        {
+            if (result == null || string.IsNullOrEmpty(result.Message))
+            {
+                return;
+            }
+
+            var ctx = OperationContextScope.Current;
+            var evt = new Amatsukaze.Shared.MessageEventView
+            {
+                Id = ++messageVersion,
+                Time = DateTime.UtcNow,
+                Level = result.IsFailed ? "error" : "info",
+                Message = result.Message,
+                Source = ctx?.Source ?? "server",
+                Page = ctx?.Page,
+                Action = ctx?.Action,
+                RequestId = ctx?.RequestId
+            };
+
+            messageLog.Add(new MessageRecord
+            {
+                Id = evt.Id,
+                Event = evt
+            });
+
+            if (messageLog.Count > MaxMessageLog)
+            {
+                messageLog.RemoveAt(0);
+            }
+        }
+
         public Task OnCommonData(CommonData data)
         {
             if (data == null)
@@ -1165,6 +1286,7 @@ namespace Amatsukaze.Server.Rest
             lock (sync)
             {
                 lastOperationResult = result != null ? ServerSupport.DeepCopy(result) : null;
+                AddMessageEvent(result);
             }
             return Task.FromResult(0);
         }

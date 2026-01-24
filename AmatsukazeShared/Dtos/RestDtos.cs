@@ -100,6 +100,37 @@ namespace Amatsukaze.Shared
         public bool IsServerLinux { get; set; }
     }
 
+    public class AutoSelectOptionsView
+    {
+        public List<string>? ProfileNames { get; set; }
+        public List<int>? PriorityList { get; set; }
+        public List<GenreNodeView>? Genres { get; set; }
+        public List<ServiceOptionView>? Services { get; set; }
+        public List<VideoSizeOptionView>? VideoSizes { get; set; }
+    }
+
+    public class GenreNodeView
+    {
+        public string? Id { get; set; }
+        public int Space { get; set; }
+        public int Level1 { get; set; }
+        public int Level2 { get; set; }
+        public string? Name { get; set; }
+        public List<GenreNodeView>? Children { get; set; }
+    }
+
+    public class ServiceOptionView
+    {
+        public int ServiceId { get; set; }
+        public string? Name { get; set; }
+    }
+
+    public class VideoSizeOptionView
+    {
+        public string? Name { get; set; }
+        public string? Value { get; set; }
+    }
+
     public class QueueItemView
     {
         public int Id { get; set; }
@@ -173,6 +204,28 @@ namespace Amatsukaze.Shared
         public string? QueueViewDigest { get; set; }
         public List<QueueChange> Changes { get; set; } = new List<QueueChange>();
         public QueueCounters Counters { get; set; } = new QueueCounters();
+    }
+
+    public class MessageEventView
+    {
+        public long Id { get; set; }
+        public DateTime Time { get; set; }
+        public string Level { get; set; } = "info";
+        public string Message { get; set; } = string.Empty;
+        public string? Source { get; set; }
+        public string? Page { get; set; }
+        public string? Action { get; set; }
+        public string? RequestId { get; set; }
+        public int? QueueItemId { get; set; }
+    }
+
+    public class MessageChangesView
+    {
+        public long FromId { get; set; }
+        public long ToId { get; set; }
+        public bool FullSyncRequired { get; set; }
+        public bool Truncated { get; set; }
+        public List<MessageEventView> Items { get; set; } = new List<MessageEventView>();
     }
 
     public class LogItemView
