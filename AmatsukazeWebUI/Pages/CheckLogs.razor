@@ -1,0 +1,132 @@
+@page "/logs/check"
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h3>Check Logs</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+</p>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+else
+{
+    @if (_checkLogs.Count == 0)
+    {
+        <p>No check logs.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Start</th>
+                    <th>Finish</th>
+                    <th>Result</th>
+                    <th>Service</th>
+                    <th>Source</th>
+                    <th>Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _checkLogs)
+                {
+                    <tr>
+                        <td>@(item.DisplayType ?? item.Type ?? "-")</td>
+                        <td>@(item.DisplayEncodeStart ?? item.CheckStartDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
+                        <td>@(item.DisplayEncodeFinish ?? item.CheckFinishDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
+                        <td>@(item.DisplayResult ?? (item.Success ? "Success" : "Fail"))</td>
+                        <td>@(item.ServiceName ?? "-")</td>
+                        <td>@(item.SrcPath ?? "-")</td>
+                        <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadCheckDetailAsync(item)">View</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h4>Log Detail</h4>
+    @if (_detailLoading)
+    {
+        <p>Loading detail...</p>
+    }
+    else if (!string.IsNullOrEmpty(_detailError))
+    {
+        <p style="color: red;">@_detailError</p>
+    }
+    else if (_detail == null)
+    {
+        <p>Select a log to view detail.</p>
+    }
+    else
+    {
+        <div>
+            <div>@_detailTitle</div>
+            <div>Size: @_detail.Meta?.Size @if (_detail.Meta?.TooLarge == true) { <span>(truncated)</span> }</div>
+            <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@(_detail.Content ?? "")</pre>
+        </div>
+    }
+}
+
+@code {
+    private readonly List<CheckLogItemView> _checkLogs = new();
+    private string? _error;
+    private bool _loading = true;
+    private LogFileContent? _detail;
+    private string? _detailTitle;
+    private string? _detailError;
+    private bool _detailLoading;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _checkLogs.Clear();
+
+        var checkRes = await Api.GetCheckLogsAsync();
+        if (!checkRes.Ok)
+        {
+            _error = checkRes.Error ?? "Failed to load check logs.";
+        }
+        else if (checkRes.Data != null)
+        {
+            _checkLogs.AddRange(checkRes.Data);
+        }
+
+        _loading = false;
+    }
+
+    private async Task LoadCheckDetailAsync(CheckLogItemView item)
+    {
+        await LoadDetailAsync(null, item.CheckStartDate, item.SrcPath ?? "Check Log");
+    }
+
+    private async Task LoadDetailAsync(DateTime? encodeStart, DateTime? checkStart, string title)
+    {
+        _detailLoading = true;
+        _detailError = null;
+        _detailTitle = title;
+        _detail = null;
+
+        var res = await Api.GetLogFileAsync(encodeStart, checkStart);
+        if (!res.Ok)
+        {
+            _detailError = res.Error ?? "Failed to load log detail.";
+        }
+        else
+        {
+            _detail = res.Data;
+        }
+        _detailLoading = false;
+    }
+}
