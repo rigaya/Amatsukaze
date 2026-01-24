@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager Nav
 <div class="page">
     <div class="sidebar">
         <NavMenu />
@@ -12,5 +13,66 @@
         <article class="content px-4">
             @Body
         </article>
+        <div class="message-panel-host px-4">
+            <MessagePanel Page="@PageKey" />
+        </div>
     </main>
 </div>
+
+@code {
+    private string PageKey => GetPageKey();
+
+    private string GetPageKey()
+    {
+        var uri = Nav.ToBaseRelativePath(Nav.Uri).ToLowerInvariant();
+        if (string.IsNullOrEmpty(uri))
+        {
+            return "status";
+        }
+        if (uri.StartsWith("queue"))
+        {
+            return "queue";
+        }
+        if (uri.StartsWith("settings"))
+        {
+            return "settings";
+        }
+        if (uri.StartsWith("services"))
+        {
+            return "services";
+        }
+        if (uri.StartsWith("profilesettings") || uri.StartsWith("profiles"))
+        {
+            return "profiles";
+        }
+        if (uri.StartsWith("autoselect"))
+        {
+            return "profiles";
+        }
+        if (uri.StartsWith("makescript"))
+        {
+            return "makescript";
+        }
+        if (uri.StartsWith("logs"))
+        {
+            return "logs";
+        }
+        if (uri.StartsWith("console"))
+        {
+            return "console";
+        }
+        if (uri.StartsWith("drcs"))
+        {
+            return "drcs";
+        }
+        if (uri.StartsWith("logo"))
+        {
+            return "logo";
+        }
+        if (uri.StartsWith("status"))
+        {
+            return "status";
+        }
+        return "status";
+    }
+}

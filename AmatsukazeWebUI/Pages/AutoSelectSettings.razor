@@ -1,0 +1,886 @@
+@page "/autoselect"
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h3>Auto Select</h3>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p style="color: red;">@_error</p>
+}
+
+<div style="margin-bottom: 8px;">
+    <span style="margin-right: 8px;">自動選択</span>
+    <select value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
+        @foreach (var item in _profiles)
+        {
+            <option value="@item.Name">@item.Name</option>
+        }
+    </select>
+    <button class="btn btn-primary" style="margin-left: 8px;" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _selectedProfile == null)">適用</button>
+    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
+    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
+    <button class="btn btn-danger" style="margin-left: 4px;" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
+    @if (_confirmDelete)
+    {
+        <span style="margin-left: 6px; color: #a00;">もう一度押すと削除します</span>
+        <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="CancelDelete">キャンセル</button>
+    }
+</div>
+
+@if (_showDiscardConfirm)
+{
+    <div style="border: 1px solid #aaa; padding: 8px; margin-bottom: 8px;">
+        <div style="margin-bottom: 6px;">編集中の内容は失われます。切り替えますか？</div>
+        <button class="btn btn-sm btn-danger" @onclick="ConfirmDiscard">破棄して切替</button>
+        <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="CancelDiscard">キャンセル</button>
+    </div>
+}
+
+@if (_nameDialog != NameDialogMode.None)
+{
+    <div style="border: 1px solid #888; padding: 10px; margin-bottom: 8px;">
+        <div style="font-weight: bold; margin-bottom: 6px;">@_nameDialogTitle</div>
+        <input style="width: 260px;" value="@_nameInput" @oninput="@(e => _nameInput = e.Value?.ToString() ?? "")" />
+        <button class="btn btn-sm btn-primary" style="margin-left: 6px;" @onclick="ConfirmNameDialog">OK</button>
+        <button class="btn btn-sm btn-secondary" style="margin-left: 4px;" @onclick="CancelNameDialog">キャンセル</button>
+    </div>
+}
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (_profiles.Count == 0)
+{
+    <p>自動選択がありません。</p>
+}
+else
+{
+    <div style="display: flex; gap: 16px; align-items: flex-start;">
+        <div style="width: 48%;">
+            <div style="margin-bottom: 6px;">
+                <button class="btn btn-sm btn-secondary" @onclick="AddCondition" disabled="@(_selectedProfile == null)">条件追加</button>
+                <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="RemoveCondition" disabled="@(_selectedProfile == null || _selectedConditionIndex < 0)">条件削除</button>
+                <span style="margin-left: 8px;">条件は上から順に評価されます</span>
+            </div>
+            <div class="condition-list">
+                @if (_selectedProfile != null)
+                {
+                    for (var i = 0; i < _selectedProfile.Conditions.Count; i++)
+                    {
+                        var index = i;
+                        var condition = _selectedProfile.Conditions[index];
+                        <div class="condition-item @(index == _selectedConditionIndex ? "selected" : "")"
+                             draggable="true"
+                             ondragstart="return amatsukazeDnd.setData(event)"
+                             @onmousedown="@(() => OnDragMouseDown(index))"
+                             ondragenter="return amatsukazeDnd.onEnter(event)"
+                             ondragover="return amatsukazeDnd.onOver(event)"
+                             @ondrop:preventDefault="true"
+                             @ondrop="@(() => OnDrop(index))"
+                             @onclick="@(() => SelectCondition(index))">
+                            @* NOTE: HTML5 DnD requires dataTransfer.setData() to allow drop.
+                               We call a tiny JS helper here (the only direct JS usage) to enable drag. *@
+                            <span class="drag-handle">
+                                ↕
+                            </span>
+                            <div style="font-weight: 600;">
+                                @GetConditionSummary(condition)
+                                @if (!string.IsNullOrEmpty(GetConditionWarning(condition)))
+                                {
+                                    <span style="color: #c00; margin-left: 6px;">@GetConditionWarning(condition)</span>
+                                }
+                            </div>
+                            <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center;">
+                                <span>プロファイル</span>
+                                <select @onchange="@(e => OnConditionProfileChanged(index, e))">
+                                    @foreach (var item in _options?.ProfileNames ?? new List<string>())
+                                    {
+                                        <option value="@item" selected="@(item == condition.Profile)">@item</option>
+                                    }
+                                </select>
+                                <span>優先度</span>
+                                <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
+                                    @foreach (var item in _options?.PriorityList ?? new List<int>())
+                                    {
+                                        <option value="@item" selected="@(item == condition.Priority)">@item</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <div style="width: 52%;">
+            @if (_selectedCondition != null)
+            {
+                <div style="border: 1px solid #ccc; padding: 10px;">
+                    <div style="margin-bottom: 8px;">
+                        <label style="margin-right: 6px;">
+                            <input type="checkbox" checked="@_selectedCondition.TagEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.TagEnabled)))" />
+                            タグ
+                        </label>
+                        <input style="width: 70%;" value="@(_selectedCondition.Tag ?? "")" @oninput="@(e => OnStringChanged(e, nameof(AutoSelectConditionModel.Tag)))" disabled="@(!_selectedCondition.TagEnabled)" />
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <label style="margin-right: 6px;">
+                            <input type="checkbox" checked="@_selectedCondition.FileNameEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.FileNameEnabled)))" />
+                            ファイル名に
+                        </label>
+                        <input style="width: 70%;" value="@(_selectedCondition.FileName ?? "")" @oninput="@(e => OnStringChanged(e, nameof(AutoSelectConditionModel.FileName)))" disabled="@(!_selectedCondition.FileNameEnabled)" />
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <div style="width: 40%;">
+                            <label>
+                                <input type="checkbox" checked="@_selectedCondition.ContentConditionEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ContentConditionEnabled)))" />
+                                ジャンル
+                            </label>
+                            <div class="condition-list" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ContentConditionEnabled)">
+                                @foreach (var main in _options?.Genres ?? new List<GenreNodeView>())
+                                {
+                                    <div class="genre-main">
+                                        <label>
+                                            <input type="checkbox" checked="@IsMainGenreChecked(main)" @onchange="@(e => OnMainGenreChanged(main, e))" />
+                                            @main.Name
+                                        </label>
+                                        <div style="margin-left: 16px;">
+                                            @foreach (var sub in main.Children ?? new List<GenreNodeView>())
+                                            {
+                                                <div>
+                                                    <label>
+                                                        <input type="checkbox" checked="@IsGenreChecked(sub)" @onchange="@(e => OnGenreChanged(sub, e))" />
+                                                        @sub.Name
+                                                    </label>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div style="width: 30%;">
+                            <label>
+                                <input type="checkbox" checked="@_selectedCondition.ServiceIdEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ServiceIdEnabled)))" />
+                                チャンネル
+                            </label>
+                            <div class="condition-list" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ServiceIdEnabled)">
+                                @foreach (var service in _options?.Services ?? new List<ServiceOptionView>())
+                                {
+                                    <div>
+                                        <label>
+                                            <input type="checkbox" checked="@_selectedCondition.ServiceIds.Contains(service.ServiceId)" @onchange="@(e => OnServiceChanged(service.ServiceId, e))" />
+                                            @service.Name
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div style="width: 30%;">
+                            <label>
+                                <input type="checkbox" checked="@_selectedCondition.VideoSizeEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.VideoSizeEnabled)))" />
+                                映像サイズ
+                            </label>
+                            <div class="condition-list" style="max-height: 150px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.VideoSizeEnabled)">
+                                @foreach (var size in _options?.VideoSizes ?? new List<VideoSizeOptionView>())
+                                {
+                                    <div>
+                                        <label>
+                                            <input type="checkbox" checked="@_selectedCondition.VideoSizes.Contains(size.Value ?? "")" @onchange="@(e => OnVideoSizeChanged(size.Value, e))" />
+                                            @size.Name
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                            <div style="margin-top: 6px;">メモ:</div>
+                            <textarea style="width: 100%; height: 80px;" @oninput="@(e => OnStringChanged(e, nameof(AutoSelectConditionModel.Description)))">@(_selectedCondition.Description ?? "")</textarea>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    private AutoSelectOptionsView? _options;
+    private List<AutoSelectProfileModel> _profiles = new();
+    private AutoSelectProfileModel? _selectedProfile;
+    private AutoSelectConditionModel? _selectedCondition;
+    private string? _selectedProfileName;
+    private string? _error;
+    private bool _loading = true;
+    private bool _isDirty;
+    private bool _confirmDelete;
+    private bool _showDiscardConfirm;
+    private string? _pendingProfileName;
+
+    private int _selectedConditionIndex = -1;
+    private int _dragIndex = -1;
+
+    private NameDialogMode _nameDialog = NameDialogMode.None;
+    private string _nameInput = "";
+    private string _nameDialogTitle = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync(string? selectName = null)
+    {
+        _loading = true;
+        _error = null;
+        _isDirty = false;
+        _confirmDelete = false;
+        _showDiscardConfirm = false;
+        _pendingProfileName = null;
+        StateHasChanged();
+
+        var optionsResult = await Api.GetAutoSelectOptionsAsync();
+        if (optionsResult.Ok && optionsResult.Data != null)
+        {
+            _options = optionsResult.Data;
+        }
+        else if (!optionsResult.Ok)
+        {
+            _error = optionsResult.Error;
+        }
+
+        var result = await Api.GetAutoSelectsAsync();
+        if (!result.Ok)
+        {
+            _error = result.Error;
+        }
+        _profiles = new List<AutoSelectProfileModel>();
+        if (result.Ok && result.Data != null)
+        {
+            foreach (var item in result.Data)
+            {
+                var profile = JsonSerializer.Deserialize<AutoSelectProfileModel>(item.GetRawText(), _jsonOptions);
+                if (profile != null)
+                {
+                    profile.Conditions ??= new List<AutoSelectConditionModel>();
+                    foreach (var cond in profile.Conditions ?? new List<AutoSelectConditionModel>())
+                    {
+                        NormalizeCondition(cond);
+                    }
+                    _profiles.Add(profile);
+                }
+            }
+        }
+        _profiles = _profiles.OrderBy(p => p.Name).ToList();
+        if (_profiles.Count > 0)
+        {
+            _selectedProfile = _profiles.FirstOrDefault(p => p.Name == (selectName ?? _selectedProfileName)) ?? _profiles[0];
+            _selectedProfileName = _selectedProfile.Name;
+            SelectCondition(0);
+        }
+        else
+        {
+            _selectedProfile = null;
+            _selectedCondition = null;
+            _selectedProfileName = null;
+            _selectedConditionIndex = -1;
+        }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void NormalizeCondition(AutoSelectConditionModel cond)
+    {
+        cond.FileName ??= "";
+        cond.ContentConditions ??= new List<GenreKey>();
+        cond.ContentConditions = DistinctGenres(cond.ContentConditions);
+        cond.ServiceIds ??= new List<int>();
+        cond.VideoSizes ??= new List<string>();
+        cond.Tag ??= "";
+        cond.Profile ??= _options?.ProfileNames?.FirstOrDefault() ?? "";
+        cond.Description ??= "";
+    }
+
+    private void SelectCondition(int index)
+    {
+        if (_selectedProfile == null || _selectedProfile.Conditions.Count == 0)
+        {
+            _selectedConditionIndex = -1;
+            _selectedCondition = null;
+            return;
+        }
+        if (index < 0 || index >= _selectedProfile.Conditions.Count)
+        {
+            index = 0;
+        }
+        _selectedConditionIndex = index;
+        _selectedCondition = _selectedProfile.Conditions[index];
+    }
+
+    private async Task OnProfileChanged(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(name) || name == _selectedProfileName)
+        {
+            return;
+        }
+        if (_isDirty)
+        {
+            _pendingProfileName = name;
+            _showDiscardConfirm = true;
+            return;
+        }
+        await LoadAsync(name);
+    }
+
+    private async Task ConfirmDiscard()
+    {
+        _showDiscardConfirm = false;
+        var name = _pendingProfileName;
+        _pendingProfileName = null;
+        await LoadAsync(name);
+    }
+
+    private void CancelDiscard()
+    {
+        _showDiscardConfirm = false;
+        _pendingProfileName = null;
+    }
+
+    private void AddCondition()
+    {
+        if (_selectedProfile == null)
+        {
+            return;
+        }
+        var defaultProfile = _options?.ProfileNames?.FirstOrDefault() ?? "";
+        var defaultPriority = _options?.PriorityList?.Contains(3) == true ? 3 : _options?.PriorityList?.FirstOrDefault() ?? 1;
+        var cond = new AutoSelectConditionModel
+        {
+            Profile = defaultProfile,
+            Priority = defaultPriority,
+            FileName = "",
+            ContentConditions = new List<GenreKey>(),
+            ServiceIds = new List<int>(),
+            VideoSizes = new List<string>(),
+            Tag = "",
+            Description = ""
+        };
+        _selectedProfile.Conditions.Add(cond);
+        _isDirty = true;
+        SelectCondition(_selectedProfile.Conditions.Count - 1);
+    }
+
+    private void RemoveCondition()
+    {
+        if (_selectedProfile == null || _selectedConditionIndex < 0)
+        {
+            return;
+        }
+        _selectedProfile.Conditions.RemoveAt(_selectedConditionIndex);
+        _isDirty = true;
+        SelectCondition(Math.Min(_selectedConditionIndex, _selectedProfile.Conditions.Count - 1));
+    }
+
+    private void OnDragMouseDown(int index)
+    {
+        _dragIndex = index;
+    }
+
+    private void OnDrop(int index)
+    {
+        if (_selectedProfile == null || _dragIndex < 0 || _dragIndex == index)
+        {
+            _dragIndex = -1;
+            return;
+        }
+        var item = _selectedProfile.Conditions[_dragIndex];
+        _selectedProfile.Conditions.RemoveAt(_dragIndex);
+        if (index >= _selectedProfile.Conditions.Count)
+        {
+            _selectedProfile.Conditions.Add(item);
+        }
+        else
+        {
+            _selectedProfile.Conditions.Insert(index, item);
+        }
+        _dragIndex = -1;
+        _isDirty = true;
+        SelectCondition(index);
+    }
+
+    private string GetConditionSummary(AutoSelectConditionModel cond)
+    {
+        var parts = new List<string>();
+        if (cond.TagEnabled && !string.IsNullOrWhiteSpace(cond.Tag))
+        {
+            parts.Add($"タグ:{cond.Tag}");
+        }
+        if (cond.FileNameEnabled && !string.IsNullOrWhiteSpace(cond.FileName))
+        {
+            parts.Add($"ファイル:{cond.FileName}");
+        }
+        if (cond.ContentConditionEnabled && cond.ContentConditions.Count > 0)
+        {
+            var count = DistinctGenres(cond.ContentConditions).Count;
+            parts.Add($"ジャンル:{count}");
+        }
+        if (cond.ServiceIdEnabled && cond.ServiceIds.Count > 0)
+        {
+            parts.Add($"チャンネル:{cond.ServiceIds.Count}");
+        }
+        if (cond.VideoSizeEnabled && cond.VideoSizes.Count > 0)
+        {
+            parts.Add($"サイズ:{cond.VideoSizes.Count}");
+        }
+        if (parts.Count == 0)
+        {
+            return "(条件なし)";
+        }
+        return string.Join(", ", parts);
+    }
+
+    private string GetConditionWarning(AutoSelectConditionModel cond)
+    {
+        if (!cond.TagEnabled && !cond.FileNameEnabled && !cond.ContentConditionEnabled && !cond.ServiceIdEnabled && !cond.VideoSizeEnabled)
+        {
+            return "条件が無効です";
+        }
+        return "";
+    }
+
+    private void OnConditionProfileChanged(int index, ChangeEventArgs e)
+    {
+        if (_selectedProfile == null || index < 0 || index >= _selectedProfile.Conditions.Count)
+        {
+            return;
+        }
+        _selectedProfile.Conditions[index].Profile = e.Value?.ToString() ?? "";
+        _isDirty = true;
+    }
+
+    private void OnConditionPriorityChanged(int index, ChangeEventArgs e)
+    {
+        if (_selectedProfile == null || index < 0 || index >= _selectedProfile.Conditions.Count)
+        {
+            return;
+        }
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            _selectedProfile.Conditions[index].Priority = value;
+            _isDirty = true;
+        }
+    }
+
+    private void OnBoolChanged(ChangeEventArgs e, string field)
+    {
+        if (_selectedCondition == null)
+        {
+            return;
+        }
+        var value = e.Value is bool b ? b : e.Value?.ToString() == "true";
+        switch (field)
+        {
+            case nameof(AutoSelectConditionModel.TagEnabled):
+                _selectedCondition.TagEnabled = value;
+                break;
+            case nameof(AutoSelectConditionModel.FileNameEnabled):
+                _selectedCondition.FileNameEnabled = value;
+                break;
+            case nameof(AutoSelectConditionModel.ContentConditionEnabled):
+                _selectedCondition.ContentConditionEnabled = value;
+                break;
+            case nameof(AutoSelectConditionModel.ServiceIdEnabled):
+                _selectedCondition.ServiceIdEnabled = value;
+                break;
+            case nameof(AutoSelectConditionModel.VideoSizeEnabled):
+                _selectedCondition.VideoSizeEnabled = value;
+                break;
+        }
+        _isDirty = true;
+    }
+
+    private void OnStringChanged(ChangeEventArgs e, string field)
+    {
+        if (_selectedCondition == null)
+        {
+            return;
+        }
+        var value = e.Value?.ToString() ?? "";
+        switch (field)
+        {
+            case nameof(AutoSelectConditionModel.Tag):
+                _selectedCondition.Tag = value;
+                break;
+            case nameof(AutoSelectConditionModel.FileName):
+                _selectedCondition.FileName = value;
+                break;
+            case nameof(AutoSelectConditionModel.Description):
+                _selectedCondition.Description = value;
+                break;
+        }
+        _isDirty = true;
+    }
+
+    private void OnGenreChanged(GenreNodeView node, ChangeEventArgs e)
+    {
+        if (_selectedCondition == null)
+        {
+            return;
+        }
+        var value = e.Value is bool b ? b : e.Value?.ToString() == "true";
+        UpdateGenreSelection(node, value);
+        _isDirty = true;
+    }
+
+    private void OnMainGenreChanged(GenreNodeView main, ChangeEventArgs e)
+    {
+        if (_selectedCondition == null)
+        {
+            return;
+        }
+        var value = e.Value is bool b ? b : e.Value?.ToString() == "true";
+        foreach (var child in main.Children ?? new List<GenreNodeView>())
+        {
+            UpdateGenreSelection(child, value);
+        }
+        _isDirty = true;
+    }
+
+    private bool IsGenreChecked(GenreNodeView node)
+    {
+        if (_selectedCondition == null)
+        {
+            return false;
+        }
+        return _selectedCondition.ContentConditions.Any(g => g.Space == node.Space && g.Level1 == node.Level1 && g.Level2 == node.Level2);
+    }
+
+    private bool IsMainGenreChecked(GenreNodeView main)
+    {
+        if (_selectedCondition == null)
+        {
+            return false;
+        }
+        var children = main.Children ?? new List<GenreNodeView>();
+        if (children.Count == 0)
+        {
+            return false;
+        }
+        return children.All(IsGenreChecked);
+    }
+
+    private void UpdateGenreSelection(GenreNodeView node, bool selected)
+    {
+        if (_selectedCondition == null)
+        {
+            return;
+        }
+        var list = _selectedCondition.ContentConditions;
+        var existing = list.FirstOrDefault(g => g.Space == node.Space && g.Level1 == node.Level1 && g.Level2 == node.Level2);
+        if (selected)
+        {
+            if (existing == null)
+            {
+                list.Add(new GenreKey { Space = node.Space, Level1 = node.Level1, Level2 = node.Level2 });
+            }
+        }
+        else
+        {
+            if (existing != null)
+            {
+                list.Remove(existing);
+            }
+        }
+        _selectedCondition.ContentConditions = DistinctGenres(_selectedCondition.ContentConditions);
+    }
+
+    private static List<GenreKey> DistinctGenres(List<GenreKey> items)
+    {
+        if (items.Count <= 1)
+        {
+            return items;
+        }
+        return items
+            .GroupBy(g => $"{g.Space}:{g.Level1}:{g.Level2}")
+            .Select(g => g.First())
+            .ToList();
+    }
+
+    private void OnServiceChanged(int serviceId, ChangeEventArgs e)
+    {
+        if (_selectedCondition == null)
+        {
+            return;
+        }
+        var value = e.Value is bool b ? b : e.Value?.ToString() == "true";
+        if (value)
+        {
+            if (!_selectedCondition.ServiceIds.Contains(serviceId))
+            {
+                _selectedCondition.ServiceIds.Add(serviceId);
+            }
+        }
+        else
+        {
+            _selectedCondition.ServiceIds.Remove(serviceId);
+        }
+        _isDirty = true;
+    }
+
+    private void OnVideoSizeChanged(string? value, ChangeEventArgs e)
+    {
+        if (_selectedCondition == null || string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+        var enabled = e.Value is bool b ? b : e.Value?.ToString() == "true";
+        if (enabled)
+        {
+            if (!_selectedCondition.VideoSizes.Contains(value))
+            {
+                _selectedCondition.VideoSizes.Add(value);
+            }
+        }
+        else
+        {
+            _selectedCondition.VideoSizes.Remove(value);
+        }
+        _isDirty = true;
+    }
+
+    private Dictionary<string, object> GetDisabledAttr(bool disabled)
+    {
+        if (!disabled)
+        {
+            return new Dictionary<string, object>();
+        }
+        return new Dictionary<string, object> { ["style"] = "opacity: 0.5; pointer-events: none;" };
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_selectedProfile == null)
+        {
+            return;
+        }
+        _loading = true;
+        _error = null;
+        try
+        {
+            var element = SerializeProfile(_selectedProfile);
+            var result = await Api.UpdateAutoSelectAsync(element);
+            if (!result.Ok)
+            {
+                _error = result.Error;
+            }
+            else
+            {
+                _isDirty = false;
+                await LoadAsync(_selectedProfile.Name);
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenNewDialog()
+    {
+        if (_selectedProfile == null)
+        {
+            return;
+        }
+        _nameDialog = NameDialogMode.New;
+        _nameDialogTitle = "新規自動選択名";
+        _nameInput = _selectedProfile.Name + "_コピー";
+    }
+
+    private void OpenRenameDialog()
+    {
+        if (_selectedProfile == null)
+        {
+            return;
+        }
+        _nameDialog = NameDialogMode.Rename;
+        _nameDialogTitle = "リネーム";
+        _nameInput = _selectedProfile.Name;
+    }
+
+    private async Task ConfirmNameDialog()
+    {
+        if (_selectedProfile == null || string.IsNullOrWhiteSpace(_nameInput))
+        {
+            return;
+        }
+        var newName = _nameInput.Trim();
+        if (_nameDialog == NameDialogMode.New)
+        {
+            var copy = CloneProfile(_selectedProfile);
+            copy.Name = newName;
+            var element = SerializeProfile(copy);
+            var result = await Api.AddAutoSelectAsync(element);
+            if (!result.Ok)
+            {
+                _error = result.Error;
+            }
+            await LoadAsync(newName);
+        }
+        else if (_nameDialog == NameDialogMode.Rename)
+        {
+            var element = SerializeProfile(_selectedProfile);
+            var result = await Api.UpdateAutoSelectAsync(element, newName);
+            if (!result.Ok)
+            {
+                _error = result.Error;
+            }
+            await LoadAsync(newName);
+        }
+        _nameDialog = NameDialogMode.None;
+    }
+
+    private void CancelNameDialog()
+    {
+        _nameDialog = NameDialogMode.None;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_selectedProfile == null)
+        {
+            return;
+        }
+        if (!_confirmDelete)
+        {
+            _confirmDelete = true;
+            return;
+        }
+        _confirmDelete = false;
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await Api.RemoveAutoSelectAsync(_selectedProfile.Name);
+            if (!result.Ok)
+            {
+                _error = result.Error;
+            }
+            await LoadAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void CancelDelete()
+    {
+        _confirmDelete = false;
+    }
+
+    private AutoSelectProfileModel CloneProfile(AutoSelectProfileModel profile)
+    {
+        var json = JsonSerializer.Serialize(profile, _jsonOptions);
+        var clone = JsonSerializer.Deserialize<AutoSelectProfileModel>(json, _jsonOptions) ?? new AutoSelectProfileModel();
+        clone.Conditions ??= new List<AutoSelectConditionModel>();
+        foreach (var cond in clone.Conditions)
+        {
+            NormalizeCondition(cond);
+        }
+        return clone;
+    }
+
+    private JsonElement SerializeProfile(AutoSelectProfileModel profile)
+    {
+        var json = JsonSerializer.Serialize(profile, _jsonOptions);
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.Clone();
+    }
+
+    private enum NameDialogMode
+    {
+        None,
+        New,
+        Rename
+    }
+
+    private sealed class AutoSelectProfileModel
+    {
+        public string Name { get; set; } = "";
+        public List<AutoSelectConditionModel> Conditions { get; set; } = new();
+    }
+
+    private sealed class AutoSelectConditionModel
+    {
+        public bool FileNameEnabled { get; set; }
+        public string FileName { get; set; } = "";
+        public bool ContentConditionEnabled { get; set; }
+        public List<GenreKey> ContentConditions { get; set; } = new();
+        public bool ServiceIdEnabled { get; set; }
+        public List<int> ServiceIds { get; set; } = new();
+        public bool VideoSizeEnabled { get; set; }
+        public List<string> VideoSizes { get; set; } = new();
+        public bool TagEnabled { get; set; }
+        public string Tag { get; set; } = "";
+        public string Profile { get; set; } = "";
+        public int Priority { get; set; }
+        public string Description { get; set; } = "";
+    }
+
+    private sealed class GenreKey
+    {
+        public int Space { get; set; }
+        public int Level1 { get; set; }
+        public int Level2 { get; set; }
+    }
+}
+
+<style>
+    .condition-list {
+        border: 1px solid #ccc;
+        padding: 6px;
+        background: #fff;
+    }
+
+    .condition-item {
+        border: 1px solid #ddd;
+        padding: 6px;
+        margin-bottom: 6px;
+        background: #fafafa;
+        cursor: pointer;
+        position: relative;
+        padding-left: 24px;
+    }
+
+    .condition-item.selected {
+        border-color: #2f6fed;
+        background: #eef4ff;
+    }
+
+    .drag-handle {
+        position: absolute;
+        left: 6px;
+        top: 8px;
+        cursor: grab;
+        user-select: none;
+        color: #666;
+        font-weight: 700;
+    }
+
+    .genre-main {
+        margin-bottom: 6px;
+    }
+</style>

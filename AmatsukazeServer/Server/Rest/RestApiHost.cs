@@ -71,6 +71,7 @@ namespace Amatsukaze.Server.Rest
             builder.Services.Configure<JsonOptions>(options =>
             {
                 options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                options.SerializerOptions.IncludeFields = true;
                 options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
             builder.Services.AddCors(options =>
@@ -226,6 +227,23 @@ namespace Amatsukaze.Server.Rest
                 return Results.BadRequest(new { error = "since is required." });
             });
 
+            app.MapGet("/api/messages/changes", (HttpRequest request) =>
+            {
+                var since = GetQueryLong(request, "since", 0);
+                var page = request.Query["page"].ToString();
+                var requestId = request.Query["requestId"].ToString();
+                var levelsStr = request.Query["levels"].ToString();
+                var max = GetQueryInt(request, "max", 50);
+                HashSet<string> levels = null;
+                if (!string.IsNullOrEmpty(levelsStr))
+                {
+                    levels = new HashSet<string>(
+                        levelsStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                 .Select(s => s.ToLowerInvariant()));
+                }
+                return Results.Json(state.GetMessageChanges(since, page, requestId, levels, max));
+            });
+
             app.MapPost("/api/queue/add", async (HttpRequest request) =>
             {
                 var data = await request.ReadFromJsonAsync<Amatsukaze.Shared.AddQueueRequest>();
@@ -272,8 +290,23 @@ namespace Amatsukaze.Server.Rest
                         : new List<Amatsukaze.Server.OutputInfo>()
                 };
 
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "queue",
+                    Action = "add",
+                    RequestId = data.RequestId,
+                    Source = "rest"
+                });
+
                 await server.AddQueue(serverReq);
-                return Results.Json(new { requestId = data.RequestId });
+
+                state.TryGetMessageForRequestId(data.RequestId, out var message);
+                return Results.Json(new
+                {
+                    requestId = data.RequestId,
+                    message = message?.Message,
+                    level = message?.Level
+                });
             });
 
             app.MapPost("/api/queue/change", async (HttpRequest request) =>
@@ -283,8 +316,29 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
+                if (string.IsNullOrEmpty(data.RequestId))
+                {
+                    data.RequestId = Guid.NewGuid().ToString("N");
+                }
+
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "queue",
+                    Action = GetQueueAction(data.ChangeType),
+                    RequestId = data.RequestId,
+                    Source = "rest"
+                });
+
                 await server.ChangeItem(data);
-                return Results.Json(new { ok = true });
+
+                state.TryGetMessageForRequestId(data.RequestId, out var message);
+                return Results.Json(new
+                {
+                    ok = true,
+                    requestId = data.RequestId,
+                    message = message?.Message,
+                    level = message?.Level
+                });
             });
 
             app.MapPost("/api/queue/pause", async (HttpRequest request) =>
@@ -294,12 +348,26 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "queue",
+                    Action = "pause",
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    Source = "rest"
+                });
                 await server.PauseEncode(data);
                 return Results.Json(new { ok = true });
             });
 
             app.MapPost("/api/queue/cancel-add", async () =>
             {
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "queue",
+                    Action = "cancel-add",
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    Source = "rest"
+                });
                 await server.CancelAddQueue();
                 return Results.Json(new { ok = true });
             });
@@ -427,8 +495,16 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest("Invalid JSON");
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "profiles",
+                    Action = "add",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetProfile(new ProfileUpdate() { Type = UpdateType.Add, Profile = data });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
             app.MapPut("/api/profiles/{name}", async (HttpRequest request, string name) =>
             {
@@ -449,17 +525,35 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest("Invalid JSON");
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "profiles",
+                    Action = "update",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetProfile(new ProfileUpdate() { Type = UpdateType.Update, Profile = data, NewName = name != data.Name ? name : null });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
             app.MapDelete("/api/profiles/{name}", async (string name) =>
             {
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "profiles",
+                    Action = "remove",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetProfile(new ProfileUpdate() { Type = UpdateType.Remove, Profile = new ProfileSetting() { Name = name } });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapGet("/api/autoselect", () => Results.Json(state.GetAutoSelects()));
+            app.MapGet("/api/autoselect/options", () => Results.Json(BuildAutoSelectOptionsView()));
             app.MapMethods("/api/autoselect", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/autoselect/options", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/autoselect/{name}", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapPost("/api/autoselect", async (HttpRequest request) =>
             {
@@ -480,8 +574,16 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest("Invalid JSON");
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "profiles",
+                    Action = "autoselect-add",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetAutoSelect(new AutoSelectUpdate() { Type = UpdateType.Add, Profile = data });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
             app.MapPut("/api/autoselect/{name}", async (HttpRequest request, string name) =>
             {
@@ -502,13 +604,29 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest("Invalid JSON");
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "profiles",
+                    Action = "autoselect-update",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetAutoSelect(new AutoSelectUpdate() { Type = UpdateType.Update, Profile = data, NewName = name != data.Name ? name : null });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
             app.MapDelete("/api/autoselect/{name}", async (string name) =>
             {
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "profiles",
+                    Action = "autoselect-remove",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetAutoSelect(new AutoSelectUpdate() { Type = UpdateType.Remove, Profile = new AutoSelectProfile() { Name = name } });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapGet("/api/services", () => Results.Json(state.GetServiceViews()));
@@ -524,8 +642,16 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "update",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetServiceSetting(data);
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapPut("/api/service-settings/{serviceId}/logos/period", async (HttpRequest request, int serviceId) =>
@@ -552,13 +678,21 @@ namespace Amatsukaze.Server.Rest
                 {
                     logo.To = data.To.Value;
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "logo-period",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetServiceSetting(new ServiceSettingUpdate()
                 {
                     Type = ServiceSettingUpdateType.Update,
                     ServiceId = serviceId,
                     Data = service
                 });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapDelete("/api/service-settings/{serviceId}/logos", async (HttpRequest request, int serviceId) =>
@@ -588,23 +722,39 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.NotFound();
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "logo-remove",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetServiceSetting(new ServiceSettingUpdate()
                 {
                     Type = ServiceSettingUpdateType.RemoveLogo,
                     ServiceId = serviceId,
                     RemoveLogoIndex = idx
                 });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapPost("/api/service-settings/{serviceId}/logos/no-logo", async (int serviceId) =>
             {
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "no-logo-add",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetServiceSetting(new ServiceSettingUpdate()
                 {
                     Type = ServiceSettingUpdateType.AddNoLogo,
                     ServiceId = serviceId
                 });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapDelete("/api/service-settings/{serviceId}/logos/no-logo", async (int serviceId) =>
@@ -629,13 +779,21 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.NotFound();
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "no-logo-remove",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetServiceSetting(new ServiceSettingUpdate()
                 {
                     Type = ServiceSettingUpdateType.RemoveLogo,
                     ServiceId = serviceId,
                     RemoveLogoIndex = idx
                 });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapPost("/api/services/logo", async (HttpRequest request) =>
@@ -675,6 +833,15 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest("Empty file.");
                 }
+
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "logo-upload",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
 
                 using var ctx = new AMTContext();
                 var tmpBase = Path.Combine(Path.GetTempPath(), "amatsukaze-logo-" + Guid.NewGuid().ToString("N"));
@@ -797,13 +964,21 @@ namespace Amatsukaze.Server.Rest
                     }
                     catch { }
                 }
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapPost("/api/services/logo/rescan", () =>
             {
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "logo-rescan",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 server.RequestLogoRescan();
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapGet("/api/drcs", () => Results.Json(state.GetDrcsViews()));
@@ -847,8 +1022,16 @@ namespace Amatsukaze.Server.Rest
                     {
                         return Results.BadRequest("Invalid JSON");
                     }
+                    var requestId = Guid.NewGuid().ToString("N");
+                    using var scope = OperationContextScope.Use(new OperationContext
+                    {
+                        Page = "settings",
+                        Action = "update",
+                        RequestId = requestId,
+                        Source = "rest"
+                    });
                     await server.SetCommonData(new CommonData() { Setting = data });
-                    return Results.Json(new { ok = true });
+                    return Results.Json(new { ok = true, requestId });
                 }
                 catch (Exception ex)
                 {
@@ -867,8 +1050,16 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "makescript",
+                    Action = "update",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetCommonData(new CommonData() { MakeScriptData = data });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapPut("/api/finish-setting", async (HttpRequest request) =>
@@ -878,8 +1069,16 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "settings",
+                    Action = "finish-setting",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
                 await server.SetCommonData(new CommonData() { FinishSetting = data });
-                return Results.Json(new { ok = true });
+                return Results.Json(new { ok = true, requestId });
             });
 
             app.MapGet("/api/makescript/preview", () =>
@@ -1252,6 +1451,25 @@ namespace Amatsukaze.Server.Rest
             return fallback;
         }
 
+        private static string GetQueueAction(ChangeItemType type)
+        {
+            return type switch
+            {
+                ChangeItemType.ResetState => "retry",
+                ChangeItemType.UpdateProfile => "reapply",
+                ChangeItemType.Duplicate => "duplicate",
+                ChangeItemType.Cancel => "cancel",
+                ChangeItemType.Priority => "priority",
+                ChangeItemType.Profile => "profile",
+                ChangeItemType.RemoveItem => "delete",
+                ChangeItemType.RemoveCompleted => "delete-completed",
+                ChangeItemType.ForceStart => "force",
+                ChangeItemType.RemoveSourceFile => "delete-source",
+                ChangeItemType.Move => "move",
+                _ => "change"
+            };
+        }
+
         private static int GetQueryInt(HttpRequest request, string key, int fallback)
         {
             if (!request.Query.TryGetValue(key, out var value))
@@ -1259,6 +1477,19 @@ namespace Amatsukaze.Server.Rest
                 return fallback;
             }
             if (int.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+            return fallback;
+        }
+
+        private static long GetQueryLong(HttpRequest request, string key, long fallback)
+        {
+            if (!request.Query.TryGetValue(key, out var value))
+            {
+                return fallback;
+            }
+            if (long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
             {
                 return parsed;
             }
@@ -1553,11 +1784,85 @@ namespace Amatsukaze.Server.Rest
             return Path.GetFileName(trimmed);
         }
 
+        private static readonly Dictionary<VideoSizeCondition, string> VideoSizeLabels = new()
+        {
+            { VideoSizeCondition.FullHD, "1920x1080" },
+            { VideoSizeCondition.HD1440, "1440x1080" },
+            { VideoSizeCondition.SD, "720x480" },
+            { VideoSizeCondition.OneSeg, "320x240" },
+        };
+
+        private AutoSelectOptionsView BuildAutoSelectOptionsView()
+        {
+            var profiles = state.GetProfiles().Select(p => p.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+            var services = state.GetServiceViews().Select(s => new ServiceOptionView
+            {
+                ServiceId = s.ServiceId,
+                Name = s.Name
+            }).ToList();
+            var genres = BuildGenreTree();
+            var videoSizes = VideoSizeLabels.Select(pair => new VideoSizeOptionView
+            {
+                Name = pair.Value,
+                Value = pair.Key.ToString()
+            }).ToList();
+            return new AutoSelectOptionsView
+            {
+                ProfileNames = profiles,
+                PriorityList = new List<int> { 1, 2, 3, 4, 5 },
+                Genres = genres,
+                Services = services,
+                VideoSizes = videoSizes
+            };
+        }
+
+        private static List<GenreNodeView> BuildGenreTree()
+        {
+            var result = new List<GenreNodeView>();
+            foreach (var spaceEntry in SubGenre.GENRE_TABLE.OrderBy(p => p.Key))
+            {
+                foreach (var mainEntry in spaceEntry.Value.MainGenres.OrderBy(p => p.Key))
+                {
+                    var main = mainEntry.Value;
+                    var mainItem = main.Item;
+                    var mainNode = new GenreNodeView
+                    {
+                        Id = BuildGenreId(mainItem),
+                        Space = mainItem.Space,
+                        Level1 = mainItem.Level1,
+                        Level2 = mainItem.Level2,
+                        Name = main.Name,
+                        Children = new List<GenreNodeView>()
+                    };
+                    foreach (var subEntry in main.SubGenres.OrderBy(p => p.Key))
+                    {
+                        var sub = subEntry.Value;
+                        var subItem = sub.Item;
+                        mainNode.Children.Add(new GenreNodeView
+                        {
+                            Id = BuildGenreId(subItem),
+                            Space = subItem.Space,
+                            Level1 = subItem.Level1,
+                            Level2 = subItem.Level2,
+                            Name = sub.Name,
+                            Children = new List<GenreNodeView>()
+                        });
+                    }
+                    result.Add(mainNode);
+                }
+            }
+            return result;
+        }
+
+        private static string BuildGenreId(GenreItem item)
+            => $"{item.Space}:{item.Level1}:{item.Level2}";
+
         private static JsonSerializerOptions CreateRestJsonOptions()
         {
             var options = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                IncludeFields = true
             };
             options.Converters.Add(new JsonStringEnumConverter());
             return options;

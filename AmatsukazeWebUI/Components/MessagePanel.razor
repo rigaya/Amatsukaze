@@ -1,0 +1,127 @@
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@implements IDisposable
+
+@if (items.Count > 0)
+{
+    <div class="message-panel message-panel-overlay" role="status">
+        <div class="message-panel-header">
+            <span class="message-panel-title">Messages</span>
+            <button type="button" class="message-panel-close" @onclick="Dismiss">×</button>
+        </div>
+        @foreach (var item in items)
+        {
+            <div class="message-item message-@item.Level">
+                <span class="message-time">@item.Time.ToLocalTime().ToString("HH:mm:ss")</span>
+                <span class="message-text">@item.Message</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Page { get; set; }
+
+    private readonly List<MessageEventView> items = new();
+    private long lastId;
+    private long hiddenUntilId;
+    private string? currentPage;
+    private CancellationTokenSource? cts;
+    private PeriodicTimer? timer;
+    private readonly SemaphoreSlim pollLock = new(1, 1);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.Equals(currentPage, Page, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        currentPage = Page;
+        lastId = 0;
+        items.Clear();
+        RestartPolling();
+        await PollOnceAsync();
+    }
+
+    private void RestartPolling()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        timer?.Dispose();
+        cts = new CancellationTokenSource();
+        timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = PollLoopAsync(cts.Token);
+    }
+
+    private async Task PollLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (await timer!.WaitForNextTickAsync(token))
+            {
+                await PollOnceAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // ignore
+        }
+    }
+
+    private async Task PollOnceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(currentPage))
+        {
+            return;
+        }
+
+        if (!await pollLock.WaitAsync(0))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Api.GetMessageChangesAsync(lastId, currentPage, null, "info,warn,error", 20);
+            if (!result.Ok || result.Data == null)
+            {
+                return;
+            }
+
+            var view = result.Data;
+            if (view.FullSyncRequired)
+            {
+                items.Clear();
+            }
+            if (view.Items != null && view.Items.Count > 0)
+            {
+                items.AddRange(view.Items.Where(i => i.Id > hiddenUntilId));
+                while (items.Count > 2)
+                {
+                    items.RemoveAt(0);
+                }
+            }
+            lastId = view.ToId;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            pollLock.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        timer?.Dispose();
+        pollLock.Dispose();
+    }
+
+    private void Dismiss()
+    {
+        hiddenUntilId = lastId;
+        items.Clear();
+    }
+}
