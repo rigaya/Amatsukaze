@@ -164,9 +164,34 @@ namespace Amatsukaze.Server.Rest
                     ServerInfo = serverInfo != null ? ServerSupport.DeepCopy(serverInfo) : null,
                     State = state != null ? ServerSupport.DeepCopy(state) : null,
                     FinishSetting = finishSetting != null ? ServerSupport.DeepCopy(finishSetting) : null,
+                    FinishActionOptions = BuildFinishActionOptions(setting, serverInfo),
                     StatusSummary = BuildStatusSummary()
                 };
             }
+        }
+
+        private static List<FinishActionOptionView> BuildFinishActionOptions(Setting currentSetting, ServerInfo currentServerInfo)
+        {
+            var isLinux = Util.IsServerLinux();
+            var enableShutdown = currentSetting?.EnableShutdownAction ?? false;
+
+            var options = new List<FinishActionOptionView>
+            {
+                new FinishActionOptionView { Value = "None", Label = "何もしない" }
+            };
+
+            if (isLinux)
+            {
+                return options;
+            }
+
+            options.Add(new FinishActionOptionView { Value = "Suspend", Label = "スリープ" });
+            options.Add(new FinishActionOptionView { Value = "Hibernate", Label = "休止状態" });
+            if (enableShutdown)
+            {
+                options.Add(new FinishActionOptionView { Value = "Shutdown", Label = "シャットダウン" });
+            }
+            return options;
         }
 
         public UiStateView GetUiStateView()
