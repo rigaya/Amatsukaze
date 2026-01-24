@@ -15,7 +15,14 @@ namespace Amatsukaze.Server.Rest
         public ServerInfo ServerInfo { get; set; }
         public State State { get; set; }
         public FinishSetting FinishSetting { get; set; }
+        public List<FinishActionOptionView> FinishActionOptions { get; set; }
         public StatusSummary StatusSummary { get; set; }
+    }
+
+    public class FinishActionOptionView
+    {
+        public string Value { get; set; }
+        public string Label { get; set; }
     }
 
     public class LogFileMeta

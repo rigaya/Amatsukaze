@@ -10,11 +10,101 @@
 
 <h3>Queue</h3>
 
+<style>
+    .status-toggle {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+        vertical-align: middle;
+    }
+    .status-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .status-toggle .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .2s;
+        border-radius: 12px;
+    }
+    .status-toggle .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .2s;
+        border-radius: 50%;
+    }
+    .status-toggle input:checked + .slider {
+        background-color: #4caf50;
+    }
+    .status-toggle input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+    .status-toggle input:disabled + .slider {
+        background-color: #999;
+        cursor: not-allowed;
+    }
+</style>
+
 <p>
     <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
     <button class="btn btn-success" style="margin-left: 0.5rem;" @onclick="OpenAddDialogAsync">Add Task</button>
 </p>
 
+<div style="margin: 0.5rem 0 1rem; display: grid; gap: 8px;">
+    <label style="display: flex; align-items: center; gap: 8px;">
+        <span class="status-toggle">
+            <input type="checkbox"
+                   checked="@IsQueueRunning"
+                   disabled="@(_pauseBusy || _system?.State == null)"
+                   @onchange="OnToggleQueuePause" />
+            <span class="slider"></span>
+        </span>
+        <span>キュー稼働中 ↔ 停止</span>
+        <span style="color: #666;">@(_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止"))</span>
+    </label>
+    <label style="display: flex; align-items: center; gap: 8px;">
+        <span class="status-toggle">
+            <input type="checkbox"
+                   checked="@IsEncoderOk"
+                   disabled="@(_suspendBusy || _system?.State == null)"
+                   @onchange="OnToggleEncoderSuspend" />
+            <span class="slider"></span>
+        </span>
+        <span>エンコーダOK ↔ 一時停止</span>
+        <span style="color: #666;">@(_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止"))</span>
+    </label>
+    <label style="display: flex; align-items: center; gap: 8px;">
+        <span>エンコード後</span>
+        <select class="form-select" style="width: 180px;"
+                value="@_finishAction"
+                disabled="@(_finishBusy || _system?.FinishSetting == null)"
+                @onchange="OnFinishActionChanged">
+            @if (_finishActionOptions.Count == 0)
+            {
+                <option value="">-</option>
+            }
+            else
+            {
+                @foreach (var option in _finishActionOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            }
+        </select>
+    </label>
+</div>
 
 @if (_loading)
 {
@@ -206,7 +296,9 @@ else
 
 @code {
     private QueueView? _view;
+    private SystemSnapshot? _system;
     private string? _error;
+    private string? _systemError;
     private bool _loading = true;
     private string? _actionMessage;
     private readonly Dictionary<int, string?> _profileInputs = new();
@@ -218,6 +310,14 @@ else
     private long _queueVersion;
     private string? _queueDigest;
     private bool _polling;
+    private bool _systemPolling;
+    private CancellationTokenSource? _systemPollCts;
+    private Task? _systemPollTask;
+    private bool _pauseBusy;
+    private bool _suspendBusy;
+    private bool _finishBusy;
+    private readonly List<FinishActionOptionView> _finishActionOptions = new();
+    private string _finishAction = "";
     private bool _showAddDialog;
     private string? _addError;
     private bool _adding;
@@ -230,10 +330,15 @@ else
     private List<string>? _addQueueBatFiles;
     private UiStateView? _uiState;
 
+    private bool IsQueueRunning => _system?.State != null && !_system.State.Pause;
+    private bool IsEncoderOk => _system?.State != null && !_system.State.Suspend;
+
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
+        await ReloadSystemAsync();
         StartPolling();
+        StartSystemPolling();
     }
 
     private bool IsAddValid =>
@@ -301,6 +406,63 @@ else
         }
 
         _loading = false;
+    }
+
+    private async Task ReloadSystemAsync()
+    {
+        var res = await Api.GetSystemAsync();
+        if (!res.Ok)
+        {
+            _systemError = res.Error ?? "Failed to load system status.";
+            return;
+        }
+        _systemError = null;
+        _system = res.Data;
+        _finishActionOptions.Clear();
+        if (_system?.FinishActionOptions != null)
+        {
+            _finishActionOptions.AddRange(_system.FinishActionOptions);
+        }
+        _finishAction = _system?.FinishSetting?.Action ?? "";
+    }
+
+    private void StartSystemPolling()
+    {
+        _systemPollCts?.Cancel();
+        _systemPollCts = new CancellationTokenSource();
+        var token = _systemPollCts.Token;
+        _systemPollTask = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(PollSystemOnceAsync);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, token);
+    }
+
+    private async Task PollSystemOnceAsync()
+    {
+        if (_loading || _systemPolling)
+        {
+            return;
+        }
+        _systemPolling = true;
+        try
+        {
+            await ReloadSystemAsync();
+        }
+        finally
+        {
+            _systemPolling = false;
+            StateHasChanged();
+        }
     }
 
     private async Task OpenAddDialogAsync()
@@ -734,6 +896,10 @@ else
         {
             _pollCts.Cancel();
         }
+        if (_systemPollCts != null)
+        {
+            _systemPollCts.Cancel();
+        }
         if (_pollTask != null)
         {
             try
@@ -744,7 +910,18 @@ else
             {
             }
         }
+        if (_systemPollTask != null)
+        {
+            try
+            {
+                await _systemPollTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
         _pollCts?.Dispose();
+        _systemPollCts?.Dispose();
     }
 
     private static string? GetProfileName(JsonElement profile)
@@ -879,5 +1056,93 @@ else
         }
         var item = _view.Items[fromIndex];
         await ChangeItemAsync(item, ChangeItemType.Move, position: toIndex);
+    }
+
+    private async Task OnToggleQueuePause(ChangeEventArgs e)
+    {
+        if (_system?.State == null || _pauseBusy)
+        {
+            return;
+        }
+        _pauseBusy = true;
+        var desiredRunning = GetBoolValue(e.Value);
+        var req = new PauseRequest
+        {
+            IsQueue = true,
+            Pause = !desiredRunning
+        };
+        var res = await Api.PauseQueueAsync(req);
+        if (!res.Ok)
+        {
+            _systemError = res.Error ?? "Failed to update.";
+        }
+        await ReloadSystemAsync();
+        _pauseBusy = false;
+    }
+
+    private async Task OnToggleEncoderSuspend(ChangeEventArgs e)
+    {
+        if (_system?.State == null || _suspendBusy)
+        {
+            return;
+        }
+        _suspendBusy = true;
+        var desiredOk = GetBoolValue(e.Value);
+        var req = new PauseRequest
+        {
+            IsQueue = false,
+            Index = -1,
+            Pause = !desiredOk
+        };
+        var res = await Api.PauseQueueAsync(req);
+        if (!res.Ok)
+        {
+            _systemError = res.Error ?? "Failed to update.";
+        }
+        await ReloadSystemAsync();
+        _suspendBusy = false;
+    }
+
+    private async Task OnFinishActionChanged(ChangeEventArgs e)
+    {
+        if (_system?.FinishSetting == null || _finishBusy)
+        {
+            return;
+        }
+        var value = e.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(value) || value == _system.FinishSetting.Action)
+        {
+            return;
+        }
+        _finishBusy = true;
+        var setting = new FinishSetting
+        {
+            Action = value,
+            Seconds = _system.FinishSetting.Seconds,
+            NoActionExe = _system.FinishSetting.NoActionExe,
+            NoActionExeList = _system.FinishSetting.NoActionExeList != null
+                ? new List<string>(_system.FinishSetting.NoActionExeList)
+                : null
+        };
+        var res = await Api.UpdateFinishSettingAsync(setting);
+        if (!res.Ok)
+        {
+            _systemError = res.Error ?? "Failed to update.";
+        }
+        await ReloadSystemAsync();
+        _finishBusy = false;
+    }
+
+    private static bool GetBoolValue(object? value)
+    {
+        if (value is bool b)
+        {
+            return b;
+        }
+        if (value is string s && bool.TryParse(s, out var parsed))
+        {
+            return parsed;
+        }
+        return false;
     }
 }
