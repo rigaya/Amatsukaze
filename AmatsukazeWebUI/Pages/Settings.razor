@@ -26,6 +26,7 @@ else if (_setting == null)
 }
 else
 {
+    <div class="settings-page">
     <h4>一般</h4>
     <table class="table">
         <tr>
@@ -50,10 +51,9 @@ else
             {
                 continue;
             }
-            <tr>
-                <th></th>
-                <td>
-                    <label>
+            <tr class="settings-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
                         <input type="checkbox" checked="@GetBoolValue(item.Field)" @onchange="@(e => OnBoolChange(e, item.Field))" />
                         @item.Label
                     </label>
@@ -62,6 +62,7 @@ else
         }
     </table>
 
+    <hr class="settings-sep" />
     <h4>パス</h4>
     <table class="table">
         @foreach (var item in _pathFields)
@@ -86,39 +87,41 @@ else
         }
     </table>
 
+    <hr class="settings-sep" />
     <h4>動作</h4>
     <table class="table">
         @foreach (var item in _behaviorBoolFields)
         {
-            <tr>
-                <th></th>
-                <td>
-                    <label>
+            <tr class="settings-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
                         <input type="checkbox" checked="@GetBoolValue(item.Field)" @onchange="@(e => OnBoolChange(e, item.Field))" />
                         @item.Label
                     </label>
                 </td>
             </tr>
         }
-        <tr>
-            <th>古いログを削除</th>
-            <td>
-                <label>
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
                     <input type="checkbox" checked="@GetBoolValue(DeleteOldLogsField)" @onchange="@(e => OnBoolChange(e, DeleteOldLogsField))" />
-                    有効
+                    古いログを削除
                 </label>
-                <span> 日数 </span>
-                <input type="number" style="width: 60px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" disabled="@(GetBoolValue(DeleteOldLogsField) == false)" />
+                <span style="margin-left: 12px;">日数</span>
+                <input type="number" style="width: 60px; margin-left: 6px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" disabled="@(GetBoolValue(DeleteOldLogsField) == false)" />
             </td>
         </tr>
     </table>
 
+    <hr class="settings-sep" />
     <h4>スケジューリング</h4>
     <table class="table">
-        <tr>
-            <th>リソーススケジューリングを有効にする</th>
-            <td>
-                <input type="checkbox" checked="@GetBoolValue(SchedulingEnabledField)" @onchange="@(e => OnBoolChange(e, SchedulingEnabledField))" />
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@GetBoolValue(SchedulingEnabledField)" @onchange="@(e => OnBoolChange(e, SchedulingEnabledField))" />
+                    リソーススケジューリングを有効にする
+                </label>
             </td>
         </tr>
         <tr>
@@ -127,6 +130,7 @@ else
         </tr>
     </table>
 
+    <hr class="settings-sep" />
     <h4>並列・優先度</h4>
     <table class="table">
         <tr>
@@ -159,62 +163,36 @@ else
                 </select>
             </td>
         </tr>
-        <tr>
-            <th>バッチ同時実行を抑止</th>
-            <td>
-                <input type="checkbox" checked="@GetBoolValue(ExclusiveBatExecField)" @onchange="@(e => OnBoolChange(e, ExclusiveBatExecField))" />
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@GetBoolValue(ExclusiveBatExecField)" @onchange="@(e => OnBoolChange(e, ExclusiveBatExecField))" />
+                    バッチ同時実行を抑止
+                </label>
             </td>
         </tr>
     </table>
 
-    <h4>X265 VFR Time Factor</h4>
-    <table class="table">
-        <tr>
-            <th>デフォルト値を使う</th>
-            <td>
-                <input type="checkbox" checked="@IsX265VfrDefault" @onchange="OnX265VfrDefaultChange" />
-            </td>
-        </tr>
-        <tr>
-            <th>値</th>
-            <td><input type="number" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" disabled="@IsX265VfrDefault" /></td>
-        </tr>
-    </table>
-
-    <h4>実行時間帯</h4>
-    <table class="table">
-        <tr>
-            <th>有効</th>
-            <td><input type="checkbox" checked="@GetBoolValue(EnableRunHoursField)" @onchange="@(e => OnBoolChange(e, EnableRunHoursField))" /></td>
-        </tr>
-        <tr>
-            <th>停止中はエンコーダを停止する</th>
-            <td><input type="checkbox" checked="@GetBoolValue(RunHoursSuspendField)" @onchange="@(e => OnBoolChange(e, RunHoursSuspendField))" disabled="@(GetBoolValue(EnableRunHoursField) == false)" /></td>
-        </tr>
-        <tr>
-            <th>時間帯</th>
-            <td>
-                @for (var i = 0; i < 24; i++)
-                {
-                    <label style="margin-right: 6px;">
-                        <input type="checkbox" checked="@GetRunHour(i)" @onchange="@(e => OnRunHourChange(e, i))" disabled="@(GetBoolValue(EnableRunHoursField) == false)" />@i
-                    </label>
-                }
-            </td>
-        </tr>
-    </table>
-
+    <hr class="settings-sep" />
     <h4>終了処理</h4>
     <table class="table">
         @if (!IsServerLinux)
         {
-            <tr>
-                <th>エンコード後シャットダウンの選択肢を有効化</th>
-                <td><input type="checkbox" checked="@GetBoolValue(EnableShutdownField)" @onchange="@(e => OnBoolChange(e, EnableShutdownField))" /></td>
+            <tr class="settings-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue(EnableShutdownField)" @onchange="@(e => OnBoolChange(e, EnableShutdownField))" />
+                        エンコード後シャットダウンの選択肢を有効化
+                    </label>
+                </td>
             </tr>
-            <tr>
-                <th>指定プロセス実行中にスリープ・休止・シャットダウンを行わない</th>
-                <td><input type="checkbox" checked="@GetBoolValue(NoActionExeField)" @onchange="@(e => OnBoolChange(e, NoActionExeField))" /></td>
+            <tr class="settings-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue(NoActionExeField)" @onchange="@(e => OnBoolChange(e, NoActionExeField))" />
+                        指定プロセス実行中にスリープ・休止・シャットダウンを行わない
+                    </label>
+                </td>
             </tr>
         }
         @if (!IsServerLinux && GetBoolValue(NoActionExeField))
@@ -241,9 +219,13 @@ else
                 </td>
             </tr>
         }
-        <tr>
-            <th>キュー完了後バッチを実行</th>
-            <td><input type="checkbox" checked="@GetBoolValue(ExecuteBatchAfterQueueField)" @onchange="@(e => OnBoolChange(e, ExecuteBatchAfterQueueField))" /></td>
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@GetBoolValue(ExecuteBatchAfterQueueField)" @onchange="@(e => OnBoolChange(e, ExecuteBatchAfterQueueField))" />
+                    キュー完了後バッチを実行
+                </label>
+            </td>
         </tr>
         @if (GetBoolValue(ExecuteBatchAfterQueueField))
         {
@@ -261,6 +243,69 @@ else
             </tr>
         }
     </table>
+
+    <hr class="settings-sep" />
+    <h4>X265 VFR Time Factor</h4>
+    <table class="table">
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@IsX265VfrDefault" @onchange="OnX265VfrDefaultChange" />
+                    デフォルト値を使う
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th>値</th>
+            <td><input type="number" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" disabled="@IsX265VfrDefault" /></td>
+        </tr>
+    </table>
+
+    <hr class="settings-sep" />
+    <h4>実行時間帯</h4>
+    <table class="table">
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@GetBoolValue(EnableRunHoursField)" @onchange="@(e => OnBoolChange(e, EnableRunHoursField))" />
+                    有効
+                </label>
+            </td>
+        </tr>
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@GetBoolValue(RunHoursSuspendField)" @onchange="@(e => OnBoolChange(e, RunHoursSuspendField))" disabled="@(GetBoolValue(EnableRunHoursField) == false)" />
+                    停止中はエンコーダを停止する
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th>時間帯</th>
+            <td>
+                <div class="run-hours-grid">
+                    @for (var i = 0; i < 24; i++)
+                    {
+                        var hour = i;
+                        var isOn = GetRunHour(hour);
+                        var cellStyle = isOn
+                            ? "background: color-mix(in srgb, var(--success) 25%, var(--bg-surface)); border-color: color-mix(in srgb, var(--success) 70%, var(--border));"
+                            : "background: color-mix(in srgb, var(--danger) 15%, var(--bg-surface)); border-color: var(--border);";
+                        var debugTitle = $"runhour {hour} = {isOn}";
+                        <div role="button"
+                             tabindex="0"
+                             class="run-hour-cell @(isOn ? "is-on" : "")"
+                             style="@cellStyle"
+                             title="@debugTitle"
+                             @onclick="() => ToggleRunHour(hour)">
+                            <span>@hour</span>
+                        </div>
+                    }
+                </div>
+            </td>
+        </tr>
+    </table>
+    </div>
 }
 
 @code {
@@ -281,32 +326,32 @@ else
 
     private readonly (string Label, string Field, string? Extensions, bool AllowFiles, bool AllowDirs)[] _pathFields = new[]
     {
-        ("AmatsukazeCLIパス", "AmatsukazePath", (string?)".exe", true, true),
-        ("x264パス", "X264Path", (string?)".exe", true, true),
-        ("x265パス", "X265Path", (string?)".exe", true, true),
-        ("SvtAv1EncAppパス", "SVTAV1Path", (string?)".exe", true, true),
-        ("QSVEncCパス", "QSVEncPath", (string?)".exe", true, true),
-        ("NVEncCパス", "NVEncPath", (string?)".exe", true, true),
-        ("VCEEncCパス", "VCEEncPath", (string?)".exe", true, true),
-        ("L-SMASH Muxerパス", "MuxerPath", (string?)".exe", true, true),
-        ("mkvmergeパス", "MKVMergePath", (string?)".exe", true, true),
-        ("MP4Boxパス", "MP4BoxPath", (string?)".exe", true, true),
-        ("TimelineEditorパス", "TimelineEditorPath", (string?)".exe", true, true),
-        ("ChapterExeパス", "ChapterExePath", (string?)".exe", true, true),
-        ("JoinLogoScpパス", "JoinLogoScpPath", (string?)".txt", true, true),
-        ("tsreadexパス", "TsReadExPath", (string?)".exe", true, true),
-        ("b24tovttパス", "B24ToVttPath", (string?)".exe", true, true),
-        ("psisiarcパス", "PsisiarcPath", (string?)".exe", true, true),
-        ("Whisperパス", "WhisperPath", (string?)".exe", true, true),
-        ("NicoConvASSパス", "NicoConvASSPath", (string?)".exe", true, true),
-        ("tsreplaceパス", "TsReplacePath", (string?)".exe", true, true),
-        ("tsMuxeRパス", "TsMuxeRPath", (string?)".exe", true, true),
-        ("SCRename.vbs/pyパス", "SCRenamePath", (string?)".vbs;.py", true, true),
-        ("AutoVfr.exeパス", "AutoVfrPath", (string?)".exe", true, true),
-        ("neroAacEnc.exeパス", "NeroAacEncPath", (string?)".exe", true, true),
-        ("qaac.exeパス", "QaacPath", (string?)".exe", true, true),
-        ("fdkaac.exeパス", "FdkaacPath", (string?)".exe", true, true),
-        ("opusenc.exeパス", "OpusEncPath", (string?)".exe", true, true)
+        ("AmatsukazeCLI", "AmatsukazePath", (string?)".exe", true, true),
+        ("x264", "X264Path", (string?)".exe", true, true),
+        ("x265", "X265Path", (string?)".exe", true, true),
+        ("SvtAv1EncApp", "SVTAV1Path", (string?)".exe", true, true),
+        ("QSVEncC", "QSVEncPath", (string?)".exe", true, true),
+        ("NVEncC", "NVEncPath", (string?)".exe", true, true),
+        ("VCEEncC", "VCEEncPath", (string?)".exe", true, true),
+        ("L-SMASH Muxer", "MuxerPath", (string?)".exe", true, true),
+        ("mkvmerge", "MKVMergePath", (string?)".exe", true, true),
+        ("MP4Box", "MP4BoxPath", (string?)".exe", true, true),
+        ("TimelineEditor", "TimelineEditorPath", (string?)".exe", true, true),
+        ("ChapterExe", "ChapterExePath", (string?)".exe", true, true),
+        ("JoinLogoScp", "JoinLogoScpPath", (string?)".txt", true, true),
+        ("tsreadex", "TsReadExPath", (string?)".exe", true, true),
+        ("b24tovtt", "B24ToVttPath", (string?)".exe", true, true),
+        ("psisiarc", "PsisiarcPath", (string?)".exe", true, true),
+        ("Whisper", "WhisperPath", (string?)".exe", true, true),
+        ("NicoConvASS", "NicoConvASSPath", (string?)".exe", true, true),
+        ("tsreplace", "TsReplacePath", (string?)".exe", true, true),
+        ("tsMuxeR", "TsMuxeRPath", (string?)".exe", true, true),
+        ("SCRename.vbs/py", "SCRenamePath", (string?)".vbs;.py", true, true),
+        ("AutoVfr.exe", "AutoVfrPath", (string?)".exe", true, true),
+        ("neroAacEnc", "NeroAacEncPath", (string?)".exe", true, true),
+        ("qaac", "QaacPath", (string?)".exe", true, true),
+        ("fdkaac", "FdkaacPath", (string?)".exe", true, true),
+        ("opusenc", "OpusEncPath", (string?)".exe", true, true)
     };
 
     private const string WorkPathField = "WorkPath";
@@ -822,6 +867,23 @@ else
             return;
         }
         _runHours[index] = e.Value is bool b && b;
+    }
+
+    private void ToggleRunHour(int index)
+    {
+        bool? before = null;
+        if (index >= 0 && index < _runHours.Length)
+        {
+            before = _runHours[index];
+        }
+        global::System.Console.WriteLine($"[Settings] ToggleRunHour index={index} before={before}");
+        if (index < 0 || index >= _runHours.Length)
+        {
+            return;
+        }
+        _runHours[index] = !_runHours[index];
+        global::System.Console.WriteLine($"[Settings] ToggleRunHour index={index} after={_runHours[index]}");
+        StateHasChanged();
     }
 
     private bool IsServerLinux => _isServerLinux;
