@@ -141,6 +141,9 @@ namespace Amatsukaze.Shared
     public class QueueItemView
     {
         public int Id { get; set; }
+        public ProcMode Mode { get; set; }
+        public string? SrcPath { get; set; }
+        public string? DirName { get; set; }
         public string? FileName { get; set; }
         public string? ServiceName { get; set; }
         public string? ProfileName { get; set; }
@@ -150,12 +153,21 @@ namespace Amatsukaze.Shared
         public bool IsBatch { get; set; }
         public DateTime? EncodeStart { get; set; }
         public DateTime? EncodeFinish { get; set; }
+        public DateTime? TsTime { get; set; }
+        public DateTime? EitStartTime { get; set; }
+        public string? DisplayBroadcastTime { get; set; }
         public string? DisplayEncodeStart { get; set; }
         public string? DisplayEncodeFinish { get; set; }
         public double Progress { get; set; }
         public int ConsoleId { get; set; }
         public int OutputMask { get; set; }
         public bool IsTooSmall { get; set; }
+        public List<string>? Tags { get; set; }
+        public string? OutDir { get; set; }
+        public int ImageWidth { get; set; }
+        public int ImageHeight { get; set; }
+        public List<GenreNodeView>? Genres { get; set; }
+        public List<string>? GenreNames { get; set; }
     }
 
     public class QueueCounters

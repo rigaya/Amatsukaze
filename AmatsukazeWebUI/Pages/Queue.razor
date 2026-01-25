@@ -146,16 +146,11 @@ else
         <table class="table">
             <thead>
                 <tr>
-                    <th>Id</th>
-                    <th>State</th>
-                    <th>File</th>
-                    <th>Service</th>
-                    <th>Profile</th>
-                    <th>Priority</th>
-                    <th>Progress</th>
-                    <th>Start</th>
-                    <th>Finish</th>
-                    <th>Actions</th>
+                    <th>タスク</th>
+                    <th>状態</th>
+                    <th>放送日 / チャンネル</th>
+                    <th>入力ファイル</th>
+                    <th>プロファイル/優先度/操作</th>
                 </tr>
             </thead>
             <tbody>
@@ -171,33 +166,24 @@ else
                         ondragover="return amatsukazeDnd.onOver(event)"
                         @ondrop:preventDefault="true"
                         @ondrop="@(() => OnQueueDrop(rowIndex))">
-                        <td>@item.Id</td>
-                        <td>@(item.StateLabel ?? item.State ?? "-")</td>
-                        <td>@(item.FileName ?? "-")</td>
-                        <td>@(item.ServiceName ?? "-")</td>
+                        <td>@GetTaskLabel(item)</td>
+                        <td>@GetStateText(item)</td>
+                        <td style="white-space: pre-line;">@GetBroadcastText(item)</td>
+                        <td title="@BuildQueueTooltip(item)">@GetInputFile(item)</td>
                         <td>
-                            <div>@(item.ProfileName ?? "-")</div>
-                            <div>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CopyProfileAsync(item)">Copy</button>
-                            </div>
-                        </td>
-                        <td>
-                            <input type="number" style="width: 4rem;" @bind="_priorityInputs[item.Id]" />
-                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ChangePriorityAsync(item)">Set</button>
-                        </td>
-                        <td>@item.Progress.ToString("P1")</td>
-                        <td>@(item.DisplayEncodeStart ?? item.EncodeStart?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td>
-                        <td>@(item.DisplayEncodeFinish ?? item.EncodeFinish?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td>
-                        <td>
-                            <div>
-                                <select @bind="_profileInputs[item.Id]">
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <select style="flex: 1; min-width: 0;"
+                                        @bind="_profileInputs[item.Id]"
+                                        @bind:after="(() => ChangeProfileAsync(item))">
                                     <option value="">(Profile)</option>
                                     @foreach (var name in _profileNames)
                                     {
                                         <option value="@name">@name</option>
                                     }
                                 </select>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ChangeProfileAsync(item)">Change</button>
+                                <input type="number" style="width: 3.5rem;"
+                                       @bind="_priorityInputs[item.Id]"
+                                       @bind:after="(() => ChangePriorityAsync(item))" />
                             </div>
                             <div style="margin-top: 0.25rem;">
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => RetryAsync(item)">Retry</button>
@@ -935,6 +921,101 @@ else
             return namePropLower.GetString();
         }
         return null;
+    }
+
+    private static string GetTaskLabel(QueueItemView item)
+    {
+        switch (item.Mode)
+        {
+            case ProcMode.Batch:
+                return "通常";
+            case ProcMode.CMCheck:
+                return "CM解析のみ";
+            case ProcMode.DrcsCheck:
+                return "DRCSチェック";
+            case ProcMode.Test:
+                return "テスト";
+            case ProcMode.AutoBatch:
+                return "自動追加";
+        }
+        return "不明";
+    }
+
+    private static string GetBroadcastText(QueueItemView item)
+    {
+        var timeText = item.DisplayBroadcastTime;
+        if (string.IsNullOrEmpty(timeText))
+        {
+            var time = item.EitStartTime ?? item.TsTime ?? item.EncodeStart;
+            timeText = time.HasValue ? time.Value.ToString("yyyy-MM-dd") : (item.DisplayEncodeStart ?? "-");
+        }
+        var service = string.IsNullOrEmpty(item.ServiceName) ? "-" : item.ServiceName;
+        return $"{timeText}\n{service}";
+    }
+
+    private static string GetInputFolder(QueueItemView item)
+    {
+        var dirPath = item.DirName;
+        if (!string.IsNullOrEmpty(dirPath))
+        {
+            var trimmed = dirPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var leaf = Path.GetFileName(trimmed);
+            return string.IsNullOrEmpty(leaf) ? dirPath : leaf;
+        }
+
+        var path = item.SrcPath ?? item.FileName ?? "";
+        if (string.IsNullOrEmpty(path))
+        {
+            return "-";
+        }
+        var dir = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(dir))
+        {
+            return "-";
+        }
+        return Path.GetFileName(dir) ?? dir;
+    }
+
+    private static string GetInputFile(QueueItemView item)
+    {
+        var path = item.SrcPath ?? item.FileName ?? "";
+        if (string.IsNullOrEmpty(path))
+        {
+            return "-";
+        }
+        return Path.GetFileName(path);
+    }
+
+    private static string BuildQueueTooltip(QueueItemView item)
+    {
+        var fullPath = item.SrcPath ?? item.FileName ?? "-";
+        var genreText = item.GenreNames == null || item.GenreNames.Count == 0
+            ? "-"
+            : string.Join(" / ", item.GenreNames);
+        var sizeText = (item.ImageWidth > 0 && item.ImageHeight > 0)
+            ? $"{item.ImageWidth}x{item.ImageHeight}"
+            : "-";
+        var tagText = item.Tags == null || item.Tags.Count == 0
+            ? "-"
+            : string.Join(", ", item.Tags);
+        var outDir = string.IsNullOrEmpty(item.OutDir) ? "-" : item.OutDir;
+
+        return $"フルパス: {fullPath}\nジャンル: {genreText}\n映像サイズ: {sizeText}\nタグ: {tagText}\n出力先: {outDir}";
+    }
+    private static string GetStateText(QueueItemView item)
+    {
+        var baseText = item.StateLabel ?? item.State ?? "-";
+        if (string.Equals(item.State, "Complete", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(item.StateLabel, "完了", StringComparison.Ordinal))
+        {
+            if (item.EncodeStart.HasValue && item.EncodeFinish.HasValue)
+            {
+                var duration = item.EncodeFinish.Value - item.EncodeStart.Value;
+                var finish = item.DisplayEncodeFinish ?? item.EncodeFinish.Value.ToString("yyyy-MM-dd HH:mm");
+                return $"{baseText} ({duration:hh\\:mm\\:ss} / {finish})";
+            }
+        }
+        return baseText;
     }
 
     private async Task CopyProfileAsync(QueueItemView item)
