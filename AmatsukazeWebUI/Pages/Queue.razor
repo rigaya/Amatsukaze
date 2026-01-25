@@ -114,16 +114,17 @@ else if (!string.IsNullOrEmpty(_error))
 {
     <p style="color: red;">@_error</p>
 }
-else if (!string.IsNullOrEmpty(_actionMessage))
-{
-    <p style="color: green;">@_actionMessage</p>
-}
 else if (_view == null)
 {
     <p>No data.</p>
 }
 else
 {
+    if (!string.IsNullOrEmpty(_actionMessage))
+    {
+        <p style="color: green;">@_actionMessage</p>
+    }
+
     <div>
         <strong>Counters</strong>
         <div>
@@ -143,8 +144,15 @@ else
     }
     else
     {
-        <div class="queue-list" @onclick="CloseContextMenu">
-        <table class="table">
+        <div class="queue-list"
+             data-drop-end="true"
+             ondragover="return amatsukazeDnd.onOverWithIndex(event)"
+             @onclick="CloseContextMenu"
+             @ondragenter="OnQueueBodyDragEnter">
+        <table class="table"
+               data-drop-end="true"
+               ondragover="return amatsukazeDnd.onOverWithIndex(event)"
+               @ondragenter="OnQueueBodyDragEnter">
             <thead>
                 <tr>
                     <th>タスク</th>
@@ -154,18 +162,22 @@ else
                     <th>プロファイル/優先度/操作</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody @ondragover:preventDefault="true"
+                   @ondrop:preventDefault="true"
+                   @ondrop="OnQueueDropFromBody"
+                   @ondragenter="OnQueueBodyDragEnter">
                 @for (var i = 0; i < _view.Items.Count; i++)
                 {
                     var rowIndex = i;
                     var item = _view.Items[rowIndex];
                     <tr @key="item.Id"
-                        class="@GetRowClass(item)"
+                        class="@GetRowClass(item, rowIndex)"
                         draggable="true"
                         data-queue-index="@rowIndex"
                         ondragstart="return amatsukazeDnd.setDataWithIndex(event)"
-                        ondragenter="return amatsukazeDnd.onEnter(event)"
-                        ondragover="return amatsukazeDnd.onOver(event)"
+                        @onmousedown="(() => OnQueueDragStart(rowIndex))"
+                        @ondragenter="(() => OnQueueDragEnter(rowIndex))"
+                        @ondragend="OnQueueDragEnd"
                         @onclick="(e => OnRowClick(item, e))"
                         @onclick:stopPropagation="true"
                         @oncontextmenu="(e => OnRowContextMenu(item, e))"
@@ -195,6 +207,13 @@ else
                         </td>
                     </tr>
                 }
+                <tr class="@GetDropRowClass()"
+                    data-drop-end="true"
+                    ondragover="return amatsukazeDnd.onOverWithIndex(event)"
+                    @ondragenter="(() => OnQueueDragEnter(_view.Items.Count))"
+                    @ondragend="OnQueueDragEnd">
+                    <td colspan="5"></td>
+                </tr>
             </tbody>
         </table>
         @if (_contextMenuVisible)
@@ -309,6 +328,7 @@ else
     private bool _contextMenuVisible;
     private double _contextMenuX;
     private double _contextMenuY;
+    private int _dropIndex = -1;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
     private long _queueVersion;
@@ -1236,8 +1256,69 @@ else
         _contextMenuVisible = false;
     }
 
-    private string GetRowClass(QueueItemView item)
-        => _selectedIds.Contains(item.Id) ? "queue-row is-selected" : "queue-row";
+    private string GetRowClass(QueueItemView item, int rowIndex)
+    {
+        var classes = new List<string> { "queue-row", GetStateClass(item) };
+        if (_selectedIds.Contains(item.Id))
+        {
+            classes.Add("is-selected");
+        }
+        if (_dropIndex == rowIndex)
+        {
+            classes.Add("queue-drop-target");
+        }
+        return string.Join(" ", classes.Where(c => !string.IsNullOrWhiteSpace(c)));
+    }
+
+    private static string GetStateClass(QueueItemView item)
+    {
+        var state = item.State ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(state))
+        {
+            state = item.StateLabel ?? string.Empty;
+        }
+        if (state.Equals("Encoding", StringComparison.OrdinalIgnoreCase))
+        {
+            return "queue-state-encoding";
+        }
+        if (state.Equals("Failed", StringComparison.OrdinalIgnoreCase) || state.Equals("PreFailed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "queue-state-error";
+        }
+        if (state.Equals("Queue", StringComparison.OrdinalIgnoreCase) || state.Equals("LogoPending", StringComparison.OrdinalIgnoreCase))
+        {
+            return "queue-state-pending";
+        }
+        if (state.Equals("Canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            return "queue-state-canceled";
+        }
+        if (state.Equals("Complete", StringComparison.OrdinalIgnoreCase))
+        {
+            return "queue-state-complete";
+        }
+        if (state.Contains("エンコード", StringComparison.Ordinal))
+        {
+            return "queue-state-encoding";
+        }
+        if (state.Contains("失敗", StringComparison.Ordinal))
+        {
+            return "queue-state-error";
+        }
+        if (state.Contains("ペンディング", StringComparison.Ordinal) || state.Contains("待ち", StringComparison.Ordinal))
+        {
+            return "queue-state-pending";
+        }
+        if (state.Contains("キャンセル", StringComparison.Ordinal))
+        {
+            return "queue-state-canceled";
+        }
+        if (state.Contains("完了", StringComparison.Ordinal))
+        {
+            return "queue-state-complete";
+        }
+        return string.Empty;
+    }
 
     private async Task OnQueueDrop(int index)
     {
@@ -1245,6 +1326,7 @@ else
         {
             return;
         }
+        _dropIndex = -1;
         var fromIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getDragIndex");
         await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
         if (fromIndex < 0 || fromIndex == index)
@@ -1267,6 +1349,58 @@ else
         var item = _view.Items[fromIndex];
         await ChangeItemAsync(item, ChangeItemType.Move, position: toIndex);
     }
+
+    private Task OnQueueDropFromBody()
+    {
+        return Task.CompletedTask;
+    }
+
+    private void OnQueueDragEnter(int index)
+    {
+        _dropIndex = index;
+    }
+
+    private void OnQueueBodyDragEnter()
+    {
+        if (_view == null)
+        {
+            return;
+        }
+        if (_dropIndex < 0)
+        {
+            _dropIndex = _view.Items.Count;
+        }
+    }
+
+    private void OnQueueDragStart(int index)
+    {
+        _dropIndex = index;
+    }
+
+    private async Task OnQueueDragEnd()
+    {
+        var lastDropIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getLastDropIndex");
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearLastDropIndex");
+        if (_view == null)
+        {
+            _dropIndex = -1;
+            await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
+            return;
+        }
+        if (lastDropIndex == -2)
+        {
+            lastDropIndex = _view.Items.Count;
+        }
+        if (lastDropIndex >= 0)
+        {
+            await OnQueueDrop(lastDropIndex);
+        }
+        _dropIndex = -1;
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
+    }
+
+    private string GetDropRowClass()
+        => _dropIndex == (_view?.Items.Count ?? -1) ? "queue-drop-row queue-drop-target" : "queue-drop-row";
 
     private async Task OnToggleQueuePause(ChangeEventArgs e)
     {
