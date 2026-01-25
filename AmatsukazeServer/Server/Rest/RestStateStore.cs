@@ -734,6 +734,9 @@ namespace Amatsukaze.Server.Rest
             return new Amatsukaze.Shared.QueueItemView()
             {
                 Id = item.Id,
+                Mode = (Amatsukaze.Shared.ProcMode)item.Mode,
+                SrcPath = item.SrcPath,
+                DirName = item.DirName,
                 FileName = item.FileName,
                 ServiceName = item.ServiceName,
                 ProfileName = item.Profile?.Name ?? item.ProfileName,
@@ -743,12 +746,30 @@ namespace Amatsukaze.Server.Rest
                 IsBatch = item.IsBatch,
                 EncodeStart = item.EncodeStart == DateTime.MinValue ? null : item.EncodeStart,
                 EncodeFinish = item.EncodeFinish == DateTime.MinValue ? null : item.EncodeFinish,
+                TsTime = item.TsTime == DateTime.MinValue ? null : item.TsTime,
+                EitStartTime = item.EITStartTime == DateTime.MinValue ? null : item.EITStartTime,
+                DisplayBroadcastTime = item.EITStartTime != DateTime.MinValue
+                    ? item.EITStartTime.ToString("yyyy/MM/dd")
+                    : (item.TsTime == DateTime.MinValue ? null : item.TsTime.ToString("yyyy/MM/dd")),
                 DisplayEncodeStart = item.EncodeStart.ToGUIString(),
                 DisplayEncodeFinish = item.EncodeFinish.ToGUIString(),
                 Progress = 0,
                 ConsoleId = item.ConsoleId,
                 OutputMask = 0,
-                IsTooSmall = IsTooSmall(item)
+                IsTooSmall = IsTooSmall(item),
+                Tags = item.Tags,
+                OutDir = item.DstPath,
+                ImageWidth = item.ImageWidth,
+                ImageHeight = item.ImageHeight,
+                Genres = item.Genre?.Select(g => new Amatsukaze.Shared.GenreNodeView
+                {
+                    Space = g.Space,
+                    Level1 = g.Level1,
+                    Level2 = g.Level2,
+                    Name = null,
+                    Children = null
+                }).ToList(),
+                GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList()
             };
         }
 
