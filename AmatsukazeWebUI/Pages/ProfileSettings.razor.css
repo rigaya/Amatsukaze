@@ -1,0 +1,26 @@
+.profile-settings .resource-table {
+    width: auto;
+    display: inline-table;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.profile-settings .resource-table th,
+.profile-settings .resource-table td {
+    padding: 4px 4px;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.profile-settings .resource-table .resource-col-small {
+    width: 56px;
+}
+
+.profile-settings .resource-input {
+    width: 56px;
+    box-sizing: border-box;
+}
+
+.profile-settings .resource-affinity {
+    margin-top: 6px;
+}
