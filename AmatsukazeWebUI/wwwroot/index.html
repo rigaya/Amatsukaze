@@ -29,6 +29,7 @@
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
         window.amatsukazeDnd = {
+            lastDropIndex: -1,
             setData: function (event) {
                 try {
                     if (event && event.dataTransfer) {
@@ -59,6 +60,32 @@
                 }
                 return -1;
             },
+            setLastDropIndex: function (event) {
+                try {
+                    if (event && event.currentTarget && event.currentTarget.dataset) {
+                        if (event.currentTarget.dataset.queueIndex !== undefined) {
+                            var index = parseInt(event.currentTarget.dataset.queueIndex, 10);
+                            if (!isNaN(index)) {
+                                window.amatsukazeDnd.lastDropIndex = index;
+                                return;
+                            }
+                        }
+                        if (event.currentTarget.dataset.dropEnd === "true") {
+                            window.amatsukazeDnd.lastDropIndex = -2;
+                            return;
+                        }
+                    }
+                } catch (e) {
+                }
+            },
+            getLastDropIndex: function () {
+                return typeof window.amatsukazeDnd.lastDropIndex === "number"
+                    ? window.amatsukazeDnd.lastDropIndex
+                    : -1;
+            },
+            clearLastDropIndex: function () {
+                window.amatsukazeDnd.lastDropIndex = -1;
+            },
             clearDragIndex: function () {
                 window.amatsukazeDnd.dragIndex = -1;
             },
@@ -74,6 +101,18 @@
             },
             onOver: function (event) {
                 try {
+                    if (event && event.dataTransfer) {
+                        event.preventDefault();
+                        return true;
+                    }
+                } catch (e) {
+                }
+                return true;
+            }
+            ,
+            onOverWithIndex: function (event) {
+                try {
+                    window.amatsukazeDnd.setLastDropIndex(event);
                     if (event && event.dataTransfer) {
                         event.preventDefault();
                         return true;

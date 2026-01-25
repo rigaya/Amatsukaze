@@ -24,6 +24,16 @@
     --success: #7ccfb8;
     --warning: #ffcf8a;
     --danger: #f29aa3;
+    --queue-complete-base: #9fe2ff;
+    --queue-complete-text: #0f2433;
+    --queue-encoding-base: #9ee6c7;
+    --queue-encoding-text: #0f2b22;
+    --queue-error-base: #f7a2a6;
+    --queue-error-text: #3a1416;
+    --queue-pending-base: #ffe2a3;
+    --queue-pending-text: #3a2a12;
+    --queue-canceled-base: #d8dbe4;
+    --queue-canceled-text: #5a667a;
     --input-bg: rgba(255, 255, 255, 0.7);
     --input-border: rgba(28, 35, 51, 0.18);
     --sidebar-bg: linear-gradient(160deg, rgba(215, 228, 255, 0.95) 0%, rgba(233, 245, 255, 0.92) 45%, rgba(246, 240, 255, 0.9) 100%);
@@ -51,6 +61,16 @@
         --success: #7cd7c4;
         --warning: #ffd39c;
         --danger: #ff9aa2;
+        --queue-complete-base: #255574;
+        --queue-complete-text: #f1f6ff;
+        --queue-encoding-base: #2d7a5f;
+        --queue-encoding-text: #f1fdf7;
+        --queue-error-base: #7a2a24;
+        --queue-error-text: #ffe8e6;
+        --queue-pending-base: #8c6a1f;
+        --queue-pending-text: #fff3d6;
+        --queue-canceled-base: #2f3442;
+        --queue-canceled-text: #c1c9db;
         --input-bg: rgba(20, 28, 46, 0.7);
         --input-border: rgba(231, 236, 248, 0.18);
         --sidebar-bg: linear-gradient(160deg, rgba(28, 39, 64, 0.95) 0%, rgba(22, 30, 52, 0.95) 55%, rgba(30, 24, 48, 0.92) 100%);
@@ -302,6 +322,70 @@ code {
 .queue-menu-item:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.queue-row td {
+    background: var(--queue-row-bg, transparent);
+    color: var(--queue-row-text, inherit);
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.queue-row:hover td {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.queue-row.is-selected td {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+    background: var(--queue-row-bg, transparent);
+}
+
+.queue-row.queue-drop-target td {
+    border-top: 2px solid color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+
+.queue-drop-row td {
+    height: 6px;
+    padding: 0;
+    background: transparent;
+}
+
+.queue-drop-row.queue-drop-target td {
+    border-top: 2px solid color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+
+.queue-row.queue-state-complete td {
+    --queue-row-bg: linear-gradient(180deg,
+        color-mix(in srgb, var(--queue-complete-base) 80%, transparent),
+        color-mix(in srgb, var(--queue-complete-base) 55%, transparent));
+    --queue-row-text: var(--queue-complete-text);
+}
+
+.queue-row.queue-state-encoding td {
+    --queue-row-bg: linear-gradient(180deg,
+        color-mix(in srgb, var(--queue-encoding-base) 82%, transparent),
+        color-mix(in srgb, var(--queue-encoding-base) 58%, transparent));
+    --queue-row-text: var(--queue-encoding-text);
+}
+
+.queue-row.queue-state-error td {
+    --queue-row-bg: linear-gradient(180deg,
+        color-mix(in srgb, var(--queue-error-base) 82%, transparent),
+        color-mix(in srgb, var(--queue-error-base) 58%, transparent));
+    --queue-row-text: var(--queue-error-text);
+}
+
+.queue-row.queue-state-pending td {
+    --queue-row-bg: linear-gradient(180deg,
+        color-mix(in srgb, var(--queue-pending-base) 82%, transparent),
+        color-mix(in srgb, var(--queue-pending-base) 58%, transparent));
+    --queue-row-text: var(--queue-pending-text);
+}
+
+.queue-row.queue-state-canceled td {
+    --queue-row-bg: linear-gradient(180deg,
+        color-mix(in srgb, var(--queue-canceled-base) 60%, transparent),
+        color-mix(in srgb, var(--queue-canceled-base) 45%, transparent));
+    --queue-row-text: var(--queue-canceled-text);
 }
 
 .settings-page table {
