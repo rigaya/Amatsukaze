@@ -3,7 +3,7 @@
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 
-<h3>MakeScript</h3>
+<h3>スクリプト生成</h3>
 
 <p>
     <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
@@ -85,7 +85,7 @@ else
         </table>
     }
 
-    <h4>Preview</h4>
+    <h4>プレビュー</h4>
     @if (_preview == null)
     {
         <p>No preview.</p>

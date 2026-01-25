@@ -2,7 +2,7 @@
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 
-<h3>Console</h3>
+<h3>コンソール</h3>
 
 @if (_loading)
 {
@@ -35,7 +35,7 @@ else
 
     @if (_view.AddQueueConsole.Count > 0)
     {
-        <h4>Add Queue</h4>
+        <h4>キュー追加</h4>
         <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@string.Join("\n", _view.AddQueueConsole)</pre>
     }
 }

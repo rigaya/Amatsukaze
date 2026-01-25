@@ -2,7 +2,7 @@
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 
-<h3>Encode Logs</h3>
+<h3>エンコードログ</h3>
 
 <p>
     <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
@@ -27,12 +27,12 @@ else
         <table class="table">
             <thead>
                 <tr>
-                    <th>Start</th>
-                    <th>Finish</th>
-                    <th>Result</th>
-                    <th>Service</th>
-                    <th>Source</th>
-                    <th>Detail</th>
+                    <th>開始</th>
+                    <th>終了</th>
+                    <th>結果</th>
+                    <th>サービス</th>
+                    <th>入力</th>
+                    <th>詳細</th>
                 </tr>
             </thead>
             <tbody>
@@ -41,7 +41,7 @@ else
                     <tr>
                         <td>@(item.DisplayEncodeStart ?? "-")</td>
                         <td>@(item.DisplayEncodeFinish ?? "-")</td>
-                        <td>@(item.DisplayResult ?? (item.Success ? "Success" : "Fail"))</td>
+                        <td>@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
                         <td>@(item.DisplayService ?? item.ServiceName ?? "-")</td>
                         <td>@(item.SrcPath ?? "-")</td>
                         <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadEncodeDetailAsync(item)">View</button></td>
@@ -51,7 +51,7 @@ else
         </table>
     }
 
-    <h4>Log Detail</h4>
+    <h4>ログ詳細</h4>
     @if (_detailLoading)
     {
         <p>Loading detail...</p>
