@@ -63,7 +63,7 @@ else if (_profiles.Count == 0)
 }
 else
 {
-    <div style="margin-top: 12px;">
+    <div class="profile-settings" style="margin-top: 12px;">
         <h4>エンコード</h4>
         <table class="table">
             <tr>
@@ -150,6 +150,7 @@ else
             </tr>
         </table>
 
+        <hr class="settings-sep" />
         <h4>デコーダ</h4>
         <table class="table">
             <tr>
@@ -187,6 +188,7 @@ else
             </tr>
         </table>
 
+        <hr class="settings-sep" />
         <h4>出力</h4>
         <table class="table">
             <tr>
@@ -200,6 +202,28 @@ else
                     </select>
                 </td>
             </tr>
+            @if (IsMp4Format())
+            {
+                <tr class="profile-check-row">
+                    <td colspan="2">
+                        <label class="settings-check">
+                            <input type="checkbox" checked="@GetBoolValue("UseMKVWhenSubExists")" @onchange="@(e => OnBoolChanged(e, "UseMKVWhenSubExists"))" />
+                            字幕がある場合、MKV出力する
+                        </label>
+                    </td>
+                </tr>
+            }
+            @if (IsTsreplaceFormat())
+            {
+                <tr class="profile-check-row">
+                    <td colspan="2">
+                        <label class="settings-check">
+                            <input type="checkbox" checked="@GetBoolValue("TsreplaceRemoveTypeD")" @onchange="@(e => OnBoolChanged(e, "TsreplaceRemoveTypeD"))" />
+                            データ放送を削除する
+                        </label>
+                    </td>
+                </tr>
+            }
             <tr>
                 <th>出力選択</th>
                 <td>
@@ -211,35 +235,30 @@ else
                     </select>
                 </td>
             </tr>
-            @if (IsMp4Format())
-            {
-                <tr>
-                    <th>字幕がある場合、MKV出力する</th>
-                    <td><input type="checkbox" checked="@GetBoolValue("UseMKVWhenSubExists")" @onchange="@(e => OnBoolChanged(e, "UseMKVWhenSubExists"))" /></td>
-                </tr>
-            }
-            @if (IsTsreplaceFormat())
-            {
-                <tr>
-                    <th>データ放送を削除する</th>
-                    <td><input type="checkbox" checked="@GetBoolValue("TsreplaceRemoveTypeD")" @onchange="@(e => OnBoolChanged(e, "TsreplaceRemoveTypeD"))" /></td>
-                </tr>
-            }
         </table>
 
+        <hr class="settings-sep" />
         <h4>リネーム / バッチ</h4>
         <table class="table">
-            <tr>
-                <th>SCRenameによるリネームを行う</th>
-                <td><input type="checkbox" checked="@GetBoolValue("EnableRename")" @onchange="@(e => OnBoolChanged(e, "EnableRename"))" /></td>
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("EnableRename")" @onchange="@(e => OnBoolChanged(e, "EnableRename"))" />
+                        SCRenameによるリネームを行う
+                    </label>
+                </td>
             </tr>
             <tr>
                 <th>SCRename書式</th>
                 <td><textarea style="width: 100%; height: 60px;" @oninput="@(e => OnStringChanged(e, "RenameFormat"))">@GetStringValue("RenameFormat")</textarea></td>
             </tr>
-            <tr>
-                <th>ジャンルごとにフォルダ分け</th>
-                <td><input type="checkbox" checked="@GetBoolValue("EnableGunreFolder")" @onchange="@(e => OnBoolChanged(e, "EnableGunreFolder"))" /></td>
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("EnableGunreFolder")" @onchange="@(e => OnBoolChanged(e, "EnableGunreFolder"))" />
+                        ジャンルごとにフォルダ分け
+                    </label>
+                </td>
             </tr>
             <tr>
                 <th>実行前バッチ</th>
@@ -279,6 +298,7 @@ else
             </tr>
         </table>
 
+        <hr class="settings-sep" />
         <h4>フィルタ設定</h4>
         <table class="table">
             <tr>
@@ -524,12 +544,9 @@ else
             }
         </table>
 
+        <hr class="settings-sep" />
         <h4>ビットレート設定</h4>
         <table class="table">
-            <tr>
-                <th>2パスエンコード</th>
-                <td><input type="checkbox" checked="@GetBoolValue("TwoPass")" @onchange="@(e => OnBoolChanged(e, "TwoPass"))" /></td>
-            </tr>
             <tr>
                 <th>CMビットレート倍率</th>
                 <td><input type="number" step="0.01" style="width: 90px;" value="@GetDoubleValue("BitrateCM")" @oninput="@(e => OnDoubleChanged(e, "BitrateCM"))" /></td>
@@ -538,25 +555,38 @@ else
                 <th>CM品質オフセット</th>
                 <td><input type="number" step="0.1" style="width: 90px;" value="@GetDoubleValue("CMQualityOffset")" @oninput="@(e => OnDoubleChanged(e, "CMQualityOffset"))" /></td>
             </tr>
-            <tr>
-                <th>自動ビットレート指定</th>
-                <td><input type="checkbox" checked="@GetBoolValue("AutoBuffer")" @onchange="@(e => OnBoolChanged(e, "AutoBuffer"))" /></td>
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("TwoPass")" @onchange="@(e => OnBoolChanged(e, "TwoPass"))" />
+                        2パスエンコード
+                    </label>
+                </td>
             </tr>
-            <tr>
-                <th>a / b / h264</th>
-                <td>
-                    <input type="number" step="0.1" style="width: 80px;" value="@GetBitrateValue("A")" @oninput="@(e => OnBitrateChanged(e, "A"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("AutoBuffer")" @onchange="@(e => OnBoolChanged(e, "AutoBuffer"))" />
+                        自動ビットレート指定
+                    </label>
+                    <span style="margin-left: 12px;">a / b / h264</span>
+                    <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("A")" @oninput="@(e => OnBitrateChanged(e, "A"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
                     <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("B")" @oninput="@(e => OnBitrateChanged(e, "B"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
                     <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("H264")" @oninput="@(e => OnBitrateChanged(e, "H264"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
                 </td>
             </tr>
         </table>
 
+        <hr class="settings-sep" />
         <h4>音声エンコード</h4>
         <table class="table">
-            <tr>
-                <th>音声をエンコードする</th>
-                <td><input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" /></td>
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" />
+                        音声をエンコードする
+                    </label>
+                </td>
             </tr>
             @if (GetBoolValue("EnableAudioEncode"))
             {
@@ -588,6 +618,7 @@ else
             }
         </table>
 
+        <hr class="settings-sep" />
         <h4>ニコニコ実況コメント</h4>
         @if (_options?.IsServerLinux == true)
         {
@@ -596,23 +627,39 @@ else
         else
         {
             <table class="table">
-                <tr>
-                    <th>ニコニコ実況コメントを有効にする</th>
-                    <td><input type="checkbox" checked="@GetBoolValue("EnableNicoJK")" @onchange="@(e => OnBoolChanged(e, "EnableNicoJK"))" /></td>
+                <tr class="profile-check-row">
+                    <td colspan="2">
+                        <label class="settings-check">
+                            <input type="checkbox" checked="@GetBoolValue("EnableNicoJK")" @onchange="@(e => OnBoolChanged(e, "EnableNicoJK"))" />
+                            ニコニコ実況コメントを有効にする
+                        </label>
+                    </td>
                 </tr>
                 @if (GetBoolValue("EnableNicoJK"))
                 {
-                    <tr>
-                        <th>エラーを無視</th>
-                        <td><input type="checkbox" checked="@GetBoolValue("IgnoreNicoJKError")" @onchange="@(e => OnBoolChanged(e, "IgnoreNicoJKError"))" /></td>
+                    <tr class="profile-check-row">
+                        <td colspan="2">
+                            <label class="settings-check">
+                                <input type="checkbox" checked="@GetBoolValue("IgnoreNicoJKError")" @onchange="@(e => OnBoolChanged(e, "IgnoreNicoJKError"))" />
+                                エラーを無視
+                            </label>
+                        </td>
                     </tr>
-                    <tr>
-                        <th>NicoJKログから優先的にコメントを取得する</th>
-                        <td><input type="checkbox" checked="@GetBoolValue("NicoJKLog")" @onchange="@(e => OnBoolChanged(e, "NicoJKLog"))" /></td>
+                    <tr class="profile-check-row">
+                        <td colspan="2">
+                            <label class="settings-check">
+                                <input type="checkbox" checked="@GetBoolValue("NicoJKLog")" @onchange="@(e => OnBoolChanged(e, "NicoJKLog"))" />
+                                NicoJKログから優先的にコメントを取得する
+                            </label>
+                        </td>
                     </tr>
-                    <tr>
-                        <th>NicoJK18サーバからコメントを取得する（推奨）</th>
-                        <td><input type="checkbox" checked="@GetBoolValue("NicoJK18")" @onchange="@(e => OnBoolChanged(e, "NicoJK18"))" /></td>
+                    <tr class="profile-check-row">
+                        <td colspan="2">
+                            <label class="settings-check">
+                                <input type="checkbox" checked="@GetBoolValue("NicoJK18")" @onchange="@(e => OnBoolChanged(e, "NicoJK18"))" />
+                                NicoJK18サーバからコメントを取得する（推奨）
+                            </label>
+                        </td>
                     </tr>
                     <tr>
                         <th>コメント字幕出力フォーマット</th>
@@ -633,17 +680,26 @@ else
             </table>
         }
 
+        <hr class="settings-sep" />
         <h4>字幕</h4>
         <table class="table">
-            <tr>
-                <th>字幕を無効にする</th>
-                <td><input type="checkbox" checked="@GetBoolValue("DisableSubs")" @onchange="@(e => OnBoolChanged(e, "DisableSubs"))" /></td>
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("DisableSubs")" @onchange="@(e => OnBoolChanged(e, "DisableSubs"))" />
+                        字幕を無効にする
+                    </label>
+                </td>
             </tr>
             @if (!GetBoolValue("DisableSubs"))
             {
-                <tr>
-                    <th>WebVTT字幕を生成する</th>
-                    <td><input type="checkbox" checked="@GetBoolValue("EnableWebVTT")" @onchange="@(e => OnBoolChanged(e, "EnableWebVTT"))" /></td>
+                <tr class="profile-check-row">
+                    <td colspan="2">
+                        <label class="settings-check">
+                            <input type="checkbox" checked="@GetBoolValue("EnableWebVTT")" @onchange="@(e => OnBoolChanged(e, "EnableWebVTT"))" />
+                            WebVTT字幕を生成する
+                        </label>
+                    </td>
                 </tr>
                 <tr>
                     <th>字幕モード</th>
@@ -683,21 +739,22 @@ else
             }
         </table>
 
+        <hr class="settings-sep" />
         <h4>その他の設定</h4>
         <table class="table">
-            <tr><th>処理の終了後、入力ファイルを別フォルダに移動する</th><td><input type="checkbox" checked="@GetBoolValue("MoveInputFile")" @onchange="@(e => OnBoolChanged(e, "MoveInputFile"))" /></td></tr>
-            <tr><th>関連ファイル(*.err,*.program.txtなど)もコピー/移動する</th><td><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetBoolValue("MoveInputFile"))" /></td></tr>
-            <tr><th>チャプター・CM解析を無効にする</th><td><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" /></td></tr>
-            <tr><th>チャプターを別ファイルに出力する</th><td><input type="checkbox" checked="@GetBoolValue("OutputChapter")" @onchange="@(e => OnBoolChanged(e, "OutputChapter"))" disabled="@(GetBoolValue("DisableChapter"))" /></td></tr>
-            <tr><th>マッピングにないDRCS外字は無視する</th><td><input type="checkbox" checked="@GetBoolValue("IgnoreNoDrcsMap")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoDrcsMap"))" /></td></tr>
-            <tr><th>ロゴ検出判定しきい値を低くする</th><td><input type="checkbox" checked="@GetBoolValue("LooseLogoDetection")" @onchange="@(e => OnBoolChanged(e, "LooseLogoDetection"))" /></td></tr>
-            <tr><th>ロゴ検出に失敗しても処理を続行する</th><td><input type="checkbox" checked="@GetBoolValue("IgnoreNoLogo")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoLogo"))" /></td></tr>
-            <tr><th>ロゴ消ししない</th><td><input type="checkbox" checked="@GetBoolValue("NoDelogo")" @onchange="@(e => OnBoolChanged(e, "NoDelogo"))" /></td></tr>
-            <tr><th>並列ロゴ解析</th><td><input type="checkbox" checked="@GetBoolValue("ParallelLogoAnalysis")" @onchange="@(e => OnBoolChanged(e, "ParallelLogoAnalysis"))" /></td></tr>
-            <tr><th>システムにインストールされているAviSynthプラグインを有効にする</th><td><input type="checkbox" checked="@GetBoolValue("SystemAviSynthPlugin")" @onchange="@(e => OnBoolChanged(e, "SystemAviSynthPlugin"))" /></td></tr>
-            <tr><th>ログファイルを出力先に生成しない</th><td><input type="checkbox" checked="@GetBoolValue("DisableLogFile")" @onchange="@(e => OnBoolChanged(e, "DisableLogFile"))" /></td></tr>
-            <tr><th>プロファイルの情報を出力先にテキストとして保存</th><td><input type="checkbox" checked="@GetBoolValue("SaveProfileText")" @onchange="@(e => OnBoolChanged(e, "SaveProfileText"))" /></td></tr>
-            <tr><th>一時ファイルを削除せずに残す</th><td><input type="checkbox" checked="@GetBoolValue("NoRemoveTmp")" @onchange="@(e => OnBoolChanged(e, "NoRemoveTmp"))" /></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveInputFile")" @onchange="@(e => OnBoolChanged(e, "MoveInputFile"))" />処理の終了後、入力ファイルを別フォルダに移動する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetBoolValue("MoveInputFile"))" />関連ファイル(*.err,*.program.txtなど)もコピー/移動する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" />チャプター・CM解析を無効にする</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("OutputChapter")" @onchange="@(e => OnBoolChanged(e, "OutputChapter"))" disabled="@(GetBoolValue("DisableChapter"))" />チャプターを別ファイルに出力する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoDrcsMap")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoDrcsMap"))" />マッピングにないDRCS外字は無視する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("LooseLogoDetection")" @onchange="@(e => OnBoolChanged(e, "LooseLogoDetection"))" />ロゴ検出判定しきい値を低くする</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoLogo")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoLogo"))" />ロゴ検出に失敗しても処理を続行する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("NoDelogo")" @onchange="@(e => OnBoolChanged(e, "NoDelogo"))" />ロゴ消ししない</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("ParallelLogoAnalysis")" @onchange="@(e => OnBoolChanged(e, "ParallelLogoAnalysis"))" />並列ロゴ解析</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("SystemAviSynthPlugin")" @onchange="@(e => OnBoolChanged(e, "SystemAviSynthPlugin"))" />システムにインストールされているAviSynthプラグインを有効にする</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableLogFile")" @onchange="@(e => OnBoolChanged(e, "DisableLogFile"))" />ログファイルを出力先に生成しない</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("SaveProfileText")" @onchange="@(e => OnBoolChanged(e, "SaveProfileText"))" />プロファイルの情報を出力先にテキストとして保存</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("NoRemoveTmp")" @onchange="@(e => OnBoolChanged(e, "NoRemoveTmp"))" />一時ファイルを削除せずに残す</label></td></tr>
             <tr>
                 <th>PMT更新がある場合はCMとする</th>
                 <td>
@@ -723,10 +780,11 @@ else
             </tr>
         </table>
 
+        <hr class="settings-sep" />
         <h4>詳細設定</h4>
         <table class="table">
-            <tr><th>メイン以外のフォーマットは結合しない</th><td><input type="checkbox" checked="@GetBoolValue("SplitSub")" @onchange="@(e => OnBoolChanged(e, "SplitSub"))" /></td></tr>
-            <tr><th>ネットワーク越しに転送する場合のハッシュチェックを無効にする</th><td><input type="checkbox" checked="@GetBoolValue("DisableHashCheck")" @onchange="@(e => OnBoolChanged(e, "DisableHashCheck"))" /></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("SplitSub")" @onchange="@(e => OnBoolChanged(e, "SplitSub"))" />メイン以外のフォーマットは結合しない</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableHashCheck")" @onchange="@(e => OnBoolChanged(e, "DisableHashCheck"))" />ネットワーク越しに転送する場合のハッシュチェックを無効にする</label></td></tr>
             <tr>
                 <th>追加ロゴ消し用のロゴ</th>
                 <td><textarea style="width: 100%; height: 60px;" @oninput="@(e => OnStringChanged(e, "AdditionalEraseLogo"))">@GetStringValue("AdditionalEraseLogo")</textarea></td>
@@ -737,31 +795,42 @@ else
             </tr>
         </table>
 
+        <hr class="settings-sep" />
+        <hr class="settings-sep" />
         <h4>リソース設定</h4>
-        <table class="table">
-            <tr>
-                <th></th>
-                <td>
-                    <table class="table">
-                        <thead>
-                            <tr><th>フェーズ</th><th>CPU</th><th>HDD</th><th>GPU</th></tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in GetResourceRows())
-                            {
-                                <tr>
-                                    <td>@item.Name</td>
-                                    <td><input type="number" style="width: 70px;" value="@item.Cpu" @oninput="@(e => OnResourceChanged(e, item.Index, "CPU"))" /></td>
-                                    <td><input type="number" style="width: 70px;" value="@item.Hdd" @oninput="@(e => OnResourceChanged(e, item.Index, "HDD"))" /></td>
-                                    <td><input type="number" style="width: 70px;" value="@item.Gpu" @oninput="@(e => OnResourceChanged(e, item.Index, "GPU"))" /></td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </td>
-            </tr>
-            <tr><th>CPUアフィニティを無視する</th><td><input type="checkbox" checked="@GetBoolValue("IgnoreEncodeAffinity")" @onchange="@(e => OnBoolChanged(e, "IgnoreEncodeAffinity"))" /></td></tr>
+        <table class="resource-table">
+            <colgroup>
+                <col class="resource-col-phase" />
+                <col class="resource-col-small" />
+                <col class="resource-col-small" />
+                <col class="resource-col-small" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>フェーズ</th>
+                    <th>CPU</th>
+                    <th>HDD</th>
+                    <th>GPU</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in GetResourceRows())
+                {
+                    <tr>
+                        <td>@item.Name</td>
+                        <td><input type="number" class="resource-input" min="0" max="100" value="@item.Cpu" @oninput="@(e => OnResourceChanged(e, item.Index, "CPU"))" /></td>
+                        <td><input type="number" class="resource-input" min="0" max="100" value="@item.Hdd" @oninput="@(e => OnResourceChanged(e, item.Index, "HDD"))" /></td>
+                        <td><input type="number" class="resource-input" min="0" max="100" value="@item.Gpu" @oninput="@(e => OnResourceChanged(e, item.Index, "GPU"))" /></td>
+                    </tr>
+                }
+            </tbody>
         </table>
+        <div class="resource-affinity">
+            <label>
+                <input type="checkbox" checked="@GetBoolValue("IgnoreEncodeAffinity")" @onchange="@(e => OnBoolChanged(e, "IgnoreEncodeAffinity"))" />
+                CPUアフィニティを無視する
+            </label>
+        </div>
     </div>
 }
 

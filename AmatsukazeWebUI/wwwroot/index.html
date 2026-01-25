@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AmatsukazeWebUI</title>
+    <base href="/" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="AmatsukazeWebUI.styles.css" rel="stylesheet" />
+</head>
+
+<body>
+    <div id="app">
+        <svg class="loading-progress">
+            <circle r="40%" cx="50%" cy="50%" />
+            <circle r="40%" cx="50%" cy="50%" />
+        </svg>
+        <div class="loading-progress-text"></div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        window.amatsukazeDnd = {
+            setData: function (event) {
+                try {
+                    if (event && event.dataTransfer) {
+                        event.dataTransfer.setData("text/plain", "dnd");
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.dropEffect = "move";
+                        return true;
+                    }
+                } catch (e) {
+                }
+                return true;
+            },
+            setDataWithIndex: function (event) {
+                try {
+                    if (event && event.currentTarget && event.currentTarget.dataset) {
+                        var index = event.currentTarget.dataset.queueIndex;
+                        if (index !== undefined) {
+                            window.amatsukazeDnd.dragIndex = parseInt(index, 10);
+                        }
+                    }
+                } catch (e) {
+                }
+                return window.amatsukazeDnd.setData(event);
+            },
+            getDragIndex: function () {
+                if (typeof window.amatsukazeDnd.dragIndex === "number" && !isNaN(window.amatsukazeDnd.dragIndex)) {
+                    return window.amatsukazeDnd.dragIndex;
+                }
+                return -1;
+            },
+            clearDragIndex: function () {
+                window.amatsukazeDnd.dragIndex = -1;
+            },
+            onEnter: function (event) {
+                try {
+                    if (event && event.dataTransfer) {
+                        event.preventDefault();
+                        return true;
+                    }
+                } catch (e) {
+                }
+                return true;
+            },
+            onOver: function (event) {
+                try {
+                    if (event && event.dataTransfer) {
+                        event.preventDefault();
+                        return true;
+                    }
+                } catch (e) {
+                }
+                return true;
+            }
+        };
+    </script>
+</body>
+
+</html>
