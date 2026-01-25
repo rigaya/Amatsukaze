@@ -4,29 +4,27 @@
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 
-<h3>プロファイル</h3>
-
 @if (!string.IsNullOrEmpty(_error))
 {
     <p style="color: red;">@_error</p>
 }
 
-<div style="margin-bottom: 8px;">
-    <span style="margin-right: 8px;">プロファイル</span>
+<div class="profile-header">
+    <span class="profile-header-title">プロファイル</span>
     <select value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
         @foreach (var item in _profiles)
         {
             <option value="@item.Name">@item.Name</option>
         }
     </select>
-    <button class="btn btn-primary" style="margin-left: 8px;" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _draftJson == null)">適用</button>
-    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
-    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
-    <button class="btn btn-danger" style="margin-left: 4px;" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
+    <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _draftJson == null)">適用</button>
+    <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
+    <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
+    <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
     @if (_confirmDelete)
     {
-        <span style="margin-left: 6px; color: #a00;">もう一度押すと削除します</span>
-        <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="CancelDelete">キャンセル</button>
+        <span class="profile-header-warn">もう一度押すと削除します</span>
+        <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">キャンセル</button>
     }
 </div>
 
