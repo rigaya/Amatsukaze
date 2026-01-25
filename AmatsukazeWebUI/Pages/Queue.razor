@@ -8,7 +8,7 @@
 @inject NavigationManager Nav
 @implements IAsyncDisposable
 
-<h3>Queue</h3>
+<h3>キュー</h3>
 
 <style>
     .status-toggle {
@@ -136,7 +136,7 @@ else
         </div>
     </div>
 
-    <h4>Items</h4>
+    <h4>項目</h4>
     @if (_view.Items.Count == 0)
     {
         <p>No queue items.</p>
@@ -219,7 +219,7 @@ else
 {
     <div class="modal-overlay" @onclick="CloseAddDialog">
         <div class="modal-body" @onclick:stopPropagation="true">
-            <h4>Add Queue Task</h4>
+            <h4>キュー追加</h4>
             @if (!string.IsNullOrEmpty(_addError))
             {
                 <p style="color: red;">@_addError</p>
@@ -265,7 +265,7 @@ else
                 </select>
             </div>
             <div class="form-row">
-                <label>Add Queue Bat</label>
+                <label>追加時バッチ</label>
                 <select class="form-select" @bind="_addAddQueueBat">
                     <option value="">(None)</option>
                     @if (_addQueueBatFiles != null)
