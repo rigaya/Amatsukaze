@@ -143,6 +143,7 @@ else
     }
     else
     {
+        <div class="queue-list" @onclick="CloseContextMenu">
         <table class="table">
             <thead>
                 <tr>
@@ -159,11 +160,17 @@ else
                     var rowIndex = i;
                     var item = _view.Items[rowIndex];
                     <tr @key="item.Id"
+                        class="@GetRowClass(item)"
                         draggable="true"
                         data-queue-index="@rowIndex"
                         ondragstart="return amatsukazeDnd.setDataWithIndex(event)"
                         ondragenter="return amatsukazeDnd.onEnter(event)"
                         ondragover="return amatsukazeDnd.onOver(event)"
+                        @onclick="(e => OnRowClick(item, e))"
+                        @onclick:stopPropagation="true"
+                        @oncontextmenu="(e => OnRowContextMenu(item, e))"
+                        @oncontextmenu:preventDefault="true"
+                        @oncontextmenu:stopPropagation="true"
                         @ondrop:preventDefault="true"
                         @ondrop="@(() => OnQueueDrop(rowIndex))">
                         <td>@GetTaskLabel(item)</td>
@@ -185,19 +192,26 @@ else
                                        @bind="_priorityInputs[item.Id]"
                                        @bind:after="(() => ChangePriorityAsync(item))" />
                             </div>
-                            <div style="margin-top: 0.25rem;">
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => RetryAsync(item)">Retry</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReapplyProfileAsync(item)">Reapply</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CancelAsync(item)">Cancel</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => DeleteAsync(item)">Delete</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ForceStartAsync(item)">Force</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenLogoAnalyze(item)">Logo</button>
-                            </div>
                         </td>
                     </tr>
                 }
             </tbody>
         </table>
+        @if (_contextMenuVisible)
+        {
+            <div class="queue-context-menu"
+                 style="left: @_contextMenuXpx; top: @_contextMenuYpx;"
+                 @onclick:stopPropagation="true">
+                <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ResetState, "リトライ"))' disabled="@(!_hasSelection)">リトライ</button>
+                <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.UpdateProfile, "プロファイル再適用"))' disabled="@(!_hasSelection)">プロファイル再適用</button>
+                <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.Cancel, "キャンセル"))' disabled="@(!_hasSelection)">キャンセル</button>
+                <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.RemoveItem, "削除"))' disabled="@(!_hasSelection)">削除</button>
+                <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ForceStart, "強制実行"))' disabled="@(!_hasSelection)">強制実行</button>
+                <button class="queue-menu-item" @onclick="(() => OpenLogoAnalyzeSelectedAsync())" disabled="@(!_hasSelection)">ロゴ解析</button>
+                <button class="queue-menu-item" @onclick="ClearSucceededAsync">成功済みをクリア</button>
+            </div>
+        }
+        </div>
     }
 }
 
@@ -291,6 +305,10 @@ else
     private readonly Dictionary<int, int> _priorityInputs = new();
     private readonly List<JsonElement> _profiles = new();
     private readonly List<string> _profileNames = new();
+    private readonly HashSet<int> _selectedIds = new();
+    private bool _contextMenuVisible;
+    private double _contextMenuX;
+    private double _contextMenuY;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
     private long _queueVersion;
@@ -315,6 +333,9 @@ else
     private ProcMode _addMode = ProcMode.Batch;
     private List<string>? _addQueueBatFiles;
     private UiStateView? _uiState;
+    private bool _hasSelection => _selectedIds.Count > 0;
+    private string _contextMenuXpx => $"{_contextMenuX:0}px";
+    private string _contextMenuYpx => $"{_contextMenuY:0}px";
 
     private bool IsQueueRunning => _system?.State != null && !_system.State.Pause;
     private bool IsEncoderOk => _system?.State != null && !_system.State.Suspend;
@@ -387,6 +408,11 @@ else
                     {
                         _priorityInputs[item.Id] = item.Priority;
                     }
+                }
+                if (_selectedIds.Count > 0)
+                {
+                    var ids = _view.Items.Select(x => x.Id).ToHashSet();
+                    _selectedIds.RemoveWhere(id => !ids.Contains(id));
                 }
             }
         }
@@ -1090,11 +1116,21 @@ else
 
     private async Task ChangeItemAsync(QueueItemView item, ChangeItemType type, int? priority = null, string? profile = null, int? position = null)
     {
+        var ok = await SendChangeAsync(item.Id, type, priority, profile, position);
+        if (ok)
+        {
+            _actionMessage = "Operation completed.";
+            await ReloadAsync();
+        }
+    }
+
+    private async Task<bool> SendChangeAsync(int itemId, ChangeItemType type, int? priority = null, string? profile = null, int? position = null)
+    {
         _actionMessage = null;
         _error = null;
         var req = new ChangeItemData
         {
-            ItemId = item.Id,
+            ItemId = itemId,
             ChangeType = type,
             Priority = priority ?? 0,
             Profile = profile,
@@ -1104,11 +1140,104 @@ else
         if (!res.Ok)
         {
             _error = res.Error ?? "Operation failed.";
+            return false;
+        }
+        return true;
+    }
+
+    private async Task ExecuteSelectedAsync(ChangeItemType type, string label)
+    {
+        CloseContextMenu();
+        if (_view == null || _selectedIds.Count == 0)
+        {
             return;
         }
-        _actionMessage = "Operation completed.";
+        var targets = _view.Items.Where(x => _selectedIds.Contains(x.Id)).ToList();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+        var anyError = false;
+        foreach (var item in targets)
+        {
+            var ok = await SendChangeAsync(item.Id, type);
+            if (!ok)
+            {
+                anyError = true;
+                break;
+            }
+        }
+        if (!anyError)
+        {
+            _actionMessage = $"{label} を実行しました。";
+        }
         await ReloadAsync();
     }
+
+    private void OpenLogoAnalyzeSelectedAsync()
+    {
+        CloseContextMenu();
+        if (_view == null || _selectedIds.Count == 0)
+        {
+            return;
+        }
+        var item = _view.Items.FirstOrDefault(x => _selectedIds.Contains(x.Id));
+        if (item == null)
+        {
+            return;
+        }
+        OpenLogoAnalyze(item);
+    }
+
+    private async Task ClearSucceededAsync()
+    {
+        CloseContextMenu();
+        var ok = await SendChangeAsync(0, ChangeItemType.RemoveCompleted);
+        if (ok)
+        {
+            _actionMessage = "成功済みをクリアしました。";
+            await ReloadAsync();
+        }
+    }
+
+    private void OnRowClick(QueueItemView item, MouseEventArgs e)
+    {
+        CloseContextMenu();
+        if (e.CtrlKey)
+        {
+            if (_selectedIds.Contains(item.Id))
+            {
+                _selectedIds.Remove(item.Id);
+            }
+            else
+            {
+                _selectedIds.Add(item.Id);
+            }
+            return;
+        }
+        _selectedIds.Clear();
+        _selectedIds.Add(item.Id);
+    }
+
+    private void OnRowContextMenu(QueueItemView item, MouseEventArgs e)
+    {
+        if (!_selectedIds.Contains(item.Id))
+        {
+            _selectedIds.Clear();
+            _selectedIds.Add(item.Id);
+        }
+        _contextMenuX = e.ClientX;
+        _contextMenuY = e.ClientY;
+        _contextMenuVisible = true;
+    }
+
+    private void CloseContextMenu()
+    {
+        _contextMenuVisible = false;
+    }
+
+    private string GetRowClass(QueueItemView item)
+        => _selectedIds.Contains(item.Id) ? "queue-row is-selected" : "queue-row";
 
     private async Task OnQueueDrop(int index)
     {
