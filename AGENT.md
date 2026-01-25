@@ -184,3 +184,39 @@ Amatsukazeは以下のようにして構成されます。
 - コーディングスタイルは、変更箇所周辺のコードスタイルに合わせる
 - コードが縦に長くなりすぎないよう配慮すること (過剰に改行しない)
 - (C++) constを積極的に使用する
+
+## WebUI / REST 実装メモ
+
+- 保守性優先で、依存関係を最小限にする方針（UIライブラリ不使用、JS interop最小）。
+- WebUIは ```AmatsukazeWebUI/```（Blazor WASM）で、RESTは ```AmatsukazeServer/Server/Rest/``` に集約。
+- DTO/共通APIは ```AmatsukazeShared/``` に置く。WebUI/Serverの両方で参照する。
+- WebUIのUI調整は ```AmatsukazeWebUI/wwwroot/css/app.css``` が集約ポイント。
+  - ライト/ダークは CSS変数で切替（```prefers-color-scheme```）。
+  - Bootstrapの背景/文字色は ```--bs-*``` を上書きして統一（例: ```--bs-body-bg```, ```--bs-emphasis-color```）。
+- Settingsページのレイアウトは以下で調整:
+  - ページ本体を ```<div class="settings-page">``` で包み、```app.css``` の ```settings-page``` スタイルで幅/余白を制御。
+  - チェックボックスは「右ラベル＋1列フル幅」に統一（```settings-check-row``` / ```settings-check```）。
+  - 大項目間の区切りは ```<hr class="settings-sep">```。
+  - 実行時間帯は可変グリッド（```run-hours-grid```）+ セルクリックでON/OFF。
+    - クリックはループ変数のキャプチャに注意（```var hour = i;``` を使う）。
+- WebUIのリアルタイム更新は以下の方式が基本:
+  - Queue: 差分ポーリング（```/api/queue/changes```） + 必要時フルスナップショット。
+  - System: ```/api/system``` を独立ポーリングし、Queueページで稼働/停止などを同期更新。
+- リアルタイム更新の注意点:
+  - キュー更新は「バージョン」＋「変更一覧」前提。バージョン不整合時はフル同期が必要。
+  - 差分適用では「Item.Idをキーに更新」し、ステータス/カウンタの更新漏れに注意。
+  - 一時的に不整合が出る場合があるため、サーバーの変更バッファ（リングバッファ長）とクライアントのsince/toの扱いを確認すること。
+- Queue関連:
+  - 追加タスクは ```/api/queue/add``` を使用（DirPath/Targets/OutDir/Mode/Batch等）。
+  - キュー順序入替は Drag&Drop を使用。サーバー側の順序更新APIが必要。
+- Services関連:
+  - ロゴ/サービス更新は REST経由で実施。ロゴURLは ```/api/assets/...``` をフルURLで組み立てること。
+  - ロゴ追加後は「ロゴ再スキャン要求API」を叩いて反映する。
+- Path補間:
+  - ```/api/path/suggest``` を使用。AllowFiles/AllowDirs, 拡張子フィルタ指定。
+  - UIは ```PathSuggestInput``` コンポーネントを使用。
+- ロゴ解析:
+  - デコード/解析/生成はサーバー側、WebUIは表示と操作のみ。
+  - シークプレビューはバイトシーク/フレーム取得をネイティブ側で保持し連続シーク対応。
+- HTML5 DnD:
+  - 原則JS interopは使わない方針だが、条件リストのドラッグ＆ドロップでのみHTML5 DnDを成立させるために限定的に使用。
