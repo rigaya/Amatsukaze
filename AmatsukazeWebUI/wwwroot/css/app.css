@@ -364,11 +364,59 @@ code {
     text-align: right;
 }
 
+.profile-header {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(6px);
+}
+
+.profile-header-title {
+    font-weight: 600;
+    margin-right: 6px;
+}
+
+.profile-header-warn {
+    color: #a00;
+    margin-left: 6px;
+}
+
 .settings-sep {
     border: none;
     height: 1px;
     background: color-mix(in srgb, var(--border) 70%, transparent);
     margin: 14px 0;
+}
+
+.settings-header {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(6px);
+}
+
+.settings-header-note {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-left: 6px;
 }
 
 .run-hours-grid {
