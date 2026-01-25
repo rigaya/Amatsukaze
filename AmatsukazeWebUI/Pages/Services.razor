@@ -29,15 +29,15 @@ else
     <div style="display: grid; grid-template-columns: 260px 1fr; gap: 16px;">
         <div>
             <div style="margin-bottom: 8px; font-weight: bold;">サービス（チャンネル）</div>
-            <ul style="list-style: none; padding: 0; margin: 0; border: 1px solid #ddd;">
+            <ul class="service-list">
                 @for (var i = 0; i < _serviceSettings.Count; i++)
                 {
                     var item = _serviceSettings[i];
                     var selected = _selectedServiceId == item.ServiceId;
-                    <li style="padding: 6px 8px; cursor: pointer; background: @(selected ? "#eef" : "transparent");"
+                    <li class="service-item @(selected ? "is-selected" : "")"
                         @onclick="() => SelectService(item.ServiceId)">
                         <div>@(item.ServiceName ?? "-")</div>
-                        <div style="font-size: 0.85em; color: #666;">SID: @item.ServiceId</div>
+                        <div class="service-meta">SID: @item.ServiceId</div>
                     </li>
                 }
             </ul>
@@ -137,7 +137,7 @@ else
                                 @foreach (var logo in _selectedService.Logos)
                                 {
                                     var isSelected = string.Equals(_selectedLogoFileName, logo.FileName, StringComparison.Ordinal);
-                                    <div style="border: 1px solid #ddd; padding: 0.5rem; min-width: 200px; background: @(isSelected ? "#eef" : "transparent"); cursor: pointer;"
+                                    <div class="logo-card @(isSelected ? "is-selected" : "")"
                                          @onclick="() => SelectLogo(logo.FileName)">
                                         <div>@(logo.FileName ?? "-")</div>
                                         <div>Enabled: @(logo.Enabled ? "Yes" : "No")</div>

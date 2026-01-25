@@ -1,0 +1,8 @@
+.path-suggest-input {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.path-suggest-input input {
+    vertical-align: middle;
+}

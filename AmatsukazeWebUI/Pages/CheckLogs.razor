@@ -71,7 +71,7 @@ else
         <div>
             <div>@_detailTitle</div>
             <div>Size: @_detail.Meta?.Size @if (_detail.Meta?.TooLarge == true) { <span>(truncated)</span> }</div>
-            <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@(_detail.Content ?? "")</pre>
+            <pre class="log-detail">@(_detail.Content ?? "")</pre>
         </div>
     }
 }

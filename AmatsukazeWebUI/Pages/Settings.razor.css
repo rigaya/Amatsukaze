@@ -1,0 +1,17 @@
+.settings-page table th,
+.settings-page table td {
+    vertical-align: middle;
+}
+
+.settings-page table th {
+    padding-right: 1rem;
+}
+
+.settings-page table td input {
+    vertical-align: middle;
+}
+
+.settings-page table td .path-suggest-input {
+    display: inline-block;
+    vertical-align: middle;
+}
