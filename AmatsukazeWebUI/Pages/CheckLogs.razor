@@ -29,9 +29,9 @@ else
                 <tr>
                     <th>Type</th>
                     <th>開始</th>
-                    <th>終了</th>
                     <th>結果</th>
-                    <th>サービス</th>
+                    <th>メッセージ</th>
+                    <th>プロファイル</th>
                     <th>入力</th>
                     <th>詳細</th>
                 </tr>
@@ -42,9 +42,9 @@ else
                     <tr>
                         <td>@(item.DisplayType ?? item.Type ?? "-")</td>
                         <td>@(item.DisplayEncodeStart ?? item.CheckStartDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
-                        <td>@(item.DisplayEncodeFinish ?? item.CheckFinishDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
                         <td>@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
-                        <td>@(item.ServiceName ?? "-")</td>
+                        <td>@(item.Reason ?? "-")</td>
+                        <td>@(item.Profile ?? "-")</td>
                         <td>@(item.SrcPath ?? "-")</td>
                         <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadCheckDetailAsync(item)">View</button></td>
                     </tr>
