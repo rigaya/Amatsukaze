@@ -54,6 +54,21 @@
                 }
                 return window.amatsukazeDnd.setData(event);
             },
+            getDragIndexFromEvent: function (event) {
+                try {
+                    if (event && event.currentTarget && event.currentTarget.dataset) {
+                        var index = event.currentTarget.dataset.queueIndex;
+                        if (index !== undefined) {
+                            var parsed = parseInt(index, 10);
+                            if (!isNaN(parsed)) {
+                                return parsed;
+                            }
+                        }
+                    }
+                } catch (e) {
+                }
+                return -1;
+            },
             getDragIndex: function () {
                 if (typeof window.amatsukazeDnd.dragIndex === "number" && !isNaN(window.amatsukazeDnd.dragIndex)) {
                     return window.amatsukazeDnd.dragIndex;
@@ -116,6 +131,32 @@
                     if (event && event.dataTransfer) {
                         event.preventDefault();
                         return true;
+                    }
+                } catch (e) {
+                }
+                return true;
+            },
+            updateDropIndexFromEvent: function (event) {
+                try {
+                    if (!event) {
+                        return true;
+                    }
+                    if (event.clientX !== undefined && event.clientY !== undefined) {
+                        var el = document.elementFromPoint(event.clientX, event.clientY);
+                        if (el) {
+                            var row = el.closest("tr[data-queue-index]");
+                            if (row && row.dataset && row.dataset.queueIndex !== undefined) {
+                                var idx = parseInt(row.dataset.queueIndex, 10);
+                                if (!isNaN(idx)) {
+                                    window.amatsukazeDnd.lastDropIndex = idx;
+                                    return true;
+                                }
+                            }
+                            var end = el.closest("[data-drop-end=\"true\"]");
+                            if (end) {
+                                window.amatsukazeDnd.lastDropIndex = -2;
+                            }
+                        }
                     }
                 } catch (e) {
                 }
