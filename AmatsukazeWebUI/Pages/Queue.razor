@@ -146,12 +146,12 @@ else
     {
         <div class="queue-list"
              data-drop-end="true"
-             ondragover="return amatsukazeDnd.onOverWithIndex(event)"
+             ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
              @onclick="CloseContextMenu"
              @ondragenter="OnQueueBodyDragEnter">
         <table class="table"
                data-drop-end="true"
-               ondragover="return amatsukazeDnd.onOverWithIndex(event)"
+               ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
                @ondragenter="OnQueueBodyDragEnter">
             <thead>
                 <tr>
@@ -165,7 +165,9 @@ else
             <tbody @ondragover:preventDefault="true"
                    @ondrop:preventDefault="true"
                    @ondrop="OnQueueDropFromBody"
-                   @ondragenter="OnQueueBodyDragEnter">
+                   @ondragenter="OnQueueBodyDragEnter"
+                   @ondragend="OnQueueDragEnd"
+                   >
                 @for (var i = 0; i < _view.Items.Count; i++)
                 {
                     var rowIndex = i;
@@ -175,7 +177,7 @@ else
                         draggable="true"
                         data-queue-index="@rowIndex"
                         ondragstart="return amatsukazeDnd.setDataWithIndex(event)"
-                        @onmousedown="(() => OnQueueDragStart(rowIndex))"
+                        ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
                         @ondragenter="(() => OnQueueDragEnter(rowIndex))"
                         @ondragend="OnQueueDragEnd"
                         @onclick="(e => OnRowClick(item, e))"
@@ -1235,6 +1237,10 @@ else
             }
             return;
         }
+        if (_selectedIds.Contains(item.Id))
+        {
+            return;
+        }
         _selectedIds.Clear();
         _selectedIds.Add(item.Id);
     }
@@ -1372,11 +1378,6 @@ else
         }
     }
 
-    private void OnQueueDragStart(int index)
-    {
-        _dropIndex = index;
-    }
-
     private async Task OnQueueDragEnd()
     {
         var lastDropIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getLastDropIndex");
@@ -1398,6 +1399,7 @@ else
         _dropIndex = -1;
         await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
     }
+
 
     private string GetDropRowClass()
         => _dropIndex == (_view?.Items.Count ?? -1) ? "queue-drop-row queue-drop-target" : "queue-drop-row";
