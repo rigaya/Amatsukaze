@@ -7,15 +7,12 @@
 
     <main>
         <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+            <MessagePanel Page="@PageKey" />
         </div>
 
         <article class="content px-4">
             @Body
         </article>
-        <div class="message-panel-host px-4">
-            <MessagePanel Page="@PageKey" />
-        </div>
     </main>
 </div>
 

@@ -43,6 +43,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<List<ServiceView>>> GetServicesAsync();
         Task<ApiResult<bool>> UpdateServiceAsync(JsonElement update);
         Task<ApiResult<bool>> UploadLogoAsync(byte[] lgdBytes, int? serviceId, int? imgWidth, int? imgHeight);
+        Task<ApiResult<LogoProbeResponse>> ProbeLogoAsync(byte[] lgdBytes);
         Task<ApiResult<List<ServiceSettingView>>> GetServiceSettingsAsync();
         Task<ApiResult<ServiceOptions>> GetServiceOptionsAsync();
         Task<ApiResult<bool>> UpdateServiceLogoPeriodAsync(int serviceId, LogoPeriodUpdateRequest request);

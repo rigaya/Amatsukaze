@@ -71,14 +71,14 @@ else
             </div>
         </div>
 
-        <div>
+        <div class="service-right-column">
             @if (_selectedService == null)
             {
                 <p>サービスを選択してください。</p>
             }
             else
             {
-                <div style="margin-bottom: 12px; padding: 8px; border: 1px solid #ddd;">
+                <div class="service-panel">
                     <div style="font-weight: bold; margin-bottom: 6px;">JoinLogoScpコマンドファイル</div>
                     <div style="display: grid; gap: 6px;">
                         <select class="form-select" @bind="_selectedJlsCommand">
@@ -99,18 +99,25 @@ else
                     </div>
                 </div>
 
-                <div style="margin-bottom: 12px; padding: 8px; border: 1px solid #ddd;">
+                <div class="service-panel">
                     <div style="font-weight: bold; margin-bottom: 6px;">ロゴアップロード</div>
                     <div style="display: grid; gap: 6px;">
                         <InputFile OnChange="OnLogoFileSelected" />
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                            <input class="form-control" placeholder="imgw (AviUtl用)" @bind="_aviutlImgWText" />
-                            <input class="form-control" placeholder="imgh (AviUtl用)" @bind="_aviutlImgHText" />
-                        </div>
+                        @if (_needsAviutlSize)
+                        {
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                                <input class="form-control" placeholder="imgw (AviUtl用)" @bind="_aviutlImgWText" />
+                                <input class="form-control" placeholder="imgh (AviUtl用)" @bind="_aviutlImgHText" />
+                            </div>
+                        }
                         <button class="btn btn-primary" disabled="@(_logoFile == null)" @onclick="UploadLogoAsync">アップロード</button>
                         @if (!string.IsNullOrEmpty(_uploadError))
                         {
                             <div style="color: red;">@_uploadError</div>
+                        }
+                        @if (!string.IsNullOrEmpty(_logoProbeError))
+                        {
+                            <div style="color: red;">@_logoProbeError</div>
                         }
                     </div>
                 </div>
@@ -154,7 +161,7 @@ else
                         }
                     </div>
 
-                    <div style="border: 1px solid #ddd; padding: 8px;">
+                    <div class="service-panel">
                         <div style="font-weight: bold; margin-bottom: 6px;">ロゴ期間</div>
                         @if (_selectedLogo == null)
                         {
@@ -202,8 +209,10 @@ else
 
     private IBrowserFile? _logoFile;
     private string? _uploadError;
+    private string? _logoProbeError;
     private string _aviutlImgWText = "";
     private string _aviutlImgHText = "";
+    private bool _needsAviutlSize;
 
     private string? _selectedLogoFileName;
     private LogoSettingView? _selectedLogo;
@@ -456,11 +465,37 @@ else
         await ReloadAsync();
     }
 
-    private Task OnLogoFileSelected(InputFileChangeEventArgs e)
+    private async Task OnLogoFileSelected(InputFileChangeEventArgs e)
     {
         _uploadError = null;
+        _logoProbeError = null;
         _logoFile = e.File;
-        return Task.CompletedTask;
+        _needsAviutlSize = false;
+        _aviutlImgWText = "";
+        _aviutlImgHText = "";
+        if (_logoFile == null)
+        {
+            return;
+        }
+        try
+        {
+            using var stream = _logoFile.OpenReadStream(50 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var probe = await Api.ProbeLogoAsync(ms.ToArray());
+            if (!probe.Ok || probe.Data == null)
+            {
+                _logoProbeError = probe.Error ?? "ロゴ判定に失敗しました。";
+                _needsAviutlSize = true;
+                return;
+            }
+            _needsAviutlSize = !probe.Data.IsExtended;
+        }
+        catch (Exception ex)
+        {
+            _logoProbeError = ex.Message;
+            _needsAviutlSize = true;
+        }
     }
 
     private async Task UploadLogoAsync()
@@ -478,12 +513,17 @@ else
             await stream.CopyToAsync(ms);
             int? imgw = null;
             int? imgh = null;
-            if (!string.IsNullOrWhiteSpace(_aviutlImgWText) || !string.IsNullOrWhiteSpace(_aviutlImgHText))
+            if (_needsAviutlSize || !string.IsNullOrWhiteSpace(_aviutlImgWText) || !string.IsNullOrWhiteSpace(_aviutlImgHText))
             {
                 if (!int.TryParse(_aviutlImgWText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedW) ||
                     !int.TryParse(_aviutlImgHText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedH))
                 {
                     _uploadError = "imgw/imgh は数値で入力してください。";
+                    return;
+                }
+                if (parsedW <= 0 || parsedH <= 0)
+                {
+                    _uploadError = "imgw/imgh は正の数で入力してください。";
                     return;
                 }
                 imgw = parsedW;

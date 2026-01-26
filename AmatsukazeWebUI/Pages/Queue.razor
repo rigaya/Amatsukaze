@@ -57,13 +57,13 @@
     }
 </style>
 
-<p>
-    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
-    <button class="btn btn-success" style="margin-left: 0.5rem;" @onclick="OpenAddDialogAsync">Add Task</button>
-</p>
+<div class="queue-header">
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
+    <button class="btn btn-success" @onclick="OpenAddDialogAsync">タスク追加</button>
+    <span class="queue-header-sep" aria-hidden="true"></span>
 
-<div style="margin: 0.5rem 0 1rem; display: grid; gap: 8px;">
     <label style="display: flex; align-items: center; gap: 8px;">
+        <span>キュー</span>
         <span class="status-toggle">
             <input type="checkbox"
                    checked="@IsQueueRunning"
@@ -71,10 +71,12 @@
                    @onchange="OnToggleQueuePause" />
             <span class="slider"></span>
         </span>
-        <span>キュー稼働中 ↔ 停止</span>
         <span style="color: #666;">@(_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止"))</span>
     </label>
+    <span class="queue-header-sep" aria-hidden="true"></span>
+
     <label style="display: flex; align-items: center; gap: 8px;">
+        <span>エンコーダ</span>
         <span class="status-toggle">
             <input type="checkbox"
                    checked="@IsEncoderOk"
@@ -82,9 +84,10 @@
                    @onchange="OnToggleEncoderSuspend" />
             <span class="slider"></span>
         </span>
-        <span>エンコーダOK ↔ 一時停止</span>
         <span style="color: #666;">@(_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止"))</span>
     </label>
+    <span class="queue-header-sep" aria-hidden="true"></span>
+
     <label style="display: flex; align-items: center; gap: 8px;">
         <span>エンコード後</span>
         <select class="form-select" style="width: 180px;"

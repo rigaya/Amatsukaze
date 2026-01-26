@@ -16,7 +16,7 @@ main {
 .top-row {
     background-color: var(--bg-elevated);
     border-bottom: 1px solid var(--border);
-    justify-content: flex-end;
+    justify-content: flex-start;
     height: 3.5rem;
     display: flex;
     align-items: center;
