@@ -967,6 +967,70 @@ namespace Amatsukaze.Server.Rest
                 return Results.Json(new { ok = true, requestId });
             });
 
+            app.MapPost("/api/services/logo/probe", async (HttpRequest request) =>
+            {
+                if (!request.HasFormContentType)
+                {
+                    return Results.BadRequest("Invalid form.");
+                }
+                var form = await request.ReadFormAsync();
+                var file = form.Files.GetFile("image");
+                if (file == null)
+                {
+                    return Results.BadRequest("File is required.");
+                }
+                byte[] uploadData;
+                using (var ms = new MemoryStream())
+                {
+                    await file.CopyToAsync(ms);
+                    uploadData = ms.ToArray();
+                }
+                if (uploadData.Length == 0)
+                {
+                    return Results.BadRequest("Empty file.");
+                }
+
+                using var ctx = new AMTContext();
+                var tmpBase = Path.Combine(Path.GetTempPath(), "amatsukaze-logo-probe-" + Guid.NewGuid().ToString("N"));
+                var srcPath = tmpBase + ".lgd";
+                try
+                {
+                    await File.WriteAllBytesAsync(srcPath, uploadData);
+                    try
+                    {
+                        using var logo = new LogoFile(ctx, srcPath);
+                        var resp = new LogoProbeResponse()
+                        {
+                            IsExtended = true,
+                            ServiceId = logo.ServiceId,
+                            ServiceName = logo.Name,
+                            ImageWidth = logo.ImageWidth,
+                            ImageHeight = logo.ImageHeight
+                        };
+                        return Results.Json(resp);
+                    }
+                    catch (IOException)
+                    {
+                        return Results.Json(new LogoProbeResponse() { IsExtended = false });
+                    }
+                    catch (Exception)
+                    {
+                        return Results.Json(new LogoProbeResponse() { IsExtended = false });
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        if (File.Exists(srcPath))
+                        {
+                            File.Delete(srcPath);
+                        }
+                    }
+                    catch { }
+                }
+            });
+
             app.MapPost("/api/services/logo/rescan", () =>
             {
                 var requestId = Guid.NewGuid().ToString("N");

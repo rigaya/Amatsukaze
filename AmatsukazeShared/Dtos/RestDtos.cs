@@ -370,6 +370,15 @@ namespace Amatsukaze.Shared
         public DateTime? To { get; set; }
     }
 
+    public class LogoProbeResponse
+    {
+        public bool IsExtended { get; set; }
+        public int? ServiceId { get; set; }
+        public string? ServiceName { get; set; }
+        public int? ImageWidth { get; set; }
+        public int? ImageHeight { get; set; }
+    }
+
     public class LogoFileNameRequest
     {
         public string? FileName { get; set; }

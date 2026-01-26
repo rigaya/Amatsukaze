@@ -227,6 +227,31 @@ namespace Amatsukaze.Shared
             }
         }
 
+        public async Task<ApiResult<LogoProbeResponse>> ProbeLogoAsync(byte[] lgdBytes)
+        {
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                content.Add(new ByteArrayContent(lgdBytes), "image", "logo.lgd");
+                using var res = await http.PostAsync("/api/services/logo/probe", content);
+                if (!res.IsSuccessStatusCode)
+                {
+                    return ApiResult<LogoProbeResponse>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+                }
+                var body = await res.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<LogoProbeResponse>(body, jsonOptions);
+                if (data == null)
+                {
+                    return ApiResult<LogoProbeResponse>.Fail((int)res.StatusCode, "Invalid response");
+                }
+                return ApiResult<LogoProbeResponse>.Success(data, (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<LogoProbeResponse>.Fail(0, ex.Message);
+            }
+        }
+
         public Task<ApiResult<List<ServiceSettingView>>> GetServiceSettingsAsync()
             => GetJsonAsync<List<ServiceSettingView>>("/api/service-settings");
 

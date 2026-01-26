@@ -2,29 +2,38 @@
 @inject IAmatsukazeApi Api
 @implements IDisposable
 
-@if (items.Count > 0)
-{
-    <div class="message-panel message-panel-overlay" role="status">
-        <div class="message-panel-header">
-            <span class="message-panel-title">Messages</span>
-            <button type="button" class="message-panel-close" @onclick="Dismiss">×</button>
-        </div>
-        @foreach (var item in items)
+<div class="message-topbar" role="status">
+    <div class="message-topbar-title">
+        <span class="message-topbar-icon" aria-hidden="true">🔔</span>
+        <span>通知</span>
+    </div>
+    <div class="message-topbar-list">
+        @if (items.Count == 0)
         {
-            <div class="message-item message-@item.Level">
-                <span class="message-time">@item.Time.ToLocalTime().ToString("HH:mm:ss")</span>
-                <span class="message-text">@item.Message</span>
+            <div class="message-item message-muted">
+                <span class="message-text">なし</span>
             </div>
         }
+        else
+        {
+            @foreach (var item in items.OrderByDescending(i => i.Id))
+            {
+                var isNewest = item.Id == latestId;
+                <div class="message-item message-@item.Level @(isNewest ? "message-new" : "")">
+                    <span class="message-time">@item.Time.ToLocalTime().ToString("HH:mm:ss")</span>
+                    <span class="message-text">@item.Message</span>
+                </div>
+            }
+        }
     </div>
-}
+</div>
 
 @code {
     [Parameter] public string? Page { get; set; }
 
     private readonly List<MessageEventView> items = new();
     private long lastId;
-    private long hiddenUntilId;
+    private long latestId;
     private string? currentPage;
     private CancellationTokenSource? cts;
     private PeriodicTimer? timer;
@@ -96,11 +105,12 @@
             }
             if (view.Items != null && view.Items.Count > 0)
             {
-                items.AddRange(view.Items.Where(i => i.Id > hiddenUntilId));
+                items.AddRange(view.Items);
                 while (items.Count > 2)
                 {
                     items.RemoveAt(0);
                 }
+                latestId = items.Count > 0 ? items.Max(i => i.Id) : 0;
             }
             lastId = view.ToId;
             await InvokeAsync(StateHasChanged);
@@ -119,9 +129,4 @@
         pollLock.Dispose();
     }
 
-    private void Dismiss()
-    {
-        hiddenUntilId = lastId;
-        items.Clear();
-    }
 }

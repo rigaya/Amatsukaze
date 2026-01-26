@@ -51,25 +51,33 @@ else
         </table>
     }
 
-    <h4>ログ詳細</h4>
-    @if (_detailLoading)
+    @if (_detailVisible)
     {
-        <p>Loading detail...</p>
-    }
-    else if (!string.IsNullOrEmpty(_detailError))
-    {
-        <p style="color: red;">@_detailError</p>
-    }
-    else if (_detail == null)
-    {
-        <p>Select a log to view detail.</p>
-    }
-    else
-    {
-        <div>
-            <div>@_detailTitle</div>
-            <div>Size: @_detail.Meta?.Size @if (_detail.Meta?.TooLarge == true) { <span>(truncated)</span> }</div>
-            <pre class="log-detail">@(_detail.Content ?? "")</pre>
+        <div class="log-overlay" @onclick="CloseDetail">
+            <div class="log-overlay-panel" @onclick:stopPropagation="true">
+                <button class="log-overlay-close" type="button" @onclick="CloseDetail">×</button>
+                <h4>ログ詳細</h4>
+                @if (_detailLoading)
+                {
+                    <p>Loading detail...</p>
+                }
+                else if (!string.IsNullOrEmpty(_detailError))
+                {
+                    <p style="color: red;">@_detailError</p>
+                }
+                else if (_detail == null)
+                {
+                    <p>Select a log to view detail.</p>
+                }
+                else
+                {
+                    <div>
+                        <div>@_detailTitle</div>
+                        <div>Size: @_detail.Meta?.Size @if (_detail.Meta?.TooLarge == true) { <span>(truncated)</span> }</div>
+                        <pre class="log-detail">@(_detail.Content ?? "")</pre>
+                    </div>
+                }
+            </div>
         </div>
     }
 }
@@ -82,6 +90,7 @@ else
     private string? _detailTitle;
     private string? _detailError;
     private bool _detailLoading;
+    private bool _detailVisible;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -115,6 +124,7 @@ else
         _detailError = null;
         _detailTitle = title;
         _detail = null;
+        _detailVisible = true;
 
         var res = await Api.GetLogFileAsync(encodeStart, checkStart);
         if (!res.Ok)
@@ -126,5 +136,10 @@ else
             _detail = res.Data;
         }
         _detailLoading = false;
+    }
+
+    private void CloseDetail()
+    {
+        _detailVisible = false;
     }
 }
