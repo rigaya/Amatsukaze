@@ -422,6 +422,7 @@ typedef struct {
     uint32_t biClrImportant;
 } BITMAPINFOHEADER;
 
+#pragma pack(push, 1)
 typedef struct {
     uint16_t   bfType;
     uint32_t   bfSize;
@@ -429,6 +430,9 @@ typedef struct {
     uint16_t   bfReserved2;
     uint32_t   bfOffBits;
 } BITMAPFILEHEADER;
+#pragma pack(pop)
+
+static_assert(sizeof(BITMAPFILEHEADER) == 14, "BITMAPFILEHEADER must be 14 bytes");
 
 static const int BI_RGB        = 0;
 static const int BI_RLE8       = 1;
