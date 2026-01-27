@@ -71,28 +71,31 @@ else
         </div>
     }
 
-    <div style="margin-bottom: 0.5rem;">
-        <label>Seek:</label>
-        <input type="range" min="0" max="1" step="0.01" @bind-value="Position" @bind-value:event="oninput" style="width: 360px;" />
-        <span style="margin-left: 0.5rem;">@_position.ToString("P0", CultureInfo.InvariantCulture)</span>
-    </div>
-    <div style="font-size: 0.85rem; color: #666;">
-        FrameUrl: @_frameUrl
-    </div>
-
-    <div style="display: inline-block; position: relative; border: 1px solid #ddd; padding: 4px;">
-        <img src="@_frameUrl" style="display: block; max-width: none;" @onload="OnFrameLoaded" @onerror="OnFrameError" />
-        <div style="position: absolute; inset: 4px; pointer-events: all;"
-             @onmousedown="OnMouseDown"
-             @onmousemove="OnMouseMove"
-             @onmouseup="OnMouseUp"
-             @onmouseleave="OnMouseUp">
-            <div style="@BuildRectStyle()"></div>
-        </div>
-    </div>
-    @if (!string.IsNullOrEmpty(_frameLoadLog))
+    @if (!_analyzing && string.IsNullOrEmpty(_resultImageUrl))
     {
-        <div style="font-size: 0.85rem; color: #666;">@_frameLoadLog</div>
+        <div style="margin-bottom: 0.5rem;">
+            <label>Seek:</label>
+            <input type="range" min="0" max="1" step="0.01" @bind-value="Position" @bind-value:event="oninput" style="width: 360px;" />
+            <span style="margin-left: 0.5rem;">@_position.ToString("P0", CultureInfo.InvariantCulture)</span>
+        </div>
+        <div style="font-size: 0.85rem; color: #666;">
+            FrameUrl: @_frameUrl
+        </div>
+
+        <div style="display: inline-block; position: relative; border: 1px solid #ddd; padding: 4px;">
+            <img src="@_frameUrl" style="display: block; max-width: none;" @onload="OnFrameLoaded" @onerror="OnFrameError" />
+            <div style="position: absolute; inset: 4px; pointer-events: all;"
+                 @onmousedown="OnMouseDown"
+                 @onmousemove="OnMouseMove"
+                 @onmouseup="OnMouseUp"
+                 @onmouseleave="OnMouseUp">
+                <div style="@BuildRectStyle()"></div>
+            </div>
+        </div>
+        @if (!string.IsNullOrEmpty(_frameLoadLog))
+        {
+            <div style="font-size: 0.85rem; color: #666;">@_frameLoadLog</div>
+        }
     }
 
     @if (!string.IsNullOrEmpty(_resultImageUrl))

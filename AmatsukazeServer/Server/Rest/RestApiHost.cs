@@ -33,6 +33,16 @@ namespace Amatsukaze.Server.Rest
         private readonly LogoPreviewService logoPreview;
         private IHost host;
 
+        private class MakeScriptGenerateRequestInternal
+        {
+            public MakeScriptData MakeScriptData { get; set; }
+            public string TargetHost { get; set; }
+            public string ScriptType { get; set; }
+            public string RemoteHost { get; set; }
+            public string Subnet { get; set; }
+            public string Mac { get; set; }
+        }
+
         public static int GetEnabledPort(int serverPort)
         {
             var disabled = Environment.GetEnvironmentVariable("AMT_REST_DISABLED");
@@ -67,7 +77,13 @@ namespace Amatsukaze.Server.Rest
             {
                 return;
             }
-            var builder = WebApplication.CreateBuilder();
+            var baseDir = AppContext.BaseDirectory;
+            var webRoot = Path.Combine(baseDir, "wwwroot");
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                ContentRootPath = baseDir,
+                WebRootPath = webRoot,
+            });
             builder.Services.Configure<JsonOptions>(options =>
             {
                 options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -83,6 +99,15 @@ namespace Amatsukaze.Server.Rest
                         {
                             if (string.IsNullOrEmpty(origin))
                                 return false;
+                            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                                return false;
+                            if (!uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase) &&
+                                !uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+                                return false;
+                            if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+                                return true;
+                            if (IPAddress.TryParse(uri.Host, out var originAddress))
+                                return IsAllowedRemote(originAddress);
                             return origin.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                                    origin.StartsWith("https://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                                    origin.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase) ||
@@ -96,12 +121,12 @@ namespace Amatsukaze.Server.Rest
             });
 
             var app = builder.Build();
-            app.Urls.Add($"http://127.0.0.1:{port}");
+            app.Urls.Add($"http://0.0.0.0:{port}");
 
             app.Use(async (context, next) =>
             {
                 var remote = context.Connection.RemoteIpAddress;
-                if (remote != null && !IPAddress.IsLoopback(remote))
+                if (remote != null && !IsAllowedRemote(remote))
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     return;
@@ -110,7 +135,12 @@ namespace Amatsukaze.Server.Rest
             });
             app.UseCors("LocalCors");
 
+            app.UseBlazorFrameworkFiles();
+            app.UseDefaultFiles();
+            app.UseStaticFiles();
+
             MapEndpoints(app);
+            app.MapFallbackToFile("index.html");
 
             host = app;
             await host.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -373,7 +403,21 @@ namespace Amatsukaze.Server.Rest
             });
 
             app.MapGet("/api/logs/encode", () => Results.Json(state.GetEncodeLogs()));
+            app.MapGet("/api/logs/encode/page", (HttpRequest request) =>
+            {
+                var offset = Math.Max(0, GetQueryInt(request, "offset", 0));
+                var limit = Clamp(GetQueryInt(request, "limit", 50), 1, 200);
+                var items = state.GetEncodeLogs();
+                return Results.Json(BuildPaged(items, offset, limit));
+            });
             app.MapGet("/api/logs/check", () => Results.Json(state.GetCheckLogs()));
+            app.MapGet("/api/logs/check/page", (HttpRequest request) =>
+            {
+                var offset = Math.Max(0, GetQueryInt(request, "offset", 0));
+                var limit = Clamp(GetQueryInt(request, "limit", 50), 1, 200);
+                var items = state.GetCheckLogs();
+                return Results.Json(BuildPaged(items, offset, limit));
+            });
 
             app.MapGet("/api/path/suggest", (HttpRequest request) =>
             {
@@ -683,6 +727,40 @@ namespace Amatsukaze.Server.Rest
                 {
                     Page = "services",
                     Action = "logo-period",
+                    RequestId = requestId,
+                    Source = "rest"
+                });
+                await server.SetServiceSetting(new ServiceSettingUpdate()
+                {
+                    Type = ServiceSettingUpdateType.Update,
+                    ServiceId = serviceId,
+                    Data = service
+                });
+                return Results.Json(new { ok = true, requestId });
+            });
+
+            app.MapPut("/api/service-settings/{serviceId}/logos/enabled", async (HttpRequest request, int serviceId) =>
+            {
+                var data = await request.ReadFromJsonAsync<LogoEnabledUpdateRequest>(CreateRestJsonOptions());
+                if (data == null || string.IsNullOrWhiteSpace(data.FileName))
+                {
+                    return Results.BadRequest();
+                }
+                if (!state.TryGetServiceSetting(serviceId, out var service) || service == null)
+                {
+                    return Results.NotFound();
+                }
+                var logo = service.LogoSettings?.FirstOrDefault(l => l.FileName == data.FileName);
+                if (logo == null)
+                {
+                    return Results.NotFound();
+                }
+                logo.Enabled = data.Enabled;
+                var requestId = Guid.NewGuid().ToString("N");
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "services",
+                    Action = "logo-enabled",
                     RequestId = requestId,
                     Source = "rest"
                 });
@@ -1056,6 +1134,42 @@ namespace Amatsukaze.Server.Rest
                 await server.AddDrcsMap(data);
                 return Results.Json(new { ok = true });
             });
+            app.MapPut("/api/drcs/map", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<DrcsMapUpdateRequest>();
+                if (data == null || string.IsNullOrWhiteSpace(data.Md5))
+                {
+                    return Results.BadRequest();
+                }
+                await server.AddDrcsMap(new DrcsImage
+                {
+                    MD5 = data.Md5,
+                    MapStr = data.MapStr
+                });
+                return Results.Json(new { ok = true });
+            });
+            app.MapDelete("/api/drcs/map/{md5}", async (string md5) =>
+            {
+                if (string.IsNullOrWhiteSpace(md5))
+                {
+                    return Results.BadRequest();
+                }
+                await server.AddDrcsMap(new DrcsImage
+                {
+                    MD5 = md5,
+                    MapStr = null
+                });
+                return Results.Json(new { ok = true });
+            });
+            app.MapGet("/api/drcs/appearance/{md5}", (string md5) =>
+            {
+                state.TryGetDrcsAppearance(md5, out var items);
+                return Results.Json(new DrcsAppearanceResponse
+                {
+                    Md5 = md5,
+                    Items = items ?? new List<string>()
+                });
+            });
 
             app.MapGet("/api/console", () => Results.Json(state.GetConsoleView()));
 
@@ -1147,10 +1261,53 @@ namespace Amatsukaze.Server.Rest
 
             app.MapGet("/api/makescript/preview", () =>
             {
+                var req = new MakeScriptGenerateRequestInternal
+                {
+                    MakeScriptData = state.GetMakeScriptData(),
+                    TargetHost = "local",
+                    ScriptType = Util.IsServerWindows() ? "bat" : "sh"
+                };
+                if (!TryBuildMakeScript(req, server.ServerPortForRest, out var script, out var error))
+                {
+                    return Results.Problem(error ?? "Failed to build script.");
+                }
                 return Results.Json(new MakeScriptPreview()
                 {
-                    CommandLine = BuildMakeScriptPreview(state.GetMakeScriptData(), server.ServerPortForRest)
+                    CommandLine = script
                 });
+            });
+            app.MapPost("/api/makescript/preview", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<MakeScriptGenerateRequestInternal>(CreateRestJsonOptions());
+                if (data == null)
+                {
+                    return Results.BadRequest("Invalid request");
+                }
+                if (!TryBuildMakeScript(data, server.ServerPortForRest, out var script, out var error))
+                {
+                    return Results.BadRequest(error ?? "Failed to build script");
+                }
+                return Results.Json(new MakeScriptPreview()
+                {
+                    CommandLine = script
+                });
+            });
+            app.MapPost("/api/makescript/file", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<MakeScriptGenerateRequestInternal>(CreateRestJsonOptions());
+                if (data == null)
+                {
+                    return Results.BadRequest("Invalid request");
+                }
+                if (!TryBuildMakeScript(data, server.ServerPortForRest, out var script, out var error))
+                {
+                    return Results.BadRequest(error ?? "Failed to build script");
+                }
+                var isBat = string.Equals(data.ScriptType, "bat", StringComparison.OrdinalIgnoreCase)
+                    || (string.IsNullOrWhiteSpace(data.ScriptType) && Util.IsServerWindows());
+                var fileName = isBat ? "AmatsukazeAddTask.bat" : "AmatsukazeAddTask.sh";
+                var bytes = Encoding.UTF8.GetBytes(script);
+                return Results.File(bytes, "text/plain", fileName);
             });
 
             app.MapGet("/api/assets/logo/{serviceId:int}/{logoIdx:int}", (int serviceId, int logoIdx) =>
@@ -1321,6 +1478,49 @@ namespace Amatsukaze.Server.Rest
             });
         }
 
+        private static bool IsAllowedRemote(IPAddress address)
+        {
+            if (IPAddress.IsLoopback(address))
+            {
+                return true;
+            }
+
+            if (address.IsIPv4MappedToIPv6)
+            {
+                address = address.MapToIPv4();
+            }
+
+            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                var bytes = address.GetAddressBytes();
+                if (bytes[0] == 10)
+                {
+                    return true;
+                }
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                {
+                    return true;
+                }
+                if (bytes[0] == 192 && bytes[1] == 168)
+                {
+                    return true;
+                }
+                return false;
+            }
+
+            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            {
+                if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal)
+                {
+                    return true;
+                }
+                var bytes = address.GetAddressBytes();
+                return (bytes[0] & 0xFE) == 0xFC; // Unique local (fc00::/7)
+            }
+
+            return false;
+        }
+
         private static LogFileContent GetLogFileContent(string path)
         {
             if (!File.Exists(path))
@@ -1410,43 +1610,116 @@ namespace Amatsukaze.Server.Rest
             return sb.ToString();
         }
 
-        private static string BuildMakeScriptPreview(MakeScriptData data, int serverPort)
+        private static bool TryBuildMakeScript(MakeScriptGenerateRequestInternal request, int serverPort, out string script, out string error)
         {
-            if (data == null)
+            script = string.Empty;
+            error = string.Empty;
+            if (request == null || request.MakeScriptData == null)
             {
-                return "";
+                error = "MakeScript data is missing.";
+                return false;
             }
 
-            var cur = Directory.GetCurrentDirectory();
-            var exe = AppContext.BaseDirectory;
-            var dst = data.OutDir?.TrimEnd(Path.DirectorySeparatorChar);
+            var data = request.MakeScriptData;
+            var targetHost = string.IsNullOrWhiteSpace(request.TargetHost) ? "remote" : request.TargetHost;
+            var scriptType = string.IsNullOrWhiteSpace(request.ScriptType)
+                ? (Util.IsServerWindows() ? "bat" : "sh")
+                : request.ScriptType;
+            var isBat = string.Equals(scriptType, "bat", StringComparison.OrdinalIgnoreCase);
+            var isWindows = Util.IsServerWindows();
+
+            if (string.Equals(targetHost, "local", StringComparison.OrdinalIgnoreCase))
+            {
+                if (isWindows && !isBat)
+                {
+                    error = "Windowsサーバーではバッチのみ生成できます。";
+                    return false;
+                }
+                if (!isWindows && isBat)
+                {
+                    error = "Linuxサーバーではシェルのみ生成できます。";
+                    return false;
+                }
+            }
+
             var prof = data.Profile;
-            var bat = data.AddQueueBat;
-            var nas = data.IsNasEnabled ? data.NasDir?.TrimEnd(Path.DirectorySeparatorChar) : null;
-            var ip = "localhost";
+            if (string.IsNullOrWhiteSpace(prof))
+            {
+                error = "プロファイルを選択してください";
+                return false;
+            }
+
+            var dst = data.OutDir?.TrimEnd(Path.DirectorySeparatorChar);
+            if (string.IsNullOrWhiteSpace(dst))
+            {
+                error = "出力先が設定されていません";
+                return false;
+            }
+            if (!Directory.Exists(dst))
+            {
+                error = "出力先ディレクトリにアクセスできません";
+                return false;
+            }
+
+            string nas = null;
+            if (data.IsNasEnabled)
+            {
+                if (string.IsNullOrWhiteSpace(data.NasDir))
+                {
+                    error = "NAS保存先を指定してください。";
+                    return false;
+                }
+                nas = data.NasDir.TrimEnd(Path.DirectorySeparatorChar);
+            }
+
+            var remoteHost = request.RemoteHost;
+            var ip = string.Equals(targetHost, "local", StringComparison.OrdinalIgnoreCase)
+                ? "127.0.0.1"
+                : remoteHost;
+            if (string.IsNullOrWhiteSpace(ip))
+            {
+                error = "接続先ホストが指定されていません";
+                return false;
+            }
+
             var port = serverPort > 0 ? serverPort : ServerSupport.DEFAULT_PORT;
             var direct = data.IsDirect;
+            var addTaskPath = Path.Combine(AppContext.BaseDirectory, Util.IsServerWindows() ? "AmatsukazeAddTask.exe" : "AmatsukazeAddTask");
+            var lineBreak = isBat ? "\r\n" : "\n";
+            var comment = isBat ? "rem" : "#";
 
             var sb = new StringBuilder();
+            if (!isBat)
+            {
+                sb.Append("#!/bin/bash").Append(lineBreak);
+            }
             if (direct)
             {
-                sb.Append("rem _EDCBX_DIRECT_\r\n");
+                sb.Append(comment).Append(" _EDCBX_DIRECT_").Append(lineBreak);
             }
-            var addTaskPath = Path.Combine(exe, Util.IsServerWindows() ? "AmatsukazeAddTask.exe" : "AmatsukazeAddTask");
+            var filePathToken = direct
+                ? "$FilePath$"
+                : isBat ? "%FilePath%" : "${FilePath}";
             sb.AppendFormat("\"{0}\"", addTaskPath)
-                .AppendFormat(" -r \"{0}\"", cur)
-                .AppendFormat(" -f \"{0}FilePath{0}\" -ip \"{1}\"", direct ? "%" : "$", ip)
+                .AppendFormat(" -r \"{0}\"", Directory.GetCurrentDirectory())
+                .AppendFormat(" -f \"{0}\" -ip \"{1}\"", filePathToken, ip)
                 .AppendFormat(" -p {0}", port)
-                .AppendFormat(" -o \"{0}\"", dst ?? "")
-                .AppendFormat(" -s \"{0}\"", prof ?? "")
+                .AppendFormat(" -o \"{0}\"", dst)
+                .AppendFormat(" -s \"{0}\"", prof)
                 .AppendFormat(" --priority {0}", data.Priority);
             if (!string.IsNullOrEmpty(nas))
             {
                 sb.AppendFormat(" -d \"{0}\"", nas);
             }
-            if (!string.IsNullOrEmpty(bat))
+            if (data.IsWakeOnLan)
             {
-                sb.AppendFormat(" -b \"{0}\"", bat);
+                if (string.IsNullOrWhiteSpace(request.Subnet) || string.IsNullOrWhiteSpace(request.Mac))
+                {
+                    error = "Wake On Lanに必要な情報が不足しています";
+                    return false;
+                }
+                sb.AppendFormat(" --subnet \"{0}\"", request.Subnet)
+                    .AppendFormat(" --mac \"{0}\"", request.Mac);
             }
             if (data.MoveAfter == false)
             {
@@ -1460,7 +1733,13 @@ namespace Amatsukaze.Server.Rest
             {
                 sb.Append(" --with-related");
             }
-            return sb.ToString();
+            if (!string.IsNullOrEmpty(data.AddQueueBat))
+            {
+                sb.AppendFormat(" -b \"{0}\"", data.AddQueueBat);
+            }
+
+            script = sb.ToString();
+            return true;
         }
 
         private static byte[] ReadImageAsPng(string path)
@@ -1545,6 +1824,27 @@ namespace Amatsukaze.Server.Rest
                 return parsed;
             }
             return fallback;
+        }
+
+        private static int Clamp(int value, int min, int max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+        }
+
+        private static PagedResult<T> BuildPaged<T>(List<T> items, int offset, int limit)
+        {
+            if (offset > items.Count)
+            {
+                offset = items.Count;
+            }
+            var page = items.Skip(offset).Take(limit).ToList();
+            return new PagedResult<T>
+            {
+                Total = items.Count,
+                Items = page
+            };
         }
 
         private static long GetQueryLong(HttpRequest request, string key, long fallback)

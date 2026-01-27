@@ -245,6 +245,18 @@ for project in ${DOTNET_PUBLISH_PROJECTS}; do
         exit 1
     fi
 done
+
+# WebUI 静的ファイルの公開（AmatsukazeServer.csproj の AfterPublish を利用）
+WEBUI_PUBLISH_DIR="${BUILD_DIR}/webui_publish"
+echo "WebUI (static) を公開します..."
+if ! dotnet publish "AmatsukazeServer/AmatsukazeServer.csproj" -c "${DOTNET_PUBLISH_CONFIG}" -r linux-x64 --self-contained false -p:PublishSingleFile=false -o "${WEBUI_PUBLISH_DIR}"; then
+    echo "WebUI の公開に失敗しました"
+    exit 1
+fi
+if [ -d "${WEBUI_PUBLISH_DIR}/wwwroot" ]; then
+    rm -rf "${INSTALL_DIR}/exe_files/wwwroot"
+    cp -r "${WEBUI_PUBLISH_DIR}/wwwroot" "${INSTALL_DIR}/exe_files/wwwroot"
+fi
 # defaultファイルのコピー
 cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
 cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
@@ -267,4 +279,4 @@ if [ ! -d "${INSTALL_DIR}/JL" ]; then
         && rm -rf join_logo_scp-Ver4.1.0_Linux Ver4.1.0_Linux.tar.gz) || exit 1
 fi
 
-echo "インストールが完了しました"
+echo "インストールが完了しました (WebUI は REST ポート+1 で公開されます)"

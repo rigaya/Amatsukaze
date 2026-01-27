@@ -48,6 +48,7 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
     <PackageReference Include="System.Threading.Tasks.Dataflow" Version="7.0.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.0" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -67,6 +68,18 @@
   <Target Name="GenerateVersionInfo" BeforeTargets="BeforeBuild">
     <Exec Condition="'$(OS)' == 'Windows_NT'" Command="Version.bat" WorkingDirectory="$(MSBuildProjectDirectory)" />
     <Exec Condition="'$(OS)' != 'Windows_NT'" Command="./Version.sh" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+  <Target Name="PublishWebUI" AfterTargets="Publish" Condition="Exists('..\AmatsukazeWebUI\AmatsukazeWebUI.csproj')">
+    <PropertyGroup>
+      <WebUIProject>..\AmatsukazeWebUI\AmatsukazeWebUI.csproj</WebUIProject>
+      <WebUIPublishDir>$(BaseIntermediateOutputPath)webui-publish\</WebUIPublishDir>
+    </PropertyGroup>
+    <Exec Command="dotnet publish &quot;$(WebUIProject)&quot; -c $(Configuration) -o &quot;$(WebUIPublishDir)&quot;" />
+    <RemoveDir Directories="$(PublishDir)wwwroot" />
+    <ItemGroup>
+      <WebUIFiles Include="$(WebUIPublishDir)wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WebUIFiles)" DestinationFiles="@(WebUIFiles->'$(PublishDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <PropertyGroup>
     <PlatformTarget>AnyCPU</PlatformTarget>

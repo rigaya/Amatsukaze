@@ -1,11 +1,12 @@
 @page "/logs/check"
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
+@inject IJSRuntime Js
 
 <h3>チェックログ</h3>
 
 <p>
-    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
 </p>
 
 @if (_loading)
@@ -24,33 +25,43 @@ else
     }
     else
     {
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>開始</th>
-                    <th>結果</th>
-                    <th>メッセージ</th>
-                    <th>プロファイル</th>
-                    <th>入力</th>
-                    <th>詳細</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in _checkLogs)
-                {
+        <div class="log-list-container" @ref="_listRef" @onscroll="OnScrollAsync">
+            <table class="table log-table">
+                <thead>
                     <tr>
-                        <td>@(item.DisplayType ?? item.Type ?? "-")</td>
-                        <td>@(item.DisplayEncodeStart ?? item.CheckStartDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
-                        <td>@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
-                        <td>@(item.Reason ?? "-")</td>
-                        <td>@(item.Profile ?? "-")</td>
-                        <td>@(item.SrcPath ?? "-")</td>
-                        <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadCheckDetailAsync(item)">View</button></td>
+                        <th>Type</th>
+                        <th>開始</th>
+                        <th>結果</th>
+                        <th>メッセージ</th>
+                        <th>プロファイル</th>
+                        <th>入力</th>
+                        <th>詳細</th>
                     </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach (var item in _checkLogs)
+                    {
+                        <tr>
+                            <td>@(item.DisplayType ?? item.Type ?? "-")</td>
+                            <td>@(item.DisplayEncodeStart ?? item.CheckStartDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
+                            <td>@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
+                            <td>@(item.Reason ?? "-")</td>
+                            <td>@(item.Profile ?? "-")</td>
+                            <td>@(item.SrcPath ?? "-")</td>
+                            <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadCheckDetailAsync(item)">View</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_loadingMore)
+            {
+                <div class="log-list-loading">Loading...</div>
+            }
+            else if (_hasMore)
+            {
+                <div class="log-list-loading">Scroll to load more...</div>
+            }
+        </div>
     }
 
     @if (_detailVisible)
@@ -88,6 +99,11 @@ else
     private readonly List<CheckLogItemView> _checkLogs = new();
     private string? _error;
     private bool _loading = true;
+    private bool _loadingMore;
+    private int _offset;
+    private int _total;
+    private const int PageSize = 50;
+    private ElementReference _listRef;
     private LogFileContent? _detail;
     private string? _detailTitle;
     private string? _detailError;
@@ -101,18 +117,57 @@ else
         _loading = true;
         _error = null;
         _checkLogs.Clear();
+        _offset = 0;
+        _total = 0;
+        await LoadMoreAsync();
+        _loading = false;
+    }
 
-        var checkRes = await Api.GetCheckLogsAsync();
+    private bool _hasMore => _checkLogs.Count < _total || _total == 0;
+
+    private async Task LoadMoreAsync()
+    {
+        if (_loadingMore)
+        {
+            return;
+        }
+        _loadingMore = true;
+        var checkRes = await Api.GetCheckLogsPageAsync(_offset, PageSize);
         if (!checkRes.Ok)
         {
             _error = checkRes.Error ?? "Failed to load check logs.";
         }
         else if (checkRes.Data != null)
         {
-            _checkLogs.AddRange(checkRes.Data);
+            _total = checkRes.Data.Total;
+            if (checkRes.Data.Items.Count > 0)
+            {
+                _checkLogs.AddRange(checkRes.Data.Items);
+                _offset += checkRes.Data.Items.Count;
+            }
         }
+        _loadingMore = false;
+    }
 
-        _loading = false;
+    private async Task OnScrollAsync()
+    {
+        if (_loading || _loadingMore || !_hasMore)
+        {
+            return;
+        }
+        var info = await Js.InvokeAsync<ScrollInfo>("amatsukazeUi.getScrollInfo", _listRef);
+        if (info.Remaining < 120)
+        {
+            await LoadMoreAsync();
+        }
+    }
+
+    private sealed class ScrollInfo
+    {
+        public double ScrollTop { get; set; }
+        public double ScrollHeight { get; set; }
+        public double ClientHeight { get; set; }
+        public double Remaining { get; set; }
     }
 
     private async Task LoadCheckDetailAsync(CheckLogItemView item)

@@ -2,11 +2,13 @@
 @using System.Text.Json
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
+@inject AmatsukazeWebUI.Api.ApiBaseAddress ApiBase
+@inject NavigationManager Nav
 
 <h3>スクリプト生成</h3>
 
 <p>
-    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
+    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
     @if (!string.IsNullOrEmpty(_downloadUrl))
     {
         <a class="btn btn-secondary" href="@_downloadUrl" download="@_downloadName">バッチファイル作成</a>
@@ -17,12 +19,12 @@
 {
     <p>Loading...</p>
 }
-else if (!string.IsNullOrEmpty(_error))
-{
-    <p style="color: red;">@_error</p>
-}
 else
 {
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <p style="color: red;">@_error</p>
+    }
     <h4>編集</h4>
     @if (_edit == null)
     {
@@ -31,6 +33,36 @@ else
     else
     {
         <table class="table">
+            <tr>
+                <th>接続先</th>
+                <td>
+                    <div class="btn-group">
+                        <button class="btn btn-sm @(IsLocalHost ? "btn-primary" : "btn-secondary")"
+                                @onclick="() => SetTargetHost(true)">ローカル</button>
+                        <button class="btn btn-sm @(!IsLocalHost ? "btn-primary" : "btn-secondary")"
+                                @onclick="() => SetTargetHost(false)">リモート</button>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th>スクリプト</th>
+                <td>
+                    <label class="settings-check" style="margin-right: 8px;">
+                        <input type="radio" name="scriptType" value="bat"
+                               checked="@IsBatSelected"
+                               disabled="@IsBatDisabled"
+                               @onchange="OnScriptTypeChanged" />
+                        Windowsバッチ
+                    </label>
+                    <label class="settings-check">
+                        <input type="radio" name="scriptType" value="sh"
+                               checked="@IsShSelected"
+                               disabled="@IsShDisabled"
+                               @onchange="OnScriptTypeChanged" />
+                        Linuxシェル
+                    </label>
+                </td>
+            </tr>
             <tr>
                 <th>プロファイル</th>
                 <td>
@@ -56,7 +88,14 @@ else
             </tr>
             <tr>
                 <th>出力先</th>
-                <td><input value="@_edit.OutDir" @oninput="OnOutDirChanged" /></td>
+                <td>
+                    <div class="makescript-outdir">
+                        <PathSuggestInput Value="@(_edit.OutDir ?? string.Empty)"
+                                          ValueChanged="OnOutDirChanged"
+                                          AllowFiles="false"
+                                          AllowDirs="true" />
+                    </div>
+                </td>
             </tr>
             <tr>
                 <th>追加時バッチ</th>
@@ -71,11 +110,54 @@ else
                 </td>
             </tr>
             <tr>
-                <th>WOL</th>
+                <th>NAS</th>
                 <td>
-                    <input type="checkbox" checked="@_edit.IsWakeOnLan" @onchange="OnWakeOnLanChanged" />
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@_edit.IsNasEnabled" @onchange="OnNasEnabledChanged" />
+                        TSをNASにコピーしてそれをソース指定する
+                    </label>
                 </td>
             </tr>
+            @if (_edit.IsNasEnabled)
+            {
+                <tr>
+                    <th>NAS保存先</th>
+                    <td><input value="@_edit.NasDir" @oninput="OnNasDirChanged" /></td>
+                </tr>
+                <tr>
+                    <th>NASオプション</th>
+                    <td>
+                        <label class="settings-check" style="margin-right: 10px;">
+                            <input type="checkbox" checked="@_edit.MoveAfter" @onchange="OnMoveAfterChanged" />
+                            コピーしたTSをtransferedへ移動
+                        </label>
+                        <label class="settings-check" style="margin-right: 10px;">
+                            <input type="checkbox" checked="@_edit.ClearEncoded" @onchange="OnClearEncodedChanged" />
+                            succeededを空にする
+                        </label>
+                        <label class="settings-check">
+                            <input type="checkbox" checked="@_edit.WithRelated" @onchange="OnWithRelatedChanged" />
+                            関連ファイルもコピー
+                        </label>
+                    </td>
+                </tr>
+            }
+            <tr>
+                <th>WOL</th>
+                <td>
+                    <input type="checkbox" checked="@_edit.IsWakeOnLan" @onchange="OnWakeOnLanChanged" disabled="@IsLocalHost" />
+                </td>
+            </tr>
+            @if (CanEditWol)
+            {
+                <tr>
+                    <th>WOL設定</th>
+                    <td>
+                        <input value="@_wolSubnet" @oninput="OnWolSubnetChanged" placeholder="サブネット" />
+                        <input value="@_wolMac" @oninput="OnWolMacChanged" placeholder="MAC" style="margin-left: 8px;" />
+                    </td>
+                </tr>
+            }
             <tr>
                 <th>_EDCBX_DIRECT_</th>
                 <td>
@@ -92,7 +174,7 @@ else
     }
     else
     {
-        <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@(_preview.CommandLine ?? "")</pre>
+        <pre class="makescript-preview">@(_preview.CommandLine ?? "")</pre>
     }
 }
 
@@ -108,6 +190,12 @@ else
     private readonly List<int> _priorities = new() { 1, 2, 3, 4, 5 };
     private string? _downloadUrl;
     private string _downloadName = "AmatsukazeAddTask.bat";
+    private bool _isLocalHost;
+    private string _scriptType = "bat";
+    private bool _serverIsWindows = true;
+    private string? _remoteHost;
+    private string? _wolSubnet;
+    private string? _wolMac;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -123,15 +211,15 @@ else
         _downloadUrl = null;
 
         var dataTask = Api.GetMakeScriptAsync();
-        var previewTask = Api.GetMakeScriptPreviewAsync();
         var profileTask = Api.GetProfilesAsync();
+        var systemTask = Api.GetSystemAsync();
         var batTask = Api.GetAddQueueBatFilesAsync();
 
-        await Task.WhenAll(dataTask, previewTask, profileTask, batTask);
+        await Task.WhenAll(dataTask, profileTask, systemTask, batTask);
 
         var dataRes = await dataTask;
-        var previewRes = await previewTask;
         var profileRes = await profileTask;
+        var systemRes = await systemTask;
         var batRes = await batTask;
 
         if (!dataRes.Ok)
@@ -142,16 +230,6 @@ else
         {
             _data = dataRes.Data;
             _edit = Clone(_data);
-        }
-
-        if (!previewRes.Ok && string.IsNullOrEmpty(_error))
-        {
-            _error = previewRes.Error ?? "Failed to load preview.";
-        }
-        else
-        {
-            _preview = previewRes.Data;
-            UpdateDownload();
         }
 
         if (profileRes.Ok && profileRes.Data != null)
@@ -180,6 +258,37 @@ else
         if (batRes.Ok && batRes.Data != null)
         {
             _addQueueBatFiles.AddRange(batRes.Data);
+        }
+
+        if (systemRes.Ok && systemRes.Data != null)
+        {
+            var platform = systemRes.Data.ServerInfo?.Platform ?? string.Empty;
+            _serverIsWindows = platform.Contains("Windows", StringComparison.OrdinalIgnoreCase);
+        }
+        _scriptType = _serverIsWindows ? "bat" : "sh";
+        _remoteHost = GetRemoteHost();
+
+        if (_edit != null)
+        {
+            var req = new MakeScriptGenerateRequest
+            {
+                MakeScriptData = _edit,
+                TargetHost = _isLocalHost ? "local" : "remote",
+                ScriptType = _scriptType,
+                RemoteHost = _isLocalHost ? null : _remoteHost,
+                Subnet = _wolSubnet,
+                Mac = _wolMac
+            };
+            var previewRes = await Api.GetMakeScriptPreviewAsync(req);
+            if (!previewRes.Ok && string.IsNullOrEmpty(_error))
+            {
+                _error = previewRes.Error ?? "Failed to load preview.";
+            }
+            else
+            {
+                _preview = previewRes.Data;
+                UpdateDownload();
+            }
         }
 
         _loading = false;
@@ -224,10 +333,10 @@ else
         }
     }
 
-    private async Task OnOutDirChanged(ChangeEventArgs e)
+    private async Task OnOutDirChanged(string value)
     {
         if (_edit == null) return;
-        _edit.OutDir = e.Value?.ToString();
+        _edit.OutDir = value;
         await UpdatePreviewAsync();
     }
 
@@ -238,10 +347,57 @@ else
         await UpdatePreviewAsync();
     }
 
+    private async Task OnNasEnabledChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.IsNasEnabled = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnNasDirChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.NasDir = e.Value?.ToString();
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnMoveAfterChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.MoveAfter = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnClearEncodedChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.ClearEncoded = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnWithRelatedChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.WithRelated = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
     private async Task OnWakeOnLanChanged(ChangeEventArgs e)
     {
         if (_edit == null) return;
         _edit.IsWakeOnLan = e.Value is bool b && b;
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnWolSubnetChanged(ChangeEventArgs e)
+    {
+        _wolSubnet = e.Value?.ToString();
+        await UpdatePreviewAsync();
+    }
+
+    private async Task OnWolMacChanged(ChangeEventArgs e)
+    {
+        _wolMac = e.Value?.ToString();
         await UpdatePreviewAsync();
     }
 
@@ -267,7 +423,16 @@ else
             _updating = false;
             return;
         }
-        var previewRes = await Api.GetMakeScriptPreviewAsync();
+        var req = new MakeScriptGenerateRequest
+        {
+            MakeScriptData = _edit,
+            TargetHost = _isLocalHost ? "local" : "remote",
+            ScriptType = _scriptType,
+            RemoteHost = _isLocalHost ? null : _remoteHost,
+            Subnet = _wolSubnet,
+            Mac = _wolMac
+        };
+        var previewRes = await Api.GetMakeScriptPreviewAsync(req);
         if (!previewRes.Ok)
         {
             _error = previewRes.Error ?? "Failed to load preview.";
@@ -288,6 +453,45 @@ else
             return;
         }
         var content = _preview.CommandLine + "\r\n";
+        _downloadName = _scriptType == "sh" ? "AmatsukazeAddTask.sh" : "AmatsukazeAddTask.bat";
         _downloadUrl = "data:text/plain;charset=utf-8," + Uri.EscapeDataString(content);
     }
+
+    private void SetTargetHost(bool local)
+    {
+        _isLocalHost = local;
+        if (local)
+        {
+            _scriptType = _serverIsWindows ? "bat" : "sh";
+        }
+        _ = UpdatePreviewAsync();
+    }
+
+    private async Task OnScriptTypeChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+        _scriptType = value;
+        await UpdatePreviewAsync();
+    }
+
+    private string GetRemoteHost()
+    {
+        var baseUri = ApiBase.Uri;
+        if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            baseUri = new Uri(Nav.BaseUri);
+        }
+        return baseUri.Host;
+    }
+
+    private bool IsLocalHost => _isLocalHost;
+    private bool IsBatSelected => _scriptType == "bat";
+    private bool IsShSelected => _scriptType == "sh";
+    private bool IsBatDisabled => IsLocalHost && !_serverIsWindows;
+    private bool IsShDisabled => IsLocalHost && _serverIsWindows;
+    private bool CanEditWol => !IsLocalHost && _edit?.IsWakeOnLan == true;
 }

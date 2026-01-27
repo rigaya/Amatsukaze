@@ -627,6 +627,30 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        public bool TryGetDrcsAppearance(string md5, out List<string> items)
+        {
+            lock (sync)
+            {
+                if (string.IsNullOrWhiteSpace(md5))
+                {
+                    items = new List<string>();
+                    return false;
+                }
+                if (drcsMap.TryGetValue(md5, out var image) && image?.SourceList != null)
+                {
+                    items = image.SourceList
+                        .Where(s => s != null)
+                        .Select(s => s.ToString())
+                        .Where(s => string.IsNullOrWhiteSpace(s) == false)
+                        .Distinct()
+                        .ToList();
+                    return true;
+                }
+                items = new List<string>();
+                return false;
+            }
+        }
+
         public Setting GetSetting()
         {
             lock (sync)

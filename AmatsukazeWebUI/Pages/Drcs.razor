@@ -4,11 +4,15 @@
 @inject AmatsukazeWebUI.Api.ApiBaseAddress ApiBase
 @inject NavigationManager Nav
 
-<h3>DRCS</h3>
+<h3>DRCS外字</h3>
 
-<p>
+<div class="drcs-toolbar">
     <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">Reload</button>
-</p>
+    <label class="settings-check drcs-filter">
+        <input type="checkbox" checked="@_noMapOnly" @onchange="ToggleNoMapOnly" />
+        未マッピングのみ
+    </label>
+</div>
 
 @if (_loading)
 {
@@ -18,43 +22,84 @@ else if (!string.IsNullOrEmpty(_error))
 {
     <p style="color: red;">@_error</p>
 }
-else if (_items.Count == 0)
+else if (FilteredItems.Count == 0)
 {
     <p>No DRCS items.</p>
 }
 else
 {
-    <table class="table">
-        <thead>
-            <tr>
-                <th>MD5</th>
-                <th>Map</th>
-                <th>Image</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var item in _items)
-            {
-                <tr>
-                    <td>@(item.Md5 ?? "-")</td>
-                    <td>@(item.MapStr ?? "-")</td>
-                    <td>
-                        @if (!string.IsNullOrEmpty(item.ImageUrl))
+    <div class="drcs-list">
+        @foreach (var item in FilteredItems)
+        {
+            var md5 = item.Md5 ?? string.Empty;
+            <div class="drcs-row">
+                <div class="drcs-image">
+                    @if (!string.IsNullOrEmpty(item.ImageUrl))
+                    {
+                        <img src="@GetImageUrl(item.Md5)" alt="@item.Md5" />
+                    }
+                    else
+                    {
+                        <div class="drcs-image-placeholder"></div>
+                    }
+                </div>
+                <div class="drcs-map">
+                    <input class="form-control" value="@GetMapInput(md5)" @oninput="(e => OnMapInput(md5, e))" />
+                </div>
+                <div class="drcs-actions">
+                    <button class="btn btn-primary btn-sm"
+                            @onclick="() => ApplyMapAsync(item)"
+                            disabled="@(!IsMapModified(item))">
+                        @(string.IsNullOrEmpty(item.MapStr) ? "マッピング追加" : "変更")
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                            @onclick="() => DeleteMapAsync(item)"
+                            disabled="@string.IsNullOrEmpty(item.MapStr)">
+                        削除
+                    </button>
+                    <div class="drcs-appearance">
+                        <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAppearanceAsync(item)">
+                            出現位置確認
+                        </button>
+                        @if (_appearanceOpenMd5 == item.Md5)
                         {
-                            <img src="@GetImageUrl(item.Md5)" alt="@item.Md5" style="max-width: 120px; max-height: 120px;" />
+                            <div class="drcs-appearance-popup">
+                                @if (_appearanceLoading)
+                                {
+                                    <div>Loading...</div>
+                                }
+                                else if (_appearanceItems.Count == 0)
+                                {
+                                    <div>出現位置なし</div>
+                                }
+                                else
+                                {
+                                    <ul>
+                                        @foreach (var line in _appearanceItems)
+                                        {
+                                            <li>@line</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
                         }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 }
 
 @code {
     private readonly List<DrcsView> _items = new();
     private readonly Dictionary<string, string> _imageUrls = new();
+    private readonly Dictionary<string, string> _mapInputs = new();
     private string? _error;
     private bool _loading = true;
+    private bool _noMapOnly;
+    private string? _appearanceOpenMd5;
+    private List<string> _appearanceItems = new();
+    private bool _appearanceLoading;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -64,6 +109,8 @@ else
         _error = null;
         _items.Clear();
         _imageUrls.Clear();
+        _appearanceOpenMd5 = null;
+        _appearanceItems = new List<string>();
 
         var res = await Api.GetDrcsAsync();
         if (!res.Ok)
@@ -74,6 +121,7 @@ else
         {
             _items.AddRange(res.Data);
             BuildImageUrls();
+            BuildMapInputs();
         }
 
         _loading = false;
@@ -105,5 +153,104 @@ else
             return string.Empty;
         }
         return _imageUrls.TryGetValue(md5, out var url) ? url : string.Empty;
+    }
+
+    private void BuildMapInputs()
+    {
+        _mapInputs.Clear();
+        foreach (var item in _items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Md5))
+            {
+                continue;
+            }
+            _mapInputs[item.Md5] = item.MapStr ?? string.Empty;
+        }
+    }
+
+    private IReadOnlyList<DrcsView> FilteredItems
+        => _noMapOnly
+            ? _items.Where(i => string.IsNullOrWhiteSpace(i.MapStr)).ToList()
+            : _items;
+
+    private void ToggleNoMapOnly(ChangeEventArgs e)
+    {
+        _noMapOnly = e.Value is bool b && b;
+    }
+
+    private string GetMapInput(string md5)
+    {
+        return _mapInputs.TryGetValue(md5, out var value) ? value : string.Empty;
+    }
+
+    private void OnMapInput(string md5, ChangeEventArgs e)
+    {
+        _mapInputs[md5] = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private bool IsMapModified(DrcsView item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Md5))
+        {
+            return false;
+        }
+        var current = item.MapStr ?? string.Empty;
+        return _mapInputs.TryGetValue(item.Md5, out var input) && input != current;
+    }
+
+    private async Task ApplyMapAsync(DrcsView item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Md5))
+        {
+            return;
+        }
+        var mapStr = _mapInputs.TryGetValue(item.Md5, out var input) ? input : string.Empty;
+        var res = await Api.UpdateDrcsMapAsync(item.Md5, mapStr);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to update mapping.";
+            return;
+        }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteMapAsync(DrcsView item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Md5))
+        {
+            return;
+        }
+        var res = await Api.DeleteDrcsMapAsync(item.Md5);
+        if (!res.Ok)
+        {
+            _error = res.Error ?? "Failed to delete mapping.";
+            return;
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ToggleAppearanceAsync(DrcsView item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Md5))
+        {
+            return;
+        }
+        if (_appearanceOpenMd5 == item.Md5)
+        {
+            _appearanceOpenMd5 = null;
+            _appearanceItems = new List<string>();
+            return;
+        }
+        _appearanceOpenMd5 = item.Md5;
+        _appearanceLoading = true;
+        _appearanceItems = new List<string>();
+        var res = await Api.GetDrcsAppearanceAsync(item.Md5);
+        _appearanceLoading = false;
+        if (!res.Ok || res.Data == null)
+        {
+            _appearanceItems = new List<string>();
+            return;
+        }
+        _appearanceItems = res.Data.Items ?? new List<string>();
     }
 }

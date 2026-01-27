@@ -221,3 +221,26 @@ Amatsukazeは以下のようにして構成されます。
   - シークプレビューはバイトシーク/フレーム取得をネイティブ側で保持し連続シーク対応。
 - HTML5 DnD:
   - 原則JS interopは使わない方針だが、条件リストのドラッグ＆ドロップでのみHTML5 DnDを成立させるために限定的に使用。
+- 各ページの実装ポイント:
+  - Home: 旧Statusを統合。上部トグル（キュー稼働/エンコーダOK）＋処理後動作を表示・変更、リアルタイム更新は独立ポーリング。
+  - Queue: 右クリックで操作メニュー（Retry/Cancel/削除/強制実行/Logo等）。単一D&Dで順序変更対応（複数移動は未対応）。
+    - タスク表示は 3列構成（タスク/放送日/チャンネル、入力ファイル、状態/優先度/操作）。ツールチップにフル情報。
+  - Console: 表示のみのログビュー。
+  - Encode Logs / Check Logs: 分離済み。詳細は右側レイヤーで表示（x/外側クリックで閉じる）。ページング対応は別途検討中。
+  - Services（チャンネル設定）: サービス/ロゴの管理（追加・削除・JoinLogoScp、ロゴ期間、有効/無効切替、ロゴ再スキャン）。
+    - ロゴアップロードはサーバー側で形式判定（Amatsukaze拡張/AviUtl）し、AviUtl時のみ imgw/imgh 入力。
+  - Settings（基本設定）: WPF SettingPanel と同等の項目構成。依存関係の表示/非表示、OS別非表示を反映。
+    - パス補間（PathSuggestInput）を全パス入力に適用。
+  - Profiles（プロファイル）: 上部固定のプロファイル操作バー。設定は段階実装（Stage2-1～）。
+  - AutoSelect（自動選択）: 条件リスト編集（D&D並べ替え）、ジャンル/チャンネル/サイズをサーバー取得。
+  - DRCS: 画像＋MapStr編集、追加/削除、出現位置確認（ツールチップ）。
+  - MakeScript（スクリプト生成）: サーバー側生成統一。リモート/ローカル切替、WOL/NAS入力、Windows bat / Linux sh 出力。
+  - Logo Analyze: 解析はサーバー側、WebUIはシーク/範囲指定/進捗/結果採用。
+- 配布/起動（WebUI 統合）:
+  - WebUI は REST サーバから静的配信（Blazor WASM）。WPF/CLI のTCPポートと競合するため **REST/WebUI は port+1** を使用。
+  - `RestApiHost` で `UseBlazorFrameworkFiles()` + `UseStaticFiles()` + `MapFallbackToFile("index.html")` を有効化。
+  - `RestApiHost` の `WebRootPath` は `AppContext.BaseDirectory/wwwroot` を参照（配布先 `exe_files/wwwroot`）。
+  - `AmatsukazeServer.csproj` に AfterPublish を追加し、WebUI publish → `wwwroot` を Server publish にコピー。
+  - Linux: `scripts/build.sh` で `AmatsukazeServer` を publish（SingleFile=false）し `exe_files/wwwroot` へ配置。
+  - Windows: `Publish.proj` に `AmatsukazeServer` publish を追加し、`publish.bat` で `wwwroot` をマージ。
+  - WebUI のURLは `http://<host>:<port+1>/`。API は `http://<host>:<port+1>/api` ではなく **port+1 と同一ホストの別ポート**で動くため、CORS は LAN IP 許可で運用。

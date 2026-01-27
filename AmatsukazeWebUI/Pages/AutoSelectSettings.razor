@@ -11,18 +11,18 @@
     <p style="color: red;">@_error</p>
 }
 
-<div style="margin-bottom: 8px;">
+<div class="autoselect-header">
     <span style="margin-right: 8px;">自動選択</span>
-    <select value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
+    <select class="autoselect-header-select" value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
         @foreach (var item in _profiles)
         {
             <option value="@item.Name">@item.Name</option>
         }
     </select>
-    <button class="btn btn-primary" style="margin-left: 8px;" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _selectedProfile == null)">適用</button>
-    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
-    <button class="btn btn-secondary" style="margin-left: 4px;" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
-    <button class="btn btn-danger" style="margin-left: 4px;" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
+    <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _selectedProfile == null)">適用</button>
+    <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
+    <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
+    <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
     @if (_confirmDelete)
     {
         <span style="margin-left: 6px; color: #a00;">もう一度押すと削除します</span>
@@ -94,21 +94,23 @@ else
                                     <span style="color: #c00; margin-left: 6px;">@GetConditionWarning(condition)</span>
                                 }
                             </div>
-                            <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center;">
-                                <span>プロファイル</span>
-                                <select @onchange="@(e => OnConditionProfileChanged(index, e))">
+                            <div class="condition-meta">
+                                <span class="condition-label">プロファイル</span>
+                                <select class="condition-profile-select" @onchange="@(e => OnConditionProfileChanged(index, e))">
                                     @foreach (var item in _options?.ProfileNames ?? new List<string>())
                                     {
                                         <option value="@item" selected="@(item == condition.Profile)">@item</option>
                                     }
                                 </select>
-                                <span>優先度</span>
-                                <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
-                                    @foreach (var item in _options?.PriorityList ?? new List<int>())
-                                    {
-                                        <option value="@item" selected="@(item == condition.Priority)">@item</option>
-                                    }
-                                </select>
+                                <span class="condition-priority-group">
+                                    <span class="condition-priority-label">優先度</span>
+                                    <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
+                                        @foreach (var item in _options?.PriorityList ?? new List<int>())
+                                        {
+                                            <option value="@item" selected="@(item == condition.Priority)">@item</option>
+                                        }
+                                    </select>
+                                </span>
                             </div>
                         </div>
                     }
@@ -119,7 +121,7 @@ else
         <div style="width: 52%;">
             @if (_selectedCondition != null)
             {
-                <div style="border: 1px solid #ccc; padding: 10px;">
+                <div class="autoselect-panel">
                     <div style="margin-bottom: 8px;">
                         <label style="margin-right: 6px;">
                             <input type="checkbox" checked="@_selectedCondition.TagEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.TagEnabled)))" />
@@ -850,24 +852,26 @@ else
 
 <style>
     .condition-list {
-        border: 1px solid #ccc;
+        border: 1px solid var(--border);
         padding: 6px;
-        background: #fff;
+        background: var(--bg-surface);
+        color: var(--text);
     }
 
     .condition-item {
-        border: 1px solid #ddd;
+        border: 1px solid var(--border);
         padding: 6px;
         margin-bottom: 6px;
-        background: #fafafa;
+        background: color-mix(in srgb, var(--bg-elevated) 75%, transparent);
         cursor: pointer;
         position: relative;
         padding-left: 24px;
+        color: var(--text);
     }
 
     .condition-item.selected {
-        border-color: #2f6fed;
-        background: #eef4ff;
+        border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+        background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
     }
 
     .drag-handle {
@@ -876,11 +880,52 @@ else
         top: 8px;
         cursor: grab;
         user-select: none;
-        color: #666;
+        color: var(--muted);
         font-weight: 700;
     }
 
     .genre-main {
         margin-bottom: 6px;
+    }
+
+    .autoselect-panel {
+        border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+        padding: 10px;
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    }
+
+    .condition-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+        align-items: center;
+        max-width: 100%;
+    }
+
+    .condition-profile-select {
+        min-width: 160px;
+        flex: 1 1 160px;
+    }
+
+    .condition-label {
+        white-space: nowrap;
+    }
+
+    .condition-priority-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    @@media (max-width: 900px) {
+        .condition-priority-label {
+            flex-basis: 100%;
+        }
+        .condition-priority-label + select {
+            flex-basis: auto;
+        }
     }
 </style>

@@ -29,5 +29,7 @@ if exist "%SRC_BASE%\AmatsukazeGUI" robocopy "%SRC_BASE%\AmatsukazeGUI" "%MERGED
 if errorlevel 8 exit /b %ERRORLEVEL%
 if exist "%SRC_BASE%\ScriptCommand" robocopy "%SRC_BASE%\ScriptCommand" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
+if exist "%SRC_BASE%\AmatsukazeServer\wwwroot" robocopy "%SRC_BASE%\AmatsukazeServer\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
+if errorlevel 8 exit /b %ERRORLEVEL%
 
-echo Done. Merged outputs are in %MERGED_DIR%.
+echo Done. Merged outputs are in %MERGED_DIR% (WebUI is served on REST port+1).

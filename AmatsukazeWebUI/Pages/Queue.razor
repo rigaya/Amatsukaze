@@ -62,50 +62,56 @@
     <button class="btn btn-success" @onclick="OpenAddDialogAsync">タスク追加</button>
     <span class="queue-header-sep" aria-hidden="true"></span>
 
-    <label style="display: flex; align-items: center; gap: 8px;">
+    <label class="queue-header-group">
         <span>キュー</span>
-        <span class="status-toggle">
-            <input type="checkbox"
-                   checked="@IsQueueRunning"
-                   disabled="@(_pauseBusy || _system?.State == null)"
-                   @onchange="OnToggleQueuePause" />
-            <span class="slider"></span>
+        <span class="queue-header-group-body">
+            <span class="status-toggle">
+                <input type="checkbox"
+                       checked="@IsQueueRunning"
+                       disabled="@(_pauseBusy || _system?.State == null)"
+                       @onchange="OnToggleQueuePause" />
+                <span class="slider"></span>
+            </span>
+            <span class="queue-header-state">@(_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止"))</span>
         </span>
-        <span style="color: #666;">@(_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止"))</span>
     </label>
     <span class="queue-header-sep" aria-hidden="true"></span>
 
-    <label style="display: flex; align-items: center; gap: 8px;">
+    <label class="queue-header-group">
         <span>エンコーダ</span>
-        <span class="status-toggle">
-            <input type="checkbox"
-                   checked="@IsEncoderOk"
-                   disabled="@(_suspendBusy || _system?.State == null)"
-                   @onchange="OnToggleEncoderSuspend" />
-            <span class="slider"></span>
+        <span class="queue-header-group-body">
+            <span class="status-toggle">
+                <input type="checkbox"
+                       checked="@IsEncoderOk"
+                       disabled="@(_suspendBusy || _system?.State == null)"
+                       @onchange="OnToggleEncoderSuspend" />
+                <span class="slider"></span>
+            </span>
+            <span class="queue-header-state">@(_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止"))</span>
         </span>
-        <span style="color: #666;">@(_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止"))</span>
     </label>
     <span class="queue-header-sep" aria-hidden="true"></span>
 
-    <label style="display: flex; align-items: center; gap: 8px;">
-        <span>エンコード後</span>
-        <select class="form-select" style="width: 180px;"
-                value="@_finishAction"
-                disabled="@(_finishBusy || _system?.FinishSetting == null)"
-                @onchange="OnFinishActionChanged">
-            @if (_finishActionOptions.Count == 0)
-            {
-                <option value="">-</option>
-            }
-            else
-            {
-                @foreach (var option in _finishActionOptions)
+    <label class="queue-header-group">
+        <span>処理後</span>
+        <span class="queue-header-group-body">
+            <select class="form-select queue-finish-select" style="width: 180px;"
+                    value="@_finishAction"
+                    disabled="@(_finishBusy || _system?.FinishSetting == null)"
+                    @onchange="OnFinishActionChanged">
+                @if (_finishActionOptions.Count == 0)
                 {
-                    <option value="@option.Value">@option.Label</option>
+                    <option value="">-</option>
                 }
-            }
-        </select>
+                else
+                {
+                    @foreach (var option in _finishActionOptions)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                }
+            </select>
+        </span>
     </label>
 </div>
 
@@ -340,6 +346,7 @@ else
     private double _contextMenuX;
     private double _contextMenuY;
     private int _dropIndex = -1;
+    private bool _isDragging;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
     private long _queueVersion;
@@ -1320,6 +1327,10 @@ else
         if (_selectedIds.Contains(item.Id))
         {
             classes.Add("is-selected");
+            if (_isDragging)
+            {
+                classes.Add("is-dragging");
+            }
         }
         if (_dropIndex == rowIndex)
         {
@@ -1378,6 +1389,54 @@ else
         return string.Empty;
     }
 
+    private async Task MoveSelectedItemsAsync(int dropIndex)
+    {
+        if (_view == null || _selectedIds.Count == 0)
+        {
+            return;
+        }
+
+        // 選択アイテムを現在の表示順序でソート
+        var selectedItems = _view.Items
+            .Select((item, idx) => (item, idx))
+            .Where(x => _selectedIds.Contains(x.item.Id))
+            .OrderBy(x => x.idx)
+            .ToList();
+
+        if (selectedItems.Count == 0)
+        {
+            return;
+        }
+
+        var minIndex = selectedItems.First().idx;
+        var maxIndex = selectedItems.Last().idx;
+
+        // 移動方向に応じて処理
+        if (dropIndex <= minIndex)
+        {
+            // 上方向移動: 上から順に処理
+            var targetPos = dropIndex;
+            foreach (var (item, _) in selectedItems)
+            {
+                await SendChangeAsync(item.Id, ChangeItemType.Move, position: targetPos);
+                targetPos++;
+            }
+        }
+        else
+        {
+            // 下方向移動: 下から順に処理
+            var adjustedDrop = dropIndex - selectedItems.Count;
+            foreach (var (item, _) in selectedItems.AsEnumerable().Reverse())
+            {
+                var targetPos = Math.Min(adjustedDrop + selectedItems.Count - 1,
+                                         _view.Items.Count - 1);
+                await SendChangeAsync(item.Id, ChangeItemType.Move, position: targetPos);
+            }
+        }
+
+        await ReloadAsync();
+    }
+
     private async Task OnQueueDrop(int index)
     {
         if (_view == null)
@@ -1387,7 +1446,28 @@ else
         _dropIndex = -1;
         var fromIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getDragIndex");
         await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
-        if (fromIndex < 0 || fromIndex == index)
+        if (fromIndex < 0)
+        {
+            return;
+        }
+
+        // ドラッグ元アイテムを選択に含める
+        var draggedItem = _view.Items[fromIndex];
+        if (!_selectedIds.Contains(draggedItem.Id))
+        {
+            _selectedIds.Clear();
+            _selectedIds.Add(draggedItem.Id);
+        }
+
+        // 複数選択の場合
+        if (_selectedIds.Count > 1)
+        {
+            await MoveSelectedItemsAsync(index);
+            return;
+        }
+
+        // 単一選択の場合（従来の処理）
+        if (fromIndex == index)
         {
             return;
         }
@@ -1404,8 +1484,7 @@ else
         {
             toIndex = _view.Items.Count - 1;
         }
-        var item = _view.Items[fromIndex];
-        await ChangeItemAsync(item, ChangeItemType.Move, position: toIndex);
+        await ChangeItemAsync(draggedItem, ChangeItemType.Move, position: toIndex);
     }
 
     private Task OnQueueDropFromBody()
@@ -1416,6 +1495,7 @@ else
     private void OnQueueDragEnter(int index)
     {
         _dropIndex = index;
+        _isDragging = true;
     }
 
     private void OnQueueBodyDragEnter()
@@ -1432,6 +1512,7 @@ else
 
     private async Task OnQueueDragEnd()
     {
+        _isDragging = false;
         var lastDropIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getLastDropIndex");
         await JS.InvokeVoidAsync("amatsukazeDnd.clearLastDropIndex");
         if (_view == null)

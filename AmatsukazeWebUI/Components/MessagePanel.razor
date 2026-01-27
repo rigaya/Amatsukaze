@@ -18,8 +18,9 @@
         {
             @foreach (var item in items.OrderByDescending(i => i.Id))
             {
+                var isExpired = IsExpired(item);
                 var isNewest = item.Id == latestId;
-                <div class="message-item message-@item.Level @(isNewest ? "message-new" : "")">
+                <div class="message-item message-@item.Level @(isNewest ? "message-new" : "") @(isExpired ? "message-expired" : "")">
                     <span class="message-time">@item.Time.ToLocalTime().ToString("HH:mm:ss")</span>
                     <span class="message-text">@item.Message</span>
                 </div>
@@ -70,6 +71,7 @@
             while (await timer!.WaitForNextTickAsync(token))
             {
                 await PollOnceAsync();
+                await InvokeAsync(StateHasChanged);
             }
         }
         catch (OperationCanceledException)
@@ -119,6 +121,15 @@
         {
             pollLock.Release();
         }
+    }
+
+    private static bool IsExpired(MessageEventView item)
+    {
+        var now = DateTime.UtcNow;
+        var itemTime = item.Time.Kind == DateTimeKind.Utc
+            ? item.Time
+            : item.Time.ToUniversalTime();
+        return (now - itemTime) >= TimeSpan.FromMinutes(5);
     }
 
     public void Dispose()

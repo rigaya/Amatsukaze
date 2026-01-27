@@ -24,6 +24,8 @@ namespace Amatsukaze.Shared
 
         Task<ApiResult<List<LogItemView>>> GetEncodeLogsAsync();
         Task<ApiResult<List<CheckLogItemView>>> GetCheckLogsAsync();
+        Task<ApiResult<PagedResult<LogItemView>>> GetEncodeLogsPageAsync(int offset, int limit);
+        Task<ApiResult<PagedResult<CheckLogItemView>>> GetCheckLogsPageAsync(int offset, int limit);
         Task<ApiResult<LogFileContent>> GetLogFileAsync(DateTime? encodeStart, DateTime? checkStart);
         Task<ApiResult<string>> GetEncodeCsvAsync();
         Task<ApiResult<string>> GetCheckCsvAsync();
@@ -47,12 +49,16 @@ namespace Amatsukaze.Shared
         Task<ApiResult<List<ServiceSettingView>>> GetServiceSettingsAsync();
         Task<ApiResult<ServiceOptions>> GetServiceOptionsAsync();
         Task<ApiResult<bool>> UpdateServiceLogoPeriodAsync(int serviceId, LogoPeriodUpdateRequest request);
+        Task<ApiResult<bool>> UpdateServiceLogoEnabledAsync(int serviceId, LogoEnabledUpdateRequest request);
         Task<ApiResult<bool>> RemoveServiceLogoAsync(int serviceId, LogoFileNameRequest request);
         Task<ApiResult<bool>> AddNoLogoAsync(int serviceId);
         Task<ApiResult<bool>> RemoveNoLogoAsync(int serviceId);
         Task<ApiResult<bool>> RequestLogoRescanAsync();
         Task<ApiResult<List<DrcsView>>> GetDrcsAsync();
         Task<ApiResult<bool>> AddDrcsAsync(JsonElement image);
+        Task<ApiResult<bool>> UpdateDrcsMapAsync(string md5, string? mapStr);
+        Task<ApiResult<bool>> DeleteDrcsMapAsync(string md5);
+        Task<ApiResult<DrcsAppearanceResponse>> GetDrcsAppearanceAsync(string md5);
 
         Task<ApiResult<JsonElement>> GetSettingAsync();
         Task<ApiResult<bool>> UpdateSettingAsync(JsonElement setting);
@@ -61,6 +67,8 @@ namespace Amatsukaze.Shared
         Task<ApiResult<List<string>>> GetQueueFinishBatFilesAsync();
         Task<ApiResult<bool>> UpdateMakeScriptAsync(MakeScriptData data);
         Task<ApiResult<MakeScriptPreview>> GetMakeScriptPreviewAsync();
+        Task<ApiResult<MakeScriptPreview>> GetMakeScriptPreviewAsync(MakeScriptGenerateRequest request);
+        Task<ApiResult<string>> GetMakeScriptFileAsync(MakeScriptGenerateRequest request);
         Task<ApiResult<bool>> UpdateFinishSettingAsync(FinishSetting setting);
 
         Task<ApiResult<ConsoleView>> GetConsoleAsync();
