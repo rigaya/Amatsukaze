@@ -571,6 +571,81 @@ code {
     flex: 0 0 auto;
 }
 
+.queue-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.queue-table th:nth-child(3),
+.queue-table td:nth-child(3) {
+    width: 30%;
+}
+
+.queue-table th:nth-child(1),
+.queue-table td:nth-child(1) {
+    width: 25%;
+}
+
+.queue-table th:nth-child(2),
+.queue-table td:nth-child(2) {
+    width: 45%;
+}
+
+.queue-input-file {
+    white-space: normal;
+    word-break: break-word;
+    overflow: hidden;
+}
+
+.queue-cell-stack {
+    display: grid;
+    gap: 4px;
+}
+
+.queue-cell-line {
+    line-height: 1.2;
+}
+
+.queue-task {
+    font-weight: 600;
+}
+
+.queue-profile-select {
+    width: 100%;
+}
+
+.queue-state-priority {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.queue-state-priority .queue-state {
+    flex: 1 1 auto;
+}
+
+.queue-priority-input {
+    width: 3.5rem;
+}
+}
+
+.queue-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.queue-profile-select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.queue-priority-input {
+    flex: 0 0 3.5rem;
+    width: 3.5rem;
+}
+
 .settings-header-note {
     color: var(--muted);
     font-size: 0.9rem;
