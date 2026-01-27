@@ -125,6 +125,12 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<List<CheckLogItemView>>> GetCheckLogsAsync()
             => GetJsonAsync<List<CheckLogItemView>>("/api/logs/check");
 
+        public Task<ApiResult<PagedResult<LogItemView>>> GetEncodeLogsPageAsync(int offset, int limit)
+            => GetJsonAsync<PagedResult<LogItemView>>($"/api/logs/encode/page?offset={offset}&limit={limit}");
+
+        public Task<ApiResult<PagedResult<CheckLogItemView>>> GetCheckLogsPageAsync(int offset, int limit)
+            => GetJsonAsync<PagedResult<CheckLogItemView>>($"/api/logs/check/page?offset={offset}&limit={limit}");
+
         public Task<ApiResult<LogFileContent>> GetLogFileAsync(DateTime? encodeStart, DateTime? checkStart)
         {
             var query = new List<string>();
@@ -261,6 +267,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<bool>> UpdateServiceLogoPeriodAsync(int serviceId, LogoPeriodUpdateRequest request)
             => PutJsonAsync($"/api/service-settings/{serviceId}/logos/period", request, _ => true);
 
+        public Task<ApiResult<bool>> UpdateServiceLogoEnabledAsync(int serviceId, LogoEnabledUpdateRequest request)
+            => PutJsonAsync($"/api/service-settings/{serviceId}/logos/enabled", request, _ => true);
+
         public Task<ApiResult<bool>> RemoveServiceLogoAsync(int serviceId, LogoFileNameRequest request)
             => DeleteJsonAsync($"/api/service-settings/{serviceId}/logos", request);
 
@@ -278,6 +287,15 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<bool>> AddDrcsAsync(JsonElement image)
             => PostJsonAsync("/api/drcs", image, _ => true);
+
+        public Task<ApiResult<bool>> UpdateDrcsMapAsync(string md5, string? mapStr)
+            => PutJsonAsync("/api/drcs/map", new DrcsMapUpdateRequest { Md5 = md5, MapStr = mapStr }, _ => true);
+
+        public Task<ApiResult<bool>> DeleteDrcsMapAsync(string md5)
+            => DeleteAsync($"/api/drcs/map/{Uri.EscapeDataString(md5)}");
+
+        public Task<ApiResult<DrcsAppearanceResponse>> GetDrcsAppearanceAsync(string md5)
+            => GetJsonAsync<DrcsAppearanceResponse>($"/api/drcs/appearance/{Uri.EscapeDataString(md5)}");
 
         public Task<ApiResult<JsonElement>> GetSettingAsync()
             => GetJsonAsync<JsonElement>("/api/settings");
@@ -299,6 +317,27 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<MakeScriptPreview>> GetMakeScriptPreviewAsync()
             => GetJsonAsync<MakeScriptPreview>("/api/makescript/preview");
+
+        public Task<ApiResult<MakeScriptPreview>> GetMakeScriptPreviewAsync(MakeScriptGenerateRequest request)
+            => PostJsonAsync("/api/makescript/preview", request,
+                element => element.Deserialize<MakeScriptPreview>(jsonOptions) ?? new MakeScriptPreview());
+
+        public async Task<ApiResult<string>> GetMakeScriptFileAsync(MakeScriptGenerateRequest request)
+        {
+            try
+            {
+                using var res = await http.PostAsJsonAsync("/api/makescript/file", request, jsonOptions);
+                if (!res.IsSuccessStatusCode)
+                {
+                    return ApiResult<string>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+                }
+                return ApiResult<string>.Success(await res.Content.ReadAsStringAsync(), (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<string>.Fail(0, ex.Message);
+            }
+        }
 
         public Task<ApiResult<bool>> UpdateFinishSettingAsync(FinishSetting setting)
             => PutJsonAsync("/api/finish-setting", setting, _ => true);

@@ -1,5 +1,6 @@
 ﻿using Amatsukaze.Models;
 using Amatsukaze.Server;
+using Amatsukaze.Server.Rest;
 using Livet.Commands;
 using Livet.EventListeners;
 using Livet.Messaging;
@@ -8,7 +9,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 
 namespace Amatsukaze.ViewModels
 {
@@ -95,122 +99,48 @@ namespace Amatsukaze.ViewModels
 
         public async void MakeBatchFile()
         {
-            string cur = Directory.GetCurrentDirectory();
-            string exe = AppContext.BaseDirectory;
-            string dst = Model.MakeScriptData.OutDir?.TrimEnd(Path.DirectorySeparatorChar);
-            string prof = DisplayProfile.GetProfileName(Model.MakeScriptData.SelectedProfile);
-            string bat = Model.MakeScriptData.Model.AddQueueBat;
-            string nas = null;
-            string ip = "localhost";
-            int port = Model.ServerPort;
-            string subnet = null;
-            string mac = null;
-            bool direct = Model.MakeScriptData.IsDirect;
-
-            if (prof == null)
-            {
-                Description = "プロファイルを選択してください";
-                return;
-            }
-
-            if (string.IsNullOrEmpty(dst))
-            {
-                Description = "出力先が設定されていません";
-                return;
-            }
-            if (Directory.Exists(dst) == false)
-            {
-                Description = "出力先ディレクトリにアクセスできません";
-                return;
-            }
-
-            if (Model.MakeScriptData.IsNasEnabled)
-            {
-                if (string.IsNullOrEmpty(Model.MakeScriptData.NasDir))
-                {
-                    Description = "NAS保存先を指定してください。";
-                    return;
-                }
-                nas = Model.MakeScriptData.NasDir.TrimEnd(Path.DirectorySeparatorChar); ;
-            }
-
-            if (IsRemoteClient)
-            {
-                ip = Model.ServerIP;
-                if (Model.MakeScriptData.IsWakeOnLan)
-                {
-                    var localIP = Model.LocalIP;
-                    if (localIP == null)
-                    {
-                        Description = "IPアドレス取得に失敗";
-                        return;
-                    }
-                    if (localIP.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
-                    {
-                        Description = "IPv4以外の接続には対応していません";
-                        return;
-                    }
-                    var subnetaddr = ServerSupport.GetSubnetMask(((IPEndPoint)localIP).Address);
-                    if (subnetaddr == null)
-                    {
-                        Description = "サブネットマスク取得に失敗";
-                        return;
-                    }
-                    subnet = subnetaddr.ToString();
-                    var macbytes = Model.MacAddress;
-                    if (macbytes == null)
-                    {
-                        Description = "MACアドレス取得に失敗";
-                        return;
-                    }
-                    mac = string.Join(":", macbytes.Select(s => s.ToString("X")));
-                }
-            }
-
             Description = "";
 
-            var sb = new StringBuilder();
-            if(direct)
+            var data = ServerSupport.DeepCopy(Model.MakeScriptData.Model);
+            data.Profile = DisplayProfile.GetProfileName(Model.MakeScriptData.SelectedProfile);
+
+            string subnet = null;
+            string mac = null;
+            if (IsRemoteClient && data.IsWakeOnLan)
             {
-                sb.Append("rem _EDCBX_DIRECT_\r\n");
+                var localIP = Model.LocalIP;
+                if (localIP == null)
+                {
+                    Description = "IPアドレス取得に失敗";
+                    return;
+                }
+                if (localIP.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                {
+                    Description = "IPv4以外の接続には対応していません";
+                    return;
+                }
+                var subnetaddr = ServerSupport.GetSubnetMask(((IPEndPoint)localIP).Address);
+                if (subnetaddr == null)
+                {
+                    Description = "サブネットマスク取得に失敗";
+                    return;
+                }
+                subnet = subnetaddr.ToString();
+                var macbytes = Model.MacAddress;
+                if (macbytes == null)
+                {
+                    Description = "MACアドレス取得に失敗";
+                    return;
+                }
+                mac = string.Join(":", macbytes.Select(s => s.ToString("X")));
             }
-            var AmatsukazeAddTaskPath = Path.Combine(exe, Util.IsServerWindows() ? "AmatsukazeAddTask.exe" : "AmatsukazeAddTask");
-            sb.AppendFormat("\"{0}\"", AmatsukazeAddTaskPath)
-                .AppendFormat(" -r \"{0}\"", cur)
-                .AppendFormat(" -f \"{0}FilePath{0}\" -ip \"{1}\"", direct ? "%" : "$", ip)
-                .AppendFormat(" -p {0}", port)
-                .AppendFormat(" -o \"{0}\"", dst)
-                .AppendFormat(" -s \"{0}\"", prof)
-                .AppendFormat(" --priority {0}", Model.MakeScriptData.Priority);
-            if (nas != null)
-            {
-                sb.AppendFormat(" -d \"{0}\"", nas);
-            }
-            if (mac != null)
-            {
-                sb.AppendFormat(" --subnet \"{0}\"", subnet)
-                    .AppendFormat(" --mac \"{0}\"", mac);
-            }
-            if (Model.MakeScriptData.MoveAfter == false)
-            {
-                sb.Append(" --no-move");
-            }
-            if (Model.MakeScriptData.ClearSucceeded)
-            {
-                sb.Append(" --clear-succeeded");
-            }
-            if (Model.MakeScriptData.WithRelated)
-            {
-                sb.Append(" --with-related");
-            }
-            if(!string.IsNullOrEmpty(bat))
-            {
-                sb.AppendFormat(" -b \"{0}\"", bat);
-            }
+
+            var serverIsWindows = Model.ServerInfo?.Platform?.IndexOf("Windows", StringComparison.OrdinalIgnoreCase) >= 0;
+            var scriptType = serverIsWindows ? "bat" : "sh";
 
             var saveFileDialog = new SaveFileDialog();
             saveFileDialog.FilterIndex = 1;
-            saveFileDialog.Filter = Util.IsServerWindows()
+            saveFileDialog.Filter = serverIsWindows
                 ? "バッチファイル(.bat)|*.bat|All Files (*.*)|*.*"
                 : "バッチファイル(.sh)|*.sh|All Files (*.*)|*.*";
             bool? result = saveFileDialog.ShowDialog();
@@ -221,7 +151,30 @@ namespace Amatsukaze.ViewModels
 
             try
             {
-                File.WriteAllText(saveFileDialog.FileName, sb.ToString(), Util.AmatsukazeDefaultEncoding);
+                var port = RestApiHost.GetEnabledPort(Model.ServerPort);
+                var baseUrl = $"http://{Model.ServerIP}:{port}";
+                using var http = new HttpClient { BaseAddress = new Uri(baseUrl) };
+                var req = new MakeScriptGenerateRequest
+                {
+                    MakeScriptData = data,
+                    TargetHost = IsRemoteClient ? "remote" : "local",
+                    ScriptType = scriptType,
+                    RemoteHost = Model.ServerIP,
+                    Subnet = subnet,
+                    Mac = mac
+                };
+                var response = await http.PostAsJsonAsync("/api/makescript/file", req, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Description = string.IsNullOrWhiteSpace(error) ? "バッチファイル作成に失敗" : error;
+                    return;
+                }
+                var content = await response.Content.ReadAsStringAsync();
+                File.WriteAllText(saveFileDialog.FileName, content, Util.AmatsukazeDefaultEncoding);
             }
             catch (Exception e)
             {
@@ -237,6 +190,16 @@ namespace Amatsukaze.ViewModels
             await Model.SendMakeScriptData();
         }
         #endregion
+
+        private class MakeScriptGenerateRequest
+        {
+            public MakeScriptData MakeScriptData { get; set; }
+            public string TargetHost { get; set; }
+            public string ScriptType { get; set; }
+            public string RemoteHost { get; set; }
+            public string Subnet { get; set; }
+            public string Mac { get; set; }
+        }
 
         #region StopServerCommand
         private ViewModelCommand _StopServerCommand;

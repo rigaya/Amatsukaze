@@ -104,6 +104,9 @@
             clearDragIndex: function () {
                 window.amatsukazeDnd.dragIndex = -1;
             },
+            setDragIndex: function (index) {
+                window.amatsukazeDnd.dragIndex = index;
+            },
             onEnter: function (event) {
                 try {
                     if (event && event.dataTransfer) {
@@ -161,6 +164,27 @@
                 } catch (e) {
                 }
                 return true;
+            }
+        };
+        window.amatsukazeUi = {
+            getScrollInfo: function (element) {
+                try {
+                    if (!element) {
+                        return { scrollTop: 0, scrollHeight: 0, clientHeight: 0, remaining: 0 };
+                    }
+                    var scrollTop = element.scrollTop || 0;
+                    var scrollHeight = element.scrollHeight || 0;
+                    var clientHeight = element.clientHeight || 0;
+                    var remaining = scrollHeight - scrollTop - clientHeight;
+                    return {
+                        scrollTop: scrollTop,
+                        scrollHeight: scrollHeight,
+                        clientHeight: clientHeight,
+                        remaining: remaining
+                    };
+                } catch (e) {
+                    return { scrollTop: 0, scrollHeight: 0, clientHeight: 0, remaining: 0 };
+                }
             }
         };
     </script>

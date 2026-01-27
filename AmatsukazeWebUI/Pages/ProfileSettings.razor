@@ -11,7 +11,7 @@
 
 <div class="profile-header">
     <span class="profile-header-title">プロファイル</span>
-    <select value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
+    <select class="profile-header-select" value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
         @foreach (var item in _profiles)
         {
             <option value="@item.Name">@item.Name</option>
@@ -101,9 +101,9 @@ else
                             <input type="checkbox" checked="@GetBoolValue("ForceSAR")" @onchange="@(e => OnBoolChanged(e, "ForceSAR"))" />
                             SAR比を上書きする
                         </label>
-                        <input type="number" style="width: 60px;" value="@GetIntValue("ForceSARWidth")" @oninput="@(e => OnIntChanged(e, "ForceSARWidth"))" />
+                        <input type="number" min="1" style="width: 60px;" value="@GetIntValue("ForceSARWidth")" @oninput="@(e => OnIntChanged(e, "ForceSARWidth"))" />
                         <span> : </span>
-                        <input type="number" style="width: 60px;" value="@GetIntValue("ForceSARHeight")" @oninput="@(e => OnIntChanged(e, "ForceSARHeight"))" />
+                        <input type="number" min="1" style="width: 60px;" value="@GetIntValue("ForceSARHeight")" @oninput="@(e => OnIntChanged(e, "ForceSARHeight"))" />
                     </td>
                 </tr>
                 <tr>
@@ -438,7 +438,7 @@ else
                                     <div style="margin-top: 8px; padding-left: 12px;">
                                         <div>
                                             <span>並列数</span>
-                                            <input type="number" style="width: 70px; margin-left: 6px;" value="@GetFilterInt("AutoVfrParallel")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrParallel"))" />
+                                            <input type="number" min="1" max="16" style="width: 70px; margin-left: 6px;" value="@GetFilterInt("AutoVfrParallel")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrParallel"))" />
                                         </div>
                                         <label>
                                             <input type="checkbox" checked="@GetFilterBool("AutoVfrFast")" @onchange="@(e => OnFilterBoolChanged(e, "AutoVfrFast"))" />
@@ -471,7 +471,7 @@ else
                                         </label>
                                         <div style="margin-top: 6px;">
                                             <span>SKIP</span>
-                                            <input type="number" style="width: 60px; margin-left: 6px;" value="@GetFilterInt("AutoVfrSkip")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrSkip"))" />
+                                            <input type="number" min="0" max="3" style="width: 60px; margin-left: 6px;" value="@GetFilterInt("AutoVfrSkip")" @oninput="@(e => OnFilterIntChanged(e, "AutoVfrSkip"))" />
                                         </div>
                                         <div style="margin-top: 6px;">
                                             <span>REF</span>
@@ -516,9 +516,9 @@ else
                             </label>
                             <div style="margin-top: 6px;">
                                 <span>横</span>
-                                <input type="number" style="width: 70px; margin-left: 4px;" value="@GetFilterInt("ResizeWidth")" @oninput="@(e => OnFilterIntChanged(e, "ResizeWidth"))" disabled="@(!GetFilterBool("EnableResize"))" />
+                                <input type="number" min="1" style="width: 70px; margin-left: 4px;" value="@GetFilterInt("ResizeWidth")" @oninput="@(e => OnFilterIntChanged(e, "ResizeWidth"))" disabled="@(!GetFilterBool("EnableResize"))" />
                                 <span style="margin-left: 6px;">x 縦</span>
-                                <input type="number" style="width: 70px; margin-left: 4px;" value="@GetFilterInt("ResizeHeight")" @oninput="@(e => OnFilterIntChanged(e, "ResizeHeight"))" disabled="@(!GetFilterBool("EnableResize"))" />
+                                <input type="number" min="1" style="width: 70px; margin-left: 4px;" value="@GetFilterInt("ResizeHeight")" @oninput="@(e => OnFilterIntChanged(e, "ResizeHeight"))" disabled="@(!GetFilterBool("EnableResize"))" />
                                 <button class="btn btn-sm btn-secondary" style="margin-left: 8px;" @onclick="() => SetResizePreset(1280, 720)" disabled="@(!GetFilterBool("EnableResize"))">1280x720</button>
                                 <button class="btn btn-sm btn-secondary" style="margin-left: 4px;" @onclick="() => SetResizePreset(1920, 1080)" disabled="@(!GetFilterBool("EnableResize"))">1920x1080</button>
                             </div>
@@ -547,11 +547,11 @@ else
         <table class="table">
             <tr>
                 <th>CMビットレート倍率</th>
-                <td><input type="number" step="0.01" style="width: 90px;" value="@GetDoubleValue("BitrateCM")" @oninput="@(e => OnDoubleChanged(e, "BitrateCM"))" /></td>
+                <td><input type="number" min="0" step="0.01" style="width: 90px;" value="@GetDoubleValue("BitrateCM")" @oninput="@(e => OnDoubleChanged(e, "BitrateCM"))" /></td>
             </tr>
             <tr>
                 <th>CM品質オフセット</th>
-                <td><input type="number" step="0.1" style="width: 90px;" value="@GetDoubleValue("CMQualityOffset")" @oninput="@(e => OnDoubleChanged(e, "CMQualityOffset"))" /></td>
+                <td><input type="number" min="0" step="0.1" style="width: 90px;" value="@GetDoubleValue("CMQualityOffset")" @oninput="@(e => OnDoubleChanged(e, "CMQualityOffset"))" /></td>
             </tr>
             <tr class="profile-check-row">
                 <td colspan="2">
@@ -568,9 +568,9 @@ else
                         自動ビットレート指定
                     </label>
                     <span style="margin-left: 12px;">a / b / h264</span>
-                    <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("A")" @oninput="@(e => OnBitrateChanged(e, "A"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
-                    <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("B")" @oninput="@(e => OnBitrateChanged(e, "B"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
-                    <input type="number" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("H264")" @oninput="@(e => OnBitrateChanged(e, "H264"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+                    <input type="number" min="0" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("A")" @oninput="@(e => OnBitrateChanged(e, "A"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+                    <input type="number" min="0" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("B")" @oninput="@(e => OnBitrateChanged(e, "B"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
+                    <input type="number" min="0" step="0.1" style="width: 80px; margin-left: 6px;" value="@GetBitrateValue("H264")" @oninput="@(e => OnBitrateChanged(e, "H264"))" disabled="@(!GetBoolValue("AutoBuffer"))" />
                 </td>
             </tr>
         </table>
@@ -602,7 +602,7 @@ else
                 <tr>
                     <th>音声ビットレート</th>
                     <td>
-                        <input type="number" style="width: 90px;" value="@GetIntValue("AudioBitrateInKbps")" @oninput="@(e => OnIntChanged(e, "AudioBitrateInKbps"))" disabled="@(!GetBoolValue("EnableAudioBitrate"))" />
+                        <input type="number" min="1" style="width: 90px;" value="@GetIntValue("AudioBitrateInKbps")" @oninput="@(e => OnIntChanged(e, "AudioBitrateInKbps"))" disabled="@(!GetBoolValue("EnableAudioBitrate"))" />
                         <label style="margin-left: 8px;">
                             <input type="checkbox" checked="@(!GetBoolValue("EnableAudioBitrate"))" @onchange="OnAudioBitrateToggle" />
                             ビットレートを指定しない
@@ -760,9 +760,9 @@ else
                         <input type="checkbox" checked="@GetBoolValue("EnablePmtCut")" @onchange="@(e => OnBoolChanged(e, "EnablePmtCut"))" />
                         最初から
                     </label>
-                    <input type="number" style="width: 60px; margin-left: 6px;" value="@GetIntValue("PmtCutHeadRate")" @oninput="@(e => OnIntChanged(e, "PmtCutHeadRate"))" disabled="@(!GetBoolValue("EnablePmtCut"))" />
+                    <input type="number" min="0" max="100" style="width: 60px; margin-left: 6px;" value="@GetIntValue("PmtCutHeadRate")" @oninput="@(e => OnIntChanged(e, "PmtCutHeadRate"))" disabled="@(!GetBoolValue("EnablePmtCut"))" />
                     <span>% と最後から </span>
-                    <input type="number" style="width: 60px;" value="@GetIntValue("PmtCutTailRate")" @oninput="@(e => OnIntChanged(e, "PmtCutTailRate"))" disabled="@(!GetBoolValue("EnablePmtCut"))" />
+                    <input type="number" min="0" max="100" style="width: 60px;" value="@GetIntValue("PmtCutTailRate")" @oninput="@(e => OnIntChanged(e, "PmtCutTailRate"))" disabled="@(!GetBoolValue("EnablePmtCut"))" />
                     <span>% に</span>
                 </td>
             </tr>
@@ -773,7 +773,7 @@ else
                         <input type="checkbox" checked="@GetBoolValue("EnableMaxFadeLength")" @onchange="@(e => OnBoolChanged(e, "EnableMaxFadeLength"))" />
                         有効
                     </label>
-                    <input type="number" style="width: 80px; margin-left: 6px;" value="@GetIntValue("MaxFadeLength")" @oninput="@(e => OnIntChanged(e, "MaxFadeLength"))" disabled="@(!GetBoolValue("EnableMaxFadeLength"))" />
+                    <input type="number" min="1" style="width: 80px; margin-left: 6px;" value="@GetIntValue("MaxFadeLength")" @oninput="@(e => OnIntChanged(e, "MaxFadeLength"))" disabled="@(!GetBoolValue("EnableMaxFadeLength"))" />
                 </td>
             </tr>
         </table>
@@ -789,7 +789,7 @@ else
             </tr>
             <tr>
                 <th>バッファリングフレーム数</th>
-                <td><input type="number" style="width: 70px;" value="@GetIntValue("NumEncodeBufferFrames")" @oninput="@(e => OnIntChanged(e, "NumEncodeBufferFrames"))" /></td>
+                <td><input type="number" min="1" max="54" style="width: 70px;" value="@GetIntValue("NumEncodeBufferFrames")" @oninput="@(e => OnIntChanged(e, "NumEncodeBufferFrames"))" /></td>
             </tr>
         </table>
 
@@ -1224,7 +1224,7 @@ else
     {
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
-            SetNodeValue(name, JsonValue.Create(value));
+            SetNodeValue(name, JsonValue.Create(NormalizeIntValue(name, value)));
         }
     }
 
@@ -1741,7 +1741,7 @@ else
     {
         if (double.TryParse(e.Value?.ToString(), out var value))
         {
-            SetNodeValue(name, JsonValue.Create(value));
+            SetNodeValue(name, JsonValue.Create(NormalizeDoubleValue(name, value)));
         }
     }
 
@@ -1759,7 +1759,7 @@ else
         }
         var bitrate = GetObjectNode("Bitrate") ?? new JsonObject();
         var key = GetMatchingKey(bitrate, name);
-        bitrate[key] = JsonValue.Create(value);
+        bitrate[key] = JsonValue.Create(Math.Max(0, value));
         SetNodeValue("Bitrate", bitrate);
     }
 
@@ -1806,7 +1806,56 @@ else
     {
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
-            SetFilterValue(name, JsonValue.Create(value));
+            SetFilterValue(name, JsonValue.Create(NormalizeFilterIntValue(name, value)));
+        }
+    }
+
+    private static int NormalizeIntValue(string name, int value)
+    {
+        switch (name)
+        {
+            case "ForceSARWidth":
+            case "ForceSARHeight":
+                return Math.Max(1, value);
+            case "AudioBitrateInKbps":
+                return Math.Max(1, value);
+            case "PmtCutHeadRate":
+            case "PmtCutTailRate":
+                return Math.Clamp(value, 0, 100);
+            case "MaxFadeLength":
+                return Math.Max(1, value);
+            case "NumEncodeBufferFrames":
+                return Math.Clamp(value, 1, 54);
+            default:
+                return value;
+        }
+    }
+
+    private static double NormalizeDoubleValue(string name, double value)
+    {
+        switch (name)
+        {
+            case "BitrateCM":
+            case "CMQualityOffset":
+                return Math.Max(0, value);
+            default:
+                return value;
+        }
+    }
+
+    private static int NormalizeFilterIntValue(string name, int value)
+    {
+        switch (name)
+        {
+            case "AutoVfrParallel":
+                return Math.Clamp(value, 1, 16);
+            case "AutoVfrSkip":
+                return Math.Clamp(value, 0, 3);
+            case "ResizeWidth":
+            case "ResizeHeight":
+                return Math.Max(1, value);
+            default:
+                return value;
         }
     }
 

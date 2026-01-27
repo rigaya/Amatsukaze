@@ -170,6 +170,10 @@ else
                         else
                         {
                             <div style="display: grid; gap: 6px;">
+                                <label class="service-logo-toggle">
+                                    <input type="checkbox" checked="@_logoEnabled" @onchange="OnToggleLogoEnabled" />
+                                    <span>ロゴを有効にする</span>
+                                </label>
                                 <input class="form-control" placeholder="開始 (YYYY/MM/DD)" @bind="_logoFromText" />
                                 <input class="form-control" placeholder="終了 (YYYY/MM/DD)" @bind="_logoToText" />
                                 <button class="btn btn-primary" @onclick="ApplyLogoPeriodAsync">適用</button>
@@ -218,6 +222,7 @@ else
     private LogoSettingView? _selectedLogo;
     private string _logoFromText = "";
     private string _logoToText = "";
+    private bool _logoEnabled;
     private string? _periodError;
     private string? _logoError;
 
@@ -296,6 +301,19 @@ else
         {
             _logoFromText = _selectedLogo.From == default ? "" : _selectedLogo.From.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
             _logoToText = _selectedLogo.To == default ? "" : _selectedLogo.To.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+            _logoEnabled = _selectedLogo.Enabled;
+        }
+    }
+
+    private void OnToggleLogoEnabled(ChangeEventArgs e)
+    {
+        if (e.Value is bool b)
+        {
+            _logoEnabled = b;
+        }
+        else if (bool.TryParse(e.Value?.ToString(), out var parsed))
+        {
+            _logoEnabled = parsed;
         }
     }
 
@@ -442,6 +460,23 @@ else
         if (!res.Ok)
         {
             _periodError = res.Error ?? "Failed to update period.";
+            return;
+        }
+
+        if (_selectedLogo.Enabled != _logoEnabled)
+        {
+            var enabledReq = new LogoEnabledUpdateRequest()
+            {
+                FileName = _selectedLogo.FileName,
+                Enabled = _logoEnabled
+            };
+            var enabledRes = await Api.UpdateServiceLogoEnabledAsync(_selectedService.ServiceId, enabledReq);
+            if (!enabledRes.Ok)
+            {
+                _periodError = enabledRes.Error ?? "Failed to update logo enabled.";
+                return;
+            }
+            _selectedLogo.Enabled = _logoEnabled;
         }
         await ReloadAsync();
     }

@@ -1,4 +1,5 @@
 @page "/settings"
+@using System
 @using System.Text.Json
 @using System.Text.Json.Nodes
 @using Amatsukaze.Shared
@@ -108,7 +109,7 @@ else
                     古いログを削除
                 </label>
                 <span style="margin-left: 12px;">日数</span>
-                <input type="number" style="width: 60px; margin-left: 6px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" disabled="@(GetBoolValue(DeleteOldLogsField) == false)" />
+                <input type="number" min="0" step="1" style="width: 60px; margin-left: 6px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" disabled="@(GetBoolValue(DeleteOldLogsField) == false)" />
             </td>
         </tr>
     </table>
@@ -126,7 +127,7 @@ else
         </tr>
         <tr>
             <th>GPU数</th>
-            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumGpuField)" @oninput="@(e => OnIntInput(e, NumGpuField))" disabled="@(GetBoolValue(SchedulingEnabledField) == false)" /></td>
+            <td><input type="number" min="1" max="16" step="1" style="width: 60px;" value="@GetIntValue(NumGpuField)" @oninput="@(e => OnIntInput(e, NumGpuField))" disabled="@(GetBoolValue(SchedulingEnabledField) == false)" /></td>
         </tr>
     </table>
 
@@ -135,11 +136,28 @@ else
     <table class="table">
         <tr>
             <th>並列数</th>
-            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumParallelField)" @oninput="@(e => OnIntInput(e, NumParallelField))" /></td>
+            <td>
+                <div class="settings-range">
+                    <input type="range" min="1" max="@MaxParallel" step="1" value="@GetIntValue(NumParallelField)" @oninput="@(e => OnIntInput(e, NumParallelField))" />
+                    <span class="settings-range-value">@GetIntValue(NumParallelField)</span>
+                </div>
+            </td>
         </tr>
         <tr>
             <th>ロゴ解析並列数</th>
-            <td><input type="number" style="width: 60px;" value="@GetIntValue(NumParallelLogoField)" @oninput="@(e => OnIntInput(e, NumParallelLogoField))" /></td>
+            <td>
+                <div class="settings-range">
+                    <label class="settings-check" style="margin-right: 10px;">
+                        <input type="checkbox" checked="@IsNumParallelLogoAuto" @onchange="OnLogoParallelAutoChange" />
+                        自動
+                    </label>
+                    @if (!IsNumParallelLogoAuto)
+                    {
+                        <input type="range" min="1" max="@MaxLogoParallel" step="1" value="@GetIntValue(NumParallelLogoField)" @oninput="@(e => OnLogoParallelInput(e))" />
+                        <span class="settings-range-value">@GetIntValue(NumParallelLogoField)</span>
+                    }
+                </div>
+            </td>
         </tr>
         <tr>
             <th>プロセス優先度</th>
@@ -257,7 +275,7 @@ else
         </tr>
         <tr>
             <th>値</th>
-            <td><input type="number" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" disabled="@IsX265VfrDefault" /></td>
+            <td><input type="number" min="0" max="1" step="0.01" style="width: 80px;" value="@GetDoubleValue(X265VfrFactorField)" @oninput="@(e => OnDoubleInput(e, X265VfrFactorField))" disabled="@IsX265VfrDefault" /></td>
         </tr>
     </table>
 
@@ -388,7 +406,9 @@ else
     private readonly List<string> _noActionExeList = new();
     private string _noActionExeName = "";
     private int _selectedNoActionExeIndex = -1;
+    private int _lastLogoParallelManual = 1;
     private bool _isServerLinux;
+    private int _serverLogicalProcessorCount;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -410,12 +430,14 @@ else
         var settingTask = Api.GetSettingAsync();
         var queueFinishTask = Api.GetQueueFinishBatFilesAsync();
         var profileOptionsTask = Api.GetProfileOptionsAsync();
+        var systemTask = Api.GetSystemAsync();
 
-        await Task.WhenAll(settingTask, queueFinishTask, profileOptionsTask);
+        await Task.WhenAll(settingTask, queueFinishTask, profileOptionsTask, systemTask);
 
         var settingRes = await settingTask;
         var queueFinishRes = await queueFinishTask;
         var profileOptionsRes = await profileOptionsTask;
+        var systemRes = await systemTask;
 
         if (!settingRes.Ok)
         {
@@ -446,6 +468,14 @@ else
         else
         {
             _isServerLinux = false;
+        }
+        if (systemRes.Ok && systemRes.Data?.ServerInfo != null)
+        {
+            _serverLogicalProcessorCount = systemRes.Data.ServerInfo.LogicalProcessorCount;
+        }
+        else
+        {
+            _serverLogicalProcessorCount = 0;
         }
 
         _loading = false;
@@ -482,15 +512,20 @@ else
         _boolValues[ExecuteBatchAfterQueueField] = GetBool(ExecuteBatchAfterQueueField);
         _boolValues[ExclusiveBatExecField] = GetBool(ExclusiveBatExecField);
 
-        _intValues[DeleteOldLogsDaysField] = GetInt(DeleteOldLogsDaysField);
-        _intValues[NumGpuField] = GetInt(NumGpuField);
-        _intValues[NumParallelField] = GetInt(NumParallelField);
-        _intValues[NumParallelLogoField] = GetInt(NumParallelLogoField);
-        _intValues[ProcessPriorityField] = GetInt(ProcessPriorityField);
-        _intValues[AffinitySettingField] = GetInt(AffinitySettingField);
-        _doubleValues[X265VfrFactorField] = GetDouble(X265VfrFactorField);
+        _intValues[DeleteOldLogsDaysField] = NormalizeIntValue(DeleteOldLogsDaysField, GetInt(DeleteOldLogsDaysField));
+        _intValues[NumGpuField] = NormalizeIntValue(NumGpuField, GetInt(NumGpuField));
+        _intValues[NumParallelField] = NormalizeIntValue(NumParallelField, GetInt(NumParallelField));
+        _intValues[NumParallelLogoField] = NormalizeIntValue(NumParallelLogoField, GetInt(NumParallelLogoField));
+        _intValues[ProcessPriorityField] = NormalizeIntValue(ProcessPriorityField, GetInt(ProcessPriorityField));
+        _intValues[AffinitySettingField] = NormalizeIntValue(AffinitySettingField, GetInt(AffinitySettingField));
+        _doubleValues[X265VfrFactorField] = NormalizeDoubleValue(X265VfrFactorField, GetDouble(X265VfrFactorField));
         _runHours = GetRunHoursArray();
         _noActionExeList.AddRange(GetStringList("NoActionExeList"));
+        var logoParallel = _intValues.TryGetValue(NumParallelLogoField, out var currentLogoParallel) ? currentLogoParallel : 0;
+        if (logoParallel > 0)
+        {
+            _lastLogoParallelManual = logoParallel;
+        }
     }
 
     private async Task ApplyAsync()
@@ -511,11 +546,11 @@ else
         }
         foreach (var kv in _intValues)
         {
-            SetSettingValue(kv.Key, kv.Value);
+            SetSettingValue(kv.Key, NormalizeIntValue(kv.Key, kv.Value));
         }
         foreach (var kv in _doubleValues)
         {
-            SetSettingValue(kv.Key, kv.Value);
+            SetSettingValue(kv.Key, NormalizeDoubleValue(kv.Key, kv.Value));
         }
         var runHoursArray = new JsonArray();
         foreach (var v in _runHours)
@@ -816,7 +851,7 @@ else
     {
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
-            _intValues[name] = value;
+            _intValues[name] = NormalizeIntValue(name, value);
         }
     }
 
@@ -824,7 +859,34 @@ else
     {
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
-            _intValues[name] = value;
+            _intValues[name] = NormalizeIntValue(name, value);
+        }
+    }
+
+    private void OnLogoParallelInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            var normalized = NormalizeIntValue(NumParallelLogoField, value);
+            _intValues[NumParallelLogoField] = normalized;
+            if (normalized > 0)
+            {
+                _lastLogoParallelManual = normalized;
+            }
+        }
+    }
+
+    private void OnLogoParallelAutoChange(ChangeEventArgs e)
+    {
+        var enabled = e.Value is bool b && b;
+        if (enabled)
+        {
+            _intValues[NumParallelLogoField] = 0;
+        }
+        else
+        {
+            var next = Math.Clamp(_lastLogoParallelManual, 1, MaxLogoParallel);
+            _intValues[NumParallelLogoField] = next;
         }
     }
 
@@ -832,8 +894,52 @@ else
     {
         if (double.TryParse(e.Value?.ToString(), out var value))
         {
-            _doubleValues[name] = value;
+            _doubleValues[name] = NormalizeDoubleValue(name, value);
         }
+    }
+
+    private int NormalizeIntValue(string name, int value)
+    {
+        if (name == DeleteOldLogsDaysField)
+        {
+            return Math.Max(0, value);
+        }
+        if (name == NumGpuField)
+        {
+            return Math.Clamp(value, 1, 16);
+        }
+        if (name == NumParallelField)
+        {
+            return Math.Clamp(value, 1, MaxParallel);
+        }
+        if (name == NumParallelLogoField)
+        {
+            if (value <= 0)
+            {
+                return 0;
+            }
+            var max = MaxLogoParallel;
+            return Math.Clamp(value, 1, max);
+        }
+        if (name == ProcessPriorityField)
+        {
+            return Math.Clamp(value, 0, _processPriorityOptions.Length - 1);
+        }
+        if (name == AffinitySettingField)
+        {
+            return Math.Clamp(value, 0, _affinityOptions.Length - 1);
+        }
+        return value;
+    }
+
+    private double NormalizeDoubleValue(string name, double value)
+    {
+        if (name == X265VfrFactorField)
+        {
+            var clamped = Math.Clamp(value, 0.0, 1.0);
+            return Math.Round(clamped, 2, MidpointRounding.AwayFromZero);
+        }
+        return value;
     }
 
     private bool[] GetRunHoursArray()
@@ -889,6 +995,12 @@ else
     private bool IsServerLinux => _isServerLinux;
 
     private bool IsX265VfrDefault => !GetBoolValue(EnableX265VfrField);
+
+    private int MaxLogoParallel => _serverLogicalProcessorCount > 0 ? _serverLogicalProcessorCount : 1;
+
+    private int MaxParallel => _serverLogicalProcessorCount > 0 ? _serverLogicalProcessorCount : 1;
+
+    private bool IsNumParallelLogoAuto => GetIntValue(NumParallelLogoField) <= 0;
 
     private static bool IsWindowsOnlyPath(string field)
     {

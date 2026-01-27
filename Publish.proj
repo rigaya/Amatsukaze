@@ -4,6 +4,7 @@
     <PublishProjects Include="AmatsukazeServerCLI\AmatsukazeServerCLI.csproj" />
     <PublishProjects Include="AmatsukazeGUI\AmatsukazeGUI.csproj" />
     <PublishProjects Include="ScriptCommand\ScriptCommand.csproj" />
+    <WebUiHostProject Include="AmatsukazeServer\AmatsukazeServer.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -20,6 +21,13 @@
       Targets="Restore;Publish"
       BuildInParallel="true"
       Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration);SelfContained=$(SelfContained);PublishSingleFile=$(PublishSingleFile);PublishDir=$(PublishRoot)%(Filename)\">
+    </MSBuild>
+
+    <MSBuild
+      Projects="@(WebUiHostProject)"
+      Targets="Restore;Publish"
+      BuildInParallel="true"
+      Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration);SelfContained=false;PublishSingleFile=false;PublishDir=$(PublishRoot)%(Filename)\">
     </MSBuild>
   </Target>
 </Project>

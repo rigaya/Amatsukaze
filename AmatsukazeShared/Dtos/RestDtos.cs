@@ -247,6 +247,12 @@ namespace Amatsukaze.Shared
         public List<MessageEventView> Items { get; set; } = new List<MessageEventView>();
     }
 
+    public class PagedResult<T>
+    {
+        public int Total { get; set; }
+        public List<T> Items { get; set; } = new List<T>();
+    }
+
     public class LogItemView
     {
         public string? SrcPath { get; set; }
@@ -370,6 +376,12 @@ namespace Amatsukaze.Shared
         public DateTime? To { get; set; }
     }
 
+    public class LogoEnabledUpdateRequest
+    {
+        public string? FileName { get; set; }
+        public bool Enabled { get; set; }
+    }
+
     public class LogoProbeResponse
     {
         public bool IsExtended { get; set; }
@@ -391,6 +403,18 @@ namespace Amatsukaze.Shared
         public string? ImageUrl { get; set; }
     }
 
+    public class DrcsMapUpdateRequest
+    {
+        public string? Md5 { get; set; }
+        public string? MapStr { get; set; }
+    }
+
+    public class DrcsAppearanceResponse
+    {
+        public string? Md5 { get; set; }
+        public List<string> Items { get; set; } = new List<string>();
+    }
+
     public class MakeScriptData
     {
         public string? Profile { get; set; }
@@ -409,6 +433,16 @@ namespace Amatsukaze.Shared
     public class MakeScriptPreview
     {
         public string? CommandLine { get; set; }
+    }
+
+    public class MakeScriptGenerateRequest
+    {
+        public MakeScriptData? MakeScriptData { get; set; }
+        public string? TargetHost { get; set; } // local / remote
+        public string? ScriptType { get; set; } // bat / sh
+        public string? RemoteHost { get; set; }
+        public string? Subnet { get; set; }
+        public string? Mac { get; set; }
     }
 
     public class LogoAnalyzeStartRequest
