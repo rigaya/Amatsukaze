@@ -17,6 +17,9 @@ Debug2/
 Release2/
 build/
 
+# .NET build output
+/AmatsukazeServer/obj/
+
 /ffmpeg_lgpl
 /publish
 
