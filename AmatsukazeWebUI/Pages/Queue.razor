@@ -152,17 +152,15 @@ else
              ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
              @onclick="CloseContextMenu"
              @ondragenter="OnQueueBodyDragEnter">
-        <table class="table"
+        <table class="table queue-table"
                data-drop-end="true"
                ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
                @ondragenter="OnQueueBodyDragEnter">
             <thead>
                 <tr>
-                    <th>タスク</th>
-                    <th>状態</th>
-                    <th>放送日 / チャンネル</th>
+                    <th>タスク<br>放送日 / チャンネル</th>
                     <th>入力ファイル</th>
-                    <th>プロファイル/優先度/操作</th>
+                    <th>プロファイル<br>状態 / 優先度</th>
                 </tr>
             </thead>
             <tbody @ondragover:preventDefault="true"
@@ -190,24 +188,32 @@ else
                         @oncontextmenu:stopPropagation="true"
                         @ondrop:preventDefault="true"
                         @ondrop="@(() => OnQueueDrop(rowIndex))">
-                        <td>@GetTaskLabel(item)</td>
-                        <td>@GetStateText(item)</td>
-                        <td style="white-space: pre-line;">@GetBroadcastText(item)</td>
-                        <td title="@BuildQueueTooltip(item)">@GetInputFile(item)</td>
                         <td>
-                            <div style="display: flex; gap: 6px; align-items: center;">
-                                <select style="flex: 1; min-width: 0;"
-                                        @bind="_profileInputs[item.Id]"
-                                        @bind:after="(() => ChangeProfileAsync(item))">
-                                    <option value="">(Profile)</option>
-                                    @foreach (var name in _profileNames)
-                                    {
-                                        <option value="@name">@name</option>
-                                    }
-                                </select>
-                                <input type="number" style="width: 3.5rem;"
-                                       @bind="_priorityInputs[item.Id]"
-                                       @bind:after="(() => ChangePriorityAsync(item))" />
+                            <div class="queue-cell-stack">
+                                <div class="queue-cell-line queue-task">@GetTaskLabel(item)</div>
+                                <div class="queue-cell-line queue-channel">@GetBroadcastDateShort(item) @@ @ToHalfWidth(GetBroadcastChannel(item))</div>
+                            </div>
+                        </td>
+                        <td class="queue-input-file" title="@BuildQueueTooltip(item)">@GetInputFile(item)</td>
+                        <td class="queue-actions-cell">
+                            <div class="queue-cell-stack">
+                                <div class="queue-cell-line">
+                                    <select class="queue-profile-select"
+                                            @bind="_profileInputs[item.Id]"
+                                            @bind:after="(() => ChangeProfileAsync(item))">
+                                        <option value="">(Profile)</option>
+                                        @foreach (var name in _profileNames)
+                                        {
+                                            <option value="@name">@name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="queue-cell-line queue-state-priority">
+                                    <span class="queue-state">@GetStateText(item)</span>
+                                    <input type="number" class="queue-priority-input"
+                                           @bind="_priorityInputs[item.Id]"
+                                           @bind:after="(() => ChangePriorityAsync(item))" />
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -217,7 +223,7 @@ else
                     ondragover="return amatsukazeDnd.onOverWithIndex(event)"
                     @ondragenter="(() => OnQueueDragEnter(_view.Items.Count))"
                     @ondragend="OnQueueDragEnd">
-                    <td colspan="5"></td>
+                    <td colspan="3"></td>
                 </tr>
             </tbody>
         </table>
@@ -992,16 +998,59 @@ else
         return "不明";
     }
 
-    private static string GetBroadcastText(QueueItemView item)
+    private static string GetBroadcastDateShort(QueueItemView item)
     {
         var timeText = item.DisplayBroadcastTime;
         if (string.IsNullOrEmpty(timeText))
         {
             var time = item.EitStartTime ?? item.TsTime ?? item.EncodeStart;
-            timeText = time.HasValue ? time.Value.ToString("yyyy-MM-dd") : (item.DisplayEncodeStart ?? "-");
+            timeText = time.HasValue ? time.Value.ToString("MM/dd") : (item.DisplayEncodeStart ?? "-");
         }
-        var service = string.IsNullOrEmpty(item.ServiceName) ? "-" : item.ServiceName;
-        return $"{timeText}\n{service}";
+        if (string.IsNullOrEmpty(timeText))
+        {
+            return "-";
+        }
+        if (DateTime.TryParse(timeText, out var parsed))
+        {
+            return parsed.ToString("MM/dd");
+        }
+        if (timeText.Length >= 5 && timeText.Contains('-'))
+        {
+            var parts = timeText.Split('-', '/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3)
+            {
+                return $"{parts[1]}/{parts[2]}";
+            }
+        }
+        return timeText;
+    }
+
+    private static string GetBroadcastChannel(QueueItemView item)
+    {
+        return string.IsNullOrEmpty(item.ServiceName) ? "-" : item.ServiceName!;
+    }
+
+    private static string ToHalfWidth(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+        var chars = value.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+            if (c == '\u3000')
+            {
+                chars[i] = ' ';
+                continue;
+            }
+            if (c >= '\uFF01' && c <= '\uFF5E')
+            {
+                chars[i] = (char)(c - 0xFEE0);
+            }
+        }
+        return new string(chars);
     }
 
     private static string GetInputFolder(QueueItemView item)
