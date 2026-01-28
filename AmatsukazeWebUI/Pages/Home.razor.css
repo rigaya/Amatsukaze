@@ -1,0 +1,20 @@
+.info-table {
+    border-collapse: separate;
+    border-spacing: 0 6px;
+    width: 100%;
+    max-width: 560px;
+}
+
+.info-table th,
+.info-table td {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.info-table th {
+    width: 140px;
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+}
