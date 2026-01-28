@@ -785,7 +785,7 @@ code {
     }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 800px) {
     .run-hours-grid {
         grid-template-columns: repeat(6, minmax(0, 1fr));
     }
@@ -1257,6 +1257,12 @@ code {
     background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
 }
 
+.service-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 16px;
+}
+
 .service-right-column {
     position: sticky;
     top: var(--topbar-height);
@@ -1270,4 +1276,17 @@ code {
     align-items: center;
     gap: 8px;
     font-size: 13px;
+}
+
+@media (max-width: 980px) {
+    .service-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .service-right-column {
+        position: static;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+    }
 }
