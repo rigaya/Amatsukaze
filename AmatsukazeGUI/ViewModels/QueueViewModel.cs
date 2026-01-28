@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,6 +13,7 @@ using Livet.Messaging.Windows;
 
 using Amatsukaze.Models;
 using Amatsukaze.Server;
+using Amatsukaze.Server.Rest;
 using System.Threading.Tasks;
 using System.Windows;
 using System.IO;
