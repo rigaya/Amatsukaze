@@ -232,7 +232,22 @@ namespace Amatsukaze.Server
                 var exePath = Process.GetCurrentProcess().MainModule.FileName;
                 if (!string.IsNullOrEmpty(exePath))
                 {
-                    version = FileVersionInfo.GetVersionInfo(exePath).FileVersion;
+                    var info = FileVersionInfo.GetVersionInfo(exePath);
+                    var detected = info.FileVersion;
+                    if (string.IsNullOrWhiteSpace(detected))
+                    {
+                        detected = info.ProductVersion;
+                    }
+                    if (string.IsNullOrWhiteSpace(detected))
+                    {
+                        detected = Assembly.GetExecutingAssembly()
+                            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+                    }
+                    if (string.IsNullOrWhiteSpace(detected))
+                    {
+                        detected = Assembly.GetExecutingAssembly().GetName().Version?.ToString();
+                    }
+                    version = string.IsNullOrWhiteSpace(detected) ? "0.0.0.0" : detected;
                 }
                 else
                 {

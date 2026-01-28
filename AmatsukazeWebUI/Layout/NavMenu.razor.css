@@ -9,6 +9,21 @@
 
 .navbar-brand {
     font-size: 1.1rem;
+    color: var(--sidebar-text);
+}
+
+.nav-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    align-items: flex-start;
+}
+
+.nav-version {
+    font-size: 0.7rem !important;
+    color: var(--sidebar-text);
+    opacity: 0.7;
+    letter-spacing: 0.02em;
 }
 
 .bi {
@@ -96,5 +111,11 @@
         /* Allow sidebar to scroll for tall menus */
         height: calc(100vh - 3.5rem);
         overflow-y: auto;
+        display: flex;
+        flex-direction: column;
     }
+}
+
+.nav-menu-list {
+    flex: 1 1 auto;
 }

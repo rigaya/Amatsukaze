@@ -20,6 +20,7 @@ using System.IO;
 using Amatsukaze.Components;
 using System.Windows.Data;
 using System.Collections;
+using System.Net.Http;
 
 namespace Amatsukaze.ViewModels
 {
@@ -346,11 +347,6 @@ namespace Amatsukaze.ViewModels
                 args += " --work \"" + tempdir + "\"";
             } else {
                 var workpath = Model.Setting.WorkPath;
-                if (Directory.Exists(workpath) == false)
-                {
-                    MessageBox.Show("一時ファイルフォルダがアクセスできる場所に設定されていないため起動できません");
-                    return;
-                }
                 string filepath = file.SrcPath;
                 if (File.Exists(filepath) == false) // サーバーがLinuxの場合はファイルのチェックをスキップ
                 {
@@ -358,11 +354,24 @@ namespace Amatsukaze.ViewModels
                     filepath = Path.Combine(Path.GetDirectoryName(file.SrcPath), "failed", Path.GetFileName(file.SrcPath));
                     if (File.Exists(filepath) == false)
                     {
-                        MessageBox.Show("ファイルが見つかりません");
-                        return;
+                        if (TryOpenWebLogoAnalyze(file.Id))
+                        {
+                            return;
+                        }
+                        // WebUIが開けない場合は従来通りファイル指定にフォールバック
+                        filepath = null;
                     }
                 }
-                args += " --file \"" + filepath + "\" --work \"" + workpath + "\"";
+                if (Directory.Exists(workpath) == false)
+                {
+                    MessageBox.Show("一時ファイルフォルダがアクセスできる場所に設定されていないため起動できません");
+                    return;
+                }
+                if (string.IsNullOrEmpty(filepath) == false)
+                {
+                    args += " --file \"" + filepath + "\"";
+                }
+                args += " --work \"" + workpath + "\"";
             }
             var apppath = Environment.ProcessPath; // 実行ファイル名を取得する
             if (slimts)
@@ -400,6 +409,37 @@ namespace Amatsukaze.ViewModels
                         }
                     });
                 };
+            }
+        }
+
+        private bool TryOpenWebLogoAnalyze(int queueItemId)
+        {
+            if (queueItemId <= 0)
+            {
+                return false;
+            }
+            var port = RestApiHost.GetEnabledPort(Model.ServerPort);
+            if (port <= 0)
+            {
+                return false;
+            }
+            var host = string.IsNullOrWhiteSpace(Model.ServerIP) ? "localhost" : Model.ServerIP;
+            var baseUrl = $"http://{host}:{port}";
+            try
+            {
+                using var http = new HttpClient { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(2) };
+                var response = http.GetAsync("/api/system").GetAwaiter().GetResult();
+                if (!response.IsSuccessStatusCode)
+                {
+                    return false;
+                }
+                var url = $"{baseUrl}/logo-analyze?queueItemId={queueItemId}";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

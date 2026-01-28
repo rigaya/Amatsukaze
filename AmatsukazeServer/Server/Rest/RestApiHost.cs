@@ -425,12 +425,15 @@ namespace Amatsukaze.Server.Rest
                 var extensions = request.Query["ext"].ToString();
                 var allowFiles = GetQueryBool(request, "allowFiles", true);
                 var allowDirs = GetQueryBool(request, "allowDirs", true);
+                var checkAccess = GetQueryBool(request, "checkAccess", false);
                 var maxDirs = GetQueryInt(request, "maxDirs", 10);
                 var maxFiles = GetQueryInt(request, "maxFiles", 10);
+                var dirOffset = GetQueryInt(request, "dirOffset", 0);
+                var fileOffset = GetQueryInt(request, "fileOffset", 0);
 
                 try
                 {
-                    var response = BuildPathSuggestResponse(input, extensions, allowFiles, allowDirs, maxDirs, maxFiles);
+                    var response = BuildPathSuggestResponse(input, extensions, allowFiles, allowDirs, maxDirs, maxFiles, checkAccess, dirOffset, fileOffset);
                     return Results.Json(response);
                 }
                 catch (Exception ex)
@@ -1860,12 +1863,16 @@ namespace Amatsukaze.Server.Rest
             return fallback;
         }
 
-        private static PathSuggestResponse BuildPathSuggestResponse(string input, string extensions, bool allowFiles, bool allowDirs, int maxDirs, int maxFiles)
+        private static PathSuggestResponse BuildPathSuggestResponse(string input, string extensions, bool allowFiles, bool allowDirs, int maxDirs, int maxFiles, bool checkAccess, int dirOffset, int fileOffset)
         {
             var response = new PathSuggestResponse
             {
                 Input = input ?? string.Empty,
-                BaseDir = string.Empty
+                BaseDir = string.Empty,
+                HasMoreDirs = false,
+                HasMoreFiles = false,
+                NextDirOffset = 0,
+                NextFileOffset = 0
             };
 
             if (string.IsNullOrWhiteSpace(input))
@@ -1887,9 +1894,10 @@ namespace Amatsukaze.Server.Rest
             if (allowDirs && maxDirs > 0)
             {
                 var dirs = new List<PathCandidate>();
+                var seen = 0;
                 foreach (var dir in SafeEnumerateDirectories(baseDir))
                 {
-                    if (!CanReadDirectory(dir))
+                    if (checkAccess && !CanReadDirectory(dir))
                     {
                         continue;
                     }
@@ -1898,23 +1906,39 @@ namespace Amatsukaze.Server.Rest
                     {
                         continue;
                     }
-                    dirs.Add(new PathCandidate
+                    if (seen < dirOffset)
                     {
-                        Name = name,
-                        FullPath = dir,
-                        StartsWith = startsWith,
-                        MatchIndex = matchIndex
-                    });
+                        seen++;
+                        continue;
+                    }
+                    if (dirs.Count < maxDirs)
+                    {
+                        dirs.Add(new PathCandidate
+                        {
+                            Name = name,
+                            FullPath = dir,
+                            StartsWith = startsWith,
+                            MatchIndex = matchIndex
+                        });
+                        seen++;
+                    }
+                    else
+                    {
+                        response.HasMoreDirs = true;
+                        break;
+                    }
                 }
-                response.Dirs = OrderCandidates(dirs).Take(maxDirs).ToList();
+                response.Dirs = OrderCandidates(dirs).ToList();
+                response.NextDirOffset = dirOffset + response.Dirs.Count;
             }
 
             if (allowFiles && maxFiles > 0)
             {
                 var files = new List<PathCandidate>();
+                var seen = 0;
                 foreach (var file in SafeEnumerateFiles(baseDir))
                 {
-                    if (!CanReadFile(file))
+                    if (checkAccess && !CanReadFile(file))
                     {
                         continue;
                     }
@@ -1931,15 +1955,30 @@ namespace Amatsukaze.Server.Rest
                     {
                         continue;
                     }
-                    files.Add(new PathCandidate
+                    if (seen < fileOffset)
                     {
-                        Name = name,
-                        FullPath = file,
-                        StartsWith = startsWith,
-                        MatchIndex = matchIndex
-                    });
+                        seen++;
+                        continue;
+                    }
+                    if (files.Count < maxFiles)
+                    {
+                        files.Add(new PathCandidate
+                        {
+                            Name = name,
+                            FullPath = file,
+                            StartsWith = startsWith,
+                            MatchIndex = matchIndex
+                        });
+                        seen++;
+                    }
+                    else
+                    {
+                        response.HasMoreFiles = true;
+                        break;
+                    }
                 }
-                response.Files = OrderCandidates(files).Take(maxFiles).ToList();
+                response.Files = OrderCandidates(files).ToList();
+                response.NextFileOffset = fileOffset + response.Files.Count;
             }
 
             return response;

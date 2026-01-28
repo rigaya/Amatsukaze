@@ -1,6 +1,7 @@
 @using System.Threading
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
+@inject IJSRuntime Js
 
 <div class="path-suggest-input">
     <input value="@Value"
@@ -10,38 +11,50 @@
            @onkeydown="OnKeyDownAsync"
            @onfocus="OnFocus"
            @onblur="OnBlurAsync" />
-    @if (_showSuggestions)
-    {
-        <div class="path-suggest-list" @onmouseenter="OnListEnter" @onmouseleave="OnListLeave">
-            @if (_dirs.Count > 0)
+@if (_showSuggestions)
+{
+    <div class="path-suggest-list" @ref="_listRef" @onmouseenter="OnListEnter" @onmouseleave="OnListLeave">
+        @if (_dirs.Count > 0)
+        {
+            <div class="path-suggest-group">Folders</div>
+            @for (var i = 0; i < _dirs.Count; i++)
             {
-                <div class="path-suggest-group">Folders</div>
-                @for (var i = 0; i < _dirs.Count; i++)
-                {
                     var index = i;
                     var itemIndex = index;
                     <div class="path-suggest-item @GetSelectedClass(itemIndex)"
                          @onmousedown="() => Select(_dirs[index].FullPath)">
                         [DIR] @_dirs[index].Name
-                    </div>
-                }
+                </div>
             }
-            @if (_files.Count > 0)
+            @if (_hasMoreDirs)
             {
-                <div class="path-suggest-group">Files</div>
-                @for (var i = 0; i < _files.Count; i++)
-                {
+                <div class="path-suggest-more" @onmousedown="LoadMoreDirs" @onmousedown:preventDefault="true">
+                    続きを読み込む (フォルダ)
+                </div>
+            }
+        }
+        @if (_files.Count > 0)
+        {
+            <div class="path-suggest-group">Files</div>
+            @for (var i = 0; i < _files.Count; i++)
+            {
                     var index = i;
                     var itemIndex = _dirs.Count + index;
                     <div class="path-suggest-item @GetSelectedClass(itemIndex)"
                          @onmousedown="() => Select(_files[index].FullPath)">
                         [FILE] @_files[index].Name
-                    </div>
-                }
+                </div>
             }
-            @if (!string.IsNullOrEmpty(_error))
+            @if (_hasMoreFiles)
             {
-                <div class="path-suggest-error">@_error</div>
+                <div class="path-suggest-more" @onmousedown="LoadMoreFiles" @onmousedown:preventDefault="true">
+                    続きを読み込む (ファイル)
+                </div>
+            }
+        }
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="path-suggest-error">@_error</div>
             }
         </div>
     }
@@ -53,8 +66,9 @@
     [Parameter] public string? Extensions { get; set; }
     [Parameter] public bool AllowFiles { get; set; } = true;
     [Parameter] public bool AllowDirs { get; set; } = true;
+    [Parameter] public bool CheckAccess { get; set; } = false;
     [Parameter] public int MaxDirs { get; set; } = 10;
-    [Parameter] public int MaxFiles { get; set; } = 10;
+    [Parameter] public int MaxFiles { get; set; } = 20;
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public string? Placeholder { get; set; }
 
@@ -66,6 +80,13 @@
     private int _selectedIndex = -1;
     private bool _hovering;
     private bool _focused;
+    private ElementReference _listRef;
+    private int _dirOffset;
+    private int _fileOffset;
+    private bool _hasMoreDirs;
+    private bool _hasMoreFiles;
+    private bool _loadingMore;
+    private double _pendingScrollTop;
 
     private async Task OnInputAsync(ChangeEventArgs e)
     {
@@ -86,6 +107,10 @@
             ClearSuggestions();
             return;
         }
+        _dirOffset = 0;
+        _fileOffset = 0;
+        _hasMoreDirs = false;
+        _hasMoreFiles = false;
 
         try
         {
@@ -101,7 +126,7 @@
             return;
         }
 
-        await FetchSuggestionsAsync(value);
+        await FetchSuggestionsAsync(value, append: false);
     }
 
     private void OnFocus()
@@ -137,9 +162,10 @@
         }
     }
 
-    private async Task FetchSuggestionsAsync(string input)
+    private async Task FetchSuggestionsAsync(string input, bool append)
     {
         _error = null;
+        _loadingMore = append;
         var req = new PathSuggestRequest
         {
             Input = input,
@@ -147,7 +173,10 @@
             AllowDirs = AllowDirs,
             AllowFiles = AllowFiles,
             MaxDirs = MaxDirs,
-            MaxFiles = MaxFiles
+            MaxFiles = MaxFiles,
+            CheckAccess = CheckAccess,
+            DirOffset = append ? _dirOffset : 0,
+            FileOffset = append ? _fileOffset : 0
         };
 
         var res = await Api.GetPathSuggestAsync(req);
@@ -157,17 +186,37 @@
             _files.Clear();
             _showSuggestions = false;
             _error = res.Error ?? "Failed to load suggestions.";
+            _loadingMore = false;
             await InvokeAsync(StateHasChanged);
             return;
         }
 
-        _dirs.Clear();
-        _files.Clear();
+        if (!append)
+        {
+            _dirs.Clear();
+            _files.Clear();
+        }
         _dirs.AddRange(res.Data.Dirs ?? new List<PathCandidate>());
         _files.AddRange(res.Data.Files ?? new List<PathCandidate>());
+        _hasMoreDirs = res.Data.HasMoreDirs;
+        _hasMoreFiles = res.Data.HasMoreFiles;
+        _dirOffset = res.Data.NextDirOffset;
+        _fileOffset = res.Data.NextFileOffset;
         _showSuggestions = (_dirs.Count > 0 || _files.Count > 0 || !string.IsNullOrEmpty(_error)) && _focused;
-        _selectedIndex = _showSuggestions ? 0 : -1;
+        if (!append)
+        {
+            _selectedIndex = _showSuggestions ? 0 : -1;
+        }
+        _loadingMore = false;
         await InvokeAsync(StateHasChanged);
+        if (append)
+        {
+            await RestoreScrollTopAsync();
+        }
+        else
+        {
+            await EnsureSelectedVisibleAsync();
+        }
     }
 
     private async Task Select(string value)
@@ -183,6 +232,11 @@
         _showSuggestions = false;
         _error = null;
         _selectedIndex = -1;
+        _dirOffset = 0;
+        _fileOffset = 0;
+        _hasMoreDirs = false;
+        _hasMoreFiles = false;
+        _loadingMore = false;
         InvokeAsync(StateHasChanged);
     }
 
@@ -214,11 +268,13 @@
         {
             _selectedIndex = Math.Min(_selectedIndex + 1, total - 1);
             StateHasChanged();
+            _ = EnsureSelectedVisibleAsync();
         }
         else if (e.Key == "ArrowUp")
         {
             _selectedIndex = Math.Max(_selectedIndex - 1, 0);
             StateHasChanged();
+            _ = EnsureSelectedVisibleAsync();
         }
         else if (e.Key == "Enter")
         {
@@ -238,6 +294,23 @@
         return Task.CompletedTask;
     }
 
+    private async Task EnsureSelectedVisibleAsync()
+    {
+        if (!_showSuggestions || _selectedIndex < 0)
+        {
+            return;
+        }
+        try
+        {
+            await Task.Yield();
+            await Js.InvokeVoidAsync("amatsukazeUi.ensureListItemVisible", _listRef, _selectedIndex);
+        }
+        catch
+        {
+            // best-effort only
+        }
+    }
+
     private string? GetSelectedCandidate()
     {
         if (_selectedIndex < 0)
@@ -254,5 +327,50 @@
             return _files[fileIndex].FullPath;
         }
         return null;
+    }
+
+    private async Task LoadMoreDirs()
+    {
+        if (_loadingMore || !_hasMoreDirs)
+        {
+            return;
+        }
+        _hovering = true;
+        _pendingScrollTop = await GetScrollTopAsync();
+        await FetchSuggestionsAsync(Value, append: true);
+    }
+
+    private async Task LoadMoreFiles()
+    {
+        if (_loadingMore || !_hasMoreFiles)
+        {
+            return;
+        }
+        _hovering = true;
+        _pendingScrollTop = await GetScrollTopAsync();
+        await FetchSuggestionsAsync(Value, append: true);
+    }
+
+    private async Task<double> GetScrollTopAsync()
+    {
+        try
+        {
+            return await Js.InvokeAsync<double>("amatsukazeUi.getScrollTop", _listRef);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private async Task RestoreScrollTopAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("amatsukazeUi.setScrollTop", _listRef, _pendingScrollTop);
+        }
+        catch
+        {
+        }
     }
 }

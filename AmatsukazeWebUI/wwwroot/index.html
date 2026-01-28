@@ -187,6 +187,49 @@
                 }
             }
         };
+        window.amatsukazeUi = {
+            ensureListItemVisible: function (listEl, index) {
+                try {
+                    if (!listEl || typeof index !== "number") {
+                        return;
+                    }
+                    var items = listEl.querySelectorAll(".path-suggest-item");
+                    if (!items || index < 0 || index >= items.length) {
+                        return;
+                    }
+                    var item = items[index];
+                    var top = item.offsetTop;
+                    var bottom = top + item.offsetHeight;
+                    var viewTop = listEl.scrollTop;
+                    var viewBottom = viewTop + listEl.clientHeight;
+                    if (top < viewTop) {
+                        listEl.scrollTop = top;
+                    } else if (bottom > viewBottom) {
+                        listEl.scrollTop = bottom - listEl.clientHeight;
+                    }
+                } catch (e) {
+                }
+            },
+            getScrollTop: function (listEl) {
+                try {
+                    if (!listEl) {
+                        return 0;
+                    }
+                    return listEl.scrollTop || 0;
+                } catch (e) {
+                    return 0;
+                }
+            },
+            setScrollTop: function (listEl, top) {
+                try {
+                    if (!listEl || typeof top !== "number") {
+                        return;
+                    }
+                    listEl.scrollTop = top;
+                } catch (e) {
+                }
+            }
+        };
     </script>
 </body>
 

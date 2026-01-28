@@ -67,7 +67,11 @@ else
                 <span style="margin-left: 8px;">条件は上から順に評価されます</span>
             </div>
             <div class="condition-list">
-                @if (_selectedProfile != null)
+                @if (_selectedProfile != null && _selectedProfile.Conditions.Count == 0)
+                {
+                    <div class="condition-empty">条件が登録されていません</div>
+                }
+                else if (_selectedProfile != null)
                 {
                     for (var i = 0; i < _selectedProfile.Conditions.Count; i++)
                     {
@@ -856,6 +860,12 @@ else
         padding: 6px;
         background: var(--bg-surface);
         color: var(--text);
+    }
+
+    .condition-empty {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        padding: 6px 8px;
     }
 
     .condition-item {
