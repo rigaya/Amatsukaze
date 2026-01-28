@@ -439,6 +439,23 @@ else
         var profileOptionsRes = await profileOptionsTask;
         var systemRes = await systemTask;
 
+        if (profileOptionsRes.Ok && profileOptionsRes.Data != null)
+        {
+            _isServerLinux = profileOptionsRes.Data.IsServerLinux;
+        }
+        else
+        {
+            _isServerLinux = false;
+        }
+        if (systemRes.Ok && systemRes.Data?.ServerInfo != null)
+        {
+            _serverLogicalProcessorCount = systemRes.Data.ServerInfo.LogicalProcessorCount;
+        }
+        else
+        {
+            _serverLogicalProcessorCount = 0;
+        }
+
         if (!settingRes.Ok)
         {
             _error = settingRes.Error ?? "Failed to load settings.";
@@ -459,23 +476,6 @@ else
         else if (!queueFinishRes.Ok && string.IsNullOrEmpty(_error))
         {
             _error = queueFinishRes.Error ?? "Failed to load queue finish bat files.";
-        }
-
-        if (profileOptionsRes.Ok && profileOptionsRes.Data != null)
-        {
-            _isServerLinux = profileOptionsRes.Data.IsServerLinux;
-        }
-        else
-        {
-            _isServerLinux = false;
-        }
-        if (systemRes.Ok && systemRes.Data?.ServerInfo != null)
-        {
-            _serverLogicalProcessorCount = systemRes.Data.ServerInfo.LogicalProcessorCount;
-        }
-        else
-        {
-            _serverLogicalProcessorCount = 0;
         }
 
         _loading = false;
