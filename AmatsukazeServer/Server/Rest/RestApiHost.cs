@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -202,6 +203,11 @@ namespace Amatsukaze.Server.Rest
 
             app.MapGet("/api/snapshot", () => Results.Json(state.GetSnapshot()));
             app.MapGet("/api/system", () => Results.Json(state.GetSystemSnapshot()));
+            app.MapGet("/api/info/latest-release", async () =>
+            {
+                var info = await GetLatestReleaseInfoAsync();
+                return Results.Json(info ?? new LatestReleaseInfo());
+            });
             app.MapGet("/api/ui-state", () => Results.Json(state.GetUiStateView()));
             app.MapPost("/api/system/end", async () =>
             {
@@ -1993,6 +1999,74 @@ namespace Amatsukaze.Server.Rest
             var normalized = input.Replace('\\', Path.DirectorySeparatorChar);
             return normalized.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         }
+
+#nullable enable
+        private static readonly HttpClient GithubClient = CreateGithubClient();
+        private static readonly object LatestReleaseLock = new();
+        private static LatestReleaseInfo? LatestReleaseCache;
+        private static DateTime LatestReleaseCacheAt = DateTime.MinValue;
+
+        private static HttpClient CreateGithubClient()
+        {
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AmatsukazeServer/1.0");
+            client.Timeout = TimeSpan.FromSeconds(5);
+            return client;
+        }
+
+        private static async Task<LatestReleaseInfo?> GetLatestReleaseInfoAsync()
+        {
+            var now = DateTime.UtcNow;
+            lock (LatestReleaseLock)
+            {
+                if (LatestReleaseCache != null && (now - LatestReleaseCacheAt) < TimeSpan.FromMinutes(30))
+                {
+                    return LatestReleaseCache;
+                }
+            }
+
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/rigaya/Amatsukaze/releases/latest");
+                using var res = await GithubClient.SendAsync(req);
+                if (!res.IsSuccessStatusCode)
+                {
+                    return LatestReleaseCache;
+                }
+                var json = await res.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                var tag = root.TryGetProperty("tag_name", out var tagProp) ? tagProp.GetString() : null;
+                var url = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() : null;
+                DateTime? publishedAt = null;
+                if (root.TryGetProperty("published_at", out var pubProp))
+                {
+                    if (DateTime.TryParse(pubProp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed))
+                    {
+                        publishedAt = parsed;
+                    }
+                }
+
+                var info = new LatestReleaseInfo
+                {
+                    Tag = tag ?? string.Empty,
+                    Url = url ?? string.Empty,
+                    PublishedAt = publishedAt
+                };
+
+                lock (LatestReleaseLock)
+                {
+                    LatestReleaseCache = info;
+                    LatestReleaseCacheAt = now;
+                }
+                return info;
+            }
+            catch
+            {
+                return LatestReleaseCache;
+            }
+        }
+#nullable restore
 
         private static (string baseDir, string needle) SplitInput(string input)
         {

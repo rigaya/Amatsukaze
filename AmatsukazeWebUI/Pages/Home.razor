@@ -18,23 +18,36 @@ else if (_system == null)
 }
 else
 {
-    <table>
+    <table class="info-table">
         <tr><th>Host</th><td>@(_system.ServerInfo?.HostName ?? "-")</td></tr>
         <tr><th>Version</th><td>@(_system.ServerInfo?.Version ?? "-")</td></tr>
+        <tr>
+            <th>Latest</th>
+            <td>
+                @if (_latestRelease != null && !string.IsNullOrEmpty(_latestRelease.Tag) && !string.IsNullOrEmpty(_latestRelease.Url))
+                {
+                    <a href="@_latestRelease.Url" target="_blank" rel="noopener noreferrer">@_latestRelease.Tag</a>
+                }
+                else
+                {
+                    <span>-</span>
+                }
+            </td>
+        </tr>
         <tr><th>Platform</th><td>@(_system.ServerInfo?.Platform ?? "-")</td></tr>
-        <tr><th>State</th><td>@(_system.StatusSummary?.RunningStateLabel ?? "-")</td></tr>
-        <tr><th>Progress</th><td>@(_system.State?.Progress.ToString("P1") ?? "-")</td></tr>
     </table>
 }
 
 @code {
     private SystemSnapshot? _system;
+    private LatestReleaseInfo? _latestRelease;
     private string? _error;
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
+        await LoadLatestReleaseAsync();
         _loading = false;
     }
 
@@ -48,5 +61,14 @@ else
         }
         _error = null;
         _system = res.Data;
+    }
+
+    private async Task LoadLatestReleaseAsync()
+    {
+        var res = await Api.GetLatestReleaseAsync();
+        if (res.Ok && res.Data != null)
+        {
+            _latestRelease = res.Data;
+        }
     }
 }
