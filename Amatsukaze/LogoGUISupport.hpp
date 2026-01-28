@@ -105,7 +105,7 @@ class GUIMediaFile : public AMTObject {
             return videoStream->duration;
         }
         if (inputCtx()->duration != AV_NOPTS_VALUE) {
-            return av_rescale_q(inputCtx()->duration, AV_TIME_BASE_Q, videoStream->time_base);
+            return av_rescale_q(inputCtx()->duration, av_make_q(1, AV_TIME_BASE), videoStream->time_base);
         }
         return -1;
     }
