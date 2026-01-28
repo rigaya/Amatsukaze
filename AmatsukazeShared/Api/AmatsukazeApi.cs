@@ -430,6 +430,14 @@ namespace Amatsukaze.Shared
             {
                 query.Add($"maxFiles={req.MaxFiles}");
             }
+            if (req.DirOffset > 0)
+            {
+                query.Add($"dirOffset={req.DirOffset}");
+            }
+            if (req.FileOffset > 0)
+            {
+                query.Add($"fileOffset={req.FileOffset}");
+            }
             if (!req.AllowFiles)
             {
                 query.Add("allowFiles=false");
@@ -437,6 +445,10 @@ namespace Amatsukaze.Shared
             if (!req.AllowDirs)
             {
                 query.Add("allowDirs=false");
+            }
+            if (req.CheckAccess)
+            {
+                query.Add("checkAccess=true");
             }
             var url = "/api/path/suggest" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
             return GetJsonAsync<PathSuggestResponse>(url);

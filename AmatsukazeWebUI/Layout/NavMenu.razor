@@ -1,6 +1,12 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">AmatsukazeWebUI</a>
+        <div class="nav-brand">
+            <a class="navbar-brand" href="">AmatsukazeWebUI</a>
+            <div class="nav-version">@_serverVersion</div>
+        </div>
         <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -8,35 +14,10 @@
 </div>
 
 <div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
-    <nav class="nav flex-column">
+    <nav class="nav flex-column nav-menu-list">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> ホーム
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="console">
-                <span class="bi bi-terminal-fill-nav-menu" aria-hidden="true"></span> コンソール
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="logs/encode">
-                <span class="bi bi-file-earmark-text-fill-nav-menu" aria-hidden="true"></span> エンコードログ
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="logs/check">
-                <span class="bi bi-file-earmark-text-fill-nav-menu" aria-hidden="true"></span> チェックログ
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="queue">
-                <span class="bi bi-list-ul-nav-menu" aria-hidden="true"></span> キュー
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="services">
-                <span class="bi bi-collection-fill-nav-menu" aria-hidden="true"></span> チャンネル設定
             </NavLink>
         </div>
         <div class="nav-item px-3">
@@ -50,6 +31,11 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
+            <NavLink class="nav-link" href="services">
+                <span class="bi bi-collection-fill-nav-menu" aria-hidden="true"></span> チャンネル
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
             <NavLink class="nav-link" href="autoselect">
                 <span class="bi bi-clipboard-fill-nav-menu" aria-hidden="true"></span> 自動選択
             </NavLink>
@@ -60,8 +46,23 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
+            <NavLink class="nav-link" href="logs/encode">
+                <span class="bi bi-file-earmark-text-fill-nav-menu" aria-hidden="true"></span> エンコードログ
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="logs/check">
+                <span class="bi bi-file-earmark-text-fill-nav-menu" aria-hidden="true"></span> チェックログ
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
             <NavLink class="nav-link" href="makescript">
                 <span class="bi bi-terminal-fill-nav-menu" aria-hidden="true"></span> スクリプト生成
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="info">
+                <span class="bi bi-file-earmark-text-fill-nav-menu" aria-hidden="true"></span> 情報
             </NavLink>
         </div>
     </nav>
@@ -69,8 +70,18 @@
 
 @code {
     private bool collapseNavMenu = true;
+    private string _serverVersion = "-";
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.GetSystemAsync();
+        if (res.Ok && res.Data?.ServerInfo?.Version != null)
+        {
+            _serverVersion = res.Data.ServerInfo.Version;
+        }
+    }
 
     private void ToggleNavMenu()
     {

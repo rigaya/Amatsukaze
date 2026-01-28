@@ -6,3 +6,42 @@
 .path-suggest-input input {
     vertical-align: middle;
 }
+
+.path-suggest-list {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text);
+}
+
+.path-suggest-group {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 4px 8px;
+}
+
+.path-suggest-item {
+    padding: 4px 8px;
+}
+
+.path-suggest-item:hover,
+.path-suggest-item.is-selected {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.path-suggest-more {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 6px 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.path-suggest-more:hover {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.path-suggest-error {
+    color: #c00;
+    padding: 6px 8px;
+}
