@@ -868,6 +868,7 @@ code {
 
 .drcs-map .form-control {
   max-width: 240px;
+  min-width: 3.5ch;
 }
 
 .drcs-actions {
