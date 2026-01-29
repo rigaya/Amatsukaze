@@ -116,6 +116,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<bool>> ChangeQueueAsync(ChangeItemData req)
             => PostJsonAsync("/api/queue/change", req, _ => true);
 
+        public Task<ApiResult<bool>> MoveQueueManyAsync(QueueMoveManyRequest req)
+            => PostJsonAsync("/api/queue/move-many", req, _ => true);
+
         public Task<ApiResult<bool>> PauseQueueAsync(PauseRequest req)
             => PostJsonAsync("/api/queue/pause", req, _ => true);
 

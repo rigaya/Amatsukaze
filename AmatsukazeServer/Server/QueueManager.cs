@@ -7,6 +7,7 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Amatsukaze.Shared;
 
 namespace Amatsukaze.Server
 {
@@ -1116,6 +1117,71 @@ namespace Amatsukaze.Server
                     }));
             }
             return Task.FromResult(0);
+        }
+
+        public Task MoveItems(QueueMoveManyRequest data)
+        {
+            if (data == null || data.ItemIds == null || data.ItemIds.Count == 0)
+            {
+                return Task.FromResult(0);
+            }
+
+            List<QueueItem> finalOrder;
+            lock (queueSync)
+            {
+                var ordered = Queue.ToList();
+                var idSet = new HashSet<int>(data.ItemIds);
+                var orderMap = new Dictionary<int, int>();
+                for (int i = 0; i < data.ItemIds.Count; i++)
+                {
+                    if (orderMap.ContainsKey(data.ItemIds[i]) == false)
+                    {
+                        orderMap[data.ItemIds[i]] = i;
+                    }
+                }
+                var moving = ordered
+                    .Where(item => idSet.Contains(item.Id))
+                    .OrderBy(item => orderMap.TryGetValue(item.Id, out var idx) ? idx : int.MaxValue)
+                    .ToList();
+                if (moving.Count == 0)
+                {
+                    return Task.FromResult(0);
+                }
+
+                var remaining = ordered.Where(item => idSet.Contains(item.Id) == false).ToList();
+
+                var dropIndex = Math.Clamp(data.DropIndex, 0, ordered.Count);
+                var beforeCount = 0;
+                for (int i = 0; i < ordered.Count && i < dropIndex; i++)
+                {
+                    if (idSet.Contains(ordered[i].Id))
+                    {
+                        beforeCount++;
+                    }
+                }
+                var adjustedDrop = Math.Clamp(dropIndex - beforeCount, 0, remaining.Count);
+
+                remaining.InsertRange(adjustedDrop, moving);
+
+                Queue.Clear();
+                Queue.AddRange(remaining);
+                finalOrder = Queue.ToList();
+            }
+
+            UpdateQueueOrder();
+
+            var waits = new List<Task>();
+            for (int i = 0; i < finalOrder.Count; i++)
+            {
+                var item = finalOrder[i];
+                waits.Add(ClientQueueUpdate(new QueueUpdate()
+                {
+                    Type = UpdateType.Move,
+                    Item = item,
+                    Position = i
+                }));
+            }
+            return Task.WhenAll(waits);
         }
 
         private Task WriteTextBytes(QueueState state, QueueItem item, string text)

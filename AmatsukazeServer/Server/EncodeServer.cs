@@ -1,6 +1,7 @@
 #define PROFILE
 using Amatsukaze.Lib;
 using Amatsukaze.Server.Rest;
+using Amatsukaze.Shared;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -3631,6 +3632,11 @@ namespace Amatsukaze.Server
                 }
             }
             return queueManager.ChangeItem(data);
+        }
+
+        public Task MoveQueueMany(QueueMoveManyRequest data)
+        {
+            return queueManager.MoveItems(data);
         }
 #endregion
 
