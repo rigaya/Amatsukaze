@@ -20,6 +20,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<MessageChangesView>> GetMessageChangesAsync(long sinceId, string? page = null, string? requestId = null, string? levels = null, int max = 50);
         Task<ApiResult<string>> AddQueueAsync(AddQueueRequest req);
         Task<ApiResult<bool>> ChangeQueueAsync(ChangeItemData req);
+        Task<ApiResult<bool>> MoveQueueManyAsync(QueueMoveManyRequest req);
         Task<ApiResult<bool>> PauseQueueAsync(PauseRequest req);
         Task<ApiResult<bool>> CancelAddQueueAsync();
 

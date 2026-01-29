@@ -1397,42 +1397,30 @@ else
             return;
         }
 
-        // 選択アイテムを現在の表示順序でソート
-        var selectedItems = _view.Items
-            .Select((item, idx) => (item, idx))
-            .Where(x => _selectedIds.Contains(x.item.Id))
-            .OrderBy(x => x.idx)
+        var selectedIds = _view.Items
+            .Where(item => _selectedIds.Contains(item.Id))
+            .Select(item => item.Id)
             .ToList();
 
-        if (selectedItems.Count == 0)
+        if (selectedIds.Count == 0)
         {
             return;
         }
 
-        var minIndex = selectedItems.First().idx;
-        var maxIndex = selectedItems.Last().idx;
+        _actionMessage = null;
+        _error = null;
 
-        // 移動方向に応じて処理
-        if (dropIndex <= minIndex)
+        var req = new QueueMoveManyRequest
         {
-            // 上方向移動: 上から順に処理
-            var targetPos = dropIndex;
-            foreach (var (item, _) in selectedItems)
-            {
-                await SendChangeAsync(item.Id, ChangeItemType.Move, position: targetPos);
-                targetPos++;
-            }
-        }
-        else
+            ItemIds = selectedIds,
+            DropIndex = dropIndex
+        };
+
+        var res = await Api.MoveQueueManyAsync(req);
+        if (!res.Ok)
         {
-            // 下方向移動: 下から順に処理
-            var adjustedDrop = dropIndex - selectedItems.Count;
-            foreach (var (item, _) in selectedItems.AsEnumerable().Reverse())
-            {
-                var targetPos = Math.Min(adjustedDrop + selectedItems.Count - 1,
-                                         _view.Items.Count - 1);
-                await SendChangeAsync(item.Id, ChangeItemType.Move, position: targetPos);
-            }
+            _error = res.Error ?? "Operation failed.";
+            return;
         }
 
         await ReloadAsync();

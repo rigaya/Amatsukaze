@@ -377,6 +377,38 @@ namespace Amatsukaze.Server.Rest
                 });
             });
 
+            app.MapPost("/api/queue/move-many", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<QueueMoveManyRequest>();
+                if (data == null || data.ItemIds == null || data.ItemIds.Count == 0)
+                {
+                    return Results.BadRequest();
+                }
+                if (string.IsNullOrEmpty(data.RequestId))
+                {
+                    data.RequestId = Guid.NewGuid().ToString("N");
+                }
+
+                using var scope = OperationContextScope.Use(new OperationContext
+                {
+                    Page = "queue",
+                    Action = "move-many",
+                    RequestId = data.RequestId,
+                    Source = "rest"
+                });
+
+                await server.MoveQueueMany(data);
+
+                state.TryGetMessageForRequestId(data.RequestId, out var message);
+                return Results.Json(new
+                {
+                    ok = true,
+                    requestId = data.RequestId,
+                    message = message?.Message,
+                    level = message?.Level
+                });
+            });
+
             app.MapPost("/api/queue/pause", async (HttpRequest request) =>
             {
                 var data = await request.ReadFromJsonAsync<PauseRequest>();
