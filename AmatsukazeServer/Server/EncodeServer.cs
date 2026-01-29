@@ -533,7 +533,7 @@ namespace Amatsukaze.Server
                 queueManager.LoadAppData();
                 Debug.Print("[Init] キュー状態の復元が完了しました");
                 
-                if (AppData_.setting.PauseOnStarted && queueManager.Queue.Any(s => s.IsActive))
+                if (AppData_.setting.PauseOnStarted && queueManager.GetQueueSnapshot().Any(s => s.IsActive))
                 {
                     // アクティブなアイテムがある状態から開始する場合はキューを凍結する
                     Debug.Print("[Init] アクティブなアイテムがあるためキューを凍結します");
@@ -3138,7 +3138,7 @@ namespace Amatsukaze.Server
                     }
                 }
             }
-            foreach(var item in queueManager.Queue.
+            foreach(var item in queueManager.GetQueueSnapshot().
                 Where(s => !string.IsNullOrEmpty(s.DstPath)).
                 Select(s => Path.GetPathRoot(s.DstPath)))
             {
@@ -3611,7 +3611,7 @@ namespace Amatsukaze.Server
 
         internal QueueItem[] GetQueueItems(string srcPath)
         {
-            return queueManager.Queue.Where(s => s.SrcPath == srcPath).ToArray();
+            return queueManager.GetQueueSnapshot().Where(s => s.SrcPath == srcPath).ToArray();
         }
 
         int getItemIdFromWorkerId(int workerId)
@@ -3739,7 +3739,7 @@ namespace Amatsukaze.Server
             {
                 QueueData = new QueueData()
                 {
-                    Items = queueManager.Queue ?? new List<QueueItem>()
+                    Items = queueManager.GetQueueSnapshot()
                 }
             });
         }
