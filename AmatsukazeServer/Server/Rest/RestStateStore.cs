@@ -222,7 +222,7 @@ namespace Amatsukaze.Server.Rest
             long currentVersion;
             lock (sync)
             {
-                items = queueItems.ToList();
+                items = queueItems.Where(item => item != null && string.IsNullOrEmpty(item.SrcPath) == false).ToList();
                 currentSetting = setting;
                 currentVersion = queueVersion;
             }
@@ -280,8 +280,9 @@ namespace Amatsukaze.Server.Rest
         {
             lock (sync)
             {
-                var counters = BuildQueueCounters(queueItems);
-                var digest = BuildQueueDigest(counters, queueItems);
+                var viewItems = queueItems.Where(item => item != null && string.IsNullOrEmpty(item.SrcPath) == false).ToList();
+                var counters = BuildQueueCounters(viewItems);
+                var digest = BuildQueueDigest(counters, viewItems);
                 if (sinceVersion > queueVersion)
                 {
                     return new Amatsukaze.Shared.QueueChangesView()
@@ -290,7 +291,7 @@ namespace Amatsukaze.Server.Rest
                         ToVersion = queueVersion,
                         FullSyncRequired = true,
                         QueueViewDigest = digest,
-                        Counters = BuildQueueCounters(queueItems)
+                        Counters = BuildQueueCounters(viewItems)
                     };
                 }
 
@@ -304,7 +305,7 @@ namespace Amatsukaze.Server.Rest
                             ToVersion = queueVersion,
                             FullSyncRequired = false,
                             QueueViewDigest = digest,
-                            Counters = BuildQueueCounters(queueItems)
+                            Counters = BuildQueueCounters(viewItems)
                         };
                     }
                     return new Amatsukaze.Shared.QueueChangesView()
@@ -313,7 +314,7 @@ namespace Amatsukaze.Server.Rest
                         ToVersion = queueVersion,
                         FullSyncRequired = true,
                         QueueViewDigest = digest,
-                        Counters = BuildQueueCounters(queueItems)
+                        Counters = BuildQueueCounters(viewItems)
                     };
                 }
 
@@ -326,7 +327,7 @@ namespace Amatsukaze.Server.Rest
                         ToVersion = queueVersion,
                         FullSyncRequired = true,
                         QueueViewDigest = digest,
-                        Counters = BuildQueueCounters(queueItems)
+                        Counters = BuildQueueCounters(viewItems)
                     };
                 }
 
@@ -342,7 +343,7 @@ namespace Amatsukaze.Server.Rest
                     FullSyncRequired = false,
                     QueueViewDigest = digest,
                     Changes = changes,
-                    Counters = BuildQueueCounters(queueItems)
+                    Counters = BuildQueueCounters(viewItems)
                 };
             }
         }
@@ -720,7 +721,7 @@ namespace Amatsukaze.Server.Rest
         {
             lock (sync)
             {
-                var found = queueItems.FirstOrDefault(q => q.Id == id);
+                var found = queueItems.FirstOrDefault(q => q != null && q.Id == id);
                 if (found == null)
                 {
                     item = null;
@@ -846,7 +847,10 @@ namespace Amatsukaze.Server.Rest
                 }
                 if (data.QueueData != null)
                 {
-                    queueItems = data.QueueData.Items?.Select(CopyQueueItem).ToList() ?? new List<QueueItem>();
+                    queueItems = data.QueueData.Items?
+                        .Where(item => item != null && string.IsNullOrEmpty(item.SrcPath) == false)
+                        .Select(CopyQueueItem)
+                        .ToList() ?? new List<QueueItem>();
                     ResetQueueChanges();
                 }
                 if (data.QueueUpdate != null)
@@ -901,7 +905,7 @@ namespace Amatsukaze.Server.Rest
                     }
                     else if (update.Type == UpdateType.Add || update.Type == UpdateType.Update)
                     {
-                        if (update.Item != null)
+                        if (update.Item != null && string.IsNullOrEmpty(update.Item.SrcPath) == false)
                         {
                             if (idx >= 0)
                             {

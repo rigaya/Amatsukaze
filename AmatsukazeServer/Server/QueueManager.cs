@@ -5,13 +5,16 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Amatsukaze.Server
 {
     class QueueManager
     {
+        private static readonly log4net.ILog LOG = log4net.LogManager.GetLogger("QueueManager");
         private EncodeServer server;
+        private readonly object queueSync = new object();
 
         public List<QueueItem> Queue { get; private set; } = new List<QueueItem>();
 
@@ -77,44 +80,112 @@ namespace Amatsukaze.Server
                 var s = new DataContractSerializer(typeof(List<QueueItem>));
                 try
                 {
-                    Queue = (List<QueueItem>)s.ReadObject(fs);
+                    var loaded = (List<QueueItem>)s.ReadObject(fs);
+                    if (loaded == null)
+                    {
+                        return;
+                    }
+                    var sanitized = loaded
+                        .Where(item => item != null && string.IsNullOrEmpty(item.SrcPath) == false)
+                        .ToList();
+                    if (sanitized.Count != loaded.Count)
+                    {
+                        LOG.Warn($"Queue restore: dropped {loaded.Count - sanitized.Count} invalid items (null or SrcPath missing).");
+                    }
+                    lock (queueSync)
+                    {
+                        Queue = sanitized;
+                        nextItemId = 1;
+                        foreach (var item in Queue)
+                        {
+                            // エンコードするアイテムはリセットしておく
+                            if (item.State == QueueState.Encoding || item.State == QueueState.Queue)
+                            {
+                                item.Reset();
+                            }
+                            if (item.Profile == null || item.Profile.LastUpdate == DateTime.MinValue)
+                            {
+                                item.Profile = server.PendingProfile;
+                            }
+                            // IDを振り直す
+                            item.Order = item.Id = nextItemId++;
+                        }
+                    }
+                    return;
                 }
                 catch
                 {
                     // 古いバージョンのファイルだとエラーになる
                     // キューの復旧は必須ではないのでエラーは無視する
-                    Queue = new List<QueueItem>();
+                    lock (queueSync)
+                    {
+                        Queue = new List<QueueItem>();
+                    }
                     return;
-                }
-                foreach(var item in Queue)
-                {
-                    // エンコードするアイテムはリセットしておく
-                    if (item.State == QueueState.Encoding || item.State == QueueState.Queue)
-                    {
-                        item.Reset();
-                    }
-                    if(item.Profile == null || item.Profile.LastUpdate == DateTime.MinValue)
-                    {
-                        item.Profile = server.PendingProfile;
-                    }
-                    // IDを振り直す
-                    item.Order = item.Id = nextItemId++;
                 }
             }
         }
 
         public void SaveQueueData(bool force)
         {
-            if(queueUpdated || force)
+            List<QueueItem> snapshot = null;
+            bool shouldSave = false;
+            lock (queueSync)
             {
-                queueUpdated = false;
+                if (queueUpdated || force)
+                {
+                    queueUpdated = false;
+                    if (Queue.Any(item => item == null || string.IsNullOrEmpty(item.SrcPath)))
+                    {
+                        var before = Queue.Count;
+                        Queue = Queue.Where(item => item != null && string.IsNullOrEmpty(item.SrcPath) == false).ToList();
+                        LOG.Warn($"Queue save: dropped {before - Queue.Count} invalid items (null or SrcPath missing).");
+                    }
+
+                    var dupGroups = Queue.GroupBy(item => item.Id).Where(g => g.Count() > 1).ToList();
+                    if (dupGroups.Count > 0)
+                    {
+                        int maxId = Queue.Max(item => item.Id);
+                        if (nextItemId <= maxId)
+                        {
+                            nextItemId = maxId + 1;
+                        }
+                        foreach (var group in dupGroups)
+                        {
+                            bool first = true;
+                            foreach (var item in group)
+                            {
+                                if (first)
+                                {
+                                    first = false;
+                                    continue;
+                                }
+                                var oldId = item.Id;
+                                item.Id = Interlocked.Increment(ref nextItemId);
+                                LOG.Warn($"Queue save: duplicate id {oldId} reassigned to {item.Id}.");
+                            }
+                        }
+                    }
+
+                    for (int i = 0; i < Queue.Count; i++)
+                    {
+                        Queue[i].Order = i;
+                    }
+
+                    snapshot = Queue.ToList();
+                    shouldSave = true;
+                }
+            }
+
+            if (shouldSave)
+            {
                 string path = server.GetQueueFilePath();
                 string tmp = path + ".tmp";
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 using (FileStream fs = new FileStream(tmp, FileMode.Create))
                 {
                     var s = new DataContractSerializer(typeof(List<QueueItem>));
-                    s.WriteObject(fs, Queue);
+                    s.WriteObject(fs, snapshot);
                 }
                 // ファイル置き換え
                 StorageUtility.MoveFileWithOverwrite(tmp, path);
@@ -143,24 +214,37 @@ namespace Amatsukaze.Server
 
         private Task ClientQueueUpdate(QueueUpdate update)
         {
-            queueUpdated = true;
+            lock (queueSync)
+            {
+                queueUpdated = true;
+            }
             return server.ClientQueueUpdate(update);
         }
 
         private void UpdateProgress()
         {
             // 進捗を更新
-            double enabledCount = Queue.Count(s =>
-                s.State != QueueState.LogoPending && s.State != QueueState.PreFailed);
-            double remainCount = Queue.Count(s =>
-                s.State == QueueState.Queue || s.State == QueueState.Encoding);
+            double enabledCount;
+            double remainCount;
+            lock (queueSync)
+            {
+                enabledCount = Queue.Count(s =>
+                    s.State != QueueState.LogoPending && s.State != QueueState.PreFailed);
+                remainCount = Queue.Count(s =>
+                    s.State == QueueState.Queue || s.State == QueueState.Encoding);
+            }
             // 完全にゼロだと分からないので・・・
             server.Progress = ((enabledCount - remainCount) + 0.1) / (enabledCount + 0.1);
         }
 
         public List<Task> UpdateQueueItems(List<Task> waits)
         {
-            foreach (var item in Queue.ToArray())
+            QueueItem[] items;
+            lock (queueSync)
+            {
+                items = Queue.ToArray();
+            }
+            foreach (var item in items)
             {
                 if (item.State != QueueState.LogoPending && item.State != QueueState.Queue)
                 {
@@ -308,7 +392,12 @@ namespace Amatsukaze.Server
 
             // 既に追加されているファイルは除外する
             // バッチのときは全ファイルが対象だが、バッチじゃなければバッチのみが対象
-            var ignores = req.IsBatch ? Queue : Queue.Where(t => t.IsBatch);
+            List<QueueItem> ignoreSnapshot;
+            lock (queueSync)
+            {
+                ignoreSnapshot = Queue.ToList();
+            }
+            var ignores = req.IsBatch ? ignoreSnapshot : ignoreSnapshot.Where(t => t.IsBatch);
 
             var ignoreSet = new HashSet<string>(
                 ignores.Where(item => item.IsActive)
@@ -385,7 +474,6 @@ namespace Amatsukaze.Server
 
                                     var item = new QueueItem()
                                     {
-                                        Id = nextItemId++,
                                         Mode = req.Mode,
                                         SrcPath = additem.Path,
                                         Hash = additem.Hash,
@@ -475,7 +563,6 @@ namespace Amatsukaze.Server
 
                             var item = new QueueItem()
                             {
-                                Id = nextItemId++,
                                 Mode = req.Mode,
                                 Profile = profile,
                                 SrcPath = additem.Path,
@@ -508,8 +595,12 @@ namespace Amatsukaze.Server
                             UpdateProfileItem(item, null);
                         }
                         // 追加
-                        item.Order = Queue.Count;
-                        Queue.Add(item);
+                        lock (queueSync)
+                        {
+                            item.Id = Interlocked.Increment(ref nextItemId);
+                            item.Order = Queue.Count;
+                            Queue.Add(item);
+                        }
                         // まずは内部だけで状態を更新
                         UpdateQueueItem(item, null);
                         // 状態が決まったらクライアント側に追加通知
@@ -661,9 +752,12 @@ namespace Amatsukaze.Server
         private void DuplicateItem(QueueItem item, List<Task> waits)
         {
             var newItem = ServerSupport.DeepCopy(item);
-            newItem.Id = nextItemId++;
-            newItem.Order = Queue.Count;
-            Queue.Add(newItem);
+            lock (queueSync)
+            {
+                newItem.Id = Interlocked.Increment(ref nextItemId);
+                newItem.Order = Queue.Count;
+                Queue.Add(newItem);
+            }
 
             // 状態はリセットしておく
             newItem.Reset();
@@ -679,7 +773,12 @@ namespace Amatsukaze.Server
         internal Task NotifyQueueItemUpdate(QueueItem item)
         {
             UpdateProgress();
-            if (Queue.Contains(item))
+            bool exists;
+            lock (queueSync)
+            {
+                exists = Queue.Contains(item);
+            }
+            if (exists)
             {
                 // ないアイテムをUpdateすると追加されてしまうので
                 return ClientQueueUpdate(new QueueUpdate()
@@ -693,21 +792,42 @@ namespace Amatsukaze.Server
 
         private void UpdateQueueOrder()
         {
-            for(int i = 0; i < Queue.Count; i++)
+            lock (queueSync)
             {
-                Queue[i].Order = i;
+                for (int i = 0; i < Queue.Count; i++)
+                {
+                    Queue[i].Order = i;
+                }
             }
             server.ReScheduleQueue();
         }
 
+        public List<QueueItem> GetQueueSnapshot()
+        {
+            lock (queueSync)
+            {
+                return Queue.Where(item => item != null && string.IsNullOrEmpty(item.SrcPath) == false).ToList();
+            }
+        }
+
         private void RemoveCompleted(List<Task> waits)
         {
-            var removeItems = Queue.Where(s => s.State == QueueState.Complete || s.State == QueueState.PreFailed).ToArray();
+            QueueItem[] removeItems;
+            lock (queueSync)
+            {
+                removeItems = Queue.Where(s => s.State == QueueState.Complete || s.State == QueueState.PreFailed).ToArray();
+                if (removeItems.Length > 0)
+                {
+                    foreach (var item in removeItems)
+                    {
+                        Queue.Remove(item);
+                    }
+                }
+            }
             if(removeItems.Length > 0)
             {
                 foreach (var item in removeItems)
                 {
-                    Queue.Remove(item);
                     waits.Add(ClientQueueUpdate(new QueueUpdate()
                     {
                         Type = UpdateType.Remove,
@@ -729,7 +849,11 @@ namespace Amatsukaze.Server
             }
 
             // アイテム操作
-            var target = Queue.FirstOrDefault(s => s.Id == data.ItemId);
+            QueueItem target;
+            lock (queueSync)
+            {
+                target = Queue.FirstOrDefault(s => s.Id == data.ItemId);
+            }
             if (target == null)
             {
                 return server.NotifyError(
@@ -776,7 +900,12 @@ namespace Amatsukaze.Server
                     // バッチモードでfailed/succeededフォルダに移動されていたら戻す
                     if (target.State == QueueState.Failed || target.State == QueueState.Complete)
                     {
-                        if (Queue.Where(s => s.SrcPath == target.SrcPath).Any(s => s.IsActive) == false)
+                        bool hasActive;
+                        lock (queueSync)
+                        {
+                            hasActive = Queue.Where(s => s.SrcPath == target.SrcPath).Any(s => s.IsActive);
+                        }
+                        if (hasActive == false)
                         {
                             var dirPath = Path.GetDirectoryName(target.SrcPath);
                             var movedDir = (target.State == QueueState.Failed) ? 
@@ -885,7 +1014,10 @@ namespace Amatsukaze.Server
             {
                 server.CancelItem(target);
                 target.State = QueueState.Canceled;
-                Queue.Remove(target);
+                lock (queueSync)
+                {
+                    Queue.Remove(target);
+                }
                 UpdateQueueOrder();
                 return Task.WhenAll(
                     ClientQueueUpdate(new QueueUpdate()
@@ -916,7 +1048,12 @@ namespace Amatsukaze.Server
                 {
                     return server.NotifyError("完了していないアイテムはTSファイル削除ができません", false);
                 }
-                if(Queue.Where(s => s.SrcPath == target.SrcPath).Any(s => s.IsActive))
+                bool hasActive;
+                lock (queueSync)
+                {
+                    hasActive = Queue.Where(s => s.SrcPath == target.SrcPath).Any(s => s.IsActive);
+                }
+                if (hasActive)
                 {
                     return server.NotifyError("まだ完了していない項目があるため、このTSは削除ができません", false);
                 }
@@ -939,7 +1076,10 @@ namespace Amatsukaze.Server
                 }
 
                 // アイテム削除
-                Queue.Remove(target);
+                lock (queueSync)
+                {
+                    Queue.Remove(target);
+                }
                 UpdateQueueOrder();
                 return Task.WhenAll(
                     ClientQueueUpdate(new QueueUpdate()
@@ -951,13 +1091,21 @@ namespace Amatsukaze.Server
             }
             else if(data.ChangeType == ChangeItemType.Move)
             {
-                if(data.Position >= Queue.Count)
+                int queueCount;
+                lock (queueSync)
+                {
+                    queueCount = Queue.Count;
+                }
+                if (data.Position >= queueCount)
                 {
                     return server.NotifyError("位置が範囲外です", false);
                 }
 
-                Queue.Remove(target);
-                Queue.Insert(data.Position, target);
+                lock (queueSync)
+                {
+                    Queue.Remove(target);
+                    Queue.Insert(data.Position, target);
+                }
                 UpdateQueueOrder();
                 return Task.WhenAll(
                     ClientQueueUpdate(new QueueUpdate()
