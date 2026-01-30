@@ -1,0 +1,221 @@
+name: Build Windows Package
+
+on:
+  push:
+    branches:
+      - master
+      - windows
+      - WebUI
+    tags:
+      - '*'
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_CRT_LINKAGE: static
+      FFMPEG_URL: https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250830/ffmpeg_dlls_for_hwenc_20250830.7z
+      DEPLIB_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeDepLibs_20260131.7z
+      JOINLOGO_URL: https://github.com/yobibi/join_logo_scp/releases/download/v5.1.0/join_logo_scp_51.zip
+      AVSCUDA_URL: https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.3/AviSynthCUDAFilters_Release_0.7.3.zip
+      LSMASH_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/lsmash_20200404.7z
+      X264_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260125-091235/x264_3223_x64.zip
+      X265_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260125-091235/x265_4.1+222_x64.zip
+      SVT_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260125-091235/SvtAv1EncApp_4.0.0_x64_clang.zip
+      BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeBasePkg_20260131.7z
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Set version name
+        id: version
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`git rev-list --count HEAD`) do set REVCOUNT=%%i
+          set "REF=%GITHUB_REF%"
+          set "TAG="
+          if /i "%REF:~0,10%"=="refs/tags/" set "TAG=%REF:~10%"
+          if not "%TAG%"=="" (
+            set "VERSION=%TAG%"
+          ) else (
+            set "VERSION=r%REVCOUNT%"
+          )
+          echo version_name=%VERSION%>> %GITHUB_OUTPUT%
+          if not "%TAG%"=="" (
+            echo is_tag=true>> %GITHUB_OUTPUT%
+          ) else (
+            echo is_tag=false>> %GITHUB_OUTPUT%
+          )
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg
+            vcpkg_installed
+          key: vcpkg-windows-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-
+
+      - name: Setup vcpkg
+        shell: cmd
+        run: |
+          if not exist vcpkg (
+            git clone https://github.com/microsoft/vcpkg vcpkg
+          )
+          call vcpkg\\bootstrap-vcpkg.bat
+          set VCPKG_ROOT=%CD%\\vcpkg
+          vcpkg\\vcpkg install zlib:x64-windows-static openssl:x64-windows-static
+
+      - name: Ensure VS Community path exists
+        shell: cmd
+        run: |
+          if not exist "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community" (
+            if exist "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise" (
+              mklink /J "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community" "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise"
+            )
+          )
+
+      - name: Download dependencies
+        shell: cmd
+        run: |
+          if not exist deps mkdir deps
+          curl -L -o deps\\ffmpeg.7z "%FFMPEG_URL%"
+          curl -L -o deps\\deplib.7z "%DEPLIB_URL%"
+          curl -L -o deps\\join_logo.zip "%JOINLOGO_URL%"
+          curl -L -o deps\\avscuda.zip "%AVSCUDA_URL%"
+          curl -L -o deps\\lsmash.7z "%LSMASH_URL%"
+          curl -L -o deps\\x264.zip "%X264_URL%"
+          curl -L -o deps\\x265.zip "%X265_URL%"
+          curl -L -o deps\\svt.zip "%SVT_URL%"
+
+      - name: Extract dependencies
+        shell: cmd
+        run: |
+          if not exist ffmpeg_lgpl mkdir ffmpeg_lgpl
+          7z x -y -offmpeg_lgpl deps\\ffmpeg.7z
+          if not exist lib mkdir lib
+          7z x -y -olib deps\\deplib.7z
+          if not exist deps\\join_logo mkdir deps\\join_logo
+          powershell -NoProfile -Command "Expand-Archive -Path deps\\join_logo.zip -DestinationPath deps\\join_logo -Force"
+          if not exist deps\\avscuda mkdir deps\\avscuda
+          powershell -NoProfile -Command "Expand-Archive -Path deps\\avscuda.zip -DestinationPath deps\\avscuda -Force"
+          if not exist deps\\lsmash mkdir deps\\lsmash
+          7z x -y -odeps\\lsmash deps\\lsmash.7z
+          if not exist deps\\x264 mkdir deps\\x264
+          powershell -NoProfile -Command "Expand-Archive -Path deps\\x264.zip -DestinationPath deps\\x264 -Force"
+          if not exist deps\\x265 mkdir deps\\x265
+          powershell -NoProfile -Command "Expand-Archive -Path deps\\x265.zip -DestinationPath deps\\x265 -Force"
+          if not exist deps\\svt mkdir deps\\svt
+          powershell -NoProfile -Command "Expand-Archive -Path deps\\svt.zip -DestinationPath deps\\svt -Force"
+
+      - name: Build (publish.bat)
+        shell: cmd
+        run: |
+          call publish.bat
+
+      - name: Prepare package base
+        shell: cmd
+        run: |
+          if "%BASE_PKG_URL%"=="" (
+            echo BASE_PKG_URL is empty. Please set base package URL.
+            exit /b 1
+          )
+          if exist package rmdir /s /q package
+          mkdir package
+          curl -L -o deps\\base_pkg.7z "%BASE_PKG_URL%"
+          7z x -y -opackage deps\\base_pkg.7z
+
+      - name: Assemble package
+        shell: cmd
+        run: |
+          if not exist package\\exe_files mkdir package\\exe_files
+          if not exist package\\exe_files\\cmd mkdir package\\exe_files\\cmd
+          if not exist package\\exe_files\\plugins64 mkdir package\\exe_files\\plugins64
+
+          rem build outputs
+          if exist x64\\Release2\\*.dll copy /y x64\\Release2\\*.dll package\\exe_files
+          if exist x64\\Release\\*.dll copy /y x64\\Release\\*.dll package\\exe_files
+          if exist x64\\Release\\*.exe copy /y x64\\Release\\*.exe package\\exe_files
+
+          if exist publish\\win-x64\\*.exe copy /y publish\\win-x64\\*.exe package\\exe_files
+          if exist publish\\win-x64\\*.dll copy /y publish\\win-x64\\*.dll package\\exe_files
+          if exist publish\\win-x64\\*.dll.config copy /y publish\\win-x64\\*.dll.config package\\exe_files
+          if exist publish\\win-x64\\*.xml copy /y publish\\win-x64\\*.xml package\\exe_files
+
+          if exist package\\exe_files\\wwwroot rmdir /s /q package\\exe_files\\wwwroot
+          if exist publish\\win-x64\\wwwroot robocopy publish\\win-x64\\wwwroot package\\exe_files\\wwwroot /E /NFL /NDL /NJH /NJS
+
+          rem ScriptCommandWrapper -> cmd
+          if exist x64\\Release\\ScriptCommandWrapper.exe (
+            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\AddTag.exe
+            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\CancelItem.exe
+            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\GetOutFiles.exe
+            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\SetOutDir.exe
+            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\SetPriority.exe
+          )
+          if exist package\\exe_files\\ScriptCommandWrapper.exe del /q package\\exe_files\\ScriptCommandWrapper.exe
+
+          rem remove old encoder names if base package has them
+          if exist package\\exe_files\\x265_4.1+211_x64.exe del /q package\\exe_files\\x265_4.1+211_x64.exe
+          if exist package\\exe_files\\SvtAv1EncApp_3.1.0-332_x64_clang.exe del /q package\\exe_files\\SvtAv1EncApp_3.1.0-332_x64_clang.exe
+
+          rem defaults
+          if exist defaults\\avs robocopy defaults\\avs package\\avs /E /NFL /NDL /NJH /NJS
+          if exist defaults\\bat_win robocopy defaults\\bat_win package\\bat /E /NFL /NDL /NJH /NJS
+          if exist defaults\\profile robocopy defaults\\profile package\\profile /E /NFL /NDL /NJH /NJS
+          if exist defaults\\drcs\\drcs_map.txt copy /y defaults\\drcs\\drcs_map.txt package\\exe_files
+          if exist defaults\\exe_files\\plugins64\\*.avsi copy /y defaults\\exe_files\\plugins64\\*.avsi package\\exe_files\\plugins64
+
+          rem join_logo + JL
+          for /r deps\\join_logo %%f in (join_logo_scp.exe) do copy /y "%%f" package\\exe_files
+          if exist deps\\join_logo\\JL robocopy deps\\join_logo\\JL package\\JL /E /NFL /NDL /NJH /NJS
+
+          rem AviSynthCUDAFilters
+          if exist deps\\avscuda\\plugins64 (
+            robocopy deps\\avscuda\\plugins64 package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
+          ) else (
+            robocopy deps\\avscuda package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
+          )
+
+          rem lsmash tools
+          for /r deps\\lsmash %%f in (muxer.exe) do copy /y "%%f" package\\exe_files
+          for /r deps\\lsmash %%f in (timelineeditor.exe) do copy /y "%%f" package\\exe_files
+          for /r deps\\lsmash %%f in (LSMASHSource.dll) do copy /y "%%f" package\\exe_files\\plugins64
+
+          rem encoders
+          for /r deps\\x264 %%f in (*.exe) do copy /y "%%f" package\\exe_files
+          for /r deps\\x265 %%f in (*.exe) do copy /y "%%f" package\\exe_files
+          for /r deps\\svt %%f in (*.exe) do copy /y "%%f" package\\exe_files
+
+          rem ffmpeg dlls
+          for %%f in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do (
+            if exist ffmpeg_lgpl\\%%f copy /y ffmpeg_lgpl\\%%f package\\exe_files
+          )
+
+      - name: Create archive
+        shell: cmd
+        run: |
+          set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"
+          7z a -t7z -mx=9 -m0=lzma2 -mmt=on -ms=on -r "%PKG_NAME%" "package\\*"
+          echo pkg_name=%PKG_NAME%>> %GITHUB_OUTPUT%
+        id: pack
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Amatsukaze_${{ steps.version.outputs.version_name }}
+          path: ${{ steps.pack.outputs.pkg_name }}
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            ${{ steps.pack.outputs.pkg_name }}

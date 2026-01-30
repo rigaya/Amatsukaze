@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - linux
+      - WebUI
     tags:
       - '*'
 
