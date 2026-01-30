@@ -17,6 +17,16 @@ namespace Amatsukaze.Server.Rest
         public FinishSetting FinishSetting { get; set; }
         public List<FinishActionOptionView> FinishActionOptions { get; set; }
         public StatusSummary StatusSummary { get; set; }
+        public List<DiskUsageView> Disks { get; set; }
+    }
+
+    public class DiskUsageView
+    {
+        public string Path { get; set; }
+        public long CapacityBytes { get; set; }
+        public long FreeBytes { get; set; }
+        public long UsedBytes { get; set; }
+        public double UsedRatio { get; set; }
     }
 
     public class FinishActionOptionView

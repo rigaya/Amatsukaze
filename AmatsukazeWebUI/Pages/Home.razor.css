@@ -18,3 +18,32 @@
     color: var(--text-muted);
     font-weight: 600;
 }
+
+.info-section-title {
+    margin-top: 24px;
+    margin-bottom: 8px;
+    font-size: 1.1rem;
+}
+
+.disk-table {
+    width: 100%;
+    max-width: 720px;
+    border-collapse: collapse;
+}
+
+.disk-table th,
+.disk-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.disk-table th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.disk-num {
+    text-align: right;
+    white-space: nowrap;
+}

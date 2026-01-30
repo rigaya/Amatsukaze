@@ -157,6 +157,20 @@ namespace Amatsukaze.Server.Rest
 
         public SystemSnapshot GetSystemSnapshot()
         {
+            var diskViews = DiskUtility.GetMainDisks().Select(item =>
+            {
+                var used = Math.Max(0, item.CapacityBytes - item.FreeBytes);
+                var ratio = item.CapacityBytes > 0 ? (double)used / item.CapacityBytes : 0.0;
+                return new DiskUsageView
+                {
+                    Path = item.Path,
+                    CapacityBytes = item.CapacityBytes,
+                    FreeBytes = item.FreeBytes,
+                    UsedBytes = used,
+                    UsedRatio = ratio
+                };
+            }).ToList();
+
             lock (sync)
             {
                 return new SystemSnapshot()
@@ -165,7 +179,8 @@ namespace Amatsukaze.Server.Rest
                     State = state != null ? ServerSupport.DeepCopy(state) : null,
                     FinishSetting = finishSetting != null ? ServerSupport.DeepCopy(finishSetting) : null,
                     FinishActionOptions = BuildFinishActionOptions(setting, serverInfo),
-                    StatusSummary = BuildStatusSummary()
+                    StatusSummary = BuildStatusSummary(),
+                    Disks = diskViews
                 };
             }
         }
