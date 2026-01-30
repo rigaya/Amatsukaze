@@ -42,10 +42,6 @@ else
                                   Disabled="@_loading" />
             </td>
         </tr>
-        <tr>
-            <th>常時表示するディスク</th>
-            <td><input value="@GetStringValue(AlwaysShowDiskField)" @oninput="@(e => OnStringInput(e, AlwaysShowDiskField))" /></td>
-        </tr>
         @foreach (var item in _generalBoolFields)
         {
             if (IsServerLinux && item.Field == SupressSleepField)
