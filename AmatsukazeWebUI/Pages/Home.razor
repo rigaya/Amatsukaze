@@ -36,6 +36,38 @@ else
         </tr>
         <tr><th>Platform</th><td>@(_system.ServerInfo?.Platform ?? "-")</td></tr>
     </table>
+
+    <h2 class="info-section-title">ディスク</h2>
+    @if (_system.Disks == null || _system.Disks.Count == 0)
+    {
+        <p>-</p>
+    }
+    else
+    {
+        <table class="disk-table">
+            <thead>
+                <tr>
+                    <th>Path</th>
+                    <th class="disk-num">Total</th>
+                    <th class="disk-num">Free</th>
+                    <th class="disk-num">Used</th>
+                    <th class="disk-num">Used%</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var disk in _system.Disks)
+                {
+                    <tr>
+                        <td>@(disk.Path ?? "-")</td>
+                        <td class="disk-num">@FormatBytes(disk.CapacityBytes)</td>
+                        <td class="disk-num">@FormatBytes(disk.FreeBytes)</td>
+                        <td class="disk-num">@FormatBytes(disk.UsedBytes)</td>
+                        <td class="disk-num">@FormatPercent(disk.UsedRatio)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
 
 @code {
@@ -70,5 +102,39 @@ else
         {
             _latestRelease = res.Data;
         }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        const double unit = 1024.0;
+        var size = Math.Max(0, (double)bytes);
+        var suffix = "B";
+        if (size >= unit)
+        {
+            size /= unit;
+            suffix = "KiB";
+        }
+        if (size >= unit)
+        {
+            size /= unit;
+            suffix = "MiB";
+        }
+        if (size >= unit)
+        {
+            size /= unit;
+            suffix = "GiB";
+        }
+        if (size >= unit)
+        {
+            size /= unit;
+            suffix = "TiB";
+        }
+        return $"{size:0.##} {suffix}";
+    }
+
+    private static string FormatPercent(double ratio)
+    {
+        var value = Math.Max(0.0, Math.Min(1.0, ratio));
+        return $"{value * 100:0.#}%";
     }
 }
