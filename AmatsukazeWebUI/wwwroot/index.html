@@ -185,9 +185,7 @@
                 } catch (e) {
                     return { scrollTop: 0, scrollHeight: 0, clientHeight: 0, remaining: 0 };
                 }
-            }
-        };
-        window.amatsukazeUi = {
+            },
             ensureListItemVisible: function (listEl, index) {
                 try {
                     if (!listEl || typeof index !== "number") {
