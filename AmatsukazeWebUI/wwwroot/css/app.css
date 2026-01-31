@@ -1230,7 +1230,7 @@ code {
 }
 
 .log-list-container {
-    max-height: calc(100vh - var(--topbar-height) - 14rem);
+    max-height: calc(100vh - var(--topbar-height) - 8rem);
     min-height: 240px;
     overflow: auto;
     border: 1px solid var(--border);
