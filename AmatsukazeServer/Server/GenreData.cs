@@ -533,7 +533,15 @@ namespace Amatsukaze.Server
 
         public string FullName {
             get {
-                return Main.Name + " - " + Name;
+                if (Main?.Name != null)
+                {
+                    return Main.Name + " - " + Name;
+                }
+                if (Item != null)
+                {
+                    return GetUnknownFullName(Item);
+                }
+                return Name;
             }
         }
 
