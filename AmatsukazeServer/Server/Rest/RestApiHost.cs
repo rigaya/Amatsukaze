@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
@@ -85,6 +86,14 @@ namespace Amatsukaze.Server.Rest
                 ContentRootPath = baseDir,
                 WebRootPath = webRoot,
             });
+            var httpLogEnabled = Environment.GetEnvironmentVariable("AMT_REST_HTTP_LOG");
+            var enableHttpLog = !string.IsNullOrEmpty(httpLogEnabled) &&
+                (httpLogEnabled == "1" || httpLogEnabled.Equals("true", StringComparison.OrdinalIgnoreCase));
+            if (!enableHttpLog)
+            {
+                // ポーリング系の大量ログを抑制するため、ASP.NET Coreの標準アクセスログを抑制する
+                builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+            }
             builder.Services.Configure<JsonOptions>(options =>
             {
                 options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
