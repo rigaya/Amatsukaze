@@ -216,7 +216,7 @@ jobs:
         run: |
           cd /d %GITHUB_WORKSPACE%
           set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"
-          7z a -t7z -mx=9 -m0=lzma2 -mmt=on -ms=on -r "%PKG_NAME%" "package\\*"
+          7z a -t7z -mx=9 -m0=lzma2 -mmt=on -ms=on -r "%PKG_NAME%" "%GITHUB_WORKSPACE%\package\*"
           echo pkg_name=%PKG_NAME%>> %GITHUB_OUTPUT%
         id: pack
 
