@@ -70,6 +70,8 @@ jobs:
           call vcpkg\\bootstrap-vcpkg.bat
           set VCPKG_ROOT=%CD%\\vcpkg
           vcpkg\\vcpkg install zlib:x64-windows-static openssl:x64-windows-static
+          vcpkg\\vcpkg integrate install
+          echo VCPKG_ROOT=%CD%\\vcpkg>> %GITHUB_ENV%
 
       - name: Ensure VS Community path exists
         shell: cmd
@@ -160,10 +162,6 @@ jobs:
           )
           if exist package\\exe_files\\ScriptCommandWrapper.exe del /q package\\exe_files\\ScriptCommandWrapper.exe
 
-          rem remove old encoder names if base package has them
-          if exist package\\exe_files\\x265_4.1+211_x64.exe del /q package\\exe_files\\x265_4.1+211_x64.exe
-          if exist package\\exe_files\\SvtAv1EncApp_3.1.0-332_x64_clang.exe del /q package\\exe_files\\SvtAv1EncApp_3.1.0-332_x64_clang.exe
-
           rem defaults
           if exist defaults\\avs robocopy defaults\\avs package\\avs /E /NFL /NDL /NJH /NJS
           if exist defaults\\bat_win robocopy defaults\\bat_win package\\bat /E /NFL /NDL /NJH /NJS
@@ -185,7 +183,9 @@ jobs:
           rem lsmash tools
           for /r deps\\lsmash %%f in (muxer.exe) do copy /y "%%f" package\\exe_files
           for /r deps\\lsmash %%f in (timelineeditor.exe) do copy /y "%%f" package\\exe_files
-          for /r deps\\lsmash %%f in (LSMASHSource.dll) do copy /y "%%f" package\\exe_files\\plugins64
+
+          rem deps (dlls)
+          if exist lib\\x64\\*.dll copy /y lib\\x64\\*.dll package\\exe_files
 
           rem encoders
           for /r deps\\x264 %%f in (*.exe) do copy /y "%%f" package\\exe_files
