@@ -33,3 +33,4 @@ if exist "%SRC_BASE%\AmatsukazeServer\wwwroot" robocopy "%SRC_BASE%\AmatsukazeSe
 if errorlevel 8 exit /b %ERRORLEVEL%
 
 echo Done. Merged outputs are in %MERGED_DIR% (WebUI is served on REST port+1).
+exit /b 0
