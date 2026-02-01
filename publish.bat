@@ -8,7 +8,7 @@ del .\publish\win-x64\*.pdb
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" x64
 
 echo Building solution with MSBuild...
-msbuild Amatsukaze.sln /p:Configuration=Release /p:Platform=x64 /m
+msbuild Amatsukaze.sln /restore /p:Configuration=Release /p:Platform=x64 /m
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo Publishing .NET projects in parallel via Publish.proj...
