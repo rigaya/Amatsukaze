@@ -15,7 +15,7 @@ jobs:
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_CRT_LINKAGE: static
-      FFMPEG_URL: https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20250830/ffmpeg_dlls_for_hwenc_20250830.7z
+      FFMPEG_URL: https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20241102/ffmpeg_dlls_for_hwenc_20241102.7z
       DEPLIB_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeDepLibs_20260131.7z
       JOINLOGO_URL: https://github.com/yobibi/join_logo_scp/releases/download/v5.1.0/join_logo_scp_51.zip
       AVSCUDA_URL: https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.3/AviSynthCUDAFilters_Release_0.7.3.zip
