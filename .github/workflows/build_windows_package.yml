@@ -106,6 +106,17 @@ jobs:
           set "OUT=%GITHUB_WORKSPACE%"
           if not exist ffmpeg_lgpl mkdir ffmpeg_lgpl
           7z x -y -o"%OUT%\ffmpeg_lgpl" "%DEPS%\ffmpeg.7z"
+          rem Flatten if 7z has root folder (e.g. ffmpeg_dlls_for_hwenc_20250830) -> expect ffmpeg_lgpl/include, ffmpeg_lgpl/lib
+          if not exist ffmpeg_lgpl\\include (
+            for /d %%d in (ffmpeg_lgpl\\*) do (
+              robocopy "%%d" "ffmpeg_lgpl" /E /NFL /NDL /NJH /NJS
+              rmdir /s /q "%%d"
+              goto :ffmpeg_flatten_done
+            )
+          )
+          :ffmpeg_flatten_done
+          echo --- ffmpeg_lgpl structure (verify include/lib exist) ---
+          tree ffmpeg_lgpl
           if not exist lib mkdir lib
           7z x -y -o"%OUT%\lib" "%DEPS%\deplib.7z"
           if not exist deps\\join_logo mkdir deps\\join_logo
@@ -183,7 +194,7 @@ jobs:
 
           rem join_logo + JL
           for /r deps\\join_logo %%f in (join_logo_scp.exe) do copy /y "%%f" package\\exe_files
-          if exist deps\\join_logo\\JL robocopy deps\\join_logo\\JL package\\JL /E /NFL /NDL /NJH /NJS
+          if exist deps\\join_logo\\join_logo_scp\\JL robocopy deps\\join_logo\\join_logo_scp\\JL package\\JL /E /NFL /NDL /NJH /NJS
 
           rem AviSynthCUDAFilters
           if exist deps\\avscuda\\plugins64 (
@@ -192,9 +203,9 @@ jobs:
             robocopy deps\\avscuda package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
           )
 
-          rem lsmash tools
-          for /r deps\\lsmash %%f in (muxer.exe) do copy /y "%%f" package\\exe_files
-          for /r deps\\lsmash %%f in (timelineeditor.exe) do copy /y "%%f" package\\exe_files
+          rem lsmash tools (muxer_x64.exe -> muxer.exe, timelineeditor_x64.exe -> timelineeditor.exe)
+          for /r deps\\lsmash %%f in (muxer_x64.exe) do copy /y "%%f" package\\exe_files\\muxer.exe
+          for /r deps\\lsmash %%f in (timelineeditor_x64.exe) do copy /y "%%f" package\\exe_files\\timelineeditor.exe
 
           rem deps (dlls)
           if exist lib\\x64\\*.dll copy /y lib\\x64\\*.dll package\\exe_files
@@ -204,10 +215,8 @@ jobs:
           for /r deps\\x265 %%f in (*.exe) do copy /y "%%f" package\\exe_files
           for /r deps\\svt %%f in (*.exe) do copy /y "%%f" package\\exe_files
 
-          rem ffmpeg dlls
-          for %%f in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do (
-            if exist ffmpeg_lgpl\\%%f copy /y ffmpeg_lgpl\\%%f package\\exe_files
-          )
+          rem ffmpeg dlls (search recursively - structure may vary)
+          for /r ffmpeg_lgpl %%d in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do if exist "%%d" copy /y "%%d" package\\exe_files
           echo --- package contents (after Assemble) ---
           tree /f package
 
