@@ -102,6 +102,9 @@
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\Amatsukaze</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <PreBuildEvent>
+      <Command>..\Amatsukaze\Version.bat</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -121,6 +124,9 @@
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\Amatsukaze</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <PreBuildEvent>
+      <Command>..\Amatsukaze\Version.bat</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -138,6 +144,9 @@
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\Amatsukaze</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <PreBuildEvent>
+      <Command>..\Amatsukaze\Version.bat</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -157,6 +166,9 @@
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\Amatsukaze</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <PreBuildEvent>
+      <Command>..\Amatsukaze\Version.bat</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ScriptCommandWrapper.cpp" />
