@@ -85,6 +85,7 @@ jobs:
       - name: Download dependencies
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
           if not exist deps mkdir deps
           curl -L -o deps\\ffmpeg.7z "%FFMPEG_URL%"
           curl -L -o deps\\deplib.7z "%DEPLIB_URL%"
@@ -94,35 +95,45 @@ jobs:
           curl -L -o deps\\x264.zip "%X264_URL%"
           curl -L -o deps\\x265.zip "%X265_URL%"
           curl -L -o deps\\svt.zip "%SVT_URL%"
+          echo --- deps contents (after Download) ---
+          tree /f deps
 
       - name: Extract dependencies
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
+          set "DEPS=%GITHUB_WORKSPACE%\deps"
+          set "OUT=%GITHUB_WORKSPACE%"
           if not exist ffmpeg_lgpl mkdir ffmpeg_lgpl
-          7z x -y -offmpeg_lgpl deps\\ffmpeg.7z
+          7z x -y -o"%OUT%\ffmpeg_lgpl" "%DEPS%\ffmpeg.7z"
           if not exist lib mkdir lib
-          7z x -y -olib deps\\deplib.7z
+          7z x -y -o"%OUT%\lib" "%DEPS%\deplib.7z"
           if not exist deps\\join_logo mkdir deps\\join_logo
           powershell -NoProfile -Command "Expand-Archive -Path deps\\join_logo.zip -DestinationPath deps\\join_logo -Force"
           if not exist deps\\avscuda mkdir deps\\avscuda
           powershell -NoProfile -Command "Expand-Archive -Path deps\\avscuda.zip -DestinationPath deps\\avscuda -Force"
           if not exist deps\\lsmash mkdir deps\\lsmash
-          7z x -y -odeps\\lsmash deps\\lsmash.7z
+          7z x -y -o"%DEPS%\lsmash" "%DEPS%\lsmash.7z"
           if not exist deps\\x264 mkdir deps\\x264
           powershell -NoProfile -Command "Expand-Archive -Path deps\\x264.zip -DestinationPath deps\\x264 -Force"
           if not exist deps\\x265 mkdir deps\\x265
           powershell -NoProfile -Command "Expand-Archive -Path deps\\x265.zip -DestinationPath deps\\x265 -Force"
           if not exist deps\\svt mkdir deps\\svt
           powershell -NoProfile -Command "Expand-Archive -Path deps\\svt.zip -DestinationPath deps\\svt -Force"
+          echo --- deps contents (after Extract) ---
+          tree /f deps
 
       - name: Build (publish.bat)
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
           call publish.bat
 
       - name: Prepare package base
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
+          set "DEPS=%GITHUB_WORKSPACE%\deps"
           if "%BASE_PKG_URL%"=="" (
             echo BASE_PKG_URL is empty. Please set base package URL.
             exit /b 1
@@ -130,11 +141,12 @@ jobs:
           if exist package rmdir /s /q package
           mkdir package
           curl -L -o deps\\base_pkg.7z "%BASE_PKG_URL%"
-          7z x -y -opackage deps\\base_pkg.7z
+          7z x -y -o"%GITHUB_WORKSPACE%\package" "%DEPS%\base_pkg.7z"
 
       - name: Assemble package
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
           if not exist package\\exe_files mkdir package\\exe_files
           if not exist package\\exe_files\\cmd mkdir package\\exe_files\\cmd
           if not exist package\\exe_files\\plugins64 mkdir package\\exe_files\\plugins64
@@ -196,10 +208,13 @@ jobs:
           for %%f in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do (
             if exist ffmpeg_lgpl\\%%f copy /y ffmpeg_lgpl\\%%f package\\exe_files
           )
+          echo --- package contents (after Assemble) ---
+          tree /f package
 
       - name: Create archive
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
           set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"
           7z a -t7z -mx=9 -m0=lzma2 -mmt=on -ms=on -r "%PKG_NAME%" "package\\*"
           echo pkg_name=%PKG_NAME%>> %GITHUB_OUTPUT%
