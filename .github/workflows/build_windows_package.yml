@@ -87,14 +87,14 @@ jobs:
         run: |
           cd /d %GITHUB_WORKSPACE%
           if not exist deps mkdir deps
-          curl -L -o deps\\ffmpeg.7z "%FFMPEG_URL%"
-          curl -L -o deps\\deplib.7z "%DEPLIB_URL%"
-          curl -L -o deps\\join_logo.zip "%JOINLOGO_URL%"
-          curl -L -o deps\\avscuda.zip "%AVSCUDA_URL%"
-          curl -L -o deps\\lsmash.7z "%LSMASH_URL%"
-          curl -L -o deps\\x264.zip "%X264_URL%"
-          curl -L -o deps\\x265.zip "%X265_URL%"
-          curl -L -o deps\\svt.zip "%SVT_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\ffmpeg.7z "%FFMPEG_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\deplib.7z "%DEPLIB_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\join_logo.zip "%JOINLOGO_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\avscuda.zip "%AVSCUDA_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\lsmash.7z "%LSMASH_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x264.zip "%X264_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x265.zip "%X265_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
           echo --- deps contents (after Download) ---
           tree /f deps
 
@@ -140,7 +140,7 @@ jobs:
           )
           if exist package rmdir /s /q package
           mkdir package
-          curl -L -o deps\\base_pkg.7z "%BASE_PKG_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\base_pkg.7z "%BASE_PKG_URL%"
           7z x -y -o"%GITHUB_WORKSPACE%\package" "%DEPS%\base_pkg.7z"
 
       - name: Assemble package
