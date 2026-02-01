@@ -11,6 +11,7 @@ services:
         restart: always
         ports:
           - "32768:32768"
+          - "32769:32769"
         environment:
           # Amatsukazeを実行するユーザーIDとグループIDを指定
           - RUN_UID=1000
