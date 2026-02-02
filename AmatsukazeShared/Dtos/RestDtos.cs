@@ -330,6 +330,43 @@ namespace Amatsukaze.Shared
         public List<string> AddQueueConsole { get; set; } = new List<string>();
     }
 
+    public class ConsoleTaskInfo
+    {
+        public int TaskId { get; set; }
+        public string? FileName { get; set; }
+        public string? ServiceName { get; set; }
+        public string? ProfileName { get; set; }
+        public string? OutDir { get; set; }
+    }
+
+    public class ConsoleTaskView
+    {
+        public ConsoleTaskInfo? Task { get; set; }
+        public List<string> Lines { get; set; } = new List<string>();
+        public long Version { get; set; }
+    }
+
+    public enum ConsoleChangeType
+    {
+        Add,
+        Replace,
+        Clear
+    }
+
+    public class ConsoleTaskChange
+    {
+        public ConsoleChangeType Type { get; set; }
+        public string? Line { get; set; }
+    }
+
+    public class ConsoleTaskChangesView
+    {
+        public long FromVersion { get; set; }
+        public long ToVersion { get; set; }
+        public bool FullSyncRequired { get; set; }
+        public List<ConsoleTaskChange> Changes { get; set; } = new List<ConsoleTaskChange>();
+    }
+
     public class LogoView
     {
         public int LogoId { get; set; }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
@@ -9,43 +10,178 @@ using Amatsukaze.Shared;
 
 namespace Amatsukaze.Server.Rest
 {
-    internal class RestConsoleBuffer : ConsoleTextBase
+    internal class TaskConsoleState : ConsoleTextBase
     {
         private readonly List<string> lines = new List<string>();
+        private readonly List<ConsoleChangeRecord> changes = new List<ConsoleChangeRecord>();
+        private long version;
 
-        public IReadOnlyList<string> Lines {
+        public ConsoleTaskInfo TaskInfo { get; private set; }
+        public int TaskId { get; }
+        public bool IsFallback { get; private set; }
+
+        public TaskConsoleState(ConsoleTaskInfo info)
+        {
+            TaskInfo = info;
+            TaskId = info.TaskId;
+        }
+
+        public IReadOnlyList<string> Lines
+        {
             get { return lines; }
+        }
+
+        public long Version
+        {
+            get { return version; }
+        }
+
+        public void UpdateTaskInfo(ConsoleTaskInfo info)
+        {
+            TaskInfo = info;
         }
 
         public override void OnAddLine(string text)
         {
-            if (lines.Count > 800)
-            {
-                lines.RemoveAt(0);
-            }
-            lines.Add(text);
+            AddLine(text);
+            AddChange(ConsoleChangeType.Add, text);
         }
 
         public override void OnReplaceLine(string text)
         {
-            if (lines.Count == 0)
+            var hadLine = lines.Count > 0;
+            ReplaceLine(text);
+            AddChange(hadLine ? ConsoleChangeType.Replace : ConsoleChangeType.Add, text);
+        }
+
+        public void LoadFallbackLines(List<string> newLines)
+        {
+            SetTextLines(newLines);
+            IsFallback = true;
+        }
+
+        public void ResetForLive()
+        {
+            if (!IsFallback)
             {
-                lines.Add(text);
+                return;
             }
-            else
-            {
-                lines[lines.Count - 1] = text;
-            }
+            IsFallback = false;
+            lines.Clear();
+            AddChange(ConsoleChangeType.Clear, string.Empty);
         }
 
         public void SetTextLines(List<string> newLines)
         {
             Clear();
             lines.Clear();
+            changes.Clear();
+            version = 0;
             if (newLines != null)
             {
                 lines.AddRange(newLines);
+                TrimLines();
             }
+        }
+
+        public ConsoleTaskChangesView GetChanges(long sinceVersion)
+        {
+            if (sinceVersion > version)
+            {
+                return new ConsoleTaskChangesView()
+                {
+                    FromVersion = sinceVersion,
+                    ToVersion = version,
+                    FullSyncRequired = true
+                };
+            }
+
+            if (changes.Count == 0)
+            {
+                return new ConsoleTaskChangesView()
+                {
+                    FromVersion = sinceVersion,
+                    ToVersion = version,
+                    FullSyncRequired = sinceVersion != version
+                };
+            }
+
+            var minVersion = changes[0].Version;
+            if (sinceVersion < minVersion)
+            {
+                return new ConsoleTaskChangesView()
+                {
+                    FromVersion = sinceVersion,
+                    ToVersion = version,
+                    FullSyncRequired = true
+                };
+            }
+
+            var items = changes
+                .Where(change => change.Version > sinceVersion)
+                .Select(change => change.Change)
+                .ToList();
+
+            return new ConsoleTaskChangesView()
+            {
+                FromVersion = sinceVersion,
+                ToVersion = version,
+                FullSyncRequired = false,
+                Changes = items
+            };
+        }
+
+        private void AddLine(string text)
+        {
+            lines.Add(text);
+            TrimLines();
+        }
+
+        private void ReplaceLine(string text)
+        {
+            if (lines.Count == 0)
+            {
+                lines.Add(text);
+                return;
+            }
+            lines[lines.Count - 1] = text;
+        }
+
+        private void TrimLines()
+        {
+            if (lines.Count <= ConsoleConstants.MaxConsoleLines)
+            {
+                return;
+            }
+            var trim = Math.Max(ConsoleConstants.ConsoleTrimLines, lines.Count - ConsoleConstants.MaxConsoleLines);
+            trim = Math.Min(trim, lines.Count);
+            lines.RemoveRange(0, trim);
+        }
+
+        private void AddChange(ConsoleChangeType type, string text)
+        {
+            version++;
+            changes.Add(new ConsoleChangeRecord()
+            {
+                Version = version,
+                Change = new ConsoleTaskChange()
+                {
+                    Type = type,
+                    Line = text
+                }
+            });
+            if (changes.Count > ConsoleConstants.MaxConsoleChanges)
+            {
+                var trim = Math.Max(ConsoleConstants.ConsoleTrimChanges, changes.Count - ConsoleConstants.MaxConsoleChanges);
+                trim = Math.Min(trim, changes.Count);
+                changes.RemoveRange(0, trim);
+            }
+        }
+
+        private class ConsoleChangeRecord
+        {
+            public long Version { get; set; }
+            public ConsoleTaskChange Change { get; set; }
         }
     }
 
@@ -66,12 +202,15 @@ namespace Amatsukaze.Server.Rest
         private const int MaxMessageLog = 500;
         private long messageVersion = 0;
         private readonly List<MessageRecord> messageLog = new List<MessageRecord>();
+        private const int MaxPendingConsoleBytes = 256 * 1024;
         private List<LogItem> logItems = new List<LogItem>();
         private List<CheckLogItem> checkLogItems = new List<CheckLogItem>();
 
-        private readonly Dictionary<int, RestConsoleBuffer> consoleBuffers = new Dictionary<int, RestConsoleBuffer>();
-        private readonly RestConsoleBuffer addQueueConsole = new RestConsoleBuffer();
-        private readonly Dictionary<int, EncodeState> encodeStates = new Dictionary<int, EncodeState>();
+        private readonly Dictionary<int, TaskConsoleState> taskConsoles = new Dictionary<int, TaskConsoleState>();
+        private readonly Dictionary<int, int> consoleIdToTaskId = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> taskIdToConsoleId = new Dictionary<int, int>();
+        private readonly Dictionary<int, List<string>> pendingConsoleSnapshots = new Dictionary<int, List<string>>();
+        private readonly Dictionary<int, List<byte>> pendingConsoleBytes = new Dictionary<int, List<byte>>();
 
         private Setting setting;
         private UIState uiState;
@@ -442,30 +581,61 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
-        public ConsoleView GetConsoleView()
+        public bool TryGetConsoleTaskView(int taskId, out ConsoleTaskView view)
         {
             lock (sync)
             {
-                var consoles = consoleBuffers
-                    .OrderBy(pair => pair.Key)
-                    .Select(pair =>
-                    {
-                        var id = pair.Key;
-                        var buffer = pair.Value;
-                        encodeStates.TryGetValue(id, out var stateInfo);
-                        return new ConsoleState()
-                        {
-                            Id = id,
-                            Lines = buffer.Lines.ToList(),
-                            Phase = stateInfo?.Phase ?? ResourcePhase.TSAnalyze,
-                            Resource = stateInfo?.Resource
-                        };
-                    }).ToList();
-                return new ConsoleView()
+                if (!taskConsoles.TryGetValue(taskId, out var console))
                 {
-                    Consoles = consoles,
-                    AddQueueConsole = addQueueConsole.Lines.ToList()
+                    var item = queueItems.FirstOrDefault(q => q != null && q.Id == taskId);
+                    if (item == null)
+                    {
+                        view = null;
+                        return false;
+                    }
+                    if (!TryCreateFallbackConsole(item, out console))
+                    {
+                        view = null;
+                        return false;
+                    }
+                    taskConsoles[taskId] = console;
+                }
+                else
+                {
+                    var item = queueItems.FirstOrDefault(q => q != null && q.Id == taskId);
+                    if (item != null &&
+                        item.State != QueueState.Encoding &&
+                        !console.IsFallback &&
+                        console.Lines.Count == 0)
+                    {
+                        if (TryCreateFallbackConsole(item, out var fallback))
+                        {
+                            taskConsoles[taskId] = fallback;
+                            console = fallback;
+                        }
+                    }
+                }
+                view = new ConsoleTaskView()
+                {
+                    Task = CopyConsoleTaskInfo(console.TaskInfo),
+                    Lines = console.Lines.ToList(),
+                    Version = console.Version
                 };
+                return true;
+            }
+        }
+
+        public bool TryGetConsoleTaskChanges(int taskId, long sinceVersion, out ConsoleTaskChangesView view)
+        {
+            lock (sync)
+            {
+                if (!taskConsoles.TryGetValue(taskId, out var console))
+                {
+                    view = null;
+                    return false;
+                }
+                view = console.GetChanges(sinceVersion);
+                return true;
             }
         }
 
@@ -707,7 +877,7 @@ namespace Amatsukaze.Server.Rest
                 QueueView = GetQueueView(new Amatsukaze.Shared.QueueFilter()),
                 EncodeLogs = GetEncodeLogs(),
                 CheckLogs = GetCheckLogs(),
-                ConsoleView = GetConsoleView(),
+                ConsoleView = null,
                 Profiles = GetProfiles(),
                 AutoSelects = GetAutoSelects(),
                 Services = GetServiceViews(),
@@ -848,6 +1018,325 @@ namespace Amatsukaze.Server.Rest
                    item.FailReason.Contains("映像が小さすぎます");
         }
 
+        private static ConsoleTaskInfo BuildConsoleTaskInfo(QueueItem item)
+        {
+            return new ConsoleTaskInfo()
+            {
+                TaskId = item.Id,
+                FileName = item.FileName,
+                ServiceName = item.ServiceName,
+                ProfileName = item.Profile?.Name ?? item.ProfileName,
+                OutDir = item.DstPath
+            };
+        }
+
+        private static ConsoleTaskInfo CopyConsoleTaskInfo(ConsoleTaskInfo info)
+        {
+            return new ConsoleTaskInfo()
+            {
+                TaskId = info.TaskId,
+                FileName = info.FileName,
+                ServiceName = info.ServiceName,
+                ProfileName = info.ProfileName,
+                OutDir = info.OutDir
+            };
+        }
+
+        private void UpdateTaskConsoleMappings(IEnumerable<QueueItem> items)
+        {
+            if (items == null)
+            {
+                return;
+            }
+            foreach (var item in items)
+            {
+                EnsureTaskConsoleMapping(item);
+            }
+        }
+
+        private void ClearTaskConsoles()
+        {
+            taskConsoles.Clear();
+            consoleIdToTaskId.Clear();
+            taskIdToConsoleId.Clear();
+            pendingConsoleSnapshots.Clear();
+            pendingConsoleBytes.Clear();
+        }
+
+        private void RemoveTaskConsole(int taskId)
+        {
+            taskConsoles.Remove(taskId);
+            if (taskIdToConsoleId.TryGetValue(taskId, out var consoleId))
+            {
+                taskIdToConsoleId.Remove(taskId);
+                if (consoleIdToTaskId.TryGetValue(consoleId, out var mappedTaskId) && mappedTaskId == taskId)
+                {
+                    consoleIdToTaskId.Remove(consoleId);
+                }
+                pendingConsoleSnapshots.Remove(consoleId);
+                pendingConsoleBytes.Remove(consoleId);
+            }
+        }
+
+        private void EnsureTaskConsoleMapping(QueueItem item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+            if (item.State != QueueState.Encoding)
+            {
+                return;
+            }
+            if (item.EncodeStart == DateTime.MinValue)
+            {
+                return;
+            }
+            var consoleId = item.ConsoleId;
+            if (consoleId < 0)
+            {
+                return;
+            }
+            if (consoleIdToTaskId.TryGetValue(consoleId, out var existingTaskId) == false ||
+                existingTaskId != item.Id)
+            {
+                consoleIdToTaskId[consoleId] = item.Id;
+            }
+            taskIdToConsoleId[item.Id] = consoleId;
+            EnsureTaskConsoleState(item);
+            ApplyPendingConsoleSnapshot(consoleId, item.Id);
+            ApplyPendingConsoleBytes(consoleId, item.Id);
+        }
+
+        private void EnsureTaskConsoleMapping(int consoleId)
+        {
+            if (consoleId < 0 || consoleIdToTaskId.ContainsKey(consoleId))
+            {
+                return;
+            }
+            var item = queueItems.FirstOrDefault(q =>
+                q != null &&
+                q.State == QueueState.Encoding &&
+                q.ConsoleId == consoleId &&
+                q.EncodeStart != DateTime.MinValue);
+            if (item != null)
+            {
+                EnsureTaskConsoleMapping(item);
+            }
+        }
+
+        private bool TryResolveTaskIdFromConsoleId(int consoleId, out int taskId)
+        {
+            if (consoleIdToTaskId.TryGetValue(consoleId, out taskId))
+            {
+                return true;
+            }
+            EnsureTaskConsoleMapping(consoleId);
+            return consoleIdToTaskId.TryGetValue(consoleId, out taskId);
+        }
+
+        private void EnsureTaskConsoleState(QueueItem item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+            if (!taskConsoles.TryGetValue(item.Id, out var console))
+            {
+                taskConsoles[item.Id] = new TaskConsoleState(BuildConsoleTaskInfo(item));
+                return;
+            }
+            console.UpdateTaskInfo(BuildConsoleTaskInfo(item));
+            console.ResetForLive();
+        }
+
+        private void ApplyConsoleSnapshot(int consoleId, List<string> text)
+        {
+            if (consoleId < 0)
+            {
+                return;
+            }
+            if (TryResolveTaskIdFromConsoleId(consoleId, out var taskId) &&
+                taskConsoles.TryGetValue(taskId, out var console))
+            {
+                console.SetTextLines(text);
+                return;
+            }
+            pendingConsoleSnapshots[consoleId] = text != null ? new List<string>(text) : new List<string>();
+        }
+
+        private void ApplyPendingConsoleSnapshot(int consoleId, int taskId)
+        {
+            if (!pendingConsoleSnapshots.TryGetValue(consoleId, out var text) ||
+                !taskConsoles.TryGetValue(taskId, out var console))
+            {
+                return;
+            }
+            console.SetTextLines(text);
+            pendingConsoleSnapshots.Remove(consoleId);
+        }
+
+        private void AddPendingConsoleBytes(int consoleId, byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0)
+            {
+                return;
+            }
+            if (!pendingConsoleBytes.TryGetValue(consoleId, out var list))
+            {
+                list = new List<byte>();
+                pendingConsoleBytes[consoleId] = list;
+            }
+            list.AddRange(bytes);
+            if (list.Count > MaxPendingConsoleBytes)
+            {
+                var trim = list.Count - MaxPendingConsoleBytes;
+                list.RemoveRange(0, trim);
+            }
+        }
+
+        private void ApplyPendingConsoleBytes(int consoleId, int taskId)
+        {
+            if (!pendingConsoleBytes.TryGetValue(consoleId, out var list) ||
+                !taskConsoles.TryGetValue(taskId, out var console))
+            {
+                return;
+            }
+            var data = list.ToArray();
+            pendingConsoleBytes.Remove(consoleId);
+            console.AddBytes(data, 0, data.Length);
+        }
+
+        private bool TryCreateFallbackConsole(QueueItem item, out TaskConsoleState console)
+        {
+            console = null;
+            var logPath = ResolveTaskLogPath(item);
+            if (string.IsNullOrEmpty(logPath))
+            {
+                return false;
+            }
+            var lines = ReadLogFileLines(logPath);
+            console = new TaskConsoleState(BuildConsoleTaskInfo(item));
+            console.LoadFallbackLines(lines);
+            return true;
+        }
+
+        private string ResolveTaskLogPath(QueueItem item)
+        {
+            if (item == null)
+            {
+                return null;
+            }
+            if (item.IsCheck)
+            {
+                var check = FindCheckLog(item);
+                if (check != null)
+                {
+                    return encodeServer.GetCheckLogFileBase(check.CheckStartDate) + ".txt";
+                }
+            }
+            else
+            {
+                var log = FindEncodeLog(item);
+                if (log != null)
+                {
+                    return encodeServer.GetLogFileBase(log.EncodeStartDate) + ".txt";
+                }
+            }
+            if (item.EncodeStart != DateTime.MinValue)
+            {
+                var path = item.IsCheck
+                    ? encodeServer.GetCheckLogFileBase(item.EncodeStart) + ".txt"
+                    : encodeServer.GetLogFileBase(item.EncodeStart) + ".txt";
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+            return null;
+        }
+
+        private LogItem FindEncodeLog(QueueItem item)
+        {
+            if (item == null)
+            {
+                return null;
+            }
+            var logs = logItems.Where(x => x != null && x.SrcPath == item.SrcPath).ToList();
+            if (logs.Count == 0)
+            {
+                return null;
+            }
+            if (item.EncodeStart != DateTime.MinValue)
+            {
+                var exact = logs.FirstOrDefault(x => x.EncodeStartDate == item.EncodeStart);
+                if (exact != null)
+                {
+                    return exact;
+                }
+            }
+            return logs.OrderByDescending(x => x.EncodeStartDate).FirstOrDefault();
+        }
+
+        private CheckLogItem FindCheckLog(QueueItem item)
+        {
+            if (item == null)
+            {
+                return null;
+            }
+            var targetType = item.Mode == ProcMode.DrcsCheck ? CheckType.DRCS : CheckType.CM;
+            var logs = checkLogItems
+                .Where(x => x != null && x.SrcPath == item.SrcPath && x.Type == targetType)
+                .ToList();
+            if (logs.Count == 0)
+            {
+                return null;
+            }
+            if (item.EncodeStart != DateTime.MinValue)
+            {
+                var exact = logs.FirstOrDefault(x => x.CheckStartDate == item.EncodeStart);
+                if (exact != null)
+                {
+                    return exact;
+                }
+            }
+            return logs.OrderByDescending(x => x.CheckStartDate).FirstOrDefault();
+        }
+
+        private static List<string> ReadLogFileLines(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return new List<string> { "ログファイルが見つかりません。パス: " + path };
+            }
+            var bytes = File.ReadAllBytes(path);
+            var content = Util.AmatsukazeDefaultEncoding.GetString(bytes);
+            var lines = SplitLines(content);
+            TrimLogLines(lines);
+            return lines;
+        }
+
+        private static List<string> SplitLines(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+            {
+                return new List<string>();
+            }
+            var normalized = content.Replace("\r\n", "\n").Replace('\r', '\n');
+            return normalized.Split('\n').ToList();
+        }
+
+        private static void TrimLogLines(List<string> lines)
+        {
+            if (lines.Count <= ConsoleConstants.MaxConsoleLines)
+            {
+                return;
+            }
+            var trim = Math.Max(ConsoleConstants.ConsoleTrimLines, lines.Count - ConsoleConstants.MaxConsoleLines);
+            trim = Math.Min(trim, lines.Count);
+            lines.RemoveRange(0, trim);
+        }
+
         public Task OnUIData(UIData data)
         {
             if (data == null)
@@ -867,6 +1356,7 @@ namespace Amatsukaze.Server.Rest
                         .Select(CopyQueueItem)
                         .ToList() ?? new List<QueueItem>();
                     ResetQueueChanges();
+                    UpdateTaskConsoleMappings(queueItems);
                 }
                 if (data.QueueUpdate != null)
                 {
@@ -875,6 +1365,7 @@ namespace Amatsukaze.Server.Rest
                     {
                         queueItems.Clear();
                         ResetQueueChanges();
+                        ClearTaskConsoles();
                         return Task.FromResult(0);
                     }
                     var idx = queueItems.FindIndex(item => item.Id == update.Item?.Id);
@@ -886,6 +1377,7 @@ namespace Amatsukaze.Server.Rest
                         }
                         if (update.Item != null)
                         {
+                            RemoveTaskConsole(update.Item.Id);
                             AddQueueChange(new Amatsukaze.Shared.QueueChange()
                             {
                                 Type = Amatsukaze.Shared.QueueChangeType.Remove,
@@ -930,6 +1422,7 @@ namespace Amatsukaze.Server.Rest
                             {
                                 queueItems.Add(CopyQueueItem(update.Item));
                             }
+                            EnsureTaskConsoleMapping(update.Item);
                             AddQueueChange(new Amatsukaze.Shared.QueueChange()
                             {
                                 Type = update.Type == UpdateType.Add ? Amatsukaze.Shared.QueueChangeType.Add : Amatsukaze.Shared.QueueChangeType.Update,
@@ -956,19 +1449,11 @@ namespace Amatsukaze.Server.Rest
                 }
                 if (data.ConsoleData != null)
                 {
-                    if (data.ConsoleData.index == -1)
-                    {
-                        addQueueConsole.SetTextLines(data.ConsoleData.text);
-                    }
-                    else
-                    {
-                        EnsureConsole(data.ConsoleData.index);
-                        consoleBuffers[data.ConsoleData.index].SetTextLines(data.ConsoleData.text);
-                    }
+                    ApplyConsoleSnapshot(data.ConsoleData.index, data.ConsoleData.text);
                 }
                 if (data.EncodeState != null)
                 {
-                    encodeStates[data.EncodeState.ConsoleId] = data.EncodeState;
+                    EnsureTaskConsoleMapping(data.EncodeState.ConsoleId);
                 }
                 if (data.SleepCancel != null)
                 {
@@ -1190,12 +1675,16 @@ namespace Amatsukaze.Server.Rest
                 converted = Util.ConvertEncoding(update.data, src, Util.AmatsukazeDefaultEncoding);
                 if (update.index == -1)
                 {
-                    addQueueConsole.AddBytes(converted, 0, converted.Length);
+                    return Task.FromResult(0);
+                }
+                if (TryResolveTaskIdFromConsoleId(update.index, out var taskId) &&
+                    taskConsoles.TryGetValue(taskId, out var console))
+                {
+                    console.AddBytes(converted, 0, converted.Length);
                 }
                 else
                 {
-                    EnsureConsole(update.index);
-                    consoleBuffers[update.index].AddBytes(converted, 0, converted.Length);
+                    AddPendingConsoleBytes(update.index, converted);
                 }
             }
             return Task.FromResult(0);
@@ -1209,7 +1698,7 @@ namespace Amatsukaze.Server.Rest
             }
             lock (sync)
             {
-                encodeStates[stateInfo.ConsoleId] = ServerSupport.DeepCopy(stateInfo);
+                EnsureTaskConsoleMapping(stateInfo.ConsoleId);
             }
             return Task.FromResult(0);
         }
@@ -1384,12 +1873,5 @@ namespace Amatsukaze.Server.Rest
         {
         }
 
-        private void EnsureConsole(int index)
-        {
-            if (!consoleBuffers.ContainsKey(index))
-            {
-                consoleBuffers[index] = new RestConsoleBuffer();
-            }
-        }
     }
 }

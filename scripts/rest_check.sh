@@ -73,7 +73,12 @@ check_json "MakeScript" "GET /api/makescript" "${BASE}/api/makescript" || failed
 check_json "MakeScriptプレビュー" "GET /api/makescript/preview" "${BASE}/api/makescript/preview" || failed=1
 
 print_header "コンソール"
-check_json "コンソール" "GET /api/console" "${BASE}/api/console" || failed=1
+if [ -n "${CONSOLE_TASK_ID:-}" ]; then
+  check_json "コンソール" "GET /api/console/${CONSOLE_TASK_ID}" "${BASE}/api/console/${CONSOLE_TASK_ID}" || failed=1
+  check_json "コンソール差分" "GET /api/console/${CONSOLE_TASK_ID}/changes?since=0" "${BASE}/api/console/${CONSOLE_TASK_ID}/changes?since=0" || failed=1
+else
+  print_result "コンソール" "GET /api/console/{taskId}" "SKIP (CONSOLE_TASK_ID が未指定)"
+fi
 
 print_header "完了"
 if [ "$failed" -eq 0 ]; then

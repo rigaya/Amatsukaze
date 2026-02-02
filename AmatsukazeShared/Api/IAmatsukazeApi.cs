@@ -73,7 +73,8 @@ namespace Amatsukaze.Shared
         Task<ApiResult<string>> GetMakeScriptFileAsync(MakeScriptGenerateRequest request);
         Task<ApiResult<bool>> UpdateFinishSettingAsync(FinishSetting setting);
 
-        Task<ApiResult<ConsoleView>> GetConsoleAsync();
+        Task<ApiResult<ConsoleTaskView>> GetConsoleTaskAsync(int taskId);
+        Task<ApiResult<ConsoleTaskChangesView>> GetConsoleTaskChangesAsync(int taskId, long sinceVersion);
 
         Task<ApiResult<LogoAnalyzeStatus>> StartLogoAnalyzeAsync(LogoAnalyzeStartRequest req);
         Task<ApiResult<LogoAnalyzeStatus>> GetLogoAnalyzeStatusAsync(string jobId);
