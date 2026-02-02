@@ -1221,7 +1221,28 @@ namespace Amatsukaze.Server.Rest
                 });
             });
 
-            app.MapGet("/api/console", () => Results.Json(state.GetConsoleView()));
+            app.MapGet("/api/console/{taskId:int}", (int taskId) =>
+            {
+                if (state.TryGetConsoleTaskView(taskId, out var view))
+                {
+                    return Results.Json(view);
+                }
+                return Results.NotFound();
+            });
+
+            app.MapGet("/api/console/{taskId:int}/changes", (int taskId, HttpRequest request) =>
+            {
+                if (request.Query.TryGetValue("since", out var sinceRaw) &&
+                    long.TryParse(sinceRaw.ToString(), out var since))
+                {
+                    if (state.TryGetConsoleTaskChanges(taskId, since, out var view))
+                    {
+                        return Results.Json(view);
+                    }
+                    return Results.NotFound();
+                }
+                return Results.BadRequest(new { error = "since is required." });
+            });
 
             app.MapGet("/api/settings", () => Results.Json(state.GetSetting()));
             app.MapMethods("/api/settings", new[] { "OPTIONS" }, () => Results.Ok());

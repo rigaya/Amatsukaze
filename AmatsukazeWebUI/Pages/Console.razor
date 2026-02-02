@@ -1,6 +1,8 @@
-@page "/console"
+@page "/console/{TaskId:int}"
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
+@inject IJSRuntime Js
+@implements IAsyncDisposable
 
 <h3>コンソール</h3>
 
@@ -18,44 +20,236 @@ else if (_view == null)
 }
 else
 {
-    @if (_view.Consoles.Count == 0)
-    {
-        <p>No consoles.</p>
-    }
-    else
-    {
-        @foreach (var console in _view.Consoles)
-        {
-            <div style="margin-bottom: 1rem;">
-                <div><strong>Console @console.Id</strong> @if (!string.IsNullOrEmpty(console.Phase)) { <span>(@console.Phase)</span> }</div>
-                <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@string.Join("\n", console.Lines)</pre>
-            </div>
-        }
-    }
-
-    @if (_view.AddQueueConsole.Count > 0)
-    {
-        <h4>キュー追加</h4>
-        <pre style="background: #f7f7f7; padding: 0.5rem; white-space: pre-wrap;">@string.Join("\n", _view.AddQueueConsole)</pre>
-    }
+    <div style="margin-bottom: 0.5rem;">
+        <div><strong>Task #@_view.Task?.TaskId</strong></div>
+        <div>ファイル名: @_view.Task?.FileName</div>
+        <div>サービス名: @_view.Task?.ServiceName</div>
+        <div>プロファイル: @_view.Task?.ProfileName</div>
+        <div>出力先: @_view.Task?.OutDir</div>
+    </div>
+    <pre @ref="_logRef" class="console-log">@string.Join("\n", _view.Lines)</pre>
 }
 
 @code {
-    private ConsoleView? _view;
+    [Parameter] public int TaskId { get; set; }
+
+    private ConsoleTaskView? _view;
     private string? _error;
     private bool _loading = true;
+    private long _version;
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
+    private bool _polling;
+    private ElementReference _logRef;
+    private bool _pendingScrollToBottom;
 
-    protected override async Task OnInitializedAsync()
+    private const double FollowThreshold = 20;
+
+    protected override async Task OnParametersSetAsync()
     {
-        var res = await Api.GetConsoleAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        StopPolling();
+        _loading = true;
+        _error = null;
+        _view = null;
+        _version = 0;
+
+        var res = await Api.GetConsoleTaskAsync(TaskId);
         if (!res.Ok)
         {
-            _error = res.Error ?? "Failed to load.";
+            _error = res.Error ?? "Failed to load console.";
         }
         else
         {
             _view = res.Data;
+            if (_view != null)
+            {
+                _version = _view.Version;
+                _pendingScrollToBottom = true;
+                StartPolling();
+            }
         }
         _loading = false;
+    }
+
+    private void StartPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+        _pollTask = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(PollOnceAsync);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, token);
+    }
+
+    private void StopPolling()
+    {
+        _pollCts?.Cancel();
+    }
+
+    private async Task PollOnceAsync()
+    {
+        if (_loading || _view == null || _polling)
+        {
+            return;
+        }
+        _polling = true;
+        try
+        {
+            var follow = await ShouldFollowAsync();
+            var res = await Api.GetConsoleTaskChangesAsync(TaskId, _version);
+            if (!res.Ok)
+            {
+                _error = res.Error ?? "Failed to poll console.";
+                return;
+            }
+            var data = res.Data;
+            if (data == null)
+            {
+                return;
+            }
+            if (data.FullSyncRequired)
+            {
+                await ReloadAsync();
+                return;
+            }
+            if (data.Changes.Count == 0)
+            {
+                _version = data.ToVersion;
+                return;
+            }
+            ApplyConsoleChanges(data);
+            if (follow)
+            {
+                _pendingScrollToBottom = true;
+            }
+            StateHasChanged();
+        }
+        finally
+        {
+            _polling = false;
+        }
+    }
+
+    private void ApplyConsoleChanges(ConsoleTaskChangesView data)
+    {
+        if (_view == null)
+        {
+            return;
+        }
+        _version = data.ToVersion;
+        var lines = _view.Lines;
+        foreach (var change in data.Changes)
+        {
+            switch (change.Type)
+            {
+                case ConsoleChangeType.Add:
+                    if (!string.IsNullOrEmpty(change.Line))
+                    {
+                        lines.Add(change.Line);
+                    }
+                    break;
+                case ConsoleChangeType.Replace:
+                    if (lines.Count == 0)
+                    {
+                        if (!string.IsNullOrEmpty(change.Line))
+                        {
+                            lines.Add(change.Line);
+                        }
+                    }
+                    else
+                    {
+                        lines[lines.Count - 1] = change.Line ?? string.Empty;
+                    }
+                    break;
+                case ConsoleChangeType.Clear:
+                    lines.Clear();
+                    break;
+            }
+        }
+        TrimLines(lines);
+    }
+
+    private static void TrimLines(List<string> lines)
+    {
+        if (lines.Count <= ConsoleConstants.MaxConsoleLines)
+        {
+            return;
+        }
+        var trim = Math.Max(ConsoleConstants.ConsoleTrimLines, lines.Count - ConsoleConstants.MaxConsoleLines);
+        trim = Math.Min(trim, lines.Count);
+        lines.RemoveRange(0, trim);
+    }
+
+    private async Task<bool> ShouldFollowAsync()
+    {
+        try
+        {
+            var info = await Js.InvokeAsync<ScrollInfo>("amatsukazeUi.getScrollInfo", _logRef);
+            return info.Remaining <= FollowThreshold;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try
+        {
+            var info = await Js.InvokeAsync<ScrollInfo>("amatsukazeUi.getScrollInfo", _logRef);
+            await Js.InvokeVoidAsync("amatsukazeUi.setScrollTop", _logRef, info.ScrollHeight);
+        }
+        catch
+        {
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingScrollToBottom)
+        {
+            _pendingScrollToBottom = false;
+            await ScrollToBottomAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _pollCts?.Cancel();
+        if (_pollTask != null)
+        {
+            try
+            {
+                await _pollTask;
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private sealed class ScrollInfo
+    {
+        public double ScrollTop { get; set; }
+        public double ScrollHeight { get; set; }
+        public double ClientHeight { get; set; }
+        public double Remaining { get; set; }
     }
 }

@@ -348,8 +348,11 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<bool>> UpdateFinishSettingAsync(FinishSetting setting)
             => PutJsonAsync("/api/finish-setting", setting, _ => true);
 
-        public Task<ApiResult<ConsoleView>> GetConsoleAsync()
-            => GetJsonAsync<ConsoleView>("/api/console");
+        public Task<ApiResult<ConsoleTaskView>> GetConsoleTaskAsync(int taskId)
+            => GetJsonAsync<ConsoleTaskView>($"/api/console/{taskId}");
+
+        public Task<ApiResult<ConsoleTaskChangesView>> GetConsoleTaskChangesAsync(int taskId, long sinceVersion)
+            => GetJsonAsync<ConsoleTaskChangesView>($"/api/console/{taskId}/changes?since={sinceVersion}");
 
         public Task<ApiResult<LogoAnalyzeStatus>> StartLogoAnalyzeAsync(LogoAnalyzeStartRequest req)
             => PostJsonAsync("/api/logo/analyze", req, element => element.Deserialize<LogoAnalyzeStatus>(jsonOptions) ?? new LogoAnalyzeStatus());

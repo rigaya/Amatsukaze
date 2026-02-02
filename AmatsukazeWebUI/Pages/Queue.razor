@@ -4,6 +4,7 @@
 @using System.Text.Json
 @using System.Threading
 @using System.IO
+@using System.Linq
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -239,6 +240,7 @@ else
             <div class="queue-context-menu"
                  style="left: @_contextMenuXpx; top: @_contextMenuYpx;"
                  @onclick:stopPropagation="true">
+                <button class="queue-menu-item" @onclick="OpenConsoleSelected">コンソール</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ResetState, "リトライ"))' disabled="@(!_hasSelection)">リトライ</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.UpdateProfile, "プロファイル再適用"))' disabled="@(!_hasSelection)">プロファイル再適用</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.Cancel, "キャンセル"))' disabled="@(!_hasSelection)">キャンセル</button>
@@ -1315,6 +1317,17 @@ else
         _contextMenuX = e.ClientX;
         _contextMenuY = e.ClientY;
         _contextMenuVisible = true;
+    }
+
+    private void OpenConsoleSelected()
+    {
+        if (_selectedIds.Count == 0)
+        {
+            return;
+        }
+        var taskId = _selectedIds.First();
+        CloseContextMenu();
+        Nav.NavigateTo($"/console/{taskId}");
     }
 
     private void CloseContextMenu()
