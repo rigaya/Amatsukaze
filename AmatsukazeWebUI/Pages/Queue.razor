@@ -57,6 +57,89 @@
         background-color: #999;
         cursor: not-allowed;
     }
+    .queue-filter-shell {
+        margin: 0.5rem 0 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg-surface);
+        padding: 0.4rem 0.75rem;
+    }
+    .queue-filter-shell.is-closed {
+        padding-top: 0.3rem;
+        padding-bottom: 0.3rem;
+    }
+    .queue-filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        min-height: 36px;
+    }
+    .queue-filter-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--bg-surface);
+        color: var(--text-strong);
+        padding: 0.4rem 0.75rem;
+        border-radius: 999px;
+        font-weight: 600;
+    }
+    .queue-filter-toggle .chev {
+        display: inline-block;
+        transition: transform 120ms ease;
+    }
+    .queue-filter-toggle.is-open .chev {
+        transform: rotate(90deg);
+    }
+    .queue-filter-panel {
+        margin-top: 0.5rem;
+        display: grid;
+        gap: 0.5rem;
+    }
+    .queue-filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+    }
+    .queue-filter-label {
+        min-width: 5.5rem;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .queue-filter-input {
+        min-width: 220px;
+        max-width: 420px;
+        flex: 1;
+    }
+    .queue-filter-btn {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--bg-surface);
+        color: var(--muted);
+        padding: 0.35rem 0.75rem;
+        font-size: 0.9rem;
+    }
+    .queue-filter-btn.is-on {
+        background: color-mix(in srgb, var(--accent) 18%, var(--bg-surface));
+        border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+        color: var(--text);
+    }
+    .queue-filter-btn.is-all {
+        font-weight: 600;
+    }
+    .queue-filter-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    .queue-counters {
+        margin-top: 0.5rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+    }
 </style>
 
 <div class="queue-header">
@@ -117,6 +200,49 @@
     </label>
 </div>
 
+<div class="queue-filter-shell @(_isFilterOpen ? "" : "is-closed")">
+    <div class="queue-filter-header">
+        <button class="queue-filter-toggle @(_isFilterOpen ? "is-open" : "")" @onclick="ToggleFilterPanel">
+            <span class="chev">▶</span>
+            フィルタ
+        </button>
+        <div class="queue-filter-actions">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">クリア</button>
+        </div>
+    </div>
+    @if (_isFilterOpen)
+    {
+        <div class="queue-filter-panel">
+            <div class="queue-filter-row">
+                <div class="queue-filter-label">検索</div>
+                <input class="form-control queue-filter-input"
+                       placeholder="検索ワード"
+                       value="@_filterSearchText"
+                       @oninput="OnFilterSearchInput" />
+            </div>
+            <div class="queue-filter-row">
+                <div class="queue-filter-label">検索項目</div>
+                <button class="queue-filter-btn is-all @(_filterSearchAll ? "is-on" : "")" @onclick="ToggleSearchAll">すべて</button>
+                <button class="queue-filter-btn @(_filterSearchFile ? "is-on" : "")" @onclick="@(() => ToggleSearchTarget(FilterSearchTarget.File))">ファイル名</button>
+                <button class="queue-filter-btn @(_filterSearchChannel ? "is-on" : "")" @onclick="@(() => ToggleSearchTarget(FilterSearchTarget.Channel))">チャンネル</button>
+                <button class="queue-filter-btn @(_filterSearchProfile ? "is-on" : "")" @onclick="@(() => ToggleSearchTarget(FilterSearchTarget.Profile))">プロファイル</button>
+                <button class="queue-filter-btn @(_filterSearchGenre ? "is-on" : "")" @onclick="@(() => ToggleSearchTarget(FilterSearchTarget.Genre))">ジャンル</button>
+                <button class="queue-filter-btn @(_filterSearchState ? "is-on" : "")" @onclick="@(() => ToggleSearchTarget(FilterSearchTarget.State))">状態</button>
+                <button class="queue-filter-btn @(_filterSearchMode ? "is-on" : "")" @onclick="@(() => ToggleSearchTarget(FilterSearchTarget.Mode))">モード</button>
+            </div>
+            <div class="queue-filter-row">
+                <div class="queue-filter-label">状態</div>
+                <button class="queue-filter-btn is-all @(_filterStateAll ? "is-on" : "")" @onclick="ToggleStateAll">すべて</button>
+                <button class="queue-filter-btn @(_filterStateWaiting ? "is-on" : "")" @onclick="@(() => ToggleStateFilter(FilterStateTarget.Waiting))">待ち</button>
+                <button class="queue-filter-btn @(_filterStatePending ? "is-on" : "")" @onclick="@(() => ToggleStateFilter(FilterStateTarget.Pending))">ペンディング</button>
+                <button class="queue-filter-btn @(_filterStateRunning ? "is-on" : "")" @onclick="@(() => ToggleStateFilter(FilterStateTarget.Running))">実行中</button>
+                <button class="queue-filter-btn @(_filterStateCanceled ? "is-on" : "")" @onclick="@(() => ToggleStateFilter(FilterStateTarget.Canceled))">キャンセル</button>
+                <button class="queue-filter-btn @(_filterStateComplete ? "is-on" : "")" @onclick="@(() => ToggleStateFilter(FilterStateTarget.Complete))">完了</button>
+            </div>
+        </div>
+    }
+</div>
+
 @if (_loading)
 {
     <p>Loading...</p>
@@ -136,20 +262,7 @@ else
         <p style="color: green;">@_actionMessage</p>
     }
 
-    <div>
-        <strong>Counters</strong>
-        <div>
-            Active: @_view.Counters.Active /
-            Encoding: @_view.Counters.Encoding /
-            Complete: @_view.Counters.Complete /
-            Pending: @_view.Counters.Pending /
-            Failed: @_view.Counters.Failed /
-            Canceled: @_view.Counters.Canceled
-        </div>
-    </div>
-
-    <h4>項目</h4>
-    @if (_view.Items.Count == 0)
+    @if (_filteredItems.Count == 0)
     {
         <p>No queue items.</p>
     }
@@ -157,12 +270,12 @@ else
     {
         <div class="queue-list"
              data-drop-end="true"
-             ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
+             ondragover="return amatsukazeDnd.updateDropIdFromEvent(event)"
              @onclick="CloseContextMenu"
              @ondragenter="OnQueueBodyDragEnter">
         <table class="table queue-table"
                data-drop-end="true"
-               ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
+               ondragover="return amatsukazeDnd.updateDropIdFromEvent(event)"
                @ondragenter="OnQueueBodyDragEnter">
             <thead>
                 <tr>
@@ -177,16 +290,17 @@ else
                    @ondragenter="OnQueueBodyDragEnter"
                    @ondragend="OnQueueDragEnd"
                    >
-                @for (var i = 0; i < _view.Items.Count; i++)
+                @for (var i = 0; i < _filteredItems.Count; i++)
                 {
                     var rowIndex = i;
-                    var item = _view.Items[rowIndex];
+                    var item = _filteredItems[rowIndex];
                     <tr @key="item.Id"
                         class="@GetRowClass(item, rowIndex)"
                         draggable="true"
                         data-queue-index="@rowIndex"
-                        ondragstart="return amatsukazeDnd.setDataWithIndex(event)"
-                        ondragover="return amatsukazeDnd.updateDropIndexFromEvent(event)"
+                        data-queue-id="@item.Id"
+                        ondragstart="return amatsukazeDnd.setDataWithQueueId(event)"
+                        ondragover="return amatsukazeDnd.updateDropIdFromEvent(event)"
                         @ondragenter="(() => OnQueueDragEnter(rowIndex))"
                         @ondragend="OnQueueDragEnd"
                         @onclick="(e => OnRowClick(item, e))"
@@ -195,7 +309,7 @@ else
                         @oncontextmenu:preventDefault="true"
                         @oncontextmenu:stopPropagation="true"
                         @ondrop:preventDefault="true"
-                        @ondrop="@(() => OnQueueDrop(rowIndex))">
+                        @ondrop="OnQueueDropFromRow">
                         <td>
                             <div class="queue-cell-stack">
                                 <div class="queue-cell-line queue-task">@GetTaskLabel(item)</div>
@@ -228,8 +342,8 @@ else
                 }
                 <tr class="@GetDropRowClass()"
                     data-drop-end="true"
-                    ondragover="return amatsukazeDnd.onOverWithIndex(event)"
-                    @ondragenter="(() => OnQueueDragEnter(_view.Items.Count))"
+                    ondragover="return amatsukazeDnd.onOverWithId(event)"
+                    @ondragenter="(() => OnQueueDragEnter(_filteredItems.Count))"
                     @ondragend="OnQueueDragEnd">
                     <td colspan="3"></td>
                 </tr>
@@ -252,6 +366,14 @@ else
         }
         </div>
     }
+    <div class="queue-counters">
+        Active: @_view.Counters.Active /
+        Encoding: @_view.Counters.Encoding /
+        Complete: @_view.Counters.Complete /
+        Pending: @_view.Counters.Pending /
+        Failed: @_view.Counters.Failed /
+        Canceled: @_view.Counters.Canceled
+    </div>
 }
 
 @if (_showAddDialog)
@@ -344,6 +466,8 @@ else
     private readonly Dictionary<int, int> _priorityInputs = new();
     private readonly List<JsonElement> _profiles = new();
     private readonly List<string> _profileNames = new();
+    private List<QueueItemView> _filteredItems = new();
+    private Dictionary<int, int> _indexById = new();
     private readonly HashSet<int> _selectedIds = new();
     private bool _contextMenuVisible;
     private double _contextMenuX;
@@ -374,6 +498,21 @@ else
     private ProcMode _addMode = ProcMode.Batch;
     private List<string>? _addQueueBatFiles;
     private UiStateView? _uiState;
+    private string _filterSearchText = "";
+    private bool _filterSearchAll = true;
+    private bool _filterSearchFile = true;
+    private bool _filterSearchChannel = true;
+    private bool _filterSearchProfile = true;
+    private bool _filterSearchGenre = true;
+    private bool _filterSearchState = true;
+    private bool _filterSearchMode = true;
+    private bool _filterStateAll = true;
+    private bool _filterStateWaiting = true;
+    private bool _filterStatePending = true;
+    private bool _filterStateRunning = true;
+    private bool _filterStateCanceled = true;
+    private bool _filterStateComplete = true;
+    private bool _isFilterOpen;
     private bool _hasSelection => _selectedIds.Count > 0;
     private string _contextMenuXpx => $"{_contextMenuX:0}px";
     private string _contextMenuYpx => $"{_contextMenuY:0}px";
@@ -458,6 +597,7 @@ else
             }
         }
 
+        RebuildFilteredItems();
         _loading = false;
     }
 
@@ -477,6 +617,393 @@ else
             _finishActionOptions.AddRange(_system.FinishActionOptions);
         }
         _finishAction = _system?.FinishSetting?.Action ?? "";
+    }
+
+    private void RebuildFilteredItems()
+    {
+        if (_view == null)
+        {
+            _filteredItems = new List<QueueItemView>();
+            _indexById = new Dictionary<int, int>();
+            _selectedIds.Clear();
+            _contextMenuVisible = false;
+            return;
+        }
+
+        var items = _view.Items;
+        var indexById = new Dictionary<int, int>(items.Count);
+        for (var i = 0; i < items.Count; i++)
+        {
+            indexById[items[i].Id] = i;
+        }
+        _indexById = indexById;
+
+        var filtered = new List<QueueItemView>(items.Count);
+        foreach (var item in items)
+        {
+            if (!MatchesStateFilter(item))
+            {
+                continue;
+            }
+            if (!MatchesSearchFilter(item))
+            {
+                continue;
+            }
+            filtered.Add(item);
+        }
+        _filteredItems = filtered;
+
+        var visibleIds = new HashSet<int>(filtered.Select(x => x.Id));
+        if (_selectedIds.RemoveWhere(id => !visibleIds.Contains(id)) > 0 && _selectedIds.Count == 0)
+        {
+            _contextMenuVisible = false;
+        }
+    }
+
+    private bool MatchesSearchFilter(QueueItemView item)
+    {
+        if (string.IsNullOrWhiteSpace(_filterSearchText))
+        {
+            return true;
+        }
+        var search = NormalizeSearchText(_filterSearchText);
+        if (string.IsNullOrEmpty(search))
+        {
+            return true;
+        }
+
+        var anyTarget = _filterSearchFile || _filterSearchChannel || _filterSearchProfile || _filterSearchGenre || _filterSearchState || _filterSearchMode;
+        if (!anyTarget)
+        {
+            return false;
+        }
+        var targetAll = _filterSearchAll;
+
+        if (targetAll || _filterSearchFile)
+        {
+            if (ContainsNormalized(item.FileName, search))
+            {
+                return true;
+            }
+        }
+        if (targetAll || _filterSearchChannel)
+        {
+            if (ContainsNormalized(item.ServiceName, search))
+            {
+                return true;
+            }
+        }
+        if (targetAll || _filterSearchProfile)
+        {
+            if (ContainsNormalized(item.ProfileName, search))
+            {
+                return true;
+            }
+        }
+        if (targetAll || _filterSearchGenre)
+        {
+            if (ContainsNormalized(item.GenreNames, search))
+            {
+                return true;
+            }
+        }
+        if (targetAll || _filterSearchState)
+        {
+            if (ContainsNormalized(item.StateLabel, search) || ContainsNormalized(item.State, search))
+            {
+                return true;
+            }
+        }
+        if (targetAll || _filterSearchMode)
+        {
+            var modeText = QueueSettingExtensions.GetProcModeDisplay(item.Mode);
+            if (ContainsNormalized(modeText, search) || ContainsNormalized(item.Mode.ToString(), search))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool MatchesStateFilter(QueueItemView item)
+    {
+        if (_filterStateAll)
+        {
+            return true;
+        }
+
+        if (!_filterStateWaiting && !_filterStatePending && !_filterStateRunning && !_filterStateCanceled && !_filterStateComplete)
+        {
+            return false;
+        }
+
+        var category = GetStateCategory(item);
+        return category switch
+        {
+            QueueStateCategory.Waiting => _filterStateWaiting,
+            QueueStateCategory.Pending => _filterStatePending,
+            QueueStateCategory.Running => _filterStateRunning,
+            QueueStateCategory.Canceled => _filterStateCanceled,
+            QueueStateCategory.Complete => _filterStateComplete,
+            QueueStateCategory.Failed => false,
+            _ => false
+        };
+    }
+
+    private enum QueueStateCategory
+    {
+        Waiting,
+        Pending,
+        Running,
+        Canceled,
+        Complete,
+        Failed,
+        Unknown
+    }
+
+    private static QueueStateCategory GetStateCategory(QueueItemView item)
+    {
+        var state = item.State ?? string.Empty;
+        if (state.Equals("Queue", StringComparison.OrdinalIgnoreCase))
+        {
+            return QueueStateCategory.Waiting;
+        }
+        if (state.Equals("LogoPending", StringComparison.OrdinalIgnoreCase))
+        {
+            return QueueStateCategory.Pending;
+        }
+        if (state.Equals("Encoding", StringComparison.OrdinalIgnoreCase))
+        {
+            return QueueStateCategory.Running;
+        }
+        if (state.Equals("Canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            return QueueStateCategory.Canceled;
+        }
+        if (state.Equals("Complete", StringComparison.OrdinalIgnoreCase))
+        {
+            return QueueStateCategory.Complete;
+        }
+        if (state.Equals("Failed", StringComparison.OrdinalIgnoreCase) || state.Equals("PreFailed", StringComparison.OrdinalIgnoreCase))
+        {
+            return QueueStateCategory.Failed;
+        }
+
+        var label = item.StateLabel ?? string.Empty;
+        if (label.Contains("待ち", StringComparison.Ordinal))
+        {
+            return QueueStateCategory.Waiting;
+        }
+        if (label.Contains("ペンディング", StringComparison.Ordinal))
+        {
+            return QueueStateCategory.Pending;
+        }
+        if (label.Contains("実行中", StringComparison.Ordinal) || label.Contains("エンコード", StringComparison.Ordinal))
+        {
+            return QueueStateCategory.Running;
+        }
+        if (label.Contains("キャンセル", StringComparison.Ordinal))
+        {
+            return QueueStateCategory.Canceled;
+        }
+        if (label.Contains("完了", StringComparison.Ordinal))
+        {
+            return QueueStateCategory.Complete;
+        }
+        if (label.Contains("失敗", StringComparison.Ordinal))
+        {
+            return QueueStateCategory.Failed;
+        }
+
+        return QueueStateCategory.Unknown;
+    }
+
+    private static bool ContainsNormalized(string? value, string search)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+        return NormalizeSearchText(value).Contains(search, StringComparison.Ordinal);
+    }
+
+    private static bool ContainsNormalized(IEnumerable<string>? values, string search)
+    {
+        if (values == null)
+        {
+            return false;
+        }
+        foreach (var value in values)
+        {
+            if (ContainsNormalized(value, search))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static string NormalizeSearchText(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+        return ToHalfWidth(value).ToLowerInvariant();
+    }
+
+    private enum FilterSearchTarget
+    {
+        File,
+        Channel,
+        Profile,
+        Genre,
+        State,
+        Mode
+    }
+
+    private enum FilterStateTarget
+    {
+        Waiting,
+        Pending,
+        Running,
+        Canceled,
+        Complete
+    }
+
+    private void ToggleFilterPanel()
+    {
+        _isFilterOpen = !_isFilterOpen;
+    }
+
+    private void ApplyFilter()
+    {
+        RebuildFilteredItems();
+    }
+
+    private void ClearFilters()
+    {
+        _filterSearchText = "";
+        _filterSearchAll = true;
+        _filterSearchFile = true;
+        _filterSearchChannel = true;
+        _filterSearchProfile = true;
+        _filterSearchGenre = true;
+        _filterSearchState = true;
+        _filterSearchMode = true;
+
+        _filterStateAll = true;
+        _filterStateWaiting = true;
+        _filterStatePending = true;
+        _filterStateRunning = true;
+        _filterStateCanceled = true;
+        _filterStateComplete = true;
+
+        RebuildFilteredItems();
+    }
+
+    private void OnFilterSearchInput(ChangeEventArgs e)
+    {
+        _filterSearchText = e.Value?.ToString() ?? "";
+        RebuildFilteredItems();
+    }
+
+    private void ToggleSearchAll()
+    {
+        _filterSearchAll = !_filterSearchAll;
+        if (_filterSearchAll)
+        {
+            _filterSearchFile = true;
+            _filterSearchChannel = true;
+            _filterSearchProfile = true;
+            _filterSearchGenre = true;
+            _filterSearchState = true;
+            _filterSearchMode = true;
+        }
+        else
+        {
+            _filterSearchFile = false;
+            _filterSearchChannel = false;
+            _filterSearchProfile = false;
+            _filterSearchGenre = false;
+            _filterSearchState = false;
+            _filterSearchMode = false;
+        }
+        RebuildFilteredItems();
+    }
+
+    private void ToggleSearchTarget(FilterSearchTarget target)
+    {
+        switch (target)
+        {
+            case FilterSearchTarget.File:
+                _filterSearchFile = !_filterSearchFile;
+                break;
+            case FilterSearchTarget.Channel:
+                _filterSearchChannel = !_filterSearchChannel;
+                break;
+            case FilterSearchTarget.Profile:
+                _filterSearchProfile = !_filterSearchProfile;
+                break;
+            case FilterSearchTarget.Genre:
+                _filterSearchGenre = !_filterSearchGenre;
+                break;
+            case FilterSearchTarget.State:
+                _filterSearchState = !_filterSearchState;
+                break;
+            case FilterSearchTarget.Mode:
+                _filterSearchMode = !_filterSearchMode;
+                break;
+        }
+        _filterSearchAll = _filterSearchFile && _filterSearchChannel && _filterSearchProfile && _filterSearchGenre && _filterSearchState && _filterSearchMode;
+        RebuildFilteredItems();
+    }
+
+    private void ToggleStateAll()
+    {
+        _filterStateAll = !_filterStateAll;
+        if (_filterStateAll)
+        {
+            _filterStateWaiting = true;
+            _filterStatePending = true;
+            _filterStateRunning = true;
+            _filterStateCanceled = true;
+            _filterStateComplete = true;
+        }
+        else
+        {
+            _filterStateWaiting = false;
+            _filterStatePending = false;
+            _filterStateRunning = false;
+            _filterStateCanceled = false;
+            _filterStateComplete = false;
+        }
+        RebuildFilteredItems();
+    }
+
+    private void ToggleStateFilter(FilterStateTarget target)
+    {
+        switch (target)
+        {
+            case FilterStateTarget.Waiting:
+                _filterStateWaiting = !_filterStateWaiting;
+                break;
+            case FilterStateTarget.Pending:
+                _filterStatePending = !_filterStatePending;
+                break;
+            case FilterStateTarget.Running:
+                _filterStateRunning = !_filterStateRunning;
+                break;
+            case FilterStateTarget.Canceled:
+                _filterStateCanceled = !_filterStateCanceled;
+                break;
+            case FilterStateTarget.Complete:
+                _filterStateComplete = !_filterStateComplete;
+                break;
+        }
+        _filterStateAll = _filterStateWaiting && _filterStatePending && _filterStateRunning && _filterStateCanceled && _filterStateComplete;
+        RebuildFilteredItems();
     }
 
     private void StartSystemPolling()
@@ -855,6 +1382,7 @@ else
                     break;
             }
         }
+        RebuildFilteredItems();
         StateHasChanged();
     }
 
@@ -865,6 +1393,7 @@ else
             _view = snapshot;
             _queueVersion = snapshot.Version;
             _queueDigest = snapshot.Digest;
+            RebuildFilteredItems();
             return;
         }
         _queueVersion = snapshot.Version;
@@ -920,6 +1449,7 @@ else
         {
             _priorityInputs.Remove(id);
         }
+        RebuildFilteredItems();
         StateHasChanged();
     }
 
@@ -1439,16 +1969,16 @@ else
         await ReloadAsync();
     }
 
-    private async Task OnQueueDrop(int index)
+    private async Task OnQueueDrop(int dropAnchorId)
     {
         if (_view == null)
         {
             return;
         }
         _dropIndex = -1;
-        var fromIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getDragIndex");
-        await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
-        if (fromIndex < 0)
+        var dragId = await JS.InvokeAsync<int>("amatsukazeDnd.getDragId");
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearDragId");
+        if (dragId < 0 || !_indexById.TryGetValue(dragId, out var fromIndex))
         {
             return;
         }
@@ -1461,19 +1991,21 @@ else
             _selectedIds.Add(draggedItem.Id);
         }
 
+        var dropIndex = ResolveDropIndex(dropAnchorId);
+        if (dropIndex < 0)
+        {
+            return;
+        }
+
         // 複数選択の場合
         if (_selectedIds.Count > 1)
         {
-            await MoveSelectedItemsAsync(index);
+            await MoveSelectedItemsAsync(dropIndex);
             return;
         }
 
         // 単一選択の場合（従来の処理）
-        if (fromIndex == index)
-        {
-            return;
-        }
-        var toIndex = index;
+        var toIndex = dropIndex;
         if (toIndex > fromIndex)
         {
             toIndex -= 1;
@@ -1486,12 +2018,47 @@ else
         {
             toIndex = _view.Items.Count - 1;
         }
+        if (toIndex == fromIndex)
+        {
+            return;
+        }
         await ChangeItemAsync(draggedItem, ChangeItemType.Move, position: toIndex);
+    }
+
+    private int ResolveDropIndex(int dropAnchorId)
+    {
+        if (_view == null)
+        {
+            return -1;
+        }
+        if (dropAnchorId == -1)
+        {
+            return 0;
+        }
+        if (dropAnchorId <= -2)
+        {
+            return _view.Items.Count;
+        }
+        if (_indexById.TryGetValue(dropAnchorId, out var upperIndex))
+        {
+            return upperIndex + 1;
+        }
+        return -1;
     }
 
     private Task OnQueueDropFromBody()
     {
         return Task.CompletedTask;
+    }
+
+    private async Task OnQueueDropFromRow()
+    {
+        var lastDropId = await JS.InvokeAsync<int>("amatsukazeDnd.getLastDropId");
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearLastDropId");
+        if (lastDropId != -999)
+        {
+            await OnQueueDrop(lastDropId);
+        }
     }
 
     private void OnQueueDragEnter(int index)
@@ -1508,36 +2075,32 @@ else
         }
         if (_dropIndex < 0)
         {
-            _dropIndex = _view.Items.Count;
+            _dropIndex = _filteredItems.Count;
         }
     }
 
     private async Task OnQueueDragEnd()
     {
         _isDragging = false;
-        var lastDropIndex = await JS.InvokeAsync<int>("amatsukazeDnd.getLastDropIndex");
-        await JS.InvokeVoidAsync("amatsukazeDnd.clearLastDropIndex");
+        var lastDropId = await JS.InvokeAsync<int>("amatsukazeDnd.getLastDropId");
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearLastDropId");
         if (_view == null)
         {
             _dropIndex = -1;
-            await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
+            await JS.InvokeVoidAsync("amatsukazeDnd.clearDragId");
             return;
         }
-        if (lastDropIndex == -2)
+        if (lastDropId != -999)
         {
-            lastDropIndex = _view.Items.Count;
-        }
-        if (lastDropIndex >= 0)
-        {
-            await OnQueueDrop(lastDropIndex);
+            await OnQueueDrop(lastDropId);
         }
         _dropIndex = -1;
-        await JS.InvokeVoidAsync("amatsukazeDnd.clearDragIndex");
+        await JS.InvokeVoidAsync("amatsukazeDnd.clearDragId");
     }
 
 
     private string GetDropRowClass()
-        => _dropIndex == (_view?.Items.Count ?? -1) ? "queue-drop-row queue-drop-target" : "queue-drop-row";
+        => _dropIndex == _filteredItems.Count ? "queue-drop-row queue-drop-target" : "queue-drop-row";
 
     private async Task OnToggleQueuePause(ChangeEventArgs e)
     {

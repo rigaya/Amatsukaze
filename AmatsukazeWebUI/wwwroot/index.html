@@ -30,6 +30,8 @@
     <script>
         window.amatsukazeDnd = {
             lastDropIndex: -1,
+            lastDropId: -999,
+            dragId: -1,
             setData: function (event) {
                 try {
                     if (event && event.dataTransfer) {
@@ -42,6 +44,18 @@
                 }
                 return true;
             },
+            setDataWithQueueId: function (event) {
+                try {
+                    if (event && event.currentTarget && event.currentTarget.dataset) {
+                        var id = event.currentTarget.dataset.queueId;
+                        if (id !== undefined) {
+                            window.amatsukazeDnd.dragId = parseInt(id, 10);
+                        }
+                    }
+                } catch (e) {
+                }
+                return window.amatsukazeDnd.setData(event);
+            },
             setDataWithIndex: function (event) {
                 try {
                     if (event && event.currentTarget && event.currentTarget.dataset) {
@@ -53,6 +67,15 @@
                 } catch (e) {
                 }
                 return window.amatsukazeDnd.setData(event);
+            },
+            getDragId: function () {
+                if (typeof window.amatsukazeDnd.dragId === "number" && !isNaN(window.amatsukazeDnd.dragId)) {
+                    return window.amatsukazeDnd.dragId;
+                }
+                return -1;
+            },
+            clearDragId: function () {
+                window.amatsukazeDnd.dragId = -1;
             },
             getDragIndexFromEvent: function (event) {
                 try {
@@ -93,13 +116,50 @@
                 } catch (e) {
                 }
             },
+            setLastDropId: function (event) {
+                try {
+                    if (event && event.currentTarget && event.currentTarget.dataset) {
+                        if (event.currentTarget.dataset.queueId !== undefined) {
+                            var id = parseInt(event.currentTarget.dataset.queueId, 10);
+                            if (!isNaN(id)) {
+                                window.amatsukazeDnd.lastDropId = id;
+                                return;
+                            }
+                        }
+                        if (event.currentTarget.dataset.dropEnd === "true") {
+                            var prev = event.currentTarget.previousElementSibling;
+                            while (prev && (!prev.dataset || prev.dataset.queueId === undefined)) {
+                                prev = prev.previousElementSibling;
+                            }
+                            if (prev && prev.dataset && prev.dataset.queueId !== undefined) {
+                                var prevId = parseInt(prev.dataset.queueId, 10);
+                                if (!isNaN(prevId)) {
+                                    window.amatsukazeDnd.lastDropId = prevId;
+                                    return;
+                                }
+                            }
+                            window.amatsukazeDnd.lastDropId = -1;
+                            return;
+                        }
+                    }
+                } catch (e) {
+                }
+            },
             getLastDropIndex: function () {
                 return typeof window.amatsukazeDnd.lastDropIndex === "number"
                     ? window.amatsukazeDnd.lastDropIndex
                     : -1;
             },
+            getLastDropId: function () {
+                return typeof window.amatsukazeDnd.lastDropId === "number"
+                    ? window.amatsukazeDnd.lastDropId
+                    : -999;
+            },
             clearLastDropIndex: function () {
                 window.amatsukazeDnd.lastDropIndex = -1;
+            },
+            clearLastDropId: function () {
+                window.amatsukazeDnd.lastDropId = -999;
             },
             clearDragIndex: function () {
                 window.amatsukazeDnd.dragIndex = -1;
@@ -139,6 +199,17 @@
                 }
                 return true;
             },
+            onOverWithId: function (event) {
+                try {
+                    window.amatsukazeDnd.setLastDropId(event);
+                    if (event && event.dataTransfer) {
+                        event.preventDefault();
+                        return true;
+                    }
+                } catch (e) {
+                }
+                return true;
+            },
             updateDropIndexFromEvent: function (event) {
                 try {
                     if (!event) {
@@ -158,6 +229,58 @@
                             var end = el.closest("[data-drop-end=\"true\"]");
                             if (end) {
                                 window.amatsukazeDnd.lastDropIndex = -2;
+                            }
+                        }
+                    }
+                } catch (e) {
+                }
+                return true;
+            },
+            updateDropIdFromEvent: function (event) {
+                try {
+                    if (!event) {
+                        return true;
+                    }
+                    if (event.clientX !== undefined && event.clientY !== undefined) {
+                        var el = document.elementFromPoint(event.clientX, event.clientY);
+                        if (el) {
+                            var row = el.closest("tr[data-queue-id]");
+                            if (row && row.dataset && row.dataset.queueId !== undefined) {
+                                var rect = row.getBoundingClientRect();
+                                var usePrev = event.clientY <= rect.top + rect.height / 2;
+                                var target = row;
+                                if (usePrev) {
+                                    var prev = row.previousElementSibling;
+                                    while (prev && (!prev.dataset || prev.dataset.queueId === undefined)) {
+                                        prev = prev.previousElementSibling;
+                                    }
+                                    if (prev) {
+                                        target = prev;
+                                    } else {
+                                        window.amatsukazeDnd.lastDropId = -1;
+                                        return true;
+                                    }
+                                }
+                                var id = parseInt(target.dataset.queueId, 10);
+                                if (!isNaN(id)) {
+                                    window.amatsukazeDnd.lastDropId = id;
+                                    return true;
+                                }
+                            }
+                            var end = el.closest("[data-drop-end=\"true\"]");
+                            if (end) {
+                                var prev = end.previousElementSibling;
+                                while (prev && (!prev.dataset || prev.dataset.queueId === undefined)) {
+                                    prev = prev.previousElementSibling;
+                                }
+                                if (prev && prev.dataset && prev.dataset.queueId !== undefined) {
+                                    var prevId = parseInt(prev.dataset.queueId, 10);
+                                    if (!isNaN(prevId)) {
+                                        window.amatsukazeDnd.lastDropId = prevId;
+                                        return true;
+                                    }
+                                }
+                                window.amatsukazeDnd.lastDropId = -1;
                             }
                         }
                     }

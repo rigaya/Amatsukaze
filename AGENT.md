@@ -198,7 +198,26 @@ Amatsukazeは以下のようにして構成されます。
   - チェックボックスは「右ラベル＋1列フル幅」に統一（```settings-check-row``` / ```settings-check```）。
   - 大項目間の区切りは ```<hr class="settings-sep">```。
   - 実行時間帯は可変グリッド（```run-hours-grid```）+ セルクリックでON/OFF。
-    - クリックはループ変数のキャプチャに注意（```var hour = i;``` を使う）。
+
+## WebUI キュー実装メモ
+
+- キュー表示/操作は `AmatsukazeWebUI/Pages/Queue.razor` に集約。
+- リアルタイム更新は `GetQueueChangesAsync` で差分取得、必要時は `GetQueueAsync` のスナップショットで補正。
+- WebUI側のキュー操作は基本的にIDベースで行う（選択・右クリック操作・ドラッグ移動）。
+
+### リスト入れ替え（D&D）対応
+
+- 単一移動は `ChangeItemType.Move` を使用。
+- 複数選択の移動は `MoveQueueManyAsync` を使用し、移動対象は選択ID集合＋`dropIndex` を送る。
+- `dropIndex` は「テーブル上の行インデックス」（末尾は `Count`）をそのまま送る。
+- サーバー側で移動を一括処理し、最終順序に沿って `QueueChangeType.Move` を複数送信する。
+
+### サーバー側の不整合防止（null/重複ID対策）
+
+- キュー操作・保存・ID発行は排他制御で保護（`queueSync` でロック）。
+- 保存時に null/SrcPath 欠損アイテムを除外し、重複IDは再採番してから保存する。
+- 起動時の読み込みでも null/SrcPath 欠損アイテムは破棄し、IDを振り直す。
+- REST側は null/SrcPath 欠損をスキップし、APIが落ちないようにする。
 - WebUIのリアルタイム更新は以下の方式が基本:
   - Queue: 差分ポーリング（```/api/queue/changes```） + 必要時フルスナップショット。
   - System: ```/api/system``` を独立ポーリングし、Queueページで稼働/停止などを同期更新。
