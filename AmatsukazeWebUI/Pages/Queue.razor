@@ -8,6 +8,7 @@
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <h3>キュー</h3>
@@ -472,6 +473,8 @@ else
     private bool _contextMenuVisible;
     private double _contextMenuX;
     private double _contextMenuY;
+    private const double ContextMenuHeight = 260;
+    private const double ContextMenuMargin = 8;
     private int _dropIndex = -1;
     private bool _isDragging;
     private CancellationTokenSource? _pollCts;
@@ -1837,7 +1840,7 @@ else
         _selectedIds.Add(item.Id);
     }
 
-    private void OnRowContextMenu(QueueItemView item, MouseEventArgs e)
+    private async Task OnRowContextMenu(QueueItemView item, MouseEventArgs e)
     {
         if (!_selectedIds.Contains(item.Id))
         {
@@ -1845,7 +1848,15 @@ else
             _selectedIds.Add(item.Id);
         }
         _contextMenuX = e.ClientX;
-        _contextMenuY = e.ClientY;
+        var viewportHeight = await JS.InvokeAsync<double>("amatsukazeUi.getViewportHeight");
+        if (viewportHeight > 0 && e.ClientY + ContextMenuHeight + ContextMenuMargin > viewportHeight)
+        {
+            _contextMenuY = Math.Max(ContextMenuMargin, e.ClientY - ContextMenuHeight);
+        }
+        else
+        {
+            _contextMenuY = e.ClientY;
+        }
         _contextMenuVisible = true;
     }
 

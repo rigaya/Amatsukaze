@@ -349,6 +349,13 @@
                     listEl.scrollTop = top;
                 } catch (e) {
                 }
+            },
+            getViewportHeight: function () {
+                try {
+                    return window.innerHeight || document.documentElement.clientHeight || 0;
+                } catch (e) {
+                    return 0;
+                }
             }
         };
     </script>
