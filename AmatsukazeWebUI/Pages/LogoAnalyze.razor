@@ -24,66 +24,67 @@ else if (_loading)
 }
 else
 {
-    <div style="margin-bottom: 0.5rem;">
-        <button class="btn btn-outline-secondary" @onclick="BackToQueue">Back to Queue</button>
-    </div>
+    <div class="logo-analyze">
+        <div class="logo-analyze-toolbar">
+            <button class="btn btn-outline-secondary" @onclick="BackToQueue">Back to Queue</button>
 
-    <div style="margin-bottom: 0.5rem;">
-        <label>Max Frames:</label>
-        <select @bind="_maxFrames">
-            @foreach (var value in _maxFramesList)
-            {
-                <option value="@value">@value</option>
-            }
-        </select>
+            <div class="logo-analyze-controls">
+                <label>Max Frames:</label>
+                <select @bind="_maxFrames">
+                    @foreach (var value in _maxFramesList)
+                    {
+                        <option value="@value">@value</option>
+                    }
+                </select>
 
-        <label style="margin-left: 1rem;">Threshold:</label>
-        <select @bind="_threshold">
-            @foreach (var value in _thresholdList)
-            {
-                <option value="@value">@value</option>
-            }
-        </select>
-    </div>
+                <label>Threshold:</label>
+                <select @bind="_threshold">
+                    @foreach (var value in _thresholdList)
+                    {
+                        <option value="@value">@value</option>
+                    }
+                </select>
+            </div>
+        </div>
 
-    <div style="margin-bottom: 0.75rem;">
-        <button class="btn btn-primary" @onclick="StartAnalyzeAsync" disabled="@_analyzing">ロゴ解析開始</button>
-    </div>
+        <div class="logo-analyze-actions">
+            <button class="btn btn-primary" @onclick="StartAnalyzeAsync" disabled="@_analyzing">ロゴ解析開始</button>
+        </div>
 
     @if (_analyzing || _lastStatus != null)
     {
-        <div style="margin-bottom: 0.75rem;">
+        <div class="logo-analyze-progress">
             <div>Progress: @_progressDisplay</div>
             <div>Read: @_lastStatus?.NumRead / @_lastStatus?.NumTotal (Valid: @_lastStatus?.NumValid)</div>
-            <progress value="@_progressValue" max="1" style="width: 320px;"></progress>
+            <progress value="@_progressValue" max="1"></progress>
         </div>
     }
 
     @if (!string.IsNullOrEmpty(_resultImageUrl))
     {
-        <div style="margin-bottom: 0.5rem;">
+        <div class="logo-analyze-result">
             <h4>結果</h4>
-            <img src="@_resultImageUrl" style="max-width: 100%; border: 1px solid #ddd;" />
+            <img src="@_resultImageUrl" />
         </div>
-        <div style="margin-bottom: 0.75rem;">
+        <div class="logo-analyze-actions">
             <button class="btn btn-primary" @onclick="ApplyResultAsync">採用</button>
-            <button class="btn btn-outline-secondary" style="margin-left: 0.5rem;" @onclick="DiscardResultAsync">キャンセル</button>
+            <button class="btn btn-outline-secondary" @onclick="DiscardResultAsync">キャンセル</button>
         </div>
     }
 
     @if (!_analyzing && string.IsNullOrEmpty(_resultImageUrl))
     {
-        <div style="margin-bottom: 0.5rem;">
+        <div class="logo-analyze-actions">
             <label>Seek:</label>
             <input type="range" min="0" max="1" step="0.01" @bind-value="Position" @bind-value:event="oninput" style="width: 360px;" />
-            <span style="margin-left: 0.5rem;">@_position.ToString("P0", CultureInfo.InvariantCulture)</span>
+            <span>@_position.ToString("P0", CultureInfo.InvariantCulture)</span>
         </div>
-        <div style="font-size: 0.85rem; color: #666;">
+        <div class="logo-analyze-meta">
             FrameUrl: @_frameUrl
         </div>
 
-        <div style="display: inline-block; position: relative; border: 1px solid #ddd; padding: 4px;">
-            <img src="@_frameUrl" style="display: block; max-width: none;" @onload="OnFrameLoaded" @onerror="OnFrameError" />
+        <div class="logo-analyze-frame">
+            <img src="@_frameUrl" @onload="OnFrameLoaded" @onerror="OnFrameError" />
             <div style="position: absolute; inset: 4px; pointer-events: all;"
                  @onmousedown="OnMouseDown"
                  @onmousemove="OnMouseMove"
@@ -94,7 +95,7 @@ else
         </div>
         @if (!string.IsNullOrEmpty(_frameLoadLog))
         {
-            <div style="font-size: 0.85rem; color: #666;">@_frameLoadLog</div>
+            <div class="logo-analyze-meta">@_frameLoadLog</div>
         }
     }
 
@@ -102,6 +103,7 @@ else
     {
         <div style="margin-top: 1rem;"></div>
     }
+    </div>
 }
 
 @code {

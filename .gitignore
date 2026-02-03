@@ -26,6 +26,7 @@ build/
 /packages/
 
 *.bak
+.uishots/
 
 /Amatsukaze/Version.h
 /AmatsukazeServer/Version.t4

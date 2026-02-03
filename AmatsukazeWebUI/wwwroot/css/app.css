@@ -15,6 +15,10 @@
     --bg: #f7f9fc;
     --bg-elevated: rgba(255, 255, 255, 0.85);
     --bg-surface: #ffffff;
+    --glass-bg: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+    --glass-strong: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+    --glass-border: color-mix(in srgb, var(--border) 88%, transparent);
+    --glass-shadow: 0 18px 48px rgba(22, 27, 45, 0.12);
     --text: #1c2333;
     --muted: #5b657a;
     --border: rgba(28, 35, 51, 0.12);
@@ -22,6 +26,8 @@
     --accent: #6fa8ff;
     --accent-strong: #4a86f7;
     --accent-soft: rgba(111, 168, 255, 0.18);
+    --accent-secondary: #6ee7ff;
+    --accent-secondary-soft: rgba(110, 231, 255, 0.2);
     --success: #7ccfb8;
     --warning: #ffcf8a;
     --danger: #f29aa3;
@@ -62,12 +68,18 @@
         --bg: #0f1424;
         --bg-elevated: rgba(20, 28, 46, 0.86);
         --bg-surface: #141b2d;
+        --glass-bg: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+        --glass-strong: color-mix(in srgb, var(--bg-surface) 84%, transparent);
+        --glass-border: color-mix(in srgb, var(--border) 80%, transparent);
+        --glass-shadow: 0 18px 52px rgba(4, 8, 18, 0.45);
         --text: #e7ecf8;
         --muted: #a9b3c7;
         --border: rgba(231, 236, 248, 0.12);
         --accent: #8fb7ff;
         --accent-strong: #6f9dff;
         --accent-soft: rgba(143, 183, 255, 0.16);
+        --accent-secondary: #6ee7ff;
+        --accent-secondary-soft: rgba(110, 231, 255, 0.18);
         --success: #7cd7c4;
         --warning: #ffd39c;
         --danger: #ff9aa2;
@@ -169,6 +181,13 @@ a:hover, .btn-link:hover {
 
 .content {
     padding-top: 1.1rem;
+}
+
+@media (max-width: 640.98px) {
+    .content {
+        border-radius: var(--radius-md);
+        padding: 0.75rem 0.75rem 1rem;
+    }
 }
 
 input,
@@ -428,19 +447,29 @@ code {
 
 .settings-page table {
     table-layout: auto;
+    border-collapse: collapse;
+    border-spacing: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .settings-page table th {
     width: 170px;
     min-width: 170px;
-    padding-right: 0.2rem;
+    padding-right: 0.4rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
     color: var(--muted);
     font-weight: 600;
     vertical-align: top;
 }
 
 .settings-page table td {
-    padding-left: 0.2rem;
+    padding-left: 0.4rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
 }
 
 .settings-page label {
@@ -479,19 +508,29 @@ code {
 
 .profile-settings table {
     table-layout: auto;
+    border-collapse: collapse;
+    border-spacing: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .profile-settings table th {
     width: 170px;
     min-width: 170px;
-    padding-right: 0.2rem;
+    padding-right: 0.4rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
     color: var(--muted);
     font-weight: 600;
     vertical-align: top;
 }
 
 .profile-settings table td {
-    padding-left: 0.2rem;
+    padding-left: 0.4rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
 }
 
 .profile-settings .profile-check-row td {
@@ -554,9 +593,10 @@ code {
     gap: 6px;
     padding: 6px 8px;
     margin-bottom: 6px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
     backdrop-filter: blur(6px);
 }
 
@@ -577,9 +617,9 @@ code {
 
 .settings-sep {
     border: none;
-    height: 1px;
-    background: color-mix(in srgb, var(--border) 70%, transparent);
-    margin: 14px 0;
+    height: 2px;
+    background: color-mix(in srgb, var(--border) 90%, transparent);
+    margin: 18px 0;
 }
 
 .settings-header {
@@ -592,9 +632,10 @@ code {
     gap: 6px;
     padding: 6px 8px;
     margin-bottom: 8px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
     backdrop-filter: blur(6px);
 }
 
@@ -607,9 +648,10 @@ code {
     gap: 8px;
     padding: 4px 6px;
     margin-bottom: 8px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
     backdrop-filter: blur(6px);
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -656,9 +698,10 @@ code {
     gap: 6px;
     padding: 6px 8px;
     margin-bottom: 8px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
     backdrop-filter: blur(6px);
 }
 
@@ -701,6 +744,13 @@ code {
 .queue-table {
     table-layout: fixed;
     width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-strong);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
 }
 
 .queue-table th:nth-child(3),
@@ -853,9 +903,10 @@ code {
   gap: 12px;
   align-items: center;
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 .drcs-image img {
@@ -924,6 +975,71 @@ code {
   max-width: 520px;
 }
 
+.logo-analyze {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.logo-analyze-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.logo-analyze-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.logo-analyze-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.logo-analyze-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+}
+
+.logo-analyze-progress progress {
+    width: min(360px, 100%);
+}
+
+.logo-analyze-frame {
+    display: inline-block;
+    position: relative;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    background: var(--glass-strong);
+}
+
+.logo-analyze-frame img {
+    display: block;
+    max-width: none;
+}
+
+.logo-analyze-meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.logo-analyze-result img {
+    max-width: 100%;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
 .run-hour-cell:hover:not(:disabled) {
     background: color-mix(in srgb, var(--warning) 20%, var(--bg-surface));
     transform: translateY(-1px);
@@ -938,9 +1054,9 @@ code {
     list-style: none;
     padding: 0;
     margin: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    background: var(--bg-elevated);
+    background: var(--glass-strong);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
 }
@@ -966,10 +1082,10 @@ code {
 }
 
 .logo-card {
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     padding: 0.5rem;
     min-width: 200px;
-    background: var(--bg-elevated);
+    background: var(--glass-strong);
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
@@ -1003,8 +1119,8 @@ code {
     left: 0;
     right: 0;
     z-index: 500;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     box-shadow: var(--shadow-md);
     max-height: 240px;
     overflow-y: auto;
@@ -1048,13 +1164,14 @@ code {
 }
 
 .modal-body {
-    background: var(--bg-elevated);
+    background: var(--glass-strong);
     padding: 1rem 1.25rem;
     border-radius: var(--radius-lg);
     min-width: 480px;
     max-width: 900px;
     box-shadow: var(--shadow-lg);
     backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border);
 }
 
 .form-row {
@@ -1098,8 +1215,8 @@ code {
     bottom: 6px;
     z-index: 900;
     padding: 4px 8px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     backdrop-filter: blur(8px);
@@ -1218,10 +1335,11 @@ code {
     width: min(720px, 90vw);
     max-height: 100vh;
     overflow: auto;
-    background: var(--bg-elevated);
-    border-left: 1px solid var(--border);
+    background: var(--glass-strong);
+    border-left: 1px solid var(--glass-border);
     padding: 16px 18px;
     box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(10px);
 }
 
 .log-overlay-close {
@@ -1239,9 +1357,9 @@ code {
     max-height: calc(100vh - var(--topbar-height) - 8rem);
     min-height: 240px;
     overflow: auto;
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+    background: var(--glass-strong);
 }
 
 .log-table {
@@ -1258,9 +1376,10 @@ code {
 .service-panel {
     margin-bottom: 12px;
     padding: 8px;
-    border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    background: var(--glass-bg);
+    box-shadow: var(--shadow-sm);
 }
 
 .service-layout {
@@ -1287,7 +1406,7 @@ code {
 .console-log {
     background: var(--console-bg);
     color: var(--console-text);
-    border: 1px solid var(--console-border);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     padding: 0.75rem;
     white-space: pre-wrap;
