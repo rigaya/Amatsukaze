@@ -55,7 +55,10 @@
 }
 else if (_profiles.Count == 0)
 {
-    <p>自動選択がありません。</p>
+    <div class="autoselect-empty-card">
+        <div class="autoselect-empty-title">自動選択がありません</div>
+        <div class="autoselect-empty-body">「新規」から自動選択セットを作成できます。</div>
+    </div>
 }
 else
 {
@@ -69,7 +72,10 @@ else
             <div class="condition-list">
                 @if (_selectedProfile != null && _selectedProfile.Conditions.Count == 0)
                 {
-                    <div class="condition-empty">条件が登録されていません</div>
+                    <div class="autoselect-empty-card autoselect-empty-compact">
+                        <div class="autoselect-empty-title">条件が登録されていません</div>
+                        <div class="autoselect-empty-body">「条件追加」でルールを作成してください。</div>
+                    </div>
                 }
                 else if (_selectedProfile != null)
                 {

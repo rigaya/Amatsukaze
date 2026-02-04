@@ -27,7 +27,6 @@ else
     <div class="logo-analyze">
         <div class="logo-analyze-toolbar">
             <button class="btn btn-outline-secondary" @onclick="BackToQueue">Back to Queue</button>
-
             <div class="logo-analyze-controls">
                 <label>Max Frames:</label>
                 <select @bind="_maxFrames">
@@ -79,10 +78,6 @@ else
             <input type="range" min="0" max="1" step="0.01" @bind-value="Position" @bind-value:event="oninput" style="width: 360px;" />
             <span>@_position.ToString("P0", CultureInfo.InvariantCulture)</span>
         </div>
-        <div class="logo-analyze-meta">
-            FrameUrl: @_frameUrl
-        </div>
-
         <div class="logo-analyze-frame">
             <img src="@_frameUrl" @onload="OnFrameLoaded" @onerror="OnFrameError" />
             <div style="position: absolute; inset: 4px; pointer-events: all;"

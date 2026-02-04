@@ -8,7 +8,6 @@
 <h3>スクリプト生成</h3>
 
 <p>
-    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
     @if (!string.IsNullOrEmpty(_downloadUrl))
     {
         <a class="btn btn-secondary" href="@_downloadUrl" download="@_downloadName">バッチファイル作成</a>

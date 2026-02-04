@@ -20,13 +20,28 @@ else if (_view == null)
 }
 else
 {
-    <div style="margin-bottom: 0.5rem;">
-        <div><strong>Task #@_view.Task?.TaskId</strong></div>
-        <div>ファイル名: @_view.Task?.FileName</div>
-        <div>サービス名: @_view.Task?.ServiceName</div>
-        <div>プロファイル: @_view.Task?.ProfileName</div>
-        <div>出力先: @_view.Task?.OutDir</div>
-    </div>
+    <table class="table console-meta">
+        <tr>
+            <th>Task</th>
+            <td>@_view.Task?.TaskId</td>
+        </tr>
+        <tr>
+            <th>ファイル名</th>
+            <td>@_view.Task?.FileName</td>
+        </tr>
+        <tr>
+            <th>サービス名</th>
+            <td>@_view.Task?.ServiceName</td>
+        </tr>
+        <tr>
+            <th>プロファイル</th>
+            <td>@_view.Task?.ProfileName</td>
+        </tr>
+        <tr>
+            <th>出力先</th>
+            <td>@_view.Task?.OutDir</td>
+        </tr>
+    </table>
     <pre @ref="_logRef" class="console-log">@string.Join("\n", _view.Lines)</pre>
 }
 

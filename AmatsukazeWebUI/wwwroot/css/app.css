@@ -993,7 +993,6 @@ code {
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
-    margin-left: auto;
 }
 
 .logo-analyze-actions {
@@ -1151,6 +1150,30 @@ code {
 .path-suggest-error {
     padding: 4px 8px;
     color: #d65b6a;
+}
+
+.autoselect-empty-card {
+    border: 1px dashed color-mix(in srgb, var(--border) 85%, transparent);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+    max-width: 520px;
+}
+
+.autoselect-empty-card.autoselect-empty-compact {
+    padding: 12px 14px;
+    max-width: none;
+}
+
+.autoselect-empty-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.autoselect-empty-body {
+    color: var(--muted);
 }
 
 .modal-overlay {
@@ -1412,6 +1435,25 @@ code {
     white-space: pre-wrap;
     max-height: 70vh;
     overflow: auto;
+}
+
+.console-meta {
+    margin-bottom: 0.5rem;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.console-meta th,
+.console-meta td {
+    padding: 4px 6px;
+    line-height: 1.2;
+    vertical-align: top;
+}
+
+.console-meta th {
+    width: 120px;
+    color: var(--muted);
+    font-weight: 600;
 }
 
 @media (max-width: 980px) {
