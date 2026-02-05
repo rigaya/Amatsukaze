@@ -125,6 +125,7 @@ html, body {
                  "Roboto",
                  "Arial",
                  sans-serif;
+    font-size: 15px;
     background: var(--bg);
     color: var(--text);
 }
@@ -459,8 +460,8 @@ code {
     width: 170px;
     min-width: 170px;
     padding-right: 0.4rem;
-    padding-top: 0.45rem;
-    padding-bottom: 0.45rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
     color: var(--muted);
     font-weight: 600;
     vertical-align: top;
@@ -468,8 +469,8 @@ code {
 
 .settings-page table td {
     padding-left: 0.4rem;
-    padding-top: 0.45rem;
-    padding-bottom: 0.45rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
 }
 
 .settings-page label {
@@ -1387,6 +1388,49 @@ code {
 
 .log-table {
     margin-bottom: 0;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.log-table th,
+.log-table td {
+    vertical-align: top;
+}
+
+.log-col-start {
+    min-width: 80px;
+    width: 80px;
+    max-width: 100px;
+}
+
+.log-col-result {
+    width: 50px;
+    max-width: 60px;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.log-col-message {
+    width: 18%;
+    max-width: 220px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.log-col-profile {
+    width: 16%;
+}
+
+.log-col-input {
+    width: 40%;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.log-col-detail {
+    width: 64px;
+    text-align: center;
 }
 
 .log-list-loading {
@@ -1441,6 +1485,10 @@ code {
     margin-bottom: 0.5rem;
     border-collapse: collapse;
     width: 100%;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-strong);
+    overflow: hidden;
 }
 
 .console-meta th,
@@ -1448,12 +1496,47 @@ code {
     padding: 4px 6px;
     line-height: 1.2;
     vertical-align: top;
+    border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
+}
+
+.console-meta tr:last-child th,
+.console-meta tr:last-child td {
+    border-bottom: none;
 }
 
 .console-meta th {
     width: 120px;
     color: var(--muted);
     font-weight: 600;
+}
+
+@media (max-width: 900px) {
+    .log-col-profile {
+        display: none;
+    }
+
+    .log-col-start {
+        width: 110px;
+        max-width: 120px;
+    }
+
+    .log-col-result {
+        width: 56px;
+        max-width: 60px;
+    }
+
+    .log-col-message {
+        width: 16%;
+        max-width: 140px;
+    }
+
+    .log-col-input {
+        width: 52%;
+    }
+
+    .log-col-detail {
+        width: 56px;
+    }
 }
 
 @media (max-width: 980px) {

@@ -1,5 +1,6 @@
 @page "/logs/encode"
 @using Amatsukaze.Shared
+@using System.IO
 @inject IAmatsukazeApi Api
 @inject IJSRuntime Js
 
@@ -28,24 +29,24 @@ else
             <table class="table log-table">
                 <thead>
                     <tr>
-                        <th>開始</th>
-                        <th>結果</th>
-                        <th>メッセージ</th>
-                        <th>プロファイル</th>
-                        <th>入力</th>
-                        <th>詳細</th>
+                        <th class="log-col-start">開始</th>
+                        <th class="log-col-result">結果</th>
+                        <th class="log-col-message">メッセージ</th>
+                        <th class="log-col-profile">プロファイル</th>
+                        <th class="log-col-input">入力</th>
+                        <th class="log-col-detail">詳細</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in _encodeLogs)
                     {
                         <tr>
-                            <td>@(item.DisplayEncodeStart ?? "-")</td>
-                            <td>@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
-                            <td>@(item.Reason ?? "-")</td>
-                            <td>@(item.Profile ?? "-")</td>
-                            <td>@(item.SrcPath ?? "-")</td>
-                            <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadEncodeDetailAsync(item)">View</button></td>
+                            <td class="log-col-start">@(item.DisplayEncodeStart ?? "-")</td>
+                            <td class="log-col-result">@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
+                            <td class="log-col-message">@(item.Reason ?? "-")</td>
+                            <td class="log-col-profile">@(item.Profile ?? "-")</td>
+                            <td class="log-col-input" title="@(item.SrcPath ?? "-")">@GetLogFileName(item.SrcPath)</td>
+                            <td class="log-col-detail"><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadEncodeDetailAsync(item)">View</button></td>
                         </tr>
                     }
                 </tbody>
@@ -170,6 +171,15 @@ else
     private async Task LoadEncodeDetailAsync(LogItemView item)
     {
         await LoadDetailAsync(item.EncodeStartDate, null, item.SrcPath ?? "Encode Log");
+    }
+
+    private static string GetLogFileName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "-";
+        }
+        return Path.GetFileName(path);
     }
 
     private async Task LoadDetailAsync(DateTime? encodeStart, DateTime? checkStart, string title)
