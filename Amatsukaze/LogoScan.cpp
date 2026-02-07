@@ -1890,7 +1890,7 @@ namespace {
             const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->data[0]);
             const float maxv = (float)((1 << bitDepth) - 1);
             const float normalize = 255.0f / maxv;
-            constexpr int kEdgeMargin = 8;
+            constexpr int kEdgeMargin = 16;
 
             // 解析対象は右上ROIのみ。Y(輝度)だけを 8bit 相当に正規化して扱う。
             // 背景:
@@ -1943,9 +1943,9 @@ namespace {
             // 背景:
             //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
             //   逆にサブサンプリングすると文字部が欠けやすかった。
-            // ただし端の極近傍は境界影響が強いため、8pxだけ内側から走査する。
-            for (int y = kEdgeMargin; y < scanh - kEdgeMargin; y += 1) {
-                for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x += 1) {
+            // ただし右上端の極近傍は境界影響が強いため、上端/右端だけ16px内側から走査する。
+            for (int y = kEdgeMargin; y < scanh - kEdgeMargin; y++) {
+                for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
                     float bg = 0.0f;
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                     // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
