@@ -2817,9 +2817,9 @@ namespace {
             struct CompCandidate {
                 AutoDetectRect rect;
                 double score;
-                double meanAccepted;
-                double consistencyNorm;
                 int area;
+                int usedRows;
+                int usedCols;
             };
             std::vector<CompCandidate> candidates;
             const int minArea = std::max(24, scanw * scanh / 2048);
@@ -2832,12 +2832,6 @@ namespace {
                     q.push(start);
                     int minX = x, maxX = x, minY = y, maxY = y, area = 0;
                     int perimeter = 0;
-                    double sumAlpha = 0.0;
-                    double sumConsistency = 0.0;
-                    double sumAccepted = 0.0;
-                    double sumScore = 0.0;
-                    double peakAccepted = 0.0;
-                    double peakScore = 0.0;
                     std::vector<int> compPixels;
                     while (!q.empty()) {
                         const int cur = q.front(); q.pop();
@@ -2849,13 +2843,6 @@ namespace {
                         maxX = std::max(maxX, cx);
                         minY = std::min(minY, cy);
                         maxY = std::max(maxY, cy);
-                        sumAlpha += mapAlpha[cur];
-                        sumConsistency += mapConsistency[cur];
-                        sumAccepted += mapAccepted[cur];
-                        sumScore += score[cur];
-                        peakAccepted = std::max(peakAccepted, (double)mapAccepted[cur]);
-                        peakScore = std::max(peakScore, (double)score[cur]);
-
                         const int nx[4] = { cx - 1, cx + 1, cx, cx };
                         const int ny[4] = { cy, cy, cy - 1, cy + 1 };
                         for (int i = 0; i < 4; i++) {
@@ -2919,56 +2906,27 @@ namespace {
                     const bool isColLineLike = maxColRatio > 0.15 && colCoverage < 0.52 && aspect > 2.4;
                     if (isWideBand || isRowLineLike || isColLineLike) continue;
 
-                    const double meanAlpha = sumAlpha / area;
-                    const double meanConsistency = sumConsistency / area;
-                    const double meanAccepted = sumAccepted / area;
-                    const double meanScore = sumScore / area;
-                    const double consistencyNorm = std::max(0.0, std::min(1.0, (meanConsistency - 0.30) / 1.70));
                     const double cxComp = comp.x + comp.w * 0.5;
                     const double cyComp = comp.y + comp.h * 0.5;
-                    // 右上寄り優先の事前確率。
-                    // 背景: 本タスクの探索範囲は右上1/divなので、同点時の選択安定化に使う。
+                    // binary主体のseed選定:
+                    // - 面積(実体)を主軸
+                    // - 右上寄りを弱いpriorとして同点解消に使う
                     const double rightTopPrior = std::max(0.0, std::min(1.0, (cxComp / scanw) * 0.60 + ((scanh - cyComp) / scanh) * 0.40));
-                    const double upperPrior = std::max(0.0, std::min(1.0, 1.0 - (cyComp / (scanh * 0.70))));
-                    const double rowLinePenalty = std::max(0.0, (maxRowRatio - 0.11) * 3.0);
-
-                    double coarseIou = 0.0;
-                    if (hasCoarse) {
-                        const int ix0 = std::max(comp.x, coarse.x);
-                        const int iy0 = std::max(comp.y, coarse.y);
-                        const int ix1 = std::min(comp.x + comp.w, coarse.x + coarse.w);
-                        const int iy1 = std::min(comp.y + comp.h, coarse.y + coarse.h);
-                        const int iw = std::max(0, ix1 - ix0);
-                        const int ih = std::max(0, iy1 - iy0);
-                        const double inter = (double)iw * ih;
-                        const double uni = boxArea + (double)coarse.w * coarse.h - inter;
-                        coarseIou = (uni > 0.0) ? (inter / uni) : 0.0;
-                    }
-
-                    // 2) 成分スコアを area主導から alpha/consistency/accepted 主導へ
-                    // 成分スコアは area 主導にしない。
-                    // 背景: area を強くすると、薄い帯が大面積ゆえに勝ってしまう。
-                    // そのため accepted/alpha/consistency とピーク強度を主軸にする。
+                    const double rowLinePenalty = std::max(0.0, (maxRowRatio - 0.11) * 2.4);
+                    const double colLinePenalty = std::max(0.0, (maxColRatio - 0.11) * 2.4);
                     const double compScore =
-                        meanAccepted * 3.6 +
-                        peakAccepted * 2.0 +
-                        meanScore * 1.3 +
-                        peakScore * 1.1 +
-                        consistencyNorm * 2.2 +
-                        meanAlpha * 1.6 +
-                        rightTopPrior * 1.6 +
-                        upperPrior * 1.4 +
-                        coarseIou * 0.5 +
-                        compactness * 0.5 +
-                        fillRatio * 0.45 +
-                        std::log(1.0 + area) * 0.06 -
-                        rowLinePenalty * 1.8;
+                        std::log(1.0 + area) * 1.30 +
+                        fillRatio * 0.55 +
+                        compactness * 0.40 +
+                        rightTopPrior * 0.35 -
+                        rowLinePenalty * 1.60 -
+                        colLinePenalty * 1.60;
                     candidates.push_back(CompCandidate{
                         comp,
                         compScore,
-                        meanAccepted,
-                        consistencyNorm,
-                        area
+                        area,
+                        usedRows,
+                        usedCols
                         });
 
                     if (compScore > bestScore) {
@@ -2979,7 +2937,8 @@ namespace {
                 }
             }
 
-            // 1) 位置決定は best 成分を優先（coarse との強制マージをやめる）
+            // 位置決定は binary成分のみで行う。
+            // 背景: score/accepted依存の閾値で、良いbinaryでも枠が狭くなる事例が出たため。
             AutoDetectRect finalRect = hasBest ? best : coarse;
             if (!hasBest && !hasCoarse) {
                 // 最終フォールバック: 最高 accepted 点の近傍を仮矩形にする。
@@ -3009,6 +2968,9 @@ namespace {
             if (finalRect.w <= 0 || finalRect.h <= 0) {
                 THROW(RuntimeException, "Logo rect projection/CCL failed");
             }
+
+            // seed成分に近いbinary成分を段階的に結合する。
+            // 文字ロゴの分断(文字間の空白)を復元する目的で、横方向の近傍はやや広めに許容。
             if (hasBest && !candidates.empty()) {
                 bool mergedAny = true;
                 int mergeIter = 0;
@@ -3016,12 +2978,10 @@ namespace {
                     mergedAny = false;
                     mergeIter++;
                     for (const auto& cand : candidates) {
-                        // best 成分に準ずる候補のみをマージ対象にする。
-                        // 背景: 何でも結合すると帯ノイズまで取り込んで矩形が肥大化する。
-                        if (cand.score < bestScore * 0.34) continue;
-                        if (cand.meanAccepted < 0.14) continue;
-                        if (cand.consistencyNorm < 0.20) continue;
+                        // 極小成分は除外（孤立ノイズ抑制）
+                        if (cand.area < minArea) continue;
                         const AutoDetectRect& comp = cand.rect;
+                        if (comp.x == finalRect.x && comp.y == finalRect.y && comp.w == finalRect.w && comp.h == finalRect.h) continue;
                         const int ix0 = std::max(finalRect.x, comp.x);
                         const int iy0 = std::max(finalRect.y, comp.y);
                         const int ix1 = std::min(finalRect.x + finalRect.w, comp.x + comp.w);
@@ -3030,15 +2990,17 @@ namespace {
                         const int overlapH = std::max(0, iy1 - iy0);
                         const int gapX = std::max(0, std::max(finalRect.x - (comp.x + comp.w), comp.x - (finalRect.x + finalRect.w)));
                         const int gapY = std::max(0, std::max(finalRect.y - (comp.y + comp.h), comp.y - (finalRect.y + finalRect.h)));
-                        const bool nearHorizontal = overlapH >= std::max(2, (int)std::round(std::min(finalRect.h, comp.h) * 0.22)) &&
-                            gapX <= std::max(12, (int)std::round(std::min(finalRect.w, comp.w) * 0.85));
-                        const bool nearVertical = overlapW >= std::max(2, (int)std::round(std::min(finalRect.w, comp.w) * 0.22)) &&
-                            gapY <= std::max(8, (int)std::round(std::min(finalRect.h, comp.h) * 0.70));
+                        const bool nearHorizontal = overlapH >= std::max(2, (int)std::round(std::min(finalRect.h, comp.h) * 0.12)) &&
+                            gapX <= std::max(20, (int)std::round(std::min(finalRect.w, comp.w) * 1.10));
+                        const bool nearVertical = overlapW >= std::max(2, (int)std::round(std::min(finalRect.w, comp.w) * 0.18)) &&
+                            gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 0.65));
+                        const bool nearDiagonal = gapX <= std::max(10, (int)std::round(std::min(finalRect.w, comp.w) * 0.35)) &&
+                            gapY <= std::max(8, (int)std::round(std::min(finalRect.h, comp.h) * 0.35));
                         const bool overlap = (overlapW > 0 && overlapH > 0);
-                        // 重なり or 近傍（横/縦）でのみ結合。
+                        // 重なり or 近傍（横/縦/斜め）でのみ結合。
                         // 目的: 文字ロゴの分断（文字間ギャップ）を復元しつつ、
                         // 離れた別成分（無関係ノイズ）を結合しない。
-                        if (!(overlap || nearHorizontal || nearVertical)) continue;
+                        if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) continue;
                         AutoDetectRect mergedRect{
                             std::min(finalRect.x, comp.x),
                             std::min(finalRect.y, comp.y),
@@ -3057,70 +3019,9 @@ namespace {
                 }
             }
 
-            // 弱スコア領域を取り込む拡張（ロゴ中央の薄い部分を接続）
-            auto edgeSignal = [&](const int x, const int y) {
-                if (x < 0 || x >= scanw || y < 0 || y >= scanh) return 0.0;
-                const int off = x + y * scanw;
-                if (!validAB[off]) return 0.0;
-                const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[off] - 0.30) / 1.70));
-                const double extremeNorm = std::max(0.0, std::min(1.0, 1.0 - mapRejectExtreme[off]));
-                const double s = mapAccepted[off] * 0.55 + consistencyNorm * 0.25 + mapAlpha[off] * 0.20;
-                return s * extremeNorm;
-            };
-            // 矩形の外周拡張: 弱い文字/輪郭を段階的に取り込む。
-            // 背景: binary で中心部のみ残ると、最終枠が窮屈になりやすい。
-            for (int iter = 0; iter < 24; iter++) {
-                bool changed = false;
-                if (finalRect.x > 0) {
-                    int good = 0;
-                    for (int yy = finalRect.y; yy < finalRect.y + finalRect.h; yy++) {
-                        if (edgeSignal(finalRect.x - 1, yy) >= 0.16) good++;
-                    }
-                    // 左辺拡張。辺全体の一定割合が「弱信号以上」なら1px拡張。
-                    if (good >= std::max(2, (int)std::round(finalRect.h * 0.22))) {
-                        finalRect.x--;
-                        finalRect.w++;
-                        changed = true;
-                    }
-                }
-                if (finalRect.x + finalRect.w < scanw) {
-                    int good = 0;
-                    const int xedge = finalRect.x + finalRect.w;
-                    for (int yy = finalRect.y; yy < finalRect.y + finalRect.h; yy++) {
-                        if (edgeSignal(xedge, yy) >= 0.16) good++;
-                    }
-                    // 右辺拡張。
-                    if (good >= std::max(2, (int)std::round(finalRect.h * 0.22))) {
-                        finalRect.w++;
-                        changed = true;
-                    }
-                }
-                if (finalRect.y > 0) {
-                    int good = 0;
-                    for (int xx = finalRect.x; xx < finalRect.x + finalRect.w; xx++) {
-                        if (edgeSignal(xx, finalRect.y - 1) >= 0.20) good++;
-                    }
-                    // 上辺拡張（帯誤検出を増やしやすいので、左右よりやや厳しめ）。
-                    if (good >= std::max(3, (int)std::round(finalRect.w * 0.20))) {
-                        finalRect.y--;
-                        finalRect.h++;
-                        changed = true;
-                    }
-                }
-                if (finalRect.y + finalRect.h < scanh) {
-                    int good = 0;
-                    const int yedge = finalRect.y + finalRect.h;
-                    for (int xx = finalRect.x; xx < finalRect.x + finalRect.w; xx++) {
-                        if (edgeSignal(xx, yedge) >= 0.24) good++;
-                    }
-                    // 下辺拡張（帯ノイズ方向になりやすいため最も厳しめ）。
-                    if (good >= std::max(4, (int)std::round(finalRect.w * 0.28))) {
-                        finalRect.h++;
-                        changed = true;
-                    }
-                }
-                if (!changed) break;
-            }
+            // score由来の外周拡張は無効化。
+            // 背景: 現状は binary 自体の品質が上がっているため、
+            // 枠決定は binary 成分の幾何のみで安定化させる。
 
             finalRect.x = std::max(0, finalRect.x - marginX);
             finalRect.y = std::max(0, finalRect.y - marginY);
