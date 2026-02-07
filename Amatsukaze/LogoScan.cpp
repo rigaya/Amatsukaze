@@ -15,6 +15,8 @@
 #include <functional>
 #include <numeric>
 #include <limits>
+#include <type_traits>
+#include <cstring>
 #include "zlib.h"
 
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
@@ -1265,7 +1267,8 @@ namespace {
         }
     }
 
-    static void BilateralFilter(std::vector<float>& dst, const std::vector<float>& src, const int w, const int h, const int radius, const float sigmaSpace, const float sigmaRange) {
+    template<typename pixel_t>
+    static void BilateralFilter(std::vector<pixel_t>& dst, const std::vector<pixel_t>& src, const int w, const int h, const int radius, const float sigmaSpace, const float sigmaRange, const pixel_t maxv) {
         dst.resize(w * h);
         const int ksize = radius * 2 + 1;
         std::vector<float> spatial(ksize * ksize, 0.0f);
@@ -1279,22 +1282,26 @@ namespace {
         }
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                const float center = src[x + y * w];
+                const int center = src[x + y * w];
                 float wsum = 0.0f;
                 float vsum = 0.0f;
+                const float* srow = spatial.data();
                 for (int dy = -radius; dy <= radius; dy++) {
                     const int yy = ClampInt(y + dy, 0, h - 1);
+                    const float* sw = srow;
                     for (int dx = -radius; dx <= radius; dx++) {
                         const int xx = ClampInt(x + dx, 0, w - 1);
-                        const float v = src[xx + yy * w];
-                        const float diff = v - center;
+                        const int v = src[xx + yy * w];
+                        const float diff = (float)(v - center);
                         const float rangeW = std::exp(-(diff * diff) * inv2SigmaRange2);
-                        const float ww = spatial[(dx + radius) + (dy + radius) * ksize] * rangeW;
+                        const float ww = (*sw++) * rangeW;
                         wsum += ww;
                         vsum += ww * v;
                     }
+                    srow += ksize;
                 }
-                dst[x + y * w] = (wsum > 1e-8f) ? (vsum / wsum) : center;
+                const float outv = (wsum > 1e-8f) ? (vsum / wsum) : (float)center;
+                dst[x + y * w] = (pixel_t)ClampInt((int)(outv + 0.5f), 0, maxv);
             }
         }
     }
@@ -1398,30 +1405,45 @@ namespace {
     // - 採用できた辺の平均を背景bgとする
     // 背景:
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
-    static bool TryEstimateBg(const std::vector<float>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
+    template<typename pixel_t>
+    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
         // 1辺を走査して「背景として使えるか」を判定するヘルパー。
         // 戻り値 true: 辺内の輝度幅(max-min)が閾値以下で、単色背景とみなせる。
         // 典型的に false になるケース:
         // - 辺上にロゴ線が乗っている
         // - 辺上が映像境界/細かい模様で輝度変動が大きい
         // 画面端では radius 外にはみ出すため、参照座標は clamp して境界画素を使う。
-        auto evalSide = [&](const int sx, const int sy, const int dx, const int dy, float& avg, float& minvOut, float& maxvOut) {
+        auto evalSide = [&](const int sx, const int sy, const int dx, const int dy, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
             const int len = radius * 2 + 1;
-            float minv = std::numeric_limits<float>::max();
-            float maxv = std::numeric_limits<float>::lowest();
-            float sum = 0.0f;
-            for (int i = 0; i < len; i++) {
-                const int px = ClampInt(sx + dx * i, 0, w - 1);
-                const int py = ClampInt(sy + dy * i, 0, h - 1);
-                const float v = y[px + py * w];
-                minv = std::min(minv, v);
-                maxv = std::max(maxv, v);
-                sum += v;
+            pixel_t minv = std::numeric_limits<pixel_t>::max();
+            pixel_t maxv = std::numeric_limits<pixel_t>::lowest();
+            int sum = 0;
+            const int ex = sx + dx * (len - 1);
+            const int ey = sy + dy * (len - 1);
+            const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
+            if (inRange) {
+                const pixel_t* ptr = &y[sx + sy * w];
+                const int step = dx + dy * w;
+                for (int i = 0; i < len; i++, ptr += step) {
+                    const pixel_t v = *ptr;
+                    minv = std::min(minv, v);
+                    maxv = std::max(maxv, v);
+                    sum += v;
+                }
+            } else {
+                for (int i = 0; i < len; i++) {
+                    const int px = ClampInt(sx + dx * i, 0, w - 1);
+                    const int py = ClampInt(sy + dy * i, 0, h - 1);
+                    const pixel_t v = y[px + py * w];
+                    minv = std::min(minv, v);
+                    maxv = std::max(maxv, v);
+                    sum += v;
+                }
             }
-            avg = sum / len;
+            avg = (float)sum / len;
             minvOut = minv;
             maxvOut = maxv;
-            return (maxv - minv) <= threshold;
+            return ((float)maxv - (float)minv) <= threshold;
         };
 
         constexpr int kSideRetryCount = 1;
@@ -1436,8 +1458,8 @@ namespace {
         const int sideLen = radius * 2 + 1;
 
         float sideAvg[4] = {};
-        float sideMin[4] = {};
-        float sideMax[4] = {};
+        pixel_t sideMin[4] = {};
+        pixel_t sideMax[4] = {};
         uint8_t sideValid[4] = {};
         auto recalcSides = [&]() {
             int count = 0;
@@ -1523,8 +1545,8 @@ namespace {
             dbg->sideCount = sideCount;
             for (int i = 0; i < 4; i++) {
                 dbg->sideValid[i] = sideValid[i];
-                dbg->sideMin[i] = sideMin[i];
-                dbg->sideMax[i] = sideMax[i];
+                dbg->sideMin[i] = (float)sideMin[i];
+                dbg->sideMax[i] = (float)sideMax[i];
                 dbg->sideAvg[i] = sideAvg[i];
             }
         }
@@ -1647,8 +1669,10 @@ namespace {
         int bitDepth;
         int readFrames;
 
-        std::vector<float> frameY;
-        std::vector<float> frameWork;
+        std::vector<uint8_t> frameY8;
+        std::vector<uint8_t> frameWork8;
+        std::vector<uint16_t> frameY16;
+        std::vector<uint16_t> frameWork16;
         std::vector<AutoDetectStats> stats;
         std::vector<float> lastSampleFg;
         std::vector<float> lastSampleBg;
@@ -1747,7 +1771,7 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , cb(cb)
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY(), frameWork(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), pointSamples(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY8(), frameWork8(), frameY16(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), pointSamples(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -1989,8 +2013,21 @@ namespace {
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
-            frameY.resize(scanw * scanh);
-            frameWork.resize(scanw * scanh);
+            if (bitDepth <= 8) {
+                frameY8.resize(scanw * scanh);
+                frameWork8.resize(scanw * scanh);
+                frameY16.clear();
+                frameWork16.clear();
+                frameY16.shrink_to_fit();
+                frameWork16.shrink_to_fit();
+            } else {
+                frameY16.resize(scanw * scanh);
+                frameWork16.resize(scanw * scanh);
+                frameY8.clear();
+                frameWork8.clear();
+                frameY8.shrink_to_fit();
+                frameWork8.shrink_to_fit();
+            }
             stats.resize(scanw * scanh);
             lastSampleFg.assign(scanw * scanh, 0.0f);
             lastSampleBg.assign(scanw * scanh, 0.0f);
@@ -2001,26 +2038,42 @@ namespace {
         int addFrame(const AVFrame* frame) {
             const int pitchY = frame->linesize[0] / sizeof(pixel_t);
             const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->data[0]);
-            const float maxv = (float)((1 << bitDepth) - 1);
-            const float normalize = 255.0f / maxv;
+            const pixel_t maxv = (pixel_t)((1 << bitDepth) - 1);
+            const float invMaxv = 1.0f / std::max(1.0f, (float)maxv);
+            const float rawScale = maxv / 255.0f;
+            const float thresholdRaw = threshold * rawScale;
             constexpr int kEdgeMargin = 16;
+            auto& frameY = [] (auto& y8, auto& y16) -> auto& {
+                if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                    return y8;
+                } else {
+                    return y16;
+                }
+            }(frameY8, frameY16);
+            auto& frameWork = [] (auto& w8, auto& w16) -> auto& {
+                if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                    return w8;
+                } else {
+                    return w16;
+                }
+            }(frameWork8, frameWork16);
 
-            // 解析対象は右上ROIのみ。Y(輝度)だけを 8bit 相当に正規化して扱う。
+            // 解析対象は右上ROIのみ。Y(輝度)を pixel_t のまま保持して扱う。
             // 背景:
-            //   本処理は白ロゴ前提で、UVを使わず Y に絞って高速化している。
+            //   白ロゴ前提でUVを使わず Y に絞る。整数保持でキャッシュ効率を上げる。
             for (int y = 0; y < scanh; y++) {
                 const int srcYPos = scany + y;
-                for (int x = 0; x < scanw; x++) {
-                    frameY[x + y * scanw] = srcY[(scanx + x) + srcYPos * pitchY] * normalize;
-                }
+                const pixel_t* srcRow = &srcY[scanx + srcYPos * pitchY];
+                pixel_t* dstRow = &frameY[y * scanw];
+                std::memcpy(dstRow, srcRow, sizeof(pixel_t) * scanw);
             }
 
             // 前処理: 輪郭保持を重視して 5x5 バイラテラルフィルタを適用。
             // 背景:
             //   3x3 平滑化(Box/Median)はロゴ輪郭を削りやすく、scoreが弱くなるケースがあった。
             //   バイラテラルでノイズを抑えつつエッジを維持する。
-            const float sigmaRange = std::max(6.0f, threshold * 0.6f);
-            BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange);
+            const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
+            BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange, maxv);
 
             PointDebugSample sample{};
             sample.frame = readFrames;
@@ -2030,18 +2083,18 @@ namespace {
                 const int off = px + py * scanw;
                 float bg = 0.0f;
                 BgDebugInfo bgdbg{};
-                if (TryEstimateBg(frameWork, scanw, scanh, px, py, radius, (float)threshold, bg, &bgdbg)) {
+                if (TryEstimateBg(frameWork, scanw, scanh, px, py, radius, thresholdRaw, bg, &bgdbg)) {
                     sample.valid = 1;
-                    sample.fg = frameWork[off] * (1.0f / 255.0f);
-                    sample.bg = bg * (1.0f / 255.0f);
+                    sample.fg = (float)frameWork[off] * invMaxv;
+                    sample.bg = bg * invMaxv;
                     sample.diff = sample.fg - sample.bg;
                 }
                 sample.sideCount = bgdbg.sideCount;
                 for (int i = 0; i < 4; i++) {
                     sample.sideValid[i] = bgdbg.sideValid[i];
-                    sample.sideMin[i] = bgdbg.sideMin[i] * (1.0f / 255.0f);
-                    sample.sideMax[i] = bgdbg.sideMax[i] * (1.0f / 255.0f);
-                    sample.sideAvg[i] = bgdbg.sideAvg[i] * (1.0f / 255.0f);
+                    sample.sideMin[i] = bgdbg.sideMin[i] * invMaxv;
+                    sample.sideMax[i] = bgdbg.sideMax[i] * invMaxv;
+                    sample.sideAvg[i] = bgdbg.sideAvg[i] * invMaxv;
                 }
             }
             pointSamples.push_back(sample);
@@ -2052,7 +2105,7 @@ namespace {
             //   レターボックス等で「ほぼ同じ fg/bg 組」が大量登録されると、
             //   有効サンプル数は増えても回帰に新情報が増えず、帯ノイズが優勢になる。
             //   ここではまず fg 一致(ほぼ同値)だけで重複を間引く。
-            const float dedupThreshold = std::max(0.5f, threshold * 0.25f);
+            const float dedupThreshold = std::max(0.5f * rawScale, thresholdRaw * 0.25f);
             // ROI 全点を走査(間引きなし)。
             // 背景:
             //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
@@ -2063,16 +2116,16 @@ namespace {
                     float bg = 0.0f;
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                     // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
-                    if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, (float)threshold, bg)) {
+                    if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
                         continue;
                     }
                     const int off = x + y * scanw;
                     AutoDetectStats& s = stats[off];
                     s.totalCandidates++;
-                    const double f = frameWork[off] * (1.0f / 255.0f);
-                    const double b = bg * (1.0f / 255.0f);
+                    const double f = (double)frameWork[off] * invMaxv;
+                    const double b = (double)bg * invMaxv;
 
-                    const float fgRaw = frameWork[off];
+                    const float fgRaw = (float)frameWork[off];
                     const float bgRaw = bg;
                     if (off < (int)lastSampleValid.size() && lastSampleValid[off]) {
                         // 重複抑制:
