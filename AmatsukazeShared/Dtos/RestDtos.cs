@@ -613,25 +613,15 @@ namespace Amatsukaze.Shared
     public class LogoAutoDetectDebugImages
     {
         public string? ScoreUrl { get; set; }
-        public string? ScoreRawUrl { get; set; }
-        public string? ScoreMedianUrl { get; set; }
-        public string? ValidAbUrl { get; set; }
         public string? BinaryUrl { get; set; }
         public string? CclUrl { get; set; }
         public string? CountUrl { get; set; }
-        public string? FrameCountUrl { get; set; }
         public string? AUrl { get; set; }
         public string? BUrl { get; set; }
         public string? AlphaUrl { get; set; }
         public string? LogoYUrl { get; set; }
         public string? ConsistencyUrl { get; set; }
         public string? BgVarUrl { get; set; }
-        public string? RejectAlphaUrl { get; set; }
-        public string? RejectLogoYUrl { get; set; }
-        public string? RejectMeanDiffUrl { get; set; }
-        public string? RejectBgVarUrl { get; set; }
-        public string? RejectExtremeUrl { get; set; }
-        public string? RejectConsistencyUrl { get; set; }
         public string? AcceptedUrl { get; set; }
         public string? PointCsvUrl { get; set; }
     }

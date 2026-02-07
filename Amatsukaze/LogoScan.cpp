@@ -1357,11 +1357,23 @@ namespace {
         float sideAvg[4];
     };
 
+    // 画素(x, y0)の背景輝度を、周辺ブロック外周4辺から推定する。
+    // 方針:
+    // - 半径radiusの正方ブロックを取り、その外周(上/下/左/右)を候補として評価
+    // - 辺内のmin-maxがthreshold以下の「ほぼ単色の辺」だけを背景候補として採用
+    // - 採用できた辺の平均を背景bgとする
+    // 背景:
+    // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     static bool TryEstimateBg(const std::vector<float>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
         if (x - radius < 0 || x + radius >= w || y0 - radius < 0 || y0 + radius >= h) {
             return false;
         }
 
+        // 1辺を走査して「背景として使えるか」を判定するヘルパー。
+        // 戻り値 true: 辺内の輝度幅(max-min)が閾値以下で、単色背景とみなせる。
+        // 典型的に false になるケース:
+        // - 辺上にロゴ線が乗っている
+        // - 辺上が映像境界/細かい模様で輝度変動が大きい
         auto evalSide = [&](const int sx, const int sy, const int dx, const int dy, float& avg, float& minvOut, float& maxvOut) {
             const int len = radius * 2 + 1;
             float minv = std::numeric_limits<float>::max();
@@ -1532,8 +1544,6 @@ namespace {
         std::vector<float> lastSampleBg;
         std::vector<uint8_t> lastSampleValid;
         std::vector<float> score;
-        std::vector<float> scoreRaw;
-        std::vector<float> scoreMedian;
         std::vector<uint8_t> binary;
         std::vector<float> mapA;
         std::vector<float> mapB;
@@ -1541,12 +1551,6 @@ namespace {
         std::vector<float> mapLogoY;
         std::vector<float> mapConsistency;
         std::vector<float> mapBgVar;
-        std::vector<float> mapRejectAlpha;
-        std::vector<float> mapRejectLogoY;
-        std::vector<float> mapRejectMeanDiff;
-        std::vector<float> mapRejectBgVar;
-        std::vector<float> mapRejectExtreme;
-        std::vector<float> mapRejectConsistency;
         std::vector<float> mapAccepted;
         std::vector<uint8_t> validAB;
         std::vector<int> frameValidCounts;
@@ -1633,7 +1637,7 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , cb(cb)
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY(), frameWork(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), scoreRaw(), scoreMedian(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapRejectAlpha(), mapRejectLogoY(), mapRejectMeanDiff(), mapRejectBgVar(), mapRejectExtreme(), mapRejectConsistency(), mapAccepted(), validAB(), frameValidCounts(), pointSamples(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY(), frameWork(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), pointSamples(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -1648,62 +1652,32 @@ namespace {
             return rectAbs;
         }
 
-        void writeDebug(const tstring& scorePath, const tstring& scoreRawPath, const tstring& scoreMedianPath, const tstring& validAbPath, const tstring& binaryPath, const tstring& cclPath, const tstring& countPath, const tstring& frameCountPath, const tstring& aPath, const tstring& bPath, const tstring& alphaPath, const tstring& logoYPath, const tstring& consistencyPath, const tstring& bgVarPath, const tstring& rejectAlphaPath, const tstring& rejectLogoYPath, const tstring& rejectMeanDiffPath, const tstring& rejectBgVarPath, const tstring& rejectExtremePath, const tstring& rejectConsistencyPath, const tstring& acceptedPath, const tstring& pointPath) {
+        void writeDebug(const tstring& scorePath, const tstring& binaryPath, const tstring& cclPath, const tstring& countPath, const tstring& aPath, const tstring& bPath, const tstring& alphaPath, const tstring& logoYPath, const tstring& consistencyPath, const tstring& bgVarPath, const tstring& acceptedPath, const tstring& pointPath) {
             if (scanw <= 0 || scanh <= 0) {
                 return;
             }
 
             const std::string scorePathA = tchar_to_string(scorePath);
-            const std::string scoreRawPathA = tchar_to_string(scoreRawPath);
-            const std::string scoreMedianPathA = tchar_to_string(scoreMedianPath);
-            const std::string validAbPathA = tchar_to_string(validAbPath);
             const std::string binaryPathA = tchar_to_string(binaryPath);
             const std::string cclPathA = tchar_to_string(cclPath);
             const std::string countPathA = tchar_to_string(countPath);
-            const std::string frameCountPathA = tchar_to_string(frameCountPath);
             const std::string aPathA = tchar_to_string(aPath);
             const std::string bPathA = tchar_to_string(bPath);
             const std::string alphaPathA = tchar_to_string(alphaPath);
             const std::string logoYPathA = tchar_to_string(logoYPath);
             const std::string consistencyPathA = tchar_to_string(consistencyPath);
             const std::string bgVarPathA = tchar_to_string(bgVarPath);
-            const std::string rejectAlphaPathA = tchar_to_string(rejectAlphaPath);
-            const std::string rejectLogoYPathA = tchar_to_string(rejectLogoYPath);
-            const std::string rejectMeanDiffPathA = tchar_to_string(rejectMeanDiffPath);
-            const std::string rejectBgVarPathA = tchar_to_string(rejectBgVarPath);
-            const std::string rejectExtremePathA = tchar_to_string(rejectExtremePath);
-            const std::string rejectConsistencyPathA = tchar_to_string(rejectConsistencyPath);
             const std::string acceptedPathA = tchar_to_string(acceptedPath);
             const std::string pointPathA = tchar_to_string(pointPath);
 
             float maxScore = 0.0f;
             for (auto v : score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
-            float maxScoreRaw = 0.0f;
-            for (auto v : scoreRaw) maxScoreRaw = std::max(maxScoreRaw, v);
-            if (maxScoreRaw <= 0) maxScoreRaw = 1.0f;
-            float maxScoreMed = 0.0f;
-            for (auto v : scoreMedian) maxScoreMed = std::max(maxScoreMed, v);
-            if (maxScoreMed <= 0) maxScoreMed = 1.0f;
 
             WriteGrayBitmap(scorePathA, scanw, scanh, [&](int x, int y) {
                 const int off = x + y * scanw;
                 const float v = (off < (int)score.size()) ? score[off] : 0.0f;
                 return (uint8_t)ClampInt((int)std::round(v / maxScore * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(scoreRawPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                const float v = (off < (int)scoreRaw.size()) ? scoreRaw[off] : 0.0f;
-                return (uint8_t)ClampInt((int)std::round(v / maxScoreRaw * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(scoreMedianPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                const float v = (off < (int)scoreMedian.size()) ? scoreMedian[off] : 0.0f;
-                return (uint8_t)ClampInt((int)std::round(v / maxScoreMed * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(validAbPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                return (off < (int)validAB.size() && validAB[off]) ? 255 : 0;
             });
             WriteGrayBitmap(binaryPathA, scanw, scanh, [&](int x, int y) {
                 const int off = x + y * scanw;
@@ -1725,30 +1699,6 @@ namespace {
             WriteGrayBitmap(countPathA, scanw, scanh, [&](int x, int y) {
                 const int c = stats[x + y * scanw].count;
                 return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
-            });
-
-            const int srcN = (int)frameValidCounts.size();
-            const int plotW = std::max(256, std::min(2048, std::max(1, srcN)));
-            const int plotH = 256;
-            std::vector<int> bins(plotW, 0);
-            if (srcN > 0) {
-                for (int i = 0; i < srcN; i++) {
-                    const int bin = std::min(plotW - 1, i * plotW / srcN);
-                    bins[bin] = std::max(bins[bin], frameValidCounts[i]);
-                }
-            }
-            int maxBin = 0;
-            for (const auto v : bins) maxBin = std::max(maxBin, v);
-            if (maxBin <= 0) maxBin = 1;
-
-            WriteGrayBitmap(frameCountPathA, plotW, plotH, [&](int x, int y) {
-                const int v = bins[x];
-                const int barH = (int)std::round((double)v * (plotH - 1) / maxBin);
-                const bool onGrid = ((plotH - 1 - y) % 64) == 0;
-                if ((plotH - 1 - y) <= barH) {
-                    return (uint8_t)220;
-                }
-                return onGrid ? (uint8_t)40 : (uint8_t)12;
             });
 
             float aMin, aMax, bMin, bMax;
@@ -1802,36 +1752,6 @@ namespace {
                 }
                 const float t = (mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
                 return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(rejectAlphaPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapRejectAlpha.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapRejectAlpha[off] * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(rejectLogoYPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapRejectLogoY.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapRejectLogoY[off] * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(rejectMeanDiffPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapRejectMeanDiff.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapRejectMeanDiff[off] * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(rejectBgVarPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapRejectBgVar.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapRejectBgVar[off] * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(rejectExtremePathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapRejectExtreme.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapRejectExtreme[off] * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(rejectConsistencyPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapRejectConsistency.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapRejectConsistency[off] * 255.0f), 0, 255);
             });
             WriteGrayBitmap(acceptedPathA, scanw, scanh, [&](int x, int y) {
                 const int off = x + y * scanw;
@@ -2120,10 +2040,11 @@ namespace {
             runRectStage();
         }
 
+        // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
+        // 2値化用の初期閾値(thHigh/thLow)を決める。
+        // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
         void runScoreStage(float& thHigh, float& thLow) {
             score.assign(scanw * scanh, 0.0f);
-            scoreRaw.assign(scanw * scanh, 0.0f);
-            scoreMedian.assign(scanw * scanh, 0.0f);
             validAB.assign(scanw * scanh, 0);
             mapA.assign(scanw * scanh, 0.0f);
             mapB.assign(scanw * scanh, 0.0f);
@@ -2131,12 +2052,6 @@ namespace {
             mapLogoY.assign(scanw * scanh, 0.0f);
             mapConsistency.assign(scanw * scanh, 0.0f);
             mapBgVar.assign(scanw * scanh, 0.0f);
-            mapRejectAlpha.assign(scanw * scanh, 0.0f);
-            mapRejectLogoY.assign(scanw * scanh, 0.0f);
-            mapRejectMeanDiff.assign(scanw * scanh, 0.0f);
-            mapRejectBgVar.assign(scanw * scanh, 0.0f);
-            mapRejectExtreme.assign(scanw * scanh, 0.0f);
-            mapRejectConsistency.assign(scanw * scanh, 0.0f);
             mapAccepted.assign(scanw * scanh, 0.0f);
             RunParallelRange(threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
@@ -2169,19 +2084,6 @@ namespace {
                             mapBgVar[i] = (float)varBg;
 
                             const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
-                            mapRejectExtreme[i] = (float)extremeRejectRatio;
-
-                            const bool rejectAlpha = !(alpha >= 0.005f && alpha <= 0.98f);
-                            const bool rejectLogoY = !(logoY >= 0.45f && logoY <= 1.10f);
-                            const bool rejectMeanDiff = meanDiff <= 0.0;
-                            const bool rejectBgVar = varBg > 0.080;
-                            const bool rejectConsistency = consistency < 0.35;
-                            mapRejectAlpha[i] = rejectAlpha ? 1.0f : 0.0f;
-                            mapRejectLogoY[i] = rejectLogoY ? 1.0f : 0.0f;
-                            mapRejectMeanDiff[i] = rejectMeanDiff ? 1.0f : 0.0f;
-                            mapRejectBgVar[i] = rejectBgVar ? 1.0f : 0.0f;
-                            mapRejectConsistency[i] = rejectConsistency ? 1.0f : 0.0f;
-
                             const double alphaGain = std::max(0.0, std::min(1.0, (alpha - 0.005) / 0.30));
                             const double logoGain = std::max(0.0, std::min(1.0, (logoY - 0.45) / 0.30));
                             const double diffGain = std::max(0.0, std::min(1.0, meanDiff / 0.12));
@@ -2192,7 +2094,6 @@ namespace {
                             if (d <= 0.0f) continue;
                             mapAccepted[i] = d;
                             score[i] = d;
-                            scoreRaw[i] = d;
                         }
                     }
                 }
@@ -2200,7 +2101,6 @@ namespace {
 
             std::vector<float> med;
             MedianFilter3x3(med, score, scanw, scanh);
-            scoreMedian = med;
             BoxFilter3x3(score, med, scanw, scanh);
 
             double sum = 0.0;
@@ -2217,17 +2117,11 @@ namespace {
                 count++;
             }
             if (count <= 0) {
-                int rawPos = 0;
-                int medPos = 0;
                 int finalPos = 0;
                 for (int i = 0; i < scanw * scanh; i++) {
                     if (!validAB[i]) continue;
-                    if (scoreRaw[i] > 0) rawPos++;
-                    if (scoreMedian[i] > 0) medPos++;
                     if (score[i] > 0) finalPos++;
                 }
-                const auto rawStats = CalcScoreDebugStats(scoreRaw, validAB);
-                const auto medStats = CalcScoreDebugStats(scoreMedian, validAB);
                 const auto finalStats = CalcScoreDebugStats(score, validAB);
                 int sampledPixels = 0;
                 int maxSampleCount = 0;
@@ -2253,14 +2147,10 @@ namespace {
                     "Insufficient valid pixels: frames=%d/%d, roi=%dx%d@(%d,%d), "
                     "validAB=%d, scorePos=%d, sampledPixels=%d, sampleCount(avg=%.2f,max=%d), "
                     "frameValid(nonZero=%d,avg=%.2f,max=%d), "
-                    "scoreRaw(pos=%d,min=%.6f,p50=%.6f,p90=%.6f,p99=%.6f,max=%.6f,mean=%.6f), "
-                    "scoreMed(pos=%d,min=%.6f,p50=%.6f,p90=%.6f,p99=%.6f,max=%.6f,mean=%.6f), "
                     "scoreFinal(pos=%d,min=%.6f,p50=%.6f,p90=%.6f,p99=%.6f,max=%.6f,mean=%.6f)",
                     readFrames, searchFrames, scanw, scanh, scanx, scany,
                     validPixels, count, sampledPixels, sampleAvg, maxSampleCount,
                     framesNonZero, frameAvg, frameMax,
-                    rawPos, rawStats.minv, rawStats.p50, rawStats.p90, rawStats.p99, rawStats.maxv, rawStats.mean,
-                    medPos, medStats.minv, medStats.p50, medStats.p90, medStats.p99, medStats.maxv, medStats.mean,
                     finalPos, finalStats.minv, finalStats.p50, finalStats.p90, finalStats.p99, finalStats.maxv, finalStats.mean);
             }
             // score の平均/分散ベース閾値は「最低限の保険」。
@@ -2319,6 +2209,12 @@ namespace {
 }
 
 namespace {
+    // ステージ2: scoreを2値化してロゴ候補マスク(binary)を確定する。
+    // 処理概要:
+    // - high/lowのヒステリシス(seed->grow)で基本マスクを生成
+    // - low側の飛び地を近縁条件で昇格
+    // - 反復的な閾値緩和とdelta近縁判定で取りこぼしを補完
+    // - 帯ノイズ/全消し時のフォールバックを適用
     void AutoDetectLogoReader::runBinaryStage(const float thHigh, const float thLow) {
         struct BuildBinaryDiag {
             int seedOn = 0;
@@ -2800,6 +2696,11 @@ namespace {
         }
     }
 
+    // ステージ3: binaryマスクから最終ロゴ矩形を決定する。
+    // 処理概要:
+    // - 連結成分を抽出し、形状フィルタで帯ノイズを除去
+    // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
+    // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
     void AutoDetectLogoReader::runRectStage() {
         std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
         for (int y = 0; y < scanh; y++) {
@@ -3088,7 +2989,7 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH,
-    const tchar* scorePath, const tchar* scoreRawPath, const tchar* scoreMedianPath, const tchar* validAbPath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* frameCountPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* rejectAlphaPath, const tchar* rejectLogoYPath, const tchar* rejectMeanDiffPath, const tchar* rejectBgVarPath, const tchar* rejectExtremePath, const tchar* rejectConsistencyPath, const tchar* acceptedPath, const tchar* pointPath,
+    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath, const tchar* pointPath,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, cb);
     try {
@@ -3097,14 +2998,14 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outY) *outY = rect.y;
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
-        if (scorePath && scoreRawPath && scoreMedianPath && validAbPath && binaryPath && cclPath && countPath && frameCountPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && rejectAlphaPath && rejectLogoYPath && rejectMeanDiffPath && rejectBgVarPath && rejectExtremePath && rejectConsistencyPath && acceptedPath && pointPath) {
-            reader.writeDebug(scorePath, scoreRawPath, scoreMedianPath, validAbPath, binaryPath, cclPath, countPath, frameCountPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, rejectAlphaPath, rejectLogoYPath, rejectMeanDiffPath, rejectBgVarPath, rejectExtremePath, rejectConsistencyPath, acceptedPath, pointPath);
+        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath && pointPath) {
+            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, pointPath);
         }
         return true;
     } catch (const Exception& exception) {
-        if (scorePath && scoreRawPath && scoreMedianPath && validAbPath && binaryPath && cclPath && countPath && frameCountPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && rejectAlphaPath && rejectLogoYPath && rejectMeanDiffPath && rejectBgVarPath && rejectExtremePath && rejectConsistencyPath && acceptedPath && pointPath) {
+        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath && pointPath) {
             try {
-                reader.writeDebug(scorePath, scoreRawPath, scoreMedianPath, validAbPath, binaryPath, cclPath, countPath, frameCountPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, rejectAlphaPath, rejectLogoYPath, rejectMeanDiffPath, rejectBgVarPath, rejectExtremePath, rejectConsistencyPath, acceptedPath, pointPath);
+                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, pointPath);
             } catch (...) {
             }
         }

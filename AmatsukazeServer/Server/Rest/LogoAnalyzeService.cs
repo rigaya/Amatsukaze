@@ -33,25 +33,15 @@ namespace Amatsukaze.Server.Rest
         public string Error { get; set; }
         public LogoRect DetectedRect { get; set; }
         public string ScoreImagePath { get; set; }
-        public string ScoreRawImagePath { get; set; }
-        public string ScoreMedianImagePath { get; set; }
-        public string ValidAbImagePath { get; set; }
         public string BinaryImagePath { get; set; }
         public string CclImagePath { get; set; }
         public string CountImagePath { get; set; }
-        public string FrameCountImagePath { get; set; }
         public string AImagePath { get; set; }
         public string BImagePath { get; set; }
         public string AlphaImagePath { get; set; }
         public string LogoYImagePath { get; set; }
         public string ConsistencyImagePath { get; set; }
         public string BgVarImagePath { get; set; }
-        public string RejectAlphaImagePath { get; set; }
-        public string RejectLogoYImagePath { get; set; }
-        public string RejectMeanDiffImagePath { get; set; }
-        public string RejectBgVarImagePath { get; set; }
-        public string RejectExtremeImagePath { get; set; }
-        public string RejectConsistencyImagePath { get; set; }
         public string AcceptedImagePath { get; set; }
         public string PointCsvPath { get; set; }
     }
@@ -202,18 +192,6 @@ namespace Amatsukaze.Server.Rest
             {
                 path = job.ScoreImagePath;
             }
-            else if (string.Equals(kind, "score_raw", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.ScoreRawImagePath;
-            }
-            else if (string.Equals(kind, "score_median", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.ScoreMedianImagePath;
-            }
-            else if (string.Equals(kind, "valid_ab", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.ValidAbImagePath;
-            }
             else if (string.Equals(kind, "binary", StringComparison.OrdinalIgnoreCase))
             {
                 path = job.BinaryImagePath;
@@ -225,10 +203,6 @@ namespace Amatsukaze.Server.Rest
             else if (string.Equals(kind, "count", StringComparison.OrdinalIgnoreCase))
             {
                 path = job.CountImagePath;
-            }
-            else if (string.Equals(kind, "framecount", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.FrameCountImagePath;
             }
             else if (string.Equals(kind, "a", StringComparison.OrdinalIgnoreCase))
             {
@@ -253,30 +227,6 @@ namespace Amatsukaze.Server.Rest
             else if (string.Equals(kind, "bgvar", StringComparison.OrdinalIgnoreCase))
             {
                 path = job.BgVarImagePath;
-            }
-            else if (string.Equals(kind, "reject_alpha", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.RejectAlphaImagePath;
-            }
-            else if (string.Equals(kind, "reject_logoy", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.RejectLogoYImagePath;
-            }
-            else if (string.Equals(kind, "reject_meandiff", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.RejectMeanDiffImagePath;
-            }
-            else if (string.Equals(kind, "reject_bgvar", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.RejectBgVarImagePath;
-            }
-            else if (string.Equals(kind, "reject_extreme", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.RejectExtremeImagePath;
-            }
-            else if (string.Equals(kind, "reject_consistency", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.RejectConsistencyImagePath;
             }
             else if (string.Equals(kind, "accepted", StringComparison.OrdinalIgnoreCase))
             {
@@ -421,47 +371,27 @@ namespace Amatsukaze.Server.Rest
                 using (var ctx = new AMTContext())
                 {
                     var scorePath = Path.Combine(baseWork, $"logo-auto-score-{job.Id}.bmp");
-                    var scoreRawPath = Path.Combine(baseWork, $"logo-auto-score-raw-{job.Id}.bmp");
-                    var scoreMedianPath = Path.Combine(baseWork, $"logo-auto-score-median-{job.Id}.bmp");
-                    var validAbPath = Path.Combine(baseWork, $"logo-auto-valid-ab-{job.Id}.bmp");
                     var binaryPath = Path.Combine(baseWork, $"logo-auto-binary-{job.Id}.bmp");
                     var cclPath = Path.Combine(baseWork, $"logo-auto-ccl-{job.Id}.bmp");
                     var countPath = Path.Combine(baseWork, $"logo-auto-count-{job.Id}.bmp");
-                    var frameCountPath = Path.Combine(baseWork, $"logo-auto-framecount-{job.Id}.bmp");
                     var aPath = Path.Combine(baseWork, $"logo-auto-a-{job.Id}.bmp");
                     var bPath = Path.Combine(baseWork, $"logo-auto-b-{job.Id}.bmp");
                     var alphaPath = Path.Combine(baseWork, $"logo-auto-alpha-{job.Id}.bmp");
                     var logoYPath = Path.Combine(baseWork, $"logo-auto-logoy-{job.Id}.bmp");
                     var consistencyPath = Path.Combine(baseWork, $"logo-auto-consistency-{job.Id}.bmp");
                     var bgVarPath = Path.Combine(baseWork, $"logo-auto-bgvar-{job.Id}.bmp");
-                    var rejectAlphaPath = Path.Combine(baseWork, $"logo-auto-reject-alpha-{job.Id}.bmp");
-                    var rejectLogoYPath = Path.Combine(baseWork, $"logo-auto-reject-logoy-{job.Id}.bmp");
-                    var rejectMeanDiffPath = Path.Combine(baseWork, $"logo-auto-reject-meandiff-{job.Id}.bmp");
-                    var rejectBgVarPath = Path.Combine(baseWork, $"logo-auto-reject-bgvar-{job.Id}.bmp");
-                    var rejectExtremePath = Path.Combine(baseWork, $"logo-auto-reject-extreme-{job.Id}.bmp");
-                    var rejectConsistencyPath = Path.Combine(baseWork, $"logo-auto-reject-consistency-{job.Id}.bmp");
                     var acceptedPath = Path.Combine(baseWork, $"logo-auto-accepted-{job.Id}.bmp");
                     var pointPath = Path.Combine(baseWork, $"logo-auto-point-{job.Id}.csv");
                     job.ScoreImagePath = scorePath;
-                    job.ScoreRawImagePath = scoreRawPath;
-                    job.ScoreMedianImagePath = scoreMedianPath;
-                    job.ValidAbImagePath = validAbPath;
                     job.BinaryImagePath = binaryPath;
                     job.CclImagePath = cclPath;
                     job.CountImagePath = countPath;
-                    job.FrameCountImagePath = frameCountPath;
                     job.AImagePath = aPath;
                     job.BImagePath = bPath;
                     job.AlphaImagePath = alphaPath;
                     job.LogoYImagePath = logoYPath;
                     job.ConsistencyImagePath = consistencyPath;
                     job.BgVarImagePath = bgVarPath;
-                    job.RejectAlphaImagePath = rejectAlphaPath;
-                    job.RejectLogoYImagePath = rejectLogoYPath;
-                    job.RejectMeanDiffImagePath = rejectMeanDiffPath;
-                    job.RejectBgVarImagePath = rejectBgVarPath;
-                    job.RejectExtremeImagePath = rejectExtremePath;
-                    job.RejectConsistencyImagePath = rejectConsistencyPath;
                     job.AcceptedImagePath = acceptedPath;
                     job.PointCsvPath = pointPath;
 
@@ -473,7 +403,7 @@ namespace Amatsukaze.Server.Rest
                         ctx, filePath, serviceId,
                         request.DivX, request.DivY, request.SearchFrames, request.BlockSize, request.Threshold,
                         request.MarginX, request.MarginY, request.ThreadN,
-                        scorePath, scoreRawPath, scoreMedianPath, validAbPath, binaryPath, cclPath, countPath, frameCountPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, rejectAlphaPath, rejectLogoYPath, rejectMeanDiffPath, rejectBgVarPath, rejectExtremePath, rejectConsistencyPath, acceptedPath, pointPath,
+                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, pointPath,
                         (stage, stageProgress, progress, nread, total) =>
                         {
                             job.Stage = stage;
@@ -632,18 +562,6 @@ namespace Amatsukaze.Server.Rest
             {
                 debug.ScoreUrl = $"/api/logo/analyze/auto/{job.Id}/debug/score";
             }
-            if (!string.IsNullOrEmpty(job.ScoreRawImagePath))
-            {
-                debug.ScoreRawUrl = $"/api/logo/analyze/auto/{job.Id}/debug/score_raw";
-            }
-            if (!string.IsNullOrEmpty(job.ScoreMedianImagePath))
-            {
-                debug.ScoreMedianUrl = $"/api/logo/analyze/auto/{job.Id}/debug/score_median";
-            }
-            if (!string.IsNullOrEmpty(job.ValidAbImagePath))
-            {
-                debug.ValidAbUrl = $"/api/logo/analyze/auto/{job.Id}/debug/valid_ab";
-            }
             if (!string.IsNullOrEmpty(job.BinaryImagePath))
             {
                 debug.BinaryUrl = $"/api/logo/analyze/auto/{job.Id}/debug/binary";
@@ -655,10 +573,6 @@ namespace Amatsukaze.Server.Rest
             if (!string.IsNullOrEmpty(job.CountImagePath))
             {
                 debug.CountUrl = $"/api/logo/analyze/auto/{job.Id}/debug/count";
-            }
-            if (!string.IsNullOrEmpty(job.FrameCountImagePath))
-            {
-                debug.FrameCountUrl = $"/api/logo/analyze/auto/{job.Id}/debug/framecount";
             }
             if (!string.IsNullOrEmpty(job.AImagePath))
             {
@@ -683,30 +597,6 @@ namespace Amatsukaze.Server.Rest
             if (!string.IsNullOrEmpty(job.BgVarImagePath))
             {
                 debug.BgVarUrl = $"/api/logo/analyze/auto/{job.Id}/debug/bgvar";
-            }
-            if (!string.IsNullOrEmpty(job.RejectAlphaImagePath))
-            {
-                debug.RejectAlphaUrl = $"/api/logo/analyze/auto/{job.Id}/debug/reject_alpha";
-            }
-            if (!string.IsNullOrEmpty(job.RejectLogoYImagePath))
-            {
-                debug.RejectLogoYUrl = $"/api/logo/analyze/auto/{job.Id}/debug/reject_logoy";
-            }
-            if (!string.IsNullOrEmpty(job.RejectMeanDiffImagePath))
-            {
-                debug.RejectMeanDiffUrl = $"/api/logo/analyze/auto/{job.Id}/debug/reject_meandiff";
-            }
-            if (!string.IsNullOrEmpty(job.RejectBgVarImagePath))
-            {
-                debug.RejectBgVarUrl = $"/api/logo/analyze/auto/{job.Id}/debug/reject_bgvar";
-            }
-            if (!string.IsNullOrEmpty(job.RejectExtremeImagePath))
-            {
-                debug.RejectExtremeUrl = $"/api/logo/analyze/auto/{job.Id}/debug/reject_extreme";
-            }
-            if (!string.IsNullOrEmpty(job.RejectConsistencyImagePath))
-            {
-                debug.RejectConsistencyUrl = $"/api/logo/analyze/auto/{job.Id}/debug/reject_consistency";
             }
             if (!string.IsNullOrEmpty(job.AcceptedImagePath))
             {

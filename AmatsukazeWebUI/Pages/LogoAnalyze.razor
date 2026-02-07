@@ -124,7 +124,7 @@ else
         }
     }
 
-    @if (!string.IsNullOrEmpty(_autoScoreImageUrl) || !string.IsNullOrEmpty(_autoScoreRawImageUrl) || !string.IsNullOrEmpty(_autoScoreMedianImageUrl) || !string.IsNullOrEmpty(_autoValidAbImageUrl) || !string.IsNullOrEmpty(_autoBinaryImageUrl) || !string.IsNullOrEmpty(_autoCclImageUrl) || !string.IsNullOrEmpty(_autoCountImageUrl) || !string.IsNullOrEmpty(_autoFrameCountImageUrl) || !string.IsNullOrEmpty(_autoAImageUrl) || !string.IsNullOrEmpty(_autoBImageUrl) || !string.IsNullOrEmpty(_autoAlphaImageUrl) || !string.IsNullOrEmpty(_autoLogoYImageUrl) || !string.IsNullOrEmpty(_autoConsistencyImageUrl) || !string.IsNullOrEmpty(_autoBgVarImageUrl) || !string.IsNullOrEmpty(_autoRejectAlphaImageUrl) || !string.IsNullOrEmpty(_autoRejectLogoYImageUrl) || !string.IsNullOrEmpty(_autoRejectMeanDiffImageUrl) || !string.IsNullOrEmpty(_autoRejectBgVarImageUrl) || !string.IsNullOrEmpty(_autoRejectExtremeImageUrl) || !string.IsNullOrEmpty(_autoRejectConsistencyImageUrl) || !string.IsNullOrEmpty(_autoAcceptedImageUrl) || !string.IsNullOrEmpty(_autoPointCsvUrl))
+    @if (!string.IsNullOrEmpty(_autoScoreImageUrl) || !string.IsNullOrEmpty(_autoBinaryImageUrl) || !string.IsNullOrEmpty(_autoCclImageUrl) || !string.IsNullOrEmpty(_autoCountImageUrl) || !string.IsNullOrEmpty(_autoAImageUrl) || !string.IsNullOrEmpty(_autoBImageUrl) || !string.IsNullOrEmpty(_autoAlphaImageUrl) || !string.IsNullOrEmpty(_autoLogoYImageUrl) || !string.IsNullOrEmpty(_autoConsistencyImageUrl) || !string.IsNullOrEmpty(_autoBgVarImageUrl) || !string.IsNullOrEmpty(_autoAcceptedImageUrl) || !string.IsNullOrEmpty(_autoPointCsvUrl))
     {
         <div class="logo-analyze-result">
             <h4>自動検出デバッグ表示</h4>
@@ -133,27 +133,6 @@ else
                 <div>
                     <div>ロゴ輝度/α計算(final)</div>
                     <img src="@_autoScoreImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoScoreRawImageUrl))
-            {
-                <div>
-                    <div>ロゴ輝度/α計算(raw)</div>
-                    <img src="@_autoScoreRawImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoScoreMedianImageUrl))
-            {
-                <div>
-                    <div>ロゴ輝度/α計算(median)</div>
-                    <img src="@_autoScoreMedianImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoValidAbImageUrl))
-            {
-                <div>
-                    <div>validABマスク</div>
-                    <img src="@_autoValidAbImageUrl" />
                 </div>
             }
             @if (!string.IsNullOrEmpty(_autoBinaryImageUrl))
@@ -175,13 +154,6 @@ else
                 <div>
                     <div>有効サンプル数マップ(count)</div>
                     <img src="@_autoCountImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoFrameCountImageUrl))
-            {
-                <div>
-                    <div>フレームごとの有効サンプル数推移</div>
-                    <img src="@_autoFrameCountImageUrl" />
                 </div>
             }
             @if (!string.IsNullOrEmpty(_autoAImageUrl))
@@ -224,48 +196,6 @@ else
                 <div>
                     <div>背景分散ヒートマップ</div>
                     <img src="@_autoBgVarImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoRejectAlphaImageUrl))
-            {
-                <div>
-                    <div>棄却理由: α範囲外</div>
-                    <img src="@_autoRejectAlphaImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoRejectLogoYImageUrl))
-            {
-                <div>
-                    <div>棄却理由: ロゴ輝度範囲外</div>
-                    <img src="@_autoRejectLogoYImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoRejectMeanDiffImageUrl))
-            {
-                <div>
-                    <div>棄却理由: fg-bg差不一致</div>
-                    <img src="@_autoRejectMeanDiffImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoRejectBgVarImageUrl))
-            {
-                <div>
-                    <div>棄却理由: 背景分散大</div>
-                    <img src="@_autoRejectBgVarImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoRejectExtremeImageUrl))
-            {
-                <div>
-                    <div>棄却理由: 極端コントラスト比率</div>
-                    <img src="@_autoRejectExtremeImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoRejectConsistencyImageUrl))
-            {
-                <div>
-                    <div>棄却理由: 一致度不足</div>
-                    <img src="@_autoRejectConsistencyImageUrl" />
                 </div>
             }
             @if (!string.IsNullOrEmpty(_autoAcceptedImageUrl))
@@ -337,25 +267,15 @@ else
     private int _autoRectW;
     private int _autoRectH;
     private string? _autoScoreImageUrl;
-    private string? _autoScoreRawImageUrl;
-    private string? _autoScoreMedianImageUrl;
-    private string? _autoValidAbImageUrl;
     private string? _autoBinaryImageUrl;
     private string? _autoCclImageUrl;
     private string? _autoCountImageUrl;
-    private string? _autoFrameCountImageUrl;
     private string? _autoAImageUrl;
     private string? _autoBImageUrl;
     private string? _autoAlphaImageUrl;
     private string? _autoLogoYImageUrl;
     private string? _autoConsistencyImageUrl;
     private string? _autoBgVarImageUrl;
-    private string? _autoRejectAlphaImageUrl;
-    private string? _autoRejectLogoYImageUrl;
-    private string? _autoRejectMeanDiffImageUrl;
-    private string? _autoRejectBgVarImageUrl;
-    private string? _autoRejectExtremeImageUrl;
-    private string? _autoRejectConsistencyImageUrl;
     private string? _autoAcceptedImageUrl;
     private string? _autoPointCsvUrl;
     private int _autoDivX = 4;
@@ -574,25 +494,15 @@ else
         _actionMessage = null;
         _error = null;
         _autoScoreImageUrl = null;
-        _autoScoreRawImageUrl = null;
-        _autoScoreMedianImageUrl = null;
-        _autoValidAbImageUrl = null;
         _autoBinaryImageUrl = null;
         _autoCclImageUrl = null;
         _autoCountImageUrl = null;
-        _autoFrameCountImageUrl = null;
         _autoAImageUrl = null;
         _autoBImageUrl = null;
         _autoAlphaImageUrl = null;
         _autoLogoYImageUrl = null;
         _autoConsistencyImageUrl = null;
         _autoBgVarImageUrl = null;
-        _autoRejectAlphaImageUrl = null;
-        _autoRejectLogoYImageUrl = null;
-        _autoRejectMeanDiffImageUrl = null;
-        _autoRejectBgVarImageUrl = null;
-        _autoRejectExtremeImageUrl = null;
-        _autoRejectConsistencyImageUrl = null;
         _autoAcceptedImageUrl = null;
         _autoPointCsvUrl = null;
         if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
@@ -785,25 +695,15 @@ else
         if (status.DebugImages != null)
         {
             _autoScoreImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreUrl) ? null : BuildImageUrl(status.DebugImages.ScoreUrl, true);
-            _autoScoreRawImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreRawUrl) ? null : BuildImageUrl(status.DebugImages.ScoreRawUrl, true);
-            _autoScoreMedianImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreMedianUrl) ? null : BuildImageUrl(status.DebugImages.ScoreMedianUrl, true);
-            _autoValidAbImageUrl = string.IsNullOrEmpty(status.DebugImages.ValidAbUrl) ? null : BuildImageUrl(status.DebugImages.ValidAbUrl, true);
             _autoBinaryImageUrl = string.IsNullOrEmpty(status.DebugImages.BinaryUrl) ? null : BuildImageUrl(status.DebugImages.BinaryUrl, true);
             _autoCclImageUrl = string.IsNullOrEmpty(status.DebugImages.CclUrl) ? null : BuildImageUrl(status.DebugImages.CclUrl, true);
             _autoCountImageUrl = string.IsNullOrEmpty(status.DebugImages.CountUrl) ? null : BuildImageUrl(status.DebugImages.CountUrl, true);
-            _autoFrameCountImageUrl = string.IsNullOrEmpty(status.DebugImages.FrameCountUrl) ? null : BuildImageUrl(status.DebugImages.FrameCountUrl, true);
             _autoAImageUrl = string.IsNullOrEmpty(status.DebugImages.AUrl) ? null : BuildImageUrl(status.DebugImages.AUrl, true);
             _autoBImageUrl = string.IsNullOrEmpty(status.DebugImages.BUrl) ? null : BuildImageUrl(status.DebugImages.BUrl, true);
             _autoAlphaImageUrl = string.IsNullOrEmpty(status.DebugImages.AlphaUrl) ? null : BuildImageUrl(status.DebugImages.AlphaUrl, true);
             _autoLogoYImageUrl = string.IsNullOrEmpty(status.DebugImages.LogoYUrl) ? null : BuildImageUrl(status.DebugImages.LogoYUrl, true);
             _autoConsistencyImageUrl = string.IsNullOrEmpty(status.DebugImages.ConsistencyUrl) ? null : BuildImageUrl(status.DebugImages.ConsistencyUrl, true);
             _autoBgVarImageUrl = string.IsNullOrEmpty(status.DebugImages.BgVarUrl) ? null : BuildImageUrl(status.DebugImages.BgVarUrl, true);
-            _autoRejectAlphaImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectAlphaUrl) ? null : BuildImageUrl(status.DebugImages.RejectAlphaUrl, true);
-            _autoRejectLogoYImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectLogoYUrl) ? null : BuildImageUrl(status.DebugImages.RejectLogoYUrl, true);
-            _autoRejectMeanDiffImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectMeanDiffUrl) ? null : BuildImageUrl(status.DebugImages.RejectMeanDiffUrl, true);
-            _autoRejectBgVarImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectBgVarUrl) ? null : BuildImageUrl(status.DebugImages.RejectBgVarUrl, true);
-            _autoRejectExtremeImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectExtremeUrl) ? null : BuildImageUrl(status.DebugImages.RejectExtremeUrl, true);
-            _autoRejectConsistencyImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectConsistencyUrl) ? null : BuildImageUrl(status.DebugImages.RejectConsistencyUrl, true);
             _autoAcceptedImageUrl = string.IsNullOrEmpty(status.DebugImages.AcceptedUrl) ? null : BuildImageUrl(status.DebugImages.AcceptedUrl, true);
             _autoPointCsvUrl = string.IsNullOrEmpty(status.DebugImages.PointCsvUrl) ? null : BuildImageUrl(status.DebugImages.PointCsvUrl, true);
         }
