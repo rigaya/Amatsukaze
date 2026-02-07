@@ -1390,22 +1390,101 @@ namespace {
             return (maxv - minv) <= threshold;
         };
 
-        float sideSum = 0.0f;
-        int sideCount = 0;
+        constexpr int kSideRetryCount = 1;
+        constexpr int kSideRetryShift = 16;
+        const int baseSx[4] = { x - radius, x - radius, x - radius, x + radius };
+        const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
+        const int sideDx[4] = { 1, 1, 0, 0 };
+        const int sideDy[4] = { 0, 0, 1, 1 };
+        // 上下左右の外側方向オフセット（top/bottom/left/right）
+        const int retryOutX[4] = { 0, 0, -1, 1 };
+        const int retryOutY[4] = { -1, 1, 0, 0 };
+        const int sideLen = radius * 2 + 1;
+
         float sideAvg[4] = {};
         float sideMin[4] = {};
         float sideMax[4] = {};
         uint8_t sideValid[4] = {};
-        sideValid[0] = evalSide(x - radius, y0 - radius, 1, 0, sideAvg[0], sideMin[0], sideMax[0]) ? 1 : 0;
-        sideValid[1] = evalSide(x - radius, y0 + radius, 1, 0, sideAvg[1], sideMin[1], sideMax[1]) ? 1 : 0;
-        sideValid[2] = evalSide(x - radius, y0 - radius, 0, 1, sideAvg[2], sideMin[2], sideMax[2]) ? 1 : 0;
-        sideValid[3] = evalSide(x + radius, y0 - radius, 0, 1, sideAvg[3], sideMin[3], sideMax[3]) ? 1 : 0;
-        for (int i = 0; i < 4; i++) {
-            if (sideValid[i]) {
-                sideSum += sideAvg[i];
-                sideCount++;
+        auto recalcSides = [&]() {
+            int count = 0;
+            float sum = 0.0f;
+            for (int i = 0; i < 4; i++) {
+                if (sideValid[i]) {
+                    sum += sideAvg[i];
+                    count++;
+                }
+            }
+            return std::pair<int, float>(count, sum);
+        };
+        auto selectConsistentSides = [&]() {
+            // 「それぞれ単色な辺」ではなく「同じ背景色に近い辺」を2本以上要求する。
+            // 条件: 辺平均値の差が threshold 以下の辺を同色クラスタとみなす。
+            int bestCount = 0;
+            float bestSum = 0.0f;
+            uint8_t bestMask[4] = {};
+            for (int base = 0; base < 4; base++) {
+                if (!sideValid[base]) continue;
+                uint8_t mask[4] = {};
+                int count = 0;
+                float sum = 0.0f;
+                for (int i = 0; i < 4; i++) {
+                    if (!sideValid[i]) continue;
+                    if (std::abs(sideAvg[i] - sideAvg[base]) <= threshold) {
+                        mask[i] = 1;
+                        count++;
+                        sum += sideAvg[i];
+                    }
+                }
+                if (count > bestCount || (count == bestCount && sum > bestSum)) {
+                    bestCount = count;
+                    bestSum = sum;
+                    for (int i = 0; i < 4; i++) bestMask[i] = mask[i];
+                }
+            }
+            if (bestCount >= 2) {
+                for (int i = 0; i < 4; i++) {
+                    sideValid[i] = bestMask[i];
+                }
+                return std::pair<int, float>(bestCount, bestSum);
+            }
+            return std::pair<int, float>(0, 0.0f);
+        };
+        for (int side = 0; side < 4; side++) {
+            sideValid[side] = evalSide(baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideAvg[side], sideMin[side], sideMax[side]) ? 1 : 0;
+        }
+        auto [sideCount, sideSum] = recalcSides();
+
+        // 1辺しか取れないときの救済:
+        // 大きなロゴの中央では、通常位置の辺がロゴ画素を含んで不一致になりやすい。
+        // そのため一致した辺以外を外側へずらして再評価し、2辺以上確保できれば採用する。
+        if (sideCount == 1) {
+            for (int retry = 0; retry < kSideRetryCount && sideCount < 2; retry++) {
+                const int shift = kSideRetryShift * (retry + 1);
+                for (int side = 0; side < 4; side++) {
+                    if (sideValid[side]) {
+                        continue;
+                    }
+                    const int sx = baseSx[side] + retryOutX[side] * shift;
+                    const int sy = baseSy[side] + retryOutY[side] * shift;
+                    const int ex = sx + sideDx[side] * (sideLen - 1);
+                    const int ey = sy + sideDy[side] * (sideLen - 1);
+                    // 画像範囲外に出る移動はスキップ（仕様どおり）。
+                    if (sx < 0 || sx >= w || sy < 0 || sy >= h || ex < 0 || ex >= w || ey < 0 || ey >= h) {
+                        continue;
+                    }
+                    const bool ok = evalSide(sx, sy, sideDx[side], sideDy[side], sideAvg[side], sideMin[side], sideMax[side]);
+                    sideValid[side] = ok ? 1 : 0;
+                }
+                auto recalc = recalcSides();
+                sideCount = recalc.first;
+                sideSum = recalc.second;
             }
         }
+        // 最終採用条件: 同色クラスタ(sideAvg差 <= threshold)が2辺以上あること。
+        // これにより、異なる背景構造を誤って混ぜるケースを抑える。
+        auto consistent = selectConsistentSides();
+        sideCount = consistent.first;
+        sideSum = consistent.second;
         if (dbg) {
             dbg->sideCount = sideCount;
             for (int i = 0; i < 4; i++) {
@@ -2089,7 +2168,7 @@ namespace {
                             const double consistencyGain = std::max(0.0, std::min(1.0, (consistency - 0.35) / 1.65));
                             const double bgGain = std::max(0.0, std::min(1.0, (0.080 - varBg) / 0.080));
                             const double extremeGain = std::max(0.0, std::min(1.0, 1.0 - extremeRejectRatio));
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.25 + 0.75 * alphaGain) * (0.25 + 0.75 * logoGain) * (0.20 + 0.80 * bgGain) * (0.20 + 0.80 * extremeGain));
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.4 + 0.6 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain));
                             if (d <= 0.0f) continue;
                             mapAccepted[i] = d;
                             score[i] = d;
@@ -2279,10 +2358,9 @@ namespace {
                     if (outBinary[i]) dbg->grownOn++;
                 }
             }
-            // 追加1パス: seedから到達しない low 成分を、近縁かつ高信頼なら昇格する。
-            // 背景: TOKYO のような分離文字が low 側にしか現れないケースの救済。
-            // ここでの「近縁」は、現在の outBinary で得られた領域(anchor)に対して
-            // 距離(gap)と重なり(overlap)の両方で判定する。
+            // seedから到達しない low 成分を、近縁かつ高信頼なら段階的に昇格する。
+            // 背景: 枠線文字など「seedには届かないが、文字列としては近い」成分の救済。
+            // 同一iter内で最大3-hopまで連鎖的に取り込む。
             int anchorMinX = scanw, anchorMinY = scanh, anchorMaxX = -1, anchorMaxY = -1;
             for (int y = 0; y < scanh; y++) {
                 for (int x = 0; x < scanw; x++) {
@@ -2295,13 +2373,53 @@ namespace {
             }
             const bool hasAnchor = (anchorMaxX >= anchorMinX && anchorMaxY >= anchorMinY);
             if (hasAnchor) {
-                const int anchorW = anchorMaxX - anchorMinX + 1;
-                const int anchorH = anchorMaxY - anchorMinY + 1;
+                struct PromoteCompLocal {
+                    int minX = 0;
+                    int minY = 0;
+                    int maxX = -1;
+                    int maxY = -1;
+                    int area = 0;
+                    int compW = 0;
+                    int compH = 0;
+                    float peakScore = 0.0f;
+                    float meanAccepted = 0.0f;
+                    int overlapW = 0;
+                    int overlapH = 0;
+                    int gapX = 0;
+                    int gapY = 0;
+                    int nearHorizontal = 0;
+                    int nearVertical = 0;
+                    int nearDiagonal = 0;
+                    int nearAnchor = 0;
+                    int shapeOk = 0;
+                    int signalOk = 0;
+                    bool promoted = false;
+                    std::vector<int> pixels;
+                };
+
+                const int initAnchorMinX = anchorMinX;
+                const int initAnchorMinY = anchorMinY;
+                const int initAnchorMaxX = anchorMaxX;
+                const int initAnchorMaxY = anchorMaxY;
+                const int initAnchorW = initAnchorMaxX - initAnchorMinX + 1;
+                const int initAnchorH = initAnchorMaxY - initAnchorMinY + 1;
+                const float baseSquare = 80.0f;
+                const float guardRatio = 1.0f / std::sqrt(std::max(initAnchorW, 4) * std::max(initAnchorH, 4) / (baseSquare * baseSquare));
+                const int guardX = std::max(32, (int)std::round(initAnchorW * guardRatio));
+                const int guardY = std::max(20, (int)std::round(initAnchorH * guardRatio));
+                const int initCenterX = (initAnchorMinX + initAnchorMaxX) / 2;
+                const int initCenterY = (initAnchorMinY + initAnchorMaxY) / 2;
+                const int guardHalfW = std::max(1, ((initAnchorMaxX - initAnchorMinX + 1) + guardX * 2) / 2);
+                const int guardHalfH = std::max(1, ((initAnchorMaxY - initAnchorMinY + 1) + guardY * 2) / 2);
+                const int guardMinX = std::max(0, initCenterX - guardHalfW);
+                const int guardMinY = std::max(0, initCenterY - guardHalfH);
+                const int guardMaxX = std::min(scanw - 1, initCenterX + guardHalfW);
+                const int guardMaxY = std::min(scanh - 1, initCenterY + guardHalfH);
+
+                std::vector<PromoteCompLocal> comps;
                 std::vector<uint8_t> visited(scanw * scanh, 0);
                 std::queue<int> q;
-                // lowMask かつ未採用画素を連結成分として列挙。
-                // まず low 成分を塊で見てから採否を決めることで、
-                // 単点ノイズの混入を抑えつつ、文字の飛び地を取り込める。
+                // lowMask かつ未採用画素を連結成分として列挙してから、多段判定する。
                 for (int y = 0; y < scanh; y++) {
                     for (int x = 0; x < scanw; x++) {
                         const int start = x + y * scanw;
@@ -2340,69 +2458,110 @@ namespace {
                         }
                         if (area <= 0) continue;
 
-                        const int compW = maxX - minX + 1;
-                        const int compH = maxY - minY + 1;
-                        const int overlapW = std::max(0, std::min(maxX, anchorMaxX) - std::max(minX, anchorMinX) + 1);
-                        const int overlapH = std::max(0, std::min(maxY, anchorMaxY) - std::max(minY, anchorMinY) + 1);
-                        const int gapX = std::max(0, std::max(minX - anchorMaxX, anchorMinX - maxX));
-                        const int gapY = std::max(0, std::max(minY - anchorMaxY, anchorMinY - maxY));
-                        // nearHorizontal:
-                        //   縦方向は十分重なっていて、横方向のギャップが小さい成分を許可。
-                        //   例) 文字列中の横に離れた文字を取り込む。
-                        const int nearHMin = std::max(2, (int)std::round(std::min(compH, anchorH) * 0.15));
-                        const bool nearHorizontalBase = overlapH >= nearHMin &&
-                            gapX <= std::max(10, (int)std::round(anchorW * 0.42));
-                            // nearVertical:
-                            //   横方向は十分重なっていて、縦方向のギャップが小さい成分を許可。
-                            //   下方向へ広がるノイズを拾いやすいので、gapYは比較的厳しめ。
-                        const bool nearVertical = overlapW >= std::max(2, (int)std::round(std::min(compW, anchorW) * 0.15)) &&
-                            gapY <= std::max(6, (int)std::round(anchorH * 0.30));
-                            // nearDiagonal:
-                            //   斜め近傍は誤検出しやすいため、距離条件は最も厳しめ。
-                        const bool nearDiagonal = gapX <= std::max(6, (int)std::round(anchorW * 0.16)) &&
-                            gapY <= std::max(4, (int)std::round(anchorH * 0.14));
+                        PromoteCompLocal local{};
+                        local.minX = minX;
+                        local.minY = minY;
+                        local.maxX = maxX;
+                        local.maxY = maxY;
+                        local.area = area;
+                        local.compW = maxX - minX + 1;
+                        local.compH = maxY - minY + 1;
+                        local.peakScore = (float)peakScore;
+                        local.meanAccepted = (float)(sumAccepted / std::max(1, area));
+                        local.pixels = std::move(comp);
+                        comps.push_back(std::move(local));
+                    }
+                }
 
-                        const double meanAccepted = sumAccepted / std::max(1, area);
-                        const double aspect = std::max((double)compW / std::max(1, compH), (double)compH / std::max(1, compW));
-                        // shapeOk:
-                        //   小さすぎる点ノイズ/大きすぎる塊を除外し、線状に偏りすぎる成分も除外。
-                        const bool shapeOk = area >= 3 && area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0;
-                        // signalOk:
-                        //   score か accepted のどちらかが一定以上の成分のみ昇格。
-                        //   lowMask だけでは拾いすぎるため、信号条件で下支えする。
-                        const bool signalOk = peakScore >= (double)lowTh * 1.02 || meanAccepted >= 0.11;
-                        // nearAnchor:
-                        //   基本は horizontal / vertical の近縁。
-                        //   diagonal は誤検出しやすいため、さらに強い信号条件を要求。
-                        const bool nearHorizontal = nearHorizontalBase;
-                        const bool nearAnchor = nearHorizontal || nearVertical ||
-                            (nearDiagonal && (peakScore >= (double)lowTh * 1.20 && meanAccepted >= 0.16));
-
-                        // 最終採用条件:
-                        //   近縁 + 形状妥当 + 信号妥当 のAND。
-                        //   どれか1つ欠ける成分は low 側に留め、昇格しない。
-                        const bool accepted = (nearAnchor && shapeOk && signalOk);
-                        promoteCompDebug.push_back(PromoteCompDebug{
-                            iterIndex, highTh, lowTh,
-                            minX, minY, maxX, maxY, area, compW, compH,
-                            overlapW, overlapH, gapX, gapY,
-                            (float)peakScore, (float)meanAccepted,
-                            nearHorizontal ? 1 : 0,
-                            nearVertical ? 1 : 0,
-                            nearDiagonal ? 1 : 0,
-                            nearAnchor ? 1 : 0,
-                            shapeOk ? 1 : 0,
-                            signalOk ? 1 : 0,
-                            accepted ? 1 : 0
-                            });
-                        if (!accepted) continue;
-                        for (const int pix : comp) {
-                            outBinary[pix] = 1;
-                        }
-                        if (dbg != nullptr) {
-                            dbg->promotedOn += area;
+                const int maxPromoteHop = 3;
+                for (int hop = 0; hop < maxPromoteHop; hop++) {
+                    int curAnchorMinX = scanw, curAnchorMinY = scanh, curAnchorMaxX = -1, curAnchorMaxY = -1;
+                    for (int y = 0; y < scanh; y++) {
+                        for (int x = 0; x < scanw; x++) {
+                            if (!outBinary[x + y * scanw]) continue;
+                            curAnchorMinX = std::min(curAnchorMinX, x);
+                            curAnchorMinY = std::min(curAnchorMinY, y);
+                            curAnchorMaxX = std::max(curAnchorMaxX, x);
+                            curAnchorMaxY = std::max(curAnchorMaxY, y);
                         }
                     }
+                    if (curAnchorMaxX < curAnchorMinX || curAnchorMaxY < curAnchorMinY) {
+                        break;
+                    }
+                    const int curAnchorW = curAnchorMaxX - curAnchorMinX + 1;
+                    const int curAnchorH = curAnchorMaxY - curAnchorMinY + 1;
+                    bool anyAccepted = false;
+
+                    for (auto& comp : comps) {
+                        if (comp.promoted) continue;
+
+                        const int overlapW = std::max(0, std::min(comp.maxX, curAnchorMaxX) - std::max(comp.minX, curAnchorMinX) + 1);
+                        const int overlapH = std::max(0, std::min(comp.maxY, curAnchorMaxY) - std::max(comp.minY, curAnchorMinY) + 1);
+                        const int gapX = std::max(0, std::max(comp.minX - curAnchorMaxX, curAnchorMinX - comp.maxX));
+                        const int gapY = std::max(0, std::max(comp.minY - curAnchorMaxY, curAnchorMinY - comp.maxY));
+                        const int nearHMin1 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.15));
+                        const int nearHMin2 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.75));
+                        const bool nearHorizontal = (overlapH >= nearHMin1 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.42)))
+                                                 || (overlapH >= nearHMin2 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.80)));
+                        const bool nearVertical = overlapW >= std::max(2, (int)std::round(std::min(comp.compW, curAnchorW) * 0.15)) &&
+                            gapY <= std::max(6, (int)std::round(curAnchorH * 0.30));
+                        const bool nearDiagonal = gapX <= std::max(6, (int)std::round(curAnchorW * 0.16)) &&
+                            gapY <= std::max(4, (int)std::round(curAnchorH * 0.10));
+                        const bool nearAnchor = nearHorizontal || nearVertical ||
+                            (nearDiagonal && (comp.peakScore >= (float)((double)lowTh * 1.20) && comp.meanAccepted >= 0.16f));
+
+                        const double aspect = std::max((double)comp.compW / std::max(1, comp.compH), (double)comp.compH / std::max(1, comp.compW));
+                        const bool shapeOk = comp.area >= 3 && comp.area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0;
+                        const bool signalOk = comp.peakScore >= (float)((double)lowTh * 1.02) || comp.meanAccepted >= 0.11f;
+
+                        const int insideW = std::max(0, std::min(comp.maxX, guardMaxX) - std::max(comp.minX, guardMinX) + 1);
+                        const int insideH = std::max(0, std::min(comp.maxY, guardMaxY) - std::max(comp.minY, guardMinY) + 1);
+                        const int compArea = std::max(1, comp.compW * comp.compH);
+                        const float insideRatio = (float)(insideW * insideH) / (float)compArea;
+                        const bool insideGuard = (insideW > 0 && insideH > 0) && insideRatio >= 0.72f;
+
+                        comp.overlapW = overlapW;
+                        comp.overlapH = overlapH;
+                        comp.gapX = gapX;
+                        comp.gapY = gapY;
+                        comp.nearHorizontal = nearHorizontal ? 1 : 0;
+                        comp.nearVertical = nearVertical ? 1 : 0;
+                        comp.nearDiagonal = nearDiagonal ? 1 : 0;
+                        comp.nearAnchor = (nearAnchor && insideGuard) ? 1 : 0;
+                        comp.shapeOk = shapeOk ? 1 : 0;
+                        comp.signalOk = signalOk ? 1 : 0;
+
+                        const bool accepted = insideGuard && nearAnchor && shapeOk && signalOk;
+                        if (!accepted) continue;
+                        for (const int pix : comp.pixels) {
+                            outBinary[pix] = 1;
+                        }
+                        comp.promoted = true;
+                        anyAccepted = true;
+                        if (dbg != nullptr) {
+                            dbg->promotedOn += comp.area;
+                        }
+                        promoteCompDebug.push_back(PromoteCompDebug{
+                            iterIndex, highTh, lowTh,
+                            comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
+                            comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
+                            comp.peakScore, comp.meanAccepted,
+                            comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 1
+                            });
+                    }
+                    if (!anyAccepted) {
+                        break;
+                    }
+                }
+                for (const auto& comp : comps) {
+                    if (comp.promoted) continue;
+                    promoteCompDebug.push_back(PromoteCompDebug{
+                        iterIndex, highTh, lowTh,
+                        comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
+                        comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
+                        comp.peakScore, comp.meanAccepted,
+                        comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 0
+                        });
                 }
             }
             // 各反復ステップで帯ノイズを抑制する。
@@ -2483,10 +2642,10 @@ namespace {
         // 背景: scoreがやや低いロゴ文字をlowMaskへ入れたい一方で、
         // highを下げすぎると遠方ノイズがseed化して不安定になりやすい。
         const float lowRelaxMin = std::max(0.0f, std::min(thLow * 0.36f, thHigh * 0.30f));
-        for (int iter = 0; iter < 10; iter++) {
+        for (int iter = 0; iter < 8; iter++) {
             curThHigh = std::max(0.0f, curThHigh * 0.94f);
             // lowは積極的に緩和して連結を促進
-            curThLow = std::max(lowRelaxMin, curThLow * 0.82f);
+            curThLow = std::max(lowRelaxMin, curThLow * 0.86f);
             curThLow = std::min(curThLow, curThHigh * 0.90f);
 
             std::vector<uint8_t> candBinary;
