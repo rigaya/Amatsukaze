@@ -1265,6 +1265,40 @@ namespace {
         }
     }
 
+    static void BilateralFilter(std::vector<float>& dst, const std::vector<float>& src, const int w, const int h, const int radius, const float sigmaSpace, const float sigmaRange) {
+        dst.resize(w * h);
+        const int ksize = radius * 2 + 1;
+        std::vector<float> spatial(ksize * ksize, 0.0f);
+        const float inv2SigmaSpace2 = 1.0f / std::max(1e-6f, 2.0f * sigmaSpace * sigmaSpace);
+        const float inv2SigmaRange2 = 1.0f / std::max(1e-6f, 2.0f * sigmaRange * sigmaRange);
+        for (int dy = -radius; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                const float r2 = (float)(dx * dx + dy * dy);
+                spatial[(dx + radius) + (dy + radius) * ksize] = std::exp(-r2 * inv2SigmaSpace2);
+            }
+        }
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                const float center = src[x + y * w];
+                float wsum = 0.0f;
+                float vsum = 0.0f;
+                for (int dy = -radius; dy <= radius; dy++) {
+                    const int yy = ClampInt(y + dy, 0, h - 1);
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        const int xx = ClampInt(x + dx, 0, w - 1);
+                        const float v = src[xx + yy * w];
+                        const float diff = v - center;
+                        const float rangeW = std::exp(-(diff * diff) * inv2SigmaRange2);
+                        const float ww = spatial[(dx + radius) + (dy + radius) * ksize] * rangeW;
+                        wsum += ww;
+                        vsum += ww * v;
+                    }
+                }
+                dst[x + y * w] = (wsum > 1e-8f) ? (vsum / wsum) : center;
+            }
+        }
+    }
+
     static bool TryGetAB(const AutoDetectStats& s, float& A, float& B) {
         if (s.count < 8) {
             return false;
@@ -1981,11 +2015,12 @@ namespace {
                 }
             }
 
-            // 前処理: 3x3 平滑化で圧縮ノイズ/粒状ノイズを弱める。
+            // 前処理: 輪郭保持を重視して 5x5 バイラテラルフィルタを適用。
             // 背景:
-            //   この後の背景推定(TryEstimateBg)は辺の min/max を見るため、
-            //   細かなノイズを残すと side 判定が不安定になりやすい。
-            BoxFilter3x3(frameWork, frameY, scanw, scanh);
+            //   3x3 平滑化(Box/Median)はロゴ輪郭を削りやすく、scoreが弱くなるケースがあった。
+            //   バイラテラルでノイズを抑えつつエッジを維持する。
+            const float sigmaRange = std::max(6.0f, threshold * 0.6f);
+            BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange);
 
             PointDebugSample sample{};
             sample.frame = readFrames;
@@ -2176,10 +2211,6 @@ namespace {
                     }
                 }
                 });
-
-            std::vector<float> med;
-            MedianFilter3x3(med, score, scanw, scanh);
-            BoxFilter3x3(score, med, scanw, scanh);
 
             double sum = 0.0;
             double sum2 = 0.0;
@@ -2501,14 +2532,14 @@ namespace {
                         const int gapY = std::max(0, std::max(comp.minY - curAnchorMaxY, curAnchorMinY - comp.maxY));
                         const int nearHMin1 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.15));
                         const int nearHMin2 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.75));
-                        const bool nearHorizontal = (overlapH >= nearHMin1 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.42)))
+                        const bool nearHorizontal = (overlapH >= nearHMin1 && gapX <= std::max(6, (int)std::round(curAnchorW * 0.20)))
                                                  || (overlapH >= nearHMin2 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.80)));
-                        const bool nearVertical = overlapW >= std::max(2, (int)std::round(std::min(comp.compW, curAnchorW) * 0.15)) &&
-                            gapY <= std::max(6, (int)std::round(curAnchorH * 0.30));
-                        const bool nearDiagonal = gapX <= std::max(6, (int)std::round(curAnchorW * 0.16)) &&
-                            gapY <= std::max(4, (int)std::round(curAnchorH * 0.10));
+                        const int nearVMin1 = std::max(2, (int)std::round(std::min(comp.compW, curAnchorW) * 0.15));
+                        const bool nearVertical = nearVMin1 && gapY <= std::max(6, (int)std::round(curAnchorH * 0.15));
+                        const bool nearDiagonal = gapX <= std::max(6, (int)std::round(curAnchorW * 0.12)) &&
+                                                  gapY <= std::max(4, (int)std::round(curAnchorH * 0.08));
                         const bool nearAnchor = nearHorizontal || nearVertical ||
-                            (nearDiagonal && (comp.peakScore >= (float)((double)lowTh * 1.20) && comp.meanAccepted >= 0.16f));
+                            (nearDiagonal && (comp.peakScore >= (float)((double)lowTh * 1.50) && comp.meanAccepted >= 0.16f));
 
                         const double aspect = std::max((double)comp.compW / std::max(1, comp.compH), (double)comp.compH / std::max(1, comp.compW));
                         const bool shapeOk = comp.area >= 3 && comp.area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0;
@@ -2642,10 +2673,10 @@ namespace {
         // 背景: scoreがやや低いロゴ文字をlowMaskへ入れたい一方で、
         // highを下げすぎると遠方ノイズがseed化して不安定になりやすい。
         const float lowRelaxMin = std::max(0.0f, std::min(thLow * 0.36f, thHigh * 0.30f));
-        for (int iter = 0; iter < 8; iter++) {
+        for (int iter = 0; iter < 5; iter++) {
             curThHigh = std::max(0.0f, curThHigh * 0.94f);
             // lowは積極的に緩和して連結を促進
-            curThLow = std::max(lowRelaxMin, curThLow * 0.86f);
+            curThLow = std::max(lowRelaxMin, curThLow * 0.90f);
             curThLow = std::min(curThLow, curThHigh * 0.90f);
 
             std::vector<uint8_t> candBinary;
