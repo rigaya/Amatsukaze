@@ -1365,23 +1365,20 @@ namespace {
     // 背景:
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     static bool TryEstimateBg(const std::vector<float>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
-        if (x - radius < 0 || x + radius >= w || y0 - radius < 0 || y0 + radius >= h) {
-            return false;
-        }
-
         // 1辺を走査して「背景として使えるか」を判定するヘルパー。
         // 戻り値 true: 辺内の輝度幅(max-min)が閾値以下で、単色背景とみなせる。
         // 典型的に false になるケース:
         // - 辺上にロゴ線が乗っている
         // - 辺上が映像境界/細かい模様で輝度変動が大きい
+        // 画面端では radius 外にはみ出すため、参照座標は clamp して境界画素を使う。
         auto evalSide = [&](const int sx, const int sy, const int dx, const int dy, float& avg, float& minvOut, float& maxvOut) {
             const int len = radius * 2 + 1;
             float minv = std::numeric_limits<float>::max();
             float maxv = std::numeric_limits<float>::lowest();
             float sum = 0.0f;
             for (int i = 0; i < len; i++) {
-                const int px = sx + dx * i;
-                const int py = sy + dy * i;
+                const int px = ClampInt(sx + dx * i, 0, w - 1);
+                const int py = ClampInt(sy + dy * i, 0, h - 1);
                 const float v = y[px + py * w];
                 minv = std::min(minv, v);
                 maxv = std::max(maxv, v);
@@ -1893,6 +1890,7 @@ namespace {
             const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->data[0]);
             const float maxv = (float)((1 << bitDepth) - 1);
             const float normalize = 255.0f / maxv;
+            constexpr int kEdgeMargin = 8;
 
             // 解析対象は右上ROIのみ。Y(輝度)だけを 8bit 相当に正規化して扱う。
             // 背景:
@@ -1914,7 +1912,7 @@ namespace {
             sample.frame = readFrames;
             const int px = debugAbsX - scanx;
             const int py = debugAbsY - scany;
-            if (px >= radius && px < scanw - radius && py >= radius && py < scanh - radius) {
+            if (px >= kEdgeMargin && px < scanw - kEdgeMargin && py >= kEdgeMargin && py < scanh - kEdgeMargin) {
                 const int off = px + py * scanw;
                 float bg = 0.0f;
                 BgDebugInfo bgdbg{};
@@ -1945,8 +1943,9 @@ namespace {
             // 背景:
             //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
             //   逆にサブサンプリングすると文字部が欠けやすかった。
-            for (int y = radius; y < scanh - radius; y += 1) {
-                for (int x = radius; x < scanw - radius; x += 1) {
+            // ただし端の極近傍は境界影響が強いため、8pxだけ内側から走査する。
+            for (int y = kEdgeMargin; y < scanh - kEdgeMargin; y += 1) {
+                for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x += 1) {
                     float bg = 0.0f;
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                     // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
