@@ -1825,10 +1825,31 @@ namespace {
             int withinInitialGuard;
             int accepted;
         };
+        struct RectMergeDebug {
+            int iter;
+            int minX;
+            int minY;
+            int maxX;
+            int maxY;
+            int area;
+            int overlapW;
+            int overlapH;
+            int gapX;
+            int gapY;
+            int nearHorizontal;
+            int nearVertical;
+            int nearDiagonal;
+            int overlap;
+            int withinSeedCenterGuard;
+            int withinFinalCenterGuard;
+            int sizeGuardOk;
+            int accepted;
+        };
         std::vector<std::vector<uint8_t>> iterBinaryHistory;
         std::vector<IterThresholdDebug> iterThresholdDebug;
         std::vector<PromoteCompDebug> promoteCompDebug;
         std::vector<DeltaCompDebug> deltaCompDebug;
+        std::vector<RectMergeDebug> rectMergeDebug;
         int debugAbsX;
         int debugAbsY;
 
@@ -1849,7 +1870,7 @@ namespace {
             , threadN(std::max(1, threadN))
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2053,6 +2074,26 @@ namespace {
                             d.nearHorizontal, d.nearVertical, d.nearDiagonal, d.nearInitial, d.withinInitialGuard, d.accepted);
                     }
                     fclose(fdelta);
+                }
+            }
+            if (!rectMergeDebug.empty()) {
+                std::string csvPath = binaryPathA;
+                const size_t dot = csvPath.find_last_of('.');
+                if (dot == std::string::npos || dot == 0) {
+                    csvPath += ".rectmerge.csv";
+                } else {
+                    csvPath = csvPath.substr(0, dot) + ".rectmerge.csv";
+                }
+                FILE* frect = fopen(csvPath.c_str(), "w");
+                if (frect != nullptr) {
+                    fprintf(frect, "iter,minX,minY,maxX,maxY,area,overlapW,overlapH,gapX,gapY,nearH,nearV,nearD,overlap,seedGuard,finalGuard,sizeGuard,accepted\n");
+                    for (const auto& d : rectMergeDebug) {
+                        fprintf(frect, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                            d.iter, d.minX, d.minY, d.maxX, d.maxY, d.area, d.overlapW, d.overlapH, d.gapX, d.gapY,
+                            d.nearHorizontal, d.nearVertical, d.nearDiagonal, d.overlap,
+                            d.withinSeedCenterGuard, d.withinFinalCenterGuard, d.sizeGuardOk, d.accepted);
+                    }
+                    fclose(frect);
                 }
             }
         }
@@ -2938,6 +2979,7 @@ namespace {
     // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
     // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
     void AutoDetectLogoReader::runRectStage() {
+        rectMergeDebug.clear();
         std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
@@ -2973,6 +3015,10 @@ namespace {
             int area;
         };
         std::vector<CompCandidate> candidates;
+        // seed選定用の厳格候補(candidates)とは別に、
+        // 枠拡張用としては「binaryで出ている成分」を広く保持する。
+        // 目的: 薄い文字パーツなど、seed判定では落ちる成分も最終枠では取り込めるようにする。
+        std::vector<CompCandidate> mergeCandidates;
         const int minArea = std::max(24, scanw * scanh / 2048);
 
         for (int y = 0; y < scanh; y++) {
@@ -3011,12 +3057,19 @@ namespace {
                         q.push(nidx);
                     }
                 }
-                // 微小成分を除外。単発ノイズや孤立点を候補にしない。
-                if (area < minArea) continue;
                 AutoDetectRect comp{ minX, minY, maxX - minX + 1, maxY - minY + 1 };
                 if (comp.w <= 0 || comp.h <= 0) continue;
                 const double boxArea = (double)comp.w * comp.h;
                 if (boxArea <= 0.0) continue;
+                if (area >= 4) {
+                    mergeCandidates.push_back(CompCandidate{
+                        comp,
+                        0.0,
+                        area
+                        });
+                }
+                // 微小成分を除外。単発ノイズや孤立点を候補にしない。
+                if (area < minArea) continue;
 
                 // 3) 帯状ノイズ抑制: 極端なアスペクト比・低充填率・低コンパクト性を棄却
                 const double aspect = std::max((double)comp.w / std::max(1, comp.h), (double)comp.h / std::max(1, comp.w));
@@ -3120,15 +3173,21 @@ namespace {
 
         // seed成分に近いbinary成分を段階的に結合する。
         // 文字ロゴの分断(文字間の空白)を復元する目的で、横方向の近傍はやや広めに許容。
-        if (hasBest && !candidates.empty()) {
+        if (hasBest && !mergeCandidates.empty()) {
             bool mergedAny = true;
             int mergeIter = 0;
-            while (mergedAny && mergeIter < 6) {
+            // seedの中心からの過剰な逸脱は抑えつつ、近傍の欠落成分は拾う。
+            // 「枠が狭すぎる」問題を緩和するため、拡張時はこの上限内で近傍を結合する。
+            const double bestCx = best.x + best.w * 0.5;
+            const double bestCy = best.y + best.h * 0.5;
+            const double maxCenterDx = std::max(80.0, best.w * 3.2);
+            const double maxCenterDy = std::max(64.0, best.h * 3.2);
+            while (mergedAny && mergeIter < 8) {
                 mergedAny = false;
                 mergeIter++;
-                for (const auto& cand : candidates) {
+                for (const auto& cand : mergeCandidates) {
                     // 極小成分は除外（孤立ノイズ抑制）
-                    if (cand.area < minArea) continue;
+                    if (cand.area < 6) continue;
                     const AutoDetectRect& comp = cand.rect;
                     if (comp.x == finalRect.x && comp.y == finalRect.y && comp.w == finalRect.w && comp.h == finalRect.h) continue;
                     const int ix0 = std::max(finalRect.x, comp.x);
@@ -3139,27 +3198,57 @@ namespace {
                     const int overlapH = std::max(0, iy1 - iy0);
                     const int gapX = std::max(0, std::max(finalRect.x - (comp.x + comp.w), comp.x - (finalRect.x + finalRect.w)));
                     const int gapY = std::max(0, std::max(finalRect.y - (comp.y + comp.h), comp.y - (finalRect.y + finalRect.h)));
-                    const bool nearHorizontal = overlapH >= std::max(2, (int)std::round(std::min(finalRect.h, comp.h) * 0.12)) &&
-                        gapX <= std::max(20, (int)std::round(std::min(finalRect.w, comp.w) * 1.10));
-                    const bool nearVertical = overlapW >= std::max(2, (int)std::round(std::min(finalRect.w, comp.w) * 0.18)) &&
-                        gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 0.65));
-                    const bool nearDiagonal = gapX <= std::max(10, (int)std::round(std::min(finalRect.w, comp.w) * 0.35)) &&
-                        gapY <= std::max(8, (int)std::round(std::min(finalRect.h, comp.h) * 0.35));
+                    const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(finalRect.h, comp.h) * 0.08)) &&
+                        gapX <= std::max(28, (int)std::round(std::min(finalRect.w, comp.w) * 1.30));
+                    const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(finalRect.w, comp.w) * 0.12)) &&
+                        gapY <= std::max(14, (int)std::round(std::min(finalRect.h, comp.h) * 0.85));
+                    const bool nearDiagonal = gapX <= std::max(12, (int)std::round(std::min(finalRect.w, comp.w) * 0.45)) &&
+                        gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 0.45));
                     const bool overlap = (overlapW > 0 && overlapH > 0);
-                    // 重なり or 近傍（横/縦/斜め）でのみ結合。
-                    // 目的: 文字ロゴの分断（文字間ギャップ）を復元しつつ、
-                    // 離れた別成分（無関係ノイズ）を結合しない。
-                    if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) continue;
+                    const double compCx = comp.x + comp.w * 0.5;
+                    const double compCy = comp.y + comp.h * 0.5;
+                    const bool withinSeedCenterGuard =
+                        std::abs(compCx - bestCx) <= maxCenterDx &&
+                        std::abs(compCy - bestCy) <= maxCenterDy;
+                    const double finalCx = finalRect.x + finalRect.w * 0.5;
+                    const double finalCy = finalRect.y + finalRect.h * 0.5;
+                    const double maxFinalDx = std::max(40.0, finalRect.w * 1.45);
+                    const double maxFinalDy = std::max(34.0, finalRect.h * 1.45);
+                    const bool withinFinalCenterGuard =
+                        std::abs(compCx - finalCx) <= maxFinalDx &&
+                        std::abs(compCy - finalCy) <= maxFinalDy;
                     AutoDetectRect mergedRect{
                         std::min(finalRect.x, comp.x),
                         std::min(finalRect.y, comp.y),
                         std::max(finalRect.x + finalRect.w, comp.x + comp.w) - std::min(finalRect.x, comp.x),
                         std::max(finalRect.y + finalRect.h, comp.y + comp.h) - std::min(finalRect.y, comp.y)
                     };
+                    const bool sizeGuardOk =
+                        mergedRect.w <= (int)(scanw * 0.88) &&
+                        mergedRect.h <= (int)(scanh * 0.62);
+                    // 重なり or 近傍（横/縦/斜め）でのみ結合。
+                    // 目的: 文字ロゴの分断（文字間ギャップ）を復元しつつ、
+                    // 離れた別成分（無関係ノイズ）を結合しない。
+                    bool accepted = true;
+                    if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
+                    if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
+                    if (!sizeGuardOk) accepted = false;
+                    rectMergeDebug.push_back(RectMergeDebug{
+                        mergeIter,
+                        comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                        cand.area,
+                        overlapW, overlapH, gapX, gapY,
+                        nearHorizontal ? 1 : 0,
+                        nearVertical ? 1 : 0,
+                        nearDiagonal ? 1 : 0,
+                        overlap ? 1 : 0,
+                        withinSeedCenterGuard ? 1 : 0,
+                        withinFinalCenterGuard ? 1 : 0,
+                        sizeGuardOk ? 1 : 0,
+                        accepted ? 1 : 0
+                    });
+                    if (!accepted) continue;
                     // マージ後サイズの上限。過剰結合で「ほぼ全域」になるのを防止。
-                    if (mergedRect.w > (int)(scanw * 0.88) || mergedRect.h > (int)(scanh * 0.62)) {
-                        continue;
-                    }
                     if (mergedRect.x != finalRect.x || mergedRect.y != finalRect.y || mergedRect.w != finalRect.w || mergedRect.h != finalRect.h) {
                         finalRect = mergedRect;
                         mergedAny = true;
