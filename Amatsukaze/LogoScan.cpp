@@ -1582,17 +1582,18 @@ namespace {
         return true;
     }
 
-    static void RunParallelRange(RGYThreadPool& pool, const int threadN, const int total, const std::function<void(int, int)>& fn) {
+    static void RunParallelRange(RGYThreadPool& pool, const int threadN, const int total, const std::function<void(int, int)>& fn, const int blockSize = 0) {
         const int workers = std::max(1, std::min(threadN, total));
         if (workers <= 1 || total <= 1) {
             fn(0, total);
             return;
         }
         std::vector<std::future<void>> futures;
-        futures.reserve(workers);
-        const int chunk = (total + workers - 1) / workers;
-        for (int worker = 0; worker < workers; worker++) {
-            const int start = worker * chunk;
+        const int chunk = (blockSize > 0) ? blockSize : (total + workers - 1) / workers;
+        const int numTasks = (total + chunk - 1) / chunk;
+        futures.reserve(numTasks);
+        for (int task = 0; task < numTasks; task++) {
+            const int start = task * chunk;
             const int end = std::min(total, start + chunk);
             if (start >= end) {
                 break;
@@ -2079,6 +2080,10 @@ namespace {
             //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
             //   逆にサブサンプリングすると文字部が欠けやすかった。
             // ただし右上端の極近傍は境界影響が強いため、上端/右端だけ16px内側から走査する。
+            // total には「実処理範囲の高さ」(scanh - 2*kEdgeMargin)を渡す。
+            // RunParallelRange から渡される y0/y1 は 0 起点のローカル座標なので、
+            // 実際の走査時に +kEdgeMargin して元の ROI 座標へ戻す。
+            // これにより実処理範囲は従来どおり [kEdgeMargin, scanh-kEdgeMargin) となる。
             RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kEdgeMargin), [&](int y0, int y1) {
                 for (int y = y0 + kEdgeMargin; y < y1 + kEdgeMargin; y++) {
                     for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
@@ -2128,7 +2133,7 @@ namespace {
                     frameCount.fetch_add(1, std::memory_order_relaxed);
                 }
                 }
-                });
+                }, 4);
             return frameCount.load(std::memory_order_relaxed);
         }
 
