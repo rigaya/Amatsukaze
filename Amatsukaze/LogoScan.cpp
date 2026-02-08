@@ -1641,19 +1641,6 @@ namespace {
         return st;
     }
 
-    struct PointDebugSample {
-        int frame;
-        int valid;
-        float fg;
-        float bg;
-        float diff;
-        int sideCount;
-        uint8_t sideValid[4];
-        float sideMin[4];
-        float sideMax[4];
-        float sideAvg[4];
-    };
-
     static void CalcRangeValid(const std::vector<float>& values, const std::vector<uint8_t>& valid, float& minv, float& maxv, const float fallbackMin, const float fallbackMax) {
         minv = std::numeric_limits<float>::max();
         maxv = std::numeric_limits<float>::lowest();
@@ -1712,7 +1699,6 @@ namespace {
         std::vector<float> mapAccepted;
         std::vector<uint8_t> validAB;
         std::vector<int> frameValidCounts;
-        std::vector<PointDebugSample> pointSamples;
         struct IterThresholdDebug {
             float highTh;
             float lowTh;
@@ -1796,7 +1782,7 @@ namespace {
             , threadN(std::max(1, threadN))
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY8(), frameWork8(), frameY16(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), pointSamples(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY8(), frameWork8(), frameY16(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -1811,7 +1797,7 @@ namespace {
             return rectAbs;
         }
 
-        void writeDebug(const tstring& scorePath, const tstring& binaryPath, const tstring& cclPath, const tstring& countPath, const tstring& aPath, const tstring& bPath, const tstring& alphaPath, const tstring& logoYPath, const tstring& consistencyPath, const tstring& bgVarPath, const tstring& acceptedPath, const tstring& pointPath) {
+        void writeDebug(const tstring& scorePath, const tstring& binaryPath, const tstring& cclPath, const tstring& countPath, const tstring& aPath, const tstring& bPath, const tstring& alphaPath, const tstring& logoYPath, const tstring& consistencyPath, const tstring& bgVarPath, const tstring& acceptedPath) {
             if (scanw <= 0 || scanh <= 0) {
                 return;
             }
@@ -1827,7 +1813,6 @@ namespace {
             const std::string consistencyPathA = tchar_to_string(consistencyPath);
             const std::string bgVarPathA = tchar_to_string(bgVarPath);
             const std::string acceptedPathA = tchar_to_string(acceptedPath);
-            const std::string pointPathA = tchar_to_string(pointPath);
 
             float maxScore = 0.0f;
             for (auto v : score) maxScore = std::max(maxScore, v);
@@ -1917,24 +1902,6 @@ namespace {
                 if (off >= (int)mapAccepted.size()) return (uint8_t)0;
                 return (uint8_t)ClampInt((int)std::round(mapAccepted[off] * 255.0f), 0, 255);
             });
-
-            FILE* fp = fopen(pointPathA.c_str(), "w");
-            if (fp != nullptr) {
-                fprintf(fp, "frame,valid,fg,bg,diff,side_count,top_valid,bottom_valid,left_valid,right_valid,top_min,top_max,top_avg,bottom_min,bottom_max,bottom_avg,left_min,left_max,left_avg,right_min,right_max,right_avg,roi_x,roi_y,abs_x,abs_y\n");
-                const int px = debugAbsX - scanx;
-                const int py = debugAbsY - scany;
-                for (const auto& s : pointSamples) {
-                    fprintf(fp, "%d,%d,%.6f,%.6f,%.6f,%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%d,%d,%d,%d\n",
-                        s.frame, s.valid, s.fg, s.bg, s.diff, s.sideCount,
-                        (int)s.sideValid[0], (int)s.sideValid[1], (int)s.sideValid[2], (int)s.sideValid[3],
-                        s.sideMin[0], s.sideMax[0], s.sideAvg[0],
-                        s.sideMin[1], s.sideMax[1], s.sideAvg[1],
-                        s.sideMin[2], s.sideMax[2], s.sideAvg[2],
-                        s.sideMin[3], s.sideMax[3], s.sideAvg[3],
-                        px, py, debugAbsX, debugAbsY);
-                }
-                fclose(fp);
-            }
 
             if (!iterBinaryHistory.empty()) {
                 auto makeIterPath = [&](const std::string& base, const int idx) {
@@ -2099,30 +2066,6 @@ namespace {
             //   バイラテラルでノイズを抑えつつエッジを維持する。
             const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
             BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
-
-            PointDebugSample sample{};
-            sample.frame = readFrames;
-            const int px = debugAbsX - scanx;
-            const int py = debugAbsY - scany;
-            if (px >= kEdgeMargin && px < scanw - kEdgeMargin && py >= kEdgeMargin && py < scanh - kEdgeMargin) {
-                const int off = px + py * scanw;
-                float bg = 0.0f;
-                BgDebugInfo bgdbg{};
-                if (TryEstimateBg(frameWork, scanw, scanh, px, py, radius, thresholdRaw, bg, &bgdbg)) {
-                    sample.valid = 1;
-                    sample.fg = (float)frameWork[off] * invMaxv;
-                    sample.bg = bg * invMaxv;
-                    sample.diff = sample.fg - sample.bg;
-                }
-                sample.sideCount = bgdbg.sideCount;
-                for (int i = 0; i < 4; i++) {
-                    sample.sideValid[i] = bgdbg.sideValid[i];
-                    sample.sideMin[i] = bgdbg.sideMin[i] * invMaxv;
-                    sample.sideMax[i] = bgdbg.sideMax[i] * invMaxv;
-                    sample.sideAvg[i] = bgdbg.sideAvg[i] * invMaxv;
-                }
-            }
-            pointSamples.push_back(sample);
 
             std::atomic<int> frameCount(0);
             // 同一点の重複サンプル抑制閾値。
@@ -3231,7 +3174,7 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH,
-    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath, const tchar* pointPath,
+    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, cb);
     try {
@@ -3240,14 +3183,14 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outY) *outY = rect.y;
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
-        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath && pointPath) {
-            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, pointPath);
+        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath) {
+            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath);
         }
         return true;
     } catch (const Exception& exception) {
-        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath && pointPath) {
+        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath) {
             try {
-                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, pointPath);
+                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath);
             } catch (...) {
             }
         }

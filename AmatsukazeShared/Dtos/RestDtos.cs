@@ -623,7 +623,6 @@ namespace Amatsukaze.Shared
         public string? ConsistencyUrl { get; set; }
         public string? BgVarUrl { get; set; }
         public string? AcceptedUrl { get; set; }
-        public string? PointCsvUrl { get; set; }
     }
 
     public class LogoAutoDetectStatus

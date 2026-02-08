@@ -43,7 +43,6 @@ namespace Amatsukaze.Server.Rest
         public string ConsistencyImagePath { get; set; }
         public string BgVarImagePath { get; set; }
         public string AcceptedImagePath { get; set; }
-        public string PointCsvPath { get; set; }
     }
 
     public class LogoAnalyzeService
@@ -232,18 +231,10 @@ namespace Amatsukaze.Server.Rest
             {
                 path = job.AcceptedImagePath;
             }
-            else if (string.Equals(kind, "point", StringComparison.OrdinalIgnoreCase))
-            {
-                path = job.PointCsvPath;
-            }
 
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {
                 return null;
-            }
-            if (string.Equals(kind, "point", StringComparison.OrdinalIgnoreCase))
-            {
-                return File.ReadAllBytes(path);
             }
             try
             {
@@ -381,7 +372,6 @@ namespace Amatsukaze.Server.Rest
                     var consistencyPath = Path.Combine(baseWork, $"logo-auto-consistency-{job.Id}.bmp");
                     var bgVarPath = Path.Combine(baseWork, $"logo-auto-bgvar-{job.Id}.bmp");
                     var acceptedPath = Path.Combine(baseWork, $"logo-auto-accepted-{job.Id}.bmp");
-                    var pointPath = Path.Combine(baseWork, $"logo-auto-point-{job.Id}.csv");
                     job.ScoreImagePath = scorePath;
                     job.BinaryImagePath = binaryPath;
                     job.CclImagePath = cclPath;
@@ -393,7 +383,6 @@ namespace Amatsukaze.Server.Rest
                     job.ConsistencyImagePath = consistencyPath;
                     job.BgVarImagePath = bgVarPath;
                     job.AcceptedImagePath = acceptedPath;
-                    job.PointCsvPath = pointPath;
 
                     int x = 0;
                     int y = 0;
@@ -403,7 +392,7 @@ namespace Amatsukaze.Server.Rest
                         ctx, filePath, serviceId,
                         request.DivX, request.DivY, request.SearchFrames, request.BlockSize, request.Threshold,
                         request.MarginX, request.MarginY, request.ThreadN,
-                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, pointPath,
+                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath,
                         (stage, stageProgress, progress, nread, total) =>
                         {
                             job.Stage = stage;
@@ -601,10 +590,6 @@ namespace Amatsukaze.Server.Rest
             if (!string.IsNullOrEmpty(job.AcceptedImagePath))
             {
                 debug.AcceptedUrl = $"/api/logo/analyze/auto/{job.Id}/debug/accepted";
-            }
-            if (!string.IsNullOrEmpty(job.PointCsvPath))
-            {
-                debug.PointCsvUrl = $"/api/logo/analyze/auto/{job.Id}/debug/point";
             }
 
             return new LogoAutoDetectStatus()

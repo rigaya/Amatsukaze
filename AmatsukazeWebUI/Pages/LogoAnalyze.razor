@@ -124,7 +124,7 @@ else
         }
     }
 
-    @if (!string.IsNullOrEmpty(_autoScoreImageUrl) || !string.IsNullOrEmpty(_autoBinaryImageUrl) || !string.IsNullOrEmpty(_autoCclImageUrl) || !string.IsNullOrEmpty(_autoCountImageUrl) || !string.IsNullOrEmpty(_autoAImageUrl) || !string.IsNullOrEmpty(_autoBImageUrl) || !string.IsNullOrEmpty(_autoAlphaImageUrl) || !string.IsNullOrEmpty(_autoLogoYImageUrl) || !string.IsNullOrEmpty(_autoConsistencyImageUrl) || !string.IsNullOrEmpty(_autoBgVarImageUrl) || !string.IsNullOrEmpty(_autoAcceptedImageUrl) || !string.IsNullOrEmpty(_autoPointCsvUrl))
+    @if (!string.IsNullOrEmpty(_autoScoreImageUrl) || !string.IsNullOrEmpty(_autoBinaryImageUrl) || !string.IsNullOrEmpty(_autoCclImageUrl) || !string.IsNullOrEmpty(_autoCountImageUrl) || !string.IsNullOrEmpty(_autoAImageUrl) || !string.IsNullOrEmpty(_autoBImageUrl) || !string.IsNullOrEmpty(_autoAlphaImageUrl) || !string.IsNullOrEmpty(_autoLogoYImageUrl) || !string.IsNullOrEmpty(_autoConsistencyImageUrl) || !string.IsNullOrEmpty(_autoBgVarImageUrl) || !string.IsNullOrEmpty(_autoAcceptedImageUrl))
     {
         <div class="logo-analyze-result">
             <h4>自動検出デバッグ表示</h4>
@@ -205,12 +205,6 @@ else
                     <img src="@_autoAcceptedImageUrl" />
                 </div>
             }
-            @if (!string.IsNullOrEmpty(_autoPointCsvUrl))
-            {
-                <div>
-                    <a href="@_autoPointCsvUrl" target="_blank">デバッグCSV (x=1380, y=67)</a>
-                </div>
-            }
         </div>
     }
 
@@ -277,7 +271,6 @@ else
     private string? _autoConsistencyImageUrl;
     private string? _autoBgVarImageUrl;
     private string? _autoAcceptedImageUrl;
-    private string? _autoPointCsvUrl;
     private int _autoDivX = 4;
     private int _autoDivY = 4;
     private int _autoSearchFrames = 20000;
@@ -504,7 +497,6 @@ else
         _autoConsistencyImageUrl = null;
         _autoBgVarImageUrl = null;
         _autoAcceptedImageUrl = null;
-        _autoPointCsvUrl = null;
         if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
         {
             _error = "queueItemId is required.";
@@ -705,7 +697,6 @@ else
             _autoConsistencyImageUrl = string.IsNullOrEmpty(status.DebugImages.ConsistencyUrl) ? null : BuildImageUrl(status.DebugImages.ConsistencyUrl, true);
             _autoBgVarImageUrl = string.IsNullOrEmpty(status.DebugImages.BgVarUrl) ? null : BuildImageUrl(status.DebugImages.BgVarUrl, true);
             _autoAcceptedImageUrl = string.IsNullOrEmpty(status.DebugImages.AcceptedUrl) ? null : BuildImageUrl(status.DebugImages.AcceptedUrl, true);
-            _autoPointCsvUrl = string.IsNullOrEmpty(status.DebugImages.PointCsvUrl) ? null : BuildImageUrl(status.DebugImages.PointCsvUrl, true);
         }
     }
 
