@@ -1375,9 +1375,10 @@ namespace {
     }
 
     static bool IsExtremeContrastSample(const double fg, const double bg) {
-        static const double kDiffThreshold = 0.25;
-        static const double kBlack = 20.0 / 255.0;
-        static const double kWhite = 230.0 / 255.0;
+        static const double kDiffThreshold = 0.20;
+        // Y は 16-235 の範囲であることが前提
+        static const double kBlack = 25.0 / 255.0;
+        static const double kWhite = 225.0 / 255.0;
         const double diff = std::abs(fg - bg);
         if (diff < kDiffThreshold) {
             return false;
