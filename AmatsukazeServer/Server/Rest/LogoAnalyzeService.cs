@@ -43,6 +43,7 @@ namespace Amatsukaze.Server.Rest
         public string ConsistencyImagePath { get; set; }
         public string BgVarImagePath { get; set; }
         public string AcceptedImagePath { get; set; }
+        public bool DetailedDebug { get; set; }
     }
 
     public class LogoAnalyzeService
@@ -161,7 +162,8 @@ namespace Amatsukaze.Server.Rest
                 Id = Guid.NewGuid().ToString("N"),
                 Stage = 1,
                 StageProgress = 0,
-                Progress = 0
+                Progress = 0,
+                DetailedDebug = request.DetailedDebug
             };
             autoJobs[job.Id] = job;
             Task.Run(() => RunAutoDetectJob(job, request, item.SrcPath, item.ServiceId));
@@ -364,14 +366,14 @@ namespace Amatsukaze.Server.Rest
                     var scorePath = Path.Combine(baseWork, $"logo-auto-score-{job.Id}.bmp");
                     var binaryPath = Path.Combine(baseWork, $"logo-auto-binary-{job.Id}.bmp");
                     var cclPath = Path.Combine(baseWork, $"logo-auto-ccl-{job.Id}.bmp");
-                    var countPath = Path.Combine(baseWork, $"logo-auto-count-{job.Id}.bmp");
-                    var aPath = Path.Combine(baseWork, $"logo-auto-a-{job.Id}.bmp");
-                    var bPath = Path.Combine(baseWork, $"logo-auto-b-{job.Id}.bmp");
-                    var alphaPath = Path.Combine(baseWork, $"logo-auto-alpha-{job.Id}.bmp");
-                    var logoYPath = Path.Combine(baseWork, $"logo-auto-logoy-{job.Id}.bmp");
-                    var consistencyPath = Path.Combine(baseWork, $"logo-auto-consistency-{job.Id}.bmp");
-                    var bgVarPath = Path.Combine(baseWork, $"logo-auto-bgvar-{job.Id}.bmp");
-                    var acceptedPath = Path.Combine(baseWork, $"logo-auto-accepted-{job.Id}.bmp");
+                    var countPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-count-{job.Id}.bmp") : null;
+                    var aPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-a-{job.Id}.bmp") : null;
+                    var bPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-b-{job.Id}.bmp") : null;
+                    var alphaPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-alpha-{job.Id}.bmp") : null;
+                    var logoYPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-logoy-{job.Id}.bmp") : null;
+                    var consistencyPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-consistency-{job.Id}.bmp") : null;
+                    var bgVarPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-bgvar-{job.Id}.bmp") : null;
+                    var acceptedPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-accepted-{job.Id}.bmp") : null;
                     job.ScoreImagePath = scorePath;
                     job.BinaryImagePath = binaryPath;
                     job.CclImagePath = cclPath;
@@ -393,6 +395,7 @@ namespace Amatsukaze.Server.Rest
                         request.DivX, request.DivY, request.SearchFrames, request.BlockSize, request.Threshold,
                         request.MarginX, request.MarginY, request.ThreadN,
                         scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath,
+                        request.DetailedDebug,
                         (stage, stageProgress, progress, nread, total) =>
                         {
                             job.Stage = stage;

@@ -1736,6 +1736,7 @@ namespace {
         const int marginX;
         const int marginY;
         const int threadN;
+        const bool detailedDebug;
         logo::LOGO_AUTODETECT_CB cb;
         RGYThreadPool threadPool;
 
@@ -1857,7 +1858,7 @@ namespace {
         AutoDetectRect rectLocal;
 
     public:
-        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, logo::LOGO_AUTODETECT_CB cb)
+        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
             : SimpleVideoReader(ctx)
             , serviceid(serviceid)
             , divx(std::max(1, divx))
@@ -1868,6 +1869,7 @@ namespace {
             , marginX(std::max(0, marginX))
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
+            , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
@@ -1885,111 +1887,137 @@ namespace {
             return rectAbs;
         }
 
-        void writeDebug(const tstring& scorePath, const tstring& binaryPath, const tstring& cclPath, const tstring& countPath, const tstring& aPath, const tstring& bPath, const tstring& alphaPath, const tstring& logoYPath, const tstring& consistencyPath, const tstring& bgVarPath, const tstring& acceptedPath) {
+        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath) {
             if (scanw <= 0 || scanh <= 0) {
                 return;
             }
 
-            const std::string scorePathA = tchar_to_string(scorePath);
-            const std::string binaryPathA = tchar_to_string(binaryPath);
-            const std::string cclPathA = tchar_to_string(cclPath);
-            const std::string countPathA = tchar_to_string(countPath);
-            const std::string aPathA = tchar_to_string(aPath);
-            const std::string bPathA = tchar_to_string(bPath);
-            const std::string alphaPathA = tchar_to_string(alphaPath);
-            const std::string logoYPathA = tchar_to_string(logoYPath);
-            const std::string consistencyPathA = tchar_to_string(consistencyPath);
-            const std::string bgVarPathA = tchar_to_string(bgVarPath);
-            const std::string acceptedPathA = tchar_to_string(acceptedPath);
+            const std::string scorePathA = (scorePath != nullptr) ? tchar_to_string(scorePath) : std::string();
+            const std::string binaryPathA = (binaryPath != nullptr) ? tchar_to_string(binaryPath) : std::string();
+            const std::string cclPathA = (cclPath != nullptr) ? tchar_to_string(cclPath) : std::string();
+            const std::string countPathA = (countPath != nullptr) ? tchar_to_string(countPath) : std::string();
+            const std::string aPathA = (aPath != nullptr) ? tchar_to_string(aPath) : std::string();
+            const std::string bPathA = (bPath != nullptr) ? tchar_to_string(bPath) : std::string();
+            const std::string alphaPathA = (alphaPath != nullptr) ? tchar_to_string(alphaPath) : std::string();
+            const std::string logoYPathA = (logoYPath != nullptr) ? tchar_to_string(logoYPath) : std::string();
+            const std::string consistencyPathA = (consistencyPath != nullptr) ? tchar_to_string(consistencyPath) : std::string();
+            const std::string bgVarPathA = (bgVarPath != nullptr) ? tchar_to_string(bgVarPath) : std::string();
+            const std::string acceptedPathA = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
 
             float maxScore = 0.0f;
             for (auto v : score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
 
-            WriteGrayBitmap(scorePathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                const float v = (off < (int)score.size()) ? score[off] : 0.0f;
-                return (uint8_t)ClampInt((int)std::round(v / maxScore * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(binaryPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                return (off < (int)binary.size() && binary[off]) ? 255 : 0;
-            });
-            WriteGrayBitmap(cclPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                const bool hasRect = rectLocal.w > 0 && rectLocal.h > 0;
-                const bool onBorder = hasRect && (x == rectLocal.x || x == rectLocal.x + rectLocal.w - 1 || y == rectLocal.y || y == rectLocal.h + rectLocal.y - 1);
-                if (onBorder) return (uint8_t)255;
-                return (off < (int)binary.size() && binary[off]) ? (uint8_t)190 : (uint8_t)24;
-            });
+            if (!scorePathA.empty()) {
+                WriteGrayBitmap(scorePathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.size()) ? score[off] : 0.0f;
+                    return (uint8_t)ClampInt((int)std::round(v / maxScore * 255.0f), 0, 255);
+                });
+            }
+            if (!binaryPathA.empty()) {
+                WriteGrayBitmap(binaryPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    return (off < (int)binary.size() && binary[off]) ? 255 : 0;
+                });
+            }
+            if (!cclPathA.empty()) {
+                WriteGrayBitmap(cclPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const bool hasRect = rectLocal.w > 0 && rectLocal.h > 0;
+                    const bool onBorder = hasRect && (x == rectLocal.x || x == rectLocal.x + rectLocal.w - 1 || y == rectLocal.y || y == rectLocal.h + rectLocal.y - 1);
+                    if (onBorder) return (uint8_t)255;
+                    return (off < (int)binary.size() && binary[off]) ? (uint8_t)190 : (uint8_t)24;
+                });
+            }
+
+            if (!detailedDebug) {
+                return;
+            }
 
             int maxCount = 0;
             for (const auto& s : stats) {
                 maxCount = std::max(maxCount, s.count);
             }
             if (maxCount <= 0) maxCount = 1;
-            WriteGrayBitmap(countPathA, scanw, scanh, [&](int x, int y) {
-                const int c = stats[x + y * scanw].count;
-                return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
-            });
+            if (!countPathA.empty()) {
+                WriteGrayBitmap(countPathA, scanw, scanh, [&](int x, int y) {
+                    const int c = stats[x + y * scanw].count;
+                    return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
+                });
+            }
 
             float aMin, aMax, bMin, bMax;
             CalcRangeValid(mapA, validAB, aMin, aMax, 0.8f, 1.2f);
             CalcRangeValid(mapB, validAB, bMin, bMax, -0.2f, 0.2f);
-            WriteGrayBitmap(aPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapA.size()) {
-                    return (uint8_t)0;
-                }
-                const float t = (mapA[off] - aMin) / (aMax - aMin);
-                return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(bPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapB.size()) {
-                    return (uint8_t)0;
-                }
-                const float t = (mapB[off] - bMin) / (bMax - bMin);
-                return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(alphaPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapAlpha.size()) {
-                    return (uint8_t)0;
-                }
-                return (uint8_t)ClampInt((int)std::round(mapAlpha[off] * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(logoYPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapLogoY.size()) {
-                    return (uint8_t)0;
-                }
-                return (uint8_t)ClampInt((int)std::round(mapLogoY[off] * 255.0f), 0, 255);
-            });
+            if (!aPathA.empty()) {
+                WriteGrayBitmap(aPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapA.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapA[off] - aMin) / (aMax - aMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!bPathA.empty()) {
+                WriteGrayBitmap(bPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapB.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapB[off] - bMin) / (bMax - bMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!alphaPathA.empty()) {
+                WriteGrayBitmap(alphaPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapAlpha.size()) {
+                        return (uint8_t)0;
+                    }
+                    return (uint8_t)ClampInt((int)std::round(mapAlpha[off] * 255.0f), 0, 255);
+                });
+            }
+            if (!logoYPathA.empty()) {
+                WriteGrayBitmap(logoYPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapLogoY.size()) {
+                        return (uint8_t)0;
+                    }
+                    return (uint8_t)ClampInt((int)std::round(mapLogoY[off] * 255.0f), 0, 255);
+                });
+            }
             float csMin, csMax, bgvMin, bgvMax;
             CalcRangeValid(mapConsistency, validAB, csMin, csMax, 0.0f, 2.0f);
             CalcRangeValid(mapBgVar, validAB, bgvMin, bgvMax, 0.0f, 0.02f);
-            WriteGrayBitmap(consistencyPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapConsistency.size()) {
-                    return (uint8_t)0;
-                }
-                const float t = (mapConsistency[off] - csMin) / (csMax - csMin);
-                return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(bgVarPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapBgVar.size()) {
-                    return (uint8_t)0;
-                }
-                const float t = (mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
-                return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-            });
-            WriteGrayBitmap(acceptedPathA, scanw, scanh, [&](int x, int y) {
-                const int off = x + y * scanw;
-                if (off >= (int)mapAccepted.size()) return (uint8_t)0;
-                return (uint8_t)ClampInt((int)std::round(mapAccepted[off] * 255.0f), 0, 255);
-            });
+            if (!consistencyPathA.empty()) {
+                WriteGrayBitmap(consistencyPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapConsistency.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapConsistency[off] - csMin) / (csMax - csMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!bgVarPathA.empty()) {
+                WriteGrayBitmap(bgVarPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapBgVar.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!acceptedPathA.empty()) {
+                WriteGrayBitmap(acceptedPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)mapAccepted.size()) return (uint8_t)0;
+                    return (uint8_t)ClampInt((int)std::round(mapAccepted[off] * 255.0f), 0, 255);
+                });
+            }
 
             if (!iterBinaryHistory.empty()) {
                 auto makeIterPath = [&](const std::string& base, const int idx) {
@@ -2684,27 +2712,31 @@ namespace {
                         if (dbg != nullptr) {
                             dbg->promotedOn += comp.area;
                         }
-                        promoteCompDebug.push_back(PromoteCompDebug{
-                            iterIndex, highTh, lowTh,
-                            comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
-                            comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
-                            comp.peakScore, comp.meanAccepted,
-                            comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 1
-                            });
+                        if (detailedDebug) {
+                            promoteCompDebug.push_back(PromoteCompDebug{
+                                iterIndex, highTh, lowTh,
+                                comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
+                                comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
+                                comp.peakScore, comp.meanAccepted,
+                                comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 1
+                                });
+                        }
                     }
                     if (!anyAccepted) {
                         break;
                     }
                 }
-                for (const auto& comp : comps) {
-                    if (comp.promoted) continue;
-                    promoteCompDebug.push_back(PromoteCompDebug{
-                        iterIndex, highTh, lowTh,
-                        comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
-                        comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
-                        comp.peakScore, comp.meanAccepted,
-                        comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 0
-                        });
+                if (detailedDebug) {
+                    for (const auto& comp : comps) {
+                        if (comp.promoted) continue;
+                        promoteCompDebug.push_back(PromoteCompDebug{
+                            iterIndex, highTh, lowTh,
+                            comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
+                            comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
+                            comp.peakScore, comp.meanAccepted,
+                            comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 0
+                            });
+                    }
                 }
             }
         };
@@ -2728,12 +2760,16 @@ namespace {
 
         // 初回2値化（基準となる「最初の領域」）
         BuildBinaryDiag baseDiag{};
-        promoteCompDebug.clear();
-        deltaCompDebug.clear();
+        if (detailedDebug) {
+            promoteCompDebug.clear();
+            deltaCompDebug.clear();
+        }
         buildBinaryFromThreshold(0, thHigh, thLow, binary, &baseDiag);
         std::vector<uint8_t> acceptedBinary = binary;
-        iterBinaryHistory.clear();
-        iterThresholdDebug.clear();
+        if (detailedDebug) {
+            iterBinaryHistory.clear();
+            iterThresholdDebug.clear();
+        }
         auto countBinaryOn = [&](const std::vector<uint8_t>& mask) {
             int c = 0;
             for (const auto v : mask) {
@@ -2741,12 +2777,14 @@ namespace {
             }
             return c;
         };
-        iterBinaryHistory.push_back(acceptedBinary);
-        iterThresholdDebug.push_back(IterThresholdDebug{
-            thHigh, thLow,
-            baseDiag.seedOn, baseDiag.lowOn, baseDiag.grownOn, baseDiag.promotedOn,
-            0, 0, 0, countBinaryOn(acceptedBinary), 0
-            });
+        if (detailedDebug) {
+            iterBinaryHistory.push_back(acceptedBinary);
+            iterThresholdDebug.push_back(IterThresholdDebug{
+                thHigh, thLow,
+                baseDiag.seedOn, baseDiag.lowOn, baseDiag.grownOn, baseDiag.promotedOn,
+                0, 0, 0, countBinaryOn(acceptedBinary), 0
+                });
+        }
 
         int initMinX = 0, initMinY = 0, initMaxX = -1, initMaxY = -1;
         const bool hasInitRect = getMaskRect(binary, initMinX, initMinY, initMaxX, initMaxY);
@@ -2782,22 +2820,26 @@ namespace {
             // 増えていない場合はさらに緩和を継続。
             if (newCount <= 0) {
                 acceptedBinary.swap(candBinary);
-                iterBinaryHistory.push_back(acceptedBinary);
-                iterThresholdDebug.push_back(IterThresholdDebug{
-                    curThHigh, curThLow,
-                    stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                    newCount, 0, 0, countBinaryOn(acceptedBinary), 2
-                    });
+                if (detailedDebug) {
+                    iterBinaryHistory.push_back(acceptedBinary);
+                    iterThresholdDebug.push_back(IterThresholdDebug{
+                        curThHigh, curThLow,
+                        stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
+                        newCount, 0, 0, countBinaryOn(acceptedBinary), 2
+                        });
+                }
                 continue;
             }
             if (!hasInitRect) {
                 acceptedBinary.swap(candBinary);
-                iterBinaryHistory.push_back(acceptedBinary);
-                iterThresholdDebug.push_back(IterThresholdDebug{
-                    curThHigh, curThLow,
-                    stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                    newCount, 0, 0, countBinaryOn(acceptedBinary), 0
-                    });
+                if (detailedDebug) {
+                    iterBinaryHistory.push_back(acceptedBinary);
+                    iterThresholdDebug.push_back(IterThresholdDebug{
+                        curThHigh, curThLow,
+                        stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
+                        newCount, 0, 0, countBinaryOn(acceptedBinary), 0
+                        });
+                }
                 continue;
             }
 
@@ -2896,17 +2938,19 @@ namespace {
                     const bool withinInitialGuard =
                         (insideW > 0 && insideH > 0) && insideRatio >= 0.72f;
                     const bool deltaAccepted = nearInitial && withinInitialGuard;
-                    deltaCompDebug.push_back(DeltaCompDebug{
-                        iter + 1, curThHigh, curThLow,
-                        minX, minY, maxX, maxY, compW, compH,
-                        overlapW, overlapH, gapX, gapY,
-                        nearHorizontal ? 1 : 0,
-                        nearVertical ? 1 : 0,
-                        nearDiagonal ? 1 : 0,
-                        nearInitial ? 1 : 0,
-                        withinInitialGuard ? 1 : 0,
-                        deltaAccepted ? 1 : 0
-                        });
+                    if (detailedDebug) {
+                        deltaCompDebug.push_back(DeltaCompDebug{
+                            iter + 1, curThHigh, curThLow,
+                            minX, minY, maxX, maxY, compW, compH,
+                            overlapW, overlapH, gapX, gapY,
+                            nearHorizontal ? 1 : 0,
+                            nearVertical ? 1 : 0,
+                            nearDiagonal ? 1 : 0,
+                            nearInitial ? 1 : 0,
+                            withinInitialGuard ? 1 : 0,
+                            deltaAccepted ? 1 : 0
+                            });
+                    }
                     if (nearInitial && withinInitialGuard) {
                         hasNearDelta = true;
                         nearCompCount++;
@@ -2922,22 +2966,26 @@ namespace {
             }
             // 遠方成分しか増えなかったら前回結果で確定。
             if (hasFarDelta && !hasNearDelta) {
-                iterBinaryHistory.push_back(acceptedBinary);
-                iterThresholdDebug.push_back(IterThresholdDebug{
-                    curThHigh, curThLow,
-                    stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                    newCount, nearCompCount, farCompCount, countBinaryOn(acceptedBinary), 1
-                    });
+                if (detailedDebug) {
+                    iterBinaryHistory.push_back(acceptedBinary);
+                    iterThresholdDebug.push_back(IterThresholdDebug{
+                        curThHigh, curThLow,
+                        stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
+                        newCount, nearCompCount, farCompCount, countBinaryOn(acceptedBinary), 1
+                        });
+                }
                 break;
             }
             // 近縁成分は採用し、遠方成分だけ除外して次反復へ進む。
             acceptedBinary.swap(filteredBinary);
-            iterBinaryHistory.push_back(acceptedBinary);
-            iterThresholdDebug.push_back(IterThresholdDebug{
-                curThHigh, curThLow,
-                stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                newCount, nearCompCount, farCompCount, countBinaryOn(acceptedBinary), 0
-                });
+            if (detailedDebug) {
+                iterBinaryHistory.push_back(acceptedBinary);
+                iterThresholdDebug.push_back(IterThresholdDebug{
+                    curThHigh, curThLow,
+                    stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
+                    newCount, nearCompCount, farCompCount, countBinaryOn(acceptedBinary), 0
+                    });
+            }
         }
         binary.swap(acceptedBinary);
 
@@ -2979,7 +3027,9 @@ namespace {
     // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
     // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
     void AutoDetectLogoReader::runRectStage() {
-        rectMergeDebug.clear();
+        if (detailedDebug) {
+            rectMergeDebug.clear();
+        }
         std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
@@ -3233,20 +3283,22 @@ namespace {
                     if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
                     if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
                     if (!sizeGuardOk) accepted = false;
-                    rectMergeDebug.push_back(RectMergeDebug{
-                        mergeIter,
-                        comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
-                        cand.area,
-                        overlapW, overlapH, gapX, gapY,
-                        nearHorizontal ? 1 : 0,
-                        nearVertical ? 1 : 0,
-                        nearDiagonal ? 1 : 0,
-                        overlap ? 1 : 0,
-                        withinSeedCenterGuard ? 1 : 0,
-                        withinFinalCenterGuard ? 1 : 0,
-                        sizeGuardOk ? 1 : 0,
-                        accepted ? 1 : 0
-                    });
+                    if (detailedDebug) {
+                        rectMergeDebug.push_back(RectMergeDebug{
+                            mergeIter,
+                            comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                            cand.area,
+                            overlapW, overlapH, gapX, gapY,
+                            nearHorizontal ? 1 : 0,
+                            nearVertical ? 1 : 0,
+                            nearDiagonal ? 1 : 0,
+                            overlap ? 1 : 0,
+                            withinSeedCenterGuard ? 1 : 0,
+                            withinFinalCenterGuard ? 1 : 0,
+                            sizeGuardOk ? 1 : 0,
+                            accepted ? 1 : 0
+                        });
+                    }
                     if (!accepted) continue;
                     // マージ後サイズの上限。過剰結合で「ほぼ全域」になるのを防止。
                     if (mergedRect.x != finalRect.x || mergedRect.y != finalRect.y || mergedRect.w != finalRect.w || mergedRect.h != finalRect.h) {
@@ -3315,20 +3367,21 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath,
+    int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
-    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, cb);
+    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;
         if (outY) *outY = rect.y;
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
-        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath) {
+        if (scorePath && binaryPath && cclPath) {
             reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath);
         }
         return true;
     } catch (const Exception& exception) {
-        if (scorePath && binaryPath && cclPath && countPath && aPath && bPath && alphaPath && logoYPath && consistencyPath && bgVarPath && acceptedPath) {
+        if (scorePath && binaryPath && cclPath) {
             try {
                 reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath);
             } catch (...) {

@@ -66,6 +66,10 @@ else
             <input type="number" min="0" @bind="_autoMarginY" style="width:72px;" />
             <label>thread_n:</label>
             <input type="number" min="1" @bind="_autoThreadN" style="width:72px;" />
+            <label style="margin-left:8px;">
+                <input type="checkbox" @bind="_autoDetailedDebug" />
+                詳細デバッグ出力
+            </label>
         </div>
 
     @if (_analyzing || _lastStatus != null)
@@ -278,6 +282,7 @@ else
     private int _autoMarginX = 4;
     private int _autoMarginY = 4;
     private int _autoThreadN = Math.Min(4, Environment.ProcessorCount);
+    private bool _autoDetailedDebug = false;
     private static readonly TimeSpan InitialLoadTimeout = TimeSpan.FromSeconds(30);
 
     protected override async Task OnInitializedAsync()
@@ -513,7 +518,8 @@ else
             Threshold = _threshold,
             MarginX = _autoMarginX,
             MarginY = _autoMarginY,
-            ThreadN = _autoThreadN
+            ThreadN = _autoThreadN,
+            DetailedDebug = _autoDetailedDebug
         };
 
         var res = await Api.StartLogoAutoDetectAsync(req);

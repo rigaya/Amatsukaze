@@ -600,6 +600,7 @@ namespace Amatsukaze.Shared
         public int MarginX { get; set; } = 4;
         public int MarginY { get; set; } = 4;
         public int ThreadN { get; set; } = 1;
+        public bool DetailedDebug { get; set; } = false;
     }
 
     public class LogoRect
