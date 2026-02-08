@@ -1421,6 +1421,184 @@ namespace {
         float sideAvg[4];
     };
 
+    // TryEstimateBg 内で使う作業状態をまとめた構造体。
+    // sideValid は「単色判定に通ったか」、sideEvaluated は「評価済みか」を保持する。
+    // firstSide は最初に有効だった辺で、以降の評価順(反対側を最後)を決める起点になる。
+    template<typename pixel_t>
+    struct TryEstimateBgState {
+        float sideAvg[4] = {};
+        pixel_t sideMin[4] = {};
+        pixel_t sideMax[4] = {};
+        uint8_t sideValid[4] = {};
+        uint8_t sideEvaluated[4] = {};
+        int sideCount = 0;
+        float sideSum = 0.0f;
+        int firstSide = -1;
+    };
+
+    // 1辺分の画素列を評価し、平均/最小/最大を返す。
+    // max-min が threshold 以下なら「近い色(ほぼ単色)」として true を返す。
+    // 範囲外を含む場合は clamp 参照で安全に評価する。
+    template<typename pixel_t>
+    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+        pixel_t minv = std::numeric_limits<pixel_t>::max();
+        pixel_t maxv = std::numeric_limits<pixel_t>::lowest();
+        int sum = 0;
+        const int ex = sx + dx * (sideLen - 1);
+        const int ey = sy + dy * (sideLen - 1);
+        const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
+        if (inRange) {
+            const pixel_t* ptr = &y[sx + sy * w];
+            const int step = dx + dy * w;
+            for (int i = 0; i < sideLen; i++, ptr += step) {
+                const pixel_t v = *ptr;
+                minv = std::min(minv, v);
+                maxv = std::max(maxv, v);
+                sum += v;
+            }
+        } else {
+            for (int i = 0; i < sideLen; i++) {
+                const int px = ClampInt(sx + dx * i, 0, w - 1);
+                const int py = ClampInt(sy + dy * i, 0, h - 1);
+                const pixel_t v = y[px + py * w];
+                minv = std::min(minv, v);
+                maxv = std::max(maxv, v);
+                sum += v;
+            }
+        }
+        avg = (float)sum / sideLen;
+        minvOut = minv;
+        maxvOut = maxv;
+        return ((float)maxv - (float)minv) <= threshold;
+    }
+
+    // 指定辺の「基準位置」での評価を実施する。
+    // 既評価なら再計算せずキャッシュ結果(sideValid)を返す。
+    template<typename pixel_t>
+    static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+        if (st.sideEvaluated[side]) {
+            return st.sideValid[side] != 0;
+        }
+        const bool ok = TryEstimateBgEvalSide(y, w, h, baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side]);
+        st.sideEvaluated[side] = 1;
+        st.sideValid[side] = ok ? 1 : 0;
+        return ok;
+    }
+
+    // firstSide と指定 side の平均輝度差が閾値以内なら「同じ近い色の2辺」とみなして確定する。
+    // 確定時は有効辺を2辺に絞り、sideCount/sideSum を確定値に更新する。
+    template<typename pixel_t>
+    static bool TryEstimateBgTryPairWithFirst(const int side, const float threshold, TryEstimateBgState<pixel_t>& st) {
+        if (st.firstSide < 0 || !st.sideValid[side]) {
+            return false;
+        }
+        if (std::abs(st.sideAvg[side] - st.sideAvg[st.firstSide]) > threshold) {
+            return false;
+        }
+        for (int i = 0; i < 4; i++) {
+            st.sideValid[i] = (i == st.firstSide || i == side) ? 1 : 0;
+        }
+        st.sideCount = 2;
+        st.sideSum = st.sideAvg[st.firstSide] + st.sideAvg[side];
+        return true;
+    }
+
+    // firstSide が決まった後の評価順を作る。
+    // ルール: firstSide の反対側は最後に回し、残り2辺を先に試す。
+    // 通常時・救済時の両方で同じ順序規則を使う。
+    static void TryEstimateBgBuildRetryOrder(const int firstSide, int order[3]) {
+        static constexpr int opposite[4] = { 1, 0, 3, 2 };
+        int idx = 0;
+        for (int side = 0; side < 4; side++) {
+            if (side == firstSide || side == opposite[firstSide]) {
+                continue;
+            }
+            order[idx++] = side;
+        }
+        order[2] = opposite[firstSide];
+    }
+
+    // firstSide 決定後、基準位置のまま残り3辺を評価して 2辺一致を探す。
+    // 評価順は TryEstimateBgBuildRetryOrder に従う。
+    template<typename pixel_t>
+    static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+        int order[3] = {};
+        TryEstimateBgBuildRetryOrder(st.firstSide, order);
+        for (int i = 0; i < 3; i++) {
+            const int side = order[i];
+            if (!TryEstimateBgEvalBaseSide(y, w, h, side, baseSx, baseSy, sideDx, sideDy, sideLen, threshold, st)) {
+                continue;
+            }
+            if (TryEstimateBgTryPairWithFirst(side, threshold, st)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 通常時の探索。
+    // 最初の有効辺は「上→下→左→右」の順で決定し、その後は共通ルールで残り辺を評価する。
+    template<typename pixel_t>
+    static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+        // 通常時は 上 -> 下 -> 左 -> 右 の順で最初の有効辺を探す。
+        // 最初の有効辺が見つかったら、以後は「反対側を最後」に回して2辺一致を探索する。
+        const int initialOrder[4] = { 0, 1, 2, 3 };
+        for (int i = 0; i < 4; i++) {
+            const int side = initialOrder[i];
+            if (!TryEstimateBgEvalBaseSide(y, w, h, side, baseSx, baseSy, sideDx, sideDy, sideLen, threshold, st)) {
+                continue;
+            }
+            st.firstSide = side;
+            return TryEstimateBgTryRemainingBase(y, w, h, baseSx, baseSy, sideDx, sideDy, sideLen, threshold, st);
+        }
+        return false;
+    }
+
+    // 1辺しか取れない場合の救済探索。
+    // firstSide 以外の辺を外側にシフトして再評価し、2辺一致を探す。
+    // 評価順は通常時と同じ規則(反対側を最後)を使う。
+    template<typename pixel_t>
+    static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const float threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
+        constexpr int kSideRetryCount = 1;
+        constexpr int kSideRetryShift = 16;
+        int order[3] = {};
+        TryEstimateBgBuildRetryOrder(st.firstSide, order);
+        for (int retry = 0; retry < kSideRetryCount; retry++) {
+            const int shift = kSideRetryShift * (retry + 1);
+            for (int i = 0; i < 3; i++) {
+                const int side = order[i];
+                const int sx = baseSx[side] + retryOutX[side] * shift;
+                const int sy = baseSy[side] + retryOutY[side] * shift;
+                const int ex = sx + sideDx[side] * (sideLen - 1);
+                const int ey = sy + sideDy[side] * (sideLen - 1);
+                if (sx < 0 || sx >= w || sy < 0 || sy >= h || ex < 0 || ex >= w || ey < 0 || ey >= h) {
+                    continue;
+                }
+                const bool ok = TryEstimateBgEvalSide(y, w, h, sx, sy, sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side]);
+                st.sideEvaluated[side] = 1;
+                st.sideValid[side] = ok ? 1 : 0;
+                if (ok && TryEstimateBgTryPairWithFirst(side, threshold, st)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // pair が確定できなかったときの後処理。
+    // その時点で有効だった辺を集計し、sideCount/sideSum を算出する。
+    template<typename pixel_t>
+    static void TryEstimateBgFinalizeSideStats(TryEstimateBgState<pixel_t>& st) {
+        st.sideCount = 0;
+        st.sideSum = 0.0f;
+        for (int i = 0; i < 4; i++) {
+            if (st.sideValid[i]) {
+                st.sideCount++;
+                st.sideSum += st.sideAvg[i];
+            }
+        }
+    }
+
     // 画素(x, y0)の背景輝度を、周辺ブロック外周4辺から推定する。
     // 方針:
     // - 半径radiusの正方ブロックを取り、その外周(上/下/左/右)を候補として評価
@@ -1430,47 +1608,6 @@ namespace {
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     template<typename pixel_t>
     static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
-        // 1辺を走査して「背景として使えるか」を判定するヘルパー。
-        // 戻り値 true: 辺内の輝度幅(max-min)が閾値以下で、単色背景とみなせる。
-        // 典型的に false になるケース:
-        // - 辺上にロゴ線が乗っている
-        // - 辺上が映像境界/細かい模様で輝度変動が大きい
-        // 画面端では radius 外にはみ出すため、参照座標は clamp して境界画素を使う。
-        auto evalSide = [&](const int sx, const int sy, const int dx, const int dy, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
-            const int len = radius * 2 + 1;
-            pixel_t minv = std::numeric_limits<pixel_t>::max();
-            pixel_t maxv = std::numeric_limits<pixel_t>::lowest();
-            int sum = 0;
-            const int ex = sx + dx * (len - 1);
-            const int ey = sy + dy * (len - 1);
-            const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
-            if (inRange) {
-                const pixel_t* ptr = &y[sx + sy * w];
-                const int step = dx + dy * w;
-                for (int i = 0; i < len; i++, ptr += step) {
-                    const pixel_t v = *ptr;
-                    minv = std::min(minv, v);
-                    maxv = std::max(maxv, v);
-                    sum += v;
-                }
-            } else {
-                for (int i = 0; i < len; i++) {
-                    const int px = ClampInt(sx + dx * i, 0, w - 1);
-                    const int py = ClampInt(sy + dy * i, 0, h - 1);
-                    const pixel_t v = y[px + py * w];
-                    minv = std::min(minv, v);
-                    maxv = std::max(maxv, v);
-                    sum += v;
-                }
-            }
-            avg = (float)sum / len;
-            minvOut = minv;
-            maxvOut = maxv;
-            return ((float)maxv - (float)minv) <= threshold;
-        };
-
-        constexpr int kSideRetryCount = 1;
-        constexpr int kSideRetryShift = 16;
         const int baseSx[4] = { x - radius, x - radius, x - radius, x + radius };
         const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
         const int sideDx[4] = { 1, 1, 0, 0 };
@@ -1480,105 +1617,32 @@ namespace {
         const int retryOutY[4] = { -1, 1, 0, 0 };
         const int sideLen = radius * 2 + 1;
 
-        float sideAvg[4] = {};
-        pixel_t sideMin[4] = {};
-        pixel_t sideMax[4] = {};
-        uint8_t sideValid[4] = {};
-        auto recalcSides = [&]() {
-            int count = 0;
-            float sum = 0.0f;
-            for (int i = 0; i < 4; i++) {
-                if (sideValid[i]) {
-                    sum += sideAvg[i];
-                    count++;
-                }
-            }
-            return std::pair<int, float>(count, sum);
-        };
-        auto selectConsistentSides = [&]() {
-            // 「それぞれ単色な辺」ではなく「同じ背景色に近い辺」を2本以上要求する。
-            // 条件: 辺平均値の差が threshold 以下の辺を同色クラスタとみなす。
-            int bestCount = 0;
-            float bestSum = 0.0f;
-            uint8_t bestMask[4] = {};
-            for (int base = 0; base < 4; base++) {
-                if (!sideValid[base]) continue;
-                uint8_t mask[4] = {};
-                int count = 0;
-                float sum = 0.0f;
-                for (int i = 0; i < 4; i++) {
-                    if (!sideValid[i]) continue;
-                    if (std::abs(sideAvg[i] - sideAvg[base]) <= threshold) {
-                        mask[i] = 1;
-                        count++;
-                        sum += sideAvg[i];
-                    }
-                }
-                if (count > bestCount || (count == bestCount && sum > bestSum)) {
-                    bestCount = count;
-                    bestSum = sum;
-                    for (int i = 0; i < 4; i++) bestMask[i] = mask[i];
-                }
-            }
-            if (bestCount >= 2) {
-                for (int i = 0; i < 4; i++) {
-                    sideValid[i] = bestMask[i];
-                }
-                return std::pair<int, float>(bestCount, bestSum);
-            }
-            return std::pair<int, float>(0, 0.0f);
-        };
-        for (int side = 0; side < 4; side++) {
-            sideValid[side] = evalSide(baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideAvg[side], sideMin[side], sideMax[side]) ? 1 : 0;
+        TryEstimateBgState<pixel_t> st;
+        bool pairFound = TryEstimateBgFindInitialPair(y, w, h, baseSx, baseSy, sideDx, sideDy, sideLen, threshold, st);
+        if (!pairFound && st.firstSide >= 0) {
+            // 1辺しか取れないときの救済:
+            // 最初の1辺を基準に、反対側を最後にする順で非基準辺を外側へ移動して再評価する。
+            pairFound = TryEstimateBgFindRetryPair(y, w, h, sideLen, threshold, baseSx, baseSy, sideDx, sideDy, retryOutX, retryOutY, st);
         }
-        auto [sideCount, sideSum] = recalcSides();
+        if (!pairFound) {
+            TryEstimateBgFinalizeSideStats(st);
+        }
 
-        // 1辺しか取れないときの救済:
-        // 大きなロゴの中央では、通常位置の辺がロゴ画素を含んで不一致になりやすい。
-        // そのため一致した辺以外を外側へずらして再評価し、2辺以上確保できれば採用する。
-        if (sideCount == 1) {
-            for (int retry = 0; retry < kSideRetryCount && sideCount < 2; retry++) {
-                const int shift = kSideRetryShift * (retry + 1);
-                for (int side = 0; side < 4; side++) {
-                    if (sideValid[side]) {
-                        continue;
-                    }
-                    const int sx = baseSx[side] + retryOutX[side] * shift;
-                    const int sy = baseSy[side] + retryOutY[side] * shift;
-                    const int ex = sx + sideDx[side] * (sideLen - 1);
-                    const int ey = sy + sideDy[side] * (sideLen - 1);
-                    // 画像範囲外に出る移動はスキップ（仕様どおり）。
-                    if (sx < 0 || sx >= w || sy < 0 || sy >= h || ex < 0 || ex >= w || ey < 0 || ey >= h) {
-                        continue;
-                    }
-                    const bool ok = evalSide(sx, sy, sideDx[side], sideDy[side], sideAvg[side], sideMin[side], sideMax[side]);
-                    sideValid[side] = ok ? 1 : 0;
-                }
-                auto recalc = recalcSides();
-                sideCount = recalc.first;
-                sideSum = recalc.second;
-            }
-        }
-        // 最終採用条件: 同色クラスタ(sideAvg差 <= threshold)が2辺以上あること。
-        // これにより、異なる背景構造を誤って混ぜるケースを抑える。
-        auto consistent = selectConsistentSides();
-        sideCount = consistent.first;
-        sideSum = consistent.second;
         if (dbg) {
-            dbg->sideCount = sideCount;
+            dbg->sideCount = st.sideCount;
             for (int i = 0; i < 4; i++) {
-                dbg->sideValid[i] = sideValid[i];
-                dbg->sideMin[i] = (float)sideMin[i];
-                dbg->sideMax[i] = (float)sideMax[i];
-                dbg->sideAvg[i] = sideAvg[i];
+                dbg->sideValid[i] = st.sideValid[i];
+                dbg->sideMin[i] = (float)st.sideMin[i];
+                dbg->sideMax[i] = (float)st.sideMax[i];
+                dbg->sideAvg[i] = st.sideAvg[i];
             }
         }
 
-        if (sideCount < 2) {
+        if (st.sideCount < 2) {
             return false;
         }
 
-        bg = sideSum / sideCount;
+        bg = st.sideSum / st.sideCount;
         return true;
     }
 
