@@ -16,8 +16,10 @@
 #include <numeric>
 #include <limits>
 #include <type_traits>
+#include <atomic>
 #include <cstring>
 #include "zlib.h"
+#include "rgy_thread_pool.h"
 
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
     for (int x = 0; x < logowidth; x++) {
@@ -1268,7 +1270,7 @@ namespace {
     }
 
     template<typename pixel_t>
-    static void BilateralFilter(std::vector<pixel_t>& dst, const std::vector<pixel_t>& src, const int w, const int h, const int radius, const float sigmaSpace, const float sigmaRange, const pixel_t maxv) {
+    static void BilateralFilter(std::vector<pixel_t>& dst, const std::vector<pixel_t>& src, const int w, const int h, const int radius, const float sigmaSpace, const float sigmaRange, const pixel_t maxv, RGYThreadPool* pool = nullptr, const int threadN = 1) {
         dst.resize(w * h);
         const int ksize = radius * 2 + 1;
         std::vector<float> spatial(ksize * ksize, 0.0f);
@@ -1280,29 +1282,50 @@ namespace {
                 spatial[(dx + radius) + (dy + radius) * ksize] = std::exp(-r2 * inv2SigmaSpace2);
             }
         }
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                const int center = src[x + y * w];
-                float wsum = 0.0f;
-                float vsum = 0.0f;
-                const float* srow = spatial.data();
-                for (int dy = -radius; dy <= radius; dy++) {
-                    const int yy = ClampInt(y + dy, 0, h - 1);
-                    const float* sw = srow;
-                    for (int dx = -radius; dx <= radius; dx++) {
-                        const int xx = ClampInt(x + dx, 0, w - 1);
-                        const int v = src[xx + yy * w];
-                        const float diff = (float)(v - center);
-                        const float rangeW = std::exp(-(diff * diff) * inv2SigmaRange2);
-                        const float ww = (*sw++) * rangeW;
-                        wsum += ww;
-                        vsum += ww * v;
+        auto filterRange = [&](const int y0, const int y1) {
+            for (int y = y0; y < y1; y++) {
+                for (int x = 0; x < w; x++) {
+                    const int center = src[x + y * w];
+                    float wsum = 0.0f;
+                    float vsum = 0.0f;
+                    const float* srow = spatial.data();
+                    for (int dy = -radius; dy <= radius; dy++) {
+                        const int yy = ClampInt(y + dy, 0, h - 1);
+                        const float* sw = srow;
+                        for (int dx = -radius; dx <= radius; dx++) {
+                            const int xx = ClampInt(x + dx, 0, w - 1);
+                            const int v = src[xx + yy * w];
+                            const float diff = (float)(v - center);
+                            const float rangeW = std::exp(-(diff * diff) * inv2SigmaRange2);
+                            const float ww = (*sw++) * rangeW;
+                            wsum += ww;
+                            vsum += ww * v;
+                        }
+                        srow += ksize;
                     }
-                    srow += ksize;
+                    const float outv = (wsum > 1e-8f) ? (vsum / wsum) : (float)center;
+                    dst[x + y * w] = (pixel_t)ClampInt((int)(outv + 0.5f), 0, maxv);
                 }
-                const float outv = (wsum > 1e-8f) ? (vsum / wsum) : (float)center;
-                dst[x + y * w] = (pixel_t)ClampInt((int)(outv + 0.5f), 0, maxv);
             }
+        };
+        if (pool == nullptr || threadN <= 1 || h <= 1) {
+            filterRange(0, h);
+            return;
+        }
+        const int workers = std::max(1, std::min(threadN, h));
+        const int chunk = (h + workers - 1) / workers;
+        std::vector<std::future<void>> futures;
+        futures.reserve(workers);
+        for (int worker = 0; worker < workers; worker++) {
+            const int start = worker * chunk;
+            const int end = std::min(h, start + chunk);
+            if (start >= end) break;
+            futures.push_back(pool->enqueue([&filterRange, start, end]() {
+                filterRange(start, end);
+            }));
+        }
+        for (auto& f : futures) {
+            f.get();
         }
     }
 
@@ -1559,14 +1582,14 @@ namespace {
         return true;
     }
 
-    static void RunParallelRange(const int threadN, const int total, const std::function<void(int, int)>& fn) {
+    static void RunParallelRange(RGYThreadPool& pool, const int threadN, const int total, const std::function<void(int, int)>& fn) {
         const int workers = std::max(1, std::min(threadN, total));
         if (workers <= 1 || total <= 1) {
             fn(0, total);
             return;
         }
-        std::vector<std::thread> threads;
-        threads.reserve(workers);
+        std::vector<std::future<void>> futures;
+        futures.reserve(workers);
         const int chunk = (total + workers - 1) / workers;
         for (int worker = 0; worker < workers; worker++) {
             const int start = worker * chunk;
@@ -1574,12 +1597,12 @@ namespace {
             if (start >= end) {
                 break;
             }
-            threads.emplace_back([&fn, start, end]() {
+            futures.push_back(pool.enqueue([&fn, start, end]() {
                 fn(start, end);
-            });
+            }));
         }
-        for (auto& th : threads) {
-            th.join();
+        for (auto& f : futures) {
+            f.get();
         }
     }
 
@@ -1658,6 +1681,7 @@ namespace {
         const int marginY;
         const int threadN;
         logo::LOGO_AUTODETECT_CB cb;
+        RGYThreadPool threadPool;
 
         int imgw;
         int imgh;
@@ -1771,6 +1795,7 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , cb(cb)
+            , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY8(), frameWork8(), frameY16(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), pointSamples(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
@@ -2073,7 +2098,7 @@ namespace {
             //   3x3 平滑化(Box/Median)はロゴ輪郭を削りやすく、scoreが弱くなるケースがあった。
             //   バイラテラルでノイズを抑えつつエッジを維持する。
             const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
-            BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange, maxv);
+            BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
 
             PointDebugSample sample{};
             sample.frame = readFrames;
@@ -2099,7 +2124,7 @@ namespace {
             }
             pointSamples.push_back(sample);
 
-            int frameCount = 0;
+            std::atomic<int> frameCount(0);
             // 同一点の重複サンプル抑制閾値。
             // 背景:
             //   レターボックス等で「ほぼ同じ fg/bg 組」が大量登録されると、
@@ -2111,8 +2136,9 @@ namespace {
             //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
             //   逆にサブサンプリングすると文字部が欠けやすかった。
             // ただし右上端の極近傍は境界影響が強いため、上端/右端だけ16px内側から走査する。
-            for (int y = kEdgeMargin; y < scanh - kEdgeMargin; y++) {
-                for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
+            RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kEdgeMargin), [&](int y0, int y1) {
+                for (int y = y0 + kEdgeMargin; y < y1 + kEdgeMargin; y++) {
+                    for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
                     const int off = x + y * scanw;
                     const float fgRaw = (float)frameWork[off];
                     if (off < (int)lastSampleValid.size() && lastSampleValid[off]) {
@@ -2156,10 +2182,11 @@ namespace {
                         lastSampleValid[off] = 1;
                     }
                     // このフレームで有効だった画素数（デバッグ可視化用）。
-                    frameCount++;
+                    frameCount.fetch_add(1, std::memory_order_relaxed);
                 }
-            }
-            return frameCount;
+                }
+                });
+            return frameCount.load(std::memory_order_relaxed);
         }
 
         /* virtual */ bool onFrame(AVFrame* frame) override {
@@ -2216,7 +2243,7 @@ namespace {
             mapConsistency.assign(scanw * scanh, 0.0f);
             mapBgVar.assign(scanw * scanh, 0.0f);
             mapAccepted.assign(scanw * scanh, 0.0f);
-            RunParallelRange(threadN, scanh, [&](int y0, int y1) {
+            RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
                     for (int x = 0; x < scanw; x++) {
                         const int i = x + y * scanw;
@@ -2386,7 +2413,7 @@ namespace {
         auto buildBinaryFromThreshold = [&](const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg) {
             std::vector<uint8_t> seed(scanw * scanh, 0);
             std::vector<uint8_t> lowMask(scanw * scanh, 0);
-            RunParallelRange(threadN, scanh, [&](int y0, int y1) {
+            RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
                     for (int x = 0; x < scanw; x++) {
                         const int off = x + y * scanw;
