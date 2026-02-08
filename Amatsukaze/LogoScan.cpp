@@ -2113,30 +2113,27 @@ namespace {
             // ただし右上端の極近傍は境界影響が強いため、上端/右端だけ16px内側から走査する。
             for (int y = kEdgeMargin; y < scanh - kEdgeMargin; y++) {
                 for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
+                    const int off = x + y * scanw;
+                    const float fgRaw = (float)frameWork[off];
+                    if (off < (int)lastSampleValid.size() && lastSampleValid[off]) {
+                        // 重複抑制を先に行い、TryEstimateBgの呼び出し回数を削減して高速化する。
+                        if (std::abs(lastSampleFg[off] - fgRaw) <= dedupThreshold) {
+                            continue;
+                        }
+                    }
+
                     float bg = 0.0f;
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                     // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
                     if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
                         continue;
                     }
-                    const int off = x + y * scanw;
                     AutoDetectStats& s = stats[off];
                     s.totalCandidates++;
                     const double f = (double)frameWork[off] * invMaxv;
                     const double b = (double)bg * invMaxv;
 
-                    const float fgRaw = (float)frameWork[off];
                     const float bgRaw = bg;
-                    if (off < (int)lastSampleValid.size() && lastSampleValid[off]) {
-                        // 重複抑制:
-                        // 直近採用 fg と今回 fg がほぼ同じなら追加しない。
-                        // 背景:
-                        //   同一背景構造が続くと同じサンプルが大量に溜まり、
-                        //   ロゴ以外(帯・境界)の寄与が相対的に強くなるため。
-                        if (std::abs(lastSampleFg[off] - fgRaw) <= dedupThreshold) {
-                            continue;
-                        }
-                    }
 
                     // 極端コントラスト点を棄却。
                     // 具体例:
@@ -2256,7 +2253,7 @@ namespace {
                             const double consistencyGain = std::max(0.0, std::min(1.0, (consistency - 0.35) / 1.65));
                             const double bgGain = std::max(0.0, std::min(1.0, (0.080 - varBg) / 0.080));
                             const double extremeGain = std::max(0.0, std::min(1.0, 1.0 - extremeRejectRatio));
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.4 + 0.6 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain));
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain));
                             if (d <= 0.0f) continue;
                             mapAccepted[i] = d;
                             score[i] = d;
@@ -2646,30 +2643,6 @@ namespace {
                         comp.peakScore, comp.meanAccepted,
                         comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 0
                         });
-                }
-            }
-            // 各反復ステップで帯ノイズを抑制する。
-            // 反復後にまとめて抑制すると、delta判定時に帯が「近縁成分」に見えて
-            // 閾値緩和を止める原因になるため、ここで毎回同条件に揃える。
-            std::vector<int> rowOn(scanh, 0);
-            for (int y = 0; y < scanh; y++) {
-                int c = 0;
-                for (int x = 0; x < scanw; x++) {
-                    if (outBinary[x + y * scanw]) c++;
-                }
-                rowOn[y] = c;
-            }
-            for (int y = 0; y < scanh; y++) {
-                const double rowRatio = (double)rowOn[y] / std::max(1, scanw);
-                if (rowRatio < 0.42) continue;
-                for (int x = 0; x < scanw; x++) {
-                    const int off = x + y * scanw;
-                    if (!outBinary[off]) continue;
-                    const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[off] - 0.30) / 1.70));
-                    const double keepSignal = mapAccepted[off] * 0.60 + mapAlpha[off] * 0.25 + consistencyNorm * 0.15;
-                    if (keepSignal < 0.22) {
-                        outBinary[off] = 0;
-                    }
                 }
             }
         };
