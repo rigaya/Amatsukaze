@@ -1269,11 +1269,12 @@ namespace {
         }
     }
 
-    template<typename pixel_t>
-    static void BilateralFilter(std::vector<pixel_t>& dst, const std::vector<pixel_t>& src, const int w, const int h, const int radius, const float sigmaSpace, const float sigmaRange, const pixel_t maxv, RGYThreadPool* pool = nullptr, const int threadN = 1) {
+    template<typename pixel_t, int radius>
+    static void BilateralFilter(std::vector<pixel_t>& dst, const pixel_t* srcBase, const int srcPitch, const int w, const int h, const float sigmaSpace, const float sigmaRange, const pixel_t maxv, RGYThreadPool* pool = nullptr, const int threadN = 1) {
+        static_assert(radius > 0, "radius must be positive");
         dst.resize(w * h);
-        const int ksize = radius * 2 + 1;
-        std::vector<float> spatial(ksize * ksize, 0.0f);
+        constexpr int ksize = radius * 2 + 1;
+        std::array<float, ksize * ksize> spatial = {};
         const float inv2SigmaSpace2 = 1.0f / std::max(1e-6f, 2.0f * sigmaSpace * sigmaSpace);
         const float inv2SigmaRange2 = 1.0f / std::max(1e-6f, 2.0f * sigmaRange * sigmaRange);
         for (int dy = -radius; dy <= radius; dy++) {
@@ -1284,17 +1285,19 @@ namespace {
         }
         auto filterRange = [&](const int y0, const int y1) {
             for (int y = y0; y < y1; y++) {
+                const pixel_t* centerRow = srcBase + y * srcPitch;
                 for (int x = 0; x < w; x++) {
-                    const int center = src[x + y * w];
+                    const int center = centerRow[x];
                     float wsum = 0.0f;
                     float vsum = 0.0f;
                     const float* srow = spatial.data();
                     for (int dy = -radius; dy <= radius; dy++) {
                         const int yy = ClampInt(y + dy, 0, h - 1);
+                        const pixel_t* srcRow = srcBase + yy * srcPitch;
                         const float* sw = srow;
                         for (int dx = -radius; dx <= radius; dx++) {
                             const int xx = ClampInt(x + dx, 0, w - 1);
-                            const int v = src[xx + yy * w];
+                            const int v = srcRow[xx];
                             const float diff = (float)(v - center);
                             const float rangeW = std::exp(-(diff * diff) * inv2SigmaRange2);
                             const float ww = (*sw++) * rangeW;
@@ -1745,9 +1748,7 @@ namespace {
         int bitDepth;
         int readFrames;
 
-        std::vector<uint8_t> frameY8;
         std::vector<uint8_t> frameWork8;
-        std::vector<uint16_t> frameY16;
         std::vector<uint16_t> frameWork16;
         std::vector<AutoDetectStats> stats;
         std::vector<float> lastSampleFg;
@@ -1847,7 +1848,7 @@ namespace {
             , threadN(std::max(1, threadN))
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameY8(), frameWork8(), frameY16(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2071,18 +2072,12 @@ namespace {
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
             if (bitDepth <= 8) {
-                frameY8.resize(scanw * scanh);
                 frameWork8.resize(scanw * scanh);
-                frameY16.clear();
                 frameWork16.clear();
-                frameY16.shrink_to_fit();
                 frameWork16.shrink_to_fit();
             } else {
-                frameY16.resize(scanw * scanh);
                 frameWork16.resize(scanw * scanh);
-                frameY8.clear();
                 frameWork8.clear();
-                frameY8.shrink_to_fit();
                 frameWork8.shrink_to_fit();
             }
             stats.resize(scanw * scanh);
@@ -2100,13 +2095,6 @@ namespace {
             const float rawScale = maxv / 255.0f;
             const float thresholdRaw = threshold * rawScale;
             constexpr int kEdgeMargin = 16;
-            auto& frameY = [] (auto& y8, auto& y16) -> auto& {
-                if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                    return y8;
-                } else {
-                    return y16;
-                }
-            }(frameY8, frameY16);
             auto& frameWork = [] (auto& w8, auto& w16) -> auto& {
                 if constexpr (std::is_same_v<pixel_t, uint8_t>) {
                     return w8;
@@ -2115,22 +2103,15 @@ namespace {
                 }
             }(frameWork8, frameWork16);
 
-            // 解析対象は右上ROIのみ。Y(輝度)を pixel_t のまま保持して扱う。
-            // 背景:
-            //   白ロゴ前提でUVを使わず Y に絞る。整数保持でキャッシュ効率を上げる。
-            for (int y = 0; y < scanh; y++) {
-                const int srcYPos = scany + y;
-                const pixel_t* srcRow = &srcY[scanx + srcYPos * pitchY];
-                pixel_t* dstRow = &frameY[y * scanw];
-                std::memcpy(dstRow, srcRow, sizeof(pixel_t) * scanw);
-            }
-
             // 前処理: 輪郭保持を重視して 5x5 バイラテラルフィルタを適用。
             // 背景:
             //   3x3 平滑化(Box/Median)はロゴ輪郭を削りやすく、scoreが弱くなるケースがあった。
             //   バイラテラルでノイズを抑えつつエッジを維持する。
+            // src は ROI 先頭位置までずらしたポインタを渡し、画素ループ内の余分な加算を避ける。
+            constexpr int kBilateralRadius = 2;
             const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
-            BilateralFilter(frameWork, frameY, scanw, scanh, 2, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
+            const pixel_t* srcRoiBase = srcY + scanx + scany * pitchY;
+            BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcRoiBase, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
 
             std::atomic<int> frameCount(0);
             // 同一点の重複サンプル抑制閾値。
