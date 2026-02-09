@@ -48,9 +48,8 @@ else
             <thead>
                 <tr>
                     <th>Path</th>
-                    <th class="disk-num">Total</th>
                     <th class="disk-num">Free</th>
-                    <th class="disk-num">Used</th>
+                    <th class="disk-num">Total</th>
                     <th class="disk-num">Used%</th>
                 </tr>
             </thead>
@@ -59,9 +58,8 @@ else
                 {
                     <tr>
                         <td>@(disk.Path ?? "-")</td>
-                        <td class="disk-num">@FormatBytes(disk.CapacityBytes)</td>
                         <td class="disk-num">@FormatBytes(disk.FreeBytes)</td>
-                        <td class="disk-num">@FormatBytes(disk.UsedBytes)</td>
+                        <td class="disk-num">@FormatBytes(disk.CapacityBytes)</td>
                         <td class="disk-num">@FormatPercent(disk.UsedRatio)</td>
                     </tr>
                 }

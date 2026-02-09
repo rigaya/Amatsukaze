@@ -130,7 +130,7 @@ else
                     }
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 280px; gap: 16px;">
+                <div class="service-logo-layout">
                     <div>
                         <div style="font-weight: bold; margin-bottom: 6px;">ロゴファイル</div>
                         @if (_selectedService.Logos.Count == 0)
@@ -139,7 +139,7 @@ else
                         }
                         else
                         {
-                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                            <div class="logo-cards-scroll">
                                 @foreach (var logo in _selectedService.Logos)
                                 {
                                     var isSelected = string.Equals(_selectedLogoFileName, logo.FileName, StringComparison.Ordinal);

@@ -12,17 +12,21 @@
 }
 
 <div class="autoselect-header">
-    <span style="margin-right: 8px;">自動選択</span>
-    <select class="autoselect-header-select" value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
-        @foreach (var item in _profiles)
-        {
-            <option value="@item.Name">@item.Name</option>
-        }
-    </select>
-    <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _selectedProfile == null)">適用</button>
-    <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
-    <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
-    <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
+    <div class="autoselect-header-main">
+        <span style="margin-right: 8px;">自動選択</span>
+        <select class="autoselect-header-select" value="@_selectedProfileName" @onchange="OnProfileChanged" disabled="@_loading">
+            @foreach (var item in _profiles)
+            {
+                <option value="@item.Name">@item.Name</option>
+            }
+        </select>
+        <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _selectedProfile == null)">適用</button>
+        <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
+    </div>
+    <div class="autoselect-header-sub">
+        <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
+        <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
+    </div>
     @if (_confirmDelete)
     {
         <span style="margin-left: 6px; color: #a00;">もう一度押すと削除します</span>
@@ -62,8 +66,8 @@ else if (_profiles.Count == 0)
 }
 else
 {
-    <div style="display: flex; gap: 16px; align-items: flex-start;">
-        <div style="width: 48%;">
+    <div class="autoselect-layout">
+        <div class="autoselect-list-col">
             <div style="margin-bottom: 6px;">
                 <button class="btn btn-sm btn-secondary" @onclick="AddCondition" disabled="@(_selectedProfile == null)">条件追加</button>
                 <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="RemoveCondition" disabled="@(_selectedProfile == null || _selectedConditionIndex < 0)">条件削除</button>
@@ -97,38 +101,48 @@ else
                             <span class="drag-handle">
                                 ↕
                             </span>
-                            <div style="font-weight: 600;">
+                            <div class="condition-main">
                                 @GetConditionSummary(condition)
-                                @if (!string.IsNullOrEmpty(GetConditionWarning(condition)))
+                                <span class="condition-status @(HasConditionWarning(condition) ? "is-warning" : "is-ok")">
+                                    @GetConditionStatus(condition)
+                                </span>
+                                @if (HasConditionWarning(condition))
                                 {
                                     <span style="color: #c00; margin-left: 6px;">@GetConditionWarning(condition)</span>
                                 }
                             </div>
-                            <div class="condition-meta">
-                                <span class="condition-label">プロファイル</span>
-                                <select class="condition-profile-select" @onchange="@(e => OnConditionProfileChanged(index, e))">
-                                    @foreach (var item in _options?.ProfileNames ?? new List<string>())
-                                    {
-                                        <option value="@item" selected="@(item == condition.Profile)">@item</option>
-                                    }
-                                </select>
-                                <span class="condition-priority-group">
-                                    <span class="condition-priority-label">優先度</span>
-                                    <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
-                                        @foreach (var item in _options?.PriorityList ?? new List<int>())
+                            <div class="condition-chips">
+                                <span class="condition-chip">優先度: @condition.Priority</span>
+                                <span class="condition-chip">プロファイル: @(string.IsNullOrWhiteSpace(condition.Profile) ? "-" : condition.Profile)</span>
+                            </div>
+                            <details class="condition-details">
+                                <summary>詳細設定</summary>
+                                <div class="condition-meta">
+                                    <span class="condition-label">プロファイル</span>
+                                    <select class="condition-profile-select" @onchange="@(e => OnConditionProfileChanged(index, e))">
+                                        @foreach (var item in _options?.ProfileNames ?? new List<string>())
                                         {
-                                            <option value="@item" selected="@(item == condition.Priority)">@item</option>
+                                            <option value="@item" selected="@(item == condition.Profile)">@item</option>
                                         }
                                     </select>
-                                </span>
-                            </div>
+                                    <span class="condition-priority-group">
+                                        <span class="condition-priority-label">優先度</span>
+                                        <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
+                                            @foreach (var item in _options?.PriorityList ?? new List<int>())
+                                            {
+                                                <option value="@item" selected="@(item == condition.Priority)">@item</option>
+                                            }
+                                        </select>
+                                    </span>
+                                </div>
+                            </details>
                         </div>
                     }
                 }
             </div>
         </div>
 
-        <div style="width: 52%;">
+        <div class="autoselect-detail-col">
             @if (_selectedCondition != null)
             {
                 <div class="autoselect-panel">
@@ -471,6 +485,16 @@ else
             return "条件が無効です";
         }
         return "";
+    }
+
+    private bool HasConditionWarning(AutoSelectConditionModel cond)
+    {
+        return !string.IsNullOrEmpty(GetConditionWarning(cond));
+    }
+
+    private string GetConditionStatus(AutoSelectConditionModel cond)
+    {
+        return HasConditionWarning(cond) ? "無効" : "有効";
     }
 
     private void OnConditionProfileChanged(int index, ChangeEventArgs e)
@@ -861,6 +885,20 @@ else
 }
 
 <style>
+    .autoselect-layout {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .autoselect-list-col {
+        width: 48%;
+    }
+
+    .autoselect-detail-col {
+        width: 52%;
+    }
+
     .condition-list {
         border: 1px solid var(--border);
         padding: 6px;
@@ -911,6 +949,18 @@ else
         background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
     }
 
+    .autoselect-header-main,
+    .autoselect-header-sub {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .autoselect-header-main {
+        flex: 1 1 100%;
+    }
+
     .condition-meta {
         display: flex;
         flex-wrap: wrap;
@@ -936,7 +986,70 @@ else
         white-space: nowrap;
     }
 
+    .condition-main {
+        font-weight: 600;
+    }
+
+    .condition-status {
+        margin-left: 8px;
+        font-size: 12px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+    }
+
+    .condition-status.is-ok {
+        color: color-mix(in srgb, var(--success) 85%, var(--text));
+        border-color: color-mix(in srgb, var(--success) 65%, var(--border));
+    }
+
+    .condition-status.is-warning {
+        color: color-mix(in srgb, var(--danger) 85%, var(--text));
+        border-color: color-mix(in srgb, var(--danger) 65%, var(--border));
+    }
+
+    .condition-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+    }
+
+    .condition-chip {
+        font-size: 12px;
+        line-height: 1.2;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+        background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+    }
+
+    .condition-details {
+        margin-top: 6px;
+    }
+
+    .condition-details > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+        user-select: none;
+        margin-bottom: 4px;
+    }
+
     @@media (max-width: 900px) {
+        .autoselect-layout {
+            flex-direction: column;
+        }
+
+        .autoselect-list-col,
+        .autoselect-detail-col {
+            width: 100%;
+        }
+
+        .autoselect-header-sub {
+            width: 100%;
+        }
+
         .condition-priority-label {
             flex-basis: 100%;
         }

@@ -46,4 +46,10 @@
 .disk-num {
     text-align: right;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+}
+
+.disk-table th.disk-num {
+    text-align: right;
 }

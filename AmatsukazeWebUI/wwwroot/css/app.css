@@ -108,6 +108,17 @@
             radial-gradient(900px 500px at 100% 0%, rgba(52, 211, 153, 0.22), transparent 60%),
             radial-gradient(900px 500px at 0% 90%, rgba(251, 191, 36, 0.12), transparent 60%);
     }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+        background-color: var(--bg-surface);
+    }
+
+    input[type="checkbox"]:hover,
+    input[type="radio"]:hover {
+        border-color: var(--accent);
+        background-color: color-mix(in srgb, var(--bg-surface) 85%, var(--accent) 15%);
+    }
 }
 
 html, body {
@@ -189,6 +200,31 @@ a:hover, .btn-link:hover {
         border-radius: var(--radius-md);
         padding: 0.75rem 0.75rem 1rem;
     }
+
+    html, body {
+        font-size: 14px;
+    }
+
+    h1 {
+        font-size: 1.55rem;
+    }
+
+    h2 {
+        font-size: 1.25rem;
+    }
+
+    h3 {
+        font-size: 1.2rem;
+    }
+
+    .btn,
+    .form-control,
+    .form-select,
+    input,
+    select,
+    textarea {
+        font-size: 0.92rem;
+    }
 }
 
 input,
@@ -240,6 +276,21 @@ input[type="radio"] {
     background-color: transparent;
     border: 1px solid var(--input-border);
     box-shadow: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="checkbox"]:hover,
+input[type="radio"]:hover {
+    box-shadow:
+        inset 0 0 0 1px var(--accent),
+        0 0 0 0.12rem color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+    border-color: var(--accent-strong);
+    box-shadow: var(--focus-ring);
+    outline: none;
 }
 
 input[type="number"] {
@@ -899,8 +950,8 @@ code {
 }
 
 .drcs-row {
-  display: grid;
-  grid-template-columns: 60px 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   padding: 8px 10px;
@@ -911,22 +962,32 @@ code {
 }
 
 .drcs-image img {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   border-radius: var(--radius-sm);
 }
 
 .drcs-image-placeholder {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
 }
 
+.drcs-image {
+  flex: 0 0 auto;
+}
+
 .drcs-map .form-control {
-  max-width: 240px;
-  min-width: 3.5ch;
+  width: 4.5ch;
+  max-width: 100%;
+  min-width: 2.5ch;
+  text-align: center;
+}
+
+.drcs-map {
+  flex: 0 0 auto;
 }
 
 .drcs-actions {
@@ -935,10 +996,31 @@ code {
   gap: 8px;
   position: relative;
   flex-wrap: wrap;
+  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .drcs-appearance {
   position: relative;
+}
+
+.drcs-actions .btn {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.drcs-btn-main {
+  min-width: 92px;
+}
+
+.drcs-btn-delete {
+  min-width: 52px;
+}
+
+.drcs-btn-appearance {
+  min-width: 104px;
 }
 
 .drcs-appearance-popup {
@@ -1062,9 +1144,10 @@ code {
 }
 
 .service-item {
-    padding: 6px 8px;
+    padding: 5px 8px;
     cursor: pointer;
     transition: background-color 0.2s ease, color 0.2s ease;
+    line-height: 1.25;
 }
 
 .service-item:hover {
@@ -1077,8 +1160,21 @@ code {
 }
 
 .service-meta {
-    font-size: 0.85em;
+    font-size: 12px;
     color: var(--muted);
+    opacity: 0.85;
+}
+
+.service-logo-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 16px;
+}
+
+.logo-cards-scroll {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
 .logo-card {
@@ -1549,5 +1645,30 @@ code {
         max-height: none;
         overflow: visible;
         padding-right: 0;
+    }
+}
+
+@media (max-width: 640.98px) {
+    .service-logo-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .logo-cards-scroll {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+
+    .logo-card {
+        min-width: 220px;
+        flex: 0 0 auto;
+    }
+
+    .drcs-row {
+        row-gap: 6px;
+    }
+
+    .drcs-actions {
+        width: 100%;
     }
 }

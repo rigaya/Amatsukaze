@@ -46,18 +46,18 @@ else
                     <input class="form-control" value="@GetMapInput(md5)" @oninput="(e => OnMapInput(md5, e))" />
                 </div>
                 <div class="drcs-actions">
-                    <button class="btn btn-primary btn-sm"
+                    <button class="btn btn-primary btn-sm drcs-btn-main"
                             @onclick="() => ApplyMapAsync(item)"
                             disabled="@(!IsMapModified(item))">
                         @(string.IsNullOrEmpty(item.MapStr) ? "マッピング追加" : "変更")
                     </button>
-                    <button class="btn btn-danger btn-sm"
+                    <button class="btn btn-danger btn-sm drcs-btn-delete"
                             @onclick="() => DeleteMapAsync(item)"
                             disabled="@string.IsNullOrEmpty(item.MapStr)">
                         削除
                     </button>
                     <div class="drcs-appearance">
-                        <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAppearanceAsync(item)">
+                        <button class="btn btn-secondary btn-sm drcs-btn-appearance" @onclick="() => ToggleAppearanceAsync(item)">
                             出現位置確認
                         </button>
                         @if (_appearanceOpenMd5 == item.Md5)
