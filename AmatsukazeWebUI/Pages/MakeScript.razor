@@ -211,14 +211,14 @@ else
 
         var dataTask = Api.GetMakeScriptAsync();
         var profileTask = Api.GetProfilesAsync();
-        var systemTask = Api.GetSystemAsync();
+        var envTask = Api.GetServerEnvironmentAsync();
         var batTask = Api.GetAddQueueBatFilesAsync();
 
-        await Task.WhenAll(dataTask, profileTask, systemTask, batTask);
+        await Task.WhenAll(dataTask, profileTask, envTask, batTask);
 
         var dataRes = await dataTask;
         var profileRes = await profileTask;
-        var systemRes = await systemTask;
+        var envRes = await envTask;
         var batRes = await batTask;
 
         if (!dataRes.Ok)
@@ -259,10 +259,9 @@ else
             _addQueueBatFiles.AddRange(batRes.Data);
         }
 
-        if (systemRes.Ok && systemRes.Data != null)
+        if (envRes.Ok && envRes.Data != null)
         {
-            var platform = systemRes.Data.ServerInfo?.Platform ?? string.Empty;
-            _serverIsWindows = platform.Contains("Windows", StringComparison.OrdinalIgnoreCase);
+            _serverIsWindows = !envRes.Data.IsServerLinux;
         }
         _scriptType = _serverIsWindows ? "bat" : "sh";
         _remoteHost = GetRemoteHost();

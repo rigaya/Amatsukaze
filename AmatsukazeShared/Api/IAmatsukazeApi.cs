@@ -10,6 +10,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<Snapshot>> GetSnapshotAsync();
 
         Task<ApiResult<SystemSnapshot>> GetSystemAsync();
+        Task<ApiResult<ServerEnvironmentView>> GetServerEnvironmentAsync();
         Task<ApiResult<LatestReleaseInfo>> GetLatestReleaseAsync();
         Task<ApiResult<UiStateView>> GetUiStateAsync();
         Task<ApiResult<bool>> EndServerAsync();

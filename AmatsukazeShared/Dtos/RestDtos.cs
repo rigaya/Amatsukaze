@@ -56,6 +56,11 @@ namespace Amatsukaze.Shared
         public List<DiskUsageView>? Disks { get; set; }
     }
 
+    public class ServerEnvironmentView
+    {
+        public bool IsServerLinux { get; set; }
+    }
+
     public class DiskUsageView
     {
         public string? Path { get; set; }

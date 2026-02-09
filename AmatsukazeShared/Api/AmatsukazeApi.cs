@@ -32,6 +32,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<SystemSnapshot>> GetSystemAsync()
             => GetJsonAsync<SystemSnapshot>("/api/system");
 
+        public Task<ApiResult<ServerEnvironmentView>> GetServerEnvironmentAsync()
+            => GetJsonAsync<ServerEnvironmentView>("/api/server-env");
+
         public Task<ApiResult<LatestReleaseInfo>> GetLatestReleaseAsync()
             => GetJsonAsync<LatestReleaseInfo>("/api/info/latest-release");
 

@@ -212,6 +212,10 @@ namespace Amatsukaze.Server.Rest
 
             app.MapGet("/api/snapshot", () => Results.Json(state.GetSnapshot()));
             app.MapGet("/api/system", () => Results.Json(state.GetSystemSnapshot()));
+            app.MapGet("/api/server-env", () => Results.Json(new ServerEnvironmentView
+            {
+                IsServerLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            }));
             app.MapGet("/api/info/latest-release", async () =>
             {
                 var info = await GetLatestReleaseInfoAsync();

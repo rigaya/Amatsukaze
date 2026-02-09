@@ -404,7 +404,8 @@ else
     private int _selectedNoActionExeIndex = -1;
     private int _lastLogoParallelManual = 1;
     private bool _isServerLinux;
-    private int _serverLogicalProcessorCount;
+    private int _serverLogicalProcessorCount = 128;
+    private int _reloadVersion;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -422,18 +423,18 @@ else
         _noActionExeList.Clear();
         _noActionExeName = "";
         _selectedNoActionExeIndex = -1;
+        _serverLogicalProcessorCount = 128;
+        var reloadVersion = ++_reloadVersion;
 
         var settingTask = Api.GetSettingAsync();
         var queueFinishTask = Api.GetQueueFinishBatFilesAsync();
         var profileOptionsTask = Api.GetProfileOptionsAsync();
-        var systemTask = Api.GetSystemAsync();
 
-        await Task.WhenAll(settingTask, queueFinishTask, profileOptionsTask, systemTask);
+        await Task.WhenAll(settingTask, queueFinishTask, profileOptionsTask);
 
         var settingRes = await settingTask;
         var queueFinishRes = await queueFinishTask;
         var profileOptionsRes = await profileOptionsTask;
-        var systemRes = await systemTask;
 
         if (profileOptionsRes.Ok && profileOptionsRes.Data != null)
         {
@@ -442,14 +443,6 @@ else
         else
         {
             _isServerLinux = false;
-        }
-        if (systemRes.Ok && systemRes.Data?.ServerInfo != null)
-        {
-            _serverLogicalProcessorCount = systemRes.Data.ServerInfo.LogicalProcessorCount;
-        }
-        else
-        {
-            _serverLogicalProcessorCount = 0;
         }
 
         if (!settingRes.Ok)
@@ -475,6 +468,41 @@ else
         }
 
         _loading = false;
+        _ = LoadSystemLimitsAsync(reloadVersion);
+    }
+
+    private async Task LoadSystemLimitsAsync(int reloadVersion)
+    {
+        var systemRes = await Api.GetSystemAsync();
+        if (reloadVersion != _reloadVersion)
+        {
+            return;
+        }
+        if (!systemRes.Ok || systemRes.Data?.ServerInfo == null)
+        {
+            return;
+        }
+        var logical = systemRes.Data.ServerInfo.LogicalProcessorCount;
+        if (logical <= 0)
+        {
+            return;
+        }
+
+        _serverLogicalProcessorCount = logical;
+        if (_intValues.TryGetValue(NumParallelField, out var numParallel))
+        {
+            _intValues[NumParallelField] = NormalizeIntValue(NumParallelField, numParallel);
+        }
+        if (_intValues.TryGetValue(NumParallelLogoField, out var numLogoParallel))
+        {
+            var normalized = NormalizeIntValue(NumParallelLogoField, numLogoParallel);
+            _intValues[NumParallelLogoField] = normalized;
+            if (normalized > 0)
+            {
+                _lastLogoParallelManual = normalized;
+            }
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private void InitializeFieldValues()

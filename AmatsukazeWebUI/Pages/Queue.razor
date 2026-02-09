@@ -154,11 +154,11 @@
             <span class="status-toggle">
                 <input type="checkbox"
                        checked="@IsQueueRunning"
-                       disabled="@(_pauseBusy || _system?.State == null)"
+                       disabled="@(_systemLoading || _pauseBusy || _system?.State == null)"
                        @onchange="OnToggleQueuePause" />
                 <span class="slider"></span>
             </span>
-            <span class="queue-header-state">@(_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止"))</span>
+            <span class="queue-header-state">@(_systemLoading ? "読込中" : (_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止")))</span>
         </span>
     </label>
     <span class="queue-header-sep" aria-hidden="true"></span>
@@ -169,11 +169,11 @@
             <span class="status-toggle">
                 <input type="checkbox"
                        checked="@IsEncoderOk"
-                       disabled="@(_suspendBusy || _system?.State == null)"
+                       disabled="@(_systemLoading || _suspendBusy || _system?.State == null)"
                        @onchange="OnToggleEncoderSuspend" />
                 <span class="slider"></span>
             </span>
-            <span class="queue-header-state">@(_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止"))</span>
+            <span class="queue-header-state">@(_systemLoading ? "読込中" : (_system?.State == null ? "-" : (IsEncoderOk ? "OK" : "一時停止")))</span>
         </span>
     </label>
     <span class="queue-header-sep" aria-hidden="true"></span>
@@ -183,9 +183,13 @@
         <span class="queue-header-group-body">
             <select class="form-select queue-finish-select" style="width: 180px;"
                     value="@_finishAction"
-                    disabled="@(_finishBusy || _system?.FinishSetting == null)"
+                    disabled="@(_systemLoading || _finishBusy || _system?.FinishSetting == null)"
                     @onchange="OnFinishActionChanged">
-                @if (_finishActionOptions.Count == 0)
+                @if (_systemLoading)
+                {
+                    <option value="">読込中...</option>
+                }
+                else if (_finishActionOptions.Count == 0)
                 {
                     <option value="">-</option>
                 }
@@ -462,6 +466,7 @@ else
     private string? _error;
     private string? _systemError;
     private bool _loading = true;
+    private bool _systemLoading = true;
     private string? _actionMessage;
     private readonly Dictionary<int, string?> _profileInputs = new();
     private readonly Dictionary<int, int> _priorityInputs = new();
@@ -526,7 +531,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
-        await ReloadSystemAsync();
+        _ = PollSystemOnceAsync();
         StartPolling();
         StartSystemPolling();
     }
@@ -1044,6 +1049,7 @@ else
         finally
         {
             _systemPolling = false;
+            _systemLoading = false;
             StateHasChanged();
         }
     }
