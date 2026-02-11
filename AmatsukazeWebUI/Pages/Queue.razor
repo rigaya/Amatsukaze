@@ -331,7 +331,6 @@ else
                                     <select class="queue-profile-select"
                                             @bind="_profileInputs[item.Id]"
                                             @bind:after="(() => ChangeProfileAsync(item))">
-                                        <option value="">(Profile)</option>
                                         @foreach (var name in _profileNames)
                                         {
                                             <option value="@name">@name</option>
