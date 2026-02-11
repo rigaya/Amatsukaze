@@ -15,6 +15,16 @@ SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
 INSTALL_DIR="$1"
 BUILD_DIR="${2:-build}"
 
+# .NET 10 SDK 必須チェック
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "dotnet コマンドが見つかりません。.NET 10 SDK をインストールしてください。"
+    exit 1
+fi
+if ! dotnet --list-sdks | awk '{print $1}' | grep -Eq '^10\.'; then
+    echo ".NET 10 SDK が見つかりません。dotnet --list-sdks を確認してください。"
+    exit 1
+fi
+
 # デバッグビルドのオプションをチェック
 DEBUG_BUILD=false
 if [ "$2" = "--debug" ] || [ "$3" = "--debug" ]; then

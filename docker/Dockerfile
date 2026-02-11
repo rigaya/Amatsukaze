@@ -284,11 +284,11 @@ RUN locale-gen ja_JP.UTF-8 \
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=ja_JP.UTF-8
 
-# .NET SDK 9.0のインストール（デバッグモードの場合のみ）
+# .NET SDK 10.0のインストール（デバッグモードの場合のみ）
 RUN if [ "$BUILD_MODE" = "debug" ]; then \
         apt add-apt-repository ppa:dotnet/backports \
         && apt update \
-        && apt install -y dotnet-sdk-9.0 \
+        && apt install -y dotnet-sdk-10.0 \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 

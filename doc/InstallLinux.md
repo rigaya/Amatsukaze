@@ -55,6 +55,7 @@ dockerでのインストール方法は[こちら](../docker/readme.md)。
 ### ビルドツールインストール
 
 エンコーダやmuxer、CM解析ツールのビルドに使用します。
+self-buildする場合は、あわせて .NET 10.0 SDK が必要です (詳細は [BuildLinux.md](./BuildLinux.md) を参照)。
 
 ```bash
 sudo apt update

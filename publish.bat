@@ -1,5 +1,16 @@
 @echo off
 
+where dotnet >nul 2>&1
+if errorlevel 1 (
+  echo dotnet command not found. Install .NET 10 SDK.
+  exit /b 1
+)
+dotnet --list-sdks | findstr /R "^10\." >nul
+if errorlevel 1 (
+  echo .NET 10 SDK not found. Check dotnet --list-sdks.
+  exit /b 1
+)
+
 del .\publish\win-x64\*.dll
 del .\publish\win-x64\*.dll.config
 del .\publish\win-x64\*.exe

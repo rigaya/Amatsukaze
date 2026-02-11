@@ -7,14 +7,14 @@ sudo apt update
 sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool \
     libssl-dev libz-dev
 ```
-次に .NET Core 9.0 SDKをインストールします。下記はUbuntu 24.04の例を示します。その他の環境については、[リンク先](https://learn.microsoft.com/ja-jp/dotnet/core/install/linux)を参照してください。
+次に .NET 10.0 SDKをインストールします。下記はUbuntu 24.04の例を示します。その他の環境については、[リンク先](https://learn.microsoft.com/ja-jp/dotnet/core/install/linux)を参照してください。
 
 ```bash
 # .NET
 wget https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
 sudo dpkg -i ./packages-microsoft-prod.deb
 sudo apt update
-sudo apt install -y dotnet-sdk-9.0
+sudo apt install -y dotnet-sdk-10.0
 ```
 
 ## AviSynthのインストール

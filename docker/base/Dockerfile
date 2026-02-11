@@ -36,7 +36,7 @@ RUN apt update \
     && update-locale LANG=ja_JP.UTF-8 \
     && add-apt-repository ppa:dotnet/backports \
     && apt update \
-    && apt-get install -y dotnet-sdk-9.0 \
+    && apt-get install -y dotnet-sdk-10.0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
