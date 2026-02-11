@@ -2124,12 +2124,13 @@ else
         _selectionAnchorId = anchorId;
     }
 
-    private async Task OnQueueDrop(int dropAnchorId)
+    private async Task OnQueueDrop()
     {
         if (_view == null)
         {
             return;
         }
+        var visualDropIndex = _dropIndex;
         _dropIndex = -1;
         var dragId = await JS.InvokeAsync<int>("amatsukazeDnd.getDragId");
         await JS.InvokeVoidAsync("amatsukazeDnd.clearDragId");
@@ -2147,7 +2148,7 @@ else
             _selectionAnchorId = draggedItem.Id;
         }
 
-        var dropIndex = ResolveDropIndex(dropAnchorId);
+        var dropIndex = ResolveDropIndexFromVisual(visualDropIndex);
         if (dropIndex < 0)
         {
             return;
@@ -2181,25 +2182,28 @@ else
         await ChangeItemAsync(draggedItem, ChangeItemType.Move, position: toIndex);
     }
 
-    private int ResolveDropIndex(int dropAnchorId)
+    private int ResolveDropIndexFromVisual(int visualDropIndex)
     {
         if (_view == null)
         {
             return -1;
         }
-        if (dropAnchorId == -1)
-        {
-            return 0;
-        }
-        if (dropAnchorId <= -2)
+        if (_filteredItems.Count == 0)
         {
             return _view.Items.Count;
         }
-        if (_indexById.TryGetValue(dropAnchorId, out var upperIndex))
+        if (visualDropIndex <= 0)
         {
-            return upperIndex + 1;
+            var firstVisibleId = _filteredItems[0].Id;
+            return _indexById.TryGetValue(firstVisibleId, out var firstIndex) ? firstIndex : -1;
         }
-        return -1;
+        if (visualDropIndex >= _filteredItems.Count)
+        {
+            var lastVisibleId = _filteredItems[_filteredItems.Count - 1].Id;
+            return _indexById.TryGetValue(lastVisibleId, out var lastIndex) ? lastIndex + 1 : -1;
+        }
+        var nextVisibleId = _filteredItems[visualDropIndex].Id;
+        return _indexById.TryGetValue(nextVisibleId, out var nextIndex) ? nextIndex : -1;
     }
 
     private Task OnQueueDropFromBody()
@@ -2213,7 +2217,7 @@ else
         await JS.InvokeVoidAsync("amatsukazeDnd.clearLastDropId");
         if (lastDropId != -999)
         {
-            await OnQueueDrop(lastDropId);
+            await OnQueueDrop();
         }
     }
 
@@ -2248,7 +2252,7 @@ else
         }
         if (lastDropId != -999)
         {
-            await OnQueueDrop(lastDropId);
+            await OnQueueDrop();
         }
         _dropIndex = -1;
         await JS.InvokeVoidAsync("amatsukazeDnd.clearDragId");
