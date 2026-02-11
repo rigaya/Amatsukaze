@@ -50,17 +50,15 @@ jobs:
           docker run --rm \
             -v "${GITHUB_WORKSPACE}:/work" \
             -w /work \
-            ubuntu:20.04 \
+            ubuntu:22.04 \
             bash -lc "
               set -e
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
-              apt-get install -y wget apt-transport-https software-properties-common git
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-              dpkg -i packages-microsoft-prod.deb
-              rm packages-microsoft-prod.deb
+              apt-get install -y software-properties-common git
+              add-apt-repository -y ppa:dotnet/backports
               apt-get update
-              apt-get install -y dotnet-sdk-9.0
+              apt-get install -y dotnet-sdk-10.0
               git config --global --add safe.directory /work
               dotnet publish AmatsukazeAddTask/AmatsukazeAddTask.csproj \
                 -c Release \
