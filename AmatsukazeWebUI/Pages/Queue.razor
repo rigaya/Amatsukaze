@@ -274,6 +274,7 @@ else
     else
     {
         <div class="queue-list"
+             @ref="_queueListElement"
              data-drop-end="true"
              ondragover="return amatsukazeDnd.updateDropIdFromEvent(event)"
              @onclick="CloseContextMenu"
@@ -482,6 +483,7 @@ else
     private const double ContextMenuMargin = 8;
     private int _dropIndex = -1;
     private bool _isDragging;
+    private ElementReference _queueListElement;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
     private long _queueVersion;
@@ -541,8 +543,12 @@ else
         !string.IsNullOrWhiteSpace(_addProfile) &&
         !string.IsNullOrWhiteSpace(_addOutDir);
 
-    private async Task ReloadAsync()
+    private Task ReloadAsync()
+        => ReloadAsyncCore(preserveScroll: false);
+
+    private async Task ReloadAsyncCore(bool preserveScroll)
     {
+        var restoreScrollTop = preserveScroll ? await CaptureQueueScrollTopAsync() : (double?)null;
         _loading = true;
         _error = null;
         _actionMessage = null;
@@ -607,6 +613,13 @@ else
 
         RebuildFilteredItems();
         _loading = false;
+
+        if (restoreScrollTop.HasValue)
+        {
+            await InvokeAsync(StateHasChanged);
+            await Task.Yield();
+            await RestoreQueueScrollTopAsync(restoreScrollTop.Value);
+        }
     }
 
     private async Task ReloadSystemAsync()
@@ -1275,7 +1288,10 @@ else
         }, token);
     }
 
-    private async Task PollOnceAsync()
+    private Task PollOnceAsync()
+        => PollOnceAsyncCore(preserveScrollOnFullSync: true);
+
+    private async Task PollOnceAsyncCore(bool preserveScrollOnFullSync)
     {
         if (_loading || _view == null || _polling)
         {
@@ -1297,7 +1313,7 @@ else
             }
             if (data.FullSyncRequired)
             {
-                await ReloadAsync();
+                await ReloadAsyncCore(preserveScrollOnFullSync);
                 return;
             }
             if (data.Changes.Count == 0)
@@ -1317,7 +1333,7 @@ else
                 }
                 return;
             }
-            ApplyQueueChanges(data);
+            await ApplyQueueChangesAsync(data);
         }
         finally
         {
@@ -1325,7 +1341,7 @@ else
         }
     }
 
-    private void ApplyQueueChanges(QueueChangesView data)
+    private async Task ApplyQueueChangesAsync(QueueChangesView data)
     {
         if (_view == null)
         {
@@ -1337,6 +1353,16 @@ else
             _queueDigest = data.QueueViewDigest;
         }
         _view.Counters = data.Counters ?? _view.Counters;
+        var moveChanges = data.Changes.Count(change => change.Type == QueueChangeType.Move);
+        if (moveChanges >= 32 && moveChanges * 2 >= data.Changes.Count)
+        {
+            var snapshotRes = await Api.GetQueueAsync();
+            if (snapshotRes.Ok && snapshotRes.Data != null)
+            {
+                ApplyQueueSnapshot(snapshotRes.Data);
+                return;
+            }
+        }
         var items = _view.Items;
 
         foreach (var change in data.Changes)
@@ -1397,20 +1423,33 @@ else
 
     private void ApplyQueueSnapshot(QueueView snapshot)
     {
+        try
+        {
+            ApplyQueueSnapshotCore(snapshot);
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"[Queue] ApplyQueueSnapshot failed: {ex}");
+            ApplyQueueSnapshotFallback(snapshot);
+        }
+    }
+
+    private void ApplyQueueSnapshotCore(QueueView snapshot)
+    {
+        _queueVersion = snapshot.Version;
+        _queueDigest = snapshot.Digest;
         if (_view == null)
         {
             _view = snapshot;
-            _queueVersion = snapshot.Version;
-            _queueDigest = snapshot.Digest;
+            SyncInputs(snapshot.Items);
             RebuildFilteredItems();
+            StateHasChanged();
             return;
         }
-        _queueVersion = snapshot.Version;
-        _queueDigest = snapshot.Digest;
         _view.Counters = snapshot.Counters;
-        var items = _view.Items;
+        _view.Filters = snapshot.Filters;
 
-        var currentMap = items.ToDictionary(item => item.Id, item => item);
+        var currentMap = _view.Items.ToDictionary(item => item.Id, item => item);
         var desired = new List<QueueItemView>(snapshot.Items.Count);
         foreach (var snap in snapshot.Items)
         {
@@ -1423,33 +1462,32 @@ else
             {
                 desired.Add(snap);
             }
-            _profileInputs[snap.Id] = snap.ProfileName ?? "";
-            _priorityInputs[snap.Id] = snap.Priority;
         }
-        for (var i = 0; i < desired.Count; i++)
-        {
-            if (i < items.Count && ReferenceEquals(items[i], desired[i]))
-            {
-                continue;
-            }
-            var existingIndex = items.FindIndex(i + 1, x => ReferenceEquals(x, desired[i]));
-            if (existingIndex >= 0)
-            {
-                var moving = items[existingIndex];
-                items.RemoveAt(existingIndex);
-                items.Insert(i, moving);
-            }
-            else
-            {
-                items.Insert(i, desired[i]);
-            }
-        }
-        if (items.Count > desired.Count)
-        {
-            items.RemoveRange(desired.Count, items.Count - desired.Count);
-        }
+        _view.Items = desired;
+        SyncInputs(desired);
+        RebuildFilteredItems();
+        StateHasChanged();
+    }
 
-        var ids = new HashSet<int>(desired.Select(item => item.Id));
+    private void ApplyQueueSnapshotFallback(QueueView snapshot)
+    {
+        _view = snapshot;
+        _queueVersion = snapshot.Version;
+        _queueDigest = snapshot.Digest;
+        SyncInputs(snapshot.Items);
+        RebuildFilteredItems();
+        StateHasChanged();
+    }
+
+    private void SyncInputs(IEnumerable<QueueItemView> items)
+    {
+        var ids = new HashSet<int>();
+        foreach (var item in items)
+        {
+            ids.Add(item.Id);
+            _profileInputs[item.Id] = item.ProfileName ?? "";
+            _priorityInputs[item.Id] = item.Priority;
+        }
         foreach (var id in _profileInputs.Keys.Where(id => !ids.Contains(id)).ToList())
         {
             _profileInputs.Remove(id);
@@ -1458,8 +1496,29 @@ else
         {
             _priorityInputs.Remove(id);
         }
-        RebuildFilteredItems();
-        StateHasChanged();
+    }
+
+    private async Task<double?> CaptureQueueScrollTopAsync()
+    {
+        try
+        {
+            return await JS.InvokeAsync<double>("amatsukazeUi.getScrollTop", _queueListElement);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task RestoreQueueScrollTopAsync(double top)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("amatsukazeUi.setScrollTop", _queueListElement, top);
+        }
+        catch
+        {
+        }
     }
 
     private static void CopyQueueItemView(QueueItemView target, QueueItemView source)
@@ -1743,7 +1802,7 @@ else
         if (ok)
         {
             _actionMessage = "Operation completed.";
-            await ReloadAsync();
+            await SyncAfterMutationAsync();
         }
     }
 
@@ -1983,7 +2042,13 @@ else
             return;
         }
 
-        await ReloadAsync();
+        _actionMessage = "Operation completed.";
+        await SyncAfterMutationAsync();
+    }
+
+    private async Task SyncAfterMutationAsync()
+    {
+        await PollOnceAsyncCore(preserveScrollOnFullSync: true);
     }
 
     private async Task OnQueueDrop(int dropAnchorId)
