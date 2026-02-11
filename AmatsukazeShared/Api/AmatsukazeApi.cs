@@ -35,6 +35,12 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<ServerEnvironmentView>> GetServerEnvironmentAsync()
             => GetJsonAsync<ServerEnvironmentView>("/api/server-env");
 
+        public Task<ApiResult<InfoSummaryView>> GetInfoSummaryAsync()
+            => GetJsonAsync<InfoSummaryView>("/api/info/summary");
+
+        public Task<ApiResult<List<DiskUsageView>>> GetInfoDisksAsync()
+            => GetJsonAsync<List<DiskUsageView>>("/api/info/disks");
+
         public Task<ApiResult<LatestReleaseInfo>> GetLatestReleaseAsync()
             => GetJsonAsync<LatestReleaseInfo>("/api/info/latest-release");
 

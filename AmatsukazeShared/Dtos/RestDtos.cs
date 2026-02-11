@@ -61,6 +61,13 @@ namespace Amatsukaze.Shared
         public bool IsServerLinux { get; set; }
     }
 
+    public class InfoSummaryView
+    {
+        public string? HostName { get; set; }
+        public string? Version { get; set; }
+        public string? Platform { get; set; }
+    }
+
     public class DiskUsageView
     {
         public string? Path { get; set; }

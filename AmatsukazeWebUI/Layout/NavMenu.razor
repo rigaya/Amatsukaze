@@ -76,10 +76,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var res = await Api.GetSystemAsync();
-        if (res.Ok && res.Data?.ServerInfo?.Version != null)
+        var res = await Api.GetInfoSummaryAsync();
+        if (res.Ok && !string.IsNullOrWhiteSpace(res.Data?.Version))
         {
-            _serverVersion = res.Data.ServerInfo.Version;
+            _serverVersion = res.Data.Version;
         }
     }
 

@@ -216,6 +216,8 @@ namespace Amatsukaze.Server.Rest
             {
                 IsServerLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
             }));
+            app.MapGet("/api/info/summary", () => Results.Json(state.GetInfoSummary()));
+            app.MapGet("/api/info/disks", () => Results.Json(state.GetInfoDisks()));
             app.MapGet("/api/info/latest-release", async () =>
             {
                 var info = await GetLatestReleaseInfoAsync();

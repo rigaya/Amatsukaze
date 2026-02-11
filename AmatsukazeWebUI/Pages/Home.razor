@@ -4,93 +4,109 @@
 
 <h1>情報</h1>
 
-@if (_loading)
+@if (!string.IsNullOrEmpty(_summaryError))
+{
+    <p style="color: red;">@_summaryError</p>
+}
+
+<table class="info-table">
+    <tr><th>Host</th><td>@GetSummaryValue(_summary?.HostName, _summaryLoading)</td></tr>
+    <tr><th>Version</th><td>@GetSummaryValue(_summary?.Version, _summaryLoading)</td></tr>
+    <tr>
+        <th>Latest</th>
+        <td>
+            @if (_latestLoading)
+            {
+                <span>Loading...</span>
+            }
+            else if (!string.IsNullOrEmpty(_latestError))
+            {
+                <span>-</span>
+            }
+            else if (_latestRelease != null && !string.IsNullOrEmpty(_latestRelease.Tag) && !string.IsNullOrEmpty(_latestRelease.Url))
+            {
+                <a href="@_latestRelease.Url" target="_blank" rel="noopener noreferrer">@_latestRelease.Tag</a>
+            }
+            else
+            {
+                <span>-</span>
+            }
+        </td>
+    </tr>
+    <tr><th>Platform</th><td>@GetSummaryValue(_summary?.Platform, _summaryLoading)</td></tr>
+</table>
+
+<h2 class="info-section-title">ディスク</h2>
+@if (_disksLoading)
 {
     <p>Loading...</p>
 }
-else if (!string.IsNullOrEmpty(_error))
+else if (!string.IsNullOrEmpty(_disksError))
 {
-    <p style="color: red;">@_error</p>
+    <p style="color: red;">@_disksError</p>
 }
-else if (_system == null)
+else if (_disks == null || _disks.Count == 0)
 {
-    <p>No data.</p>
+    <p>-</p>
 }
 else
 {
-    <table class="info-table">
-        <tr><th>Host</th><td>@(_system.ServerInfo?.HostName ?? "-")</td></tr>
-        <tr><th>Version</th><td>@(_system.ServerInfo?.Version ?? "-")</td></tr>
-        <tr>
-            <th>Latest</th>
-            <td>
-                @if (_latestRelease != null && !string.IsNullOrEmpty(_latestRelease.Tag) && !string.IsNullOrEmpty(_latestRelease.Url))
-                {
-                    <a href="@_latestRelease.Url" target="_blank" rel="noopener noreferrer">@_latestRelease.Tag</a>
-                }
-                else
-                {
-                    <span>-</span>
-                }
-            </td>
-        </tr>
-        <tr><th>Platform</th><td>@(_system.ServerInfo?.Platform ?? "-")</td></tr>
-    </table>
-
-    <h2 class="info-section-title">ディスク</h2>
-    @if (_system.Disks == null || _system.Disks.Count == 0)
-    {
-        <p>-</p>
-    }
-    else
-    {
-        <table class="disk-table">
-            <thead>
+    <table class="disk-table">
+        <thead>
+            <tr>
+                <th>Path</th>
+                <th class="disk-num">Free</th>
+                <th class="disk-num">Total</th>
+                <th class="disk-num">Used%</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var disk in _disks)
+            {
                 <tr>
-                    <th>Path</th>
-                    <th class="disk-num">Free</th>
-                    <th class="disk-num">Total</th>
-                    <th class="disk-num">Used%</th>
+                    <td>@(disk.Path ?? "-")</td>
+                    <td class="disk-num">@FormatBytes(disk.FreeBytes)</td>
+                    <td class="disk-num">@FormatBytes(disk.CapacityBytes)</td>
+                    <td class="disk-num">@FormatPercent(disk.UsedRatio)</td>
                 </tr>
-            </thead>
-            <tbody>
-                @foreach (var disk in _system.Disks)
-                {
-                    <tr>
-                        <td>@(disk.Path ?? "-")</td>
-                        <td class="disk-num">@FormatBytes(disk.FreeBytes)</td>
-                        <td class="disk-num">@FormatBytes(disk.CapacityBytes)</td>
-                        <td class="disk-num">@FormatPercent(disk.UsedRatio)</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
+            }
+        </tbody>
+    </table>
 }
 
 @code {
-    private SystemSnapshot? _system;
+    private InfoSummaryView? _summary;
     private LatestReleaseInfo? _latestRelease;
-    private string? _error;
-    private bool _loading = true;
+    private List<DiskUsageView>? _disks;
+    private string? _summaryError;
+    private string? _latestError;
+    private string? _disksError;
+    private bool _summaryLoading = true;
+    private bool _latestLoading = true;
+    private bool _disksLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        await ReloadAsync();
-        await LoadLatestReleaseAsync();
-        _loading = false;
+        _ = LoadSummaryAsync();
+        _ = LoadLatestReleaseAsync();
+        _ = LoadDisksAsync();
+        await Task.CompletedTask;
     }
 
-    private async Task ReloadAsync()
+    private async Task LoadSummaryAsync()
     {
-        var res = await Api.GetSystemAsync();
+        var res = await Api.GetInfoSummaryAsync();
         if (!res.Ok)
         {
-            _error = res.Error ?? "Failed to load.";
+            _summaryError = res.Error ?? "Failed to load summary.";
+            _summaryLoading = false;
+            await InvokeAsync(StateHasChanged);
             return;
         }
-        _error = null;
-        _system = res.Data;
+        _summaryError = null;
+        _summary = res.Data;
+        _summaryLoading = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadLatestReleaseAsync()
@@ -100,7 +116,32 @@ else
         {
             _latestRelease = res.Data;
         }
+        else
+        {
+            _latestError = res.Error;
+        }
+        _latestLoading = false;
+        await InvokeAsync(StateHasChanged);
     }
+
+    private async Task LoadDisksAsync()
+    {
+        var res = await Api.GetInfoDisksAsync();
+        if (!res.Ok)
+        {
+            _disksError = res.Error ?? "Failed to load disks.";
+            _disksLoading = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        _disksError = null;
+        _disks = res.Data ?? new List<DiskUsageView>();
+        _disksLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetSummaryValue(string? value, bool loading)
+        => loading ? "Loading..." : (string.IsNullOrWhiteSpace(value) ? "-" : value);
 
     private static string FormatBytes(long bytes)
     {

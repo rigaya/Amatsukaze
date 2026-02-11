@@ -296,7 +296,46 @@ namespace Amatsukaze.Server.Rest
 
         public SystemSnapshot GetSystemSnapshot()
         {
-            var diskViews = DiskUtility.GetMainDisks().Select(item =>
+            lock (sync)
+            {
+                ServerInfo compactServerInfo = null;
+                if (serverInfo != null)
+                {
+                    compactServerInfo = new ServerInfo
+                    {
+                        LogicalProcessorCount = serverInfo.LogicalProcessorCount,
+                        CharSet = serverInfo.CharSet,
+                        MacAddress = serverInfo.MacAddress
+                    };
+                }
+                return new SystemSnapshot()
+                {
+                    ServerInfo = compactServerInfo,
+                    State = state != null ? ServerSupport.DeepCopy(state) : null,
+                    FinishSetting = finishSetting != null ? ServerSupport.DeepCopy(finishSetting) : null,
+                    FinishActionOptions = BuildFinishActionOptions(setting, serverInfo),
+                    StatusSummary = BuildStatusSummary(),
+                    Disks = null
+                };
+            }
+        }
+
+        public InfoSummaryView GetInfoSummary()
+        {
+            lock (sync)
+            {
+                return new InfoSummaryView
+                {
+                    HostName = serverInfo?.HostName,
+                    Version = serverInfo?.Version,
+                    Platform = serverInfo?.Platform
+                };
+            }
+        }
+
+        public List<DiskUsageView> GetInfoDisks()
+        {
+            return DiskUtility.GetMainDisks().Select(item =>
             {
                 var used = Math.Max(0, item.CapacityBytes - item.FreeBytes);
                 var ratio = item.CapacityBytes > 0 ? (double)used / item.CapacityBytes : 0.0;
@@ -309,19 +348,6 @@ namespace Amatsukaze.Server.Rest
                     UsedRatio = ratio
                 };
             }).ToList();
-
-            lock (sync)
-            {
-                return new SystemSnapshot()
-                {
-                    ServerInfo = serverInfo != null ? ServerSupport.DeepCopy(serverInfo) : null,
-                    State = state != null ? ServerSupport.DeepCopy(state) : null,
-                    FinishSetting = finishSetting != null ? ServerSupport.DeepCopy(finishSetting) : null,
-                    FinishActionOptions = BuildFinishActionOptions(setting, serverInfo),
-                    StatusSummary = BuildStatusSummary(),
-                    Disks = diskViews
-                };
-            }
         }
 
         private static List<FinishActionOptionView> BuildFinishActionOptions(Setting currentSetting, ServerInfo currentServerInfo)
