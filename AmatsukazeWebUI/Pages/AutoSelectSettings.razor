@@ -1,4 +1,5 @@
 @page "/autoselect"
+@using System.Text
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using Amatsukaze.Shared
@@ -101,41 +102,33 @@ else
                             <span class="drag-handle">
                                 ↕
                             </span>
-                            <div class="condition-main">
-                                @GetConditionSummary(condition)
-                                <span class="condition-status @(HasConditionWarning(condition) ? "is-warning" : "is-ok")">
-                                    @GetConditionStatus(condition)
+                            <div class="condition-headline-row">
+                                <div class="condition-summary-main">
+                                    @GetConditionSummary(condition)
+                                </div>
+                                <span class="condition-priority-group condition-priority-inline">
+                                    <span class="condition-priority-label">優先度</span>
+                                    <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
+                                        @foreach (var item in _options?.PriorityList ?? new List<int>())
+                                        {
+                                            <option value="@item" selected="@(item == condition.Priority)">@item</option>
+                                        }
+                                    </select>
                                 </span>
-                                @if (HasConditionWarning(condition))
+                                @if (!string.IsNullOrEmpty(GetConditionWarning(condition)))
                                 {
                                     <span style="color: #c00; margin-left: 6px;">@GetConditionWarning(condition)</span>
                                 }
                             </div>
-                            <div class="condition-chips">
-                                <span class="condition-chip">優先度: @condition.Priority</span>
-                                <span class="condition-chip">プロファイル: @(string.IsNullOrWhiteSpace(condition.Profile) ? "-" : condition.Profile)</span>
+                            <div class="condition-meta condition-meta-compact">
+                                <span class="condition-label">プロファイル</span>
+                                <select class="condition-profile-select" @onchange="@(e => OnConditionProfileChanged(index, e))">
+                                    @foreach (var item in _options?.ProfileNames ?? new List<string>())
+                                    {
+                                        <option value="@item" selected="@(item == condition.Profile)">@item</option>
+                                    }
+                                </select>
                             </div>
-                            <details class="condition-details">
-                                <summary>詳細設定</summary>
-                                <div class="condition-meta">
-                                    <span class="condition-label">プロファイル</span>
-                                    <select class="condition-profile-select" @onchange="@(e => OnConditionProfileChanged(index, e))">
-                                        @foreach (var item in _options?.ProfileNames ?? new List<string>())
-                                        {
-                                            <option value="@item" selected="@(item == condition.Profile)">@item</option>
-                                        }
-                                    </select>
-                                    <span class="condition-priority-group">
-                                        <span class="condition-priority-label">優先度</span>
-                                        <select @onchange="@(e => OnConditionPriorityChanged(index, e))">
-                                            @foreach (var item in _options?.PriorityList ?? new List<int>())
-                                            {
-                                                <option value="@item" selected="@(item == condition.Priority)">@item</option>
-                                            }
-                                        </select>
-                                    </span>
-                                </div>
-                            </details>
                         </div>
                     }
                 }
@@ -160,13 +153,20 @@ else
                         </label>
                         <input style="width: 70%;" value="@(_selectedCondition.FileName ?? "")" @oninput="@(e => OnStringChanged(e, nameof(AutoSelectConditionModel.FileName)))" disabled="@(!_selectedCondition.FileNameEnabled)" />
                     </div>
-                    <div style="display: flex; gap: 12px;">
-                        <div style="width: 40%;">
+                    <div class="autoselect-tabset">
+                        <div class="autoselect-tabbar" role="tablist" aria-label="条件詳細タブ">
+                            <button type="button" role="tab" aria-selected="@(_detailTab == AutoSelectDetailTab.Genre)" class="autoselect-tab @(GetTabClass(AutoSelectDetailTab.Genre))" @onclick="(() => SetDetailTab(AutoSelectDetailTab.Genre))">ジャンル</button>
+                            <button type="button" role="tab" aria-selected="@(_detailTab == AutoSelectDetailTab.Channel)" class="autoselect-tab @(GetTabClass(AutoSelectDetailTab.Channel))" @onclick="(() => SetDetailTab(AutoSelectDetailTab.Channel))">チャンネル</button>
+                            <button type="button" role="tab" aria-selected="@(_detailTab == AutoSelectDetailTab.VideoSize)" class="autoselect-tab @(GetTabClass(AutoSelectDetailTab.VideoSize))" @onclick="(() => SetDetailTab(AutoSelectDetailTab.VideoSize))">映像サイズ</button>
+                        </div>
+                        <div class="autoselect-detail-tab-panel">
+                        @if (_detailTab == AutoSelectDetailTab.Genre)
+                        {
                             <label>
                                 <input type="checkbox" checked="@_selectedCondition.ContentConditionEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ContentConditionEnabled)))" />
                                 ジャンル
                             </label>
-                            <div class="condition-list" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ContentConditionEnabled)">
+                            <div class="condition-list condition-list-mini" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ContentConditionEnabled)">
                                 @foreach (var main in _options?.Genres ?? new List<GenreNodeView>())
                                 {
                                     <div class="genre-main">
@@ -188,32 +188,32 @@ else
                                     </div>
                                 }
                             </div>
-                        </div>
-
-                        <div style="width: 30%;">
+                        }
+                        else if (_detailTab == AutoSelectDetailTab.Channel)
+                        {
                             <label>
                                 <input type="checkbox" checked="@_selectedCondition.ServiceIdEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ServiceIdEnabled)))" />
                                 チャンネル
                             </label>
-                            <div class="condition-list" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ServiceIdEnabled)">
+                            <div class="condition-list condition-list-mini" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ServiceIdEnabled)">
                                 @foreach (var service in _options?.Services ?? new List<ServiceOptionView>())
                                 {
                                     <div>
                                         <label>
                                             <input type="checkbox" checked="@_selectedCondition.ServiceIds.Contains(service.ServiceId)" @onchange="@(e => OnServiceChanged(service.ServiceId, e))" />
-                                            @service.Name
+                                            @ToHalfWidth(service.Name)
                                         </label>
                                     </div>
                                 }
                             </div>
-                        </div>
-
-                        <div style="width: 30%;">
+                        }
+                        else
+                        {
                             <label>
                                 <input type="checkbox" checked="@_selectedCondition.VideoSizeEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.VideoSizeEnabled)))" />
                                 映像サイズ
                             </label>
-                            <div class="condition-list" style="max-height: 150px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.VideoSizeEnabled)">
+                            <div class="condition-list condition-list-mini" style="max-height: 150px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.VideoSizeEnabled)">
                                 @foreach (var size in _options?.VideoSizes ?? new List<VideoSizeOptionView>())
                                 {
                                     <div>
@@ -226,6 +226,7 @@ else
                             </div>
                             <div style="margin-top: 6px;">メモ:</div>
                             <textarea style="width: 100%; height: 80px;" @oninput="@(e => OnStringChanged(e, nameof(AutoSelectConditionModel.Description)))">@(_selectedCondition.Description ?? "")</textarea>
+                        }
                         </div>
                     </div>
                 </div>
@@ -256,6 +257,7 @@ else
 
     private int _selectedConditionIndex = -1;
     private int _dragIndex = -1;
+    private AutoSelectDetailTab _detailTab = AutoSelectDetailTab.Genre;
 
     private NameDialogMode _nameDialog = NameDialogMode.None;
     private string _nameInput = "";
@@ -353,6 +355,17 @@ else
         }
         _selectedConditionIndex = index;
         _selectedCondition = _selectedProfile.Conditions[index];
+        _detailTab = AutoSelectDetailTab.Genre;
+    }
+
+    private void SetDetailTab(AutoSelectDetailTab tab)
+    {
+        _detailTab = tab;
+    }
+
+    private string GetTabClass(AutoSelectDetailTab tab)
+    {
+        return _detailTab == tab ? "is-active" : "is-inactive";
     }
 
     private async Task OnProfileChanged(ChangeEventArgs e)
@@ -487,14 +500,29 @@ else
         return "";
     }
 
-    private bool HasConditionWarning(AutoSelectConditionModel cond)
+    private static string ToHalfWidth(string? value)
     {
-        return !string.IsNullOrEmpty(GetConditionWarning(cond));
-    }
-
-    private string GetConditionStatus(AutoSelectConditionModel cond)
-    {
-        return HasConditionWarning(cond) ? "無効" : "有効";
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+        var sb = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (ch == '\u3000')
+            {
+                sb.Append(' ');
+            }
+            else if (ch >= '\uFF01' && ch <= '\uFF5E')
+            {
+                sb.Append((char)(ch - 0xFEE0));
+            }
+            else
+            {
+                sb.Append(ch);
+            }
+        }
+        return sb.ToString();
     }
 
     private void OnConditionProfileChanged(int index, ChangeEventArgs e)
@@ -853,6 +881,13 @@ else
         Rename
     }
 
+    private enum AutoSelectDetailTab
+    {
+        Genre,
+        Channel,
+        VideoSize
+    }
+
     private sealed class AutoSelectProfileModel
     {
         public string Name { get; set; } = "";
@@ -892,11 +927,57 @@ else
     }
 
     .autoselect-list-col {
-        width: 48%;
+        width: 42%;
+        min-width: 340px;
     }
 
     .autoselect-detail-col {
-        width: 52%;
+        width: 58%;
+        min-width: 540px;
+    }
+
+    .autoselect-tabbar {
+        display: flex;
+        gap: 6px;
+        margin-bottom: -1px;
+        flex-wrap: wrap;
+    }
+
+    .autoselect-tabset {
+        margin-top: 8px;
+    }
+
+    .autoselect-tab {
+        border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+        border-bottom: none;
+        border-radius: 10px 10px 0 0;
+        background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+        color: var(--muted);
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.2;
+        cursor: pointer;
+    }
+
+    .autoselect-tab.is-inactive {
+        color: color-mix(in srgb, var(--muted) 75%, #7a8499);
+        background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+    }
+
+    .autoselect-tab.is-active {
+        color: color-mix(in srgb, var(--accent-strong) 85%, var(--text));
+        background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+        border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+        box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+
+    .autoselect-detail-tab-panel {
+        min-width: 0;
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+        border-radius: 0 10px 10px 10px;
+        padding: 8px;
+        background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
     }
 
     .condition-list {
@@ -986,54 +1067,28 @@ else
         white-space: nowrap;
     }
 
-    .condition-main {
+    .condition-headline-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .condition-summary-main {
+        flex: 1 1 auto;
+        min-width: 0;
         font-weight: 600;
     }
 
-    .condition-status {
-        margin-left: 8px;
-        font-size: 12px;
-        padding: 1px 6px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
+    .condition-priority-inline {
+        margin-left: auto;
     }
 
-    .condition-status.is-ok {
-        color: color-mix(in srgb, var(--success) 85%, var(--text));
-        border-color: color-mix(in srgb, var(--success) 65%, var(--border));
+    .condition-meta-compact {
+        margin-top: 2px;
     }
 
-    .condition-status.is-warning {
-        color: color-mix(in srgb, var(--danger) 85%, var(--text));
-        border-color: color-mix(in srgb, var(--danger) 65%, var(--border));
-    }
-
-    .condition-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 4px;
-    }
-
-    .condition-chip {
-        font-size: 12px;
-        line-height: 1.2;
-        padding: 2px 6px;
-        border-radius: 999px;
-        border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-        background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
-    }
-
-    .condition-details {
-        margin-top: 6px;
-    }
-
-    .condition-details > summary {
-        cursor: pointer;
-        color: var(--muted);
-        font-size: 12px;
-        user-select: none;
-        margin-bottom: 4px;
+    .condition-meta-compact .condition-profile-select {
+        min-width: 140px;
     }
 
     @@media (max-width: 900px) {
@@ -1044,10 +1099,33 @@ else
         .autoselect-list-col,
         .autoselect-detail-col {
             width: 100%;
+            min-width: 0;
         }
 
         .autoselect-header-sub {
             width: 100%;
+        }
+
+        .condition-meta-compact,
+        .condition-meta-compact select {
+            font-size: 12px;
+        }
+
+        .condition-list-mini {
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        .condition-list-mini label {
+            font-size: 11px;
+        }
+
+        .condition-headline-row {
+            flex-wrap: wrap;
+        }
+
+        .condition-priority-inline {
+            margin-left: 0;
         }
 
         .condition-priority-label {

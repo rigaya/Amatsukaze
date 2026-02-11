@@ -982,7 +982,7 @@ code {
 .drcs-map .form-control {
   width: 4.5ch;
   max-width: 100%;
-  min-width: 2.5ch;
+  min-width: 3.5ch;
   text-align: center;
 }
 
@@ -1009,6 +1009,7 @@ code {
   padding: 4px 8px;
   font-size: 12px;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .drcs-btn-main {
@@ -1020,7 +1021,9 @@ code {
 }
 
 .drcs-btn-appearance {
-  min-width: 104px;
+  min-width: 88px;
+  padding-left: 5px;
+  padding-right: 5px;
 }
 
 .drcs-appearance-popup {
@@ -1666,9 +1669,40 @@ code {
 
     .drcs-row {
         row-gap: 6px;
+        flex-wrap: nowrap;
+        gap: 6px;
     }
 
     .drcs-actions {
-        width: 100%;
+        width: auto;
+        gap: 4px;
+        flex-wrap: nowrap;
+    }
+
+    .drcs-actions .btn {
+        min-height: 24px;
+        padding: 2px 5px;
+        font-size: 10px;
+    }
+
+    .drcs-btn-main {
+        min-width: 68px;
+    }
+
+    .drcs-btn-delete {
+        min-width: 44px;
+    }
+
+    .drcs-btn-appearance {
+        min-width: 62px;
+        padding-left: 3px;
+        padding-right: 3px;
+    }
+
+    .drcs-map .form-control {
+        width: 4.8ch;
+        min-width: 4ch;
+        padding-left: 2px;
+        padding-right: 2px;
     }
 }
