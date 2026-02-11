@@ -364,7 +364,7 @@ else
             <div class="queue-context-menu"
                  style="left: @_contextMenuXpx; top: @_contextMenuYpx;"
                  @onclick:stopPropagation="true">
-                <button class="queue-menu-item" @onclick="OpenConsoleSelected">コンソール</button>
+                <button class="queue-menu-item" @onclick="OpenConsoleSelected">ログ</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ResetState, "リトライ"))' disabled="@(!_hasSelection)">リトライ</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.UpdateProfile, "プロファイル再適用"))' disabled="@(!_hasSelection)">プロファイル再適用</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.Cancel, "キャンセル"))' disabled="@(!_hasSelection)">キャンセル</button>
