@@ -855,6 +855,26 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool LogoPendAsError { get; set; }
         [DataMember]
+        public bool AutoLogoPendingEnabled { get; set; }
+        [DataMember]
+        public int AutoLogoPendingDivX { get; set; }
+        [DataMember]
+        public int AutoLogoPendingDivY { get; set; }
+        [DataMember]
+        public int AutoLogoPendingSearchFrames { get; set; }
+        [DataMember]
+        public int AutoLogoPendingBlockSize { get; set; }
+        [DataMember]
+        public int AutoLogoPendingThreshold { get; set; }
+        [DataMember]
+        public int AutoLogoPendingMarginX { get; set; }
+        [DataMember]
+        public int AutoLogoPendingMarginY { get; set; }
+        [DataMember]
+        public int AutoLogoPendingThreadN { get; set; }
+        [DataMember]
+        public bool AutoLogoPendingDetailedDebug { get; set; }
+        [DataMember]
         public bool DumpFilter { get; set; }
         // CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする
         [DataMember]

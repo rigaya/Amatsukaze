@@ -334,6 +334,8 @@ namespace Amatsukaze.Server
                     {
                         item.FailReason = "ロゴ設定がありません";
                         item.Reset();
+                        // ロゴ設定不足で保留になった場合は、設定に応じて自動補完を非同期実行する
+                        server.TryKickAutoLogoPending(item);
                     }
                     else if(item.IsSeparateHashRequired && item.Hash == null)
                     {

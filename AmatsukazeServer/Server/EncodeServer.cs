@@ -63,6 +63,7 @@ namespace Amatsukaze.Server
         private Action finishRequested;
 
         private QueueManager queueManager;
+        private AutoLogoPendingResolver autoLogoPendingResolver;
         private ScheduledQueue scheduledQueue;
         private WorkerPool workerPool;
 
@@ -299,6 +300,7 @@ namespace Amatsukaze.Server
             serverPort = port;
 
             queueManager = new QueueManager(this);
+            autoLogoPendingResolver = new AutoLogoPendingResolver(this);
             drcsManager = new DRCSManager(this);
 
             LoadAppData();
@@ -579,10 +581,13 @@ namespace Amatsukaze.Server
             Debug.Print("[Init] バックグラウンドスレッドの開始を開始します");
             try
             {
-                watchFileThread = WatchFileThread();
-                saveSettingThread = SaveSettingThread();
-                queueThread = QueueThread();
-                drcsThread = DrcsThread();
+                // asyncメソッドは最初のawaitまで呼び出し元スレッドで同期実行されるため、
+                // 起動時に重い処理/例外経路へ入ると初期化がブロックされることがある。
+                // 初期化シーケンスを確実に進めるため、明示的にThreadPool上で起動する。
+                watchFileThread = Task.Run(WatchFileThread);
+                saveSettingThread = Task.Run(SaveSettingThread);
+                queueThread = Task.Run(QueueThread);
+                drcsThread = Task.Run(DrcsThread);
                 Debug.Print("[Init] バックグラウンドスレッドの開始が完了しました");
             }
             catch (Exception ex)
@@ -982,11 +987,42 @@ namespace Amatsukaze.Server
             }
         }
 
+        private void UpdateFromVersion2()
+        {
+            // LogoPending自動補完設定を追加 //
+            int NextVersion = 3;
+
+            if (AppData_.Version < NextVersion)
+            {
+                if (AppData_.setting != null)
+                {
+                    AppData_.setting.AutoLogoPendingEnabled = true;
+                    AppData_.setting.AutoLogoPendingDivX = 4;
+                    AppData_.setting.AutoLogoPendingDivY = 4;
+                    AppData_.setting.AutoLogoPendingSearchFrames = 20000;
+                    AppData_.setting.AutoLogoPendingBlockSize = 32;
+                    AppData_.setting.AutoLogoPendingThreshold = 12;
+                    AppData_.setting.AutoLogoPendingMarginX = 4;
+                    AppData_.setting.AutoLogoPendingMarginY = 4;
+                    AppData_.setting.AutoLogoPendingThreadN = 0;
+                    AppData_.setting.AutoLogoPendingDetailedDebug = false;
+                }
+
+                // 現在バージョンに更新
+                AppData_.Version = NextVersion;
+
+                // 起動処理で落ちると２重に処理することになるので、
+                // ここで設定ファイルに書き込んでおく
+                SaveAppData();
+            }
+        }
+
         private void UpdateFromOldVersion()
         {
             // 古いバージョンからのアップデート処理
             UpdateFromVersion0();
             UpdateFromVersion1();
+            UpdateFromVersion2();
         }
 
         #region メッセージ出力
@@ -1344,7 +1380,22 @@ namespace Amatsukaze.Server
 
         private Setting GetDefaultSetting()
         {
-            var setting = SetDefaultPath(new Setting() { NumParallel = 1, NumParallelLogoAnalysis = 0, DeleteOldLogsDays = 180 });
+            var setting = SetDefaultPath(new Setting()
+            {
+                NumParallel = 1,
+                NumParallelLogoAnalysis = 0,
+                DeleteOldLogsDays = 180,
+                AutoLogoPendingEnabled = true,
+                AutoLogoPendingDivX = 4,
+                AutoLogoPendingDivY = 4,
+                AutoLogoPendingSearchFrames = 20000,
+                AutoLogoPendingBlockSize = 32,
+                AutoLogoPendingThreshold = 12,
+                AutoLogoPendingMarginX = 4,
+                AutoLogoPendingMarginY = 4,
+                AutoLogoPendingThreadN = 0,
+                AutoLogoPendingDetailedDebug = false
+            });
             NormalizeTrimAdjustSettings(setting);
             return setting;
         }
@@ -1394,6 +1445,34 @@ namespace Amatsukaze.Server
                 AppData_.setting.DeleteOldLogsDays = 180;
             }
             NormalizeTrimAdjustSettings(AppData_.setting);
+            if (AppData_.setting.AutoLogoPendingDivX <= 0)
+            {
+                AppData_.setting.AutoLogoPendingDivX = 4;
+            }
+            if (AppData_.setting.AutoLogoPendingDivY <= 0)
+            {
+                AppData_.setting.AutoLogoPendingDivY = 4;
+            }
+            if (AppData_.setting.AutoLogoPendingSearchFrames < 100)
+            {
+                AppData_.setting.AutoLogoPendingSearchFrames = 20000;
+            }
+            if (AppData_.setting.AutoLogoPendingBlockSize < 4)
+            {
+                AppData_.setting.AutoLogoPendingBlockSize = 32;
+            }
+            if (AppData_.setting.AutoLogoPendingThreshold < 1)
+            {
+                AppData_.setting.AutoLogoPendingThreshold = 12;
+            }
+            if (AppData_.setting.AutoLogoPendingMarginX < 0)
+            {
+                AppData_.setting.AutoLogoPendingMarginX = 4;
+            }
+            if (AppData_.setting.AutoLogoPendingMarginY < 0)
+            {
+                AppData_.setting.AutoLogoPendingMarginY = 4;
+            }
             if (AppData_.scriptData == null)
             {
                 AppData_.scriptData = new MakeScriptData();
@@ -2814,6 +2893,10 @@ namespace Amatsukaze.Server
 
                         if (updatedServices.Count > 0)
                         {
+                            foreach (var updatedServiceId in updatedServices.Distinct())
+                            {
+                                ClearAutoLogoPendingFailureLatch(updatedServiceId, "ロゴファイル更新検知");
+                            }
                             // 更新をクライアントに通知
                             foreach (var updatedServiceId in updatedServices.Distinct())
                             {
@@ -3448,6 +3531,7 @@ namespace Amatsukaze.Server
                     }
                     waits.Add(NotifyMessage(message, false));
                 }
+                autoLogoPendingResolver?.ClearFailureLatch(logoData.ServiceId, "ロゴファイル投入");
                 return Task.WhenAll(waits);
             }
             catch (Exception e)
@@ -3635,6 +3719,16 @@ namespace Amatsukaze.Server
         internal void RequestLogoRescan()
         {
             serviceListUpdated = true;
+        }
+
+        internal void TryKickAutoLogoPending(QueueItem item)
+        {
+            autoLogoPendingResolver?.TryKick(item);
+        }
+
+        internal void ClearAutoLogoPendingFailureLatch(int serviceId, string reason)
+        {
+            autoLogoPendingResolver?.ClearFailureLatch(serviceId, reason);
         }
 
 #region QueueManager
@@ -4023,6 +4117,7 @@ namespace Amatsukaze.Server
                 }
                 serviceMap[update.ServiceId] = update.Data;
                 settingUpdated = true;
+                ClearAutoLogoPendingFailureLatch(update.ServiceId, "サービス追加");
                 message = "サービス「" + update.Data.ServiceName + "」を追加しました";
             }
             else if(serviceMap.ContainsKey(update.ServiceId))
@@ -4038,6 +4133,7 @@ namespace Amatsukaze.Server
                             update.Data.LogoSettings[i].Exists = old.LogoSettings[i].Exists;
                         }
                         serviceMap[update.ServiceId] = update.Data;
+                        ClearAutoLogoPendingFailureLatch(update.ServiceId, "サービス設定更新");
 
                         var waits = new List<Task>();
                         UpdateQueueItems(waits);
@@ -4049,6 +4145,7 @@ namespace Amatsukaze.Server
                 {
                     var service = serviceMap[update.ServiceId];
                     service.LogoSettings.Add(MakeNoLogoSetting(update.ServiceId));
+                    ClearAutoLogoPendingFailureLatch(update.ServiceId, "ロゴなし設定追加");
                     update.Type = ServiceSettingUpdateType.Update;
                     update.Data = service;
                     message = "サービス「" + service.ServiceName + "」にロゴなしを追加しました";
@@ -4064,6 +4161,7 @@ namespace Amatsukaze.Server
                 {
                     var service = serviceMap[update.ServiceId];
                     service.LogoSettings.RemoveAt(update.RemoveLogoIndex);
+                    ClearAutoLogoPendingFailureLatch(update.ServiceId, "ロゴ設定削除");
                     update.Type = ServiceSettingUpdateType.Update;
                     update.Data = service;
                     message = "サービス「" + service.ServiceName + "」のロゴを削除しました";
