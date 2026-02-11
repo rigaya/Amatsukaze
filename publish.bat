@@ -11,19 +11,36 @@ if errorlevel 1 (
   exit /b 1
 )
 
-del .\publish\win-x64\*.dll
-del .\publish\win-x64\*.dll.config
-del .\publish\win-x64\*.exe
-del .\publish\win-x64\*.pdb
+if not exist ".\publish\win-x64" mkdir ".\publish\win-x64"
+del .\publish\win-x64\*.dll >nul 2>&1
+del .\publish\win-x64\*.dll.config >nul 2>&1
+del .\publish\win-x64\*.exe >nul 2>&1
+del .\publish\win-x64\*.pdb >nul 2>&1
 
-set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-if not exist "%VSWHERE%" (
-  echo vswhere.exe not found: %VSWHERE%
+set "VSWHERE="
+for /f "usebackq delims=" %%I in (`where vswhere.exe 2^>nul`) do (
+  set "VSWHERE=%%~fI"
+  goto :vswhere_found
+)
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if "%VSWHERE%"=="" if exist "%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe" set "VSWHERE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+if "%VSWHERE%"=="" if exist "%SystemDrive%\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" set "VSWHERE=%SystemDrive%\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+:vswhere_found
+if "%VSWHERE%"=="" (
+  echo vswhere.exe not found in PATH or standard install directories.
   exit /b 1
 )
 
 set "VSINSTALL="
-for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
+set "VSTMP=%TEMP%\amatsukaze_vsinstall.txt"
+"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath > "%VSTMP%"
+if errorlevel 1 (
+  echo vswhere.exe failed.
+  if exist "%VSTMP%" del /q "%VSTMP%" >nul 2>&1
+  exit /b 1
+)
+if exist "%VSTMP%" set /p VSINSTALL=<"%VSTMP%"
+if exist "%VSTMP%" del /q "%VSTMP%" >nul 2>&1
 if "%VSINSTALL%"=="" (
   echo Visual Studio with VC++ tools not found.
   exit /b 1
