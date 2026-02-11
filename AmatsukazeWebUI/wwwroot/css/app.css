@@ -1455,7 +1455,8 @@ code {
 
 .log-overlay-panel {
     position: relative;
-    width: min(720px, 90vw);
+    width: min(1600px, calc(100vw - clamp(140px, 18vw, 300px)));
+    max-width: 96vw;
     max-height: 100vh;
     overflow: auto;
     background: var(--glass-strong);
