@@ -339,6 +339,9 @@ else
                                 <div class="queue-cell-line queue-state-priority">
                                     <span class="queue-state">@GetStateText(item)</span>
                                     <input type="number" class="queue-priority-input"
+                                           min="@MinPriority"
+                                           max="@MaxPriority"
+                                           step="1"
                                            @bind="_priorityInputs[item.Id]"
                                            @bind:after="(() => ChangePriorityAsync(item))" />
                                 </div>
@@ -475,7 +478,9 @@ else
     private readonly List<string> _profileNames = new();
     private List<QueueItemView> _filteredItems = new();
     private Dictionary<int, int> _indexById = new();
+    private Dictionary<int, int> _filteredIndexById = new();
     private readonly HashSet<int> _selectedIds = new();
+    private int? _selectionAnchorId;
     private bool _contextMenuVisible;
     private double _contextMenuX;
     private double _contextMenuY;
@@ -523,6 +528,8 @@ else
     private bool _filterStateCanceled = true;
     private bool _filterStateComplete = true;
     private bool _isFilterOpen;
+    private const int MinPriority = 1;
+    private const int MaxPriority = 5;
     private bool _hasSelection => _selectedIds.Count > 0;
     private string _contextMenuXpx => $"{_contextMenuX:0}px";
     private string _contextMenuYpx => $"{_contextMenuY:0}px";
@@ -600,13 +607,17 @@ else
                     }
                     if (!_priorityInputs.ContainsKey(item.Id))
                     {
-                        _priorityInputs[item.Id] = item.Priority;
+                        _priorityInputs[item.Id] = ClampPriority(item.Priority);
                     }
                 }
                 if (_selectedIds.Count > 0)
                 {
                     var ids = _view.Items.Select(x => x.Id).ToHashSet();
                     _selectedIds.RemoveWhere(id => !ids.Contains(id));
+                    if (_selectionAnchorId.HasValue && !ids.Contains(_selectionAnchorId.Value))
+                    {
+                        _selectionAnchorId = _view.Items.FirstOrDefault(x => _selectedIds.Contains(x.Id))?.Id;
+                    }
                 }
             }
         }
@@ -646,7 +657,9 @@ else
         {
             _filteredItems = new List<QueueItemView>();
             _indexById = new Dictionary<int, int>();
+            _filteredIndexById = new Dictionary<int, int>();
             _selectedIds.Clear();
+            _selectionAnchorId = null;
             _contextMenuVisible = false;
             return;
         }
@@ -673,11 +686,20 @@ else
             filtered.Add(item);
         }
         _filteredItems = filtered;
+        _filteredIndexById = new Dictionary<int, int>(filtered.Count);
+        for (var i = 0; i < filtered.Count; i++)
+        {
+            _filteredIndexById[filtered[i].Id] = i;
+        }
 
         var visibleIds = new HashSet<int>(filtered.Select(x => x.Id));
         if (_selectedIds.RemoveWhere(id => !visibleIds.Contains(id)) > 0 && _selectedIds.Count == 0)
         {
             _contextMenuVisible = false;
+        }
+        if (_selectionAnchorId.HasValue && !visibleIds.Contains(_selectionAnchorId.Value))
+        {
+            _selectionAnchorId = _filteredItems.FirstOrDefault(x => _selectedIds.Contains(x.Id))?.Id;
         }
     }
 
@@ -1783,6 +1805,8 @@ else
         {
             priority = item.Priority;
         }
+        priority = ClampPriority(priority);
+        _priorityInputs[item.Id] = priority;
         await ChangeItemAsync(item, ChangeItemType.Priority, priority: priority);
     }
 
@@ -1885,6 +1909,11 @@ else
     private void OnRowClick(QueueItemView item, MouseEventArgs e)
     {
         CloseContextMenu();
+        if (e.ShiftKey)
+        {
+            SelectRange(item.Id, additive: e.CtrlKey);
+            return;
+        }
         if (e.CtrlKey)
         {
             if (_selectedIds.Contains(item.Id))
@@ -1895,14 +1924,17 @@ else
             {
                 _selectedIds.Add(item.Id);
             }
+            _selectionAnchorId = item.Id;
             return;
         }
         if (_selectedIds.Contains(item.Id))
         {
+            _selectionAnchorId = item.Id;
             return;
         }
         _selectedIds.Clear();
         _selectedIds.Add(item.Id);
+        _selectionAnchorId = item.Id;
     }
 
     private async Task OnRowContextMenu(QueueItemView item, MouseEventArgs e)
@@ -1912,6 +1944,7 @@ else
             _selectedIds.Clear();
             _selectedIds.Add(item.Id);
         }
+        _selectionAnchorId = item.Id;
         _contextMenuX = e.ClientX;
         var viewportHeight = await JS.InvokeAsync<double>("amatsukazeUi.getViewportHeight");
         if (viewportHeight > 0 && e.ClientY + ContextMenuHeight + ContextMenuMargin > viewportHeight)
@@ -2051,6 +2084,40 @@ else
         await PollOnceAsyncCore(preserveScrollOnFullSync: true);
     }
 
+    private void SelectRange(int itemId, bool additive)
+    {
+        if (!_filteredIndexById.TryGetValue(itemId, out var endIndex))
+        {
+            if (!additive)
+            {
+                _selectedIds.Clear();
+            }
+            _selectedIds.Add(itemId);
+            _selectionAnchorId = itemId;
+            return;
+        }
+
+        var anchorId = _selectionAnchorId ?? itemId;
+        if (!_filteredIndexById.TryGetValue(anchorId, out var startIndex))
+        {
+            startIndex = endIndex;
+            anchorId = itemId;
+        }
+
+        if (!additive)
+        {
+            _selectedIds.Clear();
+        }
+
+        var lower = Math.Min(startIndex, endIndex);
+        var upper = Math.Max(startIndex, endIndex);
+        for (var i = lower; i <= upper; i++)
+        {
+            _selectedIds.Add(_filteredItems[i].Id);
+        }
+        _selectionAnchorId = anchorId;
+    }
+
     private async Task OnQueueDrop(int dropAnchorId)
     {
         if (_view == null)
@@ -2071,6 +2138,7 @@ else
         {
             _selectedIds.Clear();
             _selectedIds.Add(draggedItem.Id);
+            _selectionAnchorId = draggedItem.Id;
         }
 
         var dropIndex = ResolveDropIndex(dropAnchorId);
@@ -2271,4 +2339,7 @@ else
         }
         return false;
     }
+
+    private static int ClampPriority(int priority)
+        => Math.Clamp(priority, MinPriority, MaxPriority);
 }
