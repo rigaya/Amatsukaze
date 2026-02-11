@@ -356,6 +356,15 @@
                 } catch (e) {
                     return 0;
                 }
+            },
+            openInNewTab: function (url) {
+                try {
+                    if (!url || typeof url !== "string") {
+                        return;
+                    }
+                    window.open(url, "_blank", "noopener,noreferrer");
+                } catch (e) {
+                }
             }
         };
     </script>

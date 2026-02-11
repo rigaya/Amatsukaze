@@ -1799,10 +1799,11 @@ else
     private Task ForceStartAsync(QueueItemView item)
         => ChangeItemAsync(item, ChangeItemType.ForceStart);
 
-    private void OpenLogoAnalyze(QueueItemView item)
+    private async Task OpenLogoAnalyzeAsync(QueueItemView item)
     {
         var url = $"logo-analyze?queueItemId={item.Id}";
-        Nav.NavigateTo(url);
+        var absoluteUrl = Nav.ToAbsoluteUri(url).ToString();
+        await JS.InvokeVoidAsync("amatsukazeUi.openInNewTab", absoluteUrl);
     }
 
     private async Task ChangePriorityAsync(QueueItemView item)
@@ -1886,7 +1887,7 @@ else
         await ReloadAsync();
     }
 
-    private void OpenLogoAnalyzeSelectedAsync()
+    private async Task OpenLogoAnalyzeSelectedAsync()
     {
         CloseContextMenu();
         if (_view == null || _selectedIds.Count == 0)
@@ -1898,7 +1899,7 @@ else
         {
             return;
         }
-        OpenLogoAnalyze(item);
+        await OpenLogoAnalyzeAsync(item);
     }
 
     private async Task ClearSucceededAsync()
@@ -1964,7 +1965,7 @@ else
         _contextMenuVisible = true;
     }
 
-    private void OpenConsoleSelected()
+    private async Task OpenConsoleSelected()
     {
         if (_selectedIds.Count == 0)
         {
@@ -1972,7 +1973,8 @@ else
         }
         var taskId = _selectedIds.First();
         CloseContextMenu();
-        Nav.NavigateTo($"/console/{taskId}");
+        var absoluteUrl = Nav.ToAbsoluteUri($"/console/{taskId}").ToString();
+        await JS.InvokeVoidAsync("amatsukazeUi.openInNewTab", absoluteUrl);
     }
 
     private void CloseContextMenu()
