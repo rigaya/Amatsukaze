@@ -111,17 +111,17 @@ jobs:
           if not exist lib mkdir lib
           7z x -y -o"%OUT%\lib" "%DEPS%\deplib.7z"
           if not exist deps\\join_logo mkdir deps\\join_logo
-          powershell -NoProfile -Command "Expand-Archive -Path deps\\join_logo.zip -DestinationPath deps\\join_logo -Force"
+          7z x -y -o"%DEPS%\join_logo" "%DEPS%\join_logo.zip"
           if not exist deps\\avscuda mkdir deps\\avscuda
-          powershell -NoProfile -Command "Expand-Archive -Path deps\\avscuda.zip -DestinationPath deps\\avscuda -Force"
+          7z x -y -o"%DEPS%\avscuda" "%DEPS%\avscuda.zip"
           if not exist deps\\lsmash mkdir deps\\lsmash
           7z x -y -o"%DEPS%\lsmash" "%DEPS%\lsmash.7z"
           if not exist deps\\x264 mkdir deps\\x264
-          powershell -NoProfile -Command "Expand-Archive -Path deps\\x264.zip -DestinationPath deps\\x264 -Force"
+          7z x -y -o"%DEPS%\x264" "%DEPS%\x264.zip"
           if not exist deps\\x265 mkdir deps\\x265
-          powershell -NoProfile -Command "Expand-Archive -Path deps\\x265.zip -DestinationPath deps\\x265 -Force"
+          7z x -y -o"%DEPS%\x265" "%DEPS%\x265.zip"
           if not exist deps\\svt mkdir deps\\svt
-          powershell -NoProfile -Command "Expand-Archive -Path deps\\svt.zip -DestinationPath deps\\svt -Force"
+          7z x -y -o"%DEPS%\svt" "%DEPS%\svt.zip"
           echo --- deps contents (after Extract) ---
           tree /f deps
 
