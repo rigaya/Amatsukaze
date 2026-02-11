@@ -16,7 +16,26 @@ del .\publish\win-x64\*.dll.config
 del .\publish\win-x64\*.exe
 del .\publish\win-x64\*.pdb
 
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" x64
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE%" (
+  echo vswhere.exe not found: %VSWHERE%
+  exit /b 1
+)
+
+set "VSINSTALL="
+for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
+if "%VSINSTALL%"=="" (
+  echo Visual Studio with VC++ tools not found.
+  exit /b 1
+)
+
+set "VCVARS=%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat"
+if not exist "%VCVARS%" (
+  echo vcvars64.bat not found: %VCVARS%
+  exit /b 1
+)
+call "%VCVARS%" x64
+if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo Building solution with MSBuild (Release + Release2)...
 msbuild Amatsukaze.sln /restore /p:Configuration=Release /p:Platform=x64 /m
