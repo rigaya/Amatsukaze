@@ -86,36 +86,70 @@ static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo
     }
     const double basePts = srcFrames[firstIndex].pts;
     func.offsets.resize(outFrames.size(), 0.0);
-    double prev = 0.0;
     double maxGap = 0.0;
     const double LOG_EPS_MS = 1.0; // 1ms以上の増分のみログ（細かな丸め誤差は無視）
+
+    // RFF(repeat_first_field)混在時、CFR仮定(k * tickMs)に対する生のoffsetには
+    // drop由来の大きなステップ変動と、RFF由来の微小な振動(±0.5×tickMs)が混在する。
+    // ステップフィルタ(dead zone)を適用し:
+    //  - RFF由来の振動 (±0.5×tickMs < 閾値) → baseline を変更しない(フィルタ除去)
+    //  - drop由来のステップ (≥1.0×tickMs > 閾値) → baseline を更新(反映)
+    // とすることで、timecodeにはdrop分のみが反映される。
+    const double stepThreshold = tickMs * 0.75;
+    double baseline = 0.0;
+
     for (int k = 0; k < (int)outFrames.size(); k++) {
         const int idx = outFrames[k];
         if (idx < 0 || idx >= (int)srcFrames.size()) {
-            func.offsets[k] = prev;
+            func.offsets[k] = baseline;
             continue;
         }
         const double tPtsMs = (srcFrames[idx].pts - basePts) * 1000.0 / MPEG_CLOCK_HZ;
         const double tCfrMs = k * tickMs;
-        double off = tPtsMs - tCfrMs;
-        if (!std::isfinite(off)) {
-            off = prev;
+        double rawOff = tPtsMs - tCfrMs;
+        if (!std::isfinite(rawOff)) {
+            rawOff = baseline;
         }
-        // drop補正は「時間の穴」を足す方向なので、単調非減少に丸める
-        off = std::max(off, prev);
-        const double delta = off - prev;
-        if (delta >= LOG_EPS_MS) {
-            ctx.infoF("tsreplace drop補正: +%.3f ms (累積 %.3f ms) at frame=%d (src=%d, tCFR=%.3f ms, tPTS=%.3f ms)",
-                delta, off, k, idx, tCfrMs, tPtsMs);
+
+        // ステップフィルタ: baseline からの偏差が閾値を超えた場合のみ更新
+        if (rawOff > baseline + stepThreshold || rawOff < baseline - stepThreshold) {
+            const double delta = rawOff - baseline;
+            ctx.infoF("tsreplace drop補正: %+.3f ms (累積 %.3f ms) at frame=%d (src=%d, tCFR=%.3f ms, tPTS=%.3f ms)",
+                delta, rawOff, k, idx, tCfrMs, tPtsMs);
+            baseline = rawOff;
         }
-        func.offsets[k] = off;
-        prev = off;
-        maxGap = std::max(maxGap, off);
+        func.offsets[k] = baseline;
+        maxGap = std::max(maxGap, std::abs(baseline));
     }
     if (maxGap > 0.5) {
-        ctx.infoF("tsreplace drop補正: 推定ギャップ合計 %.3f ms", maxGap);
+        ctx.infoF("tsreplace drop補正: 推定最大offset %.3f ms", maxGap);
     }
     return func;
+}
+
+// フレーム間PTS差分から実際の drop (大きなPTSギャップ) を検出する。
+// RFF由来の1.5倍間隔を drop と誤判定しないよう、閾値を 1.75 × timePerFrame とする。
+//  - 通常フレーム: 1.0 × timePerFrame
+//  - RFFフレーム:  1.5 × timePerFrame
+//  - 1フレームdrop: 2.0 × timePerFrame 以上
+static bool detectActualDrop(const StreamReformInfo& reformInfo, EncodeFileKey key, double timePerFrame90k) {
+    const auto& outFrames = reformInfo.getEncodeFile(key).videoFrames;
+    const auto& srcFrames = reformInfo.getFilterSourceFrames(key.video);
+    if (outFrames.size() < 2 || srcFrames.empty()) return false;
+
+    const double gapThreshold = timePerFrame90k * 1.75;
+
+    for (size_t k = 0; k + 1 < outFrames.size(); k++) {
+        const int idx0 = outFrames[k];
+        const int idx1 = outFrames[k + 1];
+        if (idx0 < 0 || idx0 >= (int)srcFrames.size()) continue;
+        if (idx1 < 0 || idx1 >= (int)srcFrames.size()) continue;
+        const double ptsDiff = srcFrames[idx1].pts - srcFrames[idx0].pts;
+        if (ptsDiff > gapThreshold) {
+            return true;  // drop 検出
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -378,13 +412,24 @@ AMTFilterSource::AMTFilterSource(AMTContext&ctx,
                 const double tickMs = (infmt.frameRateNum > 0)
                     ? (infmt.frameRateDenom * 1000.0 / (double)infmt.frameRateNum)
                     : (1000.0 / 30.0);
+                // フレーム間PTS差分から実際のdrop (大きなPTSギャップ) の有無を判定する。
+                // RFF(repeat_first_field)混在時、累積offsetだけでは
+                // RFF由来の微小なoffsetとdrop由来のoffsetの区別がつかないため、
+                // 個別フレーム間のPTS差分で判定する。
+                const double timePerFrame90k = (infmt.frameRateNum > 0)
+                    ? (infmt.frameRateDenom * (double)MPEG_CLOCK_HZ / infmt.frameRateNum)
+                    : (double)MPEG_CLOCK_HZ / 30.0;
+                const bool hasActualDrop = detectActualDrop(reformInfo, key, timePerFrame90k);
+
                 const auto offsetFunc = buildPtsGapOffsetFunc(reformInfo, key, tickMs, ctx);
 
-                // drop補正が不要（ギャップが実質0）の場合は、timecodeの生成/上書きを行わない
+                // drop補正が不要の場合は、timecodeの生成/上書きを行わない
+                // - フレーム間PTS差分に大きなギャップ(drop)が検出されなければ補正しない
+                //   (RFF由来の微小offsetではdrop補正を行わない)
                 // - フィルタが既にtimecodeを生成している場合は、そのまま利用する（調整はしない）
                 // - timecodeが無い場合は、tsreplaceのために新規生成もしない（元動作維持）
                 const double DROP_CORR_EPS_MS = 1.0;
-                const bool needDropCorrection = offsetFunc.valid() && (offsetFunc.offsets.back() >= DROP_CORR_EPS_MS);
+                const bool needDropCorrection = hasActualDrop && offsetFunc.valid() && (offsetFunc.offsets.back() >= DROP_CORR_EPS_MS);
                 if (!needDropCorrection) {
                     // 既存 timeCodes_ を変更しない
                 } else {
