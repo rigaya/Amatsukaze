@@ -140,6 +140,13 @@
         margin-top: 0.5rem;
         color: var(--muted);
         font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+    .queue-action-message {
+        color: var(--muted);
     }
 </style>
 
@@ -262,11 +269,6 @@ else if (_view == null)
 }
 else
 {
-    if (!string.IsNullOrEmpty(_actionMessage))
-    {
-        <p style="color: green;">@_actionMessage</p>
-    }
-
     @if (_filteredItems.Count == 0)
     {
         <p>No queue items.</p>
@@ -382,6 +384,10 @@ else
         Pending: @_view.Counters.Pending /
         Failed: @_view.Counters.Failed /
         Canceled: @_view.Counters.Canceled
+        @if (!string.IsNullOrEmpty(_actionMessage))
+        {
+            <span class="queue-action-message">/ @_actionMessage</span>
+        }
     </div>
 }
 
