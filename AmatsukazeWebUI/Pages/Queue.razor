@@ -188,7 +188,7 @@
     <label class="queue-header-group">
         <span>処理後</span>
         <span class="queue-header-group-body">
-            <select class="form-select queue-finish-select" style="width: 180px;"
+            <select class="form-select queue-finish-select" style="width: 156px;"
                     value="@_finishAction"
                     disabled="@(_systemLoading || _finishBusy || _system?.FinishSetting == null)"
                     @onchange="OnFinishActionChanged">
@@ -210,6 +210,11 @@
             </select>
         </span>
     </label>
+    <div style="margin-left: auto; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;">
+        <span class="queue-header-state">移動</span>
+        <button class="btn btn-outline-secondary btn-sm" type="button" title="上へ移動" @onclick="ScrollUpAsync">⬆</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" title="下へ移動" @onclick="ScrollDownAsync">⬇</button>
+    </div>
 </div>
 
 <div class="queue-filter-shell @(_isFilterOpen ? "" : "is-closed")">
@@ -1534,6 +1539,33 @@ else
         catch
         {
             return null;
+        }
+    }
+
+    private async Task ScrollUpAsync()
+    {
+        await ScrollByAsync(-1);
+    }
+
+    private async Task ScrollDownAsync()
+    {
+        await ScrollByAsync(1);
+    }
+
+    private async Task ScrollByAsync(int direction)
+    {
+        if (_view == null || _loading)
+        {
+            return;
+        }
+        try
+        {
+            var viewport = await JS.InvokeAsync<double>("amatsukazeUi.getViewportHeight");
+            var step = Math.Max(180, viewport * 0.72) * Math.Sign(direction);
+            await JS.InvokeVoidAsync("amatsukazeUi.scrollElementOrWindowBy", _queueListElement, step);
+        }
+        catch
+        {
         }
     }
 

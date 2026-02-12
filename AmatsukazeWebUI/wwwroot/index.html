@@ -350,6 +350,23 @@
                 } catch (e) {
                 }
             },
+            scrollElementOrWindowBy: function (element, deltaY) {
+                try {
+                    var dy = Number(deltaY) || 0;
+                    if (!dy) {
+                        return;
+                    }
+                    if (element) {
+                        var canScroll = (element.scrollHeight || 0) > (element.clientHeight || 0) + 1;
+                        if (canScroll) {
+                            element.scrollTop = (element.scrollTop || 0) + dy;
+                            return;
+                        }
+                    }
+                    window.scrollBy({ left: 0, top: dy, behavior: "smooth" });
+                } catch (e) {
+                }
+            },
             getViewportHeight: function () {
                 try {
                     return window.innerHeight || document.documentElement.clientHeight || 0;
