@@ -36,6 +36,7 @@ sudo apt install -y ./avisynth_<version>_amd64_Ubuntuxx.xx.deb
 - AmatsuakzeCLI, libAmatsukaze.soのビルド (C++)
   - 依存するffmpeg関連ライブラリのビルドを含む
 - AmatsuakzeServer, AmatsuakzeServerCLI, AmatsuakzeAddTask のビルド (C# dotnet)
+- WebUI静的ファイルの公開と配置 (`exe_files/wwwroot`)
 - インストール先への実行ファイルの配置
 
 ```bash

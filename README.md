@@ -235,6 +235,44 @@ NVEncの入手先は[こちら](https://github.com/rigaya/NVEnc/releases)。
 
 設定したら「適用」ボタンを忘れずに。
 
+### 7. サーバーを別PCで動かす
+
+Amatsukazeはサーバー/クライアント構成で動作できます。  
+エンコード用PCと操作用PCを分ける場合は、サーバーを別PCで起動して操作側から接続します。
+
+#### 7-1. サーバーPCでAmatsukazeServerを起動
+
+サーバーPC側で AmatsukazeServer (または AmatsukazeServerCLI) を起動します。  
+既定では、サーバー本体は `32768` ポートで待ち受けます。
+
+#### 7-2. 操作PCから接続
+
+操作側からは次のいずれかを利用できます。
+
+- AmatsukazeClient (GUI)
+  - Windows向けのデスクトップGUI (WPF) です。
+  - `AmatsukazeClient.bat` で起動して接続します。
+
+- WebUI
+  - ブラウザで使えるUIです。
+  - URLは `http://<サーバーIP>:<サーバーポート+1>/` です。  
+    既定設定 (`32768`) の場合は `http://<サーバーIP>:32769/` になります。
+
+  WebUI 画面例:
+
+  <img src="./data/AmatsukazeWebUI_20260212.webp" width="720">
+
+#### 7-3. 役割の整理
+
+- AmatsukazeServer
+  - キュー管理と実際のエンコード実行を担当します。
+
+- AmatsukazeClient (GUI)
+  - Windowsデスクトップアプリとしてサーバーを操作します。
+
+- WebUI
+  - REST API経由でサーバーを操作するブラウザUIです。
+
 ## AmatsukazeCLI
 
 実際のエンコードはAmatsukazeCLI.exeがバックエンドで動いています。
@@ -771,4 +809,3 @@ gitでバージョンを取得するので、gitにパスを通した状態で�
 ### Linux ビルド手順
 
 Linuxでのビルド方法は[こちら](./doc/BuildLinux.md)。
-

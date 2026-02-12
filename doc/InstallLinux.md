@@ -2,13 +2,13 @@
 
 ## 概要
 
-AmatsukazeServerCLI と AmatsukazeCLI、AmatsukazeAddTask をLinux対応しました。ディレクトリ構造はWindowsとほぼ同等としています。
+AmatsukazeServerCLI と AmatsukazeCLI、AmatsukazeAddTask に加えて、WebUI (ブラウザUI) をLinuxで利用できます。ディレクトリ構造はWindowsとほぼ同等としています。
 
-AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、WPFはLinuxに対応していないようなので、Linux対応は難しいです。
+AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われているため、Linuxでは利用できません。
 
-そのため、LinuxでAmatsukazeServerCLIを起動して、WindowsからAmatsukazeGUIで接続する形になります。また、タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
+Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:32769/` 既定) から操作する構成を推奨します。Windowsクライアントからの接続も引き続き利用できます。タスクのキューへの追加はAmatsukazeAddTaskの利用を想定しています。
 
-<img src="../data/AmatsukazeServerLinuxStart_00.png" width="640">
+<img src="../data/AmatsukazeServerLinuxStart_00.png" width="720">
 
 ## 想定動作環境
 
@@ -22,6 +22,7 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
   - AmatsukazeCLI
   - AmatsukazeServerCLI
   - AmatsukazeAddTask
+  - AmatsukazeWebUI
   - ScriptCommand
   
   まだ対応しきれていない箇所がまだあるかもしれません…
@@ -33,7 +34,6 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
 
 - 対応予定なし
   - AmatsukazeGUI (操作ウィンドウ)
-    - ロゴ解析含む
   - 設定画面へのドラッグドロップによるタスク追加
   - エンコード中の一時停止
   - エンコード後、スリープ・シャットダウン
@@ -42,7 +42,7 @@ AmatsukazeGUI(操作ウィンドウ)は.NETのWPFが使われていますが、W
   - 他のエンコーダの追加等
 
 > [!NOTE]
-> ロゴ生成もAmatsukazeGUI側の機能なので、これはWindows側で行う必要があります。生成したデータはServer(Linux)側に転送できるようにしています。
+> ロゴ解析/生成はWebUIからも実行できます。従来どおりWindows側のAmatsukazeGUIから実行することも可能です。
 
 ## インストール手順 (docker)
 
@@ -377,7 +377,22 @@ cd $HOME/Amatsukaze
 
 サーバーが開始されたと出ればOKです。
 
-### Windowsからの接続
+### サーバーへの接続
+
+サーバーへの接続は、WebUIからと、WindowsのAmatsukazeClient、どちらからでも接続できます。
+
+#### WebUIからの接続
+
+ブラウザから下記URLを開いて接続します。
+
+- `http://<サーバーIP>:32769/`
+
+`32769` は既定値です。  
+`AmatsukazeServerCLI` を `-p <port>` で起動している場合は `http://<サーバーIP>:<port+1>/` を使用してください。
+
+<img src="../data/AmatsukazeWebUI_20260212.webp" width="720">
+
+#### Windowsからの接続 (AmatsukazeClient)
 
 その後、Windowsから ```AmatsukazeClient.bat``` を実行して接続します。
 

@@ -119,7 +119,17 @@ vi compose.yml
 docker compose up -d
 ```
 
-## Windowsからの接続
+## 接続方法
+
+### WebUIからの接続
+
+ブラウザで下記URLを開きます。
+
+- `http://<コンテナを実行中のPCのIPアドレス>:32769/`
+
+<img src="../data/AmatsukazeWebUI_20260212.webp" width="720">
+
+### Windowsからの接続 (AmatsukazeClient)
 
 Windowsから ```AmatsukazeClient.bat``` を実行して接続します。
 
@@ -153,7 +163,8 @@ AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プ�
 
 | | ポート |
 |:--|:--:|
-| Amastuakze | 32768 |
+| Amatsukaze (Server本体) | 32768 |
+| Amatsukaze (REST/WebUI) | 32769 |
 
 | | コンテナ外 | コンテナ内 |
 |:--|:--|:--|
