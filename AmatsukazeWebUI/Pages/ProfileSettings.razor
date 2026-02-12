@@ -348,8 +348,8 @@ else
                                 CUDAで処理
                             </label>
                         </div>
-                        <fieldset style="border: 1px solid #ccc; padding: 8px; margin-bottom: 8px;">
-                            <legend style="padding: 0 6px;">インターレース解除</legend>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">インターレース解除</legend>
                             <label>
                                 <input type="checkbox" checked="@GetFilterBool("EnableDeinterlace")" @onchange="@(e => OnFilterBoolChanged(e, "EnableDeinterlace"))" />
                                 有効
@@ -481,8 +481,8 @@ else
                                 }
                             }
                         </fieldset>
-                        <fieldset style="border: 1px solid #ccc; padding: 8px; margin-bottom: 8px;">
-                            <legend style="padding: 0 6px;">デブロッキング</legend>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">デブロッキング</legend>
                             <label>
                                 <input type="checkbox" checked="@GetFilterBool("EnableDeblock")" @onchange="@(e => OnFilterBoolChanged(e, "EnableDeblock"))" />
                                 有効
@@ -508,8 +508,8 @@ else
                                 </label>
                             </div>
                         </fieldset>
-                        <fieldset style="border: 1px solid #ccc; padding: 8px; margin-bottom: 8px;">
-                            <legend style="padding: 0 6px;">リサイズ</legend>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">リサイズ</legend>
                             <label>
                                 <input type="checkbox" checked="@GetFilterBool("EnableResize")" @onchange="@(e => OnFilterBoolChanged(e, "EnableResize"))" />
                                 有効

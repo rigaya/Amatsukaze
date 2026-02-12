@@ -635,6 +635,23 @@ code {
     text-align: right;
 }
 
+.profile-settings .profile-filter-panel {
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    margin-bottom: 8px;
+    background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+}
+
+.profile-settings .profile-filter-legend {
+    padding: 0 6px;
+    margin: 0;
+    font-size: 0.80rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--muted) 88%, var(--text));
+    letter-spacing: 0.01em;
+}
+
 .profile-header {
     position: sticky;
     top: var(--topbar-height);
