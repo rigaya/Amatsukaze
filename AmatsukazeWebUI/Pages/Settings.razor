@@ -8,8 +8,8 @@
 <h3>基本設定</h3>
 
 <div class="settings-header">
-    <button class="btn btn-primary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
-    <button class="btn btn-secondary" @onclick="ApplyAsync" disabled="@(_loading || _setting == null)">適用</button>
+    <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(_loading || _setting == null)">適用</button>
+    <button class="btn btn-secondary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
     <span class="settings-header-note">「適用」で反映。「更新」を押すと編集中の設定が失われるので注意</span>
 </div>
 

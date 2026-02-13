@@ -763,7 +763,7 @@ code {
     z-index: 120;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     padding: 6px 8px;
     margin-bottom: 8px;
@@ -775,8 +775,8 @@ code {
 }
 
 .autoselect-header-select {
-    min-width: 180px;
-    flex: 1 1 180px;
+    min-width: 120px;
+    flex: 1 1 auto;
 }
 
 @media (max-width: 1100px) {
@@ -869,6 +869,7 @@ code {
 
 .queue-state-priority .queue-state {
     flex: 1 1 auto;
+    font-size: 0.82rem;
 }
 
 .queue-priority-input {
@@ -1616,7 +1617,7 @@ code {
 
 .service-layout {
     display: grid;
-    grid-template-columns: 260px 1fr;
+    grid-template-columns: 210px 1fr;
     gap: 16px;
 }
 

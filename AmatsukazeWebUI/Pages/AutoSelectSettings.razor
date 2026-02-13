@@ -28,11 +28,6 @@
         <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
         <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
     </div>
-    @if (_confirmDelete)
-    {
-        <span style="margin-left: 6px; color: #a00;">もう一度押すと削除します</span>
-        <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="CancelDelete">キャンセル</button>
-    }
 </div>
 
 @if (_showDiscardConfirm)
@@ -72,7 +67,7 @@ else
             <div style="margin-bottom: 6px;">
                 <button class="btn btn-sm btn-secondary" @onclick="AddCondition" disabled="@(_selectedProfile == null)">条件追加</button>
                 <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="RemoveCondition" disabled="@(_selectedProfile == null || _selectedConditionIndex < 0)">条件削除</button>
-                <span style="margin-left: 8px;">条件は上から順に評価されます</span>
+                <span class="autoselect-condition-hint">条件は上から順に評価されます</span>
             </div>
             <div class="condition-list">
                 @if (_selectedProfile != null && _selectedProfile.Conditions.Count == 0)
@@ -251,7 +246,6 @@ else
     private string? _error;
     private bool _loading = true;
     private bool _isDirty;
-    private bool _confirmDelete;
     private bool _showDiscardConfirm;
     private string? _pendingProfileName;
 
@@ -273,7 +267,6 @@ else
         _loading = true;
         _error = null;
         _isDirty = false;
-        _confirmDelete = false;
         _showDiscardConfirm = false;
         _pendingProfileName = null;
         StateHasChanged();
@@ -827,12 +820,6 @@ else
         {
             return;
         }
-        if (!_confirmDelete)
-        {
-            _confirmDelete = true;
-            return;
-        }
-        _confirmDelete = false;
         _loading = true;
         _error = null;
         try
@@ -848,11 +835,6 @@ else
         {
             _loading = false;
         }
-    }
-
-    private void CancelDelete()
-    {
-        _confirmDelete = false;
     }
 
     private AutoSelectProfileModel CloneProfile(AutoSelectProfileModel profile)
@@ -927,13 +909,13 @@ else
     }
 
     .autoselect-list-col {
-        width: 42%;
-        min-width: 340px;
+        width: 54%;
+        min-width: 300px;
     }
 
     .autoselect-detail-col {
-        width: 58%;
-        min-width: 540px;
+        width: 46%;
+        min-width: 270px;
     }
 
     .autoselect-tabbar {
@@ -1035,11 +1017,18 @@ else
         display: flex;
         align-items: center;
         gap: 6px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
     }
 
     .autoselect-header-main {
-        flex: 1 1 100%;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .autoselect-condition-hint {
+        margin-left: 8px;
+        font-size: 0.78rem;
+        color: color-mix(in srgb, var(--muted) 92%, transparent);
     }
 
     .condition-meta {
@@ -1100,10 +1089,6 @@ else
         .autoselect-detail-col {
             width: 100%;
             min-width: 0;
-        }
-
-        .autoselect-header-sub {
-            width: 100%;
         }
 
         .condition-meta-compact,

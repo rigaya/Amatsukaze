@@ -21,11 +21,6 @@
     <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
     <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
     <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
-    @if (_confirmDelete)
-    {
-        <span class="profile-header-warn">もう一度押すと削除します</span>
-        <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">キャンセル</button>
-    }
 </div>
 
 @if (_showDiscardConfirm)
@@ -46,10 +41,6 @@
         <button class="btn btn-sm btn-secondary" style="margin-left: 4px;" @onclick="CancelNameDialog">キャンセル</button>
     </div>
 }
-
-<div style="margin-top: 8px;">
-    <span style="color: #a00;">「適用」で反映。「更新」を押すと編集中の設定が失われるので注意</span>
-</div>
 
 @if (_loading)
 {
@@ -853,7 +844,6 @@ else
     private ProfileOptions? _options;
     private bool _loading;
     private bool _isDirty;
-    private bool _confirmDelete;
     private string? _error;
     private string? _pendingProfileName;
     private bool _showDiscardConfirm;
@@ -880,7 +870,6 @@ else
     {
         _loading = true;
         _error = null;
-        _confirmDelete = false;
 
         var prevSelected = _selectedProfileName;
         _profiles.Clear();
@@ -950,7 +939,6 @@ else
             return;
         }
         _error = null;
-        _confirmDelete = false;
 
         var json = UpdateProfileName(_draftJson, _selectedProfileName);
         using var doc = JsonDocument.Parse(json);
@@ -965,12 +953,6 @@ else
 
     private async Task DeleteAsync()
     {
-        if (_confirmDelete == false)
-        {
-            _confirmDelete = true;
-            return;
-        }
-
         if (string.IsNullOrEmpty(_selectedProfileName))
         {
             return;
@@ -983,13 +965,7 @@ else
             _error = res.Error ?? "Failed to delete profile.";
             return;
         }
-        _confirmDelete = false;
         await ReloadProfilesAsync();
-    }
-
-    private void CancelDelete()
-    {
-        _confirmDelete = false;
     }
 
     private void OpenNewDialog()
@@ -1022,7 +998,6 @@ else
             return;
         }
         _error = null;
-        _confirmDelete = false;
 
         if (_nameDialog == NameDialogMode.New)
         {
