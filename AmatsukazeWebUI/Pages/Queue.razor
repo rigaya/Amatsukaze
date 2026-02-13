@@ -1544,15 +1544,20 @@ else
 
     private async Task ScrollUpAsync()
     {
-        await ScrollByAsync(-1);
+        if (_view == null || _loading)
+        {
+            return;
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("amatsukazeUi.scrollElementOrWindowToEdge", _queueListElement, false);
+        }
+        catch
+        {
+        }
     }
 
     private async Task ScrollDownAsync()
-    {
-        await ScrollByAsync(1);
-    }
-
-    private async Task ScrollByAsync(int direction)
     {
         if (_view == null || _loading)
         {
@@ -1560,9 +1565,7 @@ else
         }
         try
         {
-            var viewport = await JS.InvokeAsync<double>("amatsukazeUi.getViewportHeight");
-            var step = Math.Max(180, viewport * 0.72) * Math.Sign(direction);
-            await JS.InvokeVoidAsync("amatsukazeUi.scrollElementOrWindowBy", _queueListElement, step);
+            await JS.InvokeVoidAsync("amatsukazeUi.scrollElementOrWindowToEdge", _queueListElement, true);
         }
         catch
         {

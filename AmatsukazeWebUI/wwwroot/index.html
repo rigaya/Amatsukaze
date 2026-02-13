@@ -367,6 +367,26 @@
                 } catch (e) {
                 }
             },
+            scrollElementOrWindowToEdge: function (element, toBottom) {
+                try {
+                    var bottom = !!toBottom;
+                    if (element) {
+                        var canScroll = (element.scrollHeight || 0) > (element.clientHeight || 0) + 1;
+                        if (canScroll) {
+                            element.scrollTop = bottom ? (element.scrollHeight || 0) : 0;
+                            return;
+                        }
+                    }
+                    var y = 0;
+                    if (bottom) {
+                        var doc = document.documentElement;
+                        var body = document.body;
+                        y = Math.max((doc && doc.scrollHeight) || 0, (body && body.scrollHeight) || 0);
+                    }
+                    window.scrollTo({ left: 0, top: y, behavior: "smooth" });
+                } catch (e) {
+                }
+            },
             getViewportHeight: function () {
                 try {
                     return window.innerHeight || document.documentElement.clientHeight || 0;
