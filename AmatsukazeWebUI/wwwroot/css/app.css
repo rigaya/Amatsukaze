@@ -1219,6 +1219,54 @@ code {
     box-shadow: var(--shadow-sm);
 }
 
+.logo-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.logo-card-file {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.logo-card-meta {
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+.logo-card-image {
+    max-width: 200px;
+    max-height: 120px;
+    margin-top: 4px;
+}
+
+.logo-enabled-toggle {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1px 6px;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+    color: var(--text);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.logo-enabled-toggle.is-enabled {
+    border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+    background: color-mix(in srgb, var(--success) 18%, var(--bg-surface));
+}
+
+.logo-enabled-toggle.is-disabled {
+    border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+    background: color-mix(in srgb, var(--danger) 14%, var(--bg-surface));
+}
+
 .path-suggest-input {
     position: relative;
     display: inline-block;

@@ -145,14 +145,21 @@ else
                                     var isSelected = string.Equals(_selectedLogoFileName, logo.FileName, StringComparison.Ordinal);
                                     <div class="logo-card @(isSelected ? "is-selected" : "")"
                                          @onclick="() => SelectLogo(logo.FileName)">
-                                        <div>@(logo.FileName ?? "-")</div>
-                                        <div>Enabled: @(logo.Enabled ? "Yes" : "No")</div>
-                                        <div>Name: @(logo.LogoName ?? "-")</div>
-                                        <div>Size: @(FormatSize(logo.ImageWidth, logo.ImageHeight))</div>
-                                        <div>Period: @(FormatPeriod(logo.From, logo.To))</div>
+                                        <div class="logo-card-header">
+                                            <span class="logo-card-file">@(logo.FileName ?? "-")</span>
+                                            <button class="logo-enabled-toggle @(logo.Enabled ? "is-enabled" : "is-disabled")"
+                                                    title="有効/無効を切り替え"
+                                                    @onclick="(() => ToggleLogoEnabledCardAsync(logo.FileName, !logo.Enabled))"
+                                                    @onclick:stopPropagation="true">
+                                                @(logo.Enabled ? "Enabled" : "Disabled")
+                                            </button>
+                                        </div>
+                                        <div>@(logo.LogoName ?? "-")</div>
+                                        <div class="logo-card-meta">@(FormatSize(logo.ImageWidth, logo.ImageHeight))</div>
+                                        <div class="logo-card-meta">@(FormatPeriod(logo.From, logo.To))</div>
                                         @if (!string.IsNullOrEmpty(logo.ImageUrl))
                                         {
-                                            <img src="@BuildImageUrl(logo.ImageUrl)" alt="@logo.FileName" style="max-width: 200px; max-height: 120px;" />
+                                            <img src="@BuildImageUrl(logo.ImageUrl)" alt="@logo.FileName" class="logo-card-image" />
                                         }
                                     </div>
                                 }
@@ -476,6 +483,27 @@ else
                 return;
             }
             _selectedLogo.Enabled = _logoEnabled;
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ToggleLogoEnabledCardAsync(string? fileName, bool enabled)
+    {
+        _periodError = null;
+        if (_selectedService == null || string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+        var enabledReq = new LogoEnabledUpdateRequest()
+        {
+            FileName = fileName,
+            Enabled = enabled
+        };
+        var enabledRes = await Api.UpdateServiceLogoEnabledAsync(_selectedService.ServiceId, enabledReq);
+        if (!enabledRes.Ok)
+        {
+            _periodError = enabledRes.Error ?? "Failed to update logo enabled.";
+            return;
         }
         await ReloadAsync();
     }
