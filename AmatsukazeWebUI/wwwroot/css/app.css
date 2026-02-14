@@ -1042,7 +1042,9 @@ code {
 }
 
 .drcs-btn-main {
-  min-width: 92px;
+  width: 116px;
+  min-width: 116px;
+  max-width: 116px;
 }
 
 .drcs-btn-delete {
@@ -1770,7 +1772,9 @@ code {
     }
 
     .drcs-btn-main {
-        min-width: 68px;
+        width: 86px;
+        min-width: 86px;
+        max-width: 86px;
     }
 
     .drcs-btn-delete {
