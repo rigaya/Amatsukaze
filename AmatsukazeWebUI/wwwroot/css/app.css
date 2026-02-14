@@ -995,6 +995,7 @@ code {
   height: 36px;
   object-fit: contain;
   border-radius: var(--radius-sm);
+  background: transparent;
 }
 
 .drcs-image-placeholder {
@@ -1006,6 +1007,13 @@ code {
 
 .drcs-image {
   flex: 0 0 auto;
+}
+
+@media (prefers-color-scheme: dark) {
+    .drcs-image img {
+        filter: invert(1) grayscale(1) contrast(1.08);
+        mix-blend-mode: lighten;
+    }
 }
 
 .drcs-map .form-control {
