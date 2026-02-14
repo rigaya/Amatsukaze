@@ -10,7 +10,9 @@
 }
 
 .navbar-brand {
-    font-size: 1.15rem;
+    font-size: 1.32rem;
+    font-weight: 700;
+    line-height: 1.1;
     color: var(--sidebar-text);
     letter-spacing: 0.02em;
 }
