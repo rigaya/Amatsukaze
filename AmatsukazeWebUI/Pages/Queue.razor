@@ -1780,7 +1780,7 @@ else
             if (item.EncodeStart.HasValue && item.EncodeFinish.HasValue)
             {
                 var duration = item.EncodeFinish.Value - item.EncodeStart.Value;
-                var finish = item.DisplayEncodeFinish ?? item.EncodeFinish.Value.ToString("yyyy-MM-dd HH:mm");
+                var finish = item.EncodeFinish.Value.ToString("MM/dd HH:mm");
                 return $"{baseText} ({duration:hh\\:mm\\:ss} / {finish})";
             }
         }
