@@ -576,13 +576,15 @@ code {
     padding-bottom: 0.45rem;
     color: var(--muted);
     font-weight: 600;
-    vertical-align: top;
+    vertical-align: middle;
+    white-space: nowrap;
 }
 
 .profile-settings table td {
     padding-left: 0.4rem;
     padding-top: 0.45rem;
     padding-bottom: 0.45rem;
+    vertical-align: middle;
 }
 
 .profile-settings .profile-check-row td {
@@ -638,18 +640,27 @@ code {
 .profile-settings .profile-filter-panel {
     border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
     border-radius: var(--radius-sm);
-    padding: 8px;
+    padding: 8px 8px 8px 20px;
     margin-bottom: 8px;
     background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    font-size: 0.85rem;
+    line-height: 2.0;
 }
 
 .profile-settings .profile-filter-legend {
-    padding: 0 6px;
+    padding: 0;
     margin: 0;
-    font-size: 0.80rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    color: color-mix(in srgb, var(--muted) 88%, var(--text));
     letter-spacing: 0.01em;
+}
+
+.profile-settings .profile-filter-legend label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: inherit;
 }
 
 .profile-header {
@@ -1552,6 +1563,12 @@ code {
     background: var(--glass-strong);
 }
 
+.log-click-hint {
+    margin: 0 0 8px 2px;
+    font-size: 0.78rem;
+    color: color-mix(in srgb, var(--muted) 84%, var(--text));
+}
+
 .log-table {
     margin-bottom: 0;
     table-layout: fixed;
@@ -1561,6 +1578,14 @@ code {
 .log-table th,
 .log-table td {
     vertical-align: top;
+}
+
+.log-row-clickable {
+    cursor: pointer;
+}
+
+.log-row-clickable:hover td {
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
 }
 
 .log-col-start {
@@ -1592,11 +1617,6 @@ code {
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
-}
-
-.log-col-detail {
-    width: 64px;
-    text-align: center;
 }
 
 .log-list-loading {
@@ -1700,9 +1720,6 @@ code {
         width: 52%;
     }
 
-    .log-col-detail {
-        width: 56px;
-    }
 }
 
 @media (max-width: 980px) {

@@ -6,8 +6,7 @@
 
 <h3>エンコードログ</h3>
 
-<p>
-</p>
+<p class="log-click-hint">行をクリックするとログ詳細を表示します。</p>
 
 @if (_loading)
 {
@@ -34,19 +33,17 @@ else
                         <th class="log-col-message">メッセージ</th>
                         <th class="log-col-profile">プロファイル</th>
                         <th class="log-col-input">入力</th>
-                        <th class="log-col-detail">詳細</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in _encodeLogs)
                     {
-                        <tr>
+                        <tr class="log-row-clickable" @onclick="() => LoadEncodeDetailAsync(item)">
                             <td class="log-col-start">@(item.DisplayEncodeStart ?? "-")</td>
                             <td class="log-col-result">@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
                             <td class="log-col-message">@(item.Reason ?? "-")</td>
                             <td class="log-col-profile">@(item.Profile ?? "-")</td>
                             <td class="log-col-input" title="@(item.SrcPath ?? "-")">@GetLogFileName(item.SrcPath)</td>
-                            <td class="log-col-detail"><button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadEncodeDetailAsync(item)">View</button></td>
                         </tr>
                     }
                 </tbody>
