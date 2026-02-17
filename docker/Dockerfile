@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     wget \
+    tzdata \
     p7zip-full \
     nasm \
     cmake \
@@ -222,6 +223,7 @@ RUN apt-get update && apt-get install -y \
     gpg \
     curl \
     wget \
+    tzdata \
     software-properties-common \
     p7zip-full \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
@@ -278,6 +280,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && apt-get autoremove -y
+
+# タイムゾーンを確実にJSTへ固定
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
 
 # 日本語ロケールの設定
 RUN locale-gen ja_JP.UTF-8 \
