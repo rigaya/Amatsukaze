@@ -1603,6 +1603,44 @@ namespace Amatsukaze.Server.Rest
                 return Results.Json(status);
             });
 
+            app.MapPost("/api/logo/analyze/auto", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<LogoAutoDetectStartRequest>();
+                if (data == null)
+                {
+                    return Results.BadRequest();
+                }
+                if (!logoAnalyze.TryStartAutoDetect(data, out var status, out var error))
+                {
+                    return Results.BadRequest(new { message = error ?? "ロゴ位置検出を開始できませんでした" });
+                }
+                return Results.Json(status);
+            });
+
+            app.MapGet("/api/logo/analyze/auto/{jobId}", (string jobId) =>
+            {
+                var status = logoAnalyze.GetAutoDetectStatus(jobId);
+                if (status == null)
+                {
+                    return Results.NotFound();
+                }
+                return Results.Json(status);
+            });
+
+            app.MapGet("/api/logo/analyze/auto/{jobId}/debug/{kind}", (string jobId, string kind) =>
+            {
+                var bytes = logoAnalyze.GetAutoDetectDebugImagePng(jobId, kind);
+                if (bytes == null)
+                {
+                    return Results.NotFound();
+                }
+                if (string.Equals(kind, "point", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.File(bytes, "text/csv");
+                }
+                return Results.File(bytes, "image/png");
+            });
+
             app.MapGet("/api/logo/analyze/{jobId}", (string jobId) =>
             {
                 var status = logoAnalyze.GetStatus(jobId);

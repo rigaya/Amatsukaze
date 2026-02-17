@@ -10,20 +10,20 @@
 
 <h3>Logo Analyze</h3>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <p style="color: red;">@_error</p>
-}
-else if (!string.IsNullOrEmpty(_actionMessage))
-{
-    <p style="color: green;">@_actionMessage</p>
-}
-else if (_loading)
+@if (_loading)
 {
     <p>Loading...</p>
 }
 else
 {
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <p style="color: red;">@_error</p>
+    }
+    @if (!string.IsNullOrEmpty(_actionMessage))
+    {
+        <p style="color: green;">@_actionMessage</p>
+    }
     <div class="logo-analyze">
         <div class="logo-analyze-toolbar">
             <button class="btn btn-outline-secondary" @onclick="BackToQueue">Back to Queue</button>
@@ -48,6 +48,24 @@ else
 
         <div class="logo-analyze-actions">
             <button class="btn btn-primary" @onclick="StartAnalyzeAsync" disabled="@_analyzing">ロゴ解析開始</button>
+            <button class="btn btn-outline-primary" @onclick="StartAutoDetectAsync" disabled="@_autoDetecting">ロゴ位置検出</button>
+            <button class="btn btn-outline-secondary" @onclick="ApplyAutoRectToManualRect" disabled="@(!HasAutoRect)">検出結果を選択範囲に反映</button>
+        </div>
+        <div class="logo-analyze-controls">
+            <label>div_x:</label>
+            <input type="number" min="1" @bind="_autoDivX" style="width:72px;" />
+            <label>div_y:</label>
+            <input type="number" min="1" @bind="_autoDivY" style="width:72px;" />
+            <label>search_frame:</label>
+            <input type="number" min="100" @bind="_autoSearchFrames" style="width:110px;" />
+            <label>block_size:</label>
+            <input type="number" min="4" @bind="_autoBlockSize" style="width:90px;" />
+            <label>margin_x:</label>
+            <input type="number" min="0" @bind="_autoMarginX" style="width:72px;" />
+            <label>margin_y:</label>
+            <input type="number" min="0" @bind="_autoMarginY" style="width:72px;" />
+            <label>thread_n:</label>
+            <input type="number" min="1" @bind="_autoThreadN" style="width:72px;" />
         </div>
 
     @if (_analyzing || _lastStatus != null)
@@ -56,6 +74,17 @@ else
             <div>Progress: @_progressDisplay</div>
             <div>Read: @_lastStatus?.NumRead / @_lastStatus?.NumTotal (Valid: @_lastStatus?.NumValid)</div>
             <progress value="@_progressValue" max="1"></progress>
+        </div>
+    }
+
+    @if (_autoDetecting || _autoStatus != null)
+    {
+        <div class="logo-analyze-progress">
+            <div>Auto Detect Stage: @_autoStageDisplay @_autoStageNameDisplay</div>
+            <div>Auto Detect Progress: @_autoProgressDisplay</div>
+            <div>Read: @_autoStatus?.NumRead / @_autoStatus?.NumTotal</div>
+            <progress value="@_autoStageProgressValue" max="1"></progress>
+            <progress value="@_autoProgressValue" max="1"></progress>
         </div>
     }
 
@@ -86,12 +115,173 @@ else
                  @onmouseup="OnMouseUp"
                  @onmouseleave="OnMouseUp">
                 <div style="@BuildRectStyle()"></div>
+                <div style="@BuildAutoRectStyle()"></div>
             </div>
         </div>
         @if (!string.IsNullOrEmpty(_frameLoadLog))
         {
             <div class="logo-analyze-meta">@_frameLoadLog</div>
         }
+    }
+
+    @if (!string.IsNullOrEmpty(_autoScoreImageUrl) || !string.IsNullOrEmpty(_autoScoreRawImageUrl) || !string.IsNullOrEmpty(_autoScoreMedianImageUrl) || !string.IsNullOrEmpty(_autoValidAbImageUrl) || !string.IsNullOrEmpty(_autoBinaryImageUrl) || !string.IsNullOrEmpty(_autoCclImageUrl) || !string.IsNullOrEmpty(_autoCountImageUrl) || !string.IsNullOrEmpty(_autoFrameCountImageUrl) || !string.IsNullOrEmpty(_autoAImageUrl) || !string.IsNullOrEmpty(_autoBImageUrl) || !string.IsNullOrEmpty(_autoAlphaImageUrl) || !string.IsNullOrEmpty(_autoLogoYImageUrl) || !string.IsNullOrEmpty(_autoConsistencyImageUrl) || !string.IsNullOrEmpty(_autoBgVarImageUrl) || !string.IsNullOrEmpty(_autoRejectAlphaImageUrl) || !string.IsNullOrEmpty(_autoRejectLogoYImageUrl) || !string.IsNullOrEmpty(_autoRejectMeanDiffImageUrl) || !string.IsNullOrEmpty(_autoRejectBgVarImageUrl) || !string.IsNullOrEmpty(_autoRejectExtremeImageUrl) || !string.IsNullOrEmpty(_autoRejectConsistencyImageUrl) || !string.IsNullOrEmpty(_autoAcceptedImageUrl) || !string.IsNullOrEmpty(_autoPointCsvUrl))
+    {
+        <div class="logo-analyze-result">
+            <h4>自動検出デバッグ表示</h4>
+            @if (!string.IsNullOrEmpty(_autoScoreImageUrl))
+            {
+                <div>
+                    <div>ロゴ輝度/α計算(final)</div>
+                    <img src="@_autoScoreImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoScoreRawImageUrl))
+            {
+                <div>
+                    <div>ロゴ輝度/α計算(raw)</div>
+                    <img src="@_autoScoreRawImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoScoreMedianImageUrl))
+            {
+                <div>
+                    <div>ロゴ輝度/α計算(median)</div>
+                    <img src="@_autoScoreMedianImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoValidAbImageUrl))
+            {
+                <div>
+                    <div>validABマスク</div>
+                    <img src="@_autoValidAbImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoBinaryImageUrl))
+            {
+                <div>
+                    <div>2値化結果</div>
+                    <img src="@_autoBinaryImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoCclImageUrl))
+            {
+                <div>
+                    <div>CCL結果</div>
+                    <img src="@_autoCclImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoCountImageUrl))
+            {
+                <div>
+                    <div>有効サンプル数マップ(count)</div>
+                    <img src="@_autoCountImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoFrameCountImageUrl))
+            {
+                <div>
+                    <div>フレームごとの有効サンプル数推移</div>
+                    <img src="@_autoFrameCountImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoAImageUrl))
+            {
+                <div>
+                    <div>Aヒートマップ</div>
+                    <img src="@_autoAImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoBImageUrl))
+            {
+                <div>
+                    <div>Bヒートマップ</div>
+                    <img src="@_autoBImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoAlphaImageUrl))
+            {
+                <div>
+                    <div>αヒートマップ</div>
+                    <img src="@_autoAlphaImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoLogoYImageUrl))
+            {
+                <div>
+                    <div>ロゴ輝度ヒートマップ</div>
+                    <img src="@_autoLogoYImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoConsistencyImageUrl))
+            {
+                <div>
+                    <div>一致度ヒートマップ</div>
+                    <img src="@_autoConsistencyImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoBgVarImageUrl))
+            {
+                <div>
+                    <div>背景分散ヒートマップ</div>
+                    <img src="@_autoBgVarImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoRejectAlphaImageUrl))
+            {
+                <div>
+                    <div>棄却理由: α範囲外</div>
+                    <img src="@_autoRejectAlphaImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoRejectLogoYImageUrl))
+            {
+                <div>
+                    <div>棄却理由: ロゴ輝度範囲外</div>
+                    <img src="@_autoRejectLogoYImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoRejectMeanDiffImageUrl))
+            {
+                <div>
+                    <div>棄却理由: fg-bg差不一致</div>
+                    <img src="@_autoRejectMeanDiffImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoRejectBgVarImageUrl))
+            {
+                <div>
+                    <div>棄却理由: 背景分散大</div>
+                    <img src="@_autoRejectBgVarImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoRejectExtremeImageUrl))
+            {
+                <div>
+                    <div>棄却理由: 極端コントラスト比率</div>
+                    <img src="@_autoRejectExtremeImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoRejectConsistencyImageUrl))
+            {
+                <div>
+                    <div>棄却理由: 一致度不足</div>
+                    <img src="@_autoRejectConsistencyImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoAcceptedImageUrl))
+            {
+                <div>
+                    <div>採用スコア寄与マップ</div>
+                    <img src="@_autoAcceptedImageUrl" />
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_autoPointCsvUrl))
+            {
+                <div>
+                    <a href="@_autoPointCsvUrl" target="_blank">デバッグCSV (x=1380, y=67)</a>
+                </div>
+            }
+        </div>
     }
 
     @if (!string.IsNullOrEmpty(_resultImageUrl))
@@ -132,33 +322,92 @@ else
     private string? _frameLoadLog;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
+    private bool _autoDetecting;
+    private string? _autoDetectJobId;
+    private LogoAutoDetectStatus? _autoStatus;
+    private string _autoStageDisplay = "Stage 0/4";
+    private string _autoStageNameDisplay = "";
+    private string _autoProgressDisplay = "0%";
+    private double _autoProgressValue;
+    private double _autoStageProgressValue;
+    private CancellationTokenSource? _autoPollCts;
+    private Task? _autoPollTask;
+    private int _autoRectX;
+    private int _autoRectY;
+    private int _autoRectW;
+    private int _autoRectH;
+    private string? _autoScoreImageUrl;
+    private string? _autoScoreRawImageUrl;
+    private string? _autoScoreMedianImageUrl;
+    private string? _autoValidAbImageUrl;
+    private string? _autoBinaryImageUrl;
+    private string? _autoCclImageUrl;
+    private string? _autoCountImageUrl;
+    private string? _autoFrameCountImageUrl;
+    private string? _autoAImageUrl;
+    private string? _autoBImageUrl;
+    private string? _autoAlphaImageUrl;
+    private string? _autoLogoYImageUrl;
+    private string? _autoConsistencyImageUrl;
+    private string? _autoBgVarImageUrl;
+    private string? _autoRejectAlphaImageUrl;
+    private string? _autoRejectLogoYImageUrl;
+    private string? _autoRejectMeanDiffImageUrl;
+    private string? _autoRejectBgVarImageUrl;
+    private string? _autoRejectExtremeImageUrl;
+    private string? _autoRejectConsistencyImageUrl;
+    private string? _autoAcceptedImageUrl;
+    private string? _autoPointCsvUrl;
+    private int _autoDivX = 4;
+    private int _autoDivY = 4;
+    private int _autoSearchFrames = 20000;
+    private int _autoBlockSize = 32;
+    private int _autoMarginX = 4;
+    private int _autoMarginY = 4;
+    private int _autoThreadN = Math.Min(4, Environment.ProcessorCount);
+    private static readonly TimeSpan InitialLoadTimeout = TimeSpan.FromSeconds(30);
 
     protected override async Task OnInitializedAsync()
     {
-        if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
+        try
         {
-            _error = "queueItemId is required.";
+            if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
+            {
+                _error = "queueItemId is required.";
+                _loading = false;
+                return;
+            }
+
+            var req = new LogoPreviewSessionRequest
+            {
+                QueueItemId = QueueItemId.Value,
+                ServiceId = 0
+            };
+
+            var resTask = Api.CreateLogoPreviewSessionAsync(req);
+            if (await Task.WhenAny(resTask, Task.Delay(InitialLoadTimeout)) != resTask)
+            {
+                _error = "Logo preview session の初期化がタイムアウトしました。";
+                _loading = false;
+                return;
+            }
+            var res = await resTask;
+            if (!res.Ok || res.Data?.SessionId == null)
+            {
+                _error = res.Error ?? "Failed to create preview session.";
+                _loading = false;
+                return;
+            }
+
+            _sessionId = res.Data.SessionId;
+            _frameUrl = BuildFrameUrl(_position);
             _loading = false;
-            return;
         }
-
-        var req = new LogoPreviewSessionRequest
+        catch (Exception ex)
         {
-            QueueItemId = QueueItemId.Value,
-            ServiceId = 0
-        };
-
-        var res = await Api.CreateLogoPreviewSessionAsync(req);
-        if (!res.Ok || res.Data?.SessionId == null)
-        {
-            _error = res.Error ?? "Failed to create preview session.";
+            _error = ex.Message;
             _loading = false;
-            return;
         }
-
-        _sessionId = res.Data.SessionId;
-        _frameUrl = BuildFrameUrl(_position);
-        _loading = false;
     }
 
     private void BackToQueue()
@@ -252,6 +501,31 @@ else
                "border:2px dashed #5f55ff; background:rgba(95,85,255,0.1);";
     }
 
+    private bool HasAutoRect => _autoRectW > 0 && _autoRectH > 0;
+
+    private string BuildAutoRectStyle()
+    {
+        if (!HasAutoRect)
+        {
+            return "display:none;";
+        }
+        return $"position:absolute; left:{_autoRectX}px; top:{_autoRectY}px; width:{_autoRectW}px; height:{_autoRectH}px; " +
+               "border:2px solid #ff8800; background:rgba(255,136,0,0.08);";
+    }
+
+    private void ApplyAutoRectToManualRect()
+    {
+        if (!HasAutoRect)
+        {
+            return;
+        }
+        _rectX = _autoRectX;
+        _rectY = _autoRectY;
+        _rectW = _autoRectW;
+        _rectH = _autoRectH;
+        _actionMessage = "検出結果を選択範囲に反映しました。";
+    }
+
     private async Task StartAnalyzeAsync()
     {
         _actionMessage = null;
@@ -295,6 +569,65 @@ else
         StartPolling();
     }
 
+    private async Task StartAutoDetectAsync()
+    {
+        _actionMessage = null;
+        _error = null;
+        _autoScoreImageUrl = null;
+        _autoScoreRawImageUrl = null;
+        _autoScoreMedianImageUrl = null;
+        _autoValidAbImageUrl = null;
+        _autoBinaryImageUrl = null;
+        _autoCclImageUrl = null;
+        _autoCountImageUrl = null;
+        _autoFrameCountImageUrl = null;
+        _autoAImageUrl = null;
+        _autoBImageUrl = null;
+        _autoAlphaImageUrl = null;
+        _autoLogoYImageUrl = null;
+        _autoConsistencyImageUrl = null;
+        _autoBgVarImageUrl = null;
+        _autoRejectAlphaImageUrl = null;
+        _autoRejectLogoYImageUrl = null;
+        _autoRejectMeanDiffImageUrl = null;
+        _autoRejectBgVarImageUrl = null;
+        _autoRejectExtremeImageUrl = null;
+        _autoRejectConsistencyImageUrl = null;
+        _autoAcceptedImageUrl = null;
+        _autoPointCsvUrl = null;
+        if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
+        {
+            _error = "queueItemId is required.";
+            return;
+        }
+
+        var req = new LogoAutoDetectStartRequest
+        {
+            QueueItemId = QueueItemId.Value,
+            DivX = _autoDivX,
+            DivY = _autoDivY,
+            SearchFrames = _autoSearchFrames,
+            BlockSize = _autoBlockSize,
+            Threshold = _threshold,
+            MarginX = _autoMarginX,
+            MarginY = _autoMarginY,
+            ThreadN = _autoThreadN
+        };
+
+        var res = await Api.StartLogoAutoDetectAsync(req);
+        if (!res.Ok || res.Data?.JobId == null)
+        {
+            _error = res.Error ?? "Failed to start auto detect.";
+            return;
+        }
+
+        _autoStatus = res.Data;
+        _autoDetectJobId = res.Data.JobId;
+        _autoDetecting = true;
+        UpdateAutoDetectProgress(_autoStatus);
+        StartAutoDetectPolling();
+    }
+
     private void StartPolling()
     {
         _pollCts?.Cancel();
@@ -330,7 +663,38 @@ else
         }, token);
     }
 
-    private string BuildImageUrl(string path)
+    private void StartAutoDetectPolling()
+    {
+        _autoPollCts?.Cancel();
+        _autoPollCts = new CancellationTokenSource();
+        var token = _autoPollCts.Token;
+        _autoPollTask = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested && _autoDetecting && !string.IsNullOrEmpty(_autoDetectJobId))
+            {
+                var res = await Api.GetLogoAutoDetectStatusAsync(_autoDetectJobId);
+                if (res.Ok && res.Data != null)
+                {
+                    _autoStatus = res.Data;
+                    UpdateAutoDetectProgress(_autoStatus);
+                    if (_autoStatus.Completed)
+                    {
+                        _autoDetecting = false;
+                        if (!string.IsNullOrEmpty(_autoStatus.Error))
+                        {
+                            _error = _autoStatus.Error;
+                        }
+                        await InvokeAsync(StateHasChanged);
+                        return;
+                    }
+                }
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(1000, token);
+            }
+        }, token);
+    }
+
+    private string BuildImageUrl(string path, bool noCache = false)
     {
         var baseUri = ApiBase.Uri;
         if (string.Equals(baseUri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
@@ -339,7 +703,13 @@ else
         }
         var baseText = baseUri.ToString().TrimEnd('/');
         var tail = path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path;
-        return baseText + tail;
+        if (!noCache)
+        {
+            return baseText + tail;
+        }
+        var sep = tail.Contains("?", StringComparison.Ordinal) ? "&" : "?";
+        var nonce = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+        return baseText + tail + sep + "t=" + nonce;
     }
 
     private void UpdateProgress(LogoAnalyzeStatus? status)
@@ -379,6 +749,64 @@ else
 
         _progressValue = value;
         _progressDisplay = $"Pass {pass}: {value * 100:0}%";
+    }
+
+    private void UpdateAutoDetectProgress(LogoAutoDetectStatus? status)
+    {
+        if (status == null)
+        {
+            _autoProgressValue = 0;
+            _autoStageProgressValue = 0;
+            _autoProgressDisplay = "0%";
+            _autoStageDisplay = "Stage 0/4";
+            return;
+        }
+
+        var stage = Math.Max(0, status.Stage);
+        var progress = status.Progress > 1.0 ? status.Progress / 100.0 : status.Progress;
+        var stageProgress = status.StageProgress > 1.0 ? status.StageProgress / 100.0 : status.StageProgress;
+        progress = Math.Max(0.0, Math.Min(1.0, progress));
+        stageProgress = Math.Max(0.0, Math.Min(1.0, stageProgress));
+
+        _autoProgressValue = progress;
+        _autoStageProgressValue = stageProgress;
+        _autoProgressDisplay = $"{progress * 100:0}%";
+        _autoStageDisplay = $"Stage {stage}/4 ({stageProgress * 100:0}%)";
+        _autoStageNameDisplay = string.IsNullOrEmpty(status.StageName) ? "" : $"- {status.StageName}";
+
+        if (status.DetectedRect != null)
+        {
+            _autoRectX = status.DetectedRect.X;
+            _autoRectY = status.DetectedRect.Y;
+            _autoRectW = status.DetectedRect.Width;
+            _autoRectH = status.DetectedRect.Height;
+        }
+
+        if (status.DebugImages != null)
+        {
+            _autoScoreImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreUrl) ? null : BuildImageUrl(status.DebugImages.ScoreUrl, true);
+            _autoScoreRawImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreRawUrl) ? null : BuildImageUrl(status.DebugImages.ScoreRawUrl, true);
+            _autoScoreMedianImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreMedianUrl) ? null : BuildImageUrl(status.DebugImages.ScoreMedianUrl, true);
+            _autoValidAbImageUrl = string.IsNullOrEmpty(status.DebugImages.ValidAbUrl) ? null : BuildImageUrl(status.DebugImages.ValidAbUrl, true);
+            _autoBinaryImageUrl = string.IsNullOrEmpty(status.DebugImages.BinaryUrl) ? null : BuildImageUrl(status.DebugImages.BinaryUrl, true);
+            _autoCclImageUrl = string.IsNullOrEmpty(status.DebugImages.CclUrl) ? null : BuildImageUrl(status.DebugImages.CclUrl, true);
+            _autoCountImageUrl = string.IsNullOrEmpty(status.DebugImages.CountUrl) ? null : BuildImageUrl(status.DebugImages.CountUrl, true);
+            _autoFrameCountImageUrl = string.IsNullOrEmpty(status.DebugImages.FrameCountUrl) ? null : BuildImageUrl(status.DebugImages.FrameCountUrl, true);
+            _autoAImageUrl = string.IsNullOrEmpty(status.DebugImages.AUrl) ? null : BuildImageUrl(status.DebugImages.AUrl, true);
+            _autoBImageUrl = string.IsNullOrEmpty(status.DebugImages.BUrl) ? null : BuildImageUrl(status.DebugImages.BUrl, true);
+            _autoAlphaImageUrl = string.IsNullOrEmpty(status.DebugImages.AlphaUrl) ? null : BuildImageUrl(status.DebugImages.AlphaUrl, true);
+            _autoLogoYImageUrl = string.IsNullOrEmpty(status.DebugImages.LogoYUrl) ? null : BuildImageUrl(status.DebugImages.LogoYUrl, true);
+            _autoConsistencyImageUrl = string.IsNullOrEmpty(status.DebugImages.ConsistencyUrl) ? null : BuildImageUrl(status.DebugImages.ConsistencyUrl, true);
+            _autoBgVarImageUrl = string.IsNullOrEmpty(status.DebugImages.BgVarUrl) ? null : BuildImageUrl(status.DebugImages.BgVarUrl, true);
+            _autoRejectAlphaImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectAlphaUrl) ? null : BuildImageUrl(status.DebugImages.RejectAlphaUrl, true);
+            _autoRejectLogoYImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectLogoYUrl) ? null : BuildImageUrl(status.DebugImages.RejectLogoYUrl, true);
+            _autoRejectMeanDiffImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectMeanDiffUrl) ? null : BuildImageUrl(status.DebugImages.RejectMeanDiffUrl, true);
+            _autoRejectBgVarImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectBgVarUrl) ? null : BuildImageUrl(status.DebugImages.RejectBgVarUrl, true);
+            _autoRejectExtremeImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectExtremeUrl) ? null : BuildImageUrl(status.DebugImages.RejectExtremeUrl, true);
+            _autoRejectConsistencyImageUrl = string.IsNullOrEmpty(status.DebugImages.RejectConsistencyUrl) ? null : BuildImageUrl(status.DebugImages.RejectConsistencyUrl, true);
+            _autoAcceptedImageUrl = string.IsNullOrEmpty(status.DebugImages.AcceptedUrl) ? null : BuildImageUrl(status.DebugImages.AcceptedUrl, true);
+            _autoPointCsvUrl = string.IsNullOrEmpty(status.DebugImages.PointCsvUrl) ? null : BuildImageUrl(status.DebugImages.PointCsvUrl, true);
+        }
     }
 
     private async Task ApplyResultAsync()
@@ -425,6 +853,10 @@ else
         if (_pollCts != null)
         {
             _pollCts.Cancel();
+        }
+        if (_autoPollCts != null)
+        {
+            _autoPollCts.Cancel();
         }
         if (!string.IsNullOrEmpty(_sessionId))
         {

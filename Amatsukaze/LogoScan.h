@@ -133,7 +133,11 @@ class LogoScan {
     static void maxfilter(float *data, float *work, int w, int h);
 
 public:
-    // thy: オリジナルだとデフォルト30*8=240（8bitだと12くらい？）
+    // thy: 単色背景判定の許容幅(8bit換算で概ね12付近を想定)。
+    // 背景:
+    //   外周画素のばらつきが大きいフレームを除外し、bg推定を安定させるための閾値。
+    //   ここが緩すぎると、レターボックス帯やテロップが混入して
+    //   後段のfg/bg回帰が歪み、ロゴ以外を強く拾いやすくなる。
     LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy);
 
     void Normalize(int mavx);
@@ -209,7 +213,11 @@ public:
             tmpV.push_back(srcV[scanUVw - 1 + y * pitchUV]);
         }
 
-        // 最小と最大が閾値以上離れている場合、単一色でないと判断
+        // 最小と最大が閾値以上離れている場合、単一色背景ではないと判断して棄却。
+        // 具体例:
+        //   - 場面転換直後で外周に高コントラストが入るフレーム
+        //   - レターボックス境界が外周にかかるフレーム
+        // これらを早期除外することで、サンプル数より品質を優先する。
         std::sort(tmpY.begin(), tmpY.end());
         if (abs(tmpY.front() - tmpY.back()) > (thy << (bitdepth - 8))) { // オリジナルだと thy * 8
             return false;
@@ -227,7 +235,10 @@ public:
         int bgU = med_average(tmpU);
         int bgV = med_average(tmpV);
 
-        // 有効フレームを追加
+        // 有効フレームのみ統計へ加算。
+        // 目的:
+        //   fg/bgの組が偏った「悪い多数サンプル」を防ぎ、
+        //   透過ロゴ推定に有効なサンプル集合を作る。
         AddScanFrame(srcY, srcU, srcV, pitchY, pitchUV, bgY, bgU, bgV, bitdepth);
 
         return true;
@@ -277,6 +288,16 @@ void CopyY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
 }
 
 typedef bool(*LOGO_ANALYZE_CB)(float progress, int nread, int total, int ngather);
+// 自動検出進捗コールバック。
+// stageの意味:
+//   1: フレーム走査/サンプル収集
+//   2: score算出と2値化
+//   3: 矩形決定(投影+CCL+後処理)
+//   4: 完了
+// 背景:
+//   UI側で「Loading...」が長時間継続する問題を切り分けるため、
+//   処理段階を明示して監視できるようにしている。
+typedef bool(*LOGO_AUTODETECT_CB)(int stage, float stageProgress, float progress, int nread, int total);
 
 class LogoScanDataCompressed {
 public:
@@ -750,7 +771,7 @@ class LogoFrame : AMTObject {
 
         const auto& range = getIterateFrameRange(trims, threadId, totalThreads);
         for (const auto& r : range) {
-            ctx.infoF(_T("  logo scan #%d: %6d-%6d"), threadId, r.first, r.second);
+            ctx.infoF("  logo scan #%d: %6d-%6d", threadId, r.first, r.second);
         }
         const int threadTotalFrames = getTotalFrames(range);
 
@@ -761,7 +782,7 @@ class LogoFrame : AMTObject {
                 ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, &evalResults[n * numLogos]);
 
                 if ((finished % 5000) == 0) {
-                    ctx.infoF(_T("  logo scan #%d: Finished %6d/%d frames"), threadId, finished, threadTotalFrames);
+                    ctx.infoF("  logo scan #%d: Finished %6d/%d frames", threadId, finished, threadTotalFrames);
                 }
             }
         }

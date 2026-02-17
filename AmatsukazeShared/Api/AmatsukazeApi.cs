@@ -413,6 +413,12 @@ namespace Amatsukaze.Shared
             }
         }
 
+        public Task<ApiResult<LogoAutoDetectStatus>> StartLogoAutoDetectAsync(LogoAutoDetectStartRequest req)
+            => PostJsonAsync("/api/logo/analyze/auto", req, element => element.Deserialize<LogoAutoDetectStatus>(jsonOptions) ?? new LogoAutoDetectStatus());
+
+        public Task<ApiResult<LogoAutoDetectStatus>> GetLogoAutoDetectStatusAsync(string jobId)
+            => GetJsonAsync<LogoAutoDetectStatus>($"/api/logo/analyze/auto/{Uri.EscapeDataString(jobId)}");
+
         public Task<ApiResult<LogoPreviewSessionResponse>> CreateLogoPreviewSessionAsync(LogoPreviewSessionRequest req)
             => PostJsonAsync("/api/logo/preview/sessions", req, element => element.Deserialize<LogoPreviewSessionResponse>(jsonOptions) ?? new LogoPreviewSessionResponse());
 

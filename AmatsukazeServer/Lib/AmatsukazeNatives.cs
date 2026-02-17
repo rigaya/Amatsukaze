@@ -498,6 +498,7 @@ namespace Amatsukaze.Lib
     }
 
     public delegate bool LogoAnalyzeCallback(float progress, int nread, int total, int ngather);
+    public delegate bool LogoAutoDetectCallback(int stage, float stageProgress, float progress, int nread, int total);
 
     public class LogoFile : IDisposable
     {
@@ -553,6 +554,17 @@ namespace Amatsukaze.Lib
         [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int ScanLogo(IntPtr ctx, string srcpath, int serviceid, string workfile, string dstpath,
             int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
+        private static extern int AutoDetectLogoRect(IntPtr ctx, string srcpath, int serviceid,
+            int divx, int divy, int searchFrames, int blockSize, int threshold,
+            int marginX, int marginY, int threadN,
+            ref int x, ref int y, ref int w, ref int h,
+            string scorePath, string scoreRawPath, string scoreMedianPath, string validAbPath,
+            string binaryPath, string cclPath, string countPath, string frameCountPath, string aPath, string bPath,
+            string alphaPath, string logoYPath, string consistencyPath, string bgVarPath,
+            string rejectAlphaPath, string rejectLogoYPath, string rejectMeanDiffPath, string rejectBgVarPath, string rejectExtremePath, string rejectConsistencyPath, string acceptedPath, string pointPath,
+            LogoAutoDetectCallback cb);
         #endregion
 
         public LogoFile(AMTContext ctx, string filepath)
@@ -696,6 +708,28 @@ namespace Amatsukaze.Lib
             {
                 throw new IOException(ctx.GetError());
             }
+        }
+
+        public static (int X, int Y, int W, int H) AutoDetectLogoRect(AMTContext ctx, string srcpath, int serviceid,
+            int divx, int divy, int searchFrames, int blockSize, int threshold,
+            int marginX, int marginY, int threadN,
+            string scorePath, string scoreRawPath, string scoreMedianPath, string validAbPath,
+            string binaryPath, string cclPath, string countPath, string frameCountPath, string aPath, string bPath,
+            string alphaPath, string logoYPath, string consistencyPath, string bgVarPath,
+            string rejectAlphaPath, string rejectLogoYPath, string rejectMeanDiffPath, string rejectBgVarPath, string rejectExtremePath, string rejectConsistencyPath, string acceptedPath, string pointPath,
+            LogoAutoDetectCallback cb)
+        {
+            int x = 0;
+            int y = 0;
+            int w = 0;
+            int h = 0;
+            if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
+                divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
+                ref x, ref y, ref w, ref h, scorePath, scoreRawPath, scoreMedianPath, validAbPath, binaryPath, cclPath, countPath, frameCountPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, rejectAlphaPath, rejectLogoYPath, rejectMeanDiffPath, rejectBgVarPath, rejectExtremePath, rejectConsistencyPath, acceptedPath, pointPath, cb) == 0)
+            {
+                throw new IOException(ctx.GetError());
+            }
+            return (x, y, w, h);
         }
     }
 
