@@ -346,8 +346,21 @@ namespace Amatsukaze.ViewModels
                 var tempdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
                 if (Directory.Exists(tempdir) == false)
                 {
-                    // tempdirがない場合はファイルを保存するフォルダを作成
-                    Directory.CreateDirectory(tempdir);
+                    try
+                    {
+                        // tempdirがない場合はファイルを保存するフォルダを作成
+                        Directory.CreateDirectory(tempdir);
+                    }
+                    catch (Exception)
+                    {
+                        // 一時フォルダを作成できない場合も、先にWebUI起動を試みる
+                        if (TryOpenWebLogoAnalyze(file.Id))
+                        {
+                            return;
+                        }
+                        MessageBox.Show("一時ファイルフォルダがアクセスできる場所に設定されていないため起動できません");
+                        return;
+                    }
                 }
                 args += " --work \"" + tempdir + "\"";
             } else {
@@ -369,6 +382,11 @@ namespace Amatsukaze.ViewModels
                 }
                 if (Directory.Exists(workpath) == false)
                 {
+                    // 一時フォルダにアクセスできない場合も、先にWebUI起動を試みる
+                    if (TryOpenWebLogoAnalyze(file.Id))
+                    {
+                        return;
+                    }
                     MessageBox.Show("一時ファイルフォルダがアクセスできる場所に設定されていないため起動できません");
                     return;
                 }
@@ -383,7 +401,21 @@ namespace Amatsukaze.ViewModels
             {
                 args += " --slimts";
             }
-            var process = System.Diagnostics.Process.Start(apppath, args);
+            System.Diagnostics.Process process = null;
+            try
+            {
+                process = System.Diagnostics.Process.Start(apppath, args);
+            }
+            catch (Exception)
+            {
+                // ローカル起動に失敗した場合も、先にWebUI起動を試みる
+                if (TryOpenWebLogoAnalyze(file.Id))
+                {
+                    return;
+                }
+                MessageBox.Show("ロゴ解析画面の起動に失敗しました");
+                return;
+            }
             if (process != null)
             {
                 process.EnableRaisingEvents = true;
