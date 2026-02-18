@@ -77,8 +77,7 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
-            var filePath = item.SrcPath;
-            if (!File.Exists(filePath))
+            if (!ServerSupport.TryResolveInputFilePath(item.SrcPath, out var filePath))
             {
                 error = "入力ファイルが存在しません";
                 return false;

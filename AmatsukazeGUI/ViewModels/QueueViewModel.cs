@@ -365,20 +365,15 @@ namespace Amatsukaze.ViewModels
                 args += " --work \"" + tempdir + "\"";
             } else {
                 var workpath = Model.Setting.WorkPath;
-                string filepath = file.SrcPath;
-                if (File.Exists(filepath) == false) // サーバーがLinuxの場合はファイルのチェックをスキップ
+                string filepath = null;
+                if (!ServerSupport.TryResolveInputFilePath(file.SrcPath, out filepath)) // サーバーがLinuxの場合はファイルのチェックをスキップ
                 {
-                    // failedに入っているかもしれないのでそっちも見る
-                    filepath = Path.Combine(Path.GetDirectoryName(file.SrcPath), "failed", Path.GetFileName(file.SrcPath));
-                    if (File.Exists(filepath) == false)
+                    if (TryOpenWebLogoAnalyze(file.Id))
                     {
-                        if (TryOpenWebLogoAnalyze(file.Id))
-                        {
-                            return;
-                        }
-                        // WebUIが開けない場合は従来通りファイル指定にフォールバック
-                        filepath = null;
+                        return;
                     }
+                    // WebUIが開けない場合は従来通りファイル指定にフォールバック
+                    filepath = null;
                 }
                 if (Directory.Exists(workpath) == false)
                 {

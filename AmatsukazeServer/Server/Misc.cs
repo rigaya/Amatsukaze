@@ -637,6 +637,46 @@ namespace Amatsukaze.Server
         public static readonly string SUCCESS_DIR = "succeeded";
         public static readonly string FAIL_DIR = "failed";
 
+        // キュー項目の入力TSパスを解決する
+        // 元の場所に無い場合は succeeded / failed への移動先も確認する
+        public static bool TryResolveInputFilePath(string srcPath, out string resolvedPath)
+        {
+            resolvedPath = null;
+            if (string.IsNullOrEmpty(srcPath))
+            {
+                return false;
+            }
+
+            if (File.Exists(srcPath))
+            {
+                resolvedPath = srcPath;
+                return true;
+            }
+
+            var dirPath = Path.GetDirectoryName(srcPath);
+            var fileName = Path.GetFileName(srcPath);
+            if (string.IsNullOrEmpty(dirPath) || string.IsNullOrEmpty(fileName))
+            {
+                return false;
+            }
+
+            var successPath = Path.Combine(dirPath, SUCCESS_DIR, fileName);
+            if (File.Exists(successPath))
+            {
+                resolvedPath = successPath;
+                return true;
+            }
+
+            var failPath = Path.Combine(dirPath, FAIL_DIR, fileName);
+            if (File.Exists(failPath))
+            {
+                resolvedPath = failPath;
+                return true;
+            }
+
+            return false;
+        }
+
         public static string GetDefaultProfileName()
         {
             return "デフォルト";

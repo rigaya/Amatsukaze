@@ -47,7 +47,7 @@ namespace Amatsukaze.Server.Rest
                 error = "キューの入力ファイルが見つかりません";
                 return false;
             }
-            if (!File.Exists(item.SrcPath))
+            if (!ServerSupport.TryResolveInputFilePath(item.SrcPath, out var filePath))
             {
                 error = "入力ファイルが存在しません";
                 return false;
@@ -65,7 +65,7 @@ namespace Amatsukaze.Server.Rest
             };
             jobs[job.Id] = job;
 
-            Task.Run(() => RunJob(job, request, item.SrcPath, item.ServiceId));
+            Task.Run(() => RunJob(job, request, filePath, item.ServiceId));
 
             status = ToStatus(job);
             return true;
