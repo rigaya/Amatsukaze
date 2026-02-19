@@ -41,6 +41,7 @@ namespace Amatsukaze.Server.Rest
         public string AlphaImagePath { get; set; }
         public string LogoYImagePath { get; set; }
         public string ConsistencyImagePath { get; set; }
+        public string FgVarImagePath { get; set; }
         public string BgVarImagePath { get; set; }
         public string AcceptedImagePath { get; set; }
         public bool DetailedDebug { get; set; }
@@ -225,6 +226,10 @@ namespace Amatsukaze.Server.Rest
             {
                 path = job.ConsistencyImagePath;
             }
+            else if (string.Equals(kind, "fgvar", StringComparison.OrdinalIgnoreCase))
+            {
+                path = job.FgVarImagePath;
+            }
             else if (string.Equals(kind, "bgvar", StringComparison.OrdinalIgnoreCase))
             {
                 path = job.BgVarImagePath;
@@ -372,6 +377,7 @@ namespace Amatsukaze.Server.Rest
                     var alphaPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-alpha-{job.Id}.bmp") : null;
                     var logoYPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-logoy-{job.Id}.bmp") : null;
                     var consistencyPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-consistency-{job.Id}.bmp") : null;
+                    var fgVarPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-fgvar-{job.Id}.bmp") : null;
                     var bgVarPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-bgvar-{job.Id}.bmp") : null;
                     var acceptedPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-accepted-{job.Id}.bmp") : null;
                     job.ScoreImagePath = scorePath;
@@ -383,6 +389,7 @@ namespace Amatsukaze.Server.Rest
                     job.AlphaImagePath = alphaPath;
                     job.LogoYImagePath = logoYPath;
                     job.ConsistencyImagePath = consistencyPath;
+                    job.FgVarImagePath = fgVarPath;
                     job.BgVarImagePath = bgVarPath;
                     job.AcceptedImagePath = acceptedPath;
 
@@ -394,7 +401,7 @@ namespace Amatsukaze.Server.Rest
                         ctx, filePath, serviceId,
                         request.DivX, request.DivY, request.SearchFrames, request.BlockSize, request.Threshold,
                         request.MarginX, request.MarginY, request.ThreadN,
-                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath,
+                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath,
                         request.DetailedDebug,
                         (stage, stageProgress, progress, nread, total) =>
                         {
@@ -585,6 +592,10 @@ namespace Amatsukaze.Server.Rest
             if (!string.IsNullOrEmpty(job.ConsistencyImagePath))
             {
                 debug.ConsistencyUrl = $"/api/logo/analyze/auto/{job.Id}/debug/consistency";
+            }
+            if (!string.IsNullOrEmpty(job.FgVarImagePath))
+            {
+                debug.FgVarUrl = $"/api/logo/analyze/auto/{job.Id}/debug/fgvar";
             }
             if (!string.IsNullOrEmpty(job.BgVarImagePath))
             {

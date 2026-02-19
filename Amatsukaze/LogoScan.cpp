@@ -1763,6 +1763,7 @@ namespace {
         std::vector<float> mapAlpha;
         std::vector<float> mapLogoY;
         std::vector<float> mapConsistency;
+        std::vector<float> mapFgVar;
         std::vector<float> mapBgVar;
         std::vector<float> mapAccepted;
         std::vector<uint8_t> validAB;
@@ -1872,7 +1873,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -1887,7 +1888,7 @@ namespace {
             return rectAbs;
         }
 
-        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath) {
+        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* acceptedPath) {
             if (scanw <= 0 || scanh <= 0) {
                 return;
             }
@@ -1901,6 +1902,7 @@ namespace {
             const std::string alphaPathA = (alphaPath != nullptr) ? tchar_to_string(alphaPath) : std::string();
             const std::string logoYPathA = (logoYPath != nullptr) ? tchar_to_string(logoYPath) : std::string();
             const std::string consistencyPathA = (consistencyPath != nullptr) ? tchar_to_string(consistencyPath) : std::string();
+            const std::string fgVarPathA = (fgVarPath != nullptr) ? tchar_to_string(fgVarPath) : std::string();
             const std::string bgVarPathA = (bgVarPath != nullptr) ? tchar_to_string(bgVarPath) : std::string();
             const std::string acceptedPathA = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
 
@@ -1988,8 +1990,9 @@ namespace {
                     return (uint8_t)ClampInt((int)std::round(mapLogoY[off] * 255.0f), 0, 255);
                 });
             }
-            float csMin, csMax, bgvMin, bgvMax;
+            float csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax;
             CalcRangeValid(mapConsistency, validAB, csMin, csMax, 0.0f, 2.0f);
+            CalcRangeValid(mapFgVar, validAB, fgvMin, fgvMax, 0.0f, 0.02f);
             CalcRangeValid(mapBgVar, validAB, bgvMin, bgvMax, 0.0f, 0.02f);
             if (!consistencyPathA.empty()) {
                 WriteGrayBitmap(consistencyPathA, scanw, scanh, [&](int x, int y) {
@@ -1998,6 +2001,16 @@ namespace {
                         return (uint8_t)0;
                     }
                     const float t = (mapConsistency[off] - csMin) / (csMax - csMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!fgVarPathA.empty()) {
+                WriteGrayBitmap(fgVarPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapFgVar.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapFgVar[off] - fgvMin) / (fgvMax - fgvMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
@@ -2304,6 +2317,7 @@ namespace {
             mapAlpha.assign(scanw * scanh, 0.0f);
             mapLogoY.assign(scanw * scanh, 0.0f);
             mapConsistency.assign(scanw * scanh, 0.0f);
+            mapFgVar.assign(scanw * scanh, 0.0f);
             mapBgVar.assign(scanw * scanh, 0.0f);
             mapAccepted.assign(scanw * scanh, 0.0f);
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
@@ -2332,8 +2346,11 @@ namespace {
                             const double varDiff = std::max(0.0, diff2 - meanDiff * meanDiff);
                             const double stdDiff = std::sqrt(varDiff);
                             const double consistency = std::abs(meanDiff) / (stdDiff + 1e-6);
+                            const double varFg = std::max(0.0, s.sumF2 * invN - meanF * meanF);
                             const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
+                            const double fgBgVarRatio = varFg / (varBg + 1e-6);
                             mapConsistency[i] = (float)consistency;
+                            mapFgVar[i] = (float)varFg;
                             mapBgVar[i] = (float)varBg;
 
                             const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
@@ -2343,7 +2360,21 @@ namespace {
                             const double consistencyGain = std::max(0.0, std::min(1.0, (consistency - 0.35) / 1.65));
                             const double bgGain = std::max(0.0, std::min(1.0, (0.080 - varBg) / 0.080));
                             const double extremeGain = std::max(0.0, std::min(1.0, 1.0 - extremeRejectRatio));
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain));
+                            // 時間変動由来の抑制:
+                            // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
+                            double temporalGain = 1.0;
+                            if (varBg >= 0.0012) {
+                                const double ratioGain = std::max(0.0, std::min(1.0, (fgBgVarRatio - 0.08) / 0.44));
+                                temporalGain = 0.85 + 0.15 * ratioGain;
+                            }
+                            double opaquePenalty = 1.0;
+                            if (alpha > 0.68) {
+                                const double alphaOpaque = std::max(0.0, std::min(1.0, (alpha - 0.68) / 0.22));
+                                const double temporalOpaque = (varBg >= 0.0012) ? std::max(0.0, std::min(1.0, (0.22 - fgBgVarRatio) / 0.22)) : 0.0;
+                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
+                                opaquePenalty = 1.0 / penaltyScale;
+                            }
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty);
                             if (d <= 0.0f) continue;
                             mapAccepted[i] = d;
                             score[i] = d;
@@ -2989,6 +3020,277 @@ namespace {
         }
         binary.swap(acceptedBinary);
 
+        // 最終成分pruning:
+        // anchor成分(右上寄り・高score・過度にopaqueでない)を基準に、
+        // 近傍かつ信号品質が近い成分のみを残して遠方ノイズを削る。
+        {
+            std::vector<uint8_t> prePruneBinary = binary;
+            const int prePruneOn = countBinaryOn(prePruneBinary);
+            int preMinX = 0, preMinY = 0, preMaxX = -1, preMaxY = -1;
+            const bool hasPreRect = getMaskRect(prePruneBinary, preMinX, preMinY, preMaxX, preMaxY);
+            bool hasAnchorBandStat = false;
+            int anchorBandPreOn = 0;
+            int anchorBandPostOn = 0;
+            int removedOn = 0;
+            int removedBelowOn = 0;
+            struct BinaryComp {
+                int minX = 0;
+                int minY = 0;
+                int maxX = -1;
+                int maxY = -1;
+                int area = 0;
+                int w = 0;
+                int h = 0;
+                float peakScore = 0.0f;
+                float meanScore = 0.0f;
+                float meanAccepted = 0.0f;
+                float meanAlpha = 0.0f;
+                float meanConsistency = 0.0f;
+                float anchorScore = -1.0f;
+                std::vector<int> pixels;
+            };
+
+            std::vector<BinaryComp> comps;
+            std::vector<uint8_t> visited(scanw * scanh, 0);
+            std::queue<int> q;
+            for (int y = 0; y < scanh; y++) {
+                for (int x = 0; x < scanw; x++) {
+                    const int start = x + y * scanw;
+                    if (!binary[start] || visited[start]) continue;
+                    visited[start] = 1;
+                    q.push(start);
+                    BinaryComp comp{};
+                    comp.minX = x;
+                    comp.maxX = x;
+                    comp.minY = y;
+                    comp.maxY = y;
+                    double sumScore = 0.0;
+                    double sumAccepted = 0.0;
+                    double sumAlpha = 0.0;
+                    double sumConsistency = 0.0;
+                    while (!q.empty()) {
+                        const int cur = q.front(); q.pop();
+                        const int cx = cur % scanw;
+                        const int cy = cur / scanw;
+                        comp.pixels.push_back(cur);
+                        comp.area++;
+                        comp.minX = std::min(comp.minX, cx);
+                        comp.maxX = std::max(comp.maxX, cx);
+                        comp.minY = std::min(comp.minY, cy);
+                        comp.maxY = std::max(comp.maxY, cy);
+                        comp.peakScore = std::max(comp.peakScore, score[cur]);
+                        sumScore += score[cur];
+                        sumAccepted += mapAccepted[cur];
+                        sumAlpha += mapAlpha[cur];
+                        sumConsistency += mapConsistency[cur];
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                if (dx == 0 && dy == 0) continue;
+                                const int nx = cx + dx;
+                                const int ny = cy + dy;
+                                if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                                const int nidx = nx + ny * scanw;
+                                if (!binary[nidx] || visited[nidx]) continue;
+                                visited[nidx] = 1;
+                                q.push(nidx);
+                            }
+                        }
+                    }
+                    if (comp.area <= 0) continue;
+                    comp.w = comp.maxX - comp.minX + 1;
+                    comp.h = comp.maxY - comp.minY + 1;
+                    comp.meanScore = (float)(sumScore / std::max(1, comp.area));
+                    comp.meanAccepted = (float)(sumAccepted / std::max(1, comp.area));
+                    comp.meanAlpha = (float)(sumAlpha / std::max(1, comp.area));
+                    comp.meanConsistency = (float)(sumConsistency / std::max(1, comp.area));
+
+                    const float cxNorm = (float)((comp.minX + comp.maxX) * 0.5 / std::max(1, scanw - 1));
+                    const float topNorm = (float)(1.0 - ((comp.minY + comp.maxY) * 0.5 / std::max(1, scanh - 1)));
+                    const float rightPrior = std::max(0.0f, std::min(1.0f, cxNorm));
+                    const float topPrior = std::max(0.0f, std::min(1.0f, topNorm));
+                    const float consistencyPrior = std::max(0.0f, std::min(1.0f, (comp.meanConsistency - 0.35f) / 1.15f));
+                    const float alphaPenalty = 1.0f / (1.0f + std::max(0.0f, comp.meanAlpha - 0.78f) * 1.5f);
+                    const float areaGain = std::sqrt((float)std::max(1, comp.area));
+                    const float signalMix = comp.meanScore * 0.55f + comp.peakScore * 0.25f + comp.meanAccepted * 0.20f;
+                    const float topWeight = (0.25f + 0.75f * topPrior);
+                    comp.anchorScore =
+                        areaGain *
+                        signalMix *
+                        (topWeight * topWeight) *
+                        (0.70f + 0.30f * rightPrior) *
+                        (0.45f + 0.55f * consistencyPrior) *
+                        alphaPenalty;
+                    comps.push_back(std::move(comp));
+                }
+            }
+
+            if (!comps.empty()) {
+                int anchorIdx = -1;
+                float bestAnchor = -1.0f;
+                int minAnchorY = scanh;
+                for (int i = 0; i < (int)comps.size(); i++) {
+                    const auto& c = comps[i];
+                    if (c.area < 6) continue;
+                    minAnchorY = std::min(minAnchorY, c.minY);
+                }
+                const int topBandSlack = std::max(12, (int)std::round(scanh * 0.15));
+                const int topBandLimit = (minAnchorY < scanh) ? (minAnchorY + topBandSlack) : scanh;
+                for (int i = 0; i < (int)comps.size(); i++) {
+                    const auto& c = comps[i];
+                    if (c.area < 6) continue;
+                    if (c.minY > topBandLimit) continue;
+                    if (c.anchorScore > bestAnchor) {
+                        bestAnchor = c.anchorScore;
+                        anchorIdx = i;
+                    }
+                }
+                if (anchorIdx < 0) {
+                    for (int i = 0; i < (int)comps.size(); i++) {
+                        const auto& c = comps[i];
+                        if (c.area < 6) continue;
+                        if (c.anchorScore > bestAnchor) {
+                            bestAnchor = c.anchorScore;
+                            anchorIdx = i;
+                        }
+                    }
+                }
+                if (anchorIdx < 0) {
+                    for (int i = 0; i < (int)comps.size(); i++) {
+                        const auto& c = comps[i];
+                        if (c.area < 3) continue;
+                        if (c.anchorScore > bestAnchor) {
+                            bestAnchor = c.anchorScore;
+                            anchorIdx = i;
+                        }
+                    }
+                }
+                if (anchorIdx >= 0) {
+                    const auto& anchor = comps[anchorIdx];
+                    const int anchorW = std::max(1, anchor.w);
+                    const int anchorH = std::max(1, anchor.h);
+                    const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
+                    const float minSignalScore = std::max(0.004f, anchor.meanScore * 0.20f);
+                    const float minSignalPeak = std::max(0.004f, anchor.peakScore * 0.10f);
+                    const float minSignalAccepted = std::max(0.003f, anchor.meanAccepted * 0.20f);
+                    const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
+                    const int maxBelowAnchor = std::max(14, (int)std::round(anchorH * 0.85));
+                    std::vector<uint8_t> keepComp(comps.size(), 0);
+                    keepComp[anchorIdx] = 1;
+                    bool changed = true;
+                    for (int hop = 0; hop < 10 && changed; hop++) {
+                        changed = false;
+                        for (int i = 0; i < (int)comps.size(); i++) {
+                            if (keepComp[i]) continue;
+                            const auto& c = comps[i];
+                            const int compCenterY = (c.minY + c.maxY) / 2;
+                            const bool yGuard = compCenterY <= anchorCenterY + maxBelowAnchor;
+                            const bool shapeOk = c.area >= 3 && std::max((double)c.w / std::max(1, c.h), (double)c.h / std::max(1, c.w)) <= 16.0;
+                            const bool signalOk =
+                                c.meanScore >= minSignalScore ||
+                                c.peakScore >= minSignalPeak ||
+                                c.meanAccepted >= minSignalAccepted;
+                            const bool sameRowComp = std::abs(compCenterY - anchorCenterY) <= std::max(4, (int)std::round(anchorH * 0.45));
+                            const bool isLowerComp = compCenterY > anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
+                            const bool lowAlphaConsistencyOk =
+                                !isLowerComp ||
+                                c.meanAlpha >= 0.20f ||
+                                c.meanConsistency >= minSignalConsistency;
+                            const bool signalGateOk = signalOk || sameRowComp;
+                            if (!yGuard || !shapeOk || !signalGateOk || !lowAlphaConsistencyOk) continue;
+                            bool nearKept = false;
+                            for (int k = 0; k < (int)comps.size(); k++) {
+                                if (!keepComp[k]) continue;
+                                const auto& ref = comps[k];
+                                const int overlapW = std::max(0, std::min(c.maxX, ref.maxX) - std::max(c.minX, ref.minX) + 1);
+                                const int overlapH = std::max(0, std::min(c.maxY, ref.maxY) - std::max(c.minY, ref.minY) + 1);
+                                const int gapX = std::max(0, std::max(c.minX - ref.maxX, ref.minX - c.maxX));
+                                const int gapY = std::max(0, std::max(c.minY - ref.maxY, ref.minY - c.maxY));
+                                const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
+                                    gapX <= std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8));
+                                const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
+                                    gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.60));
+                                const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
+                                    gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.45));
+                                nearKept = (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
+                                if (nearKept) {
+                                    break;
+                                }
+                            }
+                            if (!nearKept) continue;
+                            const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
+                            const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
+                                gapYAnchor > std::max(8, (int)std::round(anchorH * 0.80));
+                            if (opaqueFar) continue;
+                            keepComp[i] = 1;
+                            changed = true;
+                        }
+                    }
+                    std::vector<uint8_t> filtered(scanw * scanh, 0);
+                    for (int i = 0; i < (int)comps.size(); i++) {
+                        if (!keepComp[i]) continue;
+                        const auto& c = comps[i];
+                        for (const int pix : c.pixels) {
+                            filtered[pix] = 1;
+                        }
+                    }
+                    // pruningの安全弁用に、アンカー近傍帯域の保持率と
+                    // 削除画素の「下側偏在」度合いを計測しておく。
+                    const int bandY0 = std::max(0, anchor.minY - 2);
+                    const int bandY1 = std::min(scanh - 1, anchor.maxY + 2);
+                    for (int y = bandY0; y <= bandY1; y++) {
+                        const int row = y * scanw;
+                        for (int x = 0; x < scanw; x++) {
+                            const int off = row + x;
+                            if (prePruneBinary[off]) anchorBandPreOn++;
+                            if (filtered[off]) anchorBandPostOn++;
+                        }
+                    }
+                    const int belowY = anchor.maxY + std::max(2, (int)std::round(anchorH * 0.12));
+                    for (int i = 0; i < scanw * scanh; i++) {
+                        if (!prePruneBinary[i] || filtered[i]) continue;
+                        removedOn++;
+                        const int py = i / scanw;
+                        if (py > belowY) {
+                            removedBelowOn++;
+                        }
+                    }
+                    hasAnchorBandStat = true;
+                    binary.swap(filtered);
+                }
+            }
+            const int postPruneOn = countBinaryOn(binary);
+            int postMinX = 0, postMinY = 0, postMaxX = -1, postMaxY = -1;
+            const bool hasPostRect = getMaskRect(binary, postMinX, postMinY, postMaxX, postMaxY);
+            if (prePruneOn > 0 && hasPreRect) {
+                bool revertPrune = false;
+                if (postPruneOn <= 0 || !hasPostRect) {
+                    revertPrune = true;
+                } else {
+                    const int preW = preMaxX - preMinX + 1;
+                    const int postW = postMaxX - postMinX + 1;
+                    const bool areaCollapse = postPruneOn < std::max(24, (int)std::round(prePruneOn * 0.25));
+                    const bool severeShrink = areaCollapse && postW < (int)std::round(preW * 0.60);
+                    revertPrune = severeShrink;
+                    if (revertPrune && hasAnchorBandStat && anchorBandPreOn > 0 && removedOn > 0) {
+                        const float bandRetention = (float)anchorBandPostOn / std::max(1, anchorBandPreOn);
+                        const float removedBelowRatio = (float)removedBelowOn / std::max(1, removedOn);
+                        const bool trimmedMostlyBelow =
+                            removedOn >= std::max(24, (int)std::round(prePruneOn * 0.05)) &&
+                            removedBelowRatio >= 0.60f;
+                        const bool topBandPreserved = bandRetention >= 0.72f;
+                        const bool postStillEnough = postPruneOn >= std::max(12, (int)std::round(prePruneOn * 0.10));
+                        if (trimmedMostlyBelow && topBandPreserved && postStillEnough) {
+                            // 下側ノイズ除去が主目的で、上側ロゴ帯域が維持できているのでリバートしない。
+                            revertPrune = false;
+                        }
+                    }
+                }
+                if (revertPrune) {
+                    binary.swap(prePruneBinary);
+                }
+            }
+        }
+
         int binaryOnCount = 0;
         for (int i = 0; i < scanw * scanh; i++) {
             if (binary[i]) binaryOnCount++;
@@ -3366,7 +3668,7 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH,
-    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* bgVarPath, const tchar* acceptedPath,
+    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* acceptedPath,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
@@ -3377,13 +3679,13 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
         if (scorePath && binaryPath && cclPath) {
-            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath);
+            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath);
         }
         return true;
     } catch (const Exception& exception) {
         if (scorePath && binaryPath && cclPath) {
             try {
-                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath);
+                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath);
             } catch (...) {
             }
         }

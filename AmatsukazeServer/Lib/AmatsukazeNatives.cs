@@ -561,7 +561,7 @@ namespace Amatsukaze.Lib
             int marginX, int marginY, int threadN,
             ref int x, ref int y, ref int w, ref int h,
             string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
-            string alphaPath, string logoYPath, string consistencyPath, string bgVarPath,
+            string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
             string acceptedPath,
             int detailedDebug,
             LogoAutoDetectCallback cb);
@@ -714,7 +714,7 @@ namespace Amatsukaze.Lib
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
             string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
-            string alphaPath, string logoYPath, string consistencyPath, string bgVarPath,
+            string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
             string acceptedPath,
             bool detailedDebug,
             LogoAutoDetectCallback cb)
@@ -725,7 +725,7 @@ namespace Amatsukaze.Lib
             int h = 0;
             if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
                 divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
-                ref x, ref y, ref w, ref h, scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, bgVarPath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
+                ref x, ref y, ref w, ref h, scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
             {
                 throw new IOException(ctx.GetError());
             }

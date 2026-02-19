@@ -124,7 +124,7 @@ namespace Amatsukaze.Server
                         ctx, request.SrcPath, sid,
                         divX, divY, searchFrames, blockSize, threshold,
                         marginX, marginY, threadN,
-                        scorePath, binaryPath, cclPath, null, null, null, null, null, null, null, null,
+                        scorePath, binaryPath, cclPath, null, null, null, null, null, null, null, null, null,
                         detailedDebug,
                         (stage, stageProgress, progress, nread, total) => true);
                     rectX = rect.X;

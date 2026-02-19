@@ -164,6 +164,7 @@ namespace Amatsukaze.Server.Rest
         public string AlphaUrl { get; set; }
         public string LogoYUrl { get; set; }
         public string ConsistencyUrl { get; set; }
+        public string FgVarUrl { get; set; }
         public string BgVarUrl { get; set; }
         public string AcceptedUrl { get; set; }
     }
