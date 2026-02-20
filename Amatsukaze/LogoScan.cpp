@@ -2082,16 +2082,19 @@ namespace {
 
         AutoDetectRect rectAbs;
         AutoDetectRect rectLocal;
-        AutoDetectRect pass2LogoRectAbs;
-        std::unique_ptr<logo::LogoScan> pass2LogoScan;
-        std::unique_ptr<logo::LogoDataParam> pass2DeintLogo;
-        std::vector<float> pass2Corr0;
-        std::vector<float> pass2Corr1;
-        std::vector<float> pass2EvalDeint;
-        std::vector<float> pass2EvalWork;
-        std::vector<uint8_t> pass2FrameMask;
-        int pass2AcceptedFrames;
-        int pass2SkippedFrames;
+        struct Pass2Buffers {
+            AutoDetectRect logoRectAbs{ 0, 0, 0, 0 };
+            std::unique_ptr<logo::LogoScan> logoScan;
+            std::unique_ptr<logo::LogoDataParam> deintLogo;
+            std::vector<float> corr0;
+            std::vector<float> corr1;
+            std::vector<float> evalDeint;
+            std::vector<float> evalWork;
+            std::vector<uint8_t> frameMask;
+            int acceptedFrames = 0;
+            int skippedFrames = 0;
+        };
+        Pass2Buffers* activePass2;
 
         struct FrameGateRegion {
             int minX;
@@ -2140,7 +2143,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), debugScore(), debugBinary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), debugScore(), debugBinary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, activePass2(nullptr) {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2161,28 +2164,22 @@ namespace {
             const AutoDetectRect pass1RectLocal = rectLocal;
 
             // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
-            if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal)) {
-                runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal);
+            Pass2Buffers pass2{};
+            if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
+                runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
             }
             activeStatsPass = nullptr;
+            activePass2 = nullptr;
             return rectAbs;
         }
 
         void resetRunState() {
             passIndex = 0;
             activeStatsPass = nullptr;
+            activePass2 = nullptr;
             debugStats.clear();
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
-            pass2LogoScan.reset();
-            pass2DeintLogo.reset();
-            pass2Corr0.clear();
-            pass2Corr1.clear();
-            pass2EvalDeint.clear();
-            pass2EvalWork.clear();
-            pass2FrameMask.clear();
-            pass2AcceptedFrames = 0;
-            pass2SkippedFrames = 0;
             frameGateOffsets.clear();
             frameGateRefDiff.clear();
             frameGateAnchorWeight.clear();
@@ -2214,10 +2211,10 @@ namespace {
             return out;
         }
 
-        bool runPass2PrepareMask(const tstring& srcpath, const AutoDetectRect& pass1RectLocal) {
+        bool runPass2PrepareMask(const tstring& srcpath, const AutoDetectRect& pass1RectLocal, Pass2Buffers& pass2) {
             // 1) pass1で得た候補矩形を少し広げ、pass2で使う評価ROI(絶対座標/相対座標)を決める。
             const AutoDetectRect pass2LogoRectLocal = expandPass1RectForSecondPass(pass1RectLocal);
-            pass2LogoRectAbs = AutoDetectRect{
+            pass2.logoRectAbs = AutoDetectRect{
                 pass2LogoRectLocal.x + scanx,
                 pass2LogoRectLocal.y + scany,
                 pass2LogoRectLocal.w,
@@ -2229,25 +2226,26 @@ namespace {
             }
 
             // 2) pass1モードで全フレームを走査し、ROI内だけで仮ロゴ(LogoScan)を再構築する。
-            pass2LogoScan = std::make_unique<logo::LogoScan>(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, threshold);
+            activePass2 = &pass2;
+            pass2.logoScan = std::make_unique<logo::LogoScan>(pass2.logoRectAbs.w, pass2.logoRectAbs.h, logUVx, logUVy, threshold);
             passIndex = 1;
             activeStatsPass = nullptr;
             resetAccumulationState();
             readAll(srcpath, serviceid);
 
             // 3) 仮ロゴをデインタレースして評価用LogoDataParamへ変換し、maskを作る。
-            if (readFrames > 0 && pass2LogoScan) {
-                auto logoData = pass2LogoScan->GetLogo(false);
+            if (readFrames > 0 && pass2.logoScan) {
+                auto logoData = pass2.logoScan->GetLogo(false);
                 if (logoData != nullptr) {
-                    logo::LogoHeader hdr(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, imgw, imgh, pass2LogoRectAbs.x, pass2LogoRectAbs.y, "autodetect-pass2");
+                    logo::LogoHeader hdr(pass2.logoRectAbs.w, pass2.logoRectAbs.h, logUVx, logUVy, imgw, imgh, pass2.logoRectAbs.x, pass2.logoRectAbs.y, "autodetect-pass2");
                     logo::LogoDataParam tempLogo(std::move(*logoData), &hdr);
                     auto deintLogo = std::make_unique<logo::LogoDataParam>(logo::LogoData(hdr.w, hdr.h, hdr.logUVx, hdr.logUVy), &hdr);
                     logo::DeintLogo(*deintLogo, tempLogo, hdr.w, hdr.h);
                     deintLogo->CreateLogoMask(0.35f);
-                    pass2DeintLogo = std::move(deintLogo);
+                    pass2.deintLogo = std::move(deintLogo);
                 }
             }
-            if (!pass2DeintLogo) {
+            if (!pass2.deintLogo) {
                 return false;
             }
 
@@ -2255,10 +2253,10 @@ namespace {
             passIndex = 2;
             activeStatsPass = nullptr;
             resetAccumulationState();
-            pass2Corr0.clear();
-            pass2Corr1.clear();
+            pass2.corr0.clear();
+            pass2.corr1.clear();
             readAll(srcpath, serviceid);
-            if (pass2Corr0.empty() || pass2Corr0.size() != pass2Corr1.size()) {
+            if (pass2.corr0.empty() || pass2.corr0.size() != pass2.corr1.size()) {
                 return false;
             }
 
@@ -2266,7 +2264,7 @@ namespace {
             //    0=ロゴなし / 1=不確定 / 2=ロゴあり に一次判定する。
             const float kThresh = 0.2f;
             const float kThreshL = 0.5f;
-            const int num = (int)pass2Corr0.size();
+            const int num = (int)pass2.corr0.size();
             const int fps = std::max(1, framesPerSec);
             const int halfAvg = std::max(1, (int)std::round(fps * 1.0f / 2.0f));
             const int avgFrames = halfAvg * 2 + 1;
@@ -2276,7 +2274,7 @@ namespace {
             std::vector<float> rawBuf(num + halfWin * 2, 0.0f);
             auto raw = rawBuf.data() + halfWin;
             for (int i = 0; i < num; i++) {
-                raw[i] = std::max(0.0f, pass2Corr0[i]) + std::min(0.0f, pass2Corr1[i]);
+                raw[i] = std::max(0.0f, pass2.corr0[i]) + std::min(0.0f, pass2.corr1[i]);
             }
             std::fill(rawBuf.begin(), rawBuf.begin() + halfWin, raw[0]);
             std::fill(raw + num, rawBuf.data() + rawBuf.size(), raw[num - 1]);
@@ -2310,11 +2308,11 @@ namespace {
             }
 
             // 7) 最終的に「ロゴあり(2)」だけを pass3投入マスクとして保持する。
-            pass2FrameMask.assign(num, 0);
+            pass2.frameMask.assign(num, 0);
             for (int i = 0; i < num; i++) {
-                pass2FrameMask[i] = (judge[i].r == 2) ? 1 : 0;
+                pass2.frameMask[i] = (judge[i].r == 2) ? 1 : 0;
             }
-            return std::any_of(pass2FrameMask.begin(), pass2FrameMask.end(), [](uint8_t v) { return v != 0; });
+            return std::any_of(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
         }
 
         bool shouldFallbackToPass1Rect(const AutoDetectRect& pass1RectLocal) const {
@@ -2344,11 +2342,12 @@ namespace {
             return tooLarge || tooShift;
         }
 
-        bool runPass2CollectAndEstimate(const tstring& srcpath, const AutoDetectRect& pass1RectAbs, const AutoDetectRect& pass1RectLocal) {
+        bool runPass2CollectAndEstimate(const tstring& srcpath, const AutoDetectRect& pass1RectAbs, const AutoDetectRect& pass1RectLocal, Pass2Buffers& pass2) {
             // 1) pass3モードで再走査し、pass2FrameMaskに基づいて
             //    「ロゴあり」と判定されたフレームだけを統計へ投入する。
-            pass2AcceptedFrames = 0;
-            pass2SkippedFrames = 0;
+            activePass2 = &pass2;
+            pass2.acceptedFrames = 0;
+            pass2.skippedFrames = 0;
             passIndex = 3;
             StatsPassBuffers pass3Stats{};
             activeStatsPass = &pass3Stats;
@@ -2358,7 +2357,7 @@ namespace {
             // 2) 採用フレームが少なすぎる場合は推定が不安定なため、
             //    pass1で得た矩形へフォールバックする。
             const int minAcceptedFrames = std::max(8, readFrames / 50);
-            if (pass2AcceptedFrames < minAcceptedFrames) {
+            if (pass2.acceptedFrames < minAcceptedFrames) {
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
                 activeStatsPass = nullptr;
@@ -2719,8 +2718,10 @@ namespace {
             if (activeStatsPass != nullptr) {
                 activeStatsPass->reset(scanw, scanh, bitDepth);
             }
-            pass2EvalDeint.clear();
-            pass2EvalWork.clear();
+            if (activePass2 != nullptr) {
+                activePass2->evalDeint.clear();
+                activePass2->evalWork.clear();
+            }
         }
 
         void resetAccumulationState() {
@@ -2729,8 +2730,10 @@ namespace {
                 activeStatsPass->reset(scanw, scanh, bitDepth);
             }
             frameGateWeightSum = 0.0;
-            pass2AcceptedFrames = 0;
-            pass2SkippedFrames = 0;
+            if (activePass2 != nullptr) {
+                activePass2->acceptedFrames = 0;
+                activePass2->skippedFrames = 0;
+            }
         }
 
         void pushFrameGateDebug(const FrameGateEval& eval, const bool gateRejected, const int acceptedSamples,
@@ -3144,12 +3147,14 @@ namespace {
             }
 
             // pass3: ロゴ無し判定フレームは統計への投入をスキップする。
-            if (passIndex == 3 && !pass2FrameMask.empty()) {
-                if (shouldSkipPass3FrameByMask()) {
-                    pass2SkippedFrames++;
-                    return 0;
+            if (passIndex == 3) {
+                if (activePass2 != nullptr && !activePass2->frameMask.empty()) {
+                    if (shouldSkipPass3FrameByMask(*activePass2)) {
+                        activePass2->skippedFrames++;
+                        return 0;
+                    }
+                    activePass2->acceptedFrames++;
                 }
-                pass2AcceptedFrames++;
             }
 
             // 通常統計: 前処理→背景推定→サンプル採用/棄却を実施する。
@@ -3160,7 +3165,7 @@ namespace {
 
         template<typename pixel_t>
         int addFramePass1LogoScan(const AVFrame* frame, const pixel_t* srcY, const int pitchY) {
-            if (!pass2LogoScan || pass2LogoRectAbs.w <= 0 || pass2LogoRectAbs.h <= 0) {
+            if (activePass2 == nullptr || !activePass2->logoScan || activePass2->logoRectAbs.w <= 0 || activePass2->logoRectAbs.h <= 0) {
                 return 0;
             }
             if (frame->data[1] == nullptr || frame->data[2] == nullptr || frame->linesize[1] <= 0) {
@@ -3169,41 +3174,41 @@ namespace {
             const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
             const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
             const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
-            const int offY = pass2LogoRectAbs.x + pass2LogoRectAbs.y * pitchY;
-            const int offUV = (pass2LogoRectAbs.x >> logUVx) + (pass2LogoRectAbs.y >> logUVy) * pitchUV;
-            return pass2LogoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+            const int offY = activePass2->logoRectAbs.x + activePass2->logoRectAbs.y * pitchY;
+            const int offUV = (activePass2->logoRectAbs.x >> logUVx) + (activePass2->logoRectAbs.y >> logUVy) * pitchUV;
+            return activePass2->logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
         }
 
         // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
         template<typename pixel_t>
         int addFramePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv) {
             // 仮ロゴが未構築なら何もしない。
-            if (!pass2DeintLogo || !pass2DeintLogo->isValid()) {
+            if (activePass2 == nullptr || !activePass2->deintLogo || !activePass2->deintLogo->isValid()) {
                 return 0;
             }
             // ワークバッファを必要サイズへ拡張し、Y面をdeintする。
-            const int w = pass2DeintLogo->getWidth();
-            const int h = pass2DeintLogo->getHeight();
+            const int w = activePass2->deintLogo->getWidth();
+            const int h = activePass2->deintLogo->getHeight();
             const int required = w * h + 8;
-            if ((int)pass2EvalDeint.size() < required) {
-                pass2EvalDeint.resize(required, 0.0f);
+            if ((int)activePass2->evalDeint.size() < required) {
+                activePass2->evalDeint.resize(required, 0.0f);
             }
-            if ((int)pass2EvalWork.size() < required) {
-                pass2EvalWork.resize(required, 0.0f);
+            if ((int)activePass2->evalWork.size() < required) {
+                activePass2->evalWork.resize(required, 0.0f);
             }
-            const int off = pass2DeintLogo->getImgX() + pass2DeintLogo->getImgY() * pitchY;
-            logo::DeintY(pass2EvalDeint.data(), srcY + off, pitchY, w, h);
+            const int off = activePass2->deintLogo->getImgX() + activePass2->deintLogo->getImgY() * pitchY;
+            logo::DeintY(activePass2->evalDeint.data(), srcY + off, pitchY, w, h);
             // alpha=0/1 の相関を評価し、後段のロゴ有無推定用に保存する。
             const float maxvf = (float)maxv;
-            const float corr0 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 0.0f, pass2EvalWork.data());
-            const float corr1 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 1.0f, pass2EvalWork.data());
-            pass2Corr0.push_back(corr0);
-            pass2Corr1.push_back(corr1);
+            const float corr0 = activePass2->deintLogo->EvaluateLogo(activePass2->evalDeint.data(), maxvf, 0.0f, activePass2->evalWork.data());
+            const float corr1 = activePass2->deintLogo->EvaluateLogo(activePass2->evalDeint.data(), maxvf, 1.0f, activePass2->evalWork.data());
+            activePass2->corr0.push_back(corr0);
+            activePass2->corr1.push_back(corr1);
             return 0;
         }
 
-        bool shouldSkipPass3FrameByMask() const {
-            const bool hasLogo = (readFrames >= 0 && readFrames < (int)pass2FrameMask.size()) ? (pass2FrameMask[readFrames] != 0) : false;
+        bool shouldSkipPass3FrameByMask(const Pass2Buffers& pass2) const {
+            const bool hasLogo = (readFrames >= 0 && readFrames < (int)pass2.frameMask.size()) ? (pass2.frameMask[readFrames] != 0) : false;
             return !hasLogo;
         }
 
