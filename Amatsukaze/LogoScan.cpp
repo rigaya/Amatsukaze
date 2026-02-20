@@ -1873,6 +1873,9 @@ namespace {
         int scanh;
         int radius;
         int bitDepth;
+        int logUVx;
+        int logUVy;
+        int framesPerSec;
         int readFrames;
         static constexpr int kScanEdgeMargin = 16;
         static constexpr int kDedupHistoryN = 4;
@@ -2037,6 +2040,16 @@ namespace {
 
         AutoDetectRect rectAbs;
         AutoDetectRect rectLocal;
+        AutoDetectRect pass2LogoRectAbs;
+        std::unique_ptr<logo::LogoScan> pass2LogoScan;
+        std::unique_ptr<logo::LogoDataParam> pass2DeintLogo;
+        std::vector<float> pass2Corr0;
+        std::vector<float> pass2Corr1;
+        std::vector<float> pass2EvalDeint;
+        std::vector<float> pass2EvalWork;
+        std::vector<uint8_t> pass2FrameMask;
+        int pass2AcceptedFrames;
+        int pass2SkippedFrames;
 
     public:
         AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
@@ -2053,7 +2066,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), frameWork8(), frameWork16(), stats(), statsNeg(), baselineDiffSum(), baselineDiffW(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), framePresenceFeature(), framePresenceValidRatio(), framePresenceEvidence(), framePosteriorLogo(), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), frameWork8(), frameWork16(), stats(), statsNeg(), baselineDiffSum(), baselineDiffW(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), framePresenceFeature(), framePresenceValidRatio(), framePresenceEvidence(), framePosteriorLogo(), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2061,6 +2074,15 @@ namespace {
                 THROW(RuntimeException, "Cancel requested");
             }
             passIndex = 0;
+            pass2LogoScan.reset();
+            pass2DeintLogo.reset();
+            pass2Corr0.clear();
+            pass2Corr1.clear();
+            pass2EvalDeint.clear();
+            pass2EvalWork.clear();
+            pass2FrameMask.clear();
+            pass2AcceptedFrames = 0;
+            pass2SkippedFrames = 0;
             frameGateOffsets.clear();
             frameGateRefDiff.clear();
             frameGateAnchorWeight.clear();
@@ -2082,99 +2104,150 @@ namespace {
             const AutoDetectRect pass1RectAbs = rectAbs;
             const AutoDetectRect pass1RectLocal = rectLocal;
 
-            if (enableTwoPassFrameGate && prepareSecondPassFrameGate()) {
-                passIndex = 1;
-                frameGateAcceptedFrames = 0;
-                frameGateRejectedFrames = 0;
-                frameGateWeightSum = 0.0;
-                framePresenceFeature.clear();
-                framePresenceValidRatio.clear();
-                framePresenceEvidence.clear();
-                framePosteriorLogo.clear();
-                resetAccumulationState();
-                if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
-                    THROW(RuntimeException, "Cancel requested");
+            if (enableTwoPassFrameGate) {
+                auto expandLocalRect = [&](const AutoDetectRect& inRect) -> AutoDetectRect {
+                    AutoDetectRect out = inRect;
+                    if (inRect.w <= 0 || inRect.h <= 0) return AutoDetectRect{ 0, 0, 0, 0 };
+                    const int padX = std::max(8, (int)std::round(inRect.w * 0.20f));
+                    const int padY = std::max(8, (int)std::round(inRect.h * 0.20f));
+                    out.x = ClampInt(inRect.x - padX, 0, std::max(0, scanw - 2));
+                    out.y = ClampInt(inRect.y - padY, 0, std::max(0, scanh - 2));
+                    const int maxX = ClampInt(inRect.x + inRect.w - 1 + padX, 1, std::max(1, scanw - 1));
+                    const int maxY = ClampInt(inRect.y + inRect.h - 1 + padY, 1, std::max(1, scanh - 1));
+                    out.w = std::max(2, maxX - out.x + 1);
+                    out.h = std::max(2, maxY - out.y + 1);
+                    out.x = RoundDownBy(out.x, 2);
+                    out.y = RoundDownBy(out.y, 2);
+                    out.w = RoundUpBy(out.w, 2);
+                    out.h = RoundUpBy(out.h, 2);
+                    out.w = std::min(out.w, std::max(2, scanw - out.x));
+                    out.h = std::min(out.h, std::max(2, scanh - out.y));
+                    return out;
+                };
+
+                const AutoDetectRect pass2LogoRectLocal = expandLocalRect(pass1RectLocal);
+                pass2LogoRectAbs = AutoDetectRect{
+                    pass2LogoRectLocal.x + scanx,
+                    pass2LogoRectLocal.y + scany,
+                    pass2LogoRectLocal.w,
+                    pass2LogoRectLocal.h
+                };
+
+                const bool pass2RectValid = pass2LogoRectLocal.w >= 8 && pass2LogoRectLocal.h >= 8;
+                bool hasFrameMask = false;
+                if (pass2RectValid) {
+                    pass2LogoScan = std::make_unique<logo::LogoScan>(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, threshold);
+                    passIndex = 1;
+                    resetAccumulationState();
+                    readAll(srcpath, serviceid);
+
+                    if (readFrames > 0 && pass2LogoScan) {
+                        auto logoData = pass2LogoScan->GetLogo(false);
+                        if (logoData != nullptr) {
+                            logo::LogoHeader hdr(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, imgw, imgh, pass2LogoRectAbs.x, pass2LogoRectAbs.y, "autodetect-pass2");
+                            logo::LogoDataParam tempLogo(std::move(*logoData), &hdr);
+                            auto deintLogo = std::make_unique<logo::LogoDataParam>(logo::LogoData(hdr.w, hdr.h, hdr.logUVx, hdr.logUVy), &hdr);
+                            logo::DeintLogo(*deintLogo, tempLogo, hdr.w, hdr.h);
+                            deintLogo->CreateLogoMask(0.35f);
+                            pass2DeintLogo = std::move(deintLogo);
+                        }
+                    }
+
+                    if (pass2DeintLogo) {
+                        passIndex = 2;
+                        resetAccumulationState();
+                        pass2Corr0.clear();
+                        pass2Corr1.clear();
+                        readAll(srcpath, serviceid);
+                        if (!pass2Corr0.empty() && pass2Corr0.size() == pass2Corr1.size()) {
+                            const float kThresh = 0.2f;
+                            const float kThreshL = 0.5f;
+                            const int num = (int)pass2Corr0.size();
+                            const int fps = std::max(1, framesPerSec);
+                            const int halfAvg = std::max(1, (int)std::round(fps * 1.0f / 2.0f));
+                            const int avgFrames = halfAvg * 2 + 1;
+                            const int halfMedian = std::max(1, (int)std::round(fps * 0.5f / 2.0f));
+                            const int medianFrames = halfMedian * 2 + 1;
+                            const int halfWin = std::max(avgFrames, medianFrames) / 2;
+                            std::vector<float> rawBuf(num + halfWin * 2, 0.0f);
+                            auto raw = rawBuf.data() + halfWin;
+                            for (int i = 0; i < num; i++) {
+                                raw[i] = std::max(0.0f, pass2Corr0[i]) + std::min(0.0f, pass2Corr1[i]);
+                            }
+                            std::fill(rawBuf.begin(), rawBuf.begin() + halfWin, raw[0]);
+                            std::fill(raw + num, rawBuf.data() + rawBuf.size(), raw[num - 1]);
+
+                            struct FrameJudge { int r; float s; };
+                            std::vector<FrameJudge> judge(num);
+                            std::vector<float> medbuf(medianFrames, 0.0f);
+                            for (int i = 0; i < num; i++) {
+                                float beforeMax = *std::max_element(raw + i - halfAvg, raw + i);
+                                float afterMax = *std::max_element(raw + i + 1, raw + i + 1 + halfAvg);
+                                float minMax = std::min(beforeMax, afterMax);
+                                int minMaxResult = (std::abs(minMax) < kThreshL) ? 1 : (minMax < 0.0f ? 0 : 2);
+                                float avg = std::accumulate(raw + i - halfAvg, raw + i + halfAvg + 1, 0.0f) / avgFrames;
+                                int avgResult = (std::abs(avg) < kThresh) ? 1 : (avg < 0.0f ? 0 : 2);
+                                judge[i].r = (minMaxResult != avgResult) ? 1 : avgResult;
+                                std::copy(raw + i - halfMedian, raw + i + halfMedian + 1, medbuf.begin());
+                                std::sort(medbuf.begin(), medbuf.end());
+                                judge[i].s = medbuf[halfMedian];
+                            }
+                            for (auto it = judge.begin(); it != judge.end();) {
+                                auto first1 = std::find_if(it, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
+                                it = std::find_if_not(first1, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
+                                const int prev = (first1 == judge.begin()) ? 0 : (first1 - 1)->r;
+                                const int next = (it == judge.end()) ? 0 : it->r;
+                                if (prev == next) {
+                                    for (auto p = first1; p != it; ++p) p->r = prev;
+                                }
+                            }
+                            pass2FrameMask.assign(num, 0);
+                            for (int i = 0; i < num; i++) {
+                                pass2FrameMask[i] = (judge[i].r == 2) ? 1 : 0;
+                            }
+                            hasFrameMask = std::any_of(pass2FrameMask.begin(), pass2FrameMask.end(), [](uint8_t v) { return v != 0; });
+                        }
+                    }
                 }
-                readAll(srcpath, serviceid);
-                if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
-                    // 異常時は1pass結果を維持して返す。
-                    rectAbs = pass1RectAbs;
-                    rectLocal = pass1RectLocal;
-                    return rectAbs;
-                }
-                {
-                    bool posteriorReady = false;
-                    if (framePresenceFeature.size() >= 32 && framePresenceFeature.size() == framePresenceValidRatio.size() && framePresenceFeature.size() == framePresenceEvidence.size()) {
-                        std::vector<float> posterior;
-                        posteriorReady = EstimateGaussianMixturePosterior1D(framePresenceFeature, posterior);
-                        if (posteriorReady && posterior.size() == framePresenceFeature.size()) {
-                            framePosteriorLogo.resize(posterior.size());
-                            for (int i = 0; i < (int)posterior.size(); i++) {
-                                const float validBoost = 0.08f + 0.92f * Smoothstep01((framePresenceValidRatio[i] - 0.18f) / 0.55f);
-                                const float evidencePrior = Smoothstep01((framePresenceEvidence[i] - 0.08f) / 0.24f);
-                                const float p = posterior[i] * validBoost;
-                                framePosteriorLogo[i] = std::max(0.0f, std::min(1.0f, std::max(p, evidencePrior * 0.20f)));
+
+                if (hasFrameMask) {
+                    pass2AcceptedFrames = 0;
+                    pass2SkippedFrames = 0;
+                    passIndex = 3;
+                    resetAccumulationState();
+                    readAll(srcpath, serviceid);
+                    const int minAcceptedFrames = std::max(8, readFrames / 50);
+                    if (pass2AcceptedFrames >= minAcceptedFrames) {
+                        estimateScoreAndRect();
+                        if (pass1RectLocal.w > 0 && pass1RectLocal.h > 0 && rectLocal.w > 0 && rectLocal.h > 0) {
+                            const double pass1Area = (double)pass1RectLocal.w * pass1RectLocal.h;
+                            const double pass2Area = (double)rectLocal.w * rectLocal.h;
+                            const double areaRatio = pass2Area / std::max(1.0, pass1Area);
+                            const double wRatio = (double)rectLocal.w / std::max(1, pass1RectLocal.w);
+                            const double hRatio = (double)rectLocal.h / std::max(1, pass1RectLocal.h);
+                            const int l1 = pass1RectLocal.x;
+                            const int t1 = pass1RectLocal.y;
+                            const int r1 = pass1RectLocal.x + pass1RectLocal.w - 1;
+                            const int b1 = pass1RectLocal.y + pass1RectLocal.h - 1;
+                            const int l2 = rectLocal.x;
+                            const int t2 = rectLocal.y;
+                            const int r2 = rectLocal.x + rectLocal.w - 1;
+                            const int b2 = rectLocal.y + rectLocal.h - 1;
+                            const int iw = std::max(0, std::min(r1, r2) - std::max(l1, l2) + 1);
+                            const int ih = std::max(0, std::min(b1, b2) - std::max(t1, t2) + 1);
+                            const double inter = (double)iw * ih;
+                            const double uni = pass1Area + pass2Area - inter;
+                            const double iou = (uni > 1e-6) ? (inter / uni) : 0.0;
+                            const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20);
+                            const bool tooShift = (areaRatio > 1.20) && (iou < 0.35);
+                            if (tooLarge || tooShift) {
+                                rectAbs = pass1RectAbs;
+                                rectLocal = pass1RectLocal;
                             }
                         }
-                    }
-                    if (!posteriorReady || framePosteriorLogo.size() != framePresenceFeature.size()) {
-                        framePosteriorLogo.assign(framePresenceFeature.size(), 0.0f);
-                        std::vector<float> sorted = framePresenceFeature;
-                        std::sort(sorted.begin(), sorted.end());
-                        const float p40 = PercentileOfSorted(sorted, 0.40f);
-                        const float p80 = PercentileOfSorted(sorted, 0.80f);
-                        for (int i = 0; i < (int)framePresenceFeature.size(); i++) {
-                            const float z = Smoothstep01((framePresenceFeature[i] - p40) / std::max(1e-4f, p80 - p40));
-                            const float validBoost = 0.08f + 0.92f * Smoothstep01((framePresenceValidRatio[i] - 0.18f) / 0.55f);
-                            framePosteriorLogo[i] = std::max(0.0f, std::min(1.0f, z * validBoost));
-                        }
-                    }
-                }
-                passIndex = 2;
-                frameGateAcceptedFrames = 0;
-                frameGateRejectedFrames = 0;
-                frameGateWeightSum = 0.0;
-                resetAccumulationState();
-                if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
-                    THROW(RuntimeException, "Cancel requested");
-                }
-                readAll(srcpath, serviceid);
-                if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
-                    rectAbs = pass1RectAbs;
-                    rectLocal = pass1RectLocal;
-                    return rectAbs;
-                }
-                // 保守: ゲートが厳しすぎてほぼ全フレーム棄却なら 1pass にフォールバック。
-                const int minAcceptedFrames = std::max(8, readFrames / 50);
-                if (frameGateAcceptedFrames >= minAcceptedFrames && frameGateWeightSum >= minAcceptedFrames * 0.70) {
-                    estimateScoreAndRect();
-                    if (pass1RectLocal.w > 0 && pass1RectLocal.h > 0 && rectLocal.w > 0 && rectLocal.h > 0) {
-                        const double pass1Area = (double)pass1RectLocal.w * pass1RectLocal.h;
-                        const double pass2Area = (double)rectLocal.w * rectLocal.h;
-                        const double areaRatio = pass2Area / std::max(1.0, pass1Area);
-                        const double wRatio = (double)rectLocal.w / std::max(1, pass1RectLocal.w);
-                        const double hRatio = (double)rectLocal.h / std::max(1, pass1RectLocal.h);
-
-                        const int l1 = pass1RectLocal.x;
-                        const int t1 = pass1RectLocal.y;
-                        const int r1 = pass1RectLocal.x + pass1RectLocal.w - 1;
-                        const int b1 = pass1RectLocal.y + pass1RectLocal.h - 1;
-                        const int l2 = rectLocal.x;
-                        const int t2 = rectLocal.y;
-                        const int r2 = rectLocal.x + rectLocal.w - 1;
-                        const int b2 = rectLocal.y + rectLocal.h - 1;
-                        const int iw = std::max(0, std::min(r1, r2) - std::max(l1, l2) + 1);
-                        const int ih = std::max(0, std::min(b1, b2) - std::max(t1, t2) + 1);
-                        const double inter = (double)iw * ih;
-                        const double uni = pass1Area + pass2Area - inter;
-                        const double iou = (uni > 1e-6) ? (inter / uni) : 0.0;
-
-                        const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20);
-                        const bool tooShift = (areaRatio > 1.20) && (iou < 0.35);
-                        if (tooLarge || tooShift) {
-                            rectAbs = pass1RectAbs;
-                            rectLocal = pass1RectLocal;
-                        }
+                    } else {
+                        rectAbs = pass1RectAbs;
+                        rectLocal = pass1RectLocal;
                     }
                 } else {
                     rectAbs = pass1RectAbs;
@@ -2490,9 +2563,22 @@ namespace {
 
     protected:
         /* virtual */ void onFirstFrame(AVStream *videoStream, AVFrame* frame) override {
-            (void)videoStream;
             const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
             bitDepth = desc->comp[0].depth;
+            logUVx = std::max(0, (int)desc->log2_chroma_w);
+            logUVy = std::max(0, (int)desc->log2_chroma_h);
+            AVRational fps = { 0, 1 };
+            if (videoStream != nullptr) {
+                fps = videoStream->avg_frame_rate;
+                if (fps.num <= 0 || fps.den <= 0) {
+                    fps = videoStream->r_frame_rate;
+                }
+            }
+            if (fps.num > 0 && fps.den > 0) {
+                framesPerSec = ClampInt((int)std::round(av_q2d(fps)), 1, 240);
+            } else {
+                framesPerSec = 30;
+            }
             imgw = frame->width;
             imgh = frame->height;
             scanw = RoundDownBy(std::max(32, imgw / divx), 4);
@@ -2518,6 +2604,8 @@ namespace {
             dedupSamplePos.assign(scanw * scanh, 0);
             lastObservedFg.assign(scanw * scanh, 0.0f);
             lastObservedValid.assign(scanw * scanh, 0);
+            pass2EvalDeint.clear();
+            pass2EvalWork.clear();
         }
 
         void resetAccumulationState() {
@@ -2533,6 +2621,8 @@ namespace {
             lastObservedValid.assign(scanw * scanh, 0);
             frameValidCounts.clear();
             frameGateWeightSum = 0.0;
+            pass2AcceptedFrames = 0;
+            pass2SkippedFrames = 0;
         }
 
         void pushFrameGateDebug(const FrameGateEval& eval, const bool gateRejected, const int acceptedSamples,
@@ -2859,6 +2949,54 @@ namespace {
             const float invMaxv = 1.0f / std::max(1.0f, (float)maxv);
             const float rawScale = maxv / 255.0f;
             const float thresholdRaw = threshold * rawScale;
+
+            if (passIndex == 1) {
+                if (!pass2LogoScan || pass2LogoRectAbs.w <= 0 || pass2LogoRectAbs.h <= 0) {
+                    return 0;
+                }
+                if (frame->data[1] == nullptr || frame->data[2] == nullptr || frame->linesize[1] <= 0) {
+                    return 0;
+                }
+                const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
+                const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
+                const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
+                const int offY = pass2LogoRectAbs.x + pass2LogoRectAbs.y * pitchY;
+                const int offUV = (pass2LogoRectAbs.x >> logUVx) + (pass2LogoRectAbs.y >> logUVy) * pitchUV;
+                return pass2LogoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+            }
+
+            if (passIndex == 2) {
+                if (!pass2DeintLogo || !pass2DeintLogo->isValid()) {
+                    return 0;
+                }
+                const int w = pass2DeintLogo->getWidth();
+                const int h = pass2DeintLogo->getHeight();
+                const int required = w * h + 8;
+                if ((int)pass2EvalDeint.size() < required) {
+                    pass2EvalDeint.resize(required, 0.0f);
+                }
+                if ((int)pass2EvalWork.size() < required) {
+                    pass2EvalWork.resize(required, 0.0f);
+                }
+                const int off = pass2DeintLogo->getImgX() + pass2DeintLogo->getImgY() * pitchY;
+                logo::DeintY(pass2EvalDeint.data(), srcY + off, pitchY, w, h);
+                const float maxvf = (float)maxv;
+                const float corr0 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 0.0f, pass2EvalWork.data());
+                const float corr1 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 1.0f, pass2EvalWork.data());
+                pass2Corr0.push_back(corr0);
+                pass2Corr1.push_back(corr1);
+                return 0;
+            }
+
+            if (passIndex == 3 && !pass2FrameMask.empty()) {
+                const bool hasLogo = (readFrames >= 0 && readFrames < (int)pass2FrameMask.size()) ? (pass2FrameMask[readFrames] != 0) : false;
+                if (!hasLogo) {
+                    pass2SkippedFrames++;
+                    return 0;
+                }
+                pass2AcceptedFrames++;
+            }
+
             auto& frameWork = [] (auto& w8, auto& w16) -> auto& {
                 if constexpr (std::is_same_v<pixel_t, uint8_t>) {
                     return w8;
@@ -2877,56 +3015,8 @@ namespace {
             const pixel_t* srcRoiBase = srcY + scanx + scany * pitchY;
             BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcRoiBase, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
 
-            float frameWeight = 1.0f;
-            double frameSampleWeightPos = 1.0;
-            double frameSampleWeightNeg = 0.0;
-            FrameGateEval gateEval{};
-            if (passIndex >= 1 && !frameGateOffsets.empty()) {
-                gateEval = estimateSecondPassFrameEval(frameWork, rawScale, thresholdRaw);
-                if (passIndex == 1) {
-                    const float feature = std::max(0.0f, std::min(1.0f, gateEval.evidence * (0.72f + 0.28f * Smoothstep01((gateEval.validRatio - 0.18f) / 0.55f))));
-                    framePresenceFeature.push_back(feature);
-                    framePresenceValidRatio.push_back(gateEval.validRatio);
-                    framePresenceEvidence.push_back(gateEval.evidence);
-                    gateEval.frameWeight = feature;
-                    frameGateWeightSum += feature;
-                    const bool reject = (feature < 0.03f) || (gateEval.validRatio < 0.10f && feature < 0.10f);
-                    if (reject) {
-                        frameGateRejectedFrames++;
-                    } else {
-                        frameGateAcceptedFrames++;
-                    }
-                    pushFrameGateDebug(gateEval, reject, 0, feature);
-                    return 0;
-                }
-                if (readFrames >= 0 && readFrames < (int)framePosteriorLogo.size()) {
-                    frameWeight = std::max(0.0f, std::min(1.0f, framePosteriorLogo[readFrames]));
-                } else {
-                    frameWeight = gateEval.frameWeight;
-                }
-                if (passIndex == 2) {
-                    frameSampleWeightPos = std::max(0.0, std::min(1.0, (double)frameWeight));
-                    frameSampleWeightNeg = std::max(0.0, std::min(1.0, 1.0 - (double)frameWeight));
-                }
-                gateEval.frameWeight = frameWeight;
-                const float gateScore = frameWeight;
-                bool rejectByGate = (frameWeight < 0.05f || (gateEval.validRatio < 0.16f && frameWeight < 0.12f));
-                frameGateWeightSum += gateScore;
-                if (rejectByGate) {
-                    frameGateRejectedFrames++;
-                    pushFrameGateDebug(gateEval, true, 0, frameWeight);
-                    return 0;
-                }
-                frameGateAcceptedFrames++;
-            }
-            if (frameSampleWeightPos <= 1e-6 && frameSampleWeightNeg <= 1e-6) {
-                pushFrameGateDebug(gateEval, false, 0, (passIndex == 2) ? frameWeight : -1.0f);
-                return 0;
-            }
-
             std::atomic<int> frameCount(0);
-            const double sampleWeightPos = frameSampleWeightPos;
-            const double sampleWeightNeg = frameSampleWeightNeg;
+            const double sampleWeightPos = 1.0;
             // 同一点の重複サンプル抑制閾値。
             // 背景:
             //   レターボックス等で「ほぼ同じ fg/bg 組」が大量登録されると、
@@ -2949,7 +3039,6 @@ namespace {
                     const int off = x + y * scanw;
                     const float fgRaw = (float)frameWork[off];
                     AutoDetectStats& s = stats[off];
-                    AutoDetectStats& sNeg = statsNeg[off];
                     s.observed++;
                     if (off < (int)lastObservedValid.size() && lastObservedValid[off]) {
                         if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
@@ -2996,30 +3085,13 @@ namespace {
                         s.rejectedExtreme++;
                         continue;
                     }
-                    if (sampleWeightPos <= 1e-6 && sampleWeightNeg <= 1e-6) {
-                        continue;
-                    }
-                    if (sampleWeightPos > 1e-6) {
-                        s.sumF += f * sampleWeightPos;
-                        s.sumB += b * sampleWeightPos;
-                        s.sumF2 += f * f * sampleWeightPos;
-                        s.sumB2 += b * b * sampleWeightPos;
-                        s.sumFB += f * b * sampleWeightPos;
-                        s.sumW += sampleWeightPos;
-                        s.count++;
-                    }
-                    if (sampleWeightNeg > 1e-6) {
-                        sNeg.sumF += f * sampleWeightNeg;
-                        sNeg.sumB += b * sampleWeightNeg;
-                        sNeg.sumF2 += f * f * sampleWeightNeg;
-                        sNeg.sumB2 += b * b * sampleWeightNeg;
-                        sNeg.sumFB += f * b * sampleWeightNeg;
-                        sNeg.sumW += sampleWeightNeg;
-                        sNeg.count++;
-                        const double baselineWeight = sampleWeightNeg * (0.35 + 0.65 * sampleWeightNeg);
-                        baselineDiffSum[off] += (f - b) * baselineWeight;
-                        baselineDiffW[off] += baselineWeight;
-                    }
+                    s.sumF += f * sampleWeightPos;
+                    s.sumB += b * sampleWeightPos;
+                    s.sumF2 += f * f * sampleWeightPos;
+                    s.sumB2 += b * b * sampleWeightPos;
+                    s.sumFB += f * b * sampleWeightPos;
+                    s.sumW += sampleWeightPos;
+                    s.count++;
                     // 採用したサンプルを次回重複判定用に記録。
                     if (sampleWeightPos >= 0.35 && off < (int)dedupSampleCount.size() && off < (int)dedupSamplePos.size()) {
                         const int base = off * kDedupHistoryN;
@@ -3034,9 +3106,7 @@ namespace {
                 }
                 }
                 }, 4);
-            const int outCount = frameCount.load(std::memory_order_relaxed);
-            pushFrameGateDebug(gateEval, false, outCount, (passIndex == 2) ? frameWeight : -1.0f);
-            return outCount;
+            return frameCount.load(std::memory_order_relaxed);
         }
 
         /* virtual */ bool onFrame(AVFrame* frame) override {
@@ -3117,7 +3187,6 @@ namespace {
                                 return std::max(0.0, std::min(1.0, v));
                             };
                             const auto& s = stats[i];
-                            const auto& sNeg = statsNeg[i];
                             const double invN = (s.sumW > 1e-6) ? 1.0 / s.sumW : 0.0;
                             const double meanF = s.sumF * invN;
                             const double meanBg = s.sumB * invN;
@@ -3145,37 +3214,8 @@ namespace {
                             const double bgGain = sat01((0.080 - varBg) / 0.080);
                             const double extremeGain = sat01(1.0 - extremeRejectRatio);
 
-                            // 正例(ロゴあり)と負例(ロゴなし)の二重統計で、差分のみを評価する。
-                            // 低確率フレームbaselineも併用して、長時間固定の不透明文字を抑制する。
-                            double negMeanDiff = 0.0;
-                            double negVarBg = varBg;
-                            if (sNeg.sumW > 1e-6) {
-                                const double invNeg = 1.0 / sNeg.sumW;
-                                const double negMeanF = sNeg.sumF * invNeg;
-                                const double negMeanB = sNeg.sumB * invNeg;
-                                negMeanDiff = negMeanF - negMeanB;
-                                negVarBg = std::max(0.0, sNeg.sumB2 * invNeg - negMeanB * negMeanB);
-                            }
-                            float negA = 0.0f, negB = 0.0f;
-                            bool negAlphaValid = false;
-                            float negAlpha = 0.0f, negLogoY = 0.0f;
-                            if (TryGetAB(sNeg, negA, negB) && TryGetAlphaLogo(negA, negB, negAlpha, negLogoY)) {
-                                negAlphaValid = true;
-                                negAlpha = std::max(0.0f, std::min(1.0f, negAlpha));
-                            }
-                            const double negSupport = Smoothstep01((float)((sNeg.sumW - 2.5) / 10.0));
-                            const double baselineMeanDiff = (i < (int)baselineDiffW.size() && baselineDiffW[i] > 1e-6)
-                                ? baselineDiffSum[i] / baselineDiffW[i]
-                                : negMeanDiff;
-                            const double baselineSupport = (i < (int)baselineDiffW.size())
-                                ? Smoothstep01((float)((baselineDiffW[i] - 2.5) / 10.0))
-                                : 0.0;
-                            const double negDiffComp = std::max(std::max(0.0, negMeanDiff) * negSupport, std::max(0.0, baselineMeanDiff) * baselineSupport);
-                            const double negAlphaGain = negAlphaValid ? sat01((negAlpha - 0.20) / 0.55) : 0.0;
-                            const double subGainAlpha = Smoothstep01((float)((alpha - 0.28) / 0.58));
-                            const double subGain = 0.10 + 0.90 * subGainAlpha * (0.30 + 0.70 * negAlphaGain);
-                            const double residualDiff = meanDiff - negDiffComp * subGain;
-                            const double residualBgGain = sat01((0.080 - std::max(varBg, negVarBg)) / 0.080);
+                            const double residualDiff = meanDiff;
+                            const double residualBgGain = sat01((0.080 - varBg) / 0.080);
                             const double diffGainRaw = sat01((meanDiff - 0.003) / 0.120);
                             const double residualGain = sat01((residualDiff - 0.001) / 0.105);
                             const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw) * (0.35 + 0.65 * residualBgGain));
