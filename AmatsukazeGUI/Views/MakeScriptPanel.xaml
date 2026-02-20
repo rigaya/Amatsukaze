@@ -84,6 +84,14 @@
                     <CheckBox Margin="3" Content="__EDCBX__DIRECT__" 
                               IsChecked="{Binding Model.MakeScriptData.IsDirect, Mode=TwoWay}"
                               ToolTip="これが実装されているEDCBのmod版が必要です"/>
+                    <DockPanel Margin="3">
+                        <TextBlock Text="ファイル種類:" VerticalAlignment="Center"/>
+                        <ComboBox Width="190" Height="22" Margin="5,0,0,0"
+                                  ItemsSource="{Binding ScriptTypeOptions}"
+                                  SelectedValuePath="Value"
+                                  DisplayMemberPath="Label"
+                                  SelectedValue="{Binding SelectedScriptType, Mode=TwoWay}"/>
+                    </DockPanel>
                     <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="3" Foreground="Red"/>
                     <Button Margin="3" Height="25" Content="バッチファイル作成" Command="{Binding MakeBatchFileCommand}"/>
                 </StackPanel>

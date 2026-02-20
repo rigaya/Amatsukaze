@@ -6,12 +6,12 @@ using Livet.EventListeners;
 using Livet.Messaging;
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 
 namespace Amatsukaze.ViewModels
@@ -69,6 +69,26 @@ namespace Amatsukaze.ViewModels
                 return App.Option.LaunchType == Server.LaunchType.Client;
             }
         }
+
+        public List<ScriptTypeOption> ScriptTypeOptions { get; } = new List<ScriptTypeOption>()
+        {
+            new ScriptTypeOption() { Value = "bat", Label = "bat (Windowsバッチ)" },
+            new ScriptTypeOption() { Value = "sh", Label = "sh (シェルスクリプト)" }
+        };
+
+        #region SelectedScriptType変更通知プロパティ
+        private string _SelectedScriptType = "bat";
+
+        public string SelectedScriptType {
+            get { return _SelectedScriptType; }
+            set {
+                if (_SelectedScriptType == value)
+                    return;
+                _SelectedScriptType = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
 
         #region Description変更通知プロパティ
         private string _Description;
@@ -135,46 +155,73 @@ namespace Amatsukaze.ViewModels
                 mac = string.Join(":", macbytes.Select(s => s.ToString("X")));
             }
 
-            var serverIsWindows = Model.ServerInfo?.Platform?.IndexOf("Windows", StringComparison.OrdinalIgnoreCase) >= 0;
-            var scriptType = serverIsWindows ? "bat" : "sh";
+            var scriptType = GetNormalizedScriptType();
 
             var saveFileDialog = new SaveFileDialog();
-            saveFileDialog.FilterIndex = 1;
-            saveFileDialog.Filter = serverIsWindows
-                ? "バッチファイル(.bat)|*.bat|All Files (*.*)|*.*"
-                : "バッチファイル(.sh)|*.sh|All Files (*.*)|*.*";
+            saveFileDialog.Filter = "バッチファイル(.bat)|*.bat|シェルスクリプト(.sh)|*.sh|All Files (*.*)|*.*";
+            saveFileDialog.FilterIndex = scriptType == "sh" ? 2 : 1;
+            saveFileDialog.DefaultExt = scriptType;
+            saveFileDialog.AddExtension = true;
+            saveFileDialog.FileName = scriptType == "sh" ? "AmatsukazeAddTask.sh" : "AmatsukazeAddTask.bat";
             bool? result = saveFileDialog.ShowDialog();
             if (result != true)
             {
                 return;
             }
 
+            var outputPath = EnsureScriptExtension(saveFileDialog.FileName, saveFileDialog.FilterIndex, scriptType);
+
             try
             {
-                var port = RestApiHost.GetEnabledPort(Model.ServerPort);
-                var baseUrl = $"http://{Model.ServerIP}:{port}";
-                using var http = new HttpClient { BaseAddress = new Uri(baseUrl) };
-                var req = new MakeScriptGenerateRequest
+                if (IsRemoteClient)
                 {
-                    MakeScriptData = data,
-                    TargetHost = IsRemoteClient ? "remote" : "local",
-                    ScriptType = scriptType,
-                    RemoteHost = Model.ServerIP,
-                    Subnet = subnet,
-                    Mac = mac
-                };
-                var response = await http.PostAsJsonAsync("/api/makescript/file", req, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
-                if (!response.IsSuccessStatusCode)
-                {
-                    var error = await response.Content.ReadAsStringAsync();
-                    Description = string.IsNullOrWhiteSpace(error) ? "バッチファイル作成に失敗" : error;
-                    return;
+                    var port = RestApiHost.GetEnabledPort(Model.ServerPort);
+                    var baseUrl = $"http://{Model.ServerIP}:{port}";
+                    using var http = new HttpClient { BaseAddress = new Uri(baseUrl) };
+                    var req = new MakeScriptGenerateRequest
+                    {
+                        MakeScriptData = data,
+                        TargetHost = "remote",
+                        ScriptType = scriptType,
+                        RemoteHost = Model.ServerIP,
+                        Subnet = subnet,
+                        Mac = mac
+                    };
+                    var response = await http.PostAsJsonAsync("/api/makescript/file", req, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    });
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var error = await response.Content.ReadAsStringAsync();
+                        Description = string.IsNullOrWhiteSpace(error) ? "バッチファイル作成に失敗" : error;
+                        return;
+                    }
+                    var content = await response.Content.ReadAsStringAsync();
+                    File.WriteAllText(outputPath, content, Util.AmatsukazeDefaultEncoding);
                 }
-                var content = await response.Content.ReadAsStringAsync();
-                File.WriteAllText(saveFileDialog.FileName, content, Util.AmatsukazeDefaultEncoding);
+                else
+                {
+                    var serverPort = Model.ServerPort > 0 ? Model.ServerPort : ServerSupport.DEFAULT_PORT;
+                    if (!MakeScriptBuilder.TryBuild(
+                        data,
+                        "local",
+                        scriptType,
+                        Model.ServerIP,
+                        subnet,
+                        mac,
+                        serverPort,
+                        Util.IsServerWindows(),
+                        AppContext.BaseDirectory,
+                        Directory.GetCurrentDirectory(),
+                        out var content,
+                        out var error))
+                    {
+                        Description = string.IsNullOrWhiteSpace(error) ? "バッチファイル作成に失敗" : error;
+                        return;
+                    }
+                    File.WriteAllText(outputPath, content, Util.AmatsukazeDefaultEncoding);
+                }
             }
             catch (Exception e)
             {
@@ -182,7 +229,7 @@ namespace Amatsukaze.ViewModels
                 return;
             }
 
-            var resvm = new MakeBatchResultViewModel() { Path = saveFileDialog.FileName };
+            var resvm = new MakeBatchResultViewModel() { Path = outputPath };
 
             await Messenger.RaiseAsync(new TransitionMessage(
                 typeof(Views.MakeBatchResultWindow), resvm, TransitionMode.Modal, "Key"));
@@ -199,6 +246,28 @@ namespace Amatsukaze.ViewModels
             public string RemoteHost { get; set; }
             public string Subnet { get; set; }
             public string Mac { get; set; }
+        }
+
+        public class ScriptTypeOption
+        {
+            public string Value { get; set; }
+            public string Label { get; set; }
+        }
+
+        private string GetNormalizedScriptType()
+        {
+            return string.Equals(SelectedScriptType, "sh", StringComparison.OrdinalIgnoreCase) ? "sh" : "bat";
+        }
+
+        private static string EnsureScriptExtension(string fileName, int filterIndex, string defaultScriptType)
+        {
+            if (!string.IsNullOrWhiteSpace(Path.GetExtension(fileName)))
+            {
+                return fileName;
+            }
+
+            var scriptType = filterIndex == 2 ? "sh" : defaultScriptType;
+            return fileName + "." + scriptType;
         }
 
         #region StopServerCommand

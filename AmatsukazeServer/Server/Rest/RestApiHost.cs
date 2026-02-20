@@ -1689,134 +1689,19 @@ namespace Amatsukaze.Server.Rest
 
         private static bool TryBuildMakeScript(MakeScriptGenerateRequestInternal request, int serverPort, out string script, out string error)
         {
-            script = string.Empty;
-            error = string.Empty;
-            if (request == null || request.MakeScriptData == null)
-            {
-                error = "MakeScript data is missing.";
-                return false;
-            }
-
-            var data = request.MakeScriptData;
-            var targetHost = string.IsNullOrWhiteSpace(request.TargetHost) ? "remote" : request.TargetHost;
-            var scriptType = string.IsNullOrWhiteSpace(request.ScriptType)
-                ? (Util.IsServerWindows() ? "bat" : "sh")
-                : request.ScriptType;
-            var isBat = string.Equals(scriptType, "bat", StringComparison.OrdinalIgnoreCase);
-            var isWindows = Util.IsServerWindows();
-
-            if (string.Equals(targetHost, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                if (isWindows && !isBat)
-                {
-                    error = "Windowsサーバーではバッチのみ生成できます。";
-                    return false;
-                }
-                if (!isWindows && isBat)
-                {
-                    error = "Linuxサーバーではシェルのみ生成できます。";
-                    return false;
-                }
-            }
-
-            var prof = data.Profile;
-            if (string.IsNullOrWhiteSpace(prof))
-            {
-                error = "プロファイルを選択してください";
-                return false;
-            }
-
-            var dst = data.OutDir?.TrimEnd(Path.DirectorySeparatorChar);
-            if (string.IsNullOrWhiteSpace(dst))
-            {
-                error = "出力先が設定されていません";
-                return false;
-            }
-            if (!Directory.Exists(dst))
-            {
-                error = "出力先ディレクトリにアクセスできません";
-                return false;
-            }
-
-            string nas = null;
-            if (data.IsNasEnabled)
-            {
-                if (string.IsNullOrWhiteSpace(data.NasDir))
-                {
-                    error = "NAS保存先を指定してください。";
-                    return false;
-                }
-                nas = data.NasDir.TrimEnd(Path.DirectorySeparatorChar);
-            }
-
-            var remoteHost = request.RemoteHost;
-            var ip = string.Equals(targetHost, "local", StringComparison.OrdinalIgnoreCase)
-                ? "127.0.0.1"
-                : remoteHost;
-            if (string.IsNullOrWhiteSpace(ip))
-            {
-                error = "接続先ホストが指定されていません";
-                return false;
-            }
-
-            var port = serverPort > 0 ? serverPort : ServerSupport.DEFAULT_PORT;
-            var direct = data.IsDirect;
-            var addTaskPath = Path.Combine(AppContext.BaseDirectory, Util.IsServerWindows() ? "AmatsukazeAddTask.exe" : "AmatsukazeAddTask");
-            var lineBreak = isBat ? "\r\n" : "\n";
-            var comment = isBat ? "rem" : "#";
-
-            var sb = new StringBuilder();
-            if (!isBat)
-            {
-                sb.Append("#!/bin/bash").Append(lineBreak);
-            }
-            if (direct)
-            {
-                sb.Append(comment).Append(" _EDCBX_DIRECT_").Append(lineBreak);
-            }
-            var filePathToken = direct
-                ? "$FilePath$"
-                : isBat ? "%FilePath%" : "${FilePath}";
-            sb.AppendFormat("\"{0}\"", addTaskPath)
-                .AppendFormat(" -r \"{0}\"", Directory.GetCurrentDirectory())
-                .AppendFormat(" -f \"{0}\" -ip \"{1}\"", filePathToken, ip)
-                .AppendFormat(" -p {0}", port)
-                .AppendFormat(" -o \"{0}\"", dst)
-                .AppendFormat(" -s \"{0}\"", prof)
-                .AppendFormat(" --priority {0}", data.Priority);
-            if (!string.IsNullOrEmpty(nas))
-            {
-                sb.AppendFormat(" -d \"{0}\"", nas);
-            }
-            if (data.IsWakeOnLan)
-            {
-                if (string.IsNullOrWhiteSpace(request.Subnet) || string.IsNullOrWhiteSpace(request.Mac))
-                {
-                    error = "Wake On Lanに必要な情報が不足しています";
-                    return false;
-                }
-                sb.AppendFormat(" --subnet \"{0}\"", request.Subnet)
-                    .AppendFormat(" --mac \"{0}\"", request.Mac);
-            }
-            if (data.MoveAfter == false)
-            {
-                sb.Append(" --no-move");
-            }
-            if (data.ClearEncoded)
-            {
-                sb.Append(" --clear-succeeded");
-            }
-            if (data.WithRelated)
-            {
-                sb.Append(" --with-related");
-            }
-            if (!string.IsNullOrEmpty(data.AddQueueBat))
-            {
-                sb.AppendFormat(" -b \"{0}\"", data.AddQueueBat);
-            }
-
-            script = sb.ToString();
-            return true;
+            return MakeScriptBuilder.TryBuild(
+                request?.MakeScriptData,
+                request?.TargetHost,
+                request?.ScriptType,
+                request?.RemoteHost,
+                request?.Subnet,
+                request?.Mac,
+                serverPort,
+                Util.IsServerWindows(),
+                AppContext.BaseDirectory,
+                Directory.GetCurrentDirectory(),
+                out script,
+                out error);
         }
 
         private static byte[] ReadImageAsPng(string path)
