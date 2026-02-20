@@ -43,6 +43,8 @@ namespace Amatsukaze.Server.Rest
         public string ConsistencyImagePath { get; set; }
         public string FgVarImagePath { get; set; }
         public string BgVarImagePath { get; set; }
+        public string TransitionImagePath { get; set; }
+        public string KeepRateImagePath { get; set; }
         public string AcceptedImagePath { get; set; }
         public bool DetailedDebug { get; set; }
     }
@@ -234,6 +236,14 @@ namespace Amatsukaze.Server.Rest
             {
                 path = job.BgVarImagePath;
             }
+            else if (string.Equals(kind, "transition", StringComparison.OrdinalIgnoreCase))
+            {
+                path = job.TransitionImagePath;
+            }
+            else if (string.Equals(kind, "keeprate", StringComparison.OrdinalIgnoreCase))
+            {
+                path = job.KeepRateImagePath;
+            }
             else if (string.Equals(kind, "accepted", StringComparison.OrdinalIgnoreCase))
             {
                 path = job.AcceptedImagePath;
@@ -379,6 +389,8 @@ namespace Amatsukaze.Server.Rest
                     var consistencyPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-consistency-{job.Id}.bmp") : null;
                     var fgVarPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-fgvar-{job.Id}.bmp") : null;
                     var bgVarPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-bgvar-{job.Id}.bmp") : null;
+                    var transitionPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-transition-{job.Id}.bmp") : null;
+                    var keepRatePath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-keeprate-{job.Id}.bmp") : null;
                     var acceptedPath = request.DetailedDebug ? Path.Combine(baseWork, $"logo-auto-accepted-{job.Id}.bmp") : null;
                     job.ScoreImagePath = scorePath;
                     job.BinaryImagePath = binaryPath;
@@ -391,6 +403,8 @@ namespace Amatsukaze.Server.Rest
                     job.ConsistencyImagePath = consistencyPath;
                     job.FgVarImagePath = fgVarPath;
                     job.BgVarImagePath = bgVarPath;
+                    job.TransitionImagePath = transitionPath;
+                    job.KeepRateImagePath = keepRatePath;
                     job.AcceptedImagePath = acceptedPath;
 
                     int x = 0;
@@ -401,7 +415,7 @@ namespace Amatsukaze.Server.Rest
                         ctx, filePath, serviceId,
                         request.DivX, request.DivY, request.SearchFrames, request.BlockSize, request.Threshold,
                         request.MarginX, request.MarginY, request.ThreadN,
-                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath,
+                        scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath,
                         request.DetailedDebug,
                         (stage, stageProgress, progress, nread, total) =>
                         {
@@ -600,6 +614,14 @@ namespace Amatsukaze.Server.Rest
             if (!string.IsNullOrEmpty(job.BgVarImagePath))
             {
                 debug.BgVarUrl = $"/api/logo/analyze/auto/{job.Id}/debug/bgvar";
+            }
+            if (!string.IsNullOrEmpty(job.TransitionImagePath))
+            {
+                debug.TransitionUrl = $"/api/logo/analyze/auto/{job.Id}/debug/transition";
+            }
+            if (!string.IsNullOrEmpty(job.KeepRateImagePath))
+            {
+                debug.KeepRateUrl = $"/api/logo/analyze/auto/{job.Id}/debug/keeprate";
             }
             if (!string.IsNullOrEmpty(job.AcceptedImagePath))
             {

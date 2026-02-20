@@ -1204,9 +1204,12 @@ namespace {
     struct AutoDetectStats {
         double sumF, sumB, sumF2, sumB2, sumFB;
         int count;
+        int observed;
+        int fgTransition;
+        int rejectedDedup;
         int totalCandidates;
         int rejectedExtreme;
-        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), count(0), totalCandidates(0), rejectedExtreme(0) {}
+        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), count(0), observed(0), fgTransition(0), rejectedDedup(0), totalCandidates(0), rejectedExtreme(0) {}
     };
 
     static int ClampInt(const int v, const int minv, const int maxv) {
@@ -1749,13 +1752,16 @@ namespace {
         int radius;
         int bitDepth;
         int readFrames;
+        static constexpr int kDedupHistoryN = 4;
 
         std::vector<uint8_t> frameWork8;
         std::vector<uint16_t> frameWork16;
         std::vector<AutoDetectStats> stats;
-        std::vector<float> lastSampleFg;
-        std::vector<float> lastSampleBg;
-        std::vector<uint8_t> lastSampleValid;
+        std::vector<float> dedupSampleFgHistory;
+        std::vector<uint8_t> dedupSampleCount;
+        std::vector<uint8_t> dedupSamplePos;
+        std::vector<float> lastObservedFg;
+        std::vector<uint8_t> lastObservedValid;
         std::vector<float> score;
         std::vector<uint8_t> binary;
         std::vector<float> mapA;
@@ -1765,6 +1771,8 @@ namespace {
         std::vector<float> mapConsistency;
         std::vector<float> mapFgVar;
         std::vector<float> mapBgVar;
+        std::vector<float> mapTransitionRate;
+        std::vector<float> mapKeepRate;
         std::vector<float> mapAccepted;
         std::vector<uint8_t> validAB;
         std::vector<int> frameValidCounts;
@@ -1873,7 +1881,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), lastSampleFg(), lastSampleBg(), lastSampleValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -1888,7 +1896,7 @@ namespace {
             return rectAbs;
         }
 
-        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* acceptedPath) {
+        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath) {
             if (scanw <= 0 || scanh <= 0) {
                 return;
             }
@@ -1904,6 +1912,8 @@ namespace {
             const std::string consistencyPathA = (consistencyPath != nullptr) ? tchar_to_string(consistencyPath) : std::string();
             const std::string fgVarPathA = (fgVarPath != nullptr) ? tchar_to_string(fgVarPath) : std::string();
             const std::string bgVarPathA = (bgVarPath != nullptr) ? tchar_to_string(bgVarPath) : std::string();
+            const std::string transitionPathA = (transitionPath != nullptr) ? tchar_to_string(transitionPath) : std::string();
+            const std::string keepRatePathA = (keepRatePath != nullptr) ? tchar_to_string(keepRatePath) : std::string();
             const std::string acceptedPathA = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
 
             float maxScore = 0.0f;
@@ -1990,10 +2000,12 @@ namespace {
                     return (uint8_t)ClampInt((int)std::round(mapLogoY[off] * 255.0f), 0, 255);
                 });
             }
-            float csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax;
+            float csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax, trMin, trMax, krMin, krMax;
             CalcRangeValid(mapConsistency, validAB, csMin, csMax, 0.0f, 2.0f);
             CalcRangeValid(mapFgVar, validAB, fgvMin, fgvMax, 0.0f, 0.02f);
             CalcRangeValid(mapBgVar, validAB, bgvMin, bgvMax, 0.0f, 0.02f);
+            CalcRangeValid(mapTransitionRate, validAB, trMin, trMax, 0.0f, 0.20f);
+            CalcRangeValid(mapKeepRate, validAB, krMin, krMax, 0.0f, 0.20f);
             if (!consistencyPathA.empty()) {
                 WriteGrayBitmap(consistencyPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
@@ -2021,6 +2033,26 @@ namespace {
                         return (uint8_t)0;
                     }
                     const float t = (mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!transitionPathA.empty()) {
+                WriteGrayBitmap(transitionPathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapTransitionRate.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapTransitionRate[off] - trMin) / (trMax - trMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!keepRatePathA.empty()) {
+                WriteGrayBitmap(keepRatePathA, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapKeepRate.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (mapKeepRate[off] - krMin) / (krMax - krMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
@@ -2164,9 +2196,11 @@ namespace {
                 frameWork8.shrink_to_fit();
             }
             stats.resize(scanw * scanh);
-            lastSampleFg.assign(scanw * scanh, 0.0f);
-            lastSampleBg.assign(scanw * scanh, 0.0f);
-            lastSampleValid.assign(scanw * scanh, 0);
+            dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
+            dedupSampleCount.assign(scanw * scanh, 0);
+            dedupSamplePos.assign(scanw * scanh, 0);
+            lastObservedFg.assign(scanw * scanh, 0.0f);
+            lastObservedValid.assign(scanw * scanh, 0);
         }
 
         template<typename pixel_t>
@@ -2203,6 +2237,7 @@ namespace {
             //   有効サンプル数は増えても回帰に新情報が増えず、帯ノイズが優勢になる。
             //   ここではまず fg 一致(ほぼ同値)だけで重複を間引く。
             const float dedupThreshold = std::max(0.5f * rawScale, thresholdRaw * 0.25f);
+            const float transitionThreshold = std::max(0.75f * rawScale, dedupThreshold * 0.50f);
             // ROI 全点を走査(間引きなし)。
             // 背景:
             //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
@@ -2217,9 +2252,31 @@ namespace {
                     for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
                     const int off = x + y * scanw;
                     const float fgRaw = (float)frameWork[off];
-                    if (off < (int)lastSampleValid.size() && lastSampleValid[off]) {
-                        // 重複抑制を先に行い、TryEstimateBgの呼び出し回数を削減して高速化する。
-                        if (std::abs(lastSampleFg[off] - fgRaw) <= dedupThreshold) {
+                    AutoDetectStats& s = stats[off];
+                    s.observed++;
+                    if (off < (int)lastObservedValid.size() && lastObservedValid[off]) {
+                        if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
+                            s.fgTransition++;
+                        }
+                    }
+                    if (off < (int)lastObservedValid.size()) {
+                        lastObservedFg[off] = fgRaw;
+                        lastObservedValid[off] = 1;
+                    }
+                    if (off < (int)dedupSampleCount.size()) {
+                        // 重複抑制:
+                        // 最近N採用値のどれかに近ければ新情報が少ないとして棄却する。
+                        const int base = off * kDedupHistoryN;
+                        const int histCount = std::min((int)dedupSampleCount[off], kDedupHistoryN);
+                        bool isDup = false;
+                        for (int hi = 0; hi < histCount; hi++) {
+                            if (std::abs(dedupSampleFgHistory[base + hi] - fgRaw) <= dedupThreshold) {
+                                isDup = true;
+                                break;
+                            }
+                        }
+                        if (isDup) {
+                            s.rejectedDedup++;
                             continue;
                         }
                     }
@@ -2230,12 +2287,9 @@ namespace {
                     if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
                         continue;
                     }
-                    AutoDetectStats& s = stats[off];
                     s.totalCandidates++;
                     const double f = (double)frameWork[off] * invMaxv;
                     const double b = (double)bg * invMaxv;
-
-                    const float bgRaw = bg;
 
                     // 極端コントラスト点を棄却。
                     // 具体例:
@@ -2252,10 +2306,13 @@ namespace {
                     s.sumFB += f * b;
                     s.count++;
                     // 採用したサンプルを次回重複判定用に記録。
-                    if (off < (int)lastSampleValid.size()) {
-                        lastSampleFg[off] = fgRaw;
-                        lastSampleBg[off] = bgRaw;
-                        lastSampleValid[off] = 1;
+                    if (off < (int)dedupSampleCount.size() && off < (int)dedupSamplePos.size()) {
+                        const int base = off * kDedupHistoryN;
+                        const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
+                        dedupSampleFgHistory[base + writePos] = fgRaw;
+                        const int nextPos = (writePos + 1) % kDedupHistoryN;
+                        dedupSamplePos[off] = (uint8_t)nextPos;
+                        dedupSampleCount[off] = (uint8_t)std::min(kDedupHistoryN, (int)dedupSampleCount[off] + 1);
                     }
                     // このフレームで有効だった画素数（デバッグ可視化用）。
                     frameCount.fetch_add(1, std::memory_order_relaxed);
@@ -2319,6 +2376,8 @@ namespace {
             mapConsistency.assign(scanw * scanh, 0.0f);
             mapFgVar.assign(scanw * scanh, 0.0f);
             mapBgVar.assign(scanw * scanh, 0.0f);
+            mapTransitionRate.assign(scanw * scanh, 0.0f);
+            mapKeepRate.assign(scanw * scanh, 0.0f);
             mapAccepted.assign(scanw * scanh, 0.0f);
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
@@ -2349,9 +2408,14 @@ namespace {
                             const double varFg = std::max(0.0, s.sumF2 * invN - meanF * meanF);
                             const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
                             const double fgBgVarRatio = varFg / (varBg + 1e-6);
+                            const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
+                            const double keepRate = (s.observed > 0) ? (double)s.count / (double)s.observed : 0.0;
+                            const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
                             mapConsistency[i] = (float)consistency;
                             mapFgVar[i] = (float)varFg;
                             mapBgVar[i] = (float)varBg;
+                            mapTransitionRate[i] = (float)transitionRate;
+                            mapKeepRate[i] = (float)keepRate;
 
                             const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
                             const double alphaGain = std::max(0.0, std::min(1.0, (alpha - 0.005) / 0.30));
@@ -2360,6 +2424,20 @@ namespace {
                             const double consistencyGain = std::max(0.0, std::min(1.0, (consistency - 0.35) / 1.65));
                             const double bgGain = std::max(0.0, std::min(1.0, (0.080 - varBg) / 0.080));
                             const double extremeGain = std::max(0.0, std::min(1.0, 1.0 - extremeRejectRatio));
+                            // 不透明固定文字の事前ゲート(保守的):
+                            // 下側帯域に限定し、かつ keep/transition がともに低い強条件のみ除外する。
+                            // ロゴ欠落を避けるため、上側のロゴ帯にはゲートを適用しない。
+                            if (varBg >= 0.0012 && alpha > 0.62) {
+                                const double lowTransition = std::max(0.0, std::min(1.0, (0.10 - transitionRate) / 0.10));
+                                const double lowKeep = std::max(0.0, std::min(1.0, (0.08 - keepRate) / 0.08));
+                                const double staticStrength = std::sqrt(lowTransition * lowKeep);
+                                const double lowerBand = std::max(0.0, std::min(1.0, (yRatio - 0.28) / 0.30));
+                                const bool gateByStaticPair = (lowerBand > 0.0) && (staticStrength > 0.88);
+                                const bool gateByLockedKeep = (lowerBand > 0.35) && (keepRate < 0.020);
+                                if (gateByStaticPair || gateByLockedKeep) {
+                                    continue;
+                                }
+                            }
                             // 時間変動由来の抑制:
                             // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
                             double temporalGain = 1.0;
@@ -2374,7 +2452,16 @@ namespace {
                                 const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
                                 opaquePenalty = 1.0 / penaltyScale;
                             }
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty);
+                            double opaqueStaticPenalty = 1.0;
+                            if (alpha > 0.55 && varBg >= 0.0012) {
+                                const double alphaOpaque = std::max(0.0, std::min(1.0, (alpha - 0.55) / 0.35));
+                                const double lowTransition = std::max(0.0, std::min(1.0, (0.09 - transitionRate) / 0.09));
+                                const double lowKeep = std::max(0.0, std::min(1.0, (0.07 - keepRate) / 0.07));
+                                const double staticness = std::max(lowTransition, lowKeep);
+                                const double penaltyScale = 1.0 + alphaOpaque * (0.25 + 1.75 * staticness);
+                                opaqueStaticPenalty = 1.0 / penaltyScale;
+                            }
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
                             if (d <= 0.0f) continue;
                             mapAccepted[i] = d;
                             score[i] = d;
@@ -3668,7 +3755,7 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH,
-    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* acceptedPath,
+    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
@@ -3679,13 +3766,13 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
         if (scorePath && binaryPath && cclPath) {
-            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath);
+            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
         }
         return true;
     } catch (const Exception& exception) {
         if (scorePath && binaryPath && cclPath) {
             try {
-                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, acceptedPath);
+                reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
             } catch (...) {
             }
         }

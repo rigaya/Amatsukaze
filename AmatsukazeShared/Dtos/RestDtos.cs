@@ -624,6 +624,8 @@ namespace Amatsukaze.Shared
         public string? ConsistencyUrl { get; set; }
         public string? FgVarUrl { get; set; }
         public string? BgVarUrl { get; set; }
+        public string? TransitionUrl { get; set; }
+        public string? KeepRateUrl { get; set; }
         public string? AcceptedUrl { get; set; }
     }
 
