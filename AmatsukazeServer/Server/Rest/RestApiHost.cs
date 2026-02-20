@@ -1634,7 +1634,12 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.NotFound();
                 }
-                if (string.Equals(kind, "point", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(kind, "point", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "framegate", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "itercsv", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "promotecsv", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "deltacsv", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "rectmergecsv", StringComparison.OrdinalIgnoreCase))
                 {
                     return Results.File(bytes, "text/csv");
                 }

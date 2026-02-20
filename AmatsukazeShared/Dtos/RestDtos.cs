@@ -627,6 +627,7 @@ namespace Amatsukaze.Shared
         public string? TransitionUrl { get; set; }
         public string? KeepRateUrl { get; set; }
         public string? AcceptedUrl { get; set; }
+        public string? FrameGateUrl { get; set; }
     }
 
     public class LogoAutoDetectStatus

@@ -191,6 +191,20 @@ namespace Amatsukaze.Server.Rest
                 return null;
             }
 
+            static string AddSuffixToPath(string srcPath, string suffix)
+            {
+                if (string.IsNullOrEmpty(srcPath))
+                {
+                    return null;
+                }
+                var ext = Path.GetExtension(srcPath);
+                if (string.IsNullOrEmpty(ext))
+                {
+                    return srcPath + suffix;
+                }
+                return srcPath.Substring(0, srcPath.Length - ext.Length) + suffix;
+            }
+
             string path = null;
             if (string.Equals(kind, "score", StringComparison.OrdinalIgnoreCase))
             {
@@ -247,6 +261,26 @@ namespace Amatsukaze.Server.Rest
             else if (string.Equals(kind, "accepted", StringComparison.OrdinalIgnoreCase))
             {
                 path = job.AcceptedImagePath;
+            }
+            else if (string.Equals(kind, "framegate", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".framegate.csv");
+            }
+            else if (string.Equals(kind, "itercsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".iter.csv");
+            }
+            else if (string.Equals(kind, "promotecsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".promote.csv");
+            }
+            else if (string.Equals(kind, "deltacsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".delta.csv");
+            }
+            else if (string.Equals(kind, "rectmergecsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".rectmerge.csv");
             }
 
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
@@ -626,6 +660,10 @@ namespace Amatsukaze.Server.Rest
             if (!string.IsNullOrEmpty(job.AcceptedImagePath))
             {
                 debug.AcceptedUrl = $"/api/logo/analyze/auto/{job.Id}/debug/accepted";
+            }
+            if (job.DetailedDebug && !string.IsNullOrEmpty(job.BinaryImagePath))
+            {
+                debug.FrameGateUrl = $"/api/logo/analyze/auto/{job.Id}/debug/framegate";
             }
 
             return new LogoAutoDetectStatus()

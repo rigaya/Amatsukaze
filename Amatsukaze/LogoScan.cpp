@@ -14,6 +14,7 @@
 #include <thread>
 #include <functional>
 #include <numeric>
+#include <cassert>
 #include <limits>
 #include <type_traits>
 #include <atomic>
@@ -2051,6 +2052,38 @@ namespace {
         int pass2AcceptedFrames;
         int pass2SkippedFrames;
 
+        struct FrameGateRegion {
+            int minX;
+            int maxX;
+            int minY;
+            int maxY;
+        };
+
+        struct BuildBinaryDiag {
+            int seedOn = 0;
+            int lowOn = 0;
+            int grownOn = 0;
+            int promotedOn = 0;
+        };
+
+        struct RectStageCompCandidate {
+            AutoDetectRect rect;
+            double score;
+            int area;
+        };
+
+        bool getMaskRect(const std::vector<uint8_t>& mask, int& minX, int& minY, int& maxX, int& maxY) const;
+        int countMaskOn(const std::vector<uint8_t>& mask) const;
+        void buildBinaryFromThreshold(const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
+        void pruneBinaryByAnchor();
+        void applyBinaryFallbackIfEmpty();
+
+        void collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn) const;
+        void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore);
+        AutoDetectRect buildAcceptedFallbackRect() const;
+        void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
+        AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
+
     public:
         AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
             : SimpleVideoReader(ctx)
@@ -2073,6 +2106,25 @@ namespace {
             if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
                 THROW(RuntimeException, "Cancel requested");
             }
+            // 1) 初期化
+            resetRunState();
+            // 2) pass1: 全フレームで score/binary/rect を推定
+            readAll(srcpath, serviceid);
+            if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
+                THROW(RuntimeException, "No frame decoded");
+            }
+            estimateScoreAndRect();
+            const AutoDetectRect pass1RectAbs = rectAbs;
+            const AutoDetectRect pass1RectLocal = rectLocal;
+
+            // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
+            if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal)) {
+                runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal);
+            }
+            return rectAbs;
+        }
+
+        void resetRunState() {
             passIndex = 0;
             pass2LogoScan.reset();
             pass2DeintLogo.reset();
@@ -2096,165 +2148,184 @@ namespace {
             framePresenceEvidence.clear();
             framePosteriorLogo.clear();
             frameGateFrameDebug.clear();
+        }
+
+        AutoDetectRect expandPass1RectForSecondPass(const AutoDetectRect& inRect) const {
+            AutoDetectRect out = inRect;
+            if (inRect.w <= 0 || inRect.h <= 0) return AutoDetectRect{ 0, 0, 0, 0 };
+            const int padX = std::max(8, (int)std::round(inRect.w * 0.20f));
+            const int padY = std::max(8, (int)std::round(inRect.h * 0.20f));
+            out.x = ClampInt(inRect.x - padX, 0, std::max(0, scanw - 2));
+            out.y = ClampInt(inRect.y - padY, 0, std::max(0, scanh - 2));
+            const int maxX = ClampInt(inRect.x + inRect.w - 1 + padX, 1, std::max(1, scanw - 1));
+            const int maxY = ClampInt(inRect.y + inRect.h - 1 + padY, 1, std::max(1, scanh - 1));
+            out.w = std::max(2, maxX - out.x + 1);
+            out.h = std::max(2, maxY - out.y + 1);
+            out.x = RoundDownBy(out.x, 2);
+            out.y = RoundDownBy(out.y, 2);
+            out.w = RoundUpBy(out.w, 2);
+            out.h = RoundUpBy(out.h, 2);
+            out.w = std::min(out.w, std::max(2, scanw - out.x));
+            out.h = std::min(out.h, std::max(2, scanh - out.y));
+            return out;
+        }
+
+        bool runPass2PrepareMask(const tstring& srcpath, const AutoDetectRect& pass1RectLocal) {
+            // 1) pass1で得た候補矩形を少し広げ、pass2で使う評価ROI(絶対座標/相対座標)を決める。
+            const AutoDetectRect pass2LogoRectLocal = expandPass1RectForSecondPass(pass1RectLocal);
+            pass2LogoRectAbs = AutoDetectRect{
+                pass2LogoRectLocal.x + scanx,
+                pass2LogoRectLocal.y + scany,
+                pass2LogoRectLocal.w,
+                pass2LogoRectLocal.h
+            };
+            // ROIが小さすぎる場合は pass2 を実施しても安定しないので中止する。
+            if (pass2LogoRectLocal.w < 8 || pass2LogoRectLocal.h < 8) {
+                return false;
+            }
+
+            // 2) pass1モードで全フレームを走査し、ROI内だけで仮ロゴ(LogoScan)を再構築する。
+            pass2LogoScan = std::make_unique<logo::LogoScan>(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, threshold);
+            passIndex = 1;
+            resetAccumulationState();
             readAll(srcpath, serviceid);
-            if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
-                THROW(RuntimeException, "No frame decoded");
+
+            // 3) 仮ロゴをデインタレースして評価用LogoDataParamへ変換し、maskを作る。
+            if (readFrames > 0 && pass2LogoScan) {
+                auto logoData = pass2LogoScan->GetLogo(false);
+                if (logoData != nullptr) {
+                    logo::LogoHeader hdr(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, imgw, imgh, pass2LogoRectAbs.x, pass2LogoRectAbs.y, "autodetect-pass2");
+                    logo::LogoDataParam tempLogo(std::move(*logoData), &hdr);
+                    auto deintLogo = std::make_unique<logo::LogoDataParam>(logo::LogoData(hdr.w, hdr.h, hdr.logUVx, hdr.logUVy), &hdr);
+                    logo::DeintLogo(*deintLogo, tempLogo, hdr.w, hdr.h);
+                    deintLogo->CreateLogoMask(0.35f);
+                    pass2DeintLogo = std::move(deintLogo);
+                }
             }
+            if (!pass2DeintLogo) {
+                return false;
+            }
+
+            // 4) pass2モードで全フレームの相関列(corr0/corr1)を収集する。
+            passIndex = 2;
+            resetAccumulationState();
+            pass2Corr0.clear();
+            pass2Corr1.clear();
+            readAll(srcpath, serviceid);
+            if (pass2Corr0.empty() || pass2Corr0.size() != pass2Corr1.size()) {
+                return false;
+            }
+
+            // 5) 相関列を統合し、前後窓の統計を使って各フレームを
+            //    0=ロゴなし / 1=不確定 / 2=ロゴあり に一次判定する。
+            const float kThresh = 0.2f;
+            const float kThreshL = 0.5f;
+            const int num = (int)pass2Corr0.size();
+            const int fps = std::max(1, framesPerSec);
+            const int halfAvg = std::max(1, (int)std::round(fps * 1.0f / 2.0f));
+            const int avgFrames = halfAvg * 2 + 1;
+            const int halfMedian = std::max(1, (int)std::round(fps * 0.5f / 2.0f));
+            const int medianFrames = halfMedian * 2 + 1;
+            const int halfWin = std::max(avgFrames, medianFrames) / 2;
+            std::vector<float> rawBuf(num + halfWin * 2, 0.0f);
+            auto raw = rawBuf.data() + halfWin;
+            for (int i = 0; i < num; i++) {
+                raw[i] = std::max(0.0f, pass2Corr0[i]) + std::min(0.0f, pass2Corr1[i]);
+            }
+            std::fill(rawBuf.begin(), rawBuf.begin() + halfWin, raw[0]);
+            std::fill(raw + num, rawBuf.data() + rawBuf.size(), raw[num - 1]);
+
+            // r: 離散判定結果(0/1/2)、s: 予備スコア(中央値)。
+            struct FrameJudge { int r; float s; };
+            std::vector<FrameJudge> judge(num);
+            std::vector<float> medbuf(medianFrames, 0.0f);
+            for (int i = 0; i < num; i++) {
+                float beforeMax = *std::max_element(raw + i - halfAvg, raw + i);
+                float afterMax = *std::max_element(raw + i + 1, raw + i + 1 + halfAvg);
+                float minMax = std::min(beforeMax, afterMax);
+                int minMaxResult = (std::abs(minMax) < kThreshL) ? 1 : (minMax < 0.0f ? 0 : 2);
+                float avg = std::accumulate(raw + i - halfAvg, raw + i + halfAvg + 1, 0.0f) / avgFrames;
+                int avgResult = (std::abs(avg) < kThresh) ? 1 : (avg < 0.0f ? 0 : 2);
+                judge[i].r = (minMaxResult != avgResult) ? 1 : avgResult;
+                std::copy(raw + i - halfMedian, raw + i + halfMedian + 1, medbuf.begin());
+                std::sort(medbuf.begin(), medbuf.end());
+                judge[i].s = medbuf[halfMedian];
+            }
+
+            // 6) 連続する不確定区間(1)は、前後が同一判定ならその値で埋める。
+            for (auto it = judge.begin(); it != judge.end();) {
+                auto first1 = std::find_if(it, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
+                it = std::find_if_not(first1, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
+                const int prev = (first1 == judge.begin()) ? 0 : (first1 - 1)->r;
+                const int next = (it == judge.end()) ? 0 : it->r;
+                if (prev == next) {
+                    for (auto p = first1; p != it; ++p) p->r = prev;
+                }
+            }
+
+            // 7) 最終的に「ロゴあり(2)」だけを pass3投入マスクとして保持する。
+            pass2FrameMask.assign(num, 0);
+            for (int i = 0; i < num; i++) {
+                pass2FrameMask[i] = (judge[i].r == 2) ? 1 : 0;
+            }
+            return std::any_of(pass2FrameMask.begin(), pass2FrameMask.end(), [](uint8_t v) { return v != 0; });
+        }
+
+        bool shouldFallbackToPass1Rect(const AutoDetectRect& pass1RectLocal) const {
+            if (pass1RectLocal.w <= 0 || pass1RectLocal.h <= 0 || rectLocal.w <= 0 || rectLocal.h <= 0) {
+                return false;
+            }
+            const double pass1Area = (double)pass1RectLocal.w * pass1RectLocal.h;
+            const double pass2Area = (double)rectLocal.w * rectLocal.h;
+            const double areaRatio = pass2Area / std::max(1.0, pass1Area);
+            const double wRatio = (double)rectLocal.w / std::max(1, pass1RectLocal.w);
+            const double hRatio = (double)rectLocal.h / std::max(1, pass1RectLocal.h);
+            const int l1 = pass1RectLocal.x;
+            const int t1 = pass1RectLocal.y;
+            const int r1 = pass1RectLocal.x + pass1RectLocal.w - 1;
+            const int b1 = pass1RectLocal.y + pass1RectLocal.h - 1;
+            const int l2 = rectLocal.x;
+            const int t2 = rectLocal.y;
+            const int r2 = rectLocal.x + rectLocal.w - 1;
+            const int b2 = rectLocal.y + rectLocal.h - 1;
+            const int iw = std::max(0, std::min(r1, r2) - std::max(l1, l2) + 1);
+            const int ih = std::max(0, std::min(b1, b2) - std::max(t1, t2) + 1);
+            const double inter = (double)iw * ih;
+            const double uni = pass1Area + pass2Area - inter;
+            const double iou = (uni > 1e-6) ? (inter / uni) : 0.0;
+            const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20);
+            const bool tooShift = (areaRatio > 1.20) && (iou < 0.35);
+            return tooLarge || tooShift;
+        }
+
+        bool runPass2CollectAndEstimate(const tstring& srcpath, const AutoDetectRect& pass1RectAbs, const AutoDetectRect& pass1RectLocal) {
+            // 1) pass3モードで再走査し、pass2FrameMaskに基づいて
+            //    「ロゴあり」と判定されたフレームだけを統計へ投入する。
+            pass2AcceptedFrames = 0;
+            pass2SkippedFrames = 0;
+            passIndex = 3;
+            resetAccumulationState();
+            readAll(srcpath, serviceid);
+
+            // 2) 採用フレームが少なすぎる場合は推定が不安定なため、
+            //    pass1で得た矩形へフォールバックする。
+            const int minAcceptedFrames = std::max(8, readFrames / 50);
+            if (pass2AcceptedFrames < minAcceptedFrames) {
+                rectAbs = pass1RectAbs;
+                rectLocal = pass1RectLocal;
+                return false;
+            }
+
+            // 3) 採用フレームのみで score/binary/rect を再推定する。
             estimateScoreAndRect();
-            const AutoDetectRect pass1RectAbs = rectAbs;
-            const AutoDetectRect pass1RectLocal = rectLocal;
 
-            if (enableTwoPassFrameGate) {
-                auto expandLocalRect = [&](const AutoDetectRect& inRect) -> AutoDetectRect {
-                    AutoDetectRect out = inRect;
-                    if (inRect.w <= 0 || inRect.h <= 0) return AutoDetectRect{ 0, 0, 0, 0 };
-                    const int padX = std::max(8, (int)std::round(inRect.w * 0.20f));
-                    const int padY = std::max(8, (int)std::round(inRect.h * 0.20f));
-                    out.x = ClampInt(inRect.x - padX, 0, std::max(0, scanw - 2));
-                    out.y = ClampInt(inRect.y - padY, 0, std::max(0, scanh - 2));
-                    const int maxX = ClampInt(inRect.x + inRect.w - 1 + padX, 1, std::max(1, scanw - 1));
-                    const int maxY = ClampInt(inRect.y + inRect.h - 1 + padY, 1, std::max(1, scanh - 1));
-                    out.w = std::max(2, maxX - out.x + 1);
-                    out.h = std::max(2, maxY - out.y + 1);
-                    out.x = RoundDownBy(out.x, 2);
-                    out.y = RoundDownBy(out.y, 2);
-                    out.w = RoundUpBy(out.w, 2);
-                    out.h = RoundUpBy(out.h, 2);
-                    out.w = std::min(out.w, std::max(2, scanw - out.x));
-                    out.h = std::min(out.h, std::max(2, scanh - out.y));
-                    return out;
-                };
-
-                const AutoDetectRect pass2LogoRectLocal = expandLocalRect(pass1RectLocal);
-                pass2LogoRectAbs = AutoDetectRect{
-                    pass2LogoRectLocal.x + scanx,
-                    pass2LogoRectLocal.y + scany,
-                    pass2LogoRectLocal.w,
-                    pass2LogoRectLocal.h
-                };
-
-                const bool pass2RectValid = pass2LogoRectLocal.w >= 8 && pass2LogoRectLocal.h >= 8;
-                bool hasFrameMask = false;
-                if (pass2RectValid) {
-                    pass2LogoScan = std::make_unique<logo::LogoScan>(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, threshold);
-                    passIndex = 1;
-                    resetAccumulationState();
-                    readAll(srcpath, serviceid);
-
-                    if (readFrames > 0 && pass2LogoScan) {
-                        auto logoData = pass2LogoScan->GetLogo(false);
-                        if (logoData != nullptr) {
-                            logo::LogoHeader hdr(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, imgw, imgh, pass2LogoRectAbs.x, pass2LogoRectAbs.y, "autodetect-pass2");
-                            logo::LogoDataParam tempLogo(std::move(*logoData), &hdr);
-                            auto deintLogo = std::make_unique<logo::LogoDataParam>(logo::LogoData(hdr.w, hdr.h, hdr.logUVx, hdr.logUVy), &hdr);
-                            logo::DeintLogo(*deintLogo, tempLogo, hdr.w, hdr.h);
-                            deintLogo->CreateLogoMask(0.35f);
-                            pass2DeintLogo = std::move(deintLogo);
-                        }
-                    }
-
-                    if (pass2DeintLogo) {
-                        passIndex = 2;
-                        resetAccumulationState();
-                        pass2Corr0.clear();
-                        pass2Corr1.clear();
-                        readAll(srcpath, serviceid);
-                        if (!pass2Corr0.empty() && pass2Corr0.size() == pass2Corr1.size()) {
-                            const float kThresh = 0.2f;
-                            const float kThreshL = 0.5f;
-                            const int num = (int)pass2Corr0.size();
-                            const int fps = std::max(1, framesPerSec);
-                            const int halfAvg = std::max(1, (int)std::round(fps * 1.0f / 2.0f));
-                            const int avgFrames = halfAvg * 2 + 1;
-                            const int halfMedian = std::max(1, (int)std::round(fps * 0.5f / 2.0f));
-                            const int medianFrames = halfMedian * 2 + 1;
-                            const int halfWin = std::max(avgFrames, medianFrames) / 2;
-                            std::vector<float> rawBuf(num + halfWin * 2, 0.0f);
-                            auto raw = rawBuf.data() + halfWin;
-                            for (int i = 0; i < num; i++) {
-                                raw[i] = std::max(0.0f, pass2Corr0[i]) + std::min(0.0f, pass2Corr1[i]);
-                            }
-                            std::fill(rawBuf.begin(), rawBuf.begin() + halfWin, raw[0]);
-                            std::fill(raw + num, rawBuf.data() + rawBuf.size(), raw[num - 1]);
-
-                            struct FrameJudge { int r; float s; };
-                            std::vector<FrameJudge> judge(num);
-                            std::vector<float> medbuf(medianFrames, 0.0f);
-                            for (int i = 0; i < num; i++) {
-                                float beforeMax = *std::max_element(raw + i - halfAvg, raw + i);
-                                float afterMax = *std::max_element(raw + i + 1, raw + i + 1 + halfAvg);
-                                float minMax = std::min(beforeMax, afterMax);
-                                int minMaxResult = (std::abs(minMax) < kThreshL) ? 1 : (minMax < 0.0f ? 0 : 2);
-                                float avg = std::accumulate(raw + i - halfAvg, raw + i + halfAvg + 1, 0.0f) / avgFrames;
-                                int avgResult = (std::abs(avg) < kThresh) ? 1 : (avg < 0.0f ? 0 : 2);
-                                judge[i].r = (minMaxResult != avgResult) ? 1 : avgResult;
-                                std::copy(raw + i - halfMedian, raw + i + halfMedian + 1, medbuf.begin());
-                                std::sort(medbuf.begin(), medbuf.end());
-                                judge[i].s = medbuf[halfMedian];
-                            }
-                            for (auto it = judge.begin(); it != judge.end();) {
-                                auto first1 = std::find_if(it, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
-                                it = std::find_if_not(first1, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
-                                const int prev = (first1 == judge.begin()) ? 0 : (first1 - 1)->r;
-                                const int next = (it == judge.end()) ? 0 : it->r;
-                                if (prev == next) {
-                                    for (auto p = first1; p != it; ++p) p->r = prev;
-                                }
-                            }
-                            pass2FrameMask.assign(num, 0);
-                            for (int i = 0; i < num; i++) {
-                                pass2FrameMask[i] = (judge[i].r == 2) ? 1 : 0;
-                            }
-                            hasFrameMask = std::any_of(pass2FrameMask.begin(), pass2FrameMask.end(), [](uint8_t v) { return v != 0; });
-                        }
-                    }
-                }
-
-                if (hasFrameMask) {
-                    pass2AcceptedFrames = 0;
-                    pass2SkippedFrames = 0;
-                    passIndex = 3;
-                    resetAccumulationState();
-                    readAll(srcpath, serviceid);
-                    const int minAcceptedFrames = std::max(8, readFrames / 50);
-                    if (pass2AcceptedFrames >= minAcceptedFrames) {
-                        estimateScoreAndRect();
-                        if (pass1RectLocal.w > 0 && pass1RectLocal.h > 0 && rectLocal.w > 0 && rectLocal.h > 0) {
-                            const double pass1Area = (double)pass1RectLocal.w * pass1RectLocal.h;
-                            const double pass2Area = (double)rectLocal.w * rectLocal.h;
-                            const double areaRatio = pass2Area / std::max(1.0, pass1Area);
-                            const double wRatio = (double)rectLocal.w / std::max(1, pass1RectLocal.w);
-                            const double hRatio = (double)rectLocal.h / std::max(1, pass1RectLocal.h);
-                            const int l1 = pass1RectLocal.x;
-                            const int t1 = pass1RectLocal.y;
-                            const int r1 = pass1RectLocal.x + pass1RectLocal.w - 1;
-                            const int b1 = pass1RectLocal.y + pass1RectLocal.h - 1;
-                            const int l2 = rectLocal.x;
-                            const int t2 = rectLocal.y;
-                            const int r2 = rectLocal.x + rectLocal.w - 1;
-                            const int b2 = rectLocal.y + rectLocal.h - 1;
-                            const int iw = std::max(0, std::min(r1, r2) - std::max(l1, l2) + 1);
-                            const int ih = std::max(0, std::min(b1, b2) - std::max(t1, t2) + 1);
-                            const double inter = (double)iw * ih;
-                            const double uni = pass1Area + pass2Area - inter;
-                            const double iou = (uni > 1e-6) ? (inter / uni) : 0.0;
-                            const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20);
-                            const bool tooShift = (areaRatio > 1.20) && (iou < 0.35);
-                            if (tooLarge || tooShift) {
-                                rectAbs = pass1RectAbs;
-                                rectLocal = pass1RectLocal;
-                            }
-                        }
-                    } else {
-                        rectAbs = pass1RectAbs;
-                        rectLocal = pass1RectLocal;
-                    }
-                } else {
-                    rectAbs = pass1RectAbs;
-                    rectLocal = pass1RectLocal;
-                }
+            // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
+            if (shouldFallbackToPass1Rect(pass1RectLocal)) {
+                rectAbs = pass1RectAbs;
+                rectLocal = pass1RectLocal;
+                return false;
             }
-            return rectAbs;
+            return true;
         }
 
         void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath) {
@@ -2649,44 +2720,73 @@ namespace {
                 });
         }
 
+        // pass2用フレームゲートの基準点を準備する。
+        // pass1で得た binary/score から「判定に使う画素集合」と重みを構成する。
         bool prepareSecondPassFrameGate() {
+            // 前回のゲート状態をクリアし、初期閾値へ戻す。
             frameGateOffsets.clear();
             frameGateRefDiff.clear();
             frameGateAnchorWeight.clear();
             frameGateAlphaP50 = 0.12f;
             frameGateRefDiffP50 = 0.03f;
+            // 入力が不正な場合はゲート構築を行わない。
             if (scanw <= 0 || scanh <= 0 || (int)binary.size() != scanw * scanh) {
                 return false;
             }
 
-            const int upperYLimit = ClampInt((int)std::round(scanh * 0.62f), 0, std::max(0, scanh - 1));
-            int gateMinX = 0;
-            int gateMaxX = scanw - 1;
-            int gateMinY = 0;
-            int gateMaxY = upperYLimit;
-            if (rectLocal.w > 0 && rectLocal.h > 0) {
-                const int padX = std::max(16, (int)std::round(rectLocal.w * 0.80f));
-                const int padY = std::max(12, (int)std::round(rectLocal.h * 1.00f));
-                gateMinX = ClampInt(rectLocal.x - padX, 0, scanw - 1);
-                gateMaxX = ClampInt(rectLocal.x + rectLocal.w - 1 + padX, 0, scanw - 1);
-                gateMinY = ClampInt(rectLocal.y - padY, 0, scanh - 1);
-                gateMaxY = ClampInt(rectLocal.y + rectLocal.h - 1 + padY, 0, upperYLimit);
-                if (gateMaxX < gateMinX || gateMaxY < gateMinY) {
-                    gateMinX = 0;
-                    gateMaxX = scanw - 1;
-                    gateMinY = 0;
-                    gateMaxY = upperYLimit;
-                }
+            // ロゴ近傍の候補領域を決め、anchor を収集する。
+            const FrameGateRegion region = calcFrameGateRegion();
+            std::vector<uint8_t> anchor(scanw * scanh, 0);
+            int anchorCount = buildFrameGateAnchor(region, anchor);
+            if (anchorCount < 24) {
+                supplementFrameGateAnchor(region, anchor, anchorCount);
+            }
+            if (anchorCount < 16) {
+                return false;
             }
 
-            auto inGate = [&](const int x, const int y) {
-                return x >= gateMinX && x <= gateMaxX && y >= gateMinY && y <= gateMaxY;
-            };
+            // anchor を膨張し、成分形状から重み補正係数を作る。
+            std::vector<uint8_t> dilated(scanw * scanh, 0);
+            dilateFrameGateAnchor(region, anchor, dilated);
+            const std::vector<float> anchorShapeRel = calcFrameGateAnchorShapeRel(region, anchor);
+            if (!buildFrameGateOffsets(region, dilated)) {
+                return false;
+            }
 
-            std::vector<uint8_t> anchor(scanw * scanh, 0);
+            // 使いすぎを防ぐためサンプリングし、統計値と重みを算出する。
+            sampleFrameGateOffsets(640);
+            calcFrameGateStatistics(anchorShapeRel);
+            return true;
+        }
+
+        // frame gate の探索範囲を決める。
+        // 基本は右上寄り全体、pass1矩形があればその周辺へ縮小する。
+        FrameGateRegion calcFrameGateRegion() const {
+            // デフォルトは上側帯域全体を対象にする。
+            const int upperYLimit = ClampInt((int)std::round(scanh * 0.62f), 0, std::max(0, scanh - 1));
+            FrameGateRegion region{ 0, scanw - 1, 0, upperYLimit };
+            if (rectLocal.w <= 0 || rectLocal.h <= 0) {
+                return region;
+            }
+
+            // pass1矩形の周辺をパディングしてゲート範囲を絞る。
+            const int padX = std::max(16, (int)std::round(rectLocal.w * 0.80f));
+            const int padY = std::max(12, (int)std::round(rectLocal.h * 1.00f));
+            region.minX = ClampInt(rectLocal.x - padX, 0, scanw - 1);
+            region.maxX = ClampInt(rectLocal.x + rectLocal.w - 1 + padX, 0, scanw - 1);
+            region.minY = ClampInt(rectLocal.y - padY, 0, scanh - 1);
+            region.maxY = ClampInt(rectLocal.y + rectLocal.h - 1 + padY, 0, upperYLimit);
+            // 何らかの理由で範囲が壊れた場合はデフォルトへ戻す。
+            if (region.maxX < region.minX || region.maxY < region.minY) {
+                region = FrameGateRegion{ 0, scanw - 1, 0, upperYLimit };
+            }
+            return region;
+        }
+
+        int buildFrameGateAnchor(const FrameGateRegion& region, std::vector<uint8_t>& anchor) const {
             int anchorCount = 0;
-            for (int y = gateMinY; y <= gateMaxY; y++) {
-                for (int x = gateMinX; x <= gateMaxX; x++) {
+            for (int y = region.minY; y <= region.maxY; y++) {
+                for (int x = region.minX; x <= region.maxX; x++) {
                     const int off = x + y * scanw;
                     if (binary[off]) {
                         anchor[off] = 1;
@@ -2694,39 +2794,49 @@ namespace {
                     }
                 }
             }
+            return anchorCount;
+        }
 
-            if (anchorCount < 24) {
-                std::vector<std::pair<float, int>> cand;
-                cand.reserve((gateMaxX - gateMinX + 1) * (gateMaxY - gateMinY + 1));
-                for (int y = gateMinY; y <= gateMaxY; y++) {
-                    for (int x = gateMinX; x <= gateMaxX; x++) {
-                        const int off = x + y * scanw;
-                        if (off >= (int)validAB.size() || !validAB[off]) continue;
-                        const float v = (off < (int)mapAccepted.size()) ? mapAccepted[off] : 0.0f;
-                        if (v <= 0.0f || !std::isfinite(v)) continue;
-                        cand.emplace_back(v, off);
-                    }
-                }
-                if (!cand.empty()) {
-                    const int take = std::min((int)cand.size(), 256);
-                    std::nth_element(cand.begin(), cand.begin() + take - 1, cand.end(),
-                        [](const auto& a, const auto& b) { return a.first > b.first; });
-                    for (int i = 0; i < take; i++) {
-                        anchor[cand[i].second] = 1;
-                    }
-                    anchorCount = 0;
-                    for (const auto v : anchor) {
-                        if (v) anchorCount++;
-                    }
+        // binary anchor が不足するとき、mapAccepted の上位点で補完する。
+        void supplementFrameGateAnchor(const FrameGateRegion& region, std::vector<uint8_t>& anchor, int& anchorCount) const {
+            // ゲート範囲内から有効な accepted 値を候補として集める。
+            std::vector<std::pair<float, int>> cand;
+            cand.reserve((region.maxX - region.minX + 1) * (region.maxY - region.minY + 1));
+            for (int y = region.minY; y <= region.maxY; y++) {
+                for (int x = region.minX; x <= region.maxX; x++) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)validAB.size() || !validAB[off]) continue;
+                    const float v = (off < (int)mapAccepted.size()) ? mapAccepted[off] : 0.0f;
+                    if (v <= 0.0f || !std::isfinite(v)) continue;
+                    cand.emplace_back(v, off);
                 }
             }
-            if (anchorCount < 16) {
-                return false;
+            if (cand.empty()) {
+                return;
             }
+            // 候補上位だけを anchor に昇格する。
+            const int take = std::min((int)cand.size(), 256);
+            std::nth_element(cand.begin(), cand.begin() + take - 1, cand.end(),
+                [](const auto& a, const auto& b) { return a.first > b.first; });
+            for (int i = 0; i < take; i++) {
+                anchor[cand[i].second] = 1;
+            }
+            // 最終 anchor 数を再カウントする。
+            anchorCount = 0;
+            for (const auto v : anchor) {
+                if (v) anchorCount++;
+            }
+        }
 
-            std::vector<uint8_t> dilated = anchor;
-            for (int y = gateMinY; y <= gateMaxY; y++) {
-                for (int x = gateMinX; x <= gateMaxX; x++) {
+        // anchor を 8近傍へ1段膨張し、ゲート判定の対象点を増やす。
+        void dilateFrameGateAnchor(const FrameGateRegion& region, const std::vector<uint8_t>& anchor, std::vector<uint8_t>& dilated) const {
+            dilated = anchor;
+            auto inGate = [&](const int x, const int y) {
+                return x >= region.minX && x <= region.maxX && y >= region.minY && y <= region.maxY;
+            };
+            // anchor 点ごとに近傍へ伝播し、判定点マスクを厚くする。
+            for (int y = region.minY; y <= region.maxY; y++) {
+                for (int x = region.minX; x <= region.maxX; x++) {
                     const int off = x + y * scanw;
                     if (!anchor[off]) continue;
                     for (int dy = -1; dy <= 1; dy++) {
@@ -2739,68 +2849,78 @@ namespace {
                     }
                 }
             }
+        }
 
+        // anchor 連結成分の形状に応じた相対重み(shapeRel)を作る。
+        // 細線/端接触/小箱などノイズ寄り成分の重みを下げる。
+        std::vector<float> calcFrameGateAnchorShapeRel(const FrameGateRegion& region, const std::vector<uint8_t>& anchor) const {
             std::vector<float> anchorShapeRel(scanw * scanh, 1.0f);
-            {
-                std::vector<uint8_t> visited(scanw * scanh, 0);
-                std::queue<int> q;
-                for (int y = gateMinY; y <= gateMaxY; y++) {
-                    for (int x = gateMinX; x <= gateMaxX; x++) {
-                        const int start = x + y * scanw;
-                        if (!anchor[start] || visited[start]) continue;
-                        visited[start] = 1;
-                        q.push(start);
-                        int minX = x, minY = y, maxX = x, maxY = y;
-                        int area = 0;
-                        std::vector<int> pixels;
-                        pixels.reserve(64);
-                        while (!q.empty()) {
-                            const int cur = q.front();
-                            q.pop();
-                            pixels.push_back(cur);
-                            area++;
-                            const int cx = cur % scanw;
-                            const int cy = cur / scanw;
-                            minX = std::min(minX, cx);
-                            minY = std::min(minY, cy);
-                            maxX = std::max(maxX, cx);
-                            maxY = std::max(maxY, cy);
-                            for (int dy = -1; dy <= 1; dy++) {
-                                for (int dx = -1; dx <= 1; dx++) {
-                                    if (dx == 0 && dy == 0) continue;
-                                    const int nx = cx + dx;
-                                    const int ny = cy + dy;
-                                    if (nx < gateMinX || nx > gateMaxX || ny < gateMinY || ny > gateMaxY) continue;
-                                    const int nidx = nx + ny * scanw;
-                                    if (!anchor[nidx] || visited[nidx]) continue;
-                                    visited[nidx] = 1;
-                                    q.push(nidx);
-                                }
+            std::vector<uint8_t> visited(scanw * scanh, 0);
+            std::queue<int> q;
+            // 各連結成分を BFS で列挙して形状特徴を計算する。
+            for (int y = region.minY; y <= region.maxY; y++) {
+                for (int x = region.minX; x <= region.maxX; x++) {
+                    const int start = x + y * scanw;
+                    if (!anchor[start] || visited[start]) continue;
+                    visited[start] = 1;
+                    q.push(start);
+                    int minX = x, minY = y, maxX = x, maxY = y;
+                    int area = 0;
+                    std::vector<int> pixels;
+                    pixels.reserve(64);
+                    while (!q.empty()) {
+                        const int cur = q.front();
+                        q.pop();
+                        pixels.push_back(cur);
+                        area++;
+                        const int cx = cur % scanw;
+                        const int cy = cur / scanw;
+                        minX = std::min(minX, cx);
+                        minY = std::min(minY, cy);
+                        maxX = std::max(maxX, cx);
+                        maxY = std::max(maxY, cy);
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                if (dx == 0 && dy == 0) continue;
+                                const int nx = cx + dx;
+                                const int ny = cy + dy;
+                                if (nx < region.minX || nx > region.maxX || ny < region.minY || ny > region.maxY) continue;
+                                const int nidx = nx + ny * scanw;
+                                if (!anchor[nidx] || visited[nidx]) continue;
+                                visited[nidx] = 1;
+                                q.push(nidx);
                             }
                         }
-                        const int compW = maxX - minX + 1;
-                        const int compH = maxY - minY + 1;
-                        float rel = 1.0f;
-                        if (area <= 4) rel *= 0.35f;
-                        else if (area <= 10) rel *= 0.55f;
-                        const int longEdge = std::max(compW, compH);
-                        const int shortEdge = std::max(1, std::min(compW, compH));
-                        if (longEdge >= 14 && shortEdge <= 2) rel *= 0.35f;
-                        const bool touchBorder = (minX <= gateMinX + 1) || (maxX >= gateMaxX - 1) || (minY <= gateMinY + 1) || (maxY >= gateMaxY - 1);
-                        if (touchBorder) rel *= 0.70f;
-                        const bool upperSmallBox = (maxY <= gateMinY + 24) && (compW <= 14) && (compH <= 14) && (area <= 28);
-                        if (upperSmallBox) rel *= 0.65f;
-                        rel = std::max(0.15f, std::min(1.0f, rel));
-                        for (const auto off : pixels) {
-                            anchorShapeRel[off] = std::min(anchorShapeRel[off], rel);
-                        }
+                    }
+                    const int compW = maxX - minX + 1;
+                    const int compH = maxY - minY + 1;
+                    // 成分形状に応じて rel を減衰する。
+                    float rel = 1.0f;
+                    if (area <= 4) rel *= 0.35f;
+                    else if (area <= 10) rel *= 0.55f;
+                    const int longEdge = std::max(compW, compH);
+                    const int shortEdge = std::max(1, std::min(compW, compH));
+                    if (longEdge >= 14 && shortEdge <= 2) rel *= 0.35f;
+                    const bool touchBorder = (minX <= region.minX + 1) || (maxX >= region.maxX - 1) || (minY <= region.minY + 1) || (maxY >= region.maxY - 1);
+                    if (touchBorder) rel *= 0.70f;
+                    const bool upperSmallBox = (maxY <= region.minY + 24) && (compW <= 14) && (compH <= 14) && (area <= 28);
+                    if (upperSmallBox) rel *= 0.65f;
+                    rel = std::max(0.15f, std::min(1.0f, rel));
+                    for (const auto off : pixels) {
+                        anchorShapeRel[off] = std::min(anchorShapeRel[off], rel);
                     }
                 }
             }
+            return anchorShapeRel;
+        }
 
+        // 膨張済みマスクから最終ゲート点オフセット配列を構築する。
+        bool buildFrameGateOffsets(const FrameGateRegion& region, const std::vector<uint8_t>& dilated) {
+            frameGateOffsets.clear();
             frameGateOffsets.reserve(scanw * scanh / 16);
-            for (int y = gateMinY; y <= gateMaxY; y++) {
-                for (int x = gateMinX; x <= gateMaxX; x++) {
+            // ゲート範囲内の ON 点を線形オフセットで保持する。
+            for (int y = region.minY; y <= region.maxY; y++) {
+                for (int x = region.minX; x <= region.maxX; x++) {
                     const int off = x + y * scanw;
                     if (dilated[off]) {
                         frameGateOffsets.push_back(off);
@@ -2811,17 +2931,29 @@ namespace {
                 frameGateOffsets.clear();
                 return false;
             }
-            if ((int)frameGateOffsets.size() > 640) {
-                std::vector<int> sampled;
-                sampled.reserve(640);
-                const int n = (int)frameGateOffsets.size();
-                for (int k = 0; k < 640; k++) {
-                    const int idx = ClampInt((int)std::round((n - 1) * (k / 639.0)), 0, n - 1);
-                    sampled.push_back(frameGateOffsets[idx]);
-                }
-                frameGateOffsets.swap(sampled);
-            }
+            return true;
+        }
 
+        // ゲート点が多すぎる場合に等間隔サンプリングして上限をかける。
+        void sampleFrameGateOffsets(const int maxSamples) {
+            if ((int)frameGateOffsets.size() <= maxSamples) {
+                return;
+            }
+            // 先頭から末尾までほぼ均等に選び、空間的な偏りを抑える。
+            std::vector<int> sampled;
+            sampled.reserve(maxSamples);
+            const int n = (int)frameGateOffsets.size();
+            for (int k = 0; k < maxSamples; k++) {
+                const int idx = ClampInt((int)std::round((n - 1) * (k / (double)std::max(1, maxSamples - 1))), 0, n - 1);
+                sampled.push_back(frameGateOffsets[idx]);
+            }
+            frameGateOffsets.swap(sampled);
+        }
+
+        // frame gate 判定で使う基準統計を計算する。
+        // alpha中央値・参照差分・点ごとの重みをここで確定する。
+        void calcFrameGateStatistics(const std::vector<float>& anchorShapeRel) {
+            // ゲート点の alpha 分布から中央値を求める。
             std::vector<float> alphaVals;
             alphaVals.reserve(frameGateOffsets.size());
             for (const int off : frameGateOffsets) {
@@ -2835,6 +2967,8 @@ namespace {
                 std::sort(alphaVals.begin(), alphaVals.end());
                 frameGateAlphaP50 = alphaVals[alphaVals.size() / 2];
             }
+
+            // 各ゲート点の参照差分(refDiff)と anchor 重みを算出する。
             frameGateRefDiff.assign(frameGateOffsets.size(), 0.0f);
             frameGateAnchorWeight.assign(frameGateOffsets.size(), 0.35f);
             std::vector<float> refDiffVals;
@@ -2864,9 +2998,19 @@ namespace {
                 std::sort(refDiffVals.begin(), refDiffVals.end());
                 frameGateRefDiffP50 = refDiffVals[refDiffVals.size() / 2];
             }
-            return true;
         }
 
+        void fillFrameGateEvalEmpty(FrameGateEval& eval) const {
+            eval.frameWeight = 0.0f;
+            eval.meanNorm = 0.0f;
+            eval.hitRatio = 0.0f;
+            eval.evidence = 0.0f;
+            eval.rejectBase = std::max(0.030f, std::min(0.160f, 0.020f + frameGateAlphaP50 * 0.16f));
+            eval.keepBase = std::max(eval.rejectBase + 0.025f, std::min(0.280f, eval.rejectBase + 0.10f + frameGateAlphaP50 * 0.16f));
+        }
+
+        // 1フレーム分の frame gate 評価値を計算する。
+        // ゲート点の差分量を集約し、0..1 の frameWeight と診断値を返す。
         template<typename pixel_t>
         FrameGateEval estimateSecondPassFrameEval(const std::vector<pixel_t>& frameWork, const float rawScale, const float thresholdRaw) const {
             FrameGateEval eval{};
@@ -2874,6 +3018,7 @@ namespace {
             if (frameGateOffsets.empty()) {
                 return eval;
             }
+            // 差分正規化と点ごとの判定閾値を初期化する。
             const float maxvRaw = std::max(1.0f, rawScale * 255.0f);
             const float diffLow = std::max(0.45f * rawScale, thresholdRaw * 0.30f) / maxvRaw;
             const float diffHigh = std::max(1.10f * rawScale, thresholdRaw * 0.80f) / maxvRaw;
@@ -2881,6 +3026,7 @@ namespace {
             double sumNorm = 0.0;
             double sumHit = 0.0;
             int validGatePoints = 0;
+            // 全ゲート点を走査して、差分正規化値とヒット率を重み付き集計する。
             for (int idx = 0; idx < (int)frameGateOffsets.size(); idx++) {
                 const int off = frameGateOffsets[idx];
                 if (off < 0 || off >= scanw * scanh) continue;
@@ -2912,16 +3058,13 @@ namespace {
             const float validRatio = (float)validGatePoints / std::max(1, (int)frameGateOffsets.size());
             eval.validRatio = validRatio;
             eval.validGatePoints = validGatePoints;
+            // 有効点が不足する場合は空評価として返す。
             if (sumW <= 1e-6 || validGatePoints < std::max(8, (int)frameGateOffsets.size() / 10)) {
-                eval.frameWeight = 0.0f;
-                eval.meanNorm = 0.0f;
-                eval.hitRatio = 0.0f;
-                eval.evidence = 0.0f;
-                eval.rejectBase = std::max(0.030f, std::min(0.160f, 0.020f + frameGateAlphaP50 * 0.16f));
-                eval.keepBase = std::max(eval.rejectBase + 0.025f, std::min(0.280f, eval.rejectBase + 0.10f + frameGateAlphaP50 * 0.16f));
+                fillFrameGateEvalEmpty(eval);
                 return eval;
             }
 
+            // evidence をしきい値レンジへ写像し、最終 frameWeight を決める。
             const float meanNorm = (float)(sumNorm / sumW);
             const float hitRatio = (float)(sumHit / sumW);
             const float evidence = std::max(0.0f, std::min(1.0f, meanNorm * 0.40f + hitRatio * 0.60f));
@@ -2941,6 +3084,8 @@ namespace {
             return eval;
         }
 
+        // 1フレームを取り込み、現在passに応じて統計へ反映する。
+        // pass1: 仮lgd構築 / pass2: 相関列構築 / pass3: フィルタ後サンプル収集。
         template<typename pixel_t>
         int addFrame(const AVFrame* frame) {
             const int pitchY = frame->linesize[0] / sizeof(pixel_t);
@@ -2950,106 +3095,127 @@ namespace {
             const float rawScale = maxv / 255.0f;
             const float thresholdRaw = threshold * rawScale;
 
+            // pass1: pass2用の仮ロゴを LogoScan に蓄積する。
             if (passIndex == 1) {
-                if (!pass2LogoScan || pass2LogoRectAbs.w <= 0 || pass2LogoRectAbs.h <= 0) {
-                    return 0;
-                }
-                if (frame->data[1] == nullptr || frame->data[2] == nullptr || frame->linesize[1] <= 0) {
-                    return 0;
-                }
-                const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
-                const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
-                const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
-                const int offY = pass2LogoRectAbs.x + pass2LogoRectAbs.y * pitchY;
-                const int offUV = (pass2LogoRectAbs.x >> logUVx) + (pass2LogoRectAbs.y >> logUVy) * pitchUV;
-                return pass2LogoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+                return addFramePass1LogoScan<pixel_t>(frame, srcY, pitchY);
             }
 
+            // pass2: 仮ロゴとの相関列(corr0/corr1)を構築する。
             if (passIndex == 2) {
-                if (!pass2DeintLogo || !pass2DeintLogo->isValid()) {
-                    return 0;
-                }
-                const int w = pass2DeintLogo->getWidth();
-                const int h = pass2DeintLogo->getHeight();
-                const int required = w * h + 8;
-                if ((int)pass2EvalDeint.size() < required) {
-                    pass2EvalDeint.resize(required, 0.0f);
-                }
-                if ((int)pass2EvalWork.size() < required) {
-                    pass2EvalWork.resize(required, 0.0f);
-                }
-                const int off = pass2DeintLogo->getImgX() + pass2DeintLogo->getImgY() * pitchY;
-                logo::DeintY(pass2EvalDeint.data(), srcY + off, pitchY, w, h);
-                const float maxvf = (float)maxv;
-                const float corr0 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 0.0f, pass2EvalWork.data());
-                const float corr1 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 1.0f, pass2EvalWork.data());
-                pass2Corr0.push_back(corr0);
-                pass2Corr1.push_back(corr1);
-                return 0;
+                return addFramePass2Correlation<pixel_t>(srcY, pitchY, maxv);
             }
 
+            // pass3: ロゴ無し判定フレームは統計への投入をスキップする。
             if (passIndex == 3 && !pass2FrameMask.empty()) {
-                const bool hasLogo = (readFrames >= 0 && readFrames < (int)pass2FrameMask.size()) ? (pass2FrameMask[readFrames] != 0) : false;
-                if (!hasLogo) {
+                if (shouldSkipPass3FrameByMask()) {
                     pass2SkippedFrames++;
                     return 0;
                 }
                 pass2AcceptedFrames++;
             }
 
-            auto& frameWork = [] (auto& w8, auto& w16) -> auto& {
-                if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                    return w8;
-                } else {
-                    return w16;
-                }
-            }(frameWork8, frameWork16);
+            // 通常統計: 前処理→背景推定→サンプル採用/棄却を実施する。
+            auto& frameWork = getFrameWorkBuffer<pixel_t>();
+            preprocessFrame<pixel_t>(srcY, pitchY, frameWork, maxv, rawScale, thresholdRaw);
+            return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw);
+        }
 
-            // 前処理: 輪郭保持を重視して 5x5 バイラテラルフィルタを適用。
-            // 背景:
-            //   3x3 平滑化(Box/Median)はロゴ輪郭を削りやすく、scoreが弱くなるケースがあった。
-            //   バイラテラルでノイズを抑えつつエッジを維持する。
-            // src は ROI 先頭位置までずらしたポインタを渡し、画素ループ内の余分な加算を避ける。
+        template<typename pixel_t>
+        int addFramePass1LogoScan(const AVFrame* frame, const pixel_t* srcY, const int pitchY) {
+            if (!pass2LogoScan || pass2LogoRectAbs.w <= 0 || pass2LogoRectAbs.h <= 0) {
+                return 0;
+            }
+            if (frame->data[1] == nullptr || frame->data[2] == nullptr || frame->linesize[1] <= 0) {
+                return 0;
+            }
+            const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
+            const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
+            const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
+            const int offY = pass2LogoRectAbs.x + pass2LogoRectAbs.y * pitchY;
+            const int offUV = (pass2LogoRectAbs.x >> logUVx) + (pass2LogoRectAbs.y >> logUVy) * pitchUV;
+            return pass2LogoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+        }
+
+        // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
+        template<typename pixel_t>
+        int addFramePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv) {
+            // 仮ロゴが未構築なら何もしない。
+            if (!pass2DeintLogo || !pass2DeintLogo->isValid()) {
+                return 0;
+            }
+            // ワークバッファを必要サイズへ拡張し、Y面をdeintする。
+            const int w = pass2DeintLogo->getWidth();
+            const int h = pass2DeintLogo->getHeight();
+            const int required = w * h + 8;
+            if ((int)pass2EvalDeint.size() < required) {
+                pass2EvalDeint.resize(required, 0.0f);
+            }
+            if ((int)pass2EvalWork.size() < required) {
+                pass2EvalWork.resize(required, 0.0f);
+            }
+            const int off = pass2DeintLogo->getImgX() + pass2DeintLogo->getImgY() * pitchY;
+            logo::DeintY(pass2EvalDeint.data(), srcY + off, pitchY, w, h);
+            // alpha=0/1 の相関を評価し、後段のロゴ有無推定用に保存する。
+            const float maxvf = (float)maxv;
+            const float corr0 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 0.0f, pass2EvalWork.data());
+            const float corr1 = pass2DeintLogo->EvaluateLogo(pass2EvalDeint.data(), maxvf, 1.0f, pass2EvalWork.data());
+            pass2Corr0.push_back(corr0);
+            pass2Corr1.push_back(corr1);
+            return 0;
+        }
+
+        bool shouldSkipPass3FrameByMask() const {
+            const bool hasLogo = (readFrames >= 0 && readFrames < (int)pass2FrameMask.size()) ? (pass2FrameMask[readFrames] != 0) : false;
+            return !hasLogo;
+        }
+
+        template<typename pixel_t>
+        std::vector<pixel_t>& getFrameWorkBuffer() {
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                return frameWork8;
+            } else {
+                return frameWork16;
+            }
+        }
+
+        template<typename pixel_t>
+        void preprocessFrame(const pixel_t* srcY, const int pitchY, std::vector<pixel_t>& frameWork, const pixel_t maxv, const float rawScale, const float thresholdRaw) {
+            // 前処理: 5x5 バイラテラルでノイズを落としつつ輪郭を保持する。
             constexpr int kBilateralRadius = 2;
             const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
             const pixel_t* srcRoiBase = srcY + scanx + scany * pitchY;
             BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcRoiBase, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
+        }
+
+        template<typename pixel_t>
+        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw) {
+            const int pixelCount = scanw * scanh;
+            assert((int)frameWork.size() == pixelCount);
+            assert((int)stats.size() == pixelCount);
+            assert((int)lastObservedFg.size() == pixelCount);
+            assert((int)lastObservedValid.size() == pixelCount);
+            assert((int)dedupSampleCount.size() == pixelCount);
+            assert((int)dedupSamplePos.size() == pixelCount);
+            assert((int)dedupSampleFgHistory.size() == pixelCount * kDedupHistoryN);
 
             std::atomic<int> frameCount(0);
             const double sampleWeightPos = 1.0;
-            // 同一点の重複サンプル抑制閾値。
-            // 背景:
-            //   レターボックス等で「ほぼ同じ fg/bg 組」が大量登録されると、
-            //   有効サンプル数は増えても回帰に新情報が増えず、帯ノイズが優勢になる。
-            //   ここではまず fg 一致(ほぼ同値)だけで重複を間引く。
             const float dedupThreshold = std::max(0.5f * rawScale, thresholdRaw * 0.25f);
             const float transitionThreshold = std::max(0.75f * rawScale, dedupThreshold * 0.50f);
-            // ROI 全点を走査(間引きなし)。
-            // 背景:
-            //   初期検証で「全点チェック」の方がロゴの細部を拾いやすく、
-            //   逆にサブサンプリングすると文字部が欠けやすかった。
-            // ただし右上端の極近傍は境界影響が強いため、上端/右端だけ16px内側から走査する。
-            // total には「実処理範囲の高さ」(scanh - 2*kEdgeMargin)を渡す。
-            // RunParallelRange から渡される y0/y1 は 0 起点のローカル座標なので、
-            // 実際の走査時に +kEdgeMargin して元の ROI 座標へ戻す。
-            // これにより実処理範囲は従来どおり [kEdgeMargin, scanh-kEdgeMargin) となる。
             RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kScanEdgeMargin), [&](int y0, int y1) {
                 for (int y = y0 + kScanEdgeMargin; y < y1 + kScanEdgeMargin; y++) {
                     for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
-                    const int off = x + y * scanw;
-                    const float fgRaw = (float)frameWork[off];
-                    AutoDetectStats& s = stats[off];
-                    s.observed++;
-                    if (off < (int)lastObservedValid.size() && lastObservedValid[off]) {
-                        if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
-                            s.fgTransition++;
+                        const int off = x + y * scanw;
+                        const float fgRaw = (float)frameWork[off];
+                        AutoDetectStats& s = stats[off];
+                        s.observed++;
+                        if (lastObservedValid[off]) {
+                            if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
+                                s.fgTransition++;
+                            }
                         }
-                    }
-                    if (off < (int)lastObservedValid.size()) {
                         lastObservedFg[off] = fgRaw;
                         lastObservedValid[off] = 1;
-                    }
-                    if (off < (int)dedupSampleCount.size()) {
                         // 重複抑制:
                         // 最近N採用値のどれかに近ければ新情報が少ないとして棄却する。
                         const int base = off * kDedupHistoryN;
@@ -3065,45 +3231,44 @@ namespace {
                             s.rejectedDedup++;
                             continue;
                         }
-                    }
 
-                    float bg = 0.0f;
-                    // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
-                    // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
-                    if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
-                        continue;
-                    }
-                    s.totalCandidates++;
-                    const double f = (double)frameWork[off] * invMaxv;
-                    const double b = (double)bg * invMaxv;
+                        float bg = 0.0f;
+                        // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
+                        // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
+                        if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
+                            continue;
+                        }
+                        s.totalCandidates++;
+                        const double f = (double)frameWork[off] * invMaxv;
+                        const double b = (double)bg * invMaxv;
 
-                    // 極端コントラスト点を棄却。
-                    // 具体例:
-                    //   黒帯/白飛び/フラッシュに起因する「ロゴとは無関係な巨大差分」。
-                    //   これを残すと score の裾が広がり、2値化が不安定になる。
-                    if (IsExtremeContrastSample(f, b)) {
-                        s.rejectedExtreme++;
-                        continue;
+                        // 極端コントラスト点を棄却。
+                        // 具体例:
+                        //   黒帯/白飛び/フラッシュに起因する「ロゴとは無関係な巨大差分」。
+                        //   これを残すと score の裾が広がり、2値化が不安定になる。
+                        if (IsExtremeContrastSample(f, b)) {
+                            s.rejectedExtreme++;
+                            continue;
+                        }
+                        s.sumF += f * sampleWeightPos;
+                        s.sumB += b * sampleWeightPos;
+                        s.sumF2 += f * f * sampleWeightPos;
+                        s.sumB2 += b * b * sampleWeightPos;
+                        s.sumFB += f * b * sampleWeightPos;
+                        s.sumW += sampleWeightPos;
+                        s.count++;
+                        // 採用したサンプルを次回重複判定用に記録。
+                        if (sampleWeightPos >= 0.35) {
+                            const int base = off * kDedupHistoryN;
+                            const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
+                            dedupSampleFgHistory[base + writePos] = fgRaw;
+                            const int nextPos = (writePos + 1) % kDedupHistoryN;
+                            dedupSamplePos[off] = (uint8_t)nextPos;
+                            dedupSampleCount[off] = (uint8_t)std::min(kDedupHistoryN, (int)dedupSampleCount[off] + 1);
+                        }
+                        // このフレームで有効だった画素数（デバッグ可視化用）。
+                        frameCount.fetch_add(1, std::memory_order_relaxed);
                     }
-                    s.sumF += f * sampleWeightPos;
-                    s.sumB += b * sampleWeightPos;
-                    s.sumF2 += f * f * sampleWeightPos;
-                    s.sumB2 += b * b * sampleWeightPos;
-                    s.sumFB += f * b * sampleWeightPos;
-                    s.sumW += sampleWeightPos;
-                    s.count++;
-                    // 採用したサンプルを次回重複判定用に記録。
-                    if (sampleWeightPos >= 0.35 && off < (int)dedupSampleCount.size() && off < (int)dedupSamplePos.size()) {
-                        const int base = off * kDedupHistoryN;
-                        const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
-                        dedupSampleFgHistory[base + writePos] = fgRaw;
-                        const int nextPos = (writePos + 1) % kDedupHistoryN;
-                        dedupSamplePos[off] = (uint8_t)nextPos;
-                        dedupSampleCount[off] = (uint8_t)std::min(kDedupHistoryN, (int)dedupSampleCount[off] + 1);
-                    }
-                    // このフレームで有効だった画素数（デバッグ可視化用）。
-                    frameCount.fetch_add(1, std::memory_order_relaxed);
-                }
                 }
                 }, 4);
             return frameCount.load(std::memory_order_relaxed);
@@ -3154,6 +3319,7 @@ namespace {
         // 2値化用の初期閾値(thHigh/thLow)を決める。
         // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
         void runScoreStage(float& thHigh, float& thLow) {
+            // 各種出力マップをクリアする。
             score.assign(scanw * scanh, 0.0f);
             validAB.assign(scanw * scanh, 0);
             mapA.assign(scanw * scanh, 0.0f);
@@ -3166,6 +3332,7 @@ namespace {
             mapTransitionRate.assign(scanw * scanh, 0.0f);
             mapKeepRate.assign(scanw * scanh, 0.0f);
             mapAccepted.assign(scanw * scanh, 0.0f);
+            // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
                     for (int x = 0; x < scanw; x++) {
@@ -3265,6 +3432,7 @@ namespace {
                 }
                 });
 
+            // score 分布の基礎統計を集計し、成立しない場合は詳細情報付きで例外化する。
             double sum = 0.0;
             double sum2 = 0.0;
             int count = 0;
@@ -3315,6 +3483,7 @@ namespace {
                     framesNonZero, frameAvg, frameMax,
                     finalPos, finalStats.minv, finalStats.p50, finalStats.p90, finalStats.p99, finalStats.maxv, finalStats.mean);
             }
+            // まず平均/分散から暫定閾値を置く。
             // score の平均/分散ベース閾値は「最低限の保険」。
             // 実際の採用閾値は後段で score 分布から再計算する。
             // 背景: 番組によって score の絶対値レンジが大きく変わるため、
@@ -3325,6 +3494,7 @@ namespace {
             thHigh = (float)(mean + stddev * 0.8);
             thLow = (float)std::max(mean + stddev * 0.2, thHigh * 0.50);
             {
+                // 実分布の上位率から high/low を再推定して番組差に追従する。
                 // score 実分布から、目標ピクセル率で閾値を逆算して決定。
                 // 背景: 「統計値(mean/stddev)だけ」で閾値を作ると、
                 // score が全体に低いケースで binary が全消しになりやすかった。
@@ -3360,6 +3530,7 @@ namespace {
                 }
             }
 
+            // ステージ1の進捗を通知する。
             if (cb && !cb(2, 1.0f, 0.7f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
@@ -3371,6 +3542,618 @@ namespace {
 }
 
 namespace {
+    bool AutoDetectLogoReader::getMaskRect(const std::vector<uint8_t>& mask, int& minX, int& minY, int& maxX, int& maxY) const {
+        minX = scanw;
+        minY = scanh;
+        maxX = -1;
+        maxY = -1;
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
+                if (!mask[x + y * scanw]) continue;
+                minX = std::min(minX, x);
+                minY = std::min(minY, y);
+                maxX = std::max(maxX, x);
+                maxY = std::max(maxY, y);
+            }
+        }
+        return (maxX >= minX && maxY >= minY);
+    }
+
+    int AutoDetectLogoReader::countMaskOn(const std::vector<uint8_t>& mask) const {
+        int c = 0;
+        for (const auto v : mask) {
+            if (v) c++;
+        }
+        return c;
+    }
+
+    // high/low 閾値から binary を1回生成する。
+    // high seed から low 領域へ成長し、さらに近縁成分を昇格して取りこぼしを補う。
+    void AutoDetectLogoReader::buildBinaryFromThreshold(const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg) {
+        // score を high/low の2値マスクへ分解する。
+        std::vector<uint8_t> seed(scanw * scanh, 0);
+        std::vector<uint8_t> lowMask(scanw * scanh, 0);
+        RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++) {
+                for (int x = 0; x < scanw; x++) {
+                    const int off = x + y * scanw;
+                    if (!validAB[off]) continue;
+                    if (score[off] >= highTh) {
+                        seed[off] = 1;
+                    }
+                    if (score[off] >= lowTh) {
+                        lowMask[off] = 1;
+                    }
+                }
+            }
+            });
+
+        if (dbg != nullptr) {
+            for (int i = 0; i < scanw * scanh; i++) {
+                if (seed[i]) dbg->seedOn++;
+                if (lowMask[i]) dbg->lowOn++;
+            }
+        }
+
+        // seed から 8近傍で lowMask を伝播し、基本 binary を作る。
+        outBinary.assign(scanw * scanh, 0);
+        std::queue<int> growQ;
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (seed[i]) {
+                outBinary[i] = 1;
+                growQ.push(i);
+            }
+        }
+        while (!growQ.empty()) {
+            const int cur = growQ.front(); growQ.pop();
+            const int cx = cur % scanw;
+            const int cy = cur / scanw;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    if (dx == 0 && dy == 0) continue;
+                    const int nx = cx + dx;
+                    const int ny = cy + dy;
+                    if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                    const int nidx = nx + ny * scanw;
+                    if (outBinary[nidx]) continue;
+                    if (!lowMask[nidx]) continue;
+                    outBinary[nidx] = 1;
+                    growQ.push(nidx);
+                }
+            }
+        }
+        if (dbg != nullptr) {
+            for (int i = 0; i < scanw * scanh; i++) {
+                if (outBinary[i]) dbg->grownOn++;
+            }
+        }
+        // seedから到達しない low 成分を、近縁かつ高信頼なら段階的に昇格する。
+        // 背景: 枠線文字など「seedには届かないが、文字列としては近い」成分の救済。
+        // 同一iter内で最大3-hopまで連鎖的に取り込む。
+        int anchorMinX = scanw, anchorMinY = scanh, anchorMaxX = -1, anchorMaxY = -1;
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
+                if (!outBinary[x + y * scanw]) continue;
+                anchorMinX = std::min(anchorMinX, x);
+                anchorMinY = std::min(anchorMinY, y);
+                anchorMaxX = std::max(anchorMaxX, x);
+                anchorMaxY = std::max(anchorMaxY, y);
+            }
+        }
+        const bool hasAnchor = (anchorMaxX >= anchorMinX && anchorMaxY >= anchorMinY);
+        if (!hasAnchor) {
+            return;
+        }
+
+        // 未採用 low 成分を一度列挙し、後段で近縁性と信号品質で昇格判定する。
+        struct PromoteCompLocal {
+            int minX = 0;
+            int minY = 0;
+            int maxX = -1;
+            int maxY = -1;
+            int area = 0;
+            int compW = 0;
+            int compH = 0;
+            float peakScore = 0.0f;
+            float meanAccepted = 0.0f;
+            int overlapW = 0;
+            int overlapH = 0;
+            int gapX = 0;
+            int gapY = 0;
+            int nearHorizontal = 0;
+            int nearVertical = 0;
+            int nearDiagonal = 0;
+            int nearAnchor = 0;
+            int shapeOk = 0;
+            int signalOk = 0;
+            bool promoted = false;
+            std::vector<int> pixels;
+        };
+
+        const int initAnchorMinX = anchorMinX;
+        const int initAnchorMinY = anchorMinY;
+        const int initAnchorMaxX = anchorMaxX;
+        const int initAnchorMaxY = anchorMaxY;
+        const int initAnchorW = initAnchorMaxX - initAnchorMinX + 1;
+        const int initAnchorH = initAnchorMaxY - initAnchorMinY + 1;
+        const float baseSquare = 80.0f;
+        const float guardRatio = 1.0f / std::sqrt(std::max(initAnchorW, 4) * std::max(initAnchorH, 4) / (baseSquare * baseSquare));
+        const int guardX = std::max(32, (int)std::round(initAnchorW * guardRatio));
+        const int guardY = std::max(20, (int)std::round(initAnchorH * guardRatio));
+        const int initCenterX = (initAnchorMinX + initAnchorMaxX) / 2;
+        const int initCenterY = (initAnchorMinY + initAnchorMaxY) / 2;
+        const int guardHalfW = std::max(1, ((initAnchorMaxX - initAnchorMinX + 1) + guardX * 2) / 2);
+        const int guardHalfH = std::max(1, ((initAnchorMaxY - initAnchorMinY + 1) + guardY * 2) / 2);
+        const int guardMinX = std::max(0, initCenterX - guardHalfW);
+        const int guardMinY = std::max(0, initCenterY - guardHalfH);
+        const int guardMaxX = std::min(scanw - 1, initCenterX + guardHalfW);
+        const int guardMaxY = std::min(scanh - 1, initCenterY + guardHalfH);
+
+        std::vector<PromoteCompLocal> comps;
+        std::vector<uint8_t> visited(scanw * scanh, 0);
+        std::queue<int> q;
+        // lowMask かつ未採用画素を連結成分として列挙してから、多段判定する。
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
+                const int start = x + y * scanw;
+                if (visited[start] || !lowMask[start] || outBinary[start]) continue;
+                visited[start] = 1;
+                q.push(start);
+                int minX = x, minY = y, maxX = x, maxY = y;
+                int area = 0;
+                double peakScore = 0.0;
+                double sumAccepted = 0.0;
+                std::vector<int> comp;
+                while (!q.empty()) {
+                    const int cur = q.front(); q.pop();
+                    const int cx = cur % scanw;
+                    const int cy = cur / scanw;
+                    comp.push_back(cur);
+                    area++;
+                    minX = std::min(minX, cx);
+                    minY = std::min(minY, cy);
+                    maxX = std::max(maxX, cx);
+                    maxY = std::max(maxY, cy);
+                    peakScore = std::max(peakScore, (double)score[cur]);
+                    sumAccepted += mapAccepted[cur];
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (dx == 0 && dy == 0) continue;
+                            const int nx = cx + dx;
+                            const int ny = cy + dy;
+                            if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                            const int nidx = nx + ny * scanw;
+                            if (visited[nidx] || !lowMask[nidx] || outBinary[nidx]) continue;
+                            visited[nidx] = 1;
+                            q.push(nidx);
+                        }
+                    }
+                }
+                if (area <= 0) continue;
+
+                PromoteCompLocal local{};
+                local.minX = minX;
+                local.minY = minY;
+                local.maxX = maxX;
+                local.maxY = maxY;
+                local.area = area;
+                local.compW = maxX - minX + 1;
+                local.compH = maxY - minY + 1;
+                local.peakScore = (float)peakScore;
+                local.meanAccepted = (float)(sumAccepted / std::max(1, area));
+                local.pixels = std::move(comp);
+                comps.push_back(std::move(local));
+            }
+        }
+
+        // 現在の anchor 近傍だけを最大3ホップで連鎖昇格する。
+        const int maxPromoteHop = 3;
+        for (int hop = 0; hop < maxPromoteHop; hop++) {
+            int curAnchorMinX = scanw, curAnchorMinY = scanh, curAnchorMaxX = -1, curAnchorMaxY = -1;
+            for (int y = 0; y < scanh; y++) {
+                for (int x = 0; x < scanw; x++) {
+                    if (!outBinary[x + y * scanw]) continue;
+                    curAnchorMinX = std::min(curAnchorMinX, x);
+                    curAnchorMinY = std::min(curAnchorMinY, y);
+                    curAnchorMaxX = std::max(curAnchorMaxX, x);
+                    curAnchorMaxY = std::max(curAnchorMaxY, y);
+                }
+            }
+            if (curAnchorMaxX < curAnchorMinX || curAnchorMaxY < curAnchorMinY) {
+                break;
+            }
+            const int curAnchorW = curAnchorMaxX - curAnchorMinX + 1;
+            const int curAnchorH = curAnchorMaxY - curAnchorMinY + 1;
+            bool anyAccepted = false;
+
+            for (auto& comp : comps) {
+                if (comp.promoted) continue;
+                const int overlapW = std::max(0, std::min(comp.maxX, curAnchorMaxX) - std::max(comp.minX, curAnchorMinX) + 1);
+                const int overlapH = std::max(0, std::min(comp.maxY, curAnchorMaxY) - std::max(comp.minY, curAnchorMinY) + 1);
+                const int gapX = std::max(0, std::max(comp.minX - curAnchorMaxX, curAnchorMinX - comp.maxX));
+                const int gapY = std::max(0, std::max(comp.minY - curAnchorMaxY, curAnchorMinY - comp.maxY));
+                const int nearHMin1 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.15));
+                const int nearHMin2 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.75));
+                const bool nearHorizontal = (overlapH >= nearHMin1 && gapX <= std::max(6, (int)std::round(curAnchorW * 0.20)))
+                    || (overlapH >= nearHMin2 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.80)));
+                const int nearVMin1 = std::max(2, (int)std::round(std::min(comp.compW, curAnchorW) * 0.15));
+                const bool nearVertical = nearVMin1 && gapY <= std::max(6, (int)std::round(curAnchorH * 0.15));
+                const bool nearDiagonal = gapX <= std::max(6, (int)std::round(curAnchorW * 0.12)) &&
+                    gapY <= std::max(4, (int)std::round(curAnchorH * 0.08));
+                const bool nearAnchor = nearHorizontal || nearVertical ||
+                    (nearDiagonal && (comp.peakScore >= (float)((double)lowTh * 1.50) && comp.meanAccepted >= 0.16f));
+
+                const double aspect = std::max((double)comp.compW / std::max(1, comp.compH), (double)comp.compH / std::max(1, comp.compW));
+                const bool shapeOk = comp.area >= 3 && comp.area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0;
+                const bool signalOk = comp.peakScore >= (float)((double)lowTh * 1.02) || comp.meanAccepted >= 0.11f;
+
+                const int insideW = std::max(0, std::min(comp.maxX, guardMaxX) - std::max(comp.minX, guardMinX) + 1);
+                const int insideH = std::max(0, std::min(comp.maxY, guardMaxY) - std::max(comp.minY, guardMinY) + 1);
+                const int compArea = std::max(1, comp.compW * comp.compH);
+                const float insideRatio = (float)(insideW * insideH) / (float)compArea;
+                const bool insideGuard = (insideW > 0 && insideH > 0) && insideRatio >= 0.72f;
+
+                comp.overlapW = overlapW;
+                comp.overlapH = overlapH;
+                comp.gapX = gapX;
+                comp.gapY = gapY;
+                comp.nearHorizontal = nearHorizontal ? 1 : 0;
+                comp.nearVertical = nearVertical ? 1 : 0;
+                comp.nearDiagonal = nearDiagonal ? 1 : 0;
+                comp.nearAnchor = (nearAnchor && insideGuard) ? 1 : 0;
+                comp.shapeOk = shapeOk ? 1 : 0;
+                comp.signalOk = signalOk ? 1 : 0;
+
+                const bool accepted = insideGuard && nearAnchor && shapeOk && signalOk;
+                if (!accepted) continue;
+                for (const int pix : comp.pixels) {
+                    outBinary[pix] = 1;
+                }
+                comp.promoted = true;
+                anyAccepted = true;
+                if (dbg != nullptr) {
+                    dbg->promotedOn += comp.area;
+                }
+                if (detailedDebug) {
+                    promoteCompDebug.push_back(PromoteCompDebug{
+                        iterIndex, highTh, lowTh,
+                        comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
+                        comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
+                        comp.peakScore, comp.meanAccepted,
+                        comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 1
+                        });
+                }
+            }
+            if (!anyAccepted) {
+                break;
+            }
+        }
+        // 非採用成分もデバッグ出力に残す。
+        if (detailedDebug) {
+            for (const auto& comp : comps) {
+                if (comp.promoted) continue;
+                promoteCompDebug.push_back(PromoteCompDebug{
+                    iterIndex, highTh, lowTh,
+                    comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
+                    comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
+                    comp.peakScore, comp.meanAccepted,
+                    comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 0
+                    });
+            }
+        }
+    }
+
+    // binary 連結成分から anchor を選び、近縁成分のみ残してノイズを除去する。
+    void AutoDetectLogoReader::pruneBinaryByAnchor() {
+        // prune 前状態を保持し、削りすぎ時にロールバックできるようにする。
+        std::vector<uint8_t> prePruneBinary = binary;
+        const int prePruneOn = countMaskOn(prePruneBinary);
+        int preMinX = 0, preMinY = 0, preMaxX = -1, preMaxY = -1;
+        const bool hasPreRect = getMaskRect(prePruneBinary, preMinX, preMinY, preMaxX, preMaxY);
+        bool hasAnchorBandStat = false;
+        int anchorBandPreOn = 0;
+        int anchorBandPostOn = 0;
+        int removedOn = 0;
+        int removedBelowOn = 0;
+        struct BinaryComp {
+            int minX = 0;
+            int minY = 0;
+            int maxX = -1;
+            int maxY = -1;
+            int area = 0;
+            int w = 0;
+            int h = 0;
+            float peakScore = 0.0f;
+            float meanScore = 0.0f;
+            float meanAccepted = 0.0f;
+            float meanAlpha = 0.0f;
+            float meanConsistency = 0.0f;
+            float anchorScore = -1.0f;
+            std::vector<int> pixels;
+        };
+
+        // 連結成分ごとに面積/信号量/位置先験を集計する。
+        std::vector<BinaryComp> comps;
+        std::vector<uint8_t> visited(scanw * scanh, 0);
+        std::queue<int> q;
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
+                const int start = x + y * scanw;
+                if (!binary[start] || visited[start]) continue;
+                visited[start] = 1;
+                q.push(start);
+                BinaryComp comp{};
+                comp.minX = x;
+                comp.maxX = x;
+                comp.minY = y;
+                comp.maxY = y;
+                double sumScore = 0.0;
+                double sumAccepted = 0.0;
+                double sumAlpha = 0.0;
+                double sumConsistency = 0.0;
+                while (!q.empty()) {
+                    const int cur = q.front(); q.pop();
+                    const int cx = cur % scanw;
+                    const int cy = cur / scanw;
+                    comp.pixels.push_back(cur);
+                    comp.area++;
+                    comp.minX = std::min(comp.minX, cx);
+                    comp.maxX = std::max(comp.maxX, cx);
+                    comp.minY = std::min(comp.minY, cy);
+                    comp.maxY = std::max(comp.maxY, cy);
+                    comp.peakScore = std::max(comp.peakScore, score[cur]);
+                    sumScore += score[cur];
+                    sumAccepted += mapAccepted[cur];
+                    sumAlpha += mapAlpha[cur];
+                    sumConsistency += mapConsistency[cur];
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (dx == 0 && dy == 0) continue;
+                            const int nx = cx + dx;
+                            const int ny = cy + dy;
+                            if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                            const int nidx = nx + ny * scanw;
+                            if (!binary[nidx] || visited[nidx]) continue;
+                            visited[nidx] = 1;
+                            q.push(nidx);
+                        }
+                    }
+                }
+                if (comp.area <= 0) continue;
+                comp.w = comp.maxX - comp.minX + 1;
+                comp.h = comp.maxY - comp.minY + 1;
+                comp.meanScore = (float)(sumScore / std::max(1, comp.area));
+                comp.meanAccepted = (float)(sumAccepted / std::max(1, comp.area));
+                comp.meanAlpha = (float)(sumAlpha / std::max(1, comp.area));
+                comp.meanConsistency = (float)(sumConsistency / std::max(1, comp.area));
+
+                const float cxNorm = (float)((comp.minX + comp.maxX) * 0.5 / std::max(1, scanw - 1));
+                const float topNorm = (float)(1.0 - ((comp.minY + comp.maxY) * 0.5 / std::max(1, scanh - 1)));
+                const float rightPrior = std::max(0.0f, std::min(1.0f, cxNorm));
+                const float topPrior = std::max(0.0f, std::min(1.0f, topNorm));
+                const float consistencyPrior = std::max(0.0f, std::min(1.0f, (comp.meanConsistency - 0.35f) / 1.15f));
+                const float alphaPenalty = 1.0f / (1.0f + std::max(0.0f, comp.meanAlpha - 0.78f) * 1.5f);
+                const float areaGain = std::sqrt((float)std::max(1, comp.area));
+                const float signalMix = comp.meanScore * 0.55f + comp.peakScore * 0.25f + comp.meanAccepted * 0.20f;
+                const float topWeight = (0.25f + 0.75f * topPrior);
+                comp.anchorScore =
+                    areaGain *
+                    signalMix *
+                    (topWeight * topWeight) *
+                    (0.70f + 0.30f * rightPrior) *
+                    (0.45f + 0.55f * consistencyPrior) *
+                    alphaPenalty;
+                comps.push_back(std::move(comp));
+            }
+        }
+
+        // 上側帯域を優先して anchor 成分を選ぶ。
+        if (!comps.empty()) {
+            int anchorIdx = -1;
+            float bestAnchor = -1.0f;
+            int minAnchorY = scanh;
+            for (int i = 0; i < (int)comps.size(); i++) {
+                const auto& c = comps[i];
+                if (c.area < 6) continue;
+                minAnchorY = std::min(minAnchorY, c.minY);
+            }
+            const int topBandSlack = std::max(12, (int)std::round(scanh * 0.15));
+            const int topBandLimit = (minAnchorY < scanh) ? (minAnchorY + topBandSlack) : scanh;
+            for (int i = 0; i < (int)comps.size(); i++) {
+                const auto& c = comps[i];
+                if (c.area < 6) continue;
+                if (c.minY > topBandLimit) continue;
+                if (c.anchorScore > bestAnchor) {
+                    bestAnchor = c.anchorScore;
+                    anchorIdx = i;
+                }
+            }
+            if (anchorIdx < 0) {
+                for (int i = 0; i < (int)comps.size(); i++) {
+                    const auto& c = comps[i];
+                    if (c.area < 6) continue;
+                    if (c.anchorScore > bestAnchor) {
+                        bestAnchor = c.anchorScore;
+                        anchorIdx = i;
+                    }
+                }
+            }
+            if (anchorIdx < 0) {
+                for (int i = 0; i < (int)comps.size(); i++) {
+                    const auto& c = comps[i];
+                    if (c.area < 3) continue;
+                    if (c.anchorScore > bestAnchor) {
+                        bestAnchor = c.anchorScore;
+                        anchorIdx = i;
+                    }
+                }
+            }
+            if (anchorIdx >= 0) {
+                const auto& anchor = comps[anchorIdx];
+                const int anchorW = std::max(1, anchor.w);
+                const int anchorH = std::max(1, anchor.h);
+                const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
+                const float minSignalScore = std::max(0.004f, anchor.meanScore * 0.20f);
+                const float minSignalPeak = std::max(0.004f, anchor.peakScore * 0.10f);
+                const float minSignalAccepted = std::max(0.003f, anchor.meanAccepted * 0.20f);
+                const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
+                const int maxBelowAnchor = std::max(14, (int)std::round(anchorH * 0.85));
+                std::vector<uint8_t> keepComp(comps.size(), 0);
+                keepComp[anchorIdx] = 1;
+                bool changed = true;
+                // keep済み成分に近いものを段階的に採用する。
+                for (int hop = 0; hop < 10 && changed; hop++) {
+                    changed = false;
+                    for (int i = 0; i < (int)comps.size(); i++) {
+                        if (keepComp[i]) continue;
+                        const auto& c = comps[i];
+                        const int compCenterY = (c.minY + c.maxY) / 2;
+                        const bool yGuard = compCenterY <= anchorCenterY + maxBelowAnchor;
+                        const bool shapeOk = c.area >= 3 && std::max((double)c.w / std::max(1, c.h), (double)c.h / std::max(1, c.w)) <= 16.0;
+                        const bool signalOk =
+                            c.meanScore >= minSignalScore ||
+                            c.peakScore >= minSignalPeak ||
+                            c.meanAccepted >= minSignalAccepted;
+                        const bool sameRowComp = std::abs(compCenterY - anchorCenterY) <= std::max(4, (int)std::round(anchorH * 0.45));
+                        const bool isLowerComp = compCenterY > anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
+                        const bool lowAlphaConsistencyOk =
+                            !isLowerComp ||
+                            c.meanAlpha >= 0.20f ||
+                            c.meanConsistency >= minSignalConsistency;
+                        const bool signalGateOk = signalOk || sameRowComp;
+                        if (!yGuard || !shapeOk || !signalGateOk || !lowAlphaConsistencyOk) continue;
+                        bool nearKept = false;
+                        for (int k = 0; k < (int)comps.size(); k++) {
+                            if (!keepComp[k]) continue;
+                            const auto& ref = comps[k];
+                            const int overlapW = std::max(0, std::min(c.maxX, ref.maxX) - std::max(c.minX, ref.minX) + 1);
+                            const int overlapH = std::max(0, std::min(c.maxY, ref.maxY) - std::max(c.minY, ref.minY) + 1);
+                            const int gapX = std::max(0, std::max(c.minX - ref.maxX, ref.minX - c.maxX));
+                            const int gapY = std::max(0, std::max(c.minY - ref.maxY, ref.minY - c.maxY));
+                            const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
+                                gapX <= std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8));
+                            const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
+                                gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.60));
+                            const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
+                                gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.45));
+                            nearKept = (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
+                            if (nearKept) {
+                                break;
+                            }
+                        }
+                        if (!nearKept) continue;
+                        const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
+                        const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
+                            gapYAnchor > std::max(8, (int)std::round(anchorH * 0.80));
+                        if (opaqueFar) continue;
+                        keepComp[i] = 1;
+                        changed = true;
+                    }
+                }
+                // keep対象のみで新しい binary を再構築する。
+                std::vector<uint8_t> filtered(scanw * scanh, 0);
+                for (int i = 0; i < (int)comps.size(); i++) {
+                    if (!keepComp[i]) continue;
+                    const auto& c = comps[i];
+                    for (const int pix : c.pixels) {
+                        filtered[pix] = 1;
+                    }
+                }
+                const int bandY0 = std::max(0, anchor.minY - 2);
+                const int bandY1 = std::min(scanh - 1, anchor.maxY + 2);
+                for (int y = bandY0; y <= bandY1; y++) {
+                    const int row = y * scanw;
+                    for (int x = 0; x < scanw; x++) {
+                        const int off = row + x;
+                        if (prePruneBinary[off]) anchorBandPreOn++;
+                        if (filtered[off]) anchorBandPostOn++;
+                    }
+                }
+                const int belowY = anchor.maxY + std::max(2, (int)std::round(anchorH * 0.12));
+                for (int i = 0; i < scanw * scanh; i++) {
+                    if (!prePruneBinary[i] || filtered[i]) continue;
+                    removedOn++;
+                    const int py = i / scanw;
+                    if (py > belowY) {
+                        removedBelowOn++;
+                    }
+                }
+                hasAnchorBandStat = true;
+                binary.swap(filtered);
+            }
+        }
+
+        // 削りすぎ判定に引っかかった場合は prune 前へ戻す。
+        const int postPruneOn = countMaskOn(binary);
+        int postMinX = 0, postMinY = 0, postMaxX = -1, postMaxY = -1;
+        const bool hasPostRect = getMaskRect(binary, postMinX, postMinY, postMaxX, postMaxY);
+        if (prePruneOn > 0 && hasPreRect) {
+            bool revertPrune = false;
+            if (postPruneOn <= 0 || !hasPostRect) {
+                revertPrune = true;
+            } else {
+                const int preW = preMaxX - preMinX + 1;
+                const int postW = postMaxX - postMinX + 1;
+                const bool areaCollapse = postPruneOn < std::max(24, (int)std::round(prePruneOn * 0.25));
+                const bool severeShrink = areaCollapse && postW < (int)std::round(preW * 0.60);
+                revertPrune = severeShrink;
+                if (revertPrune && hasAnchorBandStat && anchorBandPreOn > 0 && removedOn > 0) {
+                    const float bandRetention = (float)anchorBandPostOn / std::max(1, anchorBandPreOn);
+                    const float removedBelowRatio = (float)removedBelowOn / std::max(1, removedOn);
+                    const bool trimmedMostlyBelow =
+                        removedOn >= std::max(24, (int)std::round(prePruneOn * 0.05)) &&
+                        removedBelowRatio >= 0.60f;
+                    const bool topBandPreserved = bandRetention >= 0.72f;
+                    const bool postStillEnough = postPruneOn >= std::max(12, (int)std::round(prePruneOn * 0.10));
+                    if (trimmedMostlyBelow && topBandPreserved && postStillEnough) {
+                        revertPrune = false;
+                    }
+                }
+            }
+            if (revertPrune) {
+                binary.swap(prePruneBinary);
+            }
+        }
+    }
+
+    // binary が空になったときのみ、mapAccepted 上位点から最小限の復旧を行う。
+    void AutoDetectLogoReader::applyBinaryFallbackIfEmpty() {
+        // 既に画素が残っている場合はフォールバック不要。
+        int binaryOnCount = 0;
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (binary[i]) binaryOnCount++;
+        }
+        if (binaryOnCount > 0) {
+            return;
+        }
+
+        // フォールバック: 通常二値化で全消しになった場合のみ適用。
+        // 復旧候補の分布を作り、上位パーセンタイル閾値を決める。
+        std::vector<float> acceptedVals;
+        acceptedVals.reserve(scanw * scanh);
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (!validAB[i]) continue;
+            const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[i] - 0.30) / 1.70));
+            if (mapAlpha[i] < 0.015f && consistencyNorm < 0.20) continue;
+            acceptedVals.push_back(mapAccepted[i]);
+        }
+        if (acceptedVals.empty()) {
+            return;
+        }
+
+        std::sort(acceptedVals.begin(), acceptedVals.end());
+        const int idx = ClampInt((int)std::round((acceptedVals.size() - 1) * 0.995), 0, (int)acceptedVals.size() - 1);
+        const float fbTh = std::max(0.06f, acceptedVals[idx]);
+        // 閾値を超える画素だけを binary に復帰させる。
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (!validAB[i]) continue;
+            const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[i] - 0.30) / 1.70));
+            if (mapAccepted[i] >= fbTh && (mapAlpha[i] >= 0.015f || consistencyNorm >= 0.20)) {
+                binary[i] = 1;
+            }
+        }
+    }
+
     // ステージ2: scoreを2値化してロゴ候補マスク(binary)を確定する。
     // 処理概要:
     // - high/lowのヒステリシス(seed->grow)で基本マスクを生成
@@ -3378,299 +4161,6 @@ namespace {
     // - 反復的な閾値緩和とdelta近縁判定で取りこぼしを補完
     // - 帯ノイズ/全消し時のフォールバックを適用
     void AutoDetectLogoReader::runBinaryStage(const float thHigh, const float thLow) {
-        struct BuildBinaryDiag {
-            int seedOn = 0;
-            int lowOn = 0;
-            int grownOn = 0;
-            int promotedOn = 0;
-        };
-
-        // 2値化は score ベース、成長はシンプルな seed->low ヒステリシスを基本とする。
-        auto buildBinaryFromThreshold = [&](const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg) {
-            std::vector<uint8_t> seed(scanw * scanh, 0);
-            std::vector<uint8_t> lowMask(scanw * scanh, 0);
-            RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
-                for (int y = y0; y < y1; y++) {
-                    for (int x = 0; x < scanw; x++) {
-                        const int off = x + y * scanw;
-                        if (!validAB[off]) continue;
-                        if (score[off] >= highTh) {
-                            seed[off] = 1;
-                        }
-                        if (score[off] >= lowTh) {
-                            lowMask[off] = 1;
-                        }
-                    }
-                }
-                });
-
-            if (dbg != nullptr) {
-                for (int i = 0; i < scanw * scanh; i++) {
-                    if (seed[i]) dbg->seedOn++;
-                    if (lowMask[i]) dbg->lowOn++;
-                }
-            }
-
-            outBinary.assign(scanw * scanh, 0);
-            std::queue<int> growQ;
-            for (int i = 0; i < scanw * scanh; i++) {
-                if (seed[i]) {
-                    outBinary[i] = 1;
-                    growQ.push(i);
-                }
-            }
-            while (!growQ.empty()) {
-                const int cur = growQ.front(); growQ.pop();
-                const int cx = cur % scanw;
-                const int cy = cur / scanw;
-                for (int dy = -1; dy <= 1; dy++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        if (dx == 0 && dy == 0) continue;
-                        const int nx = cx + dx;
-                        const int ny = cy + dy;
-                        if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
-                        const int nidx = nx + ny * scanw;
-                        if (outBinary[nidx]) continue;
-                        if (!lowMask[nidx]) continue;
-                        outBinary[nidx] = 1;
-                        growQ.push(nidx);
-                    }
-                }
-            }
-            if (dbg != nullptr) {
-                for (int i = 0; i < scanw * scanh; i++) {
-                    if (outBinary[i]) dbg->grownOn++;
-                }
-            }
-            // seedから到達しない low 成分を、近縁かつ高信頼なら段階的に昇格する。
-            // 背景: 枠線文字など「seedには届かないが、文字列としては近い」成分の救済。
-            // 同一iter内で最大3-hopまで連鎖的に取り込む。
-            int anchorMinX = scanw, anchorMinY = scanh, anchorMaxX = -1, anchorMaxY = -1;
-            for (int y = 0; y < scanh; y++) {
-                for (int x = 0; x < scanw; x++) {
-                    if (!outBinary[x + y * scanw]) continue;
-                    anchorMinX = std::min(anchorMinX, x);
-                    anchorMinY = std::min(anchorMinY, y);
-                    anchorMaxX = std::max(anchorMaxX, x);
-                    anchorMaxY = std::max(anchorMaxY, y);
-                }
-            }
-            const bool hasAnchor = (anchorMaxX >= anchorMinX && anchorMaxY >= anchorMinY);
-            if (hasAnchor) {
-                struct PromoteCompLocal {
-                    int minX = 0;
-                    int minY = 0;
-                    int maxX = -1;
-                    int maxY = -1;
-                    int area = 0;
-                    int compW = 0;
-                    int compH = 0;
-                    float peakScore = 0.0f;
-                    float meanAccepted = 0.0f;
-                    int overlapW = 0;
-                    int overlapH = 0;
-                    int gapX = 0;
-                    int gapY = 0;
-                    int nearHorizontal = 0;
-                    int nearVertical = 0;
-                    int nearDiagonal = 0;
-                    int nearAnchor = 0;
-                    int shapeOk = 0;
-                    int signalOk = 0;
-                    bool promoted = false;
-                    std::vector<int> pixels;
-                };
-
-                const int initAnchorMinX = anchorMinX;
-                const int initAnchorMinY = anchorMinY;
-                const int initAnchorMaxX = anchorMaxX;
-                const int initAnchorMaxY = anchorMaxY;
-                const int initAnchorW = initAnchorMaxX - initAnchorMinX + 1;
-                const int initAnchorH = initAnchorMaxY - initAnchorMinY + 1;
-                const float baseSquare = 80.0f;
-                const float guardRatio = 1.0f / std::sqrt(std::max(initAnchorW, 4) * std::max(initAnchorH, 4) / (baseSquare * baseSquare));
-                const int guardX = std::max(32, (int)std::round(initAnchorW * guardRatio));
-                const int guardY = std::max(20, (int)std::round(initAnchorH * guardRatio));
-                const int initCenterX = (initAnchorMinX + initAnchorMaxX) / 2;
-                const int initCenterY = (initAnchorMinY + initAnchorMaxY) / 2;
-                const int guardHalfW = std::max(1, ((initAnchorMaxX - initAnchorMinX + 1) + guardX * 2) / 2);
-                const int guardHalfH = std::max(1, ((initAnchorMaxY - initAnchorMinY + 1) + guardY * 2) / 2);
-                const int guardMinX = std::max(0, initCenterX - guardHalfW);
-                const int guardMinY = std::max(0, initCenterY - guardHalfH);
-                const int guardMaxX = std::min(scanw - 1, initCenterX + guardHalfW);
-                const int guardMaxY = std::min(scanh - 1, initCenterY + guardHalfH);
-
-                std::vector<PromoteCompLocal> comps;
-                std::vector<uint8_t> visited(scanw * scanh, 0);
-                std::queue<int> q;
-                // lowMask かつ未採用画素を連結成分として列挙してから、多段判定する。
-                for (int y = 0; y < scanh; y++) {
-                    for (int x = 0; x < scanw; x++) {
-                        const int start = x + y * scanw;
-                        if (visited[start] || !lowMask[start] || outBinary[start]) continue;
-                        visited[start] = 1;
-                        q.push(start);
-                        int minX = x, minY = y, maxX = x, maxY = y;
-                        int area = 0;
-                        double peakScore = 0.0;
-                        double sumAccepted = 0.0;
-                        std::vector<int> comp;
-                        while (!q.empty()) {
-                            const int cur = q.front(); q.pop();
-                            const int cx = cur % scanw;
-                            const int cy = cur / scanw;
-                            comp.push_back(cur);
-                            area++;
-                            minX = std::min(minX, cx);
-                            minY = std::min(minY, cy);
-                            maxX = std::max(maxX, cx);
-                            maxY = std::max(maxY, cy);
-                            peakScore = std::max(peakScore, (double)score[cur]);
-                            sumAccepted += mapAccepted[cur];
-                            for (int dy = -1; dy <= 1; dy++) {
-                                for (int dx = -1; dx <= 1; dx++) {
-                                    if (dx == 0 && dy == 0) continue;
-                                    const int nx = cx + dx;
-                                    const int ny = cy + dy;
-                                    if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
-                                    const int nidx = nx + ny * scanw;
-                                    if (visited[nidx] || !lowMask[nidx] || outBinary[nidx]) continue;
-                                    visited[nidx] = 1;
-                                    q.push(nidx);
-                                }
-                            }
-                        }
-                        if (area <= 0) continue;
-
-                        PromoteCompLocal local{};
-                        local.minX = minX;
-                        local.minY = minY;
-                        local.maxX = maxX;
-                        local.maxY = maxY;
-                        local.area = area;
-                        local.compW = maxX - minX + 1;
-                        local.compH = maxY - minY + 1;
-                        local.peakScore = (float)peakScore;
-                        local.meanAccepted = (float)(sumAccepted / std::max(1, area));
-                        local.pixels = std::move(comp);
-                        comps.push_back(std::move(local));
-                    }
-                }
-
-                const int maxPromoteHop = 3;
-                for (int hop = 0; hop < maxPromoteHop; hop++) {
-                    int curAnchorMinX = scanw, curAnchorMinY = scanh, curAnchorMaxX = -1, curAnchorMaxY = -1;
-                    for (int y = 0; y < scanh; y++) {
-                        for (int x = 0; x < scanw; x++) {
-                            if (!outBinary[x + y * scanw]) continue;
-                            curAnchorMinX = std::min(curAnchorMinX, x);
-                            curAnchorMinY = std::min(curAnchorMinY, y);
-                            curAnchorMaxX = std::max(curAnchorMaxX, x);
-                            curAnchorMaxY = std::max(curAnchorMaxY, y);
-                        }
-                    }
-                    if (curAnchorMaxX < curAnchorMinX || curAnchorMaxY < curAnchorMinY) {
-                        break;
-                    }
-                    const int curAnchorW = curAnchorMaxX - curAnchorMinX + 1;
-                    const int curAnchorH = curAnchorMaxY - curAnchorMinY + 1;
-                    bool anyAccepted = false;
-
-                    for (auto& comp : comps) {
-                        if (comp.promoted) continue;
-
-                        const int overlapW = std::max(0, std::min(comp.maxX, curAnchorMaxX) - std::max(comp.minX, curAnchorMinX) + 1);
-                        const int overlapH = std::max(0, std::min(comp.maxY, curAnchorMaxY) - std::max(comp.minY, curAnchorMinY) + 1);
-                        const int gapX = std::max(0, std::max(comp.minX - curAnchorMaxX, curAnchorMinX - comp.maxX));
-                        const int gapY = std::max(0, std::max(comp.minY - curAnchorMaxY, curAnchorMinY - comp.maxY));
-                        const int nearHMin1 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.15));
-                        const int nearHMin2 = std::max(2, (int)std::round(std::min(comp.compH, curAnchorH) * 0.75));
-                        const bool nearHorizontal = (overlapH >= nearHMin1 && gapX <= std::max(6, (int)std::round(curAnchorW * 0.20)))
-                                                 || (overlapH >= nearHMin2 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.80)));
-                        const int nearVMin1 = std::max(2, (int)std::round(std::min(comp.compW, curAnchorW) * 0.15));
-                        const bool nearVertical = nearVMin1 && gapY <= std::max(6, (int)std::round(curAnchorH * 0.15));
-                        const bool nearDiagonal = gapX <= std::max(6, (int)std::round(curAnchorW * 0.12)) &&
-                                                  gapY <= std::max(4, (int)std::round(curAnchorH * 0.08));
-                        const bool nearAnchor = nearHorizontal || nearVertical ||
-                            (nearDiagonal && (comp.peakScore >= (float)((double)lowTh * 1.50) && comp.meanAccepted >= 0.16f));
-
-                        const double aspect = std::max((double)comp.compW / std::max(1, comp.compH), (double)comp.compH / std::max(1, comp.compW));
-                        const bool shapeOk = comp.area >= 3 && comp.area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0;
-                        const bool signalOk = comp.peakScore >= (float)((double)lowTh * 1.02) || comp.meanAccepted >= 0.11f;
-
-                        const int insideW = std::max(0, std::min(comp.maxX, guardMaxX) - std::max(comp.minX, guardMinX) + 1);
-                        const int insideH = std::max(0, std::min(comp.maxY, guardMaxY) - std::max(comp.minY, guardMinY) + 1);
-                        const int compArea = std::max(1, comp.compW * comp.compH);
-                        const float insideRatio = (float)(insideW * insideH) / (float)compArea;
-                        const bool insideGuard = (insideW > 0 && insideH > 0) && insideRatio >= 0.72f;
-
-                        comp.overlapW = overlapW;
-                        comp.overlapH = overlapH;
-                        comp.gapX = gapX;
-                        comp.gapY = gapY;
-                        comp.nearHorizontal = nearHorizontal ? 1 : 0;
-                        comp.nearVertical = nearVertical ? 1 : 0;
-                        comp.nearDiagonal = nearDiagonal ? 1 : 0;
-                        comp.nearAnchor = (nearAnchor && insideGuard) ? 1 : 0;
-                        comp.shapeOk = shapeOk ? 1 : 0;
-                        comp.signalOk = signalOk ? 1 : 0;
-
-                        const bool accepted = insideGuard && nearAnchor && shapeOk && signalOk;
-                        if (!accepted) continue;
-                        for (const int pix : comp.pixels) {
-                            outBinary[pix] = 1;
-                        }
-                        comp.promoted = true;
-                        anyAccepted = true;
-                        if (dbg != nullptr) {
-                            dbg->promotedOn += comp.area;
-                        }
-                        if (detailedDebug) {
-                            promoteCompDebug.push_back(PromoteCompDebug{
-                                iterIndex, highTh, lowTh,
-                                comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
-                                comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
-                                comp.peakScore, comp.meanAccepted,
-                                comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 1
-                                });
-                        }
-                    }
-                    if (!anyAccepted) {
-                        break;
-                    }
-                }
-                if (detailedDebug) {
-                    for (const auto& comp : comps) {
-                        if (comp.promoted) continue;
-                        promoteCompDebug.push_back(PromoteCompDebug{
-                            iterIndex, highTh, lowTh,
-                            comp.minX, comp.minY, comp.maxX, comp.maxY, comp.area, comp.compW, comp.compH,
-                            comp.overlapW, comp.overlapH, comp.gapX, comp.gapY,
-                            comp.peakScore, comp.meanAccepted,
-                            comp.nearHorizontal, comp.nearVertical, comp.nearDiagonal, comp.nearAnchor, comp.shapeOk, comp.signalOk, 0
-                            });
-                    }
-                }
-            }
-        };
-
-        auto getMaskRect = [&](const std::vector<uint8_t>& mask, int& minX, int& minY, int& maxX, int& maxY) -> bool {
-            minX = scanw;
-            minY = scanh;
-            maxX = -1;
-            maxY = -1;
-            for (int y = 0; y < scanh; y++) {
-                for (int x = 0; x < scanw; x++) {
-                    if (!mask[x + y * scanw]) continue;
-                    minX = std::min(minX, x);
-                    minY = std::min(minY, y);
-                    maxX = std::max(maxX, x);
-                    maxY = std::max(maxY, y);
-                }
-            }
-            return (maxX >= minX && maxY >= minY);
-        };
-
         // 初回2値化（基準となる「最初の領域」）
         BuildBinaryDiag baseDiag{};
         if (detailedDebug) {
@@ -3683,19 +4173,12 @@ namespace {
             iterBinaryHistory.clear();
             iterThresholdDebug.clear();
         }
-        auto countBinaryOn = [&](const std::vector<uint8_t>& mask) {
-            int c = 0;
-            for (const auto v : mask) {
-                if (v) c++;
-            }
-            return c;
-        };
         if (detailedDebug) {
             iterBinaryHistory.push_back(acceptedBinary);
             iterThresholdDebug.push_back(IterThresholdDebug{
                 thHigh, thLow,
                 baseDiag.seedOn, baseDiag.lowOn, baseDiag.grownOn, baseDiag.promotedOn,
-                0, 0, 0, countBinaryOn(acceptedBinary), 0
+                0, 0, 0, countMaskOn(acceptedBinary), 0
                 });
         }
 
@@ -3722,6 +4205,7 @@ namespace {
             BuildBinaryDiag stepDiag{};
             buildBinaryFromThreshold(iter + 1, curThHigh, curThLow, candBinary, &stepDiag);
 
+            // 直前採用結果との差分だけを抽出し、増分成分を評価する。
             std::vector<uint8_t> delta(scanw * scanh, 0);
             int newCount = 0;
             for (int i = 0; i < scanw * scanh; i++) {
@@ -3738,11 +4222,12 @@ namespace {
                     iterThresholdDebug.push_back(IterThresholdDebug{
                         curThHigh, curThLow,
                         stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                        newCount, 0, 0, countBinaryOn(acceptedBinary), 2
+                        newCount, 0, 0, countMaskOn(acceptedBinary), 2
                         });
                 }
                 continue;
             }
+            // 初期矩形がない場合は近縁判定を行わず、そのまま更新する。
             if (!hasInitRect) {
                 acceptedBinary.swap(candBinary);
                 if (detailedDebug) {
@@ -3750,7 +4235,7 @@ namespace {
                     iterThresholdDebug.push_back(IterThresholdDebug{
                         curThHigh, curThLow,
                         stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                        newCount, 0, 0, countBinaryOn(acceptedBinary), 0
+                        newCount, 0, 0, countMaskOn(acceptedBinary), 0
                         });
                 }
                 continue;
@@ -3791,6 +4276,7 @@ namespace {
             bool hasNearDelta = false;
             int nearCompCount = 0;
             int farCompCount = 0;
+            // delta 成分を近縁/遠方に分類し、遠方成分は今回反復から除外する。
             std::vector<uint8_t> filteredBinary = candBinary;
             for (int y = 0; y < scanh; y++) {
                 for (int x = 0; x < scanw; x++) {
@@ -3884,7 +4370,7 @@ namespace {
                     iterThresholdDebug.push_back(IterThresholdDebug{
                         curThHigh, curThLow,
                         stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                        newCount, nearCompCount, farCompCount, countBinaryOn(acceptedBinary), 1
+                        newCount, nearCompCount, farCompCount, countMaskOn(acceptedBinary), 1
                         });
                 }
                 break;
@@ -3896,325 +4382,21 @@ namespace {
                 iterThresholdDebug.push_back(IterThresholdDebug{
                     curThHigh, curThLow,
                     stepDiag.seedOn, stepDiag.lowOn, stepDiag.grownOn, stepDiag.promotedOn,
-                    newCount, nearCompCount, farCompCount, countBinaryOn(acceptedBinary), 0
+                    newCount, nearCompCount, farCompCount, countMaskOn(acceptedBinary), 0
                     });
             }
         }
         binary.swap(acceptedBinary);
 
-        // 最終成分pruning:
-        // anchor成分(右上寄り・高score・過度にopaqueでない)を基準に、
-        // 近傍かつ信号品質が近い成分のみを残して遠方ノイズを削る。
-        {
-            std::vector<uint8_t> prePruneBinary = binary;
-            const int prePruneOn = countBinaryOn(prePruneBinary);
-            int preMinX = 0, preMinY = 0, preMaxX = -1, preMaxY = -1;
-            const bool hasPreRect = getMaskRect(prePruneBinary, preMinX, preMinY, preMaxX, preMaxY);
-            bool hasAnchorBandStat = false;
-            int anchorBandPreOn = 0;
-            int anchorBandPostOn = 0;
-            int removedOn = 0;
-            int removedBelowOn = 0;
-            struct BinaryComp {
-                int minX = 0;
-                int minY = 0;
-                int maxX = -1;
-                int maxY = -1;
-                int area = 0;
-                int w = 0;
-                int h = 0;
-                float peakScore = 0.0f;
-                float meanScore = 0.0f;
-                float meanAccepted = 0.0f;
-                float meanAlpha = 0.0f;
-                float meanConsistency = 0.0f;
-                float anchorScore = -1.0f;
-                std::vector<int> pixels;
-            };
-
-            std::vector<BinaryComp> comps;
-            std::vector<uint8_t> visited(scanw * scanh, 0);
-            std::queue<int> q;
-            for (int y = 0; y < scanh; y++) {
-                for (int x = 0; x < scanw; x++) {
-                    const int start = x + y * scanw;
-                    if (!binary[start] || visited[start]) continue;
-                    visited[start] = 1;
-                    q.push(start);
-                    BinaryComp comp{};
-                    comp.minX = x;
-                    comp.maxX = x;
-                    comp.minY = y;
-                    comp.maxY = y;
-                    double sumScore = 0.0;
-                    double sumAccepted = 0.0;
-                    double sumAlpha = 0.0;
-                    double sumConsistency = 0.0;
-                    while (!q.empty()) {
-                        const int cur = q.front(); q.pop();
-                        const int cx = cur % scanw;
-                        const int cy = cur / scanw;
-                        comp.pixels.push_back(cur);
-                        comp.area++;
-                        comp.minX = std::min(comp.minX, cx);
-                        comp.maxX = std::max(comp.maxX, cx);
-                        comp.minY = std::min(comp.minY, cy);
-                        comp.maxY = std::max(comp.maxY, cy);
-                        comp.peakScore = std::max(comp.peakScore, score[cur]);
-                        sumScore += score[cur];
-                        sumAccepted += mapAccepted[cur];
-                        sumAlpha += mapAlpha[cur];
-                        sumConsistency += mapConsistency[cur];
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dx = -1; dx <= 1; dx++) {
-                                if (dx == 0 && dy == 0) continue;
-                                const int nx = cx + dx;
-                                const int ny = cy + dy;
-                                if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
-                                const int nidx = nx + ny * scanw;
-                                if (!binary[nidx] || visited[nidx]) continue;
-                                visited[nidx] = 1;
-                                q.push(nidx);
-                            }
-                        }
-                    }
-                    if (comp.area <= 0) continue;
-                    comp.w = comp.maxX - comp.minX + 1;
-                    comp.h = comp.maxY - comp.minY + 1;
-                    comp.meanScore = (float)(sumScore / std::max(1, comp.area));
-                    comp.meanAccepted = (float)(sumAccepted / std::max(1, comp.area));
-                    comp.meanAlpha = (float)(sumAlpha / std::max(1, comp.area));
-                    comp.meanConsistency = (float)(sumConsistency / std::max(1, comp.area));
-
-                    const float cxNorm = (float)((comp.minX + comp.maxX) * 0.5 / std::max(1, scanw - 1));
-                    const float topNorm = (float)(1.0 - ((comp.minY + comp.maxY) * 0.5 / std::max(1, scanh - 1)));
-                    const float rightPrior = std::max(0.0f, std::min(1.0f, cxNorm));
-                    const float topPrior = std::max(0.0f, std::min(1.0f, topNorm));
-                    const float consistencyPrior = std::max(0.0f, std::min(1.0f, (comp.meanConsistency - 0.35f) / 1.15f));
-                    const float alphaPenalty = 1.0f / (1.0f + std::max(0.0f, comp.meanAlpha - 0.78f) * 1.5f);
-                    const float areaGain = std::sqrt((float)std::max(1, comp.area));
-                    const float signalMix = comp.meanScore * 0.55f + comp.peakScore * 0.25f + comp.meanAccepted * 0.20f;
-                    const float topWeight = (0.25f + 0.75f * topPrior);
-                    comp.anchorScore =
-                        areaGain *
-                        signalMix *
-                        (topWeight * topWeight) *
-                        (0.70f + 0.30f * rightPrior) *
-                        (0.45f + 0.55f * consistencyPrior) *
-                        alphaPenalty;
-                    comps.push_back(std::move(comp));
-                }
-            }
-
-            if (!comps.empty()) {
-                int anchorIdx = -1;
-                float bestAnchor = -1.0f;
-                int minAnchorY = scanh;
-                for (int i = 0; i < (int)comps.size(); i++) {
-                    const auto& c = comps[i];
-                    if (c.area < 6) continue;
-                    minAnchorY = std::min(minAnchorY, c.minY);
-                }
-                const int topBandSlack = std::max(12, (int)std::round(scanh * 0.15));
-                const int topBandLimit = (minAnchorY < scanh) ? (minAnchorY + topBandSlack) : scanh;
-                for (int i = 0; i < (int)comps.size(); i++) {
-                    const auto& c = comps[i];
-                    if (c.area < 6) continue;
-                    if (c.minY > topBandLimit) continue;
-                    if (c.anchorScore > bestAnchor) {
-                        bestAnchor = c.anchorScore;
-                        anchorIdx = i;
-                    }
-                }
-                if (anchorIdx < 0) {
-                    for (int i = 0; i < (int)comps.size(); i++) {
-                        const auto& c = comps[i];
-                        if (c.area < 6) continue;
-                        if (c.anchorScore > bestAnchor) {
-                            bestAnchor = c.anchorScore;
-                            anchorIdx = i;
-                        }
-                    }
-                }
-                if (anchorIdx < 0) {
-                    for (int i = 0; i < (int)comps.size(); i++) {
-                        const auto& c = comps[i];
-                        if (c.area < 3) continue;
-                        if (c.anchorScore > bestAnchor) {
-                            bestAnchor = c.anchorScore;
-                            anchorIdx = i;
-                        }
-                    }
-                }
-                if (anchorIdx >= 0) {
-                    const auto& anchor = comps[anchorIdx];
-                    const int anchorW = std::max(1, anchor.w);
-                    const int anchorH = std::max(1, anchor.h);
-                    const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
-                    const float minSignalScore = std::max(0.004f, anchor.meanScore * 0.20f);
-                    const float minSignalPeak = std::max(0.004f, anchor.peakScore * 0.10f);
-                    const float minSignalAccepted = std::max(0.003f, anchor.meanAccepted * 0.20f);
-                    const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
-                    const int maxBelowAnchor = std::max(14, (int)std::round(anchorH * 0.85));
-                    std::vector<uint8_t> keepComp(comps.size(), 0);
-                    keepComp[anchorIdx] = 1;
-                    bool changed = true;
-                    for (int hop = 0; hop < 10 && changed; hop++) {
-                        changed = false;
-                        for (int i = 0; i < (int)comps.size(); i++) {
-                            if (keepComp[i]) continue;
-                            const auto& c = comps[i];
-                            const int compCenterY = (c.minY + c.maxY) / 2;
-                            const bool yGuard = compCenterY <= anchorCenterY + maxBelowAnchor;
-                            const bool shapeOk = c.area >= 3 && std::max((double)c.w / std::max(1, c.h), (double)c.h / std::max(1, c.w)) <= 16.0;
-                            const bool signalOk =
-                                c.meanScore >= minSignalScore ||
-                                c.peakScore >= minSignalPeak ||
-                                c.meanAccepted >= minSignalAccepted;
-                            const bool sameRowComp = std::abs(compCenterY - anchorCenterY) <= std::max(4, (int)std::round(anchorH * 0.45));
-                            const bool isLowerComp = compCenterY > anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
-                            const bool lowAlphaConsistencyOk =
-                                !isLowerComp ||
-                                c.meanAlpha >= 0.20f ||
-                                c.meanConsistency >= minSignalConsistency;
-                            const bool signalGateOk = signalOk || sameRowComp;
-                            if (!yGuard || !shapeOk || !signalGateOk || !lowAlphaConsistencyOk) continue;
-                            bool nearKept = false;
-                            for (int k = 0; k < (int)comps.size(); k++) {
-                                if (!keepComp[k]) continue;
-                                const auto& ref = comps[k];
-                                const int overlapW = std::max(0, std::min(c.maxX, ref.maxX) - std::max(c.minX, ref.minX) + 1);
-                                const int overlapH = std::max(0, std::min(c.maxY, ref.maxY) - std::max(c.minY, ref.minY) + 1);
-                                const int gapX = std::max(0, std::max(c.minX - ref.maxX, ref.minX - c.maxX));
-                                const int gapY = std::max(0, std::max(c.minY - ref.maxY, ref.minY - c.maxY));
-                                const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
-                                    gapX <= std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8));
-                                const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
-                                    gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.60));
-                                const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
-                                    gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.45));
-                                nearKept = (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
-                                if (nearKept) {
-                                    break;
-                                }
-                            }
-                            if (!nearKept) continue;
-                            const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
-                            const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
-                                gapYAnchor > std::max(8, (int)std::round(anchorH * 0.80));
-                            if (opaqueFar) continue;
-                            keepComp[i] = 1;
-                            changed = true;
-                        }
-                    }
-                    std::vector<uint8_t> filtered(scanw * scanh, 0);
-                    for (int i = 0; i < (int)comps.size(); i++) {
-                        if (!keepComp[i]) continue;
-                        const auto& c = comps[i];
-                        for (const int pix : c.pixels) {
-                            filtered[pix] = 1;
-                        }
-                    }
-                    // pruningの安全弁用に、アンカー近傍帯域の保持率と
-                    // 削除画素の「下側偏在」度合いを計測しておく。
-                    const int bandY0 = std::max(0, anchor.minY - 2);
-                    const int bandY1 = std::min(scanh - 1, anchor.maxY + 2);
-                    for (int y = bandY0; y <= bandY1; y++) {
-                        const int row = y * scanw;
-                        for (int x = 0; x < scanw; x++) {
-                            const int off = row + x;
-                            if (prePruneBinary[off]) anchorBandPreOn++;
-                            if (filtered[off]) anchorBandPostOn++;
-                        }
-                    }
-                    const int belowY = anchor.maxY + std::max(2, (int)std::round(anchorH * 0.12));
-                    for (int i = 0; i < scanw * scanh; i++) {
-                        if (!prePruneBinary[i] || filtered[i]) continue;
-                        removedOn++;
-                        const int py = i / scanw;
-                        if (py > belowY) {
-                            removedBelowOn++;
-                        }
-                    }
-                    hasAnchorBandStat = true;
-                    binary.swap(filtered);
-                }
-            }
-            const int postPruneOn = countBinaryOn(binary);
-            int postMinX = 0, postMinY = 0, postMaxX = -1, postMaxY = -1;
-            const bool hasPostRect = getMaskRect(binary, postMinX, postMinY, postMaxX, postMaxY);
-            if (prePruneOn > 0 && hasPreRect) {
-                bool revertPrune = false;
-                if (postPruneOn <= 0 || !hasPostRect) {
-                    revertPrune = true;
-                } else {
-                    const int preW = preMaxX - preMinX + 1;
-                    const int postW = postMaxX - postMinX + 1;
-                    const bool areaCollapse = postPruneOn < std::max(24, (int)std::round(prePruneOn * 0.25));
-                    const bool severeShrink = areaCollapse && postW < (int)std::round(preW * 0.60);
-                    revertPrune = severeShrink;
-                    if (revertPrune && hasAnchorBandStat && anchorBandPreOn > 0 && removedOn > 0) {
-                        const float bandRetention = (float)anchorBandPostOn / std::max(1, anchorBandPreOn);
-                        const float removedBelowRatio = (float)removedBelowOn / std::max(1, removedOn);
-                        const bool trimmedMostlyBelow =
-                            removedOn >= std::max(24, (int)std::round(prePruneOn * 0.05)) &&
-                            removedBelowRatio >= 0.60f;
-                        const bool topBandPreserved = bandRetention >= 0.72f;
-                        const bool postStillEnough = postPruneOn >= std::max(12, (int)std::round(prePruneOn * 0.10));
-                        if (trimmedMostlyBelow && topBandPreserved && postStillEnough) {
-                            // 下側ノイズ除去が主目的で、上側ロゴ帯域が維持できているのでリバートしない。
-                            revertPrune = false;
-                        }
-                    }
-                }
-                if (revertPrune) {
-                    binary.swap(prePruneBinary);
-                }
-            }
-        }
-
-        int binaryOnCount = 0;
-        for (int i = 0; i < scanw * scanh; i++) {
-            if (binary[i]) binaryOnCount++;
-        }
-        if (binaryOnCount <= 0) {
-            // フォールバック: 通常二値化で全消しになった場合のみ適用。
-            // 背景: 閾値の厳しさや入力揺れで seed/low が空になるケース対策。
-            std::vector<float> acceptedVals;
-            acceptedVals.reserve(scanw * scanh);
-            for (int i = 0; i < scanw * scanh; i++) {
-                if (!validAB[i]) continue;
-                const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[i] - 0.30) / 1.70));
-                if (mapAlpha[i] < 0.015f && consistencyNorm < 0.20) continue;
-                acceptedVals.push_back(mapAccepted[i]);
-            }
-            if (!acceptedVals.empty()) {
-                std::sort(acceptedVals.begin(), acceptedVals.end());
-                const int idx = ClampInt((int)std::round((acceptedVals.size() - 1) * 0.995), 0, (int)acceptedVals.size() - 1);
-                // 下限 0.06 は「全面ノイズ復帰」を避ける安全弁。
-                const float fbTh = std::max(0.06f, acceptedVals[idx]);
-                for (int i = 0; i < scanw * scanh; i++) {
-                    if (!validAB[i]) continue;
-                    const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[i] - 0.30) / 1.70));
-                    if (mapAccepted[i] >= fbTh && (mapAlpha[i] >= 0.015f || consistencyNorm >= 0.20)) {
-                        binary[i] = 1;
-                        binaryOnCount++;
-                    }
-                }
-            }
-        }
+        // 反復閾値調整後の最終ノイズ抑制と空マスク救済を適用する。
+        pruneBinaryByAnchor();
+        applyBinaryFallbackIfEmpty();
     }
 
-    // ステージ3: binaryマスクから最終ロゴ矩形を決定する。
-    // 処理概要:
-    // - 連結成分を抽出し、形状フィルタで帯ノイズを除去
-    // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
-    // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
-    void AutoDetectLogoReader::runRectStage() {
-        if (detailedDebug) {
-            rectMergeDebug.clear();
-        }
-        std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
+    // binary の x/y 投影を作る。
+    // ON画素が存在する列/行をフラグ化し、矩形候補探索で使う。
+    void AutoDetectLogoReader::collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn) const {
+        // 全画素を走査し、binary ON に対応する x/y を立てる。
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int off = x + y * scanw;
@@ -4223,38 +4405,15 @@ namespace {
                 yOn[y] = 1;
             }
         }
+    }
 
-        if (cb && !cb(3, 0.3f, 0.78f, readFrames, searchFrames)) {
-            THROW(RuntimeException, "Cancel requested");
-        }
-
-        int xStart = 0, xEnd = scanw - 1, yStart = 0, yEnd = scanh - 1;
-        const bool hasProjX = TryFindLongestRun(xOn, xStart, xEnd);
-        const bool hasProjY = TryFindLongestRun(yOn, yStart, yEnd);
-        AutoDetectRect coarse{ 0, 0, 0, 0 };
-        bool hasCoarse = false;
-        if (hasProjX && hasProjY) {
-            coarse = AutoDetectRect{ xStart, yStart, xEnd - xStart + 1, yEnd - yStart + 1 };
-            hasCoarse = true;
-        }
-
+    // binary 連結成分を列挙し、矩形候補と結合候補を収集する。
+    // 同時に最良候補(best)をスコア最大で更新する。
+    void AutoDetectLogoReader::collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore) {
+        // 連結成分 BFS に必要なワークを初期化する。
         std::vector<uint8_t> visited(scanw * scanh, 0);
         std::queue<int> q;
-        AutoDetectRect best = coarse;
-        bool hasBest = false;
-        double bestScore = -1e30;
-        struct CompCandidate {
-            AutoDetectRect rect;
-            double score;
-            int area;
-        };
-        std::vector<CompCandidate> candidates;
-        // seed選定用の厳格候補(candidates)とは別に、
-        // 枠拡張用としては「binaryで出ている成分」を広く保持する。
-        // 目的: 薄い文字パーツなど、seed判定では落ちる成分も最終枠では取り込めるようにする。
-        std::vector<CompCandidate> mergeCandidates;
         const int minArea = std::max(24, scanw * scanh / 2048);
-
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int start = x + y * scanw;
@@ -4296,25 +4455,18 @@ namespace {
                 const double boxArea = (double)comp.w * comp.h;
                 if (boxArea <= 0.0) continue;
                 if (area >= 4) {
-                    mergeCandidates.push_back(CompCandidate{
-                        comp,
-                        0.0,
-                        area
-                        });
+                    mergeCandidates.push_back(RectStageCompCandidate{ comp, 0.0, area });
                 }
-                // 微小成分を除外。単発ノイズや孤立点を候補にしない。
                 if (area < minArea) continue;
 
-                // 3) 帯状ノイズ抑制: 極端なアスペクト比・低充填率・低コンパクト性を棄却
+                // 明らかな帯ノイズを形状特徴で除外する。
                 const double aspect = std::max((double)comp.w / std::max(1, comp.h), (double)comp.h / std::max(1, comp.w));
                 const double fillRatio = area / boxArea;
                 const double compactness = (perimeter > 0) ? (4.0 * 3.14159265358979323846 * area / (perimeter * perimeter)) : 0.0;
-                // 第1段階の形状フィルタ。
-                // 例: 横長の細帯(レターボックス痕)や、点在ノイズ塊を落とす。
                 if (aspect > 6.5) continue;
                 if (fillRatio < 0.08) continue;
                 if (compactness < 0.010) continue;
-                // 追加の線状/帯状棄却
+
                 std::vector<int> rowCount(comp.h, 0), colCount(comp.w, 0);
                 for (const int pix : compPixels) {
                     const int px = pix % scanw;
@@ -4336,19 +4488,14 @@ namespace {
                 const double maxColRatio = (area > 0) ? (double)maxCol / area : 0.0;
                 const double rowCoverage = (comp.h > 0) ? (double)usedRows / comp.h : 0.0;
                 const double colCoverage = (comp.w > 0) ? (double)usedCols / comp.w : 0.0;
-                // 第2段階の線状/帯状フィルタ。
-                // isWideBand: ROI 幅の大半を占めるのに高さが薄い成分（典型的な帯）。
-                // isRow/ColLineLike: 一部の行/列に画素が偏る線状成分。
                 const bool isWideBand = comp.w > (int)(scanw * 0.45) && comp.h < (int)(scanh * 0.22);
                 const bool isRowLineLike = maxRowRatio > 0.15 && rowCoverage < 0.52 && aspect > 2.4;
                 const bool isColLineLike = maxColRatio > 0.15 && colCoverage < 0.52 && aspect > 2.4;
                 if (isWideBand || isRowLineLike || isColLineLike) continue;
 
+                // ロゴらしさスコアを計算し、候補リストと best を更新する。
                 const double cxComp = comp.x + comp.w * 0.5;
                 const double cyComp = comp.y + comp.h * 0.5;
-                // binary主体のseed選定:
-                // - 面積(実体)を主軸
-                // - 右上寄りを弱いpriorとして同点解消に使う
                 const double rightTopPrior = std::max(0.0, std::min(1.0, (cxComp / scanw) * 0.60 + ((scanh - cyComp) / scanh) * 0.40));
                 const double rowLinePenalty = std::max(0.0, (maxRowRatio - 0.11) * 2.4);
                 const double colLinePenalty = std::max(0.0, (maxColRatio - 0.11) * 2.4);
@@ -4359,11 +4506,7 @@ namespace {
                     rightTopPrior * 0.35 -
                     rowLinePenalty * 1.60 -
                     colLinePenalty * 1.60;
-                candidates.push_back(CompCandidate{
-                    comp,
-                    compScore,
-                    area
-                    });
+                candidates.push_back(RectStageCompCandidate{ comp, compScore, area });
 
                 if (compScore > bestScore) {
                     bestScore = compScore;
@@ -4372,125 +4515,185 @@ namespace {
                 }
             }
         }
+    }
 
-        // 位置決定は binary成分のみで行う。
-        // 背景: score/accepted依存の閾値で、良いbinaryでも枠が狭くなる事例が出たため。
-        AutoDetectRect finalRect = hasBest ? best : coarse;
-        if (!hasBest && !hasCoarse) {
-            // 最終フォールバック: 最高 accepted 点の近傍を仮矩形にする。
-            // 完全失敗で UI が空になるのを避け、デバッグ可能な状態を保つ。
-            int bestIdx = -1;
-            float bestV = 0.0f;
-            for (int i = 0; i < scanw * scanh; i++) {
-                if (!validAB[i]) continue;
-                if (mapAccepted[i] > bestV) {
-                    bestV = mapAccepted[i];
-                    bestIdx = i;
+    // 通常候補が取れない場合の予備矩形を mapAccepted 最大点から作る。
+    AutoDetectRect AutoDetectLogoReader::buildAcceptedFallbackRect() const {
+        // もっとも信頼度の高い accepted 画素を探索する。
+        int bestIdx = -1;
+        float bestV = 0.0f;
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (!validAB[i]) continue;
+            if (mapAccepted[i] > bestV) {
+                bestV = mapAccepted[i];
+                bestIdx = i;
+            }
+        }
+        if (bestIdx < 0 || bestV <= 0.0f) {
+            return AutoDetectRect{ 0, 0, 0, 0 };
+        }
+        // 最大点を中心に固定半径の矩形を返す。
+        const int cx = bestIdx % scanw;
+        const int cy = bestIdx / scanw;
+        const int halfW = std::min(scanw / 4, 32);
+        const int halfH = std::min(scanh / 4, 24);
+        return AutoDetectRect{
+            std::max(0, cx - halfW),
+            std::max(0, cy - halfH),
+            std::min(scanw - std::max(0, cx - halfW), halfW * 2 + 1),
+            std::min(scanh - std::max(0, cy - halfH), halfH * 2 + 1)
+        };
+    }
+
+    void AutoDetectLogoReader::mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect) {
+        bool mergedAny = true;
+        int mergeIter = 0;
+        const double bestCx = best.x + best.w * 0.5;
+        const double bestCy = best.y + best.h * 0.5;
+        const double maxCenterDx = std::max(80.0, best.w * 3.2);
+        const double maxCenterDy = std::max(64.0, best.h * 3.2);
+        while (mergedAny && mergeIter < 8) {
+            mergedAny = false;
+            mergeIter++;
+            for (const auto& cand : mergeCandidates) {
+                if (cand.area < 6) continue;
+                const AutoDetectRect& comp = cand.rect;
+                if (comp.x == finalRect.x && comp.y == finalRect.y && comp.w == finalRect.w && comp.h == finalRect.h) continue;
+                const int ix0 = std::max(finalRect.x, comp.x);
+                const int iy0 = std::max(finalRect.y, comp.y);
+                const int ix1 = std::min(finalRect.x + finalRect.w, comp.x + comp.w);
+                const int iy1 = std::min(finalRect.y + finalRect.h, comp.y + comp.h);
+                const int overlapW = std::max(0, ix1 - ix0);
+                const int overlapH = std::max(0, iy1 - iy0);
+                const int gapX = std::max(0, std::max(finalRect.x - (comp.x + comp.w), comp.x - (finalRect.x + finalRect.w)));
+                const int gapY = std::max(0, std::max(finalRect.y - (comp.y + comp.h), comp.y - (finalRect.y + finalRect.h)));
+                const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(finalRect.h, comp.h) * 0.08)) &&
+                    gapX <= std::max(28, (int)std::round(std::min(finalRect.w, comp.w) * 1.30));
+                const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(finalRect.w, comp.w) * 0.12)) &&
+                    gapY <= std::max(14, (int)std::round(std::min(finalRect.h, comp.h) * 0.85));
+                const bool nearDiagonal = gapX <= std::max(12, (int)std::round(std::min(finalRect.w, comp.w) * 0.45)) &&
+                    gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 0.45));
+                const bool overlap = (overlapW > 0 && overlapH > 0);
+                const double compCx = comp.x + comp.w * 0.5;
+                const double compCy = comp.y + comp.h * 0.5;
+                const bool withinSeedCenterGuard =
+                    std::abs(compCx - bestCx) <= maxCenterDx &&
+                    std::abs(compCy - bestCy) <= maxCenterDy;
+                const double finalCx = finalRect.x + finalRect.w * 0.5;
+                const double finalCy = finalRect.y + finalRect.h * 0.5;
+                const double maxFinalDx = std::max(40.0, finalRect.w * 1.45);
+                const double maxFinalDy = std::max(34.0, finalRect.h * 1.45);
+                const bool withinFinalCenterGuard =
+                    std::abs(compCx - finalCx) <= maxFinalDx &&
+                    std::abs(compCy - finalCy) <= maxFinalDy;
+                AutoDetectRect mergedRect{
+                    std::min(finalRect.x, comp.x),
+                    std::min(finalRect.y, comp.y),
+                    std::max(finalRect.x + finalRect.w, comp.x + comp.w) - std::min(finalRect.x, comp.x),
+                    std::max(finalRect.y + finalRect.h, comp.y + comp.h) - std::min(finalRect.y, comp.y)
+                };
+                const bool sizeGuardOk =
+                    mergedRect.w <= (int)(scanw * 0.88) &&
+                    mergedRect.h <= (int)(scanh * 0.62);
+                bool accepted = true;
+                if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
+                if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
+                if (!sizeGuardOk) accepted = false;
+                if (detailedDebug) {
+                    rectMergeDebug.push_back(RectMergeDebug{
+                        mergeIter,
+                        comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                        cand.area,
+                        overlapW, overlapH, gapX, gapY,
+                        nearHorizontal ? 1 : 0,
+                        nearVertical ? 1 : 0,
+                        nearDiagonal ? 1 : 0,
+                        overlap ? 1 : 0,
+                        withinSeedCenterGuard ? 1 : 0,
+                        withinFinalCenterGuard ? 1 : 0,
+                        sizeGuardOk ? 1 : 0,
+                        accepted ? 1 : 0
+                        });
+                }
+                if (!accepted) continue;
+                if (mergedRect.x != finalRect.x || mergedRect.y != finalRect.y || mergedRect.w != finalRect.w || mergedRect.h != finalRect.h) {
+                    finalRect = mergedRect;
+                    mergedAny = true;
                 }
             }
-            if (bestIdx >= 0 && bestV > 0.0f) {
-                const int cx = bestIdx % scanw;
-                const int cy = bestIdx / scanw;
-                const int halfW = std::min(scanw / 4, 32);
-                const int halfH = std::min(scanh / 4, 24);
-                finalRect = AutoDetectRect{
-                    std::max(0, cx - halfW),
-                    std::max(0, cy - halfH),
-                    std::min(scanw - std::max(0, cx - halfW), halfW * 2 + 1),
-                    std::min(scanh - std::max(0, cy - halfH), halfH * 2 + 1)
-                };
-            }
+        }
+    }
+
+    // ローカル矩形を絶対座標へ変換し、サイズ制約と偶数丸めを適用する。
+    AutoDetectRect AutoDetectLogoReader::makeAbsRectFromLocal(const AutoDetectRect& localRect) const {
+        // scan ROI のオフセットを足して絶対座標化する。
+        AutoDetectRect absRect{
+            localRect.x + scanx,
+            localRect.y + scany,
+            localRect.w,
+            localRect.h
+        };
+        // 中心位置を維持しつつサイズをクランプする。
+        const double cx = absRect.x + absRect.w * 0.5;
+        const double cy = absRect.y + absRect.h * 0.5;
+        absRect.w = ClampInt(absRect.w, 32, 360);
+        absRect.h = ClampInt(absRect.h, 32, 360);
+        absRect.x = ClampInt((int)std::round(cx - absRect.w * 0.5), 0, std::max(0, imgw - absRect.w));
+        absRect.y = ClampInt((int)std::round(cy - absRect.h * 0.5), 0, std::max(0, imgh - absRect.h));
+        // 解析側の前提に合わせて偶数境界へ丸める。
+        absRect.x = RoundDownBy(absRect.x, 2);
+        absRect.y = RoundDownBy(absRect.y, 2);
+        absRect.w = RoundUpBy(absRect.w, 2);
+        absRect.h = RoundUpBy(absRect.h, 2);
+        absRect.w = std::min(absRect.w, std::max(2, imgw - absRect.x));
+        absRect.h = std::min(absRect.h, std::max(2, imgh - absRect.y));
+        return absRect;
+    }
+
+    // ステージ3: binaryマスクから最終ロゴ矩形を決定する。
+    // 処理概要:
+    // - 連結成分を抽出し、形状フィルタで帯ノイズを除去
+    // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
+    // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
+    void AutoDetectLogoReader::runRectStage() {
+        if (detailedDebug) {
+            rectMergeDebug.clear();
+        }
+        std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
+        collectBinaryProjection(xOn, yOn);
+
+        if (cb && !cb(3, 0.3f, 0.78f, readFrames, searchFrames)) {
+            THROW(RuntimeException, "Cancel requested");
+        }
+
+        int xStart = 0, xEnd = scanw - 1, yStart = 0, yEnd = scanh - 1;
+        const bool hasProjX = TryFindLongestRun(xOn, xStart, xEnd);
+        const bool hasProjY = TryFindLongestRun(yOn, yStart, yEnd);
+        AutoDetectRect coarse{ 0, 0, 0, 0 };
+        bool hasCoarse = false;
+        if (hasProjX && hasProjY) {
+            coarse = AutoDetectRect{ xStart, yStart, xEnd - xStart + 1, yEnd - yStart + 1 };
+            hasCoarse = true;
+        }
+
+        AutoDetectRect best = coarse;
+        bool hasBest = false;
+        double bestScore = -1e30;
+        std::vector<RectStageCompCandidate> candidates;
+        std::vector<RectStageCompCandidate> mergeCandidates;
+        collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore);
+
+        // 位置決定は binary成分のみで行う。
+        AutoDetectRect finalRect = hasBest ? best : coarse;
+        if (!hasBest && !hasCoarse) {
+            finalRect = buildAcceptedFallbackRect();
         }
         if (finalRect.w <= 0 || finalRect.h <= 0) {
             THROW(RuntimeException, "Logo rect projection/CCL failed");
         }
 
-        // seed成分に近いbinary成分を段階的に結合する。
-        // 文字ロゴの分断(文字間の空白)を復元する目的で、横方向の近傍はやや広めに許容。
         if (hasBest && !mergeCandidates.empty()) {
-            bool mergedAny = true;
-            int mergeIter = 0;
-            // seedの中心からの過剰な逸脱は抑えつつ、近傍の欠落成分は拾う。
-            // 「枠が狭すぎる」問題を緩和するため、拡張時はこの上限内で近傍を結合する。
-            const double bestCx = best.x + best.w * 0.5;
-            const double bestCy = best.y + best.h * 0.5;
-            const double maxCenterDx = std::max(80.0, best.w * 3.2);
-            const double maxCenterDy = std::max(64.0, best.h * 3.2);
-            while (mergedAny && mergeIter < 8) {
-                mergedAny = false;
-                mergeIter++;
-                for (const auto& cand : mergeCandidates) {
-                    // 極小成分は除外（孤立ノイズ抑制）
-                    if (cand.area < 6) continue;
-                    const AutoDetectRect& comp = cand.rect;
-                    if (comp.x == finalRect.x && comp.y == finalRect.y && comp.w == finalRect.w && comp.h == finalRect.h) continue;
-                    const int ix0 = std::max(finalRect.x, comp.x);
-                    const int iy0 = std::max(finalRect.y, comp.y);
-                    const int ix1 = std::min(finalRect.x + finalRect.w, comp.x + comp.w);
-                    const int iy1 = std::min(finalRect.y + finalRect.h, comp.y + comp.h);
-                    const int overlapW = std::max(0, ix1 - ix0);
-                    const int overlapH = std::max(0, iy1 - iy0);
-                    const int gapX = std::max(0, std::max(finalRect.x - (comp.x + comp.w), comp.x - (finalRect.x + finalRect.w)));
-                    const int gapY = std::max(0, std::max(finalRect.y - (comp.y + comp.h), comp.y - (finalRect.y + finalRect.h)));
-                    const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(finalRect.h, comp.h) * 0.08)) &&
-                        gapX <= std::max(28, (int)std::round(std::min(finalRect.w, comp.w) * 1.30));
-                    const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(finalRect.w, comp.w) * 0.12)) &&
-                        gapY <= std::max(14, (int)std::round(std::min(finalRect.h, comp.h) * 0.85));
-                    const bool nearDiagonal = gapX <= std::max(12, (int)std::round(std::min(finalRect.w, comp.w) * 0.45)) &&
-                        gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 0.45));
-                    const bool overlap = (overlapW > 0 && overlapH > 0);
-                    const double compCx = comp.x + comp.w * 0.5;
-                    const double compCy = comp.y + comp.h * 0.5;
-                    const bool withinSeedCenterGuard =
-                        std::abs(compCx - bestCx) <= maxCenterDx &&
-                        std::abs(compCy - bestCy) <= maxCenterDy;
-                    const double finalCx = finalRect.x + finalRect.w * 0.5;
-                    const double finalCy = finalRect.y + finalRect.h * 0.5;
-                    const double maxFinalDx = std::max(40.0, finalRect.w * 1.45);
-                    const double maxFinalDy = std::max(34.0, finalRect.h * 1.45);
-                    const bool withinFinalCenterGuard =
-                        std::abs(compCx - finalCx) <= maxFinalDx &&
-                        std::abs(compCy - finalCy) <= maxFinalDy;
-                    AutoDetectRect mergedRect{
-                        std::min(finalRect.x, comp.x),
-                        std::min(finalRect.y, comp.y),
-                        std::max(finalRect.x + finalRect.w, comp.x + comp.w) - std::min(finalRect.x, comp.x),
-                        std::max(finalRect.y + finalRect.h, comp.y + comp.h) - std::min(finalRect.y, comp.y)
-                    };
-                    const bool sizeGuardOk =
-                        mergedRect.w <= (int)(scanw * 0.88) &&
-                        mergedRect.h <= (int)(scanh * 0.62);
-                    // 重なり or 近傍（横/縦/斜め）でのみ結合。
-                    // 目的: 文字ロゴの分断（文字間ギャップ）を復元しつつ、
-                    // 離れた別成分（無関係ノイズ）を結合しない。
-                    bool accepted = true;
-                    if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
-                    if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
-                    if (!sizeGuardOk) accepted = false;
-                    if (detailedDebug) {
-                        rectMergeDebug.push_back(RectMergeDebug{
-                            mergeIter,
-                            comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
-                            cand.area,
-                            overlapW, overlapH, gapX, gapY,
-                            nearHorizontal ? 1 : 0,
-                            nearVertical ? 1 : 0,
-                            nearDiagonal ? 1 : 0,
-                            overlap ? 1 : 0,
-                            withinSeedCenterGuard ? 1 : 0,
-                            withinFinalCenterGuard ? 1 : 0,
-                            sizeGuardOk ? 1 : 0,
-                            accepted ? 1 : 0
-                        });
-                    }
-                    if (!accepted) continue;
-                    // マージ後サイズの上限。過剰結合で「ほぼ全域」になるのを防止。
-                    if (mergedRect.x != finalRect.x || mergedRect.y != finalRect.y || mergedRect.w != finalRect.w || mergedRect.h != finalRect.h) {
-                        finalRect = mergedRect;
-                        mergedAny = true;
-                    }
-                }
-            }
+            mergeRectCandidates(mergeCandidates, best, finalRect);
         }
 
         finalRect.x = std::max(0, finalRect.x - marginX);
@@ -4498,27 +4701,7 @@ namespace {
         finalRect.w = std::min(scanw - finalRect.x, finalRect.w + marginX * 2);
         finalRect.h = std::min(scanh - finalRect.y, finalRect.h + marginY * 2);
         rectLocal = finalRect;
-
-        AutoDetectRect absRect{
-            finalRect.x + scanx,
-            finalRect.y + scany,
-            finalRect.w,
-            finalRect.h
-        };
-
-        const double cx = absRect.x + absRect.w * 0.5;
-        const double cy = absRect.y + absRect.h * 0.5;
-        absRect.w = ClampInt(absRect.w, 32, 360);
-        absRect.h = ClampInt(absRect.h, 32, 360);
-        absRect.x = ClampInt((int)std::round(cx - absRect.w * 0.5), 0, std::max(0, imgw - absRect.w));
-        absRect.y = ClampInt((int)std::round(cy - absRect.h * 0.5), 0, std::max(0, imgh - absRect.h));
-        absRect.x = RoundDownBy(absRect.x, 2);
-        absRect.y = RoundDownBy(absRect.y, 2);
-        absRect.w = RoundUpBy(absRect.w, 2);
-        absRect.h = RoundUpBy(absRect.h, 2);
-        absRect.w = std::min(absRect.w, std::max(2, imgw - absRect.x));
-        absRect.h = std::min(absRect.h, std::max(2, imgh - absRect.y));
-        rectAbs = absRect;
+        rectAbs = makeAbsRectFromLocal(finalRect);
 
         if (cb && !cb(3, 1.0f, 0.92f, readFrames, searchFrames)) {
             THROW(RuntimeException, "Cancel requested");
