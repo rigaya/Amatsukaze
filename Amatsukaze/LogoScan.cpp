@@ -1916,19 +1916,40 @@ namespace {
 
         StatsPassBuffers* activeStatsPass;
         std::vector<AutoDetectStats> debugStats;
-        std::vector<float> score;
+
+        struct ScoreStageBuffers {
+            std::vector<float> score;
+            std::vector<float> mapA;
+            std::vector<float> mapB;
+            std::vector<float> mapAlpha;
+            std::vector<float> mapLogoY;
+            std::vector<float> mapConsistency;
+            std::vector<float> mapFgVar;
+            std::vector<float> mapBgVar;
+            std::vector<float> mapTransitionRate;
+            std::vector<float> mapKeepRate;
+            std::vector<float> mapAccepted;
+            std::vector<uint8_t> validAB;
+
+            void reset(const int scanw, const int scanh) {
+                const int n = scanw * scanh;
+                score.assign(n, 0.0f);
+                validAB.assign(n, 0);
+                mapA.assign(n, 0.0f);
+                mapB.assign(n, 0.0f);
+                mapAlpha.assign(n, 0.0f);
+                mapLogoY.assign(n, 0.0f);
+                mapConsistency.assign(n, 0.0f);
+                mapFgVar.assign(n, 0.0f);
+                mapBgVar.assign(n, 0.0f);
+                mapTransitionRate.assign(n, 0.0f);
+                mapKeepRate.assign(n, 0.0f);
+                mapAccepted.assign(n, 0.0f);
+            }
+        };
+
+        ScoreStageBuffers debugScore;
         std::vector<uint8_t> binary;
-        std::vector<float> mapA;
-        std::vector<float> mapB;
-        std::vector<float> mapAlpha;
-        std::vector<float> mapLogoY;
-        std::vector<float> mapConsistency;
-        std::vector<float> mapFgVar;
-        std::vector<float> mapBgVar;
-        std::vector<float> mapTransitionRate;
-        std::vector<float> mapKeepRate;
-        std::vector<float> mapAccepted;
-        std::vector<uint8_t> validAB;
         int passIndex;
         std::vector<int> frameGateOffsets;
         std::vector<float> frameGateRefDiff;
@@ -2091,13 +2112,13 @@ namespace {
 
         bool getMaskRect(const std::vector<uint8_t>& mask, int& minX, int& minY, int& maxX, int& maxY) const;
         int countMaskOn(const std::vector<uint8_t>& mask) const;
-        void buildBinaryFromThreshold(const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
-        void pruneBinaryByAnchor();
-        void applyBinaryFallbackIfEmpty();
+        void buildBinaryFromThreshold(const ScoreStageBuffers& scoreStage, const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
+        void pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage);
+        void applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage);
 
         void collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn) const;
-        void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore);
-        AutoDetectRect buildAcceptedFallbackRect() const;
+        void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage);
+        AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
 
@@ -2116,7 +2137,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), debugScore(), binary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2148,6 +2169,7 @@ namespace {
             passIndex = 0;
             activeStatsPass = nullptr;
             debugStats.clear();
+            debugScore = ScoreStageBuffers{};
             pass2LogoScan.reset();
             pass2DeintLogo.reset();
             pass2Corr0.clear();
@@ -2374,13 +2396,13 @@ namespace {
             const std::string acceptedPathA = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
 
             float maxScore = 0.0f;
-            for (auto v : score) maxScore = std::max(maxScore, v);
+            for (auto v : debugScore.score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
 
             if (!scorePathA.empty()) {
                 WriteGrayBitmap(scorePathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    const float v = (off < (int)score.size()) ? score[off] : 0.0f;
+                    const float v = (off < (int)debugScore.score.size()) ? debugScore.score[off] : 0.0f;
                     return (uint8_t)ClampInt((int)std::round(v / maxScore * 255.0f), 0, 255);
                 });
             }
@@ -2419,107 +2441,107 @@ namespace {
             }
 
             float aMin, aMax, bMin, bMax;
-            CalcRangeValid(mapA, validAB, aMin, aMax, 0.8f, 1.2f);
-            CalcRangeValid(mapB, validAB, bMin, bMax, -0.2f, 0.2f);
+            CalcRangeValid(debugScore.mapA, debugScore.validAB, aMin, aMax, 0.8f, 1.2f);
+            CalcRangeValid(debugScore.mapB, debugScore.validAB, bMin, bMax, -0.2f, 0.2f);
             if (!aPathA.empty()) {
                 WriteGrayBitmap(aPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapA.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapA.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapA[off] - aMin) / (aMax - aMin);
+                    const float t = (debugScore.mapA[off] - aMin) / (aMax - aMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!bPathA.empty()) {
                 WriteGrayBitmap(bPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapB.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapB.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapB[off] - bMin) / (bMax - bMin);
+                    const float t = (debugScore.mapB[off] - bMin) / (bMax - bMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!alphaPathA.empty()) {
                 WriteGrayBitmap(alphaPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapAlpha.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapAlpha.size()) {
                         return (uint8_t)0;
                     }
-                    return (uint8_t)ClampInt((int)std::round(mapAlpha[off] * 255.0f), 0, 255);
+                    return (uint8_t)ClampInt((int)std::round(debugScore.mapAlpha[off] * 255.0f), 0, 255);
                 });
             }
             if (!logoYPathA.empty()) {
                 WriteGrayBitmap(logoYPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapLogoY.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapLogoY.size()) {
                         return (uint8_t)0;
                     }
-                    return (uint8_t)ClampInt((int)std::round(mapLogoY[off] * 255.0f), 0, 255);
+                    return (uint8_t)ClampInt((int)std::round(debugScore.mapLogoY[off] * 255.0f), 0, 255);
                 });
             }
             float csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax, trMin, trMax, krMin, krMax;
-            CalcRangeValid(mapConsistency, validAB, csMin, csMax, 0.0f, 2.0f);
-            CalcRangeValid(mapFgVar, validAB, fgvMin, fgvMax, 0.0f, 0.02f);
-            CalcRangeValid(mapBgVar, validAB, bgvMin, bgvMax, 0.0f, 0.02f);
-            CalcRangeValid(mapTransitionRate, validAB, trMin, trMax, 0.0f, 0.20f);
-            CalcRangeValid(mapKeepRate, validAB, krMin, krMax, 0.0f, 0.20f);
+            CalcRangeValid(debugScore.mapConsistency, debugScore.validAB, csMin, csMax, 0.0f, 2.0f);
+            CalcRangeValid(debugScore.mapFgVar, debugScore.validAB, fgvMin, fgvMax, 0.0f, 0.02f);
+            CalcRangeValid(debugScore.mapBgVar, debugScore.validAB, bgvMin, bgvMax, 0.0f, 0.02f);
+            CalcRangeValid(debugScore.mapTransitionRate, debugScore.validAB, trMin, trMax, 0.0f, 0.20f);
+            CalcRangeValid(debugScore.mapKeepRate, debugScore.validAB, krMin, krMax, 0.0f, 0.20f);
             if (!consistencyPathA.empty()) {
                 WriteGrayBitmap(consistencyPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapConsistency.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapConsistency.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapConsistency[off] - csMin) / (csMax - csMin);
+                    const float t = (debugScore.mapConsistency[off] - csMin) / (csMax - csMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!fgVarPathA.empty()) {
                 WriteGrayBitmap(fgVarPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapFgVar.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapFgVar.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapFgVar[off] - fgvMin) / (fgvMax - fgvMin);
+                    const float t = (debugScore.mapFgVar[off] - fgvMin) / (fgvMax - fgvMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!bgVarPathA.empty()) {
                 WriteGrayBitmap(bgVarPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapBgVar.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapBgVar.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
+                    const float t = (debugScore.mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!transitionPathA.empty()) {
                 WriteGrayBitmap(transitionPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapTransitionRate.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapTransitionRate.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapTransitionRate[off] - trMin) / (trMax - trMin);
+                    const float t = (debugScore.mapTransitionRate[off] - trMin) / (trMax - trMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!keepRatePathA.empty()) {
                 WriteGrayBitmap(keepRatePathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off] || off >= (int)mapKeepRate.size()) {
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapKeepRate.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (mapKeepRate[off] - krMin) / (krMax - krMin);
+                    const float t = (debugScore.mapKeepRate[off] - krMin) / (krMax - krMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
             if (!acceptedPathA.empty()) {
                 WriteGrayBitmap(acceptedPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)mapAccepted.size()) return (uint8_t)0;
-                    return (uint8_t)ClampInt((int)std::round(mapAccepted[off] * 255.0f), 0, 255);
+                    if (off >= (int)debugScore.mapAccepted.size()) return (uint8_t)0;
+                    return (uint8_t)ClampInt((int)std::round(debugScore.mapAccepted[off] * 255.0f), 0, 255);
                 });
             }
 
@@ -2816,8 +2838,8 @@ namespace {
             for (int y = region.minY; y <= region.maxY; y++) {
                 for (int x = region.minX; x <= region.maxX; x++) {
                     const int off = x + y * scanw;
-                    if (off >= (int)validAB.size() || !validAB[off]) continue;
-                    const float v = (off < (int)mapAccepted.size()) ? mapAccepted[off] : 0.0f;
+                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off]) continue;
+                    const float v = (off < (int)debugScore.mapAccepted.size()) ? debugScore.mapAccepted[off] : 0.0f;
                     if (v <= 0.0f || !std::isfinite(v)) continue;
                     cand.emplace_back(v, off);
                 }
@@ -2968,8 +2990,8 @@ namespace {
             std::vector<float> alphaVals;
             alphaVals.reserve(frameGateOffsets.size());
             for (const int off : frameGateOffsets) {
-                if (off < 0 || off >= (int)mapAlpha.size()) continue;
-                const float a = std::max(0.0f, std::min(1.0f, mapAlpha[off]));
+                if (off < 0 || off >= (int)debugScore.mapAlpha.size()) continue;
+                const float a = std::max(0.0f, std::min(1.0f, debugScore.mapAlpha[off]));
                 if (std::isfinite(a)) {
                     alphaVals.push_back(a);
                 }
@@ -2996,8 +3018,8 @@ namespace {
                         refDiff = std::max(0.0f, std::min(1.0f, std::abs(meanF - meanB)));
                     }
                 }
-                const float accepted = (off >= 0 && off < (int)mapAccepted.size()) ? std::max(0.0f, std::min(1.0f, mapAccepted[off])) : 0.0f;
-                const float alpha = (off >= 0 && off < (int)mapAlpha.size()) ? std::max(0.0f, std::min(1.0f, mapAlpha[off])) : 0.0f;
+                const float accepted = (off >= 0 && off < (int)debugScore.mapAccepted.size()) ? std::max(0.0f, std::min(1.0f, debugScore.mapAccepted[off])) : 0.0f;
+                const float alpha = (off >= 0 && off < (int)debugScore.mapAlpha.size()) ? std::max(0.0f, std::min(1.0f, debugScore.mapAlpha[off])) : 0.0f;
                 const float shapeRel = (off >= 0 && off < (int)anchorShapeRel.size()) ? std::max(0.15f, std::min(1.0f, anchorShapeRel[off])) : 1.0f;
                 const float anchorWeight = std::max(0.08f, std::min(1.0f, (0.15f + 0.55f * std::sqrt(accepted) + 0.30f * alpha) * shapeRel));
                 frameGateRefDiff[idx] = refDiff;
@@ -3329,32 +3351,23 @@ namespace {
             }
             float thHigh = 0.0f;
             float thLow = 0.0f;
+            ScoreStageBuffers scoreStage{};
 
-            runScoreStage(statsPass, thHigh, thLow);
+            runScoreStage(statsPass, scoreStage, thHigh, thLow);
 
-            runBinaryStage(thHigh, thLow);
+            runBinaryStage(scoreStage, thHigh, thLow);
 
-            runRectStage();
+            runRectStage(scoreStage);
             debugStats = statsPass.stats;
+            debugScore = std::move(scoreStage);
         }
 
         // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
         // 2値化用の初期閾値(thHigh/thLow)を決める。
         // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
-        void runScoreStage(const StatsPassBuffers& statsPass, float& thHigh, float& thLow) {
+        void runScoreStage(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage, float& thHigh, float& thLow) {
             // 各種出力マップをクリアする。
-            score.assign(scanw * scanh, 0.0f);
-            validAB.assign(scanw * scanh, 0);
-            mapA.assign(scanw * scanh, 0.0f);
-            mapB.assign(scanw * scanh, 0.0f);
-            mapAlpha.assign(scanw * scanh, 0.0f);
-            mapLogoY.assign(scanw * scanh, 0.0f);
-            mapConsistency.assign(scanw * scanh, 0.0f);
-            mapFgVar.assign(scanw * scanh, 0.0f);
-            mapBgVar.assign(scanw * scanh, 0.0f);
-            mapTransitionRate.assign(scanw * scanh, 0.0f);
-            mapKeepRate.assign(scanw * scanh, 0.0f);
-            mapAccepted.assign(scanw * scanh, 0.0f);
+            scoreStage.reset(scanw, scanh);
             // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
@@ -3362,16 +3375,16 @@ namespace {
                         const int i = x + y * scanw;
                         float A, B;
                         if (TryGetAB(statsPass.stats[i], A, B)) {
-                            validAB[i] = 1;
-                            mapA[i] = A;
-                            mapB[i] = B;
+                            scoreStage.validAB[i] = 1;
+                            scoreStage.mapA[i] = A;
+                            scoreStage.mapB[i] = B;
                             float alpha = 0.0f;
                             float logoY = 0.0f;
                             if (!TryGetAlphaLogo(A, B, alpha, logoY)) {
                                 continue;
                             }
-                            mapAlpha[i] = std::max(0.0f, std::min(1.0f, alpha));
-                            mapLogoY[i] = std::max(0.0f, std::min(1.0f, logoY));
+                            scoreStage.mapAlpha[i] = std::max(0.0f, std::min(1.0f, alpha));
+                            scoreStage.mapLogoY[i] = std::max(0.0f, std::min(1.0f, logoY));
 
                             auto sat01 = [](const double v) {
                                 return std::max(0.0, std::min(1.0, v));
@@ -3391,11 +3404,11 @@ namespace {
                             const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
                             const double keepRate = (s.observed > 0) ? (double)s.count / (double)s.observed : 0.0;
                             const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
-                            mapConsistency[i] = (float)consistency;
-                            mapFgVar[i] = (float)varFg;
-                            mapBgVar[i] = (float)varBg;
-                            mapTransitionRate[i] = (float)transitionRate;
-                            mapKeepRate[i] = (float)keepRate;
+                            scoreStage.mapConsistency[i] = (float)consistency;
+                            scoreStage.mapFgVar[i] = (float)varFg;
+                            scoreStage.mapBgVar[i] = (float)varBg;
+                            scoreStage.mapTransitionRate[i] = (float)transitionRate;
+                            scoreStage.mapKeepRate[i] = (float)keepRate;
 
                             const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
                             const double alphaGain = sat01((alpha - 0.005) / 0.30);
@@ -3448,8 +3461,8 @@ namespace {
                             }
                             const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
                             if (d <= 0.0f) continue;
-                            mapAccepted[i] = d;
-                            score[i] = d;
+                            scoreStage.mapAccepted[i] = d;
+                            scoreStage.score[i] = d;
                         }
                     }
                 }
@@ -3461,21 +3474,21 @@ namespace {
             int count = 0;
             int validPixels = 0;
             for (int i = 0; i < scanw * scanh; i++) {
-                if (validAB[i]) {
+                if (scoreStage.validAB[i]) {
                     validPixels++;
                 }
-                if (!validAB[i] || score[i] <= 0) continue;
-                sum += score[i];
-                sum2 += score[i] * score[i];
+                if (!scoreStage.validAB[i] || scoreStage.score[i] <= 0) continue;
+                sum += scoreStage.score[i];
+                sum2 += scoreStage.score[i] * scoreStage.score[i];
                 count++;
             }
             if (count <= 0) {
                 int finalPos = 0;
                 for (int i = 0; i < scanw * scanh; i++) {
-                    if (!validAB[i]) continue;
-                    if (score[i] > 0) finalPos++;
+                    if (!scoreStage.validAB[i]) continue;
+                    if (scoreStage.score[i] > 0) finalPos++;
                 }
-                const auto finalStats = CalcScoreDebugStats(score, validAB);
+                const auto finalStats = CalcScoreDebugStats(scoreStage.score, scoreStage.validAB);
                 int sampledPixels = 0;
                 int maxSampleCount = 0;
                 long long totalSampleCount = 0;
@@ -3525,8 +3538,8 @@ namespace {
                 std::vector<float> distVals;
                 distVals.reserve(scanw * scanh);
                 for (int i = 0; i < scanw * scanh; i++) {
-                    if (!validAB[i]) continue;
-                    const float v = score[i];
+                    if (!scoreStage.validAB[i]) continue;
+                    const float v = scoreStage.score[i];
                     if (v <= 0.0f || !std::isfinite(v)) continue;
                     distVals.push_back(v);
                 }
@@ -3559,8 +3572,8 @@ namespace {
             }
         }
 
-        void runBinaryStage(const float thHigh, const float thLow);
-        void runRectStage();
+        void runBinaryStage(const ScoreStageBuffers& scoreStage, const float thHigh, const float thLow);
+        void runRectStage(const ScoreStageBuffers& scoreStage);
     };
 }
 
@@ -3592,7 +3605,7 @@ namespace {
 
     // high/low 閾値から binary を1回生成する。
     // high seed から low 領域へ成長し、さらに近縁成分を昇格して取りこぼしを補う。
-    void AutoDetectLogoReader::buildBinaryFromThreshold(const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg) {
+    void AutoDetectLogoReader::buildBinaryFromThreshold(const ScoreStageBuffers& scoreStage, const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg) {
         // score を high/low の2値マスクへ分解する。
         std::vector<uint8_t> seed(scanw * scanh, 0);
         std::vector<uint8_t> lowMask(scanw * scanh, 0);
@@ -3600,11 +3613,11 @@ namespace {
             for (int y = y0; y < y1; y++) {
                 for (int x = 0; x < scanw; x++) {
                     const int off = x + y * scanw;
-                    if (!validAB[off]) continue;
-                    if (score[off] >= highTh) {
+                    if (!scoreStage.validAB[off]) continue;
+                    if (scoreStage.score[off] >= highTh) {
                         seed[off] = 1;
                     }
-                    if (score[off] >= lowTh) {
+                    if (scoreStage.score[off] >= lowTh) {
                         lowMask[off] = 1;
                     }
                 }
@@ -3737,8 +3750,8 @@ namespace {
                     minY = std::min(minY, cy);
                     maxX = std::max(maxX, cx);
                     maxY = std::max(maxY, cy);
-                    peakScore = std::max(peakScore, (double)score[cur]);
-                    sumAccepted += mapAccepted[cur];
+                    peakScore = std::max(peakScore, (double)scoreStage.score[cur]);
+                    sumAccepted += scoreStage.mapAccepted[cur];
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dx = -1; dx <= 1; dx++) {
                             if (dx == 0 && dy == 0) continue;
@@ -3867,7 +3880,7 @@ namespace {
     }
 
     // binary 連結成分から anchor を選び、近縁成分のみ残してノイズを除去する。
-    void AutoDetectLogoReader::pruneBinaryByAnchor() {
+    void AutoDetectLogoReader::pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage) {
         // prune 前状態を保持し、削りすぎ時にロールバックできるようにする。
         std::vector<uint8_t> prePruneBinary = binary;
         const int prePruneOn = countMaskOn(prePruneBinary);
@@ -3924,11 +3937,11 @@ namespace {
                     comp.maxX = std::max(comp.maxX, cx);
                     comp.minY = std::min(comp.minY, cy);
                     comp.maxY = std::max(comp.maxY, cy);
-                    comp.peakScore = std::max(comp.peakScore, score[cur]);
-                    sumScore += score[cur];
-                    sumAccepted += mapAccepted[cur];
-                    sumAlpha += mapAlpha[cur];
-                    sumConsistency += mapConsistency[cur];
+                    comp.peakScore = std::max(comp.peakScore, scoreStage.score[cur]);
+                    sumScore += scoreStage.score[cur];
+                    sumAccepted += scoreStage.mapAccepted[cur];
+                    sumAlpha += scoreStage.mapAlpha[cur];
+                    sumConsistency += scoreStage.mapConsistency[cur];
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dx = -1; dx <= 1; dx++) {
                             if (dx == 0 && dy == 0) continue;
@@ -4140,7 +4153,7 @@ namespace {
     }
 
     // binary が空になったときのみ、mapAccepted 上位点から最小限の復旧を行う。
-    void AutoDetectLogoReader::applyBinaryFallbackIfEmpty() {
+    void AutoDetectLogoReader::applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage) {
         // 既に画素が残っている場合はフォールバック不要。
         int binaryOnCount = 0;
         for (int i = 0; i < scanw * scanh; i++) {
@@ -4155,10 +4168,10 @@ namespace {
         std::vector<float> acceptedVals;
         acceptedVals.reserve(scanw * scanh);
         for (int i = 0; i < scanw * scanh; i++) {
-            if (!validAB[i]) continue;
-            const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[i] - 0.30) / 1.70));
-            if (mapAlpha[i] < 0.015f && consistencyNorm < 0.20) continue;
-            acceptedVals.push_back(mapAccepted[i]);
+            if (!scoreStage.validAB[i]) continue;
+            const double consistencyNorm = std::max(0.0, std::min(1.0, (scoreStage.mapConsistency[i] - 0.30) / 1.70));
+            if (scoreStage.mapAlpha[i] < 0.015f && consistencyNorm < 0.20) continue;
+            acceptedVals.push_back(scoreStage.mapAccepted[i]);
         }
         if (acceptedVals.empty()) {
             return;
@@ -4169,9 +4182,9 @@ namespace {
         const float fbTh = std::max(0.06f, acceptedVals[idx]);
         // 閾値を超える画素だけを binary に復帰させる。
         for (int i = 0; i < scanw * scanh; i++) {
-            if (!validAB[i]) continue;
-            const double consistencyNorm = std::max(0.0, std::min(1.0, (mapConsistency[i] - 0.30) / 1.70));
-            if (mapAccepted[i] >= fbTh && (mapAlpha[i] >= 0.015f || consistencyNorm >= 0.20)) {
+            if (!scoreStage.validAB[i]) continue;
+            const double consistencyNorm = std::max(0.0, std::min(1.0, (scoreStage.mapConsistency[i] - 0.30) / 1.70));
+            if (scoreStage.mapAccepted[i] >= fbTh && (scoreStage.mapAlpha[i] >= 0.015f || consistencyNorm >= 0.20)) {
                 binary[i] = 1;
             }
         }
@@ -4183,14 +4196,14 @@ namespace {
     // - low側の飛び地を近縁条件で昇格
     // - 反復的な閾値緩和とdelta近縁判定で取りこぼしを補完
     // - 帯ノイズ/全消し時のフォールバックを適用
-    void AutoDetectLogoReader::runBinaryStage(const float thHigh, const float thLow) {
+    void AutoDetectLogoReader::runBinaryStage(const ScoreStageBuffers& scoreStage, const float thHigh, const float thLow) {
         // 初回2値化（基準となる「最初の領域」）
         BuildBinaryDiag baseDiag{};
         if (detailedDebug) {
             promoteCompDebug.clear();
             deltaCompDebug.clear();
         }
-        buildBinaryFromThreshold(0, thHigh, thLow, binary, &baseDiag);
+        buildBinaryFromThreshold(scoreStage, 0, thHigh, thLow, binary, &baseDiag);
         std::vector<uint8_t> acceptedBinary = binary;
         if (detailedDebug) {
             iterBinaryHistory.clear();
@@ -4226,7 +4239,7 @@ namespace {
 
             std::vector<uint8_t> candBinary;
             BuildBinaryDiag stepDiag{};
-            buildBinaryFromThreshold(iter + 1, curThHigh, curThLow, candBinary, &stepDiag);
+            buildBinaryFromThreshold(scoreStage, iter + 1, curThHigh, curThLow, candBinary, &stepDiag);
 
             // 直前採用結果との差分だけを抽出し、増分成分を評価する。
             std::vector<uint8_t> delta(scanw * scanh, 0);
@@ -4412,8 +4425,8 @@ namespace {
         binary.swap(acceptedBinary);
 
         // 反復閾値調整後の最終ノイズ抑制と空マスク救済を適用する。
-        pruneBinaryByAnchor();
-        applyBinaryFallbackIfEmpty();
+        pruneBinaryByAnchor(scoreStage);
+        applyBinaryFallbackIfEmpty(scoreStage);
     }
 
     // binary の x/y 投影を作る。
@@ -4432,7 +4445,7 @@ namespace {
 
     // binary 連結成分を列挙し、矩形候補と結合候補を収集する。
     // 同時に最良候補(best)をスコア最大で更新する。
-    void AutoDetectLogoReader::collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore) {
+    void AutoDetectLogoReader::collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage) {
         // 連結成分 BFS に必要なワークを初期化する。
         std::vector<uint8_t> visited(scanw * scanh, 0);
         std::queue<int> q;
@@ -4541,14 +4554,14 @@ namespace {
     }
 
     // 通常候補が取れない場合の予備矩形を mapAccepted 最大点から作る。
-    AutoDetectRect AutoDetectLogoReader::buildAcceptedFallbackRect() const {
+    AutoDetectRect AutoDetectLogoReader::buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const {
         // もっとも信頼度の高い accepted 画素を探索する。
         int bestIdx = -1;
         float bestV = 0.0f;
         for (int i = 0; i < scanw * scanh; i++) {
-            if (!validAB[i]) continue;
-            if (mapAccepted[i] > bestV) {
-                bestV = mapAccepted[i];
+            if (!scoreStage.validAB[i]) continue;
+            if (scoreStage.mapAccepted[i] > bestV) {
+                bestV = scoreStage.mapAccepted[i];
                 bestIdx = i;
             }
         }
@@ -4678,7 +4691,7 @@ namespace {
     // - 連結成分を抽出し、形状フィルタで帯ノイズを除去
     // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
     // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
-    void AutoDetectLogoReader::runRectStage() {
+    void AutoDetectLogoReader::runRectStage(const ScoreStageBuffers& scoreStage) {
         if (detailedDebug) {
             rectMergeDebug.clear();
         }
@@ -4704,12 +4717,12 @@ namespace {
         double bestScore = -1e30;
         std::vector<RectStageCompCandidate> candidates;
         std::vector<RectStageCompCandidate> mergeCandidates;
-        collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore);
+        collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore, scoreStage);
 
         // 位置決定は binary成分のみで行う。
         AutoDetectRect finalRect = hasBest ? best : coarse;
         if (!hasBest && !hasCoarse) {
-            finalRect = buildAcceptedFallbackRect();
+            finalRect = buildAcceptedFallbackRect(scoreStage);
         }
         if (finalRect.w <= 0 || finalRect.h <= 0) {
             THROW(RuntimeException, "Logo rect projection/CCL failed");
