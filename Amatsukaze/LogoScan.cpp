@@ -1883,14 +1883,39 @@ namespace {
         static constexpr bool kEnableTwoPassFrameGate = true;
         const bool enableTwoPassFrameGate;
 
-        std::vector<uint8_t> frameWork8;
-        std::vector<uint16_t> frameWork16;
-        std::vector<AutoDetectStats> stats;
-        std::vector<float> dedupSampleFgHistory;
-        std::vector<uint8_t> dedupSampleCount;
-        std::vector<uint8_t> dedupSamplePos;
-        std::vector<float> lastObservedFg;
-        std::vector<uint8_t> lastObservedValid;
+        struct StatsPassBuffers {
+            std::vector<uint8_t> frameWork8;
+            std::vector<uint16_t> frameWork16;
+            std::vector<AutoDetectStats> stats;
+            std::vector<float> dedupSampleFgHistory;
+            std::vector<uint8_t> dedupSampleCount;
+            std::vector<uint8_t> dedupSamplePos;
+            std::vector<float> lastObservedFg;
+            std::vector<uint8_t> lastObservedValid;
+            std::vector<int> frameValidCounts;
+
+            void reset(const int scanw, const int scanh, const int bitDepth) {
+                if (bitDepth <= 8) {
+                    frameWork8.resize(scanw * scanh);
+                    frameWork16.clear();
+                    frameWork16.shrink_to_fit();
+                } else {
+                    frameWork16.resize(scanw * scanh);
+                    frameWork8.clear();
+                    frameWork8.shrink_to_fit();
+                }
+                stats.assign(scanw * scanh, AutoDetectStats());
+                dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
+                dedupSampleCount.assign(scanw * scanh, 0);
+                dedupSamplePos.assign(scanw * scanh, 0);
+                lastObservedFg.assign(scanw * scanh, 0.0f);
+                lastObservedValid.assign(scanw * scanh, 0);
+                frameValidCounts.clear();
+            }
+        };
+
+        StatsPassBuffers* activeStatsPass;
+        std::vector<AutoDetectStats> debugStats;
         std::vector<float> score;
         std::vector<uint8_t> binary;
         std::vector<float> mapA;
@@ -1904,7 +1929,6 @@ namespace {
         std::vector<float> mapKeepRate;
         std::vector<float> mapAccepted;
         std::vector<uint8_t> validAB;
-        std::vector<int> frameValidCounts;
         int passIndex;
         std::vector<int> frameGateOffsets;
         std::vector<float> frameGateRefDiff;
@@ -2092,7 +2116,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), frameWork8(), frameWork16(), stats(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2101,12 +2125,14 @@ namespace {
             }
             // 1) 初期化
             resetRunState();
+            StatsPassBuffers pass1Stats{};
+            activeStatsPass = &pass1Stats;
             // 2) pass1: 全フレームで score/binary/rect を推定
             readAll(srcpath, serviceid);
             if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
                 THROW(RuntimeException, "No frame decoded");
             }
-            estimateScoreAndRect();
+            estimateScoreAndRect(pass1Stats);
             const AutoDetectRect pass1RectAbs = rectAbs;
             const AutoDetectRect pass1RectLocal = rectLocal;
 
@@ -2114,11 +2140,14 @@ namespace {
             if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal)) {
                 runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal);
             }
+            activeStatsPass = nullptr;
             return rectAbs;
         }
 
         void resetRunState() {
             passIndex = 0;
+            activeStatsPass = nullptr;
+            debugStats.clear();
             pass2LogoScan.reset();
             pass2DeintLogo.reset();
             pass2Corr0.clear();
@@ -2176,6 +2205,7 @@ namespace {
             // 2) pass1モードで全フレームを走査し、ROI内だけで仮ロゴ(LogoScan)を再構築する。
             pass2LogoScan = std::make_unique<logo::LogoScan>(pass2LogoRectAbs.w, pass2LogoRectAbs.h, logUVx, logUVy, threshold);
             passIndex = 1;
+            activeStatsPass = nullptr;
             resetAccumulationState();
             readAll(srcpath, serviceid);
 
@@ -2197,6 +2227,7 @@ namespace {
 
             // 4) pass2モードで全フレームの相関列(corr0/corr1)を収集する。
             passIndex = 2;
+            activeStatsPass = nullptr;
             resetAccumulationState();
             pass2Corr0.clear();
             pass2Corr1.clear();
@@ -2293,6 +2324,8 @@ namespace {
             pass2AcceptedFrames = 0;
             pass2SkippedFrames = 0;
             passIndex = 3;
+            StatsPassBuffers pass3Stats{};
+            activeStatsPass = &pass3Stats;
             resetAccumulationState();
             readAll(srcpath, serviceid);
 
@@ -2302,18 +2335,21 @@ namespace {
             if (pass2AcceptedFrames < minAcceptedFrames) {
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
+                activeStatsPass = nullptr;
                 return false;
             }
 
             // 3) 採用フレームのみで score/binary/rect を再推定する。
-            estimateScoreAndRect();
+            estimateScoreAndRect(pass3Stats);
 
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
             if (shouldFallbackToPass1Rect(pass1RectLocal)) {
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
+                activeStatsPass = nullptr;
                 return false;
             }
+            activeStatsPass = nullptr;
             return true;
         }
 
@@ -2368,14 +2404,16 @@ namespace {
                 return;
             }
 
+            const auto& statsForDebug = getStatsForDebug();
             int maxCount = 0;
-            for (const auto& s : stats) {
+            for (const auto& s : statsForDebug) {
                 maxCount = std::max(maxCount, s.count);
             }
             if (maxCount <= 0) maxCount = 1;
             if (!countPathA.empty()) {
                 WriteGrayBitmap(countPathA, scanw, scanh, [&](int x, int y) {
-                    const int c = stats[x + y * scanw].count;
+                    const int off = x + y * scanw;
+                    const int c = (off >= 0 && off < (int)statsForDebug.size()) ? statsForDebug[off].count : 0;
                     return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
                 });
             }
@@ -2620,6 +2658,12 @@ namespace {
 
         int getReadFrames() const { return readFrames; }
         int getTotalFrames() const { return searchFrames; }
+        const std::vector<AutoDetectStats>& getStatsForDebug() const {
+            if (activeStatsPass != nullptr && !activeStatsPass->stats.empty()) {
+                return activeStatsPass->stats;
+            }
+            return debugStats;
+        }
 
     protected:
         /* virtual */ void onFirstFrame(AVStream *videoStream, AVFrame* frame) override {
@@ -2646,34 +2690,18 @@ namespace {
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
-            if (bitDepth <= 8) {
-                frameWork8.resize(scanw * scanh);
-                frameWork16.clear();
-                frameWork16.shrink_to_fit();
-            } else {
-                frameWork16.resize(scanw * scanh);
-                frameWork8.clear();
-                frameWork8.shrink_to_fit();
+            if (activeStatsPass != nullptr) {
+                activeStatsPass->reset(scanw, scanh, bitDepth);
             }
-            stats.assign(scanw * scanh, AutoDetectStats());
-            dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
-            dedupSampleCount.assign(scanw * scanh, 0);
-            dedupSamplePos.assign(scanw * scanh, 0);
-            lastObservedFg.assign(scanw * scanh, 0.0f);
-            lastObservedValid.assign(scanw * scanh, 0);
             pass2EvalDeint.clear();
             pass2EvalWork.clear();
         }
 
         void resetAccumulationState() {
             readFrames = 0;
-            stats.assign(scanw * scanh, AutoDetectStats());
-            dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
-            dedupSampleCount.assign(scanw * scanh, 0);
-            dedupSamplePos.assign(scanw * scanh, 0);
-            lastObservedFg.assign(scanw * scanh, 0.0f);
-            lastObservedValid.assign(scanw * scanh, 0);
-            frameValidCounts.clear();
+            if (activeStatsPass != nullptr) {
+                activeStatsPass->reset(scanw, scanh, bitDepth);
+            }
             frameGateWeightSum = 0.0;
             pass2AcceptedFrames = 0;
             pass2SkippedFrames = 0;
@@ -2956,11 +2984,12 @@ namespace {
             frameGateAnchorWeight.assign(frameGateOffsets.size(), 0.35f);
             std::vector<float> refDiffVals;
             refDiffVals.reserve(frameGateOffsets.size());
+            const auto& statsForGate = getStatsForDebug();
             for (int idx = 0; idx < (int)frameGateOffsets.size(); idx++) {
                 const int off = frameGateOffsets[idx];
                 float refDiff = 0.0f;
-                if (off >= 0 && off < (int)stats.size()) {
-                    const auto& s = stats[off];
+                if (off >= 0 && off < (int)statsForGate.size()) {
+                    const auto& s = statsForGate[off];
                     if (s.sumW > 1e-6) {
                         const float meanF = (float)(s.sumF / s.sumW);
                         const float meanB = (float)(s.sumB / s.sumW);
@@ -3154,10 +3183,11 @@ namespace {
 
         template<typename pixel_t>
         std::vector<pixel_t>& getFrameWorkBuffer() {
+            assert(activeStatsPass != nullptr);
             if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                return frameWork8;
+                return activeStatsPass->frameWork8;
             } else {
-                return frameWork16;
+                return activeStatsPass->frameWork16;
             }
         }
 
@@ -3172,6 +3202,13 @@ namespace {
 
         template<typename pixel_t>
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw) {
+            assert(activeStatsPass != nullptr);
+            auto& stats = activeStatsPass->stats;
+            auto& dedupSampleFgHistory = activeStatsPass->dedupSampleFgHistory;
+            auto& dedupSampleCount = activeStatsPass->dedupSampleCount;
+            auto& dedupSamplePos = activeStatsPass->dedupSamplePos;
+            auto& lastObservedFg = activeStatsPass->lastObservedFg;
+            auto& lastObservedValid = activeStatsPass->lastObservedValid;
             const int pixelCount = scanw * scanh;
             assert((int)frameWork.size() == pixelCount);
             assert((int)stats.size() == pixelCount);
@@ -3269,7 +3306,9 @@ namespace {
             } else {
                 frameCount = addFrame<uint16_t>(frame);
             }
-            frameValidCounts.push_back(frameCount);
+            if (activeStatsPass != nullptr) {
+                activeStatsPass->frameValidCounts.push_back(frameCount);
+            }
 
             readFrames++;
             if (cb && (readFrames % 8) == 0) {
@@ -3284,24 +3323,25 @@ namespace {
         }
 
     private:
-        void estimateScoreAndRect() {
+        void estimateScoreAndRect(const StatsPassBuffers& statsPass) {
             if (cb && !cb(2, 0.0f, 0.5f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
             float thHigh = 0.0f;
             float thLow = 0.0f;
 
-            runScoreStage(thHigh, thLow);
+            runScoreStage(statsPass, thHigh, thLow);
 
             runBinaryStage(thHigh, thLow);
 
             runRectStage();
+            debugStats = statsPass.stats;
         }
 
         // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
         // 2値化用の初期閾値(thHigh/thLow)を決める。
         // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
-        void runScoreStage(float& thHigh, float& thLow) {
+        void runScoreStage(const StatsPassBuffers& statsPass, float& thHigh, float& thLow) {
             // 各種出力マップをクリアする。
             score.assign(scanw * scanh, 0.0f);
             validAB.assign(scanw * scanh, 0);
@@ -3321,7 +3361,7 @@ namespace {
                     for (int x = 0; x < scanw; x++) {
                         const int i = x + y * scanw;
                         float A, B;
-                        if (TryGetAB(stats[i], A, B)) {
+                        if (TryGetAB(statsPass.stats[i], A, B)) {
                             validAB[i] = 1;
                             mapA[i] = A;
                             mapB[i] = B;
@@ -3336,7 +3376,7 @@ namespace {
                             auto sat01 = [](const double v) {
                                 return std::max(0.0, std::min(1.0, v));
                             };
-                            const auto& s = stats[i];
+                            const auto& s = statsPass.stats[i];
                             const double invN = (s.sumW > 1e-6) ? 1.0 / s.sumW : 0.0;
                             const double meanF = s.sumF * invN;
                             const double meanBg = s.sumB * invN;
@@ -3439,7 +3479,7 @@ namespace {
                 int sampledPixels = 0;
                 int maxSampleCount = 0;
                 long long totalSampleCount = 0;
-                for (const auto& s : stats) {
+                for (const auto& s : statsPass.stats) {
                     if (s.count > 0) {
                         sampledPixels++;
                         totalSampleCount += s.count;
@@ -3449,12 +3489,12 @@ namespace {
                 int framesNonZero = 0;
                 int frameMax = 0;
                 long long frameSum = 0;
-                for (const int v : frameValidCounts) {
+                for (const int v : statsPass.frameValidCounts) {
                     if (v > 0) framesNonZero++;
                     frameMax = std::max(frameMax, v);
                     frameSum += v;
                 }
-                const double frameAvg = frameValidCounts.empty() ? 0.0 : (double)frameSum / frameValidCounts.size();
+                const double frameAvg = statsPass.frameValidCounts.empty() ? 0.0 : (double)frameSum / statsPass.frameValidCounts.size();
                 const double sampleAvg = sampledPixels > 0 ? (double)totalSampleCount / sampledPixels : 0.0;
                 THROWF(RuntimeException,
                     "Insufficient valid pixels: frames=%d/%d, roi=%dx%d@(%d,%d), "
