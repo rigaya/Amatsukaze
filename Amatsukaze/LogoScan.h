@@ -20,6 +20,7 @@
 #include "ReaderWriterFFmpeg.h"
 
 #include <cmath>
+#include <functional>
 #include <numeric>
 #include <vector>
 #include <fstream>
@@ -247,11 +248,15 @@ public:
 
 class SimpleVideoReader : AMTObject {
 public:
+    using FirstFrameCallback = std::function<void(AVStream *videoStream, AVFrame* frame)>;
+    using FrameCallback = std::function<bool(AVFrame* frame)>;
+
     SimpleVideoReader(AMTContext& ctx);
 
     int64_t currentPos;
 
     void readAll(const tstring& src, int serviceid);
+    void readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb);
 
 protected:
     virtual void onFirstFrame(AVStream *videoStream, AVFrame* frame);;

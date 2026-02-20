@@ -494,6 +494,12 @@ logo::SimpleVideoReader::SimpleVideoReader(AMTContext& ctx)
     : AMTObject(ctx) {}
 
 void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
+    readAll(src, serviceid,
+        [&](AVStream *videoStream, AVFrame* frame) { onFirstFrame(videoStream, frame); },
+        [&](AVFrame* frame) { return onFrame(frame); });
+}
+
+void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb) {
     using namespace av;
 
     InputContext inputCtx(src);
@@ -528,11 +534,14 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
             }
             while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
                 if (first) {
-                    onFirstFrame(videoStream, frame());
+                    if (onFirstFrameCb) {
+                        onFirstFrameCb(videoStream, frame());
+                    }
                     first = false;
                 }
                 currentPos = packet.pos;
-                if (!onFrame(frame())) {
+                const bool keepReading = onFrameCb ? onFrameCb(frame()) : true;
+                if (!keepReading) {
                     av_packet_unref(&packet);
                     return;
                 }
@@ -546,7 +555,9 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
         THROW(FormatException, "avcodec_send_packet failed");
     }
     while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
-        onFrame(frame());
+        if (onFrameCb) {
+            onFrameCb(frame());
+        }
     }
 }
 /* virtual */ void logo::SimpleVideoReader::onFirstFrame(AVStream *videoStream, AVFrame* frame) {}
@@ -1914,7 +1925,6 @@ namespace {
             }
         };
 
-        StatsPassBuffers* activeStatsPass;
         std::vector<AutoDetectStats> debugStats;
 
         struct ScoreStageBuffers {
@@ -2094,8 +2104,6 @@ namespace {
             int acceptedFrames = 0;
             int skippedFrames = 0;
         };
-        Pass2Buffers* activePass2;
-
         struct FrameGateRegion {
             int minX;
             int maxX;
@@ -2143,7 +2151,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), debugScore(), debugBinary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, activePass2(nullptr) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), debugStats(), debugScore(), debugBinary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2153,9 +2161,11 @@ namespace {
             // 1) 初期化
             resetRunState();
             StatsPassBuffers pass1Stats{};
-            activeStatsPass = &pass1Stats;
+            resetAccumulationState(&pass1Stats, nullptr);
             // 2) pass1: 全フレームで score/binary/rect を推定
-            readAll(srcpath, serviceid);
+            readAll(srcpath, serviceid,
+                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
+                [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
             if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
                 THROW(RuntimeException, "No frame decoded");
             }
@@ -2168,15 +2178,12 @@ namespace {
             if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
                 runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
             }
-            activeStatsPass = nullptr;
-            activePass2 = nullptr;
             return rectAbs;
         }
 
         void resetRunState() {
             passIndex = 0;
-            activeStatsPass = nullptr;
-            activePass2 = nullptr;
+            readFrames = 0;
             debugStats.clear();
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
@@ -2226,12 +2233,12 @@ namespace {
             }
 
             // 2) pass1モードで全フレームを走査し、ROI内だけで仮ロゴ(LogoScan)を再構築する。
-            activePass2 = &pass2;
             pass2.logoScan = std::make_unique<logo::LogoScan>(pass2.logoRectAbs.w, pass2.logoRectAbs.h, logUVx, logUVy, threshold);
             passIndex = 1;
-            activeStatsPass = nullptr;
-            resetAccumulationState();
-            readAll(srcpath, serviceid);
+            resetAccumulationState(nullptr, &pass2);
+            readAll(srcpath, serviceid,
+                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
+                [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
 
             // 3) 仮ロゴをデインタレースして評価用LogoDataParamへ変換し、maskを作る。
             if (readFrames > 0 && pass2.logoScan) {
@@ -2251,11 +2258,12 @@ namespace {
 
             // 4) pass2モードで全フレームの相関列(corr0/corr1)を収集する。
             passIndex = 2;
-            activeStatsPass = nullptr;
-            resetAccumulationState();
+            resetAccumulationState(nullptr, &pass2);
             pass2.corr0.clear();
             pass2.corr1.clear();
-            readAll(srcpath, serviceid);
+            readAll(srcpath, serviceid,
+                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
+                [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
             if (pass2.corr0.empty() || pass2.corr0.size() != pass2.corr1.size()) {
                 return false;
             }
@@ -2345,14 +2353,14 @@ namespace {
         bool runPass2CollectAndEstimate(const tstring& srcpath, const AutoDetectRect& pass1RectAbs, const AutoDetectRect& pass1RectLocal, Pass2Buffers& pass2) {
             // 1) pass3モードで再走査し、pass2FrameMaskに基づいて
             //    「ロゴあり」と判定されたフレームだけを統計へ投入する。
-            activePass2 = &pass2;
             pass2.acceptedFrames = 0;
             pass2.skippedFrames = 0;
             passIndex = 3;
             StatsPassBuffers pass3Stats{};
-            activeStatsPass = &pass3Stats;
-            resetAccumulationState();
-            readAll(srcpath, serviceid);
+            resetAccumulationState(&pass3Stats, &pass2);
+            readAll(srcpath, serviceid,
+                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass3Stats, &pass2); },
+                [&](AVFrame* frame) { return processFrame(frame, &pass3Stats, &pass2); });
 
             // 2) 採用フレームが少なすぎる場合は推定が不安定なため、
             //    pass1で得た矩形へフォールバックする。
@@ -2360,7 +2368,6 @@ namespace {
             if (pass2.acceptedFrames < minAcceptedFrames) {
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
-                activeStatsPass = nullptr;
                 return false;
             }
 
@@ -2371,10 +2378,8 @@ namespace {
             if (shouldFallbackToPass1Rect(pass1RectLocal)) {
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
-                activeStatsPass = nullptr;
                 return false;
             }
-            activeStatsPass = nullptr;
             return true;
         }
 
@@ -2684,14 +2689,11 @@ namespace {
         int getReadFrames() const { return readFrames; }
         int getTotalFrames() const { return searchFrames; }
         const std::vector<AutoDetectStats>& getStatsForDebug() const {
-            if (activeStatsPass != nullptr && !activeStatsPass->stats.empty()) {
-                return activeStatsPass->stats;
-            }
             return debugStats;
         }
 
     protected:
-        /* virtual */ void onFirstFrame(AVStream *videoStream, AVFrame* frame) override {
+        void processFirstFrame(AVStream *videoStream, AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
             bitDepth = desc->comp[0].depth;
             logUVx = std::max(0, (int)desc->log2_chroma_w);
@@ -2715,24 +2717,24 @@ namespace {
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
-            if (activeStatsPass != nullptr) {
-                activeStatsPass->reset(scanw, scanh, bitDepth);
+            if (statsPass != nullptr) {
+                statsPass->reset(scanw, scanh, bitDepth);
             }
-            if (activePass2 != nullptr) {
-                activePass2->evalDeint.clear();
-                activePass2->evalWork.clear();
+            if (pass2 != nullptr) {
+                pass2->evalDeint.clear();
+                pass2->evalWork.clear();
             }
         }
 
-        void resetAccumulationState() {
+        void resetAccumulationState(StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             readFrames = 0;
-            if (activeStatsPass != nullptr) {
-                activeStatsPass->reset(scanw, scanh, bitDepth);
+            if (statsPass != nullptr && scanw > 0 && scanh > 0) {
+                statsPass->reset(scanw, scanh, bitDepth);
             }
             frameGateWeightSum = 0.0;
-            if (activePass2 != nullptr) {
-                activePass2->acceptedFrames = 0;
-                activePass2->skippedFrames = 0;
+            if (pass2 != nullptr) {
+                pass2->acceptedFrames = 0;
+                pass2->skippedFrames = 0;
             }
         }
 
@@ -3128,7 +3130,7 @@ namespace {
         // 1フレームを取り込み、現在passに応じて統計へ反映する。
         // pass1: 仮lgd構築 / pass2: 相関列構築 / pass3: フィルタ後サンプル収集。
         template<typename pixel_t>
-        int addFrame(const AVFrame* frame) {
+        int addFrame(const AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             const int pitchY = frame->linesize[0] / sizeof(pixel_t);
             const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->data[0]);
             const pixel_t maxv = (pixel_t)((1 << bitDepth) - 1);
@@ -3138,34 +3140,39 @@ namespace {
 
             // pass1: pass2用の仮ロゴを LogoScan に蓄積する。
             if (passIndex == 1) {
-                return addFramePass1LogoScan<pixel_t>(frame, srcY, pitchY);
+                if (pass2 == nullptr) return 0;
+                return addFramePass1LogoScan<pixel_t>(frame, srcY, pitchY, *pass2);
             }
 
             // pass2: 仮ロゴとの相関列(corr0/corr1)を構築する。
             if (passIndex == 2) {
-                return addFramePass2Correlation<pixel_t>(srcY, pitchY, maxv);
+                if (pass2 == nullptr) return 0;
+                return addFramePass2Correlation<pixel_t>(srcY, pitchY, maxv, *pass2);
             }
 
             // pass3: ロゴ無し判定フレームは統計への投入をスキップする。
             if (passIndex == 3) {
-                if (activePass2 != nullptr && !activePass2->frameMask.empty()) {
-                    if (shouldSkipPass3FrameByMask(*activePass2)) {
-                        activePass2->skippedFrames++;
+                if (pass2 != nullptr && !pass2->frameMask.empty()) {
+                    if (shouldSkipPass3FrameByMask(*pass2)) {
+                        pass2->skippedFrames++;
                         return 0;
                     }
-                    activePass2->acceptedFrames++;
+                    pass2->acceptedFrames++;
                 }
             }
 
             // 通常統計: 前処理→背景推定→サンプル採用/棄却を実施する。
-            auto& frameWork = getFrameWorkBuffer<pixel_t>();
+            if (statsPass == nullptr) {
+                return 0;
+            }
+            auto& frameWork = getFrameWorkBuffer<pixel_t>(*statsPass);
             preprocessFrame<pixel_t>(srcY, pitchY, frameWork, maxv, rawScale, thresholdRaw);
-            return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw);
+            return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw, *statsPass);
         }
 
         template<typename pixel_t>
-        int addFramePass1LogoScan(const AVFrame* frame, const pixel_t* srcY, const int pitchY) {
-            if (activePass2 == nullptr || !activePass2->logoScan || activePass2->logoRectAbs.w <= 0 || activePass2->logoRectAbs.h <= 0) {
+        int addFramePass1LogoScan(const AVFrame* frame, const pixel_t* srcY, const int pitchY, Pass2Buffers& pass2) {
+            if (!pass2.logoScan || pass2.logoRectAbs.w <= 0 || pass2.logoRectAbs.h <= 0) {
                 return 0;
             }
             if (frame->data[1] == nullptr || frame->data[2] == nullptr || frame->linesize[1] <= 0) {
@@ -3174,36 +3181,36 @@ namespace {
             const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
             const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
             const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
-            const int offY = activePass2->logoRectAbs.x + activePass2->logoRectAbs.y * pitchY;
-            const int offUV = (activePass2->logoRectAbs.x >> logUVx) + (activePass2->logoRectAbs.y >> logUVy) * pitchUV;
-            return activePass2->logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+            const int offY = pass2.logoRectAbs.x + pass2.logoRectAbs.y * pitchY;
+            const int offUV = (pass2.logoRectAbs.x >> logUVx) + (pass2.logoRectAbs.y >> logUVy) * pitchUV;
+            return pass2.logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
         }
 
         // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
         template<typename pixel_t>
-        int addFramePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv) {
+        int addFramePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv, Pass2Buffers& pass2) {
             // 仮ロゴが未構築なら何もしない。
-            if (activePass2 == nullptr || !activePass2->deintLogo || !activePass2->deintLogo->isValid()) {
+            if (!pass2.deintLogo || !pass2.deintLogo->isValid()) {
                 return 0;
             }
             // ワークバッファを必要サイズへ拡張し、Y面をdeintする。
-            const int w = activePass2->deintLogo->getWidth();
-            const int h = activePass2->deintLogo->getHeight();
+            const int w = pass2.deintLogo->getWidth();
+            const int h = pass2.deintLogo->getHeight();
             const int required = w * h + 8;
-            if ((int)activePass2->evalDeint.size() < required) {
-                activePass2->evalDeint.resize(required, 0.0f);
+            if ((int)pass2.evalDeint.size() < required) {
+                pass2.evalDeint.resize(required, 0.0f);
             }
-            if ((int)activePass2->evalWork.size() < required) {
-                activePass2->evalWork.resize(required, 0.0f);
+            if ((int)pass2.evalWork.size() < required) {
+                pass2.evalWork.resize(required, 0.0f);
             }
-            const int off = activePass2->deintLogo->getImgX() + activePass2->deintLogo->getImgY() * pitchY;
-            logo::DeintY(activePass2->evalDeint.data(), srcY + off, pitchY, w, h);
+            const int off = pass2.deintLogo->getImgX() + pass2.deintLogo->getImgY() * pitchY;
+            logo::DeintY(pass2.evalDeint.data(), srcY + off, pitchY, w, h);
             // alpha=0/1 の相関を評価し、後段のロゴ有無推定用に保存する。
             const float maxvf = (float)maxv;
-            const float corr0 = activePass2->deintLogo->EvaluateLogo(activePass2->evalDeint.data(), maxvf, 0.0f, activePass2->evalWork.data());
-            const float corr1 = activePass2->deintLogo->EvaluateLogo(activePass2->evalDeint.data(), maxvf, 1.0f, activePass2->evalWork.data());
-            activePass2->corr0.push_back(corr0);
-            activePass2->corr1.push_back(corr1);
+            const float corr0 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 0.0f, pass2.evalWork.data());
+            const float corr1 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 1.0f, pass2.evalWork.data());
+            pass2.corr0.push_back(corr0);
+            pass2.corr1.push_back(corr1);
             return 0;
         }
 
@@ -3213,12 +3220,11 @@ namespace {
         }
 
         template<typename pixel_t>
-        std::vector<pixel_t>& getFrameWorkBuffer() {
-            assert(activeStatsPass != nullptr);
+        std::vector<pixel_t>& getFrameWorkBuffer(StatsPassBuffers& statsPass) {
             if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                return activeStatsPass->frameWork8;
+                return statsPass.frameWork8;
             } else {
-                return activeStatsPass->frameWork16;
+                return statsPass.frameWork16;
             }
         }
 
@@ -3232,14 +3238,13 @@ namespace {
         }
 
         template<typename pixel_t>
-        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw) {
-            assert(activeStatsPass != nullptr);
-            auto& stats = activeStatsPass->stats;
-            auto& dedupSampleFgHistory = activeStatsPass->dedupSampleFgHistory;
-            auto& dedupSampleCount = activeStatsPass->dedupSampleCount;
-            auto& dedupSamplePos = activeStatsPass->dedupSamplePos;
-            auto& lastObservedFg = activeStatsPass->lastObservedFg;
-            auto& lastObservedValid = activeStatsPass->lastObservedValid;
+        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass) {
+            auto& stats = statsPass.stats;
+            auto& dedupSampleFgHistory = statsPass.dedupSampleFgHistory;
+            auto& dedupSampleCount = statsPass.dedupSampleCount;
+            auto& dedupSamplePos = statsPass.dedupSamplePos;
+            auto& lastObservedFg = statsPass.lastObservedFg;
+            auto& lastObservedValid = statsPass.lastObservedValid;
             const int pixelCount = scanw * scanh;
             assert((int)frameWork.size() == pixelCount);
             assert((int)stats.size() == pixelCount);
@@ -3325,7 +3330,7 @@ namespace {
             return frameCount.load(std::memory_order_relaxed);
         }
 
-        /* virtual */ bool onFrame(AVFrame* frame) override {
+        bool processFrame(AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             if (readFrames >= searchFrames) {
                 return false;
             }
@@ -3333,12 +3338,12 @@ namespace {
             const int pixelSize = av_pix_fmt_desc_get((AVPixelFormat)(frame->format))->comp[0].step;
             int frameCount = 0;
             if (pixelSize == 1) {
-                frameCount = addFrame<uint8_t>(frame);
+                frameCount = addFrame<uint8_t>(frame, statsPass, pass2);
             } else {
-                frameCount = addFrame<uint16_t>(frame);
+                frameCount = addFrame<uint16_t>(frame, statsPass, pass2);
             }
-            if (activeStatsPass != nullptr) {
-                activeStatsPass->frameValidCounts.push_back(frameCount);
+            if (statsPass != nullptr) {
+                statsPass->frameValidCounts.push_back(frameCount);
             }
 
             readFrames++;
