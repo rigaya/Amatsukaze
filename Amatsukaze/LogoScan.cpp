@@ -1886,9 +1886,6 @@ namespace {
         std::vector<uint8_t> frameWork8;
         std::vector<uint16_t> frameWork16;
         std::vector<AutoDetectStats> stats;
-        std::vector<AutoDetectStats> statsNeg;
-        std::vector<double> baselineDiffSum;
-        std::vector<double> baselineDiffW;
         std::vector<float> dedupSampleFgHistory;
         std::vector<uint8_t> dedupSampleCount;
         std::vector<uint8_t> dedupSamplePos;
@@ -1914,10 +1911,6 @@ namespace {
         std::vector<float> frameGateAnchorWeight;
         float frameGateAlphaP50;
         float frameGateRefDiffP50;
-        std::vector<float> framePresenceFeature;
-        std::vector<float> framePresenceValidRatio;
-        std::vector<float> framePresenceEvidence;
-        std::vector<float> framePosteriorLogo;
         int frameGateAcceptedFrames;
         int frameGateRejectedFrames;
         double frameGateWeightSum;
@@ -2099,7 +2092,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), frameWork8(), frameWork16(), stats(), statsNeg(), baselineDiffSum(), baselineDiffW(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), framePresenceFeature(), framePresenceValidRatio(), framePresenceEvidence(), framePosteriorLogo(), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), frameWork8(), frameWork16(), stats(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2143,10 +2136,6 @@ namespace {
             frameGateAcceptedFrames = 0;
             frameGateRejectedFrames = 0;
             frameGateWeightSum = 0.0;
-            framePresenceFeature.clear();
-            framePresenceValidRatio.clear();
-            framePresenceEvidence.clear();
-            framePosteriorLogo.clear();
             frameGateFrameDebug.clear();
         }
 
@@ -2667,9 +2656,6 @@ namespace {
                 frameWork8.shrink_to_fit();
             }
             stats.assign(scanw * scanh, AutoDetectStats());
-            statsNeg.assign(scanw * scanh, AutoDetectStats());
-            baselineDiffSum.assign(scanw * scanh, 0.0);
-            baselineDiffW.assign(scanw * scanh, 0.0);
             dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
             dedupSampleCount.assign(scanw * scanh, 0);
             dedupSamplePos.assign(scanw * scanh, 0);
@@ -2682,9 +2668,6 @@ namespace {
         void resetAccumulationState() {
             readFrames = 0;
             stats.assign(scanw * scanh, AutoDetectStats());
-            statsNeg.assign(scanw * scanh, AutoDetectStats());
-            baselineDiffSum.assign(scanw * scanh, 0.0);
-            baselineDiffW.assign(scanw * scanh, 0.0);
             dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
             dedupSampleCount.assign(scanw * scanh, 0);
             dedupSamplePos.assign(scanw * scanh, 0);
