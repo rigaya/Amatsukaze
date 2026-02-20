@@ -1203,13 +1203,14 @@ namespace {
 
     struct AutoDetectStats {
         double sumF, sumB, sumF2, sumB2, sumFB;
+        double sumW;
         int count;
         int observed;
         int fgTransition;
         int rejectedDedup;
         int totalCandidates;
         int rejectedExtreme;
-        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), count(0), observed(0), fgTransition(0), rejectedDedup(0), totalCandidates(0), rejectedExtreme(0) {}
+        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), sumW(0), count(0), observed(0), fgTransition(0), rejectedDedup(0), totalCandidates(0), rejectedExtreme(0) {}
     };
 
     static int ClampInt(const int v, const int minv, const int maxv) {
@@ -1228,6 +1229,11 @@ namespace {
 
     static float AutoCalcDist(const float a, const float b) {
         return (1.0f / 3.0f) * (a - 1.0f) * (a - 1.0f) + (a - 1.0f) * b + b * b;
+    }
+
+    static float Smoothstep01(const float t) {
+        const float x = std::max(0.0f, std::min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
     }
 
     static void BoxFilter3x3(std::vector<float>& dst, const std::vector<float>& src, const int w, const int h) {
@@ -1336,15 +1342,29 @@ namespace {
     }
 
     static bool TryGetAB(const AutoDetectStats& s, float& A, float& B) {
-        if (s.count < 8) {
+        if (s.count < 8 || s.sumW < 4.0) {
             return false;
         }
 
+        auto approxWeighted = [](const double n, const double sum_x, const double sum_y, const double sum_x2, const double sum_xy, double& a, double& b) {
+            const double temp = n * sum_x2 - sum_x * sum_x;
+            if (!std::isfinite(temp) || std::abs(temp) < 1e-12) {
+                return false;
+            }
+            a = (n * sum_xy - sum_x * sum_y) / temp;
+            b = (sum_x2 * sum_y - sum_x * sum_xy) / temp;
+            return std::isfinite(a) && std::isfinite(b);
+        };
+
         double A1, A2;
         double B1, B2;
-        logo::approxim_line(s.count, s.sumF, s.sumB, s.sumF2, s.sumFB, A1, B1);
-        logo::approxim_line(s.count, s.sumB, s.sumF, s.sumB2, s.sumFB, A2, B2);
-        if (std::abs(A2) < 1e-12) {
+        if (!approxWeighted(s.sumW, s.sumF, s.sumB, s.sumF2, s.sumFB, A1, B1)) {
+            return false;
+        }
+        if (!approxWeighted(s.sumW, s.sumB, s.sumF, s.sumB2, s.sumFB, A2, B2)) {
+            return false;
+        }
+        if (!std::isfinite(A2) || std::abs(A2) < 1e-12) {
             return false;
         }
 
@@ -1729,6 +1749,108 @@ namespace {
         }
     }
 
+    static float PercentileOfSorted(const std::vector<float>& sortedVals, const float p) {
+        if (sortedVals.empty()) {
+            return 0.0f;
+        }
+        const int idx = ClampInt((int)std::round((sortedVals.size() - 1) * std::max(0.0f, std::min(1.0f, p))), 0, (int)sortedVals.size() - 1);
+        return sortedVals[idx];
+    }
+
+    static bool ParseEnvBoolDefault(const char* name, const bool defaultValue) {
+        const char* v = std::getenv(name);
+        if (v == nullptr || v[0] == '\0') {
+            return defaultValue;
+        }
+        if (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "TRUE") == 0
+            || std::strcmp(v, "on") == 0 || std::strcmp(v, "ON") == 0 || std::strcmp(v, "yes") == 0 || std::strcmp(v, "YES") == 0) {
+            return true;
+        }
+        if (std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0 || std::strcmp(v, "FALSE") == 0
+            || std::strcmp(v, "off") == 0 || std::strcmp(v, "OFF") == 0 || std::strcmp(v, "no") == 0 || std::strcmp(v, "NO") == 0) {
+            return false;
+        }
+        return defaultValue;
+    }
+
+    static bool EstimateGaussianMixturePosterior1D(const std::vector<float>& samples, std::vector<float>& posteriorLogoOut) {
+        if (samples.size() < 32) {
+            return false;
+        }
+        std::vector<float> sorted = samples;
+        std::sort(sorted.begin(), sorted.end());
+        const float p15 = PercentileOfSorted(sorted, 0.15f);
+        const float p85 = PercentileOfSorted(sorted, 0.85f);
+        const float p50 = PercentileOfSorted(sorted, 0.50f);
+        const float m0Init = std::min(p15, p50);
+        const float m1Init = std::max(p85, p50 + 1e-4f);
+        double mean = 0.0;
+        for (const auto v : samples) {
+            mean += v;
+        }
+        mean /= samples.size();
+        double var = 0.0;
+        for (const auto v : samples) {
+            const double d = v - mean;
+            var += d * d;
+        }
+        var = std::max(1e-4, var / samples.size());
+        double m0 = m0Init;
+        double m1 = m1Init;
+        double v0 = std::max(2e-4, var * 0.5);
+        double v1 = std::max(2e-4, var * 0.5);
+        double pi1 = 0.5;
+
+        std::vector<double> gamma(samples.size(), 0.5);
+        for (int iter = 0; iter < 24; iter++) {
+            double sumGamma = 0.0;
+            double sumOneMinus = 0.0;
+            double sumGammaX = 0.0;
+            double sumOneMinusX = 0.0;
+            for (int i = 0; i < (int)samples.size(); i++) {
+                const double x = samples[i];
+                const double p1 = pi1 * std::exp(-0.5 * (x - m1) * (x - m1) / v1) / std::sqrt(v1);
+                const double p0 = (1.0 - pi1) * std::exp(-0.5 * (x - m0) * (x - m0) / v0) / std::sqrt(v0);
+                const double norm = std::max(1e-12, p0 + p1);
+                const double g = p1 / norm;
+                gamma[i] = g;
+                sumGamma += g;
+                sumOneMinus += (1.0 - g);
+                sumGammaX += g * x;
+                sumOneMinusX += (1.0 - g) * x;
+            }
+            if (sumGamma < 1e-3 || sumOneMinus < 1e-3) {
+                return false;
+            }
+            m1 = sumGammaX / sumGamma;
+            m0 = sumOneMinusX / sumOneMinus;
+            double numV1 = 0.0;
+            double numV0 = 0.0;
+            for (int i = 0; i < (int)samples.size(); i++) {
+                const double x = samples[i];
+                const double g = gamma[i];
+                numV1 += g * (x - m1) * (x - m1);
+                numV0 += (1.0 - g) * (x - m0) * (x - m0);
+            }
+            v1 = std::max(1e-4, numV1 / sumGamma);
+            v0 = std::max(1e-4, numV0 / sumOneMinus);
+            pi1 = std::max(0.05, std::min(0.95, sumGamma / samples.size()));
+        }
+
+        if (m1 < m0) {
+            for (auto& g : gamma) {
+                g = 1.0 - g;
+            }
+            std::swap(m0, m1);
+        }
+
+        posteriorLogoOut.resize(samples.size());
+        for (int i = 0; i < (int)samples.size(); i++) {
+            posteriorLogoOut[i] = (float)std::max(0.0, std::min(1.0, gamma[i]));
+        }
+        return true;
+    }
+
     class AutoDetectLogoReader : logo::SimpleVideoReader {
         const int serviceid;
         const int divx;
@@ -1752,11 +1874,17 @@ namespace {
         int radius;
         int bitDepth;
         int readFrames;
+        static constexpr int kScanEdgeMargin = 16;
         static constexpr int kDedupHistoryN = 4;
+        static constexpr bool kEnableTwoPassFrameGate = true;
+        const bool enableTwoPassFrameGate;
 
         std::vector<uint8_t> frameWork8;
         std::vector<uint16_t> frameWork16;
         std::vector<AutoDetectStats> stats;
+        std::vector<AutoDetectStats> statsNeg;
+        std::vector<double> baselineDiffSum;
+        std::vector<double> baselineDiffW;
         std::vector<float> dedupSampleFgHistory;
         std::vector<uint8_t> dedupSampleCount;
         std::vector<uint8_t> dedupSamplePos;
@@ -1776,6 +1904,49 @@ namespace {
         std::vector<float> mapAccepted;
         std::vector<uint8_t> validAB;
         std::vector<int> frameValidCounts;
+        int passIndex;
+        std::vector<int> frameGateOffsets;
+        std::vector<float> frameGateRefDiff;
+        std::vector<float> frameGateAnchorWeight;
+        float frameGateAlphaP50;
+        float frameGateRefDiffP50;
+        std::vector<float> framePresenceFeature;
+        std::vector<float> framePresenceValidRatio;
+        std::vector<float> framePresenceEvidence;
+        std::vector<float> framePosteriorLogo;
+        int frameGateAcceptedFrames;
+        int frameGateRejectedFrames;
+        double frameGateWeightSum;
+        struct FrameGateEval {
+            float frameWeight;
+            float validRatio;
+            float meanNorm;
+            float hitRatio;
+            float evidence;
+            float rejectBase;
+            float keepBase;
+            int validGatePoints;
+            int totalGatePoints;
+            FrameGateEval()
+                : frameWeight(1.0f), validRatio(1.0f), meanNorm(1.0f), hitRatio(1.0f), evidence(1.0f),
+                rejectBase(0.0f), keepBase(1.0f), validGatePoints(0), totalGatePoints(0) {}
+        };
+        struct FrameGateFrameDebug {
+            int pass;
+            int frameNo;
+            float frameWeight;
+            float validRatio;
+            float meanNorm;
+            float hitRatio;
+            float evidence;
+            float rejectBase;
+            float keepBase;
+            int validGatePoints;
+            int totalGatePoints;
+            int gateRejected;
+            int acceptedSamples;
+            float posteriorLogo;
+        };
         struct IterThresholdDebug {
             float highTh;
             float lowTh;
@@ -1860,6 +2031,7 @@ namespace {
         std::vector<PromoteCompDebug> promoteCompDebug;
         std::vector<DeltaCompDebug> deltaCompDebug;
         std::vector<RectMergeDebug> rectMergeDebug;
+        std::vector<FrameGateFrameDebug> frameGateFrameDebug;
         int debugAbsX;
         int debugAbsY;
 
@@ -1881,18 +2053,134 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), frameWork8(), frameWork16(), stats(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), frameWork8(), frameWork16(), stats(), statsNeg(), baselineDiffSum(), baselineDiffW(), dedupSampleFgHistory(), dedupSampleCount(), dedupSamplePos(), lastObservedFg(), lastObservedValid(), score(), binary(), mapA(), mapB(), mapAlpha(), mapLogoY(), mapConsistency(), mapFgVar(), mapBgVar(), mapTransitionRate(), mapKeepRate(), mapAccepted(), validAB(), frameValidCounts(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), framePresenceFeature(), framePresenceValidRatio(), framePresenceEvidence(), framePosteriorLogo(), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
             if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
                 THROW(RuntimeException, "Cancel requested");
             }
+            passIndex = 0;
+            frameGateOffsets.clear();
+            frameGateRefDiff.clear();
+            frameGateAnchorWeight.clear();
+            frameGateAlphaP50 = 0.12f;
+            frameGateRefDiffP50 = 0.03f;
+            frameGateAcceptedFrames = 0;
+            frameGateRejectedFrames = 0;
+            frameGateWeightSum = 0.0;
+            framePresenceFeature.clear();
+            framePresenceValidRatio.clear();
+            framePresenceEvidence.clear();
+            framePosteriorLogo.clear();
+            frameGateFrameDebug.clear();
             readAll(srcpath, serviceid);
             if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
                 THROW(RuntimeException, "No frame decoded");
             }
             estimateScoreAndRect();
+            const AutoDetectRect pass1RectAbs = rectAbs;
+            const AutoDetectRect pass1RectLocal = rectLocal;
+
+            if (enableTwoPassFrameGate && prepareSecondPassFrameGate()) {
+                passIndex = 1;
+                frameGateAcceptedFrames = 0;
+                frameGateRejectedFrames = 0;
+                frameGateWeightSum = 0.0;
+                framePresenceFeature.clear();
+                framePresenceValidRatio.clear();
+                framePresenceEvidence.clear();
+                framePosteriorLogo.clear();
+                resetAccumulationState();
+                if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
+                    THROW(RuntimeException, "Cancel requested");
+                }
+                readAll(srcpath, serviceid);
+                if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
+                    // 異常時は1pass結果を維持して返す。
+                    rectAbs = pass1RectAbs;
+                    rectLocal = pass1RectLocal;
+                    return rectAbs;
+                }
+                {
+                    bool posteriorReady = false;
+                    if (framePresenceFeature.size() >= 32 && framePresenceFeature.size() == framePresenceValidRatio.size() && framePresenceFeature.size() == framePresenceEvidence.size()) {
+                        std::vector<float> posterior;
+                        posteriorReady = EstimateGaussianMixturePosterior1D(framePresenceFeature, posterior);
+                        if (posteriorReady && posterior.size() == framePresenceFeature.size()) {
+                            framePosteriorLogo.resize(posterior.size());
+                            for (int i = 0; i < (int)posterior.size(); i++) {
+                                const float validBoost = 0.08f + 0.92f * Smoothstep01((framePresenceValidRatio[i] - 0.18f) / 0.55f);
+                                const float evidencePrior = Smoothstep01((framePresenceEvidence[i] - 0.08f) / 0.24f);
+                                const float p = posterior[i] * validBoost;
+                                framePosteriorLogo[i] = std::max(0.0f, std::min(1.0f, std::max(p, evidencePrior * 0.20f)));
+                            }
+                        }
+                    }
+                    if (!posteriorReady || framePosteriorLogo.size() != framePresenceFeature.size()) {
+                        framePosteriorLogo.assign(framePresenceFeature.size(), 0.0f);
+                        std::vector<float> sorted = framePresenceFeature;
+                        std::sort(sorted.begin(), sorted.end());
+                        const float p40 = PercentileOfSorted(sorted, 0.40f);
+                        const float p80 = PercentileOfSorted(sorted, 0.80f);
+                        for (int i = 0; i < (int)framePresenceFeature.size(); i++) {
+                            const float z = Smoothstep01((framePresenceFeature[i] - p40) / std::max(1e-4f, p80 - p40));
+                            const float validBoost = 0.08f + 0.92f * Smoothstep01((framePresenceValidRatio[i] - 0.18f) / 0.55f);
+                            framePosteriorLogo[i] = std::max(0.0f, std::min(1.0f, z * validBoost));
+                        }
+                    }
+                }
+                passIndex = 2;
+                frameGateAcceptedFrames = 0;
+                frameGateRejectedFrames = 0;
+                frameGateWeightSum = 0.0;
+                resetAccumulationState();
+                if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
+                    THROW(RuntimeException, "Cancel requested");
+                }
+                readAll(srcpath, serviceid);
+                if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
+                    rectAbs = pass1RectAbs;
+                    rectLocal = pass1RectLocal;
+                    return rectAbs;
+                }
+                // 保守: ゲートが厳しすぎてほぼ全フレーム棄却なら 1pass にフォールバック。
+                const int minAcceptedFrames = std::max(8, readFrames / 50);
+                if (frameGateAcceptedFrames >= minAcceptedFrames && frameGateWeightSum >= minAcceptedFrames * 0.70) {
+                    estimateScoreAndRect();
+                    if (pass1RectLocal.w > 0 && pass1RectLocal.h > 0 && rectLocal.w > 0 && rectLocal.h > 0) {
+                        const double pass1Area = (double)pass1RectLocal.w * pass1RectLocal.h;
+                        const double pass2Area = (double)rectLocal.w * rectLocal.h;
+                        const double areaRatio = pass2Area / std::max(1.0, pass1Area);
+                        const double wRatio = (double)rectLocal.w / std::max(1, pass1RectLocal.w);
+                        const double hRatio = (double)rectLocal.h / std::max(1, pass1RectLocal.h);
+
+                        const int l1 = pass1RectLocal.x;
+                        const int t1 = pass1RectLocal.y;
+                        const int r1 = pass1RectLocal.x + pass1RectLocal.w - 1;
+                        const int b1 = pass1RectLocal.y + pass1RectLocal.h - 1;
+                        const int l2 = rectLocal.x;
+                        const int t2 = rectLocal.y;
+                        const int r2 = rectLocal.x + rectLocal.w - 1;
+                        const int b2 = rectLocal.y + rectLocal.h - 1;
+                        const int iw = std::max(0, std::min(r1, r2) - std::max(l1, l2) + 1);
+                        const int ih = std::max(0, std::min(b1, b2) - std::max(t1, t2) + 1);
+                        const double inter = (double)iw * ih;
+                        const double uni = pass1Area + pass2Area - inter;
+                        const double iou = (uni > 1e-6) ? (inter / uni) : 0.0;
+
+                        const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20);
+                        const bool tooShift = (areaRatio > 1.20) && (iou < 0.35);
+                        if (tooLarge || tooShift) {
+                            rectAbs = pass1RectAbs;
+                            rectLocal = pass1RectLocal;
+                        }
+                    }
+                } else {
+                    rectAbs = pass1RectAbs;
+                    rectLocal = pass1RectLocal;
+                }
+            }
             return rectAbs;
         }
 
@@ -2169,6 +2457,32 @@ namespace {
                     fclose(frect);
                 }
             }
+            if (!frameGateFrameDebug.empty() && !binaryPathA.empty()) {
+                std::string csvPath = binaryPathA;
+                const size_t dot = csvPath.find_last_of('.');
+                if (dot == std::string::npos || dot == 0) {
+                    csvPath += ".framegate.csv";
+                } else {
+                    csvPath = csvPath.substr(0, dot) + ".framegate.csv";
+                }
+                FILE* fgate = fopen(csvPath.c_str(), "w");
+                if (fgate != nullptr) {
+                    const int procW = std::max(0, scanw - 2 * kScanEdgeMargin);
+                    const int procH = std::max(0, scanh - 2 * kScanEdgeMargin);
+                    const int procPixels = std::max(1, procW * procH);
+                    fprintf(fgate, "pass,frame,gate_rejected,weight,valid_ratio,mean_norm,hit_ratio,evidence,reject_base,keep_base,posterior_logo,valid_gate_points,total_gate_points,accepted_samples,accepted_ratio\n");
+                    for (const auto& d : frameGateFrameDebug) {
+                        const double sampleRatio = (double)d.acceptedSamples / procPixels;
+                        fprintf(fgate, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%.8f\n",
+                            d.pass, d.frameNo, d.gateRejected,
+                            d.frameWeight, d.validRatio, d.meanNorm, d.hitRatio, d.evidence,
+                            d.rejectBase, d.keepBase, d.posteriorLogo,
+                            d.validGatePoints, d.totalGatePoints,
+                            d.acceptedSamples, sampleRatio);
+                    }
+                    fclose(fgate);
+                }
+            }
         }
 
         int getReadFrames() const { return readFrames; }
@@ -2195,12 +2509,346 @@ namespace {
                 frameWork8.clear();
                 frameWork8.shrink_to_fit();
             }
-            stats.resize(scanw * scanh);
+            stats.assign(scanw * scanh, AutoDetectStats());
+            statsNeg.assign(scanw * scanh, AutoDetectStats());
+            baselineDiffSum.assign(scanw * scanh, 0.0);
+            baselineDiffW.assign(scanw * scanh, 0.0);
             dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
             dedupSampleCount.assign(scanw * scanh, 0);
             dedupSamplePos.assign(scanw * scanh, 0);
             lastObservedFg.assign(scanw * scanh, 0.0f);
             lastObservedValid.assign(scanw * scanh, 0);
+        }
+
+        void resetAccumulationState() {
+            readFrames = 0;
+            stats.assign(scanw * scanh, AutoDetectStats());
+            statsNeg.assign(scanw * scanh, AutoDetectStats());
+            baselineDiffSum.assign(scanw * scanh, 0.0);
+            baselineDiffW.assign(scanw * scanh, 0.0);
+            dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
+            dedupSampleCount.assign(scanw * scanh, 0);
+            dedupSamplePos.assign(scanw * scanh, 0);
+            lastObservedFg.assign(scanw * scanh, 0.0f);
+            lastObservedValid.assign(scanw * scanh, 0);
+            frameValidCounts.clear();
+            frameGateWeightSum = 0.0;
+        }
+
+        void pushFrameGateDebug(const FrameGateEval& eval, const bool gateRejected, const int acceptedSamples,
+            const float posteriorLogo = -1.0f) {
+            if (!detailedDebug) {
+                return;
+            }
+            const float posterior = (posteriorLogo >= 0.0f) ? std::max(0.0f, std::min(1.0f, posteriorLogo)) : eval.frameWeight;
+            frameGateFrameDebug.push_back(FrameGateFrameDebug{
+                passIndex + 1,
+                readFrames + 1,
+                eval.frameWeight,
+                eval.validRatio,
+                eval.meanNorm,
+                eval.hitRatio,
+                eval.evidence,
+                eval.rejectBase,
+                eval.keepBase,
+                eval.validGatePoints,
+                eval.totalGatePoints,
+                gateRejected ? 1 : 0,
+                acceptedSamples,
+                posterior
+                });
+        }
+
+        bool prepareSecondPassFrameGate() {
+            frameGateOffsets.clear();
+            frameGateRefDiff.clear();
+            frameGateAnchorWeight.clear();
+            frameGateAlphaP50 = 0.12f;
+            frameGateRefDiffP50 = 0.03f;
+            if (scanw <= 0 || scanh <= 0 || (int)binary.size() != scanw * scanh) {
+                return false;
+            }
+
+            const int upperYLimit = ClampInt((int)std::round(scanh * 0.62f), 0, std::max(0, scanh - 1));
+            int gateMinX = 0;
+            int gateMaxX = scanw - 1;
+            int gateMinY = 0;
+            int gateMaxY = upperYLimit;
+            if (rectLocal.w > 0 && rectLocal.h > 0) {
+                const int padX = std::max(16, (int)std::round(rectLocal.w * 0.80f));
+                const int padY = std::max(12, (int)std::round(rectLocal.h * 1.00f));
+                gateMinX = ClampInt(rectLocal.x - padX, 0, scanw - 1);
+                gateMaxX = ClampInt(rectLocal.x + rectLocal.w - 1 + padX, 0, scanw - 1);
+                gateMinY = ClampInt(rectLocal.y - padY, 0, scanh - 1);
+                gateMaxY = ClampInt(rectLocal.y + rectLocal.h - 1 + padY, 0, upperYLimit);
+                if (gateMaxX < gateMinX || gateMaxY < gateMinY) {
+                    gateMinX = 0;
+                    gateMaxX = scanw - 1;
+                    gateMinY = 0;
+                    gateMaxY = upperYLimit;
+                }
+            }
+
+            auto inGate = [&](const int x, const int y) {
+                return x >= gateMinX && x <= gateMaxX && y >= gateMinY && y <= gateMaxY;
+            };
+
+            std::vector<uint8_t> anchor(scanw * scanh, 0);
+            int anchorCount = 0;
+            for (int y = gateMinY; y <= gateMaxY; y++) {
+                for (int x = gateMinX; x <= gateMaxX; x++) {
+                    const int off = x + y * scanw;
+                    if (binary[off]) {
+                        anchor[off] = 1;
+                        anchorCount++;
+                    }
+                }
+            }
+
+            if (anchorCount < 24) {
+                std::vector<std::pair<float, int>> cand;
+                cand.reserve((gateMaxX - gateMinX + 1) * (gateMaxY - gateMinY + 1));
+                for (int y = gateMinY; y <= gateMaxY; y++) {
+                    for (int x = gateMinX; x <= gateMaxX; x++) {
+                        const int off = x + y * scanw;
+                        if (off >= (int)validAB.size() || !validAB[off]) continue;
+                        const float v = (off < (int)mapAccepted.size()) ? mapAccepted[off] : 0.0f;
+                        if (v <= 0.0f || !std::isfinite(v)) continue;
+                        cand.emplace_back(v, off);
+                    }
+                }
+                if (!cand.empty()) {
+                    const int take = std::min((int)cand.size(), 256);
+                    std::nth_element(cand.begin(), cand.begin() + take - 1, cand.end(),
+                        [](const auto& a, const auto& b) { return a.first > b.first; });
+                    for (int i = 0; i < take; i++) {
+                        anchor[cand[i].second] = 1;
+                    }
+                    anchorCount = 0;
+                    for (const auto v : anchor) {
+                        if (v) anchorCount++;
+                    }
+                }
+            }
+            if (anchorCount < 16) {
+                return false;
+            }
+
+            std::vector<uint8_t> dilated = anchor;
+            for (int y = gateMinY; y <= gateMaxY; y++) {
+                for (int x = gateMinX; x <= gateMaxX; x++) {
+                    const int off = x + y * scanw;
+                    if (!anchor[off]) continue;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            const int nx = x + dx;
+                            const int ny = y + dy;
+                            if (!inGate(nx, ny)) continue;
+                            dilated[nx + ny * scanw] = 1;
+                        }
+                    }
+                }
+            }
+
+            std::vector<float> anchorShapeRel(scanw * scanh, 1.0f);
+            {
+                std::vector<uint8_t> visited(scanw * scanh, 0);
+                std::queue<int> q;
+                for (int y = gateMinY; y <= gateMaxY; y++) {
+                    for (int x = gateMinX; x <= gateMaxX; x++) {
+                        const int start = x + y * scanw;
+                        if (!anchor[start] || visited[start]) continue;
+                        visited[start] = 1;
+                        q.push(start);
+                        int minX = x, minY = y, maxX = x, maxY = y;
+                        int area = 0;
+                        std::vector<int> pixels;
+                        pixels.reserve(64);
+                        while (!q.empty()) {
+                            const int cur = q.front();
+                            q.pop();
+                            pixels.push_back(cur);
+                            area++;
+                            const int cx = cur % scanw;
+                            const int cy = cur / scanw;
+                            minX = std::min(minX, cx);
+                            minY = std::min(minY, cy);
+                            maxX = std::max(maxX, cx);
+                            maxY = std::max(maxY, cy);
+                            for (int dy = -1; dy <= 1; dy++) {
+                                for (int dx = -1; dx <= 1; dx++) {
+                                    if (dx == 0 && dy == 0) continue;
+                                    const int nx = cx + dx;
+                                    const int ny = cy + dy;
+                                    if (nx < gateMinX || nx > gateMaxX || ny < gateMinY || ny > gateMaxY) continue;
+                                    const int nidx = nx + ny * scanw;
+                                    if (!anchor[nidx] || visited[nidx]) continue;
+                                    visited[nidx] = 1;
+                                    q.push(nidx);
+                                }
+                            }
+                        }
+                        const int compW = maxX - minX + 1;
+                        const int compH = maxY - minY + 1;
+                        float rel = 1.0f;
+                        if (area <= 4) rel *= 0.35f;
+                        else if (area <= 10) rel *= 0.55f;
+                        const int longEdge = std::max(compW, compH);
+                        const int shortEdge = std::max(1, std::min(compW, compH));
+                        if (longEdge >= 14 && shortEdge <= 2) rel *= 0.35f;
+                        const bool touchBorder = (minX <= gateMinX + 1) || (maxX >= gateMaxX - 1) || (minY <= gateMinY + 1) || (maxY >= gateMaxY - 1);
+                        if (touchBorder) rel *= 0.70f;
+                        const bool upperSmallBox = (maxY <= gateMinY + 24) && (compW <= 14) && (compH <= 14) && (area <= 28);
+                        if (upperSmallBox) rel *= 0.65f;
+                        rel = std::max(0.15f, std::min(1.0f, rel));
+                        for (const auto off : pixels) {
+                            anchorShapeRel[off] = std::min(anchorShapeRel[off], rel);
+                        }
+                    }
+                }
+            }
+
+            frameGateOffsets.reserve(scanw * scanh / 16);
+            for (int y = gateMinY; y <= gateMaxY; y++) {
+                for (int x = gateMinX; x <= gateMaxX; x++) {
+                    const int off = x + y * scanw;
+                    if (dilated[off]) {
+                        frameGateOffsets.push_back(off);
+                    }
+                }
+            }
+            if ((int)frameGateOffsets.size() < 16) {
+                frameGateOffsets.clear();
+                return false;
+            }
+            if ((int)frameGateOffsets.size() > 640) {
+                std::vector<int> sampled;
+                sampled.reserve(640);
+                const int n = (int)frameGateOffsets.size();
+                for (int k = 0; k < 640; k++) {
+                    const int idx = ClampInt((int)std::round((n - 1) * (k / 639.0)), 0, n - 1);
+                    sampled.push_back(frameGateOffsets[idx]);
+                }
+                frameGateOffsets.swap(sampled);
+            }
+
+            std::vector<float> alphaVals;
+            alphaVals.reserve(frameGateOffsets.size());
+            for (const int off : frameGateOffsets) {
+                if (off < 0 || off >= (int)mapAlpha.size()) continue;
+                const float a = std::max(0.0f, std::min(1.0f, mapAlpha[off]));
+                if (std::isfinite(a)) {
+                    alphaVals.push_back(a);
+                }
+            }
+            if (!alphaVals.empty()) {
+                std::sort(alphaVals.begin(), alphaVals.end());
+                frameGateAlphaP50 = alphaVals[alphaVals.size() / 2];
+            }
+            frameGateRefDiff.assign(frameGateOffsets.size(), 0.0f);
+            frameGateAnchorWeight.assign(frameGateOffsets.size(), 0.35f);
+            std::vector<float> refDiffVals;
+            refDiffVals.reserve(frameGateOffsets.size());
+            for (int idx = 0; idx < (int)frameGateOffsets.size(); idx++) {
+                const int off = frameGateOffsets[idx];
+                float refDiff = 0.0f;
+                if (off >= 0 && off < (int)stats.size()) {
+                    const auto& s = stats[off];
+                    if (s.sumW > 1e-6) {
+                        const float meanF = (float)(s.sumF / s.sumW);
+                        const float meanB = (float)(s.sumB / s.sumW);
+                        refDiff = std::max(0.0f, std::min(1.0f, std::abs(meanF - meanB)));
+                    }
+                }
+                const float accepted = (off >= 0 && off < (int)mapAccepted.size()) ? std::max(0.0f, std::min(1.0f, mapAccepted[off])) : 0.0f;
+                const float alpha = (off >= 0 && off < (int)mapAlpha.size()) ? std::max(0.0f, std::min(1.0f, mapAlpha[off])) : 0.0f;
+                const float shapeRel = (off >= 0 && off < (int)anchorShapeRel.size()) ? std::max(0.15f, std::min(1.0f, anchorShapeRel[off])) : 1.0f;
+                const float anchorWeight = std::max(0.08f, std::min(1.0f, (0.15f + 0.55f * std::sqrt(accepted) + 0.30f * alpha) * shapeRel));
+                frameGateRefDiff[idx] = refDiff;
+                frameGateAnchorWeight[idx] = anchorWeight;
+                if (refDiff > 0.0f) {
+                    refDiffVals.push_back(refDiff);
+                }
+            }
+            if (!refDiffVals.empty()) {
+                std::sort(refDiffVals.begin(), refDiffVals.end());
+                frameGateRefDiffP50 = refDiffVals[refDiffVals.size() / 2];
+            }
+            return true;
+        }
+
+        template<typename pixel_t>
+        FrameGateEval estimateSecondPassFrameEval(const std::vector<pixel_t>& frameWork, const float rawScale, const float thresholdRaw) const {
+            FrameGateEval eval{};
+            eval.totalGatePoints = (int)frameGateOffsets.size();
+            if (frameGateOffsets.empty()) {
+                return eval;
+            }
+            const float maxvRaw = std::max(1.0f, rawScale * 255.0f);
+            const float diffLow = std::max(0.45f * rawScale, thresholdRaw * 0.30f) / maxvRaw;
+            const float diffHigh = std::max(1.10f * rawScale, thresholdRaw * 0.80f) / maxvRaw;
+            double sumW = 0.0;
+            double sumNorm = 0.0;
+            double sumHit = 0.0;
+            int validGatePoints = 0;
+            for (int idx = 0; idx < (int)frameGateOffsets.size(); idx++) {
+                const int off = frameGateOffsets[idx];
+                if (off < 0 || off >= scanw * scanh) continue;
+                const int x = off % scanw;
+                const int y = off / scanw;
+                float bg = 0.0f;
+                if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
+                    continue;
+                }
+                validGatePoints++;
+                const float fgRaw = (float)frameWork[off];
+                const float diff = std::abs(fgRaw - bg) / maxvRaw;
+                const float refDiff = (idx < (int)frameGateRefDiff.size()) ? std::max(0.0f, std::min(1.0f, frameGateRefDiff[idx])) : 0.0f;
+                const float pointLow = std::max(diffLow, refDiff * 0.40f);
+                const float pointHigh = std::max(pointLow + 1e-4f, std::max(diffHigh, refDiff * 0.95f));
+                const float pointHit = pointLow + 0.25f * (pointHigh - pointLow);
+                const float diffNorm = std::max(0.0f, std::min(1.0f, (diff - pointLow) / (pointHigh - pointLow)));
+                const float hit = (diff >= pointHit) ? 1.0f : 0.0f;
+                float anchorW = 0.5f;
+                if (idx >= 0 && idx < (int)frameGateAnchorWeight.size()) {
+                    anchorW = std::max(0.10f, std::min(1.0f, frameGateAnchorWeight[idx]));
+                }
+                const double w = anchorW;
+                sumW += w;
+                sumNorm += w * diffNorm;
+                sumHit += w * hit;
+            }
+
+            const float validRatio = (float)validGatePoints / std::max(1, (int)frameGateOffsets.size());
+            eval.validRatio = validRatio;
+            eval.validGatePoints = validGatePoints;
+            if (sumW <= 1e-6 || validGatePoints < std::max(8, (int)frameGateOffsets.size() / 10)) {
+                eval.frameWeight = 0.0f;
+                eval.meanNorm = 0.0f;
+                eval.hitRatio = 0.0f;
+                eval.evidence = 0.0f;
+                eval.rejectBase = std::max(0.030f, std::min(0.160f, 0.020f + frameGateAlphaP50 * 0.16f));
+                eval.keepBase = std::max(eval.rejectBase + 0.025f, std::min(0.280f, eval.rejectBase + 0.10f + frameGateAlphaP50 * 0.16f));
+                return eval;
+            }
+
+            const float meanNorm = (float)(sumNorm / sumW);
+            const float hitRatio = (float)(sumHit / sumW);
+            const float evidence = std::max(0.0f, std::min(1.0f, meanNorm * 0.40f + hitRatio * 0.60f));
+            const float refGain = std::max(0.0f, std::min(1.0f, frameGateRefDiffP50 / 0.18f));
+            const float rejectBase = std::max(0.050f, std::min(0.240f, 0.055f + frameGateAlphaP50 * 0.10f + refGain * 0.12f));
+            const float keepBase = std::max(rejectBase + 0.050f, std::min(0.620f, rejectBase + 0.12f + refGain * 0.22f));
+            const float t = (evidence - rejectBase) / std::max(1e-4f, keepBase - rejectBase);
+            const float evidenceWeight = Smoothstep01(t);
+            const float validWeight = 0.20f + 0.80f * Smoothstep01((validRatio - 0.22f) / 0.58f);
+            const float frameWeight = evidenceWeight * validWeight;
+            eval.frameWeight = std::max(0.0f, std::min(1.0f, frameWeight));
+            eval.meanNorm = meanNorm;
+            eval.hitRatio = hitRatio;
+            eval.evidence = evidence;
+            eval.rejectBase = rejectBase;
+            eval.keepBase = keepBase;
+            return eval;
         }
 
         template<typename pixel_t>
@@ -2211,7 +2859,6 @@ namespace {
             const float invMaxv = 1.0f / std::max(1.0f, (float)maxv);
             const float rawScale = maxv / 255.0f;
             const float thresholdRaw = threshold * rawScale;
-            constexpr int kEdgeMargin = 16;
             auto& frameWork = [] (auto& w8, auto& w16) -> auto& {
                 if constexpr (std::is_same_v<pixel_t, uint8_t>) {
                     return w8;
@@ -2230,7 +2877,56 @@ namespace {
             const pixel_t* srcRoiBase = srcY + scanx + scany * pitchY;
             BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcRoiBase, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
 
+            float frameWeight = 1.0f;
+            double frameSampleWeightPos = 1.0;
+            double frameSampleWeightNeg = 0.0;
+            FrameGateEval gateEval{};
+            if (passIndex >= 1 && !frameGateOffsets.empty()) {
+                gateEval = estimateSecondPassFrameEval(frameWork, rawScale, thresholdRaw);
+                if (passIndex == 1) {
+                    const float feature = std::max(0.0f, std::min(1.0f, gateEval.evidence * (0.72f + 0.28f * Smoothstep01((gateEval.validRatio - 0.18f) / 0.55f))));
+                    framePresenceFeature.push_back(feature);
+                    framePresenceValidRatio.push_back(gateEval.validRatio);
+                    framePresenceEvidence.push_back(gateEval.evidence);
+                    gateEval.frameWeight = feature;
+                    frameGateWeightSum += feature;
+                    const bool reject = (feature < 0.03f) || (gateEval.validRatio < 0.10f && feature < 0.10f);
+                    if (reject) {
+                        frameGateRejectedFrames++;
+                    } else {
+                        frameGateAcceptedFrames++;
+                    }
+                    pushFrameGateDebug(gateEval, reject, 0, feature);
+                    return 0;
+                }
+                if (readFrames >= 0 && readFrames < (int)framePosteriorLogo.size()) {
+                    frameWeight = std::max(0.0f, std::min(1.0f, framePosteriorLogo[readFrames]));
+                } else {
+                    frameWeight = gateEval.frameWeight;
+                }
+                if (passIndex == 2) {
+                    frameSampleWeightPos = std::max(0.0, std::min(1.0, (double)frameWeight));
+                    frameSampleWeightNeg = std::max(0.0, std::min(1.0, 1.0 - (double)frameWeight));
+                }
+                gateEval.frameWeight = frameWeight;
+                const float gateScore = frameWeight;
+                bool rejectByGate = (frameWeight < 0.05f || (gateEval.validRatio < 0.16f && frameWeight < 0.12f));
+                frameGateWeightSum += gateScore;
+                if (rejectByGate) {
+                    frameGateRejectedFrames++;
+                    pushFrameGateDebug(gateEval, true, 0, frameWeight);
+                    return 0;
+                }
+                frameGateAcceptedFrames++;
+            }
+            if (frameSampleWeightPos <= 1e-6 && frameSampleWeightNeg <= 1e-6) {
+                pushFrameGateDebug(gateEval, false, 0, (passIndex == 2) ? frameWeight : -1.0f);
+                return 0;
+            }
+
             std::atomic<int> frameCount(0);
+            const double sampleWeightPos = frameSampleWeightPos;
+            const double sampleWeightNeg = frameSampleWeightNeg;
             // 同一点の重複サンプル抑制閾値。
             // 背景:
             //   レターボックス等で「ほぼ同じ fg/bg 組」が大量登録されると、
@@ -2247,12 +2943,13 @@ namespace {
             // RunParallelRange から渡される y0/y1 は 0 起点のローカル座標なので、
             // 実際の走査時に +kEdgeMargin して元の ROI 座標へ戻す。
             // これにより実処理範囲は従来どおり [kEdgeMargin, scanh-kEdgeMargin) となる。
-            RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kEdgeMargin), [&](int y0, int y1) {
-                for (int y = y0 + kEdgeMargin; y < y1 + kEdgeMargin; y++) {
-                    for (int x = kEdgeMargin; x < scanw - kEdgeMargin; x++) {
+            RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kScanEdgeMargin), [&](int y0, int y1) {
+                for (int y = y0 + kScanEdgeMargin; y < y1 + kScanEdgeMargin; y++) {
+                    for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
                     const int off = x + y * scanw;
                     const float fgRaw = (float)frameWork[off];
                     AutoDetectStats& s = stats[off];
+                    AutoDetectStats& sNeg = statsNeg[off];
                     s.observed++;
                     if (off < (int)lastObservedValid.size() && lastObservedValid[off]) {
                         if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
@@ -2299,14 +2996,32 @@ namespace {
                         s.rejectedExtreme++;
                         continue;
                     }
-                    s.sumF += f;
-                    s.sumB += b;
-                    s.sumF2 += f * f;
-                    s.sumB2 += b * b;
-                    s.sumFB += f * b;
-                    s.count++;
+                    if (sampleWeightPos <= 1e-6 && sampleWeightNeg <= 1e-6) {
+                        continue;
+                    }
+                    if (sampleWeightPos > 1e-6) {
+                        s.sumF += f * sampleWeightPos;
+                        s.sumB += b * sampleWeightPos;
+                        s.sumF2 += f * f * sampleWeightPos;
+                        s.sumB2 += b * b * sampleWeightPos;
+                        s.sumFB += f * b * sampleWeightPos;
+                        s.sumW += sampleWeightPos;
+                        s.count++;
+                    }
+                    if (sampleWeightNeg > 1e-6) {
+                        sNeg.sumF += f * sampleWeightNeg;
+                        sNeg.sumB += b * sampleWeightNeg;
+                        sNeg.sumF2 += f * f * sampleWeightNeg;
+                        sNeg.sumB2 += b * b * sampleWeightNeg;
+                        sNeg.sumFB += f * b * sampleWeightNeg;
+                        sNeg.sumW += sampleWeightNeg;
+                        sNeg.count++;
+                        const double baselineWeight = sampleWeightNeg * (0.35 + 0.65 * sampleWeightNeg);
+                        baselineDiffSum[off] += (f - b) * baselineWeight;
+                        baselineDiffW[off] += baselineWeight;
+                    }
                     // 採用したサンプルを次回重複判定用に記録。
-                    if (off < (int)dedupSampleCount.size() && off < (int)dedupSamplePos.size()) {
+                    if (sampleWeightPos >= 0.35 && off < (int)dedupSampleCount.size() && off < (int)dedupSamplePos.size()) {
                         const int base = off * kDedupHistoryN;
                         const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
                         dedupSampleFgHistory[base + writePos] = fgRaw;
@@ -2319,7 +3034,9 @@ namespace {
                 }
                 }
                 }, 4);
-            return frameCount.load(std::memory_order_relaxed);
+            const int outCount = frameCount.load(std::memory_order_relaxed);
+            pushFrameGateDebug(gateEval, false, outCount, (passIndex == 2) ? frameWeight : -1.0f);
+            return outCount;
         }
 
         /* virtual */ bool onFrame(AVFrame* frame) override {
@@ -2396,8 +3113,12 @@ namespace {
                             mapAlpha[i] = std::max(0.0f, std::min(1.0f, alpha));
                             mapLogoY[i] = std::max(0.0f, std::min(1.0f, logoY));
 
+                            auto sat01 = [](const double v) {
+                                return std::max(0.0, std::min(1.0, v));
+                            };
                             const auto& s = stats[i];
-                            const double invN = (s.count > 0) ? 1.0 / s.count : 0.0;
+                            const auto& sNeg = statsNeg[i];
+                            const double invN = (s.sumW > 1e-6) ? 1.0 / s.sumW : 0.0;
                             const double meanF = s.sumF * invN;
                             const double meanBg = s.sumB * invN;
                             const double meanDiff = meanF - meanBg;
@@ -2418,20 +3139,54 @@ namespace {
                             mapKeepRate[i] = (float)keepRate;
 
                             const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
-                            const double alphaGain = std::max(0.0, std::min(1.0, (alpha - 0.005) / 0.30));
-                            const double logoGain = std::max(0.0, std::min(1.0, (logoY - 0.45) / 0.30));
-                            const double diffGain = std::max(0.0, std::min(1.0, meanDiff / 0.12));
-                            const double consistencyGain = std::max(0.0, std::min(1.0, (consistency - 0.35) / 1.65));
-                            const double bgGain = std::max(0.0, std::min(1.0, (0.080 - varBg) / 0.080));
-                            const double extremeGain = std::max(0.0, std::min(1.0, 1.0 - extremeRejectRatio));
+                            const double alphaGain = sat01((alpha - 0.005) / 0.30);
+                            const double logoGain = sat01((logoY - 0.45) / 0.30);
+                            const double consistencyGain = sat01((consistency - 0.35) / 1.65);
+                            const double bgGain = sat01((0.080 - varBg) / 0.080);
+                            const double extremeGain = sat01(1.0 - extremeRejectRatio);
+
+                            // 正例(ロゴあり)と負例(ロゴなし)の二重統計で、差分のみを評価する。
+                            // 低確率フレームbaselineも併用して、長時間固定の不透明文字を抑制する。
+                            double negMeanDiff = 0.0;
+                            double negVarBg = varBg;
+                            if (sNeg.sumW > 1e-6) {
+                                const double invNeg = 1.0 / sNeg.sumW;
+                                const double negMeanF = sNeg.sumF * invNeg;
+                                const double negMeanB = sNeg.sumB * invNeg;
+                                negMeanDiff = negMeanF - negMeanB;
+                                negVarBg = std::max(0.0, sNeg.sumB2 * invNeg - negMeanB * negMeanB);
+                            }
+                            float negA = 0.0f, negB = 0.0f;
+                            bool negAlphaValid = false;
+                            float negAlpha = 0.0f, negLogoY = 0.0f;
+                            if (TryGetAB(sNeg, negA, negB) && TryGetAlphaLogo(negA, negB, negAlpha, negLogoY)) {
+                                negAlphaValid = true;
+                                negAlpha = std::max(0.0f, std::min(1.0f, negAlpha));
+                            }
+                            const double negSupport = Smoothstep01((float)((sNeg.sumW - 2.5) / 10.0));
+                            const double baselineMeanDiff = (i < (int)baselineDiffW.size() && baselineDiffW[i] > 1e-6)
+                                ? baselineDiffSum[i] / baselineDiffW[i]
+                                : negMeanDiff;
+                            const double baselineSupport = (i < (int)baselineDiffW.size())
+                                ? Smoothstep01((float)((baselineDiffW[i] - 2.5) / 10.0))
+                                : 0.0;
+                            const double negDiffComp = std::max(std::max(0.0, negMeanDiff) * negSupport, std::max(0.0, baselineMeanDiff) * baselineSupport);
+                            const double negAlphaGain = negAlphaValid ? sat01((negAlpha - 0.20) / 0.55) : 0.0;
+                            const double subGainAlpha = Smoothstep01((float)((alpha - 0.28) / 0.58));
+                            const double subGain = 0.10 + 0.90 * subGainAlpha * (0.30 + 0.70 * negAlphaGain);
+                            const double residualDiff = meanDiff - negDiffComp * subGain;
+                            const double residualBgGain = sat01((0.080 - std::max(varBg, negVarBg)) / 0.080);
+                            const double diffGainRaw = sat01((meanDiff - 0.003) / 0.120);
+                            const double residualGain = sat01((residualDiff - 0.001) / 0.105);
+                            const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw) * (0.35 + 0.65 * residualBgGain));
+                            const double lowTransition = sat01((0.10 - transitionRate) / 0.10);
+                            const double lowKeep = sat01((0.08 - keepRate) / 0.08);
+                            const double staticStrength = std::sqrt(lowTransition * lowKeep);
                             // 不透明固定文字の事前ゲート(保守的):
                             // 下側帯域に限定し、かつ keep/transition がともに低い強条件のみ除外する。
                             // ロゴ欠落を避けるため、上側のロゴ帯にはゲートを適用しない。
                             if (varBg >= 0.0012 && alpha > 0.62) {
-                                const double lowTransition = std::max(0.0, std::min(1.0, (0.10 - transitionRate) / 0.10));
-                                const double lowKeep = std::max(0.0, std::min(1.0, (0.08 - keepRate) / 0.08));
-                                const double staticStrength = std::sqrt(lowTransition * lowKeep);
-                                const double lowerBand = std::max(0.0, std::min(1.0, (yRatio - 0.28) / 0.30));
+                                const double lowerBand = sat01((yRatio - 0.28) / 0.30);
                                 const bool gateByStaticPair = (lowerBand > 0.0) && (staticStrength > 0.88);
                                 const bool gateByLockedKeep = (lowerBand > 0.35) && (keepRate < 0.020);
                                 if (gateByStaticPair || gateByLockedKeep) {
@@ -2442,21 +3197,21 @@ namespace {
                             // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
                             double temporalGain = 1.0;
                             if (varBg >= 0.0012) {
-                                const double ratioGain = std::max(0.0, std::min(1.0, (fgBgVarRatio - 0.08) / 0.44));
+                                const double ratioGain = sat01((fgBgVarRatio - 0.08) / 0.44);
                                 temporalGain = 0.85 + 0.15 * ratioGain;
                             }
                             double opaquePenalty = 1.0;
                             if (alpha > 0.68) {
-                                const double alphaOpaque = std::max(0.0, std::min(1.0, (alpha - 0.68) / 0.22));
-                                const double temporalOpaque = (varBg >= 0.0012) ? std::max(0.0, std::min(1.0, (0.22 - fgBgVarRatio) / 0.22)) : 0.0;
+                                const double alphaOpaque = sat01((alpha - 0.68) / 0.22);
+                                const double temporalOpaque = (varBg >= 0.0012) ? sat01((0.22 - fgBgVarRatio) / 0.22) : 0.0;
                                 const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
                                 opaquePenalty = 1.0 / penaltyScale;
                             }
                             double opaqueStaticPenalty = 1.0;
                             if (alpha > 0.55 && varBg >= 0.0012) {
-                                const double alphaOpaque = std::max(0.0, std::min(1.0, (alpha - 0.55) / 0.35));
-                                const double lowTransition = std::max(0.0, std::min(1.0, (0.09 - transitionRate) / 0.09));
-                                const double lowKeep = std::max(0.0, std::min(1.0, (0.07 - keepRate) / 0.07));
+                                const double alphaOpaque = sat01((alpha - 0.55) / 0.35);
+                                const double lowTransition = sat01((0.09 - transitionRate) / 0.09);
+                                const double lowKeep = sat01((0.07 - keepRate) / 0.07);
                                 const double staticness = std::max(lowTransition, lowKeep);
                                 const double penaltyScale = 1.0 + alphaOpaque * (0.25 + 1.75 * staticness);
                                 opaqueStaticPenalty = 1.0 / penaltyScale;
