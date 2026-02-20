@@ -1949,7 +1949,10 @@ namespace {
         };
 
         ScoreStageBuffers debugScore;
-        std::vector<uint8_t> binary;
+        struct BinaryStageBuffers {
+            std::vector<uint8_t> binary;
+        };
+        std::vector<uint8_t> debugBinary;
         int passIndex;
         std::vector<int> frameGateOffsets;
         std::vector<float> frameGateRefDiff;
@@ -2113,11 +2116,11 @@ namespace {
         bool getMaskRect(const std::vector<uint8_t>& mask, int& minX, int& minY, int& maxX, int& maxY) const;
         int countMaskOn(const std::vector<uint8_t>& mask) const;
         void buildBinaryFromThreshold(const ScoreStageBuffers& scoreStage, const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
-        void pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage);
-        void applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage);
+        void pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
+        void applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
 
-        void collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn) const;
-        void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage);
+        void collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn, const BinaryStageBuffers& binaryStage) const;
+        void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage);
         AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
@@ -2137,7 +2140,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), debugScore(), binary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), activeStatsPass(nullptr), debugStats(), debugScore(), debugBinary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, pass2LogoRectAbs{ 0, 0, 0, 0 }, pass2LogoScan(), pass2DeintLogo(), pass2Corr0(), pass2Corr1(), pass2EvalDeint(), pass2EvalWork(), pass2FrameMask(), pass2AcceptedFrames(0), pass2SkippedFrames(0) {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2170,6 +2173,7 @@ namespace {
             activeStatsPass = nullptr;
             debugStats.clear();
             debugScore = ScoreStageBuffers{};
+            debugBinary.clear();
             pass2LogoScan.reset();
             pass2DeintLogo.reset();
             pass2Corr0.clear();
@@ -2409,7 +2413,7 @@ namespace {
             if (!binaryPathA.empty()) {
                 WriteGrayBitmap(binaryPathA, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    return (off < (int)binary.size() && binary[off]) ? 255 : 0;
+                    return (off < (int)debugBinary.size() && debugBinary[off]) ? 255 : 0;
                 });
             }
             if (!cclPathA.empty()) {
@@ -2418,7 +2422,7 @@ namespace {
                     const bool hasRect = rectLocal.w > 0 && rectLocal.h > 0;
                     const bool onBorder = hasRect && (x == rectLocal.x || x == rectLocal.x + rectLocal.w - 1 || y == rectLocal.y || y == rectLocal.h + rectLocal.y - 1);
                     if (onBorder) return (uint8_t)255;
-                    return (off < (int)binary.size() && binary[off]) ? (uint8_t)190 : (uint8_t)24;
+                    return (off < (int)debugBinary.size() && debugBinary[off]) ? (uint8_t)190 : (uint8_t)24;
                 });
             }
 
@@ -2763,7 +2767,7 @@ namespace {
             frameGateAlphaP50 = 0.12f;
             frameGateRefDiffP50 = 0.03f;
             // 入力が不正な場合はゲート構築を行わない。
-            if (scanw <= 0 || scanh <= 0 || (int)binary.size() != scanw * scanh) {
+            if (scanw <= 0 || scanh <= 0 || (int)debugBinary.size() != scanw * scanh) {
                 return false;
             }
 
@@ -2821,7 +2825,7 @@ namespace {
             for (int y = region.minY; y <= region.maxY; y++) {
                 for (int x = region.minX; x <= region.maxX; x++) {
                     const int off = x + y * scanw;
-                    if (binary[off]) {
+                    if (debugBinary[off]) {
                         anchor[off] = 1;
                         anchorCount++;
                     }
@@ -3352,14 +3356,16 @@ namespace {
             float thHigh = 0.0f;
             float thLow = 0.0f;
             ScoreStageBuffers scoreStage{};
+            BinaryStageBuffers binaryStage{};
 
             runScoreStage(statsPass, scoreStage, thHigh, thLow);
 
-            runBinaryStage(scoreStage, thHigh, thLow);
+            runBinaryStage(scoreStage, binaryStage, thHigh, thLow);
 
-            runRectStage(scoreStage);
+            runRectStage(scoreStage, binaryStage);
             debugStats = statsPass.stats;
             debugScore = std::move(scoreStage);
+            debugBinary = std::move(binaryStage.binary);
         }
 
         // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
@@ -3572,8 +3578,8 @@ namespace {
             }
         }
 
-        void runBinaryStage(const ScoreStageBuffers& scoreStage, const float thHigh, const float thLow);
-        void runRectStage(const ScoreStageBuffers& scoreStage);
+        void runBinaryStage(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage, const float thHigh, const float thLow);
+        void runRectStage(const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage);
     };
 }
 
@@ -3880,9 +3886,9 @@ namespace {
     }
 
     // binary 連結成分から anchor を選び、近縁成分のみ残してノイズを除去する。
-    void AutoDetectLogoReader::pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage) {
+    void AutoDetectLogoReader::pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage) {
         // prune 前状態を保持し、削りすぎ時にロールバックできるようにする。
-        std::vector<uint8_t> prePruneBinary = binary;
+        std::vector<uint8_t> prePruneBinary = binaryStage.binary;
         const int prePruneOn = countMaskOn(prePruneBinary);
         int preMinX = 0, preMinY = 0, preMaxX = -1, preMaxY = -1;
         const bool hasPreRect = getMaskRect(prePruneBinary, preMinX, preMinY, preMaxX, preMaxY);
@@ -3915,7 +3921,7 @@ namespace {
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int start = x + y * scanw;
-                if (!binary[start] || visited[start]) continue;
+                if (!binaryStage.binary[start] || visited[start]) continue;
                 visited[start] = 1;
                 q.push(start);
                 BinaryComp comp{};
@@ -3949,7 +3955,7 @@ namespace {
                             const int ny = cy + dy;
                             if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
                             const int nidx = nx + ny * scanw;
-                            if (!binary[nidx] || visited[nidx]) continue;
+                            if (!binaryStage.binary[nidx] || visited[nidx]) continue;
                             visited[nidx] = 1;
                             q.push(nidx);
                         }
@@ -4115,14 +4121,14 @@ namespace {
                     }
                 }
                 hasAnchorBandStat = true;
-                binary.swap(filtered);
+                binaryStage.binary.swap(filtered);
             }
         }
 
         // 削りすぎ判定に引っかかった場合は prune 前へ戻す。
-        const int postPruneOn = countMaskOn(binary);
+        const int postPruneOn = countMaskOn(binaryStage.binary);
         int postMinX = 0, postMinY = 0, postMaxX = -1, postMaxY = -1;
-        const bool hasPostRect = getMaskRect(binary, postMinX, postMinY, postMaxX, postMaxY);
+        const bool hasPostRect = getMaskRect(binaryStage.binary, postMinX, postMinY, postMaxX, postMaxY);
         if (prePruneOn > 0 && hasPreRect) {
             bool revertPrune = false;
             if (postPruneOn <= 0 || !hasPostRect) {
@@ -4147,17 +4153,17 @@ namespace {
                 }
             }
             if (revertPrune) {
-                binary.swap(prePruneBinary);
+                binaryStage.binary.swap(prePruneBinary);
             }
         }
     }
 
     // binary が空になったときのみ、mapAccepted 上位点から最小限の復旧を行う。
-    void AutoDetectLogoReader::applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage) {
+    void AutoDetectLogoReader::applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage) {
         // 既に画素が残っている場合はフォールバック不要。
         int binaryOnCount = 0;
         for (int i = 0; i < scanw * scanh; i++) {
-            if (binary[i]) binaryOnCount++;
+            if (binaryStage.binary[i]) binaryOnCount++;
         }
         if (binaryOnCount > 0) {
             return;
@@ -4185,7 +4191,7 @@ namespace {
             if (!scoreStage.validAB[i]) continue;
             const double consistencyNorm = std::max(0.0, std::min(1.0, (scoreStage.mapConsistency[i] - 0.30) / 1.70));
             if (scoreStage.mapAccepted[i] >= fbTh && (scoreStage.mapAlpha[i] >= 0.015f || consistencyNorm >= 0.20)) {
-                binary[i] = 1;
+                binaryStage.binary[i] = 1;
             }
         }
     }
@@ -4196,15 +4202,15 @@ namespace {
     // - low側の飛び地を近縁条件で昇格
     // - 反復的な閾値緩和とdelta近縁判定で取りこぼしを補完
     // - 帯ノイズ/全消し時のフォールバックを適用
-    void AutoDetectLogoReader::runBinaryStage(const ScoreStageBuffers& scoreStage, const float thHigh, const float thLow) {
+    void AutoDetectLogoReader::runBinaryStage(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage, const float thHigh, const float thLow) {
         // 初回2値化（基準となる「最初の領域」）
         BuildBinaryDiag baseDiag{};
         if (detailedDebug) {
             promoteCompDebug.clear();
             deltaCompDebug.clear();
         }
-        buildBinaryFromThreshold(scoreStage, 0, thHigh, thLow, binary, &baseDiag);
-        std::vector<uint8_t> acceptedBinary = binary;
+        buildBinaryFromThreshold(scoreStage, 0, thHigh, thLow, binaryStage.binary, &baseDiag);
+        std::vector<uint8_t> acceptedBinary = binaryStage.binary;
         if (detailedDebug) {
             iterBinaryHistory.clear();
             iterThresholdDebug.clear();
@@ -4219,7 +4225,7 @@ namespace {
         }
 
         int initMinX = 0, initMinY = 0, initMaxX = -1, initMaxY = -1;
-        const bool hasInitRect = getMaskRect(binary, initMinX, initMinY, initMaxX, initMaxY);
+        const bool hasInitRect = getMaskRect(binaryStage.binary, initMinX, initMinY, initMaxX, initMaxY);
         const int initW = hasInitRect ? (initMaxX - initMinX + 1) : 0;
         const int initH = hasInitRect ? (initMaxY - initMinY + 1) : 0;
 
@@ -4422,21 +4428,21 @@ namespace {
                     });
             }
         }
-        binary.swap(acceptedBinary);
+        binaryStage.binary.swap(acceptedBinary);
 
         // 反復閾値調整後の最終ノイズ抑制と空マスク救済を適用する。
-        pruneBinaryByAnchor(scoreStage);
-        applyBinaryFallbackIfEmpty(scoreStage);
+        pruneBinaryByAnchor(scoreStage, binaryStage);
+        applyBinaryFallbackIfEmpty(scoreStage, binaryStage);
     }
 
     // binary の x/y 投影を作る。
     // ON画素が存在する列/行をフラグ化し、矩形候補探索で使う。
-    void AutoDetectLogoReader::collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn) const {
+    void AutoDetectLogoReader::collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn, const BinaryStageBuffers& binaryStage) const {
         // 全画素を走査し、binary ON に対応する x/y を立てる。
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int off = x + y * scanw;
-                if (!binary[off]) continue;
+                if (!binaryStage.binary[off]) continue;
                 xOn[x] = 1;
                 yOn[y] = 1;
             }
@@ -4445,7 +4451,7 @@ namespace {
 
     // binary 連結成分を列挙し、矩形候補と結合候補を収集する。
     // 同時に最良候補(best)をスコア最大で更新する。
-    void AutoDetectLogoReader::collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage) {
+    void AutoDetectLogoReader::collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage) {
         // 連結成分 BFS に必要なワークを初期化する。
         std::vector<uint8_t> visited(scanw * scanh, 0);
         std::queue<int> q;
@@ -4453,7 +4459,7 @@ namespace {
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int start = x + y * scanw;
-                if (!binary[start] || visited[start]) continue;
+                if (!binaryStage.binary[start] || visited[start]) continue;
                 visited[start] = 1;
                 q.push(start);
                 int minX = x, maxX = x, minY = y, maxY = y, area = 0;
@@ -4477,7 +4483,7 @@ namespace {
                             continue;
                         }
                         const int nidx = nx[i] + ny[i] * scanw;
-                        if (!binary[nidx]) {
+                        if (!binaryStage.binary[nidx]) {
                             perimeter++;
                             continue;
                         }
@@ -4691,12 +4697,12 @@ namespace {
     // - 連結成分を抽出し、形状フィルタで帯ノイズを除去
     // - 最良成分をseedに近傍成分を段階結合して文字分断を復元
     // - margin付与・サイズ制約・偶数丸めを行い最終座標(rectAbs)へ変換
-    void AutoDetectLogoReader::runRectStage(const ScoreStageBuffers& scoreStage) {
+    void AutoDetectLogoReader::runRectStage(const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage) {
         if (detailedDebug) {
             rectMergeDebug.clear();
         }
         std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
-        collectBinaryProjection(xOn, yOn);
+        collectBinaryProjection(xOn, yOn, binaryStage);
 
         if (cb && !cb(3, 0.3f, 0.78f, readFrames, searchFrames)) {
             THROW(RuntimeException, "Cancel requested");
@@ -4717,7 +4723,7 @@ namespace {
         double bestScore = -1e30;
         std::vector<RectStageCompCandidate> candidates;
         std::vector<RectStageCompCandidate> mergeCandidates;
-        collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore, scoreStage);
+        collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore, scoreStage, binaryStage);
 
         // 位置決定は binary成分のみで行う。
         AutoDetectRect finalRect = hasBest ? best : coarse;
