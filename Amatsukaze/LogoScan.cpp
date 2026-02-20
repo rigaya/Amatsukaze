@@ -1964,44 +1964,6 @@ namespace {
         };
         std::vector<uint8_t> debugBinary;
         int passIndex;
-        std::vector<int> frameGateOffsets;
-        std::vector<float> frameGateRefDiff;
-        std::vector<float> frameGateAnchorWeight;
-        float frameGateAlphaP50;
-        float frameGateRefDiffP50;
-        int frameGateAcceptedFrames;
-        int frameGateRejectedFrames;
-        double frameGateWeightSum;
-        struct FrameGateEval {
-            float frameWeight;
-            float validRatio;
-            float meanNorm;
-            float hitRatio;
-            float evidence;
-            float rejectBase;
-            float keepBase;
-            int validGatePoints;
-            int totalGatePoints;
-            FrameGateEval()
-                : frameWeight(1.0f), validRatio(1.0f), meanNorm(1.0f), hitRatio(1.0f), evidence(1.0f),
-                rejectBase(0.0f), keepBase(1.0f), validGatePoints(0), totalGatePoints(0) {}
-        };
-        struct FrameGateFrameDebug {
-            int pass;
-            int frameNo;
-            float frameWeight;
-            float validRatio;
-            float meanNorm;
-            float hitRatio;
-            float evidence;
-            float rejectBase;
-            float keepBase;
-            int validGatePoints;
-            int totalGatePoints;
-            int gateRejected;
-            int acceptedSamples;
-            float posteriorLogo;
-        };
         struct IterThresholdDebug {
             float highTh;
             float lowTh;
@@ -2086,7 +2048,6 @@ namespace {
         std::vector<PromoteCompDebug> promoteCompDebug;
         std::vector<DeltaCompDebug> deltaCompDebug;
         std::vector<RectMergeDebug> rectMergeDebug;
-        std::vector<FrameGateFrameDebug> frameGateFrameDebug;
         int debugAbsX;
         int debugAbsY;
 
@@ -2103,12 +2064,6 @@ namespace {
             std::vector<uint8_t> frameMask;
             int acceptedFrames = 0;
             int skippedFrames = 0;
-        };
-        struct FrameGateRegion {
-            int minX;
-            int maxX;
-            int minY;
-            int maxY;
         };
 
         struct BuildBinaryDiag {
@@ -2151,7 +2106,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), debugStats(), debugScore(), debugBinary(), passIndex(0), frameGateOffsets(), frameGateRefDiff(), frameGateAnchorWeight(), frameGateAlphaP50(0.12f), frameGateRefDiffP50(0.03f), frameGateAcceptedFrames(0), frameGateRejectedFrames(0), frameGateWeightSum(0.0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), frameGateFrameDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), debugStats(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2187,15 +2142,6 @@ namespace {
             debugStats.clear();
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
-            frameGateOffsets.clear();
-            frameGateRefDiff.clear();
-            frameGateAnchorWeight.clear();
-            frameGateAlphaP50 = 0.12f;
-            frameGateRefDiffP50 = 0.03f;
-            frameGateAcceptedFrames = 0;
-            frameGateRejectedFrames = 0;
-            frameGateWeightSum = 0.0;
-            frameGateFrameDebug.clear();
         }
 
         AutoDetectRect expandPass1RectForSecondPass(const AutoDetectRect& inRect) const {
@@ -2658,32 +2604,6 @@ namespace {
                     fclose(frect);
                 }
             }
-            if (!frameGateFrameDebug.empty() && !binaryPathA.empty()) {
-                std::string csvPath = binaryPathA;
-                const size_t dot = csvPath.find_last_of('.');
-                if (dot == std::string::npos || dot == 0) {
-                    csvPath += ".framegate.csv";
-                } else {
-                    csvPath = csvPath.substr(0, dot) + ".framegate.csv";
-                }
-                FILE* fgate = fopen(csvPath.c_str(), "w");
-                if (fgate != nullptr) {
-                    const int procW = std::max(0, scanw - 2 * kScanEdgeMargin);
-                    const int procH = std::max(0, scanh - 2 * kScanEdgeMargin);
-                    const int procPixels = std::max(1, procW * procH);
-                    fprintf(fgate, "pass,frame,gate_rejected,weight,valid_ratio,mean_norm,hit_ratio,evidence,reject_base,keep_base,posterior_logo,valid_gate_points,total_gate_points,accepted_samples,accepted_ratio\n");
-                    for (const auto& d : frameGateFrameDebug) {
-                        const double sampleRatio = (double)d.acceptedSamples / procPixels;
-                        fprintf(fgate, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%.8f\n",
-                            d.pass, d.frameNo, d.gateRejected,
-                            d.frameWeight, d.validRatio, d.meanNorm, d.hitRatio, d.evidence,
-                            d.rejectBase, d.keepBase, d.posteriorLogo,
-                            d.validGatePoints, d.totalGatePoints,
-                            d.acceptedSamples, sampleRatio);
-                    }
-                    fclose(fgate);
-                }
-            }
         }
 
         int getReadFrames() const { return readFrames; }
@@ -2731,400 +2651,10 @@ namespace {
             if (statsPass != nullptr && scanw > 0 && scanh > 0) {
                 statsPass->reset(scanw, scanh, bitDepth);
             }
-            frameGateWeightSum = 0.0;
             if (pass2 != nullptr) {
                 pass2->acceptedFrames = 0;
                 pass2->skippedFrames = 0;
             }
-        }
-
-        void pushFrameGateDebug(const FrameGateEval& eval, const bool gateRejected, const int acceptedSamples,
-            const float posteriorLogo = -1.0f) {
-            if (!detailedDebug) {
-                return;
-            }
-            const float posterior = (posteriorLogo >= 0.0f) ? std::max(0.0f, std::min(1.0f, posteriorLogo)) : eval.frameWeight;
-            frameGateFrameDebug.push_back(FrameGateFrameDebug{
-                passIndex + 1,
-                readFrames + 1,
-                eval.frameWeight,
-                eval.validRatio,
-                eval.meanNorm,
-                eval.hitRatio,
-                eval.evidence,
-                eval.rejectBase,
-                eval.keepBase,
-                eval.validGatePoints,
-                eval.totalGatePoints,
-                gateRejected ? 1 : 0,
-                acceptedSamples,
-                posterior
-                });
-        }
-
-        // pass2用フレームゲートの基準点を準備する。
-        // pass1で得た binary/score から「判定に使う画素集合」と重みを構成する。
-        bool prepareSecondPassFrameGate() {
-            // 前回のゲート状態をクリアし、初期閾値へ戻す。
-            frameGateOffsets.clear();
-            frameGateRefDiff.clear();
-            frameGateAnchorWeight.clear();
-            frameGateAlphaP50 = 0.12f;
-            frameGateRefDiffP50 = 0.03f;
-            // 入力が不正な場合はゲート構築を行わない。
-            if (scanw <= 0 || scanh <= 0 || (int)debugBinary.size() != scanw * scanh) {
-                return false;
-            }
-
-            // ロゴ近傍の候補領域を決め、anchor を収集する。
-            const FrameGateRegion region = calcFrameGateRegion();
-            std::vector<uint8_t> anchor(scanw * scanh, 0);
-            int anchorCount = buildFrameGateAnchor(region, anchor);
-            if (anchorCount < 24) {
-                supplementFrameGateAnchor(region, anchor, anchorCount);
-            }
-            if (anchorCount < 16) {
-                return false;
-            }
-
-            // anchor を膨張し、成分形状から重み補正係数を作る。
-            std::vector<uint8_t> dilated(scanw * scanh, 0);
-            dilateFrameGateAnchor(region, anchor, dilated);
-            const std::vector<float> anchorShapeRel = calcFrameGateAnchorShapeRel(region, anchor);
-            if (!buildFrameGateOffsets(region, dilated)) {
-                return false;
-            }
-
-            // 使いすぎを防ぐためサンプリングし、統計値と重みを算出する。
-            sampleFrameGateOffsets(640);
-            calcFrameGateStatistics(anchorShapeRel);
-            return true;
-        }
-
-        // frame gate の探索範囲を決める。
-        // 基本は右上寄り全体、pass1矩形があればその周辺へ縮小する。
-        FrameGateRegion calcFrameGateRegion() const {
-            // デフォルトは上側帯域全体を対象にする。
-            const int upperYLimit = ClampInt((int)std::round(scanh * 0.62f), 0, std::max(0, scanh - 1));
-            FrameGateRegion region{ 0, scanw - 1, 0, upperYLimit };
-            if (rectLocal.w <= 0 || rectLocal.h <= 0) {
-                return region;
-            }
-
-            // pass1矩形の周辺をパディングしてゲート範囲を絞る。
-            const int padX = std::max(16, (int)std::round(rectLocal.w * 0.80f));
-            const int padY = std::max(12, (int)std::round(rectLocal.h * 1.00f));
-            region.minX = ClampInt(rectLocal.x - padX, 0, scanw - 1);
-            region.maxX = ClampInt(rectLocal.x + rectLocal.w - 1 + padX, 0, scanw - 1);
-            region.minY = ClampInt(rectLocal.y - padY, 0, scanh - 1);
-            region.maxY = ClampInt(rectLocal.y + rectLocal.h - 1 + padY, 0, upperYLimit);
-            // 何らかの理由で範囲が壊れた場合はデフォルトへ戻す。
-            if (region.maxX < region.minX || region.maxY < region.minY) {
-                region = FrameGateRegion{ 0, scanw - 1, 0, upperYLimit };
-            }
-            return region;
-        }
-
-        int buildFrameGateAnchor(const FrameGateRegion& region, std::vector<uint8_t>& anchor) const {
-            int anchorCount = 0;
-            for (int y = region.minY; y <= region.maxY; y++) {
-                for (int x = region.minX; x <= region.maxX; x++) {
-                    const int off = x + y * scanw;
-                    if (debugBinary[off]) {
-                        anchor[off] = 1;
-                        anchorCount++;
-                    }
-                }
-            }
-            return anchorCount;
-        }
-
-        // binary anchor が不足するとき、mapAccepted の上位点で補完する。
-        void supplementFrameGateAnchor(const FrameGateRegion& region, std::vector<uint8_t>& anchor, int& anchorCount) const {
-            // ゲート範囲内から有効な accepted 値を候補として集める。
-            std::vector<std::pair<float, int>> cand;
-            cand.reserve((region.maxX - region.minX + 1) * (region.maxY - region.minY + 1));
-            for (int y = region.minY; y <= region.maxY; y++) {
-                for (int x = region.minX; x <= region.maxX; x++) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off]) continue;
-                    const float v = (off < (int)debugScore.mapAccepted.size()) ? debugScore.mapAccepted[off] : 0.0f;
-                    if (v <= 0.0f || !std::isfinite(v)) continue;
-                    cand.emplace_back(v, off);
-                }
-            }
-            if (cand.empty()) {
-                return;
-            }
-            // 候補上位だけを anchor に昇格する。
-            const int take = std::min((int)cand.size(), 256);
-            std::nth_element(cand.begin(), cand.begin() + take - 1, cand.end(),
-                [](const auto& a, const auto& b) { return a.first > b.first; });
-            for (int i = 0; i < take; i++) {
-                anchor[cand[i].second] = 1;
-            }
-            // 最終 anchor 数を再カウントする。
-            anchorCount = 0;
-            for (const auto v : anchor) {
-                if (v) anchorCount++;
-            }
-        }
-
-        // anchor を 8近傍へ1段膨張し、ゲート判定の対象点を増やす。
-        void dilateFrameGateAnchor(const FrameGateRegion& region, const std::vector<uint8_t>& anchor, std::vector<uint8_t>& dilated) const {
-            dilated = anchor;
-            auto inGate = [&](const int x, const int y) {
-                return x >= region.minX && x <= region.maxX && y >= region.minY && y <= region.maxY;
-            };
-            // anchor 点ごとに近傍へ伝播し、判定点マスクを厚くする。
-            for (int y = region.minY; y <= region.maxY; y++) {
-                for (int x = region.minX; x <= region.maxX; x++) {
-                    const int off = x + y * scanw;
-                    if (!anchor[off]) continue;
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            const int nx = x + dx;
-                            const int ny = y + dy;
-                            if (!inGate(nx, ny)) continue;
-                            dilated[nx + ny * scanw] = 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        // anchor 連結成分の形状に応じた相対重み(shapeRel)を作る。
-        // 細線/端接触/小箱などノイズ寄り成分の重みを下げる。
-        std::vector<float> calcFrameGateAnchorShapeRel(const FrameGateRegion& region, const std::vector<uint8_t>& anchor) const {
-            std::vector<float> anchorShapeRel(scanw * scanh, 1.0f);
-            std::vector<uint8_t> visited(scanw * scanh, 0);
-            std::queue<int> q;
-            // 各連結成分を BFS で列挙して形状特徴を計算する。
-            for (int y = region.minY; y <= region.maxY; y++) {
-                for (int x = region.minX; x <= region.maxX; x++) {
-                    const int start = x + y * scanw;
-                    if (!anchor[start] || visited[start]) continue;
-                    visited[start] = 1;
-                    q.push(start);
-                    int minX = x, minY = y, maxX = x, maxY = y;
-                    int area = 0;
-                    std::vector<int> pixels;
-                    pixels.reserve(64);
-                    while (!q.empty()) {
-                        const int cur = q.front();
-                        q.pop();
-                        pixels.push_back(cur);
-                        area++;
-                        const int cx = cur % scanw;
-                        const int cy = cur / scanw;
-                        minX = std::min(minX, cx);
-                        minY = std::min(minY, cy);
-                        maxX = std::max(maxX, cx);
-                        maxY = std::max(maxY, cy);
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dx = -1; dx <= 1; dx++) {
-                                if (dx == 0 && dy == 0) continue;
-                                const int nx = cx + dx;
-                                const int ny = cy + dy;
-                                if (nx < region.minX || nx > region.maxX || ny < region.minY || ny > region.maxY) continue;
-                                const int nidx = nx + ny * scanw;
-                                if (!anchor[nidx] || visited[nidx]) continue;
-                                visited[nidx] = 1;
-                                q.push(nidx);
-                            }
-                        }
-                    }
-                    const int compW = maxX - minX + 1;
-                    const int compH = maxY - minY + 1;
-                    // 成分形状に応じて rel を減衰する。
-                    float rel = 1.0f;
-                    if (area <= 4) rel *= 0.35f;
-                    else if (area <= 10) rel *= 0.55f;
-                    const int longEdge = std::max(compW, compH);
-                    const int shortEdge = std::max(1, std::min(compW, compH));
-                    if (longEdge >= 14 && shortEdge <= 2) rel *= 0.35f;
-                    const bool touchBorder = (minX <= region.minX + 1) || (maxX >= region.maxX - 1) || (minY <= region.minY + 1) || (maxY >= region.maxY - 1);
-                    if (touchBorder) rel *= 0.70f;
-                    const bool upperSmallBox = (maxY <= region.minY + 24) && (compW <= 14) && (compH <= 14) && (area <= 28);
-                    if (upperSmallBox) rel *= 0.65f;
-                    rel = std::max(0.15f, std::min(1.0f, rel));
-                    for (const auto off : pixels) {
-                        anchorShapeRel[off] = std::min(anchorShapeRel[off], rel);
-                    }
-                }
-            }
-            return anchorShapeRel;
-        }
-
-        // 膨張済みマスクから最終ゲート点オフセット配列を構築する。
-        bool buildFrameGateOffsets(const FrameGateRegion& region, const std::vector<uint8_t>& dilated) {
-            frameGateOffsets.clear();
-            frameGateOffsets.reserve(scanw * scanh / 16);
-            // ゲート範囲内の ON 点を線形オフセットで保持する。
-            for (int y = region.minY; y <= region.maxY; y++) {
-                for (int x = region.minX; x <= region.maxX; x++) {
-                    const int off = x + y * scanw;
-                    if (dilated[off]) {
-                        frameGateOffsets.push_back(off);
-                    }
-                }
-            }
-            if ((int)frameGateOffsets.size() < 16) {
-                frameGateOffsets.clear();
-                return false;
-            }
-            return true;
-        }
-
-        // ゲート点が多すぎる場合に等間隔サンプリングして上限をかける。
-        void sampleFrameGateOffsets(const int maxSamples) {
-            if ((int)frameGateOffsets.size() <= maxSamples) {
-                return;
-            }
-            // 先頭から末尾までほぼ均等に選び、空間的な偏りを抑える。
-            std::vector<int> sampled;
-            sampled.reserve(maxSamples);
-            const int n = (int)frameGateOffsets.size();
-            for (int k = 0; k < maxSamples; k++) {
-                const int idx = ClampInt((int)std::round((n - 1) * (k / (double)std::max(1, maxSamples - 1))), 0, n - 1);
-                sampled.push_back(frameGateOffsets[idx]);
-            }
-            frameGateOffsets.swap(sampled);
-        }
-
-        // frame gate 判定で使う基準統計を計算する。
-        // alpha中央値・参照差分・点ごとの重みをここで確定する。
-        void calcFrameGateStatistics(const std::vector<float>& anchorShapeRel) {
-            // ゲート点の alpha 分布から中央値を求める。
-            std::vector<float> alphaVals;
-            alphaVals.reserve(frameGateOffsets.size());
-            for (const int off : frameGateOffsets) {
-                if (off < 0 || off >= (int)debugScore.mapAlpha.size()) continue;
-                const float a = std::max(0.0f, std::min(1.0f, debugScore.mapAlpha[off]));
-                if (std::isfinite(a)) {
-                    alphaVals.push_back(a);
-                }
-            }
-            if (!alphaVals.empty()) {
-                std::sort(alphaVals.begin(), alphaVals.end());
-                frameGateAlphaP50 = alphaVals[alphaVals.size() / 2];
-            }
-
-            // 各ゲート点の参照差分(refDiff)と anchor 重みを算出する。
-            frameGateRefDiff.assign(frameGateOffsets.size(), 0.0f);
-            frameGateAnchorWeight.assign(frameGateOffsets.size(), 0.35f);
-            std::vector<float> refDiffVals;
-            refDiffVals.reserve(frameGateOffsets.size());
-            const auto& statsForGate = getStatsForDebug();
-            for (int idx = 0; idx < (int)frameGateOffsets.size(); idx++) {
-                const int off = frameGateOffsets[idx];
-                float refDiff = 0.0f;
-                if (off >= 0 && off < (int)statsForGate.size()) {
-                    const auto& s = statsForGate[off];
-                    if (s.sumW > 1e-6) {
-                        const float meanF = (float)(s.sumF / s.sumW);
-                        const float meanB = (float)(s.sumB / s.sumW);
-                        refDiff = std::max(0.0f, std::min(1.0f, std::abs(meanF - meanB)));
-                    }
-                }
-                const float accepted = (off >= 0 && off < (int)debugScore.mapAccepted.size()) ? std::max(0.0f, std::min(1.0f, debugScore.mapAccepted[off])) : 0.0f;
-                const float alpha = (off >= 0 && off < (int)debugScore.mapAlpha.size()) ? std::max(0.0f, std::min(1.0f, debugScore.mapAlpha[off])) : 0.0f;
-                const float shapeRel = (off >= 0 && off < (int)anchorShapeRel.size()) ? std::max(0.15f, std::min(1.0f, anchorShapeRel[off])) : 1.0f;
-                const float anchorWeight = std::max(0.08f, std::min(1.0f, (0.15f + 0.55f * std::sqrt(accepted) + 0.30f * alpha) * shapeRel));
-                frameGateRefDiff[idx] = refDiff;
-                frameGateAnchorWeight[idx] = anchorWeight;
-                if (refDiff > 0.0f) {
-                    refDiffVals.push_back(refDiff);
-                }
-            }
-            if (!refDiffVals.empty()) {
-                std::sort(refDiffVals.begin(), refDiffVals.end());
-                frameGateRefDiffP50 = refDiffVals[refDiffVals.size() / 2];
-            }
-        }
-
-        void fillFrameGateEvalEmpty(FrameGateEval& eval) const {
-            eval.frameWeight = 0.0f;
-            eval.meanNorm = 0.0f;
-            eval.hitRatio = 0.0f;
-            eval.evidence = 0.0f;
-            eval.rejectBase = std::max(0.030f, std::min(0.160f, 0.020f + frameGateAlphaP50 * 0.16f));
-            eval.keepBase = std::max(eval.rejectBase + 0.025f, std::min(0.280f, eval.rejectBase + 0.10f + frameGateAlphaP50 * 0.16f));
-        }
-
-        // 1フレーム分の frame gate 評価値を計算する。
-        // ゲート点の差分量を集約し、0..1 の frameWeight と診断値を返す。
-        template<typename pixel_t>
-        FrameGateEval estimateSecondPassFrameEval(const std::vector<pixel_t>& frameWork, const float rawScale, const float thresholdRaw) const {
-            FrameGateEval eval{};
-            eval.totalGatePoints = (int)frameGateOffsets.size();
-            if (frameGateOffsets.empty()) {
-                return eval;
-            }
-            // 差分正規化と点ごとの判定閾値を初期化する。
-            const float maxvRaw = std::max(1.0f, rawScale * 255.0f);
-            const float diffLow = std::max(0.45f * rawScale, thresholdRaw * 0.30f) / maxvRaw;
-            const float diffHigh = std::max(1.10f * rawScale, thresholdRaw * 0.80f) / maxvRaw;
-            double sumW = 0.0;
-            double sumNorm = 0.0;
-            double sumHit = 0.0;
-            int validGatePoints = 0;
-            // 全ゲート点を走査して、差分正規化値とヒット率を重み付き集計する。
-            for (int idx = 0; idx < (int)frameGateOffsets.size(); idx++) {
-                const int off = frameGateOffsets[idx];
-                if (off < 0 || off >= scanw * scanh) continue;
-                const int x = off % scanw;
-                const int y = off / scanw;
-                float bg = 0.0f;
-                if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
-                    continue;
-                }
-                validGatePoints++;
-                const float fgRaw = (float)frameWork[off];
-                const float diff = std::abs(fgRaw - bg) / maxvRaw;
-                const float refDiff = (idx < (int)frameGateRefDiff.size()) ? std::max(0.0f, std::min(1.0f, frameGateRefDiff[idx])) : 0.0f;
-                const float pointLow = std::max(diffLow, refDiff * 0.40f);
-                const float pointHigh = std::max(pointLow + 1e-4f, std::max(diffHigh, refDiff * 0.95f));
-                const float pointHit = pointLow + 0.25f * (pointHigh - pointLow);
-                const float diffNorm = std::max(0.0f, std::min(1.0f, (diff - pointLow) / (pointHigh - pointLow)));
-                const float hit = (diff >= pointHit) ? 1.0f : 0.0f;
-                float anchorW = 0.5f;
-                if (idx >= 0 && idx < (int)frameGateAnchorWeight.size()) {
-                    anchorW = std::max(0.10f, std::min(1.0f, frameGateAnchorWeight[idx]));
-                }
-                const double w = anchorW;
-                sumW += w;
-                sumNorm += w * diffNorm;
-                sumHit += w * hit;
-            }
-
-            const float validRatio = (float)validGatePoints / std::max(1, (int)frameGateOffsets.size());
-            eval.validRatio = validRatio;
-            eval.validGatePoints = validGatePoints;
-            // 有効点が不足する場合は空評価として返す。
-            if (sumW <= 1e-6 || validGatePoints < std::max(8, (int)frameGateOffsets.size() / 10)) {
-                fillFrameGateEvalEmpty(eval);
-                return eval;
-            }
-
-            // evidence をしきい値レンジへ写像し、最終 frameWeight を決める。
-            const float meanNorm = (float)(sumNorm / sumW);
-            const float hitRatio = (float)(sumHit / sumW);
-            const float evidence = std::max(0.0f, std::min(1.0f, meanNorm * 0.40f + hitRatio * 0.60f));
-            const float refGain = std::max(0.0f, std::min(1.0f, frameGateRefDiffP50 / 0.18f));
-            const float rejectBase = std::max(0.050f, std::min(0.240f, 0.055f + frameGateAlphaP50 * 0.10f + refGain * 0.12f));
-            const float keepBase = std::max(rejectBase + 0.050f, std::min(0.620f, rejectBase + 0.12f + refGain * 0.22f));
-            const float t = (evidence - rejectBase) / std::max(1e-4f, keepBase - rejectBase);
-            const float evidenceWeight = Smoothstep01(t);
-            const float validWeight = 0.20f + 0.80f * Smoothstep01((validRatio - 0.22f) / 0.58f);
-            const float frameWeight = evidenceWeight * validWeight;
-            eval.frameWeight = std::max(0.0f, std::min(1.0f, frameWeight));
-            eval.meanNorm = meanNorm;
-            eval.hitRatio = hitRatio;
-            eval.evidence = evidence;
-            eval.rejectBase = rejectBase;
-            eval.keepBase = keepBase;
-            return eval;
         }
 
         // 1フレームを取り込み、現在passに応じて統計へ反映する。
