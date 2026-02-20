@@ -35,20 +35,6 @@ namespace Amatsukaze.Server.Rest
                 : scriptType;
             var isBat = string.Equals(normalizedScriptType, "bat", StringComparison.OrdinalIgnoreCase);
 
-            if (string.Equals(normalizedTargetHost, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                if (isServerWindows && !isBat)
-                {
-                    error = "Windowsサーバーではバッチのみ生成できます。";
-                    return false;
-                }
-                if (!isServerWindows && isBat)
-                {
-                    error = "Linuxサーバーではシェルのみ生成できます。";
-                    return false;
-                }
-            }
-
             var prof = data.Profile;
             if (string.IsNullOrWhiteSpace(prof))
             {
