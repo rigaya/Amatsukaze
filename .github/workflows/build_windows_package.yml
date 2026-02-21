@@ -20,9 +20,9 @@ jobs:
       JOINLOGO_URL: https://github.com/yobibi/join_logo_scp/releases/download/v5.1.0/join_logo_scp_51.zip
       AVSCUDA_URL: https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.3/AviSynthCUDAFilters_Release_0.7.3.zip
       LSMASH_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/lsmash_20200404.7z
-      X264_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260214-180714/x264_3223_x64.zip
-      X265_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260214-180714/x265_4.1+222_x64.zip
-      SVT_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260214-180714/SvtAv1EncApp_4.0.1-56_x64_clang.zip
+      X264_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260221-082727/x264_3223_x64.zip
+      X265_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260221-082727/x265_4.1+223_x64.zip
+      SVT_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260221-082727/SvtAv1EncApp_4.0.1-63_x64_clang.zip
       BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeBasePkg_20260201.7z
     steps:
       - name: Checkout
