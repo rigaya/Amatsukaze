@@ -3592,7 +3592,12 @@ namespace {
                         if (keepComp[i]) continue;
                         const auto& c = comps[i];
                         const int compCenterY = (c.minY + c.maxY) / 2;
-                        const bool yGuard = compCenterY <= anchorCenterY + maxBelowAnchor;
+                        const int anchorBelowLimitY = anchorCenterY + maxBelowAnchor;
+                        const int lowerTopSlack = std::max(4, (int)std::round(c.h * 0.35));
+                        // 下段2行ロゴを拾うため、中心Yだけでなく上端Yでも下限判定する。
+                        const bool yGuard =
+                            compCenterY <= anchorBelowLimitY ||
+                            c.minY <= anchorBelowLimitY + lowerTopSlack;
                         const bool shapeOk = c.area >= 3 && std::max((double)c.w / std::max(1, c.h), (double)c.h / std::max(1, c.w)) <= 16.0;
                         const bool signalOk =
                             c.meanScore >= minSignalScore ||
