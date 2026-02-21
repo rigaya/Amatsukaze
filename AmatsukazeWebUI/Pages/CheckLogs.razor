@@ -1,6 +1,7 @@
 @page "/logs/check"
 @using Amatsukaze.Shared
 @using System.IO
+@using System.Globalization
 @inject IAmatsukazeApi Api
 @inject IJSRuntime Js
 
@@ -42,7 +43,7 @@ else
                     {
                         <tr class="log-row-clickable" @onclick="() => LoadCheckDetailAsync(item)">
                             <td class="log-col-type">@(item.DisplayType ?? item.Type ?? "-")</td>
-                            <td class="log-col-start">@(item.DisplayEncodeStart ?? item.CheckStartDate.ToString("yyyy-MM-dd HH:mm:ss"))</td>
+                            <td class="log-col-start">@(item.DisplayEncodeStart ?? item.CheckStartDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture))</td>
                             <td class="log-col-result">@(item.DisplayResult ?? (item.Success ? "成功" : "失敗"))</td>
                             <td class="log-col-message">@(item.Reason ?? "-")</td>
                             <td class="log-col-profile">@(item.Profile ?? "-")</td>

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Amatsukaze.Shared;
@@ -209,7 +210,7 @@ namespace Amatsukaze.Server
 
         private Task WriteLine(string line)
         {
-            var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line + "\n";
+            var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture) + " " + line + "\n";
             return WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(formatted));
         }
 

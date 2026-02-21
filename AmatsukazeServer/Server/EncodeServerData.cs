@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Globalization;
 using System.Threading.Tasks;
 using Amatsukaze.Lib;
 
@@ -588,7 +589,9 @@ namespace Amatsukaze.Server
             };
 
             keyValue("プロファイル名", profile.Name);
-            keyValue("更新日時", profile.LastUpdate.ToString("yyyy年MM月dd日 hh:mm:ss"));
+            keyValue("更新日時", profile.LastUpdate == DateTime.MinValue
+                ? "不明"
+                : profile.LastUpdate.ToString("yyyy年MM月dd日 hh:mm:ss", CultureInfo.InvariantCulture));
             keyValue("エンコーダ", EncoderList[(int)profile.EncoderType]);
             keyValue("エンコーダ追加オプション", GetEncoderOption(profile) ?? "");
             if (profile.EncoderType == EncoderType.SVTAV1 && profile.ForceSAR)
@@ -1335,7 +1338,7 @@ namespace Amatsukaze.Server
         public string DisplayEncodeDuration { get { return EncodeDuration.ToGUIString(); } }
         public string DisplayReason { get { return Reason; } }
         public string DisplayService { get { return ServiceName + "(" + ServiceId + ")"; } }
-        public string DisplayTsTime { get { return (TsTime == DateTime.MinValue) ? "不明" : TsTime.ToString("yyyy年M月d日"); } }
+        public string DisplayTsTime { get { return (TsTime == DateTime.MinValue) ? "不明" : TsTime.ToString("yyyy年M月d日", CultureInfo.InvariantCulture); } }
     }
 
     [DataContract]
@@ -1490,7 +1493,7 @@ namespace Amatsukaze.Server
             }
         }
         public string DisplayService { get { return ServiceName + "(" + ServiceId + ")"; } }
-        public string DisplayTsTime { get { return (TsTime == DateTime.MinValue) ? "不明" : TsTime.ToString("yyyy年M月d日"); } }
+        public string DisplayTsTime { get { return (TsTime == DateTime.MinValue) ? "不明" : TsTime.ToString("yyyy年M月d日", CultureInfo.InvariantCulture); } }
         public string DisplayTags { get { return (Tags != null) ? string.Join(" ", Tags) : ""; } }
     }
 

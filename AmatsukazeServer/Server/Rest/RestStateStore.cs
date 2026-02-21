@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using Amatsukaze.Lib;
@@ -985,10 +986,10 @@ namespace Amatsukaze.Server.Rest
                 TsTime = item.TsTime == DateTime.MinValue ? null : item.TsTime,
                 EitStartTime = item.EITStartTime == DateTime.MinValue ? null : item.EITStartTime,
                 DisplayBroadcastTime = item.EITStartTime != DateTime.MinValue
-                    ? item.EITStartTime.ToString("yyyy/MM/dd")
-                    : (item.TsTime == DateTime.MinValue ? null : item.TsTime.ToString("yyyy/MM/dd")),
-                DisplayEncodeStart = item.EncodeStart.ToGUIString(),
-                DisplayEncodeFinish = item.EncodeFinish.ToGUIString(),
+                    ? item.EITStartTime.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture)
+                    : (item.TsTime == DateTime.MinValue ? null : item.TsTime.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture)),
+                DisplayEncodeStart = item.EncodeStart == DateTime.MinValue ? null : item.EncodeStart.ToGUIString(),
+                DisplayEncodeFinish = item.EncodeFinish == DateTime.MinValue ? null : item.EncodeFinish.ToGUIString(),
                 Progress = 0,
                 ConsoleId = item.ConsoleId,
                 OutputMask = 0,

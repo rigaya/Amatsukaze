@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using System.Threading.Tasks;
 using Amatsukaze.Lib;
 
@@ -214,7 +215,7 @@ namespace Amatsukaze.Server.Rest
                                 {
                                     var logoServiceId = logo.ServiceId;
                                     var service = info.GetServiceList().FirstOrDefault(s => s.ServiceId == logoServiceId);
-                                    var date = info.GetTime().ToString("yyyy-MM-dd");
+                                    var date = info.GetTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                                     if (service != null)
                                     {
                                         logo.Name = service.ServiceName + "(" + date + ")";

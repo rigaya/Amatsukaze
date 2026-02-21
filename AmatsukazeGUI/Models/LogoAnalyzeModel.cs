@@ -2,6 +2,7 @@
 using Amatsukaze.Server;
 using Livet;
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -312,7 +313,7 @@ namespace Amatsukaze.Models
                             {
                                 int serviceId = logo.ServiceId;
                                 string serviceName = info.GetServiceList().First(s => s.ServiceId == serviceId).ServiceName;
-                                string date = info.GetTime().ToString("yyyy-MM-dd");
+                                string date = info.GetTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                                 logo.Name = serviceName + "(" + date + ")";
                             }
                             else

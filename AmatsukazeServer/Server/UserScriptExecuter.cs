@@ -416,7 +416,8 @@ namespace Amatsukaze.Server
             env.Add("SERVICE_ID", Item.ServiceId.ToString());
             env.Add("SERVICE_NAME", Item.ServiceName);
             env.Add("SERVICE_NAME_ZTOH", ConvertStrZtoH(Item.ServiceName));
-            env.Add("TS_TIME", Item.TsTime.ToString());
+            // カレンダー依存を避けるため、TS時刻は固定フォーマットで渡す
+            env.Add("TS_TIME", Item.TsTime.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture));
             env.Add("ITEM_MODE", Item.Mode.ToString());
             env.Add("ITEM_PRIORITY", Item.Priority.ToString());
             env.Add("EVENT_GENRE", displayGenre?.FullName ?? "-");

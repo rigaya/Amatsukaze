@@ -14,6 +14,7 @@ using System.Runtime.Serialization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
@@ -227,7 +228,8 @@ namespace Amatsukaze.Server
 
         public static string ToGUIString(this DateTime dt)
         {
-            return dt.ToString("yyyy/MM/dd HH:mm:ss");
+            // UI表示は固定フォーマットで扱い、カレンダー種別の影響を受けないようにする
+            return dt.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture);
         }
 
         public static string ToGUIString(this TimeSpan ts)

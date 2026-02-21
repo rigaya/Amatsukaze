@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
@@ -789,7 +790,7 @@ namespace Amatsukaze.Server
 
         internal string GetLogFileBase(DateTime start)
         {
-            return Path.Combine("data", "logs", start.ToString("yyyy-MM-dd_HHmmss.fff"));
+            return Path.Combine("data", "logs", start.ToString("yyyy-MM-dd_HHmmss.fff", CultureInfo.InvariantCulture));
         }
 
         private string ReadLogFIle(DateTime start)
@@ -809,7 +810,7 @@ namespace Amatsukaze.Server
 
         internal string GetCheckLogFileBase(DateTime start)
         {
-            return Path.Combine("data", "checklogs", start.ToString("yyyy-MM-dd_HHmmss.fff"));
+            return Path.Combine("data", "checklogs", start.ToString("yyyy-MM-dd_HHmmss.fff", CultureInfo.InvariantCulture));
         }
 
         private string ReadCheckLogFIle(DateTime start)

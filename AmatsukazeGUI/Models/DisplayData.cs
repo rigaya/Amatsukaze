@@ -210,7 +210,13 @@ namespace Amatsukaze.Models
         public bool IsPreFailed { get { return Model.State == QueueState.PreFailed; } }
         public bool IsCanceled { get { return Model.State == QueueState.Canceled; } }
         public bool IsTooSmall { get { return IsPreFailed && Model.FailReason.Contains("映像が小さすぎます"); } }
-        public string TsTimeString { get { return Model.TsTime.ToString("yyyy年MM月dd日"); } }
+        public string TsTimeString {
+            get {
+                return Model.TsTime == DateTime.MinValue
+                    ? "不明"
+                    : Model.TsTime.ToString("yyyy年MM月dd日", CultureInfo.InvariantCulture);
+            }
+        }
         public string ServiceString { get { return Model.ServiceName + "(" + Model.ServiceId + ")"; } }
 
         public string OutDir {
@@ -2726,12 +2732,12 @@ namespace Amatsukaze.Models
 
         public string ToDateString
         {
-            get { return Setting.To.ToString("yyyy/MM/dd"); }
+            get { return Setting.To.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture); }
         }
 
         public string FromDateString
         {
-            get { return Setting.From.ToString("yyyy/MM/dd"); }
+            get { return Setting.From.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture); }
         }
 
         public void ApplyDate()
