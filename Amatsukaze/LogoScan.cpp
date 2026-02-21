@@ -1892,7 +1892,9 @@ namespace {
         static constexpr int kScanEdgeMargin = 16;
         static constexpr int kDedupHistoryN = 4;
         static constexpr bool kEnableTwoPassFrameGate = true;
+        static constexpr bool kEnablePruneBinaryByAnchor = true;
         const bool enableTwoPassFrameGate;
+        const bool enablePruneBinaryByAnchor;
 
         struct StatsPassBuffers {
             std::vector<uint8_t> frameWork8;
@@ -2106,7 +2108,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), debugStats(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), debugStats(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -3971,7 +3973,9 @@ namespace {
         binaryStage.binary.swap(acceptedBinary);
 
         // 反復閾値調整後の最終ノイズ抑制と空マスク救済を適用する。
-        pruneBinaryByAnchor(scoreStage, binaryStage);
+        if (enablePruneBinaryByAnchor) {
+            pruneBinaryByAnchor(scoreStage, binaryStage);
+        }
         applyBinaryFallbackIfEmpty(scoreStage, binaryStage);
     }
 
