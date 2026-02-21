@@ -3609,7 +3609,13 @@ namespace {
                             !isLowerComp ||
                             c.meanAlpha >= 0.20f ||
                             c.meanConsistency >= minSignalConsistency;
-                        const bool signalGateOk = signalOk || sameRowComp;
+                        // q17 で左側の靄成分が残った要因:
+                        // 「同じ行にある」だけで弱信号成分まで keep されていた。
+                        // sameRow 救済には最低限の信号量(accepted/consistency)を要求する。
+                        const bool sameRowSignalRescue =
+                            sameRowComp &&
+                            (c.meanAccepted >= minSignalAccepted || c.meanConsistency >= minSignalConsistency);
+                        const bool signalGateOk = signalOk || sameRowSignalRescue;
                         if (!yGuard || !shapeOk || !signalGateOk || !lowAlphaConsistencyOk) continue;
                         bool nearKept = false;
                         for (int k = 0; k < (int)comps.size(); k++) {
@@ -3619,8 +3625,21 @@ namespace {
                             const int overlapH = std::max(0, std::min(c.maxY, ref.maxY) - std::max(c.minY, ref.minY) + 1);
                             const int gapX = std::max(0, std::max(c.minX - ref.maxX, ref.minX - c.maxX));
                             const int gapY = std::max(0, std::max(c.minY - ref.maxY, ref.minY - c.maxY));
+                            // q17 改善意図:
+                            // 横方向 near 判定の gapX が広すぎると、遠方の弱成分(左側靄)が連鎖 keep される。
+                            // 成分の信号強度に応じて許容距離を可変化し、弱信号は短距離のみ許可する。
+                            const int nearHGapBase = std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8));
+                            const float scoreRatio = c.meanScore / std::max(1.0e-6f, minSignalScore);
+                            const float peakRatio = c.peakScore / std::max(1.0e-6f, minSignalPeak);
+                            const float acceptedRatio = c.meanAccepted / std::max(1.0e-6f, minSignalAccepted);
+                            const float consistencyRatio = c.meanConsistency / std::max(1.0e-6f, minSignalConsistency);
+                            const float signalStrength =
+                                std::max(std::max(scoreRatio, peakRatio), std::max(acceptedRatio, consistencyRatio));
+                            const float strengthNorm = std::max(0.0f, std::min(1.0f, (signalStrength - 1.0f) / 1.5f));
+                            const float nearHGapScale = 0.45f + 0.55f * strengthNorm;
+                            const int nearHGapLimit = std::max(8, (int)std::round((double)nearHGapBase * nearHGapScale));
                             const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
-                                gapX <= std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8));
+                                gapX <= nearHGapLimit;
                             const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
                                 gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.60));
                             const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
