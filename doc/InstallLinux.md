@@ -419,4 +419,4 @@ cd $HOME/Amatsukaze
 
 プロファイル名は、設定画面のプロファイルタブの使用したいプロファイル名を指定します。
 
-<img src="./data/AmatsukazeServerLinuxStart_05.png" width="480">
+<img src="../data/AmatsukazeServerLinuxStart_05.png" width="480">

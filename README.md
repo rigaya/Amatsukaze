@@ -235,22 +235,40 @@ NVEncの入手先は[こちら](https://github.com/rigaya/NVEnc/releases)。
 
 設定したら「適用」ボタンを忘れずに。
 
+
 ### 7. サーバーを別PCで動かす
 
 Amatsukazeはサーバー/クライアント構成で動作できます。  
 エンコード用PCと操作用PCを分ける場合は、サーバーを別PCで起動して操作側から接続します。
 
+<img src="./data/AmatsukazeServerClient_20260221.jpg" width="720">
+
+- AmatsukazeServer / AmatsukazeServerCLI
+  - キュー管理と実際のエンコード実行を担当します。
+
+- AmatsukazeClient (GUI)
+  - Windowsデスクトップアプリとしてサーバーを操作します。
+
+- WebUI
+  - REST API経由でサーバーを操作するブラウザUIです。
+
 #### 7-1. サーバーPCでAmatsukazeServerを起動
 
 サーバーPC側で AmatsukazeServer (または AmatsukazeServerCLI) を起動します。  
-既定では、サーバー本体は `32768` ポートで待ち受けます。
 
-#### 7-2. 操作PCから接続
+- Windows: `AmatsukazeServer.bat` を起動
+- Linux: `./amatsukazeServerCLI.sh` を実行
+
+既定では、サーバー本体は `32768` ポートで待ち受けます。
+Windowsの場合、初回はファイアウォールの警告が出ると思うので、許可してください。
+ファイアウォールにブロックされると録画PCから接続できないので、ブロックされていたら許可するように設定してください。
+
+#### 7-2. 操作PCからクライアントで接続
 
 操作側からは次のいずれかを利用できます。
 
 - AmatsukazeClient (GUI)
-  - Windows向けのデスクトップGUI (WPF) です。
+  - Windows向けのデスクトップGUI です。
   - `AmatsukazeClient.bat` で起動して接続します。
 
 - WebUI
@@ -262,16 +280,20 @@ Amatsukazeはサーバー/クライアント構成で動作できます。
 
   <img src="./data/AmatsukazeWebUI_20260212.webp" width="720">
 
-#### 7-3. 役割の整理
+#### 7-3. タスクの追加
 
-- AmatsukazeServer
-  - キュー管理と実際のエンコード実行を担当します。
+タスクの追加はクライアントアプリから行えるほか、`AmatsukazeAddTask` を使って行うこともできます。
 
-- AmatsukazeClient (GUI)
-  - Windowsデスクトップアプリとしてサーバーを操作します。
+```bat
+./exe_files/AmatsukazeAddTask -f <対象ファイル名> -o <出力フォルダ> -s <プロファイル名> --ip <サーバーIP> -p <サーバーポート>
 
-- WebUI
-  - REST API経由でサーバーを操作するブラウザUIです。
+例:
+./exe_files/AmatsukazeAddTask -f input.ts -o output_dir -s "デフォルト" --ip 192.168.0.xxx -p 32768
+```
+
+プロファイル名は、設定画面のプロファイルタブの使用したいプロファイル名を指定します。
+
+<img src="./data/AmatsukazeServerLinuxStart_05.png" width="480">
 
 ## AmatsukazeCLI
 
