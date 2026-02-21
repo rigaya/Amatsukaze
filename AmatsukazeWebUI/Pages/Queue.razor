@@ -5,6 +5,7 @@
 @using System.Threading
 @using System.IO
 @using System.Linq
+@using System.Globalization
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -1679,7 +1680,12 @@ else
         {
             return "-";
         }
-        if (DateTime.TryParse(timeText, out var parsed))
+        if (DateTime.TryParseExact(
+            timeText,
+            new[] { "yyyy/MM/dd", "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "MM/dd" },
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed))
         {
             return parsed.ToString("MM/dd");
         }
