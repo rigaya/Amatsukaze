@@ -859,9 +859,6 @@ else
     private static readonly string[] _formatEnumNames = new[] { "MP4", "MKV", "M2TS", "TS", "TSREPLACE" };
     private static readonly string[] _filterEnumNames = new[] { "None", "Setting", "Custom" };
     private static readonly string[] _deblockStrengthEnumNames = new[] { "Strong", "Medium", "Weak", "Weaker" };
-    private static readonly string[] _filterFpsEnumNames = new[] { "VFR", "CFR24", "CFR30", "CFR60", "SVP", "VFR30" };
-    private static readonly string[] _kfmFpsEnumNames = new[] { "VFR", "VFR30", "CFR24", "CFR60", "SVP" };
-    private static readonly string[] _yadifFpsEnumNames = new[] { "CFR24", "CFR30", "CFR60" };
     private static readonly string[] _d3dvpGpuEnumNames = new[] { "Auto", "Intel", "NVIDIA", "Radeon" };
     private static readonly string[] _qtgmcPresetEnumNames = new[] { "Auto", "Faster", "Fast", "Medium", "Slow", "Slower" };
     private static readonly string[] _audioEncoderEnumNames = new[] { "NeroAac", "Qaac", "Fdkaac", "OpusEnc" };
@@ -1339,12 +1336,17 @@ else
 
     private void OnKfmFpsChanged(ChangeEventArgs e)
     {
+        var enumNames = _options?.FilterFpsEnumNamesKfm ?? new List<string>();
+        if (enumNames.Count == 0)
+        {
+            return;
+        }
         var idx = ParseIndex(e.Value);
-        if (idx < 0 || idx >= _kfmFpsEnumNames.Length)
+        if (idx < 0 || idx >= enumNames.Count)
         {
             idx = 0;
         }
-        SetFilterValue("KfmFps", JsonValue.Create(_kfmFpsEnumNames[idx]));
+        SetFilterValue("KfmFps", JsonValue.Create(enumNames[idx]));
     }
 
     private void OnKfmVfrTimingChanged(ChangeEventArgs e)
@@ -1375,12 +1377,17 @@ else
 
     private void OnYadifFpsChanged(ChangeEventArgs e)
     {
+        var enumNames = _options?.FilterFpsEnumNamesYadif ?? new List<string>();
+        if (enumNames.Count == 0)
+        {
+            return;
+        }
         var idx = ParseIndex(e.Value);
-        if (idx < 0 || idx >= _yadifFpsEnumNames.Length)
+        if (idx < 0 || idx >= enumNames.Count)
         {
             idx = 0;
         }
-        SetFilterValue("YadifFps", JsonValue.Create(_yadifFpsEnumNames[idx]));
+        SetFilterValue("YadifFps", JsonValue.Create(enumNames[idx]));
     }
 
     private void OnAudioEncoderChanged(ChangeEventArgs e)
@@ -1603,8 +1610,9 @@ else
 
     private int GetKfmFpsIndex()
     {
-        var current = GetFilterEnumString("KfmFps", _filterFpsEnumNames.ToList());
-        var idx = Array.FindIndex(_kfmFpsEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        var enumNames = _options?.FilterFpsEnumNamesKfm ?? new List<string>();
+        var current = GetFilterEnumString("KfmFps", enumNames);
+        var idx = enumNames.FindIndex(item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
         return idx >= 0 ? idx : 0;
     }
 
@@ -1629,47 +1637,36 @@ else
 
     private int GetYadifFpsIndex()
     {
-        var current = GetFilterEnumString("YadifFps", _yadifFpsEnumNames.ToList());
-        var idx = Array.FindIndex(_yadifFpsEnumNames, item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        var enumNames = _options?.FilterFpsEnumNamesYadif ?? new List<string>();
+        var current = GetFilterEnumString("YadifFps", enumNames);
+        var idx = enumNames.FindIndex(item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
         return idx >= 0 ? idx : 0;
     }
 
     private IEnumerable<(string Value, string Label, bool Selected)> GetKfmFpsOptions()
     {
-        var labels = BuildFilterFpsLabelMap();
+        var labels = _options?.FilterFpsListKfm ?? new List<string>();
+        var enumNames = _options?.FilterFpsEnumNamesKfm ?? new List<string>();
         var idx = GetKfmFpsIndex();
-        for (var i = 0; i < _kfmFpsEnumNames.Length; i++)
+        for (var i = 0; i < enumNames.Count; i++)
         {
-            var key = _kfmFpsEnumNames[i];
-            var label = labels.TryGetValue(key, out var text) ? text : key;
+            var key = enumNames[i];
+            var label = i < labels.Count ? labels[i] : key;
             yield return (i.ToString(), label, i == idx);
         }
     }
 
     private IEnumerable<(string Value, string Label, bool Selected)> GetYadifFpsOptions()
     {
-        var labels = BuildFilterFpsLabelMap();
+        var labels = _options?.FilterFpsListYadif ?? new List<string>();
+        var enumNames = _options?.FilterFpsEnumNamesYadif ?? new List<string>();
         var idx = GetYadifFpsIndex();
-        for (var i = 0; i < _yadifFpsEnumNames.Length; i++)
+        for (var i = 0; i < enumNames.Count; i++)
         {
-            var key = _yadifFpsEnumNames[i];
-            var label = labels.TryGetValue(key, out var text) ? text : key;
+            var key = enumNames[i];
+            var label = i < labels.Count ? labels[i] : key;
             yield return (i.ToString(), label, i == idx);
         }
-    }
-
-    private Dictionary<string, string> BuildFilterFpsLabelMap()
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var labels = _options?.FilterFpsList ?? new List<string>();
-        for (var i = 0; i < _filterFpsEnumNames.Length; i++)
-        {
-            if (i < labels.Count)
-            {
-                map[_filterFpsEnumNames[i]] = labels[i];
-            }
-        }
-        return map;
     }
 
     private bool IsDeinterlace(string name)

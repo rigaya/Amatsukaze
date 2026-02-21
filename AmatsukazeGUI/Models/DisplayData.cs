@@ -446,13 +446,10 @@ namespace Amatsukaze.Models
             }
         }
         #endregion
-        public static string[] FPSList { get; } = Server.ProfileSettingExtensions.FilterFPSList;
+        public static string[] FPSList { get; } = Server.ProfileSettingExtensions.FilterFPSNameListKfm;
 
         #region SelectedFPS変更通知プロパティ
-        public static FilterFPS[] FPSListData = new FilterFPS[]
-        {
-            FilterFPS.VFR, FilterFPS.VFR30, FilterFPS.CFR24, FilterFPS.CFR60, FilterFPS.SVP
-        };
+        public static FilterFPS[] FPSListData = Server.ProfileSettingExtensions.FilterFPSListKfm;
         public int SelectedFPS {
             get { return Array.IndexOf(FPSListData, Data.KfmFps); }
             set
@@ -499,16 +496,10 @@ namespace Amatsukaze.Models
     {
         public override string Name { get { return "Yadif"; } }
 
-        public static string[] FPSList { get; } = new string[]
-        {
-            "24fps", "30fps", "60fps"
-        };
+        public static string[] FPSList { get; } = Server.ProfileSettingExtensions.FilterFPSNameListYadif;
 
         #region SelectedFPS変更通知プロパティ
-        public static FilterFPS[] FPSListData = new FilterFPS[]
-        {
-            FilterFPS.CFR24, FilterFPS.CFR30, FilterFPS.CFR60
-        };
+        public static FilterFPS[] FPSListData = Server.ProfileSettingExtensions.FilterFPSListYadif;
         public int SelectedFPS {
             get { return Array.IndexOf(FPSListData, Data.YadifFps); }
             set

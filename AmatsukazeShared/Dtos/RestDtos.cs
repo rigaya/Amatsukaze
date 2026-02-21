@@ -108,7 +108,10 @@ namespace Amatsukaze.Shared
         public List<int>? DeblockQualityValues { get; set; }
         public List<string>? D3dvpGpuList { get; set; }
         public List<string>? QtgmcPresetList { get; set; }
-        public List<string>? FilterFpsList { get; set; }
+        public List<string>? FilterFpsListKfm { get; set; }
+        public List<string>? FilterFpsEnumNamesKfm { get; set; }
+        public List<string>? FilterFpsListYadif { get; set; }
+        public List<string>? FilterFpsEnumNamesYadif { get; set; }
         public List<string>? VfrFpsList { get; set; }
         public List<string>? JlsCommandFiles { get; set; }
         public List<string>? Mpeg2DecoderList { get; set; }

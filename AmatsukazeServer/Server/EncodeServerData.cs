@@ -474,6 +474,14 @@ namespace Amatsukaze.Server
         public static string[] QTGMCPresetList { get; } = new string[] { "自動", "Faster", "Fast", "Medium", "Slow", "Slower" };
         // FilterFPS列挙体の順序: VFR, CFR24, CFR30, CFR60, SVP, VFR30
         public static string[] FilterFPSList { get; } = new string[] { "VFR", "24fps", "30fps", "60fps", "SVPによる60fps化", "VFR(30fps上限)" };
+        // KFMはCFR30を使用しない
+        public static FilterFPS[] FilterFPSListKfm { get; } = new FilterFPS[] { FilterFPS.VFR, FilterFPS.VFR30, FilterFPS.CFR24, FilterFPS.CFR60, FilterFPS.SVP };
+        // YadifはCFR系のみ
+        public static FilterFPS[] FilterFPSListYadif { get; } = new FilterFPS[] { FilterFPS.CFR24, FilterFPS.CFR30, FilterFPS.CFR60 };
+        public static string[] FilterFPSEnumNamesKfm { get; } = FilterFPSListKfm.Select(fps => fps.ToString()).ToArray();
+        public static string[] FilterFPSEnumNamesYadif { get; } = FilterFPSListYadif.Select(fps => fps.ToString()).ToArray();
+        public static string[] FilterFPSNameListKfm { get; } = FilterFPSListKfm.Select(GetFilterFPSString).ToArray();
+        public static string[] FilterFPSNameListYadif { get; } = FilterFPSListYadif.Select(GetYadifFPSString).ToArray();
         public static string[] DeblockStrengthList { get; } = new string[] { "強", "中", "弱", "低ビットレート用弱" };
         public static string[] DeblockQualityList { get; } = new string[] { "高(4)", "中(3)", "低(2)" };
         public static int[] DeblockQualityListData { get; } = new int[] { 4, 3, 2 };
