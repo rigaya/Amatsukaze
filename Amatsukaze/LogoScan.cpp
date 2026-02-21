@@ -12,14 +12,18 @@
 #include <array>
 #include <queue>
 #include <thread>
+#include <deque>
+#include <mutex>
 #include <functional>
 #include <numeric>
 #include <cassert>
+#include <exception>
 #include <limits>
 #include <type_traits>
 #include <atomic>
 #include <cstring>
 #include "zlib.h"
+#include "rgy_event.h"
 #include "rgy_thread_pool.h"
 
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
@@ -524,40 +528,187 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
         THROW(FormatException, "avcodec_open2 failed");
     }
 
+    struct QueuedFrame {
+        AVFrame* frame = nullptr;
+        int64_t pos = -1;
+    };
+
+    constexpr size_t kPipelineDepth = 6;
+    std::deque<QueuedFrame> frameQueue;
+    std::mutex queueMtx;
+    std::atomic<bool> stopRequested(false);
+    std::exception_ptr workerException = nullptr;
+
+    auto evQueueHasFrame = CreateEventUnique(nullptr, 1, 0);
+    auto evQueueHasRoom = CreateEventUnique(nullptr, 1, 1);
+    auto evDecodeDone = CreateEventUnique(nullptr, 1, 0);
+    auto evStopRequested = CreateEventUnique(nullptr, 1, 0);
+
+    auto updateQueueEventsLocked = [&]() {
+        if (frameQueue.empty()) {
+            ResetEvent(evQueueHasFrame.get());
+        } else {
+            SetEvent(evQueueHasFrame.get());
+        }
+        if (frameQueue.size() < kPipelineDepth) {
+            SetEvent(evQueueHasRoom.get());
+        } else {
+            ResetEvent(evQueueHasRoom.get());
+        }
+    };
+    auto clearQueueLocked = [&]() {
+        while (!frameQueue.empty()) {
+            auto& qf = frameQueue.front();
+            if (qf.frame != nullptr) {
+                av_frame_free(&qf.frame);
+            }
+            frameQueue.pop_front();
+        }
+        updateQueueEventsLocked();
+    };
+
+    std::thread worker([&]() {
+        try {
+            while (true) {
+                if (WaitForSingleObject(evQueueHasFrame.get(), 10) == WAIT_TIMEOUT) {
+                    const bool decodeDone = (WaitForSingleObject(evDecodeDone.get(), 0) == WAIT_OBJECT_0);
+                    const bool stopped = (WaitForSingleObject(evStopRequested.get(), 0) == WAIT_OBJECT_0);
+                    if (decodeDone || stopped) {
+                        std::lock_guard<std::mutex> lock(queueMtx);
+                        if (frameQueue.empty()) {
+                            break;
+                        }
+                    }
+                    continue;
+                }
+
+                QueuedFrame qf{};
+                {
+                    std::lock_guard<std::mutex> lock(queueMtx);
+                    if (frameQueue.empty()) {
+                        updateQueueEventsLocked();
+                        continue;
+                    }
+                    qf = std::move(frameQueue.front());
+                    frameQueue.pop_front();
+                    updateQueueEventsLocked();
+                }
+
+                currentPos = qf.pos;
+                const bool keepReading = onFrameCb ? onFrameCb(qf.frame) : true;
+                if (qf.frame != nullptr) {
+                    av_frame_free(&qf.frame);
+                }
+                if (!keepReading) {
+                    stopRequested.store(true);
+                    SetEvent(evStopRequested.get());
+                    std::lock_guard<std::mutex> lock(queueMtx);
+                    clearQueueLocked();
+                    break;
+                }
+            }
+        } catch (...) {
+            workerException = std::current_exception();
+            stopRequested.store(true);
+            SetEvent(evStopRequested.get());
+            SetEvent(evDecodeDone.get());
+            std::lock_guard<std::mutex> lock(queueMtx);
+            clearQueueLocked();
+        }
+    });
+
+    auto enqueueFrame = [&](AVFrame* src, const int64_t pos) -> bool {
+        AVFrame* copy = av_frame_alloc();
+        if (copy == nullptr) {
+            THROW(RuntimeException, "av_frame_alloc failed");
+        }
+        if (av_frame_ref(copy, src) != 0) {
+            av_frame_free(&copy);
+            THROW(RuntimeException, "av_frame_ref failed");
+        }
+        while (!stopRequested.load(std::memory_order_relaxed)) {
+            if (WaitForSingleObject(evQueueHasRoom.get(), 10) == WAIT_TIMEOUT) {
+                continue;
+            }
+            std::lock_guard<std::mutex> lock(queueMtx);
+            if (frameQueue.size() < kPipelineDepth) {
+                frameQueue.push_back(QueuedFrame{ copy, pos });
+                updateQueueEventsLocked();
+                return true;
+            }
+            updateQueueEventsLocked();
+        }
+        av_frame_free(&copy);
+        return false;
+    };
+
     bool first = true;
+    int64_t lastPacketPos = -1;
     Frame frame;
     AVPacket packet = AVPacket();
-    while (av_read_frame(inputCtx(), &packet) == 0) {
-        if (packet.stream_index == videoStream->index) {
-            if (avcodec_send_packet(codecCtx(), &packet) != 0) {
+    try {
+        while (!stopRequested.load(std::memory_order_relaxed) && av_read_frame(inputCtx(), &packet) == 0) {
+            if (packet.stream_index == videoStream->index) {
+                lastPacketPos = packet.pos;
+                if (avcodec_send_packet(codecCtx(), &packet) != 0) {
+                    THROW(FormatException, "avcodec_send_packet failed");
+                }
+                while (!stopRequested.load(std::memory_order_relaxed) && avcodec_receive_frame(codecCtx(), frame()) == 0) {
+                    if (first) {
+                        if (onFirstFrameCb) {
+                            onFirstFrameCb(videoStream, frame());
+                        }
+                        first = false;
+                    }
+                    if (!enqueueFrame(frame(), lastPacketPos)) {
+                        break;
+                    }
+                }
+            }
+            av_packet_unref(&packet);
+        }
+
+        if (!stopRequested.load(std::memory_order_relaxed)) {
+            // flush decoder
+            if (avcodec_send_packet(codecCtx(), NULL) != 0) {
                 THROW(FormatException, "avcodec_send_packet failed");
             }
-            while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
+            while (!stopRequested.load(std::memory_order_relaxed) && avcodec_receive_frame(codecCtx(), frame()) == 0) {
                 if (first) {
                     if (onFirstFrameCb) {
                         onFirstFrameCb(videoStream, frame());
                     }
                     first = false;
                 }
-                currentPos = packet.pos;
-                const bool keepReading = onFrameCb ? onFrameCb(frame()) : true;
-                if (!keepReading) {
-                    av_packet_unref(&packet);
-                    return;
+                if (!enqueueFrame(frame(), lastPacketPos)) {
+                    break;
                 }
             }
         }
+    } catch (...) {
         av_packet_unref(&packet);
+        stopRequested.store(true);
+        SetEvent(evStopRequested.get());
+        SetEvent(evDecodeDone.get());
+        {
+            std::lock_guard<std::mutex> lock(queueMtx);
+            clearQueueLocked();
+        }
+        if (worker.joinable()) {
+            worker.join();
+        }
+        if (workerException) {
+            std::rethrow_exception(workerException);
+        }
+        throw;
     }
 
-    // flush decoder
-    if (avcodec_send_packet(codecCtx(), NULL) != 0) {
-        THROW(FormatException, "avcodec_send_packet failed");
+    SetEvent(evDecodeDone.get());
+    if (worker.joinable()) {
+        worker.join();
     }
-    while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
-        if (onFrameCb) {
-            onFrameCb(frame());
-        }
+    if (workerException) {
+        std::rethrow_exception(workerException);
     }
 }
 /* virtual */ void logo::SimpleVideoReader::onFirstFrame(AVStream *videoStream, AVFrame* frame) {}
@@ -2790,6 +2941,8 @@ namespace {
             const double sampleWeightPos = 1.0;
             const float dedupThreshold = std::max(0.5f * rawScale, thresholdRaw * 0.25f);
             const float transitionThreshold = std::max(0.75f * rawScale, dedupThreshold * 0.50f);
+            // 小さすぎるチャンク分割はタスク投入オーバーヘッドが支配的になるため、
+            // 既定チャンク(スレッド数に応じた分割)を使う。
             RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kScanEdgeMargin), [&](int y0, int y1) {
                 for (int y = y0 + kScanEdgeMargin; y < y1 + kScanEdgeMargin; y++) {
                     for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
@@ -2858,7 +3011,7 @@ namespace {
                         frameCount.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
-                }, 4);
+                });
             return frameCount.load(std::memory_order_relaxed);
         }
 
