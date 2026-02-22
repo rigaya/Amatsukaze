@@ -8,6 +8,7 @@
 #define _USE_MATH_DEFINES
 #include "AmatsukazeCLI.hpp"
 #include "LogoGUISupport.hpp"
+#include "TrimAdjust.hpp"
 
 // Avisynthフィルタデバッグ用
 #include "TextOut.cpp"

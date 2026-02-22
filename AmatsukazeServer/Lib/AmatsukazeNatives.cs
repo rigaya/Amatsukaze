@@ -366,6 +366,111 @@ namespace Amatsukaze.Lib
         }
     }
 
+    public class TrimAdjust : IDisposable
+    {
+        public AMTContext Ctx { private set; get; }
+        public IntPtr Ptr { private set; get; }
+
+        #region Natives
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
+        private static extern IntPtr TrimAdjust_Create(IntPtr ctx, string datFilePath, int scaleMode);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern void TrimAdjust_Delete(IntPtr ptr);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern int TrimAdjust_GetNumFrames(IntPtr ptr);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern int TrimAdjust_GetWidth(IntPtr ptr);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern int TrimAdjust_GetHeight(IntPtr ptr);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern int TrimAdjust_DecodeFrame(IntPtr ptr, int frameNumber, ref int width, ref int height);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static unsafe extern void TrimAdjust_GetFrame(IntPtr ptr, int frameNumber, byte* rgb, int width, int height);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern int TrimAdjust_GetFrameInfo(IntPtr ptr, int frameNumber,
+            ref long pts, ref long duration, ref int keyFrame, ref int cmType);
+        #endregion
+
+        public TrimAdjust(AMTContext ctx, string datFilePath, int scaleMode)
+        {
+            Ctx = ctx;
+            Ptr = TrimAdjust_Create(Ctx.Ptr, datFilePath, scaleMode);
+            if (Ptr == IntPtr.Zero)
+            {
+                throw new IOException(Ctx.GetError());
+            }
+        }
+
+        #region IDisposable Support
+        private bool disposedValue = false;
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                TrimAdjust_Delete(Ptr);
+                Ptr = IntPtr.Zero;
+                disposedValue = true;
+            }
+        }
+
+        ~TrimAdjust()
+        {
+            Dispose(false);
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
+
+        public int NumFrames => TrimAdjust_GetNumFrames(Ptr);
+        public int Width => TrimAdjust_GetWidth(Ptr);
+        public int Height => TrimAdjust_GetHeight(Ptr);
+
+        // フレームをデコードしてBitmapを返す。失敗時はnull
+        public object GetFrame(int frameNumber)
+        {
+            int width = 0, height = 0;
+            if (TrimAdjust_DecodeFrame(Ptr, frameNumber, ref width, ref height) != 0)
+            {
+                if (width != 0 && height != 0)
+                {
+                    int stride = width * 3;
+                    byte[] buffer = new byte[stride * height];
+                    unsafe
+                    {
+                        fixed (byte* pbuffer = buffer)
+                        {
+                            TrimAdjust_GetFrame(Ptr, frameNumber, pbuffer, width, height);
+                        }
+                    }
+                    return BitmapManager.CreateBitmapFromRgb(buffer, width, height, stride);
+                }
+            }
+            return null;
+        }
+
+        // フレームのメタ情報を取得
+        public bool GetFrameInfo(int frameNumber, out long pts, out long duration, out int keyFrame, out int cmType)
+        {
+            pts = 0;
+            duration = 0;
+            keyFrame = 0;
+            cmType = 0;
+            return TrimAdjust_GetFrameInfo(Ptr, frameNumber, ref pts, ref duration, ref keyFrame, ref cmType) != 0;
+        }
+    }
+
     public delegate bool LogoAnalyzeCallback(float progress, int nread, int total, int ngather);
 
     public class LogoFile : IDisposable

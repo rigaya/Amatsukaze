@@ -429,6 +429,31 @@ namespace Amatsukaze.Shared
             }
         }
 
+        // Trim調整
+        public Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req)
+            => PostJsonAsync("/api/trim/sessions", req,
+                element => element.Deserialize<TrimAdjustSessionResponse>(jsonOptions) ?? new TrimAdjustSessionResponse());
+
+        public Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req)
+            => PostJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/save", req, _ => true);
+
+        public async Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId)
+        {
+            try
+            {
+                var response = await http.DeleteAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}");
+                if (response.IsSuccessStatusCode)
+                {
+                    return ApiResult<bool>.Success(true, (int)response.StatusCode);
+                }
+                return ApiResult<bool>.Fail((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<bool>.Fail(0, ex.Message);
+            }
+        }
+
         public Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req)
         {
             var query = new List<string>();

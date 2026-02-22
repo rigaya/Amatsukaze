@@ -376,6 +376,7 @@ else
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.RemoveItem, "削除"))' disabled="@(!_hasSelection)">削除</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ForceStart, "強制実行"))' disabled="@(!_hasSelection)">強制実行</button>
                 <button class="queue-menu-item" @onclick="(() => OpenLogoAnalyzeSelectedAsync())" disabled="@(!_hasSelection)">ロゴ解析</button>
+                <button class="queue-menu-item" @onclick="OpenTrimAdjustSelected" disabled="@(!CanTrimAdjustSelected)">Trim調整</button>
                 <button class="queue-menu-item" @onclick="ClearSucceededAsync">成功済みをクリア</button>
             </div>
         }
@@ -1939,6 +1940,33 @@ else
             return;
         }
         await OpenLogoAnalyzeAsync(item);
+    }
+
+    // 選択中アイテムがTrim調整可能かどうか
+    private bool CanTrimAdjustSelected
+    {
+        get
+        {
+            if (_view == null || _selectedIds.Count == 0) return false;
+            var item = _view.Items.FirstOrDefault(x => _selectedIds.Contains(x.Id));
+            return item?.CanTrimAdjust == true;
+        }
+    }
+
+    private async Task OpenTrimAdjustSelected()
+    {
+        CloseContextMenu();
+        if (_view == null || _selectedIds.Count == 0)
+        {
+            return;
+        }
+        var item = _view.Items.FirstOrDefault(x => _selectedIds.Contains(x.Id));
+        if (item == null || !item.CanTrimAdjust)
+        {
+            return;
+        }
+        // 新しいタブでTrim調整ページを開く
+        await JS.InvokeVoidAsync("open", $"/trim-adjust/{item.Id}", "_blank");
     }
 
     private async Task ClearSucceededAsync()

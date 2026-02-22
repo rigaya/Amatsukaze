@@ -1006,7 +1006,8 @@ namespace Amatsukaze.Server.Rest
                     Name = null,
                     Children = null
                 }).ToList(),
-                GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList()
+                GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList(),
+                CanTrimAdjust = item.Mode == ProcMode.CMCheck && item.State == QueueState.Complete
             };
         }
 
@@ -1246,6 +1247,16 @@ namespace Amatsukaze.Server.Rest
             console = new TaskConsoleState(BuildConsoleTaskInfo(item));
             console.LoadFallbackLines(lines);
             return true;
+        }
+
+        // Trim調整サービスから呼ばれる: QueueItemIdからログファイルパスを解決
+        public string ResolveTaskLogPathById(int queueItemId)
+        {
+            lock (sync)
+            {
+                var item = queueItems.FirstOrDefault(q => q != null && q.Id == queueItemId);
+                return ResolveTaskLogPath(item);
+            }
         }
 
         private string ResolveTaskLogPath(QueueItem item)

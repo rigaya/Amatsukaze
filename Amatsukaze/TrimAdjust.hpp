@@ -1,0 +1,230 @@
+/**
+* Amatsukaze Trim Viewer GUI Support
+* Copyright (c) 2017-2019 Nekopanda
+*
+* This software is released under the MIT License.
+* http://opensource.org/licenses/mit-license.php
+*/
+#pragma once
+
+#include "AMTSource.h"
+
+#include <mutex>
+
+namespace trimadjust {
+
+// amts0.datを読み込みAviSynth経由でフレーム取得を行うクラス
+class GUITrimAdjust : public AMTObject {
+    // amts0.datから読み込んだデータ
+    std::vector<FilterSourceFrame> frames;
+    VideoFormat vfmt;
+
+    // AviSynth環境
+    IScriptEnvironment2* env;
+    PClip rgbClip; // ConvertToRGB24適用済みクリップ
+    int width, height;
+    int numFrames;
+
+    std::mutex mutex;
+
+    // AviSynth環境を作成しAMTSourceプラグイン経由でクリップを構築
+    void initAviSynth(const tstring& datFilePath, int scaleMode) {
+        env = CreateScriptEnvironment2();
+        if (env == nullptr) {
+            THROW(RuntimeException, "AviSynth環境の作成に失敗しました");
+        }
+
+        try {
+            // AMTSourceプラグインをロード
+            // LoadAMTSourceと同様にamts0.datパスを渡してAMTSourceクリップを作成
+            AVSValue loadArgs[] = { char_to_tstring(datFilePath).c_str(), "", false, 0 };
+            const char* loadNames[] = { nullptr, nullptr, nullptr, nullptr };
+            AVSValue amtClip = env->Invoke("AMTSource", AVSValue(loadArgs, 4), loadNames);
+            PClip srcClip = amtClip.AsClip();
+
+            const VideoInfo& srcVi = srcClip->GetVideoInfo();
+            numFrames = srcVi.num_frames;
+            width = srcVi.width;
+            height = srcVi.height;
+
+            // インタレース判定に基づきConvertToRGB24を適用
+            const bool interlaced = !vfmt.progressive;
+            AVSValue convertArgs[] = { amtClip, interlaced };
+            const char* convertNames[] = { nullptr, "interlaced" };
+            AVSValue rgbResult = env->Invoke("ConvertToRGB24", AVSValue(convertArgs, 2), convertNames);
+            PClip convertedClip = rgbResult.AsClip();
+
+            // scaleMode==1: フィールド分離→リサイズ→フィールドマージ
+            if (scaleMode == 1 && interlaced) {
+                // SeparateFields
+                AVSValue sepArgs[] = { rgbResult };
+                AVSValue sepResult = env->Invoke("SeparateFields", AVSValue(sepArgs, 1));
+
+                // 元の解像度にBicubicResize
+                AVSValue resizeArgs[] = { sepResult, width, height / 2 };
+                AVSValue resizeResult = env->Invoke("BicubicResize", AVSValue(resizeArgs, 3));
+
+                // Weave（フィールドマージ）
+                AVSValue weaveArgs[] = { resizeResult };
+                AVSValue weaveResult = env->Invoke("Weave", AVSValue(weaveArgs, 1));
+
+                rgbClip = weaveResult.AsClip();
+            } else {
+                rgbClip = convertedClip;
+            }
+
+            // 最終的なサイズを取得
+            const VideoInfo& finalVi = rgbClip->GetVideoInfo();
+            width = finalVi.width;
+            height = finalVi.height;
+        } catch (const AvisynthError& e) {
+            if (env) {
+                env->DeleteScriptEnvironment();
+                env = nullptr;
+            }
+            THROWF(RuntimeException, "AviSynthエラー: %s", e.msg);
+        }
+    }
+
+public:
+    GUITrimAdjust(AMTContext& ctx, const tchar* datFilePath, int scaleMode)
+        : AMTObject(ctx)
+        , env(nullptr)
+        , rgbClip()
+        , width(0)
+        , height(0)
+        , numFrames(0) {
+        // amts0.datを読み込んでフレーム情報とVideoFormatを取得
+        tstring path(datFilePath);
+        File file(path, _T("rb"));
+        auto srcpathv = file.readArray<tchar>();
+        auto audiopathv = file.readArray<tchar>();
+        vfmt = file.readValue<VideoFormat>();
+        // AudioFormatは読み飛ばし
+        file.readValue<AudioFormat>();
+        frames = file.readArray<FilterSourceFrame>();
+        // audioFrames, decoderSettingは不要だが読み飛ばし
+        file.readArray<FilterAudioFrame>();
+        file.readValue<DecoderSetting>();
+
+        // AviSynth環境の初期化
+        initAviSynth(path, scaleMode);
+    }
+
+    ~GUITrimAdjust() {
+        rgbClip = PClip();
+        if (env) {
+            env->DeleteScriptEnvironment();
+            env = nullptr;
+        }
+    }
+
+    int getNumFrames() const { return numFrames; }
+    int getWidth() const { return width; }
+    int getHeight() const { return height; }
+
+    // フレームをデコードし、サイズを返す
+    bool decodeFrame(int frameNumber, int* pwidth, int* pheight) {
+        std::lock_guard<std::mutex> lock(mutex);
+        ctx.setError(Exception());
+        try {
+            if (frameNumber < 0 || frameNumber >= numFrames) {
+                return false;
+            }
+            *pwidth = width;
+            *pheight = height;
+            return true;
+        } catch (const Exception& exception) {
+            ctx.setError(exception);
+        }
+        return false;
+    }
+
+    // デコード済みフレームのRGBデータを取得
+    void getFrame(int frameNumber, uint8_t* rgb, int w, int h) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (w != width || h != height || !rgbClip) {
+            return;
+        }
+        try {
+            PVideoFrame frame = rgbClip->GetFrame(frameNumber, env);
+            const uint8_t* srcPtr = frame->GetReadPtr();
+            const int srcPitch = frame->GetPitch();
+            const int rowBytes = w * 3;
+            // AviSynthのRGB24はボトムアップなので上下反転してコピー
+            for (int y = 0; y < h; y++) {
+                memcpy(rgb + y * rowBytes, srcPtr + (h - 1 - y) * srcPitch, rowBytes);
+            }
+        } catch (const AvisynthError&) {
+            // フレーム取得失敗時はゼロクリア
+            memset(rgb, 0, (size_t)w * h * 3);
+        }
+    }
+
+    // フレームのメタ情報を取得
+    bool getFrameInfo(int frameNumber, int64_t* pts, int64_t* duration,
+                      int* keyFrame, int* cmType) const {
+        if (frameNumber < 0 || frameNumber >= (int)frames.size()) {
+            return false;
+        }
+        const auto& f = frames[frameNumber];
+        *pts = f.framePTS;
+        // durationはframeDurationをそのまま使う（内部用だがPTS間隔として利用可能）
+        // 90kHzタイムスタンプ単位
+        if (frameNumber + 1 < (int)frames.size()) {
+            *duration = frames[frameNumber + 1].framePTS - f.framePTS;
+        } else {
+            // 最終フレームは直前のフレームのdurationを使う
+            if (frameNumber > 0) {
+                *duration = f.framePTS - frames[frameNumber - 1].framePTS;
+            } else {
+                *duration = 0;
+            }
+        }
+        *keyFrame = f.keyFrame;
+        *cmType = (int)f.cmType;
+        return true;
+    }
+};
+
+} // namespace trimadjust
+
+// DLLエクスポート関数
+
+extern "C" AMATSUKAZE_API void* TrimAdjust_Create(AMTContext* ctx, const tchar* datFilePath, int scaleMode) {
+    try {
+        return new trimadjust::GUITrimAdjust(*ctx, datFilePath, scaleMode);
+    } catch (const Exception& exception) {
+        ctx->setError(exception);
+    }
+    return nullptr;
+}
+
+extern "C" AMATSUKAZE_API void TrimAdjust_Delete(void* ptr) {
+    delete static_cast<trimadjust::GUITrimAdjust*>(ptr);
+}
+
+extern "C" AMATSUKAZE_API int TrimAdjust_GetNumFrames(void* ptr) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getNumFrames();
+}
+
+extern "C" AMATSUKAZE_API int TrimAdjust_GetWidth(void* ptr) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getWidth();
+}
+
+extern "C" AMATSUKAZE_API int TrimAdjust_GetHeight(void* ptr) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getHeight();
+}
+
+extern "C" AMATSUKAZE_API int TrimAdjust_DecodeFrame(void* ptr, int frameNumber, int* pwidth, int* pheight) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->decodeFrame(frameNumber, pwidth, pheight) ? 1 : 0;
+}
+
+extern "C" AMATSUKAZE_API void TrimAdjust_GetFrame(void* ptr, int frameNumber, uint8_t* rgb, int width, int height) {
+    static_cast<trimadjust::GUITrimAdjust*>(ptr)->getFrame(frameNumber, rgb, width, height);
+}
+
+extern "C" AMATSUKAZE_API int TrimAdjust_GetFrameInfo(void* ptr, int frameNumber,
+    int64_t* pts, int64_t* duration, int* keyFrame, int* cmType) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getFrameInfo(frameNumber, pts, duration, keyFrame, cmType) ? 1 : 0;
+}

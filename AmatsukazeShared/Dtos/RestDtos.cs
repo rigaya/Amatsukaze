@@ -193,6 +193,7 @@ namespace Amatsukaze.Shared
         public int ImageHeight { get; set; }
         public List<GenreNodeView>? Genres { get; set; }
         public List<string>? GenreNames { get; set; }
+        public bool CanTrimAdjust { get; set; }
     }
 
     public class QueueCounters
@@ -541,6 +542,42 @@ namespace Amatsukaze.Shared
         public int Pass { get; set; }
         public string? LogoFileName { get; set; }
         public string? ImageUrl { get; set; }
+    }
+
+    // Trim調整用DTO
+    public class TrimRange
+    {
+        public int Start { get; set; }
+        public int End { get; set; } // inclusive
+    }
+
+    public class FramePtsInfo
+    {
+        public int Frame { get; set; }
+        public double PtsSeconds { get; set; }
+        public int KeyFrame { get; set; }
+        public int CmType { get; set; }
+    }
+
+    public class TrimAdjustSessionRequest
+    {
+        public int QueueItemId { get; set; }
+        public int ScaleMode { get; set; }
+    }
+
+    public class TrimAdjustSessionResponse
+    {
+        public string? SessionId { get; set; }
+        public int NumFrames { get; set; }
+        public int FrameWidth { get; set; }
+        public int FrameHeight { get; set; }
+        public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
+        public List<FramePtsInfo> FramePts { get; set; } = new List<FramePtsInfo>();
+    }
+
+    public class TrimSaveRequest
+    {
+        public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
     }
 
     public class Snapshot

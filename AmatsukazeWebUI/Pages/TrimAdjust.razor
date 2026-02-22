@@ -1,0 +1,551 @@
+@page "/trim-adjust/{QueueItemId:int}"
+@using Amatsukaze.Shared
+@using System.Globalization
+@inject IAmatsukazeApi Api
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="trim-adjust-page" @onkeydown="OnKeyDown" tabindex="0" @ref="_pageRef">
+    <div class="trim-toolbar">
+        <button class="trim-btn" @onclick="GoBack">&#x2190; 戻る</button>
+        <button class="trim-btn trim-btn-primary" @onclick="SaveTrims" disabled="@(!_hasChanges)">保存</button>
+        <span class="trim-toolbar-info">
+            @if (!string.IsNullOrEmpty(_statusMessage))
+            {
+                <span class="@(_isError ? "trim-status-error" : "trim-status-ok")">@_statusMessage</span>
+            }
+        </span>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="trim-loading">読み込み中...</div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="trim-error">@_errorMessage</div>
+    }
+    else if (_session != null)
+    {
+        <div class="trim-main">
+            @* 左: 編集点リスト *@
+            <div class="trim-editpoints">
+                <div class="trim-editpoints-header">編集点</div>
+                <div class="trim-editpoints-list">
+                    @for (int i = 0; i < _editPoints.Count; i++)
+                    {
+                        var idx = i;
+                        var ep = _editPoints[idx];
+                        <div class="trim-editpoint @(idx == _selectedEditPoint ? "selected" : "")"
+                             @onclick="(() => OnEditPointClick(idx))">
+                            <span class="trim-ep-index">@(idx + 1):</span>
+                            <span class="trim-ep-frame">@ep.Frame</span>
+                            <span class="trim-ep-time">@FormatTime(ep.Frame)</span>
+                        </div>
+                    }
+                </div>
+                <div class="trim-editpoints-actions">
+                    <button class="trim-btn trim-btn-sm" @onclick="AddEditPoint">追加</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="DeleteEditPoint"
+                            disabled="@(_selectedEditPoint < 0)">削除</button>
+                </div>
+            </div>
+
+            @* 右: プレビュー + コントロール *@
+            <div class="trim-preview-area">
+                @* 映像プレビュー *@
+                <div class="trim-preview-container">
+                    <img class="trim-preview-img"
+                         src="@GetFrameUrl()"
+                         alt="Frame @_currentFrame" />
+                </div>
+
+                @* フレーム情報 *@
+                <div class="trim-frame-info">
+                    <span>Frame: @_currentFrame</span>
+                    <span> | </span>
+                    <span>@FormatTime(_currentFrame)</span>
+                    @if (_currentFramePts != null)
+                    {
+                        <span> | </span>
+                        <span>@(_currentFramePts.KeyFrame != 0 ? "KEY" : "")</span>
+                        <span>@GetCmTypeLabel(_currentFramePts.CmType)</span>
+                    }
+                </div>
+
+                @* 移動ボタン *@
+                <div class="trim-controls">
+                    <button class="trim-btn trim-btn-sm" @onclick="() => JumpToPrevEditPoint()" title="前の編集点 (PageUp)">|&lt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-100)" title="-100F (Ctrl+Left)">&#x25C0;&#x25C0;&#x25C0;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-10)" title="-10F (Shift+Left)">&#x25C0;&#x25C0;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-1)" title="-1F (Left)">&#x25C0;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="MoveToNearestEditPoint" title="最寄り編集点">|</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(1)" title="+1F (Right)">&#x25B6;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(10)" title="+10F (Shift+Right)">&#x25B6;&#x25B6;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(100)" title="+100F (Ctrl+Right)">&#x25B6;&#x25B6;&#x25B6;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => JumpToNextEditPoint()" title="次の編集点 (PageDown)">&gt;|</button>
+                </div>
+
+                @* シークバー *@
+                <div class="trim-seekbar-container">
+                    <div class="trim-seekbar" @onclick="OnSeekBarClick" @ref="_seekBarRef">
+                        <div class="trim-seekbar-bg" style="@GetSeekBarGradient()"></div>
+                        @* 現在位置マーカー *@
+                        <div class="trim-seekbar-cursor"
+                             style="left: @(GetFramePercent(_currentFrame))%"></div>
+                        @* 編集点マーカー *@
+                        @foreach (var ep in _editPoints)
+                        {
+                            <div class="trim-seekbar-marker"
+                                 style="left: @(GetFramePercent(ep.Frame))%"></div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int QueueItemId { get; set; }
+
+    private ElementReference _pageRef;
+    private ElementReference _seekBarRef;
+
+    private bool _loading = true;
+    private string? _errorMessage;
+    private string? _statusMessage;
+    private bool _isError;
+    private bool _hasChanges;
+
+    private TrimAdjustSessionResponse? _session;
+    private string? _sessionId;
+    private int _currentFrame;
+    private int _frameUpdateToken; // debounce用のキャッシュバスティング
+
+    // 編集点リスト（Trimのstart/endを統合した昇順リスト）
+    private List<EditPoint> _editPoints = new List<EditPoint>();
+    private int _selectedEditPoint = -1;
+    private FramePtsInfo? _currentFramePts;
+
+    // debounce用タイマー
+    private System.Threading.Timer? _debounceTimer;
+    private int _pendingFrame = -1;
+
+    private class EditPoint
+    {
+        public int Frame { get; set; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _pageRef.FocusAsync();
+            await LoadSessionAsync();
+        }
+    }
+
+    private async Task LoadSessionAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var result = await Api.CreateTrimSessionAsync(new TrimAdjustSessionRequest
+        {
+            QueueItemId = QueueItemId,
+            ScaleMode = 0
+        });
+
+        if (!result.Ok || result.Data == null)
+        {
+            _errorMessage = result.Error ?? "セッションの作成に失敗しました";
+            _loading = false;
+            StateHasChanged();
+            return;
+        }
+
+        _session = result.Data;
+        _sessionId = _session.SessionId;
+        _currentFrame = 0;
+
+        // TrimsからEditPointsを構築
+        RebuildEditPoints(_session.Trims);
+        UpdateCurrentFramePts();
+
+        _loading = false;
+        _frameUpdateToken = 0;
+        StateHasChanged();
+    }
+
+    // Trimリストから編集点リストを構築
+    private void RebuildEditPoints(List<TrimRange> trims)
+    {
+        _editPoints.Clear();
+        if (trims == null || trims.Count == 0)
+        {
+            return;
+        }
+        // 各Trimのstart, endを編集点として追加（重複排除・昇順ソート）
+        var points = new SortedSet<int>();
+        foreach (var trim in trims)
+        {
+            points.Add(trim.Start);
+            points.Add(trim.End);
+        }
+        foreach (var p in points)
+        {
+            _editPoints.Add(new EditPoint { Frame = p });
+        }
+    }
+
+    // 編集点リストからTrimリストを再構築（2点ずつペアにする）
+    private List<TrimRange> BuildTrimsFromEditPoints()
+    {
+        var trims = new List<TrimRange>();
+        var sorted = _editPoints.OrderBy(e => e.Frame).ToList();
+        for (int i = 0; i + 1 < sorted.Count; i += 2)
+        {
+            trims.Add(new TrimRange
+            {
+                Start = sorted[i].Frame,
+                End = sorted[i + 1].Frame
+            });
+        }
+        return trims;
+    }
+
+    private void OnEditPointClick(int index)
+    {
+        _selectedEditPoint = index;
+        if (index >= 0 && index < _editPoints.Count)
+        {
+            SetCurrentFrame(_editPoints[index].Frame);
+        }
+    }
+
+    private void AddEditPoint()
+    {
+        // 現在フレームを編集点として追加
+        if (_editPoints.Any(e => e.Frame == _currentFrame))
+        {
+            return; // 既に存在
+        }
+        _editPoints.Add(new EditPoint { Frame = _currentFrame });
+        _editPoints = _editPoints.OrderBy(e => e.Frame).ToList();
+        _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == _currentFrame);
+        _hasChanges = true;
+        StateHasChanged();
+    }
+
+    private void DeleteEditPoint()
+    {
+        if (_selectedEditPoint < 0 || _selectedEditPoint >= _editPoints.Count)
+        {
+            return;
+        }
+        _editPoints.RemoveAt(_selectedEditPoint);
+        if (_selectedEditPoint >= _editPoints.Count)
+        {
+            _selectedEditPoint = _editPoints.Count - 1;
+        }
+        _hasChanges = true;
+        StateHasChanged();
+    }
+
+    private void MoveFrame(int delta)
+    {
+        SetCurrentFrame(_currentFrame + delta);
+    }
+
+    private void SetCurrentFrame(int frame)
+    {
+        if (_session == null) return;
+        frame = Math.Clamp(frame, 0, _session.NumFrames - 1);
+        if (frame == _currentFrame) return;
+        _currentFrame = frame;
+        UpdateCurrentFramePts();
+        ScheduleFrameUpdate();
+    }
+
+    // debounceでフレーム更新をスケジュール
+    private void ScheduleFrameUpdate()
+    {
+        _pendingFrame = _currentFrame;
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_pendingFrame == _currentFrame)
+                {
+                    _frameUpdateToken++;
+                    StateHasChanged();
+                }
+            });
+        }, null, 100, System.Threading.Timeout.Infinite);
+        // 即座にフレーム情報だけ更新
+        StateHasChanged();
+    }
+
+    private void UpdateCurrentFramePts()
+    {
+        if (_session?.FramePts != null && _currentFrame >= 0 && _currentFrame < _session.FramePts.Count)
+        {
+            _currentFramePts = _session.FramePts[_currentFrame];
+        }
+        else
+        {
+            _currentFramePts = null;
+        }
+    }
+
+    private void JumpToPrevEditPoint()
+    {
+        var prev = _editPoints.LastOrDefault(e => e.Frame < _currentFrame);
+        if (prev != null)
+        {
+            _selectedEditPoint = _editPoints.IndexOf(prev);
+            SetCurrentFrame(prev.Frame);
+        }
+        else
+        {
+            SetCurrentFrame(0);
+        }
+    }
+
+    private void JumpToNextEditPoint()
+    {
+        var next = _editPoints.FirstOrDefault(e => e.Frame > _currentFrame);
+        if (next != null)
+        {
+            _selectedEditPoint = _editPoints.IndexOf(next);
+            SetCurrentFrame(next.Frame);
+        }
+        else if (_session != null)
+        {
+            SetCurrentFrame(_session.NumFrames - 1);
+        }
+    }
+
+    private void MoveToNearestEditPoint()
+    {
+        if (_editPoints.Count == 0) return;
+        var nearest = _editPoints.OrderBy(e => Math.Abs(e.Frame - _currentFrame)).First();
+        _selectedEditPoint = _editPoints.IndexOf(nearest);
+        SetCurrentFrame(nearest.Frame);
+    }
+
+    private void MoveSelectedEditPointToCurrentFrame()
+    {
+        if (_selectedEditPoint < 0 || _selectedEditPoint >= _editPoints.Count) return;
+        _editPoints[_selectedEditPoint].Frame = _currentFrame;
+        _editPoints = _editPoints.OrderBy(e => e.Frame).ToList();
+        _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == _currentFrame);
+        _hasChanges = true;
+        StateHasChanged();
+    }
+
+    private async Task SaveTrims()
+    {
+        if (_session == null || string.IsNullOrEmpty(_sessionId)) return;
+
+        var trims = BuildTrimsFromEditPoints();
+        if (trims.Count == 0)
+        {
+            _statusMessage = "編集点が不足しています（最低2点必要）";
+            _isError = true;
+            StateHasChanged();
+            return;
+        }
+
+        var result = await Api.SaveTrimsAsync(_sessionId, new TrimSaveRequest { Trims = trims });
+        if (result.Ok)
+        {
+            _statusMessage = "保存しました";
+            _isError = false;
+            _hasChanges = false;
+        }
+        else
+        {
+            _statusMessage = result.Error ?? "保存に失敗しました";
+            _isError = true;
+        }
+        StateHasChanged();
+    }
+
+    private async Task GoBack()
+    {
+        await JS.InvokeVoidAsync("history.back");
+    }
+
+    private async Task OnSeekBarClick(MouseEventArgs e)
+    {
+        if (_session == null) return;
+        // シークバーのクリック位置からフレーム番号を計算
+        // JSInteropでシークバーの幅を取得
+        var rect = await JS.InvokeAsync<BoundingRect>("eval",
+            $"(function(){{ var r = document.querySelector('.trim-seekbar').getBoundingClientRect(); return {{ left: r.left, width: r.width }}; }})()");
+        if (rect.Width <= 0) return;
+
+        var ratio = (e.ClientX - rect.Left) / rect.Width;
+        ratio = Math.Clamp(ratio, 0, 1);
+        var targetFrame = (int)(ratio * (_session.NumFrames - 1));
+
+        // 編集点付近（±2%）ならスナップ
+        var snapThreshold = (int)(_session.NumFrames * 0.02);
+        var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).FirstOrDefault();
+        if (nearest != null && Math.Abs(nearest.Frame - targetFrame) <= snapThreshold)
+        {
+            _selectedEditPoint = _editPoints.IndexOf(nearest);
+            SetCurrentFrame(nearest.Frame);
+        }
+        else
+        {
+            SetCurrentFrame(targetFrame);
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowLeft":
+                if (e.CtrlKey) MoveFrame(-100);
+                else if (e.ShiftKey) MoveFrame(-10);
+                else MoveFrame(-1);
+                break;
+            case "ArrowRight":
+                if (e.CtrlKey) MoveFrame(100);
+                else if (e.ShiftKey) MoveFrame(10);
+                else MoveFrame(1);
+                break;
+            case "PageUp":
+                JumpToPrevEditPoint();
+                break;
+            case "PageDown":
+                JumpToNextEditPoint();
+                break;
+            case "Home":
+                SetCurrentFrame(0);
+                break;
+            case "End":
+                if (_session != null) SetCurrentFrame(_session.NumFrames - 1);
+                break;
+            case "i":
+            case "I":
+                MoveSelectedEditPointToCurrentFrame();
+                break;
+            case "s":
+            case "S":
+                _ = SaveTrims();
+                break;
+            case "Delete":
+                DeleteEditPoint();
+                break;
+        }
+    }
+
+    // ヘルパーメソッド
+
+    private string GetFrameUrl()
+    {
+        if (string.IsNullOrEmpty(_sessionId)) return "";
+        return $"api/trim/sessions/{_sessionId}/frame?n={_currentFrame}&_t={_frameUpdateToken}";
+    }
+
+    private string FormatTime(int frame)
+    {
+        if (_session?.FramePts == null || frame < 0 || frame >= _session.FramePts.Count)
+        {
+            return "--:--:--.---";
+        }
+        var seconds = _session.FramePts[frame].PtsSeconds;
+        // 先頭フレームを0秒基準にする
+        if (_session.FramePts.Count > 0)
+        {
+            seconds -= _session.FramePts[0].PtsSeconds;
+        }
+        if (seconds < 0) seconds = 0;
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
+    }
+
+    private static string GetCmTypeLabel(int cmType)
+    {
+        return cmType switch
+        {
+            0 => "",
+            1 => " [本編]",
+            2 => " [CM]",
+            3 => " [端]",
+            _ => ""
+        };
+    }
+
+    private string GetFramePercent(int frame)
+    {
+        if (_session == null || _session.NumFrames <= 1) return "0";
+        var pct = (double)frame / (_session.NumFrames - 1) * 100.0;
+        return pct.ToString("F4", CultureInfo.InvariantCulture);
+    }
+
+    // シークバーのグラデーション: Trimの有効区間をオレンジ、無効区間をグレーで表示
+    private string GetSeekBarGradient()
+    {
+        if (_session == null || _session.NumFrames <= 1)
+        {
+            return "background: #666;";
+        }
+
+        var trims = BuildTrimsFromEditPoints();
+        if (trims.Count == 0)
+        {
+            return "background: #666;";
+        }
+
+        var total = _session.NumFrames - 1;
+        var stops = new List<string>();
+        var lastPct = 0.0;
+
+        foreach (var trim in trims.OrderBy(t => t.Start))
+        {
+            var startPct = (double)trim.Start / total * 100.0;
+            var endPct = (double)trim.End / total * 100.0;
+
+            if (startPct > lastPct)
+            {
+                stops.Add($"#555 {lastPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+                stops.Add($"#555 {startPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+            }
+            stops.Add($"#e88030 {startPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+            stops.Add($"#e88030 {endPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+            lastPct = endPct;
+        }
+
+        if (lastPct < 100.0)
+        {
+            stops.Add($"#555 {lastPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+            stops.Add($"#555 100%");
+        }
+
+        return $"background: linear-gradient(to right, {string.Join(", ", stops)});";
+    }
+
+    // JS Interop用の型
+    private class BoundingRect
+    {
+        public double Left { get; set; }
+        public double Width { get; set; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _debounceTimer?.Dispose();
+        if (!string.IsNullOrEmpty(_sessionId))
+        {
+            await Api.DeleteTrimSessionAsync(_sessionId);
+        }
+    }
+}

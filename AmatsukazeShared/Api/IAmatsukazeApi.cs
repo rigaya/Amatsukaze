@@ -89,5 +89,10 @@ namespace Amatsukaze.Shared
         Task<ApiResult<bool>> DeleteLogoPreviewSessionAsync(string sessionId);
 
         Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req);
+
+        // Trim調整
+        Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req);
+        Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req);
+        Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId);
     }
 }

@@ -33,6 +33,7 @@ namespace Amatsukaze.Server.Rest
         private readonly int port;
         private readonly LogoAnalyzeService logoAnalyze;
         private readonly LogoPreviewService logoPreview;
+        private readonly TrimAdjustService trimAdjust;
         private IHost host;
 
         private class MakeScriptGenerateRequestInternal
@@ -71,6 +72,7 @@ namespace Amatsukaze.Server.Rest
             this.port = port;
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
+            trimAdjust = new TrimAdjustService(state);
         }
 
         public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -1551,6 +1553,67 @@ namespace Amatsukaze.Server.Rest
             app.MapDelete("/api/logo/preview/sessions/{sessionId}", (string sessionId) =>
             {
                 if (logoPreview.RemoveSession(sessionId))
+                {
+                    return Results.Ok();
+                }
+                return Results.NotFound();
+            });
+
+            // Trim調整API
+            app.MapPost("/api/trim/sessions", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<TrimAdjustSessionRequest>();
+                if (data == null)
+                {
+                    return Results.BadRequest();
+                }
+                if (!trimAdjust.TryCreateSession(data, out var response, out var error))
+                {
+                    return Results.BadRequest(new { message = error ?? "Trim調整セッションを作成できませんでした" });
+                }
+                return Results.Json(response);
+            });
+
+            app.MapGet("/api/trim/sessions/{sessionId}/frame", (HttpContext context, string sessionId, int n) =>
+            {
+                var session = trimAdjust.GetSession(sessionId);
+                if (session == null)
+                {
+                    return Results.NotFound();
+                }
+                if (n < 0 || n >= session.NumFrames)
+                {
+                    return Results.BadRequest(new { message = "フレーム番号が範囲外です" });
+                }
+                var bitmap = session.GetFrame(n);
+                if (bitmap == null)
+                {
+                    return Results.NotFound();
+                }
+                using var ms = new MemoryStream();
+                BitmapManager.SaveBitmapAsPng(bitmap, ms);
+                var bytes = ms.ToArray();
+                context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+                return Results.File(bytes, "image/png");
+            });
+
+            app.MapPost("/api/trim/sessions/{sessionId}/save", async (HttpRequest request, string sessionId) =>
+            {
+                var data = await request.ReadFromJsonAsync<TrimSaveRequest>();
+                if (data == null)
+                {
+                    return Results.BadRequest();
+                }
+                if (!trimAdjust.TrySaveTrims(sessionId, data, out var error))
+                {
+                    return Results.BadRequest(new { message = error ?? "Trim保存に失敗しました" });
+                }
+                return Results.Ok();
+            });
+
+            app.MapDelete("/api/trim/sessions/{sessionId}", (string sessionId) =>
+            {
+                if (trimAdjust.RemoveSession(sessionId))
                 {
                     return Results.Ok();
                 }

@@ -11,8 +11,9 @@ fi
 
 SCRIPT_DIR=`dirname $0`
 SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
+PROJECT_ROOT=`cd ${SCRIPT_DIR}/.. && pwd`
 
-INSTALL_DIR="$1"
+INSTALL_DIR=`realpath -m "$1"`
 BUILD_DIR="${2:-build}"
 
 # .NET 10 SDK 必須チェック
@@ -169,7 +170,7 @@ FFNK_PKGCFG_PATH="`pwd`/ffmpeg_nekopanda/build/lib/pkgconfig"
 if [ "${USE_PREBUILT_FFNK}" = "1" ]; then
     FFNK_PKGCFG_PATH="${AMT_PKGCONFIG_FFNK_DIR}"
 fi
-(meson setup --buildtype release --pkg-config-path "${FFNK_PKGCFG_PATH}" ../.. && ninja) || exit 1
+(meson setup --buildtype release --pkg-config-path "${FFNK_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
 cd ..
 
 # ----- BS4K向け ffmpeg_6.1.2ベースのAmatsukazeCLIのビルド -----
@@ -196,19 +197,19 @@ FF612_PKGCFG_PATH="`pwd`/ffmpeg-6.1.2/build/lib/pkgconfig"
 if [ "${USE_PREBUILT_FF612}" = "1" ]; then
   FF612_PKGCFG_PATH="${AMT_PKGCONFIG_FF612_DIR}"
 fi
-(meson setup --buildtype release --pkg-config-path "${FF612_PKGCFG_PATH}" ../.. && ninja) || exit 1
+(meson setup --buildtype release --pkg-config-path "${FF612_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
 cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
 cd ..
 
 # dotnet の AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルド
 if [ "$DEBUG_BUILD" = true ]; then
     echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のデバッグビルドを行います。"
-    cd ..
-    (dotnet build AmatsukazeLinux.sln -c Debug) || exit 1
+    cd "${PROJECT_ROOT}" || exit 1
+    (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Debug) || exit 1
 else
     echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のリリースビルドを行います。"
-    cd ..
-    (dotnet build AmatsukazeLinux.sln -c Release) || exit 1
+    cd "${PROJECT_ROOT}" || exit 1
+    (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Release) || exit 1
 fi
 
 
@@ -282,11 +283,11 @@ fi
 # JLファイルのインストール
 if [ ! -d "${INSTALL_DIR}/JL" ]; then
     echo "JLファイルのインストールを開始します..."
-    (mkdir -p "${INSTALL_DIR}/JL" \
-        && wget https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz \
-        && tar -xf Ver4.1.0_Linux.tar.gz \
-        && cp -r join_logo_scp-Ver4.1.0_Linux/JL/* "${INSTALL_DIR}/JL/" \
-        && rm -rf join_logo_scp-Ver4.1.0_Linux Ver4.1.0_Linux.tar.gz) || exit 1
+    mkdir -p "${INSTALL_DIR}/JL" || exit 1
+    wget https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz || exit 1
+    tar -xf Ver4.1.0_Linux.tar.gz || exit 1
+    cp -r join_logo_scp-Ver4.1.0_Linux/JL/* "${INSTALL_DIR}/JL/" || exit 1
+    rm -rf join_logo_scp-Ver4.1.0_Linux Ver4.1.0_Linux.tar.gz || exit 1
 fi
 
 echo "インストールが完了しました (WebUI は REST ポート+1 で公開されます)"
