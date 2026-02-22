@@ -23,7 +23,7 @@ jobs:
       X264_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260221-082727/x264_3223_x64.zip
       X265_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260221-082727/x265_4.1+223_x64.zip
       SVT_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260221-082727/SvtAv1EncApp_4.0.1-63_x64_clang.zip
-      BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeBasePkg_20260201.7z
+      BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.5.2/AmatsukazeBasePkg_20260222.7z
     steps:
       - name: Checkout
         uses: actions/checkout@v4
