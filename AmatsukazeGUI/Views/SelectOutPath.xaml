@@ -84,7 +84,7 @@
                      Text="{Binding OutPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      VerticalAlignment="Top" PreviewDragOver="textBox_PreviewDragOver" Drop="textBox_Drop"/>
             <DockPanel>
-                <ComboBox Width="40" Height="22" HorizontalAlignment="Left" DockPanel.Dock="Right"
+                <ComboBox Width="90" Height="22" HorizontalAlignment="Left" DockPanel.Dock="Right"
                                 ItemsSource="{Binding Model.PriorityList}" 
                                 SelectedItem="{Binding Item.Outputs[0].Priority, Mode=TwoWay}"/>
                 <TextBlock Text="優先度:" VerticalAlignment="Center" DockPanel.Dock="Right"/>
@@ -97,9 +97,9 @@
                           SelectedItem="{Binding AddQueueBat, Mode=TwoWay}"/>
             </DockPanel>
         </StackPanel>
-        
+
         <TextBlock Margin="2" TextWrapping="Wrap" Text="{Binding Description}" Foreground="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"/>
-        
+
         <Button Margin="2" Height="Auto" Command="{Binding OkCommand, Mode=OneWay}">
             <TextBlock TextAlignment="Center" TextWrapping="Wrap">
                 <Run FontSize="20" Text="通常モード"/><LineBreak/><Run Text="入力ファイルは、エンコード後 succeededフォルダ（成功時）、failedフォルダ（失敗時）に移動します。同名出力ファイルは上書きします。"/>
@@ -127,7 +127,7 @@
                 </Button>
             </StackPanel>
         </Expander>
-        
+
         <Button Margin="2" Height="50" >
             <i:Interaction.Triggers>
                 <i:EventTrigger EventName="Click">

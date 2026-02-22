@@ -9,18 +9,18 @@
              xmlns:m="clr-namespace:Amatsukaze.Models" 
              xmlns:local="clr-namespace:Amatsukaze.Views"
              mc:Ignorable="d" 
-             d:DesignHeight="500" d:DesignWidth="300"
+             d:DesignHeight="500" d:DesignWidth="356"
              d:DataContext="{d:DesignInstance {x:Type vm:MakeScriptViewModel}}">
 
     <UserControl.Resources>
         <ResourceDictionary Source="CommonResources.xaml"/>
     </UserControl.Resources>
-    
+
     <i:Interaction.Triggers>
         <l:InteractionMessageTrigger Messenger="{Binding Messenger}" MessageKey="Key">
             <l:TransitionInteractionMessageAction InvokeActionOnlyWhenWindowIsActive="False"/>
         </l:InteractionMessageTrigger>
-        
+
         <l:InteractionMessageTrigger MessageKey="Confirm" Messenger="{Binding Messenger}">
             <l:ConfirmationDialogInteractionMessageAction InvokeActionOnlyWhenWindowIsActive="False"/>
         </l:InteractionMessageTrigger>
@@ -36,7 +36,7 @@
                                 <TextBlock>自動選択_<Run Text="{Binding Path=Model.Name}"/></TextBlock>
                             </DataTemplate>
                         </DockPanel.Resources>
-                        <ComboBox Width="40" Height="22" Margin="5,0" HorizontalAlignment="Left" DockPanel.Dock="Right" 
+                        <ComboBox Width="90" Height="22" Margin="5,0" DockPanel.Dock="Right" 
                                   ItemsSource="{Binding Model.PriorityList}" 
                                   SelectedItem="{Binding Model.MakeScriptData.Priority, Mode=TwoWay}"/>
                         <TextBlock Text="優先度:" VerticalAlignment="Center" DockPanel.Dock="Right"/>
@@ -77,7 +77,7 @@
                                       ToolTip="*.errや*.program.txtなども一緒にコピー・移動します" />
                         </StackPanel>
                     </GroupBox>
-                
+
                     <CheckBox Margin="3" Content="エンコードPCを Wake On Lan で起動する" 
                               IsChecked="{Binding Model.MakeScriptData.IsWakeOnLan, Mode=TwoWay}"
                               IsEnabled="{Binding IsRemoteClient}"/>
@@ -86,7 +86,7 @@
                               ToolTip="これが実装されているEDCBのmod版が必要です"/>
                     <DockPanel Margin="3">
                         <TextBlock Text="ファイル種類:" VerticalAlignment="Center"/>
-                        <ComboBox Width="190" Height="22" Margin="5,0,0,0"
+                        <ComboBox Height="22" Margin="5,0,0,0"
                                   ItemsSource="{Binding ScriptTypeOptions}"
                                   SelectedValuePath="Value"
                                   DisplayMemberPath="Label"
@@ -96,7 +96,7 @@
                     <Button Margin="3" Height="25" Content="バッチファイル作成" Command="{Binding MakeBatchFileCommand}"/>
                 </StackPanel>
             </GroupBox>
-        
+
             <GroupBox Header="Amatsukazeサーバ操作" Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
                 <StackPanel Margin="5">
                     <Button Content="Amatsukazeサーバを停止" Height="25" Margin="5" IsEnabled="{Binding IsRemoteClient}" Command="{Binding StopServerCommand}"/>
