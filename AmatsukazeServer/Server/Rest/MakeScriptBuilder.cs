@@ -89,8 +89,8 @@ namespace Amatsukaze.Server.Rest
                 sb.Append(comment).Append(" _EDCBX_DIRECT_").Append(lineBreak);
             }
             var filePathToken = data.IsDirect
-                ? "$FilePath$"
-                : isBat ? "%FilePath%" : "${FilePath}";
+                ? (isBat ? "%FilePath%" : "${FilePath}")
+                : "$FilePath$";
             sb.AppendFormat("\"{0}\"", addTaskPath)
                 .AppendFormat(" -r \"{0}\"", currentDirectory)
                 .AppendFormat(" -f \"{0}\" -ip \"{1}\"", filePathToken, ip)
