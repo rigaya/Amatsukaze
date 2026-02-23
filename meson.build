@@ -29,6 +29,9 @@ ffmpeg_dep = [
   dependency('libswresample', required : true),
 ]
 
+# libjpeg-turbo (TurboJPEG API)
+turbojpeg_dep = dependency('libturbojpeg', required : true)
+
 # プラットフォーム依存ライブラリ
 openssl_dep = dependency('', required : false)
 zlib_dep = dependency('', required : false)

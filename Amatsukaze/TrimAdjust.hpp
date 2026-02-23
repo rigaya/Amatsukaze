@@ -8,6 +8,7 @@
 #pragma once
 
 #include "AMTSource.h"
+#include "JpegCompress.h"
 
 #include <mutex>
 
@@ -29,9 +30,13 @@ class GUITrimAdjust : public AMTObject {
 
     // AviSynth環境
     IScriptEnvironment2* env;
-    PClip rgbClip; // ConvertToRGB24適用済みクリップ
+    PClip yuvClip; // ConvertToYV16適用済みクリップ (planar YUV422P)
     int width, height;
     int numFrames;
+
+    // JPEG出力バッファ（getFrameJpeg呼び出し間で再利用）
+    static constexpr int JPEG_QUALITY = 85;
+    std::vector<uint8_t> jpegBuffer;
 
     std::mutex mutex;
 
@@ -57,17 +62,17 @@ class GUITrimAdjust : public AMTObject {
             width = srcVi.width;
             height = srcVi.height;
 
-            // インタレース判定に基づきConvertToRGB24を適用
+            // インタレース判定に基づきConvertToYV16 (planar YUV422P) を適用
             const bool interlaced = !vfmt.progressive;
             AVSValue convertArgs[] = { amtClip, interlaced };
             const char* convertNames[] = { nullptr, "interlaced" };
-            AVSValue rgbResult = env->Invoke("ConvertToRGB24", AVSValue(convertArgs, 2), convertNames);
-            PClip convertedClip = rgbResult.AsClip();
+            AVSValue yuvResult = env->Invoke("ConvertToYV16", AVSValue(convertArgs, 2), convertNames);
+            PClip convertedClip = yuvResult.AsClip();
 
             // scaleMode==1: フィールド分離→リサイズ→フィールドマージ
             if (scaleMode == 1 && interlaced) {
                 // SeparateFields
-                AVSValue sepArgs[] = { rgbResult };
+                AVSValue sepArgs[] = { yuvResult };
                 AVSValue sepResult = env->Invoke("SeparateFields", AVSValue(sepArgs, 1));
 
                 // 元の解像度にBicubicResize
@@ -78,13 +83,13 @@ class GUITrimAdjust : public AMTObject {
                 AVSValue weaveArgs[] = { resizeResult };
                 AVSValue weaveResult = env->Invoke("Weave", AVSValue(weaveArgs, 1));
 
-                rgbClip = weaveResult.AsClip();
+                yuvClip = weaveResult.AsClip();
             } else {
-                rgbClip = convertedClip;
+                yuvClip = convertedClip;
             }
 
             // 最終的なサイズを取得
-            const VideoInfo& finalVi = rgbClip->GetVideoInfo();
+            const VideoInfo& finalVi = yuvClip->GetVideoInfo();
             width = finalVi.width;
             height = finalVi.height;
         } catch (const AvisynthError& e) {
@@ -100,7 +105,7 @@ public:
     GUITrimAdjust(AMTContext& ctx, const tchar* datFilePath, int scaleMode)
         : AMTObject(ctx)
         , env(nullptr)
-        , rgbClip()
+        , yuvClip()
         , width(0)
         , height(0)
         , numFrames(0) {
@@ -122,7 +127,7 @@ public:
     }
 
     ~GUITrimAdjust() {
-        rgbClip = PClip();
+        yuvClip = PClip();
         if (env) {
             env->DeleteScriptEnvironment();
             env = nullptr;
@@ -150,24 +155,34 @@ public:
         return false;
     }
 
-    // デコード済みフレームのRGBデータを取得
-    void getFrame(int frameNumber, uint8_t* rgb, int w, int h) {
+    // デコード済みフレームをJPEGに圧縮して内部バッファに格納
+    // 成功時は jpegData にポインタ、jpegSize にサイズを返す
+    bool getFrameJpeg(int frameNumber, const uint8_t** jpegData, int* jpegSize) {
         std::lock_guard<std::mutex> lock(mutex);
-        if (w != width || h != height || !rgbClip) {
-            return;
+        if (!yuvClip) {
+            return false;
         }
         try {
-            PVideoFrame frame = rgbClip->GetFrame(frameNumber, env);
-            const uint8_t* srcPtr = frame->GetReadPtr();
-            const int srcPitch = frame->GetPitch();
-            const int rowBytes = w * 3;
-            // AviSynthのRGB24はボトムアップなので上下反転してコピー
-            for (int y = 0; y < h; y++) {
-                memcpy(rgb + y * rowBytes, srcPtr + (h - 1 - y) * srcPitch, rowBytes);
+            PVideoFrame frame = yuvClip->GetFrame(frameNumber, env);
+            // YV16 (planar YUV422P) の各プレーンを取得
+            const uint8_t* planes[3] = {
+                frame->GetReadPtr(PLANAR_Y),
+                frame->GetReadPtr(PLANAR_U),
+                frame->GetReadPtr(PLANAR_V),
+            };
+            const int strides[3] = {
+                frame->GetPitch(PLANAR_Y),
+                frame->GetPitch(PLANAR_U),
+                frame->GetPitch(PLANAR_V),
+            };
+            if (!jpeg_utils::compressYUV422PToJpeg(planes, strides, width, height, JPEG_QUALITY, jpegBuffer)) {
+                return false;
             }
+            *jpegData = jpegBuffer.data();
+            *jpegSize = static_cast<int>(jpegBuffer.size());
+            return true;
         } catch (const AvisynthError&) {
-            // フレーム取得失敗時はゼロクリア
-            memset(rgb, 0, (size_t)w * h * 3);
+            return false;
         }
     }
 
@@ -230,8 +245,9 @@ extern "C" AMATSUKAZE_API int TrimAdjust_DecodeFrame(void* ptr, int frameNumber,
     return static_cast<trimadjust::GUITrimAdjust*>(ptr)->decodeFrame(frameNumber, pwidth, pheight) ? 1 : 0;
 }
 
-extern "C" AMATSUKAZE_API void TrimAdjust_GetFrame(void* ptr, int frameNumber, uint8_t* rgb, int width, int height) {
-    static_cast<trimadjust::GUITrimAdjust*>(ptr)->getFrame(frameNumber, rgb, width, height);
+extern "C" AMATSUKAZE_API int TrimAdjust_GetFrameJpeg(void* ptr, int frameNumber,
+    const uint8_t** jpegData, int* jpegSize) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getFrameJpeg(frameNumber, jpegData, jpegSize) ? 1 : 0;
 }
 
 extern "C" AMATSUKAZE_API int TrimAdjust_GetFrameInfo(void* ptr, int frameNumber,

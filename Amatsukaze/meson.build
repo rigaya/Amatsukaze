@@ -36,6 +36,7 @@ amatsukaze_sources = [
   'TsInfo.cpp',
   'TsSplitter.cpp',
   'WaveWriter.cpp',
+  'JpegCompress.cpp',
 ]
 
 # AVX/AVX2用ファイル
@@ -56,6 +57,7 @@ amatsukaze_deps = [
   faad_dep,
   ffmpeg_dep,
   avisynth_dep,
+  turbojpeg_dep,
   openssl_dep,
   zlib_dep,
   version_dep,

@@ -391,7 +391,8 @@ namespace Amatsukaze.Lib
         private static extern int TrimAdjust_DecodeFrame(IntPtr ptr, int frameNumber, ref int width, ref int height);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
-        private static unsafe extern void TrimAdjust_GetFrame(IntPtr ptr, int frameNumber, byte* rgb, int width, int height);
+        private static unsafe extern int TrimAdjust_GetFrameJpeg(IntPtr ptr, int frameNumber,
+            out IntPtr jpegData, out int jpegSize);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TrimAdjust_GetFrameInfo(IntPtr ptr, int frameNumber,
@@ -437,24 +438,21 @@ namespace Amatsukaze.Lib
         public int Width => TrimAdjust_GetWidth(Ptr);
         public int Height => TrimAdjust_GetHeight(Ptr);
 
-        // フレームをデコードしてBitmapを返す。失敗時はnull
-        public object GetFrame(int frameNumber)
+        // フレームをJPEGバイト列として取得。失敗時はnull
+        public byte[] GetFrameJpeg(int frameNumber)
         {
             int width = 0, height = 0;
             if (TrimAdjust_DecodeFrame(Ptr, frameNumber, ref width, ref height) != 0)
             {
                 if (width != 0 && height != 0)
                 {
-                    int stride = width * 3;
-                    byte[] buffer = new byte[stride * height];
-                    unsafe
+                    if (TrimAdjust_GetFrameJpeg(Ptr, frameNumber, out var jpegData, out var jpegSize) != 0
+                        && jpegSize > 0)
                     {
-                        fixed (byte* pbuffer = buffer)
-                        {
-                            TrimAdjust_GetFrame(Ptr, frameNumber, pbuffer, width, height);
-                        }
+                        var buffer = new byte[jpegSize];
+                        System.Runtime.InteropServices.Marshal.Copy(jpegData, buffer, 0, jpegSize);
+                        return buffer;
                     }
-                    return BitmapManager.CreateBitmapFromRgb(buffer, width, height, stride);
                 }
             }
             return null;

@@ -40,13 +40,13 @@ namespace Amatsukaze.Server.Rest
             LastAccessUtc = DateTime.UtcNow;
         }
 
-        // フレーム画像をBitmapとして取得
-        public object GetFrame(int frameNumber)
+        // フレーム画像をJPEGバイト列として取得
+        public byte[] GetFrameJpeg(int frameNumber)
         {
             Touch();
             lock (SyncRoot)
             {
-                return trimadj.GetFrame(frameNumber);
+                return trimadj.GetFrameJpeg(frameNumber);
             }
         }
 

@@ -25,6 +25,26 @@ fi
 
 mkdir -p "${BASELIBS_DIR}"
 
+# libjpeg-turbo (静的ビルド)
+if [ ! -d "${BUILD_DIR}/libjpeg-turbo-3.1.0" ]; then
+  echo "libjpeg-turbo のビルドを行います。"
+  (
+    wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz -O libjpeg-turbo.tar.gz \
+    && tar xf libjpeg-turbo.tar.gz \
+    && rm libjpeg-turbo.tar.gz \
+    && cd libjpeg-turbo-3.1.0 \
+    && cmake -G "Unix Makefiles" -B _build \
+      -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX="${BASELIBS_DIR}" \
+      -DENABLE_SHARED=OFF \
+      -DENABLE_STATIC=ON \
+    && cd _build && make -j"$(nproc)" \
+    && make install
+  )
+fi
+
 # libvpl
 if [ ! -d "${BUILD_DIR}/libvpl-2.15.0" ]; then
   echo "libvpl のビルドを行います。"
