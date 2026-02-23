@@ -289,6 +289,50 @@
                 return true;
             }
         };
+        // Trim調整: imgのonload/onerrorハンドラ
+        window.trimAdjustSetupImgHandler = function (dotNetRef) {
+            var img = document.querySelector('.trim-preview-img');
+            if (img) {
+                img.onload = function () {
+                    dotNetRef.invokeMethodAsync('OnFrameLoaded');
+                };
+                img.onerror = function () {
+                    if (this.src && this.src.indexOf('api/trim/') !== -1) {
+                        dotNetRef.invokeMethodAsync('OnFrameLoadError');
+                    }
+                };
+            }
+        };
+        // Trim調整: シークバーのmousedown/mousemove/mouseup対応
+        window.trimAdjustSetupSeekbar = function (dotNetRef) {
+            var seekbar = document.querySelector('.trim-seekbar');
+            if (!seekbar) return;
+            // 既存リスナーの重複登録防止
+            if (seekbar._trimDragSetup) return;
+            seekbar._trimDragSetup = true;
+            var dragging = false;
+            function calcRatio(e) {
+                var rect = seekbar.getBoundingClientRect();
+                if (rect.width <= 0) return -1;
+                var r = (e.clientX - rect.left) / rect.width;
+                return Math.max(0, Math.min(1, r));
+            }
+            seekbar.addEventListener('mousedown', function (e) {
+                if (e.button !== 0) return;
+                dragging = true;
+                var r = calcRatio(e);
+                if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', function (e) {
+                if (!dragging) return;
+                var r = calcRatio(e);
+                if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
+            });
+            document.addEventListener('mouseup', function () {
+                dragging = false;
+            });
+        };
         window.amatsukazeUi = {
             getScrollInfo: function (element) {
                 try {

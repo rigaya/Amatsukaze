@@ -1591,10 +1591,10 @@ namespace Amatsukaze.Server.Rest
                     return Results.NotFound();
                 }
                 using var ms = new MemoryStream();
-                BitmapManager.SaveBitmapAsPng(bitmap, ms);
+                BitmapManager.SaveBitmapAsJpeg(bitmap, ms);
                 var bytes = ms.ToArray();
                 context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
-                return Results.File(bytes, "image/png");
+                return Results.File(bytes, "image/jpeg");
             });
 
             app.MapPost("/api/trim/sessions/{sessionId}/save", async (HttpRequest request, string sessionId) =>

@@ -57,7 +57,27 @@
                 <div class="trim-preview-container">
                     <img class="trim-preview-img"
                          src="@GetFrameUrl()"
-                         alt="Frame @_currentFrame" />
+                         alt="Frame @_currentFrame"
+                         @ref="_imgRef" />
+                    <div class="trim-preview-frame-overlay @(IsFrameInTrimRange(_displayedFrame) ? "trim-range-active" : "trim-range-cut")">
+                        @_displayedFrame
+                    </div>
+                    @if (_sessionExpired)
+                    {
+                        <div class="trim-session-expired-overlay">
+                            <div class="trim-session-expired-box">
+                                <div>セッションが切れました</div>
+                                <button class="trim-btn trim-btn-primary" @onclick="ReconnectSessionAsync"
+                                        disabled="@_reconnecting">
+                                    @(_reconnecting ? "再接続中..." : "再接続")
+                                </button>
+                                @if (!string.IsNullOrEmpty(_reconnectError))
+                                {
+                                    <div class="trim-status-error">@_reconnectError</div>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
 
                 @* フレーム情報 *@
@@ -79,7 +99,8 @@
                     <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-100)" title="-100F (Ctrl+Left)">&#x25C0;&#x25C0;&#x25C0;</button>
                     <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-10)" title="-10F (Shift+Left)">&#x25C0;&#x25C0;</button>
                     <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-1)" title="-1F (Left)">&#x25C0;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="MoveToNearestEditPoint" title="最寄り編集点">|</button>
+                    <button class="trim-btn trim-btn-sm @(IsCurrentFrameEditPoint() ? "trim-btn-active" : "")"
+                            @onclick="ToggleEditPoint" title="編集点切替">|</button>
                     <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(1)" title="+1F (Right)">&#x25B6;</button>
                     <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(10)" title="+10F (Shift+Right)">&#x25B6;&#x25B6;</button>
                     <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(100)" title="+100F (Ctrl+Right)">&#x25B6;&#x25B6;&#x25B6;</button>
@@ -88,16 +109,19 @@
 
                 @* シークバー *@
                 <div class="trim-seekbar-container">
-                    <div class="trim-seekbar" @onclick="OnSeekBarClick" @ref="_seekBarRef">
+                    <div class="trim-seekbar" @ref="_seekBarRef">
                         <div class="trim-seekbar-bg" style="@GetSeekBarGradient()"></div>
                         @* 現在位置マーカー *@
                         <div class="trim-seekbar-cursor"
                              style="left: @(GetFramePercent(_currentFrame))%"></div>
-                        @* 編集点マーカー *@
+                        @* 編集点マーカー（クリックで移動） *@
                         @foreach (var ep in _editPoints)
                         {
+                            var epFrame = ep.Frame;
                             <div class="trim-seekbar-marker"
-                                 style="left: @(GetFramePercent(ep.Frame))%"></div>
+                                 style="left: @(GetFramePercent(epFrame))%"
+                                 @onclick="() => JumpToEditPointFrame(epFrame)"
+                                 @onclick:stopPropagation="true"></div>
                         }
                     </div>
                 </div>
@@ -112,6 +136,7 @@
 
     private ElementReference _pageRef;
     private ElementReference _seekBarRef;
+    private ElementReference _imgRef;
 
     private bool _loading = true;
     private string? _errorMessage;
@@ -119,10 +144,21 @@
     private bool _isError;
     private bool _hasChanges;
 
+    // セッション切れ検出・再接続用
+    private bool _sessionExpired;
+    private bool _reconnecting;
+    private string? _reconnectError;
+    private DotNetObjectReference<TrimAdjust>? _objRef;
+    private bool _imgErrorHandlerSet;
+    private bool _seekbarHandlerSet;
+
     private TrimAdjustSessionResponse? _session;
     private string? _sessionId;
     private int _currentFrame;
-    private int _frameUpdateToken; // debounce用のキャッシュバスティング
+    private int _frameUpdateToken; // キャッシュバスティング
+    private int _displayedFrame; // 画像読み込み完了と同期して表示するフレーム番号
+    private int _loadingFrame; // 現在img srcにセットして読み込み中のフレーム
+    private bool _isFrameLoading; // 画像読み込み中フラグ
 
     // 編集点リスト（Trimのstart/endを統合した昇順リスト）
     private List<EditPoint> _editPoints = new List<EditPoint>();
@@ -142,9 +178,87 @@
     {
         if (firstRender)
         {
+            _objRef = DotNetObjectReference.Create(this);
             await _pageRef.FocusAsync();
             await LoadSessionAsync();
         }
+        // セッション確立後、JSハンドラを設定
+        if (_session != null && !_sessionExpired)
+        {
+            try
+            {
+                if (!_imgErrorHandlerSet)
+                {
+                    await JS.InvokeVoidAsync("trimAdjustSetupImgHandler", _objRef);
+                    _imgErrorHandlerSet = true;
+                }
+                if (!_seekbarHandlerSet)
+                {
+                    await JS.InvokeVoidAsync("trimAdjustSetupSeekbar", _objRef);
+                    _seekbarHandlerSet = true;
+                }
+            }
+            catch
+            {
+                // 初回レンダリング前はDOM未準備の可能性
+            }
+        }
+    }
+
+    [JSInvokable]
+    public void OnFrameLoaded()
+    {
+        InvokeAsync(() =>
+        {
+            _displayedFrame = _loadingFrame;
+            _isFrameLoading = false;
+            // まだ新しいフレームが要求されていれば続けてロード
+            if (_currentFrame != _loadingFrame)
+            {
+                RequestFrameLoad();
+            }
+            else
+            {
+                StateHasChanged();
+            }
+        });
+    }
+
+    [JSInvokable]
+    public void OnFrameLoadError()
+    {
+        InvokeAsync(() =>
+        {
+            _isFrameLoading = false;
+            if (!_sessionExpired && !_loading)
+            {
+                _sessionExpired = true;
+                StateHasChanged();
+            }
+        });
+    }
+
+    [JSInvokable]
+    public void OnSeekBarDrag(double ratio)
+    {
+        if (_session == null || _session.NumFrames <= 1) return;
+        ratio = Math.Clamp(ratio, 0, 1);
+        var targetFrame = (int)(ratio * (_session.NumFrames - 1));
+        InvokeAsync(() =>
+        {
+            // 編集点付近（±2%）ならスナップ
+            var snapThreshold = (int)(_session.NumFrames * 0.02);
+            var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).FirstOrDefault();
+            if (nearest != null && Math.Abs(nearest.Frame - targetFrame) <= snapThreshold)
+            {
+                _selectedEditPoint = _editPoints.IndexOf(nearest);
+                SetCurrentFrameDebounced(nearest.Frame);
+            }
+            else
+            {
+                SetCurrentFrameDebounced(targetFrame);
+            }
+        });
     }
 
     private async Task LoadSessionAsync()
@@ -175,7 +289,66 @@
         UpdateCurrentFramePts();
 
         _loading = false;
+        _loadingFrame = 0;
+        _displayedFrame = 0;
+        _isFrameLoading = true; // 初回フレームのonloadを待つ
         _frameUpdateToken = 0;
+        StateHasChanged();
+    }
+
+    // セッション再接続（編集点はWebUI側の状態を維持）
+    private async Task ReconnectSessionAsync()
+    {
+        _reconnecting = true;
+        _reconnectError = null;
+        StateHasChanged();
+
+        var result = await Api.CreateTrimSessionAsync(new TrimAdjustSessionRequest
+        {
+            QueueItemId = QueueItemId,
+            ScaleMode = 0
+        });
+
+        if (!result.Ok || result.Data == null)
+        {
+            _reconnectError = result.Error ?? "再接続に失敗しました（一時フォルダが削除された可能性があります）";
+            _reconnecting = false;
+            StateHasChanged();
+            return;
+        }
+
+        // セッション情報を更新、編集点はそのまま維持
+        var preservedEditPoints = _editPoints;
+        var preservedSelected = _selectedEditPoint;
+        var preservedFrame = _currentFrame;
+        var preservedHasChanges = _hasChanges;
+
+        _session = result.Data;
+        _sessionId = _session.SessionId;
+
+        // フレーム数が変わった場合は編集点・現在フレームをクランプ
+        if (_session.NumFrames > 0)
+        {
+            _editPoints = preservedEditPoints
+                .Where(e => e.Frame < _session.NumFrames)
+                .ToList();
+            _selectedEditPoint = Math.Min(preservedSelected, _editPoints.Count - 1);
+            _currentFrame = Math.Clamp(preservedFrame, 0, _session.NumFrames - 1);
+        }
+        _hasChanges = preservedHasChanges;
+
+        UpdateCurrentFramePts();
+        _loadingFrame = _currentFrame;
+        _isFrameLoading = true; // onloadを待つ
+        _frameUpdateToken++;
+        _sessionExpired = false;
+        _reconnecting = false;
+        _reconnectError = null;
+        _imgErrorHandlerSet = false; // onerrorハンドラを再設定させる
+        _seekbarHandlerSet = false; // シークバーハンドラを再設定させる
+
+        _statusMessage = "再接続しました";
+        _isError = false;
         StateHasChanged();
     }
 
@@ -259,6 +432,18 @@
         SetCurrentFrame(_currentFrame + delta);
     }
 
+    // 画像読み込みリクエスト（ロード中でなければ即座にsrc更新、ロード中ならonload後に自動で次を読み込む）
+    private void RequestFrameLoad()
+    {
+        if (_isFrameLoading) return; // onload時に_currentFrameを拾って次をロードする
+        if (_currentFrame == _loadingFrame && _isFrameLoading) return;
+        _loadingFrame = _currentFrame;
+        _isFrameLoading = true;
+        _frameUpdateToken++;
+        StateHasChanged();
+    }
+
+    // フレーム移動（即時更新：キー/ボタン操作用）
     private void SetCurrentFrame(int frame)
     {
         if (_session == null) return;
@@ -266,12 +451,20 @@
         if (frame == _currentFrame) return;
         _currentFrame = frame;
         UpdateCurrentFramePts();
-        ScheduleFrameUpdate();
+        // debounceタイマーが残っていればキャンセル
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+        RequestFrameLoad();
     }
 
-    // debounceでフレーム更新をスケジュール
-    private void ScheduleFrameUpdate()
+    // フレーム移動（debounce更新：シークバードラッグ用）
+    private void SetCurrentFrameDebounced(int frame)
     {
+        if (_session == null) return;
+        frame = Math.Clamp(frame, 0, _session.NumFrames - 1);
+        if (frame == _currentFrame) return;
+        _currentFrame = frame;
+        UpdateCurrentFramePts();
         _pendingFrame = _currentFrame;
         _debounceTimer?.Dispose();
         _debounceTimer = new System.Threading.Timer(_ =>
@@ -280,12 +473,11 @@
             {
                 if (_pendingFrame == _currentFrame)
                 {
-                    _frameUpdateToken++;
-                    StateHasChanged();
+                    RequestFrameLoad();
                 }
             });
         }, null, 100, System.Threading.Timeout.Infinite);
-        // 即座にフレーム情報だけ更新
+        // 即座にフレーム情報（画面下）だけ更新
         StateHasChanged();
     }
 
@@ -329,12 +521,45 @@
         }
     }
 
-    private void MoveToNearestEditPoint()
+    // 指定フレームがTrim有効区間内かどうか
+    private bool IsFrameInTrimRange(int frame)
     {
-        if (_editPoints.Count == 0) return;
-        var nearest = _editPoints.OrderBy(e => Math.Abs(e.Frame - _currentFrame)).First();
-        _selectedEditPoint = _editPoints.IndexOf(nearest);
-        SetCurrentFrame(nearest.Frame);
+        var trims = BuildTrimsFromEditPoints();
+        return trims.Any(t => frame >= t.Start && frame <= t.End);
+    }
+
+    // 現在フレームが編集点かどうか
+    private bool IsCurrentFrameEditPoint()
+    {
+        return _editPoints.Any(e => e.Frame == _currentFrame);
+    }
+
+    // 編集点の切替（なければ追加、あれば削除）
+    private void ToggleEditPoint()
+    {
+        var existing = _editPoints.FindIndex(e => e.Frame == _currentFrame);
+        if (existing >= 0)
+        {
+            _editPoints.RemoveAt(existing);
+            if (_selectedEditPoint >= _editPoints.Count)
+                _selectedEditPoint = _editPoints.Count - 1;
+        }
+        else
+        {
+            _editPoints.Add(new EditPoint { Frame = _currentFrame });
+            _editPoints = _editPoints.OrderBy(e => e.Frame).ToList();
+            _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == _currentFrame);
+        }
+        _hasChanges = true;
+        StateHasChanged();
+    }
+
+    // シークバーマーカークリックで編集点フレームへ移動
+    private void JumpToEditPointFrame(int frame)
+    {
+        var idx = _editPoints.FindIndex(e => e.Frame == frame);
+        if (idx >= 0) _selectedEditPoint = idx;
+        SetCurrentFrame(frame);
     }
 
     private void MoveSelectedEditPointToCurrentFrame()
@@ -369,6 +594,12 @@
         }
         else
         {
+            // セッション切れの可能性を検出（セッションが見つからないエラー）
+            var err = result.Error ?? "";
+            if (err.Contains("セッション") || err.Contains("session", StringComparison.OrdinalIgnoreCase))
+            {
+                _sessionExpired = true;
+            }
             _statusMessage = result.Error ?? "保存に失敗しました";
             _isError = true;
         }
@@ -380,32 +611,6 @@
         await JS.InvokeVoidAsync("history.back");
     }
 
-    private async Task OnSeekBarClick(MouseEventArgs e)
-    {
-        if (_session == null) return;
-        // シークバーのクリック位置からフレーム番号を計算
-        // JSInteropでシークバーの幅を取得
-        var rect = await JS.InvokeAsync<BoundingRect>("eval",
-            $"(function(){{ var r = document.querySelector('.trim-seekbar').getBoundingClientRect(); return {{ left: r.left, width: r.width }}; }})()");
-        if (rect.Width <= 0) return;
-
-        var ratio = (e.ClientX - rect.Left) / rect.Width;
-        ratio = Math.Clamp(ratio, 0, 1);
-        var targetFrame = (int)(ratio * (_session.NumFrames - 1));
-
-        // 編集点付近（±2%）ならスナップ
-        var snapThreshold = (int)(_session.NumFrames * 0.02);
-        var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).FirstOrDefault();
-        if (nearest != null && Math.Abs(nearest.Frame - targetFrame) <= snapThreshold)
-        {
-            _selectedEditPoint = _editPoints.IndexOf(nearest);
-            SetCurrentFrame(nearest.Frame);
-        }
-        else
-        {
-            SetCurrentFrame(targetFrame);
-        }
-    }
 
     private void OnKeyDown(KeyboardEventArgs e)
     {
@@ -452,7 +657,7 @@
     private string GetFrameUrl()
     {
         if (string.IsNullOrEmpty(_sessionId)) return "";
-        return $"api/trim/sessions/{_sessionId}/frame?n={_currentFrame}&_t={_frameUpdateToken}";
+        return $"api/trim/sessions/{_sessionId}/frame?n={_loadingFrame}&_t={_frameUpdateToken}";
     }
 
     private string FormatTime(int frame)
@@ -533,16 +738,10 @@
         return $"background: linear-gradient(to right, {string.Join(", ", stops)});";
     }
 
-    // JS Interop用の型
-    private class BoundingRect
-    {
-        public double Left { get; set; }
-        public double Width { get; set; }
-    }
-
     public async ValueTask DisposeAsync()
     {
         _debounceTimer?.Dispose();
+        _objRef?.Dispose();
         if (!string.IsNullOrEmpty(_sessionId))
         {
             await Api.DeleteTrimSessionAsync(_sessionId);

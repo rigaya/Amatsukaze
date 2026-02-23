@@ -1,7 +1,7 @@
 .trim-adjust-page {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
     outline: none;
     color: var(--bs-emphasis-color, #eee);
     background: var(--bs-body-bg, #1a1a2e);
@@ -79,6 +79,7 @@
 .trim-main {
     display: flex;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -147,6 +148,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0;
     overflow: hidden;
     padding: 8px;
     gap: 6px;
@@ -161,12 +163,56 @@
     background: #000;
     border-radius: 4px;
     min-height: 0;
+    position: relative;
+}
+
+/* セッション切れオーバーレイ */
+.trim-session-expired-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 10;
+    border-radius: 4px;
+}
+
+.trim-session-expired-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 32px;
+    background: #2a2a3e;
+    border: 1px solid #555;
+    border-radius: 8px;
+    font-size: 0.95rem;
 }
 
 .trim-preview-img {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+}
+
+/* プレビュー左上のフレーム番号オーバーレイ */
+.trim-preview-frame-overlay {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-size: 1.3rem;
+    font-weight: bold;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.trim-preview-frame-overlay.trim-range-active {
+    color: rgba(232, 128, 48, 0.7);
+}
+
+.trim-preview-frame-overlay.trim-range-cut {
+    color: rgba(160, 160, 160, 0.6);
 }
 
 .trim-frame-info {
@@ -226,6 +272,30 @@
     border-right: 5px solid transparent;
     border-top: 6px solid #ffcc00;
     transform: translateX(-5px);
-    z-index: 1;
-    pointer-events: none;
+    z-index: 3;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.trim-seekbar-marker::before {
+    content: "";
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 20px;
+    height: 20px;
+}
+
+.trim-seekbar-marker:hover {
+    border-top-color: #ffe060;
+}
+
+/* 編集点トグルボタン アクティブ状態 */
+.trim-btn-active {
+    background: #e88030;
+    border-color: #f09040;
+}
+
+.trim-btn-active:hover:not(:disabled) {
+    background: #f09040;
 }

@@ -11,6 +11,14 @@
 
 #include <mutex>
 
+// Amatsukaze.cppで定義されたAviSynthプラグイン初期化関数の前方宣言
+// AMTSourceフィルタをAviSynth環境に登録するために使用
+extern "C" AMATSUKAZE_API const char*
+#if defined(_WIN32) || defined(_WIN64)
+__stdcall
+#endif
+AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors);
+
 namespace trimadjust {
 
 // amts0.datを読み込みAviSynth経由でフレーム取得を行うクラス
@@ -35,9 +43,11 @@ class GUITrimAdjust : public AMTObject {
         }
 
         try {
-            // AMTSourceプラグインをロード
-            // LoadAMTSourceと同様にamts0.datパスを渡してAMTSourceクリップを作成
-            AVSValue loadArgs[] = { char_to_tstring(datFilePath).c_str(), "", false, 0 };
+            // AMTSourceフィルタを環境に登録（同一DLL内のAvisynthPluginInit3を直接呼ぶ）
+            AvisynthPluginInit3(env, nullptr);
+
+            // AMTSourceクリップを作成
+            AVSValue loadArgs[] = { datFilePath.c_str(), "", false, 0 };
             const char* loadNames[] = { nullptr, nullptr, nullptr, nullptr };
             AVSValue amtClip = env->Invoke("AMTSource", AVSValue(loadArgs, 4), loadNames);
             PClip srcClip = amtClip.AsClip();
