@@ -34,9 +34,27 @@ class GUITrimAdjust : public AMTObject {
     int width, height;
     int numFrames;
 
+    // amts0.datから読み込んだ音声データ（波形表示用）
+    std::vector<FilterAudioFrame> audioFrames;
+    AudioFormat afmt;
+    tstring audioFilePath; // waveファイルパス
+    int audioSamplesPerFrame; // 通常1024(AAC)
+
     // JPEG出力バッファ（getFrameJpeg呼び出し間で再利用）
     static constexpr int JPEG_QUALITY = 85;
     std::vector<uint8_t> jpegBuffer;
+
+    // 波形レンダリング定数・バッファ
+    static constexpr int WAVEFORM_HEIGHT = 64;
+    static constexpr int WAVEFORM_JPEG_QUALITY = 85;
+    static constexpr double WAVEFORM_WINDOW_HALF = 0.5; // 前後0.5秒（計約1秒）
+    // 背景: 濃いグレー #404040 → YCbCr(64, 128, 128)
+    static constexpr uint8_t WF_BG_Y = 64, WF_BG_CB = 128, WF_BG_CR = 128;
+    // 波形: 薄い水色 #80C8E8 → YCbCr(183, 156, 109)
+    static constexpr uint8_t WF_FG_Y = 183, WF_FG_CB = 156, WF_FG_CR = 109;
+    // センターライン: グレー #808080 → YCbCr(128, 128, 128)
+    static constexpr uint8_t WF_CL_Y = 128, WF_CL_CB = 128, WF_CL_CR = 128;
+    std::vector<uint8_t> waveformJpegBuffer;
 
     std::mutex mutex;
 
@@ -108,19 +126,30 @@ public:
         , yuvClip()
         , width(0)
         , height(0)
-        , numFrames(0) {
+        , numFrames(0)
+        , audioSamplesPerFrame(0) {
         // amts0.datを読み込んでフレーム情報とVideoFormatを取得
         tstring path(datFilePath);
         File file(path, _T("rb"));
         auto srcpathv = file.readArray<tchar>();
         auto audiopathv = file.readArray<tchar>();
+        audioFilePath = tstring(audiopathv.begin(), audiopathv.end());
         vfmt = file.readValue<VideoFormat>();
-        // AudioFormatは読み飛ばし
-        file.readValue<AudioFormat>();
+        afmt = file.readValue<AudioFormat>();
         frames = file.readArray<FilterSourceFrame>();
-        // audioFrames, decoderSettingは不要だが読み飛ばし
-        file.readArray<FilterAudioFrame>();
+        audioFrames = file.readArray<FilterAudioFrame>();
         file.readValue<DecoderSetting>();
+
+        // audioSamplesPerFrameを算出 (AMTSource.cppと同じロジック)
+        if (!audioFrames.empty()) {
+            audioSamplesPerFrame = 1024; // AACデフォルト
+            for (const auto& af : audioFrames) {
+                if (af.waveLength != 0) {
+                    audioSamplesPerFrame = af.waveLength / 4; // 16bitステレオ前提
+                    break;
+                }
+            }
+        }
 
         // AviSynth環境の初期化
         initAviSynth(path, scaleMode);
@@ -210,6 +239,147 @@ public:
         *cmType = (int)f.cmType;
         return true;
     }
+
+    // フレームnに対応する音声波形をJPEG画像として取得
+    // 前後WAVEFORM_WINDOW_HALF秒の範囲をレンダリングし、中央にセンターラインを描画
+    bool getWaveformJpeg(int frameNumber, const uint8_t** jpegData, int* jpegSize) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (audioFrames.empty() || afmt.sampleRate == 0 || audioFilePath.empty()) {
+            return false; // 音声データなし
+        }
+        if (frameNumber < 0 || frameNumber >= (int)frames.size()) {
+            return false;
+        }
+
+        // 1. フレームnの時間位置（秒）を算出
+        const double basePts = (!frames.empty()) ? (double)frames[0].framePTS : 0.0;
+        const double frameSec = ((double)frames[frameNumber].framePTS - basePts) / 90000.0;
+        double frameDurSec;
+        if (frameNumber + 1 < (int)frames.size()) {
+            frameDurSec = ((double)frames[frameNumber + 1].framePTS
+                         - (double)frames[frameNumber].framePTS) / 90000.0;
+        } else {
+            frameDurSec = (frameNumber > 0)
+                ? ((double)frames[frameNumber].framePTS
+                 - (double)frames[frameNumber - 1].framePTS) / 90000.0
+                : 1.0 / 30.0;
+        }
+
+        // 2. 表示範囲: 前後WAVEFORM_WINDOW_HALF秒、フレーム中心
+        const double centerSec = frameSec + frameDurSec * 0.5;
+        const double startSec = std::max(0.0, centerSec - WAVEFORM_WINDOW_HALF);
+        const double endSec = centerSec + WAVEFORM_WINDOW_HALF;
+
+        // 3. サンプル範囲を算出
+        const int totalAudioSamples = audioSamplesPerFrame * (int)audioFrames.size();
+        int sampleStart = clamp((int)(startSec * afmt.sampleRate), 0, totalAudioSamples);
+        int sampleEnd   = clamp((int)(endSec   * afmt.sampleRate), 0, totalAudioSamples);
+        if (sampleStart >= sampleEnd) return false;
+        const int sampleCount = sampleEnd - sampleStart;
+
+        // 4. waveファイルからPCMサンプルを読み込み（audioFrame単位でまとめて読む）
+        const int sampleBytes = 4; // 16bitステレオ: int16_t L + int16_t R
+        std::vector<int16_t> monoSamples(sampleCount, 0);
+        {
+            File waveFile(audioFilePath, _T("rb"));
+            const int afIdxStart = sampleStart / audioSamplesPerFrame;
+            const int afIdxEnd = std::min((sampleEnd - 1) / audioSamplesPerFrame + 1,
+                                          (int)audioFrames.size());
+            // audioFrame単位でバッファに読み込み
+            std::vector<int16_t> frameBuf(audioSamplesPerFrame * 2); // L,R交互
+            for (int afIdx = afIdxStart; afIdx < afIdxEnd; afIdx++) {
+                const auto& af = audioFrames[afIdx];
+                const int afSampleStart = afIdx * audioSamplesPerFrame;
+                const int afSampleEnd = afSampleStart + audioSamplesPerFrame;
+                // 表示範囲とaudioFrameの重複部分
+                const int overlapStart = std::max(sampleStart, afSampleStart);
+                const int overlapEnd   = std::min(sampleEnd, afSampleEnd);
+                if (overlapStart >= overlapEnd) continue;
+
+                if (af.waveLength != 0) {
+                    const int ofsInFrame = overlapStart - afSampleStart;
+                    const int readSamples = overlapEnd - overlapStart;
+                    waveFile.seek(af.waveOffset + ofsInFrame * sampleBytes, SEEK_SET);
+                    waveFile.read(MemoryChunk(
+                        (uint8_t*)frameBuf.data(), readSamples * sampleBytes));
+                    // L+R → mono
+                    for (int i = 0; i < readSamples; i++) {
+                        monoSamples[overlapStart - sampleStart + i] =
+                            (int16_t)(((int)frameBuf[i * 2] + (int)frameBuf[i * 2 + 1]) / 2);
+                    }
+                }
+                // waveLength==0 のフレームは無音(0のまま)
+            }
+        }
+
+        // 5. YUV444平面バッファに波形を描画
+        const int wfWidth = width;
+        const int wfHeight = WAVEFORM_HEIGHT;
+        std::vector<uint8_t> yPlane(wfWidth * wfHeight, WF_BG_Y);
+        std::vector<uint8_t> cbPlane(wfWidth * wfHeight, WF_BG_CB);
+        std::vector<uint8_t> crPlane(wfWidth * wfHeight, WF_BG_CR);
+
+        // 振幅→ピクセル変換: 平方根スケーリング (γ=0.5)
+        // 小さい音量でも波形が視認しやすくなる
+        auto sqrtScale = [](float amplitude, int halfHeight) -> int {
+            const float norm = std::min(std::abs(amplitude) / 32768.0f, 1.0f);
+            const float scaled = std::sqrt(norm) * halfHeight;
+            return (amplitude >= 0) ? -(int)scaled : (int)scaled;
+        };
+
+        const int monoCount = (int)monoSamples.size();
+        const int yCenter = wfHeight / 2;
+        for (int x = 0; x < wfWidth; x++) {
+            const int s0 = (int)((int64_t)x * monoCount / wfWidth);
+            const int s1 = std::max((int)((int64_t)(x + 1) * monoCount / wfWidth), s0 + 1);
+            // min/max振幅を取得
+            int16_t minVal = 0, maxVal = 0;
+            for (int s = s0; s < s1 && s < monoCount; s++) {
+                minVal = std::min(minVal, monoSamples[s]);
+                maxVal = std::max(maxVal, monoSamples[s]);
+            }
+            int yTop    = yCenter + sqrtScale((float)maxVal, yCenter);
+            int yBottom = yCenter + sqrtScale((float)minVal, yCenter);
+            yTop    = clamp(yTop, 0, wfHeight - 1);
+            yBottom = clamp(yBottom, 0, wfHeight - 1);
+            for (int y = yTop; y <= yBottom; y++) {
+                const int idx = y * wfWidth + x;
+                yPlane[idx]  = WF_FG_Y;
+                cbPlane[idx] = WF_FG_CB;
+                crPlane[idx] = WF_FG_CR;
+            }
+        }
+
+        // 6. 現在フレームの範囲を示す2本線を描画
+        const double windowDuration = endSec - startSec;
+        if (windowDuration > 0.0) {
+            const double frameStartRatio = (frameSec - startSec) / windowDuration;
+            const double frameEndRatio = (frameSec + frameDurSec - startSec) / windowDuration;
+            const int xLeft  = clamp((int)(frameStartRatio * wfWidth), 0, wfWidth - 1);
+            const int xRight = clamp((int)(frameEndRatio   * wfWidth), 0, wfWidth - 1);
+            for (int y = 0; y < wfHeight; y++) {
+                int idx = y * wfWidth + xLeft;
+                yPlane[idx]  = WF_CL_Y;
+                cbPlane[idx] = WF_CL_CB;
+                crPlane[idx] = WF_CL_CR;
+                idx = y * wfWidth + xRight;
+                yPlane[idx]  = WF_CL_Y;
+                cbPlane[idx] = WF_CL_CB;
+                crPlane[idx] = WF_CL_CR;
+            }
+        }
+
+        // 7. JPEG圧縮 (YUV444)
+        const uint8_t* planes[3] = { yPlane.data(), cbPlane.data(), crPlane.data() };
+        const int strides[3] = { wfWidth, wfWidth, wfWidth };
+        if (!jpeg_utils::compressYUV444PToJpeg(planes, strides, wfWidth, wfHeight,
+                                                WAVEFORM_JPEG_QUALITY, waveformJpegBuffer)) {
+            return false;
+        }
+        *jpegData = waveformJpegBuffer.data();
+        *jpegSize = static_cast<int>(waveformJpegBuffer.size());
+        return true;
+    }
 };
 
 } // namespace trimadjust
@@ -253,4 +423,9 @@ extern "C" AMATSUKAZE_API int TrimAdjust_GetFrameJpeg(void* ptr, int frameNumber
 extern "C" AMATSUKAZE_API int TrimAdjust_GetFrameInfo(void* ptr, int frameNumber,
     int64_t* pts, int64_t* duration, int* keyFrame, int* cmType) {
     return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getFrameInfo(frameNumber, pts, duration, keyFrame, cmType) ? 1 : 0;
+}
+
+extern "C" AMATSUKAZE_API int TrimAdjust_GetWaveformJpeg(void* ptr, int frameNumber,
+    const uint8_t** jpegData, int* jpegSize) {
+    return static_cast<trimadjust::GUITrimAdjust*>(ptr)->getWaveformJpeg(frameNumber, jpegData, jpegSize) ? 1 : 0;
 }

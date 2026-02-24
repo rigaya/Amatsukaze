@@ -397,6 +397,10 @@ namespace Amatsukaze.Lib
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static extern int TrimAdjust_GetFrameInfo(IntPtr ptr, int frameNumber,
             ref long pts, ref long duration, ref int keyFrame, ref int cmType);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static unsafe extern int TrimAdjust_GetWaveformJpeg(IntPtr ptr, int frameNumber,
+            out IntPtr jpegData, out int jpegSize);
         #endregion
 
         public TrimAdjust(AMTContext ctx, string datFilePath, int scaleMode)
@@ -466,6 +470,19 @@ namespace Amatsukaze.Lib
             keyFrame = 0;
             cmType = 0;
             return TrimAdjust_GetFrameInfo(Ptr, frameNumber, ref pts, ref duration, ref keyFrame, ref cmType) != 0;
+        }
+
+        // 波形画像をJPEGバイト列として取得。音声データなしの場合はnull
+        public byte[] GetWaveformJpeg(int frameNumber)
+        {
+            if (TrimAdjust_GetWaveformJpeg(Ptr, frameNumber, out var jpegData, out var jpegSize) != 0
+                && jpegSize > 0)
+            {
+                var buffer = new byte[jpegSize];
+                System.Runtime.InteropServices.Marshal.Copy(jpegData, buffer, 0, jpegSize);
+                return buffer;
+            }
+            return null;
         }
     }
 

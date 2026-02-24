@@ -56,6 +56,7 @@ namespace Amatsukaze.Shared
         public ChangeItemType ChangeType { get; set; }
         public int Priority { get; set; }
         public string? Profile { get; set; }
+        public ProcMode? Mode { get; set; }
         public int Position { get; set; }
         public string? RequestId { get; set; }
     }

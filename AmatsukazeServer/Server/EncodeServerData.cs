@@ -1263,6 +1263,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public string Profile { get; set; }
         [DataMember]
+        public ProcMode? Mode { get; set; }
+        [DataMember]
         public int Position { get; set; }
         [DataMember]
         public string RequestId { get; set; }

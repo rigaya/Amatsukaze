@@ -56,6 +56,16 @@ namespace Amatsukaze.Server.Rest
             return trimadj.GetFrameInfo(frameNumber, out pts, out duration, out keyFrame, out cmType);
         }
 
+        // 波形画像をJPEGバイト列として取得
+        public byte[] GetWaveformJpeg(int frameNumber)
+        {
+            Touch();
+            lock (SyncRoot)
+            {
+                return trimadj.GetWaveformJpeg(frameNumber);
+            }
+        }
+
         public void Dispose()
         {
             trimadj?.Dispose();

@@ -304,24 +304,75 @@
             }
         };
         // Trim調整: シークバーのmousedown/mousemove/mouseup対応
+        // シークバー本体: ダイレクト移動（スナップなし）
+        // シークバー上部（▽マーカー領域）: 最寄り編集点にスナップ
         window.trimAdjustSetupSeekbar = function (dotNetRef) {
+            var container = document.querySelector('.trim-seekbar-container');
             var seekbar = document.querySelector('.trim-seekbar');
-            if (!seekbar) return;
+            if (!container || !seekbar) return;
             // 既存リスナーの重複登録防止
-            if (seekbar._trimDragSetup) return;
-            seekbar._trimDragSetup = true;
+            if (container._trimDragSetup) return;
+            container._trimDragSetup = true;
             var dragging = false;
+            var markerMaxDist = 20; // ▽クリック有効範囲(px)
+            var lastHighlighted = null; // ホバー中のハイライト対象マーカー
             function calcRatio(e) {
                 var rect = seekbar.getBoundingClientRect();
                 if (rect.width <= 0) return -1;
                 var r = (e.clientX - rect.left) / rect.width;
                 return Math.max(0, Math.min(1, r));
             }
-            seekbar.addEventListener('mousedown', function (e) {
+            // マーカー領域（バー上端より上）でかつ最寄り▽が20px以内ならそのマーカーを返す
+            function findNearestMarker(e) {
+                var rect = seekbar.getBoundingClientRect();
+                if (e.clientY >= rect.top) return null; // バー本体上はマーカー判定しない
+                var markers = seekbar.querySelectorAll('.trim-seekbar-marker');
+                if (!markers.length) return null;
+                var best = null, bestDist = Infinity;
+                for (var i = 0; i < markers.length; i++) {
+                    var mr = markers[i].getBoundingClientRect();
+                    var cx = mr.left + mr.width / 2;
+                    var dist = Math.abs(e.clientX - cx);
+                    if (dist < bestDist) { bestDist = dist; best = markers[i]; }
+                }
+                return (bestDist <= markerMaxDist) ? best : null;
+            }
+            function setHighlight(marker) {
+                if (lastHighlighted === marker) return;
+                if (lastHighlighted) lastHighlighted.style.borderTopColor = '';
+                lastHighlighted = marker;
+                if (marker) marker.style.borderTopColor = '#ffe060';
+            }
+            // ホバー: マーカー領域でポインタ形状＋▽ハイライト
+            container.addEventListener('mousemove', function (e) {
+                if (dragging) return; // ドラッグ中はホバー処理しない
+                var rect = seekbar.getBoundingClientRect();
+                if (e.clientY >= rect.top) {
+                    // バー本体上: ホバー解除（カーソルはCSS側でpointer）
+                    setHighlight(null);
+                    container.style.cursor = '';
+                    return;
+                }
+                var marker = findNearestMarker(e);
+                setHighlight(marker);
+                container.style.cursor = marker ? 'pointer' : '';
+            });
+            container.addEventListener('mouseleave', function () {
+                if (!dragging) { setHighlight(null); container.style.cursor = ''; }
+            });
+            container.addEventListener('mousedown', function (e) {
                 if (e.button !== 0) return;
-                dragging = true;
                 var r = calcRatio(e);
-                if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
+                if (r < 0) return;
+                var marker = findNearestMarker(e);
+                if (marker) {
+                    // ▽マーカー近傍: 最寄り編集点にスナップ（ドラッグ開始しない）
+                    dotNetRef.invokeMethodAsync('OnSeekBarMarkerClick', r);
+                } else {
+                    // シークバー本体: ダイレクト移動＋ドラッグ開始
+                    dragging = true;
+                    dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
+                }
                 e.preventDefault();
             });
             document.addEventListener('mousemove', function (e) {
@@ -330,8 +381,22 @@
                 if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
             });
             document.addEventListener('mouseup', function () {
-                dragging = false;
+                if (dragging) { dragging = false; setHighlight(null); container.style.cursor = ''; }
             });
+        };
+        // Trim調整: マウスホイールで1フレームずつ移動
+        window.trimAdjustSetupWheel = function (dotNetRef) {
+            var page = document.querySelector('.trim-adjust-page');
+            if (!page) return;
+            if (page._trimWheelSetup) return;
+            page._trimWheelSetup = true;
+            page.addEventListener('wheel', function (e) {
+                if (e.deltaY === 0) return;
+                // チェックログオーバーレイ表示中はフレーム移動せず、スクロールに任せる
+                if (document.querySelector('.trim-log-overlay')) return;
+                dotNetRef.invokeMethodAsync('OnWheel', e.deltaY);
+                e.preventDefault();
+            }, { passive: false });
         };
         window.amatsukazeUi = {
             getScrollInfo: function (element) {

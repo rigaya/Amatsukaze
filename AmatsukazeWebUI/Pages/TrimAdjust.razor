@@ -1,6 +1,7 @@
 @page "/trim-adjust/{QueueItemId:int}"
 @using Amatsukaze.Shared
 @using System.Globalization
+@using System.Text.Json
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @implements IAsyncDisposable
@@ -8,7 +9,24 @@
 <div class="trim-adjust-page" @onkeydown="OnKeyDown" tabindex="0" @ref="_pageRef">
     <div class="trim-toolbar">
         <button class="trim-btn" @onclick="GoBack">&#x2190; 戻る</button>
+        <button class="trim-btn trim-btn-sm" @onclick="ShowCheckLog" title="CM解析チェックログ">ログ</button>
         <button class="trim-btn trim-btn-primary" @onclick="SaveTrims" disabled="@(!_hasChanges)">保存</button>
+        <div class="trim-toolbar-requeue">
+            <select class="trim-profile-select" @bind="_selectedProfile" disabled="@(_profiles == null || _profiles.Count == 0)">
+                @if (_profiles != null)
+                {
+                    @foreach (var name in _profiles)
+                    {
+                        <option value="@name">@name</option>
+                    }
+                }
+            </select>
+            <button class="trim-btn trim-btn-sm" @onclick="RequeueWithProfile"
+                    disabled="@(_requeueBusy || string.IsNullOrEmpty(_selectedProfile))"
+                    title="保存してプロファイルを変更し通常モードで再投入">
+                @(_requeueBusy ? "処理中..." : "再投入")
+            </button>
+        </div>
         <span class="trim-toolbar-info">
             @if (!string.IsNullOrEmpty(_statusMessage))
             {
@@ -45,9 +63,8 @@
                     }
                 </div>
                 <div class="trim-editpoints-actions">
-                    <button class="trim-btn trim-btn-sm" @onclick="AddEditPoint">追加</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="DeleteEditPoint"
-                            disabled="@(_selectedEditPoint < 0)">削除</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="ResetEditPoints"
+                            disabled="@(!_hasChanges)">リセット</button>
                 </div>
             </div>
 
@@ -78,6 +95,13 @@
                             </div>
                         </div>
                     }
+                </div>
+
+                @* 音声波形 *@
+                <div class="trim-waveform-container">
+                    <img class="trim-waveform-img"
+                         src="@GetWaveformUrl()"
+                         alt="Waveform" />
                 </div>
 
                 @* フレーム情報 *@
@@ -114,17 +138,49 @@
                         @* 現在位置マーカー *@
                         <div class="trim-seekbar-cursor"
                              style="left: @(GetFramePercent(_currentFrame))%"></div>
-                        @* 編集点マーカー（クリックで移動） *@
+                        @* 編集点マーカー（▽表示のみ、クリックはJS側で処理） *@
                         @foreach (var ep in _editPoints)
                         {
                             var epFrame = ep.Frame;
                             <div class="trim-seekbar-marker"
-                                 style="left: @(GetFramePercent(epFrame))%"
-                                 @onclick="() => JumpToEditPointFrame(epFrame)"
-                                 @onclick:stopPropagation="true"></div>
+                                 style="left: @(GetFramePercent(epFrame))%"></div>
                         }
                     </div>
                 </div>
+            </div>
+        </div>
+    }
+
+    @* チェックログオーバーレイ *@
+    @if (_checkLogVisible)
+    {
+        <div class="trim-log-overlay" @onclick="CloseCheckLog">
+            <div class="trim-log-overlay-panel" @onclick:stopPropagation="true">
+                <button class="trim-log-overlay-close" type="button" @onclick="CloseCheckLog">&times;</button>
+                <h4>CM解析チェックログ</h4>
+                @if (_checkLogLoading)
+                {
+                    <p>読み込み中...</p>
+                }
+                else if (!string.IsNullOrEmpty(_checkLogError))
+                {
+                    <p style="color: red;">@_checkLogError</p>
+                }
+                else if (_checkLogContent == null)
+                {
+                    <p>チェックログが見つかりません</p>
+                }
+                else
+                {
+                    <div class="trim-log-content">
+                        <div>@_checkLogTitle</div>
+                        @if (_checkLogContent.Meta?.TooLarge == true)
+                        {
+                            <div>(truncated)</div>
+                        }
+                        <pre class="trim-log-detail">@(_checkLogContent.Content ?? "")</pre>
+                    </div>
+                }
             </div>
         </div>
     }
@@ -151,6 +207,7 @@
     private DotNetObjectReference<TrimAdjust>? _objRef;
     private bool _imgErrorHandlerSet;
     private bool _seekbarHandlerSet;
+    private bool _wheelHandlerSet;
 
     private TrimAdjustSessionResponse? _session;
     private string? _sessionId;
@@ -162,8 +219,22 @@
 
     // 編集点リスト（Trimのstart/endを統合した昇順リスト）
     private List<EditPoint> _editPoints = new List<EditPoint>();
+    private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
     private FramePtsInfo? _currentFramePts;
+
+    // プロファイル選択・再投入
+    private List<string> _profiles = new List<string>();
+    private string? _selectedProfile;
+    private bool _requeueBusy;
+
+    // チェックログオーバーレイ
+    private bool _checkLogVisible;
+    private bool _checkLogLoading;
+    private string? _checkLogError;
+    private string? _checkLogTitle;
+    private LogFileContent? _checkLogContent;
+    private string? _queueItemSrcPath; // キューアイテムのソースパス（チェックログ検索用）
 
     // debounce用タイマー
     private System.Threading.Timer? _debounceTimer;
@@ -196,6 +267,11 @@
                 {
                     await JS.InvokeVoidAsync("trimAdjustSetupSeekbar", _objRef);
                     _seekbarHandlerSet = true;
+                }
+                if (!_wheelHandlerSet)
+                {
+                    await JS.InvokeVoidAsync("trimAdjustSetupWheel", _objRef);
+                    _wheelHandlerSet = true;
                 }
             }
             catch
@@ -246,18 +322,32 @@
         var targetFrame = (int)(ratio * (_session.NumFrames - 1));
         InvokeAsync(() =>
         {
-            // 編集点付近（±2%）ならスナップ
-            var snapThreshold = (int)(_session.NumFrames * 0.02);
-            var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).FirstOrDefault();
-            if (nearest != null && Math.Abs(nearest.Frame - targetFrame) <= snapThreshold)
-            {
-                _selectedEditPoint = _editPoints.IndexOf(nearest);
-                SetCurrentFrameDebounced(nearest.Frame);
-            }
-            else
-            {
-                SetCurrentFrameDebounced(targetFrame);
-            }
+            SetCurrentFrameDebounced(targetFrame);
+        });
+    }
+
+    // ▽マーカー領域クリック: 最寄りの編集点にスナップ
+    [JSInvokable]
+    public void OnSeekBarMarkerClick(double ratio)
+    {
+        if (_session == null || _session.NumFrames <= 1 || _editPoints.Count == 0) return;
+        ratio = Math.Clamp(ratio, 0, 1);
+        var targetFrame = (int)(ratio * (_session.NumFrames - 1));
+        InvokeAsync(() =>
+        {
+            var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).First();
+            _selectedEditPoint = _editPoints.IndexOf(nearest);
+            SetCurrentFrame(nearest.Frame);
+        });
+    }
+
+    // マウスホイール: 上で-1フレーム、下で+1フレーム
+    [JSInvokable]
+    public void OnWheel(double deltaY)
+    {
+        InvokeAsync(() =>
+        {
+            MoveFrame(deltaY > 0 ? 1 : -1);
         });
     }
 
@@ -286,6 +376,8 @@
 
         // TrimsからEditPointsを構築
         RebuildEditPoints(_session.Trims);
+        // 初期状態を保存（リセット用）
+        _initialEditPoints = _editPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
         UpdateCurrentFramePts();
 
         _loading = false;
@@ -294,6 +386,66 @@
         _isFrameLoading = true; // 初回フレームのonloadを待つ
         _frameUpdateToken = 0;
         StateHasChanged();
+
+        // プロファイルリスト取得（バックグラウンド）
+        _ = LoadProfilesAsync();
+        // キューアイテム情報取得（チェックログ検索用）
+        _ = LoadQueueItemInfoAsync();
+    }
+
+    // プロファイルリストを取得
+    private async Task LoadProfilesAsync()
+    {
+        var res = await Api.GetProfilesAsync();
+        if (res.Ok && res.Data != null)
+        {
+            _profiles = res.Data
+                .Select(GetProfileName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Select(n => n!)
+                .ToList();
+            // 現在のキューアイテムのプロファイルがあればそれを初期選択
+            if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
+            {
+                _selectedProfile = _queueItemProfileName;
+            }
+            else if (_profiles.Count > 0)
+            {
+                _selectedProfile = _profiles[0];
+            }
+            StateHasChanged();
+        }
+    }
+
+    // キューアイテム情報を取得（SrcPath, ProfileName）
+    private string? _queueItemProfileName;
+    private async Task LoadQueueItemInfoAsync()
+    {
+        var res = await Api.GetQueueAsync();
+        if (res.Ok && res.Data != null)
+        {
+            var item = res.Data.Items.FirstOrDefault(i => i.Id == QueueItemId);
+            if (item != null)
+            {
+                _queueItemSrcPath = item.SrcPath;
+                _queueItemProfileName = item.ProfileName;
+                // プロファイルリストが既にロード済みなら選択を更新
+                if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
+                {
+                    _selectedProfile = _queueItemProfileName;
+                    StateHasChanged();
+                }
+            }
+        }
+    }
+
+    private static string? GetProfileName(JsonElement profile)
+    {
+        if (profile.TryGetProperty("Name", out var nameProp))
+            return nameProp.GetString();
+        if (profile.TryGetProperty("name", out var namePropLower))
+            return namePropLower.GetString();
+        return null;
     }
 
     // セッション再接続（編集点はWebUI側の状態を維持）
@@ -346,6 +498,7 @@
         _reconnectError = null;
         _imgErrorHandlerSet = false; // onerrorハンドラを再設定させる
         _seekbarHandlerSet = false; // シークバーハンドラを再設定させる
+        _wheelHandlerSet = false; // ホイールハンドラを再設定させる
 
         _statusMessage = "再接続しました";
         _isError = false;
@@ -396,6 +549,17 @@
         {
             SetCurrentFrame(_editPoints[index].Frame);
         }
+    }
+
+    // 編集点を初期状態にリセット
+    private void ResetEditPoints()
+    {
+        _editPoints = _initialEditPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
+        _selectedEditPoint = -1;
+        _hasChanges = false;
+        _statusMessage = "編集点をリセットしました";
+        _isError = false;
+        StateHasChanged();
     }
 
     private void AddEditPoint()
@@ -606,6 +770,103 @@
         StateHasChanged();
     }
 
+    // チェックログ表示
+    private async Task ShowCheckLog()
+    {
+        _checkLogLoading = true;
+        _checkLogError = null;
+        _checkLogContent = null;
+        _checkLogTitle = null;
+        _checkLogVisible = true;
+        StateHasChanged();
+
+        // チェックログ一覧から該当アイテムのログを探す
+        var logsRes = await Api.GetCheckLogsAsync();
+        if (!logsRes.Ok || logsRes.Data == null)
+        {
+            _checkLogError = logsRes.Error ?? "チェックログの取得に失敗しました";
+            _checkLogLoading = false;
+            StateHasChanged();
+            return;
+        }
+
+        // SrcPathが一致する最新のチェックログを取得
+        var matchLog = logsRes.Data
+            .Where(l => !string.IsNullOrEmpty(_queueItemSrcPath) && l.SrcPath == _queueItemSrcPath)
+            .OrderByDescending(l => l.CheckStartDate)
+            .FirstOrDefault();
+
+        if (matchLog == null)
+        {
+            _checkLogError = "該当するチェックログが見つかりません";
+            _checkLogLoading = false;
+            StateHasChanged();
+            return;
+        }
+
+        _checkLogTitle = System.IO.Path.GetFileName(matchLog.SrcPath);
+
+        var detailRes = await Api.GetLogFileAsync(null, matchLog.CheckStartDate);
+        if (!detailRes.Ok || detailRes.Data == null)
+        {
+            _checkLogError = detailRes.Error ?? "ログ詳細の取得に失敗しました";
+        }
+        else
+        {
+            _checkLogContent = detailRes.Data;
+        }
+        _checkLogLoading = false;
+        StateHasChanged();
+    }
+
+    private void CloseCheckLog()
+    {
+        _checkLogVisible = false;
+    }
+
+    // プロファイルを指定して再投入（保存→モード変更→プロファイル変更→リトライ）
+    private async Task RequeueWithProfile()
+    {
+        if (string.IsNullOrEmpty(_selectedProfile)) return;
+        _requeueBusy = true;
+        StateHasChanged();
+
+        // 1. 編集点を保存
+        if (_hasChanges)
+        {
+            await SaveTrims();
+            if (_isError)
+            {
+                _requeueBusy = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        // 2. モードを通常(Batch)に変更し、プロファイルも変更してリトライ
+        var changeRes = await Api.ChangeQueueAsync(new ChangeItemData
+        {
+            ItemId = QueueItemId,
+            ChangeType = ChangeItemType.ResetState,
+            Profile = _selectedProfile,
+            Mode = ProcMode.Batch
+        });
+
+        if (changeRes.Ok)
+        {
+            _statusMessage = $"プロファイル「{_selectedProfile}」で再投入しました";
+            _isError = false;
+        }
+        else
+        {
+            _statusMessage = changeRes.Error ?? "再投入に失敗しました";
+            _isError = true;
+        }
+
+        _requeueBusy = false;
+        StateHasChanged();
+    }
+
     private async Task GoBack()
     {
         await JS.InvokeVoidAsync("history.back");
@@ -658,6 +919,12 @@
     {
         if (string.IsNullOrEmpty(_sessionId)) return "";
         return $"api/trim/sessions/{_sessionId}/frame?n={_loadingFrame}&_t={_frameUpdateToken}";
+    }
+
+    private string GetWaveformUrl()
+    {
+        if (string.IsNullOrEmpty(_sessionId)) return "";
+        return $"api/trim/sessions/{_sessionId}/waveform?n={_loadingFrame}&_t={_frameUpdateToken}";
     }
 
     private string FormatTime(int frame)

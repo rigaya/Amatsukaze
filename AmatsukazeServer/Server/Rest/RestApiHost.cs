@@ -1594,6 +1594,26 @@ namespace Amatsukaze.Server.Rest
                 return Results.File(jpegBytes, "image/jpeg");
             });
 
+            app.MapGet("/api/trim/sessions/{sessionId}/waveform", (HttpContext context, string sessionId, int n) =>
+            {
+                var session = trimAdjust.GetSession(sessionId);
+                if (session == null)
+                {
+                    return Results.NotFound();
+                }
+                if (n < 0 || n >= session.NumFrames)
+                {
+                    return Results.BadRequest(new { message = "フレーム番号が範囲外です" });
+                }
+                var jpegBytes = session.GetWaveformJpeg(n);
+                if (jpegBytes == null || jpegBytes.Length == 0)
+                {
+                    return Results.NoContent(); // 音声データなし
+                }
+                context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+                return Results.File(jpegBytes, "image/jpeg");
+            });
+
             app.MapPost("/api/trim/sessions/{sessionId}/save", async (HttpRequest request, string sessionId) =>
             {
                 var data = await request.ReadFromJsonAsync<TrimSaveRequest>();
@@ -1605,7 +1625,7 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest(new { message = error ?? "Trim保存に失敗しました" });
                 }
-                return Results.Ok();
+                return Results.Ok(new { });
             });
 
             app.MapDelete("/api/trim/sessions/{sessionId}", (string sessionId) =>

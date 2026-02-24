@@ -933,6 +933,16 @@ namespace Amatsukaze.Server
 
                 if (data.ChangeType == ChangeItemType.ResetState)
                 {
+                    // モード変更が指定されていれば適用
+                    if (data.Mode.HasValue)
+                    {
+                        target.Mode = data.Mode.Value;
+                    }
+                    // プロファイル変更が指定されていれば適用
+                    if (!string.IsNullOrEmpty(data.Profile))
+                    {
+                        target.ProfileName = data.Profile;
+                    }
                     // リトライはプロファイル再適用も行う
                     UpdateProfileItem(target, waits);
                     ResetStateItem(target, waits);
