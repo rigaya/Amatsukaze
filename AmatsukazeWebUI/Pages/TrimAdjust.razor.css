@@ -1,7 +1,8 @@
 .trim-adjust-page {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 100vh;
+    overflow: hidden;
     outline: none;
     color: var(--bs-emphasis-color, #eee);
     background: var(--bs-body-bg, #1a1a2e);
