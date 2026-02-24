@@ -268,6 +268,23 @@
     border-radius: 4px;
 }
 
+/* シークバーに上下方向の光沢グラデーションを重ねて透明感を出す */
+.trim-seekbar-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 4px;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.15) 0%,
+        rgba(255, 255, 255, 0.04) 40%,
+        transparent 70%,
+        rgba(0, 0, 0, 0.10) 90%,
+        rgba(0, 0, 0, 0.20) 100%
+    );
+    pointer-events: none;
+}
+
 .trim-seekbar-cursor {
     position: absolute;
     top: -2px;

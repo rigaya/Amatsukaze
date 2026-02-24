@@ -315,9 +315,19 @@ public:
         // 5. YUV444平面バッファに波形を描画
         const int wfWidth = width;
         const int wfHeight = WAVEFORM_HEIGHT;
-        std::vector<uint8_t> yPlane(wfWidth * wfHeight, WF_BG_Y);
+        std::vector<uint8_t> yPlane(wfWidth * wfHeight);
         std::vector<uint8_t> cbPlane(wfWidth * wfHeight, WF_BG_CB);
         std::vector<uint8_t> crPlane(wfWidth * wfHeight, WF_BG_CR);
+
+        // 背景Y輝度: 上下端を少し明るく、中央を暗くするグラデーション
+        static constexpr uint8_t WF_BG_Y_EDGE = 80;   // 上下端の輝度
+        static constexpr uint8_t WF_BG_Y_CENTER = 56;  // 中央の輝度
+        for (int y = 0; y < wfHeight; y++) {
+            // 中央からの距離を0.0〜1.0に正規化 (端=1.0, 中央=0.0)
+            const float dist = std::abs(y - (wfHeight - 1) * 0.5f) / ((wfHeight - 1) * 0.5f);
+            const uint8_t bgY = (uint8_t)(WF_BG_Y_CENTER + (WF_BG_Y_EDGE - WF_BG_Y_CENTER) * dist);
+            std::memset(yPlane.data() + y * wfWidth, bgY, wfWidth);
+        }
 
         // 振幅→ピクセル変換: 平方根スケーリング (γ=0.5)
         // 小さい音量でも波形が視認しやすくなる
