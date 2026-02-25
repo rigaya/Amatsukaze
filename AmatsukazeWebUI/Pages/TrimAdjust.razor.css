@@ -245,8 +245,161 @@
 .trim-controls {
     display: flex;
     justify-content: center;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
     flex-shrink: 0;
+}
+
+.trim-control-btn {
+    width: 64px;
+    min-height: 72px;
+    padding: 8px 6px 6px;
+    border-radius: 14px;
+    border: 1px solid rgba(112, 198, 228, 0.52);
+    background: linear-gradient(
+        to bottom,
+        rgba(216, 241, 250, 0.29) 0%,
+        rgba(170, 214, 232, 0.25) 58%,
+        rgba(112, 154, 186, 0.28) 100%
+    );
+    box-shadow:
+        0 9px 18px rgba(0, 11, 33, 0.36),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -8px 16px rgba(5, 23, 48, 0.22);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    color: #e4f7ff;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    touch-action: manipulation;
+}
+
+.trim-control-btn:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 12px 22px rgba(0, 11, 33, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.52),
+        inset 0 -10px 18px rgba(5, 23, 48, 0.24);
+}
+
+.trim-control-btn:active {
+    transform: translateY(1px);
+    box-shadow:
+        0 5px 10px rgba(0, 11, 33, 0.42),
+        inset 0 2px 4px rgba(4, 20, 42, 0.35);
+}
+
+.trim-control-icon {
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+}
+
+.trim-control-icon-left .trim-icon-chevron {
+    transform: none;
+}
+
+.trim-control-icon-right .trim-icon-chevron {
+    transform: none;
+}
+
+.trim-icon-chevron {
+    position: relative;
+    width: 10px;
+    height: 16px;
+    display: inline-block;
+}
+
+.trim-icon-chevron::before,
+.trim-icon-chevron::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 11px;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(
+        180deg,
+        rgba(238, 254, 255, 0.98) 0%,
+        rgba(197, 239, 252, 0.95) 60%,
+        rgba(124, 198, 224, 0.92) 100%
+    );
+    box-shadow: 0 0 0 1px rgba(94, 179, 212, 0.28);
+}
+
+.trim-control-icon-right .trim-icon-chevron::before {
+    top: 1px;
+    transform-origin: left center;
+    transform: rotate(38deg);
+}
+
+.trim-control-icon-right .trim-icon-chevron::after {
+    bottom: 1px;
+    transform-origin: left center;
+    transform: rotate(-38deg);
+}
+
+.trim-control-icon-left .trim-icon-chevron::before {
+    top: 1px;
+    right: 0;
+    left: auto;
+    transform-origin: right center;
+    transform: rotate(-38deg);
+}
+
+.trim-control-icon-left .trim-icon-chevron::after {
+    bottom: 1px;
+    right: 0;
+    left: auto;
+    transform-origin: right center;
+    transform: rotate(38deg);
+}
+
+.trim-icon-bar {
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: linear-gradient(
+        180deg,
+        rgba(237, 255, 255, 0.98) 0%,
+        rgba(188, 244, 255, 0.95) 55%,
+        rgba(107, 203, 232, 0.90) 100%
+    );
+    box-shadow:
+        0 0 0 1px rgba(92, 196, 232, 0.68),
+        0 1px 3px rgba(6, 24, 46, 0.60);
+}
+
+.trim-control-icon-toggle {
+    position: relative;
+    min-width: 18px;
+}
+
+.trim-control-icon-toggle .trim-icon-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.98) 0%, rgba(184, 236, 255, 0.95) 55%, rgba(96, 181, 220, 0.92) 100%);
+    box-shadow:
+        0 0 0 1px rgba(89, 188, 224, 0.72),
+        0 2px 4px rgba(5, 26, 50, 0.6);
+    margin-left: 4px;
+}
+
+.trim-control-distance {
+    font-size: 0.64rem;
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    color: rgba(219, 242, 255, 0.96);
+    text-shadow: 0 1px 2px rgba(2, 14, 32, 0.66);
 }
 
 /* シークバー */
@@ -336,6 +489,61 @@
 
 .trim-btn-active:hover:not(:disabled) {
     background: #f09040;
+}
+
+.trim-control-btn.trim-btn-active {
+    border-color: rgba(118, 200, 255, 0.82);
+    background: linear-gradient(
+        to bottom,
+        rgba(74, 124, 188, 0.90) 0%,
+        rgba(56, 102, 164, 0.90) 58%,
+        rgba(38, 76, 137, 0.92) 100%
+    );
+    box-shadow:
+        0 10px 20px rgba(3, 8, 35, 0.48),
+        inset 0 1px 0 rgba(196, 227, 255, 0.34),
+        inset 0 -9px 14px rgba(0, 13, 38, 0.34);
+}
+
+.trim-control-btn.trim-btn-active .trim-control-distance {
+    color: rgba(242, 250, 255, 0.98);
+}
+
+.trim-control-btn.trim-btn-active:hover {
+    background: linear-gradient(
+        to bottom,
+        rgba(82, 132, 196, 0.92) 0%,
+        rgba(60, 106, 169, 0.91) 58%,
+        rgba(41, 81, 142, 0.93) 100%
+    );
+}
+
+@media (max-width: 980px) {
+    .trim-controls {
+        gap: 6px;
+    }
+
+    .trim-control-btn {
+        width: 58px;
+        min-height: 66px;
+        border-radius: 12px;
+        padding-top: 7px;
+    }
+
+    .trim-control-icon {
+        height: 22px;
+    }
+
+    .trim-icon-chevron {
+        width: 10px;
+        height: 14px;
+    }
+
+    .trim-icon-chevron::before,
+    .trim-icon-chevron::after {
+        width: 10px;
+        height: 3px;
+    }
 }
 
 /* ツールバー: プロファイル再投入エリア */

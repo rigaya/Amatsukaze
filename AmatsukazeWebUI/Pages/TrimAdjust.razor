@@ -120,18 +120,120 @@
 
                 @* 移動ボタン *@
                 <div class="trim-controls">
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdPrevEditPoint)" title="@GetTrimCommandTooltip(TrimCmdPrevEditPoint)">|&lt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack4)" title="@GetTrimCommandTooltip(TrimCmdBack4)">&lt;&lt;&lt;&lt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack3)" title="@GetTrimCommandTooltip(TrimCmdBack3)">&lt;&lt;&lt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack2)" title="@GetTrimCommandTooltip(TrimCmdBack2)">&lt;&lt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack1)" title="@GetTrimCommandTooltip(TrimCmdBack1)">&lt;</button>
-                    <button class="trim-btn trim-btn-sm @(IsCurrentFrameEditPoint() ? "trim-btn-active" : "")"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdToggleEditPoint)" title="@GetTrimCommandTooltip(TrimCmdToggleEditPoint)">|</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward1)" title="@GetTrimCommandTooltip(TrimCmdForward1)">&gt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward2)" title="@GetTrimCommandTooltip(TrimCmdForward2)">&gt;&gt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward3)" title="@GetTrimCommandTooltip(TrimCmdForward3)">&gt;&gt;&gt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward4)" title="@GetTrimCommandTooltip(TrimCmdForward4)">&gt;&gt;&gt;&gt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdNextEditPoint)" title="@GetTrimCommandTooltip(TrimCmdNextEditPoint)">&gt;|</button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdPrevEditPoint)"
+                            title="@GetTrimCommandTooltip(TrimCmdPrevEditPoint)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdPrevEditPoint)">
+                        <span class="trim-control-icon trim-control-icon-left">
+                            <span class="trim-icon-bar"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdPrevEditPoint)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdBack4)"
+                            title="@GetTrimCommandTooltip(TrimCmdBack4)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdBack4)">
+                        <span class="trim-control-icon trim-control-icon-left">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack4)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdBack3)"
+                            title="@GetTrimCommandTooltip(TrimCmdBack3)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdBack3)">
+                        <span class="trim-control-icon trim-control-icon-left">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack3)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdBack2)"
+                            title="@GetTrimCommandTooltip(TrimCmdBack2)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdBack2)">
+                        <span class="trim-control-icon trim-control-icon-left">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack2)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdBack1)"
+                            title="@GetTrimCommandTooltip(TrimCmdBack1)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdBack1)">
+                        <span class="trim-control-icon trim-control-icon-left">
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack1)</span>
+                    </button>
+                    <button class="trim-control-btn @(IsCurrentFrameEditPoint() ? "trim-btn-active" : "")"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdToggleEditPoint)"
+                            title="@GetTrimCommandTooltip(TrimCmdToggleEditPoint)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdToggleEditPoint)">
+                        <span class="trim-control-icon trim-control-icon-toggle">
+                            <span class="trim-icon-bar"></span>
+                            <span class="trim-icon-dot"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdToggleEditPoint)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdForward1)"
+                            title="@GetTrimCommandTooltip(TrimCmdForward1)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdForward1)">
+                        <span class="trim-control-icon trim-control-icon-right">
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward1)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdForward2)"
+                            title="@GetTrimCommandTooltip(TrimCmdForward2)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdForward2)">
+                        <span class="trim-control-icon trim-control-icon-right">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward2)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdForward3)"
+                            title="@GetTrimCommandTooltip(TrimCmdForward3)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdForward3)">
+                        <span class="trim-control-icon trim-control-icon-right">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward3)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdForward4)"
+                            title="@GetTrimCommandTooltip(TrimCmdForward4)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdForward4)">
+                        <span class="trim-control-icon trim-control-icon-right">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-chevron"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward4)</span>
+                    </button>
+                    <button class="trim-control-btn"
+                            @onclick="() => ExecuteTrimCommand(TrimCmdNextEditPoint)"
+                            title="@GetTrimCommandTooltip(TrimCmdNextEditPoint)"
+                            aria-label="@GetTrimCommandTooltip(TrimCmdNextEditPoint)">
+                        <span class="trim-control-icon trim-control-icon-right">
+                            <span class="trim-icon-chevron"></span>
+                            <span class="trim-icon-bar"></span>
+                        </span>
+                        <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdNextEditPoint)</span>
+                    </button>
                 </div>
 
                 @* シークバー *@
@@ -1133,6 +1235,17 @@
     {
         var delta = GetMoveDelta(commandId);
         return $"{(delta > 0 ? "+" : "")}{delta}F";
+    }
+
+    private string GetTrimCommandDistanceLabel(string commandId)
+    {
+        return commandId switch
+        {
+            TrimCmdPrevEditPoint => "前編集点",
+            TrimCmdNextEditPoint => "次編集点",
+            TrimCmdToggleEditPoint => "切替",
+            _ => GetMoveDeltaText(commandId).ToLowerInvariant()
+        };
     }
 
     private int GetMoveDelta(string commandId)
