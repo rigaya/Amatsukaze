@@ -66,6 +66,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<DrcsAppearanceResponse>> GetDrcsAppearanceAsync(string md5);
 
         Task<ApiResult<JsonElement>> GetSettingAsync();
+        Task<ApiResult<SettingOptions>> GetSettingOptionsAsync();
         Task<ApiResult<bool>> UpdateSettingAsync(JsonElement setting);
         Task<ApiResult<MakeScriptData>> GetMakeScriptAsync();
         Task<ApiResult<List<string>>> GetAddQueueBatFilesAsync();

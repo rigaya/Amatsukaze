@@ -1301,10 +1301,49 @@ namespace Amatsukaze.Server
             return setting;
         }
 
+        private static void NormalizeTrimAdjustSettings(Setting setting)
+        {
+            setting.TrimAdjustPreviewScaleMode = NormalizeTrimAdjustPreviewScaleMode(setting.TrimAdjustPreviewScaleMode);
+            setting.TrimAdjustShortcutPrevEditPoint = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutPrevEditPoint, "ArrowUp");
+            setting.TrimAdjustShortcutBack4 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutBack4, "Alt+ArrowLeft");
+            setting.TrimAdjustShortcutBack3 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutBack3, "Shift+ArrowLeft");
+            setting.TrimAdjustShortcutBack2 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutBack2, "Ctrl+ArrowLeft");
+            setting.TrimAdjustShortcutBack1 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutBack1, "ArrowLeft");
+            setting.TrimAdjustShortcutForward1 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutForward1, "ArrowRight");
+            setting.TrimAdjustShortcutForward2 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutForward2, "Ctrl+ArrowRight");
+            setting.TrimAdjustShortcutForward3 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutForward3, "Shift+ArrowRight");
+            setting.TrimAdjustShortcutForward4 = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutForward4, "Alt+ArrowRight");
+            setting.TrimAdjustShortcutNextEditPoint = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutNextEditPoint, "ArrowDown");
+            setting.TrimAdjustShortcutToggleEditPoint = NormalizeTrimAdjustShortcut(setting.TrimAdjustShortcutToggleEditPoint, "Space");
+
+            setting.TrimAdjustMoveFramesBack4 = NormalizeTrimAdjustMoveFrames(setting.TrimAdjustMoveFramesBack4, 900);
+            setting.TrimAdjustMoveFramesBack3 = NormalizeTrimAdjustMoveFrames(setting.TrimAdjustMoveFramesBack3, 450);
+            setting.TrimAdjustMoveFramesBack2 = NormalizeTrimAdjustMoveFrames(setting.TrimAdjustMoveFramesBack2, 300);
+            setting.TrimAdjustMoveFramesForward2 = NormalizeTrimAdjustMoveFrames(setting.TrimAdjustMoveFramesForward2, 300);
+            setting.TrimAdjustMoveFramesForward3 = NormalizeTrimAdjustMoveFrames(setting.TrimAdjustMoveFramesForward3, 450);
+            setting.TrimAdjustMoveFramesForward4 = NormalizeTrimAdjustMoveFrames(setting.TrimAdjustMoveFramesForward4, 900);
+        }
+
+        private static string NormalizeTrimAdjustShortcut(string value, string defaultValue)
+        {
+            return string.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim();
+        }
+
+        private static int NormalizeTrimAdjustPreviewScaleMode(int value)
+        {
+            return value == 0 || value == 1 || value == 2 ? value : 1;
+        }
+
+        private static int NormalizeTrimAdjustMoveFrames(int value, int defaultValue)
+        {
+            return value > 0 ? value : defaultValue;
+        }
+
         private Setting GetDefaultSetting()
         {
-            string basePath = GetBasePath();
-            return SetDefaultPath(new Setting() { NumParallel = 1, NumParallelLogoAnalysis = 0, DeleteOldLogsDays = 180 });
+            var setting = SetDefaultPath(new Setting() { NumParallel = 1, NumParallelLogoAnalysis = 0, DeleteOldLogsDays = 180 });
+            NormalizeTrimAdjustSettings(setting);
+            return setting;
         }
 
 
@@ -1351,6 +1390,7 @@ namespace Amatsukaze.Server
             {
                 AppData_.setting.DeleteOldLogsDays = 180;
             }
+            NormalizeTrimAdjustSettings(AppData_.setting);
             if (AppData_.scriptData == null)
             {
                 AppData_.scriptData = new MakeScriptData();

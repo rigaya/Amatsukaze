@@ -35,6 +35,12 @@ namespace Amatsukaze.Server.Rest
         private readonly LogoPreviewService logoPreview;
         private readonly TrimAdjustService trimAdjust;
         private IHost host;
+        private static readonly IntOptionView[] TrimAdjustPreviewScaleModeOptions = new[]
+        {
+            new IntOptionView { Value = 1, Label = "1/2倍" },
+            new IntOptionView { Value = 2, Label = "2/3倍" },
+            new IntOptionView { Value = 0, Label = "等倍" }
+        };
 
         private class MakeScriptGenerateRequestInternal
         {
@@ -44,6 +50,20 @@ namespace Amatsukaze.Server.Rest
             public string RemoteHost { get; set; }
             public string Subnet { get; set; }
             public string Mac { get; set; }
+        }
+
+        private static SettingOptions BuildSettingOptions()
+        {
+            return new SettingOptions
+            {
+                TrimAdjustPreviewScaleModes = TrimAdjustPreviewScaleModeOptions
+                    .Select(item => new IntOptionView
+                    {
+                        Value = item.Value,
+                        Label = item.Label
+                    })
+                    .ToList()
+            };
         }
 
         public static int GetEnabledPort(int serverPort)
@@ -1256,6 +1276,8 @@ namespace Amatsukaze.Server.Rest
             });
 
             app.MapGet("/api/settings", () => Results.Json(state.GetSetting()));
+            app.MapGet("/api/settings/options", () => Results.Json(BuildSettingOptions()));
+            app.MapMethods("/api/settings/options", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/settings", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapPut("/api/settings", async (HttpRequest request) =>
             {

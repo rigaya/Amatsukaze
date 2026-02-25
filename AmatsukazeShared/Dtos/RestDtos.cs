@@ -432,6 +432,17 @@ namespace Amatsukaze.Shared
         public List<string> JlsCommandFiles { get; set; } = new List<string>();
     }
 
+    public class IntOptionView
+    {
+        public int Value { get; set; }
+        public string? Label { get; set; }
+    }
+
+    public class SettingOptions
+    {
+        public List<IntOptionView> TrimAdjustPreviewScaleModes { get; set; } = new List<IntOptionView>();
+    }
+
     public class LogoPeriodUpdateRequest
     {
         public string? FileName { get; set; }

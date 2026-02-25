@@ -901,6 +901,45 @@ namespace Amatsukaze.Server
         [DataMember]
         public string BatchFileAfterQueuePath { get; set; }
 
+        [DataMember]
+        public int TrimAdjustPreviewScaleMode { get; set; } = 1;
+
+        [DataMember]
+        public string TrimAdjustShortcutPrevEditPoint { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutBack4 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutBack3 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutBack2 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutBack1 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutForward1 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutForward2 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutForward3 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutForward4 { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutNextEditPoint { get; set; }
+        [DataMember]
+        public string TrimAdjustShortcutToggleEditPoint { get; set; }
+
+        [DataMember]
+        public int TrimAdjustMoveFramesBack4 { get; set; }
+        [DataMember]
+        public int TrimAdjustMoveFramesBack3 { get; set; }
+        [DataMember]
+        public int TrimAdjustMoveFramesBack2 { get; set; }
+        [DataMember]
+        public int TrimAdjustMoveFramesForward2 { get; set; }
+        [DataMember]
+        public int TrimAdjustMoveFramesForward3 { get; set; }
+        [DataMember]
+        public int TrimAdjustMoveFramesForward4 { get; set; }
+
         public ExtensionDataObject ExtensionData { get; set; }
 
         public string ActualWorkPath

@@ -315,6 +315,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<JsonElement>> GetSettingAsync()
             => GetJsonAsync<JsonElement>("/api/settings");
 
+        public Task<ApiResult<SettingOptions>> GetSettingOptionsAsync()
+            => GetJsonAsync<SettingOptions>("/api/settings/options");
+
         public Task<ApiResult<bool>> UpdateSettingAsync(JsonElement setting)
             => PutJsonAsync("/api/settings", setting, _ => true);
 

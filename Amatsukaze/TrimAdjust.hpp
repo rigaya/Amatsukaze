@@ -87,21 +87,38 @@ class GUITrimAdjust : public AMTObject {
             AVSValue yuvResult = env->Invoke("ConvertToYV16", AVSValue(convertArgs, 2), convertNames);
             PClip convertedClip = yuvResult.AsClip();
 
-            // scaleMode==1: フィールド分離→リサイズ→フィールドマージ
-            if (scaleMode == 1 && interlaced) {
-                // SeparateFields
-                AVSValue sepArgs[] = { yuvResult };
-                AVSValue sepResult = env->Invoke("SeparateFields", AVSValue(sepArgs, 1));
+            // scaleMode!=0: 縮小プレビュー
+            int scaleNum = 1;
+            int scaleDen = 1;
+            if (scaleMode == 1) {
+                scaleNum = 1;
+                scaleDen = 2;
+            } else if (scaleMode == 2) {
+                scaleNum = 2;
+                scaleDen = 3;
+            }
 
-                // 元の解像度にBicubicResize
-                AVSValue resizeArgs[] = { sepResult, width, height / 2 };
-                AVSValue resizeResult = env->Invoke("BicubicResize", AVSValue(resizeArgs, 3));
+            if (scaleDen > 1) {
+                const int resizeWidth = std::max(1, (width * scaleNum) / scaleDen);
+                const int resizeHeight = std::max(1, (height * scaleNum) / scaleDen);
+                if (interlaced) {
+                    // interlaced=true: SeparateFields -> BilinearResize -> Weave
+                    AVSValue sepArgs[] = { yuvResult };
+                    AVSValue sepResult = env->Invoke("SeparateFields", AVSValue(sepArgs, 1));
 
-                // Weave（フィールドマージ）
-                AVSValue weaveArgs[] = { resizeResult };
-                AVSValue weaveResult = env->Invoke("Weave", AVSValue(weaveArgs, 1));
+                    const int resizeFieldHeight = std::max(1, resizeHeight / 2);
+                    AVSValue resizeArgs[] = { sepResult, resizeWidth, resizeFieldHeight };
+                    AVSValue resizeResult = env->Invoke("BilinearResize", AVSValue(resizeArgs, 3));
 
-                yuvClip = weaveResult.AsClip();
+                    AVSValue weaveArgs[] = { resizeResult };
+                    AVSValue weaveResult = env->Invoke("Weave", AVSValue(weaveArgs, 1));
+                    yuvClip = weaveResult.AsClip();
+                } else {
+                    // interlaced=false: 直接BilinearResize
+                    AVSValue resizeArgs[] = { yuvResult, resizeWidth, resizeHeight };
+                    AVSValue resizeResult = env->Invoke("BilinearResize", AVSValue(resizeArgs, 3));
+                    yuvClip = resizeResult.AsClip();
+                }
             } else {
                 yuvClip = convertedClip;
             }

@@ -1,5 +1,6 @@
 @page "/settings"
 @using System
+@using Microsoft.AspNetCore.Components.Web
 @using System.Text.Json
 @using System.Text.Json.Nodes
 @using Amatsukaze.Shared
@@ -319,6 +320,62 @@ else
             </td>
         </tr>
     </table>
+
+    <hr class="settings-sep" />
+    <h4>Trim調整</h4>
+    <table class="table trim-adjust-settings-table">
+        <tr>
+            <th>プレビュー解像度</th>
+            <td colspan="2">
+                <select @onchange="@(e => OnIntSelect(e, TrimAdjustPreviewScaleModeField))">
+                    @foreach (var item in _trimAdjustPreviewScaleOptions)
+                    {
+                        <option value="@item.Value" selected="@(item.Value == GetIntValue(TrimAdjustPreviewScaleModeField))">@item.Label</option>
+                    }
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <th>ボタン</th>
+            <th>ショートカット</th>
+            <th>効果</th>
+        </tr>
+        @foreach (var item in _trimAdjustShortcutRows)
+        {
+            <tr>
+                <td><code>@item.Button</code></td>
+                <td>
+                    <input type="text"
+                           style="width: 220px;"
+                           readonly
+                           value="@GetStringValue(item.ShortcutField)"
+                           title="この欄を選択してキーを押す"
+                           @onkeydown="@(e => OnTrimShortcutKeyDown(e, item.ShortcutField))"
+                           @onkeydown:preventDefault="true" />
+                </td>
+                <td>
+                    @if (item.MoveFramesField != null)
+                    {
+                        <input type="number"
+                               min="1"
+                               style="width: 100px;"
+                               value="@GetIntValue(item.MoveFramesField)"
+                               @oninput="@(e => OnIntInput(e, item.MoveFramesField))" />
+                        <span style="margin-left: 6px;">@($"フレーム{GetTrimAdjustMoveDirectionLabel(item)}")</span>
+                    }
+                    else
+                    {
+                        <span>@item.EffectLabel</span>
+                    }
+                </td>
+            </tr>
+        }
+    </table>
+    <button class="btn btn-sm btn-secondary" @onclick="ResetTrimAdjustDefaults">デフォルトに戻す</button>
+    @if (!string.IsNullOrEmpty(_trimAdjustValidationError))
+    {
+        <p style="color: red;">@_trimAdjustValidationError</p>
+    }
     </div>
 }
 
@@ -388,8 +445,68 @@ else
     private const string ExecuteBatchAfterQueueField = "ExecuteBatchAfterQueue";
     private const string BatchFileAfterQueuePathField = "BatchFileAfterQueuePath";
     private const string SupressSleepField = "SupressSleep";
+    private const string TrimAdjustPreviewScaleModeField = "TrimAdjustPreviewScaleMode";
+    private const string TrimAdjustShortcutPrevEditPointField = "TrimAdjustShortcutPrevEditPoint";
+    private const string TrimAdjustShortcutBack4Field = "TrimAdjustShortcutBack4";
+    private const string TrimAdjustShortcutBack3Field = "TrimAdjustShortcutBack3";
+    private const string TrimAdjustShortcutBack2Field = "TrimAdjustShortcutBack2";
+    private const string TrimAdjustShortcutBack1Field = "TrimAdjustShortcutBack1";
+    private const string TrimAdjustShortcutForward1Field = "TrimAdjustShortcutForward1";
+    private const string TrimAdjustShortcutForward2Field = "TrimAdjustShortcutForward2";
+    private const string TrimAdjustShortcutForward3Field = "TrimAdjustShortcutForward3";
+    private const string TrimAdjustShortcutForward4Field = "TrimAdjustShortcutForward4";
+    private const string TrimAdjustShortcutNextEditPointField = "TrimAdjustShortcutNextEditPoint";
+    private const string TrimAdjustShortcutToggleEditPointField = "TrimAdjustShortcutToggleEditPoint";
+    private const string TrimAdjustMoveFramesBack4Field = "TrimAdjustMoveFramesBack4";
+    private const string TrimAdjustMoveFramesBack3Field = "TrimAdjustMoveFramesBack3";
+    private const string TrimAdjustMoveFramesBack2Field = "TrimAdjustMoveFramesBack2";
+    private const string TrimAdjustMoveFramesForward2Field = "TrimAdjustMoveFramesForward2";
+    private const string TrimAdjustMoveFramesForward3Field = "TrimAdjustMoveFramesForward3";
+    private const string TrimAdjustMoveFramesForward4Field = "TrimAdjustMoveFramesForward4";
+
+    private sealed class TrimAdjustShortcutRow
+    {
+        public string Button { get; }
+        public string ShortcutField { get; }
+        public string DefaultShortcut { get; }
+        public string EffectLabel { get; }
+        public string? MoveFramesField { get; }
+        public int DefaultMoveFrames { get; }
+
+        public TrimAdjustShortcutRow(string button, string shortcutField, string defaultShortcut, string effectLabel, string? moveFramesField, int defaultMoveFrames)
+        {
+            Button = button;
+            ShortcutField = shortcutField;
+            DefaultShortcut = defaultShortcut;
+            EffectLabel = effectLabel;
+            MoveFramesField = moveFramesField;
+            DefaultMoveFrames = defaultMoveFrames;
+        }
+    }
+
+    private static readonly TrimAdjustShortcutRow[] _trimAdjustShortcutRows = new[]
+    {
+        new TrimAdjustShortcutRow("|<", TrimAdjustShortcutPrevEditPointField, "ArrowUp", "前の編集点へ", null, 0),
+        new TrimAdjustShortcutRow("<<<<", TrimAdjustShortcutBack4Field, "Alt+ArrowLeft", "フレーム移動", TrimAdjustMoveFramesBack4Field, 900),
+        new TrimAdjustShortcutRow("<<<", TrimAdjustShortcutBack3Field, "Shift+ArrowLeft", "フレーム移動", TrimAdjustMoveFramesBack3Field, 450),
+        new TrimAdjustShortcutRow("<<", TrimAdjustShortcutBack2Field, "Ctrl+ArrowLeft", "フレーム移動", TrimAdjustMoveFramesBack2Field, 300),
+        new TrimAdjustShortcutRow("<", TrimAdjustShortcutBack1Field, "ArrowLeft", "1フレーム前へ", null, 0),
+        new TrimAdjustShortcutRow(">", TrimAdjustShortcutForward1Field, "ArrowRight", "1フレーム後へ", null, 0),
+        new TrimAdjustShortcutRow(">>", TrimAdjustShortcutForward2Field, "Ctrl+ArrowRight", "フレーム移動", TrimAdjustMoveFramesForward2Field, 300),
+        new TrimAdjustShortcutRow(">>>", TrimAdjustShortcutForward3Field, "Shift+ArrowRight", "フレーム移動", TrimAdjustMoveFramesForward3Field, 450),
+        new TrimAdjustShortcutRow(">>>>", TrimAdjustShortcutForward4Field, "Alt+ArrowRight", "フレーム移動", TrimAdjustMoveFramesForward4Field, 900),
+        new TrimAdjustShortcutRow(">|", TrimAdjustShortcutNextEditPointField, "ArrowDown", "次の編集点へ", null, 0),
+        new TrimAdjustShortcutRow("|", TrimAdjustShortcutToggleEditPointField, "Space", "編集点切替", null, 0)
+    };
+
     private static readonly string[] _processPriorityOptions = new[] { "通常", "通常以下", "低" };
     private static readonly string[] _affinityOptions = new[] { "なし", "コア", "L2", "L3", "NUMA", "Group" };
+    private static readonly IntOptionView[] _defaultTrimAdjustPreviewScaleOptions = new[]
+    {
+        new IntOptionView { Value = 1, Label = "1/2倍" },
+        new IntOptionView { Value = 2, Label = "2/3倍" },
+        new IntOptionView { Value = 0, Label = "等倍" }
+    };
     private string? _error;
     private bool _loading = true;
     private JsonObject? _setting;
@@ -400,12 +517,14 @@ else
     private bool[] _runHours = new bool[24];
     private readonly List<string> _queueFinishBatFiles = new();
     private readonly List<string> _noActionExeList = new();
+    private readonly List<IntOptionView> _trimAdjustPreviewScaleOptions = new();
     private string _noActionExeName = "";
     private int _selectedNoActionExeIndex = -1;
     private int _lastLogoParallelManual = 1;
     private bool _isServerLinux;
     private int _serverLogicalProcessorCount = 128;
     private int _reloadVersion;
+    private string? _trimAdjustValidationError;
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
@@ -421,18 +540,22 @@ else
         _runHours = new bool[24];
         _queueFinishBatFiles.Clear();
         _noActionExeList.Clear();
+        ResetTrimAdjustPreviewScaleOptions();
         _noActionExeName = "";
         _selectedNoActionExeIndex = -1;
         _serverLogicalProcessorCount = 128;
+        _trimAdjustValidationError = null;
         var reloadVersion = ++_reloadVersion;
 
         var settingTask = Api.GetSettingAsync();
+        var settingOptionsTask = Api.GetSettingOptionsAsync();
         var queueFinishTask = Api.GetQueueFinishBatFilesAsync();
         var profileOptionsTask = Api.GetProfileOptionsAsync();
 
-        await Task.WhenAll(settingTask, queueFinishTask, profileOptionsTask);
+        await Task.WhenAll(settingTask, settingOptionsTask, queueFinishTask, profileOptionsTask);
 
         var settingRes = await settingTask;
+        var settingOptionsRes = await settingOptionsTask;
         var queueFinishRes = await queueFinishTask;
         var profileOptionsRes = await profileOptionsTask;
 
@@ -456,6 +579,11 @@ else
             {
                 InitializeFieldValues();
             }
+        }
+
+        if (settingOptionsRes.Ok && settingOptionsRes.Data != null)
+        {
+            SetTrimAdjustPreviewScaleOptions(settingOptionsRes.Data.TrimAdjustPreviewScaleModes);
         }
 
         if (queueFinishRes.Ok && queueFinishRes.Data != null)
@@ -542,9 +670,11 @@ else
         _intValues[NumParallelLogoField] = NormalizeIntValue(NumParallelLogoField, GetInt(NumParallelLogoField));
         _intValues[ProcessPriorityField] = NormalizeIntValue(ProcessPriorityField, GetInt(ProcessPriorityField));
         _intValues[AffinitySettingField] = NormalizeIntValue(AffinitySettingField, GetInt(AffinitySettingField));
+        _intValues[TrimAdjustPreviewScaleModeField] = NormalizeIntValue(TrimAdjustPreviewScaleModeField, GetInt(TrimAdjustPreviewScaleModeField));
         _doubleValues[X265VfrFactorField] = NormalizeDoubleValue(X265VfrFactorField, GetDouble(X265VfrFactorField));
         _runHours = GetRunHoursArray();
         _noActionExeList.AddRange(GetStringList("NoActionExeList"));
+        InitializeTrimAdjustFieldValues();
         var logoParallel = _intValues.TryGetValue(NumParallelLogoField, out var currentLogoParallel) ? currentLogoParallel : 0;
         if (logoParallel > 0)
         {
@@ -559,6 +689,11 @@ else
             return;
         }
         _error = null;
+        _trimAdjustValidationError = ValidateTrimAdjustSettings();
+        if (!string.IsNullOrEmpty(_trimAdjustValidationError))
+        {
+            return;
+        }
 
         foreach (var kv in _stringValues)
         {
@@ -922,6 +1057,244 @@ else
         }
     }
 
+    private void InitializeTrimAdjustFieldValues()
+    {
+        foreach (var item in _trimAdjustShortcutRows)
+        {
+            _stringValues[item.ShortcutField] = NormalizeShortcutOrDefault(GetString(item.ShortcutField), item.DefaultShortcut);
+            if (item.MoveFramesField != null)
+            {
+                _intValues[item.MoveFramesField] = NormalizeTrimAdjustMoveFrames(GetInt(item.MoveFramesField), item.DefaultMoveFrames);
+            }
+        }
+    }
+
+    private void OnTrimShortcutKeyDown(KeyboardEventArgs e, string field)
+    {
+        if (e.Key == "Escape")
+        {
+            _stringValues[field] = "";
+            _trimAdjustValidationError = null;
+            return;
+        }
+        var shortcut = BuildShortcutFromEvent(e);
+        if (string.IsNullOrEmpty(shortcut))
+        {
+            return;
+        }
+        _stringValues[field] = shortcut;
+        _trimAdjustValidationError = null;
+    }
+
+    private string? ValidateTrimAdjustSettings()
+    {
+        var assigned = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in _trimAdjustShortcutRows)
+        {
+            var shortcut = NormalizeShortcutOrDefault(GetStringValue(item.ShortcutField), "");
+            if (string.IsNullOrEmpty(shortcut))
+            {
+                return $"[{item.Button}] のショートカットを設定してください。";
+            }
+            if (assigned.TryGetValue(shortcut, out var button))
+            {
+                return $"ショートカット {FormatShortcutLabel(shortcut)} が [{button}] と [{item.Button}] で重複しています。";
+            }
+            assigned[shortcut] = item.Button;
+        }
+        foreach (var item in _trimAdjustShortcutRows)
+        {
+            if (item.MoveFramesField == null)
+            {
+                continue;
+            }
+            var value = GetIntValue(item.MoveFramesField);
+            if (value <= 0)
+            {
+                return $"[{item.Button}] の移動量は1以上を指定してください。";
+            }
+        }
+        return null;
+    }
+
+    private static string BuildShortcutFromEvent(KeyboardEventArgs e)
+    {
+        var key = NormalizeShortcutKey(e.Key);
+        if (string.IsNullOrEmpty(key))
+        {
+            return "";
+        }
+        var parts = new List<string>();
+        if (e.CtrlKey) parts.Add("Ctrl");
+        if (e.ShiftKey) parts.Add("Shift");
+        if (e.AltKey) parts.Add("Alt");
+        parts.Add(key);
+        return string.Join("+", parts);
+    }
+
+    private static string NormalizeShortcutOrDefault(string value, string defaultValue)
+    {
+        var normalized = NormalizeShortcutText(value);
+        return string.IsNullOrEmpty(normalized) ? defaultValue : normalized;
+    }
+
+    private static string NormalizeShortcutText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+        var ctrl = false;
+        var shift = false;
+        var alt = false;
+        string? key = null;
+        var parts = value.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            var token = part.Trim();
+            if (token.Equals("ctrl", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("control", StringComparison.OrdinalIgnoreCase))
+            {
+                ctrl = true;
+                continue;
+            }
+            if (token.Equals("shift", StringComparison.OrdinalIgnoreCase))
+            {
+                shift = true;
+                continue;
+            }
+            if (token.Equals("alt", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("option", StringComparison.OrdinalIgnoreCase))
+            {
+                alt = true;
+                continue;
+            }
+            key = NormalizeShortcutKey(token);
+        }
+        if (string.IsNullOrEmpty(key))
+        {
+            return "";
+        }
+        var result = new List<string>();
+        if (ctrl) result.Add("Ctrl");
+        if (shift) result.Add("Shift");
+        if (alt) result.Add("Alt");
+        result.Add(key);
+        return string.Join("+", result);
+    }
+
+    private static string NormalizeShortcutKey(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return "";
+        }
+        return key switch
+        {
+            " " => "Space",
+            "Spacebar" => "Space",
+            "Space" => "Space",
+            "Left" => "ArrowLeft",
+            "Right" => "ArrowRight",
+            "Up" => "ArrowUp",
+            "Down" => "ArrowDown",
+            "ArrowLeft" => "ArrowLeft",
+            "ArrowRight" => "ArrowRight",
+            "ArrowUp" => "ArrowUp",
+            "ArrowDown" => "ArrowDown",
+            "Esc" => "Escape",
+            "Tab" => "",
+            "Control" => "",
+            "Shift" => "",
+            "Alt" => "",
+            "Meta" => "",
+            "OS" => "",
+            "Process" => "",
+            _ => key.Length == 1 ? key.ToUpperInvariant() : key
+        };
+    }
+
+    private static string FormatShortcutLabel(string shortcut)
+    {
+        if (string.IsNullOrWhiteSpace(shortcut))
+        {
+            return "-";
+        }
+        var parts = shortcut.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            parts[i] = parts[i] switch
+            {
+                "ArrowLeft" => "Left",
+                "ArrowRight" => "Right",
+                "ArrowUp" => "Up",
+                "ArrowDown" => "Down",
+                _ => parts[i]
+            };
+        }
+        return string.Join("+", parts);
+    }
+
+    private string GetTrimAdjustMoveDirectionLabel(TrimAdjustShortcutRow item)
+    {
+        return item.Button.StartsWith("<", StringComparison.Ordinal) ? "前" : "後";
+    }
+
+    private void ResetTrimAdjustDefaults()
+    {
+        foreach (var item in _trimAdjustShortcutRows)
+        {
+            _stringValues[item.ShortcutField] = NormalizeShortcutText(item.DefaultShortcut);
+            if (item.MoveFramesField != null)
+            {
+                _intValues[item.MoveFramesField] = NormalizeTrimAdjustMoveFrames(item.DefaultMoveFrames, item.DefaultMoveFrames);
+            }
+        }
+        _trimAdjustValidationError = null;
+    }
+
+    private static int NormalizeTrimAdjustMoveFrames(int value, int defaultValue)
+    {
+        return value > 0 ? value : defaultValue;
+    }
+
+    private void ResetTrimAdjustPreviewScaleOptions()
+    {
+        _trimAdjustPreviewScaleOptions.Clear();
+        foreach (var item in _defaultTrimAdjustPreviewScaleOptions)
+        {
+            _trimAdjustPreviewScaleOptions.Add(new IntOptionView
+            {
+                Value = item.Value,
+                Label = item.Label
+            });
+        }
+    }
+
+    private void SetTrimAdjustPreviewScaleOptions(List<IntOptionView>? options)
+    {
+        _trimAdjustPreviewScaleOptions.Clear();
+        if (options != null)
+        {
+            foreach (var item in options)
+            {
+                if (item == null || string.IsNullOrWhiteSpace(item.Label))
+                {
+                    continue;
+                }
+                _trimAdjustPreviewScaleOptions.Add(new IntOptionView
+                {
+                    Value = item.Value,
+                    Label = item.Label
+                });
+            }
+        }
+        if (_trimAdjustPreviewScaleOptions.Count == 0)
+        {
+            ResetTrimAdjustPreviewScaleOptions();
+        }
+    }
+
     private int NormalizeIntValue(string name, int value)
     {
         if (name == DeleteOldLogsDaysField)
@@ -953,7 +1326,30 @@ else
         {
             return Math.Clamp(value, 0, _affinityOptions.Length - 1);
         }
+        if (name == TrimAdjustPreviewScaleModeField)
+        {
+            return value == 0 || value == 1 || value == 2 ? value : 1;
+        }
+        var trimDefault = GetTrimAdjustDefaultMoveFrames(name);
+        if (trimDefault > 0)
+        {
+            return NormalizeTrimAdjustMoveFrames(value, trimDefault);
+        }
         return value;
+    }
+
+    private static int GetTrimAdjustDefaultMoveFrames(string name)
+    {
+        return name switch
+        {
+            TrimAdjustMoveFramesBack4Field => 900,
+            TrimAdjustMoveFramesBack3Field => 450,
+            TrimAdjustMoveFramesBack2Field => 300,
+            TrimAdjustMoveFramesForward2Field => 300,
+            TrimAdjustMoveFramesForward3Field => 450,
+            TrimAdjustMoveFramesForward4Field => 900,
+            _ => 0
+        };
     }
 
     private double NormalizeDoubleValue(string name, double value)

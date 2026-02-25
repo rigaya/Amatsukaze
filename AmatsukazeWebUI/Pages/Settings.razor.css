@@ -15,3 +15,8 @@
     display: inline-block;
     vertical-align: middle;
 }
+
+.settings-page .trim-adjust-settings-table {
+    width: 100%;
+    max-width: 760px;
+}

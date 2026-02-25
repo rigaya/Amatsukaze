@@ -130,9 +130,12 @@ namespace Amatsukaze.Server.Rest
             CleanupExpired();
 
             var sessionId = Guid.NewGuid().ToString("N");
+            var scaleMode = request.ScaleMode == 0 || request.ScaleMode == 1 || request.ScaleMode == 2
+                ? request.ScaleMode
+                : 1;
             try
             {
-                var session = new TrimAdjustSession(sessionId, request.QueueItemId, item.SrcPath, tempDir, datFilePath, request.ScaleMode);
+                var session = new TrimAdjustSession(sessionId, request.QueueItemId, item.SrcPath, tempDir, datFilePath, scaleMode);
                 sessions[sessionId] = session;
 
                 // 全フレームPTS情報を取得

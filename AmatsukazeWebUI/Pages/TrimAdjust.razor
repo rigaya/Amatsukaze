@@ -1,12 +1,13 @@
 @page "/trim-adjust/{QueueItemId:int}"
 @using Amatsukaze.Shared
+@using Microsoft.AspNetCore.Components.Web
 @using System.Globalization
 @using System.Text.Json
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<div class="trim-adjust-page" @onkeydown="OnKeyDown" tabindex="0" @ref="_pageRef">
+<div class="trim-adjust-page" @onkeydown="OnKeyDown" @onkeydown:preventDefault="true" tabindex="0" @ref="_pageRef">
     <div class="trim-toolbar">
         <button class="trim-btn" @onclick="GoBack">&#x2190; 戻る</button>
         <button class="trim-btn trim-btn-sm" @onclick="ShowCheckLog" title="CM解析チェックログ">ログ</button>
@@ -119,16 +120,18 @@
 
                 @* 移動ボタン *@
                 <div class="trim-controls">
-                    <button class="trim-btn trim-btn-sm" @onclick="() => JumpToPrevEditPoint()" title="前の編集点 (PageUp)">|&lt;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-100)" title="-100F (Ctrl+Left)">&#x25C0;&#x25C0;&#x25C0;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-10)" title="-10F (Shift+Left)">&#x25C0;&#x25C0;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(-1)" title="-1F (Left)">&#x25C0;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdPrevEditPoint)" title="@GetTrimCommandTooltip(TrimCmdPrevEditPoint)">|&lt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack4)" title="@GetTrimCommandTooltip(TrimCmdBack4)">&lt;&lt;&lt;&lt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack3)" title="@GetTrimCommandTooltip(TrimCmdBack3)">&lt;&lt;&lt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack2)" title="@GetTrimCommandTooltip(TrimCmdBack2)">&lt;&lt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdBack1)" title="@GetTrimCommandTooltip(TrimCmdBack1)">&lt;</button>
                     <button class="trim-btn trim-btn-sm @(IsCurrentFrameEditPoint() ? "trim-btn-active" : "")"
-                            @onclick="ToggleEditPoint" title="編集点切替">|</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(1)" title="+1F (Right)">&#x25B6;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(10)" title="+10F (Shift+Right)">&#x25B6;&#x25B6;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => MoveFrame(100)" title="+100F (Ctrl+Right)">&#x25B6;&#x25B6;&#x25B6;</button>
-                    <button class="trim-btn trim-btn-sm" @onclick="() => JumpToNextEditPoint()" title="次の編集点 (PageDown)">&gt;|</button>
+                            @onclick="() => ExecuteTrimCommand(TrimCmdToggleEditPoint)" title="@GetTrimCommandTooltip(TrimCmdToggleEditPoint)">|</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward1)" title="@GetTrimCommandTooltip(TrimCmdForward1)">&gt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward2)" title="@GetTrimCommandTooltip(TrimCmdForward2)">&gt;&gt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward3)" title="@GetTrimCommandTooltip(TrimCmdForward3)">&gt;&gt;&gt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdForward4)" title="@GetTrimCommandTooltip(TrimCmdForward4)">&gt;&gt;&gt;&gt;</button>
+                    <button class="trim-btn trim-btn-sm" @onclick="() => ExecuteTrimCommand(TrimCmdNextEditPoint)" title="@GetTrimCommandTooltip(TrimCmdNextEditPoint)">&gt;|</button>
                 </div>
 
                 @* シークバー *@
@@ -190,6 +193,73 @@
     [Parameter]
     public int QueueItemId { get; set; }
 
+    private const string TrimCmdPrevEditPoint = "PrevEditPoint";
+    private const string TrimCmdBack4 = "Back4";
+    private const string TrimCmdBack3 = "Back3";
+    private const string TrimCmdBack2 = "Back2";
+    private const string TrimCmdBack1 = "Back1";
+    private const string TrimCmdForward1 = "Forward1";
+    private const string TrimCmdForward2 = "Forward2";
+    private const string TrimCmdForward3 = "Forward3";
+    private const string TrimCmdForward4 = "Forward4";
+    private const string TrimCmdNextEditPoint = "NextEditPoint";
+    private const string TrimCmdToggleEditPoint = "ToggleEditPoint";
+
+    private const string TrimAdjustShortcutPrevEditPointField = "TrimAdjustShortcutPrevEditPoint";
+    private const string TrimAdjustShortcutBack4Field = "TrimAdjustShortcutBack4";
+    private const string TrimAdjustShortcutBack3Field = "TrimAdjustShortcutBack3";
+    private const string TrimAdjustShortcutBack2Field = "TrimAdjustShortcutBack2";
+    private const string TrimAdjustShortcutBack1Field = "TrimAdjustShortcutBack1";
+    private const string TrimAdjustShortcutForward1Field = "TrimAdjustShortcutForward1";
+    private const string TrimAdjustShortcutForward2Field = "TrimAdjustShortcutForward2";
+    private const string TrimAdjustShortcutForward3Field = "TrimAdjustShortcutForward3";
+    private const string TrimAdjustShortcutForward4Field = "TrimAdjustShortcutForward4";
+    private const string TrimAdjustShortcutNextEditPointField = "TrimAdjustShortcutNextEditPoint";
+    private const string TrimAdjustShortcutToggleEditPointField = "TrimAdjustShortcutToggleEditPoint";
+    private const string TrimAdjustPreviewScaleModeField = "TrimAdjustPreviewScaleMode";
+    private const string TrimAdjustMoveFramesBack4Field = "TrimAdjustMoveFramesBack4";
+    private const string TrimAdjustMoveFramesBack3Field = "TrimAdjustMoveFramesBack3";
+    private const string TrimAdjustMoveFramesBack2Field = "TrimAdjustMoveFramesBack2";
+    private const string TrimAdjustMoveFramesForward2Field = "TrimAdjustMoveFramesForward2";
+    private const string TrimAdjustMoveFramesForward3Field = "TrimAdjustMoveFramesForward3";
+    private const string TrimAdjustMoveFramesForward4Field = "TrimAdjustMoveFramesForward4";
+
+    private sealed class TrimCommandSetting
+    {
+        public string CommandId { get; }
+        public string ShortcutField { get; }
+        public string DefaultShortcut { get; }
+        public string? MoveFramesField { get; }
+        public int DefaultMoveFrames { get; }
+
+        public TrimCommandSetting(string commandId, string shortcutField, string defaultShortcut, string? moveFramesField, int defaultMoveFrames)
+        {
+            CommandId = commandId;
+            ShortcutField = shortcutField;
+            DefaultShortcut = defaultShortcut;
+            MoveFramesField = moveFramesField;
+            DefaultMoveFrames = defaultMoveFrames;
+        }
+    }
+
+    private static readonly TrimCommandSetting[] _trimCommandSettings = new[]
+    {
+        new TrimCommandSetting(TrimCmdPrevEditPoint, TrimAdjustShortcutPrevEditPointField, "ArrowUp", null, 0),
+        new TrimCommandSetting(TrimCmdBack4, TrimAdjustShortcutBack4Field, "Alt+ArrowLeft", TrimAdjustMoveFramesBack4Field, 900),
+        new TrimCommandSetting(TrimCmdBack3, TrimAdjustShortcutBack3Field, "Shift+ArrowLeft", TrimAdjustMoveFramesBack3Field, 450),
+        new TrimCommandSetting(TrimCmdBack2, TrimAdjustShortcutBack2Field, "Ctrl+ArrowLeft", TrimAdjustMoveFramesBack2Field, 300),
+        new TrimCommandSetting(TrimCmdBack1, TrimAdjustShortcutBack1Field, "ArrowLeft", null, 1),
+        new TrimCommandSetting(TrimCmdForward1, TrimAdjustShortcutForward1Field, "ArrowRight", null, 1),
+        new TrimCommandSetting(TrimCmdForward2, TrimAdjustShortcutForward2Field, "Ctrl+ArrowRight", TrimAdjustMoveFramesForward2Field, 300),
+        new TrimCommandSetting(TrimCmdForward3, TrimAdjustShortcutForward3Field, "Shift+ArrowRight", TrimAdjustMoveFramesForward3Field, 450),
+        new TrimCommandSetting(TrimCmdForward4, TrimAdjustShortcutForward4Field, "Alt+ArrowRight", TrimAdjustMoveFramesForward4Field, 900),
+        new TrimCommandSetting(TrimCmdNextEditPoint, TrimAdjustShortcutNextEditPointField, "ArrowDown", null, 0),
+        new TrimCommandSetting(TrimCmdToggleEditPoint, TrimAdjustShortcutToggleEditPointField, "Space", null, 0)
+    };
+
+    private static readonly Dictionary<string, TrimCommandSetting> _trimCommandSettingMap = _trimCommandSettings
+        .ToDictionary(item => item.CommandId, item => item, StringComparer.Ordinal);
+
     private ElementReference _pageRef;
     private ElementReference _seekBarRef;
     private ElementReference _imgRef;
@@ -239,6 +309,10 @@
     // debounce用タイマー
     private System.Threading.Timer? _debounceTimer;
     private int _pendingFrame = -1;
+    private readonly Dictionary<string, string> _shortcutByCommand = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _moveFramesByCommand = new Dictionary<string, int>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _commandByShortcut = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private int _previewScaleMode = 1;
 
     private class EditPoint
     {
@@ -351,15 +425,162 @@
         });
     }
 
+    private async Task LoadTrimAdjustSettingsAsync()
+    {
+        ResetTrimAdjustSettingsToDefault();
+
+        var settingRes = await Api.GetSettingAsync();
+        if (!settingRes.Ok || settingRes.Data.ValueKind != JsonValueKind.Object)
+        {
+            RebuildShortcutLookup();
+            return;
+        }
+
+        var setting = settingRes.Data;
+        _previewScaleMode = NormalizePreviewScaleMode(GetSettingIntOrDefault(setting, TrimAdjustPreviewScaleModeField, 1));
+        foreach (var item in _trimCommandSettings)
+        {
+            _shortcutByCommand[item.CommandId] = NormalizeShortcutOrDefault(
+                GetSettingString(setting, item.ShortcutField),
+                item.DefaultShortcut);
+            if (item.MoveFramesField != null)
+            {
+                _moveFramesByCommand[item.CommandId] = NormalizeMoveFrames(
+                    GetSettingInt(setting, item.MoveFramesField),
+                    item.DefaultMoveFrames);
+            }
+        }
+        RebuildShortcutLookup();
+    }
+
+    private void ResetTrimAdjustSettingsToDefault()
+    {
+        _shortcutByCommand.Clear();
+        _moveFramesByCommand.Clear();
+        _commandByShortcut.Clear();
+        _previewScaleMode = 1;
+        foreach (var item in _trimCommandSettings)
+        {
+            _shortcutByCommand[item.CommandId] = item.DefaultShortcut;
+            if (item.MoveFramesField != null)
+            {
+                _moveFramesByCommand[item.CommandId] = item.DefaultMoveFrames;
+            }
+        }
+    }
+
+    private void RebuildShortcutLookup()
+    {
+        _commandByShortcut.Clear();
+        foreach (var item in _trimCommandSettings)
+        {
+            if (!_shortcutByCommand.TryGetValue(item.CommandId, out var shortcut))
+            {
+                continue;
+            }
+            var normalized = NormalizeShortcutOrDefault(shortcut, item.DefaultShortcut);
+            _shortcutByCommand[item.CommandId] = normalized;
+            if (!_commandByShortcut.ContainsKey(normalized))
+            {
+                _commandByShortcut[normalized] = item.CommandId;
+            }
+        }
+    }
+
+    private static string GetSettingString(JsonElement setting, string name)
+    {
+        if (TryGetSettingProperty(setting, name, out var node) && node.ValueKind == JsonValueKind.String)
+        {
+            return node.GetString() ?? "";
+        }
+        return "";
+    }
+
+    private static int GetSettingInt(JsonElement setting, string name)
+    {
+        if (!TryGetSettingProperty(setting, name, out var node))
+        {
+            return 0;
+        }
+        if (node.ValueKind == JsonValueKind.Number && node.TryGetInt32(out var value))
+        {
+            return value;
+        }
+        if (node.ValueKind == JsonValueKind.String && int.TryParse(node.GetString(), out var parsed))
+        {
+            return parsed;
+        }
+        return 0;
+    }
+
+    private static int GetSettingIntOrDefault(JsonElement setting, string name, int defaultValue)
+    {
+        if (!TryGetSettingProperty(setting, name, out var node))
+        {
+            return defaultValue;
+        }
+        if (node.ValueKind == JsonValueKind.Number && node.TryGetInt32(out var value))
+        {
+            return value;
+        }
+        if (node.ValueKind == JsonValueKind.String && int.TryParse(node.GetString(), out var parsed))
+        {
+            return parsed;
+        }
+        return defaultValue;
+    }
+
+    private static int NormalizePreviewScaleMode(int value)
+    {
+        return value == 0 || value == 1 || value == 2 ? value : 1;
+    }
+
+    private static bool TryGetSettingProperty(JsonElement setting, string name, out JsonElement value)
+    {
+        if (setting.TryGetProperty(name, out value))
+        {
+            return true;
+        }
+        var camel = ToCamelCase(name);
+        if (setting.TryGetProperty(camel, out value))
+        {
+            return true;
+        }
+        foreach (var item in setting.EnumerateObject())
+        {
+            if (string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = item.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private static string ToCamelCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+        if (name.Length == 1)
+        {
+            return name.ToLowerInvariant();
+        }
+        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+    }
+
     private async Task LoadSessionAsync()
     {
         _loading = true;
         StateHasChanged();
+        await LoadTrimAdjustSettingsAsync();
 
         var result = await Api.CreateTrimSessionAsync(new TrimAdjustSessionRequest
         {
             QueueItemId = QueueItemId,
-            ScaleMode = 0
+            ScaleMode = _previewScaleMode
         });
 
         if (!result.Ok || result.Data == null)
@@ -458,7 +679,7 @@
         var result = await Api.CreateTrimSessionAsync(new TrimAdjustSessionRequest
         {
             QueueItemId = QueueItemId,
-            ScaleMode = 0
+            ScaleMode = _previewScaleMode
         });
 
         if (!result.Ok || result.Data == null)
@@ -873,32 +1094,221 @@
     }
 
 
-    private void OnKeyDown(KeyboardEventArgs e)
+    private void ExecuteTrimCommand(string commandId)
     {
-        switch (e.Key)
+        switch (commandId)
         {
-            case "ArrowLeft":
-                if (e.CtrlKey) MoveFrame(-100);
-                else if (e.ShiftKey) MoveFrame(-10);
-                else MoveFrame(-1);
-                break;
-            case "ArrowRight":
-                if (e.CtrlKey) MoveFrame(100);
-                else if (e.ShiftKey) MoveFrame(10);
-                else MoveFrame(1);
-                break;
-            case "PageUp":
+            case TrimCmdPrevEditPoint:
                 JumpToPrevEditPoint();
                 break;
-            case "PageDown":
+            case TrimCmdNextEditPoint:
                 JumpToNextEditPoint();
                 break;
-            case "Home":
-                SetCurrentFrame(0);
+            case TrimCmdToggleEditPoint:
+                ToggleEditPoint();
                 break;
-            case "End":
-                if (_session != null) SetCurrentFrame(_session.NumFrames - 1);
+            default:
+                var delta = GetMoveDelta(commandId);
+                if (delta != 0)
+                {
+                    MoveFrame(delta);
+                }
                 break;
+        }
+    }
+
+    private string GetTrimCommandTooltip(string commandId)
+    {
+        var shortcut = GetShortcutLabel(commandId);
+        return commandId switch
+        {
+            TrimCmdPrevEditPoint => $"前の編集点へ ({shortcut})",
+            TrimCmdNextEditPoint => $"次の編集点へ ({shortcut})",
+            TrimCmdToggleEditPoint => $"編集点切替 ({shortcut})",
+            _ => $"{GetMoveDeltaText(commandId)} ({shortcut})"
+        };
+    }
+
+    private string GetMoveDeltaText(string commandId)
+    {
+        var delta = GetMoveDelta(commandId);
+        return $"{(delta > 0 ? "+" : "")}{delta}F";
+    }
+
+    private int GetMoveDelta(string commandId)
+    {
+        return commandId switch
+        {
+            TrimCmdBack4 => -GetConfiguredMoveFrames(TrimCmdBack4),
+            TrimCmdBack3 => -GetConfiguredMoveFrames(TrimCmdBack3),
+            TrimCmdBack2 => -GetConfiguredMoveFrames(TrimCmdBack2),
+            TrimCmdBack1 => -1,
+            TrimCmdForward1 => 1,
+            TrimCmdForward2 => GetConfiguredMoveFrames(TrimCmdForward2),
+            TrimCmdForward3 => GetConfiguredMoveFrames(TrimCmdForward3),
+            TrimCmdForward4 => GetConfiguredMoveFrames(TrimCmdForward4),
+            _ => 0
+        };
+    }
+
+    private int GetConfiguredMoveFrames(string commandId)
+    {
+        if (_moveFramesByCommand.TryGetValue(commandId, out var value) && value > 0)
+        {
+            return value;
+        }
+        if (_trimCommandSettingMap.TryGetValue(commandId, out var setting))
+        {
+            return setting.DefaultMoveFrames > 0 ? setting.DefaultMoveFrames : 1;
+        }
+        return 1;
+    }
+
+    private string GetShortcutLabel(string commandId)
+    {
+        if (_shortcutByCommand.TryGetValue(commandId, out var shortcut))
+        {
+            return FormatShortcutLabel(shortcut);
+        }
+        if (_trimCommandSettingMap.TryGetValue(commandId, out var setting))
+        {
+            return FormatShortcutLabel(setting.DefaultShortcut);
+        }
+        return "-";
+    }
+
+    private static string BuildShortcutFromEvent(KeyboardEventArgs e)
+    {
+        var key = NormalizeShortcutKey(e.Key);
+        if (string.IsNullOrEmpty(key))
+        {
+            return "";
+        }
+        var parts = new List<string>();
+        if (e.CtrlKey) parts.Add("Ctrl");
+        if (e.ShiftKey) parts.Add("Shift");
+        if (e.AltKey) parts.Add("Alt");
+        parts.Add(key);
+        return string.Join("+", parts);
+    }
+
+    private static string NormalizeShortcutOrDefault(string value, string defaultValue)
+    {
+        var normalized = NormalizeShortcutText(value);
+        return string.IsNullOrEmpty(normalized) ? defaultValue : normalized;
+    }
+
+    private static string NormalizeShortcutText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+        var ctrl = false;
+        var shift = false;
+        var alt = false;
+        string? key = null;
+        var parts = value.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            var token = part.Trim();
+            if (token.Equals("ctrl", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("control", StringComparison.OrdinalIgnoreCase))
+            {
+                ctrl = true;
+                continue;
+            }
+            if (token.Equals("shift", StringComparison.OrdinalIgnoreCase))
+            {
+                shift = true;
+                continue;
+            }
+            if (token.Equals("alt", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("option", StringComparison.OrdinalIgnoreCase))
+            {
+                alt = true;
+                continue;
+            }
+            key = NormalizeShortcutKey(token);
+        }
+        if (string.IsNullOrEmpty(key))
+        {
+            return "";
+        }
+        var result = new List<string>();
+        if (ctrl) result.Add("Ctrl");
+        if (shift) result.Add("Shift");
+        if (alt) result.Add("Alt");
+        result.Add(key);
+        return string.Join("+", result);
+    }
+
+    private static string NormalizeShortcutKey(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return "";
+        }
+        return key switch
+        {
+            " " => "Space",
+            "Spacebar" => "Space",
+            "Space" => "Space",
+            "Left" => "ArrowLeft",
+            "Right" => "ArrowRight",
+            "Up" => "ArrowUp",
+            "Down" => "ArrowDown",
+            "ArrowLeft" => "ArrowLeft",
+            "ArrowRight" => "ArrowRight",
+            "ArrowUp" => "ArrowUp",
+            "ArrowDown" => "ArrowDown",
+            "Tab" => "",
+            "Control" => "",
+            "Shift" => "",
+            "Alt" => "",
+            "Meta" => "",
+            "OS" => "",
+            "Process" => "",
+            _ => key.Length == 1 ? key.ToUpperInvariant() : key
+        };
+    }
+
+    private static string FormatShortcutLabel(string shortcut)
+    {
+        if (string.IsNullOrWhiteSpace(shortcut))
+        {
+            return "-";
+        }
+        var parts = shortcut.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            parts[i] = parts[i] switch
+            {
+                "ArrowLeft" => "Left",
+                "ArrowRight" => "Right",
+                "ArrowUp" => "Up",
+                "ArrowDown" => "Down",
+                _ => parts[i]
+            };
+        }
+        return string.Join("+", parts);
+    }
+
+    private static int NormalizeMoveFrames(int value, int defaultValue)
+    {
+        return value > 0 ? value : defaultValue;
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        var shortcut = BuildShortcutFromEvent(e);
+        if (!string.IsNullOrEmpty(shortcut) && _commandByShortcut.TryGetValue(shortcut, out var commandId))
+        {
+            ExecuteTrimCommand(commandId);
+            return;
+        }
+        switch (e.Key)
+        {
             case "i":
             case "I":
                 MoveSelectedEditPointToCurrentFrame();

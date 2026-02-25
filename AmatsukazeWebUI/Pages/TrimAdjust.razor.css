@@ -1,7 +1,10 @@
 .trim-adjust-page {
+    --trim-adjust-offset: calc(var(--topbar-height, 3.5rem) + 2.15rem);
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: calc(100vh - var(--trim-adjust-offset));
+    max-height: calc(100vh - var(--trim-adjust-offset));
+    min-height: 0;
     overflow: hidden;
     outline: none;
     color: var(--bs-emphasis-color, #eee);
@@ -53,7 +56,7 @@
 .trim-btn-sm {
     padding: 2px 8px;
     font-size: 0.8rem;
-    min-width: 32px;
+    min-width: 38px;
 }
 
 .trim-loading,
