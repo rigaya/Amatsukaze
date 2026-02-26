@@ -139,19 +139,13 @@ namespace Amatsukaze.Server.Rest
                 sessions[sessionId] = session;
 
                 // 全フレームPTS情報を取得
-                var framePts = new List<FramePtsInfo>();
+                var framePts = new List<double>();
                 const double ptsToSeconds = 1.0 / 90000.0; // 90kHz PTS→秒
                 for (int i = 0; i < session.NumFrames; i++)
                 {
-                    if (session.GetFrameInfo(i, out var pts, out var duration, out var keyFrame, out var cmType))
+                    if (session.GetFrameInfo(i, out var pts, out _, out _, out _))
                     {
-                        framePts.Add(new FramePtsInfo
-                        {
-                            Frame = i,
-                            PtsSeconds = pts * ptsToSeconds,
-                            KeyFrame = keyFrame,
-                            CmType = cmType
-                        });
+                        framePts.Add(pts * ptsToSeconds);
                     }
                 }
 

@@ -113,12 +113,6 @@
                     <span>Frame: @_currentFrame</span>
                     <span> | </span>
                     <span>@FormatTime(_currentFrame)</span>
-                    @if (_currentFramePts != null)
-                    {
-                        <span> | </span>
-                        <span>@(_currentFramePts.KeyFrame != 0 ? "KEY" : "")</span>
-                        <span>@GetCmTypeLabel(_currentFramePts.CmType)</span>
-                    }
                 </div>
 
                 @* 移動ボタン *@
@@ -396,7 +390,6 @@
     private List<EditPoint> _editPoints = new List<EditPoint>();
     private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
-    private FramePtsInfo? _currentFramePts;
 
     // プロファイル選択・再投入
     private List<string> _profiles = new List<string>();
@@ -713,7 +706,6 @@
         RebuildEditPoints(_session.Trims, _session.NumFrames);
         // 初期状態を保存（リセット用）
         _initialEditPoints = _editPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
-        UpdateCurrentFramePts();
 
         _loading = false;
         _loadingFrame = 0;
@@ -827,7 +819,6 @@
         }
         _hasChanges = preservedHasChanges;
 
-        UpdateCurrentFramePts();
         _loadingFrame = _currentFrame;
         _isFrameLoading = true; // onloadを待つ
         _frameUpdateToken++;
@@ -1042,7 +1033,6 @@
         frame = Math.Clamp(frame, 0, _session.NumFrames - 1);
         if (frame == _currentFrame) return;
         _currentFrame = frame;
-        UpdateCurrentFramePts();
         // debounceタイマーが残っていればキャンセル
         _debounceTimer?.Dispose();
         _debounceTimer = null;
@@ -1056,7 +1046,6 @@
         frame = Math.Clamp(frame, 0, _session.NumFrames - 1);
         if (frame == _currentFrame) return;
         _currentFrame = frame;
-        UpdateCurrentFramePts();
         _pendingFrame = _currentFrame;
         _debounceTimer?.Dispose();
         _debounceTimer = new System.Threading.Timer(_ =>
@@ -1071,18 +1060,6 @@
         }, null, 100, System.Threading.Timeout.Infinite);
         // 即座にフレーム情報（画面下）だけ更新
         StateHasChanged();
-    }
-
-    private void UpdateCurrentFramePts()
-    {
-        if (_session?.FramePts != null && _currentFrame >= 0 && _currentFrame < _session.FramePts.Count)
-        {
-            _currentFramePts = _session.FramePts[_currentFrame];
-        }
-        else
-        {
-            _currentFramePts = null;
-        }
     }
 
     private void JumpToPrevEditPoint()
@@ -1558,27 +1535,15 @@
         {
             return "--:--:--.---";
         }
-        var seconds = _session.FramePts[frame].PtsSeconds;
+        var seconds = _session.FramePts[frame];
         // 先頭フレームを0秒基準にする
         if (_session.FramePts.Count > 0)
         {
-            seconds -= _session.FramePts[0].PtsSeconds;
+            seconds -= _session.FramePts[0];
         }
         if (seconds < 0) seconds = 0;
         var ts = TimeSpan.FromSeconds(seconds);
         return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
-    }
-
-    private static string GetCmTypeLabel(int cmType)
-    {
-        return cmType switch
-        {
-            0 => "",
-            1 => " [本編]",
-            2 => " [CM]",
-            3 => " [端]",
-            _ => ""
-        };
     }
 
     private string GetFramePercent(int frame)

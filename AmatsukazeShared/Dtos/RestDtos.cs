@@ -562,14 +562,6 @@ namespace Amatsukaze.Shared
         public int End { get; set; } // inclusive
     }
 
-    public class FramePtsInfo
-    {
-        public int Frame { get; set; }
-        public double PtsSeconds { get; set; }
-        public int KeyFrame { get; set; }
-        public int CmType { get; set; }
-    }
-
     public class TrimAdjustSessionRequest
     {
         public int QueueItemId { get; set; }
@@ -583,7 +575,7 @@ namespace Amatsukaze.Shared
         public int FrameWidth { get; set; }
         public int FrameHeight { get; set; }
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
-        public List<FramePtsInfo> FramePts { get; set; } = new List<FramePtsInfo>();
+        public List<double> FramePts { get; set; } = new List<double>();
     }
 
     public class TrimSaveRequest

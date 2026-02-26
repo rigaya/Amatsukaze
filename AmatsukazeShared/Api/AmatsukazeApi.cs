@@ -433,9 +433,27 @@ namespace Amatsukaze.Shared
         }
 
         // Trim調整
-        public Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req)
-            => PostJsonAsync("/api/trim/sessions", req,
-                element => element.Deserialize<TrimAdjustSessionResponse>(jsonOptions) ?? new TrimAdjustSessionResponse());
+        public async Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req)
+        {
+            try
+            {
+                using var res = await http.PostAsJsonAsync("/api/trim/sessions", req, jsonOptions);
+                if (!res.IsSuccessStatusCode)
+                {
+                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+                }
+                var data = await res.Content.ReadFromJsonAsync<TrimAdjustSessionResponse>(jsonOptions);
+                if (data == null)
+                {
+                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, "Empty response");
+                }
+                return ApiResult<TrimAdjustSessionResponse>.Success(data, (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<TrimAdjustSessionResponse>.Fail(0, ex.Message);
+            }
+        }
 
         public Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req)
             => PostJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/save", req, _ => true);
