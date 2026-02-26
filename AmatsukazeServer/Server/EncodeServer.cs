@@ -601,7 +601,7 @@ namespace Amatsukaze.Server
                 try
                 {
                     await restApiHost.StartAsync();
-                    Util.AddLog($"[REST] APIサーバを起動しました。port={RestApiHost.GetEnabledPort(serverPort)}", null);
+                    Util.AddLog($"[REST] APIサーバを起動しました。port={restApiHost.Port}", null);
                 }
                 catch (Exception ex)
                 {
@@ -3704,7 +3704,8 @@ namespace Amatsukaze.Server
                         Version = Version,
                         Platform = Environment.OSVersion.Platform.ToString(),
                         CharSet = Util.AmatsukazeDefaultEncoding.CodePage,
-                        LogicalProcessorCount = Environment.ProcessorCount
+                        LogicalProcessorCount = Environment.ProcessorCount,
+                        RestApiPort = restApiHost?.Port ?? 0
                     },
                     AddQueueBatFiles = AddQueueBatFiles,
                     PreBatFiles = PreBatFiles,

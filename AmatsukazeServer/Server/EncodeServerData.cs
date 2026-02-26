@@ -1774,6 +1774,8 @@ namespace Amatsukaze.Server
         public int CharSet { get; set; }
         [DataMember]
         public int LogicalProcessorCount { get; set; }
+        [DataMember]
+        public int RestApiPort { get; set; }
     }
 
     [DataContract]

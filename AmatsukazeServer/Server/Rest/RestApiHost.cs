@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Net.Http;
 using System.Diagnostics;
 using System.Text;
@@ -30,17 +31,19 @@ namespace Amatsukaze.Server.Rest
     {
         private readonly EncodeServer server;
         private readonly RestStateStore state;
-        private readonly int port;
+        private readonly int requestedPort;
         private readonly LogoAnalyzeService logoAnalyze;
         private readonly LogoPreviewService logoPreview;
         private readonly TrimAdjustService trimAdjust;
         private IHost host;
+        private volatile int boundPort;
         private static readonly IntOptionView[] TrimAdjustPreviewScaleModeOptions = new[]
         {
             new IntOptionView { Value = 1, Label = "1/2倍" },
             new IntOptionView { Value = 2, Label = "2/3倍" },
             new IntOptionView { Value = 0, Label = "等倍" }
         };
+        private const int MaxAutoPortScan = 100;
 
         private class MakeScriptGenerateRequestInternal
         {
@@ -89,18 +92,140 @@ namespace Amatsukaze.Server.Rest
         {
             this.server = server;
             this.state = state;
-            this.port = port;
+            this.requestedPort = port;
+            this.boundPort = port;
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
             trimAdjust = new TrimAdjustService(state);
         }
 
+        public int Port => boundPort;
+
         public async Task StartAsync(CancellationToken cancellationToken = default)
         {
-            if (port <= 0)
+            if (requestedPort <= 0)
             {
                 return;
             }
+
+            var startPort = ResolveStartPort();
+            if (startPort <= 0)
+            {
+                return;
+            }
+
+            Exception lastBindError = null;
+            for (var offset = 0; offset < MaxAutoPortScan; offset++)
+            {
+                var candidatePort = startPort + offset;
+                if (candidatePort <= 0 || candidatePort > 65535)
+                {
+                    break;
+                }
+                if (!IsPortAvailable(candidatePort))
+                {
+                    continue;
+                }
+
+                var app = BuildWebApp(candidatePort);
+                try
+                {
+                    host = app;
+                    await host.StartAsync(cancellationToken).ConfigureAwait(false);
+                    boundPort = candidatePort;
+                    await state.RequestInitialSync(server).ConfigureAwait(false);
+                    return;
+                }
+                catch (Exception ex) when (IsAddressInUse(ex))
+                {
+                    lastBindError = ex;
+                    try
+                    {
+                        if (app is IAsyncDisposable asyncDisposable)
+                        {
+                            asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                        }
+                    }
+                    catch
+                    {
+                    }
+                    host = null;
+                }
+            }
+
+            if (lastBindError != null)
+            {
+                throw new IOException($"REST APIの空きポートが見つかりませんでした。開始ポート={startPort}", lastBindError);
+            }
+            throw new IOException($"REST APIの空きポートが見つかりませんでした。開始ポート={startPort}");
+        }
+
+        private int ResolveStartPort()
+        {
+            if (requestedPort <= 0)
+            {
+                return 0;
+            }
+            if (requestedPort > 65535)
+            {
+                return 65535;
+            }
+            return requestedPort;
+        }
+
+        private static bool IsAddressInUse(Exception ex)
+        {
+            for (var current = ex; current != null; current = current.InnerException)
+            {
+                if (current is SocketException socketEx &&
+                    socketEx.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                {
+                    return true;
+                }
+                if (current.GetType().Name.IndexOf("AddressInUse", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+                if (!string.IsNullOrEmpty(current.Message) &&
+                    current.Message.IndexOf("address already in use", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IsPortAvailable(int port)
+        {
+            if (port <= 0 || port > 65535)
+            {
+                return false;
+            }
+            TcpListener listener = null;
+            try
+            {
+                listener = new TcpListener(IPAddress.Loopback, port);
+                listener.Start();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try
+                {
+                    listener?.Stop();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private WebApplication BuildWebApp(int port)
+        {
             var baseDir = AppContext.BaseDirectory;
             var webRoot = Path.Combine(baseDir, "wwwroot");
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -151,7 +276,6 @@ namespace Amatsukaze.Server.Rest
                         .AllowAnyMethod();
                 });
             });
-
             var app = builder.Build();
             app.Urls.Add($"http://0.0.0.0:{port}");
 
@@ -174,9 +298,7 @@ namespace Amatsukaze.Server.Rest
             MapEndpoints(app);
             app.MapFallbackToFile("index.html");
 
-            host = app;
-            await host.StartAsync(cancellationToken).ConfigureAwait(false);
-            await state.RequestInitialSync(server).ConfigureAwait(false);
+            return app;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)

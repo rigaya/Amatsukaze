@@ -109,6 +109,22 @@ namespace Amatsukaze.Models
             get { return appData.ServerPort; }
         }
 
+        public int RestApiPort
+        {
+            get
+            {
+                if (serverInfo != null && serverInfo.RestApiPort > 0)
+                {
+                    return serverInfo.RestApiPort;
+                }
+                if (ServerPort > 0)
+                {
+                    return ServerPort + 1;
+                }
+                return 0;
+            }
+        }
+
         public EndPoint LocalIP {
             get {
                 return (Server as ServerConnection)?.LocalIP;
@@ -1003,7 +1019,8 @@ namespace Amatsukaze.Models
 
         private async Task<EncodeServer> MakeEncodeServer()
         {
-            var server = new EncodeServer(0, new ClientAdapter(this), null);
+            var serverPort = appData?.ServerPort > 0 ? appData.ServerPort : ServerSupport.DEFAULT_PORT;
+            var server = new EncodeServer(serverPort, new ClientAdapter(this), null);
             await server.Init();
             return server;
         }

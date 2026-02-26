@@ -953,6 +953,9 @@
                         <MenuItem Header="ロゴ生成(TS解析あり)" Style="{StaticResource MenuForSelectedItems}"
                             Command="{Binding OpenLogoAnalyzeSlimTsCommand}" 
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
+                        <MenuItem Header="Trim調整" Style="{StaticResource MenuForSelectedItems}"
+                            Command="{Binding OpenTrimAdjustCommand}"
+                            CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
                         <Separator />
                         <MenuItem Header="プロファイル設定をテキストでコピー" Style="{StaticResource MenuForSelectedItems}"
                             Command="{Binding CopySettingTextCommand}"

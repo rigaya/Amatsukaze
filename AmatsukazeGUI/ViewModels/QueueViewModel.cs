@@ -14,7 +14,6 @@ using Livet.Messaging.Windows;
 
 using Amatsukaze.Models;
 using Amatsukaze.Server;
-using Amatsukaze.Server.Rest;
 using System.Threading.Tasks;
 using System.Windows;
 using System.IO;
@@ -450,7 +449,21 @@ namespace Amatsukaze.ViewModels
             {
                 return false;
             }
-            var port = RestApiHost.GetEnabledPort(Model.ServerPort);
+            return TryOpenWebPage($"/logo-analyze?queueItemId={queueItemId}");
+        }
+
+        private bool TryOpenWebTrimAdjust(int queueItemId)
+        {
+            if (queueItemId <= 0)
+            {
+                return false;
+            }
+            return TryOpenWebPage($"/trim-adjust/{queueItemId}");
+        }
+
+        private bool TryOpenWebPage(string relativePath)
+        {
+            var port = Model.RestApiPort;
             if (port <= 0)
             {
                 return false;
@@ -465,11 +478,16 @@ namespace Amatsukaze.ViewModels
                 {
                     return false;
                 }
-                var url = $"{baseUrl}/logo-analyze?queueItemId={queueItemId}";
+                var normalizedPath = relativePath ?? "";
+                if (!normalizedPath.StartsWith("/", StringComparison.Ordinal))
+                {
+                    normalizedPath = "/" + normalizedPath;
+                }
+                var url = $"{baseUrl}{normalizedPath}";
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }
@@ -748,6 +766,44 @@ namespace Amatsukaze.ViewModels
         public void OpenLogoAnalyzeSlimTs(IEnumerable selectedItems)
         {
             LaunchLogoAnalyze(selectedItems, true);
+        }
+        #endregion
+
+        private static bool CanOpenTrimAdjust(DisplayQueueItem item)
+        {
+            return item != null &&
+                item.Model != null &&
+                item.Model.Mode == ProcMode.CMCheck &&
+                item.Model.State == QueueState.Complete;
+        }
+
+        #region OpenTrimAdjustCommand
+        private ListenerCommand<IEnumerable> _OpenTrimAdjustCommand;
+
+        public ListenerCommand<IEnumerable> OpenTrimAdjustCommand
+        {
+            get
+            {
+                if (_OpenTrimAdjustCommand == null)
+                {
+                    _OpenTrimAdjustCommand = new ListenerCommand<IEnumerable>(OpenTrimAdjust);
+                }
+                return _OpenTrimAdjustCommand;
+            }
+        }
+
+        public void OpenTrimAdjust(IEnumerable selectedItems)
+        {
+            var item = selectedItems?.OfType<DisplayQueueItem>().FirstOrDefault();
+            if (!CanOpenTrimAdjust(item))
+            {
+                MessageBox.Show("Trim調整はCM解析が完了したアイテムでのみ使用できます");
+                return;
+            }
+            if (!TryOpenWebTrimAdjust(item.Model.Id))
+            {
+                MessageBox.Show("Trim調整画面の起動に失敗しました");
+            }
         }
         #endregion
 

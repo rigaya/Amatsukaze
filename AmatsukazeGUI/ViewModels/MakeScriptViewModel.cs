@@ -175,7 +175,12 @@ namespace Amatsukaze.ViewModels
             {
                 if (IsRemoteClient)
                 {
-                    var port = RestApiHost.GetEnabledPort(Model.ServerPort);
+                    var port = Model.RestApiPort;
+                    if (port <= 0)
+                    {
+                        Description = "REST APIのポート情報が取得できません";
+                        return;
+                    }
                     var baseUrl = $"http://{Model.ServerIP}:{port}";
                     using var http = new HttpClient { BaseAddress = new Uri(baseUrl) };
                     var req = new MakeScriptGenerateRequest
