@@ -51,15 +51,18 @@
             <div class="trim-editpoints">
                 <div class="trim-editpoints-header">編集点</div>
                 <div class="trim-editpoints-list">
-                    @for (int i = 0; i < _editPoints.Count; i++)
+                    @{
+                        var segments = BuildEditPointSegments();
+                    }
+                    @for (int i = 0; i < segments.Count; i++)
                     {
                         var idx = i;
-                        var ep = _editPoints[idx];
-                        <div class="trim-editpoint @(idx == _selectedEditPoint ? "selected" : "")"
+                        var segment = segments[idx];
+                        <div class="trim-editpoint @(segment.IsMain ? "trim-editpoint-main" : "") @(idx == _selectedEditPoint ? "selected" : "")"
                              @onclick="(() => OnEditPointClick(idx))">
-                            <span class="trim-ep-index">@(idx + 1):</span>
-                            <span class="trim-ep-frame">@ep.Frame</span>
-                            <span class="trim-ep-time">@FormatTime(ep.Frame)</span>
+                            <span class="trim-ep-index">@(idx + 1).</span>
+                            <span class="trim-ep-frame">@segment.Start</span>
+                            <span class="trim-ep-tail">@GetEditPointSegmentTail(segment)</span>
                         </div>
                     }
                 </div>
@@ -389,7 +392,7 @@
     private int _loadingFrame; // 現在img srcにセットして読み込み中のフレーム
     private bool _isFrameLoading; // 画像読み込み中フラグ
 
-    // 編集点リスト（Trimのstart/endを統合した昇順リスト）
+    // 編集点リスト（境界開始フレーム）
     private List<EditPoint> _editPoints = new List<EditPoint>();
     private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
@@ -419,6 +422,15 @@
     private class EditPoint
     {
         public int Frame { get; set; }
+    }
+
+    private sealed class EditPointSegment
+    {
+        public int Index { get; set; } // 0-based
+        public int Start { get; set; }
+        public int EndInclusive { get; set; }
+        public bool IsOpenEnded { get; set; }
+        public bool IsMain => (Index % 2) == 0; // 1始まり奇数区間=本編
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -698,7 +710,7 @@
         _currentFrame = 0;
 
         // TrimsからEditPointsを構築
-        RebuildEditPoints(_session.Trims);
+        RebuildEditPoints(_session.Trims, _session.NumFrames);
         // 初期状態を保存（リセット用）
         _initialEditPoints = _editPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
         UpdateCurrentFramePts();
@@ -804,10 +816,13 @@
         // フレーム数が変わった場合は編集点・現在フレームをクランプ
         if (_session.NumFrames > 0)
         {
+            var selectedFrame = (preservedSelected >= 0 && preservedSelected < preservedEditPoints.Count)
+                ? preservedEditPoints[preservedSelected].Frame
+                : (int?)null;
             _editPoints = preservedEditPoints
                 .Where(e => e.Frame < _session.NumFrames)
                 .ToList();
-            _selectedEditPoint = Math.Min(preservedSelected, _editPoints.Count - 1);
+            NormalizeEditPoints(selectedFrame);
             _currentFrame = Math.Clamp(preservedFrame, 0, _session.NumFrames - 1);
         }
         _hasChanges = preservedHasChanges;
@@ -829,40 +844,125 @@
     }
 
     // Trimリストから編集点リストを構築
-    private void RebuildEditPoints(List<TrimRange> trims)
+    // Avisynth Trim(end)はinclusiveなので、編集点は end+1 に変換する。
+    private void RebuildEditPoints(List<TrimRange> trims, int numFrames)
     {
         _editPoints.Clear();
-        if (trims == null || trims.Count == 0)
+        if (trims == null || trims.Count == 0 || numFrames <= 0)
         {
             return;
         }
-        // 各Trimのstart, endを編集点として追加（重複排除・昇順ソート）
-        var points = new SortedSet<int>();
+
+        var points = new List<int>();
         foreach (var trim in trims)
         {
-            points.Add(trim.Start);
-            points.Add(trim.End);
+            if (trim.Start >= 0 && trim.Start < numFrames)
+            {
+                points.Add(trim.Start);
+            }
+
+            var endExclusive = (long)trim.End + 1L;
+            if (endExclusive >= 0 && endExclusive < numFrames)
+            {
+                points.Add((int)endExclusive);
+            }
         }
-        foreach (var p in points)
-        {
-            _editPoints.Add(new EditPoint { Frame = p });
-        }
+
+        _editPoints = points.Select(frame => new EditPoint { Frame = frame }).ToList();
+        NormalizeEditPoints();
     }
 
-    // 編集点リストからTrimリストを再構築（2点ずつペアにする）
+    // 編集点リストからTrimリストを再構築（奇数区間=本編のみを保存）
     private List<TrimRange> BuildTrimsFromEditPoints()
     {
         var trims = new List<TrimRange>();
-        var sorted = _editPoints.OrderBy(e => e.Frame).ToList();
-        for (int i = 0; i + 1 < sorted.Count; i += 2)
+        foreach (var segment in BuildEditPointSegments())
         {
+            if (!segment.IsMain)
+            {
+                continue;
+            }
             trims.Add(new TrimRange
             {
-                Start = sorted[i].Frame,
-                End = sorted[i + 1].Frame
+                Start = segment.Start,
+                End = segment.EndInclusive
             });
         }
         return trims;
+    }
+
+    private List<EditPointSegment> BuildEditPointSegments()
+    {
+        var segments = new List<EditPointSegment>();
+        if (_session == null || _session.NumFrames <= 0 || _editPoints.Count == 0)
+        {
+            return segments;
+        }
+
+        for (int i = 0; i < _editPoints.Count; i++)
+        {
+            var start = _editPoints[i].Frame;
+            if (start < 0 || start >= _session.NumFrames)
+            {
+                continue;
+            }
+
+            var hasNext = i + 1 < _editPoints.Count;
+            var endExclusive = hasNext ? _editPoints[i + 1].Frame : _session.NumFrames;
+            if (endExclusive <= start)
+            {
+                continue;
+            }
+
+            segments.Add(new EditPointSegment
+            {
+                Index = i,
+                Start = start,
+                EndInclusive = endExclusive - 1,
+                IsOpenEnded = !hasNext
+            });
+        }
+
+        return segments;
+    }
+
+    private string GetEditPointSegmentTail(EditPointSegment segment)
+    {
+        if (segment.IsOpenEnded)
+        {
+            return " - ...";
+        }
+        return $" - {segment.EndInclusive}";
+    }
+
+    private void NormalizeEditPoints(int? selectedFrame = null)
+    {
+        var maxFrame = _session != null ? _session.NumFrames - 1 : int.MaxValue;
+        _editPoints = _editPoints
+            .Select(e => e.Frame)
+            .Where(frame => frame >= 0 && frame <= maxFrame)
+            .Distinct()
+            .OrderBy(frame => frame)
+            .Select(frame => new EditPoint { Frame = frame })
+            .ToList();
+
+        if (selectedFrame.HasValue)
+        {
+            var target = Math.Clamp(selectedFrame.Value, 0, maxFrame);
+            _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == target);
+            if (_selectedEditPoint < 0 && _editPoints.Count > 0)
+            {
+                _selectedEditPoint = _editPoints
+                    .Select((e, idx) => new { idx, distance = Math.Abs(e.Frame - target) })
+                    .OrderBy(x => x.distance)
+                    .First()
+                    .idx;
+            }
+        }
+        else if (_selectedEditPoint >= _editPoints.Count)
+        {
+            _selectedEditPoint = _editPoints.Count - 1;
+        }
     }
 
     private void OnEditPointClick(int index)
@@ -878,6 +978,7 @@
     private void ResetEditPoints()
     {
         _editPoints = _initialEditPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
+        NormalizeEditPoints();
         _selectedEditPoint = -1;
         _hasChanges = false;
         _statusMessage = "編集点をリセットしました";
@@ -887,14 +988,17 @@
 
     private void AddEditPoint()
     {
+        if (_session == null)
+        {
+            return;
+        }
         // 現在フレームを編集点として追加
         if (_editPoints.Any(e => e.Frame == _currentFrame))
         {
             return; // 既に存在
         }
         _editPoints.Add(new EditPoint { Frame = _currentFrame });
-        _editPoints = _editPoints.OrderBy(e => e.Frame).ToList();
-        _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == _currentFrame);
+        NormalizeEditPoints(_currentFrame);
         _hasChanges = true;
         StateHasChanged();
     }
@@ -906,6 +1010,7 @@
             return;
         }
         _editPoints.RemoveAt(_selectedEditPoint);
+        NormalizeEditPoints();
         if (_selectedEditPoint >= _editPoints.Count)
         {
             _selectedEditPoint = _editPoints.Count - 1;
@@ -1011,8 +1116,7 @@
     // 指定フレームがTrim有効区間内かどうか
     private bool IsFrameInTrimRange(int frame)
     {
-        var trims = BuildTrimsFromEditPoints();
-        return trims.Any(t => frame >= t.Start && frame <= t.End);
+        return BuildEditPointSegments().Any(s => s.IsMain && frame >= s.Start && frame <= s.EndInclusive);
     }
 
     // 現在フレームが編集点かどうか
@@ -1034,9 +1138,8 @@
         else
         {
             _editPoints.Add(new EditPoint { Frame = _currentFrame });
-            _editPoints = _editPoints.OrderBy(e => e.Frame).ToList();
-            _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == _currentFrame);
         }
+        NormalizeEditPoints(_currentFrame);
         _hasChanges = true;
         StateHasChanged();
     }
@@ -1053,8 +1156,7 @@
     {
         if (_selectedEditPoint < 0 || _selectedEditPoint >= _editPoints.Count) return;
         _editPoints[_selectedEditPoint].Frame = _currentFrame;
-        _editPoints = _editPoints.OrderBy(e => e.Frame).ToList();
-        _selectedEditPoint = _editPoints.FindIndex(e => e.Frame == _currentFrame);
+        NormalizeEditPoints(_currentFrame);
         _hasChanges = true;
         StateHasChanged();
     }
@@ -1066,7 +1168,7 @@
         var trims = BuildTrimsFromEditPoints();
         if (trims.Count == 0)
         {
-            _statusMessage = "編集点が不足しています（最低2点必要）";
+            _statusMessage = "本編区間がありません（編集点を確認してください）";
             _isError = true;
             StateHasChanged();
             return;
@@ -1486,7 +1588,7 @@
         return pct.ToString("F4", CultureInfo.InvariantCulture);
     }
 
-    // シークバーのグラデーション: Trimの有効区間をオレンジ、無効区間をグレーで表示
+    // シークバーのグラデーション: 奇数区間(本編)をオレンジ、その他をグレーで表示
     private string GetSeekBarGradient()
     {
         if (_session == null || _session.NumFrames <= 1)
@@ -1494,8 +1596,8 @@
             return "background: #666;";
         }
 
-        var trims = BuildTrimsFromEditPoints();
-        if (trims.Count == 0)
+        var segments = BuildEditPointSegments();
+        if (segments.Count == 0)
         {
             return "background: #666;";
         }
@@ -1504,18 +1606,19 @@
         var stops = new List<string>();
         var lastPct = 0.0;
 
-        foreach (var trim in trims.OrderBy(t => t.Start))
+        foreach (var segment in segments)
         {
-            var startPct = (double)trim.Start / total * 100.0;
-            var endPct = (double)trim.End / total * 100.0;
+            var startPct = (double)segment.Start / total * 100.0;
+            var endPct = (double)segment.EndInclusive / total * 100.0;
+            var color = segment.IsMain ? "#e88030" : "#555";
 
             if (startPct > lastPct)
             {
                 stops.Add($"#555 {lastPct.ToString("F2", CultureInfo.InvariantCulture)}%");
                 stops.Add($"#555 {startPct.ToString("F2", CultureInfo.InvariantCulture)}%");
             }
-            stops.Add($"#e88030 {startPct.ToString("F2", CultureInfo.InvariantCulture)}%");
-            stops.Add($"#e88030 {endPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+            stops.Add($"{color} {startPct.ToString("F2", CultureInfo.InvariantCulture)}%");
+            stops.Add($"{color} {endPct.ToString("F2", CultureInfo.InvariantCulture)}%");
             lastPct = endPct;
         }
 

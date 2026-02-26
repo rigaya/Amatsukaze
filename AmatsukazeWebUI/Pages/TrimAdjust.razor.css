@@ -114,12 +114,21 @@
     cursor: pointer;
     font-size: 0.8rem;
     display: flex;
+    align-items: center;
     gap: 6px;
     border-bottom: 1px solid #333;
 }
 
 .trim-editpoint:hover {
     background: #333;
+}
+
+.trim-editpoint-main {
+    background: rgba(232, 128, 48, 0.16);
+}
+
+.trim-editpoint-main:hover {
+    background: rgba(232, 128, 48, 0.25);
 }
 
 .trim-editpoint.selected {
@@ -132,7 +141,15 @@
 }
 
 .trim-ep-frame {
-    min-width: 50px;
+    min-width: 40px;
+    font-variant-numeric: tabular-nums;
+}
+
+.trim-ep-tail {
+    font-size: 0.68rem;
+    color: #8d8d8d;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .trim-ep-time {
@@ -251,21 +268,20 @@
 }
 
 .trim-control-btn {
-    width: 64px;
-    min-height: 72px;
-    padding: 8px 6px 6px;
-    border-radius: 14px;
+    width: 48px;
+    min-height: 54px;
+    padding: 6px 5px 5px;
+    border-radius: 11px;
     border: 1px solid rgba(112, 198, 228, 0.52);
     background: linear-gradient(
         to bottom,
-        rgba(216, 241, 250, 0.29) 0%,
-        rgba(170, 214, 232, 0.25) 58%,
-        rgba(112, 154, 186, 0.28) 100%
+        rgba(208, 236, 247, 0.30) 0%,
+        rgba(176, 216, 235, 0.29) 58%,
+        rgba(148, 186, 210, 0.30) 100%
     );
     box-shadow:
-        0 9px 18px rgba(0, 11, 33, 0.36),
-        inset 0 1px 0 rgba(255, 255, 255, 0.45),
-        inset 0 -8px 16px rgba(5, 23, 48, 0.22);
+        inset 0 1px 0 rgba(255, 255, 255, 0.42),
+        inset 0 -6px 12px rgba(5, 23, 48, 0.16);
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
     color: #e4f7ff;
@@ -282,20 +298,17 @@
 .trim-control-btn:hover {
     transform: translateY(-1px);
     box-shadow:
-        0 12px 22px rgba(0, 11, 33, 0.42),
-        inset 0 1px 0 rgba(255, 255, 255, 0.52),
-        inset 0 -10px 18px rgba(5, 23, 48, 0.24);
+        inset 0 1px 0 rgba(255, 255, 255, 0.50),
+        inset 0 -7px 13px rgba(5, 23, 48, 0.18);
 }
 
 .trim-control-btn:active {
     transform: translateY(1px);
-    box-shadow:
-        0 5px 10px rgba(0, 11, 33, 0.42),
-        inset 0 2px 4px rgba(4, 20, 42, 0.35);
+    box-shadow: inset 0 2px 4px rgba(4, 20, 42, 0.28);
 }
 
 .trim-control-icon {
-    height: 24px;
+    height: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -312,8 +325,8 @@
 
 .trim-icon-chevron {
     position: relative;
-    width: 10px;
-    height: 16px;
+    width: 8px;
+    height: 12px;
     display: inline-block;
 }
 
@@ -322,8 +335,8 @@
     content: "";
     position: absolute;
     left: 0;
-    width: 11px;
-    height: 3px;
+    width: 9px;
+    height: 2px;
     border-radius: 2px;
     background: linear-gradient(
         180deg,
@@ -363,8 +376,8 @@
 }
 
 .trim-icon-bar {
-    width: 3px;
-    height: 16px;
+    width: 2px;
+    height: 12px;
     border-radius: 2px;
     background: linear-gradient(
         180deg,
@@ -379,22 +392,22 @@
 
 .trim-control-icon-toggle {
     position: relative;
-    min-width: 18px;
+    min-width: 14px;
 }
 
 .trim-control-icon-toggle .trim-icon-dot {
-    width: 9px;
-    height: 9px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.98) 0%, rgba(184, 236, 255, 0.95) 55%, rgba(96, 181, 220, 0.92) 100%);
     box-shadow:
         0 0 0 1px rgba(89, 188, 224, 0.72),
         0 2px 4px rgba(5, 26, 50, 0.6);
-    margin-left: 4px;
+    margin-left: 3px;
 }
 
 .trim-control-distance {
-    font-size: 0.64rem;
+    font-size: 0.62rem;
     line-height: 1.1;
     letter-spacing: 0.04em;
     font-variant-numeric: tabular-nums;
@@ -495,14 +508,13 @@
     border-color: rgba(118, 200, 255, 0.82);
     background: linear-gradient(
         to bottom,
-        rgba(74, 124, 188, 0.90) 0%,
-        rgba(56, 102, 164, 0.90) 58%,
-        rgba(38, 76, 137, 0.92) 100%
+        rgba(72, 120, 178, 0.90) 0%,
+        rgba(62, 108, 166, 0.90) 58%,
+        rgba(54, 97, 154, 0.91) 100%
     );
     box-shadow:
-        0 10px 20px rgba(3, 8, 35, 0.48),
-        inset 0 1px 0 rgba(196, 227, 255, 0.34),
-        inset 0 -9px 14px rgba(0, 13, 38, 0.34);
+        inset 0 1px 0 rgba(196, 227, 255, 0.32),
+        inset 0 -7px 12px rgba(0, 13, 38, 0.28);
 }
 
 .trim-control-btn.trim-btn-active .trim-control-distance {
@@ -512,9 +524,9 @@
 .trim-control-btn.trim-btn-active:hover {
     background: linear-gradient(
         to bottom,
-        rgba(82, 132, 196, 0.92) 0%,
-        rgba(60, 106, 169, 0.91) 58%,
-        rgba(41, 81, 142, 0.93) 100%
+        rgba(80, 128, 186, 0.91) 0%,
+        rgba(68, 114, 171, 0.91) 58%,
+        rgba(58, 103, 160, 0.92) 100%
     );
 }
 
@@ -524,25 +536,25 @@
     }
 
     .trim-control-btn {
-        width: 58px;
-        min-height: 66px;
-        border-radius: 12px;
-        padding-top: 7px;
+        width: 44px;
+        min-height: 50px;
+        border-radius: 9px;
+        padding: 5px 4px 4px;
     }
 
     .trim-control-icon {
-        height: 22px;
+        height: 16px;
     }
 
     .trim-icon-chevron {
-        width: 10px;
-        height: 14px;
+        width: 8px;
+        height: 11px;
     }
 
     .trim-icon-chevron::before,
     .trim-icon-chevron::after {
-        width: 10px;
-        height: 3px;
+        width: 8px;
+        height: 2px;
     }
 }
 
@@ -624,4 +636,235 @@
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+}
+
+/* ライトテーマ時は視認性を優先して配色を上書き */
+@media (prefers-color-scheme: light) {
+    .trim-adjust-page {
+        color: #193a59;
+        background:
+            radial-gradient(circle at 10% 0%, rgba(188, 232, 252, 0.45), transparent 48%),
+            radial-gradient(circle at 100% 5%, rgba(182, 214, 255, 0.36), transparent 52%),
+            #f4f9ff;
+    }
+
+    .trim-toolbar {
+        border-bottom: 1px solid #bdd4e9;
+        background: rgba(243, 250, 255, 0.92);
+    }
+
+    .trim-btn {
+        border: 1px solid #5a97ca;
+        background: linear-gradient(
+            to bottom,
+            #effaff 0%,
+            #d8efff 60%,
+            #c4e5ff 100%
+        );
+        color: #19496f;
+        box-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.92) inset,
+            0 1px 4px rgba(28, 72, 116, 0.16);
+    }
+
+    .trim-btn:hover:not(:disabled) {
+        background: linear-gradient(
+            to bottom,
+            #f5fcff 0%,
+            #dff2ff 58%,
+            #cbe8ff 100%
+        );
+    }
+
+    .trim-btn-primary {
+        border-color: #327fc3;
+        background: linear-gradient(
+            to bottom,
+            #ccecff 0%,
+            #99cff2 56%,
+            #7bb8e8 100%
+        );
+        color: #0f3b61;
+    }
+
+    .trim-btn-primary:hover:not(:disabled) {
+        background: linear-gradient(
+            to bottom,
+            #daf1ff 0%,
+            #a7d8f7 56%,
+            #87c1ec 100%
+        );
+    }
+
+    .trim-editpoints {
+        border-right: 1px solid #bdd4e9;
+        background: rgba(246, 251, 255, 0.9);
+    }
+
+    .trim-editpoints-header {
+        border-bottom: 1px solid #bdd4e9;
+        color: #1f4f76;
+    }
+
+    .trim-editpoint {
+        border-bottom: 1px solid #d6e6f3;
+    }
+
+    .trim-editpoint:hover {
+        background: #e4f2ff;
+    }
+
+    .trim-editpoint-main {
+        background: rgba(236, 146, 59, 0.22);
+    }
+
+    .trim-editpoint-main:hover {
+        background: rgba(236, 146, 59, 0.32);
+    }
+
+    .trim-editpoint.selected {
+        background: #aad9fb;
+        color: #133f64;
+    }
+
+    .trim-ep-index {
+        color: #4b7093;
+    }
+
+    .trim-ep-tail {
+        color: #7890a7;
+    }
+
+    .trim-editpoints-actions {
+        border-top: 1px solid #bdd4e9;
+    }
+
+    .trim-waveform-container {
+        background: #dce8f4;
+    }
+
+    .trim-frame-info {
+        color: #26547a;
+    }
+
+    .trim-control-btn {
+        border: 1px solid rgba(70, 146, 204, 0.66);
+        background: linear-gradient(
+            to bottom,
+            rgba(236, 249, 255, 0.98) 0%,
+            rgba(211, 236, 249, 0.95) 58%,
+            rgba(193, 223, 243, 0.96) 100%
+        );
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.94),
+            inset 0 -6px 12px rgba(105, 165, 211, 0.15);
+        color: #1d4d75;
+    }
+
+    .trim-control-btn:hover {
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.97),
+            inset 0 -7px 13px rgba(112, 173, 218, 0.18);
+    }
+
+    .trim-control-btn:active {
+        box-shadow: inset 0 2px 4px rgba(95, 151, 197, 0.24);
+    }
+
+    .trim-icon-chevron::before,
+    .trim-icon-chevron::after {
+        background: linear-gradient(
+            180deg,
+            rgba(249, 254, 255, 0.98) 0%,
+            rgba(198, 234, 254, 0.95) 60%,
+            rgba(95, 172, 218, 0.95) 100%
+        );
+        box-shadow: 0 0 0 1px rgba(84, 152, 203, 0.46);
+    }
+
+    .trim-icon-bar {
+        background: linear-gradient(
+            180deg,
+            rgba(245, 255, 255, 0.99) 0%,
+            rgba(186, 234, 252, 0.95) 55%,
+            rgba(101, 188, 224, 0.93) 100%
+        );
+        box-shadow:
+            0 0 0 1px rgba(82, 167, 207, 0.62),
+            0 1px 2px rgba(20, 64, 99, 0.24);
+    }
+
+    .trim-control-icon-toggle .trim-icon-dot {
+        background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.98) 0%, rgba(177, 228, 250, 0.95) 55%, rgba(84, 170, 211, 0.92) 100%);
+        box-shadow:
+            0 0 0 1px rgba(84, 167, 206, 0.62),
+            0 1px 2px rgba(20, 64, 99, 0.24);
+    }
+
+    .trim-control-distance {
+        color: #124870;
+        text-shadow: 0 1px 1px rgba(255, 255, 255, 0.52);
+    }
+
+    .trim-btn-active {
+        background: #6dbbe6;
+        border-color: #3e91c7;
+        color: #0f3b61;
+    }
+
+    .trim-btn-active:hover:not(:disabled) {
+        background: #7bc4ec;
+    }
+
+    .trim-control-btn.trim-btn-active {
+        border-color: rgba(58, 132, 194, 0.84);
+        background: linear-gradient(
+            to bottom,
+            rgba(182, 220, 246, 0.98) 0%,
+            rgba(156, 202, 234, 0.97) 58%,
+            rgba(141, 187, 223, 0.98) 100%
+        );
+        box-shadow:
+            inset 0 1px 0 rgba(243, 250, 255, 0.90),
+            inset 0 -7px 11px rgba(52, 117, 173, 0.22);
+    }
+
+    .trim-control-btn.trim-btn-active .trim-control-distance {
+        color: #0a3355;
+    }
+
+    .trim-control-btn.trim-btn-active:hover {
+        background: linear-gradient(
+            to bottom,
+            rgba(192, 227, 249, 0.99) 0%,
+            rgba(165, 208, 238, 0.98) 58%,
+            rgba(147, 192, 226, 0.99) 100%
+        );
+    }
+
+    .trim-profile-select {
+        border: 1px solid #5a97ca;
+        background: #f2faff;
+        color: #19496f;
+    }
+
+    .trim-log-overlay {
+        background: rgba(122, 150, 178, 0.24);
+    }
+
+    .trim-log-overlay-panel {
+        background: #f4f9ff;
+        border-left: 1px solid #bdd4e9;
+        box-shadow: -4px 0 24px rgba(38, 72, 112, 0.2);
+    }
+
+    .trim-log-overlay-close {
+        color: #2a5b83;
+    }
+
+    .trim-log-detail {
+        background: #edf5fd;
+        color: #284d6d;
+        border: 1px solid #bdd4e9;
+    }
 }
