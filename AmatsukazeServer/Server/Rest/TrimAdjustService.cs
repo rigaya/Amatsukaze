@@ -420,7 +420,7 @@ namespace Amatsukaze.Server.Rest
 
     public class TrimAdjustService
     {
-        private static readonly Regex TempDirRegex = new Regex(@"一時フォルダ:\s*(.+)", RegexOptions.Compiled);
+        private static readonly Regex TempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
         private static readonly Regex TrimRegex = new Regex(@"Trim\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", RegexOptions.Compiled);
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(5);
 
@@ -592,19 +592,35 @@ namespace Amatsukaze.Server.Rest
         {
             try
             {
-                using var reader = new StreamReader(logPath);
-                string line;
-                while ((line = reader.ReadLine()) != null)
+                var bytes = File.ReadAllBytes(logPath);
+                var content = Util.AmatsukazeDefaultEncoding.GetString(bytes);
+                var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
+                string rootedPathFallback = null;
+                foreach (var line in lines)
                 {
                     var match = TempDirRegex.Match(line);
                     if (match.Success)
                     {
-                        var dir = match.Groups[1].Value.Trim();
+                        var dir = match.Groups[1].Value.Trim().Trim('"');
+                        if (string.IsNullOrEmpty(dir))
+                        {
+                            continue;
+                        }
                         if (Directory.Exists(dir))
                         {
                             return dir;
                         }
+                        if (Path.IsPathRooted(dir))
+                        {
+                            rootedPathFallback = dir;
+                        }
                     }
+                }
+
+                if (!string.IsNullOrEmpty(rootedPathFallback))
+                {
+                    return rootedPathFallback;
                 }
             }
             catch
