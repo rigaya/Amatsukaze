@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -21,6 +22,7 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
@@ -1715,7 +1717,7 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest(new { message = error ?? "Trim調整セッションを作成できませんでした" });
                 }
-                return Results.Json(response);
+                return BuildMaybeGzippedJsonResult(request, response);
             });
 
             app.MapGet("/api/trim/sessions/{sessionId}/frame", (HttpContext context, string sessionId, int n) =>
@@ -1736,6 +1738,26 @@ namespace Amatsukaze.Server.Rest
                 }
                 context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
                 return Results.File(jpegBytes, "image/jpeg");
+            });
+
+            app.MapGet("/api/trim/sessions/{sessionId}/bundle", (HttpContext context, string sessionId, int n) =>
+            {
+                var session = trimAdjust.GetSession(sessionId);
+                if (session == null)
+                {
+                    return Results.NotFound();
+                }
+                if (n < 0 || n >= session.NumFrames)
+                {
+                    return Results.BadRequest(new { message = "フレーム番号が範囲外です" });
+                }
+                var bundleBytes = session.GetFrameBundle(n);
+                if (bundleBytes == null || bundleBytes.Length == 0)
+                {
+                    return Results.NotFound();
+                }
+                context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+                return Results.File(bundleBytes, "application/octet-stream");
             });
 
             app.MapGet("/api/trim/sessions/{sessionId}/waveform", (HttpContext context, string sessionId, int n) =>
@@ -1823,6 +1845,31 @@ namespace Amatsukaze.Server.Rest
             }
 
             return false;
+        }
+
+        private static IResult BuildMaybeGzippedJsonResult(HttpRequest request, object payload)
+        {
+            if (!request.Headers.TryGetValue("Accept-Encoding", out var acceptEncoding) ||
+                acceptEncoding.ToString().IndexOf("gzip", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return Results.Json(payload);
+            }
+
+            var serializerOptions = request.HttpContext.RequestServices
+                .GetRequiredService<IOptions<JsonOptions>>()
+                .Value.SerializerOptions;
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(payload, serializerOptions);
+
+            using var compressedStream = new MemoryStream();
+            using (var gzip = new GZipStream(compressedStream, CompressionLevel.Fastest, leaveOpen: true))
+            {
+                gzip.Write(jsonBytes, 0, jsonBytes.Length);
+            }
+
+            var headers = request.HttpContext.Response.Headers;
+            headers["Vary"] = "Accept-Encoding";
+            headers["Content-Encoding"] = "gzip";
+            return Results.File(compressedStream.ToArray(), "application/json; charset=utf-8");
         }
 
         private static LogFileContent GetLogFileContent(string path)

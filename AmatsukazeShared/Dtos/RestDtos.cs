@@ -583,6 +583,12 @@ namespace Amatsukaze.Shared
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
     }
 
+    public class TrimAdjustBundleResponse
+    {
+        public byte[] VideoJpeg { get; set; } = Array.Empty<byte>();
+        public byte[] WaveformJpeg { get; set; } = Array.Empty<byte>();
+    }
+
     public class Snapshot
     {
         public SystemSnapshot? System { get; set; }

@@ -297,9 +297,11 @@
                     dotNetRef.invokeMethodAsync('OnFrameLoaded');
                 };
                 img.onerror = function () {
-                    if (this.src && this.src.indexOf('api/trim/') !== -1) {
-                        dotNetRef.invokeMethodAsync('OnFrameLoadError');
+                    var rawSrc = this.getAttribute('src') || '';
+                    if (!rawSrc || rawSrc.indexOf('data:') === 0) {
+                        return;
                     }
+                    dotNetRef.invokeMethodAsync('OnFrameLoadError');
                 };
             }
         };
@@ -397,6 +399,21 @@
                 dotNetRef.invokeMethodAsync('OnWheel', e.deltaY);
                 e.preventDefault();
             }, { passive: false });
+        };
+        // Trim調整: 再投入後はウィンドウを閉じる（閉じられない場合は戻る）
+        window.trimAdjustCloseWindow = function () {
+            try {
+                window.close();
+            } catch (e) {
+            }
+            setTimeout(function () {
+                try {
+                    if (!window.closed) {
+                        history.back();
+                    }
+                } catch (e) {
+                }
+            }, 100);
         };
         window.amatsukazeUi = {
             getScrollInfo: function (element) {

@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using System.Globalization
 @using System.Text.Json
+@using System.Threading
 @inject IAmatsukazeApi Api
 @inject IJSRuntime JS
 @implements IAsyncDisposable
@@ -77,7 +78,7 @@
                 @* 映像プレビュー *@
                 <div class="trim-preview-container">
                     <img class="trim-preview-img"
-                         src="@GetFrameUrl()"
+                         src="@_frameImageUrl"
                          alt="Frame @_currentFrame"
                          @ref="_imgRef" />
                     <div class="trim-preview-frame-overlay @(IsFrameInTrimRange(_displayedFrame) ? "trim-range-active" : "trim-range-cut")">
@@ -104,7 +105,7 @@
                 @* 音声波形 *@
                 <div class="trim-waveform-container">
                     <img class="trim-waveform-img"
-                         src="@GetWaveformUrl()"
+                         src="@_waveformImageUrl"
                          alt="Waveform" />
                 </div>
 
@@ -381,7 +382,9 @@
     private TrimAdjustSessionResponse? _session;
     private string? _sessionId;
     private int _currentFrame;
-    private int _frameUpdateToken; // キャッシュバスティング
+    private string _frameImageUrl = "";
+    private string _waveformImageUrl = "";
+    private int _bundleRequestToken;
     private int _displayedFrame; // 画像読み込み完了と同期して表示するフレーム番号
     private int _loadingFrame; // 現在img srcにセットして読み込み中のフレーム
     private bool _isFrameLoading; // 画像読み込み中フラグ
@@ -486,6 +489,10 @@
     {
         InvokeAsync(() =>
         {
+            if (string.IsNullOrEmpty(_frameImageUrl) || _frameImageUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
             _isFrameLoading = false;
             if (!_sessionExpired && !_loading)
             {
@@ -710,8 +717,10 @@
         _loading = false;
         _loadingFrame = 0;
         _displayedFrame = 0;
-        _isFrameLoading = true; // 初回フレームのonloadを待つ
-        _frameUpdateToken = 0;
+        _frameImageUrl = "";
+        _waveformImageUrl = "";
+        _isFrameLoading = false;
+        RequestFrameLoad();
         StateHasChanged();
 
         // プロファイルリスト取得（バックグラウンド）
@@ -820,8 +829,10 @@
         _hasChanges = preservedHasChanges;
 
         _loadingFrame = _currentFrame;
-        _isFrameLoading = true; // onloadを待つ
-        _frameUpdateToken++;
+        _isFrameLoading = false;
+        _frameImageUrl = "";
+        _waveformImageUrl = "";
+        RequestFrameLoad();
         _sessionExpired = false;
         _reconnecting = false;
         _reconnectError = null;
@@ -1022,8 +1033,45 @@
         if (_currentFrame == _loadingFrame && _isFrameLoading) return;
         _loadingFrame = _currentFrame;
         _isFrameLoading = true;
-        _frameUpdateToken++;
-        StateHasChanged();
+        var reqToken = Interlocked.Increment(ref _bundleRequestToken);
+        _ = LoadBundleForFrameAsync(_loadingFrame, reqToken);
+    }
+
+    private async Task LoadBundleForFrameAsync(int frameNumber, int reqToken)
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+        {
+            _isFrameLoading = false;
+            return;
+        }
+
+        var res = await Api.GetTrimBundleAsync(_sessionId, frameNumber);
+        if (reqToken != _bundleRequestToken)
+        {
+            return;
+        }
+
+        if (!res.Ok || res.Data == null || res.Data.VideoJpeg.Length == 0)
+        {
+            _isFrameLoading = false;
+            if (!_sessionExpired && !_loading)
+            {
+                _sessionExpired = true;
+                await InvokeAsync(StateHasChanged);
+            }
+            return;
+        }
+
+        _frameImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.VideoJpeg)}";
+        if (res.Data.WaveformJpeg.Length > 0)
+        {
+            _waveformImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.WaveformJpeg)}";
+        }
+        else
+        {
+            _waveformImageUrl = "";
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     // フレーム移動（即時更新：キー/ボタン操作用）
@@ -1256,8 +1304,13 @@
 
         if (changeRes.Ok)
         {
-            _statusMessage = $"プロファイル「{_selectedProfile}」で再投入しました";
+            _statusMessage = "再投入しました";
             _isError = false;
+            _requeueBusy = false;
+            StateHasChanged();
+            await Task.Delay(500);
+            await JS.InvokeVoidAsync("trimAdjustCloseWindow");
+            return;
         }
         else
         {
@@ -1516,18 +1569,6 @@
     }
 
     // ヘルパーメソッド
-
-    private string GetFrameUrl()
-    {
-        if (string.IsNullOrEmpty(_sessionId)) return "";
-        return $"api/trim/sessions/{_sessionId}/frame?n={_loadingFrame}&_t={_frameUpdateToken}";
-    }
-
-    private string GetWaveformUrl()
-    {
-        if (string.IsNullOrEmpty(_sessionId)) return "";
-        return $"api/trim/sessions/{_sessionId}/waveform?n={_loadingFrame}&_t={_frameUpdateToken}";
-    }
 
     private string FormatTime(int frame)
     {

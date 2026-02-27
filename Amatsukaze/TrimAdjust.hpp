@@ -45,9 +45,9 @@ class GUITrimAdjust : public AMTObject {
     std::vector<uint8_t> jpegBuffer;
 
     // 波形レンダリング定数・バッファ
-    static constexpr int WAVEFORM_HEIGHT = 64;
+    static constexpr int WAVEFORM_HEIGHT = 56;
     static constexpr int WAVEFORM_JPEG_QUALITY = 85;
-    static constexpr double WAVEFORM_WINDOW_HALF = 0.5; // 前後0.5秒（計約1秒）
+    static constexpr double WAVEFORM_WINDOW_HALF = 0.25; // 前後0.25秒（計約0.5秒）
     // 背景: 濃いグレー #404040 → YCbCr(64, 128, 128)
     static constexpr uint8_t WF_BG_Y = 64, WF_BG_CB = 128, WF_BG_CR = 128;
     // 波形: 薄い水色 #80C8E8 → YCbCr(183, 156, 109)

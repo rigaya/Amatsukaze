@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
@@ -457,6 +458,42 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req)
             => PostJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/save", req, _ => true);
+
+        public async Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber)
+        {
+            try
+            {
+                using var res = await http.GetAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/bundle?n={frameNumber}");
+                if (!res.IsSuccessStatusCode)
+                {
+                    return ApiResult<TrimAdjustBundleResponse>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync());
+                }
+                var bytes = await res.Content.ReadAsByteArrayAsync();
+                if (bytes.Length < 8)
+                {
+                    return ApiResult<TrimAdjustBundleResponse>.Fail((int)res.StatusCode, "Invalid bundle payload");
+                }
+                using var ms = new MemoryStream(bytes);
+                using var br = new BinaryReader(ms);
+                var videoSize = br.ReadInt32();
+                var waveformSize = br.ReadInt32();
+                if (videoSize < 0 || waveformSize < 0 || ms.Length - ms.Position < (long)videoSize + waveformSize)
+                {
+                    return ApiResult<TrimAdjustBundleResponse>.Fail((int)res.StatusCode, "Invalid bundle sizes");
+                }
+                var video = br.ReadBytes(videoSize);
+                var waveform = br.ReadBytes(waveformSize);
+                return ApiResult<TrimAdjustBundleResponse>.Success(new TrimAdjustBundleResponse
+                {
+                    VideoJpeg = video,
+                    WaveformJpeg = waveform
+                }, (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<TrimAdjustBundleResponse>.Fail(0, ex.Message);
+            }
+        }
 
         public async Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId)
         {
