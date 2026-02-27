@@ -1,4 +1,4 @@
-/**
+﻿/**
 * libjpeg-turbo を使用した JPEG 圧縮ユーティリティ
 * Copyright (c) 2017-2019 Nekopanda
 *

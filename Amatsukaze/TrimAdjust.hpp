@@ -1,4 +1,4 @@
-/**
+﻿/**
 * Amatsukaze Trim Viewer GUI Support
 * Copyright (c) 2017-2019 Nekopanda
 *
