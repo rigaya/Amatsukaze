@@ -62,14 +62,6 @@ sudo apt update
 sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool
 ```
 
-### 依存パッケージのインストール
-
-AmatsukazeCLIの実行に必要です。
-
-```bash
-sudo apt install -y openssl zlib1g
-```
-
 ### AviSynth+/AvisynthCUDAFiltersのインストール
 
 [こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードします。なお、自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。

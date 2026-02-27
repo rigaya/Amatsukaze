@@ -36,8 +36,8 @@ turbojpeg_dep = dependency('libturbojpeg', required : true)
 openssl_dep = dependency('', required : false)
 zlib_dep = dependency('', required : false)
 if host_machine.system() != 'windows'
-  openssl_dep = dependency('openssl', required : true)
-  zlib_dep = dependency('zlib', required : true)
+  openssl_dep = dependency('openssl', required : true, static : true)
+  zlib_dep = dependency('zlib', required : true, static : true)
 endif
 
 if host_machine.system() == 'windows'
@@ -119,4 +119,3 @@ subdir('AmatsukazeCLI')
 #    message('dotnet not found, skipping C# projects')
 #  endif
 #endif
-
