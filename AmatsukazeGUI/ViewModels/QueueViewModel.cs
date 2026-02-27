@@ -797,12 +797,12 @@ namespace Amatsukaze.ViewModels
             var item = selectedItems?.OfType<DisplayQueueItem>().FirstOrDefault();
             if (!CanOpenTrimAdjust(item))
             {
-                MessageBox.Show("Trim調整はCM解析が完了したアイテムでのみ使用できます");
+                MessageBox.Show("カット調整はCM解析が完了したアイテムでのみ使用できます");
                 return;
             }
             if (!TryOpenWebTrimAdjust(item.Model.Id))
             {
-                MessageBox.Show("Trim調整画面の起動に失敗しました");
+                MessageBox.Show("カット調整画面の起動に失敗しました");
             }
         }
         #endregion

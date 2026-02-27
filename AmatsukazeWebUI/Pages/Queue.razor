@@ -376,7 +376,7 @@ else
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.RemoveItem, "削除"))' disabled="@(!_hasSelection)">削除</button>
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ForceStart, "強制実行"))' disabled="@(!_hasSelection)">強制実行</button>
                 <button class="queue-menu-item" @onclick="(() => OpenLogoAnalyzeSelectedAsync())" disabled="@(!_hasSelection)">ロゴ解析</button>
-                <button class="queue-menu-item" @onclick="OpenTrimAdjustSelected" disabled="@(!CanTrimAdjustSelected)">Trim調整</button>
+                <button class="queue-menu-item" @onclick="OpenTrimAdjustSelected" disabled="@(!CanTrimAdjustSelected)">カット調整</button>
                 <button class="queue-menu-item" @onclick="ClearSucceededAsync">成功済みをクリア</button>
             </div>
         }

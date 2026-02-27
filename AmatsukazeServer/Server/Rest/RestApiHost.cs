@@ -1715,7 +1715,7 @@ namespace Amatsukaze.Server.Rest
                 }
                 if (!trimAdjust.TryCreateSession(data, out var response, out var error))
                 {
-                    return Results.BadRequest(new { message = error ?? "Trim調整セッションを作成できませんでした" });
+                    return Results.BadRequest(new { message = error ?? "カット調整セッションを作成できませんでした" });
                 }
                 return BuildMaybeGzippedJsonResult(request, response);
             });
