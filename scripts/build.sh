@@ -145,6 +145,28 @@ if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
     fi
 fi
 
+## libjpeg-turboのビルド
+if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "libjpeg-turbo-3.1.0" ]; then
+  echo "libjpeg-turbo のビルドを行います。"
+  (
+    wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz -O libjpeg-turbo.tar.gz \
+    && tar xf libjpeg-turbo.tar.gz \
+    && rm libjpeg-turbo.tar.gz \
+    && cd libjpeg-turbo-3.1.0 \
+    && cmake -G "Unix Makefiles" -B _build \
+      -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
+      -DENABLE_SHARED=OFF \
+      -DENABLE_STATIC=ON \
+    && cd _build && make -j"$(nproc)" \
+    && make install
+  ) || exit 1
+else
+  echo "prebuilt baselibs を使用します。libjpeg-turbo のビルドをスキップします。"
+fi
+
 # ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
 if [ ! -d "build_ffnk" ]; then
     mkdir build_ffnk
