@@ -3501,6 +3501,265 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region TrimAdjustPreviewScaleMode変更通知プロパティ
+        public int TrimAdjustPreviewScaleMode
+        {
+            get { return Model.TrimAdjustPreviewScaleMode; }
+            set
+            {
+                var newValue = (value == 0 || value == 1 || value == 2) ? value : 1;
+                if (Model.TrimAdjustPreviewScaleMode == newValue)
+                    return;
+                Model.TrimAdjustPreviewScaleMode = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutPrevEditPoint変更通知プロパティ
+        public string TrimAdjustShortcutPrevEditPoint
+        {
+            get { return Model.TrimAdjustShortcutPrevEditPoint; }
+            set
+            {
+                if (Model.TrimAdjustShortcutPrevEditPoint == value)
+                    return;
+                Model.TrimAdjustShortcutPrevEditPoint = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutBack4変更通知プロパティ
+        public string TrimAdjustShortcutBack4
+        {
+            get { return Model.TrimAdjustShortcutBack4; }
+            set
+            {
+                if (Model.TrimAdjustShortcutBack4 == value)
+                    return;
+                Model.TrimAdjustShortcutBack4 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutBack3変更通知プロパティ
+        public string TrimAdjustShortcutBack3
+        {
+            get { return Model.TrimAdjustShortcutBack3; }
+            set
+            {
+                if (Model.TrimAdjustShortcutBack3 == value)
+                    return;
+                Model.TrimAdjustShortcutBack3 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutBack2変更通知プロパティ
+        public string TrimAdjustShortcutBack2
+        {
+            get { return Model.TrimAdjustShortcutBack2; }
+            set
+            {
+                if (Model.TrimAdjustShortcutBack2 == value)
+                    return;
+                Model.TrimAdjustShortcutBack2 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutBack1変更通知プロパティ
+        public string TrimAdjustShortcutBack1
+        {
+            get { return Model.TrimAdjustShortcutBack1; }
+            set
+            {
+                if (Model.TrimAdjustShortcutBack1 == value)
+                    return;
+                Model.TrimAdjustShortcutBack1 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutForward1変更通知プロパティ
+        public string TrimAdjustShortcutForward1
+        {
+            get { return Model.TrimAdjustShortcutForward1; }
+            set
+            {
+                if (Model.TrimAdjustShortcutForward1 == value)
+                    return;
+                Model.TrimAdjustShortcutForward1 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutForward2変更通知プロパティ
+        public string TrimAdjustShortcutForward2
+        {
+            get { return Model.TrimAdjustShortcutForward2; }
+            set
+            {
+                if (Model.TrimAdjustShortcutForward2 == value)
+                    return;
+                Model.TrimAdjustShortcutForward2 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutForward3変更通知プロパティ
+        public string TrimAdjustShortcutForward3
+        {
+            get { return Model.TrimAdjustShortcutForward3; }
+            set
+            {
+                if (Model.TrimAdjustShortcutForward3 == value)
+                    return;
+                Model.TrimAdjustShortcutForward3 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutForward4変更通知プロパティ
+        public string TrimAdjustShortcutForward4
+        {
+            get { return Model.TrimAdjustShortcutForward4; }
+            set
+            {
+                if (Model.TrimAdjustShortcutForward4 == value)
+                    return;
+                Model.TrimAdjustShortcutForward4 = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutNextEditPoint変更通知プロパティ
+        public string TrimAdjustShortcutNextEditPoint
+        {
+            get { return Model.TrimAdjustShortcutNextEditPoint; }
+            set
+            {
+                if (Model.TrimAdjustShortcutNextEditPoint == value)
+                    return;
+                Model.TrimAdjustShortcutNextEditPoint = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustShortcutToggleEditPoint変更通知プロパティ
+        public string TrimAdjustShortcutToggleEditPoint
+        {
+            get { return Model.TrimAdjustShortcutToggleEditPoint; }
+            set
+            {
+                if (Model.TrimAdjustShortcutToggleEditPoint == value)
+                    return;
+                Model.TrimAdjustShortcutToggleEditPoint = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustMoveFramesBack4変更通知プロパティ
+        public int TrimAdjustMoveFramesBack4
+        {
+            get { return Model.TrimAdjustMoveFramesBack4; }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.TrimAdjustMoveFramesBack4 == newValue)
+                    return;
+                Model.TrimAdjustMoveFramesBack4 = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustMoveFramesBack3変更通知プロパティ
+        public int TrimAdjustMoveFramesBack3
+        {
+            get { return Model.TrimAdjustMoveFramesBack3; }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.TrimAdjustMoveFramesBack3 == newValue)
+                    return;
+                Model.TrimAdjustMoveFramesBack3 = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustMoveFramesBack2変更通知プロパティ
+        public int TrimAdjustMoveFramesBack2
+        {
+            get { return Model.TrimAdjustMoveFramesBack2; }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.TrimAdjustMoveFramesBack2 == newValue)
+                    return;
+                Model.TrimAdjustMoveFramesBack2 = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustMoveFramesForward2変更通知プロパティ
+        public int TrimAdjustMoveFramesForward2
+        {
+            get { return Model.TrimAdjustMoveFramesForward2; }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.TrimAdjustMoveFramesForward2 == newValue)
+                    return;
+                Model.TrimAdjustMoveFramesForward2 = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustMoveFramesForward3変更通知プロパティ
+        public int TrimAdjustMoveFramesForward3
+        {
+            get { return Model.TrimAdjustMoveFramesForward3; }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.TrimAdjustMoveFramesForward3 == newValue)
+                    return;
+                Model.TrimAdjustMoveFramesForward3 = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region TrimAdjustMoveFramesForward4変更通知プロパティ
+        public int TrimAdjustMoveFramesForward4
+        {
+            get { return Model.TrimAdjustMoveFramesForward4; }
+            set
+            {
+                var newValue = Math.Max(1, value);
+                if (Model.TrimAdjustMoveFramesForward4 == newValue)
+                    return;
+                Model.TrimAdjustMoveFramesForward4 = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region ConsoleFont変更通知プロパティ
         public System.Windows.Media.FontFamily ConsoleFont
         {

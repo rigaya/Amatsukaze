@@ -653,6 +653,133 @@
                         <ComboBox ItemsSource="{Binding Source={x:Static Fonts.SystemFontFamilies}}" SelectedValue="{Binding Model.Setting.ConsoleFont, Mode=TwoWay}"/>
                     </StackPanel>
                 </DockPanel>
+
+                <TextBlock Grid.Row="19" Grid.Column="0" Text="カット調整" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,0,0"/>
+                <StackPanel Grid.Row="19" Grid.Column="1" Margin="10,10,0,0">
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock VerticalAlignment="Center" Text="プレビュー解像度"/>
+                        <ComboBox Width="140"
+                                  Margin="10,0,0,0"
+                                  SelectedValuePath="Tag"
+                                  SelectedValue="{Binding Model.Setting.TrimAdjustPreviewScaleMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBoxItem Content="1/2倍" Tag="1"/>
+                            <ComboBoxItem Content="2/3倍" Tag="2"/>
+                            <ComboBoxItem Content="等倍" Tag="0"/>
+                        </ComboBox>
+                    </DockPanel>
+
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="72"/>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="ボタン" FontWeight="Bold" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="ショートカット" FontWeight="Bold" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="2" Text="効果" FontWeight="Bold" Margin="0,0,8,4"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="|&lt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutPrevEditPoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="前の編集点へ" VerticalAlignment="Center" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="&lt;&lt;&lt;&lt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutBack4, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DockPanel Grid.Row="2" Grid.Column="2" Margin="0,2">
+                            <TextBox Width="70" Height="22"
+                                     Text="{Binding Model.Setting.TrimAdjustMoveFramesBack4, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" Text="フレーム前へ"/>
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="&lt;&lt;&lt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutBack3, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DockPanel Grid.Row="3" Grid.Column="2" Margin="0,2">
+                            <TextBox Width="70" Height="22"
+                                     Text="{Binding Model.Setting.TrimAdjustMoveFramesBack3, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" Text="フレーム前へ"/>
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="&lt;&lt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="4" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutBack2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DockPanel Grid.Row="4" Grid.Column="2" Margin="0,2">
+                            <TextBox Width="70" Height="22"
+                                     Text="{Binding Model.Setting.TrimAdjustMoveFramesBack2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" Text="フレーム前へ"/>
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="&lt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="5" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutBack1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="5" Grid.Column="2" Text="1フレーム前へ" VerticalAlignment="Center" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="&gt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="6" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutForward1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="6" Grid.Column="2" Text="1フレーム後へ" VerticalAlignment="Center" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="&gt;&gt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="7" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutForward2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DockPanel Grid.Row="7" Grid.Column="2" Margin="0,2">
+                            <TextBox Width="70" Height="22"
+                                     Text="{Binding Model.Setting.TrimAdjustMoveFramesForward2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" Text="フレーム後へ"/>
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="&gt;&gt;&gt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="8" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutForward3, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DockPanel Grid.Row="8" Grid.Column="2" Margin="0,2">
+                            <TextBox Width="70" Height="22"
+                                     Text="{Binding Model.Setting.TrimAdjustMoveFramesForward3, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" Text="フレーム後へ"/>
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="&gt;&gt;&gt;&gt;" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="9" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutForward4, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DockPanel Grid.Row="9" Grid.Column="2" Margin="0,2">
+                            <TextBox Width="70" Height="22"
+                                     Text="{Binding Model.Setting.TrimAdjustMoveFramesForward4, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" Text="フレーム後へ"/>
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="&gt;|" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="10" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutNextEditPoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="10" Grid.Column="2" Text="次の編集点へ" VerticalAlignment="Center" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="|" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="11" Grid.Column="1" Width="200" Height="22" Margin="0,2"
+                                 Text="{Binding Model.Setting.TrimAdjustShortcutToggleEditPoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="11" Grid.Column="2" Text="編集点切替" VerticalAlignment="Center" Margin="0,2"/>
+                    </Grid>
+
+                    <Button Width="140"
+                            Height="22"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Left"
+                            Content="デフォルトに戻す"
+                            Click="TrimAdjustResetDefaults_Click"/>
+                </StackPanel>
             </Grid>
         </ScrollViewer>
     </DockPanel>
