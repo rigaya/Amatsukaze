@@ -10,7 +10,6 @@
 
 <div class="trim-adjust-page" @onkeydown="OnKeyDown" @onkeydown:preventDefault="true" tabindex="0" @ref="_pageRef">
     <div class="trim-toolbar">
-        <button class="trim-btn" @onclick="GoBack">&#x2190; 戻る</button>
         <button class="trim-btn trim-btn-sm" @onclick="ShowCheckLog" title="CM解析チェックログ">ログ</button>
         <button class="trim-btn trim-btn-primary" @onclick="SaveTrims" disabled="@(!_hasChanges)">保存</button>
         <div class="trim-toolbar-requeue">
@@ -1321,12 +1320,6 @@
         _requeueBusy = false;
         StateHasChanged();
     }
-
-    private async Task GoBack()
-    {
-        await JS.InvokeVoidAsync("history.back");
-    }
-
 
     private void ExecuteTrimCommand(string commandId)
     {
