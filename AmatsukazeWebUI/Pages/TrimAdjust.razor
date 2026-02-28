@@ -1062,10 +1062,10 @@
             return;
         }
 
-        _frameImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.VideoJpeg)}";
+        _frameImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.VideoJpeg)}#r={reqToken}";
         if (res.Data.WaveformJpeg.Length > 0)
         {
-            _waveformImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.WaveformJpeg)}";
+            _waveformImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.WaveformJpeg)}#r={reqToken}";
         }
         else
         {
