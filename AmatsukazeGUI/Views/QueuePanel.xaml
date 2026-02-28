@@ -953,9 +953,6 @@
                         <MenuItem Header="ロゴ生成(TS解析あり)" Style="{StaticResource MenuForSelectedItems}"
                             Command="{Binding OpenLogoAnalyzeSlimTsCommand}" 
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
-                        <MenuItem Header="カット調整" Style="{StaticResource MenuForSelectedItems}"
-                            Command="{Binding OpenTrimAdjustCommand}"
-                            CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
                         <Separator />
                         <MenuItem Header="プロファイル設定をテキストでコピー" Style="{StaticResource MenuForSelectedItems}"
                             Command="{Binding CopySettingTextCommand}"
@@ -1007,6 +1004,10 @@
                             Command="{Binding ForceStartCommand}"
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}"
                             ToolTip="並列数制限やリソース制限を無視して強制的に実行します" />
+                        <Separator />
+                        <MenuItem Header="カット調整" Style="{StaticResource MenuForSelectedItems}"
+                            Command="{Binding OpenTrimAdjustCommand}"
+                            CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
                         <Separator />
                         <MenuItem Header="{Binding RemoveCompletedHeader, Mode=OneWay}"
                             ToolTip="Shiftを押しながらクリックでTSファイルも同時に削除"
