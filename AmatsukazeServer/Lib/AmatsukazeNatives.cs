@@ -406,10 +406,21 @@ namespace Amatsukaze.Lib
         public TrimAdjust(AMTContext ctx, string datFilePath, int scaleMode)
         {
             Ctx = ctx;
-            Ptr = TrimAdjust_Create(Ctx.Ptr, datFilePath, scaleMode);
+            try
+            {
+                Ptr = TrimAdjust_Create(Ctx.Ptr, datFilePath, scaleMode);
+            }
+            catch (SEHException ex)
+            {
+                var nativeError = Ctx?.GetError();
+                throw new IOException(
+                    $"TrimAdjust_Createでネイティブ例外が発生しました (HRESULT=0x{ex.HResult:X8}, dat={datFilePath}, scaleMode={scaleMode}, nativeError={nativeError ?? "<none>"})",
+                    ex);
+            }
             if (Ptr == IntPtr.Zero)
             {
-                throw new IOException(Ctx.GetError());
+                throw new IOException(
+                    $"TrimAdjust_Createが失敗しました (dat={datFilePath}, scaleMode={scaleMode}): {Ctx.GetError()}");
             }
         }
 

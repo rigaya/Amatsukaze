@@ -510,7 +510,8 @@ namespace Amatsukaze.Server.Rest
             }
             catch (Exception ex)
             {
-                error = $"セッション作成に失敗しました: {ex.Message}";
+                Util.AddLog($"[TrimAdjust] セッション作成失敗: queueItemId={request.QueueItemId}, srcPath={item?.SrcPath}, tempDir={tempDir}, dat={datFilePath}", ex);
+                error = $"セッション作成に失敗しました: {ex.GetType().Name}: {ex.Message}";
                 return false;
             }
         }
