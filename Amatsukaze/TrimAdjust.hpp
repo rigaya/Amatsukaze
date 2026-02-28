@@ -12,14 +12,6 @@
 
 #include <mutex>
 
-// Amatsukaze.cppで定義されたAviSynthプラグイン初期化関数の前方宣言
-// AMTSourceフィルタをAviSynth環境に登録するために使用
-extern "C" AMATSUKAZE_API const char*
-#if defined(_WIN32) || defined(_WIN64)
-__stdcall
-#endif
-AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors);
-
 namespace trimadjust {
 
 // amts0.datを読み込みAviSynth経由でフレーム取得を行うクラス
@@ -66,11 +58,13 @@ class GUITrimAdjust : public AMTObject {
         }
 
         try {
-            // AMTSourceフィルタを環境に登録（同一DLL内のAvisynthPluginInit3を直接呼ぶ）
-            AvisynthPluginInit3(env, nullptr);
+            // 他のAviSynth経路と同じくDLLをLoadPluginしてAMTSourceを登録する
+            AVSValue loadPluginResult;
+            env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &loadPluginResult);
 
             // AMTSourceクリップを作成
-            AVSValue loadArgs[] = { datFilePath.c_str(), "", false, 0 };
+            const auto amtPath = tchar_to_string(datFilePath);
+            AVSValue loadArgs[] = { amtPath.c_str(), "", false, 0 };
             const char* loadNames[] = { nullptr, nullptr, nullptr, nullptr };
             AVSValue amtClip = env->Invoke("AMTSource", AVSValue(loadArgs, 4), loadNames);
             PClip srcClip = amtClip.AsClip();
@@ -418,6 +412,8 @@ extern "C" AMATSUKAZE_API void* TrimAdjust_Create(AMTContext* ctx, const tchar* 
         return new trimadjust::GUITrimAdjust(*ctx, datFilePath, scaleMode);
     } catch (const Exception& exception) {
         ctx->setError(exception);
+    } catch (...) {
+        ctx->setError(RuntimeException("TrimAdjust_Createで不明なネイティブ例外が発生しました"));
     }
     return nullptr;
 }
