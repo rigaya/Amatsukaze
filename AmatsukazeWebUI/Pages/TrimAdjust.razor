@@ -26,7 +26,7 @@
             <button class="trim-btn trim-btn-sm" @onclick="RequeueWithProfile"
                     disabled="@(_requeueBusy || string.IsNullOrEmpty(_selectedProfile))"
                     title="保存してプロファイルを変更し通常モードで再投入">
-                @(_requeueBusy ? "処理中..." : "再投入")
+                @(_requeueBusy ? "処理中..." : "保存して再投入")
             </button>
         </div>
         <span class="trim-toolbar-info">
