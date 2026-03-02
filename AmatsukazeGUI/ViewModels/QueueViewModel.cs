@@ -20,7 +20,7 @@ using System.IO;
 using Amatsukaze.Components;
 using System.Windows.Data;
 using System.Collections;
-using System.Net.Sockets;
+using System.Net.Http;
 
 namespace Amatsukaze.ViewModels
 {
@@ -468,22 +468,20 @@ namespace Amatsukaze.ViewModels
             {
                 return false;
             }
-            var host = string.IsNullOrWhiteSpace(Model.ServerIP) ? "localhost" : Model.ServerIP;
+            // IPv6/IPv4不一致による接続失敗を避けるため、localhostではなく127.0.0.1を使用
+            var host = string.IsNullOrWhiteSpace(Model.ServerIP) ? "127.0.0.1" : Model.ServerIP;
             var baseUrl = $"http://{host}:{port}";
             try
             {
-                using var client = new TcpClient();
-                var connectTask = client.ConnectAsync(host, port);
-                if (!connectTask.Wait(TimeSpan.FromMilliseconds(500)))
-                {
-                    return false;
-                }
                 var normalizedPath = relativePath ?? "";
                 if (!normalizedPath.StartsWith("/", StringComparison.Ordinal))
                 {
                     normalizedPath = "/" + normalizedPath;
                 }
                 var url = $"{baseUrl}{normalizedPath}";
+                // HTTPリクエストでサーバーの応答を確認
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                var response = client.GetAsync(baseUrl).GetAwaiter().GetResult();
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
                 return true;
             }
