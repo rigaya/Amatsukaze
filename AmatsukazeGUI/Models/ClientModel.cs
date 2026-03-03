@@ -996,25 +996,35 @@ namespace Amatsukaze.Models
             RaisePropertyChanged("ConsoleText");
         }
 
+        /// <summary>
+        /// 非UIスレッドからの呼び出しをUIスレッドにディスパッチする。
+        /// ディスパッチした場合はtrueを返す。
+        /// </summary>
+        private bool DispatchIfRequired(Action action)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                dispatcher.BeginInvoke(action);
+                return true;
+            }
+            return false;
+        }
+
 		private void AddLog(string text)
 		{
 			var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + text;
-			Action update = () =>
+			void update()
 			{
 				if (ClientLog.Count > 400)
 				{
 					ClientLog.RemoveAt(0);
 				}
 				ClientLog.Add(formatted);
-			};
-			if (Application.Current?.Dispatcher?.CheckAccess() == true)
-			{
-				update();
 			}
-			else
-			{
-				Application.Current?.Dispatcher?.BeginInvoke((Action)(() => update()));
-			}
+			if (DispatchIfRequired(() => update()))
+				return;
+			update();
 		}
 
         private async Task<EncodeServer> MakeEncodeServer()
@@ -1447,6 +1457,8 @@ namespace Amatsukaze.Models
 
         public Task OnUIData(UIData data)
         {
+            if (DispatchIfRequired(() => OnUIData(data)))
+                return Task.FromResult(0);
             TraceReceive(
                 "UIData",
                 data == null
@@ -1588,6 +1600,8 @@ namespace Amatsukaze.Models
 
         public Task OnCommonData(CommonData data)
         {
+            if (DispatchIfRequired(() => OnCommonData(data)))
+                return Task.FromResult(0);
             TraceReceive(
                 "CommonData",
                 data == null ? "null" : $"Setting={(data.Setting != null ? "yes" : "no")}, JlsFiles={data.JlsCommandFiles?.Count ?? 0}, Disks={data.Disks?.Count ?? 0}");
@@ -1691,6 +1705,8 @@ namespace Amatsukaze.Models
 
         public Task OnConsoleUpdate(ConsoleUpdate update)
         {
+            if (DispatchIfRequired(() => OnConsoleUpdate(update)))
+                return Task.FromResult(0);
             byte[] convertedData = Util.ConvertEncoding(update.data, Encoding.GetEncoding(serverInfo.CharSet), Util.AmatsukazeDefaultEncoding);
             if(update.index == -1)
             {
@@ -1707,6 +1723,8 @@ namespace Amatsukaze.Models
 
         public Task OnEncodeState(EncodeState state)
         {
+            if (DispatchIfRequired(() => OnEncodeState(state)))
+                return Task.FromResult(0);
             ensureConsoleNum(state.ConsoleId);
             var console = ConsoleList[state.ConsoleId];
             console.Phase = state.Phase;
@@ -1722,6 +1740,8 @@ namespace Amatsukaze.Models
 
         public Task OnOperationResult(OperationResult result)
         {
+            if (DispatchIfRequired(() => OnOperationResult(result)))
+                return Task.FromResult(0);
             IsCurrentResultFail = result.IsFailed;
             CurrentOperationResult = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + result.Message;
             AddLog(result.Message);
@@ -1734,6 +1754,8 @@ namespace Amatsukaze.Models
 
         public Task OnServiceSetting(ServiceSettingUpdate update)
         {
+            if (DispatchIfRequired(() => OnServiceSetting(update)))
+                return Task.FromResult(0);
             TraceReceive(
                 "ServiceSetting",
                 update == null ? "null" : $"Type={update.Type}, ServiceId={update.ServiceId}");
@@ -1766,6 +1788,8 @@ namespace Amatsukaze.Models
 
         public Task OnLogoData(LogoData logoData)
         {
+            if (DispatchIfRequired(() => OnLogoData(logoData)))
+                return Task.FromResult(0);
             TraceReceive("LogoData", logoData?.FileName);
             var service = _ServiceSettings
                 .FirstOrDefault(s => s.Data.ServiceId == logoData.ServiceId);
@@ -1783,6 +1807,8 @@ namespace Amatsukaze.Models
 
         public Task OnDrcsData(DrcsImageUpdate update)
         {
+            if (DispatchIfRequired(() => OnDrcsData(update)))
+                return Task.FromResult(0);
             TraceReceive(
                 "DrcsData",
                 update == null ? "null" : $"Type={update.Type}, Image={(update.Image != null ? "1" : "0")}, ListCount={update.ImageList?.Count ?? 0}");
@@ -1836,6 +1862,8 @@ namespace Amatsukaze.Models
 
         public Task OnProfile(ProfileUpdate data)
         {
+            if (DispatchIfRequired(() => OnProfile(data)))
+                return Task.FromResult(0);
             TraceReceive(
                 "Profile",
                 data == null ? "null" : $"Type={data.Type}, Name={data.Profile?.Name ?? data.NewName ?? "(null)"}");
@@ -2004,6 +2032,8 @@ namespace Amatsukaze.Models
 
         public Task OnAutoSelect(AutoSelectUpdate data)
         {
+            if (DispatchIfRequired(() => OnAutoSelect(data)))
+                return Task.FromResult(0);
             TraceReceive(
                 "AutoSelect",
                 data == null ? "null" : $"Type={data.Type}, Name={data.Profile?.Name ?? data.NewName ?? "(null)"}");
