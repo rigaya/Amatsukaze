@@ -311,6 +311,30 @@ namespace Amatsukaze.Server.Rest
             {
                 path = AddSuffixToPath(job.BinaryImagePath, ".rectmerge.csv");
             }
+            else if (string.Equals(kind, "tracecsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".trace.csv");
+            }
+            else if (string.Equals(kind, "tracecsv-pass1", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass1"), ".trace.csv");
+            }
+            else if (string.Equals(kind, "tracecsv-pass2", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass2"), ".trace.csv");
+            }
+            else if (string.Equals(kind, "tracesummarycsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".trace.summary.csv");
+            }
+            else if (string.Equals(kind, "tracesummarycsv-pass1", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass1"), ".trace.summary.csv");
+            }
+            else if (string.Equals(kind, "tracesummarycsv-pass2", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass2"), ".trace.summary.csv");
+            }
 
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {

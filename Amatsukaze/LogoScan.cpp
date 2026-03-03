@@ -1936,6 +1936,22 @@ namespace {
         return defaultValue;
     }
 
+    static std::vector<std::pair<int, int>> ParseEnvPointList(const char* name) {
+        std::vector<std::pair<int, int>> points;
+        const char* v = std::getenv(name);
+        if (v == nullptr || v[0] == '\0') {
+            return points;
+        }
+        const std::string s(v);
+        const std::regex re(R"((-?\d+)\s*,\s*(-?\d+))");
+        for (auto it = std::sregex_iterator(s.begin(), s.end(), re); it != std::sregex_iterator(); ++it) {
+            const int x = std::atoi((*it)[1].str().c_str());
+            const int y = std::atoi((*it)[2].str().c_str());
+            points.emplace_back(x, y);
+        }
+        return points;
+    }
+
     static bool EstimateGaussianMixturePosterior1D(const std::vector<float>& samples, std::vector<float>& posteriorLogoOut) {
         if (samples.size() < 32) {
             return false;
@@ -2046,6 +2062,41 @@ namespace {
         static constexpr bool kEnablePruneBinaryByAnchor = true;
         const bool enableTwoPassFrameGate;
         const bool enablePruneBinaryByAnchor;
+        const std::vector<std::pair<int, int>> tracePointEnv;
+
+        struct TracePointConfig {
+            int id = 0;
+            int x = 0; // scan-local
+            int y = 0; // scan-local
+        };
+        struct TraceSampleRecord {
+            int pass = 0;
+            int frame = 0;
+            int pointId = 0;
+            int x = 0;
+            int y = 0;
+            int absX = 0;
+            int absY = 0;
+            float fgRaw = 0.0f;
+            float fgFiltered = 0.0f;
+            float bg = 0.0f;
+            int bgOk = 0;
+            int bgSideCount = 0;
+            int bgSideValidMask = 0;
+            float bgSideRangeMax = 0.0f;
+            float bgSideAvgSpread = 0.0f;
+            float dedupNearestDiff = -1.0f;
+            float dedupThreshold = 0.0f;
+            float fgBgDiff = 0.0f;
+            int extreme = 0;
+            int accepted = 0;
+            int rejectCode = 0; // 0:accepted,1:dedup,2:bg_fail,3:extreme,4:pass3_mask,5:edge_skip
+            int observedAfter = 0;
+            int countAfter = 0;
+            int totalCandidatesAfter = 0;
+        };
+        std::vector<TracePointConfig> tracePoints;
+        std::vector<int> tracePointIndexByOffset;
 
         struct StatsPassBuffers {
             std::vector<uint8_t> frameWork8;
@@ -2057,6 +2108,7 @@ namespace {
             std::vector<float> lastObservedFg;
             std::vector<uint8_t> lastObservedValid;
             std::vector<int> frameValidCounts;
+            std::vector<TraceSampleRecord> traceRecords;
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 if (bitDepth <= 8) {
@@ -2075,10 +2127,12 @@ namespace {
                 lastObservedFg.assign(scanw * scanh, 0.0f);
                 lastObservedValid.assign(scanw * scanh, 0);
                 frameValidCounts.clear();
+                traceRecords.clear();
             }
         };
 
         std::vector<AutoDetectStats> debugStats;
+        std::vector<TraceSampleRecord> debugTraceRecords;
 
         struct ScoreStageBuffers {
             std::vector<float> score;
@@ -2118,6 +2172,7 @@ namespace {
         std::vector<uint8_t> debugBinary;
         struct DebugStageSnapshot {
             std::vector<AutoDetectStats> stats;
+            std::vector<TraceSampleRecord> traceRecords;
             ScoreStageBuffers score;
             std::vector<uint8_t> binary;
             AutoDetectRect rectAbs{ 0, 0, 0, 0 };
@@ -2313,7 +2368,7 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), debugStats(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2349,6 +2404,7 @@ namespace {
             passIndex = 0;
             readFrames = 0;
             debugStats.clear();
+            debugTraceRecords.clear();
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
             debugPass1 = DebugStageSnapshot{};
@@ -2358,11 +2414,38 @@ namespace {
 
         void captureCurrentDebugSnapshot(DebugStageSnapshot& snapshot) {
             snapshot.stats = debugStats;
+            snapshot.traceRecords = debugTraceRecords;
             snapshot.score = debugScore;
             snapshot.binary = debugBinary;
             snapshot.rectAbs = rectAbs;
             snapshot.rectLocal = rectLocal;
             snapshot.valid = (scanw > 0 && scanh > 0);
+        }
+
+        void configureTracePoints() {
+            tracePoints.clear();
+            tracePointIndexByOffset.assign(std::max(0, scanw * scanh), -1);
+            int pointId = 0;
+            for (const auto& p : tracePointEnv) {
+                const int x = p.first;
+                const int y = p.second;
+                if (x < 0 || y < 0 || x >= scanw || y >= scanh) {
+                    continue;
+                }
+                const int off = x + y * scanw;
+                if (off < 0 || off >= (int)tracePointIndexByOffset.size()) {
+                    continue;
+                }
+                if (tracePointIndexByOffset[off] >= 0) {
+                    continue;
+                }
+                TracePointConfig tp{};
+                tp.id = pointId++;
+                tp.x = x;
+                tp.y = y;
+                tracePointIndexByOffset[off] = (int)tracePoints.size();
+                tracePoints.push_back(tp);
+            }
         }
 
         AutoDetectRect expandPass1RectForSecondPass(const AutoDetectRect& inRect) const {
@@ -2615,7 +2698,7 @@ namespace {
             return out;
         }
 
-        void writeDebugStage(const std::vector<AutoDetectStats>& statsForDebug, const ScoreStageBuffers& score, const std::vector<uint8_t>& binary, const AutoDetectRect& rectLocalForDebug, const DebugPathSet& path, const bool withDetailMaps, const bool withIterationArtifacts) {
+        void writeDebugStage(const std::vector<AutoDetectStats>& statsForDebug, const std::vector<TraceSampleRecord>& traceRecords, const ScoreStageBuffers& score, const std::vector<uint8_t>& binary, const AutoDetectRect& rectLocalForDebug, const DebugPathSet& path, const bool withDetailMaps, const bool withIterationArtifacts) {
             float maxScore = 0.0f;
             for (auto v : score.score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
@@ -2765,6 +2848,127 @@ namespace {
                     if (off >= (int)score.mapAccepted.size()) return (uint8_t)0;
                     return (uint8_t)ClampInt((int)std::round(score.mapAccepted[off] * 255.0f), 0, 255);
                 });
+            }
+
+            if (!path.binary.empty() && !traceRecords.empty()) {
+                const auto rejectReasonStr = [](const int code) {
+                    switch (code) {
+                    case 0: return "accepted";
+                    case 1: return "dedup";
+                    case 2: return "bg_fail";
+                    case 3: return "extreme";
+                    case 4: return "pass3_mask";
+                    case 5: return "edge_skip";
+                    default: return "unknown";
+                    }
+                };
+                const std::string traceCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.csv");
+                FILE* ftrace = fopen(traceCsvPath.c_str(), "w");
+                if (ftrace != nullptr) {
+                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_range_max,bg_side_avg_spread,dedup_nearest_diff,dedup_threshold,fg_bg_diff,extreme,accepted,reject_code,reject\n");
+                    for (const auto& r : traceRecords) {
+                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%s\n",
+                            r.pass, r.frame, r.pointId, r.x, r.y, r.absX, r.absY,
+                            r.fgRaw, r.fgFiltered, r.bg, r.bgOk, r.bgSideCount, r.bgSideValidMask,
+                            r.bgSideRangeMax, r.bgSideAvgSpread, r.dedupNearestDiff, r.dedupThreshold, r.fgBgDiff,
+                            r.extreme, r.accepted, r.rejectCode, rejectReasonStr(r.rejectCode));
+                    }
+                    fclose(ftrace);
+                }
+
+                struct TraceSummaryRow {
+                    int pointId = 0;
+                    int x = 0;
+                    int y = 0;
+                    int absX = 0;
+                    int absY = 0;
+                    int frames = 0;
+                    int accepted = 0;
+                    int rejectedDedup = 0;
+                    int rejectedBgFail = 0;
+                    int rejectedExtreme = 0;
+                    int rejectedPassMask = 0;
+                    int rejectedEdge = 0;
+                    double sumDiff = 0.0;
+                    std::vector<float> acceptedDiff;
+                };
+                std::vector<TraceSummaryRow> rows;
+                rows.reserve(tracePoints.size());
+                for (const auto& tp : tracePoints) {
+                    TraceSummaryRow row{};
+                    row.pointId = tp.id;
+                    row.x = tp.x;
+                    row.y = tp.y;
+                    row.absX = scanx + tp.x;
+                    row.absY = scany + tp.y;
+                    rows.push_back(row);
+                }
+                for (const auto& r : traceRecords) {
+                    auto it = std::find_if(rows.begin(), rows.end(), [&](const TraceSummaryRow& v) { return v.pointId == r.pointId; });
+                    if (it == rows.end()) continue;
+                    it->frames++;
+                    if (r.accepted) {
+                        it->accepted++;
+                        it->sumDiff += r.fgBgDiff;
+                        it->acceptedDiff.push_back(r.fgBgDiff);
+                    } else if (r.rejectCode == 1) {
+                        it->rejectedDedup++;
+                    } else if (r.rejectCode == 2) {
+                        it->rejectedBgFail++;
+                    } else if (r.rejectCode == 3) {
+                        it->rejectedExtreme++;
+                    } else if (r.rejectCode == 4) {
+                        it->rejectedPassMask++;
+                    } else if (r.rejectCode == 5) {
+                        it->rejectedEdge++;
+                    }
+                }
+                const std::string summaryCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.summary.csv");
+                FILE* fsum = fopen(summaryCsvPath.c_str(), "w");
+                if (fsum != nullptr) {
+                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,reject_dedup,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,score,accepted_score\n");
+                    for (auto& row : rows) {
+                        float p50 = 0.0f;
+                        float p90 = 0.0f;
+                        if (!row.acceptedDiff.empty()) {
+                            std::sort(row.acceptedDiff.begin(), row.acceptedDiff.end());
+                            p50 = PercentileOfSorted(row.acceptedDiff, 0.50f);
+                            p90 = PercentileOfSorted(row.acceptedDiff, 0.90f);
+                        }
+                        const int off = row.x + row.y * scanw;
+                        float A = 0.0f;
+                        float B = 0.0f;
+                        float alpha = 0.0f;
+                        float logoY = 0.0f;
+                        float consistency = 0.0f;
+                        float fgvar = 0.0f;
+                        float bgvar = 0.0f;
+                        float transition = 0.0f;
+                        float keeprate = 0.0f;
+                        float scorev = 0.0f;
+                        float acceptedScore = 0.0f;
+                        if (off >= 0 && off < (int)statsForDebug.size() && off < (int)score.validAB.size() && score.validAB[off]) {
+                            A = (off < (int)score.mapA.size()) ? score.mapA[off] : 0.0f;
+                            B = (off < (int)score.mapB.size()) ? score.mapB[off] : 0.0f;
+                            alpha = (off < (int)score.mapAlpha.size()) ? score.mapAlpha[off] : 0.0f;
+                            logoY = (off < (int)score.mapLogoY.size()) ? score.mapLogoY[off] : 0.0f;
+                            consistency = (off < (int)score.mapConsistency.size()) ? score.mapConsistency[off] : 0.0f;
+                            fgvar = (off < (int)score.mapFgVar.size()) ? score.mapFgVar[off] : 0.0f;
+                            bgvar = (off < (int)score.mapBgVar.size()) ? score.mapBgVar[off] : 0.0f;
+                            transition = (off < (int)score.mapTransitionRate.size()) ? score.mapTransitionRate[off] : 0.0f;
+                            keeprate = (off < (int)score.mapKeepRate.size()) ? score.mapKeepRate[off] : 0.0f;
+                            scorev = (off < (int)score.score.size()) ? score.score[off] : 0.0f;
+                            acceptedScore = (off < (int)score.mapAccepted.size()) ? score.mapAccepted[off] : 0.0f;
+                        }
+                        const double meanDiff = row.accepted > 0 ? row.sumDiff / row.accepted : 0.0;
+                        const double acceptRate = row.frames > 0 ? (double)row.accepted / row.frames : 0.0;
+                        fprintf(fsum, "%d,%d,%d,%d,%d,%d,%d,%.8f,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                            row.pointId, row.x, row.y, row.absX, row.absY, row.frames, row.accepted, acceptRate,
+                            row.rejectedDedup, row.rejectedBgFail, row.rejectedExtreme, row.rejectedPassMask, row.rejectedEdge,
+                            meanDiff, p50, p90, A, B, alpha, logoY, consistency, fgvar, bgvar, transition, keeprate, scorev, acceptedScore);
+                    }
+                    fclose(fsum);
+                }
             }
 
             if (!withIterationArtifacts || path.binary.empty()) {
@@ -2918,16 +3122,16 @@ namespace {
             basePath.accepted = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
 
             // 互換維持: 既存パスは最終結果(final)を出力。
-            writeDebugStage(debugStats, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
+            writeDebugStage(debugStats, debugTraceRecords, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
 
             // 追加: pass1/pass2の同種デバッグ出力を suffix で並列管理。
             if (debugPass1.valid) {
                 const DebugPathSet pass1Path = makeSuffixedPathSet(basePath, ".pass1");
-                writeDebugStage(debugPass1.stats, debugPass1.score, debugPass1.binary, debugPass1.rectLocal, pass1Path, detailedDebug, false);
+                writeDebugStage(debugPass1.stats, debugPass1.traceRecords, debugPass1.score, debugPass1.binary, debugPass1.rectLocal, pass1Path, detailedDebug, false);
             }
             if (debugPass2.valid) {
                 const DebugPathSet pass2Path = makeSuffixedPathSet(basePath, ".pass2");
-                writeDebugStage(debugPass2.stats, debugPass2.score, debugPass2.binary, debugPass2.rectLocal, pass2Path, detailedDebug, false);
+                writeDebugStage(debugPass2.stats, debugPass2.traceRecords, debugPass2.score, debugPass2.binary, debugPass2.rectLocal, pass2Path, detailedDebug, false);
             }
 
             // 追加: runPass2PrepareMask で得た仮ロゴ/ロゴマスク/frame gate を保存。
@@ -2965,6 +3169,7 @@ namespace {
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
+            configureTracePoints();
             if (statsPass != nullptr) {
                 statsPass->reset(scanw, scanh, bitDepth);
             }
@@ -2995,6 +3200,10 @@ namespace {
             const float invMaxv = 1.0f / std::max(1.0f, (float)maxv);
             const float rawScale = maxv / 255.0f;
             const float thresholdRaw = threshold * rawScale;
+            std::vector<float> traceFgRaw;
+            if (statsPass != nullptr && !tracePoints.empty()) {
+                collectTraceRawFromSource<pixel_t>(srcY, pitchY, traceFgRaw);
+            }
 
             // pass1: pass2用の仮ロゴを LogoScan に蓄積する。
             if (passIndex == 1) {
@@ -3013,6 +3222,22 @@ namespace {
                 if (pass2 != nullptr && !pass2->frameMask.empty()) {
                     if (shouldSkipPass3FrameByMask(*pass2)) {
                         pass2->skippedFrames++;
+                        if (statsPass != nullptr && !tracePoints.empty()) {
+                            for (size_t ti = 0; ti < tracePoints.size(); ti++) {
+                                const auto& tp = tracePoints[ti];
+                                TraceSampleRecord rec{};
+                                rec.pass = 2;
+                                rec.frame = readFrames;
+                                rec.pointId = tp.id;
+                                rec.x = tp.x;
+                                rec.y = tp.y;
+                                rec.absX = scanx + tp.x;
+                                rec.absY = scany + tp.y;
+                                rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
+                                rec.rejectCode = 4;
+                                statsPass->traceRecords.push_back(rec);
+                            }
+                        }
                         return 0;
                     }
                     pass2->acceptedFrames++;
@@ -3025,7 +3250,7 @@ namespace {
             }
             auto& frameWork = getFrameWorkBuffer<pixel_t>(*statsPass);
             preprocessFrame<pixel_t>(srcY, pitchY, frameWork, maxv, rawScale, thresholdRaw);
-            return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw, *statsPass);
+            return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw, *statsPass, traceFgRaw);
         }
 
         template<typename pixel_t>
@@ -3087,6 +3312,20 @@ namespace {
         }
 
         template<typename pixel_t>
+        void collectTraceRawFromSource(const pixel_t* srcY, const int pitchY, std::vector<float>& outFgRaw) const {
+            outFgRaw.assign(tracePoints.size(), 0.0f);
+            if (tracePoints.empty()) {
+                return;
+            }
+            for (size_t i = 0; i < tracePoints.size(); i++) {
+                const auto& tp = tracePoints[i];
+                const int absX = scanx + tp.x;
+                const int absY = scany + tp.y;
+                outFgRaw[i] = (float)srcY[absX + absY * pitchY];
+            }
+        }
+
+        template<typename pixel_t>
         void preprocessFrame(const pixel_t* srcY, const int pitchY, std::vector<pixel_t>& frameWork, const pixel_t maxv, const float rawScale, const float thresholdRaw) {
             // 前処理: 5x5 バイラテラルでノイズを落としつつ輪郭を保持する。
             constexpr int kBilateralRadius = 2;
@@ -3096,7 +3335,7 @@ namespace {
         }
 
         template<typename pixel_t>
-        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass) {
+        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
             auto& stats = statsPass.stats;
             auto& dedupSampleFgHistory = statsPass.dedupSampleFgHistory;
             auto& dedupSampleCount = statsPass.dedupSampleCount;
@@ -3122,6 +3361,9 @@ namespace {
                 for (int y = y0 + kScanEdgeMargin; y < y1 + kScanEdgeMargin; y++) {
                     for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
                         const int off = x + y * scanw;
+                        if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
+                            continue;
+                        }
                         const float fgRaw = (float)frameWork[off];
                         AutoDetectStats& s = stats[off];
                         s.observed++;
@@ -3187,6 +3429,133 @@ namespace {
                     }
                 }
                 });
+
+            // 追跡点は理由付きログを残すため、並列本体から除外して逐次で同一ロジックを適用する。
+            for (size_t ti = 0; ti < tracePoints.size(); ti++) {
+                const auto& tp = tracePoints[ti];
+                TraceSampleRecord rec{};
+                rec.pass = (passIndex == 3) ? 2 : 1;
+                rec.frame = readFrames;
+                rec.pointId = tp.id;
+                rec.x = tp.x;
+                rec.y = tp.y;
+                rec.absX = scanx + tp.x;
+                rec.absY = scany + tp.y;
+                rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
+                rec.dedupThreshold = dedupThreshold;
+
+                if (tp.x < kScanEdgeMargin || tp.y < kScanEdgeMargin || tp.x >= scanw - kScanEdgeMargin || tp.y >= scanh - kScanEdgeMargin) {
+                    rec.rejectCode = 5;
+                    statsPass.traceRecords.push_back(rec);
+                    continue;
+                }
+
+                const int off = tp.x + tp.y * scanw;
+                const float fgFiltered = (float)frameWork[off];
+                rec.fgFiltered = fgFiltered;
+
+                AutoDetectStats& s = stats[off];
+                s.observed++;
+                if (lastObservedValid[off]) {
+                    if (std::abs(lastObservedFg[off] - fgFiltered) > transitionThreshold) {
+                        s.fgTransition++;
+                    }
+                }
+                lastObservedFg[off] = fgFiltered;
+                lastObservedValid[off] = 1;
+
+                const int base = off * kDedupHistoryN;
+                const int histCount = std::min((int)dedupSampleCount[off], kDedupHistoryN);
+                float nearestDiff = std::numeric_limits<float>::max();
+                bool isDup = false;
+                for (int hi = 0; hi < histCount; hi++) {
+                    const float d = std::abs(dedupSampleFgHistory[base + hi] - fgFiltered);
+                    nearestDiff = std::min(nearestDiff, d);
+                    if (d <= dedupThreshold) {
+                        isDup = true;
+                    }
+                }
+                rec.dedupNearestDiff = (histCount > 0) ? nearestDiff : -1.0f;
+                if (isDup) {
+                    s.rejectedDedup++;
+                    rec.rejectCode = 1;
+                    rec.observedAfter = s.observed;
+                    rec.countAfter = s.count;
+                    rec.totalCandidatesAfter = s.totalCandidates;
+                    statsPass.traceRecords.push_back(rec);
+                    continue;
+                }
+
+                float bg = 0.0f;
+                BgDebugInfo dbgBg{};
+                const bool bgOk = TryEstimateBg(frameWork, scanw, scanh, tp.x, tp.y, radius, thresholdRaw, bg, &dbgBg);
+                rec.bgOk = bgOk ? 1 : 0;
+                rec.bg = bg;
+                rec.bgSideCount = dbgBg.sideCount;
+                int sideMask = 0;
+                float sideRangeMax = 0.0f;
+                float sideAvgMin = std::numeric_limits<float>::max();
+                float sideAvgMax = std::numeric_limits<float>::lowest();
+                bool hasSideAvg = false;
+                for (int si = 0; si < 4; si++) {
+                    if (dbgBg.sideValid[si]) {
+                        sideMask |= (1 << si);
+                        sideRangeMax = std::max(sideRangeMax, dbgBg.sideMax[si] - dbgBg.sideMin[si]);
+                        sideAvgMin = std::min(sideAvgMin, dbgBg.sideAvg[si]);
+                        sideAvgMax = std::max(sideAvgMax, dbgBg.sideAvg[si]);
+                        hasSideAvg = true;
+                    }
+                }
+                rec.bgSideValidMask = sideMask;
+                rec.bgSideRangeMax = sideRangeMax;
+                rec.bgSideAvgSpread = hasSideAvg ? (sideAvgMax - sideAvgMin) : 0.0f;
+                if (!bgOk) {
+                    rec.rejectCode = 2;
+                    rec.observedAfter = s.observed;
+                    rec.countAfter = s.count;
+                    rec.totalCandidatesAfter = s.totalCandidates;
+                    statsPass.traceRecords.push_back(rec);
+                    continue;
+                }
+
+                s.totalCandidates++;
+                const double f = (double)fgFiltered * invMaxv;
+                const double b = (double)bg * invMaxv;
+                rec.fgBgDiff = (float)std::abs(f - b);
+
+                if (IsExtremeContrastSample(f, b)) {
+                    s.rejectedExtreme++;
+                    rec.extreme = 1;
+                    rec.rejectCode = 3;
+                    rec.observedAfter = s.observed;
+                    rec.countAfter = s.count;
+                    rec.totalCandidatesAfter = s.totalCandidates;
+                    statsPass.traceRecords.push_back(rec);
+                    continue;
+                }
+
+                s.sumF += f * sampleWeightPos;
+                s.sumB += b * sampleWeightPos;
+                s.sumF2 += f * f * sampleWeightPos;
+                s.sumB2 += b * b * sampleWeightPos;
+                s.sumFB += f * b * sampleWeightPos;
+                s.sumW += sampleWeightPos;
+                s.count++;
+                if (sampleWeightPos >= 0.35) {
+                    const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
+                    dedupSampleFgHistory[base + writePos] = fgFiltered;
+                    const int nextPos = (writePos + 1) % kDedupHistoryN;
+                    dedupSamplePos[off] = (uint8_t)nextPos;
+                    dedupSampleCount[off] = (uint8_t)std::min(kDedupHistoryN, (int)dedupSampleCount[off] + 1);
+                }
+                frameCount.fetch_add(1, std::memory_order_relaxed);
+                rec.accepted = 1;
+                rec.rejectCode = 0;
+                rec.observedAfter = s.observed;
+                rec.countAfter = s.count;
+                rec.totalCandidatesAfter = s.totalCandidates;
+                statsPass.traceRecords.push_back(rec);
+            }
             return frameCount.load(std::memory_order_relaxed);
         }
 
@@ -3234,6 +3603,7 @@ namespace {
 
             runRectStage(scoreStage, binaryStage);
             debugStats = statsPass.stats;
+            debugTraceRecords = statsPass.traceRecords;
             debugScore = std::move(scoreStage);
             debugBinary = std::move(binaryStage.binary);
         }
