@@ -393,6 +393,7 @@ namespace Amatsukaze.Server.Rest
             prefetchCts.Cancel();
             try
             {
+                // キャンセル後にワーカーが WaitAsync で詰まらないようシグナルを解放する
                 prefetchForwardSignal.Release();
                 prefetchBackwardSignal.Release();
             }
@@ -400,9 +401,11 @@ namespace Amatsukaze.Server.Rest
             {
             }
 
+            // ネイティブデコード中のタスクが use-after-free を起こさないよう、
+            // タイムアウトなしでタスクの完了を待ってからコンテキストを破棄する
             try
             {
-                Task.WaitAll(new[] { prefetchForwardTask, prefetchBackwardTask }, TimeSpan.FromSeconds(1));
+                Task.WaitAll(prefetchForwardTask, prefetchBackwardTask);
             }
             catch
             {
@@ -418,7 +421,7 @@ namespace Amatsukaze.Server.Rest
         }
     }
 
-    public class TrimAdjustService
+    public class TrimAdjustService : IDisposable
     {
         private static readonly Regex TempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
         private static readonly Regex TrimRegex = new Regex(@"Trim\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", RegexOptions.Compiled);
@@ -426,10 +429,13 @@ namespace Amatsukaze.Server.Rest
 
         private readonly RestStateStore state;
         private readonly ConcurrentDictionary<string, TrimAdjustSession> sessions = new ConcurrentDictionary<string, TrimAdjustSession>();
+        // TTL経過後に確実にクリーンアップされるよう、SessionTtl間隔でバックグラウンド実行する
+        private readonly Timer cleanupTimer;
 
         public TrimAdjustService(RestStateStore state)
         {
             this.state = state;
+            cleanupTimer = new Timer(_ => CleanupExpired(), null, SessionTtl, SessionTtl);
         }
 
         public bool TryCreateSession(TrimAdjustSessionRequest request, out TrimAdjustSessionResponse response, out string error)
@@ -666,6 +672,19 @@ namespace Amatsukaze.Server.Rest
             }
 
             return trims;
+        }
+
+        public void Dispose()
+        {
+            // タイマーを停止してから全セッションを破棄する
+            cleanupTimer?.Dispose();
+            foreach (var pair in sessions)
+            {
+                if (sessions.TryRemove(pair.Key, out var session))
+                {
+                    session.Dispose();
+                }
+            }
         }
 
         private void CleanupExpired()

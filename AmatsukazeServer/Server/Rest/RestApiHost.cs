@@ -345,6 +345,7 @@ namespace Amatsukaze.Server.Rest
 
         public void Dispose()
         {
+            trimAdjust?.Dispose();
             if (host != null)
             {
                 host.Dispose();
