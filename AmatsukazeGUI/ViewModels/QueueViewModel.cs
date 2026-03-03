@@ -468,8 +468,9 @@ namespace Amatsukaze.ViewModels
             {
                 return false;
             }
-            // IPv6/IPv4不一致による接続失敗を避けるため、localhostではなく127.0.0.1を使用
-            var host = string.IsNullOrWhiteSpace(Model.ServerIP) ? "127.0.0.1" : Model.ServerIP;
+            // standaloneモードではサーバーとクライアントが同一プロセスのため、接続先設定によらず127.0.0.1を使用
+            // また、IPv6/IPv4不一致による接続失敗を避けるため、localhostではなく127.0.0.1を使用
+            var host = (Model.IsStandalone || string.IsNullOrWhiteSpace(Model.ServerIP)) ? "127.0.0.1" : Model.ServerIP;
             var baseUrl = $"http://{host}:{port}";
             try
             {
