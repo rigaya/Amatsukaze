@@ -205,62 +205,91 @@ namespace Amatsukaze.Server.Rest
                 return srcPath.Substring(0, srcPath.Length - ext.Length) + suffix;
             }
 
+            static string AddInfixBeforeExtension(string srcPath, string infix)
+            {
+                if (string.IsNullOrEmpty(srcPath))
+                {
+                    return null;
+                }
+                var ext = Path.GetExtension(srcPath);
+                if (string.IsNullOrEmpty(ext))
+                {
+                    return srcPath + infix;
+                }
+                return srcPath.Substring(0, srcPath.Length - ext.Length) + infix + ext;
+            }
+
+            static bool TryResolveStagePath(string requestKind, string baseKind, string basePath, out string resolvedPath)
+            {
+                resolvedPath = null;
+                if (string.Equals(requestKind, baseKind, StringComparison.OrdinalIgnoreCase))
+                {
+                    resolvedPath = basePath;
+                    return true;
+                }
+                if (string.Equals(requestKind, baseKind + "-pass1", StringComparison.OrdinalIgnoreCase))
+                {
+                    resolvedPath = AddInfixBeforeExtension(basePath, ".pass1");
+                    return true;
+                }
+                if (string.Equals(requestKind, baseKind + "-pass2", StringComparison.OrdinalIgnoreCase))
+                {
+                    resolvedPath = AddInfixBeforeExtension(basePath, ".pass2");
+                    return true;
+                }
+                return false;
+            }
+
             string path = null;
-            if (string.Equals(kind, "score", StringComparison.OrdinalIgnoreCase))
+            if (TryResolveStagePath(kind, "score", job.ScoreImagePath, out path))
             {
-                path = job.ScoreImagePath;
             }
-            else if (string.Equals(kind, "binary", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "binary", job.BinaryImagePath, out path))
             {
-                path = job.BinaryImagePath;
             }
-            else if (string.Equals(kind, "ccl", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "ccl", job.CclImagePath, out path))
             {
-                path = job.CclImagePath;
             }
-            else if (string.Equals(kind, "count", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "count", job.CountImagePath, out path))
             {
-                path = job.CountImagePath;
             }
-            else if (string.Equals(kind, "a", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "a", job.AImagePath, out path))
             {
-                path = job.AImagePath;
             }
-            else if (string.Equals(kind, "b", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "b", job.BImagePath, out path))
             {
-                path = job.BImagePath;
             }
-            else if (string.Equals(kind, "alpha", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "alpha", job.AlphaImagePath, out path))
             {
-                path = job.AlphaImagePath;
             }
-            else if (string.Equals(kind, "logoy", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "logoy", job.LogoYImagePath, out path))
             {
-                path = job.LogoYImagePath;
             }
-            else if (string.Equals(kind, "consistency", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "consistency", job.ConsistencyImagePath, out path))
             {
-                path = job.ConsistencyImagePath;
             }
-            else if (string.Equals(kind, "fgvar", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "fgvar", job.FgVarImagePath, out path))
             {
-                path = job.FgVarImagePath;
             }
-            else if (string.Equals(kind, "bgvar", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "bgvar", job.BgVarImagePath, out path))
             {
-                path = job.BgVarImagePath;
             }
-            else if (string.Equals(kind, "transition", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "transition", job.TransitionImagePath, out path))
             {
-                path = job.TransitionImagePath;
             }
-            else if (string.Equals(kind, "keeprate", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "keeprate", job.KeepRateImagePath, out path))
             {
-                path = job.KeepRateImagePath;
             }
-            else if (string.Equals(kind, "accepted", StringComparison.OrdinalIgnoreCase))
+            else if (TryResolveStagePath(kind, "accepted", job.AcceptedImagePath, out path))
             {
-                path = job.AcceptedImagePath;
+            }
+            else if (string.Equals(kind, "pass2prep-logo", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddInfixBeforeExtension(job.ScoreImagePath, ".pass2prep-logo");
+            }
+            else if (string.Equals(kind, "pass2prep-mask", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddInfixBeforeExtension(job.BinaryImagePath, ".pass2prep-mask");
             }
             else if (string.Equals(kind, "framegate", StringComparison.OrdinalIgnoreCase))
             {

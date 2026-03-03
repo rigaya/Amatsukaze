@@ -128,85 +128,59 @@ else
         }
     }
 
-    @if (!string.IsNullOrEmpty(_autoScoreImageUrl) || !string.IsNullOrEmpty(_autoBinaryImageUrl) || !string.IsNullOrEmpty(_autoCclImageUrl) || !string.IsNullOrEmpty(_autoCountImageUrl) || !string.IsNullOrEmpty(_autoAImageUrl) || !string.IsNullOrEmpty(_autoBImageUrl) || !string.IsNullOrEmpty(_autoAlphaImageUrl) || !string.IsNullOrEmpty(_autoLogoYImageUrl) || !string.IsNullOrEmpty(_autoConsistencyImageUrl) || !string.IsNullOrEmpty(_autoBgVarImageUrl) || !string.IsNullOrEmpty(_autoAcceptedImageUrl))
+    @if (_autoDebugEntries.Count > 0 || !string.IsNullOrEmpty(_autoPass2PrepLogoUrl) || !string.IsNullOrEmpty(_autoPass2PrepMaskUrl))
     {
         <div class="logo-analyze-result">
             <h4>自動検出デバッグ表示</h4>
-            @if (!string.IsNullOrEmpty(_autoScoreImageUrl))
+            @foreach (var entry in _autoDebugEntries)
             {
-                <div>
-                    <div>ロゴ輝度/α計算(final)</div>
-                    <img src="@_autoScoreImageUrl" />
+                <div style="margin-bottom: 1rem;">
+                    <div>@entry.Title</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:16px;">
+                        @if (!string.IsNullOrEmpty(entry.Pass1Url))
+                        {
+                            <div>
+                                <div>pass1</div>
+                                <img src="@entry.Pass1Url" />
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(entry.Pass2Url))
+                        {
+                            <div>
+                                <div>pass2</div>
+                                <img src="@entry.Pass2Url" />
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(entry.FinalUrl))
+                        {
+                            <div>
+                                <div>final</div>
+                                <img src="@entry.FinalUrl" />
+                            </div>
+                        }
+                    </div>
                 </div>
             }
-            @if (!string.IsNullOrEmpty(_autoBinaryImageUrl))
+            @if (!string.IsNullOrEmpty(_autoPass2PrepLogoUrl) || !string.IsNullOrEmpty(_autoPass2PrepMaskUrl))
             {
-                <div>
-                    <div>2値化結果</div>
-                    <img src="@_autoBinaryImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoCclImageUrl))
-            {
-                <div>
-                    <div>CCL結果</div>
-                    <img src="@_autoCclImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoCountImageUrl))
-            {
-                <div>
-                    <div>有効サンプル数マップ(count)</div>
-                    <img src="@_autoCountImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoAImageUrl))
-            {
-                <div>
-                    <div>Aヒートマップ</div>
-                    <img src="@_autoAImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoBImageUrl))
-            {
-                <div>
-                    <div>Bヒートマップ</div>
-                    <img src="@_autoBImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoAlphaImageUrl))
-            {
-                <div>
-                    <div>αヒートマップ</div>
-                    <img src="@_autoAlphaImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoLogoYImageUrl))
-            {
-                <div>
-                    <div>ロゴ輝度ヒートマップ</div>
-                    <img src="@_autoLogoYImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoConsistencyImageUrl))
-            {
-                <div>
-                    <div>一致度ヒートマップ</div>
-                    <img src="@_autoConsistencyImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoBgVarImageUrl))
-            {
-                <div>
-                    <div>背景分散ヒートマップ</div>
-                    <img src="@_autoBgVarImageUrl" />
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoAcceptedImageUrl))
-            {
-                <div>
-                    <div>採用スコア寄与マップ</div>
-                    <img src="@_autoAcceptedImageUrl" />
+                <div style="margin-bottom: 1rem;">
+                    <div>runPass2PrepareMask()</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:16px;">
+                        @if (!string.IsNullOrEmpty(_autoPass2PrepLogoUrl))
+                        {
+                            <div>
+                                <div>仮ロゴ画像</div>
+                                <img src="@_autoPass2PrepLogoUrl" />
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_autoPass2PrepMaskUrl))
+                        {
+                            <div>
+                                <div>仮ロゴマスク</div>
+                                <img src="@_autoPass2PrepMaskUrl" />
+                            </div>
+                        }
+                    </div>
                 </div>
             }
         </div>
@@ -220,6 +194,14 @@ else
 }
 
 @code {
+    private sealed class AutoDebugImageEntry
+    {
+        public string Title { get; set; } = "";
+        public string? FinalUrl { get; set; }
+        public string? Pass1Url { get; set; }
+        public string? Pass2Url { get; set; }
+    }
+
     [SupplyParameterFromQuery(Name = "queueItemId")]
     public int? QueueItemId { get; set; }
 
@@ -264,17 +246,9 @@ else
     private int _autoRectY;
     private int _autoRectW;
     private int _autoRectH;
-    private string? _autoScoreImageUrl;
-    private string? _autoBinaryImageUrl;
-    private string? _autoCclImageUrl;
-    private string? _autoCountImageUrl;
-    private string? _autoAImageUrl;
-    private string? _autoBImageUrl;
-    private string? _autoAlphaImageUrl;
-    private string? _autoLogoYImageUrl;
-    private string? _autoConsistencyImageUrl;
-    private string? _autoBgVarImageUrl;
-    private string? _autoAcceptedImageUrl;
+    private readonly List<AutoDebugImageEntry> _autoDebugEntries = new();
+    private string? _autoPass2PrepLogoUrl;
+    private string? _autoPass2PrepMaskUrl;
     private int _autoDivX = 4;
     private int _autoDivY = 4;
     private int _autoSearchFrames = 20000;
@@ -491,17 +465,9 @@ else
     {
         _actionMessage = null;
         _error = null;
-        _autoScoreImageUrl = null;
-        _autoBinaryImageUrl = null;
-        _autoCclImageUrl = null;
-        _autoCountImageUrl = null;
-        _autoAImageUrl = null;
-        _autoBImageUrl = null;
-        _autoAlphaImageUrl = null;
-        _autoLogoYImageUrl = null;
-        _autoConsistencyImageUrl = null;
-        _autoBgVarImageUrl = null;
-        _autoAcceptedImageUrl = null;
+        _autoDebugEntries.Clear();
+        _autoPass2PrepLogoUrl = null;
+        _autoPass2PrepMaskUrl = null;
         if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
         {
             _error = "queueItemId is required.";
@@ -620,6 +586,63 @@ else
         return baseText + tail + sep + "t=" + nonce;
     }
 
+    private string BuildAutoDebugKindUrl(string jobId, string kind)
+    {
+        return BuildImageUrl($"/api/logo/analyze/auto/{Uri.EscapeDataString(jobId)}/debug/{kind}", true);
+    }
+
+    private void AddAutoDebugEntry(string jobId, string title, string baseKind, string? finalUrl)
+    {
+        if (string.IsNullOrEmpty(finalUrl))
+        {
+            return;
+        }
+        _autoDebugEntries.Add(new AutoDebugImageEntry
+        {
+            Title = title,
+            FinalUrl = BuildImageUrl(finalUrl, true),
+            Pass1Url = BuildAutoDebugKindUrl(jobId, $"{baseKind}-pass1"),
+            Pass2Url = BuildAutoDebugKindUrl(jobId, $"{baseKind}-pass2")
+        });
+    }
+
+    private void UpdateAutoDebugImages(LogoAutoDetectStatus status)
+    {
+        _autoDebugEntries.Clear();
+        _autoPass2PrepLogoUrl = null;
+        _autoPass2PrepMaskUrl = null;
+
+        if (status.DebugImages == null || string.IsNullOrEmpty(status.JobId))
+        {
+            return;
+        }
+
+        var jobId = status.JobId;
+        AddAutoDebugEntry(jobId, "ロゴ輝度/α計算", "score", status.DebugImages.ScoreUrl);
+        AddAutoDebugEntry(jobId, "2値化結果", "binary", status.DebugImages.BinaryUrl);
+        AddAutoDebugEntry(jobId, "CCL結果", "ccl", status.DebugImages.CclUrl);
+        AddAutoDebugEntry(jobId, "有効サンプル数マップ(count)", "count", status.DebugImages.CountUrl);
+        AddAutoDebugEntry(jobId, "Aヒートマップ", "a", status.DebugImages.AUrl);
+        AddAutoDebugEntry(jobId, "Bヒートマップ", "b", status.DebugImages.BUrl);
+        AddAutoDebugEntry(jobId, "αヒートマップ", "alpha", status.DebugImages.AlphaUrl);
+        AddAutoDebugEntry(jobId, "ロゴ輝度ヒートマップ", "logoy", status.DebugImages.LogoYUrl);
+        AddAutoDebugEntry(jobId, "一致度ヒートマップ", "consistency", status.DebugImages.ConsistencyUrl);
+        AddAutoDebugEntry(jobId, "前景分散ヒートマップ", "fgvar", status.DebugImages.FgVarUrl);
+        AddAutoDebugEntry(jobId, "背景分散ヒートマップ", "bgvar", status.DebugImages.BgVarUrl);
+        AddAutoDebugEntry(jobId, "遷移率ヒートマップ", "transition", status.DebugImages.TransitionUrl);
+        AddAutoDebugEntry(jobId, "保持率ヒートマップ", "keeprate", status.DebugImages.KeepRateUrl);
+        AddAutoDebugEntry(jobId, "採用スコア寄与マップ", "accepted", status.DebugImages.AcceptedUrl);
+
+        if (!string.IsNullOrEmpty(status.DebugImages.ScoreUrl))
+        {
+            _autoPass2PrepLogoUrl = BuildAutoDebugKindUrl(jobId, "pass2prep-logo");
+        }
+        if (!string.IsNullOrEmpty(status.DebugImages.BinaryUrl))
+        {
+            _autoPass2PrepMaskUrl = BuildAutoDebugKindUrl(jobId, "pass2prep-mask");
+        }
+    }
+
     private void UpdateProgress(LogoAnalyzeStatus? status)
     {
         if (status == null)
@@ -667,6 +690,9 @@ else
             _autoStageProgressValue = 0;
             _autoProgressDisplay = "0%";
             _autoStageDisplay = "Stage 0/4";
+            _autoDebugEntries.Clear();
+            _autoPass2PrepLogoUrl = null;
+            _autoPass2PrepMaskUrl = null;
             return;
         }
 
@@ -690,20 +716,7 @@ else
             _autoRectH = status.DetectedRect.Height;
         }
 
-        if (status.DebugImages != null)
-        {
-            _autoScoreImageUrl = string.IsNullOrEmpty(status.DebugImages.ScoreUrl) ? null : BuildImageUrl(status.DebugImages.ScoreUrl, true);
-            _autoBinaryImageUrl = string.IsNullOrEmpty(status.DebugImages.BinaryUrl) ? null : BuildImageUrl(status.DebugImages.BinaryUrl, true);
-            _autoCclImageUrl = string.IsNullOrEmpty(status.DebugImages.CclUrl) ? null : BuildImageUrl(status.DebugImages.CclUrl, true);
-            _autoCountImageUrl = string.IsNullOrEmpty(status.DebugImages.CountUrl) ? null : BuildImageUrl(status.DebugImages.CountUrl, true);
-            _autoAImageUrl = string.IsNullOrEmpty(status.DebugImages.AUrl) ? null : BuildImageUrl(status.DebugImages.AUrl, true);
-            _autoBImageUrl = string.IsNullOrEmpty(status.DebugImages.BUrl) ? null : BuildImageUrl(status.DebugImages.BUrl, true);
-            _autoAlphaImageUrl = string.IsNullOrEmpty(status.DebugImages.AlphaUrl) ? null : BuildImageUrl(status.DebugImages.AlphaUrl, true);
-            _autoLogoYImageUrl = string.IsNullOrEmpty(status.DebugImages.LogoYUrl) ? null : BuildImageUrl(status.DebugImages.LogoYUrl, true);
-            _autoConsistencyImageUrl = string.IsNullOrEmpty(status.DebugImages.ConsistencyUrl) ? null : BuildImageUrl(status.DebugImages.ConsistencyUrl, true);
-            _autoBgVarImageUrl = string.IsNullOrEmpty(status.DebugImages.BgVarUrl) ? null : BuildImageUrl(status.DebugImages.BgVarUrl, true);
-            _autoAcceptedImageUrl = string.IsNullOrEmpty(status.DebugImages.AcceptedUrl) ? null : BuildImageUrl(status.DebugImages.AcceptedUrl, true);
-        }
+        UpdateAutoDebugImages(status);
     }
 
     private async Task ApplyResultAsync()

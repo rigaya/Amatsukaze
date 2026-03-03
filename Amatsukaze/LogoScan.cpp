@@ -2089,6 +2089,7 @@ namespace {
             std::vector<float> mapConsistency;
             std::vector<float> mapFgVar;
             std::vector<float> mapBgVar;
+            std::vector<float> mapCorrFgBg;
             std::vector<float> mapTransitionRate;
             std::vector<float> mapKeepRate;
             std::vector<float> mapAccepted;
@@ -2105,6 +2106,7 @@ namespace {
                 mapConsistency.assign(n, 0.0f);
                 mapFgVar.assign(n, 0.0f);
                 mapBgVar.assign(n, 0.0f);
+                mapCorrFgBg.assign(n, 0.0f);
                 mapTransitionRate.assign(n, 0.0f);
                 mapKeepRate.assign(n, 0.0f);
                 mapAccepted.assign(n, 0.0f);
@@ -2116,6 +2118,60 @@ namespace {
             std::vector<uint8_t> binary;
         };
         std::vector<uint8_t> debugBinary;
+        struct DebugStageSnapshot {
+            std::vector<AutoDetectStats> stats;
+            ScoreStageBuffers score;
+            std::vector<uint8_t> binary;
+            AutoDetectRect rectAbs{ 0, 0, 0, 0 };
+            AutoDetectRect rectLocal{ 0, 0, 0, 0 };
+            bool valid = false;
+        };
+        struct DebugPathSet {
+            std::string score;
+            std::string binary;
+            std::string ccl;
+            std::string count;
+            std::string a;
+            std::string b;
+            std::string alpha;
+            std::string logoY;
+            std::string consistency;
+            std::string fgVar;
+            std::string bgVar;
+            std::string transition;
+            std::string keepRate;
+            std::string accepted;
+        };
+        struct Pass2PrepareDebug {
+            int logoW = 0;
+            int logoH = 0;
+            std::vector<float> logoA;
+            std::vector<float> logoB;
+            std::vector<uint8_t> logoMask;
+            std::vector<float> corr0;
+            std::vector<float> corr1;
+            std::vector<float> raw;
+            std::vector<float> median;
+            std::vector<int> judge;
+            std::vector<uint8_t> frameMask;
+
+            void clear() {
+                logoW = 0;
+                logoH = 0;
+                logoA.clear();
+                logoB.clear();
+                logoMask.clear();
+                corr0.clear();
+                corr1.clear();
+                raw.clear();
+                median.clear();
+                judge.clear();
+                frameMask.clear();
+            }
+        };
+        DebugStageSnapshot debugPass1;
+        DebugStageSnapshot debugPass2;
+        Pass2PrepareDebug debugPass2Prepare;
         int passIndex;
         struct IterThresholdDebug {
             float highTh;
@@ -2278,6 +2334,8 @@ namespace {
                 THROW(RuntimeException, "No frame decoded");
             }
             estimateScoreAndRect(pass1Stats);
+            captureCurrentDebugSnapshot(debugPass1);
+            debugPass2 = debugPass1;
             const AutoDetectRect pass1RectAbs = rectAbs;
             const AutoDetectRect pass1RectLocal = rectLocal;
 
@@ -2295,6 +2353,18 @@ namespace {
             debugStats.clear();
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
+            debugPass1 = DebugStageSnapshot{};
+            debugPass2 = DebugStageSnapshot{};
+            debugPass2Prepare.clear();
+        }
+
+        void captureCurrentDebugSnapshot(DebugStageSnapshot& snapshot) {
+            snapshot.stats = debugStats;
+            snapshot.score = debugScore;
+            snapshot.binary = debugBinary;
+            snapshot.rectAbs = rectAbs;
+            snapshot.rectLocal = rectLocal;
+            snapshot.valid = (scanw > 0 && scanh > 0);
         }
 
         AutoDetectRect expandPass1RectForSecondPass(const AutoDetectRect& inRect) const {
@@ -2318,6 +2388,7 @@ namespace {
         }
 
         bool runPass2PrepareMask(const tstring& srcpath, const AutoDetectRect& pass1RectLocal, Pass2Buffers& pass2) {
+            debugPass2Prepare.clear();
             // 1) pass1で得た候補矩形を少し広げ、pass2で使う評価ROI(絶対座標/相対座標)を決める。
             const AutoDetectRect pass2LogoRectLocal = expandPass1RectForSecondPass(pass1RectLocal);
             pass2.logoRectAbs = AutoDetectRect{
@@ -2348,6 +2419,19 @@ namespace {
                     auto deintLogo = std::make_unique<logo::LogoDataParam>(logo::LogoData(hdr.w, hdr.h, hdr.logUVx, hdr.logUVy), &hdr);
                     logo::DeintLogo(*deintLogo, tempLogo, hdr.w, hdr.h);
                     deintLogo->CreateLogoMask(0.35f);
+                    const int logoPixels = hdr.w * hdr.h;
+                    debugPass2Prepare.logoW = hdr.w;
+                    debugPass2Prepare.logoH = hdr.h;
+                    if (logoPixels > 0) {
+                        const float* pA = deintLogo->GetA(PLANAR_Y);
+                        const float* pB = deintLogo->GetB(PLANAR_Y);
+                        debugPass2Prepare.logoA.assign(pA, pA + logoPixels);
+                        debugPass2Prepare.logoB.assign(pB, pB + logoPixels);
+                        const uint8_t* pMask = deintLogo->GetMask();
+                        if (pMask != nullptr) {
+                            debugPass2Prepare.logoMask.assign(pMask, pMask + logoPixels);
+                        }
+                    }
                     pass2.deintLogo = std::move(deintLogo);
                 }
             }
@@ -2416,9 +2500,18 @@ namespace {
 
             // 7) 最終的に「ロゴあり(2)」だけを pass3投入マスクとして保持する。
             pass2.frameMask.assign(num, 0);
+            debugPass2Prepare.corr0 = pass2.corr0;
+            debugPass2Prepare.corr1 = pass2.corr1;
+            debugPass2Prepare.raw.assign(num, 0.0f);
+            debugPass2Prepare.median.assign(num, 0.0f);
+            debugPass2Prepare.judge.assign(num, 0);
             for (int i = 0; i < num; i++) {
+                debugPass2Prepare.raw[i] = raw[i];
+                debugPass2Prepare.median[i] = judge[i].s;
+                debugPass2Prepare.judge[i] = judge[i].r;
                 pass2.frameMask[i] = (judge[i].r == 2) ? 1 : 0;
             }
+            debugPass2Prepare.frameMask = pass2.frameMask;
             return std::any_of(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
         }
 
@@ -2472,6 +2565,7 @@ namespace {
 
             // 3) 採用フレームのみで score/binary/rect を再推定する。
             estimateScoreAndRect(pass3Stats);
+            captureCurrentDebugSnapshot(debugPass2);
 
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
             if (shouldFallbackToPass1Rect(pass1RectLocal)) {
@@ -2482,65 +2576,88 @@ namespace {
             return true;
         }
 
-        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath) {
-            if (scanw <= 0 || scanh <= 0) {
-                return;
+        static std::string addSuffixBeforeExtension(const std::string& path, const std::string& suffix) {
+            if (path.empty() || suffix.empty()) {
+                return path;
             }
+            const size_t dot = path.find_last_of('.');
+            if (dot == std::string::npos || dot == 0) {
+                return path + suffix;
+            }
+            return path.substr(0, dot) + suffix + path.substr(dot);
+        }
 
-            const std::string scorePathA = (scorePath != nullptr) ? tchar_to_string(scorePath) : std::string();
-            const std::string binaryPathA = (binaryPath != nullptr) ? tchar_to_string(binaryPath) : std::string();
-            const std::string cclPathA = (cclPath != nullptr) ? tchar_to_string(cclPath) : std::string();
-            const std::string countPathA = (countPath != nullptr) ? tchar_to_string(countPath) : std::string();
-            const std::string aPathA = (aPath != nullptr) ? tchar_to_string(aPath) : std::string();
-            const std::string bPathA = (bPath != nullptr) ? tchar_to_string(bPath) : std::string();
-            const std::string alphaPathA = (alphaPath != nullptr) ? tchar_to_string(alphaPath) : std::string();
-            const std::string logoYPathA = (logoYPath != nullptr) ? tchar_to_string(logoYPath) : std::string();
-            const std::string consistencyPathA = (consistencyPath != nullptr) ? tchar_to_string(consistencyPath) : std::string();
-            const std::string fgVarPathA = (fgVarPath != nullptr) ? tchar_to_string(fgVarPath) : std::string();
-            const std::string bgVarPathA = (bgVarPath != nullptr) ? tchar_to_string(bgVarPath) : std::string();
-            const std::string transitionPathA = (transitionPath != nullptr) ? tchar_to_string(transitionPath) : std::string();
-            const std::string keepRatePathA = (keepRatePath != nullptr) ? tchar_to_string(keepRatePath) : std::string();
-            const std::string acceptedPathA = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
+        static std::string replaceExtensionWithSuffix(const std::string& path, const std::string& suffixWithExt) {
+            if (path.empty()) {
+                return path;
+            }
+            const size_t dot = path.find_last_of('.');
+            if (dot == std::string::npos || dot == 0) {
+                return path + suffixWithExt;
+            }
+            return path.substr(0, dot) + suffixWithExt;
+        }
 
+        static DebugPathSet makeSuffixedPathSet(const DebugPathSet& base, const std::string& suffix) {
+            DebugPathSet out{};
+            out.score = addSuffixBeforeExtension(base.score, suffix);
+            out.binary = addSuffixBeforeExtension(base.binary, suffix);
+            out.ccl = addSuffixBeforeExtension(base.ccl, suffix);
+            out.count = addSuffixBeforeExtension(base.count, suffix);
+            out.a = addSuffixBeforeExtension(base.a, suffix);
+            out.b = addSuffixBeforeExtension(base.b, suffix);
+            out.alpha = addSuffixBeforeExtension(base.alpha, suffix);
+            out.logoY = addSuffixBeforeExtension(base.logoY, suffix);
+            out.consistency = addSuffixBeforeExtension(base.consistency, suffix);
+            out.fgVar = addSuffixBeforeExtension(base.fgVar, suffix);
+            out.bgVar = addSuffixBeforeExtension(base.bgVar, suffix);
+            out.transition = addSuffixBeforeExtension(base.transition, suffix);
+            out.keepRate = addSuffixBeforeExtension(base.keepRate, suffix);
+            out.accepted = addSuffixBeforeExtension(base.accepted, suffix);
+            return out;
+        }
+
+        void writeDebugStage(const std::vector<AutoDetectStats>& statsForDebug, const ScoreStageBuffers& score, const std::vector<uint8_t>& binary, const AutoDetectRect& rectLocalForDebug, const DebugPathSet& path, const bool withDetailMaps, const bool withIterationArtifacts) {
             float maxScore = 0.0f;
-            for (auto v : debugScore.score) maxScore = std::max(maxScore, v);
+            for (auto v : score.score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
 
-            if (!scorePathA.empty()) {
-                WriteGrayBitmap(scorePathA, scanw, scanh, [&](int x, int y) {
+            if (!path.score.empty()) {
+                WriteGrayBitmap(path.score, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    const float v = (off < (int)debugScore.score.size()) ? debugScore.score[off] : 0.0f;
+                    const float v = (off < (int)score.score.size()) ? score.score[off] : 0.0f;
                     return (uint8_t)ClampInt((int)std::round(v / maxScore * 255.0f), 0, 255);
                 });
             }
-            if (!binaryPathA.empty()) {
-                WriteGrayBitmap(binaryPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.binary.empty()) {
+                WriteGrayBitmap(path.binary, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    return (off < (int)debugBinary.size() && debugBinary[off]) ? 255 : 0;
+                    return (off < (int)binary.size() && binary[off]) ? 255 : 0;
                 });
             }
-            if (!cclPathA.empty()) {
-                WriteGrayBitmap(cclPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.ccl.empty()) {
+                WriteGrayBitmap(path.ccl, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    const bool hasRect = rectLocal.w > 0 && rectLocal.h > 0;
-                    const bool onBorder = hasRect && (x == rectLocal.x || x == rectLocal.x + rectLocal.w - 1 || y == rectLocal.y || y == rectLocal.h + rectLocal.y - 1);
+                    const bool hasRect = rectLocalForDebug.w > 0 && rectLocalForDebug.h > 0;
+                    const bool onBorder = hasRect
+                        && (x == rectLocalForDebug.x || x == rectLocalForDebug.x + rectLocalForDebug.w - 1
+                            || y == rectLocalForDebug.y || y == rectLocalForDebug.h + rectLocalForDebug.y - 1);
                     if (onBorder) return (uint8_t)255;
-                    return (off < (int)debugBinary.size() && debugBinary[off]) ? (uint8_t)190 : (uint8_t)24;
+                    return (off < (int)binary.size() && binary[off]) ? (uint8_t)190 : (uint8_t)24;
                 });
             }
 
-            if (!detailedDebug) {
+            if (!withDetailMaps) {
                 return;
             }
 
-            const auto& statsForDebug = getStatsForDebug();
             int maxCount = 0;
             for (const auto& s : statsForDebug) {
                 maxCount = std::max(maxCount, s.count);
             }
             if (maxCount <= 0) maxCount = 1;
-            if (!countPathA.empty()) {
-                WriteGrayBitmap(countPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.count.empty()) {
+                WriteGrayBitmap(path.count, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
                     const int c = (off >= 0 && off < (int)statsForDebug.size()) ? statsForDebug[off].count : 0;
                     return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
@@ -2548,124 +2665,131 @@ namespace {
             }
 
             float aMin, aMax, bMin, bMax;
-            CalcRangeValid(debugScore.mapA, debugScore.validAB, aMin, aMax, 0.8f, 1.2f);
-            CalcRangeValid(debugScore.mapB, debugScore.validAB, bMin, bMax, -0.2f, 0.2f);
-            if (!aPathA.empty()) {
-                WriteGrayBitmap(aPathA, scanw, scanh, [&](int x, int y) {
+            CalcRangeValid(score.mapA, score.validAB, aMin, aMax, 0.8f, 1.2f);
+            CalcRangeValid(score.mapB, score.validAB, bMin, bMax, -0.2f, 0.2f);
+            if (!path.a.empty()) {
+                WriteGrayBitmap(path.a, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapA.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapA.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (debugScore.mapA[off] - aMin) / (aMax - aMin);
+                    const float t = (score.mapA[off] - aMin) / (aMax - aMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
-            if (!bPathA.empty()) {
-                WriteGrayBitmap(bPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.b.empty()) {
+                WriteGrayBitmap(path.b, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapB.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapB.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (debugScore.mapB[off] - bMin) / (bMax - bMin);
+                    const float t = (score.mapB[off] - bMin) / (bMax - bMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
-            if (!alphaPathA.empty()) {
-                WriteGrayBitmap(alphaPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.alpha.empty()) {
+                WriteGrayBitmap(path.alpha, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapAlpha.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapAlpha.size()) {
                         return (uint8_t)0;
                     }
-                    return (uint8_t)ClampInt((int)std::round(debugScore.mapAlpha[off] * 255.0f), 0, 255);
+                    return (uint8_t)ClampInt((int)std::round(score.mapAlpha[off] * 255.0f), 0, 255);
                 });
             }
-            if (!logoYPathA.empty()) {
-                WriteGrayBitmap(logoYPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.logoY.empty()) {
+                WriteGrayBitmap(path.logoY, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapLogoY.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapLogoY.size()) {
                         return (uint8_t)0;
                     }
-                    return (uint8_t)ClampInt((int)std::round(debugScore.mapLogoY[off] * 255.0f), 0, 255);
+                    return (uint8_t)ClampInt((int)std::round(score.mapLogoY[off] * 255.0f), 0, 255);
                 });
             }
             float csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax, trMin, trMax, krMin, krMax;
-            CalcRangeValid(debugScore.mapConsistency, debugScore.validAB, csMin, csMax, 0.0f, 2.0f);
-            CalcRangeValid(debugScore.mapFgVar, debugScore.validAB, fgvMin, fgvMax, 0.0f, 0.02f);
-            CalcRangeValid(debugScore.mapBgVar, debugScore.validAB, bgvMin, bgvMax, 0.0f, 0.02f);
-            CalcRangeValid(debugScore.mapTransitionRate, debugScore.validAB, trMin, trMax, 0.0f, 0.20f);
-            CalcRangeValid(debugScore.mapKeepRate, debugScore.validAB, krMin, krMax, 0.0f, 0.20f);
-            if (!consistencyPathA.empty()) {
-                WriteGrayBitmap(consistencyPathA, scanw, scanh, [&](int x, int y) {
+            CalcRangeValid(score.mapConsistency, score.validAB, csMin, csMax, 0.0f, 2.0f);
+            CalcRangeValid(score.mapFgVar, score.validAB, fgvMin, fgvMax, 0.0f, 0.02f);
+            CalcRangeValid(score.mapBgVar, score.validAB, bgvMin, bgvMax, 0.0f, 0.02f);
+            CalcRangeValid(score.mapTransitionRate, score.validAB, trMin, trMax, 0.0f, 0.20f);
+            CalcRangeValid(score.mapKeepRate, score.validAB, krMin, krMax, 0.0f, 0.20f);
+            if (!path.consistency.empty()) {
+                WriteGrayBitmap(path.consistency, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapConsistency.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapConsistency.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (debugScore.mapConsistency[off] - csMin) / (csMax - csMin);
+                    const float t = (score.mapConsistency[off] - csMin) / (csMax - csMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
-            if (!fgVarPathA.empty()) {
-                WriteGrayBitmap(fgVarPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.fgVar.empty()) {
+                WriteGrayBitmap(path.fgVar, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapFgVar.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapFgVar.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (debugScore.mapFgVar[off] - fgvMin) / (fgvMax - fgvMin);
+                    const float t = (score.mapFgVar[off] - fgvMin) / (fgvMax - fgvMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
-            if (!bgVarPathA.empty()) {
-                WriteGrayBitmap(bgVarPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.bgVar.empty()) {
+                WriteGrayBitmap(path.bgVar, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapBgVar.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapBgVar.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (debugScore.mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
+                    const float t = (score.mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+                // fg-bg相関のデバッグ画像を bgVar パスから自動派生して出力
+                // corrFgBg は -1.0～1.0 の範囲を 0～255 にマッピング (128 がゼロ相関)
+                const std::string corrPath = replaceExtensionWithSuffix(path.bgVar, ".corrfgbg.bmp");
+                WriteGrayBitmap(corrPath, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapCorrFgBg.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float corr = score.mapCorrFgBg[off];
+                    return (uint8_t)ClampInt((int)std::round((corr + 1.0f) * 0.5f * 255.0f), 0, 255);
+                });
+            }
+            if (!path.transition.empty()) {
+                WriteGrayBitmap(path.transition, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapTransitionRate.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (score.mapTransitionRate[off] - trMin) / (trMax - trMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
-            if (!transitionPathA.empty()) {
-                WriteGrayBitmap(transitionPathA, scanw, scanh, [&](int x, int y) {
+            if (!path.keepRate.empty()) {
+                WriteGrayBitmap(path.keepRate, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapTransitionRate.size()) {
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapKeepRate.size()) {
                         return (uint8_t)0;
                     }
-                    const float t = (debugScore.mapTransitionRate[off] - trMin) / (trMax - trMin);
+                    const float t = (score.mapKeepRate[off] - krMin) / (krMax - krMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
-            if (!keepRatePathA.empty()) {
-                WriteGrayBitmap(keepRatePathA, scanw, scanh, [&](int x, int y) {
+            if (!path.accepted.empty()) {
+                WriteGrayBitmap(path.accepted, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    if (off >= (int)debugScore.validAB.size() || !debugScore.validAB[off] || off >= (int)debugScore.mapKeepRate.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (debugScore.mapKeepRate[off] - krMin) / (krMax - krMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                    if (off >= (int)score.mapAccepted.size()) return (uint8_t)0;
+                    return (uint8_t)ClampInt((int)std::round(score.mapAccepted[off] * 255.0f), 0, 255);
                 });
             }
-            if (!acceptedPathA.empty()) {
-                WriteGrayBitmap(acceptedPathA, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)debugScore.mapAccepted.size()) return (uint8_t)0;
-                    return (uint8_t)ClampInt((int)std::round(debugScore.mapAccepted[off] * 255.0f), 0, 255);
-                });
+
+            if (!withIterationArtifacts || path.binary.empty()) {
+                return;
             }
 
             if (!iterBinaryHistory.empty()) {
-                auto makeIterPath = [&](const std::string& base, const int idx) {
-                    const size_t dot = base.find_last_of('.');
-                    char suffix[64];
-                    sprintf_s(suffix, ".iter_%02d", idx);
-                    if (dot == std::string::npos || dot == 0) {
-                        return base + suffix + ".png";
-                    }
-                    return base.substr(0, dot) + suffix + base.substr(dot);
-                    };
-
                 for (int i = 0; i < (int)iterBinaryHistory.size(); i++) {
                     const auto& mask = iterBinaryHistory[i];
-                    const std::string outPath = makeIterPath(binaryPathA, i);
+                    char suffix[64];
+                    sprintf_s(suffix, ".iter_%02d", i);
+                    const std::string outPath = addSuffixBeforeExtension(path.binary, suffix);
                     WriteGrayBitmap(outPath, scanw, scanh, [&](int x, int y) {
                         const int off = x + y * scanw;
                         if (off >= (int)mask.size()) return (uint8_t)0;
@@ -2673,14 +2797,8 @@ namespace {
                     });
                 }
 
-                std::string csvPath = binaryPathA;
-                const size_t dot = csvPath.find_last_of('.');
-                if (dot == std::string::npos || dot == 0) {
-                    csvPath += ".iter.csv";
-                } else {
-                    csvPath = csvPath.substr(0, dot) + ".iter.csv";
-                }
-                FILE* fiter = fopen(csvPath.c_str(), "w");
+                const std::string iterCsvPath = replaceExtensionWithSuffix(path.binary, ".iter.csv");
+                FILE* fiter = fopen(iterCsvPath.c_str(), "w");
                 if (fiter != nullptr) {
                     fprintf(fiter, "iter,high,low,seed_on,low_on,grown_on,promoted_on,new_pixels,near_comp,far_comp,accepted_on,stop_reason\n");
                     for (int i = 0; i < (int)iterThresholdDebug.size(); i++) {
@@ -2697,14 +2815,8 @@ namespace {
             }
 
             if (!promoteCompDebug.empty()) {
-                std::string csvPath = binaryPathA;
-                const size_t dot = csvPath.find_last_of('.');
-                if (dot == std::string::npos || dot == 0) {
-                    csvPath += ".promote.csv";
-                } else {
-                    csvPath = csvPath.substr(0, dot) + ".promote.csv";
-                }
-                FILE* fprom = fopen(csvPath.c_str(), "w");
+                const std::string promoteCsvPath = replaceExtensionWithSuffix(path.binary, ".promote.csv");
+                FILE* fprom = fopen(promoteCsvPath.c_str(), "w");
                 if (fprom != nullptr) {
                     fprintf(fprom, "iter,high,low,minX,minY,maxX,maxY,area,w,h,overlapW,overlapH,gapX,gapY,peakScore,meanAccepted,nearH,nearV,nearD,nearAnchor,shapeOk,signalOk,accepted\n");
                     for (const auto& d : promoteCompDebug) {
@@ -2718,14 +2830,8 @@ namespace {
             }
 
             if (!deltaCompDebug.empty()) {
-                std::string csvPath = binaryPathA;
-                const size_t dot = csvPath.find_last_of('.');
-                if (dot == std::string::npos || dot == 0) {
-                    csvPath += ".delta.csv";
-                } else {
-                    csvPath = csvPath.substr(0, dot) + ".delta.csv";
-                }
-                FILE* fdelta = fopen(csvPath.c_str(), "w");
+                const std::string deltaCsvPath = replaceExtensionWithSuffix(path.binary, ".delta.csv");
+                FILE* fdelta = fopen(deltaCsvPath.c_str(), "w");
                 if (fdelta != nullptr) {
                     fprintf(fdelta, "iter,high,low,minX,minY,maxX,maxY,w,h,overlapW,overlapH,gapX,gapY,nearH,nearV,nearD,nearInit,withinGuard,accepted\n");
                     for (const auto& d : deltaCompDebug) {
@@ -2737,15 +2843,10 @@ namespace {
                     fclose(fdelta);
                 }
             }
+
             if (!rectMergeDebug.empty()) {
-                std::string csvPath = binaryPathA;
-                const size_t dot = csvPath.find_last_of('.');
-                if (dot == std::string::npos || dot == 0) {
-                    csvPath += ".rectmerge.csv";
-                } else {
-                    csvPath = csvPath.substr(0, dot) + ".rectmerge.csv";
-                }
-                FILE* frect = fopen(csvPath.c_str(), "w");
+                const std::string rectMergeCsvPath = replaceExtensionWithSuffix(path.binary, ".rectmerge.csv");
+                FILE* frect = fopen(rectMergeCsvPath.c_str(), "w");
                 if (frect != nullptr) {
                     fprintf(frect, "iter,minX,minY,maxX,maxY,area,overlapW,overlapH,gapX,gapY,nearH,nearV,nearD,overlap,seedGuard,finalGuard,sizeGuard,accepted\n");
                     for (const auto& d : rectMergeDebug) {
@@ -2757,6 +2858,93 @@ namespace {
                     fclose(frect);
                 }
             }
+        }
+
+        void writePass2PrepareDebug(const DebugPathSet& path) {
+            if (debugPass2Prepare.logoW > 0 && debugPass2Prepare.logoH > 0
+                && (int)debugPass2Prepare.logoA.size() == debugPass2Prepare.logoW * debugPass2Prepare.logoH
+                && (int)debugPass2Prepare.logoB.size() == debugPass2Prepare.logoW * debugPass2Prepare.logoH) {
+                const std::string logoPath = addSuffixBeforeExtension(path.score, ".pass2prep-logo");
+                if (!logoPath.empty()) {
+                    WriteGrayBitmap(logoPath, debugPass2Prepare.logoW, debugPass2Prepare.logoH, [&](int x, int y) {
+                        const int off = x + y * debugPass2Prepare.logoW;
+                        float alpha = 0.0f;
+                        float logoY = 0.0f;
+                        if (!TryGetAlphaLogo(debugPass2Prepare.logoA[off], debugPass2Prepare.logoB[off], alpha, logoY)) {
+                            return (uint8_t)0;
+                        }
+                        return (uint8_t)ClampInt((int)std::round(std::max(0.0f, std::min(1.0f, logoY)) * 255.0f), 0, 255);
+                    });
+                }
+            }
+
+            if (debugPass2Prepare.logoW > 0 && debugPass2Prepare.logoH > 0
+                && (int)debugPass2Prepare.logoMask.size() == debugPass2Prepare.logoW * debugPass2Prepare.logoH) {
+                const std::string maskPath = addSuffixBeforeExtension(path.binary, ".pass2prep-mask");
+                if (!maskPath.empty()) {
+                    WriteGrayBitmap(maskPath, debugPass2Prepare.logoW, debugPass2Prepare.logoH, [&](int x, int y) {
+                        const int off = x + y * debugPass2Prepare.logoW;
+                        return debugPass2Prepare.logoMask[off] ? (uint8_t)255 : (uint8_t)0;
+                    });
+                }
+            }
+
+            if (!path.binary.empty() && !debugPass2Prepare.frameMask.empty()
+                && debugPass2Prepare.corr0.size() == debugPass2Prepare.frameMask.size()
+                && debugPass2Prepare.corr1.size() == debugPass2Prepare.frameMask.size()) {
+                const std::string frameGateCsvPath = replaceExtensionWithSuffix(path.binary, ".framegate.csv");
+                FILE* fgate = fopen(frameGateCsvPath.c_str(), "w");
+                if (fgate != nullptr) {
+                    fprintf(fgate, "frame,corr0,corr1,raw,median,judge,pass3_mask\n");
+                    const int n = (int)debugPass2Prepare.frameMask.size();
+                    for (int i = 0; i < n; i++) {
+                        const float raw = (i < (int)debugPass2Prepare.raw.size()) ? debugPass2Prepare.raw[i] : 0.0f;
+                        const float med = (i < (int)debugPass2Prepare.median.size()) ? debugPass2Prepare.median[i] : 0.0f;
+                        const int judge = (i < (int)debugPass2Prepare.judge.size()) ? debugPass2Prepare.judge[i] : 0;
+                        fprintf(fgate, "%d,%.8f,%.8f,%.8f,%.8f,%d,%d\n",
+                            i, debugPass2Prepare.corr0[i], debugPass2Prepare.corr1[i], raw, med, judge, debugPass2Prepare.frameMask[i] ? 1 : 0);
+                    }
+                    fclose(fgate);
+                }
+            }
+        }
+
+        void writeDebug(const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath) {
+            if (scanw <= 0 || scanh <= 0) {
+                return;
+            }
+
+            DebugPathSet basePath{};
+            basePath.score = (scorePath != nullptr) ? tchar_to_string(scorePath) : std::string();
+            basePath.binary = (binaryPath != nullptr) ? tchar_to_string(binaryPath) : std::string();
+            basePath.ccl = (cclPath != nullptr) ? tchar_to_string(cclPath) : std::string();
+            basePath.count = (countPath != nullptr) ? tchar_to_string(countPath) : std::string();
+            basePath.a = (aPath != nullptr) ? tchar_to_string(aPath) : std::string();
+            basePath.b = (bPath != nullptr) ? tchar_to_string(bPath) : std::string();
+            basePath.alpha = (alphaPath != nullptr) ? tchar_to_string(alphaPath) : std::string();
+            basePath.logoY = (logoYPath != nullptr) ? tchar_to_string(logoYPath) : std::string();
+            basePath.consistency = (consistencyPath != nullptr) ? tchar_to_string(consistencyPath) : std::string();
+            basePath.fgVar = (fgVarPath != nullptr) ? tchar_to_string(fgVarPath) : std::string();
+            basePath.bgVar = (bgVarPath != nullptr) ? tchar_to_string(bgVarPath) : std::string();
+            basePath.transition = (transitionPath != nullptr) ? tchar_to_string(transitionPath) : std::string();
+            basePath.keepRate = (keepRatePath != nullptr) ? tchar_to_string(keepRatePath) : std::string();
+            basePath.accepted = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
+
+            // 互換維持: 既存パスは最終結果(final)を出力。
+            writeDebugStage(debugStats, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
+
+            // 追加: pass1/pass2の同種デバッグ出力を suffix で並列管理。
+            if (debugPass1.valid) {
+                const DebugPathSet pass1Path = makeSuffixedPathSet(basePath, ".pass1");
+                writeDebugStage(debugPass1.stats, debugPass1.score, debugPass1.binary, debugPass1.rectLocal, pass1Path, detailedDebug, false);
+            }
+            if (debugPass2.valid) {
+                const DebugPathSet pass2Path = makeSuffixedPathSet(basePath, ".pass2");
+                writeDebugStage(debugPass2.stats, debugPass2.score, debugPass2.binary, debugPass2.rectLocal, pass2Path, detailedDebug, false);
+            }
+
+            // 追加: runPass2PrepareMask で得た仮ロゴ/ロゴマスク/frame gate を保存。
+            writePass2PrepareDebug(basePath);
         }
 
         int getReadFrames() const { return readFrames; }
@@ -3102,12 +3290,19 @@ namespace {
                             const double varFg = std::max(0.0, s.sumF2 * invN - meanF * meanF);
                             const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
                             const double fgBgVarRatio = varFg / (varBg + 1e-6);
+                            // fg-bg 間の Pearson 相関: 半透明ロゴは fg≈(1-α)*bg+α*logoY なので bg と高い相関を示す。
+                            // 不透明固定テキストは fg が bg に追従せず相関が低い。
+                            const double covFgBg = s.sumFB * invN - meanF * meanBg;
+                            const double corrFgBg = (varFg > 1e-12 && varBg > 1e-12)
+                                ? std::max(-1.0, std::min(1.0, covFgBg / (std::sqrt(varFg) * std::sqrt(varBg))))
+                                : 0.0;
                             const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
                             const double keepRate = (s.observed > 0) ? (double)s.count / (double)s.observed : 0.0;
                             const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
                             scoreStage.mapConsistency[i] = (float)consistency;
                             scoreStage.mapFgVar[i] = (float)varFg;
                             scoreStage.mapBgVar[i] = (float)varBg;
+                            scoreStage.mapCorrFgBg[i] = (float)corrFgBg;
                             scoreStage.mapTransitionRate[i] = (float)transitionRate;
                             scoreStage.mapKeepRate[i] = (float)keepRate;
 
@@ -3137,6 +3332,16 @@ namespace {
                                     continue;
                                 }
                             }
+                            // fg-bg相関ベースの不透明テキスト除外（位置非依存）:
+                            // 不透明テキストは fg が bg に追従しないため相関が低い。
+                            // 半透明ロゴは fg ≈ (1-α)*bg + α*logoY で bg と強い正相関を示す。
+                            // varBg が十分あり、サンプル数が信頼できる場合のみ適用。
+                            if (varBg >= 0.0012 && s.count >= 25 && alpha > 0.58) {
+                                const double lowCorr = sat01((0.35 - corrFgBg) / 0.35);
+                                if (lowCorr > 0.70 && staticStrength > 0.65) {
+                                    continue;
+                                }
+                            }
                             // 時間変動由来の抑制:
                             // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
                             double temporalGain = 1.0;
@@ -3144,20 +3349,24 @@ namespace {
                                 const double ratioGain = sat01((fgBgVarRatio - 0.08) / 0.44);
                                 temporalGain = 0.85 + 0.15 * ratioGain;
                             }
+                            // fg-bg相関が低いほど不透明テキストの可能性が高い
+                            const double corrOpaque = (varBg >= 0.0012 && s.count >= 25)
+                                ? sat01((0.50 - corrFgBg) / 0.50) : 0.0;
                             double opaquePenalty = 1.0;
                             if (alpha > 0.68) {
                                 const double alphaOpaque = sat01((alpha - 0.68) / 0.22);
                                 const double temporalOpaque = (varBg >= 0.0012) ? sat01((0.22 - fgBgVarRatio) / 0.22) : 0.0;
-                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
+                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque + 0.60 * corrOpaque);
                                 opaquePenalty = 1.0 / penaltyScale;
                             }
                             double opaqueStaticPenalty = 1.0;
                             if (alpha > 0.55 && varBg >= 0.0012) {
                                 const double alphaOpaque = sat01((alpha - 0.55) / 0.35);
-                                const double lowTransition = sat01((0.09 - transitionRate) / 0.09);
+                                // transition 単独の低値による過抑制を避けるため、閾値と寄与を緩める。
+                                const double lowTransition = sat01((0.06 - transitionRate) / 0.06);
                                 const double lowKeep = sat01((0.07 - keepRate) / 0.07);
-                                const double staticness = std::max(lowTransition, lowKeep);
-                                const double penaltyScale = 1.0 + alphaOpaque * (0.25 + 1.75 * staticness);
+                                const double staticness = std::max(0.45 * lowTransition, lowKeep);
+                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness + 0.80 * corrOpaque);
                                 opaqueStaticPenalty = 1.0 / penaltyScale;
                             }
                             const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
@@ -3734,7 +3943,8 @@ namespace {
                 const float minSignalPeak = std::max(0.004f, anchor.peakScore * 0.10f);
                 const float minSignalAccepted = std::max(0.003f, anchor.meanAccepted * 0.20f);
                 const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
-                const int maxBelowAnchor = std::max(14, (int)std::round(anchorH * 0.85));
+                // 多行ロゴ(放送大学等)の下段行を拾うため、下方向の許容距離を大きく取る。
+                const int maxBelowAnchor = std::max(40, (int)std::round(anchorH * 2.5));
                 std::vector<uint8_t> keepComp(comps.size(), 0);
                 keepComp[anchorIdx] = 1;
                 bool changed = true;
@@ -3793,10 +4003,12 @@ namespace {
                             const int nearHGapLimit = std::max(8, (int)std::round((double)nearHGapBase * nearHGapScale));
                             const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
                                 gapX <= nearHGapLimit;
+                            // 多行ロゴの行間ギャップ(18px程度)を許容するため gapY を緩和。
                             const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
-                                gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.60));
+                                gapY <= std::max(20, (int)std::round(std::max(anchorH, ref.h) * 1.50));
+                            // nearD も多行ロゴの行間を考慮して gapY を緩和。
                             const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
-                                gapY <= std::max(8, (int)std::round(std::max(anchorH, ref.h) * 0.45));
+                                gapY <= std::max(12, (int)std::round(std::max(anchorH, ref.h) * 1.00));
                             nearKept = (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
                             if (nearKept) {
                                 break;
@@ -3804,8 +4016,9 @@ namespace {
                         }
                         if (!nearKept) continue;
                         const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
+                        // 多行ロゴの下段行が opaqueFar で除外されないよう gapY を緩和。
                         const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
-                            gapYAnchor > std::max(8, (int)std::round(anchorH * 0.80));
+                            gapYAnchor > std::max(8, (int)std::round(anchorH * 2.00));
                         if (opaqueFar) continue;
                         keepComp[i] = 1;
                         changed = true;
@@ -4083,7 +4296,7 @@ namespace {
                     // - 直前採用領域と十分重なる
                     // - あるいは、文字間ギャップとして説明できる距離にある
                     // 欠落しやすかったケース向けに gap 条件をやや緩和。
-                    const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(compH, prevH) * 0.10)) && gapX <= std::max(18, (int)std::round(prevW * 0.78));
+                    const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(compH, prevH) * 0.10)) && gapX <= std::max(30, (int)std::round(prevW * 0.78));
                     const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(compW, prevW) * 0.10)) && gapY <= std::max(16, (int)std::round(prevH * 0.78));
                     const bool nearDiagonal = gapX <= std::max(14, (int)std::round(prevW * 0.35)) && gapY <= std::max(12, (int)std::round(prevH * 0.35));
                     const bool nearInitial = nearHorizontal || nearVertical || nearDiagonal;
