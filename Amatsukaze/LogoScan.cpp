@@ -2089,7 +2089,6 @@ namespace {
             std::vector<float> mapConsistency;
             std::vector<float> mapFgVar;
             std::vector<float> mapBgVar;
-            std::vector<float> mapCorrFgBg;
             std::vector<float> mapTransitionRate;
             std::vector<float> mapKeepRate;
             std::vector<float> mapAccepted;
@@ -2106,7 +2105,6 @@ namespace {
                 mapConsistency.assign(n, 0.0f);
                 mapFgVar.assign(n, 0.0f);
                 mapBgVar.assign(n, 0.0f);
-                mapCorrFgBg.assign(n, 0.0f);
                 mapTransitionRate.assign(n, 0.0f);
                 mapKeepRate.assign(n, 0.0f);
                 mapAccepted.assign(n, 0.0f);
@@ -2740,17 +2738,6 @@ namespace {
                     const float t = (score.mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
-                // fg-bg相関のデバッグ画像を bgVar パスから自動派生して出力
-                // corrFgBg は -1.0～1.0 の範囲を 0～255 にマッピング (128 がゼロ相関)
-                const std::string corrPath = replaceExtensionWithSuffix(path.bgVar, ".corrfgbg.bmp");
-                WriteGrayBitmap(corrPath, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapCorrFgBg.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float corr = score.mapCorrFgBg[off];
-                    return (uint8_t)ClampInt((int)std::round((corr + 1.0f) * 0.5f * 255.0f), 0, 255);
-                });
             }
             if (!path.transition.empty()) {
                 WriteGrayBitmap(path.transition, scanw, scanh, [&](int x, int y) {
@@ -3290,19 +3277,12 @@ namespace {
                             const double varFg = std::max(0.0, s.sumF2 * invN - meanF * meanF);
                             const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
                             const double fgBgVarRatio = varFg / (varBg + 1e-6);
-                            // fg-bg 間の Pearson 相関: 半透明ロゴは fg≈(1-α)*bg+α*logoY なので bg と高い相関を示す。
-                            // 不透明固定テキストは fg が bg に追従せず相関が低い。
-                            const double covFgBg = s.sumFB * invN - meanF * meanBg;
-                            const double corrFgBg = (varFg > 1e-12 && varBg > 1e-12)
-                                ? std::max(-1.0, std::min(1.0, covFgBg / (std::sqrt(varFg) * std::sqrt(varBg))))
-                                : 0.0;
                             const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
                             const double keepRate = (s.observed > 0) ? (double)s.count / (double)s.observed : 0.0;
                             const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
                             scoreStage.mapConsistency[i] = (float)consistency;
                             scoreStage.mapFgVar[i] = (float)varFg;
                             scoreStage.mapBgVar[i] = (float)varBg;
-                            scoreStage.mapCorrFgBg[i] = (float)corrFgBg;
                             scoreStage.mapTransitionRate[i] = (float)transitionRate;
                             scoreStage.mapKeepRate[i] = (float)keepRate;
 
@@ -3332,16 +3312,6 @@ namespace {
                                     continue;
                                 }
                             }
-                            // fg-bg相関ベースの不透明テキスト除外（位置非依存）:
-                            // 不透明テキストは fg が bg に追従しないため相関が低い。
-                            // 半透明ロゴは fg ≈ (1-α)*bg + α*logoY で bg と強い正相関を示す。
-                            // varBg が十分あり、サンプル数が信頼できる場合のみ適用。
-                            if (varBg >= 0.0012 && s.count >= 25 && alpha > 0.58) {
-                                const double lowCorr = sat01((0.35 - corrFgBg) / 0.35);
-                                if (lowCorr > 0.70 && staticStrength > 0.65) {
-                                    continue;
-                                }
-                            }
                             // 時間変動由来の抑制:
                             // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
                             double temporalGain = 1.0;
@@ -3349,14 +3319,11 @@ namespace {
                                 const double ratioGain = sat01((fgBgVarRatio - 0.08) / 0.44);
                                 temporalGain = 0.85 + 0.15 * ratioGain;
                             }
-                            // fg-bg相関が低いほど不透明テキストの可能性が高い
-                            const double corrOpaque = (varBg >= 0.0012 && s.count >= 25)
-                                ? sat01((0.50 - corrFgBg) / 0.50) : 0.0;
                             double opaquePenalty = 1.0;
                             if (alpha > 0.68) {
                                 const double alphaOpaque = sat01((alpha - 0.68) / 0.22);
                                 const double temporalOpaque = (varBg >= 0.0012) ? sat01((0.22 - fgBgVarRatio) / 0.22) : 0.0;
-                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque + 0.60 * corrOpaque);
+                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
                                 opaquePenalty = 1.0 / penaltyScale;
                             }
                             double opaqueStaticPenalty = 1.0;
@@ -3366,7 +3333,7 @@ namespace {
                                 const double lowTransition = sat01((0.06 - transitionRate) / 0.06);
                                 const double lowKeep = sat01((0.07 - keepRate) / 0.07);
                                 const double staticness = std::max(0.45 * lowTransition, lowKeep);
-                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness + 0.80 * corrOpaque);
+                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness);
                                 opaqueStaticPenalty = 1.0 / penaltyScale;
                             }
                             const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
