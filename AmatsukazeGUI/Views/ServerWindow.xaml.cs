@@ -1,4 +1,4 @@
-﻿using Amatsukaze.Components;
+using Amatsukaze.Components;
 using Amatsukaze.ViewModels;
 using Livet;
 using Livet.EventListeners;
@@ -37,12 +37,35 @@ namespace Amatsukaze.Views
             {
                 var modelListener = new PropertyChangedEventListener(serverVM);
                 modelListener.Add(() => serverVM.WindowCaption, (_, __) => NotifyIcon.Text = serverVM.WindowCaption);
+                // NowEncoding の変化に応じてタスクトレイアイコンを切り替える
+                modelListener.Add(() => serverVM.Server, (_, __) => OnServerChanged(serverVM));
                 CompositeDisposable.Add(modelListener);
             }
         }
 
+        private PropertyChangedEventListener serverEncodeListener;
+
+        private void OnServerChanged(ServerViewModel serverVM)
+        {
+            // 以前のリスナーを解放
+            serverEncodeListener?.Dispose();
+            serverEncodeListener = null;
+
+            if (serverVM.Server == null) return;
+
+            serverEncodeListener = new PropertyChangedEventListener(serverVM.Server);
+            serverEncodeListener.Add(() => serverVM.Server.NowEncoding, (_, __) =>
+            {
+                NotifyIcon?.SetRunningIcon(serverVM.Server?.NowEncoding ?? false);
+            });
+        }
+
         protected override void OnClosed(EventArgs e)
         {
+            // ウィンドウが閉じる際は必ず通常アイコンに戻す
+            NotifyIcon?.SetRunningIcon(false);
+            serverEncodeListener?.Dispose();
+            serverEncodeListener = null;
             NotifyIcon?.Dispose();
             NotifyIcon = null;
             CompositeDisposable.Dispose();
