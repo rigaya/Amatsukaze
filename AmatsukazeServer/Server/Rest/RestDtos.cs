@@ -143,6 +143,7 @@ namespace Amatsukaze.Server.Rest
         public int MarginY { get; set; } = 4;
         public int ThreadN { get; set; } = 1;
         public bool DetailedDebug { get; set; } = false;
+        public int SampleMode { get; set; } = 2;
     }
 
     public class LogoRect

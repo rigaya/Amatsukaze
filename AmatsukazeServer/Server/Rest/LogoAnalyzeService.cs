@@ -504,6 +504,7 @@ namespace Amatsukaze.Server.Rest
                         request.MarginX, request.MarginY, request.ThreadN,
                         scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath,
                         request.DetailedDebug,
+                        request.SampleMode,
                         (stage, stageProgress, progress, nread, total) =>
                         {
                             job.Stage = stage;

@@ -126,6 +126,7 @@ namespace Amatsukaze.Server
                         marginX, marginY, threadN,
                         scorePath, binaryPath, cclPath, null, null, null, null, null, null, null, null, null, null, null,
                         detailedDebug,
+                        2,
                         (stage, stageProgress, progress, nread, total) => true);
                     rectX = rect.X;
                     rectY = rect.Y;

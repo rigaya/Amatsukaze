@@ -2041,6 +2041,7 @@ namespace {
         const int marginY;
         const int threadN;
         const bool detailedDebug;
+        const int sampleMode_;
         logo::LOGO_AUTODETECT_CB cb;
         RGYThreadPool threadPool;
 
@@ -2057,7 +2058,12 @@ namespace {
         int framesPerSec;
         int readFrames;
         static constexpr int kScanEdgeMargin = 16;
+        // fg値をkHistBins個のbinに分割してサンプル蓄積する
+        static constexpr int kHistBins = 32;
         static constexpr int kDedupHistoryN = 4;
+        static constexpr double kDedupRingEps = 1.0;
+        static constexpr double kDedupFgEps = 3.0;
+        static constexpr double kDedupBgEps = 15.0;
         static constexpr bool kEnableTwoPassFrameGate = true;
         static constexpr bool kEnablePruneBinaryByAnchor = true;
         const bool enableTwoPassFrameGate;
@@ -2098,13 +2104,25 @@ namespace {
         std::vector<TracePointConfig> tracePoints;
         std::vector<int> tracePointIndexByOffset;
 
+        // fg/bg値をbin単位で蓄積するバッファ（ヒストグラムbin集計方式）
+        struct BinAccum {
+            int    count;
+            double sum_fg;
+            double sum_bg;
+            double last_fg;
+            double last_bg;
+            BinAccum() : count(0), sum_fg(0.0), sum_bg(0.0), last_fg(-1.0), last_bg(-1.0) {}
+        };
+
         struct StatsPassBuffers {
             std::vector<uint8_t> frameWork8;
             std::vector<uint16_t> frameWork16;
             std::vector<AutoDetectStats> stats;
-            std::vector<float> dedupSampleFgHistory;
-            std::vector<uint8_t> dedupSampleCount;
-            std::vector<uint8_t> dedupSamplePos;
+            // ヒストグラムbin蓄積バッファ (scanw * scanh * kHistBins)
+            std::vector<BinAccum> binAccumBuf;
+            std::vector<float> dedupRingBuf;
+            std::vector<int> dedupRingCount;
+            std::vector<int> dedupRingPos;
             std::vector<float> lastObservedFg;
             std::vector<uint8_t> lastObservedValid;
             std::vector<int> frameValidCounts;
@@ -2121,9 +2139,10 @@ namespace {
                     frameWork8.shrink_to_fit();
                 }
                 stats.assign(scanw * scanh, AutoDetectStats());
-                dedupSampleFgHistory.assign(scanw * scanh * kDedupHistoryN, 0.0f);
-                dedupSampleCount.assign(scanw * scanh, 0);
-                dedupSamplePos.assign(scanw * scanh, 0);
+                binAccumBuf.assign(scanw * scanh * kHistBins, BinAccum());
+                dedupRingBuf.assign(scanw * scanh * kDedupHistoryN, 0.0f);
+                dedupRingCount.assign(scanw * scanh, 0);
+                dedupRingPos.assign(scanw * scanh, 0);
                 lastObservedFg.assign(scanw * scanh, 0.0f);
                 lastObservedValid.assign(scanw * scanh, 0);
                 frameValidCounts.clear();
@@ -2354,7 +2373,7 @@ namespace {
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
 
     public:
-        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
+        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, int sampleMode, logo::LOGO_AUTODETECT_CB cb)
             : SimpleVideoReader(ctx)
             , serviceid(serviceid)
             , divx(std::max(1, divx))
@@ -2366,6 +2385,7 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , detailedDebug(detailedDebug)
+            , sampleMode_(ClampInt(sampleMode, 0, 2))
             , cb(cb)
             , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
@@ -3337,9 +3357,10 @@ namespace {
         template<typename pixel_t>
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
             auto& stats = statsPass.stats;
-            auto& dedupSampleFgHistory = statsPass.dedupSampleFgHistory;
-            auto& dedupSampleCount = statsPass.dedupSampleCount;
-            auto& dedupSamplePos = statsPass.dedupSamplePos;
+            auto& binAccumBuf = statsPass.binAccumBuf;
+            auto& dedupRingBuf = statsPass.dedupRingBuf;
+            auto& dedupRingCount = statsPass.dedupRingCount;
+            auto& dedupRingPos = statsPass.dedupRingPos;
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
             const int pixelCount = scanw * scanh;
@@ -3347,14 +3368,14 @@ namespace {
             assert((int)stats.size() == pixelCount);
             assert((int)lastObservedFg.size() == pixelCount);
             assert((int)lastObservedValid.size() == pixelCount);
-            assert((int)dedupSampleCount.size() == pixelCount);
-            assert((int)dedupSamplePos.size() == pixelCount);
-            assert((int)dedupSampleFgHistory.size() == pixelCount * kDedupHistoryN);
+            assert((int)binAccumBuf.size() == pixelCount * kHistBins);
+            assert((int)dedupRingBuf.size() == pixelCount * kDedupHistoryN);
+            assert((int)dedupRingCount.size() == pixelCount);
+            assert((int)dedupRingPos.size() == pixelCount);
 
             std::atomic<int> frameCount(0);
-            const double sampleWeightPos = 1.0;
-            const float dedupThreshold = std::max(0.5f * rawScale, thresholdRaw * 0.25f);
-            const float transitionThreshold = std::max(0.75f * rawScale, dedupThreshold * 0.50f);
+            // 遷移検出閾値（旧: dedupThreshold * 0.50f の代わりに rawScale から直接算出）
+            const float transitionThreshold = std::max(0.75f * rawScale, thresholdRaw * 0.125f);
             // 小さすぎるチャンク分割はタスク投入オーバーヘッドが支配的になるため、
             // 既定チャンク(スレッド数に応じた分割)を使う。
             RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kScanEdgeMargin), [&](int y0, int y1) {
@@ -3374,21 +3395,6 @@ namespace {
                         }
                         lastObservedFg[off] = fgRaw;
                         lastObservedValid[off] = 1;
-                        // 重複抑制:
-                        // 最近N採用値のどれかに近ければ新情報が少ないとして棄却する。
-                        const int base = off * kDedupHistoryN;
-                        const int histCount = std::min((int)dedupSampleCount[off], kDedupHistoryN);
-                        bool isDup = false;
-                        for (int hi = 0; hi < histCount; hi++) {
-                            if (std::abs(dedupSampleFgHistory[base + hi] - fgRaw) <= dedupThreshold) {
-                                isDup = true;
-                                break;
-                            }
-                        }
-                        if (isDup) {
-                            s.rejectedDedup++;
-                            continue;
-                        }
 
                         float bg = 0.0f;
                         // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
@@ -3408,21 +3414,52 @@ namespace {
                             s.rejectedExtreme++;
                             continue;
                         }
-                        s.sumF += f * sampleWeightPos;
-                        s.sumB += b * sampleWeightPos;
-                        s.sumF2 += f * f * sampleWeightPos;
-                        s.sumB2 += b * b * sampleWeightPos;
-                        s.sumFB += f * b * sampleWeightPos;
-                        s.sumW += sampleWeightPos;
-                        s.count++;
-                        // 採用したサンプルを次回重複判定用に記録。
-                        if (sampleWeightPos >= 0.35) {
-                            const int base = off * kDedupHistoryN;
-                            const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
-                            dedupSampleFgHistory[base + writePos] = fgRaw;
-                            const int nextPos = (writePos + 1) % kDedupHistoryN;
-                            dedupSamplePos[off] = (uint8_t)nextPos;
-                            dedupSampleCount[off] = (uint8_t)std::min(kDedupHistoryN, (int)dedupSampleCount[off] + 1);
+                        if (sampleMode_ == 0) {
+                            auto& count = dedupRingCount[off];
+                            auto& pos = dedupRingPos[off];
+                            float* ring = dedupRingBuf.data() + off * kDedupHistoryN;
+                            float minv = fgRaw;
+                            float maxv = fgRaw;
+                            for (int i = 0; i < count; i++) {
+                                minv = std::min(minv, ring[i]);
+                                maxv = std::max(maxv, ring[i]);
+                            }
+                            if (count > 0 && (maxv - minv) < (float)kDedupRingEps) {
+                                s.rejectedDedup++;
+                                continue;
+                            }
+                            ring[pos] = fgRaw;
+                            pos = (pos + 1) % kDedupHistoryN;
+                            if (count < kDedupHistoryN) count++;
+                            s.sumF += f;
+                            s.sumB += b;
+                            s.sumF2 += f * f;
+                            s.sumB2 += b * b;
+                            s.sumFB += f * b;
+                            s.sumW += 1.0;
+                            s.count++;
+                            frameCount.fetch_add(1, std::memory_order_relaxed);
+                            continue;
+                        }
+
+                        // fg値をbinに振り分けて蓄積する（ヒストグラムbin集計方式）。
+                        // fgRaw * invMaxv で [0,1] に正規化してbinを決定する。
+                        const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
+                        auto& bin = binAccumBuf[off * kHistBins + binIdx];
+                        if (sampleMode_ == 1) {
+                            bin.count++;
+                            bin.sum_fg += f;
+                            bin.sum_bg += b;
+                        } else {
+                            if (bin.last_fg >= 0.0 && std::abs(fgRaw - bin.last_fg) < kDedupFgEps && std::abs(bg - bin.last_bg) < kDedupBgEps) {
+                                s.rejectedDedup++;
+                                continue;
+                            }
+                            bin.last_fg = fgRaw;
+                            bin.last_bg = bg;
+                            bin.count++;
+                            bin.sum_fg += f;
+                            bin.sum_bg += b;
                         }
                         // このフレームで有効だった画素数（デバッグ可視化用）。
                         frameCount.fetch_add(1, std::memory_order_relaxed);
@@ -3442,7 +3479,8 @@ namespace {
                 rec.absX = scanx + tp.x;
                 rec.absY = scany + tp.y;
                 rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
-                rec.dedupThreshold = dedupThreshold;
+                // mode 0/1/2 の切替運用では dedupThreshold 固定値の表示は持たない
+                rec.dedupThreshold = 0.0f;
 
                 if (tp.x < kScanEdgeMargin || tp.y < kScanEdgeMargin || tp.x >= scanw - kScanEdgeMargin || tp.y >= scanh - kScanEdgeMargin) {
                     rec.rejectCode = 5;
@@ -3463,28 +3501,6 @@ namespace {
                 }
                 lastObservedFg[off] = fgFiltered;
                 lastObservedValid[off] = 1;
-
-                const int base = off * kDedupHistoryN;
-                const int histCount = std::min((int)dedupSampleCount[off], kDedupHistoryN);
-                float nearestDiff = std::numeric_limits<float>::max();
-                bool isDup = false;
-                for (int hi = 0; hi < histCount; hi++) {
-                    const float d = std::abs(dedupSampleFgHistory[base + hi] - fgFiltered);
-                    nearestDiff = std::min(nearestDiff, d);
-                    if (d <= dedupThreshold) {
-                        isDup = true;
-                    }
-                }
-                rec.dedupNearestDiff = (histCount > 0) ? nearestDiff : -1.0f;
-                if (isDup) {
-                    s.rejectedDedup++;
-                    rec.rejectCode = 1;
-                    rec.observedAfter = s.observed;
-                    rec.countAfter = s.count;
-                    rec.totalCandidatesAfter = s.totalCandidates;
-                    statsPass.traceRecords.push_back(rec);
-                    continue;
-                }
 
                 float bg = 0.0f;
                 BgDebugInfo dbgBg{};
@@ -3534,19 +3550,60 @@ namespace {
                     continue;
                 }
 
-                s.sumF += f * sampleWeightPos;
-                s.sumB += b * sampleWeightPos;
-                s.sumF2 += f * f * sampleWeightPos;
-                s.sumB2 += b * b * sampleWeightPos;
-                s.sumFB += f * b * sampleWeightPos;
-                s.sumW += sampleWeightPos;
-                s.count++;
-                if (sampleWeightPos >= 0.35) {
-                    const int writePos = std::min((int)dedupSamplePos[off], kDedupHistoryN - 1);
-                    dedupSampleFgHistory[base + writePos] = fgFiltered;
-                    const int nextPos = (writePos + 1) % kDedupHistoryN;
-                    dedupSamplePos[off] = (uint8_t)nextPos;
-                    dedupSampleCount[off] = (uint8_t)std::min(kDedupHistoryN, (int)dedupSampleCount[off] + 1);
+                if (sampleMode_ == 0) {
+                    auto& count = dedupRingCount[off];
+                    auto& pos = dedupRingPos[off];
+                    float* ring = dedupRingBuf.data() + off * kDedupHistoryN;
+                    float minv = fgFiltered;
+                    float maxv = fgFiltered;
+                    for (int i = 0; i < count; i++) {
+                        minv = std::min(minv, ring[i]);
+                        maxv = std::max(maxv, ring[i]);
+                    }
+                    if (count > 0 && (maxv - minv) < (float)kDedupRingEps) {
+                        s.rejectedDedup++;
+                        rec.rejectCode = 1;
+                        rec.observedAfter = s.observed;
+                        rec.countAfter = s.count;
+                        rec.totalCandidatesAfter = s.totalCandidates;
+                        statsPass.traceRecords.push_back(rec);
+                        continue;
+                    }
+                    ring[pos] = fgFiltered;
+                    pos = (pos + 1) % kDedupHistoryN;
+                    if (count < kDedupHistoryN) count++;
+                    s.sumF += f;
+                    s.sumB += b;
+                    s.sumF2 += f * f;
+                    s.sumB2 += b * b;
+                    s.sumFB += f * b;
+                    s.sumW += 1.0;
+                    s.count++;
+                } else {
+                    // fg値をbinに振り分けて蓄積する（ヒストグラムbin集計方式）。
+                    // fgFiltered * invMaxv で [0,1] に正規化してbinを決定する。
+                    const int binIdx = std::min(kHistBins - 1, (int)(fgFiltered * invMaxv * kHistBins));
+                    auto& bin = binAccumBuf[off * kHistBins + binIdx];
+                    if (sampleMode_ == 1) {
+                        bin.count++;
+                        bin.sum_fg += f;
+                        bin.sum_bg += b;
+                    } else {
+                        if (bin.last_fg >= 0.0 && std::abs(fgFiltered - bin.last_fg) < kDedupFgEps && std::abs(bg - bin.last_bg) < kDedupBgEps) {
+                            s.rejectedDedup++;
+                            rec.rejectCode = 1;
+                            rec.observedAfter = s.observed;
+                            rec.countAfter = s.count;
+                            rec.totalCandidatesAfter = s.totalCandidates;
+                            statsPass.traceRecords.push_back(rec);
+                            continue;
+                        }
+                        bin.last_fg = fgFiltered;
+                        bin.last_bg = bg;
+                        bin.count++;
+                        bin.sum_fg += f;
+                        bin.sum_bg += b;
+                    }
                 }
                 frameCount.fetch_add(1, std::memory_order_relaxed);
                 rec.accepted = 1;
@@ -3588,9 +3645,53 @@ namespace {
         }
 
     private:
-        void estimateScoreAndRect(const StatsPassBuffers& statsPass) {
+        // Gompertz関数によるビン重み計算
+        // w(n) = exp(-exp(-c * (n - n0)))
+        // n0: 変曲点（このサンプル数で weight ≈ 1/e ≈ 0.37）
+        // c:  急峻さ（大きいほど閾値的な挙動になる）
+        static double GompertzWeight(int n, double n0, double c) {
+            return std::exp(-std::exp(-c * ((double)n - n0)));
+        }
+
+        // binAccumBuf に蓄積した各binのサンプルをbin平均値として stats に集約する。
+        // 呼び出し後は stats の sumF/sumB/sumF2/sumB2/sumFB/sumW/count が有効になる。
+        void convertBinAccumToStats(StatsPassBuffers& statsPass) {
+            const int pixelCount = scanw * scanh;
+            RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
+                for (int y = y0; y < y1; y++) {
+                    for (int x = 0; x < scanw; x++) {
+                        const int off = x + y * scanw;
+                        AutoDetectStats& s = statsPass.stats[off];
+                        // sumF/sumB/sumF2/sumB2/sumFB/sumW/count を binAccumBuf から算出し直す。
+                        // observed/fgTransition/rejectedDedup/totalCandidates/rejectedExtreme はそのまま保持。
+                        s.sumF = 0.0; s.sumB = 0.0; s.sumF2 = 0.0; s.sumB2 = 0.0; s.sumFB = 0.0;
+                        s.sumW = 0.0; s.count = 0;
+                        for (int b = 0; b < kHistBins; b++) {
+                            const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                            if (bin.count == 0) continue;
+                            const double avg_fg = bin.sum_fg / bin.count;
+                            const double avg_bg = bin.sum_bg / bin.count;
+                            const double w = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
+                            s.sumF  += w * avg_fg;
+                            s.sumB  += w * avg_bg;
+                            s.sumF2 += w * avg_fg * avg_fg;
+                            s.sumB2 += w * avg_bg * avg_bg;
+                            s.sumFB += w * avg_fg * avg_bg;
+                            s.sumW  += w;  // Gompertz重みでビンを加重
+                            s.count++;
+                        }
+                    }
+                }
+            });
+        }
+
+        void estimateScoreAndRect(StatsPassBuffers& statsPass) {
             if (cb && !cb(2, 0.0f, 0.5f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
+            }
+            // mode 0 は stats に直接加算済み。mode 1/2 は binAccumBuf から変換する。
+            if (sampleMode_ != 0) {
+                convertBinAccumToStats(statsPass);
             }
             float thHigh = 0.0f;
             float thLow = 0.0f;
@@ -5048,8 +5149,9 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int* outX, int* outY, int* outW, int* outH,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
+    int sampleMode,
     logo::LOGO_AUTODETECT_CB cb) {
-    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
+    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, sampleMode, cb);
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;
