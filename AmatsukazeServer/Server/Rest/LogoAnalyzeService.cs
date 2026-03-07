@@ -265,6 +265,9 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "logoy", job.LogoYImagePath, out path))
             {
             }
+            else if (TryResolveStagePath(kind, "meandiff", AddInfixBeforeExtension(job.ScoreImagePath, ".meandiff"), out path))
+            {
+            }
             else if (TryResolveStagePath(kind, "consistency", job.ConsistencyImagePath, out path))
             {
             }
@@ -281,6 +284,39 @@ namespace Amatsukaze.Server.Rest
             {
             }
             else if (TryResolveStagePath(kind, "accepted", job.AcceptedImagePath, out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "diffgain", AddInfixBeforeExtension(job.ScoreImagePath, ".diffgain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "diffgainraw", AddInfixBeforeExtension(job.ScoreImagePath, ".diffgainraw"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "residualgain", AddInfixBeforeExtension(job.ScoreImagePath, ".residualgain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "logogain", AddInfixBeforeExtension(job.ScoreImagePath, ".logogain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "consistencygain", AddInfixBeforeExtension(job.ScoreImagePath, ".consistencygain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "alphagain", AddInfixBeforeExtension(job.ScoreImagePath, ".alphagain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "bggain", AddInfixBeforeExtension(job.ScoreImagePath, ".bggain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "extremegain", AddInfixBeforeExtension(job.ScoreImagePath, ".extremegain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "temporalgain", AddInfixBeforeExtension(job.ScoreImagePath, ".temporalgain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "opaquepenalty", AddInfixBeforeExtension(job.ScoreImagePath, ".opaquepenalty"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "opaquestaticpenalty", AddInfixBeforeExtension(job.ScoreImagePath, ".opaquestaticpenalty"), out path))
             {
             }
             else if (string.Equals(kind, "pass2prep-logo", StringComparison.OrdinalIgnoreCase))

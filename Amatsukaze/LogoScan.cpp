@@ -1367,13 +1367,14 @@ namespace {
     struct AutoDetectStats {
         double sumF, sumB, sumF2, sumB2, sumFB;
         double sumW;
-        int count;
+        int rawSampleCount;
+        int effectiveBinCount;
         int observed;
         int fgTransition;
         int rejectedDedup;
         int totalCandidates;
         int rejectedExtreme;
-        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), sumW(0), count(0), observed(0), fgTransition(0), rejectedDedup(0), totalCandidates(0), rejectedExtreme(0) {}
+        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), sumW(0), rawSampleCount(0), effectiveBinCount(0), observed(0), fgTransition(0), rejectedDedup(0), totalCandidates(0), rejectedExtreme(0) {}
     };
 
     static int ClampInt(const int v, const int minv, const int maxv) {
@@ -1505,7 +1506,7 @@ namespace {
     }
 
     static bool TryGetAB(const AutoDetectStats& s, float& A, float& B) {
-        if (s.count < 8 || s.sumW < 4.0) {
+        if (s.rawSampleCount < 8 || s.sumW < 4.0) {
             return false;
         }
 
@@ -2109,9 +2110,7 @@ namespace {
             int    count;
             double sum_fg;
             double sum_bg;
-            double last_fg;
-            double last_bg;
-            BinAccum() : count(0), sum_fg(0.0), sum_bg(0.0), last_fg(-1.0), last_bg(-1.0) {}
+            BinAccum() : count(0), sum_fg(0.0), sum_bg(0.0) {}
         };
 
         struct StatsPassBuffers {
@@ -2159,12 +2158,24 @@ namespace {
             std::vector<float> mapB;
             std::vector<float> mapAlpha;
             std::vector<float> mapLogoY;
+            std::vector<float> mapMeanDiff;
             std::vector<float> mapConsistency;
             std::vector<float> mapFgVar;
             std::vector<float> mapBgVar;
             std::vector<float> mapTransitionRate;
             std::vector<float> mapKeepRate;
             std::vector<float> mapAccepted;
+            std::vector<float> mapDiffGain;
+            std::vector<float> mapDiffGainRaw;
+            std::vector<float> mapResidualGain;
+            std::vector<float> mapLogoGain;
+            std::vector<float> mapConsistencyGain;
+            std::vector<float> mapAlphaGain;
+            std::vector<float> mapBgGain;
+            std::vector<float> mapExtremeGain;
+            std::vector<float> mapTemporalGain;
+            std::vector<float> mapOpaquePenalty;
+            std::vector<float> mapOpaqueStaticPenalty;
             std::vector<uint8_t> validAB;
 
             void reset(const int scanw, const int scanh) {
@@ -2175,12 +2186,24 @@ namespace {
                 mapB.assign(n, 0.0f);
                 mapAlpha.assign(n, 0.0f);
                 mapLogoY.assign(n, 0.0f);
+                mapMeanDiff.assign(n, 0.0f);
                 mapConsistency.assign(n, 0.0f);
                 mapFgVar.assign(n, 0.0f);
                 mapBgVar.assign(n, 0.0f);
                 mapTransitionRate.assign(n, 0.0f);
                 mapKeepRate.assign(n, 0.0f);
                 mapAccepted.assign(n, 0.0f);
+                mapDiffGain.assign(n, 0.0f);
+                mapDiffGainRaw.assign(n, 0.0f);
+                mapResidualGain.assign(n, 0.0f);
+                mapLogoGain.assign(n, 0.0f);
+                mapConsistencyGain.assign(n, 0.0f);
+                mapAlphaGain.assign(n, 0.0f);
+                mapBgGain.assign(n, 0.0f);
+                mapExtremeGain.assign(n, 0.0f);
+                mapTemporalGain.assign(n, 0.0f);
+                mapOpaquePenalty.assign(n, 0.0f);
+                mapOpaqueStaticPenalty.assign(n, 0.0f);
             }
         };
 
@@ -2207,12 +2230,24 @@ namespace {
             std::string b;
             std::string alpha;
             std::string logoY;
+            std::string meanDiff;
             std::string consistency;
             std::string fgVar;
             std::string bgVar;
             std::string transition;
             std::string keepRate;
             std::string accepted;
+            std::string diffGain;
+            std::string diffGainRaw;
+            std::string residualGain;
+            std::string logoGain;
+            std::string consistencyGain;
+            std::string alphaGain;
+            std::string bgGain;
+            std::string extremeGain;
+            std::string temporalGain;
+            std::string opaquePenalty;
+            std::string opaqueStaticPenalty;
         };
         struct Pass2PrepareDebug {
             int logoW = 0;
@@ -2385,7 +2420,7 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , detailedDebug(detailedDebug)
-            , sampleMode_(ClampInt(sampleMode, 0, 2))
+            , sampleMode_(ClampInt(sampleMode, 0, 1))
             , cb(cb)
             , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
@@ -2709,12 +2744,24 @@ namespace {
             out.b = addSuffixBeforeExtension(base.b, suffix);
             out.alpha = addSuffixBeforeExtension(base.alpha, suffix);
             out.logoY = addSuffixBeforeExtension(base.logoY, suffix);
+            out.meanDiff = addSuffixBeforeExtension(base.meanDiff, suffix);
             out.consistency = addSuffixBeforeExtension(base.consistency, suffix);
             out.fgVar = addSuffixBeforeExtension(base.fgVar, suffix);
             out.bgVar = addSuffixBeforeExtension(base.bgVar, suffix);
             out.transition = addSuffixBeforeExtension(base.transition, suffix);
             out.keepRate = addSuffixBeforeExtension(base.keepRate, suffix);
             out.accepted = addSuffixBeforeExtension(base.accepted, suffix);
+            out.diffGain = addSuffixBeforeExtension(base.diffGain, suffix);
+            out.diffGainRaw = addSuffixBeforeExtension(base.diffGainRaw, suffix);
+            out.residualGain = addSuffixBeforeExtension(base.residualGain, suffix);
+            out.logoGain = addSuffixBeforeExtension(base.logoGain, suffix);
+            out.consistencyGain = addSuffixBeforeExtension(base.consistencyGain, suffix);
+            out.alphaGain = addSuffixBeforeExtension(base.alphaGain, suffix);
+            out.bgGain = addSuffixBeforeExtension(base.bgGain, suffix);
+            out.extremeGain = addSuffixBeforeExtension(base.extremeGain, suffix);
+            out.temporalGain = addSuffixBeforeExtension(base.temporalGain, suffix);
+            out.opaquePenalty = addSuffixBeforeExtension(base.opaquePenalty, suffix);
+            out.opaqueStaticPenalty = addSuffixBeforeExtension(base.opaqueStaticPenalty, suffix);
             return out;
         }
 
@@ -2754,13 +2801,13 @@ namespace {
 
             int maxCount = 0;
             for (const auto& s : statsForDebug) {
-                maxCount = std::max(maxCount, s.count);
+                maxCount = std::max(maxCount, s.rawSampleCount);
             }
             if (maxCount <= 0) maxCount = 1;
             if (!path.count.empty()) {
                 WriteGrayBitmap(path.count, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    const int c = (off >= 0 && off < (int)statsForDebug.size()) ? statsForDebug[off].count : 0;
+                    const int c = (off >= 0 && off < (int)statsForDebug.size()) ? statsForDebug[off].rawSampleCount : 0;
                     return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
                 });
             }
@@ -2806,12 +2853,35 @@ namespace {
                     return (uint8_t)ClampInt((int)std::round(score.mapLogoY[off] * 255.0f), 0, 255);
                 });
             }
-            float csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax, trMin, trMax, krMin, krMax;
+            float mdMin, mdMax, csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax, trMin, trMax, krMin, krMax;
+            float dgMin, dgMax, dgrMin, dgrMax, rgMin, rgMax, lgMin, lgMax, cgMin, cgMax, agMin, agMax, bgGainMin, bgGainMax, egMin, egMax, tgMin, tgMax, opMin, opMax, ospMin, ospMax;
+            CalcRangeValid(score.mapMeanDiff, score.validAB, mdMin, mdMax, -0.05f, 0.05f);
             CalcRangeValid(score.mapConsistency, score.validAB, csMin, csMax, 0.0f, 2.0f);
             CalcRangeValid(score.mapFgVar, score.validAB, fgvMin, fgvMax, 0.0f, 0.02f);
             CalcRangeValid(score.mapBgVar, score.validAB, bgvMin, bgvMax, 0.0f, 0.02f);
             CalcRangeValid(score.mapTransitionRate, score.validAB, trMin, trMax, 0.0f, 0.20f);
             CalcRangeValid(score.mapKeepRate, score.validAB, krMin, krMax, 0.0f, 0.20f);
+            CalcRangeValid(score.mapDiffGain, score.validAB, dgMin, dgMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapDiffGainRaw, score.validAB, dgrMin, dgrMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapResidualGain, score.validAB, rgMin, rgMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapLogoGain, score.validAB, lgMin, lgMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapConsistencyGain, score.validAB, cgMin, cgMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapAlphaGain, score.validAB, agMin, agMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapBgGain, score.validAB, bgGainMin, bgGainMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapExtremeGain, score.validAB, egMin, egMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapTemporalGain, score.validAB, tgMin, tgMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapOpaquePenalty, score.validAB, opMin, opMax, 0.0f, 1.0f);
+            CalcRangeValid(score.mapOpaqueStaticPenalty, score.validAB, ospMin, ospMax, 0.0f, 1.0f);
+            if (!path.meanDiff.empty()) {
+                WriteGrayBitmap(path.meanDiff, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapMeanDiff.size()) {
+                        return (uint8_t)0;
+                    }
+                    const float t = (score.mapMeanDiff[off] - mdMin) / (mdMax - mdMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
             if (!path.consistency.empty()) {
                 WriteGrayBitmap(path.consistency, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
@@ -2867,6 +2937,94 @@ namespace {
                     const int off = x + y * scanw;
                     if (off >= (int)score.mapAccepted.size()) return (uint8_t)0;
                     return (uint8_t)ClampInt((int)std::round(score.mapAccepted[off] * 255.0f), 0, 255);
+                });
+            }
+            if (!path.diffGain.empty()) {
+                WriteGrayBitmap(path.diffGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapDiffGain.size()) return (uint8_t)0;
+                    const float t = (score.mapDiffGain[off] - dgMin) / (dgMax - dgMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.diffGainRaw.empty()) {
+                WriteGrayBitmap(path.diffGainRaw, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapDiffGainRaw.size()) return (uint8_t)0;
+                    const float t = (score.mapDiffGainRaw[off] - dgrMin) / (dgrMax - dgrMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.residualGain.empty()) {
+                WriteGrayBitmap(path.residualGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapResidualGain.size()) return (uint8_t)0;
+                    const float t = (score.mapResidualGain[off] - rgMin) / (rgMax - rgMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.logoGain.empty()) {
+                WriteGrayBitmap(path.logoGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapLogoGain.size()) return (uint8_t)0;
+                    const float t = (score.mapLogoGain[off] - lgMin) / (lgMax - lgMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.consistencyGain.empty()) {
+                WriteGrayBitmap(path.consistencyGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapConsistencyGain.size()) return (uint8_t)0;
+                    const float t = (score.mapConsistencyGain[off] - cgMin) / (cgMax - cgMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.alphaGain.empty()) {
+                WriteGrayBitmap(path.alphaGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapAlphaGain.size()) return (uint8_t)0;
+                    const float t = (score.mapAlphaGain[off] - agMin) / (agMax - agMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.bgGain.empty()) {
+                WriteGrayBitmap(path.bgGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapBgGain.size()) return (uint8_t)0;
+                    const float t = (score.mapBgGain[off] - bgGainMin) / (bgGainMax - bgGainMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.extremeGain.empty()) {
+                WriteGrayBitmap(path.extremeGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapExtremeGain.size()) return (uint8_t)0;
+                    const float t = (score.mapExtremeGain[off] - egMin) / (egMax - egMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.temporalGain.empty()) {
+                WriteGrayBitmap(path.temporalGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapTemporalGain.size()) return (uint8_t)0;
+                    const float t = (score.mapTemporalGain[off] - tgMin) / (tgMax - tgMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.opaquePenalty.empty()) {
+                WriteGrayBitmap(path.opaquePenalty, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapOpaquePenalty.size()) return (uint8_t)0;
+                    const float t = (score.mapOpaquePenalty[off] - opMin) / (opMax - opMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            if (!path.opaqueStaticPenalty.empty()) {
+                WriteGrayBitmap(path.opaqueStaticPenalty, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapOpaqueStaticPenalty.size()) return (uint8_t)0;
+                    const float t = (score.mapOpaqueStaticPenalty[off] - ospMin) / (ospMax - ospMin);
+                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
                 });
             }
 
@@ -3134,12 +3292,24 @@ namespace {
             basePath.b = (bPath != nullptr) ? tchar_to_string(bPath) : std::string();
             basePath.alpha = (alphaPath != nullptr) ? tchar_to_string(alphaPath) : std::string();
             basePath.logoY = (logoYPath != nullptr) ? tchar_to_string(logoYPath) : std::string();
+            basePath.meanDiff = addSuffixBeforeExtension(basePath.score, ".meandiff");
             basePath.consistency = (consistencyPath != nullptr) ? tchar_to_string(consistencyPath) : std::string();
             basePath.fgVar = (fgVarPath != nullptr) ? tchar_to_string(fgVarPath) : std::string();
             basePath.bgVar = (bgVarPath != nullptr) ? tchar_to_string(bgVarPath) : std::string();
             basePath.transition = (transitionPath != nullptr) ? tchar_to_string(transitionPath) : std::string();
             basePath.keepRate = (keepRatePath != nullptr) ? tchar_to_string(keepRatePath) : std::string();
             basePath.accepted = (acceptedPath != nullptr) ? tchar_to_string(acceptedPath) : std::string();
+            basePath.diffGain = addSuffixBeforeExtension(basePath.score, ".diffgain");
+            basePath.diffGainRaw = addSuffixBeforeExtension(basePath.score, ".diffgainraw");
+            basePath.residualGain = addSuffixBeforeExtension(basePath.score, ".residualgain");
+            basePath.logoGain = addSuffixBeforeExtension(basePath.score, ".logogain");
+            basePath.consistencyGain = addSuffixBeforeExtension(basePath.score, ".consistencygain");
+            basePath.alphaGain = addSuffixBeforeExtension(basePath.score, ".alphagain");
+            basePath.bgGain = addSuffixBeforeExtension(basePath.score, ".bggain");
+            basePath.extremeGain = addSuffixBeforeExtension(basePath.score, ".extremegain");
+            basePath.temporalGain = addSuffixBeforeExtension(basePath.score, ".temporalgain");
+            basePath.opaquePenalty = addSuffixBeforeExtension(basePath.score, ".opaquepenalty");
+            basePath.opaqueStaticPenalty = addSuffixBeforeExtension(basePath.score, ".opaquestaticpenalty");
 
             // 互換維持: 既存パスは最終結果(final)を出力。
             writeDebugStage(debugStats, debugTraceRecords, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
@@ -3437,30 +3607,17 @@ namespace {
                             s.sumB2 += b * b;
                             s.sumFB += f * b;
                             s.sumW += 1.0;
-                            s.count++;
+                            s.rawSampleCount++;
                             frameCount.fetch_add(1, std::memory_order_relaxed);
                             continue;
                         }
 
-                        // fg値をbinに振り分けて蓄積する（ヒストグラムbin集計方式）。
-                        // fgRaw * invMaxv で [0,1] に正規化してbinを決定する。
+                        s.rawSampleCount++;
                         const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
                         auto& bin = binAccumBuf[off * kHistBins + binIdx];
-                        if (sampleMode_ == 1) {
-                            bin.count++;
-                            bin.sum_fg += f;
-                            bin.sum_bg += b;
-                        } else {
-                            if (bin.last_fg >= 0.0 && std::abs(fgRaw - bin.last_fg) < kDedupFgEps && std::abs(bg - bin.last_bg) < kDedupBgEps) {
-                                s.rejectedDedup++;
-                                continue;
-                            }
-                            bin.last_fg = fgRaw;
-                            bin.last_bg = bg;
-                            bin.count++;
-                            bin.sum_fg += f;
-                            bin.sum_bg += b;
-                        }
+                        bin.count++;
+                        bin.sum_fg += f;
+                        bin.sum_bg += b;
                         // このフレームで有効だった画素数（デバッグ可視化用）。
                         frameCount.fetch_add(1, std::memory_order_relaxed);
                     }
@@ -3479,7 +3636,7 @@ namespace {
                 rec.absX = scanx + tp.x;
                 rec.absY = scany + tp.y;
                 rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
-                // mode 0/1/2 の切替運用では dedupThreshold 固定値の表示は持たない
+                // mode 0/1 の切替運用では dedupThreshold 固定値の表示は持たない
                 rec.dedupThreshold = 0.0f;
 
                 if (tp.x < kScanEdgeMargin || tp.y < kScanEdgeMargin || tp.x >= scanw - kScanEdgeMargin || tp.y >= scanh - kScanEdgeMargin) {
@@ -3528,7 +3685,7 @@ namespace {
                 if (!bgOk) {
                     rec.rejectCode = 2;
                     rec.observedAfter = s.observed;
-                    rec.countAfter = s.count;
+                    rec.countAfter = s.rawSampleCount;
                     rec.totalCandidatesAfter = s.totalCandidates;
                     statsPass.traceRecords.push_back(rec);
                     continue;
@@ -3544,7 +3701,7 @@ namespace {
                     rec.extreme = 1;
                     rec.rejectCode = 3;
                     rec.observedAfter = s.observed;
-                    rec.countAfter = s.count;
+                    rec.countAfter = s.rawSampleCount;
                     rec.totalCandidatesAfter = s.totalCandidates;
                     statsPass.traceRecords.push_back(rec);
                     continue;
@@ -3564,7 +3721,7 @@ namespace {
                         s.rejectedDedup++;
                         rec.rejectCode = 1;
                         rec.observedAfter = s.observed;
-                        rec.countAfter = s.count;
+                        rec.countAfter = s.rawSampleCount;
                         rec.totalCandidatesAfter = s.totalCandidates;
                         statsPass.traceRecords.push_back(rec);
                         continue;
@@ -3578,38 +3735,20 @@ namespace {
                     s.sumB2 += b * b;
                     s.sumFB += f * b;
                     s.sumW += 1.0;
-                    s.count++;
+                    s.rawSampleCount++;
                 } else {
-                    // fg値をbinに振り分けて蓄積する（ヒストグラムbin集計方式）。
-                    // fgFiltered * invMaxv で [0,1] に正規化してbinを決定する。
+                    s.rawSampleCount++;
                     const int binIdx = std::min(kHistBins - 1, (int)(fgFiltered * invMaxv * kHistBins));
                     auto& bin = binAccumBuf[off * kHistBins + binIdx];
-                    if (sampleMode_ == 1) {
-                        bin.count++;
-                        bin.sum_fg += f;
-                        bin.sum_bg += b;
-                    } else {
-                        if (bin.last_fg >= 0.0 && std::abs(fgFiltered - bin.last_fg) < kDedupFgEps && std::abs(bg - bin.last_bg) < kDedupBgEps) {
-                            s.rejectedDedup++;
-                            rec.rejectCode = 1;
-                            rec.observedAfter = s.observed;
-                            rec.countAfter = s.count;
-                            rec.totalCandidatesAfter = s.totalCandidates;
-                            statsPass.traceRecords.push_back(rec);
-                            continue;
-                        }
-                        bin.last_fg = fgFiltered;
-                        bin.last_bg = bg;
-                        bin.count++;
-                        bin.sum_fg += f;
-                        bin.sum_bg += b;
-                    }
+                    bin.count++;
+                    bin.sum_fg += f;
+                    bin.sum_bg += b;
                 }
                 frameCount.fetch_add(1, std::memory_order_relaxed);
                 rec.accepted = 1;
                 rec.rejectCode = 0;
                 rec.observedAfter = s.observed;
-                rec.countAfter = s.count;
+                rec.countAfter = s.rawSampleCount;
                 rec.totalCandidatesAfter = s.totalCandidates;
                 statsPass.traceRecords.push_back(rec);
             }
@@ -3662,10 +3801,10 @@ namespace {
                     for (int x = 0; x < scanw; x++) {
                         const int off = x + y * scanw;
                         AutoDetectStats& s = statsPass.stats[off];
-                        // sumF/sumB/sumF2/sumB2/sumFB/sumW/count を binAccumBuf から算出し直す。
+                        // sumF/sumB/sumF2/sumB2/sumFB/sumW/effectiveBinCount を binAccumBuf から算出し直す。
                         // observed/fgTransition/rejectedDedup/totalCandidates/rejectedExtreme はそのまま保持。
                         s.sumF = 0.0; s.sumB = 0.0; s.sumF2 = 0.0; s.sumB2 = 0.0; s.sumFB = 0.0;
-                        s.sumW = 0.0; s.count = 0;
+                        s.sumW = 0.0; s.effectiveBinCount = 0;
                         for (int b = 0; b < kHistBins; b++) {
                             const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
                             if (bin.count == 0) continue;
@@ -3678,7 +3817,7 @@ namespace {
                             s.sumB2 += w * avg_bg * avg_bg;
                             s.sumFB += w * avg_fg * avg_bg;
                             s.sumW  += w;  // Gompertz重みでビンを加重
-                            s.count++;
+                            s.effectiveBinCount++;
                         }
                     }
                 }
@@ -3689,7 +3828,7 @@ namespace {
             if (cb && !cb(2, 0.0f, 0.5f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
-            // mode 0 は stats に直接加算済み。mode 1/2 は binAccumBuf から変換する。
+            // mode 0 は stats に直接加算済み。mode 1 は binAccumBuf から変換する。
             if (sampleMode_ != 0) {
                 convertBinAccumToStats(statsPass);
             }
@@ -3749,8 +3888,9 @@ namespace {
                             const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
                             const double fgBgVarRatio = varFg / (varBg + 1e-6);
                             const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
-                            const double keepRate = (s.observed > 0) ? (double)s.count / (double)s.observed : 0.0;
+                            const double keepRate = (s.observed > 0) ? (double)s.rawSampleCount / (double)s.observed : 0.0;
                             const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
+                            scoreStage.mapMeanDiff[i] = (float)meanDiff;
                             scoreStage.mapConsistency[i] = (float)consistency;
                             scoreStage.mapFgVar[i] = (float)varFg;
                             scoreStage.mapBgVar[i] = (float)varBg;
@@ -3807,6 +3947,17 @@ namespace {
                                 const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness);
                                 opaqueStaticPenalty = 1.0 / penaltyScale;
                             }
+                            scoreStage.mapDiffGain[i] = (float)diffGain;
+                            scoreStage.mapDiffGainRaw[i] = (float)diffGainRaw;
+                            scoreStage.mapResidualGain[i] = (float)residualGain;
+                            scoreStage.mapLogoGain[i] = (float)logoGain;
+                            scoreStage.mapConsistencyGain[i] = (float)consistencyGain;
+                            scoreStage.mapAlphaGain[i] = (float)alphaGain;
+                            scoreStage.mapBgGain[i] = (float)bgGain;
+                            scoreStage.mapExtremeGain[i] = (float)extremeGain;
+                            scoreStage.mapTemporalGain[i] = (float)temporalGain;
+                            scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
+                            scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
                             const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
                             if (d <= 0.0f) continue;
                             scoreStage.mapAccepted[i] = d;
@@ -3841,10 +3992,10 @@ namespace {
                 int maxSampleCount = 0;
                 long long totalSampleCount = 0;
                 for (const auto& s : statsPass.stats) {
-                    if (s.count > 0) {
+                    if (s.rawSampleCount > 0) {
                         sampledPixels++;
-                        totalSampleCount += s.count;
-                        maxSampleCount = std::max(maxSampleCount, s.count);
+                        totalSampleCount += s.rawSampleCount;
+                        maxSampleCount = std::max(maxSampleCount, s.rawSampleCount);
                     }
                 }
                 int framesNonZero = 0;
