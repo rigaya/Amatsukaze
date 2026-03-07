@@ -507,38 +507,6 @@ namespace Amatsukaze.Server.Rest
                 });
             });
 
-            app.MapPost("/api/queue/change", async (HttpRequest request) =>
-            {
-                var data = await request.ReadFromJsonAsync<ChangeItemData>();
-                if (data == null)
-                {
-                    return Results.BadRequest();
-                }
-                if (string.IsNullOrEmpty(data.RequestId))
-                {
-                    data.RequestId = Guid.NewGuid().ToString("N");
-                }
-
-                using var scope = OperationContextScope.Use(new OperationContext
-                {
-                    Page = "queue",
-                    Action = GetQueueAction(data.ChangeType),
-                    RequestId = data.RequestId,
-                    Source = "rest"
-                });
-
-                await server.ChangeItem(data);
-
-                state.TryGetMessageForRequestId(data.RequestId, out var message);
-                return Results.Json(new
-                {
-                    ok = true,
-                    requestId = data.RequestId,
-                    message = message?.Message,
-                    level = message?.Level
-                });
-            });
-
             app.MapPost("/api/queue/move-many", async (HttpRequest request) =>
             {
                 var data = await request.ReadFromJsonAsync<QueueMoveManyRequest>();
@@ -2029,25 +1997,6 @@ namespace Amatsukaze.Server.Rest
                 return parsed;
             }
             return fallback;
-        }
-
-        private static string GetQueueAction(ChangeItemType type)
-        {
-            return type switch
-            {
-                ChangeItemType.ResetState => "retry",
-                ChangeItemType.UpdateProfile => "reapply",
-                ChangeItemType.Duplicate => "duplicate",
-                ChangeItemType.Cancel => "cancel",
-                ChangeItemType.Priority => "priority",
-                ChangeItemType.Profile => "profile",
-                ChangeItemType.RemoveItem => "delete",
-                ChangeItemType.RemoveCompleted => "delete-completed",
-                ChangeItemType.ForceStart => "force",
-                ChangeItemType.RemoveSourceFile => "delete-source",
-                ChangeItemType.Move => "move",
-                _ => "change"
-            };
         }
 
         private static int GetQueryInt(HttpRequest request, string key, int fallback)
