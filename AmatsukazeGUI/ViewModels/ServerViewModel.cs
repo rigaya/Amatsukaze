@@ -1,4 +1,4 @@
-﻿using Amatsukaze.Server;
+using Amatsukaze.Server;
 using Livet;
 using Livet.EventListeners;
 using Livet.Messaging;
@@ -169,7 +169,17 @@ namespace Amatsukaze.ViewModels
             LOG.Info(text);
 
             var formatted = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + text;
+            if (DispatcherHelper.UIDispatcher != null &&
+                !DispatcherHelper.UIDispatcher.CheckAccess())
+            {
+                DispatcherHelper.UIDispatcher.BeginInvoke((Action)(() => AddLogText(formatted)));
+                return;
+            }
+            AddLogText(formatted);
+        }
 
+        private void AddLogText(string formatted)
+        {
             _Log.Add(formatted);
 
             if (_Log.Count > 100)
