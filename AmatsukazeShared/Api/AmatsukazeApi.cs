@@ -123,6 +123,9 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<string>> AddQueueAsync(AddQueueRequest req)
             => PostJsonAsync("/api/queue/add", req, result => result.GetProperty("requestId").GetString() ?? "");
 
+        public Task<ApiResult<bool>> ChangeQueueAsync(ChangeItemData req)
+            => PostJsonAsync("/api/queue/change", req, _ => true);
+
         public Task<ApiResult<bool>> MoveQueueManyAsync(QueueMoveManyRequest req)
             => PostJsonAsync("/api/queue/move-many", req, _ => true);
 
