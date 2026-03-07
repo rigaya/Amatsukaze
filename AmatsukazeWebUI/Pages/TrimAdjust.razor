@@ -404,7 +404,9 @@
     private string? _checkLogError;
     private string? _checkLogTitle;
     private LogFileContent? _checkLogContent;
-    private string? _queueItemSrcPath; // キューアイテムのソースパス（チェックログ検索用）
+    private string? _queueItemSrcPath; // キューアイテムのソースパス（チェックログ検索・再投入用）
+    private string? _queueItemOutDir; // 再投入時の出力先フォルダ
+    private int _queueItemPriority = 3; // 再投入時に引き継ぐ優先度
 
     // debounce用タイマー
     private System.Threading.Timer? _debounceTimer;
@@ -752,7 +754,7 @@
         }
     }
 
-    // キューアイテム情報を取得（SrcPath, ProfileName）
+    // キューアイテム情報を取得（SrcPath, ProfileName, OutDir, Priority）
     private string? _queueItemProfileName;
     private async Task LoadQueueItemInfoAsync()
     {
@@ -764,6 +766,8 @@
             {
                 _queueItemSrcPath = item.SrcPath;
                 _queueItemProfileName = item.ProfileName;
+                _queueItemOutDir = item.OutDir;
+                _queueItemPriority = item.Priority;
                 // プロファイルリストが既にロード済みなら選択を更新
                 if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
                 {
@@ -1273,7 +1277,7 @@
         _checkLogVisible = false;
     }
 
-    // プロファイルを指定して再投入（保存→モード変更→プロファイル変更→リトライ）
+    // プロファイルを指定して再投入（保存→通常モードの新規タスクを追加）
     private async Task RequeueWithProfile()
     {
         if (string.IsNullOrEmpty(_selectedProfile)) return;
@@ -1292,16 +1296,47 @@
             }
         }
 
-        // 2. モードを通常(Batch)に変更し、プロファイルも変更してリトライ
-        var changeRes = await Api.ChangeQueueAsync(new ChangeItemData
+        if (string.IsNullOrEmpty(_queueItemSrcPath))
         {
-            ItemId = QueueItemId,
-            ChangeType = ChangeItemType.ResetState,
-            Profile = _selectedProfile,
-            Mode = ProcMode.Batch
+            _statusMessage = "元の入力ファイル情報が取得できません";
+            _isError = true;
+            _requeueBusy = false;
+            StateHasChanged();
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_queueItemOutDir))
+        {
+            _statusMessage = "元の出力先情報が取得できません";
+            _isError = true;
+            _requeueBusy = false;
+            StateHasChanged();
+            return;
+        }
+
+        // 2. 通常モードの新規タスクとして追加
+        var addRes = await Api.AddQueueAsync(new AddQueueRequest
+        {
+            Mode = ProcMode.Batch,
+            Targets = new List<AddQueueItem>()
+            {
+                new AddQueueItem()
+                {
+                    Path = _queueItemSrcPath
+                }
+            },
+            Outputs = new List<OutputInfo>()
+            {
+                new OutputInfo()
+                {
+                    DstPath = _queueItemOutDir,
+                    Profile = _selectedProfile,
+                    Priority = _queueItemPriority
+                }
+            }
         });
 
-        if (changeRes.Ok)
+        if (addRes.Ok)
         {
             _statusMessage = "再投入しました";
             _isError = false;
@@ -1313,7 +1348,7 @@
         }
         else
         {
-            _statusMessage = changeRes.Error ?? "再投入に失敗しました";
+            _statusMessage = addRes.Error ?? "再投入に失敗しました";
             _isError = true;
         }
 
