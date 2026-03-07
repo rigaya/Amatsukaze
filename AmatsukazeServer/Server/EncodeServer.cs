@@ -716,19 +716,22 @@ namespace Amatsukaze.Server
                     {
                         try
                         {
-                            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                            Util.AddLog("[Server] REST APIサーバーを停止しています...", null);
+                            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
                             {
                                 // StopAsync内部がSynchronizationContextに捕捉されると停止が完了しないため、
                                 // ThreadPool上で実行して継続を確実に進める
                                 Task.Run(() => restApiHost.StopAsync(cts.Token)).GetAwaiter().GetResult();
                             }
+                            Util.AddLog("[Server] REST APIサーバーを停止しました。", null);
                         }
                         catch (OperationCanceledException)
                         {
+                            Util.AddLog("[Server] REST APIサーバーの停止がタイムアウトしました。強制終了します。", null);
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            // Dispose中の例外は仕方ないので無視する
+                            Util.AddLog($"[Server] REST APIサーバーの停止中にエラーが発生しました: {ex.Message}", ex);
                         }
                     }
 

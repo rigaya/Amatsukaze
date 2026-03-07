@@ -307,24 +307,19 @@ namespace Amatsukaze.Server.Rest
         {
             if (host != null)
             {
-                var start = DateTime.Now;
-                var stopTask = host.StopAsync(cancellationToken);
-                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
-                var completed = await Task.WhenAny(stopTask, timeoutTask).ConfigureAwait(false);
-                if (completed == stopTask)
+                // host.StopAsync()はタイムアウトしても戻らないケースがあるため、
+                // cancellationTokenによるタイムアウトは呼び出し側(EncodeServer.Dispose)に委ねる
+                try
                 {
-                    try
-                    {
-                        await stopTask.ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        Util.AddLog($"[REST] StopAsync failed: {ex.GetType().Name}: {ex.Message}", ex);
-                    }
+                    await host.StopAsync(cancellationToken).ConfigureAwait(false);
                 }
-                else
+                catch (OperationCanceledException)
                 {
                     Util.AddLog("[REST] StopAsync timeout -> Dispose", null);
+                }
+                catch (Exception ex)
+                {
+                    Util.AddLog($"[REST] StopAsync failed: {ex.GetType().Name}: {ex.Message}", ex);
                 }
 
                 // StopAsyncが戻らないケースがあるので、必ずDisposeして解放する
