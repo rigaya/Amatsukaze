@@ -319,6 +319,9 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "opaquestaticpenalty", AddInfixBeforeExtension(job.ScoreImagePath, ".opaquestaticpenalty"), out path))
             {
             }
+            else if (TryResolveStagePath(kind, "traceplot", AddInfixBeforeExtension(job.BinaryImagePath, ".traceplot"), out path))
+            {
+            }
             else if (string.Equals(kind, "pass2prep-logo", StringComparison.OrdinalIgnoreCase))
             {
                 path = AddInfixBeforeExtension(job.ScoreImagePath, ".pass2prep-logo");

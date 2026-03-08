@@ -2095,6 +2095,7 @@ namespace {
             float dedupNearestDiff = -1.0f;
             float dedupThreshold = 0.0f;
             float fgBgDiff = 0.0f;
+            int histBin = -1;
             int extreme = 0;
             int accepted = 0;
             int rejectCode = 0; // 0:accepted,1:dedup,2:bg_fail,3:extreme,4:pass3_mask,5:edge_skip
@@ -2248,6 +2249,7 @@ namespace {
             std::string temporalGain;
             std::string opaquePenalty;
             std::string opaqueStaticPenalty;
+            std::string tracePlot;
         };
         struct Pass2PrepareDebug {
             int logoW = 0;
@@ -2406,6 +2408,7 @@ namespace {
         AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
+        void writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords) const;
 
     public:
         AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, int sampleMode, logo::LOGO_AUTODETECT_CB cb)
@@ -2762,6 +2765,7 @@ namespace {
             out.temporalGain = addSuffixBeforeExtension(base.temporalGain, suffix);
             out.opaquePenalty = addSuffixBeforeExtension(base.opaquePenalty, suffix);
             out.opaqueStaticPenalty = addSuffixBeforeExtension(base.opaqueStaticPenalty, suffix);
+            out.tracePlot = addSuffixBeforeExtension(base.tracePlot, suffix);
             return out;
         }
 
@@ -3043,12 +3047,12 @@ namespace {
                 const std::string traceCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.csv");
                 FILE* ftrace = fopen(traceCsvPath.c_str(), "w");
                 if (ftrace != nullptr) {
-                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_range_max,bg_side_avg_spread,dedup_nearest_diff,dedup_threshold,fg_bg_diff,extreme,accepted,reject_code,reject\n");
+                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_range_max,bg_side_avg_spread,dedup_nearest_diff,dedup_threshold,fg_bg_diff,hist_bin,extreme,accepted,reject_code,reject\n");
                     for (const auto& r : traceRecords) {
-                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%s\n",
+                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%d,%s\n",
                             r.pass, r.frame, r.pointId, r.x, r.y, r.absX, r.absY,
                             r.fgRaw, r.fgFiltered, r.bg, r.bgOk, r.bgSideCount, r.bgSideValidMask,
-                            r.bgSideRangeMax, r.bgSideAvgSpread, r.dedupNearestDiff, r.dedupThreshold, r.fgBgDiff,
+                            r.bgSideRangeMax, r.bgSideAvgSpread, r.dedupNearestDiff, r.dedupThreshold, r.fgBgDiff, r.histBin,
                             r.extreme, r.accepted, r.rejectCode, rejectReasonStr(r.rejectCode));
                     }
                     fclose(ftrace);
@@ -3146,6 +3150,10 @@ namespace {
                             meanDiff, p50, p90, A, B, alpha, logoY, consistency, fgvar, bgvar, transition, keeprate, scorev, acceptedScore);
                     }
                     fclose(fsum);
+                }
+
+                if (!path.tracePlot.empty()) {
+                    writeTracePlotBitmap(path.tracePlot, traceRecords);
                 }
             }
 
@@ -3310,6 +3318,7 @@ namespace {
             basePath.temporalGain = addSuffixBeforeExtension(basePath.score, ".temporalgain");
             basePath.opaquePenalty = addSuffixBeforeExtension(basePath.score, ".opaquepenalty");
             basePath.opaqueStaticPenalty = addSuffixBeforeExtension(basePath.score, ".opaquestaticpenalty");
+            basePath.tracePlot = addSuffixBeforeExtension(basePath.binary, ".traceplot");
 
             // 互換維持: 既存パスは最終結果(final)を出力。
             writeDebugStage(debugStats, debugTraceRecords, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
@@ -3743,6 +3752,7 @@ namespace {
                     bin.count++;
                     bin.sum_fg += f;
                     bin.sum_bg += b;
+                    rec.histBin = binIdx;
                 }
                 frameCount.fetch_add(1, std::memory_order_relaxed);
                 rec.accepted = 1;
@@ -4100,6 +4110,269 @@ namespace {
             if (v) c++;
         }
         return c;
+    }
+
+    void AutoDetectLogoReader::writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords) const {
+        if (path.empty() || tracePoints.empty() || traceRecords.empty()) {
+            return;
+        }
+
+        const int cols = std::min(2, std::max(1, (int)tracePoints.size()));
+        const int rows = ((int)tracePoints.size() + cols - 1) / cols;
+        const int panelW = 320;
+        const int panelH = 320;
+        const int width = panelW * cols;
+        const int height = panelH * rows;
+        std::vector<std::array<uint8_t, 3>> img(width * height, { { 248, 249, 252 } });
+
+        const auto clamp255 = [](const int v) {
+            return (uint8_t)ClampInt(v, 0, 255);
+        };
+        const auto setPixel = [&](const int x, const int y, const std::array<uint8_t, 3>& c) {
+            if (x < 0 || x >= width || y < 0 || y >= height) {
+                return;
+            }
+            img[x + y * width] = c;
+        };
+        const auto blendPixel = [&](const int x, const int y, const std::array<uint8_t, 3>& c, const float alpha) {
+            if (x < 0 || x >= width || y < 0 || y >= height) {
+                return;
+            }
+            auto& dst = img[x + y * width];
+            const float a = std::max(0.0f, std::min(1.0f, alpha));
+            for (int i = 0; i < 3; i++) {
+                dst[i] = clamp255((int)std::round(dst[i] * (1.0f - a) + c[i] * a));
+            }
+        };
+        const auto fillRect = [&](const int x0, const int y0, const int x1, const int y1, const std::array<uint8_t, 3>& c) {
+            for (int y = std::max(0, y0); y <= std::min(height - 1, y1); y++) {
+                for (int x = std::max(0, x0); x <= std::min(width - 1, x1); x++) {
+                    setPixel(x, y, c);
+                }
+            }
+        };
+        const auto drawRect = [&](const int x0, const int y0, const int x1, const int y1, const std::array<uint8_t, 3>& c) {
+            for (int x = x0; x <= x1; x++) {
+                setPixel(x, y0, c);
+                setPixel(x, y1, c);
+            }
+            for (int y = y0; y <= y1; y++) {
+                setPixel(x0, y, c);
+                setPixel(x1, y, c);
+            }
+        };
+        const auto drawLine = [&](int x0, int y0, int x1, int y1, const std::array<uint8_t, 3>& c, const float alpha = 1.0f) {
+            int dx = std::abs(x1 - x0);
+            int sx = x0 < x1 ? 1 : -1;
+            int dy = -std::abs(y1 - y0);
+            int sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy;
+            while (true) {
+                blendPixel(x0, y0, c, alpha);
+                if (x0 == x1 && y0 == y1) {
+                    break;
+                }
+                const int e2 = err * 2;
+                if (e2 >= dy) {
+                    err += dy;
+                    x0 += sx;
+                }
+                if (e2 <= dx) {
+                    err += dx;
+                    y0 += sy;
+                }
+            }
+        };
+        const auto glyphRows = [](const char ch) -> std::array<uint8_t, 5> {
+            switch (ch) {
+            case '0': return { { 0x7, 0x5, 0x5, 0x5, 0x7 } };
+            case '1': return { { 0x2, 0x6, 0x2, 0x2, 0x7 } };
+            case '2': return { { 0x7, 0x1, 0x7, 0x4, 0x7 } };
+            case '3': return { { 0x7, 0x1, 0x7, 0x1, 0x7 } };
+            case '4': return { { 0x5, 0x5, 0x7, 0x1, 0x1 } };
+            case '5': return { { 0x7, 0x4, 0x7, 0x1, 0x7 } };
+            case '6': return { { 0x7, 0x4, 0x7, 0x5, 0x7 } };
+            case '7': return { { 0x7, 0x1, 0x1, 0x1, 0x1 } };
+            case '8': return { { 0x7, 0x5, 0x7, 0x5, 0x7 } };
+            case '9': return { { 0x7, 0x5, 0x7, 0x1, 0x7 } };
+            case 'P': return { { 0x7, 0x5, 0x7, 0x4, 0x4 } };
+            default: return { { 0, 0, 0, 0, 0 } };
+            }
+        };
+        const auto drawText = [&](int x, int y, const std::string& text, const std::array<uint8_t, 3>& c) {
+            for (const char ch : text) {
+                const auto rowsBits = glyphRows(ch);
+                for (int gy = 0; gy < 5; gy++) {
+                    for (int gx = 0; gx < 3; gx++) {
+                        if (rowsBits[gy] & (1 << (2 - gx))) {
+                            fillRect(x + gx * 2, y + gy * 2, x + gx * 2 + 1, y + gy * 2 + 1, c);
+                        }
+                    }
+                }
+                x += 8;
+            }
+        };
+        const auto hsvToRgb = [&](const float h, const float s, const float v) {
+            const float hh = std::fmod(std::max(0.0f, h), 1.0f) * 6.0f;
+            const int sector = (int)std::floor(hh);
+            const float frac = hh - sector;
+            const float p = v * (1.0f - s);
+            const float q = v * (1.0f - s * frac);
+            const float t = v * (1.0f - s * (1.0f - frac));
+            float r = 0.0f, g = 0.0f, b = 0.0f;
+            switch (sector % 6) {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+            }
+            return std::array<uint8_t, 3>{ clamp255((int)std::round(r * 255.0f)), clamp255((int)std::round(g * 255.0f)), clamp255((int)std::round(b * 255.0f)) };
+        };
+
+        std::array<std::array<uint8_t, 3>, kHistBins> binPalette = {};
+        for (int i = 0; i < kHistBins; i++) {
+            binPalette[i] = hsvToRgb((float)i / std::max(1, kHistBins), 0.78f, 0.90f);
+        }
+        int frameMin = std::numeric_limits<int>::max();
+        int frameMax = std::numeric_limits<int>::lowest();
+        for (const auto& rec : traceRecords) {
+            if (!rec.bgOk) {
+                continue;
+            }
+            frameMin = std::min(frameMin, rec.frame);
+            frameMax = std::max(frameMax, rec.frame);
+        }
+        if (frameMin == std::numeric_limits<int>::max()) {
+            frameMin = 0;
+            frameMax = 0;
+        }
+        const int frameRange = std::max(1, frameMax - frameMin);
+        const auto frameColorFor = [&](const int frame, const bool accepted) {
+            static constexpr int kFrameColorBuckets = 24;
+            const float norm = (float)(frame - frameMin) / (float)frameRange;
+            const int bucket = ClampInt((int)std::floor(norm * (float)kFrameColorBuckets), 0, kFrameColorBuckets - 1);
+            const float bucketNorm = ((float)bucket + 0.5f) / (float)kFrameColorBuckets;
+            return hsvToRgb(0.67f * (1.0f - bucketNorm), accepted ? 0.82f : 0.38f, accepted ? 0.95f : 0.72f);
+        };
+
+        const float maxv = (float)((1 << bitDepth) - 1);
+        const std::array<uint8_t, 3> panelBorder = { { 92, 102, 122 } };
+        const std::array<uint8_t, 3> axisColor = { { 120, 132, 150 } };
+        const std::array<uint8_t, 3> diagColor = { { 180, 188, 204 } };
+        const std::array<uint8_t, 3> labelColor = { { 38, 43, 52 } };
+        const auto drawDot = [&](const int px, const int py, const std::array<uint8_t, 3>& c, const float alpha) {
+            blendPixel(px, py, c, alpha);
+            blendPixel(px - 1, py, c, alpha * 0.52f);
+            blendPixel(px + 1, py, c, alpha * 0.52f);
+            blendPixel(px, py - 1, c, alpha * 0.52f);
+            blendPixel(px, py + 1, c, alpha * 0.52f);
+            blendPixel(px - 1, py - 1, c, alpha * 0.26f);
+            blendPixel(px + 1, py - 1, c, alpha * 0.26f);
+            blendPixel(px - 1, py + 1, c, alpha * 0.26f);
+            blendPixel(px + 1, py + 1, c, alpha * 0.26f);
+        };
+        const auto drawCross = [&](const int px, const int py, const std::array<uint8_t, 3>& c) {
+            const std::array<uint8_t, 3> outline = { { 32, 36, 44 } };
+            drawLine(px - 5, py, px + 5, py, outline, 0.55f);
+            drawLine(px, py - 5, px, py + 5, outline, 0.55f);
+            drawLine(px - 4, py, px + 4, py, c, 0.96f);
+            drawLine(px, py - 4, px, py + 4, c, 0.96f);
+            blendPixel(px, py, { { 255, 255, 255 } }, 0.65f);
+        };
+
+        for (size_t pointIdx = 0; pointIdx < tracePoints.size(); pointIdx++) {
+            const int col = (int)pointIdx % cols;
+            const int row = (int)pointIdx / cols;
+            const int panelX = col * panelW;
+            const int panelY = row * panelH;
+            const int plotX0 = panelX + 34;
+            const int plotY0 = panelY + 22;
+            const int plotX1 = panelX + panelW - 18;
+            const int plotY1 = panelY + panelH - 28;
+            const int pointId = tracePoints[pointIdx].id;
+
+            fillRect(panelX, panelY, panelX + panelW - 1, panelY + panelH - 1, { { 248, 249, 252 } });
+            drawRect(panelX + 1, panelY + 1, panelX + panelW - 2, panelY + panelH - 2, panelBorder);
+            drawRect(plotX0, plotY0, plotX1, plotY1, axisColor);
+            drawLine(plotX0, plotY1, plotX1, plotY0, diagColor, 0.55f);
+            drawText(panelX + 10, panelY + 8, "P" + std::to_string(pointId), labelColor);
+
+            for (int gx = 1; gx < 4; gx++) {
+                const int x = plotX0 + (plotX1 - plotX0) * gx / 4;
+                const int y = plotY0 + (plotY1 - plotY0) * gx / 4;
+                drawLine(x, plotY0 + 1, x, plotY1 - 1, { { 228, 232, 240 } }, 0.65f);
+                drawLine(plotX0 + 1, y, plotX1 - 1, y, { { 228, 232, 240 } }, 0.65f);
+            }
+
+            struct BinMean {
+                double sumFg = 0.0;
+                double sumBg = 0.0;
+                int count = 0;
+            };
+            std::array<BinMean, kHistBins> binMeans = {};
+
+            for (const auto& rec : traceRecords) {
+                if (rec.pointId != pointId || !rec.bgOk) {
+                    continue;
+                }
+                const float xNorm = std::max(0.0f, std::min(1.0f, rec.fgFiltered / std::max(1.0f, maxv)));
+                const float yNorm = std::max(0.0f, std::min(1.0f, rec.bg / std::max(1.0f, maxv)));
+                const int px = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                const int py = plotY1 - ClampInt((int)std::round(yNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                const auto color = frameColorFor(rec.frame, rec.accepted != 0);
+                drawDot(px, py, color, rec.accepted ? 0.92f : 0.38f);
+
+                if (sampleMode_ != 0 && rec.accepted && rec.histBin >= 0 && rec.histBin < kHistBins) {
+                    auto& mean = binMeans[rec.histBin];
+                    mean.sumFg += rec.fgFiltered;
+                    mean.sumBg += rec.bg;
+                    mean.count++;
+                }
+            }
+
+            const int frameLegendY0 = plotY1 + 8;
+            const int frameLegendY1 = plotY1 + 13;
+            const int frameLegendBuckets = 24;
+            const int frameLegendW = std::max(1, (plotX1 - plotX0 + 1) / frameLegendBuckets);
+            for (int b = 0; b < frameLegendBuckets; b++) {
+                const int lx0 = plotX0 + b * frameLegendW;
+                const int lx1 = (b == frameLegendBuckets - 1) ? plotX1 : std::min(plotX1, lx0 + frameLegendW - 1);
+                const int pseudoFrame = frameMin + (int)std::round(frameRange * (((float)b + 0.5f) / (float)frameLegendBuckets));
+                fillRect(lx0, frameLegendY0, lx1, frameLegendY1, frameColorFor(pseudoFrame, true));
+            }
+            drawRect(plotX0, frameLegendY0, plotX1, frameLegendY1, axisColor);
+
+            if (sampleMode_ != 0) {
+                for (int b = 0; b < kHistBins; b++) {
+                    if (binMeans[b].count <= 0) {
+                        continue;
+                    }
+                    const float fgMean = (float)(binMeans[b].sumFg / binMeans[b].count);
+                    const float bgMean = (float)(binMeans[b].sumBg / binMeans[b].count);
+                    const float xNorm = std::max(0.0f, std::min(1.0f, fgMean / std::max(1.0f, maxv)));
+                    const float yNorm = std::max(0.0f, std::min(1.0f, bgMean / std::max(1.0f, maxv)));
+                    const int px = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                    const int py = plotY1 - ClampInt((int)std::round(yNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                    drawCross(px, py, binPalette[b]);
+                }
+
+                const int legendY0 = plotY1 + 16;
+                const int legendY1 = plotY1 + 23;
+                const int legendW = std::max(1, (plotX1 - plotX0 + 1) / kHistBins);
+                for (int b = 0; b < kHistBins; b++) {
+                    const int lx0 = plotX0 + b * legendW;
+                    const int lx1 = (b == kHistBins - 1) ? plotX1 : std::min(plotX1, lx0 + legendW - 1);
+                    fillRect(lx0, legendY0, lx1, legendY1, binPalette[b]);
+                }
+                drawRect(plotX0, legendY0, plotX1, legendY1, axisColor);
+            }
+        }
+
+        WriteRgbBitmap(path, width, height, [&](int x, int y) {
+            return img[x + y * width];
+        });
     }
 
     // high/low 閾値から binary を1回生成する。
