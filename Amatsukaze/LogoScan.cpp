@@ -2103,6 +2103,22 @@ namespace {
             int countAfter = 0;
             int totalCandidatesAfter = 0;
         };
+        struct TraceBinRepresentativeRecord {
+            int pointId = 0;
+            int x = 0;
+            int y = 0;
+            int absX = 0;
+            int absY = 0;
+            int histBin = 0;
+            int count = 0;
+            float avgFg = 0.0f;
+            float rawBg = 0.0f;
+            float adjustedBg = 0.0f;
+            float weightScale = 1.0f;
+            float provisionalA = 0.0f;
+            float provisionalB = 0.0f;
+            float provisionalConsistency = 0.0f;
+        };
         std::vector<TracePointConfig> tracePoints;
         std::vector<int> tracePointIndexByOffset;
 
@@ -2111,7 +2127,10 @@ namespace {
             int    count;
             double sum_fg;
             double sum_bg;
-            BinAccum() : count(0), sum_fg(0.0), sum_bg(0.0) {}
+            double sum_weight;
+            double sum_weighted_fg;
+            double sum_weighted_bg;
+            BinAccum() : count(0), sum_fg(0.0), sum_bg(0.0), sum_weight(0.0), sum_weighted_fg(0.0), sum_weighted_bg(0.0) {}
         };
 
         struct StatsPassBuffers {
@@ -2152,6 +2171,13 @@ namespace {
 
         std::vector<AutoDetectStats> debugStats;
         std::vector<TraceSampleRecord> debugTraceRecords;
+        std::vector<TraceBinRepresentativeRecord> debugTraceBinRepresentatives;
+        std::vector<uint8_t> provisionalLineValid;
+        std::vector<float> provisionalLineA;
+        std::vector<float> provisionalLineB;
+        std::vector<float> provisionalLineConsistency;
+        std::vector<float> provisionalLineStdDiff;
+        bool sampleResidualReweightActive = false;
 
         struct ScoreStageBuffers {
             std::vector<float> score;
@@ -2216,6 +2242,7 @@ namespace {
         struct DebugStageSnapshot {
             std::vector<AutoDetectStats> stats;
             std::vector<TraceSampleRecord> traceRecords;
+            std::vector<TraceBinRepresentativeRecord> traceBinRepresentatives;
             ScoreStageBuffers score;
             std::vector<uint8_t> binary;
             AutoDetectRect rectAbs{ 0, 0, 0, 0 };
@@ -2408,7 +2435,7 @@ namespace {
         AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
-        void writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords) const;
+        void writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
 
     public:
         AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, int sampleMode, logo::LOGO_AUTODETECT_CB cb)
@@ -2444,6 +2471,14 @@ namespace {
             if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
                 THROW(RuntimeException, "No frame decoded");
             }
+            if (sampleMode_ != 0) {
+                convertBinAccumToStats(pass1Stats);
+                prepareResidualReweightMaps(pass1Stats);
+                rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
+                if (readFrames <= 0) {
+                    THROW(RuntimeException, "No frame decoded");
+                }
+            }
             estimateScoreAndRect(pass1Stats);
             captureCurrentDebugSnapshot(debugPass1);
             debugPass2 = debugPass1;
@@ -2463,6 +2498,13 @@ namespace {
             readFrames = 0;
             debugStats.clear();
             debugTraceRecords.clear();
+            debugTraceBinRepresentatives.clear();
+            provisionalLineValid.clear();
+            provisionalLineA.clear();
+            provisionalLineB.clear();
+            provisionalLineConsistency.clear();
+            provisionalLineStdDiff.clear();
+            sampleResidualReweightActive = false;
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
             debugPass1 = DebugStageSnapshot{};
@@ -2473,6 +2515,7 @@ namespace {
         void captureCurrentDebugSnapshot(DebugStageSnapshot& snapshot) {
             snapshot.stats = debugStats;
             snapshot.traceRecords = debugTraceRecords;
+            snapshot.traceBinRepresentatives = debugTraceBinRepresentatives;
             snapshot.score = debugScore;
             snapshot.binary = debugBinary;
             snapshot.rectAbs = rectAbs;
@@ -2703,6 +2746,11 @@ namespace {
             }
 
             // 3) 採用フレームのみで score/binary/rect を再推定する。
+            if (sampleMode_ != 0) {
+                convertBinAccumToStats(pass3Stats);
+                prepareResidualReweightMaps(pass3Stats);
+                rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
+            }
             estimateScoreAndRect(pass3Stats);
             captureCurrentDebugSnapshot(debugPass2);
 
@@ -2769,7 +2817,7 @@ namespace {
             return out;
         }
 
-        void writeDebugStage(const std::vector<AutoDetectStats>& statsForDebug, const std::vector<TraceSampleRecord>& traceRecords, const ScoreStageBuffers& score, const std::vector<uint8_t>& binary, const AutoDetectRect& rectLocalForDebug, const DebugPathSet& path, const bool withDetailMaps, const bool withIterationArtifacts) {
+        void writeDebugStage(const std::vector<AutoDetectStats>& statsForDebug, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives, const ScoreStageBuffers& score, const std::vector<uint8_t>& binary, const AutoDetectRect& rectLocalForDebug, const DebugPathSet& path, const bool withDetailMaps, const bool withIterationArtifacts) {
             float maxScore = 0.0f;
             for (auto v : score.score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
@@ -3152,8 +3200,23 @@ namespace {
                     fclose(fsum);
                 }
 
+                if (!traceBinRepresentatives.empty()) {
+                    const std::string binCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.bin.csv");
+                    FILE* fbin = fopen(binCsvPath.c_str(), "w");
+                    if (fbin != nullptr) {
+                        fprintf(fbin, "point_id,x,y,abs_x,abs_y,hist_bin,count,avg_fg,raw_bg,adjusted_bg,weight_scale,provisional_a,provisional_b,provisional_consistency\n");
+                        for (const auto& r : traceBinRepresentatives) {
+                            fprintf(fbin, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                                r.pointId, r.x, r.y, r.absX, r.absY, r.histBin, r.count,
+                                r.avgFg, r.rawBg, r.adjustedBg, r.weightScale,
+                                r.provisionalA, r.provisionalB, r.provisionalConsistency);
+                        }
+                        fclose(fbin);
+                    }
+                }
+
                 if (!path.tracePlot.empty()) {
-                    writeTracePlotBitmap(path.tracePlot, traceRecords);
+                    writeTracePlotBitmap(path.tracePlot, traceRecords, traceBinRepresentatives);
                 }
             }
 
@@ -3321,16 +3384,16 @@ namespace {
             basePath.tracePlot = addSuffixBeforeExtension(basePath.binary, ".traceplot");
 
             // 互換維持: 既存パスは最終結果(final)を出力。
-            writeDebugStage(debugStats, debugTraceRecords, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
+            writeDebugStage(debugStats, debugTraceRecords, debugTraceBinRepresentatives, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
 
             // 追加: pass1/pass2の同種デバッグ出力を suffix で並列管理。
             if (debugPass1.valid) {
                 const DebugPathSet pass1Path = makeSuffixedPathSet(basePath, ".pass1");
-                writeDebugStage(debugPass1.stats, debugPass1.traceRecords, debugPass1.score, debugPass1.binary, debugPass1.rectLocal, pass1Path, detailedDebug, false);
+                writeDebugStage(debugPass1.stats, debugPass1.traceRecords, debugPass1.traceBinRepresentatives, debugPass1.score, debugPass1.binary, debugPass1.rectLocal, pass1Path, detailedDebug, false);
             }
             if (debugPass2.valid) {
                 const DebugPathSet pass2Path = makeSuffixedPathSet(basePath, ".pass2");
-                writeDebugStage(debugPass2.stats, debugPass2.traceRecords, debugPass2.score, debugPass2.binary, debugPass2.rectLocal, pass2Path, detailedDebug, false);
+                writeDebugStage(debugPass2.stats, debugPass2.traceRecords, debugPass2.traceBinRepresentatives, debugPass2.score, debugPass2.binary, debugPass2.rectLocal, pass2Path, detailedDebug, false);
             }
 
             // 追加: runPass2PrepareMask で得た仮ロゴ/ロゴマスク/frame gate を保存。
@@ -3624,9 +3687,7 @@ namespace {
                         s.rawSampleCount++;
                         const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
                         auto& bin = binAccumBuf[off * kHistBins + binIdx];
-                        bin.count++;
-                        bin.sum_fg += f;
-                        bin.sum_bg += b;
+                        AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
                         // このフレームで有効だった画素数（デバッグ可視化用）。
                         frameCount.fetch_add(1, std::memory_order_relaxed);
                     }
@@ -3749,9 +3810,7 @@ namespace {
                     s.rawSampleCount++;
                     const int binIdx = std::min(kHistBins - 1, (int)(fgFiltered * invMaxv * kHistBins));
                     auto& bin = binAccumBuf[off * kHistBins + binIdx];
-                    bin.count++;
-                    bin.sum_fg += f;
-                    bin.sum_bg += b;
+                    AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
                     rec.histBin = binIdx;
                 }
                 frameCount.fetch_add(1, std::memory_order_relaxed);
@@ -3802,15 +3861,81 @@ namespace {
             return std::exp(-std::exp(-c * ((double)n - n0)));
         }
 
+        static void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
+            bin.count++;
+            bin.sum_fg += fg;
+            bin.sum_bg += bg;
+            const double w = std::max(0.0, sampleWeight);
+            bin.sum_weight += w;
+            bin.sum_weighted_fg += w * fg;
+            bin.sum_weighted_bg += w * bg;
+        }
+
+        static bool TryGetMeanDiffStdConsistency(const AutoDetectStats& s, double& meanDiff, double& stdDiff, double& consistency) {
+            if (s.sumW <= 1e-6) {
+                meanDiff = 0.0;
+                stdDiff = 0.0;
+                consistency = 0.0;
+                return false;
+            }
+            const double invN = 1.0 / s.sumW;
+            const double meanF = s.sumF * invN;
+            const double meanBg = s.sumB * invN;
+            meanDiff = meanF - meanBg;
+            const double diff2 = (s.sumF2 - 2.0 * s.sumFB + s.sumB2) * invN;
+            const double varDiff = std::max(0.0, diff2 - meanDiff * meanDiff);
+            stdDiff = std::sqrt(varDiff);
+            consistency = std::abs(meanDiff) / (stdDiff + 1e-6);
+            return std::isfinite(consistency);
+        }
+
+        static double CalcResidualReweightTrust(const double provisionalConsistency) {
+            return std::max(0.0, std::min(1.0, (provisionalConsistency - 0.55) / 0.85));
+        }
+
+        static double CalcResidualReweightSigma(const double provisionalStdDiff, const double trust) {
+            const double sigmaBase = std::max(6.0 / 255.0, provisionalStdDiff);
+            const double sigmaShrink = 1.0 + 1.65 * trust;
+            return std::max(4.0 / 255.0, sigmaBase / sigmaShrink);
+        }
+
+        static void GetBinRepresentative(const BinAccum& bin, double& avgFg, double& avgBg, double& weightScale) {
+            avgFg = bin.sum_fg / std::max(1, bin.count);
+            avgBg = bin.sum_bg / std::max(1, bin.count);
+            weightScale = 1.0;
+            if (bin.sum_weight > 1e-8) {
+                avgFg = bin.sum_weighted_fg / bin.sum_weight;
+                avgBg = bin.sum_weighted_bg / bin.sum_weight;
+                weightScale = bin.sum_weight / std::max(1, bin.count);
+            }
+        }
+
         // binAccumBuf に蓄積した各binのサンプルをbin平均値として stats に集約する。
         // 呼び出し後は stats の sumF/sumB/sumF2/sumB2/sumFB/sumW/count が有効になる。
         void convertBinAccumToStats(StatsPassBuffers& statsPass) {
-            const int pixelCount = scanw * scanh;
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
                     for (int x = 0; x < scanw; x++) {
                         const int off = x + y * scanw;
                         AutoDetectStats& s = statsPass.stats[off];
+                        AutoDetectStats provisional{};
+                        provisional.rawSampleCount = s.rawSampleCount;
+                        for (int b = 0; b < kHistBins; b++) {
+                            const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                            if (bin.count == 0) continue;
+                            const double avg_fg = bin.sum_fg / bin.count;
+                            const double avg_bg = bin.sum_bg / bin.count;
+                            const double w = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
+                            if (w <= 1e-8) continue;
+                            provisional.sumF += w * avg_fg;
+                            provisional.sumB += w * avg_bg;
+                            provisional.sumF2 += w * avg_fg * avg_fg;
+                            provisional.sumB2 += w * avg_bg * avg_bg;
+                            provisional.sumFB += w * avg_fg * avg_bg;
+                            provisional.sumW += w;
+                            provisional.effectiveBinCount++;
+                        }
+
                         // sumF/sumB/sumF2/sumB2/sumFB/sumW/effectiveBinCount を binAccumBuf から算出し直す。
                         // observed/fgTransition/rejectedDedup/totalCandidates/rejectedExtreme はそのまま保持。
                         s.sumF = 0.0; s.sumB = 0.0; s.sumF2 = 0.0; s.sumB2 = 0.0; s.sumFB = 0.0;
@@ -3818,9 +3943,12 @@ namespace {
                         for (int b = 0; b < kHistBins; b++) {
                             const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
                             if (bin.count == 0) continue;
-                            const double avg_fg = bin.sum_fg / bin.count;
-                            const double avg_bg = bin.sum_bg / bin.count;
+                            double avg_fg = 0.0;
+                            double avg_bg = 0.0;
+                            double modeWeightScale = 1.0;
+                            GetBinRepresentative(bin, avg_fg, avg_bg, modeWeightScale);
                             const double w = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
+                            if (w <= 1e-8) continue;
                             s.sumF  += w * avg_fg;
                             s.sumB  += w * avg_bg;
                             s.sumF2 += w * avg_fg * avg_fg;
@@ -3832,6 +3960,99 @@ namespace {
                     }
                 }
             });
+        }
+
+        void prepareResidualReweightMaps(const StatsPassBuffers& statsPass) {
+            const int total = scanw * scanh;
+            provisionalLineValid.assign(total, 0);
+            provisionalLineA.assign(total, 0.0f);
+            provisionalLineB.assign(total, 0.0f);
+            provisionalLineConsistency.assign(total, 0.0f);
+            provisionalLineStdDiff.assign(total, 0.0f);
+            for (int off = 0; off < total; off++) {
+                const auto& s = statsPass.stats[off];
+                float A = 0.0f;
+                float B = 0.0f;
+                double meanDiff = 0.0;
+                double stdDiff = 0.0;
+                double consistency = 0.0;
+                if (!TryGetAB(s, A, B) || !TryGetMeanDiffStdConsistency(s, meanDiff, stdDiff, consistency)) {
+                    continue;
+                }
+                provisionalLineValid[off] = 1;
+                provisionalLineA[off] = A;
+                provisionalLineB[off] = B;
+                provisionalLineConsistency[off] = (float)consistency;
+                provisionalLineStdDiff[off] = (float)stdDiff;
+            }
+        }
+
+        double calcSampleResidualWeight(const int off, const double fg, const double bg) const {
+            if (!sampleResidualReweightActive || off < 0 || off >= (int)provisionalLineValid.size() || !provisionalLineValid[off]) {
+                return 1.0;
+            }
+            const double trust = CalcResidualReweightTrust(provisionalLineConsistency[off]);
+            if (trust <= 1e-4) {
+                return 1.0;
+            }
+            const double sigma = CalcResidualReweightSigma(provisionalLineStdDiff[off], trust);
+            const double predBg = provisionalLineA[off] * fg + provisionalLineB[off];
+            const double residual = (bg - predBg) / sigma;
+            const double residualWeight = std::exp(-0.5 * residual * residual);
+            return std::max(1e-4, residualWeight);
+        }
+
+        void rerunResidualWeightedPass(const tstring& srcpath, StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
+            sampleResidualReweightActive = true;
+            resetAccumulationState(&statsPass, pass2);
+            readAll(srcpath, serviceid,
+                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &statsPass, pass2); },
+                [&](AVFrame* frame) { return processFrame(frame, &statsPass, pass2); });
+            sampleResidualReweightActive = false;
+        }
+
+        void collectTraceBinRepresentatives(const StatsPassBuffers& statsPass, std::vector<TraceBinRepresentativeRecord>& out) const {
+            out.clear();
+            if (tracePoints.empty()) {
+                return;
+            }
+            out.reserve(tracePoints.size() * kHistBins);
+            for (const auto& tp : tracePoints) {
+                const int off = tp.x + tp.y * scanw;
+                if (off < 0 || off >= (int)statsPass.stats.size()) {
+                    continue;
+                }
+                const bool hasProvisionalLine = (off >= 0 && off < (int)provisionalLineValid.size() && provisionalLineValid[off] != 0);
+                const float provisionalA = hasProvisionalLine ? provisionalLineA[off] : 0.0f;
+                const float provisionalB = hasProvisionalLine ? provisionalLineB[off] : 0.0f;
+                const float provisionalConsistency = hasProvisionalLine ? provisionalLineConsistency[off] : 0.0f;
+
+                for (int b = 0; b < kHistBins; b++) {
+                    const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                    if (bin.count == 0) continue;
+                    double avgFg = 0.0;
+                    double adjustedBg = 0.0;
+                    double weightScale = 1.0;
+                    GetBinRepresentative(bin, avgFg, adjustedBg, weightScale);
+
+                    TraceBinRepresentativeRecord rec{};
+                    rec.pointId = tp.id;
+                    rec.x = tp.x;
+                    rec.y = tp.y;
+                    rec.absX = scanx + tp.x;
+                    rec.absY = scany + tp.y;
+                    rec.histBin = b;
+                    rec.count = bin.count;
+                    rec.avgFg = (float)avgFg;
+                    rec.rawBg = (float)(bin.sum_bg / std::max(1, bin.count));
+                    rec.adjustedBg = (float)adjustedBg;
+                    rec.weightScale = (float)weightScale;
+                    rec.provisionalA = provisionalA;
+                    rec.provisionalB = provisionalB;
+                    rec.provisionalConsistency = (float)provisionalConsistency;
+                    out.push_back(rec);
+                }
+            }
         }
 
         void estimateScoreAndRect(StatsPassBuffers& statsPass) {
@@ -3854,6 +4075,7 @@ namespace {
             runRectStage(scoreStage, binaryStage);
             debugStats = statsPass.stats;
             debugTraceRecords = statsPass.traceRecords;
+            collectTraceBinRepresentatives(statsPass, debugTraceBinRepresentatives);
             debugScore = std::move(scoreStage);
             debugBinary = std::move(binaryStage.binary);
         }
@@ -4112,7 +4334,7 @@ namespace {
         return c;
     }
 
-    void AutoDetectLogoReader::writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords) const {
+    void AutoDetectLogoReader::writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const {
         if (path.empty() || tracePoints.empty() || traceRecords.empty()) {
             return;
         }
@@ -4281,6 +4503,12 @@ namespace {
             drawLine(px, py - 4, px, py + 4, c, 0.96f);
             blendPixel(px, py, { { 255, 255, 255 } }, 0.65f);
         };
+        const auto drawSquareMarker = [&](const int px, const int py, const std::array<uint8_t, 3>& c) {
+            const std::array<uint8_t, 3> outline = { { 24, 28, 36 } };
+            fillRect(px - 2, py - 2, px + 2, py + 2, outline);
+            fillRect(px - 1, py - 1, px + 1, py + 1, c);
+            blendPixel(px, py, { { 255, 255, 255 } }, 0.45f);
+        };
 
         for (size_t pointIdx = 0; pointIdx < tracePoints.size(); pointIdx++) {
             const int col = (int)pointIdx % cols;
@@ -4355,7 +4583,23 @@ namespace {
                     const float yNorm = std::max(0.0f, std::min(1.0f, bgMean / std::max(1.0f, maxv)));
                     const int px = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
                     const int py = plotY1 - ClampInt((int)std::round(yNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
-                    drawCross(px, py, binPalette[b]);
+                    drawCross(px, py, { { 180, 186, 198 } });
+                }
+
+                for (const auto& rep : traceBinRepresentatives) {
+                    if (rep.pointId != pointId || rep.histBin < 0 || rep.histBin >= kHistBins || rep.count <= 0) {
+                        continue;
+                    }
+                    const auto color = binPalette[rep.histBin];
+                    const float xNorm = std::max(0.0f, std::min(1.0f, rep.avgFg / std::max(1.0f, maxv)));
+                    const float rawYNorm = std::max(0.0f, std::min(1.0f, rep.rawBg / std::max(1.0f, maxv)));
+                    const float adjYNorm = std::max(0.0f, std::min(1.0f, rep.adjustedBg / std::max(1.0f, maxv)));
+                    const int pxRaw = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                    const int pyRaw = plotY1 - ClampInt((int)std::round(rawYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                    const int pxAdj = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                    const int pyAdj = plotY1 - ClampInt((int)std::round(adjYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                    drawCross(pxRaw, pyRaw, { { 170, 176, 188 } });
+                    drawSquareMarker(pxAdj, pyAdj, color);
                 }
 
                 const int legendY0 = plotY1 + 16;

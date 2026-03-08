@@ -374,6 +374,18 @@ namespace Amatsukaze.Server.Rest
             {
                 path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass2"), ".trace.summary.csv");
             }
+            else if (string.Equals(kind, "tracebincsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".trace.bin.csv");
+            }
+            else if (string.Equals(kind, "tracebincsv-pass1", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass1"), ".trace.bin.csv");
+            }
+            else if (string.Equals(kind, "tracebincsv-pass2", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass2"), ".trace.bin.csv");
+            }
 
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {
