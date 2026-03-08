@@ -940,6 +940,10 @@ namespace Amatsukaze.Server
         [DataMember]
         public int TrimAdjustMoveFramesForward4 { get; set; }
 
+        // 再投入時に元のCM解析タスクを削除するか
+        [DataMember]
+        public bool TrimAdjustDeleteCmTask { get; set; }
+
         public ExtensionDataObject ExtensionData { get; set; }
 
         public string ActualWorkPath

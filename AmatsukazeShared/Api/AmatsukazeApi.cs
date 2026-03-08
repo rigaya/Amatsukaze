@@ -512,6 +512,9 @@ namespace Amatsukaze.Shared
             }
         }
 
+        public Task<ApiResult<bool>> DeleteTrimTempDirAsync(int queueItemId)
+            => DeleteAsync($"/api/trim/tempdir/{queueItemId}");
+
         public Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req)
         {
             var query = new List<string>();

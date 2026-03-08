@@ -547,6 +547,71 @@ namespace Amatsukaze.Server.Rest
             return false;
         }
 
+        // CM解析タスクの一時フォルダを削除する。
+        // キューからの削除は呼び出し元が別途行うこと。
+        // 成功時はtrue、フォルダが存在しない・取得できない場合もtrueを返す（エラーがなければ成功扱い）。
+        // 失敗時はfalseと理由をerrorに設定する。
+        public bool TryDeleteCmTaskTempDir(int queueItemId, out string error)
+        {
+            error = null;
+
+            if (!state.TryGetQueueItem(queueItemId, out var item))
+            {
+                error = "キューアイテムが見つかりません";
+                return false;
+            }
+
+            // CMCheck済みアイテムのみ対象
+            if (item.Mode != Amatsukaze.Server.ProcMode.CMCheck)
+            {
+                error = "CM解析タスク以外は削除できません";
+                return false;
+            }
+
+            // 処理中の場合は一時フォルダを削除できない
+            if (item.State == Amatsukaze.Server.QueueState.Encoding)
+            {
+                error = "処理中のタスクの一時フォルダは削除できません";
+                return false;
+            }
+
+            var logPath = state.ResolveTaskLogPathById(queueItemId);
+            if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))
+            {
+                // ログがなければ一時フォルダも特定できないが、エラーにはしない
+                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})のログファイルが見つかりません。一時フォルダ削除をスキップします", null);
+                return true;
+            }
+
+            var tempDir = ExtractTempDirFromLog(logPath);
+            if (string.IsNullOrEmpty(tempDir))
+            {
+                // 一時フォルダが特定できなければスキップ（エラーにはしない）
+                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})の一時フォルダがログから取得できませんでした。一時フォルダ削除をスキップします", null);
+                return true;
+            }
+
+            if (!Directory.Exists(tempDir))
+            {
+                // 既に存在しない場合はスキップ
+                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})の一時フォルダは既に存在しません: {tempDir}", null);
+                return true;
+            }
+
+            try
+            {
+                Directory.Delete(tempDir, true);
+                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})の一時フォルダを削除しました: {tempDir}", null);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"一時フォルダの削除に失敗しました: {ex.Message}";
+                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})の一時フォルダ削除に失敗しました: {tempDir}", ex);
+                return false;
+            }
+        }
+
         // Trimを保存: {srcPath}.trim.avs に書き出し
         public bool TrySaveTrims(string sessionId, TrimSaveRequest request, out string error)
         {

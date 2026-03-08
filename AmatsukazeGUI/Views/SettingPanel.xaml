@@ -668,6 +668,10 @@
                         </ComboBox>
                     </DockPanel>
 
+                    <CheckBox Margin="0,6,0,0"
+                              IsChecked="{Binding Model.Setting.TrimAdjustDeleteCmTask, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              Content="再投入時に元のCM解析タスク（一時フォルダ含む）を削除する"/>
+
                     <Grid Margin="0,4,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="72"/>

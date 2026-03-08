@@ -1798,6 +1798,16 @@ namespace Amatsukaze.Server.Rest
                 }
                 return Results.NotFound();
             });
+
+            // カット調整用: 指定キューアイテムの一時フォルダを削除するAPI
+            app.MapDelete("/api/trim/tempdir/{queueItemId:int}", (int queueItemId) =>
+            {
+                if (!trimAdjust.TryDeleteCmTaskTempDir(queueItemId, out var error))
+                {
+                    return Results.BadRequest(new { message = error ?? "一時フォルダの削除に失敗しました" });
+                }
+                return Results.Ok(new { });
+            });
         }
 
         private static bool IsAllowedRemote(IPAddress address)

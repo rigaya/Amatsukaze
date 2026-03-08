@@ -96,5 +96,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber);
         Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req);
         Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId);
+        // カット編集用: 指定キューアイテムの一時フォルダを削除する
+        Task<ApiResult<bool>> DeleteTrimTempDirAsync(int queueItemId);
     }
 }

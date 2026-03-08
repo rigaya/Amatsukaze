@@ -397,6 +397,8 @@
     private List<string> _profiles = new List<string>();
     private string? _selectedProfile;
     private bool _requeueBusy;
+    // 再投入時に元のCM解析タスクを削除するか（設定値から初期化）
+    private bool _deleteCmTask;
 
     // チェックログオーバーレイ
     private bool _checkLogVisible;
@@ -553,6 +555,7 @@
 
         var setting = settingRes.Data;
         _previewScaleMode = NormalizePreviewScaleMode(GetSettingIntOrDefault(setting, TrimAdjustPreviewScaleModeField, 1));
+        _deleteCmTask = GetSettingBool(setting, "TrimAdjustDeleteCmTask");
         foreach (var item in _trimCommandSettings)
         {
             _shortcutByCommand[item.CommandId] = NormalizeShortcutOrDefault(
@@ -609,6 +612,15 @@
             return node.GetString() ?? "";
         }
         return "";
+    }
+
+    private static bool GetSettingBool(JsonElement setting, string name)
+    {
+        if (!TryGetSettingProperty(setting, name, out var node)) return false;
+        if (node.ValueKind == JsonValueKind.True) return true;
+        if (node.ValueKind == JsonValueKind.False) return false;
+        if (node.ValueKind == JsonValueKind.String && bool.TryParse(node.GetString(), out var v)) return v;
+        return false;
     }
 
     private static int GetSettingInt(JsonElement setting, string name)
@@ -1277,7 +1289,7 @@
         _checkLogVisible = false;
     }
 
-    // プロファイルを指定して再投入（保存→通常モードの新規タスクを追加）
+    // プロファイルを指定して再投入（保存→セッションクローズ→通常モードの新規タスクを追加）
     private async Task RequeueWithProfile()
     {
         if (string.IsNullOrEmpty(_selectedProfile)) return;
@@ -1314,7 +1326,15 @@
             return;
         }
 
-        // 2. 通常モードの新規タスクとして追加
+        // 2. CM解析タスク削除を行う場合、一時フォルダのファイルハンドルを解放するため
+        //    セッションを先にクローズする（セッションが audio.wav / i0.mpg 等を掴んでいるため）
+        if (_deleteCmTask && !string.IsNullOrEmpty(_sessionId))
+        {
+            await Api.DeleteTrimSessionAsync(_sessionId);
+            _sessionId = null; // DisposeAsync での二重削除を防ぐ
+        }
+
+        // 3. 通常モードの新規タスクとして追加
         var addRes = await Api.AddQueueAsync(new AddQueueRequest
         {
             Mode = ProcMode.Batch,
@@ -1338,6 +1358,27 @@
 
         if (addRes.Ok)
         {
+            // 設定によって元のCM解析タスクを削除（一時フォルダ削除 + キューから削除）
+            if (_deleteCmTask)
+            {
+                // 一時フォルダを削除
+                var deleteTempRes = await Api.DeleteTrimTempDirAsync(QueueItemId);
+                if (!deleteTempRes.Ok)
+                {
+                    // 削除失敗は警告のみ（再投入は成功しているため続行）
+                    System.Diagnostics.Debug.WriteLine($"[TrimAdjust] 一時フォルダ削除に失敗しました: {deleteTempRes.Error}");
+                }
+                // キューからCM解析タスクを削除
+                var deleteQueueRes = await Api.ChangeQueueAsync(new ChangeItemData
+                {
+                    ItemId = QueueItemId,
+                    ChangeType = ChangeItemType.RemoveItem
+                });
+                if (!deleteQueueRes.Ok)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TrimAdjust] CM解析タスクのキュー削除に失敗しました: {deleteQueueRes.Error}");
+                }
+            }
             _statusMessage = "再投入しました";
             _isError = false;
             _requeueBusy = false;

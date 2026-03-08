@@ -336,6 +336,14 @@ else
             </td>
         </tr>
         <tr>
+            <td colspan="3">
+                <label>
+                    <input type="checkbox" checked="@GetBoolValue(TrimAdjustDeleteCmTaskField)" @onchange="@(e => OnBoolChange(e, TrimAdjustDeleteCmTaskField))" />
+                    再投入時に元のCM解析タスク（一時フォルダ含む）を削除する
+                </label>
+            </td>
+        </tr>
+        <tr>
             <th>ボタン</th>
             <th>ショートカット</th>
             <th>効果</th>
@@ -463,6 +471,7 @@ else
     private const string TrimAdjustMoveFramesForward2Field = "TrimAdjustMoveFramesForward2";
     private const string TrimAdjustMoveFramesForward3Field = "TrimAdjustMoveFramesForward3";
     private const string TrimAdjustMoveFramesForward4Field = "TrimAdjustMoveFramesForward4";
+    private const string TrimAdjustDeleteCmTaskField = "TrimAdjustDeleteCmTask";
 
     private sealed class TrimAdjustShortcutRow
     {
