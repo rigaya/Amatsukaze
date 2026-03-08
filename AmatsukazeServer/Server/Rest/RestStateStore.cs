@@ -995,7 +995,7 @@ namespace Amatsukaze.Server.Rest
                 OutputMask = 0,
                 IsTooSmall = IsTooSmall(item),
                 Tags = item.Tags,
-                OutDir = item.DstPath,
+                OutDir = GetOutDir(item.DstPath),
                 ImageWidth = item.ImageWidth,
                 ImageHeight = item.ImageHeight,
                 Genres = item.Genre?.Select(g => new Amatsukaze.Shared.GenreNodeView
@@ -1054,8 +1054,17 @@ namespace Amatsukaze.Server.Rest
                 FileName = item.FileName,
                 ServiceName = item.ServiceName,
                 ProfileName = item.Profile?.Name ?? item.ProfileName,
-                OutDir = item.DstPath
+                OutDir = GetOutDir(item.DstPath)
             };
+        }
+
+        private static string GetOutDir(string dstPath)
+        {
+            if (string.IsNullOrEmpty(dstPath))
+            {
+                return dstPath;
+            }
+            return Path.GetDirectoryName(dstPath) ?? dstPath;
         }
 
         private static ConsoleTaskInfo CopyConsoleTaskInfo(ConsoleTaskInfo info)
