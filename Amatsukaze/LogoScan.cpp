@@ -2122,7 +2122,10 @@ namespace {
         std::vector<TracePointConfig> tracePoints;
         std::vector<int> tracePointIndexByOffset;
 
-        // fg/bg値をbin単位で蓄積するバッファ（ヒストグラムbin集計方式）
+        // mode1 はサンプルを fg の近い値ごとに束ねてから回帰へ渡す。
+        // 静止した不透明枠や固定文字が大量に混ざると、そのままでは
+        // 「同じような fg のサンプル数が多いだけ」で回帰を引っ張ってしまうため、
+        // 画素生サンプルを直接使わず binAccum + Gompertz で代表点へ圧縮する。
         struct BinAccum {
             int    count;
             double sum_fg;
@@ -2472,6 +2475,9 @@ namespace {
                 THROW(RuntimeException, "No frame decoded");
             }
             if (sampleMode_ != 0) {
+                // 1回目の回帰は「粗い回帰線」を得るための準備段階。
+                // まずは純粋な binAccum+Gompertz だけで provisional line を作り、
+                // その線から外れる別枝サンプルを 2回目の走査で弱める。
                 convertBinAccumToStats(pass1Stats);
                 prepareResidualReweightMaps(pass1Stats);
                 rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
@@ -2747,6 +2753,9 @@ namespace {
 
             // 3) 採用フレームのみで score/binary/rect を再推定する。
             if (sampleMode_ != 0) {
+                // pass3 でも同じく provisional line -> 重み付き再走査の2段にする。
+                // frame gate 済みフレームだけで別枝抑制をやり直すことで、
+                // q43 のような「下側だけ別の bg 系列が混ざる」点を押し上げる。
                 convertBinAccumToStats(pass3Stats);
                 prepareResidualReweightMaps(pass3Stats);
                 rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
@@ -3857,6 +3866,8 @@ namespace {
         // w(n) = exp(-exp(-c * (n - n0)))
         // n0: 変曲点（このサンプル数で weight ≈ 1/e ≈ 0.37）
         // c:  急峻さ（大きいほど閾値的な挙動になる）
+        // 少数 bin の代表点は bg が不安定になりやすいので、sample 数だけではなく
+        // 「少なすぎる bin を自然に弱める」目的で Gompertz を使う。
         static double GompertzWeight(int n, double n0, double c) {
             return std::exp(-std::exp(-c * ((double)n - n0)));
         }
@@ -3889,16 +3900,26 @@ namespace {
             return std::isfinite(consistency);
         }
 
+        // trust は「この provisional line をどこまで信用してよいか」を表す係数。
+        // q43 の低スコア群では旧閾値(0.55)だと補正がまったく発火しなかったため、
+        // 0.20 からゆるやかに立ち上げ、1.40 で飽和するようにしている。
         static double CalcResidualReweightTrust(const double provisionalConsistency) {
-            return std::max(0.0, std::min(1.0, (provisionalConsistency - 0.55) / 0.85));
+            return std::max(0.0, std::min(1.0, (provisionalConsistency - 0.20) / 1.20));
         }
 
+        // sigma は provisional line まわりの許容幅。
+        // provisionalStdDiff は「回帰残差」ではなく点全体の fg-bg 差の散らばりで、
+        // それを基準幅にしつつ、line を信用できる点ほど狭めて外れ枝を落とす。
+        // ただし下限を持たせ、誤った provisional line で潰しすぎないようにする。
         static double CalcResidualReweightSigma(const double provisionalStdDiff, const double trust) {
             const double sigmaBase = std::max(6.0 / 255.0, provisionalStdDiff);
             const double sigmaShrink = 1.0 + 1.65 * trust;
             return std::max(4.0 / 255.0, sigmaBase / sigmaShrink);
         }
 
+        // 2回目の走査では sample 単位で重みを掛けてから bin 平均を作る。
+        // これにより、同じ fg bin に混ざる「時間連続の別 bg 枝」を hard reject せず
+        // soft に弱めつつ、本流の representative point を保ちやすくする。
         static void GetBinRepresentative(const BinAccum& bin, double& avgFg, double& avgBg, double& weightScale) {
             avgFg = bin.sum_fg / std::max(1, bin.count);
             avgBg = bin.sum_bg / std::max(1, bin.count);
@@ -3910,7 +3931,9 @@ namespace {
             }
         }
 
-        // binAccumBuf に蓄積した各binのサンプルをbin平均値として stats に集約する。
+        // binAccumBuf に蓄積した各binのサンプルをbin代表点として stats に集約する。
+        // provisional 回帰線を作る段階では raw 平均、2回目走査の後は weighted 平均が
+        // 入ってくるので、同じ変換器で 1回目/2回目の両方を扱えるようにしている。
         // 呼び出し後は stats の sumF/sumB/sumF2/sumB2/sumFB/sumW/count が有効になる。
         void convertBinAccumToStats(StatsPassBuffers& statsPass) {
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
@@ -3993,16 +4016,23 @@ namespace {
             }
             const double trust = CalcResidualReweightTrust(provisionalLineConsistency[off]);
             if (trust <= 1e-4) {
+                // provisional line が弱い点は「どの枝を本流とみなすか」がまだ不明なので、
+                // 無理に潰さず一旦そのまま通す。
                 return 1.0;
             }
             const double sigma = CalcResidualReweightSigma(provisionalLineStdDiff[off], trust);
             const double predBg = provisionalLineA[off] * fg + provisionalLineB[off];
             const double residual = (bg - predBg) / sigma;
+            // bg_desire=predBg を中心とするガウス重み。
+            // 回帰線から離れた枝は指数的に弱めるが、hard reject はせず平均化へ残す。
             const double residualWeight = std::exp(-0.5 * residual * residual);
             return std::max(1e-4, residualWeight);
         }
 
         void rerunResidualWeightedPass(const tstring& srcpath, StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
+            // provisional line ができた後にだけ raw sample へ戻って重み付けし直す。
+            // q43 のように「bin代表点だけ見るとまだ二股だが、sample 単位では本流が見える」
+            // ケースを拾うため、ここは再走査してでも sample 単位で処理する。
             sampleResidualReweightActive = true;
             resetAccumulationState(&statsPass, pass2);
             readAll(srcpath, serviceid,
