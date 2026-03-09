@@ -1371,10 +1371,9 @@ namespace {
         int effectiveBinCount;
         int observed;
         int fgTransition;
-        int rejectedDedup;
         int totalCandidates;
         int rejectedExtreme;
-        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), sumW(0), rawSampleCount(0), effectiveBinCount(0), observed(0), fgTransition(0), rejectedDedup(0), totalCandidates(0), rejectedExtreme(0) {}
+        AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), sumW(0), rawSampleCount(0), effectiveBinCount(0), observed(0), fgTransition(0), totalCandidates(0), rejectedExtreme(0) {}
     };
 
     static int ClampInt(const int v, const int minv, const int maxv) {
@@ -2042,7 +2041,6 @@ namespace {
         const int marginY;
         const int threadN;
         const bool detailedDebug;
-        const int sampleMode_;
         logo::LOGO_AUTODETECT_CB cb;
         RGYThreadPool threadPool;
 
@@ -2061,10 +2059,6 @@ namespace {
         static constexpr int kScanEdgeMargin = 16;
         // fg値をkHistBins個のbinに分割してサンプル蓄積する
         static constexpr int kHistBins = 32;
-        static constexpr int kDedupHistoryN = 4;
-        static constexpr double kDedupRingEps = 1.0;
-        static constexpr double kDedupFgEps = 3.0;
-        static constexpr double kDedupBgEps = 15.0;
         static constexpr bool kEnableTwoPassFrameGate = true;
         static constexpr bool kEnablePruneBinaryByAnchor = true;
         const bool enableTwoPassFrameGate;
@@ -2092,13 +2086,11 @@ namespace {
             int bgSideValidMask = 0;
             float bgSideRangeMax = 0.0f;
             float bgSideAvgSpread = 0.0f;
-            float dedupNearestDiff = -1.0f;
-            float dedupThreshold = 0.0f;
             float fgBgDiff = 0.0f;
             int histBin = -1;
             int extreme = 0;
             int accepted = 0;
-            int rejectCode = 0; // 0:accepted,1:dedup,2:bg_fail,3:extreme,4:pass3_mask,5:edge_skip
+            int rejectCode = 0; // 0:accepted,1:bg_fail,2:extreme,3:pass3_mask,4:edge_skip
             int observedAfter = 0;
             int countAfter = 0;
             int totalCandidatesAfter = 0;
@@ -2142,9 +2134,6 @@ namespace {
             std::vector<AutoDetectStats> stats;
             // ヒストグラムbin蓄積バッファ (scanw * scanh * kHistBins)
             std::vector<BinAccum> binAccumBuf;
-            std::vector<float> dedupRingBuf;
-            std::vector<int> dedupRingCount;
-            std::vector<int> dedupRingPos;
             std::vector<float> lastObservedFg;
             std::vector<uint8_t> lastObservedValid;
             std::vector<int> frameValidCounts;
@@ -2162,9 +2151,6 @@ namespace {
                 }
                 stats.assign(scanw * scanh, AutoDetectStats());
                 binAccumBuf.assign(scanw * scanh * kHistBins, BinAccum());
-                dedupRingBuf.assign(scanw * scanh * kDedupHistoryN, 0.0f);
-                dedupRingCount.assign(scanw * scanh, 0);
-                dedupRingPos.assign(scanw * scanh, 0);
                 lastObservedFg.assign(scanw * scanh, 0.0f);
                 lastObservedValid.assign(scanw * scanh, 0);
                 frameValidCounts.clear();
@@ -2441,7 +2427,7 @@ namespace {
         void writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
 
     public:
-        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, int sampleMode, logo::LOGO_AUTODETECT_CB cb)
+        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
             : SimpleVideoReader(ctx)
             , serviceid(serviceid)
             , divx(std::max(1, divx))
@@ -2453,7 +2439,6 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , detailedDebug(detailedDebug)
-            , sampleMode_(ClampInt(sampleMode, 0, 1))
             , cb(cb)
             , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
@@ -2474,16 +2459,14 @@ namespace {
             if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
                 THROW(RuntimeException, "No frame decoded");
             }
-            if (sampleMode_ != 0) {
-                // 1回目の回帰は「粗い回帰線」を得るための準備段階。
-                // まずは純粋な binAccum+Gompertz だけで provisional line を作り、
-                // その線から外れる別枝サンプルを 2回目の走査で弱める。
-                convertBinAccumToStats(pass1Stats);
-                prepareResidualReweightMaps(pass1Stats);
-                rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
-                if (readFrames <= 0) {
-                    THROW(RuntimeException, "No frame decoded");
-                }
+            // 1回目の回帰は「粗い回帰線」を得るための準備段階。
+            // まずは純粋な binAccum+Gompertz だけで provisional line を作り、
+            // その線から外れる別枝サンプルを 2回目の走査で弱める。
+            convertBinAccumToStats(pass1Stats);
+            prepareResidualReweightMaps(pass1Stats);
+            rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
+            if (readFrames <= 0) {
+                THROW(RuntimeException, "No frame decoded");
             }
             estimateScoreAndRect(pass1Stats);
             captureCurrentDebugSnapshot(debugPass1);
@@ -2752,14 +2735,12 @@ namespace {
             }
 
             // 3) 採用フレームのみで score/binary/rect を再推定する。
-            if (sampleMode_ != 0) {
-                // pass3 でも同じく provisional line -> 重み付き再走査の2段にする。
-                // frame gate 済みフレームだけで別枝抑制をやり直すことで、
-                // q43 のような「下側だけ別の bg 系列が混ざる」点を押し上げる。
-                convertBinAccumToStats(pass3Stats);
-                prepareResidualReweightMaps(pass3Stats);
-                rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
-            }
+            // pass3 でも同じく provisional line -> 重み付き再走査の2段にする。
+            // frame gate 済みフレームだけで別枝抑制をやり直すことで、
+            // q43 のような「下側だけ別の bg 系列が混ざる」点を押し上げる。
+            convertBinAccumToStats(pass3Stats);
+            prepareResidualReweightMaps(pass3Stats);
+            rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
             estimateScoreAndRect(pass3Stats);
             captureCurrentDebugSnapshot(debugPass2);
 
@@ -3093,23 +3074,22 @@ namespace {
                 const auto rejectReasonStr = [](const int code) {
                     switch (code) {
                     case 0: return "accepted";
-                    case 1: return "dedup";
-                    case 2: return "bg_fail";
-                    case 3: return "extreme";
-                    case 4: return "pass3_mask";
-                    case 5: return "edge_skip";
+                    case 1: return "bg_fail";
+                    case 2: return "extreme";
+                    case 3: return "pass3_mask";
+                    case 4: return "edge_skip";
                     default: return "unknown";
                     }
                 };
                 const std::string traceCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.csv");
                 FILE* ftrace = fopen(traceCsvPath.c_str(), "w");
                 if (ftrace != nullptr) {
-                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_range_max,bg_side_avg_spread,dedup_nearest_diff,dedup_threshold,fg_bg_diff,hist_bin,extreme,accepted,reject_code,reject\n");
+                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_range_max,bg_side_avg_spread,fg_bg_diff,hist_bin,extreme,accepted,reject_code,reject\n");
                     for (const auto& r : traceRecords) {
-                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%d,%s\n",
+                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%d,%s\n",
                             r.pass, r.frame, r.pointId, r.x, r.y, r.absX, r.absY,
                             r.fgRaw, r.fgFiltered, r.bg, r.bgOk, r.bgSideCount, r.bgSideValidMask,
-                            r.bgSideRangeMax, r.bgSideAvgSpread, r.dedupNearestDiff, r.dedupThreshold, r.fgBgDiff, r.histBin,
+                            r.bgSideRangeMax, r.bgSideAvgSpread, r.fgBgDiff, r.histBin,
                             r.extreme, r.accepted, r.rejectCode, rejectReasonStr(r.rejectCode));
                     }
                     fclose(ftrace);
@@ -3123,7 +3103,6 @@ namespace {
                     int absY = 0;
                     int frames = 0;
                     int accepted = 0;
-                    int rejectedDedup = 0;
                     int rejectedBgFail = 0;
                     int rejectedExtreme = 0;
                     int rejectedPassMask = 0;
@@ -3151,21 +3130,19 @@ namespace {
                         it->sumDiff += r.fgBgDiff;
                         it->acceptedDiff.push_back(r.fgBgDiff);
                     } else if (r.rejectCode == 1) {
-                        it->rejectedDedup++;
-                    } else if (r.rejectCode == 2) {
                         it->rejectedBgFail++;
-                    } else if (r.rejectCode == 3) {
+                    } else if (r.rejectCode == 2) {
                         it->rejectedExtreme++;
-                    } else if (r.rejectCode == 4) {
+                    } else if (r.rejectCode == 3) {
                         it->rejectedPassMask++;
-                    } else if (r.rejectCode == 5) {
+                    } else if (r.rejectCode == 4) {
                         it->rejectedEdge++;
                     }
                 }
                 const std::string summaryCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.summary.csv");
                 FILE* fsum = fopen(summaryCsvPath.c_str(), "w");
                 if (fsum != nullptr) {
-                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,reject_dedup,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,score,accepted_score\n");
+                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,score,accepted_score\n");
                     for (auto& row : rows) {
                         float p50 = 0.0f;
                         float p90 = 0.0f;
@@ -3201,9 +3178,9 @@ namespace {
                         }
                         const double meanDiff = row.accepted > 0 ? row.sumDiff / row.accepted : 0.0;
                         const double acceptRate = row.frames > 0 ? (double)row.accepted / row.frames : 0.0;
-                        fprintf(fsum, "%d,%d,%d,%d,%d,%d,%d,%.8f,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                        fprintf(fsum, "%d,%d,%d,%d,%d,%d,%d,%.8f,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
                             row.pointId, row.x, row.y, row.absX, row.absY, row.frames, row.accepted, acceptRate,
-                            row.rejectedDedup, row.rejectedBgFail, row.rejectedExtreme, row.rejectedPassMask, row.rejectedEdge,
+                            row.rejectedBgFail, row.rejectedExtreme, row.rejectedPassMask, row.rejectedEdge,
                             meanDiff, p50, p90, A, B, alpha, logoY, consistency, fgvar, bgvar, transition, keeprate, scorev, acceptedScore);
                     }
                     fclose(fsum);
@@ -3505,7 +3482,7 @@ namespace {
                                 rec.absX = scanx + tp.x;
                                 rec.absY = scany + tp.y;
                                 rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
-                                rec.rejectCode = 4;
+                                rec.rejectCode = 3;
                                 statsPass->traceRecords.push_back(rec);
                             }
                         }
@@ -3609,9 +3586,6 @@ namespace {
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
-            auto& dedupRingBuf = statsPass.dedupRingBuf;
-            auto& dedupRingCount = statsPass.dedupRingCount;
-            auto& dedupRingPos = statsPass.dedupRingPos;
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
             const int pixelCount = scanw * scanh;
@@ -3620,12 +3594,9 @@ namespace {
             assert((int)lastObservedFg.size() == pixelCount);
             assert((int)lastObservedValid.size() == pixelCount);
             assert((int)binAccumBuf.size() == pixelCount * kHistBins);
-            assert((int)dedupRingBuf.size() == pixelCount * kDedupHistoryN);
-            assert((int)dedupRingCount.size() == pixelCount);
-            assert((int)dedupRingPos.size() == pixelCount);
 
             std::atomic<int> frameCount(0);
-            // 遷移検出閾値（旧: dedupThreshold * 0.50f の代わりに rawScale から直接算出）
+            // 遷移検出閾値は rawScale から直接算出する。
             const float transitionThreshold = std::max(0.75f * rawScale, thresholdRaw * 0.125f);
             // 小さすぎるチャンク分割はタスク投入オーバーヘッドが支配的になるため、
             // 既定チャンク(スレッド数に応じた分割)を使う。
@@ -3665,33 +3636,6 @@ namespace {
                             s.rejectedExtreme++;
                             continue;
                         }
-                        if (sampleMode_ == 0) {
-                            auto& count = dedupRingCount[off];
-                            auto& pos = dedupRingPos[off];
-                            float* ring = dedupRingBuf.data() + off * kDedupHistoryN;
-                            float minv = fgRaw;
-                            float maxv = fgRaw;
-                            for (int i = 0; i < count; i++) {
-                                minv = std::min(minv, ring[i]);
-                                maxv = std::max(maxv, ring[i]);
-                            }
-                            if (count > 0 && (maxv - minv) < (float)kDedupRingEps) {
-                                s.rejectedDedup++;
-                                continue;
-                            }
-                            ring[pos] = fgRaw;
-                            pos = (pos + 1) % kDedupHistoryN;
-                            if (count < kDedupHistoryN) count++;
-                            s.sumF += f;
-                            s.sumB += b;
-                            s.sumF2 += f * f;
-                            s.sumB2 += b * b;
-                            s.sumFB += f * b;
-                            s.sumW += 1.0;
-                            s.rawSampleCount++;
-                            frameCount.fetch_add(1, std::memory_order_relaxed);
-                            continue;
-                        }
 
                         s.rawSampleCount++;
                         const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
@@ -3715,11 +3659,9 @@ namespace {
                 rec.absX = scanx + tp.x;
                 rec.absY = scany + tp.y;
                 rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
-                // mode 0/1 の切替運用では dedupThreshold 固定値の表示は持たない
-                rec.dedupThreshold = 0.0f;
 
                 if (tp.x < kScanEdgeMargin || tp.y < kScanEdgeMargin || tp.x >= scanw - kScanEdgeMargin || tp.y >= scanh - kScanEdgeMargin) {
-                    rec.rejectCode = 5;
+                    rec.rejectCode = 4;
                     statsPass.traceRecords.push_back(rec);
                     continue;
                 }
@@ -3762,7 +3704,7 @@ namespace {
                 rec.bgSideRangeMax = sideRangeMax;
                 rec.bgSideAvgSpread = hasSideAvg ? (sideAvgMax - sideAvgMin) : 0.0f;
                 if (!bgOk) {
-                    rec.rejectCode = 2;
+                    rec.rejectCode = 1;
                     rec.observedAfter = s.observed;
                     rec.countAfter = s.rawSampleCount;
                     rec.totalCandidatesAfter = s.totalCandidates;
@@ -3778,7 +3720,7 @@ namespace {
                 if (IsExtremeContrastSample(f, b)) {
                     s.rejectedExtreme++;
                     rec.extreme = 1;
-                    rec.rejectCode = 3;
+                    rec.rejectCode = 2;
                     rec.observedAfter = s.observed;
                     rec.countAfter = s.rawSampleCount;
                     rec.totalCandidatesAfter = s.totalCandidates;
@@ -3786,42 +3728,11 @@ namespace {
                     continue;
                 }
 
-                if (sampleMode_ == 0) {
-                    auto& count = dedupRingCount[off];
-                    auto& pos = dedupRingPos[off];
-                    float* ring = dedupRingBuf.data() + off * kDedupHistoryN;
-                    float minv = fgFiltered;
-                    float maxv = fgFiltered;
-                    for (int i = 0; i < count; i++) {
-                        minv = std::min(minv, ring[i]);
-                        maxv = std::max(maxv, ring[i]);
-                    }
-                    if (count > 0 && (maxv - minv) < (float)kDedupRingEps) {
-                        s.rejectedDedup++;
-                        rec.rejectCode = 1;
-                        rec.observedAfter = s.observed;
-                        rec.countAfter = s.rawSampleCount;
-                        rec.totalCandidatesAfter = s.totalCandidates;
-                        statsPass.traceRecords.push_back(rec);
-                        continue;
-                    }
-                    ring[pos] = fgFiltered;
-                    pos = (pos + 1) % kDedupHistoryN;
-                    if (count < kDedupHistoryN) count++;
-                    s.sumF += f;
-                    s.sumB += b;
-                    s.sumF2 += f * f;
-                    s.sumB2 += b * b;
-                    s.sumFB += f * b;
-                    s.sumW += 1.0;
-                    s.rawSampleCount++;
-                } else {
-                    s.rawSampleCount++;
-                    const int binIdx = std::min(kHistBins - 1, (int)(fgFiltered * invMaxv * kHistBins));
-                    auto& bin = binAccumBuf[off * kHistBins + binIdx];
-                    AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
-                    rec.histBin = binIdx;
-                }
+                s.rawSampleCount++;
+                const int binIdx = std::min(kHistBins - 1, (int)(fgFiltered * invMaxv * kHistBins));
+                auto& bin = binAccumBuf[off * kHistBins + binIdx];
+                AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
+                rec.histBin = binIdx;
                 frameCount.fetch_add(1, std::memory_order_relaxed);
                 rec.accepted = 1;
                 rec.rejectCode = 0;
@@ -3960,7 +3871,7 @@ namespace {
                         }
 
                         // sumF/sumB/sumF2/sumB2/sumFB/sumW/effectiveBinCount を binAccumBuf から算出し直す。
-                        // observed/fgTransition/rejectedDedup/totalCandidates/rejectedExtreme はそのまま保持。
+                        // observed/fgTransition/totalCandidates/rejectedExtreme はそのまま保持。
                         s.sumF = 0.0; s.sumB = 0.0; s.sumF2 = 0.0; s.sumB2 = 0.0; s.sumFB = 0.0;
                         s.sumW = 0.0; s.effectiveBinCount = 0;
                         for (int b = 0; b < kHistBins; b++) {
@@ -4089,10 +4000,7 @@ namespace {
             if (cb && !cb(2, 0.0f, 0.5f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
-            // mode 0 は stats に直接加算済み。mode 1 は binAccumBuf から変換する。
-            if (sampleMode_ != 0) {
-                convertBinAccumToStats(statsPass);
-            }
+            convertBinAccumToStats(statsPass);
             float thHigh = 0.0f;
             float thLow = 0.0f;
             ScoreStageBuffers scoreStage{};
@@ -4582,7 +4490,7 @@ namespace {
                 const auto color = frameColorFor(rec.frame, rec.accepted != 0);
                 drawDot(px, py, color, rec.accepted ? 0.92f : 0.38f);
 
-                if (sampleMode_ != 0 && rec.accepted && rec.histBin >= 0 && rec.histBin < kHistBins) {
+                if (rec.accepted && rec.histBin >= 0 && rec.histBin < kHistBins) {
                     auto& mean = binMeans[rec.histBin];
                     mean.sumFg += rec.fgFiltered;
                     mean.sumBg += rec.bg;
@@ -4602,46 +4510,44 @@ namespace {
             }
             drawRect(plotX0, frameLegendY0, plotX1, frameLegendY1, axisColor);
 
-            if (sampleMode_ != 0) {
-                for (int b = 0; b < kHistBins; b++) {
-                    if (binMeans[b].count <= 0) {
-                        continue;
-                    }
-                    const float fgMean = (float)(binMeans[b].sumFg / binMeans[b].count);
-                    const float bgMean = (float)(binMeans[b].sumBg / binMeans[b].count);
-                    const float xNorm = std::max(0.0f, std::min(1.0f, fgMean / std::max(1.0f, maxv)));
-                    const float yNorm = std::max(0.0f, std::min(1.0f, bgMean / std::max(1.0f, maxv)));
-                    const int px = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
-                    const int py = plotY1 - ClampInt((int)std::round(yNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
-                    drawCross(px, py, { { 180, 186, 198 } });
+            for (int b = 0; b < kHistBins; b++) {
+                if (binMeans[b].count <= 0) {
+                    continue;
                 }
-
-                for (const auto& rep : traceBinRepresentatives) {
-                    if (rep.pointId != pointId || rep.histBin < 0 || rep.histBin >= kHistBins || rep.count <= 0) {
-                        continue;
-                    }
-                    const auto color = binPalette[rep.histBin];
-                    const float xNorm = std::max(0.0f, std::min(1.0f, rep.avgFg / std::max(1.0f, maxv)));
-                    const float rawYNorm = std::max(0.0f, std::min(1.0f, rep.rawBg / std::max(1.0f, maxv)));
-                    const float adjYNorm = std::max(0.0f, std::min(1.0f, rep.adjustedBg / std::max(1.0f, maxv)));
-                    const int pxRaw = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
-                    const int pyRaw = plotY1 - ClampInt((int)std::round(rawYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
-                    const int pxAdj = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
-                    const int pyAdj = plotY1 - ClampInt((int)std::round(adjYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
-                    drawCross(pxRaw, pyRaw, { { 170, 176, 188 } });
-                    drawSquareMarker(pxAdj, pyAdj, color);
-                }
-
-                const int legendY0 = plotY1 + 16;
-                const int legendY1 = plotY1 + 23;
-                const int legendW = std::max(1, (plotX1 - plotX0 + 1) / kHistBins);
-                for (int b = 0; b < kHistBins; b++) {
-                    const int lx0 = plotX0 + b * legendW;
-                    const int lx1 = (b == kHistBins - 1) ? plotX1 : std::min(plotX1, lx0 + legendW - 1);
-                    fillRect(lx0, legendY0, lx1, legendY1, binPalette[b]);
-                }
-                drawRect(plotX0, legendY0, plotX1, legendY1, axisColor);
+                const float fgMean = (float)(binMeans[b].sumFg / binMeans[b].count);
+                const float bgMean = (float)(binMeans[b].sumBg / binMeans[b].count);
+                const float xNorm = std::max(0.0f, std::min(1.0f, fgMean / std::max(1.0f, maxv)));
+                const float yNorm = std::max(0.0f, std::min(1.0f, bgMean / std::max(1.0f, maxv)));
+                const int px = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                const int py = plotY1 - ClampInt((int)std::round(yNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                drawCross(px, py, { { 180, 186, 198 } });
             }
+
+            for (const auto& rep : traceBinRepresentatives) {
+                if (rep.pointId != pointId || rep.histBin < 0 || rep.histBin >= kHistBins || rep.count <= 0) {
+                    continue;
+                }
+                const auto color = binPalette[rep.histBin];
+                const float xNorm = std::max(0.0f, std::min(1.0f, rep.avgFg / std::max(1.0f, maxv)));
+                const float rawYNorm = std::max(0.0f, std::min(1.0f, rep.rawBg / std::max(1.0f, maxv)));
+                const float adjYNorm = std::max(0.0f, std::min(1.0f, rep.adjustedBg / std::max(1.0f, maxv)));
+                const int pxRaw = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                const int pyRaw = plotY1 - ClampInt((int)std::round(rawYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                const int pxAdj = plotX0 + ClampInt((int)std::round(xNorm * (plotX1 - plotX0)), 0, plotX1 - plotX0);
+                const int pyAdj = plotY1 - ClampInt((int)std::round(adjYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                drawCross(pxRaw, pyRaw, { { 170, 176, 188 } });
+                drawSquareMarker(pxAdj, pyAdj, color);
+            }
+
+            const int legendY0 = plotY1 + 16;
+            const int legendY1 = plotY1 + 23;
+            const int legendW = std::max(1, (plotX1 - plotX0 + 1) / kHistBins);
+            for (int b = 0; b < kHistBins; b++) {
+                const int lx0 = plotX0 + b * legendW;
+                const int lx1 = (b == kHistBins - 1) ? plotX1 : std::min(plotX1, lx0 + legendW - 1);
+                fillRect(lx0, legendY0, lx1, legendY1, binPalette[b]);
+            }
+            drawRect(plotX0, legendY0, plotX1, legendY1, axisColor);
         }
 
         WriteRgbBitmap(path, width, height, [&](int x, int y) {
@@ -5847,9 +5753,8 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int* outX, int* outY, int* outW, int* outH,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
-    int sampleMode,
     logo::LOGO_AUTODETECT_CB cb) {
-    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, sampleMode, cb);
+    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;

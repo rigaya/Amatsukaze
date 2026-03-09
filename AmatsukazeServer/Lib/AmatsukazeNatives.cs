@@ -565,7 +565,6 @@ namespace Amatsukaze.Lib
             string transitionPath, string keepRatePath,
             string acceptedPath,
             int detailedDebug,
-            int sampleMode,
             LogoAutoDetectCallback cb);
         #endregion
 
@@ -720,7 +719,6 @@ namespace Amatsukaze.Lib
             string transitionPath, string keepRatePath,
             string acceptedPath,
             bool detailedDebug,
-            int sampleMode,
             LogoAutoDetectCallback cb)
         {
             int x = 0;
@@ -729,7 +727,7 @@ namespace Amatsukaze.Lib
             int h = 0;
             if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
                 divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
-                ref x, ref y, ref w, ref h, scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, sampleMode, cb) == 0)
+                ref x, ref y, ref w, ref h, scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
             {
                 throw new IOException(ctx.GetError());
             }
