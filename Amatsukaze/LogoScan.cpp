@@ -4981,9 +4981,14 @@ namespace {
                 const int anchorW = std::max(1, anchor.w);
                 const int anchorH = std::max(1, anchor.h);
                 const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
-                const float minSignalScore = std::max(0.004f, anchor.meanScore * 0.20f);
-                const float minSignalPeak = std::max(0.004f, anchor.peakScore * 0.10f);
-                const float minSignalAccepted = std::max(0.003f, anchor.meanAccepted * 0.20f);
+                // prune の keep 判定は anchor に対する相対量を基本にしつつ、
+                // 極端に弱いケースでも完全なノイズ拾いにならない程度の最小値だけ持たせる。
+                // mode1/q49 のように score 全体のスケールが小さいケースでは、
+                // 旧固定下限(0.004/0.003)だと promote 済みの上端・下段成分まで
+                // signalOk を満たせず prune で全落ちしていた。
+                const float minSignalScore = std::max(5.0e-4f, anchor.meanScore * 0.20f);
+                const float minSignalPeak = std::max(6.0e-4f, anchor.peakScore * 0.10f);
+                const float minSignalAccepted = std::max(5.0e-4f, anchor.meanAccepted * 0.20f);
                 const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
                 // 多行ロゴ(放送大学等)の下段行を拾うため、下方向の許容距離を大きく取る。
                 const int maxBelowAnchor = std::max(40, (int)std::round(anchorH * 2.5));
@@ -5574,7 +5579,9 @@ namespace {
             mergedAny = false;
             mergeIter++;
             for (const auto& cand : mergeCandidates) {
-                if (cand.area < 6) continue;
+                // q49 のような上端の点成分を残すため area=5 までは候補に残す。
+                // ただし 1-3px 級まで広げるとノイズ側が勝ちやすいので 4px 未満は切る。
+                if (cand.area < 4) continue;
                 const AutoDetectRect& comp = cand.rect;
                 if (comp.x == finalRect.x && comp.y == finalRect.y && comp.w == finalRect.w && comp.h == finalRect.h) continue;
                 const int ix0 = std::max(finalRect.x, comp.x);
@@ -5604,6 +5611,17 @@ namespace {
                 const bool withinFinalCenterGuard =
                     std::abs(compCx - finalCx) <= maxFinalDx &&
                     std::abs(compCy - finalCy) <= maxFinalDy;
+                const bool isSmallComp = cand.area < 6;
+                // 小成分は単独だとノイズ率が高いので、既存 rect に上下左右どちらかで
+                // ほぼ接続している場合だけ取り込む。これで q49 の上部点は拾いつつ、
+                // 離れた飛び地ノイズの混入は抑える。
+                const bool smallCompNearVertical =
+                    overlapW > 0 &&
+                    gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 2.5));
+                const bool smallCompNearHorizontal =
+                    overlapH > 0 &&
+                    gapX <= std::max(8, (int)std::round(std::min(finalRect.w, comp.w) * 2.5));
+                const bool smallCompAllowed = !isSmallComp || smallCompNearVertical || smallCompNearHorizontal;
                 AutoDetectRect mergedRect{
                     std::min(finalRect.x, comp.x),
                     std::min(finalRect.y, comp.y),
@@ -5616,6 +5634,7 @@ namespace {
                 bool accepted = true;
                 if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
                 if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
+                if (!smallCompAllowed) accepted = false;
                 if (!sizeGuardOk) accepted = false;
                 if (detailedDebug) {
                     rectMergeDebug.push_back(RectMergeDebug{
