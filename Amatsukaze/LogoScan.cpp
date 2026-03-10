@@ -1376,6 +1376,50 @@ namespace {
         AutoDetectStats() : sumF(0), sumB(0), sumF2(0), sumB2(0), sumFB(0), sumW(0), rawSampleCount(0), effectiveBinCount(0), observed(0), fgTransition(0), totalCandidates(0), rejectedExtreme(0) {}
     };
 
+    enum class LogoRectDetectFail {
+        None,
+        InsufficientScorePixels,
+        NoSeed,
+        BinaryFallbackUsed,
+        NoBestComponent,
+        RectSizeAbnormal,
+    };
+
+    enum class LogoAnalyzeFail {
+        None,
+        Pass2RoiTooSmall,
+        GetLogoNull,
+        CorrSequenceInvalid,
+        FrameMaskEmpty,
+        TooFewAcceptedFrames,
+        Pass2RectDiverged,
+    };
+
+    static const char* ToString(const LogoRectDetectFail fail) {
+        switch (fail) {
+        case LogoRectDetectFail::None: return "None";
+        case LogoRectDetectFail::InsufficientScorePixels: return "InsufficientScorePixels";
+        case LogoRectDetectFail::NoSeed: return "NoSeed";
+        case LogoRectDetectFail::BinaryFallbackUsed: return "BinaryFallbackUsed";
+        case LogoRectDetectFail::NoBestComponent: return "NoBestComponent";
+        case LogoRectDetectFail::RectSizeAbnormal: return "RectSizeAbnormal";
+        default: return "Unknown";
+        }
+    }
+
+    static const char* ToString(const LogoAnalyzeFail fail) {
+        switch (fail) {
+        case LogoAnalyzeFail::None: return "None";
+        case LogoAnalyzeFail::Pass2RoiTooSmall: return "Pass2RoiTooSmall";
+        case LogoAnalyzeFail::GetLogoNull: return "GetLogoNull";
+        case LogoAnalyzeFail::CorrSequenceInvalid: return "CorrSequenceInvalid";
+        case LogoAnalyzeFail::FrameMaskEmpty: return "FrameMaskEmpty";
+        case LogoAnalyzeFail::TooFewAcceptedFrames: return "TooFewAcceptedFrames";
+        case LogoAnalyzeFail::Pass2RectDiverged: return "Pass2RectDiverged";
+        default: return "Unknown";
+        }
+    }
+
     static int ClampInt(const int v, const int minv, const int maxv) {
         return std::max(minv, std::min(maxv, v));
     }
@@ -2387,6 +2431,13 @@ namespace {
 
         AutoDetectRect rectAbs;
         AutoDetectRect rectLocal;
+        LogoRectDetectFail rectDetectFail;
+        LogoAnalyzeFail logoAnalyzeFail;
+        int scoreValidPixelCount;
+        int scorePositivePixelCount;
+        int initialSeedCount;
+        int initialGrownCount;
+        bool usedBinaryFallback;
         struct Pass2Buffers {
             AutoDetectRect logoRectAbs{ 0, 0, 0, 0 };
             std::unique_ptr<logo::LogoScan> logoScan;
@@ -2417,7 +2468,7 @@ namespace {
         int countMaskOn(const std::vector<uint8_t>& mask) const;
         void buildBinaryFromThreshold(const ScoreStageBuffers& scoreStage, const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
         void pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
-        void applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
+        bool applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
 
         void collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn, const BinaryStageBuffers& binaryStage) const;
         void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage);
@@ -2425,6 +2476,32 @@ namespace {
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
         void writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
+        void setRectDetectFail(const LogoRectDetectFail fail) {
+            if (fail != LogoRectDetectFail::None && rectDetectFail == LogoRectDetectFail::None) {
+                rectDetectFail = fail;
+            }
+        }
+        void setLogoAnalyzeFail(const LogoAnalyzeFail fail) {
+            if (fail != LogoAnalyzeFail::None && logoAnalyzeFail == LogoAnalyzeFail::None) {
+                logoAnalyzeFail = fail;
+            }
+        }
+        void throwIfRectDetectFailed() const {
+            if (rectDetectFail != LogoRectDetectFail::None) {
+                THROWF(RuntimeException, "Logo rect detect failed: %s", ToString(rectDetectFail));
+            }
+        }
+        bool isRectSizeAbnormal(const AutoDetectRect& rect) const {
+            if (rect.w <= 0 || rect.h <= 0) {
+                return true;
+            }
+            const int area = rect.w * rect.h;
+            return rect.w < 8
+                || rect.h < 8
+                || area < 24
+                || rect.w > (int)std::round(scanw * 0.88)
+                || rect.h > (int)std::round(scanh * 0.62);
+        }
 
     public:
         AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
@@ -2441,7 +2518,15 @@ namespace {
             , detailedDebug(detailedDebug)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 } {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false) {
+        }
+
+        int getRectDetectFailCode() const {
+            return (int)rectDetectFail;
+        }
+
+        int getLogoAnalyzeFailCode() const {
+            return (int)logoAnalyzeFail;
         }
 
         AutoDetectRect run(const tstring& srcpath) {
@@ -2499,6 +2584,13 @@ namespace {
             debugPass1 = DebugStageSnapshot{};
             debugPass2 = DebugStageSnapshot{};
             debugPass2Prepare.clear();
+            rectDetectFail = LogoRectDetectFail::None;
+            logoAnalyzeFail = LogoAnalyzeFail::None;
+            scoreValidPixelCount = 0;
+            scorePositivePixelCount = 0;
+            initialSeedCount = 0;
+            initialGrownCount = 0;
+            usedBinaryFallback = false;
         }
 
         void captureCurrentDebugSnapshot(DebugStageSnapshot& snapshot) {
@@ -2570,6 +2662,7 @@ namespace {
             };
             // ROIが小さすぎる場合は pass2 を実施しても安定しないので中止する。
             if (pass2LogoRectLocal.w < 8 || pass2LogoRectLocal.h < 8) {
+                setLogoAnalyzeFail(LogoAnalyzeFail::Pass2RoiTooSmall);
                 return false;
             }
 
@@ -2607,6 +2700,7 @@ namespace {
                 }
             }
             if (!pass2.deintLogo) {
+                setLogoAnalyzeFail(LogoAnalyzeFail::GetLogoNull);
                 return false;
             }
 
@@ -2619,6 +2713,7 @@ namespace {
                 [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
                 [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
             if (pass2.corr0.empty() || pass2.corr0.size() != pass2.corr1.size()) {
+                setLogoAnalyzeFail(LogoAnalyzeFail::CorrSequenceInvalid);
                 return false;
             }
 
@@ -2683,7 +2778,11 @@ namespace {
                 pass2.frameMask[i] = (judge[i].r == 2) ? 1 : 0;
             }
             debugPass2Prepare.frameMask = pass2.frameMask;
-            return std::any_of(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
+            const bool hasFrameMask = std::any_of(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
+            if (!hasFrameMask) {
+                setLogoAnalyzeFail(LogoAnalyzeFail::FrameMaskEmpty);
+            }
+            return hasFrameMask;
         }
 
         bool shouldFallbackToPass1Rect(const AutoDetectRect& pass1RectLocal) const {
@@ -2729,6 +2828,7 @@ namespace {
             //    pass1で得た矩形へフォールバックする。
             const int minAcceptedFrames = std::max(8, readFrames / 50);
             if (pass2.acceptedFrames < minAcceptedFrames) {
+                setLogoAnalyzeFail(LogoAnalyzeFail::TooFewAcceptedFrames);
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
                 return false;
@@ -2746,6 +2846,7 @@ namespace {
 
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
             if (shouldFallbackToPass1Rect(pass1RectLocal)) {
+                setLogoAnalyzeFail(LogoAnalyzeFail::Pass2RectDiverged);
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
                 return false;
@@ -4016,6 +4117,7 @@ namespace {
             collectTraceBinRepresentatives(statsPass, debugTraceBinRepresentatives);
             debugScore = std::move(scoreStage);
             debugBinary = std::move(binaryStage.binary);
+            throwIfRectDetectFailed();
         }
 
         // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
@@ -4151,7 +4253,11 @@ namespace {
                 sum2 += scoreStage.score[i] * scoreStage.score[i];
                 count++;
             }
-            if (count <= 0) {
+            scoreValidPixelCount = validPixels;
+            scorePositivePixelCount = count;
+            const int minRequiredPixels = std::max(24, scanw * scanh / 2048);
+            if (validPixels < minRequiredPixels || count < minRequiredPixels) {
+                setRectDetectFail(LogoRectDetectFail::InsufficientScorePixels);
                 int finalPos = 0;
                 for (int i = 0; i < scanw * scanh; i++) {
                     if (!scoreStage.validAB[i]) continue;
@@ -4179,12 +4285,12 @@ namespace {
                 const double frameAvg = statsPass.frameValidCounts.empty() ? 0.0 : (double)frameSum / statsPass.frameValidCounts.size();
                 const double sampleAvg = sampledPixels > 0 ? (double)totalSampleCount / sampledPixels : 0.0;
                 THROWF(RuntimeException,
-                    "Insufficient valid pixels: frames=%d/%d, roi=%dx%d@(%d,%d), "
-                    "validAB=%d, scorePos=%d, sampledPixels=%d, sampleCount(avg=%.2f,max=%d), "
+                    "Logo rect detect failed: %s: frames=%d/%d, roi=%dx%d@(%d,%d), "
+                    "validAB=%d, scorePos=%d, minRequired=%d, sampledPixels=%d, sampleCount(avg=%.2f,max=%d), "
                     "frameValid(nonZero=%d,avg=%.2f,max=%d), "
                     "scoreFinal(pos=%d,min=%.6f,p50=%.6f,p90=%.6f,p99=%.6f,max=%.6f,mean=%.6f)",
-                    readFrames, searchFrames, scanw, scanh, scanx, scany,
-                    validPixels, count, sampledPixels, sampleAvg, maxSampleCount,
+                    ToString(rectDetectFail), readFrames, searchFrames, scanw, scanh, scanx, scany,
+                    validPixels, count, minRequiredPixels, sampledPixels, sampleAvg, maxSampleCount,
                     framesNonZero, frameAvg, frameMax,
                     finalPos, finalStats.minv, finalStats.p50, finalStats.p90, finalStats.p99, finalStats.maxv, finalStats.mean);
             }
@@ -5138,14 +5244,14 @@ namespace {
     }
 
     // binary が空になったときのみ、mapAccepted 上位点から最小限の復旧を行う。
-    void AutoDetectLogoReader::applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage) {
+    bool AutoDetectLogoReader::applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage) {
         // 既に画素が残っている場合はフォールバック不要。
         int binaryOnCount = 0;
         for (int i = 0; i < scanw * scanh; i++) {
             if (binaryStage.binary[i]) binaryOnCount++;
         }
         if (binaryOnCount > 0) {
-            return;
+            return false;
         }
 
         // フォールバック: 通常二値化で全消しになった場合のみ適用。
@@ -5159,20 +5265,23 @@ namespace {
             acceptedVals.push_back(scoreStage.mapAccepted[i]);
         }
         if (acceptedVals.empty()) {
-            return;
+            return false;
         }
 
         std::sort(acceptedVals.begin(), acceptedVals.end());
         const int idx = ClampInt((int)std::round((acceptedVals.size() - 1) * 0.995), 0, (int)acceptedVals.size() - 1);
         const float fbTh = std::max(0.06f, acceptedVals[idx]);
+        bool restored = false;
         // 閾値を超える画素だけを binary に復帰させる。
         for (int i = 0; i < scanw * scanh; i++) {
             if (!scoreStage.validAB[i]) continue;
             const double consistencyNorm = std::max(0.0, std::min(1.0, (scoreStage.mapConsistency[i] - 0.30) / 1.70));
             if (scoreStage.mapAccepted[i] >= fbTh && (scoreStage.mapAlpha[i] >= 0.015f || consistencyNorm >= 0.20)) {
                 binaryStage.binary[i] = 1;
+                restored = true;
             }
         }
+        return restored;
     }
 
     // ステージ2: scoreを2値化してロゴ候補マスク(binary)を確定する。
@@ -5189,6 +5298,11 @@ namespace {
             deltaCompDebug.clear();
         }
         buildBinaryFromThreshold(scoreStage, 0, thHigh, thLow, binaryStage.binary, &baseDiag);
+        initialSeedCount = baseDiag.seedOn;
+        initialGrownCount = baseDiag.grownOn;
+        if (baseDiag.seedOn <= 0) {
+            setRectDetectFail(LogoRectDetectFail::NoSeed);
+        }
         std::vector<uint8_t> acceptedBinary = binaryStage.binary;
         if (detailedDebug) {
             iterBinaryHistory.clear();
@@ -5413,7 +5527,10 @@ namespace {
         if (enablePruneBinaryByAnchor) {
             pruneBinaryByAnchor(scoreStage, binaryStage);
         }
-        applyBinaryFallbackIfEmpty(scoreStage, binaryStage);
+        usedBinaryFallback = applyBinaryFallbackIfEmpty(scoreStage, binaryStage);
+        if (usedBinaryFallback) {
+            setRectDetectFail(LogoRectDetectFail::BinaryFallbackUsed);
+        }
     }
 
     // binary の x/y 投影を作る。
@@ -5719,6 +5836,9 @@ namespace {
         std::vector<RectStageCompCandidate> candidates;
         std::vector<RectStageCompCandidate> mergeCandidates;
         collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore, scoreStage, binaryStage);
+        if (!hasBest) {
+            setRectDetectFail(LogoRectDetectFail::NoBestComponent);
+        }
 
         // 位置決定は binary成分のみで行う。
         AutoDetectRect finalRect = hasBest ? best : coarse;
@@ -5726,7 +5846,8 @@ namespace {
             finalRect = buildAcceptedFallbackRect(scoreStage);
         }
         if (finalRect.w <= 0 || finalRect.h <= 0) {
-            THROW(RuntimeException, "Logo rect projection/CCL failed");
+            setRectDetectFail(LogoRectDetectFail::NoBestComponent);
+            throwIfRectDetectFailed();
         }
 
         if (hasBest && !mergeCandidates.empty()) {
@@ -5737,6 +5858,9 @@ namespace {
         finalRect.y = std::max(0, finalRect.y - marginY);
         finalRect.w = std::min(scanw - finalRect.x, finalRect.w + marginX * 2);
         finalRect.h = std::min(scanh - finalRect.y, finalRect.h + marginY * 2);
+        if (isRectSizeAbnormal(finalRect)) {
+            setRectDetectFail(LogoRectDetectFail::RectSizeAbnormal);
+        }
         rectLocal = finalRect;
         rectAbs = makeAbsRectFromLocal(finalRect);
 
@@ -5769,22 +5893,28 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     const tchar* srcpath, int serviceid,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
     int marginX, int marginY, int threadN,
-    int* outX, int* outY, int* outW, int* outH,
+    int* outX, int* outY, int* outW, int* outH, int* outRectDetectFail, int* outLogoAnalyzeFail,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
+    if (outRectDetectFail) *outRectDetectFail = 0;
+    if (outLogoAnalyzeFail) *outLogoAnalyzeFail = 0;
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;
         if (outY) *outY = rect.y;
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
+        if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
+        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
         if (scorePath && binaryPath && cclPath) {
             reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
         }
         return true;
     } catch (const Exception& exception) {
+        if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
+        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
         if (scorePath && binaryPath && cclPath) {
             try {
                 reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);

@@ -184,6 +184,10 @@ namespace Amatsukaze.Server.Rest
         public int NumRead { get; set; }
         public int NumTotal { get; set; }
         public LogoRect DetectedRect { get; set; }
+        public int RectDetectFailCode { get; set; }
+        public string RectDetectFailName { get; set; }
+        public int LogoAnalyzeFailCode { get; set; }
+        public string LogoAnalyzeFailName { get; set; }
         public LogoAutoDetectDebugImages DebugImages { get; set; }
     }
 

@@ -32,6 +32,8 @@ namespace Amatsukaze.Server.Rest
         public bool Completed { get; set; }
         public string Error { get; set; }
         public LogoRect DetectedRect { get; set; }
+        public LogoRectDetectFail RectDetectFail { get; set; }
+        public LogoAnalyzeFail LogoAnalyzeFail { get; set; }
         public string ScoreImagePath { get; set; }
         public string BinaryImagePath { get; set; }
         public string CclImagePath { get; set; }
@@ -564,6 +566,8 @@ namespace Amatsukaze.Server.Rest
                             job.NumTotal = total;
                             return true;
                         });
+                    job.RectDetectFail = result.RectDetectFail;
+                    job.LogoAnalyzeFail = result.LogoAnalyzeFail;
                     x = result.X;
                     y = result.Y;
                     w = result.W;
@@ -580,12 +584,19 @@ namespace Amatsukaze.Server.Rest
                 }
 
                 job.Completed = true;
-            }
-            catch (Exception ex)
-            {
-                job.Error = ex.Message;
-                job.Completed = true;
-            }
+                }
+                catch (AutoDetectLogoRectException ex)
+                {
+                    job.RectDetectFail = ex.RectDetectFail;
+                    job.LogoAnalyzeFail = ex.LogoAnalyzeFail;
+                    job.Error = ex.Message;
+                    job.Completed = true;
+                }
+                catch (Exception ex)
+                {
+                    job.Error = ex.Message;
+                    job.Completed = true;
+                }
         }
 
         private void RunJob(LogoAnalyzeJob job, LogoAnalyzeStartRequest request, string filePath, int serviceId)
@@ -782,6 +793,10 @@ namespace Amatsukaze.Server.Rest
                 NumRead = job.NumRead,
                 NumTotal = job.NumTotal,
                 DetectedRect = job.DetectedRect,
+                RectDetectFailCode = (int)job.RectDetectFail,
+                RectDetectFailName = job.RectDetectFail.ToString(),
+                LogoAnalyzeFailCode = (int)job.LogoAnalyzeFail,
+                LogoAnalyzeFailName = job.LogoAnalyzeFail.ToString(),
                 DebugImages = debug
             };
         }

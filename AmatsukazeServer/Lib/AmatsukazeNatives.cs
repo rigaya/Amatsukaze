@@ -17,6 +17,50 @@ namespace Amatsukaze.Lib
 #endif
     }
 
+    public enum LogoRectDetectFail
+    {
+        None = 0,
+        InsufficientScorePixels = 1,
+        NoSeed = 2,
+        BinaryFallbackUsed = 3,
+        NoBestComponent = 4,
+        RectSizeAbnormal = 5,
+    }
+
+    public enum LogoAnalyzeFail
+    {
+        None = 0,
+        Pass2RoiTooSmall = 1,
+        GetLogoNull = 2,
+        CorrSequenceInvalid = 3,
+        FrameMaskEmpty = 4,
+        TooFewAcceptedFrames = 5,
+        Pass2RectDiverged = 6,
+    }
+
+    public sealed class AutoDetectLogoRectResult
+    {
+        public int X { get; init; }
+        public int Y { get; init; }
+        public int W { get; init; }
+        public int H { get; init; }
+        public LogoRectDetectFail RectDetectFail { get; init; }
+        public LogoAnalyzeFail LogoAnalyzeFail { get; init; }
+    }
+
+    public sealed class AutoDetectLogoRectException : IOException
+    {
+        public LogoRectDetectFail RectDetectFail { get; }
+        public LogoAnalyzeFail LogoAnalyzeFail { get; }
+
+        public AutoDetectLogoRectException(string message, LogoRectDetectFail rectDetectFail, LogoAnalyzeFail logoAnalyzeFail)
+            : base(message)
+        {
+            RectDetectFail = rectDetectFail;
+            LogoAnalyzeFail = logoAnalyzeFail;
+        }
+    }
+
     public class AMTContext : IDisposable
     {
         public IntPtr Ptr { private set; get; }
@@ -559,7 +603,7 @@ namespace Amatsukaze.Lib
         private static extern int AutoDetectLogoRect(IntPtr ctx, string srcpath, int serviceid,
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
-            ref int x, ref int y, ref int w, ref int h,
+            ref int x, ref int y, ref int w, ref int h, ref int rectDetectFail, ref int logoAnalyzeFail,
             string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
             string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
             string transitionPath, string keepRatePath,
@@ -711,7 +755,7 @@ namespace Amatsukaze.Lib
             }
         }
 
-        public static (int X, int Y, int W, int H) AutoDetectLogoRect(AMTContext ctx, string srcpath, int serviceid,
+        public static AutoDetectLogoRectResult AutoDetectLogoRect(AMTContext ctx, string srcpath, int serviceid,
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
             string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
@@ -725,13 +769,27 @@ namespace Amatsukaze.Lib
             int y = 0;
             int w = 0;
             int h = 0;
+            int rectDetectFail = 0;
+            int logoAnalyzeFail = 0;
             if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
                 divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
-                ref x, ref y, ref w, ref h, scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
+                ref x, ref y, ref w, ref h, ref rectDetectFail, ref logoAnalyzeFail,
+                scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
             {
-                throw new IOException(ctx.GetError());
+                throw new AutoDetectLogoRectException(
+                    ctx.GetError(),
+                    (LogoRectDetectFail)rectDetectFail,
+                    (LogoAnalyzeFail)logoAnalyzeFail);
             }
-            return (x, y, w, h);
+            return new AutoDetectLogoRectResult()
+            {
+                X = x,
+                Y = y,
+                W = w,
+                H = h,
+                RectDetectFail = (LogoRectDetectFail)rectDetectFail,
+                LogoAnalyzeFail = (LogoAnalyzeFail)logoAnalyzeFail,
+            };
         }
     }
 
