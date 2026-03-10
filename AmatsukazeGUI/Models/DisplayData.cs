@@ -3760,6 +3760,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region TrimAdjustDeleteCmTask変更通知プロパティ
+        public bool TrimAdjustDeleteCmTask
+        {
+            get { return Model.TrimAdjustDeleteCmTask; }
+            set
+            {
+                if (Model.TrimAdjustDeleteCmTask == value)
+                    return;
+                Model.TrimAdjustDeleteCmTask = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region ConsoleFont変更通知プロパティ
         public System.Windows.Media.FontFamily ConsoleFont
         {
