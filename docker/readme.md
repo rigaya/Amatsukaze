@@ -189,7 +189,7 @@ docker compose down
 
 ```sh
 # 更新
-docker compose pull
+git pull
 docker compose build --pull
 # 最新のイメージを元に起動
 docker compose up -d
