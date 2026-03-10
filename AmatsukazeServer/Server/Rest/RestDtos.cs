@@ -134,14 +134,14 @@ namespace Amatsukaze.Server.Rest
     public class LogoAutoDetectStartRequest
     {
         public int QueueItemId { get; set; }
-        public int DivX { get; set; } = 4;
-        public int DivY { get; set; } = 4;
-        public int SearchFrames { get; set; } = 20000;
+        public int DivX { get; set; } = 5;
+        public int DivY { get; set; } = 5;
+        public int SearchFrames { get; set; } = 10000;
         public int BlockSize { get; set; } = 32;
         public int Threshold { get; set; } = 12;
-        public int MarginX { get; set; } = 4;
-        public int MarginY { get; set; } = 4;
-        public int ThreadN { get; set; } = 1;
+        public int MarginX { get; set; } = 6;
+        public int MarginY { get; set; } = 6;
+        public int ThreadN { get; set; } = 0;
         public bool DetailedDebug { get; set; } = false;
     }
 

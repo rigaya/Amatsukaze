@@ -107,7 +107,7 @@ namespace Amatsukaze.Server
                 var threshold = Math.Max(MinThreshold, setting.AutoLogoPendingThreshold);
                 var marginX = Math.Max(MinMargin, setting.AutoLogoPendingMarginX);
                 var marginY = Math.Max(MinMargin, setting.AutoLogoPendingMarginY);
-                var threadN = ResolveThreadN(setting.AutoLogoPendingThreadN);
+                var threadN = AutoLogoThreadResolver.Resolve(setting.AutoLogoPendingThreadN);
                 var detailedDebug = setting.AutoLogoPendingDetailedDebug;
                 var rectX = 0;
                 var rectY = 0;
@@ -210,18 +210,6 @@ namespace Amatsukaze.Server
         {
             return server.AppData_?.setting?.AutoLogoPendingEnabled ?? false;
         }
-
-        private static int ResolveThreadN(int configured)
-        {
-            if (configured > 0)
-            {
-                return configured;
-            }
-            var logical = Math.Max(1, Environment.ProcessorCount);
-            var half = Math.Max(1, logical / 2);
-            return Math.Min(8, half);
-        }
-
         private class AutoRequest
         {
             public int QueueItemId { get; set; }

@@ -997,13 +997,13 @@ namespace Amatsukaze.Server
                 if (AppData_.setting != null)
                 {
                     AppData_.setting.AutoLogoPendingEnabled = true;
-                    AppData_.setting.AutoLogoPendingDivX = 4;
-                    AppData_.setting.AutoLogoPendingDivY = 4;
-                    AppData_.setting.AutoLogoPendingSearchFrames = 20000;
+                    AppData_.setting.AutoLogoPendingDivX = 5;
+                    AppData_.setting.AutoLogoPendingDivY = 5;
+                    AppData_.setting.AutoLogoPendingSearchFrames = 10000;
                     AppData_.setting.AutoLogoPendingBlockSize = 32;
                     AppData_.setting.AutoLogoPendingThreshold = 12;
-                    AppData_.setting.AutoLogoPendingMarginX = 4;
-                    AppData_.setting.AutoLogoPendingMarginY = 4;
+                    AppData_.setting.AutoLogoPendingMarginX = 6;
+                    AppData_.setting.AutoLogoPendingMarginY = 6;
                     AppData_.setting.AutoLogoPendingThreadN = 0;
                     AppData_.setting.AutoLogoPendingDetailedDebug = false;
                 }
@@ -1017,12 +1017,43 @@ namespace Amatsukaze.Server
             }
         }
 
+        private void UpdateFromVersion3()
+        {
+            // 旧デフォルト(1/4, 20000f, margin 4x4)を新デフォルトへ移行 //
+            int NextVersion = 4;
+
+            if (AppData_.Version < NextVersion)
+            {
+                if (AppData_.setting != null &&
+                    AppData_.setting.AutoLogoPendingDivX == 4 &&
+                    AppData_.setting.AutoLogoPendingDivY == 4 &&
+                    AppData_.setting.AutoLogoPendingSearchFrames == 20000 &&
+                    AppData_.setting.AutoLogoPendingBlockSize == 32 &&
+                    AppData_.setting.AutoLogoPendingThreshold == 12 &&
+                    AppData_.setting.AutoLogoPendingMarginX == 4 &&
+                    AppData_.setting.AutoLogoPendingMarginY == 4 &&
+                    AppData_.setting.AutoLogoPendingThreadN == 0 &&
+                    AppData_.setting.AutoLogoPendingDetailedDebug == false)
+                {
+                    AppData_.setting.AutoLogoPendingDivX = 5;
+                    AppData_.setting.AutoLogoPendingDivY = 5;
+                    AppData_.setting.AutoLogoPendingSearchFrames = 10000;
+                    AppData_.setting.AutoLogoPendingMarginX = 6;
+                    AppData_.setting.AutoLogoPendingMarginY = 6;
+                }
+
+                AppData_.Version = NextVersion;
+                SaveAppData();
+            }
+        }
+
         private void UpdateFromOldVersion()
         {
             // 古いバージョンからのアップデート処理
             UpdateFromVersion0();
             UpdateFromVersion1();
             UpdateFromVersion2();
+            UpdateFromVersion3();
         }
 
         #region メッセージ出力
@@ -1386,13 +1417,13 @@ namespace Amatsukaze.Server
                 NumParallelLogoAnalysis = 0,
                 DeleteOldLogsDays = 180,
                 AutoLogoPendingEnabled = true,
-                AutoLogoPendingDivX = 4,
-                AutoLogoPendingDivY = 4,
-                AutoLogoPendingSearchFrames = 20000,
+                AutoLogoPendingDivX = 5,
+                AutoLogoPendingDivY = 5,
+                AutoLogoPendingSearchFrames = 10000,
                 AutoLogoPendingBlockSize = 32,
                 AutoLogoPendingThreshold = 12,
-                AutoLogoPendingMarginX = 4,
-                AutoLogoPendingMarginY = 4,
+                AutoLogoPendingMarginX = 6,
+                AutoLogoPendingMarginY = 6,
                 AutoLogoPendingThreadN = 0,
                 AutoLogoPendingDetailedDebug = false
             });
@@ -1447,15 +1478,15 @@ namespace Amatsukaze.Server
             NormalizeTrimAdjustSettings(AppData_.setting);
             if (AppData_.setting.AutoLogoPendingDivX <= 0)
             {
-                AppData_.setting.AutoLogoPendingDivX = 4;
+                AppData_.setting.AutoLogoPendingDivX = 5;
             }
             if (AppData_.setting.AutoLogoPendingDivY <= 0)
             {
-                AppData_.setting.AutoLogoPendingDivY = 4;
+                AppData_.setting.AutoLogoPendingDivY = 5;
             }
             if (AppData_.setting.AutoLogoPendingSearchFrames < 100)
             {
-                AppData_.setting.AutoLogoPendingSearchFrames = 20000;
+                AppData_.setting.AutoLogoPendingSearchFrames = 10000;
             }
             if (AppData_.setting.AutoLogoPendingBlockSize < 4)
             {
@@ -1467,11 +1498,11 @@ namespace Amatsukaze.Server
             }
             if (AppData_.setting.AutoLogoPendingMarginX < 0)
             {
-                AppData_.setting.AutoLogoPendingMarginX = 4;
+                AppData_.setting.AutoLogoPendingMarginX = 6;
             }
             if (AppData_.setting.AutoLogoPendingMarginY < 0)
             {
-                AppData_.setting.AutoLogoPendingMarginY = 4;
+                AppData_.setting.AutoLogoPendingMarginY = 6;
             }
             if (AppData_.scriptData == null)
             {

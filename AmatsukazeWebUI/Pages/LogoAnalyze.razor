@@ -64,8 +64,8 @@ else
             <input type="number" min="0" @bind="_autoMarginX" style="width:72px;" />
             <label>margin_y:</label>
             <input type="number" min="0" @bind="_autoMarginY" style="width:72px;" />
-            <label>thread_n:</label>
-            <input type="number" min="1" @bind="_autoThreadN" style="width:72px;" />
+            <label>thread_n (0=auto):</label>
+            <input type="number" min="0" @bind="_autoThreadN" style="width:72px;" />
             <label style="margin-left:8px;">
                 <input type="checkbox" @bind="_autoDetailedDebug" />
                 詳細デバッグ出力
@@ -249,13 +249,13 @@ else
     private readonly List<AutoDebugImageEntry> _autoDebugEntries = new();
     private string? _autoPass2PrepLogoUrl;
     private string? _autoPass2PrepMaskUrl;
-    private int _autoDivX = 4;
-    private int _autoDivY = 4;
-    private int _autoSearchFrames = 20000;
+    private int _autoDivX = 5;
+    private int _autoDivY = 5;
+    private int _autoSearchFrames = 10000;
     private int _autoBlockSize = 32;
-    private int _autoMarginX = 4;
-    private int _autoMarginY = 4;
-    private int _autoThreadN = Math.Min(4, Environment.ProcessorCount);
+    private int _autoMarginX = 6;
+    private int _autoMarginY = 6;
+    private int _autoThreadN = 0;
     private bool _autoDetailedDebug = false;
     private static readonly TimeSpan InitialLoadTimeout = TimeSpan.FromSeconds(30);
 

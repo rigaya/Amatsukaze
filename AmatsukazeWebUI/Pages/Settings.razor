@@ -154,7 +154,7 @@ else
             <th>スレッド数 (0=auto)</th>
             <td>
                 <input type="number" min="0" step="1" style="width:120px;" value="@GetIntValue(AutoLogoPendingThreadNField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingThreadNField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-                <span style="margin-left:8px;">auto = min(8, 論理コア数/2)</span>
+                <span style="margin-left:8px;">auto = clamp(論理コア数-2, 1, 16)</span>
             </td>
         </tr>
         <tr class="settings-check-row">

@@ -156,9 +156,9 @@ namespace Amatsukaze.Server.Rest
                 error = "thresholdは1以上で指定してください";
                 return false;
             }
-            if (request.ThreadN < 1)
+            if (request.ThreadN < 0)
             {
-                error = "thread_nは1以上で指定してください";
+                error = "thread_nは0以上で指定してください";
                 return false;
             }
 
@@ -509,6 +509,7 @@ namespace Amatsukaze.Server.Rest
         {
             try
             {
+                var threadN = AutoLogoThreadResolver.Resolve(request.ThreadN);
                 var baseWork = server.AppData_?.setting?.WorkPath;
                 if (string.IsNullOrEmpty(baseWork))
                 {
@@ -554,7 +555,7 @@ namespace Amatsukaze.Server.Rest
                     var result = LogoFile.AutoDetectLogoRect(
                         ctx, filePath, serviceId,
                         request.DivX, request.DivY, request.SearchFrames, request.BlockSize, request.Threshold,
-                        request.MarginX, request.MarginY, request.ThreadN,
+                        request.MarginX, request.MarginY, threadN,
                         scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath,
                         request.DetailedDebug,
                         (stage, stageProgress, progress, nread, total) =>
