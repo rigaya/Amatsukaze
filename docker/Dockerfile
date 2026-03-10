@@ -221,6 +221,7 @@ ENV FASTER_WHISPER_VER=r245.4
 # 実行に必要なパッケージのみインストール（デバッグモードの場合はビルドツールも含める）
 RUN apt-get update && apt-get install -y \
     gpg \
+    ca-certificates \
     curl \
     wget \
     tzdata \
@@ -237,7 +238,6 @@ RUN apt-get update && apt-get install -y \
     fi \
     && apt-get update \
     && apt-get install -y \
-        ca-certificates \
         gosu \
         git \
         xz-utils \
