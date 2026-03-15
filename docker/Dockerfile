@@ -210,10 +210,10 @@ ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8
 ENV LC_CTYPE=ja_JP.UTF-8
 
-ENV QSVENCC_VER=8.03
-ENV NVENCC_VER=9.08
-ENV VCEENCC_VER=9.02
-ENV TSREPLACE_VER=0.17
+ENV QSVENCC_VER=8.04
+ENV NVENCC_VER=9.12
+ENV VCEENCC_VER=9.04
+ENV TSREPLACE_VER=0.18
 ENV AVISYNTHCUDAFILTERS_VER=0.7.3
 ENV AVISYNTH_VER=3.7.5
 ENV FASTER_WHISPER_VER=r245.4
@@ -248,18 +248,18 @@ RUN apt-get update && apt-get install -y \
         opus-tools \
         intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-opencl-dev \
         cuda-nvrtc-11-8 libnpp-11-8 \
-    && wget https://github.com/rigaya/QSVEnc/releases/download/${QSVENCC_VER}/qsvencc_${QSVENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O qsvencc.deb \
+    && wget https://github.com/rigaya/QSVEnc/releases/download/${QSVENCC_VER}/qsvencc_${QSVENCC_VER}_${ARCH}.deb -O qsvencc.deb \
         && apt-get install -y ./qsvencc.deb \
         && rm ./qsvencc.deb \
-    && wget https://github.com/rigaya/NVEnc/releases/download/${NVENCC_VER}/nvencc_${NVENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O nvencc.deb \
+    && wget https://github.com/rigaya/NVEnc/releases/download/${NVENCC_VER}/nvencc_${NVENCC_VER}_${ARCH}.deb -O nvencc.deb \
         && apt-get install -y ./nvencc.deb \
         && rm ./nvencc.deb \
     && if [ "$ENABLE_VCEENCC" = "1" ]; then \
-        wget https://github.com/rigaya/VCEEnc/releases/download/${VCEENCC_VER}/vceencc_${VCEENCC_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O vceencc.deb \
+        wget https://github.com/rigaya/VCEEnc/releases/download/${VCEENCC_VER}/vceencc_${VCEENCC_VER}_${ARCH}.deb -O vceencc.deb \
         && apt-get install -y ./vceencc.deb \
         && rm ./vceencc.deb; \
     fi \
-    && wget https://github.com/rigaya/tsreplace/releases/download/${TSREPLACE_VER}/tsreplace_${TSREPLACE_VER}_Ubuntu${UBUNTU_VERSION}_${ARCH}.deb -O tsreplace.deb \
+    && wget https://github.com/rigaya/tsreplace/releases/download/${TSREPLACE_VER}/tsreplace_${TSREPLACE_VER}_${ARCH}.deb -O tsreplace.deb \
         && apt-get install -y ./tsreplace.deb \
         && rm ./tsreplace.deb \
     && if [ "$BUILD_MODE" = "debug" ]; then \

@@ -203,21 +203,21 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     ```bash
     # qsvencc
     (curl -s https://api.github.com/repos/rigaya/QSVEnc/releases/latest \
-      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
       | wget -i - -O qsvencc.deb \
       && sudo apt install -y ./qsvencc.deb \
       && rm ./qsvencc.deb)
     
     # nvencc
     (curl -s https://api.github.com/repos/rigaya/NVEnc/releases/latest \
-      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
       | wget -i - -O nvencc.deb \
       && sudo apt install -y ./nvencc.deb \
       && rm ./nvencc.deb)
     
     # vceencc
     (curl -s https://api.github.com/repos/rigaya/VCEEnc/releases/latest \
-      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
       | wget -i - -O vceencc.deb \
       && sudo apt install -y ./vceencc.deb \
       && rm ./vceencc.deb)
@@ -258,7 +258,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     [こちら](https://github.com/rigaya/tsreplace/releases)から最新版をダウンロードしてインストールします。
 
     ```bash
-    sudo apt install -y ./tsreplace_<version>_amd64_Ubuntuxx.xx.deb
+    sudo apt install -y ./tsreplace_<version>_amd64.deb
     ```
   
     <details>
@@ -266,7 +266,7 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
     ```bash
     (curl -s https://api.github.com/repos/rigaya/tsreplace/releases/latest \
-      | grep "browser_download_url.*deb" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
       | wget -i - -O tsreplace.deb \
       && sudo apt install -y ./tsreplace.deb \
       && rm ./tsreplace.deb)
