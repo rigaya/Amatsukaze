@@ -136,7 +136,10 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const tstring& metapath,
     const bool tsreplaceRemoveTypeD,
     bool tsreplaceEdgeTrim,
-    int64_t tsreplaceDelay);
+    int64_t tsreplaceDelay,
+    bool muxerAddEncoderCmd,
+    const tstring& encoderName,
+    const tstring& encoderOptions);
 
 tstring makeTimelineEditorArgs(
     const tstring& binpath,
@@ -200,6 +203,8 @@ struct Config {
     ENUM_ENCODER encoder;
     tstring encoderPath;
     tstring encoderOptions;
+    // 追加オプションをコンテナに記録する（mp4/mkv出力時のみ有効）
+    bool muxerAddEncoderCmd;
     std::pair<int, int> userSAR;
     ENUM_AUDIO_ENCODER audioEncoder;
     tstring audioEncoderPath;
@@ -309,6 +314,8 @@ public:
     tstring getEncoderPath() const;
 
     tstring getEncoderOptions() const;
+
+    bool getMuxerAddEncoderCmd() const;
 
     std::pair<int, int> getUserSAR() const;
 

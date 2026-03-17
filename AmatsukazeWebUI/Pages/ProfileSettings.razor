@@ -83,6 +83,16 @@ else
                     </select>
                 </td>
             </tr>
+            <tr>
+                <th>追加オプションを<br />コンテナに記録する</th>
+                <td>
+                    <label style="margin-right: 6px;" title="mp4/mkv出力時のみ有効です。他の出力フォーマットでは反映されません。">
+                        <input type="checkbox" checked="@GetBoolValue("MuxerAddEncoderCmd")" @onchange="@(e => OnBoolChanged(e, "MuxerAddEncoderCmd"))" />
+                        有効
+                    </label>
+                    <span class="text-muted small">mp4/mkv出力時のみ有効です。他の出力フォーマットでは反映されません。</span>
+                </td>
+            </tr>
             @if (IsForceSarEnabled())
             {
                 <tr>

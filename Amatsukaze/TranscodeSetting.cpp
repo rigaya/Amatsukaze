@@ -272,6 +272,39 @@ bool sarValid(const std::pair<int, int>& sar) {
     return sar.first > 0 && sar.second > 0;
 }
 
+// -itags 用にエスケープ（値内の " を \" に、% を %% に）
+static tstring escapeItagsValue(const tstring& s) {
+    tstring ret;
+    ret.reserve(s.size() + 16);
+    for (const auto c : s) {
+        if (c == _T('"')) {
+            ret += _T("\\\"");
+        } else if (c == _T('%')) {
+            ret += _T("%%");
+        } else {
+            ret += c;
+        }
+    }
+    return ret;
+}
+
+// MKV global-tags XML用にエスケープ（<,>,&,".'）
+static std::string escapeXmlAttr(const std::string& s) {
+    std::string ret;
+    ret.reserve(s.size() + 8);
+    for (const unsigned char c : s) {
+        switch (c) {
+        case '<': ret += "&lt;"; break;
+        case '>': ret += "&gt;"; break;
+        case '&': ret += "&amp;"; break;
+        case '"': ret += "&quot;"; break;
+        case '\'': ret += "&apos;"; break;
+        default: ret += (char)c; break;
+        }
+    }
+    return ret;
+}
+
 /* static */ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const ENUM_ENCODER encoder,
     const std::pair<int, int>& userSAR,
@@ -296,7 +329,10 @@ bool sarValid(const std::pair<int, int>& sar) {
     const tstring& metapath,
     const bool tsreplaceRemoveTypeD,
     bool tsreplaceEdgeTrim,
-    int64_t tsreplaceDelay) {
+    int64_t tsreplaceDelay,
+    bool muxerAddEncoderCmd,
+    const tstring& encoderName,
+    const tstring& encoderOptions) {
     std::vector<std::pair<tstring, bool>> ret;
 
     StringBuilderT sb;
@@ -339,6 +375,10 @@ bool sarValid(const std::pair<int, int>& sar) {
             needSubs = false;
         }
         tstring dst = (needTimecode || needChapter || needSubs) ? tmpout1path : outpath;
+        if (muxerAddEncoderCmd && dst == outpath) {
+            const tstring toolVal = tstring(_T("Amatsukaze ")) + encoderName + _T(" ") + encoderOptions;
+            sb.append(_T(" -itags \"tool=%s\""), escapeItagsValue(toolVal).c_str());
+        }
         sb.append(_T(" -new \"%s\""), dst);
         ret.push_back(std::make_pair(sb.str(), true));
         sb.clear();
@@ -372,6 +412,10 @@ bool sarValid(const std::pair<int, int>& sar) {
             // timecodeがある場合はこっちでチャプターを入れる
             if (needChapter) {
                 sb.append(_T(" -chap \"%s\""), chapterpath);
+            }
+            if (muxerAddEncoderCmd) {
+                const tstring toolVal = tstring(_T("Amatsukaze ")) + encoderName + _T(" ") + encoderOptions;
+                sb.append(_T(" -itags \"tool=%s\""), escapeItagsValue(toolVal).c_str());
             }
             sb.append(_T(" -new \"%s\""), outpath);
             ret.push_back(std::make_pair(sb.str(), true));
@@ -415,7 +459,15 @@ bool sarValid(const std::pair<int, int>& sar) {
         for (int i = 0; i < (int)inSubs.size(); i++) {
             sb.append(_T(" --track-name \"0:%s\" \"%s\""), subsTitles[i], inSubs[i]);
         }
-
+        if (muxerAddEncoderCmd) {
+            const tstring toolVal = tstring(_T("Amatsukaze ")) + encoderName + _T(" ") + encoderOptions;
+            const std::string toolUtf8 = tchar_to_string(toolVal, CP_UTF8);
+            const std::string escaped = escapeXmlAttr(toolUtf8);
+            const tstring tagPath = tmpdir + _T("/amt_mux_tool_tag.xml");
+            const std::string xml = "<?xml version=\"1.0\"?><Tags><Tag><Simple><TagName>TOOL</TagName><TagString>" + escaped + "</TagString></Simple></Tag></Tags>";
+            WriteUTF8File(tagPath, xml);
+            sb.append(_T(" --global-tags \"%s\""), tagPath.c_str());
+        }
         ret.push_back(std::make_pair(sb.str(), true));
         sb.clear();
     } else if (format == FORMAT_TSREPLACE) {
@@ -651,6 +703,10 @@ tstring ConfigWrapper::getEncoderPath() const {
 
 tstring ConfigWrapper::getEncoderOptions() const {
     return conf.encoderOptions;
+}
+
+bool ConfigWrapper::getMuxerAddEncoderCmd() const {
+    return conf.muxerAddEncoderCmd;
 }
 
 std::pair<int, int> ConfigWrapper::getUserSAR() const {

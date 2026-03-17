@@ -1966,6 +1966,7 @@ namespace Amatsukaze.Models
                 profile.PmtCutHeadRate = data.Profile.PmtCutHeadRate;
                 profile.PmtCutTailRate = data.Profile.PmtCutTailRate;
                 profile.EncoderParallel = data.Profile.EncoderParallel;
+                profile.MuxerAddEncoderCmd = data.Profile.MuxerAddEncoderCmd;
                 for (int i = 0; i < DisplayResource.MAX; i++)
                 {
                     profile.Resources[i].Resource = data.Profile.ReqResources[i];

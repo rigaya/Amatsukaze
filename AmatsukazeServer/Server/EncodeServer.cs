@@ -1945,6 +1945,10 @@ namespace Amatsukaze.Server
                             .Append(encoderOption)
                             .Append("\"");
                     }
+                    if (profile.MuxerAddEncoderCmd)
+                    {
+                        sb.Append(" --muxer-add-encoder-cmd");
+                    }
 
                     if (profile.OutputFormat == FormatType.MP4)
                     {

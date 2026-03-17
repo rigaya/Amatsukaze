@@ -1311,6 +1311,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region MuxerAddEncoderCmd変更通知プロパティ
+        public bool MuxerAddEncoderCmd
+        {
+            get { return Data.MuxerAddEncoderCmd; }
+            set
+            {
+                if (Data.MuxerAddEncoderCmd == value)
+                    return;
+                Data.MuxerAddEncoderCmd = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region SplitSub変更通知プロパティ
         public bool SplitSub {
             get { return Data.SplitSub; }
