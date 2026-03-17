@@ -2172,6 +2172,14 @@ namespace {
             BinAccum() : count(0), sum_fg(0.0), sum_bg(0.0), sum_weight(0.0), sum_weighted_fg(0.0), sum_weighted_bg(0.0) {}
         };
 
+        // 空間edge時系列統計の蓄積バッファ (画素ごと)
+        struct SpatialEdgeAccum {
+            float sumEdge;   // 正方向 corrected edge の和
+            float sumEdge2;  // 正方向 corrected edge の二乗和
+            int   edgeCount; // 正方向 edge が存在したフレーム数
+            SpatialEdgeAccum() : sumEdge(0.0f), sumEdge2(0.0f), edgeCount(0) {}
+        };
+
         struct StatsPassBuffers {
             std::vector<uint8_t> frameWork8;
             std::vector<uint16_t> frameWork16;
@@ -2182,6 +2190,8 @@ namespace {
             std::vector<uint8_t> lastObservedValid;
             std::vector<int> frameValidCounts;
             std::vector<TraceSampleRecord> traceRecords;
+            // 空間edge時系列統計バッファ (scanw * scanh)
+            std::vector<SpatialEdgeAccum> edgeAccumBuf;
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 if (bitDepth <= 8) {
@@ -2199,6 +2209,7 @@ namespace {
                 lastObservedValid.assign(scanw * scanh, 0);
                 frameValidCounts.clear();
                 traceRecords.clear();
+                edgeAccumBuf.assign(scanw * scanh, SpatialEdgeAccum());
             }
         };
 
@@ -2236,6 +2247,11 @@ namespace {
             std::vector<float> mapTemporalGain;
             std::vector<float> mapOpaquePenalty;
             std::vector<float> mapOpaqueStaticPenalty;
+            // 空間edge時系列統計マップ
+            std::vector<float> mapEdgePresence;
+            std::vector<float> mapEdgeMean;
+            std::vector<float> mapEdgeVar;
+            std::vector<float> mapRescueScore;
             std::vector<uint8_t> validAB;
 
             void reset(const int scanw, const int scanh) {
@@ -2264,6 +2280,10 @@ namespace {
                 mapTemporalGain.assign(n, 0.0f);
                 mapOpaquePenalty.assign(n, 0.0f);
                 mapOpaqueStaticPenalty.assign(n, 0.0f);
+                mapEdgePresence.assign(n, 0.0f);
+                mapEdgeMean.assign(n, 0.0f);
+                mapEdgeVar.assign(n, 0.0f);
+                mapRescueScore.assign(n, 0.0f);
             }
         };
 
@@ -2310,6 +2330,11 @@ namespace {
             std::string opaquePenalty;
             std::string opaqueStaticPenalty;
             std::string tracePlot;
+            // 空間edge時系列統計デバッグパス
+            std::string edgePresence;
+            std::string edgeMean;
+            std::string edgeVar;
+            std::string rescueScore;
         };
         struct Pass2PrepareDebug {
             int logoW = 0;
@@ -2905,6 +2930,10 @@ namespace {
             out.opaquePenalty = addSuffixBeforeExtension(base.opaquePenalty, suffix);
             out.opaqueStaticPenalty = addSuffixBeforeExtension(base.opaqueStaticPenalty, suffix);
             out.tracePlot = addSuffixBeforeExtension(base.tracePlot, suffix);
+            out.edgePresence = addSuffixBeforeExtension(base.edgePresence, suffix);
+            out.edgeMean = addSuffixBeforeExtension(base.edgeMean, suffix);
+            out.edgeVar = addSuffixBeforeExtension(base.edgeVar, suffix);
+            out.rescueScore = addSuffixBeforeExtension(base.rescueScore, suffix);
             return out;
         }
 
@@ -3168,6 +3197,39 @@ namespace {
                     if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapOpaqueStaticPenalty.size()) return (uint8_t)0;
                     const float t = (score.mapOpaqueStaticPenalty[off] - ospMin) / (ospMax - ospMin);
                     return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
+                });
+            }
+            // 空間edge時系列統計マップ: validAB に関わらず全画素に対して出力
+            if (!path.edgePresence.empty()) {
+                WriteGrayBitmap(path.edgePresence, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapEdgePresence.size()) ? score.mapEdgePresence[off] : 0.0f;
+                    // 0.0-1.0 を 0-255 に線形マップ
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            if (!path.edgeMean.empty()) {
+                WriteGrayBitmap(path.edgeMean, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapEdgeMean.size()) ? score.mapEdgeMean[off] : 0.0f;
+                    // 0.0-0.8 を 0-255 に線形マップ
+                    return (uint8_t)ClampInt((int)std::round(v / 0.8f * 255.0f), 0, 255);
+                });
+            }
+            if (!path.edgeVar.empty()) {
+                WriteGrayBitmap(path.edgeVar, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapEdgeVar.size()) ? score.mapEdgeVar[off] : 0.0f;
+                    // 0.0-0.04 を 0-255 に線形マップ
+                    return (uint8_t)ClampInt((int)std::round(v / 0.04f * 255.0f), 0, 255);
+                });
+            }
+            if (!path.rescueScore.empty()) {
+                WriteGrayBitmap(path.rescueScore, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapRescueScore.size()) ? score.mapRescueScore[off] : 0.0f;
+                    // 0.0-1.0 を 0-255 に線形マップ
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
                 });
             }
 
@@ -3469,6 +3531,10 @@ namespace {
             basePath.opaquePenalty = addSuffixBeforeExtension(basePath.score, ".opaquepenalty");
             basePath.opaqueStaticPenalty = addSuffixBeforeExtension(basePath.score, ".opaquestaticpenalty");
             basePath.tracePlot = addSuffixBeforeExtension(basePath.binary, ".traceplot");
+            basePath.edgePresence = addSuffixBeforeExtension(basePath.score, ".edgepresence");
+            basePath.edgeMean     = addSuffixBeforeExtension(basePath.score, ".edgemean");
+            basePath.edgeVar      = addSuffixBeforeExtension(basePath.score, ".edgevar");
+            basePath.rescueScore  = addSuffixBeforeExtension(basePath.score, ".rescuescore");
 
             // 互換維持: 既存パスは最終結果(final)を出力。
             writeDebugStage(debugStats, debugTraceRecords, debugTraceBinRepresentatives, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
@@ -3719,6 +3785,59 @@ namespace {
                         lastObservedFg[off] = fgRaw;
                         lastObservedValid[off] = 1;
 
+                        // 4方向の corrected edge を計算し最大値を edgeAccumBuf に蓄積する
+                        {
+                            const float fg_i = fgRaw * invMaxv;
+                            float maxCorrected = 0.0f;
+                            bool anyPositive = false;
+                            // left
+                            if (x > 0) {
+                                const float fg_j = (float)frameWork[off - 1] * invMaxv;
+                                const float raw = fg_i - fg_j;
+                                if (raw > 0.0f) {
+                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                                    maxCorrected = std::max(maxCorrected, corrected);
+                                    anyPositive = true;
+                                }
+                            }
+                            // right
+                            if (x < scanw - 1) {
+                                const float fg_j = (float)frameWork[off + 1] * invMaxv;
+                                const float raw = fg_i - fg_j;
+                                if (raw > 0.0f) {
+                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                                    maxCorrected = std::max(maxCorrected, corrected);
+                                    anyPositive = true;
+                                }
+                            }
+                            // up
+                            if (y > 0) {
+                                const float fg_j = (float)frameWork[off - scanw] * invMaxv;
+                                const float raw = fg_i - fg_j;
+                                if (raw > 0.0f) {
+                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                                    maxCorrected = std::max(maxCorrected, corrected);
+                                    anyPositive = true;
+                                }
+                            }
+                            // down
+                            if (y < scanh - 1) {
+                                const float fg_j = (float)frameWork[off + scanw] * invMaxv;
+                                const float raw = fg_i - fg_j;
+                                if (raw > 0.0f) {
+                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                                    maxCorrected = std::max(maxCorrected, corrected);
+                                    anyPositive = true;
+                                }
+                            }
+                            if (anyPositive) {
+                                auto& ea = statsPass.edgeAccumBuf[off];
+                                ea.sumEdge  += maxCorrected;
+                                ea.sumEdge2 += maxCorrected * maxCorrected;
+                                ea.edgeCount++;
+                            }
+                        }
+
                         float bg = 0.0f;
                         // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                         // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
@@ -3780,6 +3899,57 @@ namespace {
                 }
                 lastObservedFg[off] = fgFiltered;
                 lastObservedValid[off] = 1;
+
+                // 4方向の corrected edge を計算し最大値を edgeAccumBuf に蓄積する (tracePoint 逐次ループ)
+                {
+                    const int tx = tp.x;
+                    const int ty = tp.y;
+                    const float fg_i = fgFiltered * invMaxv;
+                    float maxCorrected = 0.0f;
+                    bool anyPositive = false;
+                    if (tx > 0) {
+                        const float fg_j = (float)frameWork[off - 1] * invMaxv;
+                        const float raw = fg_i - fg_j;
+                        if (raw > 0.0f) {
+                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                            maxCorrected = std::max(maxCorrected, corrected);
+                            anyPositive = true;
+                        }
+                    }
+                    if (tx < scanw - 1) {
+                        const float fg_j = (float)frameWork[off + 1] * invMaxv;
+                        const float raw = fg_i - fg_j;
+                        if (raw > 0.0f) {
+                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                            maxCorrected = std::max(maxCorrected, corrected);
+                            anyPositive = true;
+                        }
+                    }
+                    if (ty > 0) {
+                        const float fg_j = (float)frameWork[off - scanw] * invMaxv;
+                        const float raw = fg_i - fg_j;
+                        if (raw > 0.0f) {
+                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                            maxCorrected = std::max(maxCorrected, corrected);
+                            anyPositive = true;
+                        }
+                    }
+                    if (ty < scanh - 1) {
+                        const float fg_j = (float)frameWork[off + scanw] * invMaxv;
+                        const float raw = fg_i - fg_j;
+                        if (raw > 0.0f) {
+                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                            maxCorrected = std::max(maxCorrected, corrected);
+                            anyPositive = true;
+                        }
+                    }
+                    if (anyPositive) {
+                        auto& ea = statsPass.edgeAccumBuf[off];
+                        ea.sumEdge  += maxCorrected;
+                        ea.sumEdge2 += maxCorrected * maxCorrected;
+                        ea.edgeCount++;
+                    }
+                }
 
                 float bg = 0.0f;
                 BgDebugInfo dbgBg{};
@@ -4239,7 +4409,52 @@ namespace {
                 }
                 });
 
+            // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
+            {
+                auto sat01f = [](const float v) { return std::max(0.0f, std::min(1.0f, v)); };
+                const int pixelCount = scanw * scanh;
+                for (int i = 0; i < pixelCount; i++) {
+                    const auto& ea = statsPass.edgeAccumBuf[i];
+                    const auto& s = statsPass.stats[i];
+                    if (ea.edgeCount <= 0 || s.observed <= 0) continue;
+
+                    const float edgeMean     = ea.sumEdge / ea.edgeCount;
+                    const float edgeVar      = std::max(0.0f, ea.sumEdge2 / ea.edgeCount - edgeMean * edgeMean);
+                    const float edgePresence = (float)ea.edgeCount / (float)s.observed;
+
+                    // フィルタ・ゲイン計算
+                    const float presenceGain = sat01f((edgePresence - 0.08f) / 0.42f);
+                    const float magGain      = sat01f((edgeMean     - 0.05f) / 0.30f);
+                    const float upperGate    = sat01f((0.80f - edgeMean)     / 0.10f);
+                    const float consistGain  = sat01f((0.040f - edgeVar)     / 0.035f);
+
+                    const float rescueScore = presenceGain * magGain * upperGate * consistGain;
+
+                    scoreStage.mapEdgePresence[i] = edgePresence;
+                    scoreStage.mapEdgeMean[i]     = edgeMean;
+                    scoreStage.mapEdgeVar[i]       = edgeVar;
+                    scoreStage.mapRescueScore[i]   = rescueScore;
+                }
+            }
+
+            // Stage 2: validAB=false の画素に rescue score を適用する。
+            // pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
+            // 含まれるためロゴと誤判定するリスクが高い。pass2 ではフレームゲートにより
+            // テロップのあるフレームが除外されるため、rescue の誤爆リスクが低い。
+            // validAB=true (回帰ベーススコア) がある画素は従来通りそのスコアを優先する。
+            if (passIndex == 3) {
+                const float rescueWeight = 0.0f;  // デバッグ: Stage 1相当（rescue無効）
+                const int pixelCount = scanw * scanh;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i] && scoreStage.mapRescueScore[i] > 0.0f) {
+                        scoreStage.score[i] = rescueWeight * scoreStage.mapRescueScore[i];
+                    }
+                }
+            }
+
             // score 分布の基礎統計を集計し、成立しない場合は詳細情報付きで例外化する。
+            // 閾値は回帰ベーススコア (validAB=true) のみで計算する。
+            // rescue score は scale が異なるため、分布に混入させない。
             double sum = 0.0;
             double sum2 = 0.0;
             int count = 0;
@@ -4313,6 +4528,7 @@ namespace {
                 std::vector<float> distVals;
                 distVals.reserve(scanw * scanh);
                 for (int i = 0; i < scanw * scanh; i++) {
+                    // 閾値は回帰ベーススコアのみで決定する
                     if (!scoreStage.validAB[i]) continue;
                     const float v = scoreStage.score[i];
                     if (v <= 0.0f || !std::isfinite(v)) continue;
@@ -5303,6 +5519,7 @@ namespace {
         if (baseDiag.seedOn <= 0) {
             setRectDetectFail(LogoRectDetectFail::NoSeed);
         }
+
         std::vector<uint8_t> acceptedBinary = binaryStage.binary;
         if (detailedDebug) {
             iterBinaryHistory.clear();
@@ -5522,6 +5739,118 @@ namespace {
             }
         }
         binaryStage.binary.swap(acceptedBinary);
+
+        // rescue 拡張: pass2 (passIndex==3) のみで実施する。
+        // 反復ループ完了後の回帰バイナリを基準に後処理として実施することで、
+        // 反復ループの guard 機構が rescue 拡張の影響を受けないようにする。
+        // NoSeed のときは高確信度 rescue 画素を seed として直接使う緊急フォールバック。
+        if (passIndex == 3) {
+            constexpr float kRescueLowMaskTh = 1.0f;  // デバッグ: 実質無効 (診断用)
+            constexpr float kRescueSeedTh    = 0.60f; // rescue seed 採用閾値 (NoSeed フォールバック)
+            constexpr int   kRescueMaxDist   = 40;    // 回帰バイナリからの最大許容距離 (pixels)
+
+            // 反復後の回帰バイナリから BFS で距離マップを計算する。
+            // NoSeed のとき binaryStage.binary はゼロ → distMap はすべて INT_MAX。
+            std::vector<int> distMap(scanw * scanh, INT_MAX);
+            {
+                std::queue<int> bfsQ;
+                for (int i = 0; i < scanw * scanh; i++) {
+                    if (binaryStage.binary[i]) {
+                        distMap[i] = 0;
+                        bfsQ.push(i);
+                    }
+                }
+                while (!bfsQ.empty()) {
+                    const int cur = bfsQ.front(); bfsQ.pop();
+                    if (distMap[cur] >= kRescueMaxDist) continue;
+                    const int cx = cur % scanw, cy = cur / scanw;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (!dx && !dy) continue;
+                            const int nx = cx + dx, ny = cy + dy;
+                            if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                            const int nidx = nx + ny * scanw;
+                            if (distMap[nidx] > distMap[cur] + 1) {
+                                distMap[nidx] = distMap[cur] + 1;
+                                bfsQ.push(nidx);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // NoSeed フォールバック: 回帰 seed がゼロのとき、高確信度 rescue 画素を seed とする。
+            if (baseDiag.seedOn <= 0) {
+                bool hasRescueSeed = false;
+                for (int i = 0; i < scanw * scanh; i++) {
+                    if (!scoreStage.validAB[i] && scoreStage.mapRescueScore[i] >= kRescueSeedTh) {
+                        binaryStage.binary[i] = 1;
+                        distMap[i] = 0;
+                        hasRescueSeed = true;
+                    }
+                }
+                if (hasRescueSeed) {
+                    rectDetectFail = LogoRectDetectFail::None; // フォールバック成功
+                    // 距離マップを rescue seeds から再計算
+                    std::queue<int> bfsQ;
+                    for (int i = 0; i < scanw * scanh; i++) {
+                        if (binaryStage.binary[i]) bfsQ.push(i);
+                    }
+                    while (!bfsQ.empty()) {
+                        const int cur = bfsQ.front(); bfsQ.pop();
+                        if (distMap[cur] >= kRescueMaxDist) continue;
+                        const int cx = cur % scanw, cy = cur / scanw;
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                if (!dx && !dy) continue;
+                                const int nx = cx + dx, ny = cy + dy;
+                                if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                                const int nidx = nx + ny * scanw;
+                                if (distMap[nidx] > distMap[cur] + 1) {
+                                    distMap[nidx] = distMap[cur] + 1;
+                                    bfsQ.push(nidx);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 距離制約内の rescue lowMask 画素へ成長させる。
+            {
+                // まず距離制約内の rescue 画素を lowMask として用意
+                std::vector<uint8_t> rescueLowMask(scanw * scanh, 0);
+                for (int i = 0; i < scanw * scanh; i++) {
+                    if (!scoreStage.validAB[i] &&
+                        !binaryStage.binary[i] &&  // すでに binary に入っている画素はスキップ
+                        scoreStage.mapRescueScore[i] >= kRescueLowMaskTh &&
+                        distMap[i] <= kRescueMaxDist) {
+                        rescueLowMask[i] = 1;
+                    }
+                }
+                // 既存 binary から rescueLowMask へ 8 近傍成長
+                std::queue<int> growQ;
+                for (int i = 0; i < scanw * scanh; i++) {
+                    if (binaryStage.binary[i]) growQ.push(i);
+                }
+                while (!growQ.empty()) {
+                    const int cur = growQ.front(); growQ.pop();
+                    const int cx = cur % scanw, cy = cur / scanw;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (!dx && !dy) continue;
+                            const int nx = cx + dx, ny = cy + dy;
+                            if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                            const int nidx = nx + ny * scanw;
+                            if (binaryStage.binary[nidx]) continue;
+                            if (!rescueLowMask[nidx]) continue;
+                            binaryStage.binary[nidx] = 1;
+                            growQ.push(nidx);
+                        }
+                    }
+                }
+            }
+        }
 
         // 反復閾値調整後の最終ノイズ抑制と空マスク救済を適用する。
         if (enablePruneBinaryByAnchor) {
