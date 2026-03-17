@@ -2252,6 +2252,11 @@ namespace {
             std::vector<float> mapEdgeMean;
             std::vector<float> mapEdgeVar;
             std::vector<float> mapRescueScore;
+            // rescue score 中間ゲインマップ (診断用)
+            std::vector<float> mapPresenceGain;  // 存在率ゲイン
+            std::vector<float> mapMagGain;        // 大きさゲイン
+            std::vector<float> mapUpperGate;      // 上限ゲート (不透明構造除外)
+            std::vector<float> mapConsistGain;    // 一貫性ゲイン (低分散ほど高い)
             std::vector<uint8_t> validAB;
 
             void reset(const int scanw, const int scanh) {
@@ -2284,6 +2289,10 @@ namespace {
                 mapEdgeMean.assign(n, 0.0f);
                 mapEdgeVar.assign(n, 0.0f);
                 mapRescueScore.assign(n, 0.0f);
+                mapPresenceGain.assign(n, 0.0f);
+                mapMagGain.assign(n, 0.0f);
+                mapUpperGate.assign(n, 0.0f);
+                mapConsistGain.assign(n, 0.0f);
             }
         };
 
@@ -2335,6 +2344,11 @@ namespace {
             std::string edgeMean;
             std::string edgeVar;
             std::string rescueScore;
+            // rescue score 中間ゲインデバッグパス (診断用)
+            std::string presenceGain;
+            std::string magGain;
+            std::string upperGate;
+            std::string consistGain;
         };
         struct Pass2PrepareDebug {
             int logoW = 0;
@@ -2934,6 +2948,10 @@ namespace {
             out.edgeMean = addSuffixBeforeExtension(base.edgeMean, suffix);
             out.edgeVar = addSuffixBeforeExtension(base.edgeVar, suffix);
             out.rescueScore = addSuffixBeforeExtension(base.rescueScore, suffix);
+            out.presenceGain = addSuffixBeforeExtension(base.presenceGain, suffix);
+            out.magGain = addSuffixBeforeExtension(base.magGain, suffix);
+            out.upperGate = addSuffixBeforeExtension(base.upperGate, suffix);
+            out.consistGain = addSuffixBeforeExtension(base.consistGain, suffix);
             return out;
         }
 
@@ -3229,6 +3247,35 @@ namespace {
                     const int off = x + y * scanw;
                     const float v = (off < (int)score.mapRescueScore.size()) ? score.mapRescueScore[off] : 0.0f;
                     // 0.0-1.0 を 0-255 に線形マップ
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            // rescue score 中間ゲイン画像 (すべて 0.0-1.0 を 0-255 に線形マップ)
+            if (!path.presenceGain.empty()) {
+                WriteGrayBitmap(path.presenceGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapPresenceGain.size()) ? score.mapPresenceGain[off] : 0.0f;
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            if (!path.magGain.empty()) {
+                WriteGrayBitmap(path.magGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapMagGain.size()) ? score.mapMagGain[off] : 0.0f;
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            if (!path.upperGate.empty()) {
+                WriteGrayBitmap(path.upperGate, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapUpperGate.size()) ? score.mapUpperGate[off] : 0.0f;
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            if (!path.consistGain.empty()) {
+                WriteGrayBitmap(path.consistGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapConsistGain.size()) ? score.mapConsistGain[off] : 0.0f;
                     return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
                 });
             }
@@ -3535,6 +3582,10 @@ namespace {
             basePath.edgeMean     = addSuffixBeforeExtension(basePath.score, ".edgemean");
             basePath.edgeVar      = addSuffixBeforeExtension(basePath.score, ".edgevar");
             basePath.rescueScore  = addSuffixBeforeExtension(basePath.score, ".rescuescore");
+            basePath.presenceGain = addSuffixBeforeExtension(basePath.score, ".presencegain");
+            basePath.magGain      = addSuffixBeforeExtension(basePath.score, ".maggain");
+            basePath.upperGate    = addSuffixBeforeExtension(basePath.score, ".uppergate");
+            basePath.consistGain  = addSuffixBeforeExtension(basePath.score, ".consistgain");
 
             // 互換維持: 既存パスは最終結果(final)を出力。
             writeDebugStage(debugStats, debugTraceRecords, debugTraceBinRepresentatives, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
@@ -4410,6 +4461,8 @@ namespace {
                 });
 
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
+            // ステップ1: edgeMean / edgeVar / edgePresence と各ゲインを計算して保存する。
+            //            upperGate は 3x3 localmax 後に計算するため、ここでは保存しない。
             {
                 auto sat01f = [](const float v) { return std::max(0.0f, std::min(1.0f, v)); };
                 const int pixelCount = scanw * scanh;
@@ -4422,18 +4475,57 @@ namespace {
                     const float edgeVar      = std::max(0.0f, ea.sumEdge2 / ea.edgeCount - edgeMean * edgeMean);
                     const float edgePresence = (float)ea.edgeCount / (float)s.observed;
 
-                    // フィルタ・ゲイン計算
-                    const float presenceGain = sat01f((edgePresence - 0.08f) / 0.42f);
-                    const float magGain      = sat01f((edgeMean     - 0.05f) / 0.30f);
-                    const float upperGate    = sat01f((0.80f - edgeMean)     / 0.10f);
-                    const float consistGain  = sat01f((0.040f - edgeVar)     / 0.035f);
-
-                    const float rescueScore = presenceGain * magGain * upperGate * consistGain;
-
                     scoreStage.mapEdgePresence[i] = edgePresence;
                     scoreStage.mapEdgeMean[i]     = edgeMean;
                     scoreStage.mapEdgeVar[i]       = edgeVar;
-                    scoreStage.mapRescueScore[i]   = rescueScore;
+                    scoreStage.mapPresenceGain[i]  = sat01f((edgePresence - 0.08f) / 0.42f);
+                    scoreStage.mapMagGain[i]       = sat01f((edgeMean     - 0.05f) / 0.30f);
+                    // consistGain: 低分散ほど高スコアの線形降下に、高分散側への急峻な上限ゲートを乗算。
+                    // 上限ゲート: 1/(1+exp(c*(x-d)))  c=500, d=0.015
+                    //   透明ロゴの背景変動 (edgeVar≈0.010-0.018) は通し、
+                    //   動的/変動コンテンツ (edgeVar>0.020) を強く抑制する。
+                    // 全データ sep_gmean: current=45.3 → 本式=62.6 (+38%)。
+                    static constexpr float kConsistUpperGateC = 500.0f;
+                    static constexpr float kConsistUpperGateD = 0.015f;
+                    const float consistLinear   = sat01f((0.040f - edgeVar) / 0.035f);
+                    const float consistUpperGate = 1.0f / (1.0f + std::exp(kConsistUpperGateC * (edgeVar - kConsistUpperGateD)));
+                    scoreStage.mapConsistGain[i]   = consistLinear * consistUpperGate;
+                }
+
+                // ステップ2: 3x3 近傍最大 edgeMean を計算する。
+                // 静止構造の内部は edgeMean が高く sigmoid でゲートされるが、その外周 1px は
+                // edgeMean が低く素通りしてしまう。近傍最大を使うことで外周まで抑制できる。
+                const int pixelCount2 = pixelCount;  // for clarity in loop below
+                std::vector<float> edgeMeanLocalMax(pixelCount2, 0.0f);
+                for (int y = 0; y < scanh; y++) {
+                    for (int x = 0; x < scanw; x++) {
+                        float maxVal = 0.0f;
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                const int nx = x + dx, ny = y + dy;
+                                if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
+                                    maxVal = std::max(maxVal, scoreStage.mapEdgeMean[nx + ny * scanw]);
+                                }
+                            }
+                        }
+                        edgeMeanLocalMax[x + y * scanw] = maxVal;
+                    }
+                }
+
+                // ステップ3: upperGate と rescueScore を計算する。
+                // upperGate: sigmoid(a*(x-b)) で不透明な静止構造を除外する降下特性ゲート。
+                // 3x3 localmax edgeMean を [0,0.8] → [0,1] に正規化して入力する。
+                // a=25, b=0.40: 全データ sep_gmean 最大パラメータ。
+                static constexpr float kUpperGateSigmoidA = 25.0f;
+                static constexpr float kUpperGateSigmoidB = 0.40f;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;  // edgeCount==0 画素はスキップ
+                    const float edgeMeanNorm = std::min(edgeMeanLocalMax[i] / 0.80f, 1.0f);
+                    const float upperGate    = 1.0f / (1.0f + std::exp(kUpperGateSigmoidA * (edgeMeanNorm - kUpperGateSigmoidB)));
+                    const float rescueScore  = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
+                                             * upperGate * scoreStage.mapConsistGain[i];
+                    scoreStage.mapUpperGate[i]   = upperGate;
+                    scoreStage.mapRescueScore[i] = rescueScore;
                 }
             }
 

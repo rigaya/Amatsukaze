@@ -333,6 +333,18 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "rescuescore", AddInfixBeforeExtension(job.ScoreImagePath, ".rescuescore"), out path))
             {
             }
+            else if (TryResolveStagePath(kind, "presencegain", AddInfixBeforeExtension(job.ScoreImagePath, ".presencegain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "maggain", AddInfixBeforeExtension(job.ScoreImagePath, ".maggain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "uppergate", AddInfixBeforeExtension(job.ScoreImagePath, ".uppergate"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "consistgain", AddInfixBeforeExtension(job.ScoreImagePath, ".consistgain"), out path))
+            {
+            }
             else if (TryResolveStagePath(kind, "traceplot", AddInfixBeforeExtension(job.BinaryImagePath, ".traceplot"), out path))
             {
             }
