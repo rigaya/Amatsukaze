@@ -4451,7 +4451,7 @@ namespace {
                             scoreStage.mapTemporalGain[i] = (float)temporalGain;
                             scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
                             scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.50 + 0.50 * bgGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
                             if (d <= 0.0f) continue;
                             scoreStage.mapAccepted[i] = d;
                             scoreStage.score[i] = d;
@@ -4512,18 +4512,27 @@ namespace {
                     }
                 }
 
-                // ステップ3: upperGate と rescueScore を計算する。
+                // ステップ3: upperGate・bgVarGain・rescueScore を計算する。
                 // upperGate: sigmoid(a*(x-b)) で不透明な静止構造を除外する降下特性ゲート。
                 // 3x3 localmax edgeMean を [0,0.8] → [0,1] に正規化して入力する。
                 // a=25, b=0.40: 全データ sep_gmean 最大パラメータ。
+                // bgVarGain: 背景分散が十分ある(半透明)ロゴのみを rescue 対象とするゲート。
+                // bgVar を [0, kBgVarScale] → [0,1] に正規化後に sigmoid(a=30, b=0.10) を適用する。
+                // 不透明テロップ (bgVar≈0) は bgVarGain≈0.047 となり rescueScore が抑制される。
+                // 半透明ロゴ (bgVar≈0.004以上) は bgVarGain≈0.95以上となりほぼ通過する。
                 static constexpr float kUpperGateSigmoidA = 25.0f;
                 static constexpr float kUpperGateSigmoidB = 0.40f;
+                static constexpr float kBgVarGainSigmoidA = 30.0f;
+                static constexpr float kBgVarGainSigmoidB = 0.10f;
+                static constexpr float kBgVarScale        = 0.020f;  // bgVar 正規化上限 (0〜1 スケール変換)
                 for (int i = 0; i < pixelCount; i++) {
                     if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;  // edgeCount==0 画素はスキップ
                     const float edgeMeanNorm = std::min(edgeMeanLocalMax[i] / 0.80f, 1.0f);
                     const float upperGate    = 1.0f / (1.0f + std::exp(kUpperGateSigmoidA * (edgeMeanNorm - kUpperGateSigmoidB)));
+                    const float bgVarNorm    = std::min(scoreStage.mapBgVar[i] / kBgVarScale, 1.0f);
+                    const float bgVarGain    = 1.0f / (1.0f + std::exp(-kBgVarGainSigmoidA * (bgVarNorm - kBgVarGainSigmoidB)));
                     const float rescueScore  = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
-                                             * upperGate * scoreStage.mapConsistGain[i];
+                                             * upperGate * scoreStage.mapConsistGain[i] * bgVarGain;
                     scoreStage.mapUpperGate[i]   = upperGate;
                     scoreStage.mapRescueScore[i] = rescueScore;
                 }
@@ -4535,7 +4544,7 @@ namespace {
             // テロップのあるフレームが除外されるため、rescue の誤爆リスクが低い。
             // validAB=true (回帰ベーススコア) がある画素は従来通りそのスコアを優先する。
             if (passIndex == 3) {
-                const float rescueWeight = 0.0f;  // デバッグ: Stage 1相当（rescue無効）
+                const float rescueWeight = 0.6f;
                 const int pixelCount = scanw * scanh;
                 for (int i = 0; i < pixelCount; i++) {
                     if (!scoreStage.validAB[i] && scoreStage.mapRescueScore[i] > 0.0f) {
@@ -5837,7 +5846,7 @@ namespace {
         // 反復ループの guard 機構が rescue 拡張の影響を受けないようにする。
         // NoSeed のときは高確信度 rescue 画素を seed として直接使う緊急フォールバック。
         if (passIndex == 3) {
-            constexpr float kRescueLowMaskTh = 1.0f;  // デバッグ: 実質無効 (診断用)
+            constexpr float kRescueLowMaskTh = 0.20f;
             constexpr float kRescueSeedTh    = 0.60f; // rescue seed 採用閾値 (NoSeed フォールバック)
             constexpr int   kRescueMaxDist   = 40;    // 回帰バイナリからの最大許容距離 (pixels)
 
