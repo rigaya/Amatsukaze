@@ -159,9 +159,27 @@
 
 .trim-editpoints-actions {
     display: flex;
-    gap: 4px;
+    flex-direction: column;
+    gap: 6px;
     padding: 6px 8px;
     border-top: 1px solid #444;
+}
+
+.trim-editpoints-total {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.72rem;
+    color: #aaa;
+}
+
+.trim-editpoints-total-label {
+    color: #8d8d8d;
+}
+
+.trim-editpoints-total-time {
+    font-variant-numeric: tabular-nums;
+    color: #ddd;
 }
 
 /* 右: プレビュー */
@@ -185,6 +203,75 @@
     border-radius: 4px;
     min-height: 0;
     position: relative;
+}
+
+.trim-preview-thumb {
+    position: absolute;
+    bottom: 8px;
+    width: min(220px, 26vw);
+    height: min(140px, 18vh);
+    border: 1px solid rgba(180, 220, 255, 0.45);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
+    transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+    z-index: 4;
+}
+
+.trim-preview-thumb:hover {
+    transform: translateY(-1px);
+    border-color: rgba(200, 235, 255, 0.75);
+    background: rgba(0, 0, 0, 0.62);
+    box-shadow: 0 12px 22px rgba(0, 0, 0, 0.42);
+}
+
+.trim-preview-thumb:active {
+    transform: translateY(1px);
+}
+
+.trim-preview-thumb.is-loading {
+    opacity: 0.72;
+}
+
+.trim-preview-thumb-left {
+    left: 8px;
+}
+
+.trim-preview-thumb-right {
+    right: 8px;
+}
+
+.trim-preview-thumb-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.trim-preview-thumb-label {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+    pointer-events: none;
+}
+
+.trim-preview-thumb-label.trim-range-active {
+    color: rgba(232, 128, 48, 0.82);
+}
+
+.trim-preview-thumb-label.trim-range-cut {
+    color: rgba(210, 210, 210, 0.78);
 }
 
 /* セッション切れオーバーレイ */

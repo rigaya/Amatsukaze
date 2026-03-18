@@ -148,18 +148,6 @@ namespace Amatsukaze.Server.Rest
             return BuildBundle(entry);
         }
 
-        public byte[] GetFrameJpeg(int frameNumber)
-        {
-            Touch();
-            var entry = EnsurePairCached(frameNumber, onDemandContext, waitForExisting: true, prefetchCts.Token);
-            if (entry == null)
-            {
-                return null;
-            }
-            RequestPrefetch(frameNumber);
-            return entry.VideoJpeg;
-        }
-
         public bool GetFrameInfo(int frameNumber, out long pts, out long duration, out int keyFrame, out int cmType)
         {
             return onDemandContext.GetFrameInfo(frameNumber, out pts, out duration, out keyFrame, out cmType);

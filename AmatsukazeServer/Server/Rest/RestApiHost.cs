@@ -1716,26 +1716,6 @@ namespace Amatsukaze.Server.Rest
                 return BuildMaybeGzippedJsonResult(request, response);
             });
 
-            app.MapGet("/api/trim/sessions/{sessionId}/frame", (HttpContext context, string sessionId, int n) =>
-            {
-                var session = trimAdjust.GetSession(sessionId);
-                if (session == null)
-                {
-                    return Results.NotFound();
-                }
-                if (n < 0 || n >= session.NumFrames)
-                {
-                    return Results.BadRequest(new { message = "フレーム番号が範囲外です" });
-                }
-                var jpegBytes = session.GetFrameJpeg(n);
-                if (jpegBytes == null || jpegBytes.Length == 0)
-                {
-                    return Results.NotFound();
-                }
-                context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
-                return Results.File(jpegBytes, "image/jpeg");
-            });
-
             app.MapGet("/api/trim/sessions/{sessionId}/bundle", (HttpContext context, string sessionId, int n) =>
             {
                 var session = trimAdjust.GetSession(sessionId);

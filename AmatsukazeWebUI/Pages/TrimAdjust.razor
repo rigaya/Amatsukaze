@@ -67,6 +67,10 @@
                     }
                 </div>
                 <div class="trim-editpoints-actions">
+                    <div class="trim-editpoints-total">
+                        <span class="trim-editpoints-total-label">本編 合計</span>
+                        <span class="trim-editpoints-total-time">@GetActiveTotalTime()</span>
+                    </div>
                     <button class="trim-btn trim-btn-sm" @onclick="ResetEditPoints"
                             disabled="@(!_hasChanges)">リセット</button>
                 </div>
@@ -76,6 +80,34 @@
             <div class="trim-preview-area">
                 @* 映像プレビュー *@
                 <div class="trim-preview-container">
+                    @* 前後フレーム（遅延ロード・キャッシュ） *@
+                    @if (_session != null)
+                    {
+                        var prevFrame = _currentFrame - 1;
+                        if (prevFrame >= 0)
+                        {
+                            <button type="button"
+                                    class="trim-preview-thumb trim-preview-thumb-left @((string.IsNullOrEmpty(_prevThumbUrl) ? "is-loading" : ""))"
+                                    @onclick="() => JumpToFrame(prevFrame)"
+                                    aria-label="@($"前フレームへ ({prevFrame})")">
+                                <img class="trim-preview-thumb-img" src="@_prevThumbUrl" alt="@($"Frame {prevFrame}")" />
+                                <div class="trim-preview-thumb-label @(IsFrameInTrimRange(prevFrame) ? "trim-range-active" : "trim-range-cut")">@prevFrame</div>
+                            </button>
+                        }
+
+                        var nextFrame = _currentFrame + 1;
+                        if (_session.NumFrames > 0 && nextFrame < _session.NumFrames)
+                        {
+                            <button type="button"
+                                    class="trim-preview-thumb trim-preview-thumb-right @((string.IsNullOrEmpty(_nextThumbUrl) ? "is-loading" : ""))"
+                                    @onclick="() => JumpToFrame(nextFrame)"
+                                    aria-label="@($"次フレームへ ({nextFrame})")">
+                                <img class="trim-preview-thumb-img" src="@_nextThumbUrl" alt="@($"Frame {nextFrame}")" />
+                                <div class="trim-preview-thumb-label @(IsFrameInTrimRange(nextFrame) ? "trim-range-active" : "trim-range-cut")">@nextFrame</div>
+                            </button>
+                        }
+                    }
+
                     <img class="trim-preview-img"
                          src="@_frameImageUrl"
                          alt="Frame @_currentFrame"
@@ -384,9 +416,20 @@
     private string _frameImageUrl = "";
     private string _waveformImageUrl = "";
     private int _bundleRequestToken;
+    private int _thumbRequestToken;
     private int _displayedFrame; // 画像読み込み完了と同期して表示するフレーム番号
     private int _loadingFrame; // 現在img srcにセットして読み込み中のフレーム
     private bool _isFrameLoading; // 画像読み込み中フラグ
+
+    private string _prevThumbUrl = "";
+    private string _nextThumbUrl = "";
+
+    private const int MaxClientFrameCacheEntries = 360;
+    private readonly object _frameCacheLock = new object();
+    private readonly Dictionary<int, CachedTrimBundle> _frameUrlCache = new Dictionary<int, CachedTrimBundle>();
+    private readonly Dictionary<int, LinkedListNode<int>> _frameLruNodes = new Dictionary<int, LinkedListNode<int>>();
+    private readonly LinkedList<int> _frameLru = new LinkedList<int>();
+    private readonly Dictionary<int, Task> _frameFetchInFlight = new Dictionary<int, Task>();
 
     // 編集点リスト（境界開始フレーム）
     private List<EditPoint> _editPoints = new List<EditPoint>();
@@ -430,6 +473,12 @@
         public int EndInclusive { get; set; }
         public bool IsOpenEnded { get; set; }
         public bool IsMain => (Index % 2) == 0; // 1始まり奇数区間=本編
+    }
+
+    private sealed class CachedTrimBundle
+    {
+        public string FrameUrl { get; set; } = "";
+        public string WaveformUrl { get; set; } = "";
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -733,6 +782,9 @@
         _frameImageUrl = "";
         _waveformImageUrl = "";
         _isFrameLoading = false;
+        _prevThumbUrl = "";
+        _nextThumbUrl = "";
+        ClearFrameCache();
         RequestFrameLoad();
         StateHasChanged();
 
@@ -847,6 +899,9 @@
         _isFrameLoading = false;
         _frameImageUrl = "";
         _waveformImageUrl = "";
+        _prevThumbUrl = "";
+        _nextThumbUrl = "";
+        ClearFrameCache();
         RequestFrameLoad();
         _sessionExpired = false;
         _reconnecting = false;
@@ -1044,12 +1099,30 @@
     // 画像読み込みリクエスト（ロード中でなければ即座にsrc更新、ロード中ならonload後に自動で次を読み込む）
     private void RequestFrameLoad()
     {
+        if (_session == null) return;
         if (_isFrameLoading) return; // onload時に_currentFrameを拾って次をロードする
         if (_currentFrame == _loadingFrame && _isFrameLoading) return;
+
         _loadingFrame = _currentFrame;
-        _isFrameLoading = true;
         var reqToken = Interlocked.Increment(ref _bundleRequestToken);
+        Interlocked.Exchange(ref _thumbRequestToken, reqToken);
+
+        if (TryGetCachedTrimBundle(_loadingFrame, out var cachedBundle))
+        {
+            _isFrameLoading = false;
+            _frameImageUrl = cachedBundle.FrameUrl;
+            _waveformImageUrl = cachedBundle.WaveformUrl; // 波形表示は常にnフレームのもののみ
+            _displayedFrame = _loadingFrame;
+            StateHasChanged();
+            _ = UpdateNeighborThumbsAsync(_loadingFrame, reqToken);
+            _ = PrefetchAroundFrameAsync(_loadingFrame, reqToken);
+            return;
+        }
+
+        _isFrameLoading = true;
         _ = LoadBundleForFrameAsync(_loadingFrame, reqToken);
+        _ = UpdateNeighborThumbsAsync(_loadingFrame, reqToken);
+        _ = PrefetchAroundFrameAsync(_loadingFrame, reqToken);
     }
 
     private async Task LoadBundleForFrameAsync(int frameNumber, int reqToken)
@@ -1077,14 +1150,12 @@
             return;
         }
 
-        _frameImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.VideoJpeg)}#r={reqToken}";
-        if (res.Data.WaveformJpeg.Length > 0)
+        // メイン表示フレームはフレーム+波形をセットでキャッシュする
+        CacheTrimBundle(frameNumber, res.Data.VideoJpeg, res.Data.WaveformJpeg);
+        if (TryGetCachedTrimBundle(frameNumber, out var cachedBundle))
         {
-            _waveformImageUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(res.Data.WaveformJpeg)}#r={reqToken}";
-        }
-        else
-        {
-            _waveformImageUrl = "";
+            _frameImageUrl = cachedBundle.FrameUrl;
+            _waveformImageUrl = cachedBundle.WaveformUrl; // 波形表示は常にnフレームのもののみ
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -1123,6 +1194,253 @@
         }, null, 100, System.Threading.Timeout.Infinite);
         // 即座にフレーム情報（画面下）だけ更新
         StateHasChanged();
+    }
+
+    private void JumpToFrame(int frame)
+    {
+        if (_session == null)
+        {
+            return;
+        }
+        if (frame < 0 || frame >= _session.NumFrames)
+        {
+            return;
+        }
+        SetCurrentFrame(frame);
+    }
+
+    private void ClearFrameCache()
+    {
+        lock (_frameCacheLock)
+        {
+            _frameUrlCache.Clear();
+            _frameLruNodes.Clear();
+            _frameLru.Clear();
+            _frameFetchInFlight.Clear();
+        }
+    }
+
+    private bool TryGetCachedFrameUrl(int frameNumber, out string url)
+    {
+        lock (_frameCacheLock)
+        {
+            if (_frameUrlCache.TryGetValue(frameNumber, out var value) && !string.IsNullOrEmpty(value.FrameUrl))
+            {
+                TouchFrameCache(frameNumber);
+                url = value.FrameUrl;
+                return true;
+            }
+        }
+        url = "";
+        return false;
+    }
+
+    private bool TryGetCachedTrimBundle(int frameNumber, out CachedTrimBundle bundle)
+    {
+        lock (_frameCacheLock)
+        {
+            if (_frameUrlCache.TryGetValue(frameNumber, out var value) && !string.IsNullOrEmpty(value.FrameUrl))
+            {
+                TouchFrameCache(frameNumber);
+                bundle = value;
+                return true;
+            }
+        }
+        bundle = new CachedTrimBundle();
+        return false;
+    }
+
+    private void CacheTrimBundle(int frameNumber, byte[] frameJpegBytes, byte[]? waveformJpegBytes)
+    {
+        if (frameJpegBytes == null || frameJpegBytes.Length == 0)
+        {
+            return;
+        }
+        var frameUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(frameJpegBytes)}";
+        var waveformUrl = (waveformJpegBytes != null && waveformJpegBytes.Length > 0)
+            ? $"data:image/jpeg;base64,{Convert.ToBase64String(waveformJpegBytes)}"
+            : "";
+        lock (_frameCacheLock)
+        {
+            _frameUrlCache[frameNumber] = new CachedTrimBundle
+            {
+                FrameUrl = frameUrl,
+                WaveformUrl = waveformUrl
+            };
+            TouchFrameCache(frameNumber);
+            TrimFrameCacheIfNeeded();
+        }
+    }
+
+    private void TouchFrameCache(int frameNumber)
+    {
+        if (_frameLruNodes.TryGetValue(frameNumber, out var node))
+        {
+            _frameLru.Remove(node);
+            _frameLru.AddLast(node);
+            return;
+        }
+        var newNode = _frameLru.AddLast(frameNumber);
+        _frameLruNodes[frameNumber] = newNode;
+    }
+
+    private void TrimFrameCacheIfNeeded()
+    {
+        while (_frameLru.Count > MaxClientFrameCacheEntries)
+        {
+            var oldest = _frameLru.First;
+            if (oldest == null)
+            {
+                break;
+            }
+            var key = oldest.Value;
+            _frameLru.RemoveFirst();
+            _frameLruNodes.Remove(key);
+            _frameUrlCache.Remove(key);
+        }
+    }
+
+    private async Task UpdateNeighborThumbsAsync(int centerFrame, int reqToken)
+    {
+        if (_session == null || string.IsNullOrEmpty(_sessionId))
+        {
+            return;
+        }
+        if (reqToken != _thumbRequestToken)
+        {
+            return;
+        }
+
+        var prev = centerFrame - 1;
+        var next = centerFrame + 1;
+
+        if (prev >= 0)
+        {
+            if (TryGetCachedFrameUrl(prev, out var url))
+            {
+                _prevThumbUrl = url;
+            }
+            else
+            {
+                _prevThumbUrl = "";
+                _ = FetchFrameIntoCacheAsync(prev, centerFrame, reqToken);
+            }
+        }
+        else
+        {
+            _prevThumbUrl = "";
+        }
+
+        if (next >= 0 && next < _session.NumFrames)
+        {
+            if (TryGetCachedFrameUrl(next, out var url))
+            {
+                _nextThumbUrl = url;
+            }
+            else
+            {
+                _nextThumbUrl = "";
+                _ = FetchFrameIntoCacheAsync(next, centerFrame, reqToken);
+            }
+        }
+        else
+        {
+            _nextThumbUrl = "";
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PrefetchAroundFrameAsync(int centerFrame, int reqToken)
+    {
+        if (_session == null)
+        {
+            return;
+        }
+        var targets = new[] { centerFrame - 1, centerFrame + 1, centerFrame - 2, centerFrame + 2 };
+        foreach (var target in targets)
+        {
+            if (target < 0 || target >= _session.NumFrames)
+            {
+                continue;
+            }
+            if (TryGetCachedFrameUrl(target, out _))
+            {
+                continue;
+            }
+            await FetchFrameIntoCacheAsync(target, centerFrame, reqToken);
+        }
+    }
+
+    private Task FetchFrameIntoCacheAsync(int frameNumber, int centerFrame, int reqToken)
+    {
+        Task task;
+        lock (_frameCacheLock)
+        {
+            if (_frameFetchInFlight.TryGetValue(frameNumber, out var existing))
+            {
+                return existing;
+            }
+            task = FetchFrameIntoCacheCoreAsync(frameNumber, centerFrame, reqToken);
+            _frameFetchInFlight[frameNumber] = task;
+        }
+        return task;
+    }
+
+    private async Task FetchFrameIntoCacheCoreAsync(int frameNumber, int centerFrame, int reqToken)
+    {
+        try
+        {
+            if (_session == null || string.IsNullOrEmpty(_sessionId))
+            {
+                return;
+            }
+            if (frameNumber < 0 || frameNumber >= _session.NumFrames)
+            {
+                return;
+            }
+            // 先読みは遅延OKなので、要求が更新されていたらここで中断
+            if (reqToken != _thumbRequestToken)
+            {
+                return;
+            }
+
+            var res = await Api.GetTrimBundleAsync(_sessionId, frameNumber);
+            if (!res.Ok || res.Data == null || res.Data.VideoJpeg.Length == 0)
+            {
+                return;
+            }
+            CacheTrimBundle(frameNumber, res.Data.VideoJpeg, res.Data.WaveformJpeg);
+
+            if (reqToken != _thumbRequestToken)
+            {
+                return;
+            }
+            // 取得完了時点でまだ同じ中心フレームを表示中ならサムネを更新
+            if (_currentFrame == centerFrame)
+            {
+                if (frameNumber == centerFrame - 1 && TryGetCachedFrameUrl(frameNumber, out var prevUrl))
+                {
+                    _prevThumbUrl = prevUrl;
+                }
+                else if (frameNumber == centerFrame + 1 && TryGetCachedFrameUrl(frameNumber, out var nextUrl))
+                {
+                    _nextThumbUrl = nextUrl;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            // サムネ先読み失敗は握りつぶす（メイン表示を優先）
+        }
+        finally
+        {
+            lock (_frameCacheLock)
+            {
+                _frameFetchInFlight.Remove(frameNumber);
+            }
+        }
     }
 
     private void JumpToPrevEditPoint()
@@ -1611,6 +1929,44 @@
     private static int NormalizeMoveFrames(int value, int defaultValue)
     {
         return value > 0 ? value : defaultValue;
+    }
+
+    private string GetActiveTotalTime()
+    {
+        if (_session?.FramePts == null || _session.FramePts.Count == 0)
+        {
+            return "--:--:--.---";
+        }
+
+        var totalSeconds = 0.0;
+        foreach (var segment in BuildEditPointSegments())
+        {
+            if (!segment.IsMain)
+            {
+                continue;
+            }
+            var start = segment.Start;
+            var end = segment.EndInclusive;
+            if (start < 0 || end < 0 || start >= _session.FramePts.Count || end >= _session.FramePts.Count)
+            {
+                continue;
+            }
+            if (end < start)
+            {
+                continue;
+            }
+
+            var seconds = _session.FramePts[end] - _session.FramePts[start];
+            if (seconds <= 0)
+            {
+                continue;
+            }
+            totalSeconds += seconds;
+        }
+
+        if (totalSeconds < 0) totalSeconds = 0;
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+        return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
     }
 
     private void OnKeyDown(KeyboardEventArgs e)
