@@ -4348,6 +4348,10 @@ namespace {
             // 各種出力マップをクリアする。
             scoreStage.reset(scanw, scanh);
             // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
+            auto smoothstep = [](const double t) {
+                const double tc = std::max(0.0, std::min(1.0, t));
+                return tc * tc * (3.0 - 2.0 * tc);
+            };
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
                     for (int x = 0; x < scanw; x++) {
@@ -4391,7 +4395,14 @@ namespace {
                             scoreStage.mapKeepRate[i] = (float)keepRate;
 
                             const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
-                            const double alphaGain = sat01((alpha - 0.005) / 0.30);
+                            // alphaGain: alpha が 0.15〜0.35 付近（半透明ロゴ帯域）を最大評価し、
+                            // 完全不透明（alpha >= 0.75）と完全透明（alpha <= 0.03）を排除する。
+                            // f(alpha) = S((a-0.03)/0.12) [0.03,0.15), 1 [0.15,0.35], 1-S((a-0.35)/0.40) (0.35,0.75), 0 otherwise
+                            const double alphaGain = (alpha <= 0.03) ? 0.0
+                                : (alpha < 0.15)  ? smoothstep((alpha - 0.03) / 0.12)
+                                : (alpha <= 0.35)  ? 1.0
+                                : (alpha < 0.75)  ? 1.0 - smoothstep((alpha - 0.35) / 0.40)
+                                : 0.0;
                             const double logoGain = sat01((logoY - 0.45) / 0.30);
                             const double consistencyGain = sat01((consistency - 0.35) / 1.65);
                             const double bgGain = sat01((0.080 - varBg) / 0.080);
@@ -4451,7 +4462,7 @@ namespace {
                             scoreStage.mapTemporalGain[i] = (float)temporalGain;
                             scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
                             scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.20 + 0.80 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.15 + 0.85 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
                             if (d <= 0.0f) continue;
                             scoreStage.mapAccepted[i] = d;
                             scoreStage.score[i] = d;
@@ -4459,6 +4470,54 @@ namespace {
                     }
                 }
                 });
+
+            // alpha 3x3 max filter による alphaGain 補正:
+            // 近傍の最大 alpha を使い、不透明要素の輪郭 1px を追加抑制する。
+            // alphaGain = min(f(alpha), f(alpha3x3max)) とすることで、
+            // 自身は低 alpha でも近傍に高 alpha がある画素（＝不透明要素の縁）を抑制する。
+            {
+                const int pixelCount = scanw * scanh;
+                std::vector<float> alpha3x3max(pixelCount, 0.0f);
+                for (int y = 0; y < scanh; y++) {
+                    for (int x = 0; x < scanw; x++) {
+                        float maxVal = 0.0f;
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                const int nx = x + dx, ny = y + dy;
+                                if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
+                                    maxVal = std::max(maxVal, scoreStage.mapAlpha[nx + ny * scanw]);
+                                }
+                            }
+                        }
+                        alpha3x3max[x + y * scanw] = maxVal;
+                    }
+                }
+                auto falpha = [&smoothstep](const double a) -> double {
+                    if (a <= 0.03) return 0.0;
+                    if (a < 0.15)  return smoothstep((a - 0.03) / 0.12);
+                    if (a <= 0.35) return 1.0;
+                    if (a < 0.75)  return 1.0 - smoothstep((a - 0.35) / 0.40);
+                    return 0.0;
+                };
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i]) continue;
+                    const float alphaGainOrig = scoreStage.mapAlphaGain[i];
+                    const float alphaGainNeighbor = (float)falpha(alpha3x3max[i]);
+                    const float alphaGainNew = std::min(alphaGainOrig, alphaGainNeighbor);
+                    if (alphaGainNew >= alphaGainOrig) continue;
+                    scoreStage.mapAlphaGain[i] = alphaGainNew;
+                    const float d = scoreStage.mapDiffGain[i]
+                        * (0.25f + 0.75f * scoreStage.mapConsistencyGain[i])
+                        * (0.15f + 0.85f * alphaGainNew)
+                        * (0.6f + 0.4f * scoreStage.mapLogoGain[i])
+                        * (0.20f + 0.80f * scoreStage.mapExtremeGain[i])
+                        * scoreStage.mapTemporalGain[i]
+                        * scoreStage.mapOpaquePenalty[i]
+                        * scoreStage.mapOpaqueStaticPenalty[i];
+                    scoreStage.mapAccepted[i] = (d > 0.0f) ? d : 0.0f;
+                    scoreStage.score[i] = (d > 0.0f) ? d : 0.0f;
+                }
+            }
 
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
             // ステップ1: edgeMean / edgeVar / edgePresence と各ゲインを計算して保存する。
@@ -4538,17 +4597,25 @@ namespace {
                 }
             }
 
-            // Stage 2: validAB=false の画素に rescue score を適用する。
+            // Stage 2: rescue score を適用する。
             // pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
             // 含まれるためロゴと誤判定するリスクが高い。pass2 ではフレームゲートにより
             // テロップのあるフレームが除外されるため、rescue の誤爆リスクが低い。
-            // validAB=true (回帰ベーススコア) がある画素は従来通りそのスコアを優先する。
+            // (1) validAB=false: 回帰不成立の画素 → rescue score で代替
+            // (2) validAB=true だが回帰ベーススコアがほぼゼロ → rescue score で補完
+            //     テロップ重畳等で bg 推定が汚染され diffGain ≈ 0 に潰された画素を
+            //     edgePresence ベースの rescue で救済する。
             if (passIndex == 3) {
                 const float rescueWeight = 0.6f;
+                const float contaminatedScoreThreshold = 0.01f;
                 const int pixelCount = scanw * scanh;
                 for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i] && scoreStage.mapRescueScore[i] > 0.0f) {
-                        scoreStage.score[i] = rescueWeight * scoreStage.mapRescueScore[i];
+                    if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
+                    const float rescueVal = rescueWeight * scoreStage.mapRescueScore[i];
+                    if (!scoreStage.validAB[i]) {
+                        scoreStage.score[i] = rescueVal;
+                    } else if (scoreStage.score[i] < contaminatedScoreThreshold) {
+                        scoreStage.score[i] = rescueVal;
                     }
                 }
             }
