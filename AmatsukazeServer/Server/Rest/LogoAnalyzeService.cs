@@ -412,6 +412,22 @@ namespace Amatsukaze.Server.Rest
             {
                 path = AddSuffixToPath(AddInfixBeforeExtension(job.BinaryImagePath, ".pass2"), ".trace.bin.csv");
             }
+            else if (string.Equals(kind, "pixeldumpcsv", StringComparison.OrdinalIgnoreCase))
+            {
+                // C++側は replaceExtensionWithSuffix(path.score, ".pixeldump.csv") で生成
+                // 例: score.png → score.pixeldump.csv
+                var dir = Path.GetDirectoryName(job.ScoreImagePath) ?? "";
+                var noExt = Path.GetFileNameWithoutExtension(job.ScoreImagePath);
+                path = Path.Combine(dir, noExt + ".pixeldump.csv");
+            }
+            else if (string.Equals(kind, "pixeldumpcsv-pass2", StringComparison.OrdinalIgnoreCase))
+            {
+                // pass2 variant: score.pass2.pixeldump.csv
+                var scorePass2 = AddInfixBeforeExtension(job.ScoreImagePath, ".pass2");
+                var dir = Path.GetDirectoryName(scorePass2) ?? "";
+                var noExt = Path.GetFileNameWithoutExtension(scorePass2);
+                path = Path.Combine(dir, noExt + ".pixeldump.csv");
+            }
 
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {

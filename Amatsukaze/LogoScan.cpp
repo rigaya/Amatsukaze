@@ -2600,8 +2600,21 @@ namespace {
 
             // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
             Pass2Buffers pass2{};
+            bool pass2Entered = false;
             if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
+                pass2Entered = true;
                 runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
+            }
+            // 4) pass2 に全く進めなかった場合（FrameMaskEmpty 等）、
+            //    pass1 結果に rescue blending を適用して score/binary/rect を再計算する。
+            //    pass2 不成立では passIndex==3 に到達しないため rescue が一切使われず、
+            //    静止構造と重なるロゴ部分が欠落する。rescue 付きで再推定して救済する。
+            //    注: pass2 に進んだが結果が不適切なケース(TooFewAcceptedFrames,
+            //    Pass2RectDiverged)は既に passIndex==3 で rescue 済みなので対象外。
+            if (!pass2Entered) {
+                fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
+                estimateScoreAndRect(pass1Stats, true, pass1RectLocal);
+                captureCurrentDebugSnapshot(debugPass2);
             }
             return rectAbs;
         }
@@ -3416,6 +3429,45 @@ namespace {
                 }
             }
 
+            // ピクセルレベルのスコア/ゲインダンプ CSV
+            // score > 0 または rescueScore > 0 の全ピクセルを出力し、スケール比較に使う。
+            if (!path.score.empty() && withDetailMaps) {
+                const std::string pixelCsvPath = replaceExtensionWithSuffix(path.score, ".pixeldump.csv");
+                FILE* fpx = fopen(pixelCsvPath.c_str(), "w");
+                if (fpx != nullptr) {
+                    fprintf(fpx, "x,y,validAB,score,rescueScore,diffGain,consistencyGain,alphaGain,logoGain,extremeGain,temporalGain,opaquePenalty,opaqueStaticPenalty,alpha,presenceGain,magGain,upperGate,consistGain,bgVarGain\n");
+                    for (int y = 0; y < scanh; y++) {
+                        for (int x = 0; x < scanw; x++) {
+                            const int off = x + y * scanw;
+                            const float sc = (off < (int)score.score.size()) ? score.score[off] : 0.0f;
+                            const float rs = (off < (int)score.mapRescueScore.size()) ? score.mapRescueScore[off] : 0.0f;
+                            if (sc <= 0.0f && rs <= 0.0f) continue;
+                            const bool vab = (off < (int)score.validAB.size()) ? score.validAB[off] : false;
+                            const float dg  = (off < (int)score.mapDiffGain.size()) ? score.mapDiffGain[off] : 0.0f;
+                            const float cg  = (off < (int)score.mapConsistencyGain.size()) ? score.mapConsistencyGain[off] : 0.0f;
+                            const float ag  = (off < (int)score.mapAlphaGain.size()) ? score.mapAlphaGain[off] : 0.0f;
+                            const float lg  = (off < (int)score.mapLogoGain.size()) ? score.mapLogoGain[off] : 0.0f;
+                            const float eg  = (off < (int)score.mapExtremeGain.size()) ? score.mapExtremeGain[off] : 0.0f;
+                            const float tg  = (off < (int)score.mapTemporalGain.size()) ? score.mapTemporalGain[off] : 0.0f;
+                            const float op  = (off < (int)score.mapOpaquePenalty.size()) ? score.mapOpaquePenalty[off] : 0.0f;
+                            const float osp = (off < (int)score.mapOpaqueStaticPenalty.size()) ? score.mapOpaqueStaticPenalty[off] : 0.0f;
+                            const float al  = (off < (int)score.mapAlpha.size()) ? score.mapAlpha[off] : 0.0f;
+                            const float pg  = (off < (int)score.mapPresenceGain.size()) ? score.mapPresenceGain[off] : 0.0f;
+                            const float mg  = (off < (int)score.mapMagGain.size()) ? score.mapMagGain[off] : 0.0f;
+                            const float ug  = (off < (int)score.mapUpperGate.size()) ? score.mapUpperGate[off] : 0.0f;
+                            const float csg = (off < (int)score.mapConsistGain.size()) ? score.mapConsistGain[off] : 0.0f;
+                            // bgVarGain は保存されていないので rescueScore / (pg*mg*ug*csg) から逆算
+                            float bgvg = 0.0f;
+                            const float denom = pg * mg * ug * csg;
+                            if (denom > 1e-8f && rs > 0.0f) bgvg = rs / denom;
+                            fprintf(fpx, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                                x, y, vab ? 1 : 0, sc, rs, dg, cg, ag, lg, eg, tg, op, osp, al, pg, mg, ug, csg, bgvg);
+                        }
+                    }
+                    fclose(fpx);
+                }
+            }
+
             if (!withIterationArtifacts || path.binary.empty()) {
                 return;
             }
@@ -3730,9 +3782,63 @@ namespace {
             const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
             const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
             const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
+
+            // ロゴROIの外周はロゴ画素そのものであるため、AddFrame の外周単色判定を
+            // そのまま使うとほぼ全フレームが棄却され nframes=0 → GetLogoNull になる。
+            // そこで、ロゴROI外側の「外枠リング」ピクセルから背景色を推定し、
+            // AddScanFrame を直接呼ぶことで border check を回避する。
+            static constexpr int kBgRimWidth = 8; // ロゴROI外側サンプリング幅(px)
+            const int rimX0 = std::max(0, pass2.logoRectAbs.x - kBgRimWidth);
+            const int rimY0 = std::max(0, pass2.logoRectAbs.y - kBgRimWidth);
+            const int rimX1 = std::min(imgw, pass2.logoRectAbs.x + pass2.logoRectAbs.w + kBgRimWidth);
+            const int rimY1 = std::min(imgh, pass2.logoRectAbs.y + pass2.logoRectAbs.h + kBgRimWidth);
+
+            // Y チャンネル: 上下行 + 左右列の外枠リング
+            std::vector<int> rimYVals;
+            rimYVals.reserve((rimX1 - rimX0) * 2 + (rimY1 - rimY0) * 2);
+            for (int x = rimX0; x < rimX1; x++) {
+                rimYVals.push_back(srcY[x + rimY0 * pitchY]);
+                rimYVals.push_back(srcY[x + (rimY1 - 1) * pitchY]);
+            }
+            for (int y = rimY0 + 1; y < rimY1 - 1; y++) {
+                rimYVals.push_back(srcY[rimX0 + y * pitchY]);
+                rimYVals.push_back(srcY[(rimX1 - 1) + y * pitchY]);
+            }
+            if (rimYVals.empty()) return 0; // ロゴROIが画像全体を覆う異常ケース
+
+            std::sort(rimYVals.begin(), rimYVals.end());
+            const int bgY = rimYVals[rimYVals.size() / 2];
+
+            // UV チャンネル: 色差座標系に変換してサンプリング
+            const int rimUX0 = rimX0 >> logUVx, rimUX1 = rimX1 >> logUVx;
+            const int rimUY0 = rimY0 >> logUVy, rimUY1 = rimY1 >> logUVy;
+            std::vector<int> rimUVals, rimVVals;
+            rimUVals.reserve((rimUX1 - rimUX0) * 2 + (rimUY1 - rimUY0) * 2);
+            rimVVals.reserve(rimUVals.capacity());
+            for (int x = rimUX0; x < rimUX1; x++) {
+                rimUVals.push_back(srcU[x + rimUY0 * pitchUV]);
+                rimUVals.push_back(srcU[x + (rimUY1 - 1) * pitchUV]);
+                rimVVals.push_back(srcV[x + rimUY0 * pitchUV]);
+                rimVVals.push_back(srcV[x + (rimUY1 - 1) * pitchUV]);
+            }
+            for (int y = rimUY0 + 1; y < rimUY1 - 1; y++) {
+                rimUVals.push_back(srcU[rimUX0 + y * pitchUV]);
+                rimUVals.push_back(srcU[(rimUX1 - 1) + y * pitchUV]);
+                rimVVals.push_back(srcV[rimUX0 + y * pitchUV]);
+                rimVVals.push_back(srcV[(rimUX1 - 1) + y * pitchUV]);
+            }
+            int bgU = 128, bgV = 128; // rimが空の場合のデフォルト
+            if (!rimUVals.empty()) {
+                std::sort(rimUVals.begin(), rimUVals.end());
+                std::sort(rimVVals.begin(), rimVVals.end());
+                bgU = rimUVals[rimUVals.size() / 2];
+                bgV = rimVVals[rimVVals.size() / 2];
+            }
+
             const int offY = pass2.logoRectAbs.x + pass2.logoRectAbs.y * pitchY;
             const int offUV = (pass2.logoRectAbs.x >> logUVx) + (pass2.logoRectAbs.y >> logUVy) * pitchUV;
-            return pass2.logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+            pass2.logoScan->AddScanFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bgY, bgU, bgV, bitDepth);
+            return 1;
         }
 
         // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
@@ -4318,7 +4424,11 @@ namespace {
             }
         }
 
-        void estimateScoreAndRect(StatsPassBuffers& statsPass) {
+        // enableRescue: rescue blending を有効にするか
+        // rescueAnchorRect: contaminated rescue の空間制約に使う矩形 (scan-local 座標)。
+        //   enableRescue=true 時、この矩形からの距離以内のみに contaminated rescue を適用する。
+        //   幅0 の場合は制約なし。
+        void estimateScoreAndRect(StatsPassBuffers& statsPass, bool enableRescue = false, const AutoDetectRect& rescueAnchorRect = AutoDetectRect{0,0,0,0}) {
             if (cb && !cb(2, 0.0f, 0.5f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
@@ -4328,9 +4438,9 @@ namespace {
             ScoreStageBuffers scoreStage{};
             BinaryStageBuffers binaryStage{};
 
-            runScoreStage(statsPass, scoreStage, thHigh, thLow);
+            runScoreStage(statsPass, scoreStage, thHigh, thLow, enableRescue, rescueAnchorRect);
 
-            runBinaryStage(scoreStage, binaryStage, thHigh, thLow);
+            runBinaryStage(scoreStage, binaryStage, thHigh, thLow, enableRescue);
 
             runRectStage(scoreStage, binaryStage);
             debugStats = statsPass.stats;
@@ -4344,7 +4454,10 @@ namespace {
         // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
         // 2値化用の初期閾値(thHigh/thLow)を決める。
         // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
-        void runScoreStage(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage, float& thHigh, float& thLow) {
+        void runScoreStage(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage, float& thHigh, float& thLow, bool enableRescue = false, const AutoDetectRect& rescueAnchorRect = AutoDetectRect{0,0,0,0}) {
+            // 診断ログ: passIndex確認
+            fprintf(stderr, "[LogoScan] runScoreStage: passIndex=%d enableRescue=%d anchorRect=(%d,%d,%d,%d)\n",
+                passIndex, (int)enableRescue, rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h);
             // 各種出力マップをクリアする。
             scoreStage.reset(scanw, scanh);
             // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
@@ -4598,31 +4711,114 @@ namespace {
             }
 
             // Stage 2: rescue score を適用する。
-            // pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
+            // 通常は pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
             // 含まれるためロゴと誤判定するリスクが高い。pass2 ではフレームゲートにより
             // テロップのあるフレームが除外されるため、rescue の誤爆リスクが低い。
+            // ただし pass2 に進めなかった場合(FrameMaskEmpty 等)は、pass1 フォールバック時
+            // にも enableRescue=true で rescue を適用する。pass2 が不成立の場合、他に手段が
+            // ないため、テロップ誤判定リスクを許容して rescue で救済する。
             // (1) validAB=false: 回帰不成立の画素 → rescue score で代替
-            // (2) validAB=true だが回帰ベーススコアがほぼゼロ → rescue score で補完
+            // (2) validAB=true だが score が低い(汚染推定)→ rescue score でブレンド
             //     テロップ重畳等で bg 推定が汚染され diffGain ≈ 0 に潰された画素を
             //     edgePresence ベースの rescue で救済する。
-            if (passIndex == 3) {
-                const float rescueWeight = 0.6f;
-                const float contaminatedScoreThreshold = 0.01f;
+            //
+            // スケール合わせ: rescue score は gains の積のみで baselines がなく、
+            // 通常 score より値が低い。validAB=true かつ両方正の画素から
+            // score/rescue 比の p75 を求め、rescue にそのスケールを掛けてから適用する。
+            if (passIndex == 3 || enableRescue) {
+                fprintf(stderr, "[LogoScan] rescue blending: passIndex=%d enableRescue=%d, starting blend\n", passIndex, (int)enableRescue);
                 const int pixelCount = scanw * scanh;
+
+                // スケールファクター推定: validAB=true で score と rescue が共に正の画素から
+                std::vector<float> scaleRatios;
+                scaleRatios.reserve(4096);
+                static constexpr float kScaleRatioMinScore  = 0.02f;
+                static constexpr float kScaleRatioMinRescue = 0.005f;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i]) continue;
+                    const float sc = scoreStage.score[i];
+                    const float rs = scoreStage.mapRescueScore[i];
+                    if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
+                        scaleRatios.push_back(sc / rs);
+                    }
+                }
+                float scaleFactor = 1.0f;
+                if (!scaleRatios.empty()) {
+                    std::sort(scaleRatios.begin(), scaleRatios.end());
+                    // p75 を採用: 高すぎる外れ値を避けつつ十分なスケール補正を行う
+                    const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
+                    scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 20.0f));
+                }
+                fprintf(stderr, "[LogoScan] rescue blending: scaleRatios.size()=%zu scaleFactor=%.4f\n", scaleRatios.size(), (double)scaleFactor);
+
+                // rescue スコアを適用: max() ブレンドで既存スコアを下げない
+                static constexpr float kRescueBlendWeight        = 0.7f;   // score に対してやや割引
+                static constexpr float kContaminatedScoreThresh  = 0.05f;  // この値未満のスコアを汚染とみなす
+
+                // pass1 フォールバック時 (enableRescue=true, passIndex!=3) の contaminated ケース
+                // (validAB=true, score<閾値) は、pass1 rect を空間制約として使う。
+                // pass1 ではフレームゲートがないためテロップ/文字エッジにも高い rescue score
+                // が出るが、pass1 rect(初回推定で得た高確信ロゴ領域)の近傍に限定することで
+                // ロゴ隣接部分の救済とテロップノイズの除外を両立する。
+                // pass2 (passIndex==3) ではフレームゲート済みなので距離制約は不要。
+                static constexpr int kRescueRectMaxDist = 30;
+                const bool useRectGate = enableRescue && (passIndex != 3)
+                    && rescueAnchorRect.w > 0 && rescueAnchorRect.h > 0;
+                // 矩形からのチェビシェフ距離マップを BFS で構築する
+                std::vector<int> rectDistMap;
+                if (useRectGate) {
+                    rectDistMap.assign(pixelCount, INT_MAX);
+                    std::queue<int> bfsQ;
+                    for (int y = rescueAnchorRect.y; y < rescueAnchorRect.y + rescueAnchorRect.h && y < scanh; y++) {
+                        for (int x = rescueAnchorRect.x; x < rescueAnchorRect.x + rescueAnchorRect.w && x < scanw; x++) {
+                            if (x >= 0 && y >= 0) {
+                                const int idx = x + y * scanw;
+                                rectDistMap[idx] = 0;
+                                bfsQ.push(idx);
+                            }
+                        }
+                    }
+                    while (!bfsQ.empty()) {
+                        const int cur = bfsQ.front(); bfsQ.pop();
+                        if (rectDistMap[cur] >= kRescueRectMaxDist) continue;
+                        const int cx = cur % scanw, cy = cur / scanw;
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                if (!dx && !dy) continue;
+                                const int nx = cx + dx, ny = cy + dy;
+                                if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                                const int nidx = nx + ny * scanw;
+                                if (rectDistMap[nidx] > rectDistMap[cur] + 1) {
+                                    rectDistMap[nidx] = rectDistMap[cur] + 1;
+                                    bfsQ.push(nidx);
+                                }
+                            }
+                        }
+                    }
+                    fprintf(stderr, "[LogoScan] rescue rect gate: rect=(%d,%d,%d,%d) maxDist=%d\n",
+                        rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, kRescueRectMaxDist);
+                }
+
                 for (int i = 0; i < pixelCount; i++) {
                     if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
-                    const float rescueVal = rescueWeight * scoreStage.mapRescueScore[i];
+                    const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
+                    const float rescueVal = kRescueBlendWeight * rescueScaled;
                     if (!scoreStage.validAB[i]) {
+                        // 回帰不成立: rescue をそのまま適用
                         scoreStage.score[i] = rescueVal;
-                    } else if (scoreStage.score[i] < contaminatedScoreThreshold) {
-                        scoreStage.score[i] = rescueVal;
+                    } else if (scoreStage.score[i] < kContaminatedScoreThresh) {
+                        // 汚染推定: max() で大きいほうを採用（既存スコアを下げない）
+                        // pass1 フォールバック時は rect 距離制約を適用
+                        if (useRectGate && rectDistMap[i] > kRescueRectMaxDist) continue;
+                        scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
                     }
                 }
             }
 
             // score 分布の基礎統計を集計し、成立しない場合は詳細情報付きで例外化する。
             // 閾値は回帰ベーススコア (validAB=true) のみで計算する。
-            // rescue score は scale が異なるため、分布に混入させない。
+            // rescue でスケール補正済のスコアも validAB=true の分布に混入させてよいが、
+            // rescue のみ由来の画素 (validAB=false) は除外する。
             double sum = 0.0;
             double sum2 = 0.0;
             int count = 0;
@@ -4731,7 +4927,7 @@ namespace {
             }
         }
 
-        void runBinaryStage(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage, const float thHigh, const float thLow);
+        void runBinaryStage(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage, const float thHigh, const float thLow, bool enableRescue = false);
         void runRectStage(const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage);
     };
 }
@@ -5674,7 +5870,7 @@ namespace {
     // - low側の飛び地を近縁条件で昇格
     // - 反復的な閾値緩和とdelta近縁判定で取りこぼしを補完
     // - 帯ノイズ/全消し時のフォールバックを適用
-    void AutoDetectLogoReader::runBinaryStage(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage, const float thHigh, const float thLow) {
+    void AutoDetectLogoReader::runBinaryStage(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage, const float thHigh, const float thLow, bool enableRescue) {
         // 初回2値化（基準となる「最初の領域」）
         BuildBinaryDiag baseDiag{};
         if (detailedDebug) {
@@ -5908,11 +6104,12 @@ namespace {
         }
         binaryStage.binary.swap(acceptedBinary);
 
-        // rescue 拡張: pass2 (passIndex==3) のみで実施する。
+        // rescue 拡張: 通常は pass2 (passIndex==3) で実施する。
+        // pass2 不成立時は enableRescue=true で pass1 フォールバック時にも適用する。
         // 反復ループ完了後の回帰バイナリを基準に後処理として実施することで、
         // 反復ループの guard 機構が rescue 拡張の影響を受けないようにする。
         // NoSeed のときは高確信度 rescue 画素を seed として直接使う緊急フォールバック。
-        if (passIndex == 3) {
+        if (passIndex == 3 || enableRescue) {
             constexpr float kRescueLowMaskTh = 0.20f;
             constexpr float kRescueSeedTh    = 0.60f; // rescue seed 採用閾値 (NoSeed フォールバック)
             constexpr int   kRescueMaxDist   = 40;    // 回帰バイナリからの最大許容距離 (pixels)
@@ -5985,14 +6182,23 @@ namespace {
             }
 
             // 距離制約内の rescue lowMask 画素へ成長させる。
+            // validAB=false の画素は常に対象。
+            // enableRescue 時(pass1 フォールバック)は、contaminated 画素
+            // (validAB=true, score<閾値) も対象に含める。
+            // スコア段階では contaminated rescue を適用しないため、
+            // binary 段階の BFS 成長で空間的に近い画素のみ取り込む。
             {
+                constexpr float kContaminatedScoreTh = 0.05f;
                 // まず距離制約内の rescue 画素を lowMask として用意
                 std::vector<uint8_t> rescueLowMask(scanw * scanh, 0);
                 for (int i = 0; i < scanw * scanh; i++) {
-                    if (!scoreStage.validAB[i] &&
-                        !binaryStage.binary[i] &&  // すでに binary に入っている画素はスキップ
-                        scoreStage.mapRescueScore[i] >= kRescueLowMaskTh &&
-                        distMap[i] <= kRescueMaxDist) {
+                    if (binaryStage.binary[i]) continue;  // すでに binary に入っている画素はスキップ
+                    if (scoreStage.mapRescueScore[i] < kRescueLowMaskTh) continue;
+                    if (distMap[i] > kRescueMaxDist) continue;
+                    const bool isNoAB = !scoreStage.validAB[i];
+                    const bool isContaminated = enableRescue && scoreStage.validAB[i]
+                        && scoreStage.score[i] < kContaminatedScoreTh;
+                    if (isNoAB || isContaminated) {
                         rescueLowMask[i] = 1;
                     }
                 }

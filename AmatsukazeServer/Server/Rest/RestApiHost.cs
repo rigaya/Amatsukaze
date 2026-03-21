@@ -1645,7 +1645,9 @@ namespace Amatsukaze.Server.Rest
                     || string.Equals(kind, "tracecsv-pass2", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "tracesummarycsv", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "tracesummarycsv-pass1", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(kind, "tracesummarycsv-pass2", StringComparison.OrdinalIgnoreCase))
+                    || string.Equals(kind, "tracesummarycsv-pass2", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "pixeldumpcsv", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "pixeldumpcsv-pass2", StringComparison.OrdinalIgnoreCase))
                 {
                     return Results.File(bytes, "text/csv");
                 }
