@@ -2488,6 +2488,7 @@ namespace {
             std::vector<uint8_t> frameMask;
             int acceptedFrames = 0;
             int skippedFrames = 0;
+            int addFrameRejected = 0;
         };
 
         struct BuildBinaryDiag {
@@ -2893,7 +2894,7 @@ namespace {
             convertBinAccumToStats(pass3Stats);
             prepareResidualReweightMaps(pass3Stats);
             rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
-            estimateScoreAndRect(pass3Stats);
+            estimateScoreAndRect(pass3Stats, false, pass1RectLocal);
             captureCurrentDebugSnapshot(debugPass2);
 
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
@@ -3783,62 +3784,9 @@ namespace {
             const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
             const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
 
-            // ロゴROIの外周はロゴ画素そのものであるため、AddFrame の外周単色判定を
-            // そのまま使うとほぼ全フレームが棄却され nframes=0 → GetLogoNull になる。
-            // そこで、ロゴROI外側の「外枠リング」ピクセルから背景色を推定し、
-            // AddScanFrame を直接呼ぶことで border check を回避する。
-            static constexpr int kBgRimWidth = 8; // ロゴROI外側サンプリング幅(px)
-            const int rimX0 = std::max(0, pass2.logoRectAbs.x - kBgRimWidth);
-            const int rimY0 = std::max(0, pass2.logoRectAbs.y - kBgRimWidth);
-            const int rimX1 = std::min(imgw, pass2.logoRectAbs.x + pass2.logoRectAbs.w + kBgRimWidth);
-            const int rimY1 = std::min(imgh, pass2.logoRectAbs.y + pass2.logoRectAbs.h + kBgRimWidth);
-
-            // Y チャンネル: 上下行 + 左右列の外枠リング
-            std::vector<int> rimYVals;
-            rimYVals.reserve((rimX1 - rimX0) * 2 + (rimY1 - rimY0) * 2);
-            for (int x = rimX0; x < rimX1; x++) {
-                rimYVals.push_back(srcY[x + rimY0 * pitchY]);
-                rimYVals.push_back(srcY[x + (rimY1 - 1) * pitchY]);
-            }
-            for (int y = rimY0 + 1; y < rimY1 - 1; y++) {
-                rimYVals.push_back(srcY[rimX0 + y * pitchY]);
-                rimYVals.push_back(srcY[(rimX1 - 1) + y * pitchY]);
-            }
-            if (rimYVals.empty()) return 0; // ロゴROIが画像全体を覆う異常ケース
-
-            std::sort(rimYVals.begin(), rimYVals.end());
-            const int bgY = rimYVals[rimYVals.size() / 2];
-
-            // UV チャンネル: 色差座標系に変換してサンプリング
-            const int rimUX0 = rimX0 >> logUVx, rimUX1 = rimX1 >> logUVx;
-            const int rimUY0 = rimY0 >> logUVy, rimUY1 = rimY1 >> logUVy;
-            std::vector<int> rimUVals, rimVVals;
-            rimUVals.reserve((rimUX1 - rimUX0) * 2 + (rimUY1 - rimUY0) * 2);
-            rimVVals.reserve(rimUVals.capacity());
-            for (int x = rimUX0; x < rimUX1; x++) {
-                rimUVals.push_back(srcU[x + rimUY0 * pitchUV]);
-                rimUVals.push_back(srcU[x + (rimUY1 - 1) * pitchUV]);
-                rimVVals.push_back(srcV[x + rimUY0 * pitchUV]);
-                rimVVals.push_back(srcV[x + (rimUY1 - 1) * pitchUV]);
-            }
-            for (int y = rimUY0 + 1; y < rimUY1 - 1; y++) {
-                rimUVals.push_back(srcU[rimUX0 + y * pitchUV]);
-                rimUVals.push_back(srcU[(rimUX1 - 1) + y * pitchUV]);
-                rimVVals.push_back(srcV[rimUX0 + y * pitchUV]);
-                rimVVals.push_back(srcV[(rimUX1 - 1) + y * pitchUV]);
-            }
-            int bgU = 128, bgV = 128; // rimが空の場合のデフォルト
-            if (!rimUVals.empty()) {
-                std::sort(rimUVals.begin(), rimUVals.end());
-                std::sort(rimVVals.begin(), rimVVals.end());
-                bgU = rimUVals[rimUVals.size() / 2];
-                bgV = rimVVals[rimVVals.size() / 2];
-            }
-
             const int offY = pass2.logoRectAbs.x + pass2.logoRectAbs.y * pitchY;
             const int offUV = (pass2.logoRectAbs.x >> logUVx) + (pass2.logoRectAbs.y >> logUVy) * pitchUV;
-            pass2.logoScan->AddScanFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bgY, bgU, bgV, bitDepth);
-            return 1;
+            return pass2.logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
         }
 
         // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
@@ -4729,42 +4677,10 @@ namespace {
                 fprintf(stderr, "[LogoScan] rescue blending: passIndex=%d enableRescue=%d, starting blend\n", passIndex, (int)enableRescue);
                 const int pixelCount = scanw * scanh;
 
-                // スケールファクター推定: validAB=true で score と rescue が共に正の画素から
-                std::vector<float> scaleRatios;
-                scaleRatios.reserve(4096);
-                static constexpr float kScaleRatioMinScore  = 0.02f;
-                static constexpr float kScaleRatioMinRescue = 0.005f;
-                for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i]) continue;
-                    const float sc = scoreStage.score[i];
-                    const float rs = scoreStage.mapRescueScore[i];
-                    if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
-                        scaleRatios.push_back(sc / rs);
-                    }
-                }
-                float scaleFactor = 1.0f;
-                if (!scaleRatios.empty()) {
-                    std::sort(scaleRatios.begin(), scaleRatios.end());
-                    // p75 を採用: 高すぎる外れ値を避けつつ十分なスケール補正を行う
-                    const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
-                    scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 20.0f));
-                }
-                fprintf(stderr, "[LogoScan] rescue blending: scaleRatios.size()=%zu scaleFactor=%.4f\n", scaleRatios.size(), (double)scaleFactor);
-
-                // rescue スコアを適用: max() ブレンドで既存スコアを下げない
-                static constexpr float kRescueBlendWeight        = 0.7f;   // score に対してやや割引
-                static constexpr float kContaminatedScoreThresh  = 0.05f;  // この値未満のスコアを汚染とみなす
-
-                // pass1 フォールバック時 (enableRescue=true, passIndex!=3) の contaminated ケース
-                // (validAB=true, score<閾値) は、pass1 rect を空間制約として使う。
-                // pass1 ではフレームゲートがないためテロップ/文字エッジにも高い rescue score
-                // が出るが、pass1 rect(初回推定で得た高確信ロゴ領域)の近傍に限定することで
-                // ロゴ隣接部分の救済とテロップノイズの除外を両立する。
-                // pass2 (passIndex==3) ではフレームゲート済みなので距離制約は不要。
+                // rectGate: アンカー矩形からの距離マップを構築し、遠い画素への rescue 適用を抑制する。
+                // enableRescue (pass1 fallback) と pass2 (passIndex==3) の両方で使用する。
                 static constexpr int kRescueRectMaxDist = 30;
-                const bool useRectGate = enableRescue && (passIndex != 3)
-                    && rescueAnchorRect.w > 0 && rescueAnchorRect.h > 0;
-                // 矩形からのチェビシェフ距離マップを BFS で構築する
+                const bool useRectGate = rescueAnchorRect.w > 0 && rescueAnchorRect.h > 0;
                 std::vector<int> rectDistMap;
                 if (useRectGate) {
                     rectDistMap.assign(pixelCount, INT_MAX);
@@ -4799,18 +4715,59 @@ namespace {
                         rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, kRescueRectMaxDist);
                 }
 
-                for (int i = 0; i < pixelCount; i++) {
-                    if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
-                    const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
-                    const float rescueVal = kRescueBlendWeight * rescueScaled;
-                    if (!scoreStage.validAB[i]) {
-                        // 回帰不成立: rescue をそのまま適用
-                        scoreStage.score[i] = rescueVal;
-                    } else if (scoreStage.score[i] < kContaminatedScoreThresh) {
-                        // 汚染推定: max() で大きいほうを採用（既存スコアを下げない）
-                        // pass1 フォールバック時は rect 距離制約を適用
+                if (enableRescue) {
+                    // pass1 フォールバック: scaleFactor で rescue score を補正し、
+                    // contaminated 閾値を高めに設定して pass1 rect 近傍のみ救済する。
+                    std::vector<float> scaleRatios;
+                    scaleRatios.reserve(4096);
+                    static constexpr float kScaleRatioMinScore  = 0.02f;
+                    static constexpr float kScaleRatioMinRescue = 0.005f;
+                    for (int i = 0; i < pixelCount; i++) {
+                        if (!scoreStage.validAB[i]) continue;
+                        const float sc = scoreStage.score[i];
+                        const float rs = scoreStage.mapRescueScore[i];
+                        if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
+                            scaleRatios.push_back(sc / rs);
+                        }
+                    }
+                    float scaleFactor = 1.0f;
+                    if (!scaleRatios.empty()) {
+                        std::sort(scaleRatios.begin(), scaleRatios.end());
+                        const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
+                        scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 20.0f));
+                    }
+                    fprintf(stderr, "[LogoScan] rescue blending (pass1 fallback): scaleRatios.size()=%zu scaleFactor=%.4f\n",
+                        scaleRatios.size(), (double)scaleFactor);
+
+                    static constexpr float kRescueBlendWeight       = 0.7f;
+                    static constexpr float kContaminatedScoreThresh = 0.05f;
+                    for (int i = 0; i < pixelCount; i++) {
+                        if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
+                        const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
+                        const float rescueVal = kRescueBlendWeight * rescueScaled;
+                        if (!scoreStage.validAB[i]) {
+                            scoreStage.score[i] = rescueVal;
+                        } else if (scoreStage.score[i] < kContaminatedScoreThresh) {
+                            if (useRectGate && rectDistMap[i] > kRescueRectMaxDist) continue;
+                            scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
+                        }
+                    }
+                } else {
+                    // pass2 (passIndex==3): フレームゲート済みのためテロップノイズは少なく、
+                    // スケール補正は不要。weight=0.6, threshold=0.01 で控えめに適用する。
+                    // rectGate があれば、ロゴ矩形近傍のみに rescue を制限して
+                    // 散在する偽陽性ノイズによる矩形検出失敗を防ぐ。
+                    static constexpr float kRescueWeight = 0.6f;
+                    static constexpr float kContaminatedThreshold = 0.01f;
+                    for (int i = 0; i < pixelCount; i++) {
+                        if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
                         if (useRectGate && rectDistMap[i] > kRescueRectMaxDist) continue;
-                        scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
+                        const float rescueVal = kRescueWeight * scoreStage.mapRescueScore[i];
+                        if (!scoreStage.validAB[i]) {
+                            scoreStage.score[i] = rescueVal;
+                        } else if (scoreStage.score[i] < kContaminatedThreshold) {
+                            scoreStage.score[i] = rescueVal;
+                        }
                     }
                 }
             }

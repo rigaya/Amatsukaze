@@ -141,6 +141,9 @@ public:
     //   後段のfg/bg回帰が歪み、ロゴ以外を強く拾いやすくなる。
     LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy);
 
+    // AddFrame で受理されたフレーム数を返す
+    int getNumFrames() const { return nframes; }
+
     void Normalize(int mavx);
 
     std::unique_ptr<LogoData> GetLogo(bool clean) const;
