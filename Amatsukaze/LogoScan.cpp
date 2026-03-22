@@ -4658,6 +4658,103 @@ namespace {
                 }
             }
 
+            // rescueScore ベースのスコア補正 (noise suppression + logo boost):
+            // rescueScore は edge ベースの指標で、半透明ロゴの輪郭を正確に捉える一方、
+            // 不透明テロップ等のノイズには低い値を返す。この特性を利用して:
+            // (A) score が正なのに rescueScore が低い画素 → ノイズ候補として抑制
+            // (B) score が弱いが rescueScore が高い画素 → ロゴ候補として底上げ
+            //
+            // ノイズテロップでは rescueScore が低くなる理由:
+            // - エッジ部: edgeMean 高 → upperGate 低 → rescueScore 低
+            // - 内部: edgeMean 低 → magGain 低 → rescueScore 低
+            // いずれの場合も rescueScore の積構造により少なくとも1因子が低くなる。
+            {
+                auto sat01f = [](const float v) { return std::max(0.0f, std::min(1.0f, v)); };
+                const int pixelCount = scanw * scanh;
+
+                // rescueScore の空間膨張 (max filter × kDilateIter 回):
+                // rescueScore はエッジベースなので、ロゴ内部では ≈ 0 になる。
+                // しかしロゴ内部はロゴ輪郭（高 rescueScore）の近傍にあるため、
+                // 空間膨張で輪郭の値を内部に伝播させればロゴ内部を保護できる。
+                // ノイズテロップは全域で rescueScore が低いため、膨張しても低いまま。
+                static constexpr int kDilateIter = 4;  // 3x3 max filter × 4 回 = 実効半径 4px
+                std::vector<float> rescueDilated(scoreStage.mapRescueScore.begin(),
+                                                 scoreStage.mapRescueScore.begin() + pixelCount);
+                std::vector<float> rescueTmp(pixelCount);
+                for (int iter = 0; iter < kDilateIter; iter++) {
+                    for (int y = 0; y < scanh; y++) {
+                        for (int x = 0; x < scanw; x++) {
+                            float maxVal = rescueDilated[x + y * scanw];
+                            if (x > 0)          maxVal = std::max(maxVal, rescueDilated[(x-1) + y * scanw]);
+                            if (x < scanw - 1)  maxVal = std::max(maxVal, rescueDilated[(x+1) + y * scanw]);
+                            if (y > 0)          maxVal = std::max(maxVal, rescueDilated[x + (y-1) * scanw]);
+                            if (y < scanh - 1)  maxVal = std::max(maxVal, rescueDilated[x + (y+1) * scanw]);
+                            rescueTmp[x + y * scanw] = maxVal;
+                        }
+                    }
+                    std::swap(rescueDilated, rescueTmp);
+                }
+
+                // (A) ノイズ抑制: 膨張済み rescueScore が低い画素のメインスコアを抑制する。
+                static constexpr float kGateThresh = 0.005f;
+                static constexpr float kGateRange  = 0.035f;
+                static constexpr float kGateFloor  = 0.15f;
+                // (B) ロゴ底上げ: 元の rescueScore が高い画素のメインスコアを底上げする。
+                static constexpr float kBoostWeight  = 0.6f;
+                static constexpr float kBoostCeiling = 0.10f;
+                int gatedCount = 0, boostedCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    // (A) ノイズ抑制: 膨張済み rescueScore でゲート
+                    if (scoreStage.score[i] > 0.0f) {
+                        const float rescueGate = sat01f((rescueDilated[i] - kGateThresh) / kGateRange);
+                        const float factor = kGateFloor + (1.0f - kGateFloor) * rescueGate;
+                        if (factor < 0.9f) gatedCount++;
+                        scoreStage.score[i] *= factor;
+                    }
+                    // (B) ロゴ底上げ: 元の rescueScore で底上げ
+                    if (scoreStage.mapRescueScore[i] > 0.0f && scoreStage.score[i] < kBoostCeiling) {
+                        const float boostVal = kBoostWeight * scoreStage.mapRescueScore[i];
+                        if (boostVal > scoreStage.score[i]) boostedCount++;
+                        scoreStage.score[i] = std::max(scoreStage.score[i], boostVal);
+                    }
+                }
+                fprintf(stderr, "[LogoScan] rescueScore dilated gate: dilateIter=%d thresh=%.3f range=%.3f floor=%.2f gated=%d boosted=%d\n",
+                    kDilateIter, kGateThresh, kGateRange, kGateFloor, gatedCount, boostedCount);
+                // ファイル出力: rescueScore 分布とゲート効果の確認
+                {
+                    FILE* fp = fopen("/tmp/rescue_gate_diag.txt", "w");
+                    if (fp) {
+                        float maxRS = 0, maxDilRS = 0, maxSc = 0, maxAcc = 0;
+                        int nonzeroRS = 0, nonzeroDilRS = 0, nonzeroSc = 0;
+                        for (int i = 0; i < pixelCount; i++) {
+                            if (scoreStage.mapRescueScore[i] > 0) nonzeroRS++;
+                            if (rescueDilated[i] > 0) nonzeroDilRS++;
+                            if (scoreStage.score[i] > 0) nonzeroSc++;
+                            maxRS = std::max(maxRS, scoreStage.mapRescueScore[i]);
+                            maxDilRS = std::max(maxDilRS, rescueDilated[i]);
+                            maxSc = std::max(maxSc, scoreStage.score[i]);
+                            maxAcc = std::max(maxAcc, scoreStage.mapAccepted[i]);
+                        }
+                        fprintf(fp, "pixelCount=%d\n", pixelCount);
+                        fprintf(fp, "nonzeroRS=%d nonzeroDilRS=%d nonzeroSc=%d\n", nonzeroRS, nonzeroDilRS, nonzeroSc);
+                        fprintf(fp, "maxRS=%.6f maxDilRS=%.6f maxScore=%.6f maxAccepted=%.6f\n", maxRS, maxDilRS, maxSc, maxAcc);
+                        fprintf(fp, "gated=%d boosted=%d\n", gatedCount, boostedCount);
+                        // サンプル: ノイズ領域(y=40付近) と ロゴ領域(y=100付近) の値
+                        for (int y : {30, 35, 40, 45, 70, 90, 100, 110}) {
+                            if (y >= scanh) continue;
+                            for (int x : {80, 100, 120, 140, 160, 180, 200}) {
+                                if (x >= scanw) continue;
+                                const int idx = x + y * scanw;
+                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f dilRS=%.6f\n",
+                                    x, y, scoreStage.mapAccepted[idx], scoreStage.score[idx],
+                                    scoreStage.mapRescueScore[idx], rescueDilated[idx]);
+                            }
+                        }
+                        fclose(fp);
+                    }
+                }
+            }
+
             // Stage 2: rescue score を適用する。
             // 通常は pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
             // 含まれるためロゴと誤判定するリスクが高い。pass2 ではフレームゲートにより
