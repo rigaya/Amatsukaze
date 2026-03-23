@@ -2257,6 +2257,10 @@ namespace {
             std::vector<float> mapMagGain;        // 大きさゲイン
             std::vector<float> mapUpperGate;      // 上限ゲート (不透明構造除外)
             std::vector<float> mapConsistGain;    // 一貫性ゲイン (低分散ほど高い)
+            std::vector<float> mapBgVarGain;      // 背景分散ゲイン (不透明テロップ除外)
+            std::vector<uint8_t> mapIsWall;       // 壁マスク (膨張後)
+            std::vector<uint8_t> mapIsInterior;   // テロップ内部マスク (flood fill 結果)
+            std::vector<float> mapUpperGateFilled; // upperGate (壁・内部を 0 に抑制済み)
             std::vector<uint8_t> validAB;
 
             void reset(const int scanw, const int scanh) {
@@ -2293,6 +2297,10 @@ namespace {
                 mapMagGain.assign(n, 0.0f);
                 mapUpperGate.assign(n, 0.0f);
                 mapConsistGain.assign(n, 0.0f);
+                mapBgVarGain.assign(n, 0.0f);
+                mapIsWall.assign(n, 0);
+                mapIsInterior.assign(n, 0);
+                mapUpperGateFilled.assign(n, 0.0f);
             }
         };
 
@@ -2349,6 +2357,10 @@ namespace {
             std::string magGain;
             std::string upperGate;
             std::string consistGain;
+            std::string bgVarGain;
+            std::string isWall;
+            std::string isInterior;
+            std::string upperGateFilled;
         };
         struct Pass2PrepareDebug {
             int logoW = 0;
@@ -2966,6 +2978,10 @@ namespace {
             out.magGain = addSuffixBeforeExtension(base.magGain, suffix);
             out.upperGate = addSuffixBeforeExtension(base.upperGate, suffix);
             out.consistGain = addSuffixBeforeExtension(base.consistGain, suffix);
+            out.bgVarGain = addSuffixBeforeExtension(base.bgVarGain, suffix);
+            out.isWall = addSuffixBeforeExtension(base.isWall, suffix);
+            out.isInterior = addSuffixBeforeExtension(base.isInterior, suffix);
+            out.upperGateFilled = addSuffixBeforeExtension(base.upperGateFilled, suffix);
             return out;
         }
 
@@ -3290,6 +3306,34 @@ namespace {
                 WriteGrayBitmap(path.consistGain, scanw, scanh, [&](int x, int y) {
                     const int off = x + y * scanw;
                     const float v = (off < (int)score.mapConsistGain.size()) ? score.mapConsistGain[off] : 0.0f;
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            if (!path.bgVarGain.empty()) {
+                WriteGrayBitmap(path.bgVarGain, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapBgVarGain.size()) ? score.mapBgVarGain[off] : 0.0f;
+                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+                });
+            }
+            if (!path.isWall.empty()) {
+                WriteGrayBitmap(path.isWall, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const uint8_t v = (off < (int)score.mapIsWall.size()) ? score.mapIsWall[off] : 0;
+                    return v ? (uint8_t)255 : (uint8_t)0;
+                });
+            }
+            if (!path.isInterior.empty()) {
+                WriteGrayBitmap(path.isInterior, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const uint8_t v = (off < (int)score.mapIsInterior.size()) ? score.mapIsInterior[off] : 0;
+                    return v ? (uint8_t)255 : (uint8_t)0;
+                });
+            }
+            if (!path.upperGateFilled.empty()) {
+                WriteGrayBitmap(path.upperGateFilled, scanw, scanh, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    const float v = (off < (int)score.mapUpperGateFilled.size()) ? score.mapUpperGateFilled[off] : 0.0f;
                     return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
                 });
             }
@@ -3639,6 +3683,10 @@ namespace {
             basePath.magGain      = addSuffixBeforeExtension(basePath.score, ".maggain");
             basePath.upperGate    = addSuffixBeforeExtension(basePath.score, ".uppergate");
             basePath.consistGain  = addSuffixBeforeExtension(basePath.score, ".consistgain");
+            basePath.bgVarGain    = addSuffixBeforeExtension(basePath.score, ".bgvargain");
+            basePath.isWall           = addSuffixBeforeExtension(basePath.score, ".iswall");
+            basePath.isInterior       = addSuffixBeforeExtension(basePath.score, ".isinterior");
+            basePath.upperGateFilled  = addSuffixBeforeExtension(basePath.score, ".uppergatefilled");
 
             // 互換維持: 既存パスは最終結果(final)を出力。
             writeDebugStage(debugStats, debugTraceRecords, debugTraceBinRepresentatives, debugScore, debugBinary, rectLocal, basePath, detailedDebug, true);
@@ -4654,8 +4702,129 @@ namespace {
                     const float rescueScore  = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
                                              * upperGate * scoreStage.mapConsistGain[i] * bgVarGain;
                     scoreStage.mapUpperGate[i]   = upperGate;
+                    scoreStage.mapBgVarGain[i]   = bgVarGain;
                     scoreStage.mapRescueScore[i] = rescueScore;
                 }
+            }
+
+            // upperGateFilled 構築:
+            // 不透明テロップは輪郭部が低 upperGate (静止エッジ検出)、内部は高 upperGate。
+            // テロップ内部も静止構造なので rescueScore を抑制したい。
+            // 手法: upperGate の低い画素（壁）で Flood Fill し、壁と内部の画素を特定。
+            //       壁・内部の画素では upperGateFilled = 0 として rescueScore を再計算する。
+            std::vector<uint8_t> isInterior;
+            {
+                const int pixelCount = scanw * scanh;
+                static constexpr float kFillWallThresh = 0.30f;  // upperGate がこの値未満 → 壁
+                static constexpr int   kFillWallDilate = 1;      // 壁の膨張回数（隙間を塞ぐ）
+
+                // 1. 壁マスク作成: edgePresence > 0 かつ upperGate < 閾値 の画素を壁とする
+                std::vector<uint8_t> isWall(pixelCount, 0);
+                for (int i = 0; i < pixelCount; i++) {
+                    if (scoreStage.mapEdgePresence[i] > 0.0f && scoreStage.mapUpperGate[i] < kFillWallThresh) {
+                        isWall[i] = 1;
+                    }
+                }
+
+                // 壁を膨張（小さな隙間を塞ぐ）
+                if (kFillWallDilate > 0) {
+                    std::vector<uint8_t> wallTmp(pixelCount);
+                    for (int iter = 0; iter < kFillWallDilate; iter++) {
+                        for (int y = 0; y < scanh; y++) {
+                            for (int x = 0; x < scanw; x++) {
+                                const int idx = x + y * scanw;
+                                uint8_t v = isWall[idx];
+                                if (!v && x > 0)          v |= isWall[(x-1) + y * scanw];
+                                if (!v && x < scanw - 1)  v |= isWall[(x+1) + y * scanw];
+                                if (!v && y > 0)          v |= isWall[x + (y-1) * scanw];
+                                if (!v && y < scanh - 1)  v |= isWall[x + (y+1) * scanw];
+                                wallTmp[idx] = v;
+                            }
+                        }
+                        std::swap(isWall, wallTmp);
+                    }
+                }
+
+                // 2. 画像境界から非壁画素を通って Flood Fill → 外側をマーク
+                //    4-connectivity: テロップ輪郭の対角隙間を壁として尊重する
+                std::vector<uint8_t> isExterior(pixelCount, 0);
+                std::vector<int> stack;
+                stack.reserve(pixelCount / 4);
+                for (int x = 0; x < scanw; x++) {
+                    for (const int y : {0, scanh - 1}) {
+                        const int idx = x + y * scanw;
+                        if (!isWall[idx] && !isExterior[idx]) {
+                            isExterior[idx] = 1;
+                            stack.push_back(idx);
+                        }
+                    }
+                }
+                for (int y = 1; y < scanh - 1; y++) {
+                    for (const int x : {0, scanw - 1}) {
+                        const int idx = x + y * scanw;
+                        if (!isWall[idx] && !isExterior[idx]) {
+                            isExterior[idx] = 1;
+                            stack.push_back(idx);
+                        }
+                    }
+                }
+                while (!stack.empty()) {
+                    const int idx = stack.back(); stack.pop_back();
+                    const int x = idx % scanw, y = idx / scanw;
+                    const int dx[] = {-1, 1, 0, 0};
+                    const int dy[] = {0, 0, -1, 1};
+                    for (int d = 0; d < 4; d++) {
+                        const int nx = x + dx[d], ny = y + dy[d];
+                        if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                        const int ni = nx + ny * scanw;
+                        if (!isExterior[ni] && !isWall[ni]) {
+                            isExterior[ni] = 1;
+                            stack.push_back(ni);
+                        }
+                    }
+                }
+
+                // 3. 内部マスクを構築（壁でも外側でもない画素 = テロップ内部）
+                isInterior.resize(pixelCount, 0);
+                int filledCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!isWall[i] && !isExterior[i]) {
+                        isInterior[i] = 1;
+                        filledCount++;
+                    }
+                }
+                fprintf(stderr, "[LogoScan] upperGate interior mask: wallThresh=%.2f dilate=%d interior=%d\n",
+                    kFillWallThresh, kFillWallDilate, filledCount);
+
+                // 4. upperGateFilled: 壁・内部の画素は 0、それ以外は元の upperGate
+                //    これを使って rescueScore を再計算し、テロップ内部の rescueScore を抑制する。
+                scoreStage.mapUpperGateFilled.resize(pixelCount);
+                int suppressedCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (isWall[i] || isInterior[i]) {
+                        scoreStage.mapUpperGateFilled[i] = 0.0f;
+                        suppressedCount++;
+                    } else {
+                        scoreStage.mapUpperGateFilled[i] = scoreStage.mapUpperGate[i];
+                    }
+                }
+                fprintf(stderr, "[LogoScan] upperGateFilled: suppressed=%d (wall+interior)\n", suppressedCount);
+
+                // 5. rescueScore を upperGateFilled で再計算
+                int rescueZeroedCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;
+                    const float rescueScoreNew = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
+                                               * scoreStage.mapUpperGateFilled[i] * scoreStage.mapConsistGain[i]
+                                               * scoreStage.mapBgVarGain[i];
+                    if (scoreStage.mapRescueScore[i] > 0.0f && rescueScoreNew <= 0.0f) rescueZeroedCount++;
+                    scoreStage.mapRescueScore[i] = rescueScoreNew;
+                }
+                fprintf(stderr, "[LogoScan] rescueScore recalc with upperGateFilled: zeroed=%d\n", rescueZeroedCount);
+
+                // デバッグ出力用にバッファに保存
+                scoreStage.mapIsWall = isWall;
+                scoreStage.mapIsInterior = isInterior;
             }
 
             // rescueScore ベースのスコア補正 (noise suppression + logo boost):
@@ -4711,14 +4880,16 @@ namespace {
                         if (factor < 0.9f) gatedCount++;
                         scoreStage.score[i] *= factor;
                     }
-                    // (B) ロゴ底上げ: 元の rescueScore で底上げ
-                    if (scoreStage.mapRescueScore[i] > 0.0f && scoreStage.score[i] < kBoostCeiling) {
+                    // (B) ロゴ底上げ: rescueScore > 0 でメインスコアが弱い画素を底上げ。
+                    //     テロップ内部マスク (isInterior) に該当する画素はブースト対象外。
+                    if (scoreStage.mapRescueScore[i] > 0.0f && scoreStage.score[i] < kBoostCeiling
+                        && !isInterior[i]) {
                         const float boostVal = kBoostWeight * scoreStage.mapRescueScore[i];
                         if (boostVal > scoreStage.score[i]) boostedCount++;
                         scoreStage.score[i] = std::max(scoreStage.score[i], boostVal);
                     }
                 }
-                fprintf(stderr, "[LogoScan] rescueScore dilated gate: dilateIter=%d thresh=%.3f range=%.3f floor=%.2f gated=%d boosted=%d\n",
+                fprintf(stderr, "[LogoScan] rescueScore gate: dilateIter=%d thresh=%.3f range=%.3f floor=%.2f gated=%d boosted=%d\n",
                     kDilateIter, kGateThresh, kGateRange, kGateFloor, gatedCount, boostedCount);
                 // ファイル出力: rescueScore 分布とゲート効果の確認
                 {
@@ -4745,10 +4916,46 @@ namespace {
                             for (int x : {80, 100, 120, 140, 160, 180, 200}) {
                                 if (x >= scanw) continue;
                                 const int idx = x + y * scanw;
-                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f dilRS=%.6f\n",
+                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f dilRS=%.6f ugate=%.4f interior=%d\n",
                                     x, y, scoreStage.mapAccepted[idx], scoreStage.score[idx],
-                                    scoreStage.mapRescueScore[idx], rescueDilated[idx]);
+                                    scoreStage.mapRescueScore[idx], rescueDilated[idx],
+                                    scoreStage.mapUpperGate[idx], (int)isInterior[idx]);
                             }
+                        }
+                        // isInterior / isWall / upperGate / rescueScore 詳細ラスターダンプ
+                        fprintf(fp, "\n--- raster (y=45..95, x=10..200) ---\n");
+                        fprintf(fp, "legend: wall=W int=# ext=. ugt=0-9 ep=0-9(edgePresence*10) rs=0-9(rescueScore*100)\n");
+                        for (int y = 45; y <= 95 && y < scanh; y++) {
+                            fprintf(fp, "y=%3d wall: ", y);
+                            for (int x = 10; x <= 200 && x < scanw; x++) {
+                                const int idx = x + y * scanw;
+                                fprintf(fp, "%c", isInterior[idx] ? '#' : (scoreStage.mapIsWall[idx] ? 'W' : '.'));
+                            }
+                            fprintf(fp, "\n");
+                            fprintf(fp, "y=%3d ep:   ", y);
+                            for (int x = 10; x <= 200 && x < scanw; x++) {
+                                const int idx = x + y * scanw;
+                                const float ep = scoreStage.mapEdgePresence[idx];
+                                const int level = (ep <= 0.0f) ? 0 : std::min(9, (int)(ep * 10.0f));
+                                fprintf(fp, "%d", level);
+                            }
+                            fprintf(fp, "\n");
+                            fprintf(fp, "y=%3d ugt:  ", y);
+                            for (int x = 10; x <= 200 && x < scanw; x++) {
+                                const int idx = x + y * scanw;
+                                const float ug = scoreStage.mapUpperGate[idx];
+                                const int level = (ug <= 0.0f) ? 0 : std::min(9, (int)(ug * 10.0f));
+                                fprintf(fp, "%d", level);
+                            }
+                            fprintf(fp, "\n");
+                            fprintf(fp, "y=%3d rs:   ", y);
+                            for (int x = 10; x <= 200 && x < scanw; x++) {
+                                const int idx = x + y * scanw;
+                                const float rs = scoreStage.mapRescueScore[idx];
+                                const int level = (rs <= 0.0f) ? 0 : std::min(9, (int)(rs * 100.0f));
+                                fprintf(fp, "%d", level);
+                            }
+                            fprintf(fp, "\n");
                         }
                         fclose(fp);
                     }
