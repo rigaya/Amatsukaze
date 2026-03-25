@@ -1,4 +1,5 @@
 @echo off
+setlocal
 
 where dotnet >nul 2>&1
 if errorlevel 1 (
@@ -33,7 +34,7 @@ if "%VSWHERE%"=="" (
 
 set "VSINSTALL="
 set "VSTMP=%TEMP%\amatsukaze_vsinstall.txt"
-"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath > "%VSTMP%"
+"%VSWHERE%" -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath > "%VSTMP%"
 if errorlevel 1 (
   echo vswhere.exe failed.
   if exist "%VSTMP%" del /q "%VSTMP%" >nul 2>&1
@@ -47,21 +48,29 @@ if "%VSINSTALL%"=="" (
 )
 
 set "VCVARS=%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat"
+set "MSBUILD=%VSINSTALL%\MSBuild\Current\Bin\MSBuild.exe"
 if not exist "%VCVARS%" (
   echo vcvars64.bat not found: %VCVARS%
   exit /b 1
 )
+if not exist "%MSBUILD%" (
+  echo MSBuild.exe not found: %MSBUILD%
+  exit /b 1
+)
+
+echo Using Visual Studio: %VSINSTALL%
+echo Using MSBuild: %MSBUILD%
 call "%VCVARS%" x64
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo Building solution with MSBuild (Release + Release2)...
-msbuild Amatsukaze.sln /restore /p:Configuration=Release /p:Platform=x64 /m
+"%MSBUILD%" Amatsukaze.sln /restore /p:Configuration=Release /p:Platform=x64 /m
 if errorlevel 1 exit /b %ERRORLEVEL%
-msbuild Amatsukaze.sln /p:Configuration=Release2 /p:Platform=x64 /m
+"%MSBUILD%" Amatsukaze.sln /p:Configuration=Release2 /p:Platform=x64 /m
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo Publishing .NET projects in parallel via Publish.proj...
-msbuild Publish.proj /m
+"%MSBUILD%" Publish.proj /m
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo Collecting published artifacts into a single folder...
