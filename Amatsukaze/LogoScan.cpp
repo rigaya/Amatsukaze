@@ -3834,6 +3834,10 @@ namespace {
 
             const int offY = pass2.logoRectAbs.x + pass2.logoRectAbs.y * pitchY;
             const int offUV = (pass2.logoRectAbs.x >> logUVx) + (pass2.logoRectAbs.y >> logUVy) * pitchUV;
+            // pass2 用の仮ロゴ生成では、ROI 外側リングから bg を作って AddScanFrame へ
+            // 直接流すと、固定文字や枠線を bg として取り込みやすく q41/q42 のように
+            // deintLogo / frame gate が崩れる。ROI 外周の単色判定まで含めた AddFrame を使い、
+            // 「悪い多数サンプル」は捨てて品質を優先する。
             return pass2.logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
         }
 
@@ -4827,99 +4831,104 @@ namespace {
                 scoreStage.mapIsInterior = isInterior;
             }
 
-            // rescueScore ベースのスコア補正 (noise suppression + logo boost):
-            // rescueScore は edge ベースの指標で、半透明ロゴの輪郭を正確に捉える一方、
-            // 不透明テロップ等のノイズには低い値を返す。この特性を利用して:
-            // (A) score が正なのに rescueScore が低い画素 → ノイズ候補として抑制
-            // (B) score が弱いが rescueScore が高い画素 → ロゴ候補として底上げ
-            //
-            // ノイズテロップでは rescueScore が低くなる理由:
-            // - エッジ部: edgeMean 高 → upperGate 低 → rescueScore 低
-            // - 内部: edgeMean 低 → magGain 低 → rescueScore 低
-            // いずれの場合も rescueScore の積構造により少なくとも1因子が低くなる。
+            // rescueScore の単純加算:
+            // d9b3138 で入れた suppression/boost は、rescue が疎なケースで
+            // base score の内部にむらを作りやすかった。ここでは base を削らず、
+            // rescue を base と同じスケールに合わせて足し込むだけに留める。
             {
-                auto sat01f = [](const float v) { return std::max(0.0f, std::min(1.0f, v)); };
                 const int pixelCount = scanw * scanh;
-
-                // rescueScore の空間膨張 (max filter × kDilateIter 回):
-                // rescueScore はエッジベースなので、ロゴ内部では ≈ 0 になる。
-                // しかしロゴ内部はロゴ輪郭（高 rescueScore）の近傍にあるため、
-                // 空間膨張で輪郭の値を内部に伝播させればロゴ内部を保護できる。
-                // ノイズテロップは全域で rescueScore が低いため、膨張しても低いまま。
-                static constexpr int kDilateIter = 4;  // 3x3 max filter × 4 回 = 実効半径 4px
-                std::vector<float> rescueDilated(scoreStage.mapRescueScore.begin(),
-                                                 scoreStage.mapRescueScore.begin() + pixelCount);
-                std::vector<float> rescueTmp(pixelCount);
-                for (int iter = 0; iter < kDilateIter; iter++) {
-                    for (int y = 0; y < scanh; y++) {
-                        for (int x = 0; x < scanw; x++) {
-                            float maxVal = rescueDilated[x + y * scanw];
-                            if (x > 0)          maxVal = std::max(maxVal, rescueDilated[(x-1) + y * scanw]);
-                            if (x < scanw - 1)  maxVal = std::max(maxVal, rescueDilated[(x+1) + y * scanw]);
-                            if (y > 0)          maxVal = std::max(maxVal, rescueDilated[x + (y-1) * scanw]);
-                            if (y < scanh - 1)  maxVal = std::max(maxVal, rescueDilated[x + (y+1) * scanw]);
-                            rescueTmp[x + y * scanw] = maxVal;
-                        }
-                    }
-                    std::swap(rescueDilated, rescueTmp);
-                }
-
-                // (A) ノイズ抑制: 膨張済み rescueScore が低い画素のメインスコアを抑制する。
-                static constexpr float kGateThresh = 0.005f;
-                static constexpr float kGateRange  = 0.035f;
-                static constexpr float kGateFloor  = 0.15f;
-                // (B) ロゴ底上げ: 元の rescueScore が高い画素のメインスコアを底上げする。
-                static constexpr float kBoostWeight  = 0.6f;
-                static constexpr float kBoostCeiling = 0.10f;
-                int gatedCount = 0, boostedCount = 0;
+                std::vector<float> baseScores;
+                baseScores.reserve(4096);
+                std::vector<float> scaleRatios;
+                scaleRatios.reserve(4096);
+                static constexpr float kScaleRatioMinScore  = 0.02f;
+                static constexpr float kScaleRatioMinRescue = 0.005f;
                 for (int i = 0; i < pixelCount; i++) {
-                    // (A) ノイズ抑制: 膨張済み rescueScore でゲート
-                    if (scoreStage.score[i] > 0.0f) {
-                        const float rescueGate = sat01f((rescueDilated[i] - kGateThresh) / kGateRange);
-                        const float factor = kGateFloor + (1.0f - kGateFloor) * rescueGate;
-                        if (factor < 0.9f) gatedCount++;
-                        scoreStage.score[i] *= factor;
+                    if (!scoreStage.validAB[i]) continue;
+                    const float sc = scoreStage.score[i];
+                    const float rs = scoreStage.mapRescueScore[i];
+                    if (sc > 0.0f) {
+                        baseScores.push_back(sc);
                     }
-                    // (B) ロゴ底上げ: rescueScore > 0 でメインスコアが弱い画素を底上げ。
-                    //     テロップ内部マスク (isInterior) に該当する画素はブースト対象外。
-                    if (scoreStage.mapRescueScore[i] > 0.0f && scoreStage.score[i] < kBoostCeiling
-                        && !isInterior[i]) {
-                        const float boostVal = kBoostWeight * scoreStage.mapRescueScore[i];
-                        if (boostVal > scoreStage.score[i]) boostedCount++;
-                        scoreStage.score[i] = std::max(scoreStage.score[i], boostVal);
+                    if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
+                        scaleRatios.push_back(sc / rs);
                     }
                 }
-                fprintf(stderr, "[LogoScan] rescueScore gate: dilateIter=%d thresh=%.3f range=%.3f floor=%.2f gated=%d boosted=%d\n",
-                    kDilateIter, kGateThresh, kGateRange, kGateFloor, gatedCount, boostedCount);
-                // ファイル出力: rescueScore 分布とゲート効果の確認
+                float baseP75 = 0.0f;
+                if (!baseScores.empty()) {
+                    std::sort(baseScores.begin(), baseScores.end());
+                    const int idx75 = std::min((int)(baseScores.size() * 3 / 4), (int)baseScores.size() - 1);
+                    baseP75 = baseScores[idx75];
+                }
+                float scaleFactor = 1.0f;
+                if (!scaleRatios.empty()) {
+                    std::sort(scaleRatios.begin(), scaleRatios.end());
+                    const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
+                    scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 20.0f));
+                }
+                static constexpr float kRescueBlendRatioHi = 0.6f;
+                static constexpr float kRescueBlendRatioLo = 0.05f;
+                static constexpr float kRescueBaseNormLo   = 0.3f;
+                static constexpr float kRescueBaseNormHi   = 1.0f;
+                int blendedCount = 0;
+                int rescueOnlyCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    const float rs = scoreStage.mapRescueScore[i];
+                    if (rs <= 0.0f) continue;
+                    if (!scoreStage.validAB[i]) continue;
+                    const float base = scoreStage.score[i];
+                    const float baseNorm = (baseP75 > 1e-6f) ? (base / baseP75) : 0.0f;
+                    float rescueRatio = kRescueBlendRatioLo;
+                    if (baseNorm <= kRescueBaseNormLo) {
+                        rescueRatio = kRescueBlendRatioHi;
+                    } else if (baseNorm < kRescueBaseNormHi) {
+                        const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
+                        rescueRatio = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
+                    }
+                    const float rescueVal = rescueRatio * std::min(scaleFactor * rs, 1.0f);
+                    scoreStage.score[i] += rescueVal;
+                    blendedCount++;
+                }
+                fprintf(stderr, "[LogoScan] rescue additive blend: ratioHi=%.2f ratioLo=%.2f baseP75=%.4f scaleRatios.size()=%zu scaleFactor=%.4f blended=%d rescueOnly=%d\n",
+                    kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP75,
+                    scaleRatios.size(), (double)scaleFactor, blendedCount, rescueOnlyCount);
+                // ファイル出力: rescueScore 分布と加算効果の確認
                 {
                     FILE* fp = fopen("/tmp/rescue_gate_diag.txt", "w");
                     if (fp) {
-                        float maxRS = 0, maxDilRS = 0, maxSc = 0, maxAcc = 0;
-                        int nonzeroRS = 0, nonzeroDilRS = 0, nonzeroSc = 0;
+                        float maxRS = 0, maxSc = 0, maxAcc = 0;
+                        int nonzeroRS = 0, nonzeroSc = 0;
                         for (int i = 0; i < pixelCount; i++) {
                             if (scoreStage.mapRescueScore[i] > 0) nonzeroRS++;
-                            if (rescueDilated[i] > 0) nonzeroDilRS++;
                             if (scoreStage.score[i] > 0) nonzeroSc++;
                             maxRS = std::max(maxRS, scoreStage.mapRescueScore[i]);
-                            maxDilRS = std::max(maxDilRS, rescueDilated[i]);
                             maxSc = std::max(maxSc, scoreStage.score[i]);
                             maxAcc = std::max(maxAcc, scoreStage.mapAccepted[i]);
                         }
                         fprintf(fp, "pixelCount=%d\n", pixelCount);
-                        fprintf(fp, "nonzeroRS=%d nonzeroDilRS=%d nonzeroSc=%d\n", nonzeroRS, nonzeroDilRS, nonzeroSc);
-                        fprintf(fp, "maxRS=%.6f maxDilRS=%.6f maxScore=%.6f maxAccepted=%.6f\n", maxRS, maxDilRS, maxSc, maxAcc);
-                        fprintf(fp, "gated=%d boosted=%d\n", gatedCount, boostedCount);
-                        // サンプル: ノイズ領域(y=40付近) と ロゴ領域(y=100付近) の値
+                        fprintf(fp, "nonzeroRS=%d nonzeroSc=%d\n", nonzeroRS, nonzeroSc);
+                        fprintf(fp, "maxRS=%.6f maxScore=%.6f maxAccepted=%.6f\n", maxRS, maxSc, maxAcc);
+                        fprintf(fp, "baseScores.size()=%zu baseP75=%.6f scaleRatios.size()=%zu scaleFactor=%.6f ratioHi=%.6f ratioLo=%.6f blended=%d rescueOnly=%d\n",
+                            baseScores.size(), baseP75, scaleRatios.size(), scaleFactor,
+                            kRescueBlendRatioHi, kRescueBlendRatioLo, blendedCount, rescueOnlyCount);
                         for (int y : {30, 35, 40, 45, 70, 90, 100, 110}) {
                             if (y >= scanh) continue;
                             for (int x : {80, 100, 120, 140, 160, 180, 200}) {
                                 if (x >= scanw) continue;
                                 const int idx = x + y * scanw;
-                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f dilRS=%.6f ugate=%.4f interior=%d\n",
+                                const float base = scoreStage.mapAccepted[idx];
+                                const float baseNorm = (baseP75 > 1e-6f) ? (base / baseP75) : 0.0f;
+                                float rescueRatio = kRescueBlendRatioLo;
+                                if (baseNorm <= kRescueBaseNormLo) {
+                                    rescueRatio = kRescueBlendRatioHi;
+                                } else if (baseNorm < kRescueBaseNormHi) {
+                                    const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
+                                    rescueRatio = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
+                                }
+                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f baseNorm=%.4f ratio=%.4f ugate=%.4f interior=%d validAB=%d\n",
                                     x, y, scoreStage.mapAccepted[idx], scoreStage.score[idx],
-                                    scoreStage.mapRescueScore[idx], rescueDilated[idx],
-                                    scoreStage.mapUpperGate[idx], (int)isInterior[idx]);
+                                    scoreStage.mapRescueScore[idx], baseNorm, rescueRatio, scoreStage.mapUpperGate[idx],
+                                    (int)isInterior[idx], (int)scoreStage.validAB[idx]);
                             }
                         }
                         // isInterior / isWall / upperGate / rescueScore 詳細ラスターダンプ
