@@ -22,6 +22,7 @@
 #include <type_traits>
 #include <atomic>
 #include <cstring>
+#include <utility>
 #include "zlib.h"
 #include "rgy_event.h"
 #include "rgy_thread_pool.h"
@@ -2108,6 +2109,17 @@ namespace {
         const bool enableTwoPassFrameGate;
         const bool enablePruneBinaryByAnchor;
         const std::vector<std::pair<int, int>> tracePointEnv;
+        struct ProgressPlan {
+            int stage = 0;
+            float stageBase = 0.0f;
+            float stageSpan = 1.0f;
+            float overallBase = 0.0f;
+            float overallSpan = 1.0f;
+        };
+        ProgressPlan progressPlan;
+        int lastReportedStage;
+        float lastReportedStageProgress;
+        float lastReportedProgress;
 
         struct TracePointConfig {
             int id = 0;
@@ -2571,6 +2583,10 @@ namespace {
             , cb(cb)
             , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false) {
+            progressPlan = ProgressPlan{};
+            lastReportedStage = 0;
+            lastReportedStageProgress = 0.0f;
+            lastReportedProgress = 0.0f;
         }
 
         int getRectDetectFailCode() const {
@@ -2582,15 +2598,16 @@ namespace {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
-            if (cb && cb(1, 0.0f, 0.0f, 0, searchFrames) == false) {
-                THROW(RuntimeException, "Cancel requested");
-            }
             // 1) 初期化
             resetRunState();
+            setProgressPlan(1, 0.0f, 0.5f, 0.0f, 0.15f);
+            if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
             StatsPassBuffers pass1Stats{};
             resetAccumulationState(&pass1Stats, nullptr);
             // 2) pass1: 全フレームで score/binary/rect を推定
-            readAll(srcpath, serviceid,
+            runFramePassWithProgress(srcpath, 1, 0.0f, 0.5f, 0.0f, 0.15f,
                 [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
                 [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
             if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
@@ -2601,10 +2618,12 @@ namespace {
             // その線から外れる別枝サンプルを 2回目の走査で弱める。
             convertBinAccumToStats(pass1Stats);
             prepareResidualReweightMaps(pass1Stats);
+            setProgressPlan(1, 0.5f, 0.5f, 0.15f, 0.15f);
             rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
             if (readFrames <= 0) {
                 THROW(RuntimeException, "No frame decoded");
             }
+            setProgressPlan(2, 0.0f, 0.35f, 0.30f, 0.12f);
             estimateScoreAndRect(pass1Stats);
             captureCurrentDebugSnapshot(debugPass1);
             debugPass2 = debugPass1;
@@ -2626,8 +2645,13 @@ namespace {
             //    Pass2RectDiverged)は既に passIndex==3 で rescue 済みなので対象外。
             if (!pass2Entered) {
                 fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
+                setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
                 estimateScoreAndRect(pass1Stats, true, pass1RectLocal);
                 captureCurrentDebugSnapshot(debugPass2);
+            }
+            setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
+            if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
             }
             return rectAbs;
         }
@@ -2635,6 +2659,10 @@ namespace {
         void resetRunState() {
             passIndex = 0;
             readFrames = 0;
+            progressPlan = ProgressPlan{};
+            lastReportedStage = 0;
+            lastReportedStageProgress = 0.0f;
+            lastReportedProgress = 0.0f;
             debugStats.clear();
             debugTraceRecords.clear();
             debugTraceBinRepresentatives.clear();
@@ -2656,6 +2684,50 @@ namespace {
             initialSeedCount = 0;
             initialGrownCount = 0;
             usedBinaryFallback = false;
+        }
+
+        static float clamp01(const float v) {
+            return std::max(0.0f, std::min(1.0f, v));
+        }
+
+        void setProgressPlan(const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan) {
+            progressPlan.stage = stage;
+            progressPlan.stageBase = stageBase;
+            progressPlan.stageSpan = stageSpan;
+            progressPlan.overallBase = overallBase;
+            progressPlan.overallSpan = overallSpan;
+        }
+
+        bool reportProgressInCurrentPlan(const float planProgress, const int nread, const int total) {
+            if (!cb || progressPlan.stage <= 0) {
+                return true;
+            }
+            const float clampedPlan = clamp01(planProgress);
+            float stageProgress = clamp01(progressPlan.stageBase + clampedPlan * progressPlan.stageSpan);
+            float progress = clamp01(progressPlan.overallBase + clampedPlan * progressPlan.overallSpan);
+            if (progressPlan.stage == lastReportedStage) {
+                stageProgress = std::max(stageProgress, lastReportedStageProgress);
+            }
+            progress = std::max(progress, lastReportedProgress);
+            if (!cb(progressPlan.stage, stageProgress, progress, nread, total)) {
+                return false;
+            }
+            lastReportedStage = progressPlan.stage;
+            lastReportedStageProgress = stageProgress;
+            lastReportedProgress = progress;
+            return true;
+        }
+
+        template<typename FirstFrameCb, typename FrameCb>
+        void runFramePassWithProgress(const tstring& srcpath, const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan, FirstFrameCb&& onFirstFrame, FrameCb&& onFrame) {
+            setProgressPlan(stage, stageBase, stageSpan, overallBase, overallSpan);
+            if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+            readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame));
+            if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
         }
 
         void captureCurrentDebugSnapshot(DebugStageSnapshot& snapshot) {
@@ -2735,7 +2807,7 @@ namespace {
             pass2.logoScan = std::make_unique<logo::LogoScan>(pass2.logoRectAbs.w, pass2.logoRectAbs.h, logUVx, logUVy, threshold);
             passIndex = 1;
             resetAccumulationState(nullptr, &pass2);
-            readAll(srcpath, serviceid,
+            runFramePassWithProgress(srcpath, 2, 0.35f, 0.30f, 0.42f, 0.11f,
                 [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
                 [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
 
@@ -2774,7 +2846,7 @@ namespace {
             resetAccumulationState(nullptr, &pass2);
             pass2.corr0.clear();
             pass2.corr1.clear();
-            readAll(srcpath, serviceid,
+            runFramePassWithProgress(srcpath, 2, 0.65f, 0.35f, 0.53f, 0.12f,
                 [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
                 [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
             if (pass2.corr0.empty() || pass2.corr0.size() != pass2.corr1.size()) {
@@ -2885,7 +2957,7 @@ namespace {
             passIndex = 3;
             StatsPassBuffers pass3Stats{};
             resetAccumulationState(&pass3Stats, &pass2);
-            readAll(srcpath, serviceid,
+            runFramePassWithProgress(srcpath, 3, 0.0f, 0.40f, 0.65f, 0.13f,
                 [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass3Stats, &pass2); },
                 [&](AVFrame* frame) { return processFrame(frame, &pass3Stats, &pass2); });
 
@@ -2905,7 +2977,9 @@ namespace {
             // q43 のような「下側だけ別の bg 系列が混ざる」点を押し上げる。
             convertBinAccumToStats(pass3Stats);
             prepareResidualReweightMaps(pass3Stats);
+            setProgressPlan(3, 0.40f, 0.35f, 0.78f, 0.11f);
             rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
+            setProgressPlan(3, 0.75f, 0.25f, 0.89f, 0.09f);
             estimateScoreAndRect(pass3Stats, false, pass1RectLocal);
             captureCurrentDebugSnapshot(debugPass2);
 
@@ -4190,10 +4264,8 @@ namespace {
 
             readFrames++;
             if (cb && (readFrames % 8) == 0) {
-                float stageProg = readFrames / (float)searchFrames;
-                stageProg = std::min(1.0f, stageProg);
-                float prog = stageProg * 0.5f;
-                if (!cb(1, stageProg, prog, readFrames, searchFrames)) {
+                const float passProgress = readFrames / (float)searchFrames;
+                if (!reportProgressInCurrentPlan(passProgress, readFrames, searchFrames)) {
                     THROW(RuntimeException, "Cancel requested");
                 }
             }
@@ -4374,7 +4446,7 @@ namespace {
             // ケースを拾うため、ここは再走査してでも sample 単位で処理する。
             sampleResidualReweightActive = true;
             resetAccumulationState(&statsPass, pass2);
-            readAll(srcpath, serviceid,
+            runFramePassWithProgress(srcpath, progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan, progressPlan.overallBase, progressPlan.overallSpan,
                 [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &statsPass, pass2); },
                 [&](AVFrame* frame) { return processFrame(frame, &statsPass, pass2); });
             sampleResidualReweightActive = false;
@@ -4429,7 +4501,7 @@ namespace {
         //   enableRescue=true 時、この矩形からの距離以内のみに contaminated rescue を適用する。
         //   幅0 の場合は制約なし。
         void estimateScoreAndRect(StatsPassBuffers& statsPass, bool enableRescue = false, const AutoDetectRect& rescueAnchorRect = AutoDetectRect{0,0,0,0}) {
-            if (cb && !cb(2, 0.0f, 0.5f, readFrames, searchFrames)) {
+            if (!reportProgressInCurrentPlan(0.0f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
             convertBinAccumToStats(statsPass);
@@ -5191,8 +5263,7 @@ namespace {
                 }
             }
 
-            // ステージ1の進捗を通知する。
-            if (cb && !cb(2, 1.0f, 0.7f, readFrames, searchFrames)) {
+            if (!reportProgressInCurrentPlan(0.65f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
         }
@@ -6789,7 +6860,7 @@ namespace {
         std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
         collectBinaryProjection(xOn, yOn, binaryStage);
 
-        if (cb && !cb(3, 0.3f, 0.78f, readFrames, searchFrames)) {
+        if (!reportProgressInCurrentPlan(0.80f, readFrames, searchFrames)) {
             THROW(RuntimeException, "Cancel requested");
         }
 
@@ -6837,10 +6908,7 @@ namespace {
         rectLocal = finalRect;
         rectAbs = makeAbsRectFromLocal(finalRect);
 
-        if (cb && !cb(3, 1.0f, 0.92f, readFrames, searchFrames)) {
-            THROW(RuntimeException, "Cancel requested");
-        }
-        if (cb && !cb(4, 1.0f, 1.0f, readFrames, searchFrames)) {
+        if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
             THROW(RuntimeException, "Cancel requested");
         }
     }

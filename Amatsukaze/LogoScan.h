@@ -298,13 +298,14 @@ void CopyY(float* dst, const pixel_t* src, int srcPitch, int w, int h) {
 typedef bool(*LOGO_ANALYZE_CB)(float progress, int nread, int total, int ngather);
 // 自動検出進捗コールバック。
 // stageの意味:
-//   1: フレーム走査/サンプル収集
-//   2: score算出と2値化
-//   3: 矩形決定(投影+CCL+後処理)
+//   1: 初期フレーム走査
+//   2: 仮推定とFrameGate準備
+//   3: 最終推定と矩形決定
 //   4: 完了
 // 背景:
-//   UI側で「Loading...」が長時間継続する問題を切り分けるため、
-//   処理段階を明示して監視できるようにしている。
+//   ロゴ自動検出は複数passの scan/再推定を挟むため、
+//   stage/stageProgress は pass 切替時にも逆走しないよう
+//   大きめの処理区間にまとめて通知する。
 typedef bool(*LOGO_AUTODETECT_CB)(int stage, float stageProgress, float progress, int nread, int total);
 
 class LogoScanDataCompressed {

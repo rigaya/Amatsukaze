@@ -754,10 +754,10 @@ namespace Amatsukaze.Server.Rest
         {
             var stageName = job.Stage switch
             {
-                1 => "フレーム収集",
-                2 => "ロゴ輝度/α推定",
-                3 => "2値化・投影・CCL",
-                4 => "後処理・確定",
+                1 => "初期フレーム走査",
+                2 => "仮推定とFrameGate準備",
+                3 => "最終推定と矩形確定",
+                4 => "完了",
                 _ => "待機中"
             };
             var debug = new LogoAutoDetectDebugImages();
