@@ -1026,7 +1026,7 @@ void logo::LogoFrame::selectLogo(const std::vector<int>& trims, int numCandidate
     for (int i = 0; i < numCandidates; i++) {
         const auto& s = logoScore[i];
 #if 1
-        ctx.debugF("logo%d: %f * %f = %f", i + 1,
+        ctx.debugF(_T("logo%d: %f * %f = %f"), i + 1,
             (s.cost / s.numFrames), (targetFrames / (float)s.numFrames), s.score);
 #endif
     }

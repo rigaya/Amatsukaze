@@ -15,7 +15,7 @@ namespace Amatsukaze.Server
         {
             try
             {
-                var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく
+                Util.EnsureEncodingProviderRegistered();
 
                 // Debug.Printの出力を標準エラー出力に表示するためのリスナーを追加
                 Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));

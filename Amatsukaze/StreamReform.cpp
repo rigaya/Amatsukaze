@@ -51,18 +51,18 @@ void AudioDiffInfo::printAudioPtsDiff(AMTContext& ctx) const {
     double maxDiff = this->maxDiff() * 1000;
     int notIncluded = totalSrcFrames - totalUniquAudioFrames;
 
-    ctx.infoF("出力音声フレーム: %d（うち水増しフレーム%d）",
+    ctx.infoF(_T("出力音声フレーム: %d（うち水増しフレーム%d）"),
         totalAudioFrames, totalAudioFrames - totalUniquAudioFrames);
-    ctx.infoF("未出力フレーム: %d（%.3f%%）",
+    ctx.infoF(_T("未出力フレーム: %d（%.3f%%）"),
         notIncluded, (double)notIncluded * 100 / totalSrcFrames);
 
-    ctx.infoF("音ズレ: 平均 %.2fms 最大 %.2fms",
+    ctx.infoF(_T("音ズレ: 平均 %.2fms 最大 %.2fms"),
         avgDiff, maxDiff);
     if (maxPtsDiff > 0 && maxDiff - avgDiff > 1) {
         double sec = elapsedTime(maxPtsDiffPos);
         int minutes = (int)(sec / 60);
         sec -= minutes * 60;
-        ctx.infoF("最大音ズレ位置: 入力最初の映像フレームから%d分%.3f秒後",
+        ctx.infoF(_T("最大音ズレ位置: 入力最初の映像フレームから%d分%.3f秒後"),
             minutes, sec);
     }
 }
@@ -335,12 +335,12 @@ std::vector<FilterAudioFrame> StreamReformInfo::getWaveInput(const std::vector<i
 }
 
 void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> getFileName) const {
-    ctx.info("[出力ファイル]");
+    ctx.info(_T("[出力ファイル]"));
     for (int i = 0; i < (int)outFileKeys_.size(); i++) {
-        ctx.infoF("%d: %s", i, getFileName(outFileKeys_[i]));
+        ctx.infoF(_T("%d: %s"), i, getFileName(outFileKeys_[i]));
     }
 
-    ctx.info("[入力->出力マッピング]");
+    ctx.info(_T("[入力->出力マッピング]"));
     double fromPTS = dataPTS_[0];
     int prevFileId = 0;
     for (int i = 0; i < (int)ordredVideoFrame_.size(); i++) {
@@ -351,7 +351,7 @@ void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> 
             // print
             auto from = elapsedTime(fromPTS);
             auto to = elapsedTime(pts);
-            ctx.infoF("%3d分%05.3f秒 - %3d分%05.3f秒 -> %d",
+            ctx.infoF(_T("%3d分%05.3f秒 - %3d分%05.3f秒 -> %d"),
                 from.first, from.second, to.first, to.second, fileFormatId_[prevFileId]);
             prevFileId = fileId;
             fromPTS = pts;
@@ -359,7 +359,7 @@ void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> 
     }
     auto from = elapsedTime(fromPTS);
     auto to = elapsedTime(dataPTS_.back());
-    ctx.infoF("%3d分%05.3f秒 - %3d分%05.3f秒 -> %d",
+    ctx.infoF(_T("%3d分%05.3f秒 - %3d分%05.3f秒 -> %d"),
         from.first, from.second, to.first, to.second, fileFormatId_[prevFileId]);
 }
 
@@ -410,7 +410,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
         framePtsMap_[videoFrameList_[i].PTS] = i;
     }
     */
-    ctx.info("[ファイル分割/timestamp計算]");
+    ctx.info(_T("[ファイル分割/timestamp計算]"));
 
     // VFR検出
     isVFR_ = false;
@@ -520,7 +520,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     std::vector<int> sectionFormatList;
     std::vector<double> startPtsList;
 
-    ctx.info("[フォーマット切り替え解析]");
+    ctx.info(_T("[フォーマット切り替え解析]"));
 
     // 現在の音声フォーマットを保持
     // 音声ES数が変化しても前の音声フォーマットと変わらない場合は
@@ -539,7 +539,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
         if (startPts == -1) {
             startPts = curFromPTS;
         }
-        ctx.infoF("%.2f -> %d", (curFromPTS - startPts) / 90000.0, curFormat.formatId);
+        ctx.infoF(_T("%.2f -> %d"), (curFromPTS - startPts) / 90000.0, curFormat.formatId);
         curFromPTS = -1;
         curVideoFromPTS = -1;
         };
@@ -612,7 +612,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     formatStartIndex_.push_back((int)format_.size());
 
     // frameSectionIdを生成
-    ctx.info("frameSectionId生成");
+    ctx.info(_T("frameSectionId生成"));
     std::vector<int> outFormatFrames(format_.size());
     std::vector<int> frameSectionId(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); i++) {
@@ -672,14 +672,14 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // frameFormatId_を生成
-    ctx.info("frameFormatId_生成");
+    ctx.info(_T("frameFormatId_生成"));
     frameFormatId_.resize(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); i++) {
         frameFormatId_[i] = sectionFileList[frameSectionId[i]];
     }
 
     // フィルタ用入力フレームリスト生成
-    ctx.info("フィルタ用入力フレームリスト生成");
+    ctx.info(_T("フィルタ用入力フレームリスト生成"));
     filterFrameList_ = std::vector<std::vector<FilterSourceFrame>>(numVideoFile_);
     for (int videoId = 0; videoId < (int)numVideoFile_; videoId++) {
         int keyFrame = -1;
@@ -768,7 +768,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // indexAudioFrameList_を作成
-    ctx.info("indexAudioFrameList_生成");
+    ctx.info(_T("indexAudioFrameList_生成"));
     int numMaxAudio = 1;
     for (int i = 0; i < (int)format_.size(); i++) {
         numMaxAudio = std::max(numMaxAudio, (int)format_[i].audioFormat.size());
@@ -784,7 +784,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // audioFileOffsets_を生成
-    ctx.info("audioFileOffsets_生成");
+    ctx.info(_T("audioFileOffsets_生成"));
     audioFileOffsets_.resize(audioFrameList_.size() + 1);
     for (int i = 0; i < (int)audioFrameList_.size(); i++) {
         audioFileOffsets_[i] = audioFrameList_[i].fileOffset;
@@ -793,7 +793,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     audioFileOffsets_.back() = lastFrame.fileOffset + lastFrame.codedDataSize;
 
     // 時間情報
-    ctx.info("時間情報生成");
+    ctx.info(_T("時間情報生成"));
     srcTotalDuration_ = dataPTS_.back() - dataPTS_.front();
     if (timeList_.size() > 0) {
         auto ti = timeList_[0];
@@ -1019,7 +1019,7 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
 
 void StreamReformInfo::genWaveAudioStream() {
     // 全映像フレームを追加
-    ctx.info("[CM判定用音声構築]");
+    ctx.info(_T("[CM判定用音声構築]"));
     filterAudioFrameList_.resize(numVideoFile_);
     for (int videoId = 0; videoId < (int)numVideoFile_; videoId++) {
         OutFileState file = { 0 };
@@ -1151,7 +1151,7 @@ void StreamReformInfo::fillAudioFrames(
             state.lostPts = pts;
             if (adiff) {
                 auto elapsed = elapsedTime(pts);
-                ctx.debugF("%d分%.3f秒で音声%d-%dの同期ポイントを見失ったので再検索",
+                ctx.debugF(_T("%d分%.3f秒で音声%d-%dの同期ポイントを見失ったので再検索"),
                     elapsed.first, elapsed.second, file.formatId, index);
             }
         }
@@ -1210,16 +1210,16 @@ void StreamReformInfo::fillAudioFramesInOrder(
         if (adiff) {
             if (nframes > 1) {
                 auto elapsed = elapsedTime(modPTS);
-                ctx.debugF("%d分%.3f秒で音声%d-%dにずれがあるので%dフレーム水増し",
+                ctx.debugF(_T("%d分%.3f秒で音声%d-%dにずれがあるので%dフレーム水増し"),
                     elapsed.first, elapsed.second, file.formatId, index, nframes - 1);
             }
             if (nskipped > 0) {
                 if (state.lastFrame == -1) {
-                    ctx.debugF("音声%d-%dは%dフレーム目から開始",
+                    ctx.debugF(_T("音声%d-%dは%dフレーム目から開始"),
                         file.formatId, index, nskipped);
                 } else {
                     auto elapsed = elapsedTime(modPTS);
-                    ctx.debugF("%d分%.3f秒で音声%d-%dにずれがあるので%dフレームスキップ",
+                    ctx.debugF(_T("%d分%.3f秒で音声%d-%dにずれがあるので%dフレームスキップ"),
                         elapsed.first, elapsed.second, file.formatId, index, nskipped);
                 }
                 nskipped = 0;
@@ -1264,7 +1264,7 @@ std::pair<int, double> StreamReformInfo::elapsedTime(double modPTS) const {
 }
 
 void StreamReformInfo::genCaptionStream() {
-    ctx.info("[字幕構築]");
+    ctx.info(_T("[字幕構築]"));
 
     for (int v = 0; v < (int)outFileKeys_.size(); v++) {
         auto key = outFileKeys_[v];
@@ -1338,7 +1338,7 @@ void StreamReformInfo::genCaptionStream() {
 }
 
 void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting) {
-    ctx.info("[WebVTT生成]");
+    ctx.info(_T("[WebVTT生成]"));
     // 1) tsreadex_dump.txt から最初のPCRを抽出
     int64_t firstPcr = 0;
     {
@@ -1361,7 +1361,7 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
             THROW(RuntimeException, "tsreadex_dump.txtからPCRが取得できません");
         }
     }
-    ctx.infoF("tsreadex_dump.txtからPCRが取得できました: %lld", firstPcr);
+    ctx.infoF(_T("tsreadex_dump.txtからPCRが取得できました: %lld"), firstPcr);
 
     // 出力ファイルごとに処理（delayは各ファイルの先頭PTSとPCRの差から計算）
     //    Nero/OGM形式: CHAPTERxx / CHAPTERxxNAME
@@ -1461,11 +1461,11 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
         auto psc = setting.getTmpPSCFilePath(key);
         tstring cmd = StringFormat(_T("\"%s\" -r arib-data -c \"%s\" \"%s\" \"%s\""),
             setting.getPsisiarcPath(), setting.getTmpB24CutChapterPath(key), rawts, psc);
-        ctx.infoF("psisiarc コマンド: %s", cmd.c_str());
+        ctx.infoF(_T("psisiarc コマンド: %s"), cmd.c_str());
         SubProcess proc(cmd);
         int exitCode = proc.join();
         if (exitCode != 0) {
-            ctx.warnF("psisiarcがエラーコード(%d)を返しました", exitCode);
+            ctx.warnF(_T("psisiarcがエラーコード(%d)を返しました"), exitCode);
         }
     }
 
@@ -1474,7 +1474,7 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
         auto outVtt = setting.getTmpVTTFilePath(key, lang);
         tstring cmd = StringFormat(_T("\"%s\" -l %d -d %lld -c \"%s\" \"%s\""),
             setting.getB24ToVttPath(), lang + 1, (long long int)delayMs, setting.getTmpB24CutChapterPath(key), outVtt);
-        ctx.infoF("b24tovtt コマンド: %s", cmd.c_str());
+        ctx.infoF(_T("b24tovtt コマンド: %s"), cmd.c_str());
         // 入力: tsreadex_dump を標準入力に流す
         SubProcess proc(cmd);
         {
@@ -1490,7 +1490,7 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
         proc.finishWrite();
         int exitCode = proc.join();
         if (exitCode != 0) {
-            ctx.warnF("b24tovttがエラーコード(%d)を返しました", exitCode);
+            ctx.warnF(_T("b24tovttがエラーコード(%d)を返しました"), exitCode);
         }
     }
 }

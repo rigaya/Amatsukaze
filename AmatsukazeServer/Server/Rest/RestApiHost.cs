@@ -1865,7 +1865,7 @@ namespace Amatsukaze.Server.Rest
                 return new LogFileContent()
                 {
                     Content = "ログファイルが見つかりません。パス: " + path,
-                    Meta = new LogFileMeta() { Size = 0, TooLarge = false, Encoding = "cp932" }
+                    Meta = new LogFileMeta() { Size = 0, TooLarge = false, Encoding = Util.AmatsukazeDefaultEncoding.WebName }
                 };
             }
             var bytes = File.ReadAllBytes(path);
@@ -1877,7 +1877,7 @@ namespace Amatsukaze.Server.Rest
                 {
                     Size = bytes.LongLength,
                     TooLarge = bytes.LongLength > 100 * 1000,
-                    Encoding = "cp932"
+                    Encoding = Util.AmatsukazeDefaultEncoding.WebName
                 }
             };
         }

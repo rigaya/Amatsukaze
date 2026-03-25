@@ -295,8 +295,8 @@
         logof.scanFrames(clip, {}, 0, 1, env.get());
         logof.writeResult(setting.getTmpLogoFramePath(0));
 
-        ctx.infoF("BestLogo: %s\n", setting.getLogoPath()[logof.getBestLogo()].c_str());
-        ctx.infoF("LogoRatio: %f\n", logof.getLogoRatio());
+        ctx.infoF(_T("BestLogo: %s\n"), setting.getLogoPath()[logof.getBestLogo()].c_str());
+        ctx.infoF(_T("LogoRatio: %f\n"), logof.getLogoRatio());
     }
 
     return 0;
@@ -360,7 +360,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
             unsigned long samplerate;
             unsigned char channels;
             if (NeAACDecInit(hAacDec, buf.get() + offset, (int)header.frame_length, &samplerate, &channels)) {
-                ctx.warn("NeAACDecInitに失敗");
+                ctx.warn(_T("NeAACDecInitに失敗"));
                 return 1;
             }
         }
@@ -525,7 +525,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
     txtf.read(MemoryChunk((uint8_t*)strv.data(), strv.size()));
     printf("txt len: %d\n", (int)strv.size());
     std::string str(strv.begin(), strv.end());
-    ctx.info(str.c_str());
+    ctx.info(char_to_tstring(str));
     return 0;
 }
 
@@ -533,7 +533,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
     srand((int)time(0));
     ResourceManger rm(ctx, setting.getInPipe(), setting.getOutPipe());
     for (int i = 0; i < 10000; i++) {
-        ctx.infoF("Test Loop: %d", i);
+        ctx.infoF(_T("Test Loop: %d"), i);
         rm.wait(HOST_CMD_TSAnalyze);
         std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));
         rm.wait(HOST_CMD_CMAnalyze);

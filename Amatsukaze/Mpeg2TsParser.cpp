@@ -998,11 +998,11 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
         }
         if (videoEs.pid == -1) {
             // 映像ストリームがない
-            ctx.warn("PMT 映像ストリームがありません");
+            ctx.warn(_T("PMT 映像ストリームがありません"));
             return;
         }
         if (audioEs.size() == 0) {
-            ctx.warn("PMT オーディオストリームがありません");
+            ctx.warn(_T("PMT オーディオストリームがありません"));
         }
 
         // 
@@ -1012,7 +1012,7 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
             waitingNewVideo = true;
             table = nextHandlerTable;
             if (this->videoEs.pid != -1) {
-                ctx.info("PMT 映像ストリームの変更を検知");
+                ctx.info(_T("PMT 映像ストリームの変更を検知"));
             }
         }
 
@@ -1030,7 +1030,7 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
         }
 
         const auto pcr_pid = pmt.PCR_PID();
-        ctx.infoF("PID: 0x%04x TYPE: PCR", pcr_pid);
+        ctx.infoF(_T("PID: 0x%04x TYPE: PCR"), pcr_pid);
         selectorHandler->onPmtUpdated(pcr_pid);
         if (table == curHandlerTable) {
             selectorHandler->onPidTableChanged(videoEs, audioEs, captionEs);
@@ -1171,12 +1171,12 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
 
 void TsPacketSelector::printPMT(const PMT& pmt) {
     if (currentClock == -1 || startClock == -1) {
-        ctx.info("[PMT更新]");
+        ctx.info(_T("[PMT更新]"));
     } else {
         double sec = (currentClock - startClock) / 27000000.0;
         int minutes = (int)(sec / 60);
         sec -= minutes * 60;
-        ctx.infoF("[PMT更新] ストリーム時刻: %d分%.2f秒", minutes, sec);
+        ctx.infoF(_T("[PMT更新] ストリーム時刻: %d分%.2f秒"), minutes, sec);
     }
 
     const char* content = NULL;
@@ -1197,14 +1197,14 @@ void TsPacketSelector::printPMT(const PMT& pmt) {
         const char* tag = componentTagString(component_tag);
         if (content != NULL) {
             if (tag != NULL) {
-                ctx.infoF("PID: 0x%04x TYPE: %s TAG: %s(0x%02x)", elem.elementary_PID(), content, tag, component_tag);
+                ctx.infoF(_T("PID: 0x%04x TYPE: %s TAG: %s(0x%02x)"), elem.elementary_PID(), char_to_tstring(content), char_to_tstring(tag), component_tag);
             } else if (component_tag != -1) {
-                ctx.infoF("PID: 0x%04x TYPE: %s TAG: 不明(0x%02x)", elem.elementary_PID(), content, component_tag);
+                ctx.infoF(_T("PID: 0x%04x TYPE: %s TAG: 不明(0x%02x)"), elem.elementary_PID(), char_to_tstring(content), component_tag);
             } else {
-                ctx.infoF("PID: 0x%04x TYPE: %s", elem.elementary_PID(), content);
+                ctx.infoF(_T("PID: 0x%04x TYPE: %s"), elem.elementary_PID(), char_to_tstring(content));
             }
         } else {
-            ctx.infoF("PID: 0x%04x TYPE: Unknown (0x%04x)", elem.elementary_PID(), elem.stream_type());
+            ctx.infoF(_T("PID: 0x%04x TYPE: Unknown (0x%04x)"), elem.elementary_PID(), elem.stream_type());
         }
     }
 }

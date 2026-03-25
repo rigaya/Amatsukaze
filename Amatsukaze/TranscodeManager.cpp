@@ -50,14 +50,14 @@ static void copyTrimAVSForCMOnly(
     }
     if (bestIndex >= 0) {
         const auto dstTrim = StringFormat(_T("%s.trim.avs"), setting.getSrcFileOriginalPath().c_str());
-        ctx.infoF("[CM解析のみ] trim%d.avs をtrim.avsとしてコピー: %s",
+        ctx.infoF(_T("[CM解析のみ] trim%d.avs をtrim.avsとしてコピー: %s"),
             bestIndex, dstTrim.c_str());
         if (!rgy_file_copy(bestSrcTrim, dstTrim, true)) {
-            ctx.warnF("[CM解析のみ] trim.avsのコピーに失敗: %s -> %s",
+            ctx.warnF(_T("[CM解析のみ] trim.avsのコピーに失敗: %s -> %s"),
                 bestSrcTrim.c_str(), dstTrim.c_str());
         }
     } else {
-        ctx.warn("[CM解析のみ] コピー対象のtrim*.avsが見つかりませんでした");
+        ctx.warn(_T("[CM解析のみ] コピー対象のtrim*.avsが見つかりませんでした"));
     }
 }
 
@@ -70,26 +70,26 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     const int destChannels = (entry.dualMonoChannel >= 0) ? 1 : srcChannels;
 
     if (entry.audioSourceIndex < 0) {
-        ctx.warn("Whisper入力wav作成: 音声インデックスが不正です");
+        ctx.warn(_T("Whisper入力wav作成: 音声インデックスが不正です"));
         return tstring();
     }
 
     const auto& key = entry.key;
     const auto& fileIn = reformInfo.getEncodeFile(key);
     if (entry.audioSourceIndex >= (int)fileIn.audioFrames.size()) {
-        ctx.warnF("Whisper入力wav作成: 音声%d-%dで音声インデックス%dが範囲外です", key.video, key.format, entry.audioSourceIndex);
+        ctx.warnF(_T("Whisper入力wav作成: 音声%d-%dで音声インデックス%dが範囲外です"), key.video, key.format, entry.audioSourceIndex);
         return tstring();
     }
 
     const auto& frameIndexList = fileIn.audioFrames[entry.audioSourceIndex];
     if (frameIndexList.empty()) {
-        ctx.warnF("Whisper入力wav作成: 音声%d-%d-%dにフレームが存在しません", key.video, key.format, entry.audioSourceIndex);
+        ctx.warnF(_T("Whisper入力wav作成: 音声%d-%d-%dにフレームが存在しません"), key.video, key.format, entry.audioSourceIndex);
         return tstring();
     }
 
     auto waveFrames = reformInfo.getWaveInput(frameIndexList);
     if (waveFrames.empty()) {
-        ctx.warnF("Whisper入力wav作成: 音声%d-%d-%dのwave情報が取得できません", key.video, key.format, entry.audioSourceIndex);
+        ctx.warnF(_T("Whisper入力wav作成: 音声%d-%d-%dのwave情報が取得できません"), key.video, key.format, entry.audioSourceIndex);
         return tstring();
     }
 
@@ -121,7 +121,7 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     const tstring wavPath = setting.getTmpWhisperWavPath(key, entry.localIndex);
     std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(wavPath.c_str(), _T("wb")), &fclose);
     if (!fp) {
-        ctx.warnF("Whisper入力wav作成: ファイルを開けません (%s)", wavPath.c_str());
+        ctx.warnF(_T("Whisper入力wav作成: ファイルを開けません (%s)"), wavPath.c_str());
         return tstring();
     }
 
@@ -266,7 +266,7 @@ void AMTSplitter::readAll() {
 void AMTSplitter::printInteraceCount() {
 
     if (videoFrameList_.size() == 0) {
-        ctx.error("フレームがありません");
+        ctx.error(_T("フレームがありません"));
         return;
     }
 
@@ -298,8 +298,8 @@ void AMTSplitter::printInteraceCount() {
             const VideoFrameInfo& nextFrame = videoFrameList_[modifiedPTS[i + 1].second];
             PTSdiff = int(nextPTS - PTS);
             if (CheckPullDown(frame.pic, nextFrame.pic) == false) {
-                ctx.warn("Flag Check Error: PTS=%lld %s -> %s",
-                    PTS, PictureTypeString(frame.pic), PictureTypeString(nextFrame.pic));
+                ctx.warnF(_T("Flag Check Error: PTS=%lld %s -> %s"),
+                    PTS, char_to_tstring(PictureTypeString(frame.pic)), char_to_tstring(PictureTypeString(nextFrame.pic)));
             }
         }
         fprintf(framesfp, "%d,%d,%lld,%d,%s,%s,%d\n",
@@ -328,19 +328,19 @@ void AMTSplitter::printInteraceCount() {
         prevPTS = PTS;
     }
 
-    ctx.info("[映像フレーム統計情報]");
+    ctx.info(_T("[映像フレーム統計情報]"));
 
     int64_t totalTime = modifiedPTS.back().first - videoBasePTS;
     double sec = (double)totalTime / MPEG_CLOCK_HZ;
     int minutes = (int)(sec / 60);
     sec -= minutes * 60;
-    ctx.infoF("時間: %d分%.3f秒", minutes, sec);
+    ctx.infoF(_T("時間: %d分%.3f秒"), minutes, sec);
 
-    ctx.infoF("FRAME=%d DBL=%d TLP=%d TFF=%d BFF=%d TFF_RFF=%d BFF_RFF=%d",
+    ctx.infoF(_T("FRAME=%d DBL=%d TLP=%d TFF=%d BFF=%d TFF_RFF=%d BFF_RFF=%d"),
         interaceCounter[0], interaceCounter[1], interaceCounter[2], interaceCounter[3], interaceCounter[4], interaceCounter[5], interaceCounter[6]);
 
     for (const auto& pair : PTSdiffMap) {
-        ctx.infoF("(PTS_Diff,Cnt)=(%d,%d)", pair.first, pair.second.v);
+        ctx.infoF(_T("(PTS_Diff,Cnt)=(%d,%d)"), pair.first, pair.second.v);
     }
 }
 
@@ -358,7 +358,7 @@ void AMTSplitter::printInteraceCount() {
 }
 
 /* virtual */ void AMTSplitter::onVideoFormatChanged(VideoFormat fmt) {
-    ctx.info("[映像フォーマット変更]");
+    ctx.info(_T("[映像フォーマット変更]"));
 
     StringBuilder sb;
     sb.append("サイズ: %dx%d", fmt.width, fmt.height);
@@ -372,7 +372,7 @@ void AMTSplitter::printInteraceCount() {
     } else {
         sb.append(" FPS: VFR");
     }
-    ctx.info(sb.str().c_str());
+    ctx.info(char_to_tstring(sb.str()));
 
     // ファイル変更
     if (!curVideoFormat_.isBasicEquals(fmt)) {
@@ -415,9 +415,9 @@ void AMTSplitter::printInteraceCount() {
 }
 
 /* virtual */ void AMTSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {
-    ctx.infoF("[音声%dフォーマット変更]", audioIdx);
-    ctx.infoF("チャンネル: %s サンプルレート: %d",
-        getAudioChannelString(fmt.channels), fmt.sampleRate);
+    ctx.infoF(_T("[音声%dフォーマット変更]"), audioIdx);
+    ctx.infoF(_T("チャンネル: %s サンプルレート: %d"),
+        char_to_tstring(getAudioChannelString(fmt.channels)), fmt.sampleRate);
 
     StreamEvent ev = StreamEvent();
     ev.type = AUDIO_FORMAT_CHANGED;
@@ -623,7 +623,7 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
 // src, target
 std::pair<double, double> EncoderArgumentGenerator::printBitrate(AMTContext& ctx, EncodeFileKey key) const {
     double srcBitrate = getSourceBitrate(key.video);
-    ctx.infoF("入力映像ビットレート: %d kbps", (int)srcBitrate);
+    ctx.infoF(_T("入力映像ビットレート: %d kbps"), (int)srcBitrate);
     VIDEO_STREAM_FORMAT srcFormat = reformInfo_.getVideoStreamFormat();
     double targetBitrate = std::numeric_limits<float>::quiet_NaN();
     if (setting_.isAutoBitrate()) {
@@ -631,7 +631,7 @@ std::pair<double, double> EncoderArgumentGenerator::printBitrate(AMTContext& ctx
         if (key.cm == CMTYPE_CM) {
             targetBitrate *= setting_.getBitrateCM();
         }
-        ctx.infoF("目標映像ビットレート: %d kbps", (int)targetBitrate);
+        ctx.infoF(_T("目標映像ビットレート: %d kbps"), (int)targetBitrate);
     }
     return std::make_pair(srcBitrate, targetBitrate);
 }
@@ -746,7 +746,7 @@ void DoBadThing() {
         splitter->setServiceId(setting.getServiceId());
     }
     StreamReformInfo reformInfo = splitter->split();
-    ctx.infoF("TS解析完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("TS解析完了: %.2f秒"), sw.getAndReset());
     const int serviceId = splitter->getActualServiceId();
     const int64_t numTotalPackets = splitter->getNumTotalPackets();
     const int64_t numScramblePackets = splitter->getNumScramblePackets();
@@ -760,10 +760,10 @@ void DoBadThing() {
 
     // tsreadexでトレースを取得 (WebVTT出力時のみ)
     if (setting.isWebVTTEnabled()) {
-        ctx.info("[tsreadex 解析]");
+        ctx.info(_T("[tsreadex 解析]"));
         File stdoutf(setting.getTmpTsReadExDumpPath(), _T("wb"));
         tstring args = StringFormat(_T("\"%s\" -n -1 -r - \"%s\""), setting.getTsReadExPath().c_str(), setting.getTmpRawTSPath().c_str());
-        ctx.infoF("tsreadex コマンド: %s", args.c_str());
+        ctx.infoF(_T("tsreadex コマンド: %s"), args.c_str());
         class MyTsReadEx : public EventBaseSubProcess {
         public:
             MyTsReadEx(const tstring& args, File* out) : EventBaseSubProcess(args), out(out) {}
@@ -778,13 +778,13 @@ void DoBadThing() {
         if (exitCode != 0) {
             THROWF(FormatException, "tsreadexがエラーコード(%d)を返しました", exitCode);
         }
-        ctx.infoF("tsreadex 完了: %.2f秒", sw.getAndReset());
+        ctx.infoF(_T("tsreadex 完了: %.2f秒"), sw.getAndReset());
     }
 
     // スクランブルパケットチェック
     double scrambleRatio = (double)numScramblePackets / (double)numTotalPackets;
     if (scrambleRatio > 0.01) {
-        ctx.errorF("%.2f%%のパケットがスクランブル状態です。", scrambleRatio * 100);
+        ctx.errorF(_T("%.2f%%のパケットがスクランブル状態です。"), scrambleRatio * 100);
         if (scrambleRatio > 0.3) {
             THROW(FormatException, "スクランブルパケットが多すぎます");
         }
@@ -804,14 +804,14 @@ void DoBadThing() {
     NicoJK nicoJK(ctx, setting);
     bool nicoOK = false;
     if (!isNoEncode && setting.isNicoJKEnabled()) {
-        ctx.info("[ニコニコ実況コメント取得]");
+        ctx.info(_T("[ニコニコ実況コメント取得]"));
         auto srcDuration = reformInfo.getInDuration() / MPEG_CLOCK_HZ;
         nicoOK = nicoJK.makeASS(serviceId, startTime, (int)srcDuration);
         if (nicoOK) {
             reformInfo.SetNicoJKList(nicoJK.getDialogues());
         } else {
             if (nicoJK.isFail() == false) {
-                ctx.info("対応チャンネルがありません");
+                ctx.info(_T("対応チャンネルがありません"));
             } else if (setting.isIgnoreNicoJKError() == false) {
                 THROW(RuntimeException, "ニコニコ実況コメント取得に失敗");
             }
@@ -827,7 +827,7 @@ void DoBadThing() {
         // ファイル読み込み情報を保存
         auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
         auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
-        ctx.infoF("ソースファイル読み込み用データ保存[%d/%d]: %s", videoFileIndex + 1, numVideoFiles, amtsPath.c_str());
+        ctx.infoF(_T("ソースファイル読み込み用データ保存[%d/%d]: %s"), videoFileIndex + 1, numVideoFiles, amtsPath.c_str());
         av::SaveAMTSource(amtsPath,
             setting.getIntVideoFilePath(videoFileIndex),
             setting.getWaveFilePath(),
@@ -835,12 +835,12 @@ void DoBadThing() {
             reformInfo.getFilterSourceFrames(videoFileIndex),
             reformInfo.getFilterSourceAudioFrames(videoFileIndex),
             setting.getDecoderSetting());
-        ctx.infoF("ソースファイル読み込み用データ保存完了[%d/%d]", videoFileIndex + 1, numVideoFiles);
+        ctx.infoF(_T("ソースファイル読み込み用データ保存完了[%d/%d]"), videoFileIndex + 1, numVideoFiles);
     }
 
     // ロゴ・CM解析
     rm.wait(HOST_CMD_CMAnalyze);
-    ctx.infoF("[ロゴ・CM解析]");
+    ctx.infoF(_T("[ロゴ・CM解析]"));
     sw.start();
     std::vector<std::pair<size_t, bool>> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
@@ -889,7 +889,7 @@ void DoBadThing() {
         {
             THROW(NoLogoException, "マッチするロゴが見つかりませんでした");
         }
-        ctx.infoF("ロゴ・CM解析完了: %.2f秒", sw.getAndReset());
+        ctx.infoF(_T("ロゴ・CM解析完了: %.2f秒"), sw.getAndReset());
     }
 
     if (isNoEncode) {
@@ -897,7 +897,7 @@ void DoBadThing() {
             copyTrimAVSForCMOnly(ctx, setting, reformInfo, numVideoFiles);
         }
         if (setting.isOutputChapterEnabled()) {
-            ctx.info("[チャプター生成]");
+            ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {
                 const auto& fileIn = reformInfo.getEncodeFile(key);
                 if (fileIn.duration >= MPEG_CLOCK_HZ /*1秒以下なら出力しない*/ && chapterMakers[key.video]) {
@@ -924,7 +924,7 @@ void DoBadThing() {
 
     std::vector<EncodeFileOutput> outFileInfo(keys.size());
 
-    ctx.info("[チャプター生成]");
+    ctx.info(_T("[チャプター生成]"));
     for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
         if (chapterMakers[key.video]) {
@@ -945,7 +945,7 @@ void DoBadThing() {
     std::vector<WhisperTask> whisperTasks;
     std::vector<int> whisperLocalIndex(keys.size(), 0);
     if (setting.isEncodeAudio()) {
-        ctx.info("[音声エンコード]");
+        ctx.info(_T("[音声エンコード]"));
         for (int i = 0; i < (int)keys.size(); i++) {
             auto key = keys[i];
             auto outpath = setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder());
@@ -962,7 +962,7 @@ void DoBadThing() {
         }
     } else if (setting.getFormat() != FORMAT_TSREPLACE
         || (setting.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK)) { // tsreplaceの場合は音声ファイルを作らない
-        ctx.info("[音声出力]");
+        ctx.info(_T("[音声出力]"));
         PacketCache audioCache(ctx, setting.getAudioFilePath(), reformInfo.getAudioFileOffsets(), 12, 4);
         for (int i = 0; i < (int)keys.size(); i++) {
             const auto key = keys[i];
@@ -974,7 +974,7 @@ void DoBadThing() {
                     const bool isDualMono = (fmt.audioFormat[asrc].channels == AUDIO_2LANG);
                     if (!setting.isEncodeAudio() && isDualMono) {
                         // デュアルモノは2つのAACに分離
-                        ctx.infoF("音声%d-%dはデュアルモノなので2つのAACファイルに分離します", fileIn.outKey.format, asrc);
+                        ctx.infoF(_T("音声%d-%dはデュアルモノなので2つのAACファイルに分離します"), fileIn.outKey.format, asrc);
                         const int adst0 = adst++;
                         const int adst1 = adst++;
                         SpDualMonoSplitter splitter(ctx);
@@ -987,11 +987,11 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             splitter.inputPacket(audioCache[frameIndex]);
                         }
-                        ctx.infoF("音声%d-%d[0]出力 -> %s", fileIn.outKey.format, asrc, filepath0.c_str());
-                        ctx.infoF("音声%d-%d[1]出力 -> %s", fileIn.outKey.format, asrc, filepath1.c_str());
+                        ctx.infoF(_T("音声%d-%d[0]出力 -> %s"), fileIn.outKey.format, asrc, filepath0.c_str());
+                        ctx.infoF(_T("音声%d-%d[1]出力 -> %s"), fileIn.outKey.format, asrc, filepath1.c_str());
                     } else {
                         if (isDualMono) {
-                            ctx.infoF("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません", fileIn.outKey.format, asrc);
+                            ctx.infoF(_T("音声%d-%dはデュアルモノですが、音声フォーマット無視指定があるので分離しません"), fileIn.outKey.format, asrc);
                         }
                         const int adst0 = adst++;
                         const tstring filepath = setting.getIntAudioFilePath(key, adst0, setting.getAudioEncoder());
@@ -1000,14 +1000,14 @@ void DoBadThing() {
                         for (int frameIndex : frameList) {
                             file.write(audioCache[frameIndex]);
                         }
-                        ctx.infoF("音声%d-%d出力 -> %s", fileIn.outKey.format, asrc, filepath.c_str());
+                        ctx.infoF(_T("音声%d-%d出力 -> %s"), fileIn.outKey.format, asrc, filepath.c_str());
                     }
                 }
             }
         }
     }
 
-    ctx.info("[字幕ファイル生成]");
+    ctx.info(_T("[字幕ファイル生成]"));
     for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
         CaptionASSFormatter formatterASS(ctx);
@@ -1018,12 +1018,12 @@ void DoBadThing() {
             auto ass = formatterASS.generate(capList[lang]);
             auto srt = formatterSRT.generate(capList[lang]);
             WriteUTF8File(setting.getTmpASSFilePath(key, lang), ass);
-            ctx.infoF("字幕ファイル出力: %s", setting.getTmpASSFilePath(key, lang).c_str());
+            ctx.infoF(_T("字幕ファイル出力: %s"), setting.getTmpASSFilePath(key, lang).c_str());
             if (srt.size() > 0) {
                 // SRTはCP_STR_SMALLしかなかった場合など出力がない場合があり、
                 // 空ファイルはmux時にエラーになるので、1行もない場合は出力しない
                 WriteUTF8File(setting.getTmpSRTFilePath(key, lang), srt);
-                ctx.infoF("字幕ファイル出力: %s", setting.getTmpSRTFilePath(key, lang).c_str());
+                ctx.infoF(_T("字幕ファイル出力: %s"), setting.getTmpSRTFilePath(key, lang).c_str());
             }
         }
         if (nicoOK) {
@@ -1041,7 +1041,7 @@ void DoBadThing() {
                 reformInfo.genWebVTT(key, setting);
             }
         } catch (const Exception& e) {
-            ctx.warnF("WebVTT生成に失敗: %s", e.message());
+            ctx.warnF(_T("WebVTT生成に失敗: %s"), char_to_tstring(e.message()));
         }
 
         // Whisperによる字幕生成 (モード制御 + 複数音声)
@@ -1075,16 +1075,16 @@ void DoBadThing() {
                                 if (!wavInput.empty()) {
                                     whisperInput = wavInput;
                                 } else {
-                                    ctx.warnF("whisper-cpp用のwav生成に失敗したため、元の音声を使用します: %s", whisperInput.c_str());
+                                    ctx.warnF(_T("whisper-cpp用のwav生成に失敗したため、元の音声を使用します: %s"), whisperInput.c_str());
                                 }
                             } catch (const Exception& e) {
-                                ctx.warnF("whisper-cpp用wav生成中に例外: %s", e.message());
-                                ctx.warnF("元の音声を使用します: %s", whisperInput.c_str());
+                                ctx.warnF(_T("whisper-cpp用wav生成中に例外: %s"), char_to_tstring(e.message()));
+                                ctx.warnF(_T("元の音声を使用します: %s"), whisperInput.c_str());
                             }
                         }
 
                         if (whisperInput.empty()) {
-                            ctx.warn("Whisper字幕生成: 音声入力パスが空のためスキップします");
+                            ctx.warn(_T("Whisper字幕生成: 音声入力パスが空のためスキップします"));
                             continue;
                         }
                         const tstring outFileWithoutExt = setting.getTmpWhisperFilenameWithoutExt(entry.key, entry.localIndex);
@@ -1134,10 +1134,10 @@ void DoBadThing() {
                 }
             }
         } catch (const Exception& e) {
-            ctx.warnF("Whisper字幕生成に失敗: %s", e.message());
+            ctx.warnF(_T("Whisper字幕生成に失敗: %s"), char_to_tstring(e.message()));
         }
     }
-    ctx.infoF("字幕ファイル生成完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("字幕ファイル生成完了: %.2f秒"), sw.getAndReset());
 
     auto argGen = std::unique_ptr<EncoderArgumentGenerator>(new EncoderArgumentGenerator(setting, reformInfo));
 
@@ -1151,8 +1151,8 @@ void DoBadThing() {
             cma->getZones(), cma->getLogoPath(), key, rm);
 
         if (!setting.getPreEncBatchFile().empty()) {
-            ctx.infoF("[エンコード前バッチファイル] %d/%d", i + 1, (int)keys.size());
-            ctx.infoF("%s", setting.getPreEncBatchFile().c_str());
+            ctx.infoF(_T("[エンコード前バッチファイル] %d/%d"), i + 1, (int)keys.size());
+            ctx.infoF(_T("%s"), setting.getPreEncBatchFile().c_str());
             std::unique_ptr<RGYMutex> mutexOpt;
             if (setting.isExclusiveBatExec()) {
                 mutexOpt = std::make_unique<RGYMutex>("AmatsukazeCLIPreEncodeBatMutex");
@@ -1173,7 +1173,7 @@ void DoBadThing() {
             auto& outvi = filterClip->GetVideoInfo();
             auto& timeCodes = filterSource.getTimeCodes();
 
-            ctx.infoF("[エンコード開始] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));
+            ctx.infoF(_T("[エンコード開始] %d/%d %s"), i + 1, (int)keys.size(), char_to_tstring(CMTypeToString(key.cm)));
             auto bitrate = argGen->printBitrate(ctx, key);
 
             fileOut.vfmt = outfmt;
@@ -1191,11 +1191,11 @@ void DoBadThing() {
                 } else if (!setting.isFormatVFRSupported()) {
                     THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
                 }
-                ctx.infoF("VFRタイミング: %d fps", fileOut.vfrTimingFps);
+                ctx.infoF(_T("VFRタイミング: %d fps"), fileOut.vfrTimingFps);
                 fileOut.timecode = setting.getAvsTimecodePath(key);
             }
             if (encoderParallel > 1) {
-                ctx.infoF("分割エンコード: %d", encoderParallel);
+                ctx.infoF(_T("分割エンコード: %d"), encoderParallel);
             }
 
             std::vector<int> passList;
@@ -1240,13 +1240,13 @@ void DoBadThing() {
             THROWF(AviSynthException, "%s", avserror.msg);
         }
     }
-    ctx.infoF("エンコード完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("エンコード完了: %.2f秒"), sw.getAndReset());
 
     argGen = nullptr;
 
     // Whisper並列実行時はここで完了待ち＆ログ出力を行う
     if (setting.isWhisperParallelEnabled() && !whisperTasks.empty()) {
-        ctx.info("[Whisper字幕生成: 並列処理の完了待ち]");
+        ctx.info(_T("[Whisper字幕生成: 並列処理の完了待ち]"));
         for (auto& task : whisperTasks) {
             if (!task.process) {
                 continue;
@@ -1255,19 +1255,19 @@ void DoBadThing() {
 
             const auto& lines = task.process->getCapturedLines();
             if (!lines.empty()) {
-                ctx.info("↓↓↓↓↓↓Whisper出力↓↓↓↓↓↓");
+                ctx.info(_T("↓↓↓↓↓↓Whisper出力↓↓↓↓↓↓"));
                 for (const auto& v : lines) {
                     std::vector<char> buf = v;
                     if (buf.empty() || buf.back() != '\0') {
                         buf.push_back('\0');
                     }
-                    ctx.infoF("%s", buf.data());
+                    ctx.infoF(_T("%s"), char_to_tstring(buf.data()));
                 }
-                ctx.info("↑↑↑↑↑↑Whisper出力↑↑↑↑↑↑");
+                ctx.info(_T("↑↑↑↑↑↑Whisper出力↑↑↑↑↑↑"));
             }
 
             if (ret != 0) {
-                ctx.warnF("Whisper字幕生成に失敗 (終了コード: 0x%x)", ret);
+                ctx.warnF(_T("Whisper字幕生成に失敗 (終了コード: 0x%x)"), ret);
                 continue;
             }
 
@@ -1289,12 +1289,12 @@ void DoBadThing() {
     for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
 
-        ctx.infoF("[Mux開始] %d/%d %s", i + 1, (int)keys.size(), CMTypeToString(key.cm));
+        ctx.infoF(_T("[Mux開始] %d/%d %s"), i + 1, (int)keys.size(), char_to_tstring(CMTypeToString(key.cm)));
         muxer->mux(key, eoInfo, nicoOK, outFileInfo[i]);
 
         totalOutSize += outFileInfo[i].fileSize;
     }
-    ctx.infoF("Mux完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("Mux完了: %.2f秒"), sw.getAndReset());
 
     muxer = nullptr;
     thSetPowerThrottling->abortThread();
@@ -1359,7 +1359,7 @@ void DoBadThing() {
 
 /* static */ void transcodeSimpleMain(AMTContext& ctx, const ConfigWrapper& setting) {
     if (ends_with(setting.getSrcFilePath(), _T(".ts"))) {
-        ctx.warn("一般ファイルモードでのTSファイルの処理は非推奨です");
+        ctx.warn(_T("一般ファイルモードでのTSファイルの処理は非推奨です"));
     }
 
     auto encoder = std::unique_ptr<AMTSimpleVideoEncoder>(new AMTSimpleVideoEncoder(ctx, setting));
@@ -1375,7 +1375,7 @@ void DoBadThing() {
     muxer = nullptr;
 
     // 出力結果を表示
-    ctx.info("完了");
+    ctx.info(_T("完了"));
     if (setting.getOutInfoJsonPath().size() > 0) {
         StringBuilder sb;
         sb.append("{ \"srcpath\": \"%s\"", toJsonString(setting.getSrcFilePath()))
@@ -1572,7 +1572,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
         splitter->setServiceId(setting.getServiceId());
     }
     splitter->readAll();
-    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 }
 
 /* static */ void detectSubtitleMain(AMTContext& ctx, const ConfigWrapper& setting) {

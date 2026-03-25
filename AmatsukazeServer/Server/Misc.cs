@@ -134,16 +134,21 @@ namespace Amatsukaze.Server
     {
         public static List<Action<string>> LogHandlers = new List<Action<string>>();
 
+        [DllImport("kernel32.dll")]
+        private static extern uint GetACP();
+
         static Util()
         {
             // エンコーディングプロバイダを登録
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+            LogoEncoding = Encoding.GetEncoding(932);
+
             // OSに応じてデフォルトエンコーディングを設定
             if (IsServerWindows())
             {
-                // Windowsの場合はCP932
-                AmatsukazeDefaultEncoding = Encoding.GetEncoding(932);
+                // Windowsではシステムロケールに対応するANSIコードページを使用
+                AmatsukazeDefaultEncoding = Encoding.GetEncoding((int)GetACP());
             }
             else
             {
@@ -161,8 +166,14 @@ namespace Amatsukaze.Server
             return RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         }
 
+        public static void EnsureEncodingProviderRegistered()
+        {
+        }
+
         // アプリケーション全体で使用するデフォルトエンコーディング
         public static readonly Encoding AmatsukazeDefaultEncoding;
+        // ロゴファイル/ロゴ名はフォーマット上CP932固定
+        public static readonly Encoding LogoEncoding;
 
         public static byte[] ConvertEncoding(byte[] data, Encoding srcEncoding, Encoding dstEncoding)
         {

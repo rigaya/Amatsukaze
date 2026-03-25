@@ -625,15 +625,15 @@ namespace Amatsukaze.Lib
             byte[] bytes = new byte[length];
             Marshal.Copy(ptr, bytes, 0, length);
             
-            // CP932からUTF-16に変換
-            return Encoding.GetEncoding(932).GetString(bytes);
+            // ロゴフォーマットはCP932固定
+            return global::Amatsukaze.Server.Util.LogoEncoding.GetString(bytes);
         }
 
         private static IntPtr ConvertToCP932(string str) {
             if (string.IsNullOrEmpty(str)) return IntPtr.Zero;
             
-            // UTF-16からCP932に変換
-            byte[] bytes = Encoding.GetEncoding(932).GetBytes(str);
+            // ロゴフォーマットはCP932固定
+            byte[] bytes = global::Amatsukaze.Server.Util.LogoEncoding.GetBytes(str);
             
             // 終端のnullを含むメモリを確保
             IntPtr ptr = Marshal.AllocHGlobal(bytes.Length + 1);

@@ -750,7 +750,7 @@ class LogoFrame : AMTObject {
 
         const auto& range = getIterateFrameRange(trims, threadId, totalThreads);
         for (const auto& r : range) {
-            ctx.infoF("  logo scan #%d: %6d-%6d", threadId, r.first, r.second);
+            ctx.infoF(_T("  logo scan #%d: %6d-%6d"), threadId, r.first, r.second);
         }
         const int threadTotalFrames = getTotalFrames(range);
 
@@ -761,7 +761,7 @@ class LogoFrame : AMTObject {
                 ScanFrame<pixel_t>(frame, memDeint.data(), memWork.data(), maxv, &evalResults[n * numLogos]);
 
                 if ((finished % 5000) == 0) {
-                    ctx.infoF("  logo scan #%d: Finished %6d/%d frames", threadId, finished, threadTotalFrames);
+                    ctx.infoF(_T("  logo scan #%d: Finished %6d/%d frames"), threadId, finished, threadTotalFrames);
                 }
             }
         }

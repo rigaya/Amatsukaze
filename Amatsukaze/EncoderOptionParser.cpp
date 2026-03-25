@@ -323,22 +323,22 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
 void PrintEncoderInfo(AMTContext& ctx, EncoderOptionInfo info) {
     switch (info.deint) {
     case ENCODER_DEINT_NONE:
-        ctx.info("エンコーダでのインタレ解除: なし");
+        ctx.info(_T("エンコーダでのインタレ解除: なし"));
         break;
     case ENCODER_DEINT_24P:
-        ctx.info("エンコーダでのインタレ解除: 24fps化");
+        ctx.info(_T("エンコーダでのインタレ解除: 24fps化"));
         break;
     case ENCODER_DEINT_30P:
-        ctx.info("エンコーダでのインタレ解除: 30fps化");
+        ctx.info(_T("エンコーダでのインタレ解除: 30fps化"));
         break;
     case ENCODER_DEINT_60P:
-        ctx.info("エンコーダでのインタレ解除: 60fps化");
+        ctx.info(_T("エンコーダでのインタレ解除: 60fps化"));
         break;
     case ENCODER_DEINT_VFR:
-        ctx.info("エンコーダでのインタレ解除: VFR化");
+        ctx.info(_T("エンコーダでのインタレ解除: VFR化"));
         break;
     }
     if (info.selectEvery > 1) {
-        ctx.infoF("エンコーダで%dフレームに1フレーム間引く", info.selectEvery);
+        ctx.infoF(_T("エンコーダで%dフレームに1フレーム間引く"), info.selectEvery);
     }
 }

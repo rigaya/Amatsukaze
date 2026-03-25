@@ -182,8 +182,8 @@ Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, V
     : AMTObject(ctx)
     , y4mWriter_(new MyVideoWriter(this, vi, fmt))
     , process_(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, lineCallback)) {
-    ctx.infoF("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps",
-        getYUV(vi), vi.BitsPerComponent(), fmt.progressive ? "progressive" : "tff",
+    ctx.infoF(_T("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps"),
+        char_to_tstring(getYUV(vi)), vi.BitsPerComponent(), fmt.progressive ? _T("progressive") : _T("tff"),
         fmt.width, fmt.height, fmt.sarWidth, fmt.sarHeight, vi.fps_numerator, vi.fps_denominator);
 }
 Y4MEncodeWriter::~Y4MEncodeWriter() {
@@ -201,12 +201,12 @@ void Y4MEncodeWriter::finish() {
         process_->finishWrite();
         int ret = process_->join();
         if (ret != 0) {
-            ctx.error("↓↓↓↓↓↓エンコーダ最後の出力↓↓↓↓↓↓");
+            ctx.error(_T("↓↓↓↓↓↓エンコーダ最後の出力↓↓↓↓↓↓"));
             for (auto v : process_->getLastLines()) {
                 v.push_back(0); // null terminate
-                ctx.errorF("%s", v.data());
+                ctx.errorF(_T("%s"), char_to_tstring(v.data()));
             }
-            ctx.error("↑↑↑↑↑↑エンコーダ最後の出力↑↑↑↑↑↑");
+            ctx.error(_T("↑↑↑↑↑↑エンコーダ最後の出力↑↑↑↑↑↑"));
             THROWF(RuntimeException, "エンコーダ終了コード: 0x%x", ret);
         }
     }
@@ -244,7 +244,7 @@ AMTFilterVideoEncoder::AMTFilterVideoEncoder(
     , encoder_()
     , pipeParallel_(0)
     , thread_(this, numEncodeBufferFrames) {
-    ctx.infoF("バッファリングフレーム数: %d", numEncodeBufferFrames);
+    ctx.infoF(_T("バッファリングフレーム数: %d"), numEncodeBufferFrames);
 }
 
 void AMTFilterVideoEncoder::encodeSWParallel(
@@ -345,7 +345,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             for (size_t idx = 0; idx < entries_.size(); idx++) {
                 std::lock_guard<std::mutex> lock(entries_[idx].mtx);
                 for (const auto& line : entries_[idx].logs) {
-                    ctx_.infoF("[chunk%d] %s", (int)idx, line.c_str());
+                    ctx_.infoF(_T("[chunk%d] %s"), (int)idx, char_to_tstring(line));
                 }
             }
         }
@@ -379,7 +379,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                     }
                     std::string message = entries_[idx].hasProgress ? entries_[idx].lastProgress : std::string("Running...");
                     lock.unlock();
-                    ctx_.progressF("[chunk%d] %s", (int)idx, message.c_str());
+                    ctx_.progressF(_T("[chunk%d] %s"), (int)idx, char_to_tstring(message));
                     offset = idx + 1;
                     printed = true;
                     break;
@@ -418,9 +418,9 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         }
     };
 
-    ctx.info("[エンコーダ起動]");
+    ctx.info(_T("[エンコーダ起動]"));
     for (int p = 0; p < mp; p++) {
-        ctx.infoF("[chunk %d] %s", p, chunks[p].args.c_str());
+        ctx.infoF(_T("[chunk %d] %s"), p, chunks[p].args.c_str());
     }
 
     class ChunkPumpThread : public DataPumpThread<std::unique_ptr<PVideoFrame>, true> {
@@ -480,7 +480,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                             chunkPumps[p]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
                         }
                     } catch (const AvisynthError& avserror) {
-                        ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+                        ctx.errorF(_T("Avisynthフィルタでエラーが発生: %s"), char_to_tstring(avserror.msg));
                         anyError.store(true);
                     } catch (Exception&) {
                         anyError.store(true);
@@ -495,7 +495,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                 worker.join();
             }
         } catch (const AvisynthError& avserror) {
-            ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+            ctx.errorF(_T("Avisynthフィルタでエラーが発生: %s"), char_to_tstring(avserror.msg));
             error = true;
         } catch (Exception&) {
             error = true;
@@ -530,7 +530,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         // エンコード全体の経過時間を計測
         sw.stop();
         totalEncodeTime = sw.getTotal();
-        ctx.infoF("%d並列エンコード完了 %.2fs", mp, totalEncodeTime);
+        ctx.infoF(_T("%d並列エンコード完了 %.2fs"), mp, totalEncodeTime);
 
         if (setting_.getEncoder() == ENCODER_SVTAV1) {
             // SVT-AV1 はバイナリ連結できないため、mp4boxを使用してチャンクを結合する
@@ -542,18 +542,18 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             }
 
             auto runMp4BoxWithLogging = [&](const tstring& cmdLine) {
-                ctx.infoF("MP4Box コマンド: %s", cmdLine.c_str());
+                ctx.infoF(_T("MP4Box コマンド: %s"), cmdLine.c_str());
                 StdRedirectedSubProcess proc(cmdLine, 0, true, false, true);
                 int ret = proc.join();
                 const auto& lines = proc.getCapturedLines();
                 if (!lines.empty()) {
-                    ctx.info("MP4Box 出力↓↓↓↓↓↓");
+                    ctx.info(_T("MP4Box 出力↓↓↓↓↓↓"));
                     for (auto v : lines) {
                         auto line = v;
                         line.push_back('\0');
-                        ctx.infoF("%s", line.data());
+                        ctx.infoF(_T("%s"), char_to_tstring(line.data()));
                     }
-                    ctx.info("MP4Box 出力↑↑↑↑↑↑");
+                    ctx.info(_T("MP4Box 出力↑↑↑↑↑↑"));
                 }
                 // mp4boxがコンソール出力のコードページを変えてしまうので戻す
                 ctx.setDefaultCP();
@@ -616,14 +616,14 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     const double duration = calcDurationSec(vi_, timeCodes);
     uint64_t fileSize = 0;
     if (!rgy_get_filesize(baseOutputPath.c_str(), &fileSize)) {
-        ctx.infoF("%d並列エンコード 実効速度: %.2f fps", mp, effectiveFps);
+        ctx.infoF(_T("%d並列エンコード 実効速度: %.2f fps"), mp, effectiveFps);
     } else if (fileSize == 0) {
         THROW(RuntimeException, "出力映像ファイルサイズが0です");
     } else if (duration <= 0.0) {
-        ctx.infoF("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: (duration不明)", mp, effectiveFps);
+        ctx.infoF(_T("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: (duration不明)"), mp, effectiveFps);
     } else {
         const double effectiveBitrate = fileSize * 8 / (duration * 1000.0);
-        ctx.infoF("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: %.2f kbps", mp, effectiveFps, effectiveBitrate);
+        ctx.infoF(_T("%d並列エンコード 実効速度: %.2f fps, 実効ビットレート: %.2f kbps"), mp, effectiveFps, effectiveBitrate);
     }
 }
 
@@ -653,7 +653,7 @@ void AMTFilterVideoEncoder::encode(
     const int npass = (int)passList.size();
     for (int i = 0; i < npass; i++) {
         const int currentPass = passList[i];
-        ctx.infoF("%d/%dパス エンコード開始 予定フレーム数: %d", i + 1, npass, vi_.num_frames);
+        ctx.infoF(_T("%d/%dパス エンコード開始 予定フレーム数: %d"), i + 1, npass, vi_.num_frames);
 
         if (softwareParallel) {
             if (npass > 1) {
@@ -709,8 +709,8 @@ void AMTFilterVideoEncoder::encode(
             }
             argsWithParallel += chunkSb.str();
         }
-        ctx.info("[エンコーダ起動]");
-        ctx.infoF("%s", argsWithParallel);
+        ctx.info(_T("[エンコーダ起動]"));
+        ctx.infoF(_T("%s"), argsWithParallel);
 
         // 初期化（子プロセス起動）
         encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling));
@@ -825,7 +825,7 @@ void AMTFilterVideoEncoder::encode(
                                     pumps[threadId]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
                                 }
                             } catch (const AvisynthError& avserror) {
-                                ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+                                ctx.errorF(_T("Avisynthフィルタでエラーが発生: %s"), char_to_tstring(avserror.msg));
                                 anyError.store(true);
                             } catch (Exception&) {
                                 anyError.store(true);
@@ -868,7 +868,7 @@ void AMTFilterVideoEncoder::encode(
                 thread_.join();
             }
         } catch (const AvisynthError& avserror) {
-            ctx.errorF("Avisynthフィルタでエラーが発生: %s", avserror.msg);
+            ctx.errorF(_T("Avisynthフィルタでエラーが発生: %s"), char_to_tstring(avserror.msg));
             error = true;
         } catch (Exception&) {
             error = true;
@@ -890,9 +890,9 @@ void AMTFilterVideoEncoder::encode(
         // 単一パイプ時のみ従来の待ち時間統計を出す
         if (actualParallel <= 1) {
             double prod, cons; thread_.getTotalWait(prod, cons);
-            ctx.infoF("Total: %.2fs, FilterWait: %.2fs, EncoderWait: %.2fs", sw.getTotal(), prod, cons);
+            ctx.infoF(_T("Total: %.2fs, FilterWait: %.2fs, EncoderWait: %.2fs"), sw.getTotal(), prod, cons);
         } else {
-            ctx.infoF("Total: %.2fs (parallel mp=%d)", sw.getTotal(), actualParallel);
+            ctx.infoF(_T("Total: %.2fs (parallel mp=%d)"), sw.getTotal(), actualParallel);
         }
     }
 }
@@ -914,9 +914,9 @@ AMTSimpleVideoEncoder::AMTSimpleVideoEncoder(
 
 void AMTSimpleVideoEncoder::encode() {
     if (setting_.isTwoPass()) {
-        ctx.info("1/2パス エンコード開始");
+        ctx.info(_T("1/2パス エンコード開始"));
         processAllData(1);
-        ctx.info("2/2パス エンコード開始");
+        ctx.info(_T("2/2パス エンコード開始"));
         processAllData(2);
     } else {
         processAllData(-1);
@@ -1012,10 +1012,10 @@ void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
     File file(setting_.getSrcFilePath(), _T("rb"));
     srcFileSize_ = file.size();
     double srcBitrate = ((double)srcFileSize_ * 8 / 1000) / (stream->duration * av_q2d(stream->time_base));
-    ctx.infoF("入力映像ビットレート: %d kbps", (int)srcBitrate);
+    ctx.infoF(_T("入力映像ビットレート: %d kbps"), (int)srcBitrate);
 
     if (setting_.isAutoBitrate()) {
-        ctx.infoF("目標映像ビットレート: %d kbps",
+        ctx.infoF(_T("目標映像ビットレート: %d kbps"),
             (int)setting_.getBitrate().getTargetBitrate(fmt.format, srcBitrate));
     }
 
@@ -1029,8 +1029,8 @@ void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
         setting_.getFormat(),
         setting_.getEncVideoFilePath(EncodeFileKey()));
 
-    ctx.info("[エンコーダ開始]");
-    ctx.infoF("%s", args);
+    ctx.info(_T("[エンコーダ開始]"));
+    ctx.infoF(_T("%s"), args);
 
     // x265でインタレースの場合はフィールドモード
     bool dstFieldMode =

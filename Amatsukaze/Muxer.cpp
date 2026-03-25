@@ -93,9 +93,9 @@ void AMTMuxder::mux(EncodeFileKey key,
     } else {
         if (eoInfo.deint != ENCODER_DEINT_NONE) {
             // 一応警告を出す
-            ctx.warn("エンコーダへの入力はプログレッシブですが、"
-                     "エンコーダオプションでインタレ解除指定がされています。");
-            ctx.warn("エンコーダでこのオプションが無視される場合は問題ありません。");
+            ctx.warn(_T("エンコーダへの入力はプログレッシブですが、"
+                     _T("エンコーダオプションでインタレ解除指定がされています。")));
+            ctx.warn(_T("エンコーダでこのオプションが無視される場合は問題ありません。"));
         }
     }
 
@@ -255,7 +255,7 @@ void AMTMuxder::mux(EncodeFileKey key,
     if (muxFormat != setting_.getFormat()) { // 初期のフォーマットから変わっているとき
         if (muxFormat == FORMAT_MKV) { // useMKVWhenSubExistの場合
             muxerPath = setting_.getMkvMergePath();
-            ctx.infoF("字幕が存在するため、mkv出力に切り替えます。");
+            ctx.infoF(_T("字幕が存在するため、mkv出力に切り替えます。"));
         } else {
             THROWF(RuntimeException, "Unexpected error, muxFormat != setting_.getFormat()");
         }
@@ -274,7 +274,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         setting_.getEncoderOptions());
 
     for (int i = 0; i < (int)args.size(); i++) {
-        ctx.infoF("%s", args[i].first);
+        ctx.infoF(_T("%s"), args[i].first);
         StdRedirectedSubProcess muxer(args[i].first, 0, args[i].second);
         int ret = muxer.join();
         if (ret != 0) {
@@ -283,7 +283,7 @@ void AMTMuxder::mux(EncodeFileKey key,
             if (muxFormat == FORMAT_MKV && ret == 1) {
                 uint64_t outSize = 0;
                 if (encVideoFileSize > 0 && rgy_get_filesize(outPath.c_str(), &outSize) && outSize >= encVideoFileSize) {
-                    ctx.warnF("mkvmergeから警告コード 1 が返されましたが、出力ファイルは正常に作成されました。(output: %lld bytes, input video: %lld bytes)",
+                    ctx.warnF(_T("mkvmergeから警告コード 1 が返されましたが、出力ファイルは正常に作成されました。(output: %lld bytes, input video: %lld bytes)"),
                                 (long long)outSize, (long long)encVideoFileSize);
                     continue;
                 }
@@ -330,8 +330,8 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         setting_.getMuxerAddEncoderCmd(),
         char_to_tstring(encoderToString(setting_.getEncoder())),
         setting_.getEncoderOptions());
-    ctx.info("[Mux開始]");
-    ctx.infoF("%s", args[0].first);
+    ctx.info(_T("[Mux開始]"));
+    ctx.infoF(_T("%s"), args[0].first);
 
     {
         MySubProcess muxer(args[0].first);

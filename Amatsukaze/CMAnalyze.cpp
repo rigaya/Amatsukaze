@@ -30,10 +30,10 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
 
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
-        ctx.infoF("チャプター・CM解析開始");
+        ctx.infoF(_T("チャプター・CM解析開始"));
         const bool logoOffJL = logoOffInJL(videoFileIndex);
         if (logoOffJL) {
-            ctx.info("チャプター・CM解析にロゴを使用しません。");
+            ctx.info(_T("チャプター・CM解析にロゴを使用しません。"));
         } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う
             analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
@@ -51,19 +51,19 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
 void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     if (!logoAnalysisDone
         && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
-        ctx.info("[ロゴ解析]");
+        ctx.info(_T("[ロゴ解析]"));
         sw.start();
         logoFrame(videoFileIndex, inputFormat, numFrames, avspath);
-        ctx.infoF("完了: %.2f秒", sw.getAndReset());
+        ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 
-        ctx.info("[ロゴ解析結果]");
+        ctx.info(_T("[ロゴ解析結果]"));
         if (logopath.size() > 0) {
-            ctx.infoF("マッチしたロゴ: %s", logopath);
+            ctx.infoF(_T("マッチしたロゴ: %s"), logopath);
             PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex));
         }
         const auto& eraseLogoPath = setting_.getEraseLogoPath();
         for (int i = 0; i < (int)eraseLogoPath.size(); i++) {
-            ctx.infoF("追加ロゴ%d: %s", i + 1, eraseLogoPath[i]);
+            ctx.infoF(_T("追加ロゴ%d: %s"), i + 1, eraseLogoPath[i]);
             PrintFileAll(setting_.getTmpLogoFramePath(videoFileIndex, i));
         }
         logoAnalysisDone = true;
@@ -72,38 +72,38 @@ void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFo
 
 void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     // チャプター解析
-    ctx.info("[無音・シーンチェンジ解析]");
+    ctx.info(_T("[無音・シーンチェンジ解析]"));
     sw.start();
     chapterExe(videoFileIndex, inputFormat, avspath);
-    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 
-    ctx.info("[無音・シーンチェンジ解析結果]");
+    ctx.info(_T("[無音・シーンチェンジ解析結果]"));
     PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
 
     // CM推定
-    ctx.info("[CM解析]");
+    ctx.info(_T("[CM解析]"));
     sw.start();
     joinLogoScp(videoFileIndex, serviceId);
-    ctx.infoF("完了: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 
-    ctx.info("[CM解析結果 - TrimAVS]");
+    ctx.info(_T("[CM解析結果 - TrimAVS]"));
     PrintFileAll(setting_.getTmpTrimAVSPath(videoFileIndex));
-    ctx.info("[CM解析結果 - 詳細]");
+    ctx.info(_T("[CM解析結果 - 詳細]"));
     PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
 
     // AVSファイルからCM区間を読む
     readTrimAVS(videoFileIndex, numFrames);
-    ctx.infoF("trimAVS読み込み完了");
+    ctx.infoF(_T("trimAVS読み込み完了"));
 
     // シーンチェンジ
     readSceneChanges(videoFileIndex);
-    ctx.infoF("シーンチェンジ読み込み完了");
+    ctx.infoF(_T("シーンチェンジ読み込み完了"));
 
     // 分割情報
     readDiv(videoFileIndex, numFrames);
-    ctx.infoF("分割情報読み込み完了");
+    ctx.infoF(_T("分割情報読み込み完了"));
     makeCMZones(numFrames);
-    ctx.infoF("CM区間生成完了");
+    ctx.infoF(_T("CM区間生成完了"));
 }
 
 // PMT変更情報からCM追加認識
@@ -111,10 +111,10 @@ void CMAnalyze::applyPmtCut(
     int numFrames, const double* rates,
     const std::vector<int>& pidChanges) {
     if (sceneChanges.size() == 0) {
-        ctx.info("シーンチェンジ情報がないためPMT変更情報をCM判定に利用できません");
+        ctx.info(_T("シーンチェンジ情報がないためPMT変更情報をCM判定に利用できません"));
     }
 
-    ctx.info("[PMT更新CM認識]");
+    ctx.info(_T("[PMT更新CM認識]"));
 
     int validStart = 0, validEnd = numFrames;
     std::vector<int> matchedPoints;
@@ -135,16 +135,16 @@ void CMAnalyze::applyPmtCut(
         int diff = std::abs(pidChanges[i] - sceneChanges[next]);
         if (diff < 30 * 2) { // 次
             matchedPoints.push_back(sceneChanges[next]);
-            ctx.infoF("フレーム%dのPMT変更はフレーム%dにシーンチェンジあり",
+            ctx.infoF(_T("フレーム%dのPMT変更はフレーム%dにシーンチェンジあり"),
                 pidChanges[i], sceneChanges[next]);
         } else {
             diff = std::abs(pidChanges[i] - sceneChanges[prev]);
             if (diff < 30 * 2) { // 前
                 matchedPoints.push_back(sceneChanges[prev]);
-                ctx.infoF("フレーム%dのPMT変更はフレーム%dにシーンチェンジあり",
+                ctx.infoF(_T("フレーム%dのPMT変更はフレーム%dにシーンチェンジあり"),
                     pidChanges[i], sceneChanges[prev]);
             } else {
-                ctx.infoF("フレーム%dのPMT変更は付近にシーンチェンジがないため無視します", pidChanges[i]);
+                ctx.infoF(_T("フレーム%dのPMT変更は付近にシーンチェンジがないため無視します"), pidChanges[i]);
             }
         }
     }
@@ -160,8 +160,8 @@ void CMAnalyze::applyPmtCut(
             validEnd = std::min(validEnd, matchedPoints[i]);
         }
     }
-    ctx.infoF("設定区間: 0-%d %d-%d", maxCutFrames0, maxCutFrames1, numFrames);
-    ctx.infoF("検出CM区間: 0-%d %d-%d", validStart, validEnd, numFrames);
+    ctx.infoF(_T("設定区間: 0-%d %d-%d"), maxCutFrames0, maxCutFrames1, numFrames);
+    ctx.infoF(_T("検出CM区間: 0-%d %d-%d"), validStart, validEnd, numFrames);
 
     // trimsに反映
     auto copy = trims;
@@ -189,11 +189,11 @@ void CMAnalyze::applyPmtCut(
 
     // cmzonesに反映
     makeCMZones(numFrames);
-    ctx.infoF("CM区間反映完了");
+    ctx.infoF(_T("CM区間反映完了"));
 }
 
 void CMAnalyze::inputTrimAVS(int numFrames, const tstring& trimavsPath) {
-    ctx.infoF("[Trim情報入力]: %s", trimavsPath.c_str());
+    ctx.infoF(_T("[Trim情報入力]: %s"), trimavsPath.c_str());
     PrintFileAll(trimavsPath);
 
     // AVSファイルからCM区間を読む
@@ -242,7 +242,7 @@ tstring CMAnalyze::makeAVSFile(int videoFileIndex, const VideoFormat& inputForma
     const tstring avspath = (forChapterExe) ? setting_.getTmpSourceAVS8bitPath(videoFileIndex) : setting_.getTmpSourceAVSPath(videoFileIndex);
     File file(avspath, _T("w"));
     file.write(sb.getMC());
-    ctx.infoF("AVSファイル作成完了: %s", avspath.c_str());
+    ctx.infoF(_T("AVSファイル作成完了: %s"), avspath.c_str());
     return avspath;
 }
 
@@ -287,9 +287,9 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     logo::LogoFrame logof(ctx, allLogoPath, 0.35f);
 
     if (trims.size() > 0 && (trims.size() % 2) == 0) {
-        ctx.infoF("解析範囲");
+        ctx.infoF(_T("解析範囲"));
         for (int i = 0; i < (int)trims.size() / 2; i++) {
-            ctx.infoF(" %6d-%6d", trims[2 * i], trims[2 * i + 1]);
+            ctx.infoF(_T(" %6d-%6d"), trims[2 * i], trims[2 * i + 1]);
         }
     }
     int duration = 0;
@@ -299,7 +299,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     const int minFramesPerThread = 600;
     const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
     const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 8 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
-    ctx.infoF("ロゴ解析 %d並列 x デコード%dスレッド", totalThreads, decodeThreads);
+    ctx.infoF(_T("ロゴ解析 %d並列 x デコード%dスレッド"), totalThreads, decodeThreads);
 
     std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
     for (int ith = 0; ith < totalThreads; ith++) {
@@ -368,7 +368,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
 
         float threshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
         if (logof.getLogoRatio() < threshold) {
-            ctx.info("この区間はマッチするロゴはありませんでした");
+            ctx.info(_T("この区間はマッチするロゴはありませんでした"));
         } else {
             logopath = setting_.getLogoPath()[logof.getBestLogo()];
         }
@@ -392,7 +392,7 @@ tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inp
 void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
     File stdoutf(setting_.getTmpChapterExeOutPath(videoFileIndex), _T("wb"));
     auto args = MakeChapterExeArgs(videoFileIndex, inputFormat, avspath);
-    ctx.infoF("%s", args);
+    ctx.infoF(_T("%s"), args);
     MySubProcess process(args, &stdoutf);
     int exitCode = process.join();
     if (exitCode != 0) {
@@ -418,7 +418,7 @@ tstring CMAnalyze::MakeJoinLogoScpArgs(int videoFileIndex) {
 
 void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     auto args = MakeJoinLogoScpArgs(videoFileIndex);
-    ctx.infoF("%s", args);
+    ctx.infoF(_T("%s"), args);
     // join_logo_scp向けの環境変数を設定
     const tstring clioutpath = setting_.getOutFileBaseWithoutPrefix() + _T(".") + setting_.getOutputExtention(setting_.getFormat());
     SetTemporaryEnvironmentVariable tmpvar;
@@ -426,10 +426,10 @@ void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     tmpvar.set(_T("TS_IN_PATH"), setting_.getSrcFileOriginalPath().c_str());
     tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceId).c_str());
     tmpvar.set(_T("CLI_OUT_PATH"), clioutpath.c_str());
-    ctx.infoF("CLI_IN_PATH  : %s", tchar_to_string(setting_.getSrcFilePath()).c_str());
-    ctx.infoF("TS_IN_PATH   : %s", tchar_to_string(setting_.getSrcFileOriginalPath()).c_str());
-    ctx.infoF("SERVICE_ID   : %d", serviceId);
-    ctx.infoF("CLI_OUT_PATH : %s", tchar_to_string(clioutpath).c_str());
+    ctx.infoF(_T("CLI_IN_PATH  : %s"), setting_.getSrcFilePath());
+    ctx.infoF(_T("TS_IN_PATH   : %s"), setting_.getSrcFileOriginalPath());
+    ctx.infoF(_T("SERVICE_ID   : %d"), serviceId);
+    ctx.infoF(_T("CLI_OUT_PATH : %s"), clioutpath);
     MySubProcess process(args);
     int exitCode = process.join();
     if (exitCode != 0) {
@@ -698,13 +698,13 @@ std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey 
 }
 
 void MakeChapter::writeChapter(const std::vector<JlsElement>& chapters, EncodeFileKey key) {
-    ctx.infoF("ファイル: %d-%d-%d %s", key.video, key.format, key.div, CMTypeToString(key.cm));
+    ctx.infoF(_T("ファイル: %d-%d-%d %s"), key.video, key.format, key.div, char_to_tstring(CMTypeToString(key.cm)));
 
     StringBuilder sb;
     for (int i = 0; i < (int)chapters.size(); i++) {
         auto& c = chapters[i];
 
-        ctx.infoF("%5d: %s", c.frameStart, c.comment.c_str());
+        ctx.infoF(_T("%5d: %s"), c.frameStart, char_to_tstring(c.comment));
 
         int ms = 0;
         if (setting.getFormat() == FORMAT_TSREPLACE) {

@@ -42,7 +42,7 @@ namespace Amatsukaze
                 Directory.SetCurrentDirectory(Option.RootDir);
             }
 
-            var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく必要がある
+            Util.EnsureEncodingProviderRegistered();
 
             // ログパスを設定
             log4net.GlobalContext.Properties["Root"] = Directory.GetCurrentDirectory();

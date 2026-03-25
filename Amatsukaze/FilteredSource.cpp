@@ -114,7 +114,7 @@ static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo
         // ステップフィルタ: baseline からの偏差が閾値を超えた場合のみ更新
         if (rawOff > baseline + stepThreshold || rawOff < baseline - stepThreshold) {
             const double delta = rawOff - baseline;
-            ctx.infoF("tsreplace drop補正: %+.3f ms (累積 %.3f ms) at frame=%d (src=%d, tCFR=%.3f ms, tPTS=%.3f ms)",
+            ctx.infoF(_T("tsreplace drop補正: %+.3f ms (累積 %.3f ms) at frame=%d (src=%d, tCFR=%.3f ms, tPTS=%.3f ms)"),
                 delta, rawOff, k, idx, tCfrMs, tPtsMs);
             baseline = rawOff;
         }
@@ -122,7 +122,7 @@ static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo
         maxGap = std::max(maxGap, std::abs(baseline));
     }
     if (maxGap > 0.5) {
-        ctx.infoF("tsreplace drop補正: 推定最大offset %.3f ms", maxGap);
+        ctx.infoF(_T("tsreplace drop補正: 推定最大offset %.3f ms"), maxGap);
     }
     return func;
 }
@@ -612,7 +612,7 @@ void AMTFilterSource::ReadAllFrames(int pass) {
     PClip clip = env_->GetVar("last").AsClip();
     const VideoInfo vi = clip->GetVideoInfo();
 
-    ctx.infoF("フィルタパス%d 予定フレーム数: %d", pass + 1, vi.num_frames);
+    ctx.infoF(_T("フィルタパス%d 予定フレーム数: %d"), pass + 1, vi.num_frames);
     Stopwatch sw;
     sw.start();
     int prevFrames = 0;
@@ -622,14 +622,14 @@ void AMTFilterSource::ReadAllFrames(int pass) {
         double elapsed = sw.current();
         if (elapsed >= 1.0) {
             double fps = (i - prevFrames) / elapsed;
-            ctx.progressF("%dフレーム完了 %.2ffps", i + 1, fps);
+            ctx.progressF(_T("%dフレーム完了 %.2ffps"), i + 1, fps);
 
             prevFrames = i;
             sw.stop();
         }
     }
 
-    ctx.infoF("フィルタパス%d 完了: %.2f秒", pass + 1, sw.getTotal());
+    ctx.infoF(_T("フィルタパス%d 完了: %.2f秒"), pass + 1, sw.getTotal());
 }
 
 void AMTFilterSource::defineMakeSource(
@@ -764,17 +764,17 @@ void AMTFilterSource::MakeZones(
         : (double)numOutFrames * outvi.fps_denominator / outvi.fps_numerator;
     bool outParity = filter_->GetParity(0);
 
-    ctx.infoF("フィルタ入力: %dフレーム %d/%dfps (%s)",
+    ctx.infoF(_T("フィルタ入力: %dフレーム %d/%dfps (%s)"),
         numSrcFrames, infmt.frameRateNum, infmt.frameRateDenom,
-        infmt.progressive ? "プログレッシブ" : "インターレース");
+        infmt.progressive ? _T("プログレッシブ") : _T("インターレース"));
 
     if (timeCodes_.size()) {
-        ctx.infoF("フィルタ出力: %dフレーム VFR (ベース %d/%d fps)",
+        ctx.infoF(_T("フィルタ出力: %dフレーム VFR (ベース %d/%d fps)"),
             numOutFrames, outvi.fps_numerator, outvi.fps_denominator);
     } else {
-        ctx.infoF("フィルタ出力: %dフレーム %d/%dfps (%s)",
+        ctx.infoF(_T("フィルタ出力: %dフレーム %d/%dfps (%s)"),
             numOutFrames, outvi.fps_numerator, outvi.fps_denominator,
-            outParity ? "インターレース" : "プログレッシブ");
+            outParity ? _T("インターレース") : _T("プログレッシブ"));
     }
 
     if (std::abs(srcDuration - clipDuration) > 0.1f) {
@@ -782,7 +782,7 @@ void AMTFilterSource::MakeZones(
     }
 
     if (numSrcFrames != numOutFrames && outParity) {
-        ctx.warn("フレーム数が変わっていますがインターレースのままです。プログレッシブ出力が目的ならAssumeBFF()をavsファイルの最後に追加してください。");
+        ctx.warn(_T("フレーム数が変わっていますがインターレースのままです。プログレッシブ出力が目的ならAssumeBFF()をavsファイルの最後に追加してください。"));
     }
 
     if (timeCodes_.size()) {

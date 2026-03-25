@@ -709,7 +709,7 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
             test::ResourceTest(ctx, setting);
 
         else
-            ctx.errorF("--modeの指定が間違っています: %s\n", mode.c_str());
+            ctx.errorF(_T("--modeの指定が間違っています: %s\n"), mode.c_str());
 
         return 0;
     } catch (const NoLogoException&) {
@@ -719,8 +719,8 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
         // DRCSマッピングなしは101とする
         return 101;
     } catch (const AvisynthError& avserror) {
-        ctx.error("AviSynth Error");
-        ctx.error(avserror.msg);
+        ctx.error(_T("AviSynth Error"));
+        ctx.error(char_to_tstring(avserror.msg));
         return 2;
     } catch (const Exception&) {
         return 1;
@@ -741,7 +741,7 @@ int RunAmatsukazeCLI(int argc, const tchar* argv[]) {
 
         // CPUアフィニティを設定
         if (!SetCPUAffinity(setting->getAffinityGroup(), setting->getAffinityMask())) {
-            ctx.error("CPUアフィニティを設定できませんでした");
+            ctx.error(_T("CPUアフィニティを設定できませんでした"));
         }
 
         // FFMPEGライブラリ初期化

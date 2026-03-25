@@ -585,7 +585,7 @@ TempDirectory::~TempDirectory() {
     ctx.clearTmpFiles();
     // ディレクトリ削除
     if (rmdirT(path_.c_str()) != 0) {
-        ctx.warnF("一時ディレクトリ削除に失敗: ", path_);
+        ctx.warnF(_T("一時ディレクトリ削除に失敗: "), path_);
     }
 }
 
@@ -1496,72 +1496,72 @@ tstring ConfigWrapper::getOptions(
 }
 
 void ConfigWrapper::dump() const {
-    ctx.info("[設定]");
+    ctx.info(_T("[設定]"));
     if (conf.mode != _T("ts")) {
-        ctx.infoF("Mode: %s", conf.mode);
+        ctx.infoF(_T("Mode: %s"), conf.mode);
     }
-    ctx.infoF("入力: %s", conf.srcFilePath);
+    ctx.infoF(_T("入力: %s"), conf.srcFilePath);
     if (conf.srcFilePath != conf.srcFilePathOrg) {
-        ctx.infoF("入力 (オリジナル): %s", conf.srcFilePathOrg);
+        ctx.infoF(_T("入力 (オリジナル): %s"), conf.srcFilePathOrg);
     }
-    ctx.infoF("出力: %s", conf.outVideoPath);
-    ctx.infoF("一時フォルダ: %s", tmpDir.path());
-    ctx.infoF("出力フォーマット: %s%s",
-        formatToString(conf.format),
-        (conf.useMKVWhenSubExist) ? " (字幕ありではMKV)" : "");
-    ctx.infoF("エンコーダ: %s (%s)", conf.encoderPath, encoderToString(conf.encoder));
-    ctx.infoF("エンコーダオプション: %s", conf.encoderOptions);
+    ctx.infoF(_T("出力: %s"), conf.outVideoPath);
+    ctx.infoF(_T("一時フォルダ: %s"), tmpDir.path());
+    ctx.infoF(_T("出力フォーマット: %s%s"),
+        char_to_tstring(formatToString(conf.format)),
+        (conf.useMKVWhenSubExist) ? _T(" (字幕ありではMKV)") : _T(""));
+    ctx.infoF(_T("エンコーダ: %s (%s)"), conf.encoderPath, char_to_tstring(encoderToString(conf.encoder)));
+    ctx.infoF(_T("エンコーダオプション: %s"), conf.encoderOptions);
     if (conf.userSAR.first > 0 && conf.userSAR.second > 0) {
-        ctx.infoF("ユーザー指定SAR: %d:%d", conf.userSAR.first, conf.userSAR.second);
+        ctx.infoF(_T("ユーザー指定SAR: %d:%d"), conf.userSAR.first, conf.userSAR.second);
     }
     if (conf.autoBitrate) {
-        ctx.infoF("自動ビットレート: 有効 (%g:%g:%g)",
+        ctx.infoF(_T("自動ビットレート: 有効 (%g:%g:%g)"),
             conf.bitrate.a, conf.bitrate.b, conf.bitrate.h264);
     } else {
-        ctx.info("自動ビットレート: 無効");
+        ctx.info(_T("自動ビットレート: 無効"));
     }
-    ctx.infoF("エンコード/出力: %s/%s",
-        conf.twoPass ? "2パス" : "1パス",
-        cmOutMaskToString(conf.cmoutmask));
-    ctx.infoF("エンコード分割並列: %d", conf.encoderParallel);
-    ctx.infoF("チャプター解析: %s%s",
-        conf.chapter ? "有効" : "無効",
-        (conf.chapter && conf.ignoreNoLogo) ? "" : "（ロゴ必須）");
+    ctx.infoF(_T("エンコード/出力: %s/%s"),
+        conf.twoPass ? _T("2パス") : _T("1パス"),
+        char_to_tstring(cmOutMaskToString(conf.cmoutmask)));
+    ctx.infoF(_T("エンコード分割並列: %d"), conf.encoderParallel);
+    ctx.infoF(_T("チャプター解析: %s%s"),
+        conf.chapter ? _T("有効") : _T("無効"),
+        (conf.chapter && conf.ignoreNoLogo) ? _T("") : _T("（ロゴ必須）"));
     if (conf.chapter) {
         for (int i = 0; i < (int)conf.logoPath.size(); i++) {
-            ctx.infoF("logo%d: %s", (i + 1), conf.logoPath[i]);
+            ctx.infoF(_T("logo%d: %s"), (i + 1), conf.logoPath[i]);
         }
     }
-    ctx.infoF("ロゴ消し: %s", conf.noDelogo ? "しない" : "する");
-    ctx.infoF("並列ロゴ解析: %s", conf.parallelLogoAnalysis ? (conf.numParallelLogoAnalysis > 0 ? StringFormat("%d並列", conf.numParallelLogoAnalysis) : "オン") : "オフ");
+    ctx.infoF(_T("ロゴ消し: %s"), conf.noDelogo ? _T("しない") : _T("する"));
+    ctx.infoF(_T("並列ロゴ解析: %s"), conf.parallelLogoAnalysis ? (conf.numParallelLogoAnalysis > 0 ? StringFormat(_T("%d並列"), conf.numParallelLogoAnalysis) : _T("オン")) : _T("オフ"));
     if (conf.audioEncoder != AUDIO_ENCODER_NONE) {
-        ctx.infoF("音声: %s (%s)", conf.audioEncoderPath, audioEncoderToString(conf.audioEncoder));
+        ctx.infoF(_T("音声: %s (%s)"), conf.audioEncoderPath, char_to_tstring(audioEncoderToString(conf.audioEncoder)));
         if (conf.audioBitrateInKbps > 0) {
-            ctx.infoF("音声エンコーダビットレート: %d kbps", conf.audioBitrateInKbps);
+            ctx.infoF(_T("音声エンコーダビットレート: %d kbps"), conf.audioBitrateInKbps);
         }
-        ctx.infoF("音声エンコーダオプション: %s", conf.audioEncoderOptions);
+        ctx.infoF(_T("音声エンコーダオプション: %s"), conf.audioEncoderOptions);
     }
-    ctx.infoF("字幕: %s", conf.subtitles ? "有効" : "無効");
+    ctx.infoF(_T("字幕: %s"), conf.subtitles ? _T("有効") : _T("無効"));
     if (conf.subtitles) {
-        ctx.infoF("WebVTT出力: %s", conf.webvtt ? "有効" : "無効");
+        ctx.infoF(_T("WebVTT出力: %s"), conf.webvtt ? _T("有効") : _T("無効"));
         if (conf.webvtt) {
-            ctx.infoF("tsreadexパス: %s", conf.tsreadexPath);
-            ctx.infoF("b24tovttパス: %s", conf.b24tovttPath);
-            ctx.infoF("psisiarcパス: %s", conf.psisiarcPath);
+            ctx.infoF(_T("tsreadexパス: %s"), conf.tsreadexPath);
+            ctx.infoF(_T("b24tovttパス: %s"), conf.b24tovttPath);
+            ctx.infoF(_T("psisiarcパス: %s"), conf.psisiarcPath);
         }
-        ctx.infoF("DRCSマッピング: %s", conf.drcsMapPath);
+        ctx.infoF(_T("DRCSマッピング: %s"), conf.drcsMapPath);
     }
     if (conf.serviceId > 0) {
-        ctx.infoF("サービスID: %d", conf.serviceId);
+        ctx.infoF(_T("サービスID: %d"), conf.serviceId);
     } else {
-        ctx.info("サービスID: 指定なし");
+        ctx.info(_T("サービスID: 指定なし"));
     }
-    ctx.infoF("デコーダ: MPEG2:%s H264:%s HEVC:%s",
-        decoderToString(conf.decoderSetting.mpeg2),
-        decoderToString(conf.decoderSetting.h264),
-        decoderToString(conf.decoderSetting.hevc));
+    ctx.infoF(_T("デコーダ: MPEG2:%s H264:%s HEVC:%s"),
+        char_to_tstring(decoderToString(conf.decoderSetting.mpeg2)),
+        char_to_tstring(decoderToString(conf.decoderSetting.h264)),
+        char_to_tstring(decoderToString(conf.decoderSetting.hevc)));
     if (conf.mode == _T("cm")) {
-        ctx.infoF("trim.avsをコピー: %s", conf.copyTrimAVS ? "有効" : "無効");
+        ctx.infoF(_T("trim.avsをコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
     }
 }
 

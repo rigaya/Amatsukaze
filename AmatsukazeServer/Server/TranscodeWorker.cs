@@ -163,7 +163,7 @@ namespace Amatsukaze.Server
                         // 終了
                         return;
                     }
-                    // CP932を明示的に使用
+                    // サーバー既定のログ文字コードにそろえて再エンコード
                     await WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(line + "\n"));
                 }
             }

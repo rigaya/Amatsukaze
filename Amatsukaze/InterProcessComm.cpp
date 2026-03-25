@@ -194,10 +194,10 @@ ResourceAllocation ResourceManger::wait(PipeCommand phase) const {
     ResourceAllocation ret = request(phase);
     if (ret.IsFailed()) {
         writeCommand(phase);
-        ctx.progress("リソース待ち ...");
+        ctx.progress(_T("リソース待ち ..."));
         Stopwatch sw; sw.start();
         ret = readCommand(phase);
-        ctx.infoF("リソース待ち %.2f秒", sw.getAndReset());
+        ctx.infoF(_T("リソース待ち %.2f秒"), sw.getAndReset());
     }
     return ret;
 }

@@ -47,7 +47,7 @@ void VideoFrameParser::reset() {
 
 /* virtual */ void VideoFrameParser::onPesPacket(int64_t clock, PESPacket packet) {
     if (!packet.has_PTS()) {
-        ctx.error("Video PES Packet に PTS がありません");
+        ctx.error(_T("Video PES Packet に PTS がありません"));
         return;
     }
 
@@ -56,7 +56,7 @@ void VideoFrameParser::reset() {
     MemoryChunk payload = packet.paylod();
 
     if (!parser->inputFrame(payload, frameInfo, PTS, DTS)) {
-        ctx.errorF("フレーム情報の取得に失敗 PTS=%lld", PTS);
+        ctx.errorF(_T("フレーム情報の取得に失敗 PTS=%lld"), PTS);
         return;
     }
 
@@ -84,7 +84,7 @@ AudioFrameParser::AudioFrameParser(AMTContext&ctx)
 
 /* virtual */ void AudioFrameParser::onPesPacket(int64_t clock, PESPacket packet) {
     if (clock == -1) {
-        ctx.error("Audio PES Packet にクロック情報がありません");
+        ctx.error(_T("Audio PES Packet にクロック情報がありません"));
         return;
     }
 
@@ -368,7 +368,7 @@ TsSplitter::PcrDetectionHandler::PcrDetectionHandler(TsSplitter& this_)
 /* virtual */ void TsSplitter::PcrDetectionHandler::onTsPacket(int64_t clock, TsPacket packet) {
     this_.tsSystemClock.inputTsPacket(packet);
     if (this_.tsSystemClock.pcrReceived()) {
-        this_.ctx.debug("必要な情報は取得したのでTSを最初から読み直します");
+        this_.ctx.debug(_T("必要な情報は取得したのでTSを最初から読み直します"));
         this_.initPhase = INIT_FINISHED;
         // ハンドラを戻して最初から読み直す
         this_.tsPacketParser.setHandler(&this_.tsPacketHandler);
@@ -376,7 +376,7 @@ TsSplitter::PcrDetectionHandler::PcrDetectionHandler(TsSplitter& this_)
         this_.tsSystemClock.backTs();
 
         int64_t startClock = this_.tsSystemClock.getClock(0);
-        this_.ctx.infoF("開始Clock: %lld", startClock);
+        this_.ctx.infoF(_T("開始Clock: %lld"), startClock);
         this_.tsPacketSelector.setStartClock(startClock);
 
         this_.tsPacketParser.backAndInput();
@@ -388,7 +388,7 @@ TsSplitter::SpVideoFrameParser::SpVideoFrameParser(AMTContext&ctx, TsSplitter& t
     : VideoFrameParser(ctx), this_(this_) {}
 /* virtual */ void TsSplitter::SpVideoFrameParser::onVideoPesPacket(int64_t clock, const std::vector<VideoFrameInfo>& frames, PESPacket packet) {
     if (clock == -1) {
-        ctx.error("Video PES Packet にクロック情報がありません");
+        ctx.error(_T("Video PES Packet にクロック情報がありません"));
         return;
     }
     this_.onVideoPesPacket(clock, frames, packet);
@@ -419,11 +419,11 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
 // サービスを設定する場合はサービスのpids上でのインデックス
 // なにもしない場合は負の値の返す
 /* virtual */ int TsSplitter::onPidSelect(int TSID, const std::vector<int>& pids) {
-    ctx.info("[PAT更新]");
+    ctx.info(_T("[PAT更新]"));
     for (int i = 0; i < int(pids.size()); i++) {
         if (preferedServiceId == pids[i]) {
             selectedServiceId = pids[i];
-            ctx.infoF("サービス %d を選択", selectedServiceId);
+            ctx.infoF(_T("サービス %d を選択"), selectedServiceId);
             return i;
         }
     }
@@ -435,12 +435,12 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
             sb.append("%s%d", (i > 0) ? ", " : "", pids[i]);
         }
         sb.append(" 指定サービスID: %d", preferedServiceId);
-        ctx.error("指定されたサービスがありません");
-        ctx.error(sb.str().c_str());
+        ctx.error(_T("指定されたサービスがありません"));
+        ctx.error(char_to_tstring(sb.str()));
         //THROW(InvalidOperationException, "failed to select service");
     }
     selectedServiceId = pids[0];
-    ctx.infoF("サービス %d を選択（指定がありませんでした）", selectedServiceId);
+    ctx.infoF(_T("サービス %d を選択（指定がありませんでした）"), selectedServiceId);
     return 0;
 }
 
@@ -477,7 +477,7 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
         while (audioParsers.size() < numAudios) {
             int audioIdx = int(audioParsers.size());
             audioParsers.push_back(new SpAudioFrameParser(ctx, *this, audioIdx));
-            ctx.infoF("音声パーサ %d を追加", audioIdx);
+            ctx.infoF(_T("音声パーサ %d を追加"), audioIdx);
         }
     }
 }

@@ -353,7 +353,7 @@ private:
             if (modifiedPTS[i] - modifiedPTS[i - 1] < -60 * MPEG_CLOCK_HZ) {
                 // 1分以上戻っている
                 ctx.incrementCounter(AMT_ERR_NON_CONTINUOUS_PTS);
-                ctx.warnF("PTSが戻っています。正しく処理できないかもしれません。 [%d] %.0f -> %.0f",
+                ctx.warnF(_T("PTSが戻っています。正しく処理できないかもしれません。 [%d] %.0f -> %.0f"),
                     i, modifiedPTS[i - 1], modifiedPTS[i]);
             }
         }

@@ -50,9 +50,9 @@ std::unique_ptr<StdRedirectedSubProcess> SubtitleGenerator::startWhisperProcess(
     const tstring cmd = buildWhisperCommand(param.whisperPath, param.audioPath, param.outDir,
         param.outFileWithoutExt, param.extraOptions, param.enableVtt);
 
-    ctx.info("[Whisper起動]");
-    ctx.infoF("Whisper type: %s", isWhisperCpp ? _T("whisper-cpp") : _T("faster-whisper"));
-    ctx.infoF("%s", cmd);
+    ctx.info(_T("[Whisper起動]"));
+    ctx.infoF(_T("Whisper type: %s"), isWhisperCpp ? _T("whisper-cpp") : _T("faster-whisper"));
+    ctx.infoF(_T("%s"), cmd);
 
     // ログ取りつつ起動
     return std::unique_ptr<StdRedirectedSubProcess>(
@@ -85,12 +85,12 @@ void SubtitleGenerator::runWhisper(const WhisperProcessParam& param) {
     // 実行完了待ち
     int ret = process->join();
     if (ret != 0) {
-        ctx.error("↓↓↓↓↓↓Whisper最後の出力↓↓↓↓↓↓");
+        ctx.error(_T("↓↓↓↓↓↓Whisper最後の出力↓↓↓↓↓↓"));
         for (auto v : process->getLastLines()) {
             v.push_back(0);
-            ctx.errorF("%s", v.data());
+            ctx.errorF(_T("%s"), char_to_tstring(v.data()));
         }
-        ctx.error("↑↑↑↑↑↑Whisper最後の出力↑↑↑↑↑↑");
+        ctx.error(_T("↑↑↑↑↑↑Whisper最後の出力↑↑↑↑↑↑"));
         THROWF(RuntimeException, "Whisper終了コード: 0x%x", ret);
     }
 }

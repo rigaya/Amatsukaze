@@ -22,8 +22,8 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     const std::vector<FilterAudioFrame>& audioFrames) {
     using namespace wave;
 
-    ctx.info("[音声エンコーダ起動]");
-    ctx.infoF("%s", encoder_args);
+    ctx.info(_T("[音声エンコーダ起動]"));
+    ctx.infoF(_T("%s"), encoder_args);
 
     auto process = std::unique_ptr<StdRedirectedSubProcess>(
         new StdRedirectedSubProcess(encoder_args, 5));
@@ -77,12 +77,12 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
     process->finishWrite();
     int ret = process->join();
     if (ret != 0) {
-        ctx.error("↓↓↓↓↓↓音声エンコーダ最後の出力↓↓↓↓↓↓");
+        ctx.error(_T("↓↓↓↓↓↓音声エンコーダ最後の出力↓↓↓↓↓↓"));
         for (auto v : process->getLastLines()) {
             v.push_back(0); // null terminate
-            ctx.errorF("%s", v.data());
+            ctx.errorF(_T("%s"), char_to_tstring(v.data()));
         }
-        ctx.error("↑↑↑↑↑↑音声エンコーダ最後の出力↑↑↑↑↑↑");
+        ctx.error(_T("↑↑↑↑↑↑音声エンコーダ最後の出力↑↑↑↑↑↑"));
         THROWF(RuntimeException, "音声エンコーダ終了コード: 0x%x", ret);
     }
 }

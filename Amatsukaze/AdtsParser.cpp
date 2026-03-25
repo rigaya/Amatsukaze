@@ -161,7 +161,7 @@ AdtsParser::~AdtsParser() {
 
                     if (frameInfo.error != 0 || numChannels != 2) {
                         ctx.incrementCounter(AMT_ERR_DECODE_AUDIO);
-                        ctx.warn("音声フレームを正しくデコードできませんでした");
+                        ctx.warn(_T("音声フレームを正しくデコードできませんでした"));
                     } else {
                         decodedBuffer.add(MemoryChunk((uint8_t*)samples, frameInfo.samples * 2));
 
@@ -263,7 +263,7 @@ bool AdtsParser::resetDecoder(MemoryChunk data) {
     unsigned long samplerate;
     unsigned char channels;
     if (NeAACDecInit(hAacDec, data.data, (int)data.length, &samplerate, &channels)) {
-        ctx.warn("NeAACDecInitに失敗");
+        ctx.warn(_T("NeAACDecInitに失敗"));
         return false;
     }
     return true;
@@ -461,7 +461,7 @@ bool DualMonoSplitter::resetDecoder(MemoryChunk data) {
     unsigned long samplerate;
     unsigned char channels;
     if (NeAACDecInit(hAacDec, data.data, (int)data.length, &samplerate, &channels)) {
-        ctx.warn("NeAACDecInitに失敗");
+        ctx.warn(_T("NeAACDecInitに失敗"));
         return false;
     }
     return true;

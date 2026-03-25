@@ -264,7 +264,7 @@ namespace Amatsukaze.ViewModels
                 return false;
             }
 
-            var logoCharSet = Util.AmatsukazeDefaultEncoding; // とりあえず呼んでおく
+            Util.EnsureEncodingProviderRegistered();
 
             try
             {

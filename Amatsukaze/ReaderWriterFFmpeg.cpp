@@ -187,7 +187,7 @@ void av::VideoReader::readAll(const tstring& src, const DecoderSetting& decoderS
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
     const AVCodec *pCodec = getHWAccelCodec(vcodecId, decoderSetting);
     if (pCodec == NULL) {
-        ctx.warn("指定されたデコーダが使用できないためデフォルトデコーダを使います");
+        ctx.warn(_T("指定されたデコーダが使用できないためデフォルトデコーダを使います"));
         pCodec = avcodec_find_decoder(vcodecId);
     }
     if (pCodec == NULL) {
@@ -296,7 +296,7 @@ void av::VideoReader::onFrame(Frame& frame) {
             if (tff) {
                 prevFrame_ = std::unique_ptr<av::Frame>(new av::Frame(frame));
             } else {
-                ctx.warn("トップフィールドを想定していたがそうではなかったのでフィールドを破棄");
+                ctx.warn(_T("トップフィールドを想定していたがそうではなかったのでフィールドを破棄"));
             }
         } else {
             // 2枚のフィールドを合成
@@ -702,12 +702,12 @@ void av::EncodeWriter::finish() {
         process_->finishWrite();
         int ret = process_->join();
         if (ret != 0) {
-            ctx.error("↓↓↓↓↓↓エンコーダ最後の出力↓↓↓↓↓↓");
+            ctx.error(_T("↓↓↓↓↓↓エンコーダ最後の出力↓↓↓↓↓↓"));
             for (auto v : process_->getLastLines()) {
                 v.push_back(0); // null terminate
-                ctx.errorF("%s", v.data());
+                ctx.errorF(_T("%s"), char_to_tstring(v.data()));
             }
-            ctx.error("↑↑↑↑↑↑エンコーダ最後の出力↑↑↑↑↑↑");
+            ctx.error(_T("↑↑↑↑↑↑エンコーダ最後の出力↑↑↑↑↑↑"));
             THROWF(RuntimeException, "エンコーダ終了コード: 0x%x", ret);
         }
         int inFrame = getFrameCount();

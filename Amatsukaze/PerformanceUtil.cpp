@@ -50,7 +50,7 @@ void FpsPrinter::updateProgress(bool last) {
     current = TimeCount();
 
     if (last) {
-        ctx.infoF("complete. %.2ffps (%dフレーム)", sum.count / sum.span, total);
+        ctx.infoF(_T("complete. %.2ffps (%dフレーム)"), sum.count / sum.span, total);
     } else {
         float sumtime = 0;
         int sumcount = 0;
@@ -58,7 +58,7 @@ void FpsPrinter::updateProgress(bool last) {
             sumtime += times[i].span;
             sumcount += times[i].count;
         }
-        ctx.progressF("%d/%d %.2ffps", sum.count, total, sumcount / sumtime);
+        ctx.progressF(_T("%d/%d %.2ffps"), sum.count, total, sumcount / sumtime);
 
         if ((int)times.size() > navg) {
             times.pop_front();

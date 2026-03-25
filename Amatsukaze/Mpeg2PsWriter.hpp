@@ -415,7 +415,7 @@ private:
         if (systemClock.currentClock == -1) {
 #if REDEFINE_PTS
             systemClock.clockOffset = clock - SYSTEM_CLOCK;
-            ctx.info("[PsWriter] ClockOffset = %lld", systemClock.clockOffset);
+            ctx.infoF(_T("[PsWriter] ClockOffset = %lld"), systemClock.clockOffset);
 #endif
             systemClock.currentClock = clock;
         }

@@ -19,9 +19,9 @@ bool NicoJK::makeASS(int serviceId, time_t startTime, int duration) {
     Stopwatch sw;
     sw.start();
     if (!makeASS_(sw, serviceId, startTime, duration)) return false;
-    ctx.infoF("コメントASS生成: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("コメントASS生成: %.2f秒"), sw.getAndReset());
     readASS();
-    ctx.infoF("コメントASS読み込み: %.2f秒", sw.getAndReset());
+    ctx.infoF(_T("コメントASS読み込み: %.2f秒"), sw.getAndReset());
     return true;
 }
 
@@ -92,7 +92,7 @@ tstring NicoJK::MakeNicoJK18Args(int jknum, size_t startTime, size_t endTime) {
 
 bool NicoJK::getNicoJKXml(time_t startTime, int duration) {
     auto args = MakeNicoJK18Args(jknum_, (size_t)startTime, (size_t)startTime + duration);
-    ctx.infoF("%s", args);
+    ctx.infoF(_T("%s"), args);
     StdRedirectedSubProcess process(args);
     int exitCode = process.join();
     if (exitCode == 0 && File::exists(setting_.getTmpNicoJKXMLPath())) {
@@ -178,7 +178,7 @@ bool NicoJK::nicoConvASS(ConvMode mode, size_t startTime) {
     for (int i = 0; i < 2; i++) {
         if (mask_i[i] & typemask) {
             auto args = MakeNicoConvASSArgs(mode, startTime, type_s[i]);
-            ctx.infoF("%s", args);
+            ctx.infoF(_T("%s"), args);
             MySubProcess process(args);
             int exitCode = process.join();
             if (exitCode == 0 && File::exists(setting_.getTmpNicoJKASSPath(type_s[i]))) {
@@ -254,13 +254,13 @@ bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int durati
         }
         t.tm_hour += 9; // GMT+9
         mktime(&t);
-        ctx.infoF("%s (jk%d) %d年%02d月%02d日 %02d時%02d分%02d秒 から %d時間%02d分%02d秒",
-            tvname_.c_str(), jknum_,
+        ctx.infoF(_T("%s (jk%d) %d年%02d月%02d日 %02d時%02d分%02d秒 から %d時間%02d分%02d秒"),
+            char_to_tstring(tvname_), jknum_,
             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
             duration / 3600, (duration / 60) % 60, duration % 60);
 
         if (!getNicoJKXml(startTime, duration)) return false;
-        ctx.infoF("コメントXML取得: %.2f秒", sw.getAndReset());
+        ctx.infoF(_T("コメントXML取得: %.2f秒"), sw.getAndReset());
         return nicoConvASS(CONV_ASS_XML, startTime);
     } else {
         if (setting_.isUseNicoJKLog()) return false;

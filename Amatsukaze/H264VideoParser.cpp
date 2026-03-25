@@ -538,7 +538,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
                                 // PESパケットのPTSと一致しているかチェック
                                 if (std::abs(PTS - PTS_from_SEI) > 1) {
                                     ctx.incrementCounter(AMT_ERR_H264_PTS_MISMATCH);
-                                    ctx.warn("[H264パーサ] PTSが一致しません");
+                                    ctx.warn(_T("[H264パーサ] PTSが一致しません"));
                                 }
                             }
                         }
@@ -597,7 +597,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
 
                 if (receivedField > 2) {
                     ctx.incrementCounter(AMT_ERR_H264_UNEXPECTED_FIELD);
-                    ctx.warn("フィールド配置が変則的すぎて対応できません");
+                    ctx.warn(_T("フィールド配置が変則的すぎて対応できません"));
                     break;
                 }
 

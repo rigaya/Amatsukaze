@@ -55,7 +55,7 @@ void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
     AVCodecID vcodecId = videoStream->codecpar->codec_id;
     const AVCodec *pCodec = getHWAccelCodec(vcodecId);
     if (pCodec == NULL) {
-        ctx.warn("指定されたデコーダが使用できないためデフォルトデコーダを使います");
+        ctx.warn(_T("指定されたデコーダが使用できないためデフォルトデコーダを使います"));
         pCodec = avcodec_find_decoder(vcodecId);
     }
     if (pCodec == NULL) {
@@ -411,7 +411,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
     if (it->originalFramePTS != pts) {
         // 一致するフレームがない
         ctx.incrementCounter(AMT_ERR_UNKNOWN_PTS);
-        ctx.warnF("Unknown PTS frame %lld", pts);
+        ctx.warnF(_T("Unknown PTS frame %lld"), pts);
         prevFrame = nullptr; // 連続でなくなる場合はnullリセット
         return;
     }
@@ -520,7 +520,7 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
             }
             if (avcodec_send_packet(codecCtx(), &packet) != 0) {
                 ctx.incrementCounter(AMT_ERR_DECODE_PACKET_FAILED);
-                ctx.warn("avcodec_send_packet failed");
+                ctx.warn(_T("avcodec_send_packet failed"));
             }
             while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
                 // 最初はキーフレームまでスキップ

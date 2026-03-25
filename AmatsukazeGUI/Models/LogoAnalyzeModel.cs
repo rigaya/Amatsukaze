@@ -192,7 +192,7 @@ namespace Amatsukaze.Models
         public LogoAnalyzeModel()
         {
             context = new AMTContext();
-            var logoCharSet = Util.AmatsukazeDefaultEncoding; // 文字コード(CP932)の登録のため、呼んでおく必要がある
+            Util.EnsureEncodingProviderRegistered();
         }
 
         public void SetClientModel(ClientModel clientModel)

@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <fstream>
+#include <type_traits>
 #include "rgy_osdep.h"
 #include "CoreUtils.hpp"
 #include "FileUtils.h"
@@ -352,40 +353,65 @@ public:
     // ！！入力文字列を含む文字列をfmtに渡すのは禁止！！
     // （%が含まれていると誤動作するので）
 
-    void debug(const char *str) const {
-        print(str, AMT_LOG_DEBUG);
+    void debug(const tchar *str) const {
+        printT(str, AMT_LOG_DEBUG);
+    }
+    void debug(const tstring& str) const {
+        printT(str, AMT_LOG_DEBUG);
     }
     template <typename ... Args>
-    void debugF(const char *fmt, const Args& ... args) const {
-        print(StringFormat(fmt, args ...).c_str(), AMT_LOG_DEBUG);
+    void debugF(const tchar *fmt, const Args& ... args) const {
+        static_assert((!is_forbidden_log_string_arg_v<Args> && ...),
+            "ctx.debugF() string arguments must use TCHAR/tstring");
+        printT(StringFormat(fmt, args ...), AMT_LOG_DEBUG);
     }
-    void info(const char *str) const {
-        print(str, AMT_LOG_INFO);
+    void info(const tchar *str) const {
+        printT(str, AMT_LOG_INFO);
     }
-    template <typename ... Args>
-    void infoF(const char *fmt, const Args& ... args) const {
-        print(StringFormat(fmt, args ...).c_str(), AMT_LOG_INFO);
-    }
-    void warn(const char *str) const {
-        print(str, AMT_LOG_WARN);
+    void info(const tstring& str) const {
+        printT(str, AMT_LOG_INFO);
     }
     template <typename ... Args>
-    void warnF(const char *fmt, const Args& ... args) const {
-        print(StringFormat(fmt, args ...).c_str(), AMT_LOG_WARN);
+    void infoF(const tchar *fmt, const Args& ... args) const {
+        static_assert((!is_forbidden_log_string_arg_v<Args> && ...),
+            "ctx.infoF() string arguments must use TCHAR/tstring");
+        printT(StringFormat(fmt, args ...), AMT_LOG_INFO);
     }
-    void error(const char *str) const {
-        print(str, AMT_LOG_ERROR);
+    void warn(const tchar *str) const {
+        printT(str, AMT_LOG_WARN);
     }
-    template <typename ... Args>
-    void errorF(const char *fmt, const Args& ... args) const {
-        print(StringFormat(fmt, args ...).c_str(), AMT_LOG_ERROR);
-    }
-    void progress(const char *str) const {
-        printProgress(str);
+    void warn(const tstring& str) const {
+        printT(str, AMT_LOG_WARN);
     }
     template <typename ... Args>
-    void progressF(const char *fmt, const Args& ... args) const {
-        printProgress(StringFormat(fmt, args ...).c_str());
+    void warnF(const tchar *fmt, const Args& ... args) const {
+        static_assert((!is_forbidden_log_string_arg_v<Args> && ...),
+            "ctx.warnF() string arguments must use TCHAR/tstring");
+        printT(StringFormat(fmt, args ...), AMT_LOG_WARN);
+    }
+    void error(const tchar *str) const {
+        printT(str, AMT_LOG_ERROR);
+    }
+    void error(const tstring& str) const {
+        printT(str, AMT_LOG_ERROR);
+    }
+    template <typename ... Args>
+    void errorF(const tchar *fmt, const Args& ... args) const {
+        static_assert((!is_forbidden_log_string_arg_v<Args> && ...),
+            "ctx.errorF() string arguments must use TCHAR/tstring");
+        printT(StringFormat(fmt, args ...), AMT_LOG_ERROR);
+    }
+    void progress(const tchar *str) const {
+        printProgressT(str);
+    }
+    void progress(const tstring& str) const {
+        printProgressT(str);
+    }
+    template <typename ... Args>
+    void progressF(const tchar *fmt, const Args& ... args) const {
+        static_assert((!is_forbidden_log_string_arg_v<Args> && ...),
+            "ctx.progressF() string arguments must use TCHAR/tstring");
+        printProgressT(StringFormat(fmt, args ...));
     }
 
     void registerTmpFile(const tstring& path) {
@@ -470,6 +496,52 @@ public:
     }
 
 private:
+    template <typename T>
+    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+
+    template <typename T>
+    struct string_char_type {
+        using type = void;
+    };
+
+    template <typename CharT>
+    struct string_char_type<CharT*> {
+        using type = std::remove_cv_t<CharT>;
+    };
+
+    template <typename CharT, size_t N>
+    struct string_char_type<CharT[N]> {
+        using type = std::remove_cv_t<CharT>;
+    };
+
+    template <typename CharT, size_t N>
+    struct string_char_type<const CharT[N]> {
+        using type = std::remove_cv_t<CharT>;
+    };
+
+    template <typename CharT, typename Traits, typename Allocator>
+    struct string_char_type<std::basic_string<CharT, Traits, Allocator>> {
+        using type = std::remove_cv_t<CharT>;
+    };
+
+    template <typename T>
+    using string_char_type_t = typename string_char_type<remove_cvref_t<T>>::type;
+
+    template <typename T>
+    static constexpr bool is_character_type_v =
+        std::is_same_v<T, char> ||
+        std::is_same_v<T, wchar_t> ||
+#if defined(__cpp_char8_t)
+        std::is_same_v<T, char8_t> ||
+#endif
+        std::is_same_v<T, char16_t> ||
+        std::is_same_v<T, char32_t>;
+
+    template <typename T>
+    static constexpr bool is_forbidden_log_string_arg_v =
+        is_character_type_v<string_char_type_t<T>> &&
+        !std::is_same_v<string_char_type_t<T>, tchar>;
+
     bool timePrefix;
     CRC32 crc;
     int acp;
@@ -479,6 +551,48 @@ private:
     std::string errMessage;
 
     std::map<std::string, std::wstring> drcsMap;
+
+    void printT(const tchar *str, AMT_LOG_LEVEL level) const {
+#if defined(_WIN32) || defined(_WIN64)
+        printWide(str, level);
+#else
+        print(str, level);
+#endif
+    }
+
+    void printT(const tstring& str, AMT_LOG_LEVEL level) const {
+#if defined(_WIN32) || defined(_WIN64)
+        print(wstring_to_string(str, (uint32_t)acp).c_str(), level);
+#else
+        print(str.c_str(), level);
+#endif
+    }
+
+    void printProgressT(const tchar *str) const {
+#if defined(_WIN32) || defined(_WIN64)
+        printProgressWide(str);
+#else
+        printProgress(str);
+#endif
+    }
+
+    void printProgressT(const tstring& str) const {
+#if defined(_WIN32) || defined(_WIN64)
+        printProgress(wstring_to_string(str, (uint32_t)acp).c_str());
+#else
+        printProgress(str.c_str());
+#endif
+    }
+
+#if defined(_WIN32) || defined(_WIN64)
+    void printWide(const wchar_t *str, AMT_LOG_LEVEL level) const {
+        printT(std::wstring(str), level);
+    }
+
+    void printProgressWide(const wchar_t *str) const {
+        printProgressT(std::wstring(str));
+    }
+#endif
 
     void printWithTimePrefix(const char* str, const char *endchar = "\n") const {
         time_t rawtime;
