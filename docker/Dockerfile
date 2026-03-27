@@ -213,25 +213,23 @@ ENV LC_CTYPE=ja_JP.UTF-8
 ENV QSVENCC_VER=8.06
 ENV NVENCC_VER=9.12
 ENV VCEENCC_VER=9.04
-ENV AMDGPU_INSTALL_VER=25.35
-ENV AMDGPU_INSTALL_DEB_VER=7.2.70200-1
-ENV AMF_INSTALLER_VER=25.20
+ENV AMDGPU_INSTALL_VER=25.35.1
+ENV AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
 ENV TSREPLACE_VER=0.19
 ENV AVISYNTHCUDAFILTERS_VER=0.7.3
 ENV AVISYNTH_VER=3.7.5
 ENV FASTER_WHISPER_VER=r245.4
 
 # 実行に必要なパッケージのみインストール（デバッグモードの場合はビルドツールも含める）
+# ENABLE_VCEENCC 時の AMF: repo.radeon.com amdgpu/6.4.4 pool は jammy(22.04): *_2202160.22.04_* と noble(24.04): *_2203192.24.04_* の二系統。ベース Ubuntu 22.04 のため前者を取得する。
 RUN apt-get update && apt-get install -y \
     gpg \
     ca-certificates \
     curl \
-    jq \
     wget \
     tzdata \
     software-properties-common \
     p7zip-full \
-    unzip \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${UBUNTU_NAME} unified" \
       | tee /etc/apt/sources.list.d/intel-gpu-${UBUNTU_NAME}.list \
@@ -241,16 +239,19 @@ RUN apt-get update && apt-get install -y \
         && rm ./amdgpu-install.deb \
         && apt-get update \
         && amdgpu-install -y --usecase=opencl --opencl=rocr --no-dkms \
-        && AMF_INSTALLER_URL="$(curl -fsSL 'https://api.github.com/repos/GPUOpen-LibrariesAndSDKs/AMF/releases?per_page=100' \
-            | jq -r --arg ver "${AMF_INSTALLER_VER}" '[.[].assets[]? | select(.name == ("amf_installer_" + $ver + ".zip")) | .browser_download_url][0]')" \
-        && if [ -z "${AMF_INSTALLER_URL}" ] || [ "${AMF_INSTALLER_URL}" = "null" ]; then \
-            echo "AMF installer not found for version ${AMF_INSTALLER_VER}" >&2; \
-            exit 1; \
-        fi \
-        && wget "${AMF_INSTALLER_URL}" -O amf_installer.zip \
-        && unzip -o amf_installer.zip \
-        && "./amf_installer_${AMF_INSTALLER_VER}.sh" --accept-eula \
-        && rm -f amf_installer.zip "./amf_installer_${AMF_INSTALLER_VER}.sh" \
+        && wget https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/a/amdgpu-pro-core/amdgpu-pro-core_25.10-2202160.22.04_all.deb \
+        && wget https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/liba/libamdenc-amdgpu-pro/libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb \
+        && wget https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/a/amf-amdgpu-pro/amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb \
+        && apt-get remove --purge -y amf-amdgpu-pro libamdenc-amdgpu-pro || true \
+        && apt-get install -y --allow-downgrades \
+            ./amdgpu-pro-core_25.10-2202160.22.04_all.deb \
+            ./libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb \
+            ./amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb \
+        && apt-mark hold amdgpu-pro-core libamdenc-amdgpu-pro amf-amdgpu-pro \
+        && rm -f \
+            ./amdgpu-pro-core_25.10-2202160.22.04_all.deb \
+            ./libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb \
+            ./amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb \
         && if [ ! -e /lib/x86_64-linux-gnu/libOpenCL.so ] && [ -e /lib/x86_64-linux-gnu/libOpenCL.so.1 ]; then \
             ln -s /lib/x86_64-linux-gnu/libOpenCL.so.1 /lib/x86_64-linux-gnu/libOpenCL.so; \
         fi; \
