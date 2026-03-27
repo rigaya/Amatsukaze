@@ -83,6 +83,7 @@
 .trim-main {
     display: flex;
     flex: 1;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
 }
@@ -187,6 +188,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
     padding: 8px;
@@ -198,6 +200,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 0;
     overflow: hidden;
     background: #000;
     border-radius: 4px;
@@ -208,8 +211,9 @@
 .trim-preview-thumb {
     position: absolute;
     bottom: 8px;
-    width: min(220px, 26vw);
-    height: min(140px, 18vh);
+    width: clamp(96px, 16vw, 220px);
+    max-width: calc(50% - 16px);
+    height: clamp(60px, 10vw, 140px);
     border: 1px solid rgba(180, 220, 255, 0.45);
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.55);
@@ -299,6 +303,8 @@
 }
 
 .trim-preview-img {
+    width: 100%;
+    min-width: 0;
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
@@ -505,11 +511,13 @@
 /* シークバー */
 .trim-seekbar-container {
     flex-shrink: 0;
+    min-width: 0;
     padding: 16px 0 4px 0; /* 上にマーカー領域分の余白 */
 }
 
 .trim-seekbar {
     position: relative;
+    min-width: 0;
     height: 24px;
     border-radius: 4px;
     overflow: visible;
