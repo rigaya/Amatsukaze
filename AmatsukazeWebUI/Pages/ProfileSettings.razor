@@ -744,8 +744,8 @@ else
         <hr class="settings-sep" />
         <h4>その他の設定</h4>
         <table class="table">
-            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveInputFile")" @onchange="@(e => OnBoolChanged(e, "MoveInputFile"))" />処理の終了後、入力ファイルを別フォルダに移動する</label></td></tr>
-            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetBoolValue("MoveInputFile"))" />関連ファイル(*.err,*.program.txtなど)もコピー/移動する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetMoveInputFileValue()" @onchange="OnMoveInputFileChanged" />処理の終了後、入力ファイルを別フォルダに移動する</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetMoveInputFileValue())" />関連ファイル(*.err,*.program.txtなど)もコピー/移動する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" />チャプター・CM解析を無効にする</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("OutputChapter")" @onchange="@(e => OnBoolChanged(e, "OutputChapter"))" disabled="@(GetBoolValue("DisableChapter"))" />チャプターを別ファイルに出力する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoDrcsMap")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoDrcsMap"))" />マッピングにないDRCS外字は無視する</label></td></tr>
@@ -1200,6 +1200,11 @@ else
         return TryGetBoolFromNode(node, out var value) && value;
     }
 
+    private bool GetMoveInputFileValue()
+    {
+        return !GetBoolValue("DisableMoveInputFile");
+    }
+
     private void OnStringChanged(ChangeEventArgs e, string name)
     {
         SetNodeValue(name, JsonValue.Create(e.Value?.ToString() ?? ""));
@@ -1217,6 +1222,16 @@ else
     {
         var value = e.Value is bool b && b;
         SetNodeValue(name, JsonValue.Create(value));
+    }
+
+    private void OnMoveInputFileChanged(ChangeEventArgs e)
+    {
+        var moveInputFile = e.Value is bool b && b;
+        SetNodeValue("DisableMoveInputFile", JsonValue.Create(!moveInputFile));
+        if (!moveInputFile)
+        {
+            SetNodeValue("MoveEDCBFiles", JsonValue.Create(false));
+        }
     }
 
     private void OnEncoderChanged(ChangeEventArgs e)
