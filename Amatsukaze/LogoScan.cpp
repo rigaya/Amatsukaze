@@ -4907,41 +4907,36 @@ namespace {
             // d9b3138 で入れた suppression/boost は、rescue が疎なケースで
             // base score の内部にむらを作りやすかった。ここでは base を削らず、
             // rescue を base と同じスケールに合わせて足し込むだけに留める。
+            // 基準値は部分集合ではなく ROI 全体から取り、式の意味を単純に保つ。
             {
                 const int pixelCount = scanw * scanh;
                 std::vector<float> baseScores;
-                baseScores.reserve(4096);
-                std::vector<float> scaleRatios;
-                scaleRatios.reserve(4096);
-                static constexpr float kScaleRatioMinScore  = 0.02f;
-                static constexpr float kScaleRatioMinRescue = 0.005f;
+                baseScores.reserve(pixelCount);
+                std::vector<float> rescueScores;
+                rescueScores.reserve(pixelCount);
                 for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i]) continue;
-                    const float sc = scoreStage.score[i];
-                    const float rs = scoreStage.mapRescueScore[i];
-                    if (sc > 0.0f) {
-                        baseScores.push_back(sc);
-                    }
-                    if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
-                        scaleRatios.push_back(sc / rs);
-                    }
+                    baseScores.push_back(std::max(scoreStage.score[i], 0.0f));
+                    rescueScores.push_back(std::max(scoreStage.mapRescueScore[i], 0.0f));
                 }
-                float baseP75 = 0.0f;
+                float baseP99 = 0.0f;
                 if (!baseScores.empty()) {
                     std::sort(baseScores.begin(), baseScores.end());
-                    const int idx75 = std::min((int)(baseScores.size() * 3 / 4), (int)baseScores.size() - 1);
-                    baseP75 = baseScores[idx75];
+                    const int idx99 = std::min((int)(baseScores.size() * 99 / 100), (int)baseScores.size() - 1);
+                    baseP99 = baseScores[idx99];
                 }
-                float scaleFactor = 1.0f;
-                if (!scaleRatios.empty()) {
-                    std::sort(scaleRatios.begin(), scaleRatios.end());
-                    const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
-                    scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 20.0f));
+                float rescueP999 = 0.0f;
+                if (!rescueScores.empty()) {
+                    std::sort(rescueScores.begin(), rescueScores.end());
+                    const int idx999 = std::min((int)(rescueScores.size() * 999 / 1000), (int)rescueScores.size() - 1);
+                    rescueP999 = rescueScores[idx999];
                 }
+                const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f) ? (baseP99 / rescueP999) : 0.0f;
                 static constexpr float kRescueBlendRatioHi = 0.6f;
                 static constexpr float kRescueBlendRatioLo = 0.05f;
                 static constexpr float kRescueBaseNormLo   = 0.3f;
                 static constexpr float kRescueBaseNormHi   = 1.0f;
+                static constexpr float kRescueNormLo       = 0.3f;
+                static constexpr float kRescueNormHi       = 1.0f;
                 int blendedCount = 0;
                 int rescueOnlyCount = 0;
                 for (int i = 0; i < pixelCount; i++) {
@@ -4949,21 +4944,28 @@ namespace {
                     if (rs <= 0.0f) continue;
                     if (!scoreStage.validAB[i]) continue;
                     const float base = scoreStage.score[i];
-                    const float baseNorm = (baseP75 > 1e-6f) ? (base / baseP75) : 0.0f;
-                    float rescueRatio = kRescueBlendRatioLo;
+                    const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
+                    float rescueRatioBase = kRescueBlendRatioLo;
                     if (baseNorm <= kRescueBaseNormLo) {
-                        rescueRatio = kRescueBlendRatioHi;
+                        rescueRatioBase = kRescueBlendRatioHi;
                     } else if (baseNorm < kRescueBaseNormHi) {
                         const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
-                        rescueRatio = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
+                        rescueRatioBase = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
                     }
-                    const float rescueVal = rescueRatio * std::min(scaleFactor * rs, 1.0f);
+                    const float rescueNorm = (rescueP999 > 1e-6f) ? (rs / rescueP999) : 0.0f;
+                    float rescueWeight = 1.0f;
+                    if (rescueNorm <= kRescueNormLo) {
+                        rescueWeight = 0.0f;
+                    } else if (rescueNorm < kRescueNormHi) {
+                        rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
+                    }
+                    const float rescueVal = rescueRatioBase * rescueWeight * rs * rescueGain;
                     scoreStage.score[i] += rescueVal;
                     blendedCount++;
                 }
-                fprintf(stderr, "[LogoScan] rescue additive blend: ratioHi=%.2f ratioLo=%.2f baseP75=%.4f scaleRatios.size()=%zu scaleFactor=%.4f blended=%d rescueOnly=%d\n",
-                    kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP75,
-                    scaleRatios.size(), (double)scaleFactor, blendedCount, rescueOnlyCount);
+                fprintf(stderr, "[LogoScan] rescue additive blend: ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
+                    kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
+                    (double)rescueGain, blendedCount, rescueOnlyCount);
                 // ファイル出力: rescueScore 分布と加算効果の確認
                 {
                     FILE* fp = fopen("/tmp/rescue_gate_diag.txt", "w");
@@ -4980,8 +4982,8 @@ namespace {
                         fprintf(fp, "pixelCount=%d\n", pixelCount);
                         fprintf(fp, "nonzeroRS=%d nonzeroSc=%d\n", nonzeroRS, nonzeroSc);
                         fprintf(fp, "maxRS=%.6f maxScore=%.6f maxAccepted=%.6f\n", maxRS, maxSc, maxAcc);
-                        fprintf(fp, "baseScores.size()=%zu baseP75=%.6f scaleRatios.size()=%zu scaleFactor=%.6f ratioHi=%.6f ratioLo=%.6f blended=%d rescueOnly=%d\n",
-                            baseScores.size(), baseP75, scaleRatios.size(), scaleFactor,
+                        fprintf(fp, "baseScores.size()=%zu baseP99=%.6f rescueScores.size()=%zu rescueP999=%.6f rescueGain=%.6f ratioHi=%.6f ratioLo=%.6f blended=%d rescueOnly=%d\n",
+                            baseScores.size(), baseP99, rescueScores.size(), rescueP999, rescueGain,
                             kRescueBlendRatioHi, kRescueBlendRatioLo, blendedCount, rescueOnlyCount);
                         for (int y : {30, 35, 40, 45, 70, 90, 100, 110}) {
                             if (y >= scanh) continue;
@@ -4989,17 +4991,24 @@ namespace {
                                 if (x >= scanw) continue;
                                 const int idx = x + y * scanw;
                                 const float base = scoreStage.mapAccepted[idx];
-                                const float baseNorm = (baseP75 > 1e-6f) ? (base / baseP75) : 0.0f;
-                                float rescueRatio = kRescueBlendRatioLo;
+                                const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
+                                float rescueRatioBase = kRescueBlendRatioLo;
                                 if (baseNorm <= kRescueBaseNormLo) {
-                                    rescueRatio = kRescueBlendRatioHi;
+                                    rescueRatioBase = kRescueBlendRatioHi;
                                 } else if (baseNorm < kRescueBaseNormHi) {
                                     const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
-                                    rescueRatio = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
+                                    rescueRatioBase = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
                                 }
-                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f baseNorm=%.4f ratio=%.4f ugate=%.4f interior=%d validAB=%d\n",
+                                const float rescueNorm = (rescueP999 > 1e-6f) ? (scoreStage.mapRescueScore[idx] / rescueP999) : 0.0f;
+                                float rescueWeight = 1.0f;
+                                if (rescueNorm <= kRescueNormLo) {
+                                    rescueWeight = 0.0f;
+                                } else if (rescueNorm < kRescueNormHi) {
+                                    rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
+                                }
+                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f baseNorm=%.4f rescueNorm=%.4f ratioBase=%.4f weight=%.4f rescueGain=%.4f ugate=%.4f interior=%d validAB=%d\n",
                                     x, y, scoreStage.mapAccepted[idx], scoreStage.score[idx],
-                                    scoreStage.mapRescueScore[idx], baseNorm, rescueRatio, scoreStage.mapUpperGate[idx],
+                                    scoreStage.mapRescueScore[idx], baseNorm, rescueNorm, rescueRatioBase, rescueWeight, rescueGain, scoreStage.mapUpperGate[idx],
                                     (int)isInterior[idx], (int)scoreStage.validAB[idx]);
                             }
                         }
