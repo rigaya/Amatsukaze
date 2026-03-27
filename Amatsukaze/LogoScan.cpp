@@ -5808,7 +5808,83 @@ namespace {
                     (nearDiagonal && (comp.peakScore >= (float)((double)lowTh * 1.50) && comp.meanAccepted >= 0.16f));
 
                 const double aspect = std::max((double)comp.compW / std::max(1, comp.compH), (double)comp.compH / std::max(1, comp.compW));
-                const bool shapeOk = comp.area >= 3 && comp.area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0;
+                static constexpr int kBridgeTol = 2;
+                const bool tinyBridgeCandidate =
+                    comp.area <= 4 &&
+                    std::max(comp.compW, comp.compH) <= 4 &&
+                    comp.peakScore >= (float)((double)lowTh * 1.02) &&
+                    comp.meanAccepted >= 0.03f;
+                auto hasVerticalBridge = [&]() {
+                    if (!tinyBridgeCandidate) return false;
+                    if (comp.minY <= 0 || comp.maxY >= scanh - 1) return false;
+                    for (int x = comp.minX; x <= comp.maxX; x++) {
+                        bool coveredAbove = false;
+                        bool coveredBelow = false;
+                        const int sx0 = std::max(0, x - kBridgeTol);
+                        const int sx1 = std::min(scanw - 1, x + kBridgeTol);
+                        const int aboveY0 = std::max(0, comp.minY - kBridgeTol);
+                        const int aboveY1 = comp.minY - 1;
+                        const int belowY0 = comp.maxY + 1;
+                        const int belowY1 = std::min(scanh - 1, comp.maxY + kBridgeTol);
+                        for (int sy = aboveY0; sy <= aboveY1 && !coveredAbove; sy++) {
+                            for (int sx = sx0; sx <= sx1; sx++) {
+                                if (outBinary[sx + sy * scanw]) {
+                                    coveredAbove = true;
+                                    break;
+                                }
+                            }
+                        }
+                        for (int sy = belowY0; sy <= belowY1 && !coveredBelow; sy++) {
+                            for (int sx = sx0; sx <= sx1; sx++) {
+                                if (outBinary[sx + sy * scanw]) {
+                                    coveredBelow = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!coveredAbove || !coveredBelow) return false;
+                    }
+                    return true;
+                };
+                auto hasHorizontalBridge = [&]() {
+                    if (!tinyBridgeCandidate) return false;
+                    if (comp.minX <= 0 || comp.maxX >= scanw - 1) return false;
+                    for (int y = comp.minY; y <= comp.maxY; y++) {
+                        bool coveredLeft = false;
+                        bool coveredRight = false;
+                        const int sy0 = std::max(0, y - kBridgeTol);
+                        const int sy1 = std::min(scanh - 1, y + kBridgeTol);
+                        const int leftX0 = std::max(0, comp.minX - kBridgeTol);
+                        const int leftX1 = comp.minX - 1;
+                        const int rightX0 = comp.maxX + 1;
+                        const int rightX1 = std::min(scanw - 1, comp.maxX + kBridgeTol);
+                        for (int sx = leftX0; sx <= leftX1 && !coveredLeft; sx++) {
+                            for (int sy = sy0; sy <= sy1; sy++) {
+                                if (outBinary[sx + sy * scanw]) {
+                                    coveredLeft = true;
+                                    break;
+                                }
+                            }
+                        }
+                        for (int sx = rightX0; sx <= rightX1 && !coveredRight; sx++) {
+                            for (int sy = sy0; sy <= sy1; sy++) {
+                                if (outBinary[sx + sy * scanw]) {
+                                    coveredRight = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!coveredLeft || !coveredRight) return false;
+                    }
+                    return true;
+                };
+                const bool tinyBridgeComp = hasVerticalBridge() || hasHorizontalBridge();
+                // q66 のように輪郭ベースで 1-4px の橋画素が出るケースでは、
+                // 成分 span が既存 binary に上下または左右から挟まれているときだけ
+                // shape 条件を緩めて promote へ通す。
+                const bool shapeOk =
+                    ((comp.area >= 3 && comp.area <= (int)(scanw * scanh * 0.12) && aspect <= 10.0) ||
+                     tinyBridgeComp);
                 const bool signalOk = comp.peakScore >= (float)((double)lowTh * 1.02) || comp.meanAccepted >= 0.11f;
 
                 const int insideW = std::max(0, std::min(comp.maxX, guardMaxX) - std::max(comp.minX, guardMinX) + 1);
