@@ -2675,7 +2675,8 @@ namespace {
             if (!pass2Entered) {
                 fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
                 setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
-                estimateScoreAndRect(pass1Stats, true, pass1RectLocal);
+                const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
+                estimateScoreAndRect(pass1Stats, true, rescueAnchorRect);
                 captureCurrentDebugSnapshot(debugPass2);
             }
             setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
@@ -3009,7 +3010,8 @@ namespace {
             setProgressPlan(3, 0.40f, 0.35f, 0.78f, 0.11f);
             rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
             setProgressPlan(3, 0.75f, 0.25f, 0.89f, 0.09f);
-            estimateScoreAndRect(pass3Stats, false, pass1RectLocal);
+            const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
+            estimateScoreAndRect(pass3Stats, false, rescueAnchorRect);
             captureCurrentDebugSnapshot(debugPass2);
 
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
@@ -5119,7 +5121,7 @@ namespace {
 
                 // rectGate: アンカー矩形からの距離マップを構築し、遠い画素への rescue 適用を抑制する。
                 // enableRescue (pass1 fallback) と pass2 (passIndex==3) の両方で使用する。
-                static constexpr int kRescueRectMaxDist = 30;
+                const int rescueRectMaxDist = enableRescue ? 48 : 40;
                 const bool useRectGate = rescueAnchorRect.w > 0 && rescueAnchorRect.h > 0;
                 std::vector<int> rectDistMap;
                 if (useRectGate) {
@@ -5136,7 +5138,7 @@ namespace {
                     }
                     while (!bfsQ.empty()) {
                         const int cur = bfsQ.front(); bfsQ.pop();
-                        if (rectDistMap[cur] >= kRescueRectMaxDist) continue;
+                        if (rectDistMap[cur] >= rescueRectMaxDist) continue;
                         const int cx = cur % scanw, cy = cur / scanw;
                         for (int dy = -1; dy <= 1; dy++) {
                             for (int dx = -1; dx <= 1; dx++) {
@@ -5152,12 +5154,10 @@ namespace {
                         }
                     }
                     fprintf(stderr, "[LogoScan] rescue rect gate: rect=(%d,%d,%d,%d) maxDist=%d\n",
-                        rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, kRescueRectMaxDist);
+                        rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, rescueRectMaxDist);
                 }
 
-                if (enableRescue) {
-                    // pass1 フォールバック: scaleFactor で rescue score を補正し、
-                    // contaminated 閾値を高めに設定して pass1 rect 近傍のみ救済する。
+                auto computeRescueScaleFactor = [&]() {
                     std::vector<float> scaleRatios;
                     scaleRatios.reserve(4096);
                     static constexpr float kScaleRatioMinScore  = 0.02f;
@@ -5174,10 +5174,17 @@ namespace {
                     if (!scaleRatios.empty()) {
                         std::sort(scaleRatios.begin(), scaleRatios.end());
                         const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
-                        scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 20.0f));
+                        scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 4.0f));
                     }
+                    return std::make_pair(scaleFactor, scaleRatios.size());
+                };
+
+                if (enableRescue) {
+                    // pass1 フォールバック: scaleFactor で rescue score を補正し、
+                    // contaminated 閾値を高めに設定して pass1 rect 近傍のみ救済する。
+                    const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
                     fprintf(stderr, "[LogoScan] rescue blending (pass1 fallback): scaleRatios.size()=%zu scaleFactor=%.4f\n",
-                        scaleRatios.size(), (double)scaleFactor);
+                        scaleRatioCount, (double)scaleFactor);
 
                     static constexpr float kRescueBlendWeight       = 0.7f;
                     static constexpr float kContaminatedScoreThresh = 0.05f;
@@ -5188,25 +5195,29 @@ namespace {
                         if (!scoreStage.validAB[i]) {
                             scoreStage.score[i] = rescueVal;
                         } else if (scoreStage.score[i] < kContaminatedScoreThresh) {
-                            if (useRectGate && rectDistMap[i] > kRescueRectMaxDist) continue;
+                            if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
                             scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
                         }
                     }
                 } else {
-                    // pass2 (passIndex==3): フレームゲート済みのためテロップノイズは少なく、
-                    // スケール補正は不要。weight=0.6, threshold=0.01 で控えめに適用する。
-                    // rectGate があれば、ロゴ矩形近傍のみに rescue を制限して
-                    // 散在する偽陽性ノイズによる矩形検出失敗を防ぐ。
-                    static constexpr float kRescueWeight = 0.6f;
-                    static constexpr float kContaminatedThreshold = 0.01f;
+                    // pass2 (passIndex==3): フレームゲート後でも q58/q70 のように
+                    // 回帰 score が細部だけ落ちるケースがあるので、pass1 fallback と同様に
+                    // rescue をスケール補正して使う。ただし上限は低めにして暴れを抑える。
+                    const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
+                    fprintf(stderr, "[LogoScan] rescue blending (pass2): scaleRatios.size()=%zu scaleFactor=%.4f\n",
+                        scaleRatioCount, (double)scaleFactor);
+                    static constexpr float kRescueWeight = 0.65f;
+                    static constexpr float kContaminatedThreshold = 0.03f;
+                    static constexpr float kRescuePromoteRatio = 1.5f;
                     for (int i = 0; i < pixelCount; i++) {
                         if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
-                        if (useRectGate && rectDistMap[i] > kRescueRectMaxDist) continue;
-                        const float rescueVal = kRescueWeight * scoreStage.mapRescueScore[i];
+                        if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
+                        const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
+                        const float rescueVal = kRescueWeight * rescueScaled;
                         if (!scoreStage.validAB[i]) {
                             scoreStage.score[i] = rescueVal;
-                        } else if (scoreStage.score[i] < kContaminatedThreshold) {
-                            scoreStage.score[i] = rescueVal;
+                        } else if (scoreStage.score[i] < kContaminatedThreshold || rescueVal > scoreStage.score[i] * kRescuePromoteRatio) {
+                            scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
                         }
                     }
                 }
