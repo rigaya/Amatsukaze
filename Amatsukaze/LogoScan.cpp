@@ -6183,11 +6183,10 @@ namespace {
                             c.peakScore >= minSignalPeak ||
                             c.meanAccepted >= minSignalAccepted;
                         const bool sameRowComp = std::abs(compCenterY - anchorCenterY) <= std::max(4, (int)std::round(anchorH * 0.45));
-                        const bool isLowerComp = compCenterY > anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
-                        const bool lowAlphaConsistencyOk =
-                            !isLowerComp ||
-                            c.meanAlpha >= 0.20f ||
-                            c.meanConsistency >= minSignalConsistency;
+                        const int lowerCompThresholdY = anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
+                        const bool isLowerComp = compCenterY > lowerCompThresholdY;
+                        const bool clearLowerRowComp =
+                            c.minY >= anchor.maxY + std::max(6, (int)std::round(anchorH * 0.35));
                         // q17 で左側の靄成分が残った要因:
                         // 「同じ行にある」だけで弱信号成分まで keep されていた。
                         // sameRow 救済には最低限の信号量(accepted/consistency)を要求する。
@@ -6195,8 +6194,9 @@ namespace {
                             sameRowComp &&
                             (c.meanAccepted >= minSignalAccepted || c.meanConsistency >= minSignalConsistency);
                         const bool signalGateOk = signalOk || sameRowSignalRescue;
-                        if (!yGuard || !shapeOk || !signalGateOk || !lowAlphaConsistencyOk) continue;
+                        if (!yGuard || !shapeOk || !signalGateOk) continue;
                         bool nearKept = false;
+                        bool lowerRowBridge = false;
                         for (int k = 0; k < (int)comps.size(); k++) {
                             if (!keepComp[k]) continue;
                             const auto& ref = comps[k];
@@ -6225,12 +6225,28 @@ namespace {
                             // nearD も多行ロゴの行間を考慮して gapY を緩和。
                             const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
                                 gapY <= std::max(12, (int)std::round(std::max(anchorH, ref.h) * 1.00));
-                            nearKept = (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
-                            if (nearKept) {
-                                break;
-                            }
+                            const int refCenterY = (ref.minY + ref.maxY) / 2;
+                            const bool refIsLowerComp = refCenterY > lowerCompThresholdY;
+                            const bool sameLowerRowNearH =
+                                clearLowerRowComp &&
+                                refIsLowerComp &&
+                                overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.35)) &&
+                                gapX <= std::max(12, (int)std::round(std::max(anchorW, ref.w) * 0.60));
+                            lowerRowBridge = lowerRowBridge || sameLowerRowNearH;
+                            nearKept = nearKept || (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
                         }
                         if (!nearKept) continue;
+                        const bool lowerRowSignalRescue =
+                            clearLowerRowComp &&
+                            lowerRowBridge &&
+                            c.area >= std::max(12, (int)std::round(anchorW * 0.18)) &&
+                            (c.meanScore >= minSignalScore * 1.60f || c.peakScore >= minSignalPeak * 1.60f);
+                        const bool lowAlphaConsistencyOk =
+                            !isLowerComp ||
+                            c.meanAlpha >= 0.20f ||
+                            c.meanConsistency >= minSignalConsistency ||
+                            lowerRowSignalRescue;
+                        if (!lowAlphaConsistencyOk) continue;
                         const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
                         // 多行ロゴの下段行が opaqueFar で除外されないよう gapY を緩和。
                         const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
