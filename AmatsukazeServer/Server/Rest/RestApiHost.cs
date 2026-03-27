@@ -1640,6 +1640,7 @@ namespace Amatsukaze.Server.Rest
                     || string.Equals(kind, "promotecsv", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "deltacsv", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "rectmergecsv", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "compscorecsv", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "tracecsv", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "tracecsv-pass1", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(kind, "tracecsv-pass2", StringComparison.OrdinalIgnoreCase)

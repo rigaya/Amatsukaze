@@ -376,6 +376,10 @@ namespace Amatsukaze.Server.Rest
             {
                 path = AddSuffixToPath(job.BinaryImagePath, ".rectmerge.csv");
             }
+            else if (string.Equals(kind, "compscorecsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".compscore.csv");
+            }
             else if (string.Equals(kind, "tracecsv", StringComparison.OrdinalIgnoreCase))
             {
                 path = AddSuffixToPath(job.BinaryImagePath, ".trace.csv");

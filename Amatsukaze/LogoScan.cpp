@@ -2484,11 +2484,40 @@ namespace {
             int sizeGuardOk;
             int accepted;
         };
+        struct RectCompScoreDebug {
+            int minX;
+            int minY;
+            int maxX;
+            int maxY;
+            int area;
+            int w;
+            int h;
+            int perimeter;
+            double fillRatio;
+            double compactness;
+            double maxRowRatio;
+            double maxColRatio;
+            double rowCoverage;
+            double colCoverage;
+            double rightTopPrior;
+            double compScore;
+            int regularCandidate;
+            int fallbackEligible;
+            int clusterArea;
+            int clusterCount;
+            int clusterMinX;
+            int clusterMinY;
+            int clusterMaxX;
+            int clusterMaxY;
+            double fallbackScore;
+            int selectedBest;
+        };
         std::vector<std::vector<uint8_t>> iterBinaryHistory;
         std::vector<IterThresholdDebug> iterThresholdDebug;
         std::vector<PromoteCompDebug> promoteCompDebug;
         std::vector<DeltaCompDebug> deltaCompDebug;
         std::vector<RectMergeDebug> rectMergeDebug;
+        std::vector<RectCompScoreDebug> rectCompScoreDebug;
         int debugAbsX;
         int debugAbsY;
 
@@ -3663,6 +3692,23 @@ namespace {
                             d.withinSeedCenterGuard, d.withinFinalCenterGuard, d.sizeGuardOk, d.accepted);
                     }
                     fclose(frect);
+                }
+            }
+
+            if (!rectCompScoreDebug.empty()) {
+                const std::string compScoreCsvPath = replaceExtensionWithSuffix(path.binary, ".compscore.csv");
+                FILE* fcomp = fopen(compScoreCsvPath.c_str(), "w");
+                if (fcomp != nullptr) {
+                    fprintf(fcomp, "minX,minY,maxX,maxY,area,w,h,perimeter,fillRatio,compactness,maxRowRatio,maxColRatio,rowCoverage,colCoverage,rightTopPrior,compScore,regularCandidate,fallbackEligible,clusterArea,clusterCount,clusterMinX,clusterMinY,clusterMaxX,clusterMaxY,fallbackScore,selectedBest\n");
+                    for (const auto& d : rectCompScoreDebug) {
+                        fprintf(fcomp, "%d,%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%d,%d,%d,%d,%d,%.8f,%d\n",
+                            d.minX, d.minY, d.maxX, d.maxY, d.area, d.w, d.h, d.perimeter,
+                            d.fillRatio, d.compactness, d.maxRowRatio, d.maxColRatio, d.rowCoverage, d.colCoverage,
+                            d.rightTopPrior, d.compScore, d.regularCandidate, d.fallbackEligible,
+                            d.clusterArea, d.clusterCount, d.clusterMinX, d.clusterMinY, d.clusterMaxX, d.clusterMaxY,
+                            d.fallbackScore, d.selectedBest);
+                    }
+                    fclose(fcomp);
                 }
             }
         }
@@ -6683,6 +6729,98 @@ namespace {
         std::vector<uint8_t> visited(scanw * scanh, 0);
         std::queue<int> q;
         const int minArea = std::max(24, scanw * scanh / 2048);
+        const int fallbackMinArea = std::max(12, (int)std::ceil(minArea * 0.80));
+        std::vector<RectStageCompCandidate> fallbackSeedCandidates;
+        auto sameRect = [](const AutoDetectRect& lhs, const AutoDetectRect& rhs) {
+            return lhs.x == rhs.x && lhs.y == rhs.y && lhs.w == rhs.w && lhs.h == rhs.h;
+        };
+        auto expandMergeCluster = [&](const RectStageCompCandidate& seedCand, AutoDetectRect& outRect, int& outClusterArea, int& outClusterCount) {
+            const AutoDetectRect& seed = seedCand.rect;
+            outRect = seed;
+            outClusterArea = seedCand.area;
+            outClusterCount = 1;
+            const double seedCx = seed.x + seed.w * 0.5;
+            const double seedCy = seed.y + seed.h * 0.5;
+            const double maxSeedDx = std::max(80.0, seed.w * 3.2);
+            const double maxSeedDy = std::max(64.0, seed.h * 3.2);
+            std::vector<uint8_t> used(mergeCandidates.size(), 0);
+            bool seedMarked = false;
+            for (int i = 0; i < (int)mergeCandidates.size(); i++) {
+                if (!seedMarked &&
+                    mergeCandidates[i].area == seedCand.area &&
+                    sameRect(mergeCandidates[i].rect, seed)) {
+                    used[i] = 1;
+                    seedMarked = true;
+                }
+            }
+            bool mergedAny = true;
+            int iter = 0;
+            while (mergedAny && iter < 8) {
+                mergedAny = false;
+                iter++;
+                for (int i = 0; i < (int)mergeCandidates.size(); i++) {
+                    if (used[i]) continue;
+                    const auto& cand = mergeCandidates[i];
+                    if (cand.area < 4) continue;
+                    const AutoDetectRect& comp = cand.rect;
+                    const int ix0 = std::max(outRect.x, comp.x);
+                    const int iy0 = std::max(outRect.y, comp.y);
+                    const int ix1 = std::min(outRect.x + outRect.w, comp.x + comp.w);
+                    const int iy1 = std::min(outRect.y + outRect.h, comp.y + comp.h);
+                    const int overlapW = std::max(0, ix1 - ix0);
+                    const int overlapH = std::max(0, iy1 - iy0);
+                    const int gapX = std::max(0, std::max(outRect.x - (comp.x + comp.w), comp.x - (outRect.x + outRect.w)));
+                    const int gapY = std::max(0, std::max(outRect.y - (comp.y + comp.h), comp.y - (outRect.y + outRect.h)));
+                    const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(outRect.h, comp.h) * 0.08)) &&
+                        gapX <= std::max(28, (int)std::round(std::min(outRect.w, comp.w) * 1.30));
+                    const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(outRect.w, comp.w) * 0.12)) &&
+                        gapY <= std::max(14, (int)std::round(std::min(outRect.h, comp.h) * 0.85));
+                    const bool nearDiagonal = gapX <= std::max(12, (int)std::round(std::min(outRect.w, comp.w) * 0.45)) &&
+                        gapY <= std::max(10, (int)std::round(std::min(outRect.h, comp.h) * 0.45));
+                    const bool overlap = (overlapW > 0 && overlapH > 0);
+                    const double compCx = comp.x + comp.w * 0.5;
+                    const double compCy = comp.y + comp.h * 0.5;
+                    const bool withinSeedCenterGuard =
+                        std::abs(compCx - seedCx) <= maxSeedDx &&
+                        std::abs(compCy - seedCy) <= maxSeedDy;
+                    const double finalCx = outRect.x + outRect.w * 0.5;
+                    const double finalCy = outRect.y + outRect.h * 0.5;
+                    const double maxFinalDx = std::max(40.0, outRect.w * 1.45);
+                    const double maxFinalDy = std::max(34.0, outRect.h * 1.45);
+                    const bool withinFinalCenterGuard =
+                        std::abs(compCx - finalCx) <= maxFinalDx &&
+                        std::abs(compCy - finalCy) <= maxFinalDy;
+                    const bool isSmallComp = cand.area < 6;
+                    const bool smallCompNearVertical =
+                        overlapW > 0 &&
+                        gapY <= std::max(10, (int)std::round(std::min(outRect.h, comp.h) * 2.5));
+                    const bool smallCompNearHorizontal =
+                        overlapH > 0 &&
+                        gapX <= std::max(8, (int)std::round(std::min(outRect.w, comp.w) * 2.5));
+                    const bool smallCompAllowed = !isSmallComp || smallCompNearVertical || smallCompNearHorizontal;
+                    AutoDetectRect mergedRect{
+                        std::min(outRect.x, comp.x),
+                        std::min(outRect.y, comp.y),
+                        std::max(outRect.x + outRect.w, comp.x + comp.w) - std::min(outRect.x, comp.x),
+                        std::max(outRect.y + outRect.h, comp.y + comp.h) - std::min(outRect.y, comp.y)
+                    };
+                    const bool sizeGuardOk =
+                        mergedRect.w <= (int)(scanw * 0.88) &&
+                        mergedRect.h <= (int)(scanh * 0.62);
+                    const bool accepted =
+                        (overlap || nearHorizontal || nearVertical || nearDiagonal) &&
+                        (withinSeedCenterGuard || withinFinalCenterGuard) &&
+                        smallCompAllowed &&
+                        sizeGuardOk;
+                    if (!accepted) continue;
+                    used[i] = 1;
+                    outRect = mergedRect;
+                    outClusterArea += cand.area;
+                    outClusterCount++;
+                    mergedAny = true;
+                }
+            }
+        };
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int start = x + y * scanw;
@@ -6726,7 +6864,7 @@ namespace {
                 if (area >= 4) {
                     mergeCandidates.push_back(RectStageCompCandidate{ comp, 0.0, area });
                 }
-                if (area < minArea) continue;
+                if (area < fallbackMinArea) continue;
 
                 // 明らかな帯ノイズを形状特徴で除外する。
                 const double aspect = std::max((double)comp.w / std::max(1, comp.h), (double)comp.h / std::max(1, comp.w));
@@ -6760,7 +6898,18 @@ namespace {
                 const bool isWideBand = comp.w > (int)(scanw * 0.45) && comp.h < (int)(scanh * 0.22);
                 const bool isRowLineLike = maxRowRatio > 0.15 && rowCoverage < 0.52 && aspect > 2.4;
                 const bool isColLineLike = maxColRatio > 0.15 && colCoverage < 0.52 && aspect > 2.4;
-                if (isWideBand || isRowLineLike || isColLineLike) continue;
+                const bool shapeRejected = aspect > 6.5 || fillRatio < 0.08 || compactness < 0.010 || isWideBand || isRowLineLike || isColLineLike;
+                if (shapeRejected) {
+                    if (detailedDebug) {
+                        rectCompScoreDebug.push_back(RectCompScoreDebug{
+                            comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                            area, comp.w, comp.h, perimeter,
+                            fillRatio, compactness, maxRowRatio, maxColRatio, rowCoverage, colCoverage,
+                            0.0, -1.0, 0, 0, 0, 0, comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1, -1.0, 0
+                            });
+                    }
+                    continue;
+                }
 
                 // ロゴらしさスコアを計算し、候補リストと best を更新する。
                 const double cxComp = comp.x + comp.w * 0.5;
@@ -6775,12 +6924,92 @@ namespace {
                     rightTopPrior * 0.35 -
                     rowLinePenalty * 1.60 -
                     colLinePenalty * 1.60;
-                candidates.push_back(RectStageCompCandidate{ comp, compScore, area });
+                const bool regularCandidate = area >= minArea;
+                const bool fallbackEligible = area >= fallbackMinArea;
+                if (regularCandidate) {
+                    candidates.push_back(RectStageCompCandidate{ comp, compScore, area });
+                    if (compScore > bestScore) {
+                        bestScore = compScore;
+                        best = comp;
+                        hasBest = true;
+                    }
+                } else if (fallbackEligible) {
+                    fallbackSeedCandidates.push_back(RectStageCompCandidate{ comp, compScore, area });
+                }
+                if (detailedDebug) {
+                    rectCompScoreDebug.push_back(RectCompScoreDebug{
+                        comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                        area, comp.w, comp.h, perimeter,
+                        fillRatio, compactness, maxRowRatio, maxColRatio, rowCoverage, colCoverage,
+                        rightTopPrior, compScore,
+                        regularCandidate ? 1 : 0,
+                        fallbackEligible ? 1 : 0,
+                        area, 1, comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                        compScore, 0
+                        });
+                }
+            }
+        }
 
-                if (compScore > bestScore) {
-                    bestScore = compScore;
-                    best = comp;
+        if (!hasBest && !fallbackSeedCandidates.empty()) {
+            double bestFallbackScore = -1.0e30;
+            int bestDebugIdx = -1;
+            for (const auto& cand : fallbackSeedCandidates) {
+                AutoDetectRect clusterRect{};
+                int clusterArea = 0;
+                int clusterCount = 0;
+                expandMergeCluster(cand, clusterRect, clusterArea, clusterCount);
+                const double clusterBoxArea = (double)clusterRect.w * clusterRect.h;
+                const double clusterFill = (clusterBoxArea > 0.0) ? (clusterArea / clusterBoxArea) : 0.0;
+                const double clusterGain =
+                    std::log(1.0 + std::max(clusterArea, cand.area)) * 1.10 +
+                    std::log(1.0 + std::max(0, clusterCount - 1)) * 0.45 +
+                    clusterFill * 0.70;
+                const double fallbackScore =
+                    cand.score * 0.45 +
+                    clusterGain;
+                if (detailedDebug) {
+                    for (int i = (int)rectCompScoreDebug.size() - 1; i >= 0; i--) {
+                        const auto& d = rectCompScoreDebug[i];
+                        if (d.area == cand.area &&
+                            d.minX == cand.rect.x &&
+                            d.minY == cand.rect.y &&
+                            d.maxX == cand.rect.x + cand.rect.w - 1 &&
+                            d.maxY == cand.rect.y + cand.rect.h - 1) {
+                            rectCompScoreDebug[i].clusterArea = clusterArea;
+                            rectCompScoreDebug[i].clusterCount = clusterCount;
+                            rectCompScoreDebug[i].clusterMinX = clusterRect.x;
+                            rectCompScoreDebug[i].clusterMinY = clusterRect.y;
+                            rectCompScoreDebug[i].clusterMaxX = clusterRect.x + clusterRect.w - 1;
+                            rectCompScoreDebug[i].clusterMaxY = clusterRect.y + clusterRect.h - 1;
+                            rectCompScoreDebug[i].fallbackScore = fallbackScore;
+                            if (fallbackScore > bestFallbackScore) {
+                                bestDebugIdx = i;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (fallbackScore > bestFallbackScore) {
+                    bestFallbackScore = fallbackScore;
+                    bestScore = fallbackScore;
+                    best = clusterRect;
                     hasBest = true;
+                }
+            }
+            if (detailedDebug && bestDebugIdx >= 0 && bestDebugIdx < (int)rectCompScoreDebug.size()) {
+                rectCompScoreDebug[bestDebugIdx].selectedBest = 1;
+            }
+        } else if (detailedDebug && hasBest) {
+            for (int i = (int)rectCompScoreDebug.size() - 1; i >= 0; i--) {
+                const auto& d = rectCompScoreDebug[i];
+                if (d.regularCandidate &&
+                    d.minX == best.x &&
+                    d.minY == best.y &&
+                    d.maxX == best.x + best.w - 1 &&
+                    d.maxY == best.y + best.h - 1) {
+                    rectCompScoreDebug[i].selectedBest = 1;
+                    break;
                 }
             }
         }
@@ -6941,6 +7170,7 @@ namespace {
     void AutoDetectLogoReader::runRectStage(const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage) {
         if (detailedDebug) {
             rectMergeDebug.clear();
+            rectCompScoreDebug.clear();
         }
         std::vector<uint8_t> xOn(scanw, 0), yOn(scanh, 0);
         collectBinaryProjection(xOn, yOn, binaryStage);
