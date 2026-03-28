@@ -2237,6 +2237,8 @@ namespace {
 
         struct ScoreStageBuffers {
             std::vector<float> score;
+            float debugMaxScore;
+            float debugMaxScoreBeforeRescue;
             std::vector<float> mapA;
             std::vector<float> mapB;
             std::vector<float> mapAlpha;
@@ -2278,6 +2280,8 @@ namespace {
             void reset(const int scanw, const int scanh) {
                 const int n = scanw * scanh;
                 score.assign(n, 0.0f);
+                debugMaxScore = 0.0f;
+                debugMaxScoreBeforeRescue = 0.0f;
                 validAB.assign(n, 0);
                 mapA.assign(n, 0.0f);
                 mapB.assign(n, 0.0f);
@@ -2626,6 +2630,18 @@ namespace {
             return (int)logoAnalyzeFail;
         }
 
+        double getPass1ScoreMax() const {
+            return debugPass1.score.debugMaxScore;
+        }
+
+        double getPass2ScoreMax() const {
+            return debugPass2.score.debugMaxScore;
+        }
+
+        double getFinalScoreBeforeRescueMax() const {
+            return debugScore.debugMaxScoreBeforeRescue;
+        }
+
         AutoDetectRect run(const tstring& srcpath) {
             // 1) 初期化
             resetRunState();
@@ -2653,7 +2669,13 @@ namespace {
                 THROW(RuntimeException, "No frame decoded");
             }
             setProgressPlan(2, 0.0f, 0.35f, 0.30f, 0.12f);
-            estimateScoreAndRect(pass1Stats);
+            try {
+                estimateScoreAndRect(pass1Stats);
+            } catch (...) {
+                captureCurrentDebugSnapshot(debugPass1);
+                debugPass2 = debugPass1;
+                throw;
+            }
             captureCurrentDebugSnapshot(debugPass1);
             debugPass2 = debugPass1;
             const AutoDetectRect pass1RectAbs = rectAbs;
@@ -2676,7 +2698,12 @@ namespace {
                 fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
                 setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
                 const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
-                estimateScoreAndRect(pass1Stats, true, rescueAnchorRect);
+                try {
+                    estimateScoreAndRect(pass1Stats, true, rescueAnchorRect);
+                } catch (...) {
+                    captureCurrentDebugSnapshot(debugPass2);
+                    throw;
+                }
                 captureCurrentDebugSnapshot(debugPass2);
             }
             setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
@@ -2718,6 +2745,16 @@ namespace {
 
         static float clamp01(const float v) {
             return std::max(0.0f, std::min(1.0f, v));
+        }
+
+        static float calcPositiveMax(const std::vector<float>& values) {
+            float maxValue = 0.0f;
+            for (const auto v : values) {
+                if (v > maxValue) {
+                    maxValue = v;
+                }
+            }
+            return maxValue;
         }
 
         void setProgressPlan(const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan) {
@@ -3011,7 +3048,12 @@ namespace {
             rerunResidualWeightedPass(srcpath, pass3Stats, &pass2);
             setProgressPlan(3, 0.75f, 0.25f, 0.89f, 0.09f);
             const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
-            estimateScoreAndRect(pass3Stats, false, rescueAnchorRect);
+            try {
+                estimateScoreAndRect(pass3Stats, false, rescueAnchorRect);
+            } catch (...) {
+                captureCurrentDebugSnapshot(debugPass2);
+                throw;
+            }
             captureCurrentDebugSnapshot(debugPass2);
 
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
@@ -4951,6 +4993,8 @@ namespace {
                 scoreStage.mapIsInterior = isInterior;
             }
 
+            scoreStage.debugMaxScoreBeforeRescue = calcPositiveMax(scoreStage.score);
+
             // rescueScore の単純加算:
             // d9b3138 で入れた suppression/boost は、rescue が疎なケースで
             // base score の内部にむらを作りやすかった。ここでは base を削らず、
@@ -5222,6 +5266,8 @@ namespace {
                     }
                 }
             }
+
+            scoreStage.debugMaxScore = calcPositiveMax(scoreStage.score);
 
             // score 分布の基礎統計を集計し、成立しない場合は詳細情報付きで例外化する。
             // 閾値は回帰ベーススコア (validAB=true) のみで計算する。
@@ -7277,12 +7323,16 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH, int* outRectDetectFail, int* outLogoAnalyzeFail,
+    double* outPass1ScoreMax, double* outPass2ScoreMax, double* outFinalScoreBeforeRescueMax,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
     if (outRectDetectFail) *outRectDetectFail = 0;
     if (outLogoAnalyzeFail) *outLogoAnalyzeFail = 0;
+    if (outPass1ScoreMax) *outPass1ScoreMax = 0.0;
+    if (outPass2ScoreMax) *outPass2ScoreMax = 0.0;
+    if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = 0.0;
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;
@@ -7291,6 +7341,9 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outH) *outH = rect.h;
         if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
         if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+        if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
+        if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
+        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
         if (scorePath && binaryPath && cclPath) {
             reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
         }
@@ -7298,6 +7351,9 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     } catch (const Exception& exception) {
         if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
         if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+        if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
+        if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
+        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
         if (scorePath && binaryPath && cclPath) {
             try {
                 reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);

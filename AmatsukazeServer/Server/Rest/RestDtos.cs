@@ -188,6 +188,9 @@ namespace Amatsukaze.Server.Rest
         public string RectDetectFailName { get; set; }
         public int LogoAnalyzeFailCode { get; set; }
         public string LogoAnalyzeFailName { get; set; }
+        public double? Pass1ScoreMax { get; set; }
+        public double? Pass2ScoreMax { get; set; }
+        public double? FinalScoreBeforeRescueMax { get; set; }
         public LogoAutoDetectDebugImages DebugImages { get; set; }
     }
 

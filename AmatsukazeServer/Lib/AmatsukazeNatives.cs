@@ -46,18 +46,33 @@ namespace Amatsukaze.Lib
         public int H { get; init; }
         public LogoRectDetectFail RectDetectFail { get; init; }
         public LogoAnalyzeFail LogoAnalyzeFail { get; init; }
+        public double Pass1ScoreMax { get; init; }
+        public double Pass2ScoreMax { get; init; }
+        public double FinalScoreBeforeRescueMax { get; init; }
     }
 
     public sealed class AutoDetectLogoRectException : IOException
     {
         public LogoRectDetectFail RectDetectFail { get; }
         public LogoAnalyzeFail LogoAnalyzeFail { get; }
+        public double Pass1ScoreMax { get; }
+        public double Pass2ScoreMax { get; }
+        public double FinalScoreBeforeRescueMax { get; }
 
-        public AutoDetectLogoRectException(string message, LogoRectDetectFail rectDetectFail, LogoAnalyzeFail logoAnalyzeFail)
+        public AutoDetectLogoRectException(
+            string message,
+            LogoRectDetectFail rectDetectFail,
+            LogoAnalyzeFail logoAnalyzeFail,
+            double pass1ScoreMax,
+            double pass2ScoreMax,
+            double finalScoreBeforeRescueMax)
             : base(message)
         {
             RectDetectFail = rectDetectFail;
             LogoAnalyzeFail = logoAnalyzeFail;
+            Pass1ScoreMax = pass1ScoreMax;
+            Pass2ScoreMax = pass2ScoreMax;
+            FinalScoreBeforeRescueMax = finalScoreBeforeRescueMax;
         }
     }
 
@@ -604,6 +619,7 @@ namespace Amatsukaze.Lib
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
             ref int x, ref int y, ref int w, ref int h, ref int rectDetectFail, ref int logoAnalyzeFail,
+            ref double pass1ScoreMax, ref double pass2ScoreMax, ref double finalScoreBeforeRescueMax,
             string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
             string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
             string transitionPath, string keepRatePath,
@@ -771,15 +787,22 @@ namespace Amatsukaze.Lib
             int h = 0;
             int rectDetectFail = 0;
             int logoAnalyzeFail = 0;
+            double pass1ScoreMax = 0.0;
+            double pass2ScoreMax = 0.0;
+            double finalScoreBeforeRescueMax = 0.0;
             if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
                 divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
                 ref x, ref y, ref w, ref h, ref rectDetectFail, ref logoAnalyzeFail,
+                ref pass1ScoreMax, ref pass2ScoreMax, ref finalScoreBeforeRescueMax,
                 scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
             {
                 throw new AutoDetectLogoRectException(
                     ctx.GetError(),
                     (LogoRectDetectFail)rectDetectFail,
-                    (LogoAnalyzeFail)logoAnalyzeFail);
+                    (LogoAnalyzeFail)logoAnalyzeFail,
+                    pass1ScoreMax,
+                    pass2ScoreMax,
+                    finalScoreBeforeRescueMax);
             }
             return new AutoDetectLogoRectResult()
             {
@@ -789,6 +812,9 @@ namespace Amatsukaze.Lib
                 H = h,
                 RectDetectFail = (LogoRectDetectFail)rectDetectFail,
                 LogoAnalyzeFail = (LogoAnalyzeFail)logoAnalyzeFail,
+                Pass1ScoreMax = pass1ScoreMax,
+                Pass2ScoreMax = pass2ScoreMax,
+                FinalScoreBeforeRescueMax = finalScoreBeforeRescueMax,
             };
         }
     }

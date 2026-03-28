@@ -34,6 +34,9 @@ namespace Amatsukaze.Server.Rest
         public LogoRect DetectedRect { get; set; }
         public LogoRectDetectFail RectDetectFail { get; set; }
         public LogoAnalyzeFail LogoAnalyzeFail { get; set; }
+        public double? Pass1ScoreMax { get; set; }
+        public double? Pass2ScoreMax { get; set; }
+        public double? FinalScoreBeforeRescueMax { get; set; }
         public string ScoreImagePath { get; set; }
         public string BinaryImagePath { get; set; }
         public string CclImagePath { get; set; }
@@ -613,6 +616,9 @@ namespace Amatsukaze.Server.Rest
                         });
                     job.RectDetectFail = result.RectDetectFail;
                     job.LogoAnalyzeFail = result.LogoAnalyzeFail;
+                    job.Pass1ScoreMax = result.Pass1ScoreMax;
+                    job.Pass2ScoreMax = result.Pass2ScoreMax;
+                    job.FinalScoreBeforeRescueMax = result.FinalScoreBeforeRescueMax;
                     x = result.X;
                     y = result.Y;
                     w = result.W;
@@ -634,6 +640,9 @@ namespace Amatsukaze.Server.Rest
                 {
                     job.RectDetectFail = ex.RectDetectFail;
                     job.LogoAnalyzeFail = ex.LogoAnalyzeFail;
+                    job.Pass1ScoreMax = ex.Pass1ScoreMax;
+                    job.Pass2ScoreMax = ex.Pass2ScoreMax;
+                    job.FinalScoreBeforeRescueMax = ex.FinalScoreBeforeRescueMax;
                     job.Error = ex.Message;
                     job.Completed = true;
                 }
@@ -842,6 +851,9 @@ namespace Amatsukaze.Server.Rest
                 RectDetectFailName = job.RectDetectFail.ToString(),
                 LogoAnalyzeFailCode = (int)job.LogoAnalyzeFail,
                 LogoAnalyzeFailName = job.LogoAnalyzeFail.ToString(),
+                Pass1ScoreMax = job.Pass1ScoreMax,
+                Pass2ScoreMax = job.Pass2ScoreMax,
+                FinalScoreBeforeRescueMax = job.FinalScoreBeforeRescueMax,
                 DebugImages = debug
             };
         }
