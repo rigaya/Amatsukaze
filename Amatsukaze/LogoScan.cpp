@@ -7,6 +7,8 @@
 */
 
 #include "LogoScan.h"
+#include "FileUtils.h"
+#include "StringUtils.h"
 #include <cstdlib>
 #include <regex>
 #include <array>
@@ -23,6 +25,11 @@
 #include <atomic>
 #include <cstring>
 #include <utility>
+#include <ctime>
+#include <inttypes.h>
+#if !defined(_WIN32) && !defined(_WIN64)
+#include <sys/sysinfo.h>
+#endif
 #include "zlib.h"
 #include "rgy_event.h"
 #include "rgy_thread_pool.h"
@@ -419,7 +426,7 @@ logo::LogoScan::LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy) 
     logoU(new LogoColor[scanw * scanh >> (logUVx + logUVy)]),
     logoV(new LogoColor[scanw * scanh >> (logUVx + logUVy)]) {}
 
-std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
+std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean, logo::LogoColorMode colorMode) const {
     int scanUVw = scanw >> logUVx;
     int scanUVh = scanh >> logUVy;
     auto data = std::unique_ptr<logo::LogoData>(new logo::LogoData(scanw, scanh, logUVx, logUVy));
@@ -436,11 +443,23 @@ std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
             if (!logoY[off].GetAB(aY[off], bY[off], nframes)) return nullptr;
         }
     }
-    for (int y = 0; y < scanUVh; y++) {
-        for (int x = 0; x < scanUVw; x++) {
-            int off = x + y * scanUVw;
-            if (!logoU[off].GetAB(aU[off], bU[off], nframes)) return nullptr;
-            if (!logoV[off].GetAB(aV[off], bV[off], nframes)) return nullptr;
+    if (colorMode == logo::LogoColorMode::NormalYUV) {
+        for (int y = 0; y < scanUVh; y++) {
+            for (int x = 0; x < scanUVw; x++) {
+                int off = x + y * scanUVw;
+                if (!logoU[off].GetAB(aU[off], bU[off], nframes)) return nullptr;
+                if (!logoV[off].GetAB(aV[off], bV[off], nframes)) return nullptr;
+            }
+        }
+    } else {
+        for (int y = 0; y < scanUVh; y++) {
+            for (int x = 0; x < scanUVw; x++) {
+                int off = x + y * scanUVw;
+                aU[off] = 1.0f;
+                bU[off] = 0.0f;
+                aV[off] = 1.0f;
+                bV[off] = 0.0f;
+            }
         }
     }
 
@@ -461,9 +480,11 @@ std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean) const {
             for (int x = 0; x < scanw; x++) {
                 int off = x + y * scanw;
                 int offUV = (x >> logUVx) + (y >> logUVy) * scanUVw;
-                dist[off] = calcDist(aY[off], bY[off]) +
-                    calcDist(aU[offUV], bU[offUV]) +
-                    calcDist(aV[offUV], bV[offUV]);
+                dist[off] = calcDist(aY[off], bY[off]);
+                if (colorMode == logo::LogoColorMode::NormalYUV) {
+                    dist[off] += calcDist(aU[offUV], bU[offUV]) +
+                        calcDist(aV[offUV], bV[offUV]);
+                }
 
                 // 値が小さすぎて分かりにくいので大きくしてあげる
                 dist[off] *= 1000;
@@ -2086,6 +2107,7 @@ namespace {
         const int marginY;
         const int threadN;
         const bool detailedDebug;
+        AMTContext& logCtx;
         logo::LOGO_AUTODETECT_CB cb;
         RGYThreadPool threadPool;
 
@@ -2224,6 +2246,22 @@ namespace {
                 edgeAccumBuf.assign(scanw * scanh, SpatialEdgeAccum());
             }
         };
+
+        enum class RoiCacheBackend {
+            None,
+            Ram,
+            TempFile,
+        };
+
+        static constexpr int kRoiCacheFramesPerSlab = 64;
+        RoiCacheBackend roiCacheBackend = RoiCacheBackend::None;
+        bool roiCacheCaptureActive = false;
+        int roiCacheFrameBytes = 0;
+        int roiCacheStoredFrames = 0;
+        std::vector<std::vector<uint8_t>> roiCacheRamSlabs;
+        std::vector<uint8_t> roiReplayFrame;
+        std::unique_ptr<File> roiCacheFile;
+        tstring roiCachePath;
 
         std::vector<AutoDetectStats> debugStats;
         std::vector<TraceSampleRecord> debugTraceRecords;
@@ -2536,6 +2574,7 @@ namespace {
         bool usedBinaryFallback;
         struct Pass2Buffers {
             AutoDetectRect logoRectAbs{ 0, 0, 0, 0 };
+            AutoDetectRect logoRectLocal{ 0, 0, 0, 0 };
             std::unique_ptr<logo::LogoScan> logoScan;
             std::unique_ptr<logo::LogoDataParam> deintLogo;
             std::vector<float> corr0;
@@ -2613,6 +2652,7 @@ namespace {
             , marginY(std::max(0, marginY))
             , threadN(std::max(1, threadN))
             , detailedDebug(detailedDebug)
+            , logCtx(ctx)
             , cb(cb)
             , threadPool(std::max(1, threadN))
             , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false) {
@@ -2620,6 +2660,10 @@ namespace {
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
             lastReportedProgress = 0.0f;
+        }
+
+        ~AutoDetectLogoReader() {
+            clearRoiCache();
         }
 
         int getRectDetectFailCode() const {
@@ -2643,77 +2687,304 @@ namespace {
         }
 
         AutoDetectRect run(const tstring& srcpath) {
-            // 1) 初期化
-            resetRunState();
-            setProgressPlan(1, 0.0f, 0.5f, 0.0f, 0.15f);
+            try {
+                // 1) 初期化
+                resetRunState();
+                setProgressPlan(1, 0.0f, 0.5f, 0.0f, 0.15f);
+                if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
+                    THROW(RuntimeException, "Cancel requested");
+                }
+                StatsPassBuffers pass1Stats{};
+                resetAccumulationState(&pass1Stats, nullptr);
+                // 2) pass1: 全フレームで score/binary/rect を推定
+                roiCacheCaptureActive = true;
+                runFramePassWithProgress(srcpath, 1, 0.0f, 0.5f, 0.0f, 0.15f,
+                    [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
+                    [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
+                roiCacheCaptureActive = false;
+                if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
+                    THROW(RuntimeException, "No frame decoded");
+                }
+                // 1回目の回帰は「粗い回帰線」を得るための準備段階。
+                // まずは純粋な binAccum+Gompertz だけで provisional line を作り、
+                // その線から外れる別枝サンプルを 2回目の走査で弱める。
+                convertBinAccumToStats(pass1Stats);
+                prepareResidualReweightMaps(pass1Stats);
+                setProgressPlan(1, 0.5f, 0.5f, 0.15f, 0.15f);
+                rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
+                if (readFrames <= 0) {
+                    THROW(RuntimeException, "No frame decoded");
+                }
+                setProgressPlan(2, 0.0f, 0.35f, 0.30f, 0.12f);
+                try {
+                    estimateScoreAndRect(pass1Stats);
+                } catch (...) {
+                    captureCurrentDebugSnapshot(debugPass1);
+                    debugPass2 = debugPass1;
+                    throw;
+                }
+                captureCurrentDebugSnapshot(debugPass1);
+                debugPass2 = debugPass1;
+                const AutoDetectRect pass1RectAbs = rectAbs;
+                const AutoDetectRect pass1RectLocal = rectLocal;
+
+                // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
+                Pass2Buffers pass2{};
+                bool pass2Entered = false;
+                if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
+                    pass2Entered = true;
+                    runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
+                }
+                // 4) pass2 に全く進めなかった場合（FrameMaskEmpty 等）、
+                //    pass1 結果に rescue blending を適用して score/binary/rect を再計算する。
+                //    pass2 不成立では passIndex==3 に到達しないため rescue が一切使われず、
+                //    静止構造と重なるロゴ部分が欠落する。rescue 付きで再推定して救済する。
+                //    注: pass2 に進んだが結果が不適切なケース(TooFewAcceptedFrames,
+                //    Pass2RectDiverged)は既に passIndex==3 で rescue 済みなので対象外。
+                if (!pass2Entered) {
+                    fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
+                    setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
+                    const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
+                    try {
+                        estimateScoreAndRect(pass1Stats, true, rescueAnchorRect);
+                    } catch (...) {
+                        captureCurrentDebugSnapshot(debugPass2);
+                        throw;
+                    }
+                    captureCurrentDebugSnapshot(debugPass2);
+                }
+                setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
+                if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
+                    THROW(RuntimeException, "Cancel requested");
+                }
+                clearRoiCache();
+                return rectAbs;
+            } catch (...) {
+                try {
+                    clearRoiCache();
+                } catch (...) {
+                }
+                throw;
+            }
+        }
+
+        bool hasStoredRoiCache() const {
+            return roiCacheBackend != RoiCacheBackend::None && roiCacheFrameBytes > 0 && roiCacheStoredFrames > 0;
+        }
+
+        bool isStoredRoiReplayActive() const {
+            return hasStoredRoiCache() && !roiCacheCaptureActive;
+        }
+
+        int getCurrentProcessingBitDepth() const {
+            return isStoredRoiReplayActive() ? 8 : bitDepth;
+        }
+
+        static uint64_t getAvailableSystemMemoryBytes() {
+#if defined(_WIN32) || defined(_WIN64)
+            MEMORYSTATUSEX msex = { 0 };
+            msex.dwLength = sizeof(msex);
+            if (GlobalMemoryStatusEx(&msex)) {
+                return msex.ullAvailPhys;
+            }
+            return 0;
+#else
+            FILE* fp = fopen("/proc/meminfo", "r");
+            if (fp != nullptr) {
+                char line[256];
+                while (fgets(line, sizeof(line), fp) != nullptr) {
+                    uint64_t kb = 0;
+                    if (sscanf(line, "MemAvailable: %" PRIu64 " kB", &kb) == 1) {
+                        fclose(fp);
+                        return kb * 1024;
+                    }
+                }
+                fclose(fp);
+            }
+            struct sysinfo info;
+            if (sysinfo(&info) == 0) {
+                return (uint64_t)info.freeram * info.mem_unit;
+            }
+            return 0;
+#endif
+        }
+
+        tstring getRoiCacheBaseDir() const {
+            static const char* kEnvNames[] = {
+                "AMT_LOGO_AUTODETECT_TMPDIR",
+                "TMPDIR",
+                "TEMP",
+                "TMP",
+            };
+            for (const auto name : kEnvNames) {
+                const char* v = std::getenv(name);
+                if (v != nullptr && v[0] != '\0') {
+                    return pathNormalize(char_to_tstring(v));
+                }
+            }
+#if defined(_WIN32) || defined(_WIN64)
+            return pathNormalize(char_to_tstring("."));
+#else
+            return pathNormalize(char_to_tstring("/tmp"));
+#endif
+        }
+
+        tstring makeRoiCachePath() const {
+            const tstring baseDir = getRoiCacheBaseDir();
+            const unsigned now = (unsigned)std::time(nullptr);
+            for (int attempt = 0; attempt < 128; attempt++) {
+                const tstring path = StringFormat(_T("%s/amt_logo_roi_%u_%d_%d.y8cache"),
+                    baseDir.c_str(), now, serviceid, attempt);
+                if (!File::exists(path)) {
+                    return path;
+                }
+            }
+            THROW(IOException, "ROI cache temp path generation failed");
+            return tstring();
+        }
+
+        void clearRoiCache() {
+            const tstring tmpPath = roiCachePath;
+            const bool hadTmpRegistration = !tmpPath.empty();
+            if (roiCacheFile) {
+                roiCacheFile.reset();
+            }
+            if (hadTmpRegistration) {
+                removeT(tmpPath.c_str());
+                logCtx.unregisterTmpFile(tmpPath);
+            }
+            roiCacheBackend = RoiCacheBackend::None;
+            roiCacheCaptureActive = false;
+            roiCacheFrameBytes = 0;
+            roiCacheStoredFrames = 0;
+            roiCacheRamSlabs.clear();
+            roiCacheRamSlabs.shrink_to_fit();
+            roiReplayFrame.clear();
+            roiReplayFrame.shrink_to_fit();
+            roiCachePath.clear();
+        }
+
+        void initializeRoiCache() {
+            if (roiCacheBackend != RoiCacheBackend::None || scanw <= 0 || scanh <= 0) {
+                return;
+            }
+            const uint64_t frameBytes = (uint64_t)scanw * scanh;
+            const uint64_t estimatedBytes = frameBytes * (uint64_t)searchFrames;
+            const uint64_t memoryGuard = 2ull * 1024ull * 1024ull * 1024ull;
+            const uint64_t availBytes = getAvailableSystemMemoryBytes();
+            const bool preferTempFile = (availBytes > 0 && availBytes < estimatedBytes + memoryGuard);
+            roiCacheFrameBytes = (int)frameBytes;
+            roiReplayFrame.resize(roiCacheFrameBytes);
+
+            try {
+                if (!preferTempFile) {
+                    const int slabCount = (searchFrames + kRoiCacheFramesPerSlab - 1) / kRoiCacheFramesPerSlab;
+                    roiCacheRamSlabs.clear();
+                    roiCacheRamSlabs.reserve(std::max(1, slabCount));
+                    for (int slab = 0; slab < slabCount; slab++) {
+                        const int framesInSlab = std::min(kRoiCacheFramesPerSlab, searchFrames - slab * kRoiCacheFramesPerSlab);
+                        roiCacheRamSlabs.emplace_back((size_t)roiCacheFrameBytes * (size_t)framesInSlab);
+                    }
+                    roiCacheBackend = RoiCacheBackend::Ram;
+                    logCtx.infoF("[LogoScan] ROI cache: RAM slabs=%d (%" PRIu64 " bytes, avail=%" PRIu64 ")", slabCount, estimatedBytes, availBytes);
+                    return;
+                }
+            } catch (const std::bad_alloc&) {
+                roiCacheRamSlabs.clear();
+            }
+
+            try {
+                roiCachePath = makeRoiCachePath();
+                logCtx.registerTmpFile(roiCachePath);
+                roiCacheFile = std::make_unique<File>(roiCachePath, _T("w+b"));
+                roiCacheBackend = RoiCacheBackend::TempFile;
+                logCtx.infoF("[LogoScan] ROI cache: temp file (%s, %" PRIu64 " bytes, avail=%" PRIu64 ")",
+                    tchar_to_string(roiCachePath).c_str(), estimatedBytes, availBytes);
+            } catch (const Exception&) {
+                clearRoiCache();
+                logCtx.warn("[LogoScan] ROI cache init failed; fallback to full decode reruns");
+            }
+        }
+
+        template<typename pixel_t>
+        void appendFrameToRoiCache(const pixel_t* srcY, const int pitchY) {
+            if (!roiCacheCaptureActive || roiCacheBackend == RoiCacheBackend::None || roiCacheFrameBytes <= 0) {
+                return;
+            }
+            if (roiCacheStoredFrames >= searchFrames) {
+                return;
+            }
+            if ((int)roiReplayFrame.size() != roiCacheFrameBytes) {
+                roiReplayFrame.resize(roiCacheFrameBytes);
+            }
+            const pixel_t* srcRoi = srcY + scanx + scany * pitchY;
+            const int maxv = std::max(1, (1 << bitDepth) - 1);
+            for (int y = 0; y < scanh; y++) {
+                const pixel_t* srcLine = srcRoi + y * pitchY;
+                uint8_t* dstLine = roiReplayFrame.data() + y * scanw;
+                for (int x = 0; x < scanw; x++) {
+                    const int v = (int)srcLine[x];
+                    dstLine[x] = (uint8_t)ClampInt((v * 255 + maxv / 2) / maxv, 0, 255);
+                }
+            }
+            if (roiCacheBackend == RoiCacheBackend::Ram) {
+                const int slabIndex = roiCacheStoredFrames / kRoiCacheFramesPerSlab;
+                const int frameInSlab = roiCacheStoredFrames % kRoiCacheFramesPerSlab;
+                auto& slab = roiCacheRamSlabs[slabIndex];
+                std::memcpy(slab.data() + (size_t)frameInSlab * roiCacheFrameBytes,
+                    roiReplayFrame.data(), (size_t)roiCacheFrameBytes);
+            } else if (roiCacheBackend == RoiCacheBackend::TempFile && roiCacheFile) {
+                roiCacheFile->write(MemoryChunk(roiReplayFrame.data(), (size_t)roiCacheFrameBytes));
+            }
+            roiCacheStoredFrames++;
+        }
+
+        bool readStoredRoiFrame(const int frameIndex, std::vector<uint8_t>& out) {
+            if (!hasStoredRoiCache() || frameIndex < 0 || frameIndex >= roiCacheStoredFrames) {
+                return false;
+            }
+            out.resize(roiCacheFrameBytes);
+            if (roiCacheBackend == RoiCacheBackend::Ram) {
+                const int slabIndex = frameIndex / kRoiCacheFramesPerSlab;
+                const int frameInSlab = frameIndex % kRoiCacheFramesPerSlab;
+                const auto& slab = roiCacheRamSlabs[slabIndex];
+                std::memcpy(out.data(),
+                    slab.data() + (size_t)frameInSlab * roiCacheFrameBytes,
+                    (size_t)roiCacheFrameBytes);
+                return true;
+            }
+            if (roiCacheBackend == RoiCacheBackend::TempFile && roiCacheFile) {
+                roiCacheFile->seek((int64_t)frameIndex * roiCacheFrameBytes, SEEK_SET);
+                return roiCacheFile->read(MemoryChunk(out.data(), (size_t)roiCacheFrameBytes)) == (size_t)roiCacheFrameBytes;
+            }
+            return false;
+        }
+
+        template<typename FrameCb>
+        void runStoredRoiPassWithProgress(const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan, FrameCb&& onFrame) {
+            if (!hasStoredRoiCache()) {
+                THROW(InvalidOperationException, "ROI cache is not available");
+            }
+            setProgressPlan(stage, stageBase, stageSpan, overallBase, overallSpan);
             if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
-            StatsPassBuffers pass1Stats{};
-            resetAccumulationState(&pass1Stats, nullptr);
-            // 2) pass1: 全フレームで score/binary/rect を推定
-            runFramePassWithProgress(srcpath, 1, 0.0f, 0.5f, 0.0f, 0.15f,
-                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
-                [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
-            if (readFrames <= 0 || scanw <= 0 || scanh <= 0) {
-                THROW(RuntimeException, "No frame decoded");
-            }
-            // 1回目の回帰は「粗い回帰線」を得るための準備段階。
-            // まずは純粋な binAccum+Gompertz だけで provisional line を作り、
-            // その線から外れる別枝サンプルを 2回目の走査で弱める。
-            convertBinAccumToStats(pass1Stats);
-            prepareResidualReweightMaps(pass1Stats);
-            setProgressPlan(1, 0.5f, 0.5f, 0.15f, 0.15f);
-            rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
-            if (readFrames <= 0) {
-                THROW(RuntimeException, "No frame decoded");
-            }
-            setProgressPlan(2, 0.0f, 0.35f, 0.30f, 0.12f);
-            try {
-                estimateScoreAndRect(pass1Stats);
-            } catch (...) {
-                captureCurrentDebugSnapshot(debugPass1);
-                debugPass2 = debugPass1;
-                throw;
-            }
-            captureCurrentDebugSnapshot(debugPass1);
-            debugPass2 = debugPass1;
-            const AutoDetectRect pass1RectAbs = rectAbs;
-            const AutoDetectRect pass1RectLocal = rectLocal;
-
-            // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
-            Pass2Buffers pass2{};
-            bool pass2Entered = false;
-            if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
-                pass2Entered = true;
-                runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
-            }
-            // 4) pass2 に全く進めなかった場合（FrameMaskEmpty 等）、
-            //    pass1 結果に rescue blending を適用して score/binary/rect を再計算する。
-            //    pass2 不成立では passIndex==3 に到達しないため rescue が一切使われず、
-            //    静止構造と重なるロゴ部分が欠落する。rescue 付きで再推定して救済する。
-            //    注: pass2 に進んだが結果が不適切なケース(TooFewAcceptedFrames,
-            //    Pass2RectDiverged)は既に passIndex==3 で rescue 済みなので対象外。
-            if (!pass2Entered) {
-                fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
-                setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
-                const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
-                try {
-                    estimateScoreAndRect(pass1Stats, true, rescueAnchorRect);
-                } catch (...) {
-                    captureCurrentDebugSnapshot(debugPass2);
-                    throw;
+            readFrames = 0;
+            for (int i = 0; i < roiCacheStoredFrames; i++) {
+                if (!readStoredRoiFrame(i, roiReplayFrame)) {
+                    THROW(IOException, "failed to read ROI cache frame");
                 }
-                captureCurrentDebugSnapshot(debugPass2);
+                if (!onFrame(roiReplayFrame.data())) {
+                    break;
+                }
             }
-            setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
             if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
-            return rectAbs;
         }
 
         void resetRunState() {
+            clearRoiCache();
             passIndex = 0;
             readFrames = 0;
             progressPlan = ProgressPlan{};
@@ -2858,6 +3129,7 @@ namespace {
             debugPass2Prepare.clear();
             // 1) pass1で得た候補矩形を少し広げ、pass2で使う評価ROI(絶対座標/相対座標)を決める。
             const AutoDetectRect pass2LogoRectLocal = expandPass1RectForSecondPass(pass1RectLocal);
+            pass2.logoRectLocal = pass2LogoRectLocal;
             pass2.logoRectAbs = AutoDetectRect{
                 pass2LogoRectLocal.x + scanx,
                 pass2LogoRectLocal.y + scany,
@@ -2874,13 +3146,18 @@ namespace {
             pass2.logoScan = std::make_unique<logo::LogoScan>(pass2.logoRectAbs.w, pass2.logoRectAbs.h, logUVx, logUVy, threshold);
             passIndex = 1;
             resetAccumulationState(nullptr, &pass2);
-            runFramePassWithProgress(srcpath, 2, 0.35f, 0.30f, 0.42f, 0.11f,
-                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
-                [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
+            if (hasStoredRoiCache()) {
+                runStoredRoiPassWithProgress(2, 0.35f, 0.30f, 0.42f, 0.11f,
+                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, nullptr, &pass2); });
+            } else {
+                runFramePassWithProgress(srcpath, 2, 0.35f, 0.30f, 0.42f, 0.11f,
+                    [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
+                    [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
+            }
 
             // 3) 仮ロゴをデインタレースして評価用LogoDataParamへ変換し、maskを作る。
             if (readFrames > 0 && pass2.logoScan) {
-                auto logoData = pass2.logoScan->GetLogo(false);
+                auto logoData = pass2.logoScan->GetLogo(false, logo::LogoColorMode::YOnlyNeutralUV);
                 if (logoData != nullptr) {
                     logo::LogoHeader hdr(pass2.logoRectAbs.w, pass2.logoRectAbs.h, logUVx, logUVy, imgw, imgh, pass2.logoRectAbs.x, pass2.logoRectAbs.y, "autodetect-pass2");
                     logo::LogoDataParam tempLogo(std::move(*logoData), &hdr);
@@ -2913,9 +3190,14 @@ namespace {
             resetAccumulationState(nullptr, &pass2);
             pass2.corr0.clear();
             pass2.corr1.clear();
-            runFramePassWithProgress(srcpath, 2, 0.65f, 0.35f, 0.53f, 0.12f,
-                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
-                [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
+            if (hasStoredRoiCache()) {
+                runStoredRoiPassWithProgress(2, 0.65f, 0.35f, 0.53f, 0.12f,
+                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, nullptr, &pass2); });
+            } else {
+                runFramePassWithProgress(srcpath, 2, 0.65f, 0.35f, 0.53f, 0.12f,
+                    [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
+                    [&](AVFrame* frame) { return processFrame(frame, nullptr, &pass2); });
+            }
             if (pass2.corr0.empty() || pass2.corr0.size() != pass2.corr1.size()) {
                 setLogoAnalyzeFail(LogoAnalyzeFail::CorrSequenceInvalid);
                 return false;
@@ -3024,9 +3306,14 @@ namespace {
             passIndex = 3;
             StatsPassBuffers pass3Stats{};
             resetAccumulationState(&pass3Stats, &pass2);
-            runFramePassWithProgress(srcpath, 3, 0.0f, 0.40f, 0.65f, 0.13f,
-                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass3Stats, &pass2); },
-                [&](AVFrame* frame) { return processFrame(frame, &pass3Stats, &pass2); });
+            if (hasStoredRoiCache()) {
+                runStoredRoiPassWithProgress(3, 0.0f, 0.40f, 0.65f, 0.13f,
+                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, &pass3Stats, &pass2); });
+            } else {
+                runFramePassWithProgress(srcpath, 3, 0.0f, 0.40f, 0.65f, 0.13f,
+                    [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass3Stats, &pass2); },
+                    [&](AVFrame* frame) { return processFrame(frame, &pass3Stats, &pass2); });
+            }
 
             // 2) 採用フレームが少なすぎる場合は推定が不安定なため、
             //    pass1で得た矩形へフォールバックする。
@@ -3901,8 +4188,11 @@ namespace {
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
             configureTracePoints();
+            if (roiCacheCaptureActive) {
+                initializeRoiCache();
+            }
             if (statsPass != nullptr) {
-                statsPass->reset(scanw, scanh, bitDepth);
+                statsPass->reset(scanw, scanh, getCurrentProcessingBitDepth());
             }
             if (pass2 != nullptr) {
                 pass2->evalDeint.clear();
@@ -3913,7 +4203,7 @@ namespace {
         void resetAccumulationState(StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             readFrames = 0;
             if (statsPass != nullptr && scanw > 0 && scanh > 0) {
-                statsPass->reset(scanw, scanh, bitDepth);
+                statsPass->reset(scanw, scanh, getCurrentProcessingBitDepth());
             }
             if (pass2 != nullptr) {
                 pass2->acceptedFrames = 0;
@@ -3984,6 +4274,58 @@ namespace {
             return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw, *statsPass, traceFgRaw);
         }
 
+        int addStoredFrame(const uint8_t* srcY, const int pitchY, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
+            constexpr uint8_t kMaxv = 255;
+            constexpr float kInvMaxv = 1.0f / 255.0f;
+            constexpr float kRawScale = 1.0f;
+            const float thresholdRaw = (float)threshold;
+            std::vector<float> traceFgRaw;
+            if (statsPass != nullptr && !tracePoints.empty()) {
+                collectTraceRawFromStoredSource(srcY, pitchY, traceFgRaw);
+            }
+
+            if (passIndex == 1) {
+                if (pass2 == nullptr) return 0;
+                return addStoredFramePass1LogoScan(srcY, pitchY, *pass2);
+            }
+            if (passIndex == 2) {
+                if (pass2 == nullptr) return 0;
+                return addStoredFramePass2Correlation(srcY, pitchY, *pass2);
+            }
+            if (passIndex == 3) {
+                if (pass2 != nullptr && !pass2->frameMask.empty()) {
+                    if (shouldSkipPass3FrameByMask(*pass2)) {
+                        pass2->skippedFrames++;
+                        if (statsPass != nullptr && !tracePoints.empty()) {
+                            for (size_t ti = 0; ti < tracePoints.size(); ti++) {
+                                const auto& tp = tracePoints[ti];
+                                TraceSampleRecord rec{};
+                                rec.pass = 2;
+                                rec.frame = readFrames;
+                                rec.pointId = tp.id;
+                                rec.x = tp.x;
+                                rec.y = tp.y;
+                                rec.absX = scanx + tp.x;
+                                rec.absY = scany + tp.y;
+                                rec.fgRaw = (ti < traceFgRaw.size()) ? traceFgRaw[ti] : 0.0f;
+                                rec.rejectCode = 3;
+                                statsPass->traceRecords.push_back(rec);
+                            }
+                        }
+                        return 0;
+                    }
+                    pass2->acceptedFrames++;
+                }
+            }
+
+            if (statsPass == nullptr) {
+                return 0;
+            }
+            auto& frameWork = getFrameWorkBuffer<uint8_t>(*statsPass);
+            preprocessStoredFrame(srcY, pitchY, frameWork, thresholdRaw);
+            return collectFrameSamples<uint8_t>(frameWork, kInvMaxv, kRawScale, thresholdRaw, *statsPass, traceFgRaw);
+        }
+
         template<typename pixel_t>
         int addFramePass1LogoScan(const AVFrame* frame, const pixel_t* srcY, const int pitchY, Pass2Buffers& pass2) {
             if (!pass2.logoScan || pass2.logoRectAbs.w <= 0 || pass2.logoRectAbs.h <= 0) {
@@ -4003,6 +4345,14 @@ namespace {
             // deintLogo / frame gate が崩れる。ROI 外周の単色判定まで含めた AddFrame を使い、
             // 「悪い多数サンプル」は捨てて品質を優先する。
             return pass2.logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
+        }
+
+        int addStoredFramePass1LogoScan(const uint8_t* srcY, const int pitchY, Pass2Buffers& pass2) {
+            if (!pass2.logoScan || pass2.logoRectLocal.w <= 0 || pass2.logoRectLocal.h <= 0) {
+                return 0;
+            }
+            const int offY = pass2.logoRectLocal.x + pass2.logoRectLocal.y * pitchY;
+            return pass2.logoScan->AddFrameYOnlyNeutralUV(srcY + offY, pitchY, 8) ? 1 : 0;
         }
 
         // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
@@ -4028,6 +4378,28 @@ namespace {
             const float maxvf = (float)maxv;
             const float corr0 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 0.0f, pass2.evalWork.data());
             const float corr1 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 1.0f, pass2.evalWork.data());
+            pass2.corr0.push_back(corr0);
+            pass2.corr1.push_back(corr1);
+            return 0;
+        }
+
+        int addStoredFramePass2Correlation(const uint8_t* srcY, const int pitchY, Pass2Buffers& pass2) {
+            if (!pass2.deintLogo || !pass2.deintLogo->isValid()) {
+                return 0;
+            }
+            const int w = pass2.deintLogo->getWidth();
+            const int h = pass2.deintLogo->getHeight();
+            const int required = w * h + 8;
+            if ((int)pass2.evalDeint.size() < required) {
+                pass2.evalDeint.resize(required, 0.0f);
+            }
+            if ((int)pass2.evalWork.size() < required) {
+                pass2.evalWork.resize(required, 0.0f);
+            }
+            const int off = pass2.logoRectLocal.x + pass2.logoRectLocal.y * pitchY;
+            logo::DeintY(pass2.evalDeint.data(), srcY + off, pitchY, w, h);
+            const float corr0 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), 255.0f, 0.0f, pass2.evalWork.data());
+            const float corr1 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), 255.0f, 1.0f, pass2.evalWork.data());
             pass2.corr0.push_back(corr0);
             pass2.corr1.push_back(corr1);
             return 0;
@@ -4061,6 +4433,17 @@ namespace {
             }
         }
 
+        void collectTraceRawFromStoredSource(const uint8_t* srcY, const int pitchY, std::vector<float>& outFgRaw) const {
+            outFgRaw.assign(tracePoints.size(), 0.0f);
+            if (tracePoints.empty()) {
+                return;
+            }
+            for (size_t i = 0; i < tracePoints.size(); i++) {
+                const auto& tp = tracePoints[i];
+                outFgRaw[i] = (float)srcY[tp.x + tp.y * pitchY];
+            }
+        }
+
         template<typename pixel_t>
         void preprocessFrame(const pixel_t* srcY, const int pitchY, std::vector<pixel_t>& frameWork, const pixel_t maxv, const float rawScale, const float thresholdRaw) {
             // 前処理: 5x5 バイラテラルでノイズを落としつつ輪郭を保持する。
@@ -4068,6 +4451,12 @@ namespace {
             const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
             const pixel_t* srcRoiBase = srcY + scanx + scany * pitchY;
             BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcRoiBase, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
+        }
+
+        void preprocessStoredFrame(const uint8_t* srcY, const int pitchY, std::vector<uint8_t>& frameWork, const float thresholdRaw) {
+            constexpr int kBilateralRadius = 2;
+            const float sigmaRange = std::max(6.0f, thresholdRaw * 0.6f);
+            BilateralFilter<uint8_t, kBilateralRadius>(frameWork, srcY, pitchY, scanw, scanh, 1.4f, sigmaRange, (uint8_t)255, &threadPool, threadN);
         }
 
         template<typename pixel_t>
@@ -4344,10 +4733,36 @@ namespace {
             const int pixelSize = av_pix_fmt_desc_get((AVPixelFormat)(frame->format))->comp[0].step;
             int frameCount = 0;
             if (pixelSize == 1) {
+                const auto* srcY = reinterpret_cast<const uint8_t*>(frame->data[0]);
+                const int pitchY = frame->linesize[0] / sizeof(uint8_t);
                 frameCount = addFrame<uint8_t>(frame, statsPass, pass2);
+                appendFrameToRoiCache(srcY, pitchY);
             } else {
+                const auto* srcY = reinterpret_cast<const uint16_t*>(frame->data[0]);
+                const int pitchY = frame->linesize[0] / sizeof(uint16_t);
                 frameCount = addFrame<uint16_t>(frame, statsPass, pass2);
+                appendFrameToRoiCache(srcY, pitchY);
             }
+            if (statsPass != nullptr) {
+                statsPass->frameValidCounts.push_back(frameCount);
+            }
+
+            readFrames++;
+            if (cb && (readFrames % 8) == 0) {
+                const float passProgress = readFrames / (float)searchFrames;
+                if (!reportProgressInCurrentPlan(passProgress, readFrames, searchFrames)) {
+                    THROW(RuntimeException, "Cancel requested");
+                }
+            }
+            return true;
+        }
+
+        bool processStoredFrame(const uint8_t* srcY, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
+            if (readFrames >= roiCacheStoredFrames) {
+                return false;
+            }
+
+            const int frameCount = addStoredFrame(srcY, scanw, statsPass, pass2);
             if (statsPass != nullptr) {
                 statsPass->frameValidCounts.push_back(frameCount);
             }
@@ -4536,9 +4951,14 @@ namespace {
             // ケースを拾うため、ここは再走査してでも sample 単位で処理する。
             sampleResidualReweightActive = true;
             resetAccumulationState(&statsPass, pass2);
-            runFramePassWithProgress(srcpath, progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan, progressPlan.overallBase, progressPlan.overallSpan,
-                [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &statsPass, pass2); },
-                [&](AVFrame* frame) { return processFrame(frame, &statsPass, pass2); });
+            if (hasStoredRoiCache()) {
+                runStoredRoiPassWithProgress(progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan, progressPlan.overallBase, progressPlan.overallSpan,
+                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, &statsPass, pass2); });
+            } else {
+                runFramePassWithProgress(srcpath, progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan, progressPlan.overallBase, progressPlan.overallSpan,
+                    [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &statsPass, pass2); },
+                    [&](AVFrame* frame) { return processFrame(frame, &statsPass, pass2); });
+            }
             sampleResidualReweightActive = false;
         }
 

@@ -42,6 +42,11 @@ float CalcCorrelation5x5_Debug(const float* k, const float* Y, int x, int y, int
 
 namespace logo {
 
+enum class LogoColorMode {
+    NormalYUV,
+    YOnlyNeutralUV,
+};
+
 class LogoDataParam : public LogoData {
     enum {
         KSIZE = 5,
@@ -146,7 +151,7 @@ public:
 
     void Normalize(int mavx);
 
-    std::unique_ptr<LogoData> GetLogo(bool clean) const;
+    std::unique_ptr<LogoData> GetLogo(bool clean, LogoColorMode colorMode = LogoColorMode::NormalYUV) const;
 
     template <typename pixel_t>
     void AddScanFrame(
@@ -245,6 +250,52 @@ public:
         //   透過ロゴ推定に有効なサンプル集合を作る。
         AddScanFrame(srcY, srcU, srcV, pitchY, pitchUV, bgY, bgU, bgV, bitdepth);
 
+        return true;
+    }
+
+    template <typename pixel_t>
+    bool AddFrameYOnlyNeutralUV(
+        const pixel_t* srcY,
+        int pitchY, int bitdepth) {
+        const int scanUVw = scanw >> logUVx;
+        const int scanUVh = scanh >> logUVy;
+
+        tmpY.clear();
+        tmpY.reserve((scanw + scanh - 1) * 2);
+
+        for (int x = 0; x < scanw; x++) {
+            tmpY.push_back(srcY[x]);
+            tmpY.push_back(srcY[x + (scanh - 1) * pitchY]);
+        }
+        for (int y = 1; y < scanh - 1; y++) {
+            tmpY.push_back(srcY[y * pitchY]);
+            tmpY.push_back(srcY[scanw - 1 + y * pitchY]);
+        }
+
+        std::sort(tmpY.begin(), tmpY.end());
+        if (abs(tmpY.front() - tmpY.back()) > (thy << (bitdepth - 8))) {
+            return false;
+        }
+
+        const int bgY = med_average(tmpY);
+        const int neutralUV = 1 << std::max(0, bitdepth - 1);
+        const double normalize = 1.0 / ((1 << bitdepth) - 1);
+        const double bgYNorm = bgY * normalize;
+        const double neutralNorm = neutralUV * normalize;
+
+        for (int y = 0; y < scanh; y++) {
+            for (int x = 0; x < scanw; x++) {
+                logoY[x + y * scanw].Add(srcY[x + y * pitchY] * normalize, bgYNorm);
+            }
+        }
+        for (int y = 0; y < scanUVh; y++) {
+            for (int x = 0; x < scanUVw; x++) {
+                logoU[x + y * scanUVw].Add(neutralNorm, neutralNorm);
+                logoV[x + y * scanUVw].Add(neutralNorm, neutralNorm);
+            }
+        }
+
+        nframes++;
         return true;
     }
 };

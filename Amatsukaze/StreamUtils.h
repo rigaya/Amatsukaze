@@ -418,6 +418,10 @@ public:
         tmpFiles.insert(path);
     }
 
+    void unregisterTmpFile(const tstring& path) {
+        tmpFiles.erase(path);
+    }
+
     void clearTmpFiles() {
         for (auto& path : tmpFiles) {
             if (path.find(_T('*')) != tstring::npos) {
