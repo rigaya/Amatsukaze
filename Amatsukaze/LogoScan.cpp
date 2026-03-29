@@ -5214,6 +5214,53 @@ namespace {
                 }
             }
 
+            // 案C改: alphaGain 分布に基づく動的 floor 調整。
+            // 回帰が「明確にロゴ半透明」と判定したピクセル (alphaGain >= 0.80) の個数で
+            // 回帰成功度を測る。非ロゴ背景は alpha≈0 が正常なので P99 等では判別できないが、
+            // 真のロゴピクセルは alphaGain≈1.0 となるため、その個数で回帰の健全性を判定する。
+            // strongCount >= 80: 回帰正常 → floor=0.15 (影響なし)
+            // strongCount <= 5:  回帰完全失敗 → floor=0.50 (最大補正)
+            float regressionHealth = 1.0f;
+            {
+                const int pixelCount = scanw * scanh;
+                int strongAlphaCount = 0;
+                static constexpr float kStrongAlphaThresh = 0.80f;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i]) continue;
+                    if (scoreStage.score[i] <= 0.0f) continue;
+                    if (scoreStage.mapAlphaGain[i] >= kStrongAlphaThresh) {
+                        strongAlphaCount++;
+                    }
+                }
+                static constexpr int   kStrongCountLo     = 5;
+                static constexpr int   kStrongCountHi     = 80;
+                static constexpr float kAlphaFloorDefault  = 0.15f;
+                static constexpr float kAlphaFloorMax      = 0.50f;
+                regressionHealth = std::min(std::max(
+                    (float)(strongAlphaCount - kStrongCountLo) / (kStrongCountHi - kStrongCountLo), 0.0f), 1.0f);
+                const float alphaFloor = kAlphaFloorMax + (kAlphaFloorDefault - kAlphaFloorMax) * regressionHealth;
+                fprintf(stderr, "[LogoScan] alphaGain strong(>=%.2f)=%d health=%.4f alphaFloor=%.4f\n",
+                    (double)kStrongAlphaThresh, strongAlphaCount, (double)regressionHealth, (double)alphaFloor);
+                // floor が変わった場合、score を事後補正:
+                // score の alpha 項 (0.15 + 0.85*ag) を (alphaFloor + (1-alphaFloor)*ag) に置き換え
+                if (alphaFloor > kAlphaFloorDefault + 1e-4f) {
+                    const float oldCoeff = 1.0f - kAlphaFloorDefault; // 0.85
+                    const float newCoeff = 1.0f - alphaFloor;
+                    for (int i = 0; i < pixelCount; i++) {
+                        if (!scoreStage.validAB[i]) continue;
+                        if (scoreStage.score[i] <= 0.0f) continue;
+                        const float ag = scoreStage.mapAlphaGain[i];
+                        const float oldTerm = kAlphaFloorDefault + oldCoeff * ag;
+                        const float newTerm = alphaFloor + newCoeff * ag;
+                        if (oldTerm > 1e-6f) {
+                            const float ratio = newTerm / oldTerm;
+                            scoreStage.score[i] *= ratio;
+                            scoreStage.mapAccepted[i] *= ratio;
+                        }
+                    }
+                }
+            }
+
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
             // ステップ1: edgeMean / edgeVar / edgePresence と各ゲインを計算して保存する。
             //            upperGate は 3x3 localmax 後に計算するため、ここでは保存しない。
@@ -5442,7 +5489,13 @@ namespace {
                     const int idx999 = std::min((int)(rescueScores.size() * 999 / 1000), (int)rescueScores.size() - 1);
                     rescueP999 = rescueScores[idx999];
                 }
-                const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f) ? (baseP99 / rescueP999) : 0.0f;
+                // 案A改: 回帰が全域で失敗している場合のみ rescueGain に下限を設ける。
+                // regressionHealth が低い(ロゴ半透明ピクセルがほぼ検出されない)場合のみ発動し、
+                // 回帰が部分的に機能しているケースではノイズ増幅を避ける。
+                static constexpr float kMinRescueGainBase = 0.15f;
+                static constexpr float kRescueHealthThresh = 0.5f;
+                const float kMinRescueGain = (regressionHealth < kRescueHealthThresh) ? kMinRescueGainBase : 0.0f;
+                const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f) ? std::max(baseP99 / rescueP999, kMinRescueGain) : 0.0f;
                 static constexpr float kRescueBlendRatioHi = 0.6f;
                 static constexpr float kRescueBlendRatioLo = 0.05f;
                 static constexpr float kRescueBaseNormLo   = 0.3f;
