@@ -5460,6 +5460,29 @@ namespace {
                 scoreStage.mapIsInterior = isInterior;
             }
 
+            // upperGate による base score の静止構造抑制:
+            // 半透明テキストオーバーレイ等の静止構造は回帰ベースでは区別できないが、
+            // edgeMean が高い(= upperGate が低い)という特徴がある。
+            // upperGate を base score にも乗じることで、こうした静止構造のノイズを抑制する。
+            // floor を設けてテキスト型ロゴ(中程度の edgeMean)の過剰抑制を防ぐ。
+            {
+                const int pixelCount = scanw * scanh;
+                static constexpr float kBaseUpperGateFloor = 0.15f;
+                int gatedCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (scoreStage.score[i] <= 0.0f) continue;
+                    if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;
+                    const float baseGate = kBaseUpperGateFloor + (1.0f - kBaseUpperGateFloor) * scoreStage.mapUpperGate[i];
+                    if (baseGate < 1.0f - 1e-4f) {
+                        scoreStage.score[i] *= baseGate;
+                        scoreStage.mapAccepted[i] *= baseGate;
+                        gatedCount++;
+                    }
+                }
+                fprintf(stderr, "[LogoScan] upperGate base score suppression: floor=%.2f gated=%d\n",
+                    (double)kBaseUpperGateFloor, gatedCount);
+            }
+
             scoreStage.debugMaxScoreBeforeRescue = calcPositiveMax(scoreStage.score);
 
             // rescueScore の単純加算:
@@ -5489,24 +5512,63 @@ namespace {
                     const int idx999 = std::min((int)(rescueScores.size() * 999 / 1000), (int)rescueScores.size() - 1);
                     rescueP999 = rescueScores[idx999];
                 }
-                // 案A改: 回帰が全域で失敗している場合のみ rescueGain に下限を設ける。
-                // regressionHealth が低い(ロゴ半透明ピクセルがほぼ検出されない)場合のみ発動し、
-                // 回帰が部分的に機能しているケースではノイズ増幅を避ける。
-                static constexpr float kMinRescueGainBase = 0.15f;
-                static constexpr float kRescueHealthThresh = 0.5f;
-                const float kMinRescueGain = (regressionHealth < kRescueHealthThresh) ? kMinRescueGainBase : 0.0f;
-                const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f) ? std::max(baseP99 / rescueP999, kMinRescueGain) : 0.0f;
+                // rescueGain 計算:
+                // 通常時: rescue を base と同スケールに揃える (baseP99 / rescueP999)。
+                // 回帰失敗時 (regressionHealth < 閾値): base が存在しないので rescueScore を
+                // そのまま使う rescue-only モードに切り替える。
                 static constexpr float kRescueBlendRatioHi = 0.6f;
                 static constexpr float kRescueBlendRatioLo = 0.05f;
                 static constexpr float kRescueBaseNormLo   = 0.3f;
                 static constexpr float kRescueBaseNormHi   = 1.0f;
                 static constexpr float kRescueNormLo       = 0.3f;
                 static constexpr float kRescueNormHi       = 1.0f;
+                // 案B: ���帰完全失敗��の rescue-only フォールバック。
+                // regressionHealth が極めて低く base score がゼロ近傍の場合、
+                // validAB のないピクセルでも rescueScore のみで rect 検出用スコアを構築する。
+                static constexpr float kRescueOnlyHealthThresh = 0.10f;
+                const bool rescueOnlyMode = (regressionHealth < kRescueOnlyHealthThresh
+                                             && baseP99 <= 1e-6f && rescueP999 > 1e-6f);
+                // rescueGain: rescue を base と同スケールに揃えるゲイン。
+                // regressionHealth が低い場合は回帰が弱く baseP99 が過小なため、
+                // rescueGain に下限 (kMinRescueGainBase) を設けて rescue 寄与を確保する。
+                // rescueGain 下限フロアを以下の場合に適用する:
+                // (1) regressionHealth が低い: 回帰が弱く baseP99 が過小
+                // (2) baseP99/rescueP999 が極端に低い: 回帰は部分的に成功しているが
+                //     base score が rescue に比べて極端に小さい
+                static constexpr float kMinRescueGainBase     = 0.15f;
+                static constexpr float kRescueHealthThresh    = 0.50f;
+                static constexpr float kRescueGainRatioThresh = 0.05f;
+                const bool needRescueFloor = (regressionHealth < kRescueHealthThresh)
+                    || (baseP99 > 1e-6f && rescueP999 > 1e-6f
+                        && (baseP99 / rescueP999) < kRescueGainRatioThresh);
+                const float kMinRescueGain = needRescueFloor ? kMinRescueGainBase : 0.0f;
+                const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f)
+                    ? std::max(baseP99 / rescueP999, kMinRescueGain) : 0.0f;
                 int blendedCount = 0;
                 int rescueOnlyCount = 0;
                 for (int i = 0; i < pixelCount; i++) {
                     const float rs = scoreStage.mapRescueScore[i];
                     if (rs <= 0.0f) continue;
+                    // 案B: rescue-only モードでは validAB がなくてもスコアを付与する。
+                    // rescueScore を正規化して [kRescueNormLo, kRescueNormHi] で重み付けし、
+                    // base がないので blendRatio は常に Hi (= 最大寄与) を使う。
+                    if (rescueOnlyMode && !scoreStage.validAB[i]) {
+                        const float rescueNorm = rs / rescueP999;
+                        float rescueWeight = 1.0f;
+                        if (rescueNorm <= kRescueNormLo) {
+                            rescueWeight = 0.0f;
+                        } else if (rescueNorm < kRescueNormHi) {
+                            rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
+                        }
+                        const float rescueVal = kRescueBlendRatioHi * rescueWeight * rs;
+                        if (rescueVal > 0.0f) {
+                            scoreStage.score[i] = rescueVal;
+                            scoreStage.mapAccepted[i] = rescueVal;
+                            scoreStage.validAB[i] = 1;  // 下流の validAB フィルタを通過させる
+                            rescueOnlyCount++;
+                        }
+                        continue;
+                    }
                     if (!scoreStage.validAB[i]) continue;
                     const float base = scoreStage.score[i];
                     const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
@@ -5528,8 +5590,8 @@ namespace {
                     scoreStage.score[i] += rescueVal;
                     blendedCount++;
                 }
-                fprintf(stderr, "[LogoScan] rescue additive blend: ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
-                    kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
+                fprintf(stderr, "[LogoScan] rescue additive blend: rescueOnlyMode=%d ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
+                    (int)rescueOnlyMode, kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
                     (double)rescueGain, blendedCount, rescueOnlyCount);
                 // ファイル出力: rescueScore 分布と加算効果の確認
                 {
@@ -5743,9 +5805,8 @@ namespace {
             scoreStage.debugMaxScore = calcPositiveMax(scoreStage.score);
 
             // score 分布の基礎統計を集計し、成立しない場合は詳細情報付きで例外化する。
-            // 閾値は回帰ベーススコア (validAB=true) のみで計算する。
-            // rescue でスケール補正済のスコアも validAB=true の分布に混入させてよいが、
-            // rescue のみ由来の画素 (validAB=false) は除外する。
+            // validAB=true のピクセルでカウント。案B の rescue-only 時は
+            // スコア付与時に validAB=1 をセット済なので、ここは変更不要。
             double sum = 0.0;
             double sum2 = 0.0;
             int count = 0;
