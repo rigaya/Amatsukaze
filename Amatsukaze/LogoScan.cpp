@@ -5788,6 +5788,16 @@ namespace {
                     static constexpr float kRescueWeight = 0.65f;
                     static constexpr float kContaminatedThreshold = 0.03f;
                     static constexpr float kRescuePromoteRatio = 1.5f;
+                    static constexpr float kRescueBridgeScoreThresh = 0.07f;
+                    static constexpr float kRescueBridgeMinScore = 0.08f;
+                    static constexpr float kRescueBridgeMaxScore = 0.16f;
+                    static constexpr float kRescueBridgeMinRescue = 0.15f;
+                    static constexpr float kRescueBridgeMinAlpha = 0.10f;
+                    static constexpr float kRescueBridgeMinUpperGate = 0.95f;
+                    static constexpr float kRescueBridgeMinBgVarGain = 0.90f;
+                    static constexpr float kRescueBridgeConsistencyMax = 0.20f;
+                    static constexpr float kRescueBridgeDiffMax = 0.12f;
+                    int rescueBridgeCount = 0;
                     for (int i = 0; i < pixelCount; i++) {
                         if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
                         if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
@@ -5797,8 +5807,30 @@ namespace {
                             scoreStage.score[i] = rescueVal;
                         } else if (scoreStage.score[i] < kContaminatedThreshold || rescueVal > scoreStage.score[i] * kRescuePromoteRatio) {
                             scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
+                        } else {
+                            // pass2 では回帰が成立していても diff/consistency だけが弱く、
+                            // rescue 側だけが下部文字を強く捉えることがある。
+                            const bool weakBase = scoreStage.score[i] < kRescueBridgeScoreThresh
+                                && scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
+                                && scoreStage.mapAlpha[i] >= kRescueBridgeMinAlpha
+                                && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
+                                && scoreStage.mapBgVarGain[i] >= kRescueBridgeMinBgVarGain
+                                && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
+                                    || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
+                            if (weakBase) {
+                                const float rescueExcess = std::max(scoreStage.mapRescueScore[i] - kRescueBridgeMinRescue, 0.0f);
+                                const float rescueFloor = std::min(
+                                    kRescueBridgeMinScore + rescueExcess * 0.45f,
+                                    kRescueBridgeMaxScore);
+                                if (rescueFloor > scoreStage.score[i]) {
+                                    scoreStage.score[i] = rescueFloor;
+                                    rescueBridgeCount++;
+                                }
+                            }
                         }
                     }
+                    fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f\n",
+                        rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue);
                 }
             }
 
