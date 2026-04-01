@@ -27,6 +27,8 @@
 #include <utility>
 #include <ctime>
 #include <inttypes.h>
+#include <sstream>
+#include <iomanip>
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <sys/sysinfo.h>
 #endif
@@ -1570,27 +1572,26 @@ namespace {
         }
     }
 
-    static bool TryGetAB(const AutoDetectStats& s, float& A, float& B) {
-        if (s.rawSampleCount < 8 || s.sumW < 4.0) {
+    static bool TryApproxWeightedLine(const double n, const double sum_x, const double sum_y, const double sum_x2, const double sum_xy, double& a, double& b) {
+        const double temp = n * sum_x2 - sum_x * sum_x;
+        if (!std::isfinite(temp) || std::abs(temp) < 1e-12) {
             return false;
         }
+        a = (n * sum_xy - sum_x * sum_y) / temp;
+        b = (sum_x2 * sum_y - sum_x * sum_xy) / temp;
+        return std::isfinite(a) && std::isfinite(b);
+    }
 
-        auto approxWeighted = [](const double n, const double sum_x, const double sum_y, const double sum_x2, const double sum_xy, double& a, double& b) {
-            const double temp = n * sum_x2 - sum_x * sum_x;
-            if (!std::isfinite(temp) || std::abs(temp) < 1e-12) {
-                return false;
-            }
-            a = (n * sum_xy - sum_x * sum_y) / temp;
-            b = (sum_x2 * sum_y - sum_x * sum_xy) / temp;
-            return std::isfinite(a) && std::isfinite(b);
-        };
-
+    static bool TryGetABFromMoments(const double sumW, const double sumF, const double sumB, const double sumF2, const double sumB2, const double sumFB, float& A, float& B) {
+        if (sumW < 1e-6) {
+            return false;
+        }
         double A1, A2;
         double B1, B2;
-        if (!approxWeighted(s.sumW, s.sumF, s.sumB, s.sumF2, s.sumFB, A1, B1)) {
+        if (!TryApproxWeightedLine(sumW, sumF, sumB, sumF2, sumFB, A1, B1)) {
             return false;
         }
-        if (!approxWeighted(s.sumW, s.sumB, s.sumF, s.sumB2, s.sumFB, A2, B2)) {
+        if (!TryApproxWeightedLine(sumW, sumB, sumF, sumB2, sumFB, A2, B2)) {
             return false;
         }
         if (!std::isfinite(A2) || std::abs(A2) < 1e-12) {
@@ -1601,6 +1602,13 @@ namespace {
         B = (float)((B1 + (-B2 / A2)) * 0.5);
 
         return !(std::isnan(A) || std::isinf(A) || std::isnan(B) || std::isinf(B) || std::abs(A) < 1e-8f);
+    }
+
+    static bool TryGetAB(const AutoDetectStats& s, float& A, float& B) {
+        if (s.rawSampleCount < 8 || s.sumW < 4.0) {
+            return false;
+        }
+        return TryGetABFromMoments(s.sumW, s.sumF, s.sumB, s.sumF2, s.sumB2, s.sumFB, A, B);
     }
 
     static bool TryGetAlphaLogo(const float A, const float B, float& alpha, float& logoY) {
@@ -2162,6 +2170,7 @@ namespace {
             int bgOk = 0;
             int bgSideCount = 0;
             int bgSideValidMask = 0;
+            float bgSideAvgEach[4] = {};
             float bgSideRangeMax = 0.0f;
             float bgSideAvgSpread = 0.0f;
             float fgBgDiff = 0.0f;
@@ -2185,6 +2194,7 @@ namespace {
             float rawBg = 0.0f;
             float adjustedBg = 0.0f;
             float weightScale = 1.0f;
+            float gompertzWeight = 0.0f;
             float provisionalA = 0.0f;
             float provisionalB = 0.0f;
             float provisionalConsistency = 0.0f;
@@ -2299,6 +2309,12 @@ namespace {
             std::vector<float> mapTemporalGain;
             std::vector<float> mapOpaquePenalty;
             std::vector<float> mapOpaqueStaticPenalty;
+            std::vector<float> mapBranchRescueScore;
+            std::vector<float> mapBranchContaminationGain;
+            std::vector<float> mapBranchSupportGain;
+            std::vector<float> mapBranchDiffGain;
+            std::vector<float> mapBranchConsistencyGain;
+            std::vector<float> mapBranchAlphaGain;
             // 空間edge時系列統計マップ
             std::vector<float> mapEdgePresence;
             std::vector<float> mapEdgeMean;
@@ -2343,6 +2359,12 @@ namespace {
                 mapTemporalGain.assign(n, 0.0f);
                 mapOpaquePenalty.assign(n, 0.0f);
                 mapOpaqueStaticPenalty.assign(n, 0.0f);
+                mapBranchRescueScore.assign(n, 0.0f);
+                mapBranchContaminationGain.assign(n, 0.0f);
+                mapBranchSupportGain.assign(n, 0.0f);
+                mapBranchDiffGain.assign(n, 0.0f);
+                mapBranchConsistencyGain.assign(n, 0.0f);
+                mapBranchAlphaGain.assign(n, 0.0f);
                 mapEdgePresence.assign(n, 0.0f);
                 mapEdgeMean.assign(n, 0.0f);
                 mapEdgeVar.assign(n, 0.0f);
@@ -3793,11 +3815,12 @@ namespace {
                 const std::string traceCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.csv");
                 FILE* ftrace = fopen(traceCsvPath.c_str(), "w");
                 if (ftrace != nullptr) {
-                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_range_max,bg_side_avg_spread,fg_bg_diff,hist_bin,extreme,accepted,reject_code,reject\n");
+                    fprintf(ftrace, "pass,frame,point_id,x,y,abs_x,abs_y,fg_raw,fg_filtered,bg,bg_ok,bg_side_count,bg_side_valid_mask,bg_side_avg_top,bg_side_avg_bottom,bg_side_avg_left,bg_side_avg_right,bg_side_range_max,bg_side_avg_spread,fg_bg_diff,hist_bin,extreme,accepted,reject_code,reject\n");
                     for (const auto& r : traceRecords) {
-                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%d,%s\n",
+                        fprintf(ftrace, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%d,%d,%d,%d,%s\n",
                             r.pass, r.frame, r.pointId, r.x, r.y, r.absX, r.absY,
                             r.fgRaw, r.fgFiltered, r.bg, r.bgOk, r.bgSideCount, r.bgSideValidMask,
+                            r.bgSideAvgEach[0], r.bgSideAvgEach[1], r.bgSideAvgEach[2], r.bgSideAvgEach[3],
                             r.bgSideRangeMax, r.bgSideAvgSpread, r.fgBgDiff, r.histBin,
                             r.extreme, r.accepted, r.rejectCode, rejectReasonStr(r.rejectCode));
                     }
@@ -3818,6 +3841,7 @@ namespace {
                     int rejectedEdge = 0;
                     double sumDiff = 0.0;
                     std::vector<float> acceptedDiff;
+                    std::array<int, 16> acceptedMaskCount = {};
                 };
                 std::vector<TraceSummaryRow> rows;
                 rows.reserve(tracePoints.size());
@@ -3838,6 +3862,9 @@ namespace {
                         it->accepted++;
                         it->sumDiff += r.fgBgDiff;
                         it->acceptedDiff.push_back(r.fgBgDiff);
+                        if (r.bgSideValidMask >= 0 && r.bgSideValidMask < (int)it->acceptedMaskCount.size()) {
+                            it->acceptedMaskCount[r.bgSideValidMask]++;
+                        }
                     } else if (r.rejectCode == 1) {
                         it->rejectedBgFail++;
                     } else if (r.rejectCode == 2) {
@@ -3851,7 +3878,7 @@ namespace {
                 const std::string summaryCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.summary.csv");
                 FILE* fsum = fopen(summaryCsvPath.c_str(), "w");
                 if (fsum != nullptr) {
-                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,score,accepted_score\n");
+                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,dominant_mask,dominant_mask_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,bin_fg_p10,bin_fg_p90,bin_low_weight_frac,bin_negative_weight_frac,bin_diag_weight_frac,bin_total_weight,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,score,accepted_score\n");
                     for (auto& row : rows) {
                         float p50 = 0.0f;
                         float p90 = 0.0f;
@@ -3859,6 +3886,68 @@ namespace {
                             std::sort(row.acceptedDiff.begin(), row.acceptedDiff.end());
                             p50 = PercentileOfSorted(row.acceptedDiff, 0.50f);
                             p90 = PercentileOfSorted(row.acceptedDiff, 0.90f);
+                        }
+                        int dominantMask = 0;
+                        int dominantMaskCount = 0;
+                        for (int mask = 0; mask < (int)row.acceptedMaskCount.size(); mask++) {
+                            if (row.acceptedMaskCount[mask] > dominantMaskCount) {
+                                dominantMask = mask;
+                                dominantMaskCount = row.acceptedMaskCount[mask];
+                            }
+                        }
+                        float binFgP10 = 0.0f;
+                        float binFgP90 = 0.0f;
+                        float binLowWeightFrac = 0.0f;
+                        float binNegativeWeightFrac = 0.0f;
+                        float binDiagWeightFrac = 0.0f;
+                        float binTotalWeight = 0.0f;
+                        {
+                            std::vector<const TraceBinRepresentativeRecord*> pointBins;
+                            pointBins.reserve(kHistBins);
+                            for (const auto& rep : traceBinRepresentatives) {
+                                if (rep.pointId == row.pointId && rep.count > 0) {
+                                    pointBins.push_back(&rep);
+                                }
+                            }
+                            std::sort(pointBins.begin(), pointBins.end(), [](const TraceBinRepresentativeRecord* a, const TraceBinRepresentativeRecord* b) {
+                                return a->avgFg < b->avgFg;
+                            });
+                            double totalWeight = 0.0;
+                            double lowWeight = 0.0;
+                            double negativeWeight = 0.0;
+                            double diagWeight = 0.0;
+                            for (const auto* rep : pointBins) {
+                                const double w = std::max(0.0f, rep->gompertzWeight);
+                                totalWeight += w;
+                                if (rep->histBin <= 18) {
+                                    lowWeight += w;
+                                }
+                                if (rep->adjustedBg > rep->avgFg) {
+                                    negativeWeight += w;
+                                }
+                                if (std::abs(rep->avgFg - rep->adjustedBg) <= (2.0f / 255.0f)) {
+                                    diagWeight += w;
+                                }
+                            }
+                            if (totalWeight > 1e-8) {
+                                const auto weightedPercentile = [&](const double ratio) {
+                                    const double target = totalWeight * std::max(0.0, std::min(1.0, ratio));
+                                    double accum = 0.0;
+                                    for (const auto* rep : pointBins) {
+                                        accum += std::max(0.0f, rep->gompertzWeight);
+                                        if (accum >= target) {
+                                            return rep->avgFg;
+                                        }
+                                    }
+                                    return pointBins.empty() ? 0.0f : pointBins.back()->avgFg;
+                                };
+                                binFgP10 = weightedPercentile(0.10);
+                                binFgP90 = weightedPercentile(0.90);
+                                binLowWeightFrac = (float)(lowWeight / totalWeight);
+                                binNegativeWeightFrac = (float)(negativeWeight / totalWeight);
+                                binDiagWeightFrac = (float)(diagWeight / totalWeight);
+                                binTotalWeight = (float)totalWeight;
+                            }
                         }
                         const int off = row.x + row.y * scanw;
                         float A = 0.0f;
@@ -3887,10 +3976,45 @@ namespace {
                         }
                         const double meanDiff = row.accepted > 0 ? row.sumDiff / row.accepted : 0.0;
                         const double acceptRate = row.frames > 0 ? (double)row.accepted / row.frames : 0.0;
-                        fprintf(fsum, "%d,%d,%d,%d,%d,%d,%d,%.8f,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
-                            row.pointId, row.x, row.y, row.absX, row.absY, row.frames, row.accepted, acceptRate,
-                            row.rejectedBgFail, row.rejectedExtreme, row.rejectedPassMask, row.rejectedEdge,
-                            meanDiff, p50, p90, A, B, alpha, logoY, consistency, fgvar, bgvar, transition, keeprate, scorev, acceptedScore);
+                        const double dominantMaskRate = row.accepted > 0 ? (double)dominantMaskCount / row.accepted : 0.0;
+                        std::ostringstream ss;
+                        ss << std::fixed << std::setprecision(8)
+                            << row.pointId << ','
+                            << row.x << ','
+                            << row.y << ','
+                            << row.absX << ','
+                            << row.absY << ','
+                            << row.frames << ','
+                            << row.accepted << ','
+                            << acceptRate << ','
+                            << dominantMask << ','
+                            << dominantMaskRate << ','
+                            << row.rejectedBgFail << ','
+                            << row.rejectedExtreme << ','
+                            << row.rejectedPassMask << ','
+                            << row.rejectedEdge << ','
+                            << meanDiff << ','
+                            << p50 << ','
+                            << p90 << ','
+                            << binFgP10 << ','
+                            << binFgP90 << ','
+                            << binLowWeightFrac << ','
+                            << binNegativeWeightFrac << ','
+                            << binDiagWeightFrac << ','
+                            << binTotalWeight << ','
+                            << A << ','
+                            << B << ','
+                            << alpha << ','
+                            << logoY << ','
+                            << consistency << ','
+                            << fgvar << ','
+                            << bgvar << ','
+                            << transition << ','
+                            << keeprate << ','
+                            << scorev << ','
+                            << acceptedScore
+                            << '\n';
+                        fputs(ss.str().c_str(), fsum);
                     }
                     fclose(fsum);
                 }
@@ -3899,11 +4023,11 @@ namespace {
                     const std::string binCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.bin.csv");
                     FILE* fbin = fopen(binCsvPath.c_str(), "w");
                     if (fbin != nullptr) {
-                        fprintf(fbin, "point_id,x,y,abs_x,abs_y,hist_bin,count,avg_fg,raw_bg,adjusted_bg,weight_scale,provisional_a,provisional_b,provisional_consistency\n");
+                        fprintf(fbin, "point_id,x,y,abs_x,abs_y,hist_bin,count,avg_fg,raw_bg,adjusted_bg,weight_scale,gompertz_weight,provisional_a,provisional_b,provisional_consistency\n");
                         for (const auto& r : traceBinRepresentatives) {
-                            fprintf(fbin, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                            fprintf(fbin, "%d,%d,%d,%d,%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
                                 r.pointId, r.x, r.y, r.absX, r.absY, r.histBin, r.count,
-                                r.avgFg, r.rawBg, r.adjustedBg, r.weightScale,
+                                r.avgFg, r.rawBg, r.adjustedBg, r.weightScale, r.gompertzWeight,
                                 r.provisionalA, r.provisionalB, r.provisionalConsistency);
                         }
                         fclose(fbin);
@@ -3921,7 +4045,7 @@ namespace {
                 const std::string pixelCsvPath = replaceExtensionWithSuffix(path.score, ".pixeldump.csv");
                 FILE* fpx = fopen(pixelCsvPath.c_str(), "w");
                 if (fpx != nullptr) {
-                    fprintf(fpx, "x,y,validAB,score,rescueScore,diffGain,consistencyGain,alphaGain,logoGain,extremeGain,temporalGain,opaquePenalty,opaqueStaticPenalty,alpha,presenceGain,magGain,upperGate,consistGain,bgVarGain\n");
+                    fprintf(fpx, "x,y,validAB,score,rescueScore,branchRescueScore,diffGain,consistencyGain,alphaGain,logoGain,extremeGain,temporalGain,opaquePenalty,opaqueStaticPenalty,alpha,branchContamGain,branchSupportGain,branchDiffGain,branchConsistencyGain,branchAlphaGain,presenceGain,magGain,upperGate,consistGain,bgVarGain\n");
                     for (int y = 0; y < scanh; y++) {
                         for (int x = 0; x < scanw; x++) {
                             const int off = x + y * scanw;
@@ -3938,6 +4062,12 @@ namespace {
                             const float op  = (off < (int)score.mapOpaquePenalty.size()) ? score.mapOpaquePenalty[off] : 0.0f;
                             const float osp = (off < (int)score.mapOpaqueStaticPenalty.size()) ? score.mapOpaqueStaticPenalty[off] : 0.0f;
                             const float al  = (off < (int)score.mapAlpha.size()) ? score.mapAlpha[off] : 0.0f;
+                            const float brs = (off < (int)score.mapBranchRescueScore.size()) ? score.mapBranchRescueScore[off] : 0.0f;
+                            const float bcg = (off < (int)score.mapBranchContaminationGain.size()) ? score.mapBranchContaminationGain[off] : 0.0f;
+                            const float bsg = (off < (int)score.mapBranchSupportGain.size()) ? score.mapBranchSupportGain[off] : 0.0f;
+                            const float bdg = (off < (int)score.mapBranchDiffGain.size()) ? score.mapBranchDiffGain[off] : 0.0f;
+                            const float bkg = (off < (int)score.mapBranchConsistencyGain.size()) ? score.mapBranchConsistencyGain[off] : 0.0f;
+                            const float bag = (off < (int)score.mapBranchAlphaGain.size()) ? score.mapBranchAlphaGain[off] : 0.0f;
                             const float pg  = (off < (int)score.mapPresenceGain.size()) ? score.mapPresenceGain[off] : 0.0f;
                             const float mg  = (off < (int)score.mapMagGain.size()) ? score.mapMagGain[off] : 0.0f;
                             const float ug  = (off < (int)score.mapUpperGate.size()) ? score.mapUpperGate[off] : 0.0f;
@@ -3946,8 +4076,8 @@ namespace {
                             float bgvg = 0.0f;
                             const float denom = pg * mg * ug * csg;
                             if (denom > 1e-8f && rs > 0.0f) bgvg = rs / denom;
-                            fprintf(fpx, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
-                                x, y, vab ? 1 : 0, sc, rs, dg, cg, ag, lg, eg, tg, op, osp, al, pg, mg, ug, csg, bgvg);
+                            fprintf(fpx, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                                x, y, vab ? 1 : 0, sc, rs, brs, dg, cg, ag, lg, eg, tg, op, osp, al, bcg, bsg, bdg, bkg, bag, pg, mg, ug, csg, bgvg);
                         }
                     }
                     fclose(fpx);
@@ -4680,6 +4810,7 @@ namespace {
                 float sideAvgMax = std::numeric_limits<float>::lowest();
                 bool hasSideAvg = false;
                 for (int si = 0; si < 4; si++) {
+                    rec.bgSideAvgEach[si] = dbgBg.sideAvg[si];
                     if (dbgBg.sideValid[si]) {
                         sideMask |= (1 << si);
                         sideRangeMax = std::max(sideRangeMax, dbgBg.sideMax[si] - dbgBg.sideMin[si]);
@@ -4821,6 +4952,146 @@ namespace {
             stdDiff = std::sqrt(varDiff);
             consistency = std::abs(meanDiff) / (stdDiff + 1e-6);
             return std::isfinite(consistency);
+        }
+
+        struct BranchRescueInfo {
+            bool valid = false;
+            float contaminationGain = 0.0f;
+            float supportGain = 0.0f;
+            float positiveWeightFrac = 0.0f;
+            float negativeWeightFrac = 0.0f;
+            float diagonalWeightFrac = 0.0f;
+            float lowWeightFrac = 0.0f;
+            float auxA = 0.0f;
+            float auxB = 0.0f;
+            float auxAlpha = 0.0f;
+            float auxLogoY = 0.0f;
+            float auxMeanDiff = 0.0f;
+            float auxConsistency = 0.0f;
+        };
+
+        bool analyzeContaminatedBranchFit(const StatsPassBuffers& statsPass, const int off, const double baseConsistency, const double baseAlpha, BranchRescueInfo& out) const {
+            out = BranchRescueInfo{};
+            if (passIndex != 0 || off < 0) {
+                return false;
+            }
+            const int pixelCount = scanw * scanh;
+            if (off >= pixelCount) {
+                return false;
+            }
+            auto sat01 = [](const double v) {
+                return std::max(0.0, std::min(1.0, v));
+            };
+
+            static constexpr double kDiagDiffAbs = 2.0 / 255.0;
+            static constexpr double kNegativeDiff = 0.003;
+            static constexpr double kPositiveDiff = 0.010;
+            static constexpr int kLowBinMax = 18;
+
+            double totalWeight = 0.0;
+            double lowWeight = 0.0;
+            double negativeWeight = 0.0;
+            double diagonalWeight = 0.0;
+            double positiveWeight = 0.0;
+            int positiveBins = 0;
+
+            double posSumF = 0.0;
+            double posSumB = 0.0;
+            double posSumF2 = 0.0;
+            double posSumB2 = 0.0;
+            double posSumFB = 0.0;
+
+            for (int b = 0; b < kHistBins; b++) {
+                const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                if (bin.count == 0) continue;
+                double avgFg = 0.0;
+                double avgBg = 0.0;
+                double weightScale = 1.0;
+                GetBinRepresentative(bin, avgFg, avgBg, weightScale);
+                const double w = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
+                if (w <= 1e-8) continue;
+                const double diff = avgFg - avgBg;
+                totalWeight += w;
+                if (b <= kLowBinMax) {
+                    lowWeight += w;
+                }
+                if (diff < -kNegativeDiff) {
+                    negativeWeight += w;
+                }
+                if (std::abs(diff) <= kDiagDiffAbs) {
+                    diagonalWeight += w;
+                }
+                if (diff > kPositiveDiff) {
+                    positiveWeight += w;
+                    positiveBins++;
+                    posSumF += w * avgFg;
+                    posSumB += w * avgBg;
+                    posSumF2 += w * avgFg * avgFg;
+                    posSumB2 += w * avgBg * avgBg;
+                    posSumFB += w * avgFg * avgBg;
+                }
+            }
+
+            if (totalWeight <= 1e-6 || positiveWeight <= 1e-6 || positiveBins < 4) {
+                return false;
+            }
+
+            const double lowWeightFrac = lowWeight / totalWeight;
+            const double negativeWeightFrac = negativeWeight / totalWeight;
+            const double diagonalWeightFrac = diagonalWeight / totalWeight;
+            const double positiveWeightFrac = positiveWeight / totalWeight;
+
+            const double consistencyWeakGain = sat01((0.85 - baseConsistency) / 0.85);
+            const double alphaWeakGain = sat01((0.10 - baseAlpha) / 0.10);
+            const double lowGain = sat01((lowWeightFrac - 0.30) / 0.20);
+            const double negativeGain = sat01((negativeWeightFrac - 0.20) / 0.18);
+            const double diagonalGain = sat01((diagonalWeightFrac - 0.25) / 0.20);
+            const double contaminationGain = consistencyWeakGain * std::max(alphaWeakGain, 0.45) * lowGain * std::max(negativeGain, 0.60 * diagonalGain);
+            if (contaminationGain <= 1e-4) {
+                return false;
+            }
+
+            const double supportGain = sat01((positiveWeightFrac - 0.18) / 0.22) * sat01((positiveBins - 3.0) / 5.0);
+            if (supportGain <= 1e-4) {
+                return false;
+            }
+
+            float auxA = 0.0f;
+            float auxB = 0.0f;
+            if (!TryGetABFromMoments(positiveWeight, posSumF, posSumB, posSumF2, posSumB2, posSumFB, auxA, auxB)) {
+                return false;
+            }
+
+            float auxAlpha = 0.0f;
+            float auxLogoY = 0.0f;
+            if (!TryGetAlphaLogo(auxA, auxB, auxAlpha, auxLogoY)) {
+                return false;
+            }
+
+            const double invN = 1.0 / positiveWeight;
+            const double auxMeanDiff = (posSumF - posSumB) * invN;
+            const double diff2 = (posSumF2 - 2.0 * posSumFB + posSumB2) * invN;
+            const double auxVarDiff = std::max(0.0, diff2 - auxMeanDiff * auxMeanDiff);
+            const double auxStdDiff = std::sqrt(auxVarDiff);
+            const double auxConsistency = std::abs(auxMeanDiff) / (auxStdDiff + 1e-6);
+            if (!std::isfinite(auxConsistency) || auxConsistency < 0.55 || auxMeanDiff <= 0.008) {
+                return false;
+            }
+
+            out.valid = true;
+            out.contaminationGain = (float)contaminationGain;
+            out.supportGain = (float)supportGain;
+            out.positiveWeightFrac = (float)positiveWeightFrac;
+            out.negativeWeightFrac = (float)negativeWeightFrac;
+            out.diagonalWeightFrac = (float)diagonalWeightFrac;
+            out.lowWeightFrac = (float)lowWeightFrac;
+            out.auxA = auxA;
+            out.auxB = auxB;
+            out.auxAlpha = auxAlpha;
+            out.auxLogoY = auxLogoY;
+            out.auxMeanDiff = (float)auxMeanDiff;
+            out.auxConsistency = (float)auxConsistency;
+            return true;
         }
 
         // trust は「この provisional line をどこまで信用してよいか」を表す係数。
@@ -5005,6 +5276,7 @@ namespace {
                     rec.rawBg = (float)(bin.sum_bg / std::max(1, bin.count));
                     rec.adjustedBg = (float)adjustedBg;
                     rec.weightScale = (float)weightScale;
+                    rec.gompertzWeight = (float)GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
                     rec.provisionalA = provisionalA;
                     rec.provisionalB = provisionalB;
                     rec.provisionalConsistency = (float)provisionalConsistency;
@@ -5264,6 +5536,56 @@ namespace {
                             scoreStage.score[i] *= ratio;
                             scoreStage.mapAccepted[i] *= ratio;
                         }
+                    }
+                }
+            }
+
+            // pass1 専用: contaminated branch 検知 + positive/lower branch 補助 fit。
+            // 本流回帰が固定構造で潰れた点だけを救済する。
+            if (passIndex == 0) {
+                auto sat01 = [](const double v) {
+                    return std::max(0.0, std::min(1.0, v));
+                };
+                const int pixelCount = scanw * scanh;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i]) continue;
+                    BranchRescueInfo branch{};
+                    if (!analyzeContaminatedBranchFit(statsPass, i, scoreStage.mapConsistency[i], scoreStage.mapAlpha[i], branch)) {
+                        continue;
+                    }
+
+                    const double branchAlphaGain = (branch.auxAlpha <= 0.03f) ? 0.0
+                        : (branch.auxAlpha < 0.15f) ? smoothstep((branch.auxAlpha - 0.03f) / 0.12f)
+                        : (branch.auxAlpha <= 0.35f) ? 1.0
+                        : (branch.auxAlpha < 0.75f) ? 1.0 - smoothstep((branch.auxAlpha - 0.35f) / 0.40f)
+                        : 0.0;
+                    const double branchLogoGain = sat01((branch.auxLogoY - 0.45f) / 0.30f);
+                    const double branchConsistencyGain = sat01((branch.auxConsistency - 0.35f) / 1.65f);
+                    const double branchDiffGainRaw = sat01((branch.auxMeanDiff - 0.003f) / 0.120f);
+                    const double branchResidualGain = sat01((branch.auxMeanDiff - 0.001f) / 0.105f);
+                    const double branchDiffGain = sat01(branchResidualGain * (0.25 + 0.75 * branchDiffGainRaw));
+                    const double branchAlphaTerm = 0.35 + 0.65 * std::max(branchAlphaGain, 0.45 * branch.contaminationGain);
+                    const double branchScore =
+                        branchDiffGain *
+                        (0.20 + 0.80 * branchConsistencyGain) *
+                        branchAlphaTerm *
+                        (0.55 + 0.45 * branchLogoGain) *
+                        branch.contaminationGain *
+                        branch.supportGain *
+                        scoreStage.mapTemporalGain[i] *
+                        scoreStage.mapOpaquePenalty[i] *
+                        scoreStage.mapOpaqueStaticPenalty[i];
+
+                    scoreStage.mapBranchRescueScore[i] = (float)branchScore;
+                    scoreStage.mapBranchContaminationGain[i] = branch.contaminationGain;
+                    scoreStage.mapBranchSupportGain[i] = branch.supportGain;
+                    scoreStage.mapBranchDiffGain[i] = (float)branchDiffGain;
+                    scoreStage.mapBranchConsistencyGain[i] = (float)branchConsistencyGain;
+                    scoreStage.mapBranchAlphaGain[i] = (float)branchAlphaGain;
+
+                    if (branchScore > scoreStage.mapAccepted[i]) {
+                        scoreStage.mapAccepted[i] = (float)branchScore;
+                        scoreStage.score[i] = (float)branchScore;
                     }
                 }
             }
