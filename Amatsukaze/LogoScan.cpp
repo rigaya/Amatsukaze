@@ -2622,6 +2622,9 @@ namespace {
                 logoAnalyzeFail = fail;
             }
         }
+        void clearLogoAnalyzeFail() {
+            logoAnalyzeFail = LogoAnalyzeFail::None;
+        }
         void throwIfRectDetectFailed() const {
             if (rectDetectFail != LogoRectDetectFail::None) {
                 THROWF(RuntimeException, "Logo rect detect failed: %s", ToString(rectDetectFail));
@@ -2731,18 +2734,21 @@ namespace {
                 // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
                 Pass2Buffers pass2{};
                 bool pass2Entered = false;
+                bool pass2Succeeded = false;
                 if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
                     pass2Entered = true;
-                    runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
+                    pass2Succeeded = runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
                 }
-                // 4) pass2 に全く進めなかった場合（FrameMaskEmpty 等）、
-                //    pass1 結果に rescue blending を適用して score/binary/rect を再計算する。
-                //    pass2 不成立では passIndex==3 に到達しないため rescue が一切使われず、
-                //    静止構造と重なるロゴ部分が欠落する。rescue 付きで再推定して救済する。
-                //    注: pass2 に進んだが結果が不適切なケース(TooFewAcceptedFrames,
-                //    Pass2RectDiverged)は既に passIndex==3 で rescue 済みなので対象外。
-                if (!pass2Entered) {
-                    fprintf(stderr, "[LogoScan] pass2 not available, re-estimating pass1 with rescue blending\n");
+                // 4) pass2 に進めなかった場合、または TooFewAcceptedFrames で
+                //    pass1 へ戻した場合は、pass1 結果に rescue blending を適用して
+                //    score/binary/rect を再計算する。
+                //    一方で Pass2RectDiverged は「pass2 が大きくズレた」ケースなので、
+                //    同じ rescue を無条件で掛けると q75 のように過大矩形へ飛びやすい。
+                const bool retryPass1WithRescue = !pass2Entered
+                    || (!pass2Succeeded && logoAnalyzeFail == LogoAnalyzeFail::TooFewAcceptedFrames);
+                if (retryPass1WithRescue) {
+                    fprintf(stderr, "[LogoScan] pass2 fallback to rescue pass1 (entered=%d fail=%d)\n",
+                        (int)pass2Entered, (int)logoAnalyzeFail);
                     setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
                     const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
                     try {
@@ -2752,6 +2758,7 @@ namespace {
                         throw;
                     }
                     captureCurrentDebugSnapshot(debugPass2);
+                    clearLogoAnalyzeFail();
                 }
                 setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
                 if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
@@ -5460,28 +5467,8 @@ namespace {
                 scoreStage.mapIsInterior = isInterior;
             }
 
-            // upperGate による base score の静止構造抑制:
-            // 半透明テキストオーバーレイ等の静止構造は回帰ベースでは区別できないが、
-            // edgeMean が高い(= upperGate が低い)という特徴がある。
-            // upperGate を base score にも乗じることで、こうした静止構造のノイズを抑制する。
-            // floor を設けてテキスト型ロゴ(中程度の edgeMean)の過剰抑制を防ぐ。
-            {
-                const int pixelCount = scanw * scanh;
-                static constexpr float kBaseUpperGateFloor = 0.15f;
-                int gatedCount = 0;
-                for (int i = 0; i < pixelCount; i++) {
-                    if (scoreStage.score[i] <= 0.0f) continue;
-                    if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;
-                    const float baseGate = kBaseUpperGateFloor + (1.0f - kBaseUpperGateFloor) * scoreStage.mapUpperGate[i];
-                    if (baseGate < 1.0f - 1e-4f) {
-                        scoreStage.score[i] *= baseGate;
-                        scoreStage.mapAccepted[i] *= baseGate;
-                        gatedCount++;
-                    }
-                }
-                fprintf(stderr, "[LogoScan] upperGate base score suppression: floor=%.2f gated=%d\n",
-                    (double)kBaseUpperGateFloor, gatedCount);
-            }
+            // upperGate の base score 直接抑制は、局ロゴの輪郭や細線まで削ってしまうため無効化する。
+            fprintf(stderr, "[LogoScan] upperGate base score suppression: disabled\n");
 
             scoreStage.debugMaxScoreBeforeRescue = calcPositiveMax(scoreStage.score);
 
@@ -5792,11 +5779,27 @@ namespace {
                     static constexpr float kRescueBridgeMinScore = 0.08f;
                     static constexpr float kRescueBridgeMaxScore = 0.16f;
                     static constexpr float kRescueBridgeMinRescue = 0.15f;
-                    static constexpr float kRescueBridgeMinAlpha = 0.10f;
                     static constexpr float kRescueBridgeMinUpperGate = 0.95f;
-                    static constexpr float kRescueBridgeMinBgVarGain = 0.90f;
                     static constexpr float kRescueBridgeConsistencyMax = 0.20f;
                     static constexpr float kRescueBridgeDiffMax = 0.12f;
+                    static constexpr int   kRescueBridgeNearRadius = 3;
+                    std::vector<uint8_t> acceptedNear(pixelCount, 0);
+                    for (int y = 0; y < scanh; y++) {
+                        for (int x = 0; x < scanw; x++) {
+                            const int idx = x + y * scanw;
+                            if (scoreStage.mapAccepted[idx] <= 0.0f) continue;
+                            const int y0 = std::max(0, y - kRescueBridgeNearRadius);
+                            const int y1 = std::min(scanh - 1, y + kRescueBridgeNearRadius);
+                            const int x0 = std::max(0, x - kRescueBridgeNearRadius);
+                            const int x1 = std::min(scanw - 1, x + kRescueBridgeNearRadius);
+                            for (int ny = y0; ny <= y1; ny++) {
+                                for (int nx = x0; nx <= x1; nx++) {
+                                    acceptedNear[nx + ny * scanw] = 1;
+                                }
+                            }
+                        }
+                    }
+                    int rescuePromotedCount = 0;
                     int rescueBridgeCount = 0;
                     for (int i = 0; i < pixelCount; i++) {
                         if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
@@ -5805,6 +5808,16 @@ namespace {
                         const float rescueVal = kRescueWeight * rescueScaled;
                         if (!scoreStage.validAB[i]) {
                             scoreStage.score[i] = rescueVal;
+                            const bool promoteRescueOnly = scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
+                                && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
+                                && acceptedNear[i]
+                                && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
+                                    || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
+                            if (promoteRescueOnly) {
+                                scoreStage.mapAccepted[i] = std::max(scoreStage.mapAccepted[i], rescueVal);
+                                scoreStage.validAB[i] = 1;
+                                rescuePromotedCount++;
+                            }
                         } else if (scoreStage.score[i] < kContaminatedThreshold || rescueVal > scoreStage.score[i] * kRescuePromoteRatio) {
                             scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
                         } else {
@@ -5812,9 +5825,8 @@ namespace {
                             // rescue 側だけが下部文字を強く捉えることがある。
                             const bool weakBase = scoreStage.score[i] < kRescueBridgeScoreThresh
                                 && scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
-                                && scoreStage.mapAlpha[i] >= kRescueBridgeMinAlpha
                                 && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
-                                && scoreStage.mapBgVarGain[i] >= kRescueBridgeMinBgVarGain
+                                && acceptedNear[i]
                                 && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
                                     || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
                             if (weakBase) {
@@ -5829,8 +5841,12 @@ namespace {
                             }
                         }
                     }
-                    fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f\n",
-                        rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue);
+                    fprintf(stderr, "[LogoScan] rescue-only promote (pass2): count=%d rescueTh=%.2f upperGateTh=%.2f\n",
+                        rescuePromotedCount, (double)kRescueBridgeMinRescue,
+                        (double)kRescueBridgeMinUpperGate);
+                    fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f nearRadius=%d\n",
+                        rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue,
+                        kRescueBridgeNearRadius);
                 }
             }
 
