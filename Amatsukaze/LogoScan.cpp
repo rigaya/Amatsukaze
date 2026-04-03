@@ -29,6 +29,9 @@
 #include <inttypes.h>
 #include <sstream>
 #include <iomanip>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <sys/sysinfo.h>
 #endif
@@ -2664,6 +2667,12 @@ namespace {
                 || rect.h > (int)std::round(scanh * 0.62);
         }
 
+        static void trimAllocator() {
+#if defined(__GLIBC__)
+            malloc_trim(0);
+#endif
+        }
+
     public:
         AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
             : SimpleVideoReader(ctx)
@@ -2689,6 +2698,7 @@ namespace {
 
         ~AutoDetectLogoReader() {
             clearRoiCache();
+            trimAllocator();
         }
 
         int getRectDetectFailCode() const {
