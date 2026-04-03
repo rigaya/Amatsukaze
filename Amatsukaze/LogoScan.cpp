@@ -5547,12 +5547,33 @@ namespace {
                     return std::max(0.0, std::min(1.0, v));
                 };
                 const int pixelCount = scanw * scanh;
+                const std::vector<float> baseAcceptedBeforeBranch = scoreStage.mapAccepted;
+                int branchCandidateCount = 0;
+                int branchLogoLikeRejectCount = 0;
+                int branchBaseSupportRejectCount = 0;
+                int branchAdoptedCount = 0;
+                auto calcBaseAcceptedLocalMax = [&](const int off, const int radius) {
+                    const int cx = off % scanw;
+                    const int cy = off / scanw;
+                    float maxVal = 0.0f;
+                    const int x0 = std::max(0, cx - radius);
+                    const int x1 = std::min(scanw - 1, cx + radius);
+                    const int y0 = std::max(0, cy - radius);
+                    const int y1 = std::min(scanh - 1, cy + radius);
+                    for (int y = y0; y <= y1; y++) {
+                        for (int x = x0; x <= x1; x++) {
+                            maxVal = std::max(maxVal, baseAcceptedBeforeBranch[x + y * scanw]);
+                        }
+                    }
+                    return maxVal;
+                };
                 for (int i = 0; i < pixelCount; i++) {
                     if (!scoreStage.validAB[i]) continue;
                     BranchRescueInfo branch{};
                     if (!analyzeContaminatedBranchFit(statsPass, i, scoreStage.mapConsistency[i], scoreStage.mapAlpha[i], branch)) {
                         continue;
                     }
+                    branchCandidateCount++;
 
                     const double branchAlphaGain = (branch.auxAlpha <= 0.03f) ? 0.0
                         : (branch.auxAlpha < 0.15f) ? smoothstep((branch.auxAlpha - 0.03f) / 0.12f)
@@ -5564,12 +5585,37 @@ namespace {
                     const double branchDiffGainRaw = sat01((branch.auxMeanDiff - 0.003f) / 0.120f);
                     const double branchResidualGain = sat01((branch.auxMeanDiff - 0.001f) / 0.105f);
                     const double branchDiffGain = sat01(branchResidualGain * (0.25 + 0.75 * branchDiffGainRaw));
+                    const double baseAlphaGain = scoreStage.mapAlphaGain[i];
+                    const double baseLogoGain = scoreStage.mapLogoGain[i];
+                    const double branchAlphaImprove = branchAlphaGain - baseAlphaGain;
+                    const double branchLogoImprove = branchLogoGain - baseLogoGain;
+                    const bool branchLooksMoreTransparent =
+                        branch.auxAlpha >= 0.05f &&
+                        branchAlphaGain >= 0.35f &&
+                        branchAlphaImprove >= 0.15f;
+                    const bool branchLooksBrighter =
+                        branch.auxLogoY >= 0.46f &&
+                        branchLogoGain >= 0.08f &&
+                        branchLogoImprove >= 0.08f;
+                    if (!(branchLooksMoreTransparent && branchLooksBrighter)) {
+                        branchLogoLikeRejectCount++;
+                        continue;
+                    }
+                    const float baseAcceptedLocalMax = calcBaseAcceptedLocalMax(i, 3);
+                    if (baseAcceptedLocalMax < 0.012f) {
+                        branchBaseSupportRejectCount++;
+                        continue;
+                    }
+                    const double branchAdoptGain =
+                        sat01((branchAlphaImprove - 0.15f) / 0.45f) *
+                        sat01((branchLogoImprove - 0.08f) / 0.45f);
                     const double branchAlphaTerm = 0.35 + 0.65 * std::max(branchAlphaGain, 0.45 * branch.contaminationGain);
                     const double branchScore =
                         branchDiffGain *
                         (0.20 + 0.80 * branchConsistencyGain) *
                         branchAlphaTerm *
                         (0.55 + 0.45 * branchLogoGain) *
+                        (0.35 + 0.65 * branchAdoptGain) *
                         branch.contaminationGain *
                         branch.supportGain *
                         scoreStage.mapTemporalGain[i] *
@@ -5586,8 +5632,11 @@ namespace {
                     if (branchScore > scoreStage.mapAccepted[i]) {
                         scoreStage.mapAccepted[i] = (float)branchScore;
                         scoreStage.score[i] = (float)branchScore;
+                        branchAdoptedCount++;
                     }
                 }
+                fprintf(stderr, "[LogoScan] contaminated branch rescue: candidates=%d rejected_logo_like=%d rejected_base_support=%d adopted=%d\n",
+                    branchCandidateCount, branchLogoLikeRejectCount, branchBaseSupportRejectCount, branchAdoptedCount);
             }
 
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
