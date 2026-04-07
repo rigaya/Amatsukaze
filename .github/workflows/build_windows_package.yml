@@ -125,6 +125,11 @@ jobs:
           echo --- deps contents (after Extract) ---
           tree /f deps
 
+      - name: Install .NET WebAssembly build tools
+        shell: cmd
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+
       - name: Build (publish.bat)
         shell: cmd
         run: |

@@ -37,6 +37,7 @@ RUN apt update \
     && add-apt-repository ppa:dotnet/backports \
     && apt update \
     && apt-get install -y dotnet-sdk-10.0 \
+    && dotnet workload install wasm-tools --skip-manifest-update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

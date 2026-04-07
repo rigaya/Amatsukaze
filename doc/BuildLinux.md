@@ -15,7 +15,11 @@ wget https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.
 sudo dpkg -i ./packages-microsoft-prod.deb
 sudo apt update
 sudo apt install -y dotnet-sdk-10.0
+dotnet workload install wasm-tools --skip-manifest-update
 ```
+
+`AmatsukazeWebUI` は Blazor WebAssembly を publish するため、`wasm-tools` workload がないと
+`Publishing without optimizations...` という警告が表示され、WebUI が非最適化で公開されます。
 
 ## AviSynthのインストール
 
