@@ -35,6 +35,7 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
 - 対応予定なし
   - AmatsukazeGUI (操作ウィンドウ)
   - 設定画面へのドラッグドロップによるタスク追加
+  - 常時表示ディスク
   - エンコード中の一時停止
   - エンコード後、スリープ・シャットダウン
   - インタレ解除のうち、 D3DVPとAutoVfr
