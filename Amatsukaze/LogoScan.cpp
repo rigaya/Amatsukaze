@@ -5336,6 +5336,13 @@ namespace {
                 const double tc = std::max(0.0, std::min(1.0, t));
                 return tc * tc * (3.0 - 2.0 * tc);
             };
+            // 白色拘束逸脱ペナルティ定数:
+            // dev = |A+B-1| = alpha*(1-logoY)
+            // 白系透明ロゴ: alpha<=0.35, logoY>=0.90 → dev<=0.035
+            // 番組グラフィック等のノイズ: alpha>=0.50, logoY<=0.80 → dev>=0.10
+            // kWhiteDevThresh でギャップを分離し、kWhiteDevFloor が下限ゲイン。
+            static constexpr double kWhiteDevThresh = 0.08;
+            static constexpr double kWhiteDevFloor  = 0.40;
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
                 for (int y = y0; y < y1; y++) {
                     for (int x = 0; x < scanw; x++) {
@@ -5393,10 +5400,11 @@ namespace {
                             const double extremeGain = sat01(1.0 - extremeRejectRatio);
 
                             const double residualDiff = meanDiff;
-                            const double residualBgGain = sat01((0.080 - varBg) / 0.080);
                             const double diffGainRaw = sat01((meanDiff - 0.003) / 0.120);
                             const double residualGain = sat01((residualDiff - 0.001) / 0.105);
-                            const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw) * (0.35 + 0.65 * residualBgGain));
+                            // residualBgGain は varBg が小さい（bg幅が狭い）ほど高くなる逆向きの重みだったため除去。
+                            // bg分散が大きい方が回帰の信頼性が高く、diffGain には影響させない。
+                            const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw));
                             const double lowTransition = sat01((0.10 - transitionRate) / 0.10);
                             const double lowKeep = sat01((0.08 - keepRate) / 0.08);
                             const double staticStrength = std::sqrt(lowTransition * lowKeep);
@@ -5435,6 +5443,11 @@ namespace {
                                 const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness);
                                 opaqueStaticPenalty = 1.0 / penaltyScale;
                             }
+                            // 白色拘束逸脱ペナルティ: dev = |A+B-1| = alpha*(1-logoY)
+                            // 白系透明局ロゴは dev ≈ 0 で影響なし。不透明ノイズは dev が大きく抑制される。
+                            const double whiteDeviation = std::abs((double)A + B - 1.0);
+                            const double whiteConstraintGain = kWhiteDevFloor + (1.0 - kWhiteDevFloor)
+                                * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation) / kWhiteDevThresh));
                             scoreStage.mapDiffGain[i] = (float)diffGain;
                             scoreStage.mapDiffGainRaw[i] = (float)diffGainRaw;
                             scoreStage.mapResidualGain[i] = (float)residualGain;
@@ -5446,7 +5459,7 @@ namespace {
                             scoreStage.mapTemporalGain[i] = (float)temporalGain;
                             scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
                             scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.15 + 0.85 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty);
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.15 + 0.85 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty * whiteConstraintGain);
                             if (d <= 0.0f) continue;
                             scoreStage.mapAccepted[i] = d;
                             scoreStage.score[i] = d;
@@ -5490,6 +5503,10 @@ namespace {
                     const float alphaGainNew = std::min(alphaGainOrig, alphaGainNeighbor);
                     if (alphaGainNew >= alphaGainOrig) continue;
                     scoreStage.mapAlphaGain[i] = alphaGainNew;
+                    // mapA/mapB から白色拘束逸脱ペナルティを再計算する。
+                    const double whiteDeviation3x3 = std::abs((double)scoreStage.mapA[i] + scoreStage.mapB[i] - 1.0);
+                    const float whiteConstraintGain3x3 = (float)(kWhiteDevFloor + (1.0 - kWhiteDevFloor)
+                        * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation3x3) / kWhiteDevThresh)));
                     const float d = scoreStage.mapDiffGain[i]
                         * (0.25f + 0.75f * scoreStage.mapConsistencyGain[i])
                         * (0.15f + 0.85f * alphaGainNew)
@@ -5497,7 +5514,8 @@ namespace {
                         * (0.20f + 0.80f * scoreStage.mapExtremeGain[i])
                         * scoreStage.mapTemporalGain[i]
                         * scoreStage.mapOpaquePenalty[i]
-                        * scoreStage.mapOpaqueStaticPenalty[i];
+                        * scoreStage.mapOpaqueStaticPenalty[i]
+                        * whiteConstraintGain3x3;
                     scoreStage.mapAccepted[i] = (d > 0.0f) ? d : 0.0f;
                     scoreStage.score[i] = (d > 0.0f) ? d : 0.0f;
                 }
@@ -6639,6 +6657,14 @@ namespace {
                 const int pyAdj = plotY1 - ClampInt((int)std::round(adjYNorm * (plotY1 - plotY0)), 0, plotY1 - plotY0);
                 drawCross(pxRaw, pyRaw, { { 170, 176, 188 } });
                 drawSquareMarker(pxAdj, pyAdj, color);
+                // 回帰線の描画 (赤線)
+                const float regYNorm0 = std::max(0.0f, std::min(1.0f, rep.provisionalB));
+                const float regYNorm1 = std::max(0.0f, std::min(1.0f, rep.provisionalA + rep.provisionalB));
+                const int regPx0 = plotX0;
+                const int regPy0 = plotY1 - ClampInt((int)std::round(regYNorm0 * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                const int regPx1 = plotX1;
+                const int regPy1 = plotY1 - ClampInt((int)std::round(regYNorm1 * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                drawLine(regPx0, regPy0, regPx1, regPy1, { { 255, 0, 0 } }, 0.8f);
             }
 
             const int legendY0 = plotY1 + 16;
@@ -6650,6 +6676,7 @@ namespace {
                 fillRect(lx0, legendY0, lx1, legendY1, binPalette[b]);
             }
             drawRect(plotX0, legendY0, plotX1, legendY1, axisColor);
+
         }
 
         WriteRgbBitmap(path, width, height, [&](int x, int y) {
