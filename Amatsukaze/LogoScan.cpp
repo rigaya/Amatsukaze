@@ -3463,30 +3463,60 @@ namespace {
             for (auto v : score.score) maxScore = std::max(maxScore, v);
             if (maxScore <= 0) maxScore = 1.0f;
 
-            if (!path.score.empty()) {
-                WriteGrayBitmap(path.score, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.score.size()) ? score.score[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v / maxScore * 255.0f), 0, 255);
+            auto writeMap = [&](const std::string& outPath, auto&& pixel) {
+                if (!outPath.empty()) {
+                    WriteGrayBitmap(outPath, scanw, scanh, std::forward<decltype(pixel)>(pixel));
+                }
+            };
+            const auto toByte = [](const float v) {
+                return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
+            };
+            const auto getFloat = [](const std::vector<float>& values, const int off) {
+                return (off >= 0 && off < (int)values.size()) ? values[off] : 0.0f;
+            };
+            const auto getMask = [](const std::vector<uint8_t>& values, const int off) {
+                return (off >= 0 && off < (int)values.size()) ? values[off] : (uint8_t)0;
+            };
+            auto hasValidValue = [&](const std::vector<float>& values, const int off) {
+                return off >= 0 && off < (int)score.validAB.size() && score.validAB[off] && off < (int)values.size();
+            };
+            auto writeFloatMap = [&](const std::string& outPath, const std::vector<float>& values, const float scale) {
+                writeMap(outPath, [&](int x, int y) {
+                    return toByte(getFloat(values, x + y * scanw) * scale);
                 });
-            }
-            if (!path.binary.empty()) {
-                WriteGrayBitmap(path.binary, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    return (off < (int)binary.size() && binary[off]) ? 255 : 0;
+            };
+            auto writeMaskMap = [&](const std::string& outPath, const std::vector<uint8_t>& values) {
+                writeMap(outPath, [&](int x, int y) {
+                    return getMask(values, x + y * scanw) ? (uint8_t)255 : (uint8_t)0;
                 });
-            }
-            if (!path.ccl.empty()) {
-                WriteGrayBitmap(path.ccl, scanw, scanh, [&](int x, int y) {
+            };
+            auto writeValidRangeMap = [&](const std::string& outPath, const std::vector<float>& values, const float minv, const float maxv) {
+                writeMap(outPath, [&](int x, int y) {
                     const int off = x + y * scanw;
-                    const bool hasRect = rectLocalForDebug.w > 0 && rectLocalForDebug.h > 0;
-                    const bool onBorder = hasRect
-                        && (x == rectLocalForDebug.x || x == rectLocalForDebug.x + rectLocalForDebug.w - 1
-                            || y == rectLocalForDebug.y || y == rectLocalForDebug.h + rectLocalForDebug.y - 1);
-                    if (onBorder) return (uint8_t)255;
-                    return (off < (int)binary.size() && binary[off]) ? (uint8_t)190 : (uint8_t)24;
+                    if (!hasValidValue(values, off)) {
+                        return (uint8_t)0;
+                    }
+                    return toByte((values[off] - minv) / (maxv - minv));
                 });
-            }
+            };
+            auto writeValidUnitMap = [&](const std::string& outPath, const std::vector<float>& values) {
+                writeMap(outPath, [&](int x, int y) {
+                    const int off = x + y * scanw;
+                    return hasValidValue(values, off) ? toByte(values[off]) : (uint8_t)0;
+                });
+            };
+
+            writeFloatMap(path.score, score.score, 1.0f / maxScore);
+            writeMaskMap(path.binary, binary);
+            writeMap(path.ccl, [&](int x, int y) {
+                const int off = x + y * scanw;
+                const bool hasRect = rectLocalForDebug.w > 0 && rectLocalForDebug.h > 0;
+                const bool onBorder = hasRect
+                    && (x == rectLocalForDebug.x || x == rectLocalForDebug.x + rectLocalForDebug.w - 1
+                        || y == rectLocalForDebug.y || y == rectLocalForDebug.h + rectLocalForDebug.y - 1);
+                if (onBorder) return (uint8_t)255;
+                return (off < (int)binary.size() && binary[off]) ? (uint8_t)190 : (uint8_t)24;
+            });
 
             if (!withDetailMaps) {
                 return;
@@ -3497,318 +3527,82 @@ namespace {
                 maxCount = std::max(maxCount, s.rawSampleCount);
             }
             if (maxCount <= 0) maxCount = 1;
-            if (!path.count.empty()) {
-                WriteGrayBitmap(path.count, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const int c = (off >= 0 && off < (int)statsForDebug.size()) ? statsForDebug[off].rawSampleCount : 0;
-                    return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
-                });
+            writeMap(path.count, [&](int x, int y) {
+                const int off = x + y * scanw;
+                const int c = (off >= 0 && off < (int)statsForDebug.size()) ? statsForDebug[off].rawSampleCount : 0;
+                return (uint8_t)ClampInt((int)std::round((double)c * 255.0 / maxCount), 0, 255);
+            });
+
+            struct ValidRangeMapDef {
+                const std::string* outPath;
+                const std::vector<float>* values;
+                float fallbackMin;
+                float fallbackMax;
+            };
+            const ValidRangeMapDef validRangeMaps[] = {
+                { &path.a, &score.mapA, 0.8f, 1.2f },
+                { &path.b, &score.mapB, -0.2f, 0.2f },
+                { &path.meanDiff, &score.mapMeanDiff, -0.05f, 0.05f },
+                { &path.consistency, &score.mapConsistency, 0.0f, 2.0f },
+                { &path.fgVar, &score.mapFgVar, 0.0f, 0.02f },
+                { &path.bgVar, &score.mapBgVar, 0.0f, 0.02f },
+                { &path.transition, &score.mapTransitionRate, 0.0f, 0.20f },
+                { &path.keepRate, &score.mapKeepRate, 0.0f, 0.20f },
+                { &path.diffGain, &score.mapDiffGain, 0.0f, 1.0f },
+                { &path.diffGainRaw, &score.mapDiffGainRaw, 0.0f, 1.0f },
+                { &path.residualGain, &score.mapResidualGain, 0.0f, 1.0f },
+                { &path.logoGain, &score.mapLogoGain, 0.0f, 1.0f },
+                { &path.consistencyGain, &score.mapConsistencyGain, 0.0f, 1.0f },
+                { &path.alphaGain, &score.mapAlphaGain, 0.0f, 1.0f },
+                { &path.bgGain, &score.mapBgGain, 0.0f, 1.0f },
+                { &path.extremeGain, &score.mapExtremeGain, 0.0f, 1.0f },
+                { &path.temporalGain, &score.mapTemporalGain, 0.0f, 1.0f },
+                { &path.opaquePenalty, &score.mapOpaquePenalty, 0.0f, 1.0f },
+                { &path.opaqueStaticPenalty, &score.mapOpaqueStaticPenalty, 0.0f, 1.0f },
+            };
+            for (const auto& m : validRangeMaps) {
+                float minv = 0.0f;
+                float maxv = 1.0f;
+                CalcRangeValid(*m.values, score.validAB, minv, maxv, m.fallbackMin, m.fallbackMax);
+                writeValidRangeMap(*m.outPath, *m.values, minv, maxv);
             }
 
-            float aMin, aMax, bMin, bMax;
-            CalcRangeValid(score.mapA, score.validAB, aMin, aMax, 0.8f, 1.2f);
-            CalcRangeValid(score.mapB, score.validAB, bMin, bMax, -0.2f, 0.2f);
-            if (!path.a.empty()) {
-                WriteGrayBitmap(path.a, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapA.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapA[off] - aMin) / (aMax - aMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
+            const std::pair<const std::string*, const std::vector<float>*> validUnitMaps[] = {
+                { &path.alpha, &score.mapAlpha },
+                { &path.logoY, &score.mapLogoY },
+            };
+            for (const auto& m : validUnitMaps) {
+                writeValidUnitMap(*m.first, *m.second);
             }
-            if (!path.b.empty()) {
-                WriteGrayBitmap(path.b, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapB.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapB[off] - bMin) / (bMax - bMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
+
+            struct FloatMapDef {
+                const std::string* outPath;
+                const std::vector<float>* values;
+                float scale;
+            };
+            const FloatMapDef floatMaps[] = {
+                { &path.accepted, &score.mapAccepted, 1.0f },
+                { &path.edgePresence, &score.mapEdgePresence, 1.0f },
+                { &path.edgeMean, &score.mapEdgeMean, 1.0f / 0.8f },
+                { &path.edgeVar, &score.mapEdgeVar, 1.0f / 0.04f },
+                { &path.rescueScore, &score.mapRescueScore, 1.0f },
+                { &path.presenceGain, &score.mapPresenceGain, 1.0f },
+                { &path.magGain, &score.mapMagGain, 1.0f },
+                { &path.upperGate, &score.mapUpperGate, 1.0f },
+                { &path.consistGain, &score.mapConsistGain, 1.0f },
+                { &path.bgVarGain, &score.mapBgVarGain, 1.0f },
+                { &path.upperGateFilled, &score.mapUpperGateFilled, 1.0f },
+            };
+            for (const auto& m : floatMaps) {
+                writeFloatMap(*m.outPath, *m.values, m.scale);
             }
-            if (!path.alpha.empty()) {
-                WriteGrayBitmap(path.alpha, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapAlpha.size()) {
-                        return (uint8_t)0;
-                    }
-                    return (uint8_t)ClampInt((int)std::round(score.mapAlpha[off] * 255.0f), 0, 255);
-                });
-            }
-            if (!path.logoY.empty()) {
-                WriteGrayBitmap(path.logoY, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapLogoY.size()) {
-                        return (uint8_t)0;
-                    }
-                    return (uint8_t)ClampInt((int)std::round(score.mapLogoY[off] * 255.0f), 0, 255);
-                });
-            }
-            float mdMin, mdMax, csMin, csMax, fgvMin, fgvMax, bgvMin, bgvMax, trMin, trMax, krMin, krMax;
-            float dgMin, dgMax, dgrMin, dgrMax, rgMin, rgMax, lgMin, lgMax, cgMin, cgMax, agMin, agMax, bgGainMin, bgGainMax, egMin, egMax, tgMin, tgMax, opMin, opMax, ospMin, ospMax;
-            CalcRangeValid(score.mapMeanDiff, score.validAB, mdMin, mdMax, -0.05f, 0.05f);
-            CalcRangeValid(score.mapConsistency, score.validAB, csMin, csMax, 0.0f, 2.0f);
-            CalcRangeValid(score.mapFgVar, score.validAB, fgvMin, fgvMax, 0.0f, 0.02f);
-            CalcRangeValid(score.mapBgVar, score.validAB, bgvMin, bgvMax, 0.0f, 0.02f);
-            CalcRangeValid(score.mapTransitionRate, score.validAB, trMin, trMax, 0.0f, 0.20f);
-            CalcRangeValid(score.mapKeepRate, score.validAB, krMin, krMax, 0.0f, 0.20f);
-            CalcRangeValid(score.mapDiffGain, score.validAB, dgMin, dgMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapDiffGainRaw, score.validAB, dgrMin, dgrMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapResidualGain, score.validAB, rgMin, rgMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapLogoGain, score.validAB, lgMin, lgMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapConsistencyGain, score.validAB, cgMin, cgMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapAlphaGain, score.validAB, agMin, agMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapBgGain, score.validAB, bgGainMin, bgGainMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapExtremeGain, score.validAB, egMin, egMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapTemporalGain, score.validAB, tgMin, tgMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapOpaquePenalty, score.validAB, opMin, opMax, 0.0f, 1.0f);
-            CalcRangeValid(score.mapOpaqueStaticPenalty, score.validAB, ospMin, ospMax, 0.0f, 1.0f);
-            if (!path.meanDiff.empty()) {
-                WriteGrayBitmap(path.meanDiff, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapMeanDiff.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapMeanDiff[off] - mdMin) / (mdMax - mdMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.consistency.empty()) {
-                WriteGrayBitmap(path.consistency, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapConsistency.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapConsistency[off] - csMin) / (csMax - csMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.fgVar.empty()) {
-                WriteGrayBitmap(path.fgVar, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapFgVar.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapFgVar[off] - fgvMin) / (fgvMax - fgvMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.bgVar.empty()) {
-                WriteGrayBitmap(path.bgVar, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapBgVar.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapBgVar[off] - bgvMin) / (bgvMax - bgvMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.transition.empty()) {
-                WriteGrayBitmap(path.transition, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapTransitionRate.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapTransitionRate[off] - trMin) / (trMax - trMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.keepRate.empty()) {
-                WriteGrayBitmap(path.keepRate, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapKeepRate.size()) {
-                        return (uint8_t)0;
-                    }
-                    const float t = (score.mapKeepRate[off] - krMin) / (krMax - krMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.accepted.empty()) {
-                WriteGrayBitmap(path.accepted, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.mapAccepted.size()) return (uint8_t)0;
-                    return (uint8_t)ClampInt((int)std::round(score.mapAccepted[off] * 255.0f), 0, 255);
-                });
-            }
-            if (!path.diffGain.empty()) {
-                WriteGrayBitmap(path.diffGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapDiffGain.size()) return (uint8_t)0;
-                    const float t = (score.mapDiffGain[off] - dgMin) / (dgMax - dgMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.diffGainRaw.empty()) {
-                WriteGrayBitmap(path.diffGainRaw, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapDiffGainRaw.size()) return (uint8_t)0;
-                    const float t = (score.mapDiffGainRaw[off] - dgrMin) / (dgrMax - dgrMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.residualGain.empty()) {
-                WriteGrayBitmap(path.residualGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapResidualGain.size()) return (uint8_t)0;
-                    const float t = (score.mapResidualGain[off] - rgMin) / (rgMax - rgMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.logoGain.empty()) {
-                WriteGrayBitmap(path.logoGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapLogoGain.size()) return (uint8_t)0;
-                    const float t = (score.mapLogoGain[off] - lgMin) / (lgMax - lgMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.consistencyGain.empty()) {
-                WriteGrayBitmap(path.consistencyGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapConsistencyGain.size()) return (uint8_t)0;
-                    const float t = (score.mapConsistencyGain[off] - cgMin) / (cgMax - cgMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.alphaGain.empty()) {
-                WriteGrayBitmap(path.alphaGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapAlphaGain.size()) return (uint8_t)0;
-                    const float t = (score.mapAlphaGain[off] - agMin) / (agMax - agMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.bgGain.empty()) {
-                WriteGrayBitmap(path.bgGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapBgGain.size()) return (uint8_t)0;
-                    const float t = (score.mapBgGain[off] - bgGainMin) / (bgGainMax - bgGainMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.extremeGain.empty()) {
-                WriteGrayBitmap(path.extremeGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapExtremeGain.size()) return (uint8_t)0;
-                    const float t = (score.mapExtremeGain[off] - egMin) / (egMax - egMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.temporalGain.empty()) {
-                WriteGrayBitmap(path.temporalGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapTemporalGain.size()) return (uint8_t)0;
-                    const float t = (score.mapTemporalGain[off] - tgMin) / (tgMax - tgMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.opaquePenalty.empty()) {
-                WriteGrayBitmap(path.opaquePenalty, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapOpaquePenalty.size()) return (uint8_t)0;
-                    const float t = (score.mapOpaquePenalty[off] - opMin) / (opMax - opMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            if (!path.opaqueStaticPenalty.empty()) {
-                WriteGrayBitmap(path.opaqueStaticPenalty, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    if (off >= (int)score.validAB.size() || !score.validAB[off] || off >= (int)score.mapOpaqueStaticPenalty.size()) return (uint8_t)0;
-                    const float t = (score.mapOpaqueStaticPenalty[off] - ospMin) / (ospMax - ospMin);
-                    return (uint8_t)ClampInt((int)std::round(t * 255.0f), 0, 255);
-                });
-            }
-            // 空間edge時系列統計マップ: validAB に関わらず全画素に対して出力
-            if (!path.edgePresence.empty()) {
-                WriteGrayBitmap(path.edgePresence, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapEdgePresence.size()) ? score.mapEdgePresence[off] : 0.0f;
-                    // 0.0-1.0 を 0-255 に線形マップ
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            if (!path.edgeMean.empty()) {
-                WriteGrayBitmap(path.edgeMean, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapEdgeMean.size()) ? score.mapEdgeMean[off] : 0.0f;
-                    // 0.0-0.8 を 0-255 に線形マップ
-                    return (uint8_t)ClampInt((int)std::round(v / 0.8f * 255.0f), 0, 255);
-                });
-            }
-            if (!path.edgeVar.empty()) {
-                WriteGrayBitmap(path.edgeVar, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapEdgeVar.size()) ? score.mapEdgeVar[off] : 0.0f;
-                    // 0.0-0.04 を 0-255 に線形マップ
-                    return (uint8_t)ClampInt((int)std::round(v / 0.04f * 255.0f), 0, 255);
-                });
-            }
-            if (!path.rescueScore.empty()) {
-                WriteGrayBitmap(path.rescueScore, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapRescueScore.size()) ? score.mapRescueScore[off] : 0.0f;
-                    // 0.0-1.0 を 0-255 に線形マップ
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            // rescue score 中間ゲイン画像 (すべて 0.0-1.0 を 0-255 に線形マップ)
-            if (!path.presenceGain.empty()) {
-                WriteGrayBitmap(path.presenceGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapPresenceGain.size()) ? score.mapPresenceGain[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            if (!path.magGain.empty()) {
-                WriteGrayBitmap(path.magGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapMagGain.size()) ? score.mapMagGain[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            if (!path.upperGate.empty()) {
-                WriteGrayBitmap(path.upperGate, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapUpperGate.size()) ? score.mapUpperGate[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            if (!path.consistGain.empty()) {
-                WriteGrayBitmap(path.consistGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapConsistGain.size()) ? score.mapConsistGain[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            if (!path.bgVarGain.empty()) {
-                WriteGrayBitmap(path.bgVarGain, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapBgVarGain.size()) ? score.mapBgVarGain[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
-            }
-            if (!path.isWall.empty()) {
-                WriteGrayBitmap(path.isWall, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const uint8_t v = (off < (int)score.mapIsWall.size()) ? score.mapIsWall[off] : 0;
-                    return v ? (uint8_t)255 : (uint8_t)0;
-                });
-            }
-            if (!path.isInterior.empty()) {
-                WriteGrayBitmap(path.isInterior, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const uint8_t v = (off < (int)score.mapIsInterior.size()) ? score.mapIsInterior[off] : 0;
-                    return v ? (uint8_t)255 : (uint8_t)0;
-                });
-            }
-            if (!path.upperGateFilled.empty()) {
-                WriteGrayBitmap(path.upperGateFilled, scanw, scanh, [&](int x, int y) {
-                    const int off = x + y * scanw;
-                    const float v = (off < (int)score.mapUpperGateFilled.size()) ? score.mapUpperGateFilled[off] : 0.0f;
-                    return (uint8_t)ClampInt((int)std::round(v * 255.0f), 0, 255);
-                });
+
+            const std::pair<const std::string*, const std::vector<uint8_t>*> maskMaps[] = {
+                { &path.isWall, &score.mapIsWall },
+                { &path.isInterior, &score.mapIsInterior },
+            };
+            for (const auto& m : maskMaps) {
+                writeMaskMap(*m.first, *m.second);
             }
 
             if (!path.binary.empty() && !traceRecords.empty()) {
@@ -5295,6 +5089,610 @@ namespace {
             }
         }
 
+        void computeSpatialEdgeRescueScoreMaps(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage) {
+            // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
+            // ステップ1: edgeMean / edgeVar / edgePresence と各ゲインを計算して保存する。
+            //            upperGate は 3x3 localmax 後に計算するため、ここでは保存しない。
+            auto sat01f = [](const float v) { return std::max(0.0f, std::min(1.0f, v)); };
+            const int pixelCount = scanw * scanh;
+            for (int i = 0; i < pixelCount; i++) {
+                const auto& ea = statsPass.edgeAccumBuf[i];
+                const auto& s = statsPass.stats[i];
+                if (ea.edgeCount <= 0 || s.observed <= 0) continue;
+
+                const float edgeMean     = ea.sumEdge / ea.edgeCount;
+                const float edgeVar      = std::max(0.0f, ea.sumEdge2 / ea.edgeCount - edgeMean * edgeMean);
+                const float edgePresence = (float)ea.edgeCount / (float)s.observed;
+
+                scoreStage.mapEdgePresence[i] = edgePresence;
+                scoreStage.mapEdgeMean[i]     = edgeMean;
+                scoreStage.mapEdgeVar[i]      = edgeVar;
+                scoreStage.mapPresenceGain[i] = sat01f((edgePresence - 0.08f) / 0.42f);
+                scoreStage.mapMagGain[i]      = sat01f((edgeMean - 0.05f) / 0.30f);
+                // consistGain: 低分散ほど高スコアの線形降下に、高分散側への急峻な上限ゲートを乗算。
+                // 上限ゲート: 1/(1+exp(c*(x-d)))  c=500, d=0.015
+                //   透明ロゴの背景変動 (edgeVar≈0.010-0.018) は通し、
+                //   動的/変動コンテンツ (edgeVar>0.020) を強く抑制する。
+                // 全データ sep_gmean: current=45.3 → 本式=62.6 (+38%)。
+                static constexpr float kConsistUpperGateC = 500.0f;
+                static constexpr float kConsistUpperGateD = 0.015f;
+                const float consistLinear = sat01f((0.040f - edgeVar) / 0.035f);
+                const float consistUpperGate = 1.0f / (1.0f + std::exp(kConsistUpperGateC * (edgeVar - kConsistUpperGateD)));
+                scoreStage.mapConsistGain[i] = consistLinear * consistUpperGate;
+            }
+
+            // ステップ2: 3x3 近傍最大 edgeMean を計算する。
+            // 静止構造の内部は edgeMean が高く sigmoid でゲートされるが、その外周 1px は
+            // edgeMean が低く素通りしてしまう。近傍最大を使うことで外周まで抑制できる。
+            std::vector<float> edgeMeanLocalMax(pixelCount, 0.0f);
+            for (int y = 0; y < scanh; y++) {
+                for (int x = 0; x < scanw; x++) {
+                    float maxVal = 0.0f;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            const int nx = x + dx, ny = y + dy;
+                            if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
+                                maxVal = std::max(maxVal, scoreStage.mapEdgeMean[nx + ny * scanw]);
+                            }
+                        }
+                    }
+                    edgeMeanLocalMax[x + y * scanw] = maxVal;
+                }
+            }
+
+            // ステップ3: upperGate・bgVarGain・rescueScore を計算する。
+            // upperGate: sigmoid(a*(x-b)) で不透明な静止構造を除外する降下特性ゲート。
+            // 3x3 localmax edgeMean を [0,0.8] → [0,1] に正規化して入力する。
+            // a=25, b=0.40: 全データ sep_gmean 最大パラメータ。
+            // bgVarGain: 背景分散が十分ある(半透明)ロゴのみを rescue 対象とするゲート。
+            // bgVar を [0, kBgVarScale] → [0,1] に正規化後に sigmoid(a=30, b=0.10) を適用する。
+            // 不透明テロップ (bgVar≈0) は bgVarGain≈0.047 となり rescueScore が抑制される。
+            // 半透明ロゴ (bgVar≈0.004以上) は bgVarGain≈0.95以上となりほぼ通過する。
+            static constexpr float kUpperGateSigmoidA = 25.0f;
+            static constexpr float kUpperGateSigmoidB = 0.40f;
+            static constexpr float kBgVarGainSigmoidA = 30.0f;
+            static constexpr float kBgVarGainSigmoidB = 0.10f;
+            static constexpr float kBgVarScale        = 0.020f;  // bgVar 正規化上限 (0〜1 スケール変換)
+            for (int i = 0; i < pixelCount; i++) {
+                if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;  // edgeCount==0 画素はスキップ
+                const float edgeMeanNorm = std::min(edgeMeanLocalMax[i] / 0.80f, 1.0f);
+                const float upperGate    = 1.0f / (1.0f + std::exp(kUpperGateSigmoidA * (edgeMeanNorm - kUpperGateSigmoidB)));
+                const float bgVarNorm    = std::min(scoreStage.mapBgVar[i] / kBgVarScale, 1.0f);
+                const float bgVarGain    = 1.0f / (1.0f + std::exp(-kBgVarGainSigmoidA * (bgVarNorm - kBgVarGainSigmoidB)));
+                const float rescueScore  = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
+                                         * upperGate * scoreStage.mapConsistGain[i] * bgVarGain;
+                scoreStage.mapUpperGate[i]   = upperGate;
+                scoreStage.mapBgVarGain[i]   = bgVarGain;
+                scoreStage.mapRescueScore[i] = rescueScore;
+            }
+        }
+
+        void applyUpperGateFilledToRescueScore(ScoreStageBuffers& scoreStage) {
+            // upperGateFilled 構築:
+            // 不透明テロップは輪郭部が低 upperGate (静止エッジ検出)、内部は高 upperGate。
+            // テロップ内部も静止構造なので rescueScore を抑制したい。
+            // 手法: upperGate の低い画素（壁）で Flood Fill し、壁と内部の画素を特定。
+            //       壁・内部の画素では upperGateFilled = 0 として rescueScore を再計算する。
+            const int pixelCount = scanw * scanh;
+            static constexpr float kFillWallThresh = 0.30f;  // upperGate がこの値未満 → 壁
+            static constexpr int   kFillWallDilate = 1;      // 壁の膨張回数（隙間を塞ぐ）
+
+            // 1. 壁マスク作成: edgePresence > 0 かつ upperGate < 閾値 の画素を壁とする
+            std::vector<uint8_t> isWall(pixelCount, 0);
+            for (int i = 0; i < pixelCount; i++) {
+                if (scoreStage.mapEdgePresence[i] > 0.0f && scoreStage.mapUpperGate[i] < kFillWallThresh) {
+                    isWall[i] = 1;
+                }
+            }
+
+            // 壁を膨張（小さな隙間を塞ぐ）
+            if (kFillWallDilate > 0) {
+                std::vector<uint8_t> wallTmp(pixelCount);
+                for (int iter = 0; iter < kFillWallDilate; iter++) {
+                    for (int y = 0; y < scanh; y++) {
+                        for (int x = 0; x < scanw; x++) {
+                            const int idx = x + y * scanw;
+                            uint8_t v = isWall[idx];
+                            if (!v && x > 0)         v |= isWall[(x - 1) + y * scanw];
+                            if (!v && x < scanw - 1) v |= isWall[(x + 1) + y * scanw];
+                            if (!v && y > 0)         v |= isWall[x + (y - 1) * scanw];
+                            if (!v && y < scanh - 1) v |= isWall[x + (y + 1) * scanw];
+                            wallTmp[idx] = v;
+                        }
+                    }
+                    std::swap(isWall, wallTmp);
+                }
+            }
+
+            // 2. 画像境界から非壁画素を通って Flood Fill → 外側をマーク
+            //    4-connectivity: テロップ輪郭の対角隙間を壁として尊重する
+            std::vector<uint8_t> isExterior(pixelCount, 0);
+            std::vector<int> stack;
+            stack.reserve(pixelCount / 4);
+            for (int x = 0; x < scanw; x++) {
+                for (const int y : {0, scanh - 1}) {
+                    const int idx = x + y * scanw;
+                    if (!isWall[idx] && !isExterior[idx]) {
+                        isExterior[idx] = 1;
+                        stack.push_back(idx);
+                    }
+                }
+            }
+            for (int y = 1; y < scanh - 1; y++) {
+                for (const int x : {0, scanw - 1}) {
+                    const int idx = x + y * scanw;
+                    if (!isWall[idx] && !isExterior[idx]) {
+                        isExterior[idx] = 1;
+                        stack.push_back(idx);
+                    }
+                }
+            }
+            while (!stack.empty()) {
+                const int idx = stack.back(); stack.pop_back();
+                const int x = idx % scanw, y = idx / scanw;
+                const int dx[] = {-1, 1, 0, 0};
+                const int dy[] = {0, 0, -1, 1};
+                for (int d = 0; d < 4; d++) {
+                    const int nx = x + dx[d], ny = y + dy[d];
+                    if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                    const int ni = nx + ny * scanw;
+                    if (!isExterior[ni] && !isWall[ni]) {
+                        isExterior[ni] = 1;
+                        stack.push_back(ni);
+                    }
+                }
+            }
+
+            // 3. 内部マスクを構築（壁でも外側でもない画素 = テロップ内部）
+            std::vector<uint8_t> isInterior(pixelCount, 0);
+            int filledCount = 0;
+            for (int i = 0; i < pixelCount; i++) {
+                if (!isWall[i] && !isExterior[i]) {
+                    isInterior[i] = 1;
+                    filledCount++;
+                }
+            }
+            fprintf(stderr, "[LogoScan] upperGate interior mask: wallThresh=%.2f dilate=%d interior=%d\n",
+                kFillWallThresh, kFillWallDilate, filledCount);
+
+            // 4. upperGateFilled: 壁・内部の画素は 0、それ以外は元の upperGate
+            //    これを使って rescueScore を再計算し、テロップ内部の rescueScore を抑制する。
+            scoreStage.mapUpperGateFilled.resize(pixelCount);
+            int suppressedCount = 0;
+            for (int i = 0; i < pixelCount; i++) {
+                if (isWall[i] || isInterior[i]) {
+                    scoreStage.mapUpperGateFilled[i] = 0.0f;
+                    suppressedCount++;
+                } else {
+                    scoreStage.mapUpperGateFilled[i] = scoreStage.mapUpperGate[i];
+                }
+            }
+            fprintf(stderr, "[LogoScan] upperGateFilled: suppressed=%d (wall+interior)\n", suppressedCount);
+
+            // 5. rescueScore を upperGateFilled で再計算
+            int rescueZeroedCount = 0;
+            for (int i = 0; i < pixelCount; i++) {
+                if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;
+                const float rescueScoreNew = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
+                                           * scoreStage.mapUpperGateFilled[i] * scoreStage.mapConsistGain[i]
+                                           * scoreStage.mapBgVarGain[i];
+                if (scoreStage.mapRescueScore[i] > 0.0f && rescueScoreNew <= 0.0f) rescueZeroedCount++;
+                scoreStage.mapRescueScore[i] = rescueScoreNew;
+            }
+            fprintf(stderr, "[LogoScan] rescueScore recalc with upperGateFilled: zeroed=%d\n", rescueZeroedCount);
+
+            // デバッグ出力用にバッファに保存
+            scoreStage.mapIsWall = std::move(isWall);
+            scoreStage.mapIsInterior = std::move(isInterior);
+        }
+
+        void writeRescueGateDiag(
+            const ScoreStageBuffers& scoreStage,
+            const std::vector<float>& baseScores,
+            const std::vector<float>& rescueScores,
+            const float baseP99,
+            const float rescueP999,
+            const float rescueGain,
+            const bool rescueOnlyMode,
+            const float kRescueBlendRatioHi,
+            const float kRescueBlendRatioLo,
+            const float kRescueBaseNormLo,
+            const float kRescueBaseNormHi,
+            const float kRescueNormLo,
+            const float kRescueNormHi,
+            const int blendedCount,
+            const int rescueOnlyCount) const {
+            FILE* fp = fopen("/tmp/rescue_gate_diag.txt", "w");
+            if (!fp) {
+                return;
+            }
+
+            const int pixelCount = scanw * scanh;
+            float maxRS = 0, maxSc = 0, maxAcc = 0;
+            int nonzeroRS = 0, nonzeroSc = 0;
+            for (int i = 0; i < pixelCount; i++) {
+                if (scoreStage.mapRescueScore[i] > 0) nonzeroRS++;
+                if (scoreStage.score[i] > 0) nonzeroSc++;
+                maxRS = std::max(maxRS, scoreStage.mapRescueScore[i]);
+                maxSc = std::max(maxSc, scoreStage.score[i]);
+                maxAcc = std::max(maxAcc, scoreStage.mapAccepted[i]);
+            }
+            fprintf(fp, "pixelCount=%d\n", pixelCount);
+            fprintf(fp, "nonzeroRS=%d nonzeroSc=%d\n", nonzeroRS, nonzeroSc);
+            fprintf(fp, "maxRS=%.6f maxScore=%.6f maxAccepted=%.6f\n", maxRS, maxSc, maxAcc);
+            fprintf(fp, "baseScores.size()=%zu baseP99=%.6f rescueScores.size()=%zu rescueP999=%.6f rescueGain=%.6f ratioHi=%.6f ratioLo=%.6f blended=%d rescueOnly=%d\n",
+                baseScores.size(), baseP99, rescueScores.size(), rescueP999, rescueGain,
+                kRescueBlendRatioHi, kRescueBlendRatioLo, blendedCount, rescueOnlyCount);
+            for (int y : {30, 35, 40, 45, 70, 90, 100, 110}) {
+                if (y >= scanh) continue;
+                for (int x : {80, 100, 120, 140, 160, 180, 200}) {
+                    if (x >= scanw) continue;
+                    const int idx = x + y * scanw;
+                    const float base = scoreStage.mapAccepted[idx];
+                    const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
+                    float rescueRatioBase = kRescueBlendRatioLo;
+                    if (baseNorm <= kRescueBaseNormLo) {
+                        rescueRatioBase = kRescueBlendRatioHi;
+                    } else if (baseNorm < kRescueBaseNormHi) {
+                        const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
+                        rescueRatioBase = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
+                    }
+                    const float rescueNorm = (rescueP999 > 1e-6f) ? (scoreStage.mapRescueScore[idx] / rescueP999) : 0.0f;
+                    float rescueWeight = 1.0f;
+                    if (rescueNorm <= kRescueNormLo) {
+                        rescueWeight = 0.0f;
+                    } else if (rescueNorm < kRescueNormHi) {
+                        rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
+                    }
+                    const int interior = (idx < (int)scoreStage.mapIsInterior.size()) ? (int)scoreStage.mapIsInterior[idx] : 0;
+                    fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f baseNorm=%.4f rescueNorm=%.4f ratioBase=%.4f weight=%.4f rescueGain=%.4f ugate=%.4f interior=%d validAB=%d\n",
+                        x, y, scoreStage.mapAccepted[idx], scoreStage.score[idx],
+                        scoreStage.mapRescueScore[idx], baseNorm, rescueNorm, rescueRatioBase, rescueWeight, rescueGain, scoreStage.mapUpperGate[idx],
+                        interior, (int)scoreStage.validAB[idx]);
+                }
+            }
+
+            // isInterior / isWall / upperGate / rescueScore 詳細ラスターダンプ
+            fprintf(fp, "\n--- raster (y=45..95, x=10..200) ---\n");
+            fprintf(fp, "legend: wall=W int=# ext=. ugt=0-9 ep=0-9(edgePresence*10) rs=0-9(rescueScore*100)\n");
+            for (int y = 45; y <= 95 && y < scanh; y++) {
+                fprintf(fp, "y=%3d wall: ", y);
+                for (int x = 10; x <= 200 && x < scanw; x++) {
+                    const int idx = x + y * scanw;
+                    const bool interior = idx < (int)scoreStage.mapIsInterior.size() && scoreStage.mapIsInterior[idx];
+                    const bool wall = idx < (int)scoreStage.mapIsWall.size() && scoreStage.mapIsWall[idx];
+                    fprintf(fp, "%c", interior ? '#' : (wall ? 'W' : '.'));
+                }
+                fprintf(fp, "\n");
+                fprintf(fp, "y=%3d ep:   ", y);
+                for (int x = 10; x <= 200 && x < scanw; x++) {
+                    const int idx = x + y * scanw;
+                    const float ep = scoreStage.mapEdgePresence[idx];
+                    const int level = (ep <= 0.0f) ? 0 : std::min(9, (int)(ep * 10.0f));
+                    fprintf(fp, "%d", level);
+                }
+                fprintf(fp, "\n");
+                fprintf(fp, "y=%3d ugt:  ", y);
+                for (int x = 10; x <= 200 && x < scanw; x++) {
+                    const int idx = x + y * scanw;
+                    const float ug = scoreStage.mapUpperGate[idx];
+                    const int level = (ug <= 0.0f) ? 0 : std::min(9, (int)(ug * 10.0f));
+                    fprintf(fp, "%d", level);
+                }
+                fprintf(fp, "\n");
+                fprintf(fp, "y=%3d rs:   ", y);
+                for (int x = 10; x <= 200 && x < scanw; x++) {
+                    const int idx = x + y * scanw;
+                    const float rs = scoreStage.mapRescueScore[idx];
+                    const int level = (rs <= 0.0f) ? 0 : std::min(9, (int)(rs * 100.0f));
+                    fprintf(fp, "%d", level);
+                }
+                fprintf(fp, "\n");
+            }
+            fclose(fp);
+        }
+
+        void applyAdditiveRescueScoreBlend(ScoreStageBuffers& scoreStage, const float regressionHealth) {
+            // rescueScore の単純加算:
+            // d9b3138 で入れた suppression/boost は、rescue が疎なケースで
+            // base score の内部にむらを作りやすかった。ここでは base を削らず、
+            // rescue を base と同じスケールに合わせて足し込むだけに留める。
+            // 基準値は部分集合ではなく ROI 全体から取り、式の意味を単純に保つ。
+            const int pixelCount = scanw * scanh;
+            std::vector<float> baseScores;
+            baseScores.reserve(pixelCount);
+            std::vector<float> rescueScores;
+            rescueScores.reserve(pixelCount);
+            for (int i = 0; i < pixelCount; i++) {
+                baseScores.push_back(std::max(scoreStage.score[i], 0.0f));
+                rescueScores.push_back(std::max(scoreStage.mapRescueScore[i], 0.0f));
+            }
+            float baseP99 = 0.0f;
+            if (!baseScores.empty()) {
+                std::sort(baseScores.begin(), baseScores.end());
+                const int idx99 = std::min((int)(baseScores.size() * 99 / 100), (int)baseScores.size() - 1);
+                baseP99 = baseScores[idx99];
+            }
+            float rescueP999 = 0.0f;
+            if (!rescueScores.empty()) {
+                std::sort(rescueScores.begin(), rescueScores.end());
+                const int idx999 = std::min((int)(rescueScores.size() * 999 / 1000), (int)rescueScores.size() - 1);
+                rescueP999 = rescueScores[idx999];
+            }
+            // rescueGain 計算:
+            // 通常時: rescue を base と同スケールに揃える (baseP99 / rescueP999)。
+            // 回帰失敗時 (regressionHealth < 閾値): base が存在しないので rescueScore を
+            // そのまま使う rescue-only モードに切り替える。
+            static constexpr float kRescueBlendRatioHi = 0.6f;
+            static constexpr float kRescueBlendRatioLo = 0.05f;
+            static constexpr float kRescueBaseNormLo   = 0.3f;
+            static constexpr float kRescueBaseNormHi   = 1.0f;
+            static constexpr float kRescueNormLo       = 0.3f;
+            static constexpr float kRescueNormHi       = 1.0f;
+            // 案B: 回帰完全失敗時の rescue-only フォールバック。
+            // regressionHealth が極めて低く base score がゼロ近傍の場合、
+            // validAB のないピクセルでも rescueScore のみで rect 検出用スコアを構築する。
+            static constexpr float kRescueOnlyHealthThresh = 0.10f;
+            const bool rescueOnlyMode = (regressionHealth < kRescueOnlyHealthThresh
+                                         && baseP99 <= 1e-6f && rescueP999 > 1e-6f);
+            // rescueGain: rescue を base と同スケールに揃えるゲイン。
+            // regressionHealth が低い場合は回帰が弱く baseP99 が過小なため、
+            // rescueGain に下限 (kMinRescueGainBase) を設けて rescue 寄与を確保する。
+            // rescueGain 下限フロアを以下の場合に適用する:
+            // (1) regressionHealth が低い: 回帰が弱く baseP99 が過小
+            // (2) baseP99/rescueP999 が極端に低い: 回帰は部分的に成功しているが
+            //     base score が rescue に比べて極端に小さい
+            static constexpr float kMinRescueGainBase     = 0.15f;
+            static constexpr float kRescueHealthThresh    = 0.50f;
+            static constexpr float kRescueGainRatioThresh = 0.05f;
+            const bool needRescueFloor = (regressionHealth < kRescueHealthThresh)
+                || (baseP99 > 1e-6f && rescueP999 > 1e-6f
+                    && (baseP99 / rescueP999) < kRescueGainRatioThresh);
+            const float kMinRescueGain = needRescueFloor ? kMinRescueGainBase : 0.0f;
+            const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f)
+                ? std::max(baseP99 / rescueP999, kMinRescueGain) : 0.0f;
+            int blendedCount = 0;
+            int rescueOnlyCount = 0;
+            for (int i = 0; i < pixelCount; i++) {
+                const float rs = scoreStage.mapRescueScore[i];
+                if (rs <= 0.0f) continue;
+                // 案B: rescue-only モードでは validAB がなくてもスコアを付与する。
+                // rescueScore を正規化して [kRescueNormLo, kRescueNormHi] で重み付けし、
+                // base がないので blendRatio は常に Hi (= 最大寄与) を使う。
+                if (rescueOnlyMode && !scoreStage.validAB[i]) {
+                    const float rescueNorm = rs / rescueP999;
+                    float rescueWeight = 1.0f;
+                    if (rescueNorm <= kRescueNormLo) {
+                        rescueWeight = 0.0f;
+                    } else if (rescueNorm < kRescueNormHi) {
+                        rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
+                    }
+                    const float rescueVal = kRescueBlendRatioHi * rescueWeight * rs;
+                    if (rescueVal > 0.0f) {
+                        scoreStage.score[i] = rescueVal;
+                        scoreStage.mapAccepted[i] = rescueVal;
+                        scoreStage.validAB[i] = 1;  // 下流の validAB フィルタを通過させる
+                        rescueOnlyCount++;
+                    }
+                    continue;
+                }
+                if (!scoreStage.validAB[i]) continue;
+                const float base = scoreStage.score[i];
+                const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
+                float rescueRatioBase = kRescueBlendRatioLo;
+                if (baseNorm <= kRescueBaseNormLo) {
+                    rescueRatioBase = kRescueBlendRatioHi;
+                } else if (baseNorm < kRescueBaseNormHi) {
+                    const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
+                    rescueRatioBase = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
+                }
+                const float rescueNorm = (rescueP999 > 1e-6f) ? (rs / rescueP999) : 0.0f;
+                float rescueWeight = 1.0f;
+                if (rescueNorm <= kRescueNormLo) {
+                    rescueWeight = 0.0f;
+                } else if (rescueNorm < kRescueNormHi) {
+                    rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
+                }
+                const float rescueVal = rescueRatioBase * rescueWeight * rs * rescueGain;
+                scoreStage.score[i] += rescueVal;
+                blendedCount++;
+            }
+            fprintf(stderr, "[LogoScan] rescue additive blend: rescueOnlyMode=%d ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
+                (int)rescueOnlyMode, kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
+                (double)rescueGain, blendedCount, rescueOnlyCount);
+
+            // ファイル出力: rescueScore 分布と加算効果の確認
+            writeRescueGateDiag(scoreStage, baseScores, rescueScores, baseP99, rescueP999, rescueGain, rescueOnlyMode,
+                kRescueBlendRatioHi, kRescueBlendRatioLo, kRescueBaseNormLo, kRescueBaseNormHi,
+                kRescueNormLo, kRescueNormHi, blendedCount, rescueOnlyCount);
+        }
+
+        void applyPass2OrFallbackRescueBlend(ScoreStageBuffers& scoreStage, const bool enableRescue, const AutoDetectRect& rescueAnchorRect) {
+            // Stage 2: rescue score を適用する。
+            // 通常は pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
+            // 含まれるためロゴと誤判定するリスクが高い。pass2 ではフレームゲートにより
+            // テロップのあるフレームが除外されるため、rescue の誤爆リスクが低い。
+            // ただし pass2 に進めなかった場合(FrameMaskEmpty 等)は、pass1 フォールバック時
+            // にも enableRescue=true で rescue を適用する。pass2 が不成立の場合、他に手段が
+            // ないため、テロップ誤判定リスクを許容して rescue で救済する。
+            // (1) validAB=false: 回帰不成立の画素 → rescue score で代替
+            // (2) validAB=true だが score が低い(汚染推定)→ rescue score でブレンド
+            //     テロップ重畳等で bg 推定が汚染され diffGain ≈ 0 に潰された画素を
+            //     edgePresence ベースの rescue で救済する。
+            //
+            // スケール合わせ: rescue score は gains の積のみで baselines がなく、
+            // 通常 score より値が低い。validAB=true かつ両方正の画素から
+            // score/rescue 比の p75 を求め、rescue にそのスケールを掛けてから適用する。
+            if (passIndex != 3 && !enableRescue) {
+                return;
+            }
+            fprintf(stderr, "[LogoScan] rescue blending: passIndex=%d enableRescue=%d, starting blend\n", passIndex, (int)enableRescue);
+            const int pixelCount = scanw * scanh;
+            // rectGate: アンカー矩形からの距離マップを構築し、遠い画素への rescue 適用を抑制する。
+            // enableRescue (pass1 fallback) と pass2 (passIndex==3) の両方で使用する。
+            const int rescueRectMaxDist = enableRescue ? 48 : 40;
+            const bool useRectGate = rescueAnchorRect.w > 0 && rescueAnchorRect.h > 0;
+            std::vector<int> rectDistMap;
+            if (useRectGate) {
+                rectDistMap.assign(pixelCount, INT_MAX);
+                std::queue<int> bfsQ;
+                for (int y = rescueAnchorRect.y; y < rescueAnchorRect.y + rescueAnchorRect.h && y < scanh; y++) {
+                    for (int x = rescueAnchorRect.x; x < rescueAnchorRect.x + rescueAnchorRect.w && x < scanw; x++) {
+                        if (x >= 0 && y >= 0) {
+                            const int idx = x + y * scanw;
+                            rectDistMap[idx] = 0;
+                            bfsQ.push(idx);
+                        }
+                    }
+                }
+                while (!bfsQ.empty()) {
+                    const int cur = bfsQ.front(); bfsQ.pop();
+                    if (rectDistMap[cur] >= rescueRectMaxDist) continue;
+                    const int cx = cur % scanw, cy = cur / scanw;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (!dx && !dy) continue;
+                            const int nx = cx + dx, ny = cy + dy;
+                            if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
+                            const int nidx = nx + ny * scanw;
+                            if (rectDistMap[nidx] > rectDistMap[cur] + 1) {
+                                rectDistMap[nidx] = rectDistMap[cur] + 1;
+                                bfsQ.push(nidx);
+                            }
+                        }
+                    }
+                }
+                fprintf(stderr, "[LogoScan] rescue rect gate: rect=(%d,%d,%d,%d) maxDist=%d\n",
+                    rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, rescueRectMaxDist);
+            }
+
+            auto computeRescueScaleFactor = [&]() {
+                std::vector<float> scaleRatios;
+                scaleRatios.reserve(4096);
+                static constexpr float kScaleRatioMinScore  = 0.02f;
+                static constexpr float kScaleRatioMinRescue = 0.005f;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i]) continue;
+                    const float sc = scoreStage.score[i];
+                    const float rs = scoreStage.mapRescueScore[i];
+                    if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
+                        scaleRatios.push_back(sc / rs);
+                    }
+                }
+                float scaleFactor = 1.0f;
+                if (!scaleRatios.empty()) {
+                    std::sort(scaleRatios.begin(), scaleRatios.end());
+                    const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
+                    scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 4.0f));
+                }
+                return std::make_pair(scaleFactor, scaleRatios.size());
+            };
+
+            if (enableRescue) {
+                // pass1 フォールバック: scaleFactor で rescue score を補正し、
+                // contaminated 閾値を高めに設定して pass1 rect 近傍のみ救済する。
+                const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
+                fprintf(stderr, "[LogoScan] rescue blending (pass1 fallback): scaleRatios.size()=%zu scaleFactor=%.4f\n",
+                    scaleRatioCount, (double)scaleFactor);
+
+                static constexpr float kRescueBlendWeight       = 0.7f;
+                static constexpr float kContaminatedScoreThresh = 0.05f;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
+                    const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
+                    const float rescueVal = kRescueBlendWeight * rescueScaled;
+                    if (!scoreStage.validAB[i]) {
+                        scoreStage.score[i] = rescueVal;
+                    } else if (scoreStage.score[i] < kContaminatedScoreThresh) {
+                        if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
+                        scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
+                    }
+                }
+            } else {
+                // pass2 (passIndex==3): フレームゲート後でも q58/q70 のように
+                // 回帰 score が細部だけ落ちるケースがあるので、pass1 fallback と同様に
+                // rescue をスケール補正して使う。ただし上限は低めにして暴れを抑える。
+                const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
+                fprintf(stderr, "[LogoScan] rescue blending (pass2): scaleRatios.size()=%zu scaleFactor=%.4f\n",
+                    scaleRatioCount, (double)scaleFactor);
+                static constexpr float kRescueWeight = 0.65f;
+                static constexpr float kContaminatedThreshold = 0.03f;
+                static constexpr float kRescuePromoteRatio = 1.5f;
+                static constexpr float kRescueBridgeScoreThresh = 0.07f;
+                static constexpr float kRescueBridgeMinScore = 0.08f;
+                static constexpr float kRescueBridgeMaxScore = 0.16f;
+                static constexpr float kRescueBridgeMinRescue = 0.15f;
+                static constexpr float kRescueBridgeMinUpperGate = 0.95f;
+                static constexpr float kRescueBridgeConsistencyMax = 0.20f;
+                static constexpr float kRescueBridgeDiffMax = 0.12f;
+                static constexpr int   kRescueBridgeNearRadius = 3;
+                std::vector<uint8_t> acceptedNear(pixelCount, 0);
+                for (int y = 0; y < scanh; y++) {
+                    for (int x = 0; x < scanw; x++) {
+                        const int idx = x + y * scanw;
+                        if (scoreStage.mapAccepted[idx] <= 0.0f) continue;
+                        const int y0 = std::max(0, y - kRescueBridgeNearRadius);
+                        const int y1 = std::min(scanh - 1, y + kRescueBridgeNearRadius);
+                        const int x0 = std::max(0, x - kRescueBridgeNearRadius);
+                        const int x1 = std::min(scanw - 1, x + kRescueBridgeNearRadius);
+                        for (int ny = y0; ny <= y1; ny++) {
+                            for (int nx = x0; nx <= x1; nx++) {
+                                acceptedNear[nx + ny * scanw] = 1;
+                            }
+                        }
+                    }
+                }
+                int rescuePromotedCount = 0;
+                int rescueBridgeCount = 0;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
+                    if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
+                    const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
+                    const float rescueVal = kRescueWeight * rescueScaled;
+                    if (!scoreStage.validAB[i]) {
+                        scoreStage.score[i] = rescueVal;
+                        const bool promoteRescueOnly = scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
+                            && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
+                            && acceptedNear[i]
+                            && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
+                                || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
+                        if (promoteRescueOnly) {
+                            scoreStage.mapAccepted[i] = std::max(scoreStage.mapAccepted[i], rescueVal);
+                            scoreStage.validAB[i] = 1;
+                            rescuePromotedCount++;
+                        }
+                    } else if (scoreStage.score[i] < kContaminatedThreshold || rescueVal > scoreStage.score[i] * kRescuePromoteRatio) {
+                        scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
+                    } else {
+                        // pass2 では回帰が成立していても diff/consistency だけが弱く、
+                        // rescue 側だけが下部文字を強く捉えることがある。
+                        const bool weakBase = scoreStage.score[i] < kRescueBridgeScoreThresh
+                            && scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
+                            && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
+                            && acceptedNear[i]
+                            && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
+                                || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
+                        if (weakBase) {
+                            const float rescueExcess = std::max(scoreStage.mapRescueScore[i] - kRescueBridgeMinRescue, 0.0f);
+                            const float rescueFloor = std::min(
+                                kRescueBridgeMinScore + rescueExcess * 0.45f,
+                                kRescueBridgeMaxScore);
+                            if (rescueFloor > scoreStage.score[i]) {
+                                scoreStage.score[i] = rescueFloor;
+                                rescueBridgeCount++;
+                            }
+                        }
+                    }
+                }
+                fprintf(stderr, "[LogoScan] rescue-only promote (pass2): count=%d rescueTh=%.2f upperGateTh=%.2f\n",
+                    rescuePromotedCount, (double)kRescueBridgeMinRescue,
+                    (double)kRescueBridgeMinUpperGate);
+                fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f nearRadius=%d\n",
+                    rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue,
+                    kRescueBridgeNearRadius);
+            }
+        }
+
         // enableRescue: rescue blending を有効にするか
         // rescueAnchorRect: contaminated rescue の空間制約に使う矩形 (scan-local 座標)。
         //   enableRescue=true 時、この矩形からの距離以内のみに contaminated rescue を適用する。
@@ -5668,203 +6066,14 @@ namespace {
             }
 
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
-            // ステップ1: edgeMean / edgeVar / edgePresence と各ゲインを計算して保存する。
-            //            upperGate は 3x3 localmax 後に計算するため、ここでは保存しない。
-            {
-                auto sat01f = [](const float v) { return std::max(0.0f, std::min(1.0f, v)); };
-                const int pixelCount = scanw * scanh;
-                for (int i = 0; i < pixelCount; i++) {
-                    const auto& ea = statsPass.edgeAccumBuf[i];
-                    const auto& s = statsPass.stats[i];
-                    if (ea.edgeCount <= 0 || s.observed <= 0) continue;
-
-                    const float edgeMean     = ea.sumEdge / ea.edgeCount;
-                    const float edgeVar      = std::max(0.0f, ea.sumEdge2 / ea.edgeCount - edgeMean * edgeMean);
-                    const float edgePresence = (float)ea.edgeCount / (float)s.observed;
-
-                    scoreStage.mapEdgePresence[i] = edgePresence;
-                    scoreStage.mapEdgeMean[i]     = edgeMean;
-                    scoreStage.mapEdgeVar[i]       = edgeVar;
-                    scoreStage.mapPresenceGain[i]  = sat01f((edgePresence - 0.08f) / 0.42f);
-                    scoreStage.mapMagGain[i]       = sat01f((edgeMean     - 0.05f) / 0.30f);
-                    // consistGain: 低分散ほど高スコアの線形降下に、高分散側への急峻な上限ゲートを乗算。
-                    // 上限ゲート: 1/(1+exp(c*(x-d)))  c=500, d=0.015
-                    //   透明ロゴの背景変動 (edgeVar≈0.010-0.018) は通し、
-                    //   動的/変動コンテンツ (edgeVar>0.020) を強く抑制する。
-                    // 全データ sep_gmean: current=45.3 → 本式=62.6 (+38%)。
-                    static constexpr float kConsistUpperGateC = 500.0f;
-                    static constexpr float kConsistUpperGateD = 0.015f;
-                    const float consistLinear   = sat01f((0.040f - edgeVar) / 0.035f);
-                    const float consistUpperGate = 1.0f / (1.0f + std::exp(kConsistUpperGateC * (edgeVar - kConsistUpperGateD)));
-                    scoreStage.mapConsistGain[i]   = consistLinear * consistUpperGate;
-                }
-
-                // ステップ2: 3x3 近傍最大 edgeMean を計算する。
-                // 静止構造の内部は edgeMean が高く sigmoid でゲートされるが、その外周 1px は
-                // edgeMean が低く素通りしてしまう。近傍最大を使うことで外周まで抑制できる。
-                const int pixelCount2 = pixelCount;  // for clarity in loop below
-                std::vector<float> edgeMeanLocalMax(pixelCount2, 0.0f);
-                for (int y = 0; y < scanh; y++) {
-                    for (int x = 0; x < scanw; x++) {
-                        float maxVal = 0.0f;
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dx = -1; dx <= 1; dx++) {
-                                const int nx = x + dx, ny = y + dy;
-                                if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
-                                    maxVal = std::max(maxVal, scoreStage.mapEdgeMean[nx + ny * scanw]);
-                                }
-                            }
-                        }
-                        edgeMeanLocalMax[x + y * scanw] = maxVal;
-                    }
-                }
-
-                // ステップ3: upperGate・bgVarGain・rescueScore を計算する。
-                // upperGate: sigmoid(a*(x-b)) で不透明な静止構造を除外する降下特性ゲート。
-                // 3x3 localmax edgeMean を [0,0.8] → [0,1] に正規化して入力する。
-                // a=25, b=0.40: 全データ sep_gmean 最大パラメータ。
-                // bgVarGain: 背景分散が十分ある(半透明)ロゴのみを rescue 対象とするゲート。
-                // bgVar を [0, kBgVarScale] → [0,1] に正規化後に sigmoid(a=30, b=0.10) を適用する。
-                // 不透明テロップ (bgVar≈0) は bgVarGain≈0.047 となり rescueScore が抑制される。
-                // 半透明ロゴ (bgVar≈0.004以上) は bgVarGain≈0.95以上となりほぼ通過する。
-                static constexpr float kUpperGateSigmoidA = 25.0f;
-                static constexpr float kUpperGateSigmoidB = 0.40f;
-                static constexpr float kBgVarGainSigmoidA = 30.0f;
-                static constexpr float kBgVarGainSigmoidB = 0.10f;
-                static constexpr float kBgVarScale        = 0.020f;  // bgVar 正規化上限 (0〜1 スケール変換)
-                for (int i = 0; i < pixelCount; i++) {
-                    if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;  // edgeCount==0 画素はスキップ
-                    const float edgeMeanNorm = std::min(edgeMeanLocalMax[i] / 0.80f, 1.0f);
-                    const float upperGate    = 1.0f / (1.0f + std::exp(kUpperGateSigmoidA * (edgeMeanNorm - kUpperGateSigmoidB)));
-                    const float bgVarNorm    = std::min(scoreStage.mapBgVar[i] / kBgVarScale, 1.0f);
-                    const float bgVarGain    = 1.0f / (1.0f + std::exp(-kBgVarGainSigmoidA * (bgVarNorm - kBgVarGainSigmoidB)));
-                    const float rescueScore  = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
-                                             * upperGate * scoreStage.mapConsistGain[i] * bgVarGain;
-                    scoreStage.mapUpperGate[i]   = upperGate;
-                    scoreStage.mapBgVarGain[i]   = bgVarGain;
-                    scoreStage.mapRescueScore[i] = rescueScore;
-                }
-            }
+            computeSpatialEdgeRescueScoreMaps(statsPass, scoreStage);
 
             // upperGateFilled 構築:
             // 不透明テロップは輪郭部が低 upperGate (静止エッジ検出)、内部は高 upperGate。
             // テロップ内部も静止構造なので rescueScore を抑制したい。
             // 手法: upperGate の低い画素（壁）で Flood Fill し、壁と内部の画素を特定。
             //       壁・内部の画素では upperGateFilled = 0 として rescueScore を再計算する。
-            std::vector<uint8_t> isInterior;
-            {
-                const int pixelCount = scanw * scanh;
-                static constexpr float kFillWallThresh = 0.30f;  // upperGate がこの値未満 → 壁
-                static constexpr int   kFillWallDilate = 1;      // 壁の膨張回数（隙間を塞ぐ）
-
-                // 1. 壁マスク作成: edgePresence > 0 かつ upperGate < 閾値 の画素を壁とする
-                std::vector<uint8_t> isWall(pixelCount, 0);
-                for (int i = 0; i < pixelCount; i++) {
-                    if (scoreStage.mapEdgePresence[i] > 0.0f && scoreStage.mapUpperGate[i] < kFillWallThresh) {
-                        isWall[i] = 1;
-                    }
-                }
-
-                // 壁を膨張（小さな隙間を塞ぐ）
-                if (kFillWallDilate > 0) {
-                    std::vector<uint8_t> wallTmp(pixelCount);
-                    for (int iter = 0; iter < kFillWallDilate; iter++) {
-                        for (int y = 0; y < scanh; y++) {
-                            for (int x = 0; x < scanw; x++) {
-                                const int idx = x + y * scanw;
-                                uint8_t v = isWall[idx];
-                                if (!v && x > 0)          v |= isWall[(x-1) + y * scanw];
-                                if (!v && x < scanw - 1)  v |= isWall[(x+1) + y * scanw];
-                                if (!v && y > 0)          v |= isWall[x + (y-1) * scanw];
-                                if (!v && y < scanh - 1)  v |= isWall[x + (y+1) * scanw];
-                                wallTmp[idx] = v;
-                            }
-                        }
-                        std::swap(isWall, wallTmp);
-                    }
-                }
-
-                // 2. 画像境界から非壁画素を通って Flood Fill → 外側をマーク
-                //    4-connectivity: テロップ輪郭の対角隙間を壁として尊重する
-                std::vector<uint8_t> isExterior(pixelCount, 0);
-                std::vector<int> stack;
-                stack.reserve(pixelCount / 4);
-                for (int x = 0; x < scanw; x++) {
-                    for (const int y : {0, scanh - 1}) {
-                        const int idx = x + y * scanw;
-                        if (!isWall[idx] && !isExterior[idx]) {
-                            isExterior[idx] = 1;
-                            stack.push_back(idx);
-                        }
-                    }
-                }
-                for (int y = 1; y < scanh - 1; y++) {
-                    for (const int x : {0, scanw - 1}) {
-                        const int idx = x + y * scanw;
-                        if (!isWall[idx] && !isExterior[idx]) {
-                            isExterior[idx] = 1;
-                            stack.push_back(idx);
-                        }
-                    }
-                }
-                while (!stack.empty()) {
-                    const int idx = stack.back(); stack.pop_back();
-                    const int x = idx % scanw, y = idx / scanw;
-                    const int dx[] = {-1, 1, 0, 0};
-                    const int dy[] = {0, 0, -1, 1};
-                    for (int d = 0; d < 4; d++) {
-                        const int nx = x + dx[d], ny = y + dy[d];
-                        if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
-                        const int ni = nx + ny * scanw;
-                        if (!isExterior[ni] && !isWall[ni]) {
-                            isExterior[ni] = 1;
-                            stack.push_back(ni);
-                        }
-                    }
-                }
-
-                // 3. 内部マスクを構築（壁でも外側でもない画素 = テロップ内部）
-                isInterior.resize(pixelCount, 0);
-                int filledCount = 0;
-                for (int i = 0; i < pixelCount; i++) {
-                    if (!isWall[i] && !isExterior[i]) {
-                        isInterior[i] = 1;
-                        filledCount++;
-                    }
-                }
-                fprintf(stderr, "[LogoScan] upperGate interior mask: wallThresh=%.2f dilate=%d interior=%d\n",
-                    kFillWallThresh, kFillWallDilate, filledCount);
-
-                // 4. upperGateFilled: 壁・内部の画素は 0、それ以外は元の upperGate
-                //    これを使って rescueScore を再計算し、テロップ内部の rescueScore を抑制する。
-                scoreStage.mapUpperGateFilled.resize(pixelCount);
-                int suppressedCount = 0;
-                for (int i = 0; i < pixelCount; i++) {
-                    if (isWall[i] || isInterior[i]) {
-                        scoreStage.mapUpperGateFilled[i] = 0.0f;
-                        suppressedCount++;
-                    } else {
-                        scoreStage.mapUpperGateFilled[i] = scoreStage.mapUpperGate[i];
-                    }
-                }
-                fprintf(stderr, "[LogoScan] upperGateFilled: suppressed=%d (wall+interior)\n", suppressedCount);
-
-                // 5. rescueScore を upperGateFilled で再計算
-                int rescueZeroedCount = 0;
-                for (int i = 0; i < pixelCount; i++) {
-                    if (scoreStage.mapEdgePresence[i] <= 0.0f) continue;
-                    const float rescueScoreNew = scoreStage.mapPresenceGain[i] * scoreStage.mapMagGain[i]
-                                               * scoreStage.mapUpperGateFilled[i] * scoreStage.mapConsistGain[i]
-                                               * scoreStage.mapBgVarGain[i];
-                    if (scoreStage.mapRescueScore[i] > 0.0f && rescueScoreNew <= 0.0f) rescueZeroedCount++;
-                    scoreStage.mapRescueScore[i] = rescueScoreNew;
-                }
-                fprintf(stderr, "[LogoScan] rescueScore recalc with upperGateFilled: zeroed=%d\n", rescueZeroedCount);
-
-                // デバッグ出力用にバッファに保存
-                scoreStage.mapIsWall = isWall;
-                scoreStage.mapIsInterior = isInterior;
-            }
+            applyUpperGateFilledToRescueScore(scoreStage);
 
             // upperGate の base score 直接抑制は、局ロゴの輪郭や細線まで削ってしまうため無効化する。
             fprintf(stderr, "[LogoScan] upperGate base score suppression: disabled\n");
@@ -5876,194 +6085,7 @@ namespace {
             // base score の内部にむらを作りやすかった。ここでは base を削らず、
             // rescue を base と同じスケールに合わせて足し込むだけに留める。
             // 基準値は部分集合ではなく ROI 全体から取り、式の意味を単純に保つ。
-            {
-                const int pixelCount = scanw * scanh;
-                std::vector<float> baseScores;
-                baseScores.reserve(pixelCount);
-                std::vector<float> rescueScores;
-                rescueScores.reserve(pixelCount);
-                for (int i = 0; i < pixelCount; i++) {
-                    baseScores.push_back(std::max(scoreStage.score[i], 0.0f));
-                    rescueScores.push_back(std::max(scoreStage.mapRescueScore[i], 0.0f));
-                }
-                float baseP99 = 0.0f;
-                if (!baseScores.empty()) {
-                    std::sort(baseScores.begin(), baseScores.end());
-                    const int idx99 = std::min((int)(baseScores.size() * 99 / 100), (int)baseScores.size() - 1);
-                    baseP99 = baseScores[idx99];
-                }
-                float rescueP999 = 0.0f;
-                if (!rescueScores.empty()) {
-                    std::sort(rescueScores.begin(), rescueScores.end());
-                    const int idx999 = std::min((int)(rescueScores.size() * 999 / 1000), (int)rescueScores.size() - 1);
-                    rescueP999 = rescueScores[idx999];
-                }
-                // rescueGain 計算:
-                // 通常時: rescue を base と同スケールに揃える (baseP99 / rescueP999)。
-                // 回帰失敗時 (regressionHealth < 閾値): base が存在しないので rescueScore を
-                // そのまま使う rescue-only モードに切り替える。
-                static constexpr float kRescueBlendRatioHi = 0.6f;
-                static constexpr float kRescueBlendRatioLo = 0.05f;
-                static constexpr float kRescueBaseNormLo   = 0.3f;
-                static constexpr float kRescueBaseNormHi   = 1.0f;
-                static constexpr float kRescueNormLo       = 0.3f;
-                static constexpr float kRescueNormHi       = 1.0f;
-                // 案B: ���帰完全失敗��の rescue-only フォールバック。
-                // regressionHealth が極めて低く base score がゼロ近傍の場合、
-                // validAB のないピクセルでも rescueScore のみで rect 検出用スコアを構築する。
-                static constexpr float kRescueOnlyHealthThresh = 0.10f;
-                const bool rescueOnlyMode = (regressionHealth < kRescueOnlyHealthThresh
-                                             && baseP99 <= 1e-6f && rescueP999 > 1e-6f);
-                // rescueGain: rescue を base と同スケールに揃えるゲイン。
-                // regressionHealth が低い場合は回帰が弱く baseP99 が過小なため、
-                // rescueGain に下限 (kMinRescueGainBase) を設けて rescue 寄与を確保する。
-                // rescueGain 下限フロアを以下の場合に適用する:
-                // (1) regressionHealth が低い: 回帰が弱く baseP99 が過小
-                // (2) baseP99/rescueP999 が極端に低い: 回帰は部分的に成功しているが
-                //     base score が rescue に比べて極端に小さい
-                static constexpr float kMinRescueGainBase     = 0.15f;
-                static constexpr float kRescueHealthThresh    = 0.50f;
-                static constexpr float kRescueGainRatioThresh = 0.05f;
-                const bool needRescueFloor = (regressionHealth < kRescueHealthThresh)
-                    || (baseP99 > 1e-6f && rescueP999 > 1e-6f
-                        && (baseP99 / rescueP999) < kRescueGainRatioThresh);
-                const float kMinRescueGain = needRescueFloor ? kMinRescueGainBase : 0.0f;
-                const float rescueGain = (baseP99 > 1e-6f && rescueP999 > 1e-6f)
-                    ? std::max(baseP99 / rescueP999, kMinRescueGain) : 0.0f;
-                int blendedCount = 0;
-                int rescueOnlyCount = 0;
-                for (int i = 0; i < pixelCount; i++) {
-                    const float rs = scoreStage.mapRescueScore[i];
-                    if (rs <= 0.0f) continue;
-                    // 案B: rescue-only モードでは validAB がなくてもスコアを付与する。
-                    // rescueScore を正規化して [kRescueNormLo, kRescueNormHi] で重み付けし、
-                    // base がないので blendRatio は常に Hi (= 最大寄与) を使う。
-                    if (rescueOnlyMode && !scoreStage.validAB[i]) {
-                        const float rescueNorm = rs / rescueP999;
-                        float rescueWeight = 1.0f;
-                        if (rescueNorm <= kRescueNormLo) {
-                            rescueWeight = 0.0f;
-                        } else if (rescueNorm < kRescueNormHi) {
-                            rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
-                        }
-                        const float rescueVal = kRescueBlendRatioHi * rescueWeight * rs;
-                        if (rescueVal > 0.0f) {
-                            scoreStage.score[i] = rescueVal;
-                            scoreStage.mapAccepted[i] = rescueVal;
-                            scoreStage.validAB[i] = 1;  // 下流の validAB フィルタを通過させる
-                            rescueOnlyCount++;
-                        }
-                        continue;
-                    }
-                    if (!scoreStage.validAB[i]) continue;
-                    const float base = scoreStage.score[i];
-                    const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
-                    float rescueRatioBase = kRescueBlendRatioLo;
-                    if (baseNorm <= kRescueBaseNormLo) {
-                        rescueRatioBase = kRescueBlendRatioHi;
-                    } else if (baseNorm < kRescueBaseNormHi) {
-                        const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
-                        rescueRatioBase = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
-                    }
-                    const float rescueNorm = (rescueP999 > 1e-6f) ? (rs / rescueP999) : 0.0f;
-                    float rescueWeight = 1.0f;
-                    if (rescueNorm <= kRescueNormLo) {
-                        rescueWeight = 0.0f;
-                    } else if (rescueNorm < kRescueNormHi) {
-                        rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
-                    }
-                    const float rescueVal = rescueRatioBase * rescueWeight * rs * rescueGain;
-                    scoreStage.score[i] += rescueVal;
-                    blendedCount++;
-                }
-                fprintf(stderr, "[LogoScan] rescue additive blend: rescueOnlyMode=%d ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
-                    (int)rescueOnlyMode, kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
-                    (double)rescueGain, blendedCount, rescueOnlyCount);
-                // ファイル出力: rescueScore 分布と加算効果の確認
-                {
-                    FILE* fp = fopen("/tmp/rescue_gate_diag.txt", "w");
-                    if (fp) {
-                        float maxRS = 0, maxSc = 0, maxAcc = 0;
-                        int nonzeroRS = 0, nonzeroSc = 0;
-                        for (int i = 0; i < pixelCount; i++) {
-                            if (scoreStage.mapRescueScore[i] > 0) nonzeroRS++;
-                            if (scoreStage.score[i] > 0) nonzeroSc++;
-                            maxRS = std::max(maxRS, scoreStage.mapRescueScore[i]);
-                            maxSc = std::max(maxSc, scoreStage.score[i]);
-                            maxAcc = std::max(maxAcc, scoreStage.mapAccepted[i]);
-                        }
-                        fprintf(fp, "pixelCount=%d\n", pixelCount);
-                        fprintf(fp, "nonzeroRS=%d nonzeroSc=%d\n", nonzeroRS, nonzeroSc);
-                        fprintf(fp, "maxRS=%.6f maxScore=%.6f maxAccepted=%.6f\n", maxRS, maxSc, maxAcc);
-                        fprintf(fp, "baseScores.size()=%zu baseP99=%.6f rescueScores.size()=%zu rescueP999=%.6f rescueGain=%.6f ratioHi=%.6f ratioLo=%.6f blended=%d rescueOnly=%d\n",
-                            baseScores.size(), baseP99, rescueScores.size(), rescueP999, rescueGain,
-                            kRescueBlendRatioHi, kRescueBlendRatioLo, blendedCount, rescueOnlyCount);
-                        for (int y : {30, 35, 40, 45, 70, 90, 100, 110}) {
-                            if (y >= scanh) continue;
-                            for (int x : {80, 100, 120, 140, 160, 180, 200}) {
-                                if (x >= scanw) continue;
-                                const int idx = x + y * scanw;
-                                const float base = scoreStage.mapAccepted[idx];
-                                const float baseNorm = (baseP99 > 1e-6f) ? (base / baseP99) : 0.0f;
-                                float rescueRatioBase = kRescueBlendRatioLo;
-                                if (baseNorm <= kRescueBaseNormLo) {
-                                    rescueRatioBase = kRescueBlendRatioHi;
-                                } else if (baseNorm < kRescueBaseNormHi) {
-                                    const float t = (baseNorm - kRescueBaseNormLo) / (kRescueBaseNormHi - kRescueBaseNormLo);
-                                    rescueRatioBase = kRescueBlendRatioHi + (kRescueBlendRatioLo - kRescueBlendRatioHi) * t;
-                                }
-                                const float rescueNorm = (rescueP999 > 1e-6f) ? (scoreStage.mapRescueScore[idx] / rescueP999) : 0.0f;
-                                float rescueWeight = 1.0f;
-                                if (rescueNorm <= kRescueNormLo) {
-                                    rescueWeight = 0.0f;
-                                } else if (rescueNorm < kRescueNormHi) {
-                                    rescueWeight = (rescueNorm - kRescueNormLo) / (kRescueNormHi - kRescueNormLo);
-                                }
-                                fprintf(fp, "  [%d,%d] accepted=%.5f score=%.5f rescue=%.6f baseNorm=%.4f rescueNorm=%.4f ratioBase=%.4f weight=%.4f rescueGain=%.4f ugate=%.4f interior=%d validAB=%d\n",
-                                    x, y, scoreStage.mapAccepted[idx], scoreStage.score[idx],
-                                    scoreStage.mapRescueScore[idx], baseNorm, rescueNorm, rescueRatioBase, rescueWeight, rescueGain, scoreStage.mapUpperGate[idx],
-                                    (int)isInterior[idx], (int)scoreStage.validAB[idx]);
-                            }
-                        }
-                        // isInterior / isWall / upperGate / rescueScore 詳細ラスターダンプ
-                        fprintf(fp, "\n--- raster (y=45..95, x=10..200) ---\n");
-                        fprintf(fp, "legend: wall=W int=# ext=. ugt=0-9 ep=0-9(edgePresence*10) rs=0-9(rescueScore*100)\n");
-                        for (int y = 45; y <= 95 && y < scanh; y++) {
-                            fprintf(fp, "y=%3d wall: ", y);
-                            for (int x = 10; x <= 200 && x < scanw; x++) {
-                                const int idx = x + y * scanw;
-                                fprintf(fp, "%c", isInterior[idx] ? '#' : (scoreStage.mapIsWall[idx] ? 'W' : '.'));
-                            }
-                            fprintf(fp, "\n");
-                            fprintf(fp, "y=%3d ep:   ", y);
-                            for (int x = 10; x <= 200 && x < scanw; x++) {
-                                const int idx = x + y * scanw;
-                                const float ep = scoreStage.mapEdgePresence[idx];
-                                const int level = (ep <= 0.0f) ? 0 : std::min(9, (int)(ep * 10.0f));
-                                fprintf(fp, "%d", level);
-                            }
-                            fprintf(fp, "\n");
-                            fprintf(fp, "y=%3d ugt:  ", y);
-                            for (int x = 10; x <= 200 && x < scanw; x++) {
-                                const int idx = x + y * scanw;
-                                const float ug = scoreStage.mapUpperGate[idx];
-                                const int level = (ug <= 0.0f) ? 0 : std::min(9, (int)(ug * 10.0f));
-                                fprintf(fp, "%d", level);
-                            }
-                            fprintf(fp, "\n");
-                            fprintf(fp, "y=%3d rs:   ", y);
-                            for (int x = 10; x <= 200 && x < scanw; x++) {
-                                const int idx = x + y * scanw;
-                                const float rs = scoreStage.mapRescueScore[idx];
-                                const int level = (rs <= 0.0f) ? 0 : std::min(9, (int)(rs * 100.0f));
-                                fprintf(fp, "%d", level);
-                            }
-                            fprintf(fp, "\n");
-                        }
-                        fclose(fp);
-                    }
-                }
-            }
+            applyAdditiveRescueScoreBlend(scoreStage, regressionHealth);
 
             // Stage 2: rescue score を適用する。
             // 通常は pass2 (passIndex==3) のみで適用する。pass1 では scan region にテロップが
@@ -6080,174 +6102,7 @@ namespace {
             // スケール合わせ: rescue score は gains の積のみで baselines がなく、
             // 通常 score より値が低い。validAB=true かつ両方正の画素から
             // score/rescue 比の p75 を求め、rescue にそのスケールを掛けてから適用する。
-            if (passIndex == 3 || enableRescue) {
-                fprintf(stderr, "[LogoScan] rescue blending: passIndex=%d enableRescue=%d, starting blend\n", passIndex, (int)enableRescue);
-                const int pixelCount = scanw * scanh;
-
-                // rectGate: アンカー矩形からの距離マップを構築し、遠い画素への rescue 適用を抑制する。
-                // enableRescue (pass1 fallback) と pass2 (passIndex==3) の両方で使用する。
-                const int rescueRectMaxDist = enableRescue ? 48 : 40;
-                const bool useRectGate = rescueAnchorRect.w > 0 && rescueAnchorRect.h > 0;
-                std::vector<int> rectDistMap;
-                if (useRectGate) {
-                    rectDistMap.assign(pixelCount, INT_MAX);
-                    std::queue<int> bfsQ;
-                    for (int y = rescueAnchorRect.y; y < rescueAnchorRect.y + rescueAnchorRect.h && y < scanh; y++) {
-                        for (int x = rescueAnchorRect.x; x < rescueAnchorRect.x + rescueAnchorRect.w && x < scanw; x++) {
-                            if (x >= 0 && y >= 0) {
-                                const int idx = x + y * scanw;
-                                rectDistMap[idx] = 0;
-                                bfsQ.push(idx);
-                            }
-                        }
-                    }
-                    while (!bfsQ.empty()) {
-                        const int cur = bfsQ.front(); bfsQ.pop();
-                        if (rectDistMap[cur] >= rescueRectMaxDist) continue;
-                        const int cx = cur % scanw, cy = cur / scanw;
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dx = -1; dx <= 1; dx++) {
-                                if (!dx && !dy) continue;
-                                const int nx = cx + dx, ny = cy + dy;
-                                if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
-                                const int nidx = nx + ny * scanw;
-                                if (rectDistMap[nidx] > rectDistMap[cur] + 1) {
-                                    rectDistMap[nidx] = rectDistMap[cur] + 1;
-                                    bfsQ.push(nidx);
-                                }
-                            }
-                        }
-                    }
-                    fprintf(stderr, "[LogoScan] rescue rect gate: rect=(%d,%d,%d,%d) maxDist=%d\n",
-                        rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, rescueRectMaxDist);
-                }
-
-                auto computeRescueScaleFactor = [&]() {
-                    std::vector<float> scaleRatios;
-                    scaleRatios.reserve(4096);
-                    static constexpr float kScaleRatioMinScore  = 0.02f;
-                    static constexpr float kScaleRatioMinRescue = 0.005f;
-                    for (int i = 0; i < pixelCount; i++) {
-                        if (!scoreStage.validAB[i]) continue;
-                        const float sc = scoreStage.score[i];
-                        const float rs = scoreStage.mapRescueScore[i];
-                        if (sc >= kScaleRatioMinScore && rs >= kScaleRatioMinRescue) {
-                            scaleRatios.push_back(sc / rs);
-                        }
-                    }
-                    float scaleFactor = 1.0f;
-                    if (!scaleRatios.empty()) {
-                        std::sort(scaleRatios.begin(), scaleRatios.end());
-                        const int idx75 = std::min((int)(scaleRatios.size() * 3 / 4), (int)scaleRatios.size() - 1);
-                        scaleFactor = std::max(1.0f, std::min(scaleRatios[idx75], 4.0f));
-                    }
-                    return std::make_pair(scaleFactor, scaleRatios.size());
-                };
-
-                if (enableRescue) {
-                    // pass1 フォールバック: scaleFactor で rescue score を補正し、
-                    // contaminated 閾値を高めに設定して pass1 rect 近傍のみ救済する。
-                    const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
-                    fprintf(stderr, "[LogoScan] rescue blending (pass1 fallback): scaleRatios.size()=%zu scaleFactor=%.4f\n",
-                        scaleRatioCount, (double)scaleFactor);
-
-                    static constexpr float kRescueBlendWeight       = 0.7f;
-                    static constexpr float kContaminatedScoreThresh = 0.05f;
-                    for (int i = 0; i < pixelCount; i++) {
-                        if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
-                        const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
-                        const float rescueVal = kRescueBlendWeight * rescueScaled;
-                        if (!scoreStage.validAB[i]) {
-                            scoreStage.score[i] = rescueVal;
-                        } else if (scoreStage.score[i] < kContaminatedScoreThresh) {
-                            if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
-                            scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
-                        }
-                    }
-                } else {
-                    // pass2 (passIndex==3): フレームゲート後でも q58/q70 のように
-                    // 回帰 score が細部だけ落ちるケースがあるので、pass1 fallback と同様に
-                    // rescue をスケール補正して使う。ただし上限は低めにして暴れを抑える。
-                    const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
-                    fprintf(stderr, "[LogoScan] rescue blending (pass2): scaleRatios.size()=%zu scaleFactor=%.4f\n",
-                        scaleRatioCount, (double)scaleFactor);
-                    static constexpr float kRescueWeight = 0.65f;
-                    static constexpr float kContaminatedThreshold = 0.03f;
-                    static constexpr float kRescuePromoteRatio = 1.5f;
-                    static constexpr float kRescueBridgeScoreThresh = 0.07f;
-                    static constexpr float kRescueBridgeMinScore = 0.08f;
-                    static constexpr float kRescueBridgeMaxScore = 0.16f;
-                    static constexpr float kRescueBridgeMinRescue = 0.15f;
-                    static constexpr float kRescueBridgeMinUpperGate = 0.95f;
-                    static constexpr float kRescueBridgeConsistencyMax = 0.20f;
-                    static constexpr float kRescueBridgeDiffMax = 0.12f;
-                    static constexpr int   kRescueBridgeNearRadius = 3;
-                    std::vector<uint8_t> acceptedNear(pixelCount, 0);
-                    for (int y = 0; y < scanh; y++) {
-                        for (int x = 0; x < scanw; x++) {
-                            const int idx = x + y * scanw;
-                            if (scoreStage.mapAccepted[idx] <= 0.0f) continue;
-                            const int y0 = std::max(0, y - kRescueBridgeNearRadius);
-                            const int y1 = std::min(scanh - 1, y + kRescueBridgeNearRadius);
-                            const int x0 = std::max(0, x - kRescueBridgeNearRadius);
-                            const int x1 = std::min(scanw - 1, x + kRescueBridgeNearRadius);
-                            for (int ny = y0; ny <= y1; ny++) {
-                                for (int nx = x0; nx <= x1; nx++) {
-                                    acceptedNear[nx + ny * scanw] = 1;
-                                }
-                            }
-                        }
-                    }
-                    int rescuePromotedCount = 0;
-                    int rescueBridgeCount = 0;
-                    for (int i = 0; i < pixelCount; i++) {
-                        if (scoreStage.mapRescueScore[i] <= 0.0f) continue;
-                        if (useRectGate && rectDistMap[i] > rescueRectMaxDist) continue;
-                        const float rescueScaled = std::min(scaleFactor * scoreStage.mapRescueScore[i], 1.0f);
-                        const float rescueVal = kRescueWeight * rescueScaled;
-                        if (!scoreStage.validAB[i]) {
-                            scoreStage.score[i] = rescueVal;
-                            const bool promoteRescueOnly = scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
-                                && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
-                                && acceptedNear[i]
-                                && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
-                                    || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
-                            if (promoteRescueOnly) {
-                                scoreStage.mapAccepted[i] = std::max(scoreStage.mapAccepted[i], rescueVal);
-                                scoreStage.validAB[i] = 1;
-                                rescuePromotedCount++;
-                            }
-                        } else if (scoreStage.score[i] < kContaminatedThreshold || rescueVal > scoreStage.score[i] * kRescuePromoteRatio) {
-                            scoreStage.score[i] = std::max(scoreStage.score[i], rescueVal);
-                        } else {
-                            // pass2 では回帰が成立していても diff/consistency だけが弱く、
-                            // rescue 側だけが下部文字を強く捉えることがある。
-                            const bool weakBase = scoreStage.score[i] < kRescueBridgeScoreThresh
-                                && scoreStage.mapRescueScore[i] >= kRescueBridgeMinRescue
-                                && scoreStage.mapUpperGate[i] >= kRescueBridgeMinUpperGate
-                                && acceptedNear[i]
-                                && (scoreStage.mapConsistencyGain[i] < kRescueBridgeConsistencyMax
-                                    || scoreStage.mapDiffGain[i] < kRescueBridgeDiffMax);
-                            if (weakBase) {
-                                const float rescueExcess = std::max(scoreStage.mapRescueScore[i] - kRescueBridgeMinRescue, 0.0f);
-                                const float rescueFloor = std::min(
-                                    kRescueBridgeMinScore + rescueExcess * 0.45f,
-                                    kRescueBridgeMaxScore);
-                                if (rescueFloor > scoreStage.score[i]) {
-                                    scoreStage.score[i] = rescueFloor;
-                                    rescueBridgeCount++;
-                                }
-                            }
-                        }
-                    }
-                    fprintf(stderr, "[LogoScan] rescue-only promote (pass2): count=%d rescueTh=%.2f upperGateTh=%.2f\n",
-                        rescuePromotedCount, (double)kRescueBridgeMinRescue,
-                        (double)kRescueBridgeMinUpperGate);
-                    fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f nearRadius=%d\n",
-                        rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue,
-                        kRescueBridgeNearRadius);
-                }
-            }
+            applyPass2OrFallbackRescueBlend(scoreStage, enableRescue, rescueAnchorRect);
 
             scoreStage.debugMaxScore = calcPositiveMax(scoreStage.score);
 
