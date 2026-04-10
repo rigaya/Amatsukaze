@@ -2201,6 +2201,7 @@ namespace {
             float provisionalA = 0.0f;
             float provisionalB = 0.0f;
             float provisionalConsistency = 0.0f;
+            bool provisionalLineValid = false;
         };
         std::vector<TracePointConfig> tracePoints;
         std::vector<int> tracePointIndexByOffset;
@@ -5084,6 +5085,7 @@ namespace {
                     rec.provisionalA = provisionalA;
                     rec.provisionalB = provisionalB;
                     rec.provisionalConsistency = (float)provisionalConsistency;
+                    rec.provisionalLineValid = hasProvisionalLine;
                     out.push_back(rec);
                 }
             }
@@ -5735,10 +5737,12 @@ namespace {
                 return tc * tc * (3.0 - 2.0 * tc);
             };
             // 白色拘束逸脱ペナルティ定数:
-            // dev = |A+B-1| = alpha*(1-logoY)
-            // 白系透明ロゴ: alpha<=0.35, logoY>=0.90 → dev<=0.035
-            // 番組グラフィック等のノイズ: alpha>=0.50, logoY<=0.80 → dev>=0.10
+            // limited-range white (bg=235/255=k) を白の基準点とし、
+            // dev = |A*k + B - k| = |(A-1)*k + B| で逸脱を評価する。
+            // 透明白ロゴ: fg=A*bg+B が bg=k で fg≈k なら dev≈0 (白を維持)
+            // 暗いオーバーレイ: bg=k でも fg<k → dev>0 で抑制
             // kWhiteDevThresh でギャップを分離し、kWhiteDevFloor が下限ゲイン。
+            static constexpr double kWhiteDevK      = 235.0 / 255.0;  // limited-range white
             static constexpr double kWhiteDevThresh = 0.08;
             static constexpr double kWhiteDevFloor  = 0.40;
             RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
@@ -5841,9 +5845,9 @@ namespace {
                                 const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness);
                                 opaqueStaticPenalty = 1.0 / penaltyScale;
                             }
-                            // 白色拘束逸脱ペナルティ: dev = |A+B-1| = alpha*(1-logoY)
-                            // 白系透明局ロゴは dev ≈ 0 で影響なし。不透明ノイズは dev が大きく抑制される。
-                            const double whiteDeviation = std::abs((double)A + B - 1.0);
+                            // 白色拘束逸脱ペナルティ: limited-range white (235/255) での回帰残差。
+                            // fg=A*bg+B が bg=k=235/255 で fg≈k なら dev≈0、逸脱するほど抑制。
+                            const double whiteDeviation = std::abs((double)A * kWhiteDevK + B - kWhiteDevK);
                             const double whiteConstraintGain = kWhiteDevFloor + (1.0 - kWhiteDevFloor)
                                 * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation) / kWhiteDevThresh));
                             scoreStage.mapDiffGain[i] = (float)diffGain;
@@ -5901,8 +5905,8 @@ namespace {
                     const float alphaGainNew = std::min(alphaGainOrig, alphaGainNeighbor);
                     if (alphaGainNew >= alphaGainOrig) continue;
                     scoreStage.mapAlphaGain[i] = alphaGainNew;
-                    // mapA/mapB から白色拘束逸脱ペナルティを再計算する。
-                    const double whiteDeviation3x3 = std::abs((double)scoreStage.mapA[i] + scoreStage.mapB[i] - 1.0);
+                    // mapA/mapB から白色拘束逸脱ペナルティを再計算する（235/255 評価点）。
+                    const double whiteDeviation3x3 = std::abs((double)scoreStage.mapA[i] * kWhiteDevK + scoreStage.mapB[i] - kWhiteDevK);
                     const float whiteConstraintGain3x3 = (float)(kWhiteDevFloor + (1.0 - kWhiteDevFloor)
                         * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation3x3) / kWhiteDevThresh)));
                     const float d = scoreStage.mapDiffGain[i]
@@ -6513,12 +6517,15 @@ namespace {
                 drawCross(pxRaw, pyRaw, { { 170, 176, 188 } });
                 drawSquareMarker(pxAdj, pyAdj, color);
                 // 回帰線の描画 (赤線)
-                const float regYNorm0 = std::max(0.0f, std::min(1.0f, rep.provisionalB));
-                const float regYNorm1 = std::max(0.0f, std::min(1.0f, rep.provisionalA + rep.provisionalB));
+                if (!rep.provisionalLineValid) {
+                    continue;
+                }
+                const float regYNorm0 = rep.provisionalB;
+                const float regYNorm1 = rep.provisionalA + rep.provisionalB;
                 const int regPx0 = plotX0;
-                const int regPy0 = plotY1 - ClampInt((int)std::round(regYNorm0 * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                const int regPy0 = plotY1 - (int)std::round(regYNorm0 * (plotY1 - plotY0));
                 const int regPx1 = plotX1;
-                const int regPy1 = plotY1 - ClampInt((int)std::round(regYNorm1 * (plotY1 - plotY0)), 0, plotY1 - plotY0);
+                const int regPy1 = plotY1 - (int)std::round(regYNorm1 * (plotY1 - plotY0));
                 drawLine(regPx0, regPy0, regPx1, regPy1, { { 255, 0, 0 } }, 0.8f);
             }
 
