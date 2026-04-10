@@ -360,6 +360,18 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "consistgain", AddInfixBeforeExtension(job.ScoreImagePath, ".consistgain"), out path))
             {
             }
+            else if (TryResolveStagePath(kind, "bgvargain", AddInfixBeforeExtension(job.ScoreImagePath, ".bgvargain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "iswall", AddInfixBeforeExtension(job.ScoreImagePath, ".iswall"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "isinterior", AddInfixBeforeExtension(job.ScoreImagePath, ".isinterior"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "uppergatefilled", AddInfixBeforeExtension(job.ScoreImagePath, ".uppergatefilled"), out path))
+            {
+            }
             else if (TryResolveStagePath(kind, "traceplot", AddInfixBeforeExtension(job.BinaryImagePath, ".traceplot"), out path))
             {
             }
