@@ -2313,6 +2313,8 @@ namespace {
             std::vector<float> mapTemporalGain;
             std::vector<float> mapOpaquePenalty;
             std::vector<float> mapOpaqueStaticPenalty;
+            std::vector<float> mapLineFitGain;
+            std::vector<float> mapDominantResidualPenalty;
             std::vector<float> mapBranchRescueScore;
             std::vector<float> mapBranchContaminationGain;
             std::vector<float> mapBranchSupportGain;
@@ -2363,6 +2365,8 @@ namespace {
                 mapTemporalGain.assign(n, 0.0f);
                 mapOpaquePenalty.assign(n, 0.0f);
                 mapOpaqueStaticPenalty.assign(n, 0.0f);
+                mapLineFitGain.assign(n, 0.0f);
+                mapDominantResidualPenalty.assign(n, 0.0f);
                 mapBranchRescueScore.assign(n, 0.0f);
                 mapBranchContaminationGain.assign(n, 0.0f);
                 mapBranchSupportGain.assign(n, 0.0f);
@@ -2426,6 +2430,8 @@ namespace {
             std::string temporalGain;
             std::string opaquePenalty;
             std::string opaqueStaticPenalty;
+            std::string lineFitGain;
+            std::string dominantResidualPenalty;
             std::string tracePlot;
             // 空間edge時系列統計デバッグパス
             std::string edgePresence;
@@ -3443,6 +3449,8 @@ namespace {
             out.temporalGain = addSuffixBeforeExtension(base.temporalGain, suffix);
             out.opaquePenalty = addSuffixBeforeExtension(base.opaquePenalty, suffix);
             out.opaqueStaticPenalty = addSuffixBeforeExtension(base.opaqueStaticPenalty, suffix);
+            out.lineFitGain = addSuffixBeforeExtension(base.lineFitGain, suffix);
+            out.dominantResidualPenalty = addSuffixBeforeExtension(base.dominantResidualPenalty, suffix);
             out.tracePlot = addSuffixBeforeExtension(base.tracePlot, suffix);
             out.edgePresence = addSuffixBeforeExtension(base.edgePresence, suffix);
             out.edgeMean = addSuffixBeforeExtension(base.edgeMean, suffix);
@@ -3560,6 +3568,8 @@ namespace {
                 { &path.temporalGain, &score.mapTemporalGain, 0.0f, 1.0f },
                 { &path.opaquePenalty, &score.mapOpaquePenalty, 0.0f, 1.0f },
                 { &path.opaqueStaticPenalty, &score.mapOpaqueStaticPenalty, 0.0f, 1.0f },
+                { &path.lineFitGain, &score.mapLineFitGain, 0.0f, 1.0f },
+                { &path.dominantResidualPenalty, &score.mapDominantResidualPenalty, 0.0f, 1.0f },
             };
             for (const auto& m : validRangeMaps) {
                 float minv = 0.0f;
@@ -3683,7 +3693,7 @@ namespace {
                 const std::string summaryCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.summary.csv");
                 FILE* fsum = fopen(summaryCsvPath.c_str(), "w");
                 if (fsum != nullptr) {
-                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,dominant_mask,dominant_mask_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,bin_fg_p10,bin_fg_p90,bin_low_weight_frac,bin_negative_weight_frac,bin_diag_weight_frac,bin_total_weight,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,score,accepted_score\n");
+                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,dominant_mask,dominant_mask_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,bin_fg_p10,bin_fg_p90,bin_low_weight_frac,bin_negative_weight_frac,bin_diag_weight_frac,bin_total_weight,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,line_fit_gain,dominant_residual_penalty,score,accepted_score\n");
                     for (auto& row : rows) {
                         float p50 = 0.0f;
                         float p90 = 0.0f;
@@ -3764,6 +3774,8 @@ namespace {
                         float bgvar = 0.0f;
                         float transition = 0.0f;
                         float keeprate = 0.0f;
+                        float lineFitGain = 0.0f;
+                        float dominantResidualPenalty = 0.0f;
                         float scorev = 0.0f;
                         float acceptedScore = 0.0f;
                         if (off >= 0 && off < (int)statsForDebug.size() && off < (int)score.validAB.size() && score.validAB[off]) {
@@ -3776,6 +3788,8 @@ namespace {
                             bgvar = (off < (int)score.mapBgVar.size()) ? score.mapBgVar[off] : 0.0f;
                             transition = (off < (int)score.mapTransitionRate.size()) ? score.mapTransitionRate[off] : 0.0f;
                             keeprate = (off < (int)score.mapKeepRate.size()) ? score.mapKeepRate[off] : 0.0f;
+                            lineFitGain = (off < (int)score.mapLineFitGain.size()) ? score.mapLineFitGain[off] : 0.0f;
+                            dominantResidualPenalty = (off < (int)score.mapDominantResidualPenalty.size()) ? score.mapDominantResidualPenalty[off] : 0.0f;
                             scorev = (off < (int)score.score.size()) ? score.score[off] : 0.0f;
                             acceptedScore = (off < (int)score.mapAccepted.size()) ? score.mapAccepted[off] : 0.0f;
                         }
@@ -3816,6 +3830,8 @@ namespace {
                             << bgvar << ','
                             << transition << ','
                             << keeprate << ','
+                            << lineFitGain << ','
+                            << dominantResidualPenalty << ','
                             << scorev << ','
                             << acceptedScore
                             << '\n';
@@ -3850,7 +3866,7 @@ namespace {
                 const std::string pixelCsvPath = replaceExtensionWithSuffix(path.score, ".pixeldump.csv");
                 FILE* fpx = fopen(pixelCsvPath.c_str(), "w");
                 if (fpx != nullptr) {
-                    fprintf(fpx, "x,y,validAB,score,rescueScore,branchRescueScore,diffGain,consistencyGain,alphaGain,logoGain,extremeGain,temporalGain,opaquePenalty,opaqueStaticPenalty,alpha,branchContamGain,branchSupportGain,branchDiffGain,branchConsistencyGain,branchAlphaGain,presenceGain,magGain,upperGate,consistGain,bgVarGain\n");
+                    fprintf(fpx, "x,y,validAB,score,rescueScore,branchRescueScore,diffGain,consistencyGain,alphaGain,logoGain,extremeGain,temporalGain,opaquePenalty,opaqueStaticPenalty,lineFitGain,dominantResidualPenalty,alpha,branchContamGain,branchSupportGain,branchDiffGain,branchConsistencyGain,branchAlphaGain,presenceGain,magGain,upperGate,consistGain,bgVarGain\n");
                     for (int y = 0; y < scanh; y++) {
                         for (int x = 0; x < scanw; x++) {
                             const int off = x + y * scanw;
@@ -3866,6 +3882,8 @@ namespace {
                             const float tg  = (off < (int)score.mapTemporalGain.size()) ? score.mapTemporalGain[off] : 0.0f;
                             const float op  = (off < (int)score.mapOpaquePenalty.size()) ? score.mapOpaquePenalty[off] : 0.0f;
                             const float osp = (off < (int)score.mapOpaqueStaticPenalty.size()) ? score.mapOpaqueStaticPenalty[off] : 0.0f;
+                            const float lfg = (off < (int)score.mapLineFitGain.size()) ? score.mapLineFitGain[off] : 0.0f;
+                            const float drp = (off < (int)score.mapDominantResidualPenalty.size()) ? score.mapDominantResidualPenalty[off] : 0.0f;
                             const float al  = (off < (int)score.mapAlpha.size()) ? score.mapAlpha[off] : 0.0f;
                             const float brs = (off < (int)score.mapBranchRescueScore.size()) ? score.mapBranchRescueScore[off] : 0.0f;
                             const float bcg = (off < (int)score.mapBranchContaminationGain.size()) ? score.mapBranchContaminationGain[off] : 0.0f;
@@ -3881,8 +3899,8 @@ namespace {
                             float bgvg = 0.0f;
                             const float denom = pg * mg * ug * csg;
                             if (denom > 1e-8f && rs > 0.0f) bgvg = rs / denom;
-                            fprintf(fpx, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
-                                x, y, vab ? 1 : 0, sc, rs, brs, dg, cg, ag, lg, eg, tg, op, osp, al, bcg, bsg, bdg, bkg, bag, pg, mg, ug, csg, bgvg);
+                            fprintf(fpx, "%d,%d,%d,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n",
+                                x, y, vab ? 1 : 0, sc, rs, brs, dg, cg, ag, lg, eg, tg, op, osp, lfg, drp, al, bcg, bsg, bdg, bkg, bag, pg, mg, ug, csg, bgvg);
                         }
                     }
                     fclose(fpx);
@@ -4067,6 +4085,8 @@ namespace {
             basePath.temporalGain = addSuffixBeforeExtension(basePath.score, ".temporalgain");
             basePath.opaquePenalty = addSuffixBeforeExtension(basePath.score, ".opaquepenalty");
             basePath.opaqueStaticPenalty = addSuffixBeforeExtension(basePath.score, ".opaquestaticpenalty");
+            basePath.lineFitGain = addSuffixBeforeExtension(basePath.score, ".linefitgain");
+            basePath.dominantResidualPenalty = addSuffixBeforeExtension(basePath.score, ".domresidualpenalty");
             basePath.tracePlot = addSuffixBeforeExtension(basePath.binary, ".traceplot");
             basePath.edgePresence = addSuffixBeforeExtension(basePath.score, ".edgepresence");
             basePath.edgeMean     = addSuffixBeforeExtension(basePath.score, ".edgemean");
@@ -4897,6 +4917,53 @@ namespace {
             out.auxMeanDiff = (float)auxMeanDiff;
             out.auxConsistency = (float)auxConsistency;
             return true;
+        }
+
+        float calcDominantResidualPenalty(const StatsPassBuffers& statsPass, const int off, const float A, const float B) const {
+            if (off < 0 || off >= scanw * scanh || !std::isfinite(A) || !std::isfinite(B)) {
+                return 0.0f;
+            }
+            auto sat01 = [](const double v) {
+                return std::max(0.0, std::min(1.0, v));
+            };
+
+            double totalWeight = 0.0;
+            double dominantWeight = 0.0;
+            double dominantResidual = 0.0;
+            double badResidualWeight = 0.0;
+            for (int b = 0; b < kHistBins; b++) {
+                const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                if (bin.count == 0) continue;
+
+                double avgFg = 0.0;
+                double avgBg = 0.0;
+                double weightScale = 1.0;
+                GetBinRepresentative(bin, avgFg, avgBg, weightScale);
+                const double gompertzWeight = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
+                if (gompertzWeight <= 1e-8) continue;
+
+                const double countWeight = (double)bin.count * gompertzWeight;
+                const double predBg = (double)A * avgFg + B;
+                const double residual = std::abs(avgBg - predBg);
+                totalWeight += countWeight;
+                if (countWeight > dominantWeight) {
+                    dominantWeight = countWeight;
+                    dominantResidual = residual;
+                }
+                if (residual > 0.080) {
+                    badResidualWeight += countWeight;
+                }
+            }
+            if (totalWeight < 16.0 || dominantWeight <= 0.0) {
+                return 0.0f;
+            }
+
+            const double dominantWeightFrac = dominantWeight / totalWeight;
+            const double badResidualFrac = badResidualWeight / totalWeight;
+            const double dominantGain = sat01((dominantWeightFrac - 0.45) / 0.20);
+            const double dominantResidualGain = sat01((dominantResidual - 0.060) / 0.080);
+            const double badResidualGain = sat01((badResidualFrac - 0.45) / 0.35);
+            return (float)(dominantGain * dominantResidualGain * badResidualGain);
         }
 
         // trust は「この provisional line をどこまで信用してよいか」を表す係数。
@@ -5850,6 +5917,8 @@ namespace {
                             const double whiteDeviation = std::abs((double)A * kWhiteDevK + B - kWhiteDevK);
                             const double whiteConstraintGain = kWhiteDevFloor + (1.0 - kWhiteDevFloor)
                                 * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation) / kWhiteDevThresh));
+                            const float dominantResidualPenalty = calcDominantResidualPenalty(statsPass, i, A, B);
+                            const float lineFitGain = 1.0f / (1.0f + 2.5f * dominantResidualPenalty);
                             scoreStage.mapDiffGain[i] = (float)diffGain;
                             scoreStage.mapDiffGainRaw[i] = (float)diffGainRaw;
                             scoreStage.mapResidualGain[i] = (float)residualGain;
@@ -5861,7 +5930,9 @@ namespace {
                             scoreStage.mapTemporalGain[i] = (float)temporalGain;
                             scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
                             scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.15 + 0.85 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty * whiteConstraintGain);
+                            scoreStage.mapLineFitGain[i] = lineFitGain;
+                            scoreStage.mapDominantResidualPenalty[i] = dominantResidualPenalty;
+                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.15 + 0.85 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty * whiteConstraintGain * lineFitGain);
                             if (d <= 0.0f) continue;
                             scoreStage.mapAccepted[i] = d;
                             scoreStage.score[i] = d;
@@ -5917,7 +5988,8 @@ namespace {
                         * scoreStage.mapTemporalGain[i]
                         * scoreStage.mapOpaquePenalty[i]
                         * scoreStage.mapOpaqueStaticPenalty[i]
-                        * whiteConstraintGain3x3;
+                        * whiteConstraintGain3x3
+                        * scoreStage.mapLineFitGain[i];
                     scoreStage.mapAccepted[i] = (d > 0.0f) ? d : 0.0f;
                     scoreStage.score[i] = (d > 0.0f) ? d : 0.0f;
                 }

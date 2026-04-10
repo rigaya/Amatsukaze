@@ -324,6 +324,12 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "opaquestaticpenalty", AddInfixBeforeExtension(job.ScoreImagePath, ".opaquestaticpenalty"), out path))
             {
             }
+            else if (TryResolveStagePath(kind, "linefitgain", AddInfixBeforeExtension(job.ScoreImagePath, ".linefitgain"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "domresidualpenalty", AddInfixBeforeExtension(job.ScoreImagePath, ".domresidualpenalty"), out path))
+            {
+            }
             else if (TryResolveStagePath(kind, "edgepresence", AddInfixBeforeExtension(job.ScoreImagePath, ".edgepresence"), out path))
             {
             }
