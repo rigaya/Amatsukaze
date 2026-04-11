@@ -3347,7 +3347,15 @@ namespace {
             const double inter = (double)iw * ih;
             const double uni = pass1Area + pass2Area - inter;
             const double iou = (uni > 1e-6) ? (inter / uni) : 0.0;
-            const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20);
+            const bool sameBand =
+                std::abs(t2 - t1) <= std::max(4, (int)std::round(pass1RectLocal.h * 0.18)) &&
+                std::abs(b2 - b1) <= std::max(8, (int)std::round(pass1RectLocal.h * 0.55));
+            const bool horizontalExpansion =
+                wRatio > 1.20 &&
+                hRatio <= 1.18 &&
+                sameBand &&
+                iou >= 0.50;
+            const bool tooLarge = (areaRatio > 1.45) && (wRatio > 1.20 || hRatio > 1.20) && !horizontalExpansion;
             const bool tooShift = (areaRatio > 1.20) && (iou < 0.35);
             return tooLarge || tooShift;
         }
@@ -7503,7 +7511,8 @@ namespace {
                 const bool nearHorizontal = (overlapH >= nearHMin1 && gapX <= std::max(6, (int)std::round(curAnchorW * 0.20)))
                     || (overlapH >= nearHMin2 && gapX <= std::max(10, (int)std::round(curAnchorW * 0.80)));
                 const int nearVMin1 = std::max(2, (int)std::round(std::min(comp.compW, curAnchorW) * 0.15));
-                const bool nearVertical = nearVMin1 && gapY <= std::max(6, (int)std::round(curAnchorH * 0.15));
+                const bool nearVertical = overlapW >= nearVMin1 &&
+                    gapY <= std::max(6, (int)std::round(curAnchorH * 0.15));
                 const bool nearDiagonal = gapX <= std::max(6, (int)std::round(curAnchorW * 0.12)) &&
                     gapY <= std::max(4, (int)std::round(curAnchorH * 0.08));
                 const bool nearAnchor = nearHorizontal || nearVertical ||
@@ -7794,6 +7803,8 @@ namespace {
                 const auto& anchor = comps[anchorIdx];
                 const int anchorW = std::max(1, anchor.w);
                 const int anchorH = std::max(1, anchor.h);
+                const int preW = hasPreRect ? std::max(1, preMaxX - preMinX + 1) : anchorW;
+                const int preH = hasPreRect ? std::max(1, preMaxY - preMinY + 1) : anchorH;
                 const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
                 // prune の keep 判定は anchor に対する相対量を基本にしつつ、
                 // 極端に弱いケースでも完全なノイズ拾いにならない程度の最小値だけ持たせる。
@@ -7805,7 +7816,9 @@ namespace {
                 const float minSignalAccepted = std::max(5.0e-4f, anchor.meanAccepted * 0.20f);
                 const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
                 // 多行ロゴ(放送大学等)の下段行を拾うため、下方向の許容距離を大きく取る。
-                const int maxBelowAnchor = std::max(40, (int)std::round(anchorH * 2.5));
+                const int maxBelowAnchor = std::max(
+                    std::max(40, (int)std::round(anchorH * 2.5)),
+                    (int)std::round(preH * 0.85));
                 std::vector<uint8_t> keepComp(comps.size(), 0);
                 keepComp[anchorIdx] = 1;
                 bool changed = true;
@@ -7840,6 +7853,21 @@ namespace {
                             (c.meanAccepted >= minSignalAccepted || c.meanConsistency >= minSignalConsistency);
                         const bool signalGateOk = signalOk || sameRowSignalRescue;
                         if (!yGuard || !shapeOk || !signalGateOk) continue;
+                        const bool farSideComp =
+                            (c.maxX < anchor.minX - std::max(24, (int)std::round(preW * 0.28)) ||
+                             c.minX > anchor.maxX + std::max(28, (int)std::round(preW * 0.28)));
+                        const bool weakUpperSideNoise =
+                            farSideComp &&
+                            c.maxY <= anchor.maxY + std::max(6, (int)std::round(anchorH * 0.40)) &&
+                            c.meanAccepted < std::max(0.0025f, minSignalAccepted * 0.80f) &&
+                            c.meanAlpha < std::max(0.15f, anchor.meanAlpha * 0.60f);
+                        if (weakUpperSideNoise) continue;
+                        const bool weakSideNoise =
+                            farSideComp &&
+                            c.meanAccepted < minSignalAccepted &&
+                            c.meanConsistency < minSignalConsistency &&
+                            c.meanAlpha < std::max(0.12f, anchor.meanAlpha * 0.45f);
+                        if (weakSideNoise) continue;
                         bool nearKept = false;
                         bool lowerRowBridge = false;
                         for (int k = 0; k < (int)comps.size(); k++) {
@@ -7852,7 +7880,9 @@ namespace {
                             // q17 改善意図:
                             // 横方向 near 判定の gapX が広すぎると、遠方の弱成分(左側靄)が連鎖 keep される。
                             // 成分の信号強度に応じて許容距離を可変化し、弱信号は短距離のみ許可する。
-                            const int nearHGapBase = std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8));
+                            const int nearHGapBase = std::max(
+                                std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8)),
+                                ClampInt((int)std::round(preW * 0.90), 20, 36));
                             const float scoreRatio = c.meanScore / std::max(1.0e-6f, minSignalScore);
                             const float peakRatio = c.peakScore / std::max(1.0e-6f, minSignalPeak);
                             const float acceptedRatio = c.meanAccepted / std::max(1.0e-6f, minSignalAccepted);
@@ -8479,11 +8509,15 @@ namespace {
                     const bool sizeGuardOk =
                         mergedRect.w <= (int)(scanw * 0.88) &&
                         mergedRect.h <= (int)(scanh * 0.62);
+                    const bool farAboveSeed =
+                        comp.y + comp.h <= seed.y &&
+                        gapY > std::max(20, (int)std::round(seed.h * 0.70));
                     const bool accepted =
                         (overlap || nearHorizontal || nearVertical || nearDiagonal) &&
                         (withinSeedCenterGuard || withinFinalCenterGuard) &&
                         smallCompAllowed &&
-                        sizeGuardOk;
+                        sizeGuardOk &&
+                        !farAboveSeed;
                     if (!accepted) continue;
                     used[i] = 1;
                     outRect = mergedRect;
@@ -8778,11 +8812,15 @@ namespace {
                 const bool sizeGuardOk =
                     mergedRect.w <= (int)(scanw * 0.88) &&
                     mergedRect.h <= (int)(scanh * 0.62);
+                const bool farAboveBest =
+                    comp.y + comp.h <= best.y &&
+                    gapY > std::max(20, (int)std::round(best.h * 0.70));
                 bool accepted = true;
                 if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
                 if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
                 if (!smallCompAllowed) accepted = false;
                 if (!sizeGuardOk) accepted = false;
+                if (farAboveBest) accepted = false;
                 if (detailedDebug) {
                     rectMergeDebug.push_back(RectMergeDebug{
                         mergeIter,
