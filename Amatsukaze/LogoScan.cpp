@@ -2285,6 +2285,7 @@ namespace {
         std::vector<float> provisionalLineB;
         std::vector<float> provisionalLineConsistency;
         std::vector<float> provisionalLineStdDiff;
+        std::vector<uint8_t> lowBgLeftReweightEligible;
         bool sampleResidualReweightActive = false;
 
         struct ScoreStageBuffers {
@@ -2649,7 +2650,7 @@ namespace {
         AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
-        void writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
+        void writeTracePlotBitmap(const std::string& path, const ScoreStageBuffers& scoreStage, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
         void setRectDetectFail(const LogoRectDetectFail fail) {
             if (fail != LogoRectDetectFail::None && rectDetectFail == LogoRectDetectFail::None) {
                 rectDetectFail = fail;
@@ -3051,6 +3052,7 @@ namespace {
             provisionalLineB.clear();
             provisionalLineConsistency.clear();
             provisionalLineStdDiff.clear();
+            lowBgLeftReweightEligible.clear();
             sampleResidualReweightActive = false;
             debugScore = ScoreStageBuffers{};
             debugBinary.clear();
@@ -3703,7 +3705,7 @@ namespace {
                 const std::string summaryCsvPath = replaceExtensionWithSuffix(path.binary, ".trace.summary.csv");
                 FILE* fsum = fopen(summaryCsvPath.c_str(), "w");
                 if (fsum != nullptr) {
-                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,dominant_mask,dominant_mask_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,bin_fg_p10,bin_fg_p90,bin_low_weight_frac,bin_negative_weight_frac,bin_diag_weight_frac,bin_total_weight,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,line_fit_gain,dominant_residual_penalty,split_branch_gain,split_branch_penalty,score,accepted_score\n");
+                    fprintf(fsum, "point_id,x,y,abs_x,abs_y,frames,accepted,accept_rate,dominant_mask,dominant_mask_rate,reject_bg_fail,reject_extreme,reject_pass3_mask,reject_edge,mean_fg_bg_diff,fg_bg_diff_p50,fg_bg_diff_p90,bin_fg_p10,bin_fg_p90,bin_low_weight_frac,bin_negative_weight_frac,bin_diag_weight_frac,bin_total_weight,A,B,alpha,logoy,consistency,fgvar,bgvar,transition,keeprate,line_fit_gain,dominant_residual_penalty,split_branch_gain,split_branch_penalty,score,accepted_score,lowbg_reweight_reason,lowbg_reweight_fg_range,lowbg_reweight_low_frac,lowbg_reweight_low_fg_range,lowbg_reweight_left_frac,lowbg_reweight_weight_scale,lowbg_reweight_A,lowbg_reweight_B,lowbg_reweight_alpha,lowbg_reweight_logoy,lowbg_reweight_alphagain,lowbg_reweight_score,lowbg_reweight_highbg_residual_ratio\n");
                     for (auto& row : rows) {
                         float p50 = 0.0f;
                         float p90 = 0.0f;
@@ -3790,6 +3792,7 @@ namespace {
                         float splitBranchPenalty = 0.0f;
                         float scorev = 0.0f;
                         float acceptedScore = 0.0f;
+                        LowBgResidualReweightCandidate lowBgReweight{};
                         if (off >= 0 && off < (int)statsForDebug.size() && off < (int)score.validAB.size() && score.validAB[off]) {
                             A = (off < (int)score.mapA.size()) ? score.mapA[off] : 0.0f;
                             B = (off < (int)score.mapB.size()) ? score.mapB[off] : 0.0f;
@@ -3806,6 +3809,7 @@ namespace {
                             splitBranchPenalty = (off < (int)score.mapSplitBranchPenalty.size()) ? score.mapSplitBranchPenalty[off] : 0.0f;
                             scorev = (off < (int)score.score.size()) ? score.score[off] : 0.0f;
                             acceptedScore = (off < (int)score.mapAccepted.size()) ? score.mapAccepted[off] : 0.0f;
+                            lowBgReweight = analyzeLowBgResidualReweightCandidate(traceBinRepresentatives, score, off, row.pointId);
                         }
                         const double meanDiff = row.accepted > 0 ? row.sumDiff / row.accepted : 0.0;
                         const double acceptRate = row.frames > 0 ? (double)row.accepted / row.frames : 0.0;
@@ -3849,7 +3853,20 @@ namespace {
                             << splitBranchGain << ','
                             << splitBranchPenalty << ','
                             << scorev << ','
-                            << acceptedScore
+                            << acceptedScore << ','
+                            << lowBgReweight.reason << ','
+                            << lowBgReweight.fgRange << ','
+                            << lowBgReweight.lowBgWeightFrac << ','
+                            << lowBgReweight.lowBgFgRange << ','
+                            << lowBgReweight.lowBgLeftWeightFrac << ','
+                            << lowBgReweight.meanWeightScale << ','
+                            << lowBgReweight.reweightA << ','
+                            << lowBgReweight.reweightB << ','
+                            << lowBgReweight.reweightAlpha << ','
+                            << lowBgReweight.reweightLogoY << ','
+                            << lowBgReweight.reweightAlphaGain << ','
+                            << lowBgReweight.reweightScore << ','
+                            << lowBgReweight.highBgResidualRatio
                             << '\n';
                         fputs(ss.str().c_str(), fsum);
                     }
@@ -3872,7 +3889,7 @@ namespace {
                 }
 
                 if (!path.tracePlot.empty()) {
-                    writeTracePlotBitmap(path.tracePlot, traceRecords, traceBinRepresentatives);
+                    writeTracePlotBitmap(path.tracePlot, score, traceRecords, traceBinRepresentatives);
                 }
             }
 
@@ -4815,6 +4832,271 @@ namespace {
             float auxConsistency = 0.0f;
         };
 
+        struct LowBgResidualReweightCandidate {
+            bool valid = false;
+            const char *reason = "not_evaluated";
+            float fgRange = 0.0f;
+            float lowBgWeightFrac = 0.0f;
+            float lowBgFgRange = 0.0f;
+            float lowBgLeftWeightFrac = 0.0f;
+            float baseA = 0.0f;
+            float baseB = 0.0f;
+            float baseAlpha = 0.0f;
+            float baseLogoY = 0.0f;
+            float baseAlphaGain = 0.0f;
+            float baseScore = 0.0f;
+            float reweightA = 0.0f;
+            float reweightB = 0.0f;
+            float reweightAlpha = 0.0f;
+            float reweightLogoY = 0.0f;
+            float reweightAlphaGain = 0.0f;
+            float reweightScore = 0.0f;
+            float highBgResidualRatio = 0.0f;
+            float meanWeightScale = 1.0f;
+        };
+
+        static double CalcLogoAlphaGain(const double alpha, const std::function<double(double)>& smoothstep) {
+            if (alpha <= 0.03) return 0.0;
+            if (alpha < 0.15)  return smoothstep((alpha - 0.03) / 0.12);
+            if (alpha <= 0.35) return 1.0;
+            if (alpha < 0.75)  return 1.0 - smoothstep((alpha - 0.35) / 0.40);
+            return 0.0;
+        }
+
+        static double CalcWhiteConstraintGain(const double A, const double B) {
+            static constexpr double kWhiteDevK = 235.0 / 255.0;
+            static constexpr double kWhiteDevThresh = 0.08;
+            static constexpr double kWhiteDevFloor = 0.40;
+            const double whiteDeviation = std::abs(A * kWhiteDevK + B - kWhiteDevK);
+            return kWhiteDevFloor + (1.0 - kWhiteDevFloor)
+                * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation) / kWhiteDevThresh));
+        }
+
+        LowBgResidualReweightCandidate analyzeLowBgResidualReweightCandidate(const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives, const ScoreStageBuffers& scoreStage, const int off, const int pointId) const {
+            LowBgResidualReweightCandidate out{};
+            if (off < 0 || off >= scanw * scanh || off >= (int)scoreStage.validAB.size() || !scoreStage.validAB[off]) {
+                out.reason = "invalid";
+                return out;
+            }
+
+            auto sat01 = [](const double v) {
+                return std::max(0.0, std::min(1.0, v));
+            };
+            auto smoothstep = [](const double t) {
+                const double tc = std::max(0.0, std::min(1.0, t));
+                return tc * tc * (3.0 - 2.0 * tc);
+            };
+
+            struct BinPoint {
+                double fg = 0.0;
+                double bg = 0.0;
+                double w = 0.0;
+                int histBin = 0;
+            };
+            std::vector<BinPoint> bins;
+            bins.reserve(kHistBins);
+            double totalW = 0.0;
+            double lowW = 0.0;
+            double lowLeftW = 0.0;
+            for (const auto& rep : traceBinRepresentatives) {
+                if (rep.pointId != pointId || rep.count <= 0) continue;
+                const double fg = rep.avgFg;
+                // This candidate models an additional raw-sample reweighting pass.
+                // Use raw bg here; adjusted bg has already been affected by the
+                // existing residual reweighting and can hide the low-bg diagonal branch.
+                const double bg = rep.rawBg;
+                const double w = rep.gompertzWeight;
+                if (w <= 1e-8 || !std::isfinite(fg) || !std::isfinite(bg)) continue;
+                bins.push_back(BinPoint{ fg, bg, w, rep.histBin });
+                totalW += w;
+            }
+            if (totalW < 10.0 || bins.size() < 12) {
+                out.reason = "too_few_bins";
+                return out;
+            }
+
+            auto weightedPercentile = [](std::vector<std::pair<double, double>> vals, const double ratio) {
+                if (vals.empty()) return 0.0;
+                std::sort(vals.begin(), vals.end(), [](const auto& a, const auto& b) {
+                    return a.first < b.first;
+                });
+                double total = 0.0;
+                for (const auto& v : vals) total += std::max(0.0, v.second);
+                if (total <= 1e-8) return vals.front().first;
+                const double target = total * std::max(0.0, std::min(1.0, ratio));
+                double accum = 0.0;
+                for (const auto& v : vals) {
+                    accum += std::max(0.0, v.second);
+                    if (accum >= target) return v.first;
+                }
+                return vals.back().first;
+            };
+
+            std::vector<std::pair<double, double>> fgVals;
+            std::vector<std::pair<double, double>> lowFgVals;
+            fgVals.reserve(bins.size());
+            lowFgVals.reserve(bins.size());
+            const double baseA = scoreStage.mapA[off];
+            const double baseB = scoreStage.mapB[off];
+            out.baseA = (float)baseA;
+            out.baseB = (float)baseB;
+            out.baseAlpha = scoreStage.mapAlpha[off];
+            out.baseLogoY = scoreStage.mapLogoY[off];
+            out.baseAlphaGain = scoreStage.mapAlphaGain[off];
+            out.baseScore = scoreStage.mapAccepted[off];
+            for (const auto& p : bins) {
+                fgVals.push_back({ p.fg, p.w });
+                if (p.bg < 0.25) {
+                    lowW += p.w;
+                    lowFgVals.push_back({ p.fg, p.w });
+                    const double residual = p.bg - (baseA * p.fg + baseB);
+                    if (residual > 0.0) {
+                        lowLeftW += p.w;
+                    }
+                }
+            }
+            out.lowBgWeightFrac = (float)(lowW / std::max(totalW, 1e-8));
+            out.lowBgLeftWeightFrac = (float)(lowLeftW / std::max(totalW, 1e-8));
+            out.fgRange = (float)(weightedPercentile(fgVals, 0.90) - weightedPercentile(fgVals, 0.10));
+            out.lowBgFgRange = (float)(weightedPercentile(lowFgVals, 0.90) - weightedPercentile(lowFgVals, 0.10));
+
+            if (out.fgRange < 0.45f) {
+                out.reason = "fg_range_small";
+                return out;
+            }
+            if (out.lowBgWeightFrac < 0.18f || lowFgVals.size() < 4) {
+                out.reason = "low_bg_sparse";
+                return out;
+            }
+            if (out.lowBgFgRange < 0.15f) {
+                out.reason = "low_bg_fg_range_small";
+                return out;
+            }
+            if (out.lowBgLeftWeightFrac < 0.10f) {
+                out.reason = "left_branch_sparse";
+                return out;
+            }
+            if (out.baseAlphaGain > 0.4f) {
+                out.reason = "base_alpha_strong";
+                return out;
+            }
+
+            double sumW = 0.0;
+            double sumF = 0.0;
+            double sumB = 0.0;
+            double sumF2 = 0.0;
+            double sumB2 = 0.0;
+            double sumFB = 0.0;
+            double rawAbsResidualW = 0.0;
+            double newAbsResidualW = 0.0;
+            double residualEvalW = 0.0;
+            double scaledWeightSum = 0.0;
+            for (const auto& p : bins) {
+                const double residual = p.bg - (baseA * p.fg + baseB);
+                const double lowBgGain = sat01((0.25 - p.bg) / 0.12);
+                const double sideGain = sat01((residual + 0.005) / 0.045);
+                const double reweight = std::max(0.05, 1.0 - 1.35 * lowBgGain * sideGain);
+                const double w2 = p.w * reweight;
+                sumW += w2;
+                sumF += w2 * p.fg;
+                sumB += w2 * p.bg;
+                sumF2 += w2 * p.fg * p.fg;
+                sumB2 += w2 * p.bg * p.bg;
+                sumFB += w2 * p.fg * p.bg;
+                scaledWeightSum += w2;
+                if (p.bg >= 0.25 || sideGain < 1e-4) {
+                    residualEvalW += p.w;
+                    rawAbsResidualW += p.w * std::abs(p.bg - (baseA * p.fg + baseB));
+                }
+            }
+            out.meanWeightScale = (float)(scaledWeightSum / std::max(totalW, 1e-8));
+
+            float newA = 0.0f;
+            float newB = 0.0f;
+            if (!TryGetABFromMoments(sumW, sumF, sumB, sumF2, sumB2, sumFB, newA, newB)) {
+                out.reason = "refit_failed";
+                return out;
+            }
+            float newAlpha = 0.0f;
+            float newLogoY = 0.0f;
+            if (!TryGetAlphaLogo(newA, newB, newAlpha, newLogoY)) {
+                out.reason = "refit_alpha_invalid";
+                return out;
+            }
+            out.reweightA = newA;
+            out.reweightB = newB;
+            out.reweightAlpha = newAlpha;
+            out.reweightLogoY = newLogoY;
+            out.reweightAlphaGain = (float)CalcLogoAlphaGain(newAlpha, smoothstep);
+
+            for (const auto& p : bins) {
+                const double residual = p.bg - (baseA * p.fg + baseB);
+                const double sideGain = sat01((residual + 0.005) / 0.045);
+                if (p.bg >= 0.25 || sideGain < 1e-4) {
+                    newAbsResidualW += p.w * std::abs(p.bg - ((double)newA * p.fg + newB));
+                }
+            }
+            out.highBgResidualRatio = (float)(newAbsResidualW / std::max(rawAbsResidualW, 1e-8));
+            if (residualEvalW < 3.0) {
+                out.reason = "residual_eval_sparse";
+                return out;
+            }
+            if (out.highBgResidualRatio > 1.25f) {
+                out.reason = "high_bg_residual_worse";
+                return out;
+            }
+            const double whiteBase = CalcWhiteConstraintGain(baseA, baseB);
+            const double whiteNew = CalcWhiteConstraintGain(newA, newB);
+            const double invN = 1.0 / std::max(sumW, 1e-8);
+            const double meanF = sumF * invN;
+            const double meanBg = sumB * invN;
+            const double meanDiff = meanF - meanBg;
+            const double diff2 = (sumF2 - 2.0 * sumFB + sumB2) * invN;
+            const double varDiff = std::max(0.0, diff2 - meanDiff * meanDiff);
+            const double consistency = std::abs(meanDiff) / (std::sqrt(varDiff) + 1e-6);
+            const double diffGainRaw = sat01((meanDiff - 0.003) / 0.120);
+            const double residualGain = sat01((meanDiff - 0.001) / 0.105);
+            const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw));
+            const double consistencyGain = sat01((consistency - 0.35) / 1.65);
+            const double logoGain = sat01((newLogoY - 0.45) / 0.30);
+            const double alphaTerm = 0.50 + 0.50 * out.reweightAlphaGain;
+            out.reweightScore = (float)(diffGain
+                * (0.25 + 0.75 * consistencyGain)
+                * alphaTerm
+                * (0.6 + 0.4 * logoGain)
+                * (0.20 + 0.80 * scoreStage.mapExtremeGain[off])
+                * scoreStage.mapTemporalGain[off]
+                * scoreStage.mapOpaquePenalty[off]
+                * scoreStage.mapOpaqueStaticPenalty[off]
+                * whiteNew
+                * scoreStage.mapLineFitGain[off]
+                * scoreStage.mapSplitBranchGain[off]);
+            if (newAlpha < out.baseAlpha + 0.025f || out.reweightAlphaGain < out.baseAlphaGain + 0.10f) {
+                out.reason = "alpha_improve_small";
+                return out;
+            }
+            if (newAlpha < 0.045f || newAlpha > 0.38f || newA < 1.04f || newA > 1.62f) {
+                out.reason = "alpha_range";
+                return out;
+            }
+            if (newLogoY < 0.45f) {
+                out.reason = "logoy_range";
+                return out;
+            }
+            if (whiteNew < 0.55 || whiteNew < whiteBase * 0.75) {
+                out.reason = "white_gain_worse";
+                return out;
+            }
+            if (out.reweightScore < std::max(0.001f, out.baseScore * 1.10f)) {
+                out.reason = "score_improve_small";
+                return out;
+            }
+
+            out.valid = true;
+            out.reason = "accepted";
+            return out;
+        }
+
         bool analyzeContaminatedBranchFit(const StatsPassBuffers& statsPass, const int off, const double baseConsistency, const double baseAlpha, BranchRescueInfo& out) const {
             out = BranchRescueInfo{};
             if (passIndex != 0 || off < 0) {
@@ -4998,6 +5280,7 @@ namespace {
                 int histBin = 0;
                 double weight = 0.0;
                 double weightScale = 0.0;
+                double bgAdjustJump = 0.0;
             };
             std::vector<BinPoint> bins;
             bins.reserve(kHistBins);
@@ -5014,7 +5297,9 @@ namespace {
                 if (gompertzWeight <= 1e-8) continue;
 
                 const double countWeight = (double)bin.count * gompertzWeight;
-                bins.push_back(BinPoint{ b, countWeight, weightScale });
+                const double rawBg = bin.sum_bg / std::max(1, bin.count);
+                const double bgAdjustJump = std::max(0.0, avgBg - rawBg);
+                bins.push_back(BinPoint{ b, countWeight, weightScale, bgAdjustJump });
                 totalWeight += countWeight;
             }
             if (totalWeight < 16.0 || bins.size() < 2) {
@@ -5027,12 +5312,16 @@ namespace {
                 double weight = 0.0;
                 double weightedBin = 0.0;
                 double weightedScale = 0.0;
+                double weightedBgAdjustJump = 0.0;
 
                 double center() const {
                     return (weight > 1e-8) ? weightedBin / weight : 0.0;
                 }
                 double avgScale() const {
                     return (weight > 1e-8) ? weightedScale / weight : 0.0;
+                }
+                double avgBgAdjustJump() const {
+                    return (weight > 1e-8) ? weightedBgAdjustJump / weight : 0.0;
                 }
             };
             std::vector<Cluster> clusters;
@@ -5050,6 +5339,7 @@ namespace {
                 c.weight += p.weight;
                 c.weightedBin += p.weight * p.histBin;
                 c.weightedScale += p.weight * p.weightScale;
+                c.weightedBgAdjustJump += p.weight * p.bgAdjustJump;
             }
             if (clusters.size() < 2) {
                 return 0.0f;
@@ -5076,22 +5366,36 @@ namespace {
                 const Cluster& branch = clusters[i];
                 const double branchFrac = branch.weight / totalWeight;
                 const double branchScale = branch.avgScale();
+                const double branchBgAdjustJump = branch.avgBgAdjustJump();
                 const double branchToMain = branchFrac / std::max(mainFrac, 1e-8);
                 const double scaleRatio = branchScale / std::max(mainScale, 1e-8);
                 const double separation = std::abs(branch.center() - main.center());
                 const double branchFracGain = sat01((branchFrac - 0.08) / 0.12);
+                const double branchJumpFracGain = sat01((branchFrac - 0.04) / 0.05);
                 const double separationGain = sat01((separation - 4.0) / 4.0);
                 const double branchLowScaleGain = sat01((0.45 - branchScale) / 0.35);
+                const double branchExtremeLowScaleGain = sat01((0.15 - branchScale) / 0.15);
+                const double branchBgAdjustJumpGain = sat01((branchBgAdjustJump - 0.18) / 0.12);
                 const double relativeLowScaleGain = sat01((0.60 - scaleRatio) / 0.40);
                 const double secondaryGain = sat01((0.75 - branchToMain) / 0.35);
-                const double penalty = branchFracGain
-                    * separationGain
+                const double commonBranchGain = separationGain
                     * mainScaleGain
-                    * branchLowScaleGain
                     * relativeLowScaleGain
-                    * secondaryGain
-                    * alphaTrustGain;
-                bestPenalty = std::max(bestPenalty, penalty);
+                    * secondaryGain;
+                const double commonPenaltyGain = commonBranchGain * alphaTrustGain;
+                const double penalty = branchFracGain
+                    * branchLowScaleGain
+                    * commonPenaltyGain;
+                const double extremePenalty = sat01((branchFrac - 0.04) / 0.08)
+                    * branchExtremeLowScaleGain
+                    * commonPenaltyGain;
+                const double rawAdjustedAlphaGain = 0.35 + 0.65 * alphaTrustGain;
+                const double rawAdjustedBranchPenalty = branchJumpFracGain
+                    * branchExtremeLowScaleGain
+                    * branchBgAdjustJumpGain
+                    * commonBranchGain
+                    * rawAdjustedAlphaGain;
+                bestPenalty = std::max(bestPenalty, std::max(penalty, std::max(extremePenalty, rawAdjustedBranchPenalty)));
             }
             return (float)bestPenalty;
         }
@@ -5188,6 +5492,7 @@ namespace {
             provisionalLineB.assign(total, 0.0f);
             provisionalLineConsistency.assign(total, 0.0f);
             provisionalLineStdDiff.assign(total, 0.0f);
+            lowBgLeftReweightEligible.assign(total, 0);
             for (int off = 0; off < total; off++) {
                 const auto& s = statsPass.stats[off];
                 float A = 0.0f;
@@ -5204,25 +5509,126 @@ namespace {
                 provisionalLineConsistency[off] = (float)consistency;
                 provisionalLineStdDiff[off] = (float)stdDiff;
             }
+
+            auto weightedPercentile = [](std::vector<std::pair<double, double>> vals, const double ratio) {
+                if (vals.empty()) return 0.0;
+                std::sort(vals.begin(), vals.end(), [](const auto& a, const auto& b) {
+                    return a.first < b.first;
+                });
+                double totalW = 0.0;
+                for (const auto& v : vals) totalW += std::max(0.0, v.second);
+                if (totalW <= 1e-8) return vals.front().first;
+                const double target = totalW * std::max(0.0, std::min(1.0, ratio));
+                double accum = 0.0;
+                for (const auto& v : vals) {
+                    accum += std::max(0.0, v.second);
+                    if (accum >= target) return v.first;
+                }
+                return vals.back().first;
+            };
+            auto smoothstep = [](const double t) {
+                const double tc = std::max(0.0, std::min(1.0, t));
+                return tc * tc * (3.0 - 2.0 * tc);
+            };
+            // 低bg側の偽枝を追加で潰す対象画素を前計算する。
+            // 狙いは q79 のような「limited range の下限付近に偽の対角枝が乗り、
+            // 本来より寝た回帰線を作ってしまう」ケースの救済。
+            // ただし全画素へ無条件にかけると暴れやすいので、
+            //   - fg の広い範囲で bin が取れている
+            //   - bg<0.25 のサンプルが十分ある
+            //   - その低bgサンプルが fg 方向にも広がっている
+            //   - しかも provisional line の左側(bg が予測より高い側)に一定量ある
+            // 画素だけを eligible にする。
+            for (int off = 0; off < total; off++) {
+                if (!provisionalLineValid[off]) continue;
+                float alpha = 0.0f;
+                float logoY = 0.0f;
+                if (!TryGetAlphaLogo(provisionalLineA[off], provisionalLineB[off], alpha, logoY)) {
+                    continue;
+                }
+                const double alphaGain = (alpha <= 0.03f) ? 0.0
+                    : (alpha < 0.15f)  ? smoothstep((alpha - 0.03f) / 0.12f)
+                    : (alpha <= 0.35f) ? 1.0
+                    : (alpha < 0.75f)  ? 1.0 - smoothstep((alpha - 0.35f) / 0.40f)
+                    : 0.0;
+                if (alphaGain > 0.4) {
+                    continue;
+                }
+
+                double totalW = 0.0;
+                double lowW = 0.0;
+                double lowLeftW = 0.0;
+                int binCount = 0;
+                std::vector<std::pair<double, double>> fgVals;
+                std::vector<std::pair<double, double>> lowFgVals;
+                fgVals.reserve(kHistBins);
+                lowFgVals.reserve(kHistBins);
+                for (int b = 0; b < kHistBins; b++) {
+                    const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                    if (bin.count <= 0) continue;
+                    const double w = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
+                    if (w <= 1e-8) continue;
+                    const double fg = bin.sum_fg / std::max(1, bin.count);
+                    const double bg = bin.sum_bg / std::max(1, bin.count);
+                    if (!std::isfinite(fg) || !std::isfinite(bg)) continue;
+                    binCount++;
+                    totalW += w;
+                    fgVals.push_back({ fg, w });
+                    if (bg < 0.25) {
+                        lowW += w;
+                        lowFgVals.push_back({ fg, w });
+                        const double residual = bg - (provisionalLineA[off] * fg + provisionalLineB[off]);
+                        if (residual > 0.0) {
+                            lowLeftW += w;
+                        }
+                    }
+                }
+                if (totalW < 10.0 || binCount < 12 || lowFgVals.size() < 4) continue;
+                const double fgRange = weightedPercentile(fgVals, 0.90) - weightedPercentile(fgVals, 0.10);
+                const double lowBgWeightFrac = lowW / std::max(totalW, 1e-8);
+                const double lowBgFgRange = weightedPercentile(lowFgVals, 0.90) - weightedPercentile(lowFgVals, 0.10);
+                const double lowBgLeftWeightFrac = lowLeftW / std::max(totalW, 1e-8);
+                if (fgRange < 0.45) continue;
+                if (lowBgWeightFrac < 0.18) continue;
+                if (lowBgFgRange < 0.15) continue;
+                if (lowBgLeftWeightFrac < 0.10) continue;
+                lowBgLeftReweightEligible[off] = 1;
+            }
         }
 
         double calcSampleResidualWeight(const int off, const double fg, const double bg) const {
             if (!sampleResidualReweightActive || off < 0 || off >= (int)provisionalLineValid.size() || !provisionalLineValid[off]) {
                 return 1.0;
             }
-            const double trust = CalcResidualReweightTrust(provisionalLineConsistency[off]);
-            if (trust <= 1e-4) {
-                // provisional line が弱い点は「どの枝を本流とみなすか」がまだ不明なので、
-                // 無理に潰さず一旦そのまま通す。
-                return 1.0;
-            }
-            const double sigma = CalcResidualReweightSigma(provisionalLineStdDiff[off], trust);
+            const auto sat01 = [](const double v) {
+                return std::max(0.0, std::min(1.0, v));
+            };
             const double predBg = provisionalLineA[off] * fg + provisionalLineB[off];
-            const double residual = (bg - predBg) / sigma;
-            // bg_desire=predBg を中心とするガウス重み。
-            // 回帰線から離れた枝は指数的に弱めるが、hard reject はせず平均化へ残す。
-            const double residualWeight = std::exp(-0.5 * residual * residual);
-            return std::max(1e-4, residualWeight);
+            const double trust = CalcResidualReweightTrust(provisionalLineConsistency[off]);
+            double weight = 1.0;
+            if (trust > 1e-4) {
+                const double sigma = CalcResidualReweightSigma(provisionalLineStdDiff[off], trust);
+                const double residual = (bg - predBg) / sigma;
+                // bg_desire=predBg を中心とするガウス重み。
+                // 回帰線から離れた枝は指数的に弱めるが、hard reject はせず平均化へ残す。
+                const double residualWeight = std::exp(-0.5 * residual * residual);
+                weight = std::max(1e-4, residualWeight);
+            }
+            if (off < (int)lowBgLeftReweightEligible.size() && lowBgLeftReweightEligible[off]) {
+                const double residual = bg - predBg;
+                const double lowBgGain = sat01((0.25 - bg) / 0.12);
+                const double sideGain = sat01((residual + 0.005) / 0.045);
+                // low-bg かつ回帰線の左側にある sample を、線から離れるほど強く弱める。
+                // limited range 映像では true bg が 0 近傍まで落ち切らないため、
+                // この領域に対角状に残る枝は「ロゴ本体」より「偽の背景系列」である
+                // 可能性が高い。ここを 0.05 まで積極的に落として、
+                // provisional line を本流側へ引き戻す。
+                const double lowBgLeftWeight = std::max(0.05, 1.0 - 1.35 * lowBgGain * sideGain);
+                // 既存の対称ガウス重みはそのまま残し、より強い方だけを採用する。
+                // これで従来の branch 抑制を壊さずに、低bg左枝だけ追加で叩ける。
+                weight = std::min(weight, lowBgLeftWeight);
+            }
+            return std::max(1e-4, weight);
         }
 
         void rerunResidualWeightedPass(const tstring& srcpath, StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
@@ -6494,7 +6900,7 @@ namespace {
         return c;
     }
 
-    void AutoDetectLogoReader::writeTracePlotBitmap(const std::string& path, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const {
+    void AutoDetectLogoReader::writeTracePlotBitmap(const std::string& path, const ScoreStageBuffers& scoreStage, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const {
         if (path.empty() || tracePoints.empty() || traceRecords.empty()) {
             return;
         }
@@ -6669,6 +7075,51 @@ namespace {
             fillRect(px - 1, py - 1, px + 1, py + 1, c);
             blendPixel(px, py, { { 255, 255, 255 } }, 0.45f);
         };
+        const auto drawRegressionLineNorm = [&](const int plotX0, const int plotY0, const int plotX1, const int plotY1, const float A, const float B, const std::array<uint8_t, 3>& c, const float alpha, const int dashOn = 0, const int dashOff = 0) {
+            const auto toPlotY = [&](const float yNorm) {
+                return plotY1 - (int)std::round(yNorm * (plotY1 - plotY0));
+            };
+            const int regPx0 = plotX0;
+            const int regPy0 = toPlotY(B);
+            const int regPx1 = plotX1;
+            const int regPy1 = toPlotY(A + B);
+            if (dashOn <= 0 || dashOff <= 0) {
+                drawLine(regPx0, regPy0, regPx1, regPy1, c, alpha);
+                return;
+            }
+            const int dx = regPx1 - regPx0;
+            const int dy = regPy1 - regPy0;
+            const int steps = std::max(std::abs(dx), std::abs(dy));
+            if (steps <= 0) {
+                blendPixel(regPx0, regPy0, c, alpha);
+                return;
+            }
+            const int period = std::max(1, dashOn + dashOff);
+            int segStartX = 0;
+            int segStartY = 0;
+            int segEndX = 0;
+            int segEndY = 0;
+            bool inSegment = false;
+            for (int i = 0; i <= steps; i++) {
+                const int x = regPx0 + (int)std::round((double)dx * i / steps);
+                const int y = regPy0 + (int)std::round((double)dy * i / steps);
+                if ((i % period) < dashOn) {
+                    if (!inSegment) {
+                        segStartX = x;
+                        segStartY = y;
+                        inSegment = true;
+                    }
+                    segEndX = x;
+                    segEndY = y;
+                } else if (inSegment) {
+                    drawLine(segStartX, segStartY, segEndX, segEndY, c, alpha);
+                    inSegment = false;
+                }
+            }
+            if (inSegment) {
+                drawLine(segStartX, segStartY, segEndX, segEndY, c, alpha);
+            }
+        };
 
         for (size_t pointIdx = 0; pointIdx < tracePoints.size(); pointIdx++) {
             const int col = (int)pointIdx % cols;
@@ -6763,13 +7214,16 @@ namespace {
                 if (!rep.provisionalLineValid) {
                     continue;
                 }
-                const float regYNorm0 = rep.provisionalB;
-                const float regYNorm1 = rep.provisionalA + rep.provisionalB;
-                const int regPx0 = plotX0;
-                const int regPy0 = plotY1 - (int)std::round(regYNorm0 * (plotY1 - plotY0));
-                const int regPx1 = plotX1;
-                const int regPy1 = plotY1 - (int)std::round(regYNorm1 * (plotY1 - plotY0));
-                drawLine(regPx0, regPy0, regPx1, regPy1, { { 255, 0, 0 } }, 0.8f);
+                drawRegressionLineNorm(plotX0, plotY0, plotX1, plotY1, rep.provisionalA, rep.provisionalB, { { 255, 0, 0 } }, 0.8f);
+            }
+
+            const int off = tracePoints[pointIdx].x + tracePoints[pointIdx].y * scanw;
+            const auto lowBgReweight = analyzeLowBgResidualReweightCandidate(traceBinRepresentatives, scoreStage, off, pointId);
+            if (lowBgReweight.reweightA != 0.0f || lowBgReweight.reweightB != 0.0f) {
+                const std::array<uint8_t, 3> reweightColor = lowBgReweight.valid
+                    ? std::array<uint8_t, 3>{ { 0, 180, 255 } }
+                    : std::array<uint8_t, 3>{ { 0, 132, 224 } };
+                drawRegressionLineNorm(plotX0, plotY0, plotX1, plotY1, lowBgReweight.reweightA, lowBgReweight.reweightB, reweightColor, 0.95f, 7, 5);
             }
 
             const int legendY0 = plotY1 + 16;
