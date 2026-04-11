@@ -5281,6 +5281,8 @@ namespace {
                 double weight = 0.0;
                 double weightScale = 0.0;
                 double bgAdjustJump = 0.0;
+                double avgFg = 0.0;
+                double rawBg = 0.0;
             };
             std::vector<BinPoint> bins;
             bins.reserve(kHistBins);
@@ -5299,7 +5301,7 @@ namespace {
                 const double countWeight = (double)bin.count * gompertzWeight;
                 const double rawBg = bin.sum_bg / std::max(1, bin.count);
                 const double bgAdjustJump = std::max(0.0, avgBg - rawBg);
-                bins.push_back(BinPoint{ b, countWeight, weightScale, bgAdjustJump });
+                bins.push_back(BinPoint{ b, countWeight, weightScale, bgAdjustJump, avgFg, rawBg });
                 totalWeight += countWeight;
             }
             if (totalWeight < 16.0 || bins.size() < 2) {
@@ -5356,46 +5358,94 @@ namespace {
             const double mainScale = main.avgScale();
             const double mainScaleGain = sat01((mainScale - 0.45) / 0.30);
             const double alphaTrustGain = sat01((alpha - 0.18) / 0.10);
-            if (mainScaleGain <= 0.0 || alphaTrustGain <= 0.0) {
-                return 0.0f;
-            }
 
             double bestPenalty = 0.0;
-            for (int i = 0; i < (int)clusters.size(); i++) {
-                if (i == mainIndex) continue;
-                const Cluster& branch = clusters[i];
-                const double branchFrac = branch.weight / totalWeight;
-                const double branchScale = branch.avgScale();
-                const double branchBgAdjustJump = branch.avgBgAdjustJump();
-                const double branchToMain = branchFrac / std::max(mainFrac, 1e-8);
-                const double scaleRatio = branchScale / std::max(mainScale, 1e-8);
-                const double separation = std::abs(branch.center() - main.center());
-                const double branchFracGain = sat01((branchFrac - 0.08) / 0.12);
-                const double branchJumpFracGain = sat01((branchFrac - 0.04) / 0.05);
-                const double separationGain = sat01((separation - 4.0) / 4.0);
-                const double branchLowScaleGain = sat01((0.45 - branchScale) / 0.35);
-                const double branchExtremeLowScaleGain = sat01((0.15 - branchScale) / 0.15);
-                const double branchBgAdjustJumpGain = sat01((branchBgAdjustJump - 0.18) / 0.12);
-                const double relativeLowScaleGain = sat01((0.60 - scaleRatio) / 0.40);
-                const double secondaryGain = sat01((0.75 - branchToMain) / 0.35);
-                const double commonBranchGain = separationGain
-                    * mainScaleGain
-                    * relativeLowScaleGain
-                    * secondaryGain;
-                const double commonPenaltyGain = commonBranchGain * alphaTrustGain;
-                const double penalty = branchFracGain
-                    * branchLowScaleGain
-                    * commonPenaltyGain;
-                const double extremePenalty = sat01((branchFrac - 0.04) / 0.08)
-                    * branchExtremeLowScaleGain
-                    * commonPenaltyGain;
-                const double rawAdjustedAlphaGain = 0.35 + 0.65 * alphaTrustGain;
-                const double rawAdjustedBranchPenalty = branchJumpFracGain
-                    * branchExtremeLowScaleGain
-                    * branchBgAdjustJumpGain
-                    * commonBranchGain
-                    * rawAdjustedAlphaGain;
-                bestPenalty = std::max(bestPenalty, std::max(penalty, std::max(extremePenalty, rawAdjustedBranchPenalty)));
+            if (mainScaleGain > 0.0 && alphaTrustGain > 0.0) {
+                for (int i = 0; i < (int)clusters.size(); i++) {
+                    if (i == mainIndex) continue;
+                    const Cluster& branch = clusters[i];
+                    const double branchFrac = branch.weight / totalWeight;
+                    const double branchScale = branch.avgScale();
+                    const double branchBgAdjustJump = branch.avgBgAdjustJump();
+                    const double branchToMain = branchFrac / std::max(mainFrac, 1e-8);
+                    const double scaleRatio = branchScale / std::max(mainScale, 1e-8);
+                    const double separation = std::abs(branch.center() - main.center());
+                    const double branchFracGain = sat01((branchFrac - 0.08) / 0.12);
+                    const double branchJumpFracGain = sat01((branchFrac - 0.04) / 0.05);
+                    const double separationGain = sat01((separation - 4.0) / 4.0);
+                    const double branchLowScaleGain = sat01((0.45 - branchScale) / 0.35);
+                    const double branchExtremeLowScaleGain = sat01((0.15 - branchScale) / 0.15);
+                    const double branchBgAdjustJumpGain = sat01((branchBgAdjustJump - 0.18) / 0.12);
+                    const double relativeLowScaleGain = sat01((0.60 - scaleRatio) / 0.40);
+                    const double secondaryGain = sat01((0.75 - branchToMain) / 0.35);
+                    const double commonBranchGain = separationGain
+                        * mainScaleGain
+                        * relativeLowScaleGain
+                        * secondaryGain;
+                    const double commonPenaltyGain = commonBranchGain * alphaTrustGain;
+                    const double penalty = branchFracGain
+                        * branchLowScaleGain
+                        * commonPenaltyGain;
+                    const double extremePenalty = sat01((branchFrac - 0.04) / 0.08)
+                        * branchExtremeLowScaleGain
+                        * commonPenaltyGain;
+                    const double rawAdjustedAlphaGain = 0.35 + 0.65 * alphaTrustGain;
+                    const double rawAdjustedBranchPenalty = branchJumpFracGain
+                        * branchExtremeLowScaleGain
+                        * branchBgAdjustJumpGain
+                        * commonBranchGain
+                        * rawAdjustedAlphaGain;
+                    bestPenalty = std::max(bestPenalty, std::max(penalty, std::max(extremePenalty, rawAdjustedBranchPenalty)));
+                }
+            }
+
+            // q56 の帯のように、fg 軸では連続した bin 群のままでも
+            // raw residual が回帰線の正負両側へ大きく割れるケースがある。
+            // 既存 cluster 判定は「bin が離れた塊」前提なので、ここでは
+            // provisional line に対する raw residual の二重枝を直接見る。
+            float lineA = 0.0f;
+            float lineB = 0.0f;
+            if (TryGetAB(statsPass.stats[off], lineA, lineB)) {
+                struct ResidualBranchSide {
+                    double weight = 0.0;
+                    double absResidual = 0.0;
+                    double weightedScale = 0.0;
+                    int bins = 0;
+                };
+                ResidualBranchSide posSide{};
+                ResidualBranchSide negSide{};
+                static constexpr double kResidualBranchThresh = 0.055;
+                for (const auto& p : bins) {
+                    const double residual = p.rawBg - ((double)lineA * p.avgFg + lineB);
+                    if (residual > kResidualBranchThresh) {
+                        posSide.weight += p.weight;
+                        posSide.absResidual += p.weight * residual;
+                        posSide.weightedScale += p.weight * p.weightScale;
+                        posSide.bins++;
+                    } else if (residual < -kResidualBranchThresh) {
+                        negSide.weight += p.weight;
+                        negSide.absResidual += p.weight * (-residual);
+                        negSide.weightedScale += p.weight * p.weightScale;
+                        negSide.bins++;
+                    }
+                }
+                if (posSide.weight > 1e-8 && negSide.weight > 1e-8) {
+                    const double posFrac = posSide.weight / totalWeight;
+                    const double negFrac = negSide.weight / totalWeight;
+                    const double posAvgResidual = posSide.absResidual / posSide.weight;
+                    const double negAvgResidual = negSide.absResidual / negSide.weight;
+                    const double posAvgScale = posSide.weightedScale / posSide.weight;
+                    const double negAvgScale = negSide.weightedScale / negSide.weight;
+                    const double dualSideFracGain = sat01((std::min(posFrac, negFrac) - 0.08) / 0.20);
+                    const double dualSideResidualGain = sat01((std::min(posAvgResidual, negAvgResidual) - 0.055) / 0.06);
+                    const double dualSideBinsGain = sat01((std::min(posSide.bins, negSide.bins) - 2.0) / 3.0);
+                    const double dualSideLowScaleGain = sat01((0.45 - std::max(posAvgScale, negAvgScale)) / 0.30);
+                    const double dualSidePenalty = dualSideFracGain
+                        * dualSideResidualGain
+                        * dualSideBinsGain
+                        * dualSideLowScaleGain;
+                    bestPenalty = std::max(bestPenalty, dualSidePenalty);
+                }
             }
             return (float)bestPenalty;
         }
