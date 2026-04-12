@@ -25,6 +25,7 @@ namespace Amatsukaze.Lib
         BinaryFallbackUsed = 3,
         NoBestComponent = 4,
         RectSizeAbnormal = 5,
+        RectPositionAbnormal = 6,
     }
 
     public enum LogoAnalyzeFail

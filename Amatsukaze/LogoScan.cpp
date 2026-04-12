@@ -1410,6 +1410,7 @@ namespace {
         BinaryFallbackUsed,
         NoBestComponent,
         RectSizeAbnormal,
+        RectPositionAbnormal,
     };
 
     enum class LogoAnalyzeFail {
@@ -1430,6 +1431,7 @@ namespace {
         case LogoRectDetectFail::BinaryFallbackUsed: return "BinaryFallbackUsed";
         case LogoRectDetectFail::NoBestComponent: return "NoBestComponent";
         case LogoRectDetectFail::RectSizeAbnormal: return "RectSizeAbnormal";
+        case LogoRectDetectFail::RectPositionAbnormal: return "RectPositionAbnormal";
         default: return "Unknown";
         }
     }
@@ -2679,6 +2681,25 @@ namespace {
                 || area < 24
                 || rect.w > (int)std::round(scanw * 0.88)
                 || rect.h > (int)std::round(scanh * 0.62);
+        }
+
+        bool isRectPositionAbnormal(const AutoDetectRect& rect) const {
+            if (scanw <= 0 || scanh <= 0 || rect.w <= 0 || rect.h <= 0) {
+                return true;
+            }
+            const double left = rect.x;
+            const double centerX = rect.x + rect.w * 0.5;
+            const double centerY = rect.y + rect.h * 0.5;
+            const double bottom = rect.y + rect.h;
+            // 日本の放送局ロゴは右上寄りに出る前提なので、ROI 下端近くまで
+            // 食い込む矩形は局ロゴとして不自然とみなす。
+            const bool bottomAbnormal =
+                centerY > scanh * 0.65 &&
+                bottom > scanh * 0.86;
+            const bool leftAbnormal =
+                centerX < scanw * 0.30 &&
+                left < scanw * 0.20;
+            return bottomAbnormal || leftAbnormal;
         }
 
         static void trimAllocator() {
@@ -8948,6 +8969,8 @@ namespace {
         finalRect.h = std::min(scanh - finalRect.y, finalRect.h + marginY * 2);
         if (isRectSizeAbnormal(finalRect)) {
             setRectDetectFail(LogoRectDetectFail::RectSizeAbnormal);
+        } else if (isRectPositionAbnormal(finalRect)) {
+            setRectDetectFail(LogoRectDetectFail::RectPositionAbnormal);
         }
         rectLocal = finalRect;
         rectAbs = makeAbsRectFromLocal(finalRect);
