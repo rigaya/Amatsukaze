@@ -7970,14 +7970,24 @@ namespace {
         const bool hasPostRect = getMaskRect(binaryStage.binary, postMinX, postMinY, postMaxX, postMaxY);
         if (prePruneOn > 0 && hasPreRect) {
             bool revertPrune = false;
+            const char* revertReason = nullptr;
             if (postPruneOn <= 0 || !hasPostRect) {
                 revertPrune = true;
+                revertReason = "empty";
             } else {
                 const int preW = preMaxX - preMinX + 1;
                 const int postW = postMaxX - postMinX + 1;
                 const bool areaCollapse = postPruneOn < std::max(24, (int)std::round(prePruneOn * 0.25));
                 const bool severeShrink = areaCollapse && postW < (int)std::round(preW * 0.60);
-                revertPrune = severeShrink;
+                const bool moderateAreaCollapse = postPruneOn < std::max(24, (int)std::round(prePruneOn * 0.35));
+                const bool widthCollapse = postW < std::max(12, (int)std::round(preW * 0.40));
+                const bool severeWidthShrink = moderateAreaCollapse && widthCollapse;
+                revertPrune = severeShrink || severeWidthShrink;
+                if (severeShrink) {
+                    revertReason = "severe_shrink";
+                } else if (severeWidthShrink) {
+                    revertReason = "width_collapse";
+                }
                 if (revertPrune && hasAnchorBandStat && anchorBandPreOn > 0 && removedOn > 0) {
                     const float bandRetention = (float)anchorBandPostOn / std::max(1, anchorBandPreOn);
                     const float removedBelowRatio = (float)removedBelowOn / std::max(1, removedOn);
@@ -7988,7 +7998,16 @@ namespace {
                     const bool postStillEnough = postPruneOn >= std::max(12, (int)std::round(prePruneOn * 0.10));
                     if (trimmedMostlyBelow && topBandPreserved && postStillEnough) {
                         revertPrune = false;
+                        revertReason = nullptr;
                     }
+                }
+                if (revertPrune) {
+                    const float onRatio = (float)postPruneOn / std::max(1, prePruneOn);
+                    const float widthRatio = (float)postW / std::max(1, preW);
+                    fprintf(stderr,
+                        "[LogoScan] prune rollback: reason=%s preOn=%d postOn=%d onRatio=%.3f preW=%d postW=%d widthRatio=%.3f\n",
+                        (revertReason != nullptr) ? revertReason : "unknown",
+                        prePruneOn, postPruneOn, onRatio, preW, postW, widthRatio);
                 }
             }
             if (revertPrune) {
