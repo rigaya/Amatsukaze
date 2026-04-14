@@ -112,6 +112,7 @@ void CMAnalyze::applyPmtCut(
     const std::vector<int>& pidChanges) {
     if (sceneChanges.size() == 0) {
         ctx.info(_T("シーンチェンジ情報がないためPMT変更情報をCM判定に利用できません"));
+        return;
     }
 
     ctx.info(_T("[PMT更新CM認識]"));
