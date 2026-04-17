@@ -295,7 +295,7 @@ namespace Amatsukaze.Models
             try
             {
                 await Task.Run(() => LogoFile.ScanLogo(
-                    context, filepath, serviceid, workfile, tmppath, imgx, imgy, w, h, thy, maxFrames, LogoScanCallback));
+                    context, filepath, serviceid, workfile, tmppath, null, imgx, imgy, w, h, thy, maxFrames, LogoScanCallback));
 
                 // TsInfoでサービス名を取得する
                 using (var info = new TsInfo(context))

@@ -29,6 +29,7 @@
 #include <inttypes.h>
 #include <sstream>
 #include <iomanip>
+#include <libavutil/error.h>
 #if defined(__GLIBC__)
 #include <malloc.h>
 #endif
@@ -38,6 +39,25 @@
 #include "zlib.h"
 #include "rgy_event.h"
 #include "rgy_thread_pool.h"
+
+namespace {
+
+std::string FormatAvErrorDetail(int errnum) {
+    char errbuf[AV_ERROR_MAX_STRING_SIZE] = {};
+    if (av_strerror(errnum, errbuf, sizeof(errbuf)) == 0) {
+        return std::string(errbuf);
+    }
+    return StringFormat("unknown ffmpeg error (%d)", errnum);
+}
+
+std::string FormatPacketTimestamp(int64_t value) {
+    if (value == AV_NOPTS_VALUE) {
+        return "NOPTS";
+    }
+    return StringFormat("%lld", static_cast<long long>(value));
+}
+
+}
 
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
     for (int x = 0; x < logowidth; x++) {
@@ -673,14 +693,52 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
     int64_t lastPacketPos = -1;
     Frame frame;
     AVPacket packet = AVPacket();
+    auto throwSendPacketError = [&](const char* phase, int ret, const AVPacket* failedPacket) {
+        const auto detail = FormatAvErrorDetail(ret);
+        const auto packetPts = FormatPacketTimestamp(failedPacket ? failedPacket->pts : AV_NOPTS_VALUE);
+        const auto packetDts = FormatPacketTimestamp(failedPacket ? failedPacket->dts : AV_NOPTS_VALUE);
+        const int packetSize = failedPacket ? failedPacket->size : 0;
+        const long long packetPos = failedPacket ? static_cast<long long>(failedPacket->pos) : -1LL;
+        const int packetKey = failedPacket ? ((failedPacket->flags & AV_PKT_FLAG_KEY) ? 1 : 0) : 0;
+        THROWF(FormatException,
+            "avcodec_send_packet failed (phase=%s, code=%d, detail=%s, stream=%d, codec=%s, packetPos=%lld, packetPts=%s, packetDts=%s, packetSize=%d, key=%d)",
+            phase, ret, detail.c_str(), videoStream->index, pCodec->name, packetPos, packetPts.c_str(), packetDts.c_str(), packetSize, packetKey);
+    };
+    auto warnSendPacketError = [&](const char* phase, int ret, const AVPacket* failedPacket) {
+        const auto detail = FormatAvErrorDetail(ret);
+        const auto packetPts = FormatPacketTimestamp(failedPacket ? failedPacket->pts : AV_NOPTS_VALUE);
+        const auto packetDts = FormatPacketTimestamp(failedPacket ? failedPacket->dts : AV_NOPTS_VALUE);
+        const int packetSize = failedPacket ? failedPacket->size : 0;
+        const long long packetPos = failedPacket ? static_cast<long long>(failedPacket->pos) : -1LL;
+        const int packetKey = failedPacket ? ((failedPacket->flags & AV_PKT_FLAG_KEY) ? 1 : 0) : 0;
+        ctx.incrementCounter(AMT_ERR_DECODE_PACKET_FAILED);
+        ctx.warnF("[LogoScan] avcodec_send_packet failed; packet skipped (phase=%s, code=%d, detail=%s, stream=%d, codec=%s, packetPos=%lld, packetPts=%s, packetDts=%s, packetSize=%d, key=%d)",
+            phase, ret, detail.c_str(), videoStream->index, pCodec->name, packetPos, packetPts.c_str(), packetDts.c_str(), packetSize, packetKey);
+    };
+    auto throwReceiveFrameError = [&](const char* phase, int ret) {
+        const auto detail = FormatAvErrorDetail(ret);
+        THROWF(FormatException,
+            "avcodec_receive_frame failed (phase=%s, code=%d, detail=%s, stream=%d, codec=%s, lastPacketPos=%lld)",
+            phase, ret, detail.c_str(), videoStream->index, pCodec->name, static_cast<long long>(lastPacketPos));
+    };
     try {
         while (!stopRequested.load(std::memory_order_relaxed) && av_read_frame(inputCtx(), &packet) == 0) {
             if (packet.stream_index == videoStream->index) {
                 lastPacketPos = packet.pos;
-                if (avcodec_send_packet(codecCtx(), &packet) != 0) {
-                    THROW(FormatException, "avcodec_send_packet failed");
+                const int sendRet = avcodec_send_packet(codecCtx(), &packet);
+                if (sendRet != 0) {
+                    warnSendPacketError("decode", sendRet, &packet);
+                    av_packet_unref(&packet);
+                    continue;
                 }
-                while (!stopRequested.load(std::memory_order_relaxed) && avcodec_receive_frame(codecCtx(), frame()) == 0) {
+                while (!stopRequested.load(std::memory_order_relaxed)) {
+                    const int receiveRet = avcodec_receive_frame(codecCtx(), frame());
+                    if (receiveRet == AVERROR(EAGAIN) || receiveRet == AVERROR_EOF) {
+                        break;
+                    }
+                    if (receiveRet != 0) {
+                        throwReceiveFrameError("decode", receiveRet);
+                    }
                     if (first) {
                         if (onFirstFrameCb) {
                             onFirstFrameCb(videoStream, frame());
@@ -697,10 +755,18 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
 
         if (!stopRequested.load(std::memory_order_relaxed)) {
             // flush decoder
-            if (avcodec_send_packet(codecCtx(), NULL) != 0) {
-                THROW(FormatException, "avcodec_send_packet failed");
+            const int flushRet = avcodec_send_packet(codecCtx(), NULL);
+            if (flushRet != 0) {
+                throwSendPacketError("flush", flushRet, nullptr);
             }
-            while (!stopRequested.load(std::memory_order_relaxed) && avcodec_receive_frame(codecCtx(), frame()) == 0) {
+            while (!stopRequested.load(std::memory_order_relaxed)) {
+                const int receiveRet = avcodec_receive_frame(codecCtx(), frame());
+                if (receiveRet == AVERROR(EAGAIN) || receiveRet == AVERROR_EOF) {
+                    break;
+                }
+                if (receiveRet != 0) {
+                    throwReceiveFrameError("flush", receiveRet);
+                }
                 if (first) {
                     if (onFirstFrameCb) {
                         onFirstFrameCb(videoStream, frame());
@@ -846,13 +912,14 @@ void logo::LogoAnalyzer::MakeInitialLogo() {
 }
 
 logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
-    int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+    const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
     LOGO_ANALYZE_CB cb) :
     AMTObject(ctx),
     srcpath(srcpath),
     serviceid(serviceid),
     workfile(workfile),
     dstpath(dstpath),
+    debugpath(debugpath ? debugpath : _T("")),
     cb(cb),
     scanx(imgx),
     scany(imgy),
@@ -874,13 +941,16 @@ void logo::LogoAnalyzer::ScanLogo() {
     // 有効フレームデータと初期ロゴの取得
     progressbase = 0;
     MakeInitialLogo();
+    SaveDebugLogo();
 
     // データ解析とロゴの作り直し
     progressbase = 50;
     //MultiCandidate();
     (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
+    SaveDebugLogo();
     progressbase = 75;
     (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
+    SaveDebugLogo();
     //ReMakeLogo();
 
     if (cb(1, numFrames, numFrames, numFrames) == false) {
@@ -9124,11 +9194,11 @@ namespace {
 // C API for P/Invoke
 extern "C" AMATSUKAZE_API int ScanLogo(AMTContext * ctx,
     const tchar * srcpath, int serviceid, const tchar * workfile, const tchar * dstpath,
-    int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+    const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
     logo::LOGO_ANALYZE_CB cb) {
     try {
         logo::LogoAnalyzer analyzer(*ctx,
-            srcpath, serviceid, workfile, dstpath, imgx, imgy, w, h, thy, numMaxFrames, cb);
+            srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb);
         analyzer.ScanLogo();
         return true;
     } catch (const Exception& exception) {

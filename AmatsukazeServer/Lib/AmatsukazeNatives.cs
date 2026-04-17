@@ -653,7 +653,7 @@ namespace Amatsukaze.Lib
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int ScanLogo(IntPtr ctx, string srcpath, int serviceid, string workfile, string dstpath,
-            int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
+            string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int AutoDetectLogoRect(IntPtr ctx, string srcpath, int serviceid,
@@ -807,9 +807,9 @@ namespace Amatsukaze.Lib
         }
 
         public static void ScanLogo(AMTContext ctx, string srcpath, int serviceid, string workfile, string dstpath,
-            int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb)
+            string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb)
         {
-            if(ScanLogo(ctx.Ptr, srcpath, serviceid, workfile, dstpath, imgx, imgy, w, h, thy, numMaxFrames, cb) == 0)
+            if(ScanLogo(ctx.Ptr, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb) == 0)
             {
                 throw new IOException(ctx.GetError());
             }

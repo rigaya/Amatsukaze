@@ -1685,6 +1685,16 @@ namespace Amatsukaze.Server.Rest
                 return Results.File(bytes, "image/png");
             });
 
+            app.MapGet("/api/logo/analyze/{jobId}/debug-image", (string jobId) =>
+            {
+                var bytes = logoAnalyze.GetDebugLogoImagePng(jobId);
+                if (bytes == null)
+                {
+                    return Results.NotFound();
+                }
+                return Results.File(bytes, "image/png");
+            });
+
             app.MapPost("/api/logo/analyze/{jobId}/apply", (string jobId) =>
             {
                 if (logoAnalyze.TryApply(jobId, out var error))

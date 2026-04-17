@@ -553,6 +553,7 @@ namespace Amatsukaze.Shared
         public int Pass { get; set; }
         public string? LogoFileName { get; set; }
         public string? ImageUrl { get; set; }
+        public string? DebugImageUrl { get; set; }
     }
 
     // Trim調整用DTO

@@ -19,6 +19,7 @@ namespace Amatsukaze.Server.Rest
         public bool Completed { get; set; }
         public string Error { get; set; }
         public string LogoFilePath { get; set; }
+        public string DebugLogoFilePath { get; set; }
     }
 
     internal class LogoAutoDetectJob
@@ -579,6 +580,25 @@ namespace Amatsukaze.Server.Rest
             return null;
         }
 
+        public byte[] GetDebugLogoImagePng(string id)
+        {
+            if (jobs.TryGetValue(id, out var job))
+            {
+                if (!string.IsNullOrEmpty(job.DebugLogoFilePath) && File.Exists(job.DebugLogoFilePath))
+                {
+                    using (var ctx = new AMTContext())
+                    using (var logo = new LogoFile(ctx, job.DebugLogoFilePath))
+                    using (var ms = new MemoryStream())
+                    {
+                        var image = logo.GetImage(0);
+                        BitmapManager.SaveBitmapAsPng(image, ms);
+                        return ms.ToArray();
+                    }
+                }
+            }
+            return null;
+        }
+
         private static void SetAutoProgress(LogoAutoDetectJob job, int stage, float stageProgress, float progress)
         {
             job.Stage = stage;
@@ -721,6 +741,7 @@ namespace Amatsukaze.Server.Rest
                 var workfile = Path.Combine(baseWork, "logotmp-" + job.Id + ".dat");
                 var tmppath = Path.Combine(baseWork, "logotmp-" + job.Id + ".lgd");
                 var outpath = Path.Combine(baseWork, "logo-" + job.Id + ".lgd");
+                var debugpath = Path.Combine(baseWork, "logo-debug-" + job.Id + ".lgd");
 
                 int imgx = (int)Math.Floor(request.X / 2.0) * 2;
                 int imgy = (int)Math.Floor(request.Y / 2.0) * 2;
@@ -729,7 +750,7 @@ namespace Amatsukaze.Server.Rest
 
                 using (var ctx = new AMTContext())
                 {
-                    LogoFile.ScanLogo(ctx, filePath, serviceId, workfile, tmppath,
+                    LogoFile.ScanLogo(ctx, filePath, serviceId, workfile, tmppath, debugpath,
                         imgx, imgy, w, h, request.Threshold, request.MaxFrames, (progress, nread, total, ngather) =>
                         {
                             job.Progress = progress;
@@ -778,10 +799,19 @@ namespace Amatsukaze.Server.Rest
                 }
 
                 job.LogoFilePath = outpath;
+                if (File.Exists(debugpath))
+                {
+                    File.Delete(debugpath);
+                }
                 job.Completed = true;
             }
             catch (Exception ex)
             {
+                var debugpath = Path.Combine(server.AppData_?.setting?.WorkPath ?? Directory.GetCurrentDirectory(), "logo-debug-" + job.Id + ".lgd");
+                if (File.Exists(debugpath))
+                {
+                    job.DebugLogoFilePath = debugpath;
+                }
                 job.Error = ex.Message;
                 job.Completed = true;
             }
@@ -813,7 +843,8 @@ namespace Amatsukaze.Server.Rest
                 NumValid = job.NumValid,
                 Pass = pass,
                 LogoFileName = string.IsNullOrEmpty(job.LogoFilePath) ? null : Path.GetFileName(job.LogoFilePath),
-                ImageUrl = job.Completed && !string.IsNullOrEmpty(job.LogoFilePath) ? $"/api/logo/analyze/{job.Id}/image" : null
+                ImageUrl = job.Completed && !string.IsNullOrEmpty(job.LogoFilePath) ? $"/api/logo/analyze/{job.Id}/image" : null,
+                DebugImageUrl = job.Completed && !string.IsNullOrEmpty(job.DebugLogoFilePath) ? $"/api/logo/analyze/{job.Id}/debug-image" : null
             };
         }
 

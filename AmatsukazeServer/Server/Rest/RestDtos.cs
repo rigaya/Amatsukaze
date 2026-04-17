@@ -129,6 +129,7 @@ namespace Amatsukaze.Server.Rest
         public int Pass { get; set; }
         public string LogoFileName { get; set; }
         public string ImageUrl { get; set; }
+        public string DebugImageUrl { get; set; }
     }
 
     public class LogoAutoDetectStartRequest

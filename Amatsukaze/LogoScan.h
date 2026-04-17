@@ -435,6 +435,7 @@ class LogoAnalyzer : AMTObject {
     int logUVx, logUVy;
     int imgw, imgh;
     int numFrames;
+    tstring debugpath;
     std::unique_ptr<LogoData> logodata;
 
     float progressbase;
@@ -442,6 +443,17 @@ class LogoAnalyzer : AMTObject {
     std::unique_ptr<InitialLogoCreator> creator;
 
     void MakeInitialLogo();
+    void SaveDebugLogo() const {
+        if (debugpath.empty() || logodata == nullptr) {
+            return;
+        }
+        try {
+            LogoHeader header(scanw, scanh, logUVx, logUVy, imgw, imgh, scanx, scany, "Debug");
+            header.serviceId = serviceid;
+            logodata->Save(debugpath, &header);
+        } catch (const Exception&) {
+        }
+    }
 
     template <typename pixel_t>
     void ReMakeLogo()  {
@@ -504,6 +516,7 @@ class LogoAnalyzer : AMTObject {
         printf("maxi = %d (%.1f%%)\n", maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
 
         LogoScan logoscan(scanw, scanh, logUVx, logUVy, thy);
+        int eligibleFrames = 0;
         {
             int scanUVw = scanw >> logUVx;
             int scanUVh = scanh >> logUVy;
@@ -516,6 +529,7 @@ class LogoAnalyzer : AMTObject {
                 creator->getFrame(i, memScanData.data());
                 // ロゴのあるフレームだけAddFrame
                 if (minFades[i] > 8) { // TODO: 調整
+                    eligibleFrames++;
                     const auto ptr = memScanData.data();
                     logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw, creator->bitdepth());
                 }
@@ -528,13 +542,14 @@ class LogoAnalyzer : AMTObject {
         logodata = logoscan.GetLogo(true);
 
         if (logodata == nullptr) {
-            THROW(RuntimeException, "Insufficient logo frames");
+            THROWF(RuntimeException, "Insufficient logo frames (eligible=%d, total=%d, dominantFade=%d, dominantFadeRate=%.1f%%)",
+                eligibleFrames, numFrames, maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
         }
     }
 
 public:
     LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
-        int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+        const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
         LOGO_ANALYZE_CB cb);
 
     void ScanLogo();

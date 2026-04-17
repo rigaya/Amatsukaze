@@ -137,7 +137,7 @@ namespace Amatsukaze.Server
                     var w = (int)Math.Ceiling(rect.W / 2.0) * 2;
                     var h = (int)Math.Ceiling(rect.H / 2.0) * 2;
 
-                    LogoFile.ScanLogo(ctx, request.SrcPath, sid, workfile, tmppath,
+                    LogoFile.ScanLogo(ctx, request.SrcPath, sid, workfile, tmppath, null,
                         imgx, imgy, w, h, threshold, searchFrames,
                         (progress, nread, total, ngather) => true);
 
