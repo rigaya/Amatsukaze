@@ -50,6 +50,16 @@ namespace Amatsukaze.Lib
         public double Pass1ScoreMax { get; init; }
         public double Pass2ScoreMax { get; init; }
         public double FinalScoreBeforeRescueMax { get; init; }
+        public bool Pass2Entered { get; init; }
+        public bool Pass2PrepareSucceeded { get; init; }
+        public bool Pass2CollectSucceeded { get; init; }
+        public bool Pass2RescueFallbackApplied { get; init; }
+        public LogoAnalyzeFail Pass2FailBeforeClear { get; init; }
+        public int Pass2FrameMaskNonZero { get; init; }
+        public int Pass2AcceptedFrames { get; init; }
+        public int Pass2SkippedFrames { get; init; }
+        public int FrameGateRetryAttemptCount { get; init; }
+        public int FrameGateRetrySuccessAttempt { get; init; }
     }
 
     public sealed class AutoDetectLogoRectException : IOException
@@ -59,6 +69,16 @@ namespace Amatsukaze.Lib
         public double Pass1ScoreMax { get; }
         public double Pass2ScoreMax { get; }
         public double FinalScoreBeforeRescueMax { get; }
+        public bool Pass2Entered { get; }
+        public bool Pass2PrepareSucceeded { get; }
+        public bool Pass2CollectSucceeded { get; }
+        public bool Pass2RescueFallbackApplied { get; }
+        public LogoAnalyzeFail Pass2FailBeforeClear { get; }
+        public int Pass2FrameMaskNonZero { get; }
+        public int Pass2AcceptedFrames { get; }
+        public int Pass2SkippedFrames { get; }
+        public int FrameGateRetryAttemptCount { get; }
+        public int FrameGateRetrySuccessAttempt { get; }
 
         public AutoDetectLogoRectException(
             string message,
@@ -66,7 +86,17 @@ namespace Amatsukaze.Lib
             LogoAnalyzeFail logoAnalyzeFail,
             double pass1ScoreMax,
             double pass2ScoreMax,
-            double finalScoreBeforeRescueMax)
+            double finalScoreBeforeRescueMax,
+            bool pass2Entered,
+            bool pass2PrepareSucceeded,
+            bool pass2CollectSucceeded,
+            bool pass2RescueFallbackApplied,
+            LogoAnalyzeFail pass2FailBeforeClear,
+            int pass2FrameMaskNonZero,
+            int pass2AcceptedFrames,
+            int pass2SkippedFrames,
+            int frameGateRetryAttemptCount,
+            int frameGateRetrySuccessAttempt)
             : base(message)
         {
             RectDetectFail = rectDetectFail;
@@ -74,6 +104,16 @@ namespace Amatsukaze.Lib
             Pass1ScoreMax = pass1ScoreMax;
             Pass2ScoreMax = pass2ScoreMax;
             FinalScoreBeforeRescueMax = finalScoreBeforeRescueMax;
+            Pass2Entered = pass2Entered;
+            Pass2PrepareSucceeded = pass2PrepareSucceeded;
+            Pass2CollectSucceeded = pass2CollectSucceeded;
+            Pass2RescueFallbackApplied = pass2RescueFallbackApplied;
+            Pass2FailBeforeClear = pass2FailBeforeClear;
+            Pass2FrameMaskNonZero = pass2FrameMaskNonZero;
+            Pass2AcceptedFrames = pass2AcceptedFrames;
+            Pass2SkippedFrames = pass2SkippedFrames;
+            FrameGateRetryAttemptCount = frameGateRetryAttemptCount;
+            FrameGateRetrySuccessAttempt = frameGateRetrySuccessAttempt;
         }
     }
 
@@ -621,6 +661,9 @@ namespace Amatsukaze.Lib
             int marginX, int marginY, int threadN,
             ref int x, ref int y, ref int w, ref int h, ref int rectDetectFail, ref int logoAnalyzeFail,
             ref double pass1ScoreMax, ref double pass2ScoreMax, ref double finalScoreBeforeRescueMax,
+            ref int pass2Entered, ref int pass2PrepareSucceeded, ref int pass2CollectSucceeded, ref int pass2RescueFallbackApplied,
+            ref int pass2FailBeforeClear, ref int pass2FrameMaskNonZero, ref int pass2AcceptedFrames, ref int pass2SkippedFrames,
+            ref int frameGateRetryAttemptCount, ref int frameGateRetrySuccessAttempt,
             string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
             string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
             string transitionPath, string keepRatePath,
@@ -791,10 +834,23 @@ namespace Amatsukaze.Lib
             double pass1ScoreMax = 0.0;
             double pass2ScoreMax = 0.0;
             double finalScoreBeforeRescueMax = 0.0;
+            int pass2Entered = 0;
+            int pass2PrepareSucceeded = 0;
+            int pass2CollectSucceeded = 0;
+            int pass2RescueFallbackApplied = 0;
+            int pass2FailBeforeClear = 0;
+            int pass2FrameMaskNonZero = 0;
+            int pass2AcceptedFrames = 0;
+            int pass2SkippedFrames = 0;
+            int frameGateRetryAttemptCount = 0;
+            int frameGateRetrySuccessAttempt = 0;
             if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
                 divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
                 ref x, ref y, ref w, ref h, ref rectDetectFail, ref logoAnalyzeFail,
                 ref pass1ScoreMax, ref pass2ScoreMax, ref finalScoreBeforeRescueMax,
+                ref pass2Entered, ref pass2PrepareSucceeded, ref pass2CollectSucceeded, ref pass2RescueFallbackApplied,
+                ref pass2FailBeforeClear, ref pass2FrameMaskNonZero, ref pass2AcceptedFrames, ref pass2SkippedFrames,
+                ref frameGateRetryAttemptCount, ref frameGateRetrySuccessAttempt,
                 scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
             {
                 throw new AutoDetectLogoRectException(
@@ -803,7 +859,17 @@ namespace Amatsukaze.Lib
                     (LogoAnalyzeFail)logoAnalyzeFail,
                     pass1ScoreMax,
                     pass2ScoreMax,
-                    finalScoreBeforeRescueMax);
+                    finalScoreBeforeRescueMax,
+                    pass2Entered != 0,
+                    pass2PrepareSucceeded != 0,
+                    pass2CollectSucceeded != 0,
+                    pass2RescueFallbackApplied != 0,
+                    (LogoAnalyzeFail)pass2FailBeforeClear,
+                    pass2FrameMaskNonZero,
+                    pass2AcceptedFrames,
+                    pass2SkippedFrames,
+                    frameGateRetryAttemptCount,
+                    frameGateRetrySuccessAttempt);
             }
             return new AutoDetectLogoRectResult()
             {
@@ -816,6 +882,16 @@ namespace Amatsukaze.Lib
                 Pass1ScoreMax = pass1ScoreMax,
                 Pass2ScoreMax = pass2ScoreMax,
                 FinalScoreBeforeRescueMax = finalScoreBeforeRescueMax,
+                Pass2Entered = pass2Entered != 0,
+                Pass2PrepareSucceeded = pass2PrepareSucceeded != 0,
+                Pass2CollectSucceeded = pass2CollectSucceeded != 0,
+                Pass2RescueFallbackApplied = pass2RescueFallbackApplied != 0,
+                Pass2FailBeforeClear = (LogoAnalyzeFail)pass2FailBeforeClear,
+                Pass2FrameMaskNonZero = pass2FrameMaskNonZero,
+                Pass2AcceptedFrames = pass2AcceptedFrames,
+                Pass2SkippedFrames = pass2SkippedFrames,
+                FrameGateRetryAttemptCount = frameGateRetryAttemptCount,
+                FrameGateRetrySuccessAttempt = frameGateRetrySuccessAttempt,
             };
         }
     }

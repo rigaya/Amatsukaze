@@ -191,6 +191,17 @@ namespace Amatsukaze.Server.Rest
         public double? Pass1ScoreMax { get; set; }
         public double? Pass2ScoreMax { get; set; }
         public double? FinalScoreBeforeRescueMax { get; set; }
+        public bool Pass2Entered { get; set; }
+        public bool Pass2PrepareSucceeded { get; set; }
+        public bool Pass2CollectSucceeded { get; set; }
+        public bool Pass2RescueFallbackApplied { get; set; }
+        public int Pass2FailBeforeClearCode { get; set; }
+        public string Pass2FailBeforeClearName { get; set; }
+        public int Pass2FrameMaskNonZero { get; set; }
+        public int Pass2AcceptedFrames { get; set; }
+        public int Pass2SkippedFrames { get; set; }
+        public int FrameGateRetryAttemptCount { get; set; }
+        public int FrameGateRetrySuccessAttempt { get; set; }
         public LogoAutoDetectDebugImages DebugImages { get; set; }
     }
 

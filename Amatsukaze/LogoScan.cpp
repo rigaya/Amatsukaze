@@ -2136,11 +2136,14 @@ namespace {
         int logUVy;
         int framesPerSec;
         int readFrames;
+        int sourceFrameIndex;
+        int frameWindowStart;
         static constexpr int kScanEdgeMargin = 16;
         // fg値をkHistBins個のbinに分割してサンプル蓄積する
         static constexpr int kHistBins = 32;
         static constexpr bool kEnableTwoPassFrameGate = true;
         static constexpr bool kEnablePruneBinaryByAnchor = true;
+        static constexpr int kFrameGateRetryMax = 3;
         const bool enableTwoPassFrameGate;
         const bool enablePruneBinaryByAnchor;
         const std::vector<std::pair<int, int>> tracePointEnv;
@@ -2613,6 +2616,16 @@ namespace {
         int initialSeedCount;
         int initialGrownCount;
         bool usedBinaryFallback;
+        bool debugPass2Entered;
+        bool debugPass2PrepareSucceeded;
+        bool debugPass2CollectSucceeded;
+        bool debugPass2RescueFallbackApplied;
+        LogoAnalyzeFail debugPass2FailBeforeClear;
+        int debugPass2FrameMaskNonZero;
+        int debugPass2AcceptedFrames;
+        int debugPass2SkippedFrames;
+        int debugFrameGateRetryAttemptCount;
+        int debugFrameGateRetrySuccessAttempt;
         struct Pass2Buffers {
             AutoDetectRect logoRectAbs{ 0, 0, 0, 0 };
             AutoDetectRect logoRectLocal{ 0, 0, 0, 0 };
@@ -2676,9 +2689,9 @@ namespace {
                 return true;
             }
             const int area = rect.w * rect.h;
-            return rect.w < 8
-                || rect.h < 8
-                || area < 24
+            return rect.w < 40
+                || rect.h < 25
+                || area < 1200
                 || rect.w > (int)std::round(scanw * 0.88)
                 || rect.h > (int)std::round(scanh * 0.62);
         }
@@ -2724,7 +2737,7 @@ namespace {
             , logCtx(ctx)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false) {
+            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
@@ -2756,7 +2769,95 @@ namespace {
             return debugScore.debugMaxScoreBeforeRescue;
         }
 
+        bool didEnterPass2() const {
+            return debugPass2Entered;
+        }
+
+        bool didPreparePass2() const {
+            return debugPass2PrepareSucceeded;
+        }
+
+        bool didCollectPass2() const {
+            return debugPass2CollectSucceeded;
+        }
+
+        bool didFallbackToPass1Rescue() const {
+            return debugPass2RescueFallbackApplied;
+        }
+
+        int getPass2FailBeforeClearCode() const {
+            return (int)debugPass2FailBeforeClear;
+        }
+
+        int getPass2FrameMaskNonZero() const {
+            return debugPass2FrameMaskNonZero;
+        }
+
+        int getPass2AcceptedFrames() const {
+            return debugPass2AcceptedFrames;
+        }
+
+        int getPass2SkippedFrames() const {
+            return debugPass2SkippedFrames;
+        }
+
+        int getFrameGateRetryAttemptCount() const {
+            return debugFrameGateRetryAttemptCount;
+        }
+
+        int getFrameGateRetrySuccessAttempt() const {
+            return debugFrameGateRetrySuccessAttempt;
+        }
+
+        bool shouldRetryFrameGateWindow() const {
+            if (!debugPass2RescueFallbackApplied) {
+                return false;
+            }
+            switch (debugPass2FailBeforeClear) {
+            case LogoAnalyzeFail::Pass2RoiTooSmall:
+            case LogoAnalyzeFail::GetLogoNull:
+            case LogoAnalyzeFail::CorrSequenceInvalid:
+            case LogoAnalyzeFail::FrameMaskEmpty:
+            case LogoAnalyzeFail::TooFewAcceptedFrames:
+                return true;
+            default:
+                return false;
+            }
+        }
+
         AutoDetectRect run(const tstring& srcpath) {
+            debugFrameGateRetryAttemptCount = 0;
+            debugFrameGateRetrySuccessAttempt = 0;
+            const int retryStep = std::max(1, searchFrames / 2);
+            AutoDetectRect rect = runSingleWindow(srcpath, 0);
+            if (!shouldRetryFrameGateWindow()) {
+                return rect;
+            }
+            logCtx.infoF("[LogoScan] frameGate retry start: reason=%s step=%d maxRetry=%d",
+                ToString(debugPass2FailBeforeClear), retryStep, kFrameGateRetryMax);
+            for (int retry = 1; retry <= kFrameGateRetryMax; retry++) {
+                debugFrameGateRetryAttemptCount = retry;
+                const int startFrame = retryStep * retry;
+                try {
+                    rect = runSingleWindow(srcpath, startFrame);
+                    if (!shouldRetryFrameGateWindow()) {
+                        debugFrameGateRetrySuccessAttempt = retry;
+                        logCtx.infoF("[LogoScan] frameGate retry success: retry=%d startFrame=%d", retry, startFrame);
+                        return rect;
+                    }
+                    logCtx.infoF("[LogoScan] frameGate retry fallback: retry=%d startFrame=%d reason=%s",
+                        retry, startFrame, ToString(debugPass2FailBeforeClear));
+                } catch (const Exception& ex) {
+                    logCtx.warnF("[LogoScan] frameGate retry failed: retry=%d startFrame=%d error=%s",
+                        retry, startFrame, ex.message());
+                }
+            }
+            logCtx.info("[LogoScan] frameGate retry exhausted; fallback to initial window");
+            return runSingleWindow(srcpath, 0);
+        }
+
+        AutoDetectRect runSingleWindow(const tstring& srcpath, const int startFrame) {
+            frameWindowStart = std::max(0, startFrame);
             try {
                 // 1) 初期化
                 resetRunState();
@@ -2802,9 +2903,25 @@ namespace {
                 Pass2Buffers pass2{};
                 bool pass2Entered = false;
                 bool pass2Succeeded = false;
+                debugPass2Entered = false;
+                debugPass2PrepareSucceeded = false;
+                debugPass2CollectSucceeded = false;
+                debugPass2RescueFallbackApplied = false;
+                debugPass2FailBeforeClear = LogoAnalyzeFail::None;
+                debugPass2FrameMaskNonZero = 0;
+                debugPass2AcceptedFrames = 0;
+                debugPass2SkippedFrames = 0;
                 if (enableTwoPassFrameGate && runPass2PrepareMask(srcpath, pass1RectLocal, pass2)) {
                     pass2Entered = true;
                     pass2Succeeded = runPass2CollectAndEstimate(srcpath, pass1RectAbs, pass1RectLocal, pass2);
+                }
+                debugPass2Entered = pass2Entered;
+                debugPass2PrepareSucceeded = pass2Entered;
+                debugPass2CollectSucceeded = pass2Succeeded;
+                debugPass2AcceptedFrames = pass2.acceptedFrames;
+                debugPass2SkippedFrames = pass2.skippedFrames;
+                if (logoAnalyzeFail != LogoAnalyzeFail::None) {
+                    debugPass2FailBeforeClear = logoAnalyzeFail;
                 }
                 // 4) pass2 に進めなかった場合、または TooFewAcceptedFrames で
                 //    pass1 へ戻した場合は、pass1 結果に rescue blending を適用して
@@ -2814,6 +2931,7 @@ namespace {
                 const bool retryPass1WithRescue = !pass2Entered
                     || (!pass2Succeeded && logoAnalyzeFail == LogoAnalyzeFail::TooFewAcceptedFrames);
                 if (retryPass1WithRescue) {
+                    debugPass2RescueFallbackApplied = true;
                     fprintf(stderr, "[LogoScan] pass2 fallback to rescue pass1 (entered=%d fail=%d)\n",
                         (int)pass2Entered, (int)logoAnalyzeFail);
                     setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
@@ -3061,6 +3179,7 @@ namespace {
             clearRoiCache();
             passIndex = 0;
             readFrames = 0;
+            sourceFrameIndex = 0;
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
@@ -3082,6 +3201,14 @@ namespace {
             debugPass2Prepare.clear();
             rectDetectFail = LogoRectDetectFail::None;
             logoAnalyzeFail = LogoAnalyzeFail::None;
+            debugPass2Entered = false;
+            debugPass2PrepareSucceeded = false;
+            debugPass2CollectSucceeded = false;
+            debugPass2RescueFallbackApplied = false;
+            debugPass2FailBeforeClear = LogoAnalyzeFail::None;
+            debugPass2FrameMaskNonZero = 0;
+            debugPass2AcceptedFrames = 0;
+            debugPass2SkippedFrames = 0;
             scoreValidPixelCount = 0;
             scorePositivePixelCount = 0;
             initialSeedCount = 0;
@@ -3339,6 +3466,7 @@ namespace {
                 pass2.frameMask[i] = (judge[i].r == 2) ? 1 : 0;
             }
             debugPass2Prepare.frameMask = pass2.frameMask;
+            debugPass2FrameMaskNonZero = (int)std::count_if(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
             const bool hasFrameMask = std::any_of(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
             if (!hasFrameMask) {
                 setLogoAnalyzeFail(LogoAnalyzeFail::FrameMaskEmpty);
@@ -3403,6 +3531,8 @@ namespace {
             const int minAcceptedFrames = std::max(8, readFrames / 50);
             if (pass2.acceptedFrames < minAcceptedFrames) {
                 setLogoAnalyzeFail(LogoAnalyzeFail::TooFewAcceptedFrames);
+                debugPass2AcceptedFrames = pass2.acceptedFrames;
+                debugPass2SkippedFrames = pass2.skippedFrames;
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
                 return false;
@@ -3429,10 +3559,14 @@ namespace {
             // 4) pass2結果がpass1に対して過大/過シフトなら安全側でpass1矩形を採用する。
             if (shouldFallbackToPass1Rect(pass1RectLocal)) {
                 setLogoAnalyzeFail(LogoAnalyzeFail::Pass2RectDiverged);
+                debugPass2AcceptedFrames = pass2.acceptedFrames;
+                debugPass2SkippedFrames = pass2.skippedFrames;
                 rectAbs = pass1RectAbs;
                 rectLocal = pass1RectLocal;
                 return false;
             }
+            debugPass2AcceptedFrames = pass2.acceptedFrames;
+            debugPass2SkippedFrames = pass2.skippedFrames;
             return true;
         }
 
@@ -4230,6 +4364,7 @@ namespace {
 
         void resetAccumulationState(StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             readFrames = 0;
+            sourceFrameIndex = 0;
             if (statsPass != nullptr && scanw > 0 && scanh > 0) {
                 statsPass->reset(scanw, scanh, getCurrentProcessingBitDepth());
             }
@@ -4755,6 +4890,10 @@ namespace {
         }
 
         bool processFrame(AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
+            if (sourceFrameIndex < frameWindowStart) {
+                sourceFrameIndex++;
+                return true;
+            }
             if (readFrames >= searchFrames) {
                 return false;
             }
@@ -4777,6 +4916,7 @@ namespace {
             }
 
             readFrames++;
+            sourceFrameIndex++;
             if (cb && (readFrames % 8) == 0) {
                 const float passProgress = readFrames / (float)searchFrames;
                 if (!reportProgressInCurrentPlan(passProgress, readFrames, searchFrames)) {
@@ -9003,6 +9143,9 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int marginX, int marginY, int threadN,
     int* outX, int* outY, int* outW, int* outH, int* outRectDetectFail, int* outLogoAnalyzeFail,
     double* outPass1ScoreMax, double* outPass2ScoreMax, double* outFinalScoreBeforeRescueMax,
+    int* outPass2Entered, int* outPass2PrepareSucceeded, int* outPass2CollectSucceeded, int* outPass2RescueFallbackApplied,
+    int* outPass2FailBeforeClear, int* outPass2FrameMaskNonZero, int* outPass2AcceptedFrames, int* outPass2SkippedFrames,
+    int* outFrameGateRetryAttemptCount, int* outFrameGateRetrySuccessAttempt,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
@@ -9012,6 +9155,16 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     if (outPass1ScoreMax) *outPass1ScoreMax = 0.0;
     if (outPass2ScoreMax) *outPass2ScoreMax = 0.0;
     if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = 0.0;
+    if (outPass2Entered) *outPass2Entered = 0;
+    if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = 0;
+    if (outPass2CollectSucceeded) *outPass2CollectSucceeded = 0;
+    if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = 0;
+    if (outPass2FailBeforeClear) *outPass2FailBeforeClear = 0;
+    if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = 0;
+    if (outPass2AcceptedFrames) *outPass2AcceptedFrames = 0;
+    if (outPass2SkippedFrames) *outPass2SkippedFrames = 0;
+    if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = 0;
+    if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = 0;
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;
@@ -9023,6 +9176,16 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
         if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
         if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
+        if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
+        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
+        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
+        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
+        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
+        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
+        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
+        if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
+        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
+        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
         if (scorePath && binaryPath && cclPath) {
             reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
         }
@@ -9033,6 +9196,16 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
         if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
         if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
         if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
+        if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
+        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
+        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
+        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
+        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
+        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
+        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
+        if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
+        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
+        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
         if (scorePath && binaryPath && cclPath) {
             try {
                 reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);

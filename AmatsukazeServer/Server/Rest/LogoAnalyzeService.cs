@@ -37,6 +37,16 @@ namespace Amatsukaze.Server.Rest
         public double? Pass1ScoreMax { get; set; }
         public double? Pass2ScoreMax { get; set; }
         public double? FinalScoreBeforeRescueMax { get; set; }
+        public bool Pass2Entered { get; set; }
+        public bool Pass2PrepareSucceeded { get; set; }
+        public bool Pass2CollectSucceeded { get; set; }
+        public bool Pass2RescueFallbackApplied { get; set; }
+        public LogoAnalyzeFail Pass2FailBeforeClear { get; set; }
+        public int Pass2FrameMaskNonZero { get; set; }
+        public int Pass2AcceptedFrames { get; set; }
+        public int Pass2SkippedFrames { get; set; }
+        public int FrameGateRetryAttemptCount { get; set; }
+        public int FrameGateRetrySuccessAttempt { get; set; }
         public string ScoreImagePath { get; set; }
         public string BinaryImagePath { get; set; }
         public string CclImagePath { get; set; }
@@ -643,6 +653,16 @@ namespace Amatsukaze.Server.Rest
                     job.Pass1ScoreMax = result.Pass1ScoreMax;
                     job.Pass2ScoreMax = result.Pass2ScoreMax;
                     job.FinalScoreBeforeRescueMax = result.FinalScoreBeforeRescueMax;
+                    job.Pass2Entered = result.Pass2Entered;
+                    job.Pass2PrepareSucceeded = result.Pass2PrepareSucceeded;
+                    job.Pass2CollectSucceeded = result.Pass2CollectSucceeded;
+                    job.Pass2RescueFallbackApplied = result.Pass2RescueFallbackApplied;
+                    job.Pass2FailBeforeClear = result.Pass2FailBeforeClear;
+                    job.Pass2FrameMaskNonZero = result.Pass2FrameMaskNonZero;
+                    job.Pass2AcceptedFrames = result.Pass2AcceptedFrames;
+                    job.Pass2SkippedFrames = result.Pass2SkippedFrames;
+                    job.FrameGateRetryAttemptCount = result.FrameGateRetryAttemptCount;
+                    job.FrameGateRetrySuccessAttempt = result.FrameGateRetrySuccessAttempt;
                     x = result.X;
                     y = result.Y;
                     w = result.W;
@@ -667,6 +687,16 @@ namespace Amatsukaze.Server.Rest
                     job.Pass1ScoreMax = ex.Pass1ScoreMax;
                     job.Pass2ScoreMax = ex.Pass2ScoreMax;
                     job.FinalScoreBeforeRescueMax = ex.FinalScoreBeforeRescueMax;
+                    job.Pass2Entered = ex.Pass2Entered;
+                    job.Pass2PrepareSucceeded = ex.Pass2PrepareSucceeded;
+                    job.Pass2CollectSucceeded = ex.Pass2CollectSucceeded;
+                    job.Pass2RescueFallbackApplied = ex.Pass2RescueFallbackApplied;
+                    job.Pass2FailBeforeClear = ex.Pass2FailBeforeClear;
+                    job.Pass2FrameMaskNonZero = ex.Pass2FrameMaskNonZero;
+                    job.Pass2AcceptedFrames = ex.Pass2AcceptedFrames;
+                    job.Pass2SkippedFrames = ex.Pass2SkippedFrames;
+                    job.FrameGateRetryAttemptCount = ex.FrameGateRetryAttemptCount;
+                    job.FrameGateRetrySuccessAttempt = ex.FrameGateRetrySuccessAttempt;
                     job.Error = ex.Message;
                     job.Completed = true;
                 }
@@ -878,6 +908,17 @@ namespace Amatsukaze.Server.Rest
                 Pass1ScoreMax = job.Pass1ScoreMax,
                 Pass2ScoreMax = job.Pass2ScoreMax,
                 FinalScoreBeforeRescueMax = job.FinalScoreBeforeRescueMax,
+                Pass2Entered = job.Pass2Entered,
+                Pass2PrepareSucceeded = job.Pass2PrepareSucceeded,
+                Pass2CollectSucceeded = job.Pass2CollectSucceeded,
+                Pass2RescueFallbackApplied = job.Pass2RescueFallbackApplied,
+                Pass2FailBeforeClearCode = (int)job.Pass2FailBeforeClear,
+                Pass2FailBeforeClearName = job.Pass2FailBeforeClear.ToString(),
+                Pass2FrameMaskNonZero = job.Pass2FrameMaskNonZero,
+                Pass2AcceptedFrames = job.Pass2AcceptedFrames,
+                Pass2SkippedFrames = job.Pass2SkippedFrames,
+                FrameGateRetryAttemptCount = job.FrameGateRetryAttemptCount,
+                FrameGateRetrySuccessAttempt = job.FrameGateRetrySuccessAttempt,
                 DebugImages = debug
             };
         }
