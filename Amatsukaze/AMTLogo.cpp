@@ -214,6 +214,21 @@ void logo::LogoData::Save(const tstring& filepath, const LogoHeader* header) {
     WriteExtendedLogo(file, header);
 }
 
+void logo::LogoData::SaveAviUtl(const tstring& filepath, const LogoHeader* header) {
+    int wUV = w >> logUVx;
+    std::vector<LOGO_PIXEL> basedata(header->w * header->h);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            int off = x + y * w;
+            int offUV = (x >> logUVx) + (y >> logUVy) * wUV;
+            ToOutLGP(basedata[off], aY[off], bY[off], aU[offUV], bU[offUV], aV[offUV], bV[offUV]);
+        }
+    }
+
+    File file(filepath, _T("wb"));
+    WriteBaseLogo(file, header, basedata.data());
+}
+
 /* static */ logo::LogoData logo::LogoData::Load(const tstring& filepath, LogoHeader* header) {
     File file(filepath, _T("rb"));
 

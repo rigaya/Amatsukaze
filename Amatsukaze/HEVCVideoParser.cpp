@@ -28,6 +28,10 @@
 
 #include "HEVCVideoParser.h"
 
+#ifndef FF_PROFILE_HEVC_MAIN_10
+#define FF_PROFILE_HEVC_MAIN_10 AV_PROFILE_HEVC_MAIN_10
+#endif
+
 HEVCVideoParser::HEVCVideoParser(AMTContext& ctx) :
     AMTObject(ctx),
     IVideoParser(),

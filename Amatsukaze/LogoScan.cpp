@@ -712,8 +712,12 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
         const long long packetPos = failedPacket ? static_cast<long long>(failedPacket->pos) : -1LL;
         const int packetKey = failedPacket ? ((failedPacket->flags & AV_PKT_FLAG_KEY) ? 1 : 0) : 0;
         ctx.incrementCounter(AMT_ERR_DECODE_PACKET_FAILED);
-        ctx.warnF("[LogoScan] avcodec_send_packet failed; packet skipped (phase=%s, code=%d, detail=%s, stream=%d, codec=%s, packetPos=%lld, packetPts=%s, packetDts=%s, packetSize=%d, key=%d)",
-            phase, ret, detail.c_str(), videoStream->index, pCodec->name, packetPos, packetPts.c_str(), packetDts.c_str(), packetSize, packetKey);
+        const auto detailT = char_to_tstring(detail);
+        const auto packetPtsT = char_to_tstring(packetPts);
+        const auto packetDtsT = char_to_tstring(packetDts);
+        const auto codecNameT = char_to_tstring(pCodec->name);
+        ctx.warnF(_T("[LogoScan] avcodec_send_packet failed; packet skipped (phase=%s, code=%d, detail=%s, stream=%d, codec=%s, packetPos=%lld, packetPts=%s, packetDts=%s, packetSize=%d, key=%d)"),
+            char_to_tstring(phase), ret, detailT, videoStream->index, codecNameT, packetPos, packetPtsT, packetDtsT, packetSize, packetKey);
     };
     auto throwReceiveFrameError = [&](const char* phase, int ret) {
         const auto detail = FormatAvErrorDetail(ret);
@@ -1296,7 +1300,7 @@ void logo::LogoFrame::selectLogo(const std::vector<int>& trims, int numCandidate
     for (int i = 0; i < numCandidates; i++) {
         const auto& s = logoScore[i];
 #if 1
-        ctx.debugF("logo%d: %f * %f = %f", i + 1,
+        ctx.debugF(_T("logo%d: %f * %f = %f"), i + 1,
             (s.cost / s.numFrames), (targetFrames / (float)s.numFrames), s.score);
 #endif
     }
@@ -2909,8 +2913,8 @@ namespace {
             if (!shouldRetryFrameGateWindow()) {
                 return rect;
             }
-            logCtx.infoF("[LogoScan] frameGate retry start: reason=%s step=%d maxRetry=%d",
-                ToString(debugPass2FailBeforeClear), retryStep, kFrameGateRetryMax);
+            logCtx.infoF(_T("[LogoScan] frameGate retry start: reason=%s step=%d maxRetry=%d"),
+                char_to_tstring(ToString(debugPass2FailBeforeClear)), retryStep, kFrameGateRetryMax);
             for (int retry = 1; retry <= kFrameGateRetryMax; retry++) {
                 debugFrameGateRetryAttemptCount = retry;
                 const int startFrame = retryStep * retry;
@@ -2918,17 +2922,17 @@ namespace {
                     rect = runSingleWindow(srcpath, startFrame);
                     if (!shouldRetryFrameGateWindow()) {
                         debugFrameGateRetrySuccessAttempt = retry;
-                        logCtx.infoF("[LogoScan] frameGate retry success: retry=%d startFrame=%d", retry, startFrame);
+                        logCtx.infoF(_T("[LogoScan] frameGate retry success: retry=%d startFrame=%d"), retry, startFrame);
                         return rect;
                     }
-                    logCtx.infoF("[LogoScan] frameGate retry fallback: retry=%d startFrame=%d reason=%s",
-                        retry, startFrame, ToString(debugPass2FailBeforeClear));
+                    logCtx.infoF(_T("[LogoScan] frameGate retry fallback: retry=%d startFrame=%d reason=%s"),
+                        retry, startFrame, char_to_tstring(ToString(debugPass2FailBeforeClear)));
                 } catch (const Exception& ex) {
-                    logCtx.warnF("[LogoScan] frameGate retry failed: retry=%d startFrame=%d error=%s",
-                        retry, startFrame, ex.message());
+                    logCtx.warnF(_T("[LogoScan] frameGate retry failed: retry=%d startFrame=%d error=%s"),
+                        retry, startFrame, char_to_tstring(ex.message()));
                 }
             }
-            logCtx.info("[LogoScan] frameGate retry exhausted; fallback to initial window");
+            logCtx.info(_T("[LogoScan] frameGate retry exhausted; fallback to initial window"));
             return runSingleWindow(srcpath, 0);
         }
 
@@ -3158,7 +3162,7 @@ namespace {
                         roiCacheRamSlabs.emplace_back((size_t)roiCacheFrameBytes * (size_t)framesInSlab);
                     }
                     roiCacheBackend = RoiCacheBackend::Ram;
-                    logCtx.infoF("[LogoScan] ROI cache: RAM slabs=%d (%" PRIu64 " bytes, avail=%" PRIu64 ")", slabCount, estimatedBytes, availBytes);
+                    logCtx.infoF(_T("[LogoScan] ROI cache: RAM slabs=%d (%") _T(PRIu64) _T(" bytes, avail=%") _T(PRIu64) _T(")"), slabCount, estimatedBytes, availBytes);
                     return;
                 }
             } catch (const std::bad_alloc&) {
@@ -3170,11 +3174,11 @@ namespace {
                 logCtx.registerTmpFile(roiCachePath);
                 roiCacheFile = std::make_unique<File>(roiCachePath, _T("w+b"));
                 roiCacheBackend = RoiCacheBackend::TempFile;
-                logCtx.infoF("[LogoScan] ROI cache: temp file (%s, %" PRIu64 " bytes, avail=%" PRIu64 ")",
-                    tchar_to_string(roiCachePath).c_str(), estimatedBytes, availBytes);
+                logCtx.infoF(_T("[LogoScan] ROI cache: temp file (%s, %") _T(PRIu64) _T(" bytes, avail=%") _T(PRIu64) _T(")"),
+                    roiCachePath.c_str(), estimatedBytes, availBytes);
             } catch (const Exception&) {
                 clearRoiCache();
-                logCtx.warn("[LogoScan] ROI cache init failed; fallback to full decode reruns");
+                logCtx.warn(_T("[LogoScan] ROI cache init failed; fallback to full decode reruns"));
             }
         }
 
@@ -4431,7 +4435,7 @@ namespace {
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
-            logCtx.infoF("[LogoScan] detect geometry: source=%dx%d detect=%dx%d scale=%d scan=(%d,%d,%d,%d)",
+            logCtx.infoF(_T("[LogoScan] detect geometry: source=%dx%d detect=%dx%d scale=%d scan=(%d,%d,%d,%d)"),
                 srcImgW, srcImgH, imgw, imgh, detectScale, scanx, scany, scanw, scanh);
             configureTracePoints();
             if (roiCacheCaptureActive) {

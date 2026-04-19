@@ -76,6 +76,7 @@ public:
     float* GetB(int plane);
 
     void Save(const tstring& filepath, const LogoHeader* header);
+    void SaveAviUtl(const tstring& filepath, const LogoHeader* header);
 
     static LogoData Load(const tstring& filepath, LogoHeader* header);
 };

@@ -253,6 +253,7 @@ touch "${INSTALL_DIR}/drcs/drcs_map.txt"
 echo "実行ファイルをインストールします..."
 install -D -t "${INSTALL_DIR}" ./scripts/AmatsukazeServer.sh
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeCLI/AmatsukazeCLI"
+install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeGenLogo/AmatsukazeGenLogo"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/libAmatsukaze.so"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
 

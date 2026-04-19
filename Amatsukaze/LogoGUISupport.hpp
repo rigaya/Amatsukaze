@@ -270,6 +270,16 @@ public:
         }
         return false;
     }
+
+    bool saveAviUtl(const tchar* filename) {
+        try {
+            logo.SaveAviUtl(filename, &header);
+            return true;
+        } catch (const Exception& exception) {
+            ctx.setError(exception);
+        }
+        return false;
+    }
 };
 
 } // namespace logo
@@ -593,3 +603,4 @@ extern "C" AMATSUKAZE_API const char* LogoFile_GetName(logo::GUILogoFile * ptr) 
 extern "C" AMATSUKAZE_API void LogoFile_SetName(logo::GUILogoFile * ptr, const char* name) { ptr->setName(name); }
 extern "C" AMATSUKAZE_API void LogoFile_GetImage(logo::GUILogoFile * ptr, uint8_t * rgb, int stride, uint8_t bg) { ptr->getImage(rgb, stride, bg); }
 extern "C" AMATSUKAZE_API int LogoFile_Save(logo::GUILogoFile * ptr, const tchar * filename) { return ptr->save(filename); }
+extern "C" AMATSUKAZE_API int LogoFile_SaveAviUtl(logo::GUILogoFile * ptr, const tchar * filename) { return ptr->saveAviUtl(filename); }
