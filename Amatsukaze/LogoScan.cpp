@@ -2194,8 +2194,11 @@ namespace {
         logo::LOGO_AUTODETECT_CB cb;
         RGYThreadPool threadPool;
 
+        int srcImgW;
+        int srcImgH;
         int imgw;
         int imgh;
+        int detectScale;
         int scanx;
         int scany;
         int scanw;
@@ -2349,6 +2352,8 @@ namespace {
         int roiCacheStoredFrames = 0;
         std::vector<std::vector<uint8_t>> roiCacheRamSlabs;
         std::vector<uint8_t> roiReplayFrame;
+        std::vector<uint8_t> detectFrame8;
+        std::vector<uint16_t> detectFrame16;
         std::unique_ptr<File> roiCacheFile;
         tstring roiCachePath;
 
@@ -2735,6 +2740,7 @@ namespace {
         AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
+        AutoDetectRect makeSourceRectFromDetect(const AutoDetectRect& detectRect) const;
         void writeTracePlotBitmap(const std::string& path, const ScoreStageBuffers& scoreStage, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
         void setRectDetectFail(const LogoRectDetectFail fail) {
             if (fail != LogoRectDetectFail::None && rectDetectFail == LogoRectDetectFail::None) {
@@ -2807,7 +2813,7 @@ namespace {
             , logCtx(ctx)
             , cb(cb)
             , threadPool(std::max(1, threadN))
-            , imgw(0), imgh(0), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
+            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScale(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
@@ -3020,7 +3026,7 @@ namespace {
                     THROW(RuntimeException, "Cancel requested");
                 }
                 clearRoiCache();
-                return rectAbs;
+                return makeSourceRectFromDetect(rectAbs);
             } catch (...) {
                 try {
                     clearRoiCache();
@@ -3123,6 +3129,10 @@ namespace {
             roiCacheRamSlabs.shrink_to_fit();
             roiReplayFrame.clear();
             roiReplayFrame.shrink_to_fit();
+            detectFrame8.clear();
+            detectFrame8.shrink_to_fit();
+            detectFrame16.clear();
+            detectFrame16.shrink_to_fit();
             roiCachePath.clear();
         }
 
@@ -3169,7 +3179,7 @@ namespace {
         }
 
         template<typename pixel_t>
-        void appendFrameToRoiCache(const pixel_t* srcY, const int pitchY) {
+        void appendDetectFrameToRoiCache(const pixel_t* srcY, const int pitchY) {
             if (!roiCacheCaptureActive || roiCacheBackend == RoiCacheBackend::None || roiCacheFrameBytes <= 0) {
                 return;
             }
@@ -3179,10 +3189,9 @@ namespace {
             if ((int)roiReplayFrame.size() != roiCacheFrameBytes) {
                 roiReplayFrame.resize(roiCacheFrameBytes);
             }
-            const pixel_t* srcRoi = srcY + scanx + scany * pitchY;
             const int maxv = std::max(1, (1 << bitDepth) - 1);
             for (int y = 0; y < scanh; y++) {
-                const pixel_t* srcLine = srcRoi + y * pitchY;
+                const pixel_t* srcLine = srcY + y * pitchY;
                 uint8_t* dstLine = roiReplayFrame.data() + y * scanw;
                 for (int x = 0; x < scanw; x++) {
                     const int v = (int)srcLine[x];
@@ -4412,13 +4421,18 @@ namespace {
             } else {
                 framesPerSec = 30;
             }
-            imgw = frame->width;
-            imgh = frame->height;
+            srcImgW = frame->width;
+            srcImgH = frame->height;
+            detectScale = (srcImgH > 1080) ? 2 : 1;
+            imgw = std::max(32, srcImgW / detectScale);
+            imgh = std::max(32, srcImgH / detectScale);
             scanw = RoundDownBy(std::max(32, imgw / divx), 4);
             scanh = RoundDownBy(std::max(32, imgh / divy), 4);
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
+            logCtx.infoF("[LogoScan] detect geometry: source=%dx%d detect=%dx%d scale=%d scan=(%d,%d,%d,%d)",
+                srcImgW, srcImgH, imgw, imgh, detectScale, scanx, scany, scanw, scanh);
             configureTracePoints();
             if (roiCacheCaptureActive) {
                 initializeRoiCache();
@@ -4447,22 +4461,20 @@ namespace {
         // 1フレームを取り込み、現在passに応じて統計へ反映する。
         // pass1: 仮lgd構築 / pass2: 相関列構築 / pass3: フィルタ後サンプル収集。
         template<typename pixel_t>
-        int addFrame(const AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
-            const int pitchY = frame->linesize[0] / sizeof(pixel_t);
-            const pixel_t* srcY = reinterpret_cast<const pixel_t*>(frame->data[0]);
+        int addFrame(const pixel_t* srcY, const int pitchY, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             const pixel_t maxv = (pixel_t)((1 << bitDepth) - 1);
             const float invMaxv = 1.0f / std::max(1.0f, (float)maxv);
             const float rawScale = maxv / 255.0f;
             const float thresholdRaw = threshold * rawScale;
             std::vector<float> traceFgRaw;
             if (statsPass != nullptr && !tracePoints.empty()) {
-                collectTraceRawFromSource<pixel_t>(srcY, pitchY, traceFgRaw);
+                collectTraceRawFromScanLocalSource<pixel_t>(srcY, pitchY, traceFgRaw);
             }
 
             // pass1: pass2用の仮ロゴを LogoScan に蓄積する。
             if (passIndex == 1) {
                 if (pass2 == nullptr) return 0;
-                return addFramePass1LogoScan<pixel_t>(frame, srcY, pitchY, *pass2);
+                return addFramePass1LogoScan<pixel_t>(srcY, pitchY, bitDepth, *pass2);
             }
 
             // pass2: 仮ロゴとの相関列(corr0/corr1)を構築する。
@@ -4514,16 +4526,16 @@ namespace {
             const float thresholdRaw = (float)threshold;
             std::vector<float> traceFgRaw;
             if (statsPass != nullptr && !tracePoints.empty()) {
-                collectTraceRawFromStoredSource(srcY, pitchY, traceFgRaw);
+                collectTraceRawFromScanLocalSource(srcY, pitchY, traceFgRaw);
             }
 
             if (passIndex == 1) {
                 if (pass2 == nullptr) return 0;
-                return addStoredFramePass1LogoScan(srcY, pitchY, *pass2);
+                return addFramePass1LogoScan<uint8_t>(srcY, pitchY, 8, *pass2);
             }
             if (passIndex == 2) {
                 if (pass2 == nullptr) return 0;
-                return addStoredFramePass2Correlation(srcY, pitchY, *pass2);
+                return addFramePass2Correlation<uint8_t>(srcY, pitchY, (uint8_t)255, *pass2);
             }
             if (passIndex == 3) {
                 if (pass2 != nullptr && !pass2->frameMask.empty()) {
@@ -4560,32 +4572,12 @@ namespace {
         }
 
         template<typename pixel_t>
-        int addFramePass1LogoScan(const AVFrame* frame, const pixel_t* srcY, const int pitchY, Pass2Buffers& pass2) {
-            if (!pass2.logoScan || pass2.logoRectAbs.w <= 0 || pass2.logoRectAbs.h <= 0) {
-                return 0;
-            }
-            if (frame->data[1] == nullptr || frame->data[2] == nullptr || frame->linesize[1] <= 0) {
-                return 0;
-            }
-            const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
-            const pixel_t* srcU = reinterpret_cast<const pixel_t*>(frame->data[1]);
-            const pixel_t* srcV = reinterpret_cast<const pixel_t*>(frame->data[2]);
-
-            const int offY = pass2.logoRectAbs.x + pass2.logoRectAbs.y * pitchY;
-            const int offUV = (pass2.logoRectAbs.x >> logUVx) + (pass2.logoRectAbs.y >> logUVy) * pitchUV;
-            // pass2 用の仮ロゴ生成では、ROI 外側リングから bg を作って AddScanFrame へ
-            // 直接流すと、固定文字や枠線を bg として取り込みやすく q41/q42 のように
-            // deintLogo / frame gate が崩れる。ROI 外周の単色判定まで含めた AddFrame を使い、
-            // 「悪い多数サンプル」は捨てて品質を優先する。
-            return pass2.logoScan->AddFrame(srcY + offY, srcU + offUV, srcV + offUV, pitchY, pitchUV, bitDepth) ? 1 : 0;
-        }
-
-        int addStoredFramePass1LogoScan(const uint8_t* srcY, const int pitchY, Pass2Buffers& pass2) {
+        int addFramePass1LogoScan(const pixel_t* srcY, const int pitchY, const int inputBitDepth, Pass2Buffers& pass2) {
             if (!pass2.logoScan || pass2.logoRectLocal.w <= 0 || pass2.logoRectLocal.h <= 0) {
                 return 0;
             }
             const int offY = pass2.logoRectLocal.x + pass2.logoRectLocal.y * pitchY;
-            return pass2.logoScan->AddFrameYOnlyNeutralUV(srcY + offY, pitchY, 8) ? 1 : 0;
+            return pass2.logoScan->AddFrameYOnlyNeutralUV(srcY + offY, pitchY, inputBitDepth) ? 1 : 0;
         }
 
         // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
@@ -4605,34 +4597,12 @@ namespace {
             if ((int)pass2.evalWork.size() < required) {
                 pass2.evalWork.resize(required, 0.0f);
             }
-            const int off = pass2.deintLogo->getImgX() + pass2.deintLogo->getImgY() * pitchY;
+            const int off = pass2.logoRectLocal.x + pass2.logoRectLocal.y * pitchY;
             logo::DeintY(pass2.evalDeint.data(), srcY + off, pitchY, w, h);
             // alpha=0/1 の相関を評価し、後段のロゴ有無推定用に保存する。
             const float maxvf = (float)maxv;
             const float corr0 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 0.0f, pass2.evalWork.data());
             const float corr1 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 1.0f, pass2.evalWork.data());
-            pass2.corr0.push_back(corr0);
-            pass2.corr1.push_back(corr1);
-            return 0;
-        }
-
-        int addStoredFramePass2Correlation(const uint8_t* srcY, const int pitchY, Pass2Buffers& pass2) {
-            if (!pass2.deintLogo || !pass2.deintLogo->isValid()) {
-                return 0;
-            }
-            const int w = pass2.deintLogo->getWidth();
-            const int h = pass2.deintLogo->getHeight();
-            const int required = w * h + 8;
-            if ((int)pass2.evalDeint.size() < required) {
-                pass2.evalDeint.resize(required, 0.0f);
-            }
-            if ((int)pass2.evalWork.size() < required) {
-                pass2.evalWork.resize(required, 0.0f);
-            }
-            const int off = pass2.logoRectLocal.x + pass2.logoRectLocal.y * pitchY;
-            logo::DeintY(pass2.evalDeint.data(), srcY + off, pitchY, w, h);
-            const float corr0 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), 255.0f, 0.0f, pass2.evalWork.data());
-            const float corr1 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), 255.0f, 1.0f, pass2.evalWork.data());
             pass2.corr0.push_back(corr0);
             pass2.corr1.push_back(corr1);
             return 0;
@@ -4653,20 +4623,7 @@ namespace {
         }
 
         template<typename pixel_t>
-        void collectTraceRawFromSource(const pixel_t* srcY, const int pitchY, std::vector<float>& outFgRaw) const {
-            outFgRaw.assign(tracePoints.size(), 0.0f);
-            if (tracePoints.empty()) {
-                return;
-            }
-            for (size_t i = 0; i < tracePoints.size(); i++) {
-                const auto& tp = tracePoints[i];
-                const int absX = scanx + tp.x;
-                const int absY = scany + tp.y;
-                outFgRaw[i] = (float)srcY[absX + absY * pitchY];
-            }
-        }
-
-        void collectTraceRawFromStoredSource(const uint8_t* srcY, const int pitchY, std::vector<float>& outFgRaw) const {
+        void collectTraceRawFromScanLocalSource(const pixel_t* srcY, const int pitchY, std::vector<float>& outFgRaw) const {
             outFgRaw.assign(tracePoints.size(), 0.0f);
             if (tracePoints.empty()) {
                 return;
@@ -4678,12 +4635,43 @@ namespace {
         }
 
         template<typename pixel_t>
+        void buildDetectFrame(const pixel_t* srcY, const int pitchY, std::vector<pixel_t>& out) const {
+            out.resize(std::max(0, scanw * scanh));
+            if (scanw <= 0 || scanh <= 0) {
+                return;
+            }
+            const int scale = std::max(1, detectScale);
+            const int srcBaseX = scanx * scale;
+            const int srcBaseY = scany * scale;
+            if (scale == 1) {
+                for (int y = 0; y < scanh; y++) {
+                    std::memcpy(out.data() + y * scanw, srcY + srcBaseX + (srcBaseY + y) * pitchY, sizeof(pixel_t) * scanw);
+                }
+                return;
+            }
+            for (int y = 0; y < scanh; y++) {
+                pixel_t* dstLine = out.data() + y * scanw;
+                const int srcY0 = srcBaseY + y * scale;
+                for (int x = 0; x < scanw; x++) {
+                    const int srcX0 = srcBaseX + x * scale;
+                    uint64_t sum = 0;
+                    for (int dy = 0; dy < scale; dy++) {
+                        const pixel_t* srcLine = srcY + (srcY0 + dy) * pitchY + srcX0;
+                        for (int dx = 0; dx < scale; dx++) {
+                            sum += (uint64_t)srcLine[dx];
+                        }
+                    }
+                    dstLine[x] = (pixel_t)((sum + (uint64_t)(scale * scale) / 2) / (uint64_t)(scale * scale));
+                }
+            }
+        }
+
+        template<typename pixel_t>
         void preprocessFrame(const pixel_t* srcY, const int pitchY, std::vector<pixel_t>& frameWork, const pixel_t maxv, const float rawScale, const float thresholdRaw) {
             // 前処理: 5x5 バイラテラルでノイズを落としつつ輪郭を保持する。
             constexpr int kBilateralRadius = 2;
             const float sigmaRange = std::max(6.0f * rawScale, thresholdRaw * 0.6f);
-            const pixel_t* srcRoiBase = srcY + scanx + scany * pitchY;
-            BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcRoiBase, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
+            BilateralFilter<pixel_t, kBilateralRadius>(frameWork, srcY, pitchY, scanw, scanh, 1.4f, sigmaRange, (pixel_t)maxv, &threadPool, threadN);
         }
 
         void preprocessStoredFrame(const uint8_t* srcY, const int pitchY, std::vector<uint8_t>& frameWork, const float thresholdRaw) {
@@ -4973,13 +4961,15 @@ namespace {
             if (pixelSize == 1) {
                 const auto* srcY = reinterpret_cast<const uint8_t*>(frame->data[0]);
                 const int pitchY = frame->linesize[0] / sizeof(uint8_t);
-                frameCount = addFrame<uint8_t>(frame, statsPass, pass2);
-                appendFrameToRoiCache(srcY, pitchY);
+                buildDetectFrame<uint8_t>(srcY, pitchY, detectFrame8);
+                frameCount = addFrame<uint8_t>(detectFrame8.data(), scanw, statsPass, pass2);
+                appendDetectFrameToRoiCache(detectFrame8.data(), scanw);
             } else {
                 const auto* srcY = reinterpret_cast<const uint16_t*>(frame->data[0]);
                 const int pitchY = frame->linesize[0] / sizeof(uint16_t);
-                frameCount = addFrame<uint16_t>(frame, statsPass, pass2);
-                appendFrameToRoiCache(srcY, pitchY);
+                buildDetectFrame<uint16_t>(srcY, pitchY, detectFrame16);
+                frameCount = addFrame<uint16_t>(detectFrame16.data(), scanw, statsPass, pass2);
+                appendDetectFrameToRoiCache(detectFrame16.data(), scanw);
             }
             if (statsPass != nullptr) {
                 statsPass->frameValidCounts.push_back(frameCount);
@@ -9120,6 +9110,29 @@ namespace {
         absRect.w = std::min(absRect.w, std::max(2, imgw - absRect.x));
         absRect.h = std::min(absRect.h, std::max(2, imgh - absRect.y));
         return absRect;
+    }
+
+    AutoDetectRect AutoDetectLogoReader::makeSourceRectFromDetect(const AutoDetectRect& detectRect) const {
+        if (detectRect.w <= 0 || detectRect.h <= 0) {
+            return AutoDetectRect{ 0, 0, 0, 0 };
+        }
+        AutoDetectRect srcRect{
+            detectRect.x * detectScale,
+            detectRect.y * detectScale,
+            detectRect.w * detectScale,
+            detectRect.h * detectScale
+        };
+        srcRect.x = ClampInt(srcRect.x, 0, std::max(0, srcImgW - 2));
+        srcRect.y = ClampInt(srcRect.y, 0, std::max(0, srcImgH - 2));
+        srcRect.w = std::max(2, srcRect.w);
+        srcRect.h = std::max(2, srcRect.h);
+        srcRect.x = RoundDownBy(srcRect.x, 2);
+        srcRect.y = RoundDownBy(srcRect.y, 2);
+        srcRect.w = RoundUpBy(srcRect.w, 2);
+        srcRect.h = RoundUpBy(srcRect.h, 2);
+        srcRect.w = std::min(srcRect.w, std::max(2, srcImgW - srcRect.x));
+        srcRect.h = std::min(srcRect.h, std::max(2, srcImgH - srcRect.y));
+        return srcRect;
     }
 
     // ステージ3: binaryマスクから最終ロゴ矩形を決定する。
