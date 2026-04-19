@@ -919,6 +919,33 @@ int ConfigWrapper::getNumParallelLogoAnalysis() const {
 int ConfigWrapper::getMaxFadeLength() const {
     return conf.maxFadeLength;
 }
+bool ConfigWrapper::isAutoLogoDetectEnabled() const {
+    return conf.autoLogoDetect != 0;
+}
+int ConfigWrapper::getAutoLogoDetect() const {
+    return conf.autoLogoDetect;
+}
+int ConfigWrapper::getAutoLogoDetectSearchFrames() const {
+    return conf.autoLogoDetectSearchFrames;
+}
+int ConfigWrapper::getAutoLogoDetectDivX() const {
+    return conf.autoLogoDetectDivX;
+}
+int ConfigWrapper::getAutoLogoDetectDivY() const {
+    return conf.autoLogoDetectDivY;
+}
+int ConfigWrapper::getAutoLogoDetectBlockSize() const {
+    return conf.autoLogoDetectBlockSize;
+}
+int ConfigWrapper::getAutoLogoDetectThreshold() const {
+    return conf.autoLogoDetectThreshold;
+}
+int ConfigWrapper::getAutoLogoDetectMarginX() const {
+    return conf.autoLogoDetectMarginX;
+}
+int ConfigWrapper::getAutoLogoDetectMarginY() const {
+    return conf.autoLogoDetectMarginY;
+}
 
 tstring ConfigWrapper::getChapterExePath() const {
     return conf.chapterExePath;

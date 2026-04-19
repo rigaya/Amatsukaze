@@ -102,6 +102,9 @@ private:
 
     void logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
+    // ロゴ不一致時に自動ロゴ枠検出→ロゴ生成→仮ロゴで再解析を試行する
+    bool tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
+
     tstring MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 
     void chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);

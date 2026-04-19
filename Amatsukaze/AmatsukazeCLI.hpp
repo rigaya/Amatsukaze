@@ -79,6 +79,14 @@ static void printHelp(const tchar* bin) {
         "  --parallel-logo-analysis auto or <数値> 並列ロゴ解析 (数値は並列数を指定)\n"
         "  --loose-logo-detection ロゴ検出判定しきい値を低くします\n"
         "  --max-fade-length <数値> ロゴの最大フェードフレーム数[16]\n"
+        "  --auto-logo-detect <0|1> ロゴ不一致時に自動ロゴ検出を試行[1]\n"
+        "  --auto-logo-detect-search-frames <数値> 自動ロゴ検出の検索フレーム数[10000]\n"
+        "  --auto-logo-detect-div-x <数値> 自動ロゴ検出の分割数X[5]\n"
+        "  --auto-logo-detect-div-y <数値> 自動ロゴ検出の分割数Y[5]\n"
+        "  --auto-logo-detect-block-size <数値> 自動ロゴ検出のブロックサイズ[32]\n"
+        "  --auto-logo-detect-threshold <数値> 自動ロゴ検出の閾値[12]\n"
+        "  --auto-logo-detect-margin-x <数値> 自動ロゴ検出のマージンX[6]\n"
+        "  --auto-logo-detect-margin-y <数値> 自動ロゴ検出のマージンY[6]\n"
         "  --chapter-exe <パス> chapter_exe.exeへのパス\n"
         "  --jls <パス>         join_logo_scp.exeへのパス\n"
         "  --jls-cmd <パス>    join_logo_scpのコマンドファイルへのパス\n"
@@ -219,6 +227,14 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.inPipe = INVALID_HANDLE_VALUE;
     conf.outPipe = INVALID_HANDLE_VALUE;
     conf.maxFadeLength = 16;
+    conf.autoLogoDetect = 1;
+    conf.autoLogoDetectSearchFrames = 10000;
+    conf.autoLogoDetectDivX = 5;
+    conf.autoLogoDetectDivY = 5;
+    conf.autoLogoDetectBlockSize = 32;
+    conf.autoLogoDetectThreshold = 12;
+    conf.autoLogoDetectMarginX = 6;
+    conf.autoLogoDetectMarginY = 6;
     conf.numEncodeBufferFrames = 16;
     conf.encoderParallel = 1;
     conf.parallelLogoAnalysis = false;
@@ -405,6 +421,22 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             const auto arg = getParam(argc, argv, i++);
             conf.parallelLogoAnalysis = true;
             conf.numParallelLogoAnalysis = (arg == _T("auto")) ? 0 : std::stoi(arg);
+        } else if (key == _T("--auto-logo-detect")) {
+            conf.autoLogoDetect = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-search-frames")) {
+            conf.autoLogoDetectSearchFrames = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-div-x")) {
+            conf.autoLogoDetectDivX = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-div-y")) {
+            conf.autoLogoDetectDivY = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-block-size")) {
+            conf.autoLogoDetectBlockSize = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-threshold")) {
+            conf.autoLogoDetectThreshold = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-margin-x")) {
+            conf.autoLogoDetectMarginX = std::stoi(getParam(argc, argv, i++));
+        } else if (key == _T("--auto-logo-detect-margin-y")) {
+            conf.autoLogoDetectMarginY = std::stoi(getParam(argc, argv, i++));
         } else if (key == _T("--timefactor")) {
             const auto arg = getParam(argc, argv, i++);
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.x265TimeFactor);

@@ -260,6 +260,15 @@ struct Config {
     bool parallelLogoAnalysis;
     int numParallelLogoAnalysis;
     int maxFadeLength;
+    // 自動ロゴ検出設定
+    int autoLogoDetect;              // 0:無効, 1:有効
+    int autoLogoDetectSearchFrames;
+    int autoLogoDetectDivX;
+    int autoLogoDetectDivY;
+    int autoLogoDetectBlockSize;
+    int autoLogoDetectThreshold;
+    int autoLogoDetectMarginX;
+    int autoLogoDetectMarginY;
     tstring chapterExePath;
     tstring chapterExeOptions;
     tstring joinLogoScpPath;
@@ -417,6 +426,16 @@ public:
     int getNumParallelLogoAnalysis() const;
 
     int getMaxFadeLength() const;
+
+    bool isAutoLogoDetectEnabled() const;
+    int getAutoLogoDetect() const;
+    int getAutoLogoDetectSearchFrames() const;
+    int getAutoLogoDetectDivX() const;
+    int getAutoLogoDetectDivY() const;
+    int getAutoLogoDetectBlockSize() const;
+    int getAutoLogoDetectThreshold() const;
+    int getAutoLogoDetectMarginX() const;
+    int getAutoLogoDetectMarginY() const;
 
     tstring getChapterExePath() const;
 

@@ -9,8 +9,30 @@
 #include <future>
 #include <atomic>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
+#include <thread>
 #include "CMAnalyze.h"
+
+extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
+    const tchar* srcpath, int serviceid,
+    int divx, int divy, int searchFrames, int blockSize, int threshold,
+    int marginX, int marginY, int threadN,
+    int* outX, int* outY, int* outW, int* outH, int* outRectDetectFail, int* outLogoAnalyzeFail,
+    double* outPass1ScoreMax, double* outPass2ScoreMax, double* outFinalScoreBeforeRescueMax,
+    int* outPass2Entered, int* outPass2PrepareSucceeded, int* outPass2CollectSucceeded, int* outPass2RescueFallbackApplied,
+    int* outPass2FailBeforeClear, int* outPass2FrameMaskNonZero, int* outPass2AcceptedFrames, int* outPass2SkippedFrames,
+    int* outFrameGateRetryAttemptCount, int* outFrameGateRetrySuccessAttempt,
+    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
+    int detailedDebug,
+    logo::LOGO_AUTODETECT_CB cb);
+
+extern "C" AMATSUKAZE_API int ScanLogo(AMTContext* ctx,
+    const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
+    const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+    logo::LOGO_ANALYZE_CB cb);
 
 CMAnalyze::CMAnalyze(AMTContext& ctx,
     const ConfigWrapper& setting) :
@@ -370,6 +392,14 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
         float threshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
         if (logof.getLogoRatio() < threshold) {
             ctx.info(_T("この区間はマッチするロゴはありませんでした"));
+            if (setting_.isAutoLogoDetectEnabled()) {
+                ctx.info(_T("[自動ロゴ検出] 自動ロゴ検出を試行します"));
+                if (tryAutoDetectAndRetryLogo(videoFileIndex, inputFormat, numFrames, avspath)) {
+                    ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに成功しました"));
+                } else {
+                    ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに失敗しました"));
+                }
+            }
         } else {
             logopath = setting_.getLogoPath()[logof.getBestLogo()];
         }
@@ -377,6 +407,181 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
 
     for (int i = 0; i < (int)eraseLogoPath.size(); i++) {
         logof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex, i), (int)logoPath.size() + i);
+    }
+}
+
+bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
+    const auto workfile = setting_.getTmpDir() + StringFormat(_T("/auto_logo_work_%d.dat"), videoFileIndex);
+    const auto tmpLogoPath = setting_.getTmpDir() + StringFormat(_T("/auto_logo_%d.tmp.lgd"), videoFileIndex);
+    auto cleanup = [&]() {
+        removeT(workfile.c_str());
+        removeT(tmpLogoPath.c_str());
+    };
+
+    try {
+        const auto srcpath = setting_.getSrcFilePath();
+        const int serviceId = setting_.getServiceId();
+        const int autoDetectThreadN = std::min(std::max(std::max(1, GetProcessorCount()) - 2, 1), 16);
+
+        ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出を開始します (%dスレッド)"), autoDetectThreadN);
+        int rectX = 0, rectY = 0, rectW = 0, rectH = 0;
+        int rectDetectFail = 0, logoAnalyzeFail = 0;
+        auto autoDetectCb = [](int, float, float, int, int) -> bool { return true; };
+        const int ret = AutoDetectLogoRect(&ctx, srcpath.c_str(), serviceId,
+            setting_.getAutoLogoDetectDivX(), setting_.getAutoLogoDetectDivY(),
+            setting_.getAutoLogoDetectSearchFrames(), setting_.getAutoLogoDetectBlockSize(),
+            setting_.getAutoLogoDetectThreshold(),
+            setting_.getAutoLogoDetectMarginX(), setting_.getAutoLogoDetectMarginY(),
+            autoDetectThreadN,
+            &rectX, &rectY, &rectW, &rectH, &rectDetectFail, &logoAnalyzeFail,
+            nullptr, nullptr, nullptr,
+            nullptr, nullptr, nullptr, nullptr,
+            nullptr, nullptr, nullptr, nullptr,
+            nullptr, nullptr,
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+            0,
+            autoDetectCb);
+        if (!ret || rectW <= 0 || rectH <= 0) {
+            ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出に失敗しました (rectDetectFail=%d, logoAnalyzeFail=%d)"), rectDetectFail, logoAnalyzeFail);
+            return false;
+        }
+        ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出完了: (%d, %d, %d, %d)"), rectX, rectY, rectW, rectH);
+
+        const int imgx = (rectX / 2) * 2;
+        const int imgy = (rectY / 2) * 2;
+        const int logoW = ((rectW + 1) / 2) * 2;
+        const int logoH = ((rectH + 1) / 2) * 2;
+
+        ctx.info(_T("[自動ロゴ検出] ロゴ生成を開始します"));
+        auto scanLogoCb = [](float, int, int, int) -> bool { return true; };
+        if (!ScanLogo(&ctx, srcpath.c_str(), serviceId,
+            workfile.c_str(), tmpLogoPath.c_str(), nullptr,
+            imgx, imgy, logoW, logoH,
+            setting_.getAutoLogoDetectThreshold(),
+            setting_.getAutoLogoDetectSearchFrames(),
+            scanLogoCb)) {
+            ctx.info(_T("[自動ロゴ検出] ロゴ生成に失敗しました"));
+            cleanup();
+            return false;
+        }
+        ctx.info(_T("[自動ロゴ検出] ロゴ生成完了"));
+
+        ctx.info(_T("[自動ロゴ検出] 仮ロゴで再解析を開始します"));
+        std::vector<tstring> autoLogoPathVec = { tmpLogoPath };
+        logo::LogoFrame autoLogof(ctx, autoLogoPathVec, 0.35f);
+
+        int duration = 0;
+        std::atomic<int> startThreads = 0;
+        const int processorCount = setting_.getNumParallelLogoAnalysis() > 0 ? setting_.getNumParallelLogoAnalysis() : GetProcessorCount();
+        const int preferredThreads = (setting_.isParallelLogoAnalysis()) ? getPreferredThreads(processorCount) : 1;
+        const int minFramesPerThread = 600;
+        const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread / 2) / minFramesPerThread))) : 1;
+        const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 8 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
+        ctx.infoF(_T("[自動ロゴ検出] 再解析 %d並列 x デコード%dスレッド"), totalThreads, decodeThreads);
+
+        std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
+        for (int ith = 0; ith < totalThreads; ith++) {
+            logoScanThreads.push_back(std::async(std::launch::async, [&](const int threadID) {
+                try {
+                    ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
+                    AVSValue result;
+                    env->Invoke("Eval", AVSValue(makePreamble().c_str()));
+                    env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &result);
+                    const auto amtsourcePath = tchar_to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
+                    AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
+                    PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
+                    auto vi = clip->GetVideoInfo();
+                    if (threadID == 0) {
+                        autoLogof.setClipInfo(clip);
+                        duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                    }
+                    startThreads++;
+                    autoLogof.scanFrames(clip, trims, threadID, totalThreads, env.get());
+                } catch (const AvisynthError& avserror) {
+                    startThreads++;
+                    return std::pair<int, std::string>{ 1, avserror.msg };
+                } catch (const std::exception& e) {
+                    startThreads++;
+                    return std::pair<int, std::string>{ 1, e.what() };
+                } catch (...) {
+                    startThreads++;
+                    return std::pair<int, std::string>{ 1, "unknown exception" };
+                }
+                return std::pair<int, std::string>{ 0, "" };
+            }, ith));
+            const auto waitStart = std::chrono::steady_clock::now();
+            while (startThreads.load() <= ith) {
+                if (logoScanThreads[ith].wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                    break;
+                }
+                if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60)) {
+                    ctx.infoF(_T("[自動ロゴ検出] logo scan #%d: タイムアウト"), ith);
+                    cleanup();
+                    return false;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            if (startThreads.load() <= ith
+                && logoScanThreads[ith].wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                const auto& scanResult = logoScanThreads[ith].get();
+                if (scanResult.first != 0) {
+                    ctx.infoF(_T("[自動ロゴ検出] logo scan #%d: %s"), ith, char_to_tstring(scanResult.second));
+                    cleanup();
+                    return false;
+                }
+            }
+        }
+        for (size_t ith = 0; ith < logoScanThreads.size(); ith++) {
+            const auto& scanResult = logoScanThreads[ith].get();
+            if (scanResult.first != 0) {
+                ctx.infoF(_T("[自動ロゴ検出] logo scan #%d: %s"), (int)ith, char_to_tstring(scanResult.second));
+                cleanup();
+                return false;
+            }
+        }
+
+        autoLogof.selectLogo(trims, 1);
+        const float retryThreshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
+        if (autoLogof.getLogoRatio() < retryThreshold) {
+            ctx.infoF(_T("[自動ロゴ検出] 仮ロゴでもマッチしませんでした (ratio=%.4f, threshold=%.4f)"), autoLogof.getLogoRatio(), retryThreshold);
+            cleanup();
+            return false;
+        }
+        ctx.infoF(_T("[自動ロゴ検出] 仮ロゴでマッチ成功 (ratio=%.4f)"), autoLogof.getLogoRatio());
+
+        const auto logoDir = pathGetDirectory(setting_.getLogoPath()[0]);
+        const auto now = std::chrono::system_clock::now();
+        const auto nowTimeT = std::chrono::system_clock::to_time_t(now);
+        std::tm localTm{};
+#if defined(_WIN32) || defined(_WIN64)
+        localtime_s(&localTm, &nowTimeT);
+#else
+        localtime_r(&nowTimeT, &localTm);
+#endif
+        std::ostringstream oss;
+        oss << std::put_time(&localTm, "%Y%m%d_%H%M%S");
+        const auto tTimestamp = char_to_tstring(oss.str());
+        const auto savedLogoPath = logoDir + StringFormat(_T("/SID%d-auto-%" PRITSTR ".lgd"), serviceId, tTimestamp.c_str());
+
+        File::copy(tmpLogoPath, savedLogoPath);
+        ctx.infoF(_T("[自動ロゴ検出] ロゴファイルを保存しました: %s"), savedLogoPath.c_str());
+
+        autoLogof.writeResult(setting_.getTmpLogoFramePath(videoFileIndex));
+        logopath = savedLogoPath;
+        cleanup();
+        return true;
+    } catch (const Exception& e) {
+        ctx.infoF(_T("[自動ロゴ検出] 例外が発生しました: %s"), char_to_tstring(e.message()));
+        cleanup();
+        return false;
+    } catch (const std::exception& e) {
+        ctx.infoF(_T("[自動ロゴ検出] 例外が発生しました: %s"), char_to_tstring(e.what()));
+        cleanup();
+        return false;
+    } catch (...) {
+        ctx.info(_T("[自動ロゴ検出] 不明な例外が発生しました"));
+        cleanup();
+        return false;
     }
 }
 
