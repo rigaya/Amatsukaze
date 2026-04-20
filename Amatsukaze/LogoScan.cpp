@@ -2254,6 +2254,19 @@ namespace {
         return defaultValue;
     }
 
+    static int ParseEnvIntDefault(const char* name, const int defaultValue, const int minValue = std::numeric_limits<int>::min(), const int maxValue = std::numeric_limits<int>::max()) {
+        const char* v = std::getenv(name);
+        if (v == nullptr || v[0] == '\0') {
+            return defaultValue;
+        }
+        char* end = nullptr;
+        const long parsed = std::strtol(v, &end, 10);
+        if (end == v || (end != nullptr && *end != '\0')) {
+            return defaultValue;
+        }
+        return ClampInt((int)parsed, minValue, maxValue);
+    }
+
     static std::vector<std::pair<int, int>> ParseEnvPointList(const char* name) {
         std::vector<std::pair<int, int>> points;
         const char* v = std::getenv(name);
@@ -4914,12 +4927,15 @@ namespace {
             std::atomic<int> frameCount(0);
             // 遷移検出閾値は rawScale から直接算出する。
             const float transitionThreshold = std::max(0.75f * rawScale, thresholdRaw * 0.125f);
-            // 小さすぎるチャンク分割はタスク投入オーバーヘッドが支配的になるため、
-            // 既定チャンク(スレッド数に応じた分割)を使う。
-            RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kScanEdgeMargin), [&](int y0, int y1) {
+            const int collectYBlock = ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", 16, 1);
+            const int collectXSplits = ParseEnvIntDefault("AMT_LOGO_COLLECT_X_SPLITS", 2, 1);
+            const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
+            const int innerWidth = std::max(0, scanw - 2 * kScanEdgeMargin);
+
+            auto processRange = [&](const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
                 int localFrameCount = 0;
-                for (int y = y0 + kScanEdgeMargin; y < y1 + kScanEdgeMargin; y++) {
-                    for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
+                for (int y = yBegin; y < yEnd; y++) {
+                    for (int x = xBegin; x < xEnd; x++) {
                         const int off = x + y * scanw;
                         if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
                             continue;
@@ -4965,7 +4981,34 @@ namespace {
                     }
                 }
                 frameCount.fetch_add(localFrameCount, std::memory_order_relaxed);
-                }, 8);
+            };
+
+            if (collectXSplits <= 1 || innerWidth <= 1) {
+                RunParallelRange(threadPool, threadN, innerHeight, [&](int y0, int y1) {
+                    processRange(y0 + kScanEdgeMargin, y1 + kScanEdgeMargin, kScanEdgeMargin, scanw - kScanEdgeMargin);
+                }, collectYBlock);
+            } else {
+                const int xSplits = std::min(collectXSplits, innerWidth);
+                const int yTasks = (innerHeight + collectYBlock - 1) / collectYBlock;
+                const int totalTasks = yTasks * xSplits;
+                RunParallelRange(threadPool, threadN, totalTasks, [&](int task0, int task1) {
+                    for (int task = task0; task < task1; task++) {
+                        const int tileY = task / xSplits;
+                        const int tileX = task % xSplits;
+                        const int localY0 = tileY * collectYBlock;
+                        const int localY1 = std::min(innerHeight, localY0 + collectYBlock);
+                        if (localY0 >= localY1) {
+                            continue;
+                        }
+                        const int localX0 = (innerWidth * tileX) / xSplits;
+                        const int localX1 = (innerWidth * (tileX + 1)) / xSplits;
+                        if (localX0 >= localX1) {
+                            continue;
+                        }
+                        processRange(localY0 + kScanEdgeMargin, localY1 + kScanEdgeMargin, localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin);
+                    }
+                }, 1);
+            }
 
             // 追跡点は理由付きログを残すため、並列本体から除外して逐次で同一ロジックを適用する。
             for (size_t ti = 0; ti < tracePoints.size(); ti++) {
