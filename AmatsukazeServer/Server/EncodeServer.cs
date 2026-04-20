@@ -1409,6 +1409,34 @@ namespace Amatsukaze.Server
             return value > 0 ? value : defaultValue;
         }
 
+        private const int AutoLogoPendingDefaultDivX = 5;
+        private const int AutoLogoPendingDefaultDivY = 5;
+        private const int AutoLogoPendingDefaultSearchFrames = 10000;
+        private const int AutoLogoPendingDefaultBlockSize = 32;
+        private const int AutoLogoPendingDefaultThreshold = 12;
+        private const int AutoLogoPendingDefaultMarginX = 6;
+        private const int AutoLogoPendingDefaultMarginY = 6;
+        private const int AutoLogoPendingDefaultThreadN = 0;
+        private const bool AutoLogoPendingDefaultDetailedDebug = false;
+
+        private static void NormalizeAutoLogoPendingSettings(Setting setting)
+        {
+            if (setting == null)
+            {
+                return;
+            }
+
+            setting.AutoLogoPendingDivX = AutoLogoPendingDefaultDivX;
+            setting.AutoLogoPendingDivY = AutoLogoPendingDefaultDivY;
+            setting.AutoLogoPendingSearchFrames = AutoLogoPendingDefaultSearchFrames;
+            setting.AutoLogoPendingBlockSize = AutoLogoPendingDefaultBlockSize;
+            setting.AutoLogoPendingThreshold = AutoLogoPendingDefaultThreshold;
+            setting.AutoLogoPendingMarginX = AutoLogoPendingDefaultMarginX;
+            setting.AutoLogoPendingMarginY = AutoLogoPendingDefaultMarginY;
+            setting.AutoLogoPendingThreadN = AutoLogoPendingDefaultThreadN;
+            setting.AutoLogoPendingDetailedDebug = AutoLogoPendingDefaultDetailedDebug;
+        }
+
         private Setting GetDefaultSetting()
         {
             var setting = SetDefaultPath(new Setting()
@@ -1416,18 +1444,10 @@ namespace Amatsukaze.Server
                 NumParallel = 1,
                 NumParallelLogoAnalysis = 0,
                 DeleteOldLogsDays = 180,
-                AutoLogoPendingEnabled = true,
-                AutoLogoPendingDivX = 5,
-                AutoLogoPendingDivY = 5,
-                AutoLogoPendingSearchFrames = 10000,
-                AutoLogoPendingBlockSize = 32,
-                AutoLogoPendingThreshold = 12,
-                AutoLogoPendingMarginX = 6,
-                AutoLogoPendingMarginY = 6,
-                AutoLogoPendingThreadN = 0,
-                AutoLogoPendingDetailedDebug = false
+                AutoLogoPendingEnabled = true
             });
             NormalizeTrimAdjustSettings(setting);
+            NormalizeAutoLogoPendingSettings(setting);
             return setting;
         }
 
@@ -1476,34 +1496,7 @@ namespace Amatsukaze.Server
                 AppData_.setting.DeleteOldLogsDays = 180;
             }
             NormalizeTrimAdjustSettings(AppData_.setting);
-            if (AppData_.setting.AutoLogoPendingDivX <= 0)
-            {
-                AppData_.setting.AutoLogoPendingDivX = 5;
-            }
-            if (AppData_.setting.AutoLogoPendingDivY <= 0)
-            {
-                AppData_.setting.AutoLogoPendingDivY = 5;
-            }
-            if (AppData_.setting.AutoLogoPendingSearchFrames < 100)
-            {
-                AppData_.setting.AutoLogoPendingSearchFrames = 10000;
-            }
-            if (AppData_.setting.AutoLogoPendingBlockSize < 4)
-            {
-                AppData_.setting.AutoLogoPendingBlockSize = 32;
-            }
-            if (AppData_.setting.AutoLogoPendingThreshold < 1)
-            {
-                AppData_.setting.AutoLogoPendingThreshold = 12;
-            }
-            if (AppData_.setting.AutoLogoPendingMarginX < 0)
-            {
-                AppData_.setting.AutoLogoPendingMarginX = 6;
-            }
-            if (AppData_.setting.AutoLogoPendingMarginY < 0)
-            {
-                AppData_.setting.AutoLogoPendingMarginY = 6;
-            }
+            NormalizeAutoLogoPendingSettings(AppData_.setting);
             if (AppData_.scriptData == null)
             {
                 AppData_.scriptData = new MakeScriptData();
@@ -2348,6 +2341,8 @@ namespace Amatsukaze.Server
                 {
                     sb.Append(" --no-delogo");
                 }
+                sb.Append(" --auto-logo-detect ")
+                    .Append(setting.AutoLogoPendingEnabled ? 1 : 0);
                 if (profile.ParallelLogoAnalysis)
                 {
                     sb.Append(" --parallel-logo-analysis ");
@@ -3478,6 +3473,7 @@ namespace Amatsukaze.Server
                 {
                     SetDefaultPath(data.Setting);
                     CheckSetting(null, data.Setting);
+                    NormalizeAutoLogoPendingSettings(data.Setting);
                     AppData_.setting = data.Setting;
                     workerPool.SetNumParallel(data.Setting.NumParallel);
                     SetScheduleParam(AppData_.setting.SchedulingEnabled,

@@ -109,59 +109,11 @@ else
                 <input type="number" min="0" step="1" style="width: 60px; margin-left: 6px;" value="@GetIntValue(DeleteOldLogsDaysField)" @oninput="@(e => OnIntInput(e, DeleteOldLogsDaysField))" disabled="@(GetBoolValue(DeleteOldLogsField) == false)" />
             </td>
         </tr>
-    </table>
-
-    <hr class="settings-sep" />
-    <h4>ロゴ自動補完</h4>
-    <table class="table">
         <tr class="settings-check-row">
             <td colspan="2">
                 <label class="settings-check">
                     <input type="checkbox" checked="@GetBoolValue(AutoLogoPendingEnabledField)" @onchange="@(e => OnBoolChange(e, AutoLogoPendingEnabledField))" />
-                    ロゴ設定不足で保留になったとき自動でロゴを解析・採用する
-                </label>
-            </td>
-        </tr>
-        <tr>
-            <th>探索分割 (div_x,div_y)</th>
-            <td>
-                <input type="number" min="1" step="1" style="width:80px;" value="@GetIntValue(AutoLogoPendingDivXField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingDivXField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-                <span style="margin:0 6px;">,</span>
-                <input type="number" min="1" step="1" style="width:80px;" value="@GetIntValue(AutoLogoPendingDivYField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingDivYField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-            </td>
-        </tr>
-        <tr>
-            <th>探索フレーム数</th>
-            <td><input type="number" min="100" step="100" style="width:120px;" value="@GetIntValue(AutoLogoPendingSearchFramesField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingSearchFramesField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" /></td>
-        </tr>
-        <tr>
-            <th>ブロック半径</th>
-            <td><input type="number" min="4" step="1" style="width:120px;" value="@GetIntValue(AutoLogoPendingBlockSizeField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingBlockSizeField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" /></td>
-        </tr>
-        <tr>
-            <th>閾値</th>
-            <td><input type="number" min="1" step="1" style="width:120px;" value="@GetIntValue(AutoLogoPendingThresholdField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingThresholdField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" /></td>
-        </tr>
-        <tr>
-            <th>マージン (x,y)</th>
-            <td>
-                <input type="number" min="0" step="1" style="width:80px;" value="@GetIntValue(AutoLogoPendingMarginXField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingMarginXField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-                <span style="margin:0 6px;">,</span>
-                <input type="number" min="0" step="1" style="width:80px;" value="@GetIntValue(AutoLogoPendingMarginYField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingMarginYField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-            </td>
-        </tr>
-        <tr>
-            <th>スレッド数 (0=auto)</th>
-            <td>
-                <input type="number" min="0" step="1" style="width:120px;" value="@GetIntValue(AutoLogoPendingThreadNField)" @oninput="@(e => OnIntInput(e, AutoLogoPendingThreadNField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-                <span style="margin-left:8px;">auto = clamp(論理コア数-2, 1, 16)</span>
-            </td>
-        </tr>
-        <tr class="settings-check-row">
-            <td colspan="2">
-                <label class="settings-check">
-                    <input type="checkbox" checked="@GetBoolValue(AutoLogoPendingDetailedDebugField)" @onchange="@(e => OnBoolChange(e, AutoLogoPendingDetailedDebugField))" disabled="@(!GetBoolValue(AutoLogoPendingEnabledField))" />
-                    詳細デバッグ出力を保存する
+                    自動でロゴを解析・採用する
                 </label>
             </td>
         </tr>
@@ -501,15 +453,6 @@ else
     private const string AffinitySettingField = "AffinitySetting";
     private const string ExclusiveBatExecField = "ExclusiveBatExec";
     private const string AutoLogoPendingEnabledField = "AutoLogoPendingEnabled";
-    private const string AutoLogoPendingDivXField = "AutoLogoPendingDivX";
-    private const string AutoLogoPendingDivYField = "AutoLogoPendingDivY";
-    private const string AutoLogoPendingSearchFramesField = "AutoLogoPendingSearchFrames";
-    private const string AutoLogoPendingBlockSizeField = "AutoLogoPendingBlockSize";
-    private const string AutoLogoPendingThresholdField = "AutoLogoPendingThreshold";
-    private const string AutoLogoPendingMarginXField = "AutoLogoPendingMarginX";
-    private const string AutoLogoPendingMarginYField = "AutoLogoPendingMarginY";
-    private const string AutoLogoPendingThreadNField = "AutoLogoPendingThreadN";
-    private const string AutoLogoPendingDetailedDebugField = "AutoLogoPendingDetailedDebug";
     private const string EnableX265VfrField = "EnableX265VFRTimeFactor";
     private const string X265VfrFactorField = "X265VFRTimeFactor";
     private const string EnableRunHoursField = "EnableRunHours";
@@ -739,7 +682,6 @@ else
         _boolValues[ExecuteBatchAfterQueueField] = GetBool(ExecuteBatchAfterQueueField);
         _boolValues[ExclusiveBatExecField] = GetBool(ExclusiveBatExecField);
         _boolValues[AutoLogoPendingEnabledField] = GetBool(AutoLogoPendingEnabledField);
-        _boolValues[AutoLogoPendingDetailedDebugField] = GetBool(AutoLogoPendingDetailedDebugField);
 
         _intValues[DeleteOldLogsDaysField] = NormalizeIntValue(DeleteOldLogsDaysField, GetInt(DeleteOldLogsDaysField));
         _intValues[NumGpuField] = NormalizeIntValue(NumGpuField, GetInt(NumGpuField));
@@ -748,14 +690,6 @@ else
         _intValues[ProcessPriorityField] = NormalizeIntValue(ProcessPriorityField, GetInt(ProcessPriorityField));
         _intValues[AffinitySettingField] = NormalizeIntValue(AffinitySettingField, GetInt(AffinitySettingField));
         _intValues[TrimAdjustPreviewScaleModeField] = NormalizeIntValue(TrimAdjustPreviewScaleModeField, GetInt(TrimAdjustPreviewScaleModeField));
-        _intValues[AutoLogoPendingDivXField] = NormalizeIntValue(AutoLogoPendingDivXField, GetInt(AutoLogoPendingDivXField));
-        _intValues[AutoLogoPendingDivYField] = NormalizeIntValue(AutoLogoPendingDivYField, GetInt(AutoLogoPendingDivYField));
-        _intValues[AutoLogoPendingSearchFramesField] = NormalizeIntValue(AutoLogoPendingSearchFramesField, GetInt(AutoLogoPendingSearchFramesField));
-        _intValues[AutoLogoPendingBlockSizeField] = NormalizeIntValue(AutoLogoPendingBlockSizeField, GetInt(AutoLogoPendingBlockSizeField));
-        _intValues[AutoLogoPendingThresholdField] = NormalizeIntValue(AutoLogoPendingThresholdField, GetInt(AutoLogoPendingThresholdField));
-        _intValues[AutoLogoPendingMarginXField] = NormalizeIntValue(AutoLogoPendingMarginXField, GetInt(AutoLogoPendingMarginXField));
-        _intValues[AutoLogoPendingMarginYField] = NormalizeIntValue(AutoLogoPendingMarginYField, GetInt(AutoLogoPendingMarginYField));
-        _intValues[AutoLogoPendingThreadNField] = NormalizeIntValue(AutoLogoPendingThreadNField, GetInt(AutoLogoPendingThreadNField));
         _doubleValues[X265VfrFactorField] = NormalizeDoubleValue(X265VfrFactorField, GetDouble(X265VfrFactorField));
         _runHours = GetRunHoursArray();
         _noActionExeList.AddRange(GetStringList("NoActionExeList"));
@@ -1420,30 +1354,6 @@ else
         if (trimDefault > 0)
         {
             return NormalizeTrimAdjustMoveFrames(value, trimDefault);
-        }
-        if (name == AutoLogoPendingDivXField || name == AutoLogoPendingDivYField)
-        {
-            return Math.Max(1, value);
-        }
-        if (name == AutoLogoPendingSearchFramesField)
-        {
-            return Math.Max(100, value);
-        }
-        if (name == AutoLogoPendingBlockSizeField)
-        {
-            return Math.Max(4, value);
-        }
-        if (name == AutoLogoPendingThresholdField)
-        {
-            return Math.Max(1, value);
-        }
-        if (name == AutoLogoPendingMarginXField || name == AutoLogoPendingMarginYField)
-        {
-            return Math.Max(0, value);
-        }
-        if (name == AutoLogoPendingThreadNField)
-        {
-            return Math.Max(0, value);
         }
         return value;
     }

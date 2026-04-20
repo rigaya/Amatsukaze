@@ -18,11 +18,15 @@ namespace Amatsukaze.Server
         private readonly ConcurrentDictionary<int, byte> runningServices = new ConcurrentDictionary<int, byte>();
         private readonly ConcurrentDictionary<int, string> failureLatch = new ConcurrentDictionary<int, string>();
 
-        private const int MinSearchFrames = 100;
-        private const int MinBlockSize = 4;
-        private const int MinThreshold = 1;
-        private const int MinMargin = 0;
-        private const int MinDiv = 1;
+        private const int DefaultDivX = 5;
+        private const int DefaultDivY = 5;
+        private const int DefaultSearchFrames = 10000;
+        private const int DefaultBlockSize = 32;
+        private const int DefaultThreshold = 12;
+        private const int DefaultMarginX = 6;
+        private const int DefaultMarginY = 6;
+        private const int DefaultThreadN = 0;
+        private const bool DefaultDetailedDebug = false;
 
         public AutoLogoPendingResolver(EncodeServer server)
         {
@@ -100,15 +104,15 @@ namespace Amatsukaze.Server
                 var tmppath = Path.Combine(workPath, $"logo-auto-{jobId}.tmp.lgd");
                 var outpath = Path.Combine(workPath, $"logo-auto-{jobId}.lgd");
 
-                var divX = Math.Max(MinDiv, setting.AutoLogoPendingDivX);
-                var divY = Math.Max(MinDiv, setting.AutoLogoPendingDivY);
-                var searchFrames = Math.Max(MinSearchFrames, setting.AutoLogoPendingSearchFrames);
-                var blockSize = Math.Max(MinBlockSize, setting.AutoLogoPendingBlockSize);
-                var threshold = Math.Max(MinThreshold, setting.AutoLogoPendingThreshold);
-                var marginX = Math.Max(MinMargin, setting.AutoLogoPendingMarginX);
-                var marginY = Math.Max(MinMargin, setting.AutoLogoPendingMarginY);
-                var threadN = AutoLogoThreadResolver.Resolve(setting.AutoLogoPendingThreadN);
-                var detailedDebug = setting.AutoLogoPendingDetailedDebug;
+                var divX = DefaultDivX;
+                var divY = DefaultDivY;
+                var searchFrames = DefaultSearchFrames;
+                var blockSize = DefaultBlockSize;
+                var threshold = DefaultThreshold;
+                var marginX = DefaultMarginX;
+                var marginY = DefaultMarginY;
+                var threadN = AutoLogoThreadResolver.Resolve(DefaultThreadN);
+                var detailedDebug = DefaultDetailedDebug;
                 var rectX = 0;
                 var rectY = 0;
                 var rectW = 0;

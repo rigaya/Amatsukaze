@@ -3487,6 +3487,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region AutoLogoPendingEnabled変更通知プロパティ
+        public bool AutoLogoPendingEnabled
+        {
+            get { return Model.AutoLogoPendingEnabled; }
+            set
+            {
+                if (Model.AutoLogoPendingEnabled == value)
+                    return;
+                Model.AutoLogoPendingEnabled = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region DumpFilter変更通知プロパティ
         public bool DumpFilter
         {

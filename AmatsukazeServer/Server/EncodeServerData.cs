@@ -775,6 +775,12 @@ namespace Amatsukaze.Server
     [DataContract]
     public class Setting : IExtensibleDataObject
     {
+        [OnDeserializing]
+        private void OnDeserializing(StreamingContext context)
+        {
+            AutoLogoPendingEnabled = true;
+        }
+
         [DataMember]
         public string AmatsukazePath { get; set; }
         [DataMember]
