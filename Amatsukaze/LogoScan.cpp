@@ -42,6 +42,15 @@
 
 namespace {
 
+int ResolveAutoDetectThreadCount(const int configured) {
+    if (configured > 0) {
+        return configured;
+    }
+    const unsigned logicalRaw = std::thread::hardware_concurrency();
+    const int logical = std::max(1, (int)((logicalRaw > 0) ? logicalRaw : 1));
+    return std::min(logical, 16);
+}
+
 std::string FormatAvErrorDetail(int errnum) {
     char errbuf[AV_ERROR_MAX_STRING_SIZE] = {};
     if (av_strerror(errnum, errbuf, sizeof(errbuf)) == 0) {
@@ -2812,11 +2821,11 @@ namespace {
             , threshold(std::max(1, threshold))
             , marginX(std::max(0, marginX))
             , marginY(std::max(0, marginY))
-            , threadN(std::max(1, threadN))
+            , threadN(ResolveAutoDetectThreadCount(threadN))
             , detailedDebug(detailedDebug)
             , logCtx(ctx)
             , cb(cb)
-            , threadPool(std::max(1, threadN))
+            , threadPool(ResolveAutoDetectThreadCount(threadN))
             , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScale(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;

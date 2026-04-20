@@ -148,7 +148,7 @@ void PrintUsage() {
         _T("      --auto-logo-detect-threshold <n>      自動ロゴ枠検出の閾値 [12]\n")
         _T("      --auto-logo-detect-margin-x <n>       自動ロゴ枠検出のマージンX [6]\n")
         _T("      --auto-logo-detect-margin-y <n>       自動ロゴ枠検出のマージンY [6]\n")
-        _T("      --auto-logo-detect-threads <n>        自動ロゴ枠検出スレッド数 [0=自動]\n")
+        _T("      --auto-logo-detect-threads <n>        自動ロゴ枠検出スレッド数 [0=min(論理コア数,16)]\n")
         _T("\n")
         _T("Logo generate options:\n")
         _T("      --logo-gen-threshold <n>              ロゴ生成の閾値 [auto-detect-thresholdと同値]\n")
