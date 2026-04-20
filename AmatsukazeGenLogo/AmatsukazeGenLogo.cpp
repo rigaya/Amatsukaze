@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cerrno>
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -580,15 +581,62 @@ void RemoveIfExists(const tstring& path) {
     }
 }
 
+std::tm GetLocalTime(std::time_t now) {
+    std::tm localTime = {};
+#if defined(_WIN32) || defined(_WIN64)
+    localtime_s(&localTime, &now);
+#else
+    localtime_r(&now, &localTime);
+#endif
+    return localTime;
+}
+
+tstring MakeOutputTimestamp() {
+    const auto now = std::time(nullptr);
+    const auto localTime = GetLocalTime(now);
+    TCHAR buffer[32] = {};
+    _stprintf_s(buffer, _T("%04d%02d%02d_%02d%02d%02d"),
+        localTime.tm_year + 1900, localTime.tm_mon + 1, localTime.tm_mday,
+        localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
+    return tstring(buffer);
+}
+
+fs::path ResolveFinalOutputPath(const tstring& outputPath) {
+    const fs::path output(outputPath);
+    if (!fs::exists(output)) {
+        return output;
+    }
+
+    const fs::path parent = output.has_parent_path() ? output.parent_path() : fs::current_path();
+    const tstring stem = output.stem().native();
+    const tstring ext = output.has_extension() ? output.extension().native() : tstring(_T(".lgd"));
+    const tstring timestamp = MakeOutputTimestamp();
+    for (int attempt = 0; attempt < 100; attempt++) {
+        tstring filename = stem + _T("-") + timestamp;
+        if (attempt > 0) {
+            filename += _T("-") + IntToTString(attempt);
+        }
+        filename += ext;
+        const fs::path candidate = parent / filename;
+        if (!fs::exists(candidate)) {
+            _ftprintf(stderr,
+                _T("出力先に既存ファイルがあるため、別名で保存します: %s -> %s\n"),
+                output.c_str(), candidate.c_str());
+            return candidate;
+        }
+    }
+
+    throw std::runtime_error("退避用の出力ファイル名を決定できません");
+}
+
 void FinalizeOutput(const tstring& tempPath, const tstring& outputPath) {
+    const fs::path finalPath = ResolveFinalOutputPath(outputPath);
     std::error_code ec;
-    fs::remove(fs::path(outputPath), ec);
-    ec.clear();
-    fs::rename(fs::path(tempPath), fs::path(outputPath), ec);
+    fs::rename(fs::path(tempPath), finalPath, ec);
     if (!ec) {
         return;
     }
-    fs::copy_file(fs::path(tempPath), fs::path(outputPath), fs::copy_options::overwrite_existing, ec);
+    fs::copy_file(fs::path(tempPath), finalPath, fs::copy_options::none, ec);
     if (ec) {
         throw std::runtime_error("出力ファイルの配置に失敗しました");
     }

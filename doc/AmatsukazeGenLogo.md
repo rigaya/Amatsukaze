@@ -75,6 +75,7 @@ AmatsukazeGenLogo -i input.ts -o output.lgd --debug-dir ./debug_logo
 - 通常出力は Amatsukaze 拡張 lgd
 - `--aviutl-lgd` 指定時は AviUtl 向け base-only lgd
 - 出力ファイルは一時ファイルに保存後、成功時のみ最終パスへ配置する
+- 出力先に既存ファイルがある場合は上書きせず、`<ファイル名>-yyyyMMdd_HHmmss.lgd` 形式の別名で保存する
 
 ## 備考
 
