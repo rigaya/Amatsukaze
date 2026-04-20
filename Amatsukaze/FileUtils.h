@@ -227,7 +227,7 @@ void WriteGrayBitmap(const std::string& path, int w, int h, F pixels) {
     bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(bmiHeader);
     bmfHeader.bfSize = bmfHeader.bfOffBits + bmiHeader.biSizeImage;
 
-    File file(path, "wb");
+    File file(char_to_tstring(path), _T("wb"));
     file.write(MemoryChunk((uint8_t*)&bmfHeader, sizeof(bmfHeader)));
     file.write(MemoryChunk((uint8_t*)&bmiHeader, sizeof(bmiHeader)));
     file.write(MemoryChunk(buf.get(), h * stride));
@@ -267,7 +267,7 @@ void WriteRgbBitmap(const std::string& path, int w, int h, F pixels) {
     bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(bmiHeader);
     bmfHeader.bfSize = bmfHeader.bfOffBits + bmiHeader.biSizeImage;
 
-    File file(path, "wb");
+    File file(char_to_tstring(path), _T("wb"));
     file.write(MemoryChunk((uint8_t*)&bmfHeader, sizeof(bmfHeader)));
     file.write(MemoryChunk((uint8_t*)&bmiHeader, sizeof(bmiHeader)));
     file.write(MemoryChunk(buf.get(), h * stride));
