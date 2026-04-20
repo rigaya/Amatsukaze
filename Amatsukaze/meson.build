@@ -42,6 +42,7 @@ amatsukaze_sources = [
 # AVX/AVX2用ファイル
 avx_sources = ['ComputeKernelAVX.cpp']
 avx2_sources = ['ComputeKernelAVX2.cpp', 'ConvertPixAVX2.cpp']
+avx512_sources = ['ComputeKernelAVX512.cpp']
 
 amatsukaze_inc = include_directories('.')
 amatsukaze_include_dirs = [
@@ -81,10 +82,12 @@ if host_machine.system() == 'windows'
   # Windows用のコンパイラフラグ
   avx_cpp_args = amatsukaze_cpp_args + ['/arch:AVX']
   avx2_cpp_args = amatsukaze_cpp_args + ['/arch:AVX2']
+  avx512_cpp_args = amatsukaze_cpp_args + ['/arch:AVX512']
 else
   # Linux用のコンパイラフラグ
   avx_cpp_args = amatsukaze_cpp_args + avx_args
   avx2_cpp_args = amatsukaze_cpp_args + avx2_args
+  avx512_cpp_args = amatsukaze_cpp_args + avx512_args
 endif
 
 # AVXファイルのターゲット
@@ -105,6 +108,15 @@ avx2_lib = static_library('avx2_lib',
   pic : true
 )
 
+# AVX512ファイルのターゲット
+avx512_lib = static_library('avx512_lib',
+  avx512_sources,
+  include_directories : amatsukaze_include_dirs,
+  dependencies : amatsukaze_deps,
+  cpp_args : avx512_cpp_args,
+  pic : true
+)
+
 # AribString.cppは_UNICODEマクロ付きで別途ビルド
 aribstring_lib = static_library('aribstring',
   'AribString.cpp',
@@ -121,7 +133,7 @@ amatsukaze_lib = shared_library('Amatsukaze',
   dependencies : amatsukaze_deps,
   cpp_args : amatsukaze_cpp_args,
   link_args : amatsukaze_link_args,
-  link_with : [avx_lib, avx2_lib, aribstring_lib],
+  link_with : [avx_lib, avx2_lib, avx512_lib, aribstring_lib],
   install : true,
 )
 

@@ -14,10 +14,19 @@
 
 #include "rgy_simd.h"
 
+static RGY_SIMD GetAvailableSIMDCached() {
+    static const RGY_SIMD simd = get_availableSIMD();
+    return simd;
+}
+
 bool IsAVXAvailable() {
-    return (get_availableSIMD() & RGY_SIMD::AVX) != RGY_SIMD::NONE;
+    return (GetAvailableSIMDCached() & RGY_SIMD::AVX) != RGY_SIMD::NONE;
 }
 
 bool IsAVX2Available() {
-    return (get_availableSIMD() & RGY_SIMD::AVX2) != RGY_SIMD::NONE;
+    return (GetAvailableSIMDCached() & RGY_SIMD::AVX2) != RGY_SIMD::NONE;
+}
+
+bool IsAVX512BWAvailable() {
+    return (GetAvailableSIMDCached() & RGY_SIMD::AVX512BW) == RGY_SIMD::AVX512BW;
 }

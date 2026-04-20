@@ -42,14 +42,6 @@
 
 namespace {
 
-#if defined(_MSC_VER)
-#define AMT_NOINLINE __declspec(noinline)
-#elif defined(__GNUC__) || defined(__clang__)
-#define AMT_NOINLINE __attribute__((noinline))
-#else
-#define AMT_NOINLINE
-#endif
-
 int ResolveAutoDetectThreadCount(const int configured) {
     if (configured > 0) {
         return configured;
@@ -1605,6 +1597,62 @@ namespace {
         }
     }
 
+    static uint8_t BilateralFilter5x5U8RangeLUTScalarPixel(const uint8_t* srcBase, const int srcPitch, const int w, const int h, const int x, const int y, const float* spatial, const float* rangeWeight) {
+        const int center = srcBase[y * srcPitch + x];
+        float wsum = 0.0f;
+        float vsum = 0.0f;
+        int k = 0;
+        for (int dy = -2; dy <= 2; dy++) {
+            const int yy = ClampInt(y + dy, 0, h - 1);
+            const uint8_t* srcRow = srcBase + yy * srcPitch;
+            for (int dx = -2; dx <= 2; dx++, k++) {
+                const int xx = ClampInt(x + dx, 0, w - 1);
+                const int v = srcRow[xx];
+                const float ww = spatial[k] * rangeWeight[std::abs(v - center)];
+                wsum += ww;
+                vsum += ww * (float)v;
+            }
+        }
+        const float outv = (wsum > 1e-8f) ? (vsum / wsum) : (float)center;
+        return (uint8_t)ClampInt((int)(outv + 0.5f), 0, 255);
+    }
+
+    static void BilateralFilter5x5U8RangeLUTScalar(std::vector<uint8_t>& dst, const uint8_t* srcBase, const int srcPitch, const int w, const int h, const float* spatial, const float* rangeWeight, const int y0, const int y1) {
+        for (int y = y0; y < y1; y++) {
+            uint8_t* dstRow = dst.data() + y * w;
+            for (int x = 0; x < w; x++) {
+                dstRow[x] = BilateralFilter5x5U8RangeLUTScalarPixel(srcBase, srcPitch, w, h, x, y, spatial, rangeWeight);
+            }
+        }
+    }
+
+    enum class BilateralSIMDMode {
+        Auto,
+        Scalar,
+        AVX2,
+        AVX512,
+    };
+
+    static BilateralSIMDMode GetForcedBilateralSIMDMode() {
+        static const BilateralSIMDMode mode = []() {
+            const char* env = std::getenv("AMT_LOGOSCAN_BILATERAL_SIMD");
+            if (env == nullptr || env[0] == '\0') {
+                return BilateralSIMDMode::Auto;
+            }
+            if (std::strcmp(env, "scalar") == 0) {
+                return BilateralSIMDMode::Scalar;
+            }
+            if (std::strcmp(env, "avx2") == 0) {
+                return BilateralSIMDMode::AVX2;
+            }
+            if (std::strcmp(env, "avx512") == 0) {
+                return BilateralSIMDMode::AVX512;
+            }
+            return BilateralSIMDMode::Auto;
+        }();
+        return mode;
+    }
+
     template<typename pixel_t, int radius>
     static void BilateralFilter(std::vector<pixel_t>& dst, const pixel_t* srcBase, const int srcPitch, const int w, const int h, const float sigmaSpace, const float sigmaRange, const pixel_t maxv, RGYThreadPool* pool = nullptr, const int threadN = 1) {
         static_assert(radius > 0, "radius must be positive");
@@ -1618,6 +1666,52 @@ namespace {
                 const float r2 = (float)(dx * dx + dy * dy);
                 spatial[(dx + radius) + (dy + radius) * ksize] = std::exp(-r2 * inv2SigmaSpace2);
             }
+        }
+        if constexpr (radius == 2 && std::is_same_v<pixel_t, uint8_t>) {
+            std::array<float, 256> rangeWeight = {};
+            const float minSpatial = *std::min_element(spatial.begin(), spatial.end());
+            const float expArgMin = std::log(std::numeric_limits<float>::min() / std::max(minSpatial, std::numeric_limits<float>::min()));
+            for (int diff = 0; diff < (int)rangeWeight.size(); diff++) {
+                const float arg = std::max(-(float)(diff * diff) * inv2SigmaRange2, expArgMin);
+                rangeWeight[diff] = std::exp(arg);
+            }
+
+            auto filterRangeU8 = [&](const int y0, const int y1) {
+                const BilateralSIMDMode forcedMode = GetForcedBilateralSIMDMode();
+                if (forcedMode == BilateralSIMDMode::Scalar) {
+                    BilateralFilter5x5U8RangeLUTScalar(dst, srcBase, srcPitch, w, h, spatial.data(), rangeWeight.data(), y0, y1);
+                } else if (forcedMode == BilateralSIMDMode::AVX512 && IsAVX512BWAvailable()) {
+                    BilateralFilter5x5U8RangeLUT_AVX512(dst.data(), srcBase, srcPitch, w, h, spatial.data(), rangeWeight.data(), maxv, y0, y1);
+                } else if (forcedMode == BilateralSIMDMode::AVX2 && IsAVX2Available()) {
+                    BilateralFilter5x5U8RangeLUT_AVX2(dst.data(), srcBase, srcPitch, w, h, spatial.data(), rangeWeight.data(), maxv, y0, y1);
+                } else if (IsAVX512BWAvailable()) {
+                    BilateralFilter5x5U8RangeLUT_AVX512(dst.data(), srcBase, srcPitch, w, h, spatial.data(), rangeWeight.data(), maxv, y0, y1);
+                } else if (IsAVX2Available()) {
+                    BilateralFilter5x5U8RangeLUT_AVX2(dst.data(), srcBase, srcPitch, w, h, spatial.data(), rangeWeight.data(), maxv, y0, y1);
+                } else {
+                    BilateralFilter5x5U8RangeLUTScalar(dst, srcBase, srcPitch, w, h, spatial.data(), rangeWeight.data(), y0, y1);
+                }
+            };
+            if (pool == nullptr || threadN <= 1 || h <= 1) {
+                filterRangeU8(0, h);
+                return;
+            }
+            const int workers = std::max(1, std::min(threadN, h));
+            const int chunk = (h + workers - 1) / workers;
+            std::vector<std::future<void>> futures;
+            futures.reserve(workers);
+            for (int worker = 0; worker < workers; worker++) {
+                const int start = worker * chunk;
+                const int end = std::min(h, start + chunk);
+                if (start >= end) break;
+                futures.push_back(pool->enqueue([&filterRangeU8, start, end]() {
+                    filterRangeU8(start, end);
+                }));
+            }
+            for (auto& f : futures) {
+                f.get();
+            }
+            return;
         }
         auto filterRange = [&](const int y0, const int y1) {
             for (int y = y0; y < y1; y++) {
@@ -1730,7 +1824,7 @@ namespace {
         return true;
     }
 
-    AMT_NOINLINE static bool IsExtremeContrastSample(const double fg, const double bg) {
+    static bool IsExtremeContrastSample(const double fg, const double bg) {
         static const double kDiffThreshold = 0.20;
         // Y は 16-235 の範囲であることが前提
         static const double kBlack = 25.0 / 255.0;
@@ -1863,7 +1957,7 @@ namespace {
     // max-min が threshold 以下なら「近い色(ほぼ単色)」として true を返す。
     // 範囲外を含む場合は clamp 参照で安全に評価する。
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
         const int ex = sx + dx * (sideLen - 1);
         const int ey = sy + dy * (sideLen - 1);
         const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
@@ -1889,7 +1983,7 @@ namespace {
     // 指定辺の「基準位置」での評価を実施する。
     // 既評価なら再計算せずキャッシュ結果(sideValid)を返す。
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
         if (st.sideEvaluated[side]) {
             return st.sideValid[side] != 0;
         }
@@ -1902,7 +1996,7 @@ namespace {
     // firstSide と指定 side の平均輝度差が閾値以内なら「同じ近い色の2辺」とみなして確定する。
     // 確定時は有効辺を2辺に絞り、sideCount/sideSum を確定値に更新する。
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBgTryPairWithFirst(const int side, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgTryPairWithFirst(const int side, const float threshold, TryEstimateBgState<pixel_t>& st) {
         if (st.firstSide < 0 || !st.sideValid[side]) {
             return false;
         }
@@ -1920,7 +2014,7 @@ namespace {
     // firstSide が決まった後の評価順を作る。
     // ルール: firstSide の反対側は最後に回し、残り2辺を先に試す。
     // 通常時・救済時の両方で同じ順序規則を使う。
-    AMT_NOINLINE static void TryEstimateBgBuildRetryOrder(const int firstSide, int order[3]) {
+    static void TryEstimateBgBuildRetryOrder(const int firstSide, int order[3]) {
         static constexpr int opposite[4] = { 1, 0, 3, 2 };
         int idx = 0;
         for (int side = 0; side < 4; side++) {
@@ -1935,7 +2029,7 @@ namespace {
     // firstSide 決定後、基準位置のまま残り3辺を評価して 2辺一致を探す。
     // 評価順は TryEstimateBgBuildRetryOrder に従う。
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
         int order[3] = {};
         TryEstimateBgBuildRetryOrder(st.firstSide, order);
         for (int i = 0; i < 3; i++) {
@@ -1953,7 +2047,7 @@ namespace {
     // 通常時の探索。
     // 最初の有効辺は「上→下→左→右」の順で決定し、その後は共通ルールで残り辺を評価する。
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
         // 通常時は 上 -> 下 -> 左 -> 右 の順で最初の有効辺を探す。
         // 最初の有効辺が見つかったら、以後は「反対側を最後」に回して2辺一致を探索する。
         const int initialOrder[4] = { 0, 1, 2, 3 };
@@ -1972,7 +2066,7 @@ namespace {
     // firstSide 以外の辺を外側にシフトして再評価し、2辺一致を探す。
     // 評価順は通常時と同じ規則(反対側を最後)を使う。
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const float threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const float threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
         constexpr int kSideRetryCount = 1;
         constexpr int kSideRetryShift = 16;
         int order[3] = {};
@@ -2002,7 +2096,7 @@ namespace {
     // pair が確定できなかったときの後処理。
     // その時点で有効だった辺を集計し、sideCount/sideSum を算出する。
     template<typename pixel_t>
-    AMT_NOINLINE static void TryEstimateBgFinalizeSideStats(TryEstimateBgState<pixel_t>& st) {
+    static void TryEstimateBgFinalizeSideStats(TryEstimateBgState<pixel_t>& st) {
         st.sideCount = 0;
         st.sideSum = 0.0f;
         for (int i = 0; i < 4; i++) {
@@ -2021,7 +2115,7 @@ namespace {
     // 背景:
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     template<typename pixel_t>
-    AMT_NOINLINE static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
+    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
         const int baseSx[4] = { x - radius, x - radius, x - radius, x + radius };
         const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
         const int sideDx[4] = { 1, 1, 0, 0 };
@@ -4756,7 +4850,7 @@ namespace {
         }
 
         template<typename pixel_t>
-        AMT_NOINLINE void AccumulateCorrectedEdge(const std::vector<pixel_t>& frameWork, const int off, const int x, const int y, const float invMaxv, StatsPassBuffers& statsPass) const {
+        void AccumulateCorrectedEdge(const std::vector<pixel_t>& frameWork, const int off, const int x, const int y, const float invMaxv, StatsPassBuffers& statsPass) const {
             const float fg_i = (float)frameWork[off] * invMaxv;
             float maxCorrected = 0.0f;
             bool anyPositive = false;
@@ -4871,7 +4965,7 @@ namespace {
                     }
                 }
                 frameCount.fetch_add(localFrameCount, std::memory_order_relaxed);
-                });
+                }, 8);
 
             // 追跡点は理由付きログを残すため、並列本体から除外して逐次で同一ロジックを適用する。
             for (size_t ti = 0; ti < tracePoints.size(); ti++) {
@@ -5043,7 +5137,7 @@ namespace {
             return std::exp(-std::exp(-c * ((double)n - n0)));
         }
 
-        AMT_NOINLINE static void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
+        static void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
             bin.count++;
             bin.sum_fg += fg;
             bin.sum_bg += bg;
@@ -5901,7 +5995,7 @@ namespace {
             }
         }
 
-        AMT_NOINLINE double calcSampleResidualWeight(const int off, const double fg, const double bg) const {
+        double calcSampleResidualWeight(const int off, const double fg, const double bg) const {
             if (!sampleResidualReweightActive || off < 0 || off >= (int)provisionalLineValid.size() || !provisionalLineValid[off]) {
                 return 1.0;
             }

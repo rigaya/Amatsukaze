@@ -269,6 +269,9 @@
     <ClCompile Include="ComputeKernelAVX2.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="ComputeKernelAVX512.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="AribString.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
