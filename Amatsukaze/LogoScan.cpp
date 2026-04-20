@@ -42,6 +42,14 @@
 
 namespace {
 
+#if defined(_MSC_VER)
+#define AMT_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define AMT_NOINLINE __attribute__((noinline))
+#else
+#define AMT_NOINLINE
+#endif
+
 int ResolveAutoDetectThreadCount(const int configured) {
     if (configured > 0) {
         return configured;
@@ -1722,7 +1730,7 @@ namespace {
         return true;
     }
 
-    static bool IsExtremeContrastSample(const double fg, const double bg) {
+    AMT_NOINLINE static bool IsExtremeContrastSample(const double fg, const double bg) {
         static const double kDiffThreshold = 0.20;
         // Y は 16-235 の範囲であることが前提
         static const double kBlack = 25.0 / 255.0;
@@ -1788,46 +1796,100 @@ namespace {
         int firstSide = -1;
     };
 
-    // 1辺分の画素列を評価し、平均/最小/最大を返す。
-    // max-min が threshold 以下なら「近い色(ほぼ単色)」として true を返す。
-    // 範囲外を含む場合は clamp 参照で安全に評価する。
-    template<typename pixel_t>
-    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+    enum class TryEstimateBgSideAxis {
+        Horizontal,
+        Vertical,
+    };
+
+    enum class TryEstimateBgSideRangeMode {
+        InRange,
+        Clamp,
+    };
+
+    template<typename pixel_t, TryEstimateBgSideAxis Axis, TryEstimateBgSideRangeMode RangeMode, int FixedLen = 0>
+    RGY_FORCEINLINE static bool TryEstimateBgEvalSideImpl(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
         pixel_t minv = std::numeric_limits<pixel_t>::max();
         pixel_t maxv = std::numeric_limits<pixel_t>::lowest();
         int sum = 0;
-        const int ex = sx + dx * (sideLen - 1);
-        const int ey = sy + dy * (sideLen - 1);
-        const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
-        if (inRange) {
-            const pixel_t* ptr = &y[sx + sy * w];
-            const int step = dx + dy * w;
-            for (int i = 0; i < sideLen; i++, ptr += step) {
-                const pixel_t v = *ptr;
-                minv = std::min(minv, v);
-                maxv = std::max(maxv, v);
-                sum += v;
+        const int len = (FixedLen > 0) ? FixedLen : sideLen;
+
+        if constexpr (RangeMode == TryEstimateBgSideRangeMode::InRange) {
+            if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
+                const pixel_t* ptr = &y[sx + sy * w];
+                for (int i = 0; i < len; i++) {
+                    const pixel_t v = ptr[i];
+                    minv = std::min(minv, v);
+                    maxv = std::max(maxv, v);
+                    sum += v;
+                }
+            } else {
+                const pixel_t* ptr = &y[sx + sy * w];
+                for (int i = 0; i < len; i++, ptr += w) {
+                    const pixel_t v = *ptr;
+                    minv = std::min(minv, v);
+                    maxv = std::max(maxv, v);
+                    sum += v;
+                }
             }
         } else {
-            for (int i = 0; i < sideLen; i++) {
-                const int px = ClampInt(sx + dx * i, 0, w - 1);
-                const int py = ClampInt(sy + dy * i, 0, h - 1);
-                const pixel_t v = y[px + py * w];
-                minv = std::min(minv, v);
-                maxv = std::max(maxv, v);
-                sum += v;
+            if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
+                for (int i = 0; i < len; i++) {
+                    const int px = ClampInt(sx + i, 0, w - 1);
+                    const int py = ClampInt(sy, 0, h - 1);
+                    const pixel_t v = y[px + py * w];
+                    minv = std::min(minv, v);
+                    maxv = std::max(maxv, v);
+                    sum += v;
+                }
+            } else {
+                for (int i = 0; i < len; i++) {
+                    const int px = ClampInt(sx, 0, w - 1);
+                    const int py = ClampInt(sy + i, 0, h - 1);
+                    const pixel_t v = y[px + py * w];
+                    minv = std::min(minv, v);
+                    maxv = std::max(maxv, v);
+                    sum += v;
+                }
             }
         }
-        avg = (float)sum / sideLen;
+
+        avg = (float)sum / len;
         minvOut = minv;
         maxvOut = maxv;
         return ((float)maxv - (float)minv) <= threshold;
     }
 
+    // 1辺分の画素列を評価し、平均/最小/最大を返す。
+    // max-min が threshold 以下なら「近い色(ほぼ単色)」として true を返す。
+    // 範囲外を含む場合は clamp 参照で安全に評価する。
+    template<typename pixel_t>
+    AMT_NOINLINE static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+        const int ex = sx + dx * (sideLen - 1);
+        const int ey = sy + dy * (sideLen - 1);
+        const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
+        const bool horizontal = (dy == 0);
+        if (horizontal) {
+            if (inRange) {
+                if (sideLen == 65) {
+                    return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, TryEstimateBgSideRangeMode::InRange, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+                }
+                return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, TryEstimateBgSideRangeMode::InRange, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+            }
+            return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, TryEstimateBgSideRangeMode::Clamp, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+        }
+        if (inRange) {
+            if (sideLen == 65) {
+                return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, TryEstimateBgSideRangeMode::InRange, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+            }
+            return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, TryEstimateBgSideRangeMode::InRange, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+        }
+        return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, TryEstimateBgSideRangeMode::Clamp, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+    }
+
     // 指定辺の「基準位置」での評価を実施する。
     // 既評価なら再計算せずキャッシュ結果(sideValid)を返す。
     template<typename pixel_t>
-    static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    AMT_NOINLINE static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
         if (st.sideEvaluated[side]) {
             return st.sideValid[side] != 0;
         }
@@ -1840,7 +1902,7 @@ namespace {
     // firstSide と指定 side の平均輝度差が閾値以内なら「同じ近い色の2辺」とみなして確定する。
     // 確定時は有効辺を2辺に絞り、sideCount/sideSum を確定値に更新する。
     template<typename pixel_t>
-    static bool TryEstimateBgTryPairWithFirst(const int side, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    AMT_NOINLINE static bool TryEstimateBgTryPairWithFirst(const int side, const float threshold, TryEstimateBgState<pixel_t>& st) {
         if (st.firstSide < 0 || !st.sideValid[side]) {
             return false;
         }
@@ -1858,7 +1920,7 @@ namespace {
     // firstSide が決まった後の評価順を作る。
     // ルール: firstSide の反対側は最後に回し、残り2辺を先に試す。
     // 通常時・救済時の両方で同じ順序規則を使う。
-    static void TryEstimateBgBuildRetryOrder(const int firstSide, int order[3]) {
+    AMT_NOINLINE static void TryEstimateBgBuildRetryOrder(const int firstSide, int order[3]) {
         static constexpr int opposite[4] = { 1, 0, 3, 2 };
         int idx = 0;
         for (int side = 0; side < 4; side++) {
@@ -1873,7 +1935,7 @@ namespace {
     // firstSide 決定後、基準位置のまま残り3辺を評価して 2辺一致を探す。
     // 評価順は TryEstimateBgBuildRetryOrder に従う。
     template<typename pixel_t>
-    static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    AMT_NOINLINE static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
         int order[3] = {};
         TryEstimateBgBuildRetryOrder(st.firstSide, order);
         for (int i = 0; i < 3; i++) {
@@ -1891,7 +1953,7 @@ namespace {
     // 通常時の探索。
     // 最初の有効辺は「上→下→左→右」の順で決定し、その後は共通ルールで残り辺を評価する。
     template<typename pixel_t>
-    static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    AMT_NOINLINE static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
         // 通常時は 上 -> 下 -> 左 -> 右 の順で最初の有効辺を探す。
         // 最初の有効辺が見つかったら、以後は「反対側を最後」に回して2辺一致を探索する。
         const int initialOrder[4] = { 0, 1, 2, 3 };
@@ -1910,7 +1972,7 @@ namespace {
     // firstSide 以外の辺を外側にシフトして再評価し、2辺一致を探す。
     // 評価順は通常時と同じ規則(反対側を最後)を使う。
     template<typename pixel_t>
-    static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const float threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
+    AMT_NOINLINE static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const float threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
         constexpr int kSideRetryCount = 1;
         constexpr int kSideRetryShift = 16;
         int order[3] = {};
@@ -1940,7 +2002,7 @@ namespace {
     // pair が確定できなかったときの後処理。
     // その時点で有効だった辺を集計し、sideCount/sideSum を算出する。
     template<typename pixel_t>
-    static void TryEstimateBgFinalizeSideStats(TryEstimateBgState<pixel_t>& st) {
+    AMT_NOINLINE static void TryEstimateBgFinalizeSideStats(TryEstimateBgState<pixel_t>& st) {
         st.sideCount = 0;
         st.sideSum = 0.0f;
         for (int i = 0; i < 4; i++) {
@@ -1959,7 +2021,7 @@ namespace {
     // 背景:
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     template<typename pixel_t>
-    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
+    AMT_NOINLINE static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
         const int baseSx[4] = { x - radius, x - radius, x - radius, x + radius };
         const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
         const int sideDx[4] = { 1, 1, 0, 0 };
@@ -4694,6 +4756,55 @@ namespace {
         }
 
         template<typename pixel_t>
+        AMT_NOINLINE void AccumulateCorrectedEdge(const std::vector<pixel_t>& frameWork, const int off, const int x, const int y, const float invMaxv, StatsPassBuffers& statsPass) const {
+            const float fg_i = (float)frameWork[off] * invMaxv;
+            float maxCorrected = 0.0f;
+            bool anyPositive = false;
+            if (x > 0) {
+                const float fg_j = (float)frameWork[off - 1] * invMaxv;
+                const float raw = fg_i - fg_j;
+                if (raw > 0.0f) {
+                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                    maxCorrected = std::max(maxCorrected, corrected);
+                    anyPositive = true;
+                }
+            }
+            if (x < scanw - 1) {
+                const float fg_j = (float)frameWork[off + 1] * invMaxv;
+                const float raw = fg_i - fg_j;
+                if (raw > 0.0f) {
+                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                    maxCorrected = std::max(maxCorrected, corrected);
+                    anyPositive = true;
+                }
+            }
+            if (y > 0) {
+                const float fg_j = (float)frameWork[off - scanw] * invMaxv;
+                const float raw = fg_i - fg_j;
+                if (raw > 0.0f) {
+                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                    maxCorrected = std::max(maxCorrected, corrected);
+                    anyPositive = true;
+                }
+            }
+            if (y < scanh - 1) {
+                const float fg_j = (float)frameWork[off + scanw] * invMaxv;
+                const float raw = fg_i - fg_j;
+                if (raw > 0.0f) {
+                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
+                    maxCorrected = std::max(maxCorrected, corrected);
+                    anyPositive = true;
+                }
+            }
+            if (anyPositive) {
+                auto& ea = statsPass.edgeAccumBuf[off];
+                ea.sumEdge += maxCorrected;
+                ea.sumEdge2 += maxCorrected * maxCorrected;
+                ea.edgeCount++;
+            }
+        }
+
+        template<typename pixel_t>
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
@@ -4712,6 +4823,7 @@ namespace {
             // 小さすぎるチャンク分割はタスク投入オーバーヘッドが支配的になるため、
             // 既定チャンク(スレッド数に応じた分割)を使う。
             RunParallelRange(threadPool, threadN, std::max(0, scanh - 2 * kScanEdgeMargin), [&](int y0, int y1) {
+                int localFrameCount = 0;
                 for (int y = y0 + kScanEdgeMargin; y < y1 + kScanEdgeMargin; y++) {
                     for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
                         const int off = x + y * scanw;
@@ -4729,58 +4841,7 @@ namespace {
                         lastObservedFg[off] = fgRaw;
                         lastObservedValid[off] = 1;
 
-                        // 4方向の corrected edge を計算し最大値を edgeAccumBuf に蓄積する
-                        {
-                            const float fg_i = fgRaw * invMaxv;
-                            float maxCorrected = 0.0f;
-                            bool anyPositive = false;
-                            // left
-                            if (x > 0) {
-                                const float fg_j = (float)frameWork[off - 1] * invMaxv;
-                                const float raw = fg_i - fg_j;
-                                if (raw > 0.0f) {
-                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                                    maxCorrected = std::max(maxCorrected, corrected);
-                                    anyPositive = true;
-                                }
-                            }
-                            // right
-                            if (x < scanw - 1) {
-                                const float fg_j = (float)frameWork[off + 1] * invMaxv;
-                                const float raw = fg_i - fg_j;
-                                if (raw > 0.0f) {
-                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                                    maxCorrected = std::max(maxCorrected, corrected);
-                                    anyPositive = true;
-                                }
-                            }
-                            // up
-                            if (y > 0) {
-                                const float fg_j = (float)frameWork[off - scanw] * invMaxv;
-                                const float raw = fg_i - fg_j;
-                                if (raw > 0.0f) {
-                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                                    maxCorrected = std::max(maxCorrected, corrected);
-                                    anyPositive = true;
-                                }
-                            }
-                            // down
-                            if (y < scanh - 1) {
-                                const float fg_j = (float)frameWork[off + scanw] * invMaxv;
-                                const float raw = fg_i - fg_j;
-                                if (raw > 0.0f) {
-                                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                                    maxCorrected = std::max(maxCorrected, corrected);
-                                    anyPositive = true;
-                                }
-                            }
-                            if (anyPositive) {
-                                auto& ea = statsPass.edgeAccumBuf[off];
-                                ea.sumEdge  += maxCorrected;
-                                ea.sumEdge2 += maxCorrected * maxCorrected;
-                                ea.edgeCount++;
-                            }
-                        }
+                        AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
 
                         float bg = 0.0f;
                         // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
@@ -4806,9 +4867,10 @@ namespace {
                         auto& bin = binAccumBuf[off * kHistBins + binIdx];
                         AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
                         // このフレームで有効だった画素数（デバッグ可視化用）。
-                        frameCount.fetch_add(1, std::memory_order_relaxed);
+                        localFrameCount++;
                     }
                 }
+                frameCount.fetch_add(localFrameCount, std::memory_order_relaxed);
                 });
 
             // 追跡点は理由付きログを残すため、並列本体から除外して逐次で同一ロジックを適用する。
@@ -4844,56 +4906,7 @@ namespace {
                 lastObservedFg[off] = fgFiltered;
                 lastObservedValid[off] = 1;
 
-                // 4方向の corrected edge を計算し最大値を edgeAccumBuf に蓄積する (tracePoint 逐次ループ)
-                {
-                    const int tx = tp.x;
-                    const int ty = tp.y;
-                    const float fg_i = fgFiltered * invMaxv;
-                    float maxCorrected = 0.0f;
-                    bool anyPositive = false;
-                    if (tx > 0) {
-                        const float fg_j = (float)frameWork[off - 1] * invMaxv;
-                        const float raw = fg_i - fg_j;
-                        if (raw > 0.0f) {
-                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                            maxCorrected = std::max(maxCorrected, corrected);
-                            anyPositive = true;
-                        }
-                    }
-                    if (tx < scanw - 1) {
-                        const float fg_j = (float)frameWork[off + 1] * invMaxv;
-                        const float raw = fg_i - fg_j;
-                        if (raw > 0.0f) {
-                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                            maxCorrected = std::max(maxCorrected, corrected);
-                            anyPositive = true;
-                        }
-                    }
-                    if (ty > 0) {
-                        const float fg_j = (float)frameWork[off - scanw] * invMaxv;
-                        const float raw = fg_i - fg_j;
-                        if (raw > 0.0f) {
-                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                            maxCorrected = std::max(maxCorrected, corrected);
-                            anyPositive = true;
-                        }
-                    }
-                    if (ty < scanh - 1) {
-                        const float fg_j = (float)frameWork[off + scanw] * invMaxv;
-                        const float raw = fg_i - fg_j;
-                        if (raw > 0.0f) {
-                            const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                            maxCorrected = std::max(maxCorrected, corrected);
-                            anyPositive = true;
-                        }
-                    }
-                    if (anyPositive) {
-                        auto& ea = statsPass.edgeAccumBuf[off];
-                        ea.sumEdge  += maxCorrected;
-                        ea.sumEdge2 += maxCorrected * maxCorrected;
-                        ea.edgeCount++;
-                    }
-                }
+                AccumulateCorrectedEdge(frameWork, off, tp.x, tp.y, invMaxv, statsPass);
 
                 float bg = 0.0f;
                 BgDebugInfo dbgBg{};
@@ -5030,7 +5043,7 @@ namespace {
             return std::exp(-std::exp(-c * ((double)n - n0)));
         }
 
-        static void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
+        AMT_NOINLINE static void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
             bin.count++;
             bin.sum_fg += fg;
             bin.sum_bg += bg;
@@ -5888,7 +5901,7 @@ namespace {
             }
         }
 
-        double calcSampleResidualWeight(const int off, const double fg, const double bg) const {
+        AMT_NOINLINE double calcSampleResidualWeight(const int off, const double fg, const double bg) const {
             if (!sampleResidualReweightActive || off < 0 || off >= (int)provisionalLineValid.size() || !provisionalLineValid[off]) {
                 return 1.0;
             }
