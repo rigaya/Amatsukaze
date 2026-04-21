@@ -1913,6 +1913,7 @@ namespace {
         pixel_t maxv = std::numeric_limits<pixel_t>::lowest();
         int sum = 0;
         const int len = (FixedLen > 0) ? FixedLen : sideLen;
+        const float invLen = 1.0f / len;
 
         if constexpr (RangeMode == TryEstimateBgSideRangeMode::InRange) {
             if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
@@ -1954,7 +1955,7 @@ namespace {
             }
         }
 
-        avg = (float)sum / len;
+        avg = (float)sum * invLen;
         minvOut = minv;
         maxvOut = maxv;
         return ((float)maxv - (float)minv) <= threshold;
@@ -4872,45 +4873,33 @@ namespace {
         }
 
         template<typename pixel_t>
+        void AccumulateCorrectedEdgeFromNeighbor(const std::vector<pixel_t>& frameWork, const int neighborOff, const float fg_i, const float invMaxv, float& maxCorrected, bool& anyPositive) const {
+            const float fg_j = (float)frameWork[neighborOff] * invMaxv;
+            const float raw = fg_i - fg_j;
+            if (raw <= 0.0f) {
+                return;
+            }
+            const float corrected = raw / (1.0f - fg_j + 1e-4f);
+            maxCorrected = std::max(maxCorrected, corrected);
+            anyPositive = true;
+        }
+
+        template<typename pixel_t>
         void AccumulateCorrectedEdge(const std::vector<pixel_t>& frameWork, const int off, const int x, const int y, const float invMaxv, StatsPassBuffers& statsPass) const {
             const float fg_i = (float)frameWork[off] * invMaxv;
             float maxCorrected = 0.0f;
             bool anyPositive = false;
             if (x > 0) {
-                const float fg_j = (float)frameWork[off - 1] * invMaxv;
-                const float raw = fg_i - fg_j;
-                if (raw > 0.0f) {
-                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                    maxCorrected = std::max(maxCorrected, corrected);
-                    anyPositive = true;
-                }
+                AccumulateCorrectedEdgeFromNeighbor(frameWork, off - 1, fg_i, invMaxv, maxCorrected, anyPositive);
             }
             if (x < scanw - 1) {
-                const float fg_j = (float)frameWork[off + 1] * invMaxv;
-                const float raw = fg_i - fg_j;
-                if (raw > 0.0f) {
-                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                    maxCorrected = std::max(maxCorrected, corrected);
-                    anyPositive = true;
-                }
+                AccumulateCorrectedEdgeFromNeighbor(frameWork, off + 1, fg_i, invMaxv, maxCorrected, anyPositive);
             }
             if (y > 0) {
-                const float fg_j = (float)frameWork[off - scanw] * invMaxv;
-                const float raw = fg_i - fg_j;
-                if (raw > 0.0f) {
-                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                    maxCorrected = std::max(maxCorrected, corrected);
-                    anyPositive = true;
-                }
+                AccumulateCorrectedEdgeFromNeighbor(frameWork, off - scanw, fg_i, invMaxv, maxCorrected, anyPositive);
             }
             if (y < scanh - 1) {
-                const float fg_j = (float)frameWork[off + scanw] * invMaxv;
-                const float raw = fg_i - fg_j;
-                if (raw > 0.0f) {
-                    const float corrected = raw / (1.0f - fg_j + 1e-4f);
-                    maxCorrected = std::max(maxCorrected, corrected);
-                    anyPositive = true;
-                }
+                AccumulateCorrectedEdgeFromNeighbor(frameWork, off + scanw, fg_i, invMaxv, maxCorrected, anyPositive);
             }
             if (anyPositive) {
                 auto& ea = statsPass.edgeAccumBuf[off];
@@ -5564,10 +5553,11 @@ namespace {
                 return false;
             }
 
-            const double lowWeightFrac = lowWeight / totalWeight;
-            const double negativeWeightFrac = negativeWeight / totalWeight;
-            const double diagonalWeightFrac = diagonalWeight / totalWeight;
-            const double positiveWeightFrac = positiveWeight / totalWeight;
+            const double invTotalWeight = 1.0 / totalWeight;
+            const double lowWeightFrac = lowWeight * invTotalWeight;
+            const double negativeWeightFrac = negativeWeight * invTotalWeight;
+            const double diagonalWeightFrac = diagonalWeight * invTotalWeight;
+            const double positiveWeightFrac = positiveWeight * invTotalWeight;
 
             const double consistencyWeakGain = sat01((0.85 - baseConsistency) / 0.85);
             const double alphaWeakGain = sat01((0.10 - baseAlpha) / 0.10);
