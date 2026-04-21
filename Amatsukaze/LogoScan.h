@@ -516,7 +516,8 @@ class LogoAnalyzer : AMTObject {
             numMinFades[minFades[i]]++;
         }
         int maxi = (int)(std::max_element(numMinFades.begin(), numMinFades.end()) - numMinFades.begin());
-        printf("maxi = %d (%.1f%%)\n", maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
+        ctx.infoF(_T("[GenLogo] dominant fade: index=%d rate=%.1f%% eligibleFadeMin=%d"),
+            maxi, numMinFades[maxi] / (float)numFrames * 100.0f, 9);
 
         LogoScan logoscan(scanw, scanh, logUVx, logUVy, thy);
         int eligibleFrames = 0;
@@ -537,7 +538,10 @@ class LogoAnalyzer : AMTObject {
                     logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw, creator->bitdepth());
                 }
 
-                if ((i % 2000) == 0) printf("%d frames\n", i);
+                if (((i + 1) % 2000) == 0 || (i + 1) == numFrames) {
+                    ctx.infoF(_T("[GenLogo] eligible frame collect: %d/%d eligible=%d"),
+                        i + 1, numFrames, eligibleFrames);
+                }
             }
         }
 

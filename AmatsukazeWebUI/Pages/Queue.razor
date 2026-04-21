@@ -1591,6 +1591,8 @@ else
         target.ProfileName = source.ProfileName;
         target.State = source.State;
         target.StateLabel = source.StateLabel;
+        target.StateDetailText = source.StateDetailText;
+        target.AutoLogoState = source.AutoLogoState;
         target.Priority = source.Priority;
         target.IsBatch = source.IsBatch;
         target.EncodeStart = source.EncodeStart;
@@ -1790,6 +1792,10 @@ else
                 var finish = item.EncodeFinish.Value.ToString("MM/dd HH:mm");
                 return $"{baseText} ({duration:hh\\:mm\\:ss} / {finish})";
             }
+        }
+        if (!string.IsNullOrWhiteSpace(item.StateDetailText))
+        {
+            return baseText + item.StateDetailText;
         }
         return baseText;
     }

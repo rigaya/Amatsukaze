@@ -951,28 +951,35 @@ logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serv
 }
 
 void logo::LogoAnalyzer::ScanLogo() {
+    ctx.infoF(_T("[GenLogo] start: input=%s serviceId=%d rect=(%d,%d,%d,%d) threshold=%d maxFrames=%d debug=%s"),
+        srcpath.c_str(), serviceid, scanx, scany, scanw, scanh, thy, numMaxFrames,
+        debugpath.empty() ? _T("<none>") : debugpath.c_str());
     // 有効フレームデータと初期ロゴの取得
     progressbase = 0;
+    ctx.infoF(_T("[GenLogo] phase: 初期ロゴ生成"));
     MakeInitialLogo();
     SaveDebugLogo();
 
     // データ解析とロゴの作り直し
     progressbase = 50;
     //MultiCandidate();
+    ctx.infoF(_T("[GenLogo] phase: ロゴ再構築(1回目)"));
     (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
     SaveDebugLogo();
     progressbase = 75;
+    ctx.infoF(_T("[GenLogo] phase: ロゴ再構築(2回目)"));
     (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
     SaveDebugLogo();
     //ReMakeLogo();
 
-    if (cb(1, numFrames, numFrames, numFrames) == false) {
+    if (cb(100, numFrames, numFrames, numFrames) == false) {
         THROW(RuntimeException, "Cancel requested");
     }
 
     LogoHeader header(scanw, scanh, logUVx, logUVy, imgw, imgh, scanx, scany, "No Name");
     header.serviceId = serviceid;
     logodata->Save(dstpath, &header);
+    ctx.infoF(_T("[GenLogo] completed: output=%s"), dstpath.c_str());
 }
 logo::AMTAnalyzeLogo::AMTAnalyzeLogo(PClip clip, const tstring& logoPath, float maskratio, IScriptEnvironment* env)
     : GenericVideoFilter(clip)
@@ -3190,8 +3197,10 @@ namespace {
                     || (!pass2Succeeded && logoAnalyzeFail == LogoAnalyzeFail::TooFewAcceptedFrames);
                 if (retryPass1WithRescue) {
                     debugPass2RescueFallbackApplied = true;
-                    fprintf(stderr, "[LogoScan] pass2 fallback to rescue pass1 (entered=%d fail=%d)\n",
-                        (int)pass2Entered, (int)logoAnalyzeFail);
+                    if (detailedDebug) {
+                        fprintf(stderr, "[LogoScan] pass2 fallback to rescue pass1 (entered=%d fail=%d)\n",
+                            (int)pass2Entered, (int)logoAnalyzeFail);
+                    }
                     setProgressPlan(3, 0.0f, 1.0f, 0.65f, 0.33f);
                     const AutoDetectRect rescueAnchorRect = expandPass1RectForSecondPass(pass1RectLocal);
                     try {
@@ -6299,8 +6308,10 @@ namespace {
                     filledCount++;
                 }
             }
-            fprintf(stderr, "[LogoScan] upperGate interior mask: wallThresh=%.2f dilate=%d interior=%d\n",
-                kFillWallThresh, kFillWallDilate, filledCount);
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] upperGate interior mask: wallThresh=%.2f dilate=%d interior=%d\n",
+                    kFillWallThresh, kFillWallDilate, filledCount);
+            }
 
             // 4. upperGateFilled: 壁・内部の画素は 0、それ以外は元の upperGate
             //    これを使って rescueScore を再計算し、テロップ内部の rescueScore を抑制する。
@@ -6314,7 +6325,9 @@ namespace {
                     scoreStage.mapUpperGateFilled[i] = scoreStage.mapUpperGate[i];
                 }
             }
-            fprintf(stderr, "[LogoScan] upperGateFilled: suppressed=%d (wall+interior)\n", suppressedCount);
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] upperGateFilled: suppressed=%d (wall+interior)\n", suppressedCount);
+            }
 
             // 5. rescueScore を upperGateFilled で再計算
             int rescueZeroedCount = 0;
@@ -6326,7 +6339,9 @@ namespace {
                 if (scoreStage.mapRescueScore[i] > 0.0f && rescueScoreNew <= 0.0f) rescueZeroedCount++;
                 scoreStage.mapRescueScore[i] = rescueScoreNew;
             }
-            fprintf(stderr, "[LogoScan] rescueScore recalc with upperGateFilled: zeroed=%d\n", rescueZeroedCount);
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] rescueScore recalc with upperGateFilled: zeroed=%d\n", rescueZeroedCount);
+            }
 
             // デバッグ出力用にバッファに保存
             scoreStage.mapIsWall = std::move(isWall);
@@ -6544,9 +6559,11 @@ namespace {
                 scoreStage.score[i] += rescueVal;
                 blendedCount++;
             }
-            fprintf(stderr, "[LogoScan] rescue additive blend: rescueOnlyMode=%d ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
-                (int)rescueOnlyMode, kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
-                (double)rescueGain, blendedCount, rescueOnlyCount);
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] rescue additive blend: rescueOnlyMode=%d ratioHi=%.2f ratioLo=%.2f baseP99=%.4f rescueP999=%.4f rescueGain=%.4f blended=%d rescueOnly=%d\n",
+                    (int)rescueOnlyMode, kRescueBlendRatioHi, kRescueBlendRatioLo, (double)baseP99, (double)rescueP999,
+                    (double)rescueGain, blendedCount, rescueOnlyCount);
+            }
 
             // ファイル出力: rescueScore 分布と加算効果の確認
             writeRescueGateDiag(scoreStage, baseScores, rescueScores, baseP99, rescueP999, rescueGain, rescueOnlyMode,
@@ -6573,7 +6590,9 @@ namespace {
             if (passIndex != 3 && !enableRescue) {
                 return;
             }
-            fprintf(stderr, "[LogoScan] rescue blending: passIndex=%d enableRescue=%d, starting blend\n", passIndex, (int)enableRescue);
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] rescue blending: passIndex=%d enableRescue=%d, starting blend\n", passIndex, (int)enableRescue);
+            }
             const int pixelCount = scanw * scanh;
             // rectGate: アンカー矩形からの距離マップを構築し、遠い画素への rescue 適用を抑制する。
             // enableRescue (pass1 fallback) と pass2 (passIndex==3) の両方で使用する。
@@ -6609,8 +6628,10 @@ namespace {
                         }
                     }
                 }
-                fprintf(stderr, "[LogoScan] rescue rect gate: rect=(%d,%d,%d,%d) maxDist=%d\n",
-                    rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, rescueRectMaxDist);
+                if (detailedDebug) {
+                    fprintf(stderr, "[LogoScan] rescue rect gate: rect=(%d,%d,%d,%d) maxDist=%d\n",
+                        rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h, rescueRectMaxDist);
+                }
             }
 
             auto computeRescueScaleFactor = [&]() {
@@ -6639,8 +6660,10 @@ namespace {
                 // pass1 フォールバック: scaleFactor で rescue score を補正し、
                 // contaminated 閾値を高めに設定して pass1 rect 近傍のみ救済する。
                 const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
-                fprintf(stderr, "[LogoScan] rescue blending (pass1 fallback): scaleRatios.size()=%zu scaleFactor=%.4f\n",
-                    scaleRatioCount, (double)scaleFactor);
+                if (detailedDebug) {
+                    fprintf(stderr, "[LogoScan] rescue blending (pass1 fallback): scaleRatios.size()=%zu scaleFactor=%.4f\n",
+                        scaleRatioCount, (double)scaleFactor);
+                }
 
                 static constexpr float kRescueBlendWeight       = 0.7f;
                 static constexpr float kContaminatedScoreThresh = 0.05f;
@@ -6660,8 +6683,10 @@ namespace {
                 // 回帰 score が細部だけ落ちるケースがあるので、pass1 fallback と同様に
                 // rescue をスケール補正して使う。ただし上限は低めにして暴れを抑える。
                 const auto [scaleFactor, scaleRatioCount] = computeRescueScaleFactor();
-                fprintf(stderr, "[LogoScan] rescue blending (pass2): scaleRatios.size()=%zu scaleFactor=%.4f\n",
-                    scaleRatioCount, (double)scaleFactor);
+                if (detailedDebug) {
+                    fprintf(stderr, "[LogoScan] rescue blending (pass2): scaleRatios.size()=%zu scaleFactor=%.4f\n",
+                        scaleRatioCount, (double)scaleFactor);
+                }
                 static constexpr float kRescueWeight = 0.65f;
                 static constexpr float kContaminatedThreshold = 0.03f;
                 static constexpr float kRescuePromoteRatio = 1.5f;
@@ -6731,12 +6756,14 @@ namespace {
                         }
                     }
                 }
-                fprintf(stderr, "[LogoScan] rescue-only promote (pass2): count=%d rescueTh=%.2f upperGateTh=%.2f\n",
-                    rescuePromotedCount, (double)kRescueBridgeMinRescue,
-                    (double)kRescueBridgeMinUpperGate);
-                fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f nearRadius=%d\n",
-                    rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue,
-                    kRescueBridgeNearRadius);
+                if (detailedDebug) {
+                    fprintf(stderr, "[LogoScan] rescue-only promote (pass2): count=%d rescueTh=%.2f upperGateTh=%.2f\n",
+                        rescuePromotedCount, (double)kRescueBridgeMinRescue,
+                        (double)kRescueBridgeMinUpperGate);
+                    fprintf(stderr, "[LogoScan] rescue bridge floor (pass2): count=%d scoreTh=%.2f rescueTh=%.2f nearRadius=%d\n",
+                        rescueBridgeCount, (double)kRescueBridgeScoreThresh, (double)kRescueBridgeMinRescue,
+                        kRescueBridgeNearRadius);
+                }
             }
         }
 
@@ -6772,8 +6799,10 @@ namespace {
         // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
         void runScoreStage(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage, float& thHigh, float& thLow, bool enableRescue = false, const AutoDetectRect& rescueAnchorRect = AutoDetectRect{0,0,0,0}) {
             // 診断ログ: passIndex確認
-            fprintf(stderr, "[LogoScan] runScoreStage: passIndex=%d enableRescue=%d anchorRect=(%d,%d,%d,%d)\n",
-                passIndex, (int)enableRescue, rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h);
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] runScoreStage: passIndex=%d enableRescue=%d anchorRect=(%d,%d,%d,%d)\n",
+                    passIndex, (int)enableRescue, rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h);
+            }
             // 各種出力マップをクリアする。
             scoreStage.reset(scanw, scanh);
             // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
@@ -7039,8 +7068,10 @@ namespace {
                 regressionHealth = std::min(std::max(
                     (float)(strongAlphaCount - kStrongCountLo) / (kStrongCountHi - kStrongCountLo), 0.0f), 1.0f);
                 const float alphaFloor = kAlphaFloorMax + (kAlphaFloorDefault - kAlphaFloorMax) * regressionHealth;
-                fprintf(stderr, "[LogoScan] alphaGain strong(>=%.2f)=%d health=%.4f alphaFloor=%.4f\n",
-                    (double)kStrongAlphaThresh, strongAlphaCount, (double)regressionHealth, (double)alphaFloor);
+                if (detailedDebug) {
+                    fprintf(stderr, "[LogoScan] alphaGain strong(>=%.2f)=%d health=%.4f alphaFloor=%.4f\n",
+                        (double)kStrongAlphaThresh, strongAlphaCount, (double)regressionHealth, (double)alphaFloor);
+                }
                 // floor が変わった場合、score を事後補正:
                 // score の alpha 項 (0.15 + 0.85*ag) を (alphaFloor + (1-alphaFloor)*ag) に置き換え
                 if (alphaFloor > kAlphaFloorDefault + 1e-4f) {
@@ -7156,8 +7187,10 @@ namespace {
                         branchAdoptedCount++;
                     }
                 }
-                fprintf(stderr, "[LogoScan] contaminated branch rescue: candidates=%d rejected_logo_like=%d rejected_base_support=%d adopted=%d\n",
-                    branchCandidateCount, branchLogoLikeRejectCount, branchBaseSupportRejectCount, branchAdoptedCount);
+                if (detailedDebug) {
+                    fprintf(stderr, "[LogoScan] contaminated branch rescue: candidates=%d rejected_logo_like=%d rejected_base_support=%d adopted=%d\n",
+                        branchCandidateCount, branchLogoLikeRejectCount, branchBaseSupportRejectCount, branchAdoptedCount);
+                }
             }
 
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
@@ -7171,7 +7204,9 @@ namespace {
             applyUpperGateFilledToRescueScore(scoreStage);
 
             // upperGate の base score 直接抑制は、局ロゴの輪郭や細線まで削ってしまうため無効化する。
-            fprintf(stderr, "[LogoScan] upperGate base score suppression: disabled\n");
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] upperGate base score suppression: disabled\n");
+            }
 
             scoreStage.debugMaxScoreBeforeRescue = calcPositiveMax(scoreStage.score);
 
@@ -8388,10 +8423,12 @@ namespace {
                 if (revertPrune) {
                     const float onRatio = (float)postPruneOn / std::max(1, prePruneOn);
                     const float widthRatio = (float)postW / std::max(1, preW);
-                    fprintf(stderr,
-                        "[LogoScan] prune rollback: reason=%s preOn=%d postOn=%d onRatio=%.3f preW=%d postW=%d widthRatio=%.3f\n",
-                        (revertReason != nullptr) ? revertReason : "unknown",
-                        prePruneOn, postPruneOn, onRatio, preW, postW, widthRatio);
+                    if (detailedDebug) {
+                        fprintf(stderr,
+                            "[LogoScan] prune rollback: reason=%s preOn=%d postOn=%d onRatio=%.3f preW=%d postW=%d widthRatio=%.3f\n",
+                            (revertReason != nullptr) ? revertReason : "unknown",
+                            prePruneOn, postPruneOn, onRatio, preW, postW, widthRatio);
+                    }
                 }
             }
             if (revertPrune) {

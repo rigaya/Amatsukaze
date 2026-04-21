@@ -277,6 +277,49 @@ namespace Amatsukaze.Models
             }
         }
 
+        public string StateDetailText
+        {
+            get
+            {
+                var detail = string.IsNullOrWhiteSpace(Model.FailReason) ? "" : Model.FailReason.Trim();
+                if (Model.State != QueueState.LogoPending)
+                {
+                    return string.IsNullOrWhiteSpace(detail) ? "" : " / " + detail;
+                }
+                var auto = GetAutoLogoDetailText();
+                if (string.IsNullOrWhiteSpace(auto))
+                {
+                    return string.IsNullOrWhiteSpace(detail) ? "" : " / " + detail;
+                }
+                if (string.IsNullOrWhiteSpace(detail) || detail == auto)
+                {
+                    return " / " + auto;
+                }
+                return " / " + detail + " / " + auto;
+            }
+        }
+
+        private string GetAutoLogoDetailText()
+        {
+            if (Model.AutoLogoInProgress)
+            {
+                return "自動ロゴ生成中";
+            }
+            if (Model.AutoLogoQueued)
+            {
+                return "自動ロゴ生成待ち";
+            }
+            if (string.IsNullOrWhiteSpace(Model.AutoLogoLastMessage))
+            {
+                return "";
+            }
+            if (Model.AutoLogoResult == AutoLogoResultState.Failed)
+            {
+                return "自動ロゴ生成失敗: " + Model.AutoLogoLastMessage;
+            }
+            return Model.AutoLogoLastMessage;
+        }
+
         public string ModeString
         {
             get

@@ -174,6 +174,8 @@ namespace Amatsukaze.Shared
         public string? ProfileName { get; set; }
         public string? State { get; set; }
         public string? StateLabel { get; set; }
+        public string? StateDetailText { get; set; }
+        public string? AutoLogoState { get; set; }
         public int Priority { get; set; }
         public bool IsBatch { get; set; }
         public DateTime? EncodeStart { get; set; }

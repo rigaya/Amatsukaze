@@ -1132,6 +1132,13 @@ namespace Amatsukaze.Server
         Canceled,       // キャンセルされた
     }
 
+    public enum AutoLogoResultState
+    {
+        None,
+        Success,
+        Failed,
+    }
+
     public enum GenreSpace
     {
         ARIB = 0,
@@ -1223,6 +1230,16 @@ namespace Amatsukaze.Server
         [DataMember]
         public List<string> Tags { get; set; }
 
+        [DataMember]
+        public AutoLogoResultState AutoLogoResult { get; set; }
+        [DataMember]
+        public string AutoLogoLastMessage { get; set; }
+
+        [DataMember]
+        public bool AutoLogoQueued { get; set; }
+        [DataMember]
+        public bool AutoLogoInProgress { get; set; }
+
         // 内部処理順決定用パラメータ
         public int Order { get; set; }
 
@@ -1281,6 +1298,20 @@ namespace Amatsukaze.Server
             State = QueueState.LogoPending;
             EncodeStart = new DateTime();
             EncodeTime = new TimeSpan();
+            ClearAutoLogoTransientState();
+        }
+
+        public void ClearAutoLogoTransientState()
+        {
+            AutoLogoQueued = false;
+            AutoLogoInProgress = false;
+        }
+
+        public void ResetAutoLogoAttempt()
+        {
+            AutoLogoResult = AutoLogoResultState.None;
+            AutoLogoLastMessage = null;
+            ClearAutoLogoTransientState();
         }
     }
 

@@ -645,9 +645,9 @@
                     <DockPanel>
                         <TextBlock>
                             状態: <Run Text="{Binding StateString, Mode=OneWay}" />
-                            <Run Text="{Binding Model.FailReason, Mode=OneWay}">
+                            <Run Text="{Binding StateDetailText, Mode=OneWay}">
                                 <Run.ToolTip>
-                                    <TextBlock Text="{Binding Model.FailReason, Mode=OneWay}" TextWrapping="WrapWithOverflow" MaxWidth="900"/>
+                                    <TextBlock Text="{Binding StateDetailText, Mode=OneWay}" TextWrapping="WrapWithOverflow" MaxWidth="900"/>
                                 </Run.ToolTip>
                             </Run>
                         </TextBlock>

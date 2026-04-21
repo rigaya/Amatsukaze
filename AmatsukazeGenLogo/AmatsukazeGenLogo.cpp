@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cerrno>
+#include <cstdarg>
 #include <ctime>
 #include <cstdio>
 #include <cstdlib>
@@ -121,11 +122,160 @@ struct NativeApi {
     LogoFileSaveFunc LogoFile_SaveAviUtl = nullptr;
 };
 
-bool AlwaysContinueAnalyze(float, int, int, int) {
+struct AutoDetectProgressState {
+    int lastStage = -1;
+    int lastOverallBucket = -1;
+    std::time_t lastReportTime = 0;
+};
+
+struct LogoGenProgressState {
+    int lastPhase = -1;
+    int lastProgressBucket = -1;
+    std::time_t lastReportTime = 0;
+};
+
+AutoDetectProgressState* g_autoDetectProgressState = nullptr;
+LogoGenProgressState* g_logoGenProgressState = nullptr;
+
+std::tm GetLocalTime(std::time_t now);
+
+tstring MakeLogTimestamp() {
+    const auto now = std::time(nullptr);
+    const auto localTime = GetLocalTime(now);
+    TCHAR buffer[32] = {};
+    _stprintf_s(buffer, _T("%04d-%02d-%02d %02d:%02d:%02d"),
+        localTime.tm_year + 1900, localTime.tm_mon + 1, localTime.tm_mday,
+        localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
+    return tstring(buffer);
+}
+
+tstring VFormatLogMessage(const TCHAR* fmt, va_list args) {
+    TCHAR buffer[4096] = {};
+#if defined(_WIN32) || defined(_WIN64)
+    va_list argsCopy;
+    va_copy(argsCopy, args);
+    vswprintf(buffer, sizeof(buffer) / sizeof(buffer[0]), fmt, argsCopy);
+    va_end(argsCopy);
+#else
+    va_list argsCopy;
+    va_copy(argsCopy, args);
+    vsnprintf(buffer, sizeof(buffer), fmt, argsCopy);
+    va_end(argsCopy);
+#endif
+    return tstring(buffer);
+}
+
+void PrintCliInfo(const TCHAR* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    const tstring message = VFormatLogMessage(fmt, args);
+    va_end(args);
+    _ftprintf(stdout, _T("%s [GenLogoCLI] %s\n"), MakeLogTimestamp().c_str(), message.c_str());
+    fflush(stdout);
+}
+
+float ClampPercent(float value) {
+    return std::max(0.0f, std::min(100.0f, value));
+}
+
+const TCHAR* GetAutoDetectStageName(int stage) {
+    switch (stage) {
+    case 1: return _T("初期フレーム走査");
+    case 2: return _T("仮推定とFrameGate準備");
+    case 3: return _T("最終推定と矩形確定");
+    case 4: return _T("完了");
+    default: return _T("待機中");
+    }
+}
+
+const TCHAR* GetLogoGenPhaseName(float progressPercent) {
+    if (progressPercent >= 99.9f) {
+        return _T("完了");
+    }
+    if (progressPercent >= 75.0f) {
+        return _T("ロゴ再構築(2回目)");
+    }
+    if (progressPercent >= 50.0f) {
+        return _T("ロゴ再構築(1回目)");
+    }
+    return _T("初期ロゴ生成");
+}
+
+float NormalizeLogoGenProgress(float progress, int nread, int total) {
+    if (total > 0 && nread >= total && progress <= 1.5f) {
+        return 100.0f;
+    }
+    return ClampPercent(progress);
+}
+
+bool ReportAnalyzeProgress(float progress, int nread, int total, int) {
+    if (g_logoGenProgressState == nullptr) {
+        return true;
+    }
+
+    auto& state = *g_logoGenProgressState;
+    const float progressPercent = NormalizeLogoGenProgress(progress, nread, total);
+    const int progressBucket = (progressPercent >= 100.0f) ? 10 : (int)(progressPercent / 10.0f);
+    const int phase =
+        (progressPercent >= 99.9f) ? 4 :
+        (progressPercent >= 75.0f) ? 3 :
+        (progressPercent >= 50.0f) ? 2 : 1;
+    const auto now = std::time(nullptr);
+
+    if (phase != state.lastPhase) {
+        if (total > 0) {
+            PrintCliInfo(_T("logo generate phase: %s progress=%.1f%% read=%d/%d"),
+                GetLogoGenPhaseName(progressPercent), progressPercent, nread, total);
+        } else {
+            PrintCliInfo(_T("logo generate phase: %s progress=%.1f%% read=%d"),
+                GetLogoGenPhaseName(progressPercent), progressPercent, nread);
+        }
+        state.lastPhase = phase;
+        state.lastProgressBucket = progressBucket;
+        state.lastReportTime = now;
+        return true;
+    }
+
+    if (progressBucket > state.lastProgressBucket || std::difftime(now, state.lastReportTime) >= 5.0) {
+        if (total > 0) {
+            PrintCliInfo(_T("logo generate progress: %s progress=%.1f%% read=%d/%d"),
+                GetLogoGenPhaseName(progressPercent), progressPercent, nread, total);
+        } else {
+            PrintCliInfo(_T("logo generate progress: %s progress=%.1f%% read=%d"),
+                GetLogoGenPhaseName(progressPercent), progressPercent, nread);
+        }
+        state.lastProgressBucket = progressBucket;
+        state.lastReportTime = now;
+    }
     return true;
 }
 
-bool AlwaysContinueAutoDetect(int, float, float, int, int) {
+bool ReportAutoDetectProgress(int stage, float stageProgress, float progress, int nread, int total) {
+    if (g_autoDetectProgressState == nullptr) {
+        return true;
+    }
+
+    auto& state = *g_autoDetectProgressState;
+    const float overallPercent = ClampPercent(progress * 100.0f);
+    const float stagePercent = ClampPercent(stageProgress * 100.0f);
+    const int overallBucket = (overallPercent >= 100.0f) ? 10 : (int)(overallPercent / 10.0f);
+    const auto now = std::time(nullptr);
+
+    if (stage != state.lastStage) {
+        PrintCliInfo(_T("auto detect phase: %s overall=%.1f%% stage=%.1f%% read=%d/%d"),
+            GetAutoDetectStageName(stage), overallPercent, stagePercent, nread, total);
+        state.lastStage = stage;
+        state.lastOverallBucket = overallBucket;
+        state.lastReportTime = now;
+        return true;
+    }
+
+    if (overallBucket > state.lastOverallBucket || std::difftime(now, state.lastReportTime) >= 5.0) {
+        PrintCliInfo(_T("auto detect progress: %s overall=%.1f%% stage=%.1f%% read=%d/%d"),
+            GetAutoDetectStageName(stage), overallPercent, stagePercent, nread, total);
+        state.lastOverallBucket = overallBucket;
+        state.lastReportTime = now;
+    }
     return true;
 }
 
@@ -629,18 +779,19 @@ fs::path ResolveFinalOutputPath(const tstring& outputPath) {
     throw std::runtime_error("退避用の出力ファイル名を決定できません");
 }
 
-void FinalizeOutput(const tstring& tempPath, const tstring& outputPath) {
+fs::path FinalizeOutput(const tstring& tempPath, const tstring& outputPath) {
     const fs::path finalPath = ResolveFinalOutputPath(outputPath);
     std::error_code ec;
     fs::rename(fs::path(tempPath), finalPath, ec);
     if (!ec) {
-        return;
+        return finalPath;
     }
     fs::copy_file(fs::path(tempPath), finalPath, fs::copy_options::none, ec);
     if (ec) {
         throw std::runtime_error("出力ファイルの配置に失敗しました");
     }
     fs::remove(fs::path(tempPath), ec);
+    return finalPath;
 }
 
 int Run(const NativeApi& api, const Options& opt) {
@@ -679,6 +830,9 @@ int Run(const NativeApi& api, const Options& opt) {
             }
 
             const int serviceId = ResolveServiceId(api, tsInfo);
+            PrintCliInfo(_T("start: input=%s output=%s serviceId=%d aviutl=%d debugDir=%s"),
+                opt.input.c_str(), opt.output.c_str(), serviceId, (int)opt.aviutlLgd,
+                detailedDebug ? opt.debugDir.c_str() : _T("<none>"));
             Rect rect = opt.logoRange.value_or(Rect{});
             if (!opt.logoRange.has_value()) {
                 int x = 0, y = 0, w = 0, h = 0;
@@ -697,6 +851,12 @@ int Run(const NativeApi& api, const Options& opt) {
                 int pass2SkippedFrames = 0;
                 int frameGateRetryAttemptCount = 0;
                 int frameGateRetrySuccessAttempt = 0;
+
+                PrintCliInfo(_T("auto detect params: div=%dx%d searchFrames=%d blockSize=%d threshold=%d margin=(%d,%d) threadN=%d detailedDebug=%d"),
+                    opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
+                    opt.autoMarginX, opt.autoMarginY, opt.autoThreads, (int)detailedDebug);
+                AutoDetectProgressState autoDetectProgressState{};
+                g_autoDetectProgressState = &autoDetectProgressState;
 
                 if (api.AutoDetectLogoRect(
                     ctx, opt.input.c_str(), serviceId,
@@ -722,25 +882,43 @@ int Run(const NativeApi& api, const Options& opt) {
                     detailedDebug ? debugPaths.keepRate.c_str() : nullptr,
                     detailedDebug ? debugPaths.accepted.c_str() : nullptr,
                     detailedDebug ? 1 : 0,
-                    AlwaysContinueAutoDetect) == 0) {
+                    ReportAutoDetectProgress) == 0) {
+                    g_autoDetectProgressState = nullptr;
                     throw std::runtime_error(SafeGetError(api, ctx));
                 }
+                g_autoDetectProgressState = nullptr;
+                PrintCliInfo(_T("auto detect result: rect=(%d,%d,%d,%d) rectDetectFail=%d logoAnalyzeFail=%d pass1ScoreMax=%.4f pass2ScoreMax=%.4f finalScoreBeforeRescueMax=%.4f pass2={entered=%d prepare=%d collect=%d fallback=%d acceptedFrames=%d skippedFrames=%d retryAttempt=%d retrySuccess=%d}"),
+                    x, y, w, h, rectDetectFail, logoAnalyzeFail,
+                    pass1ScoreMax, pass2ScoreMax, finalScoreBeforeRescueMax,
+                    pass2Entered, pass2PrepareSucceeded, pass2CollectSucceeded, pass2RescueFallbackApplied,
+                    pass2AcceptedFrames, pass2SkippedFrames, frameGateRetryAttemptCount, frameGateRetrySuccessAttempt);
                 rect = Rect{ x, y, w, h };
+            } else {
+                PrintCliInfo(_T("manual logo rect: rect=(%d,%d,%d,%d)"), rect.x, rect.y, rect.w, rect.h);
             }
 
             const Rect aligned = AlignRect(rect);
             if (aligned.w <= 0 || aligned.h <= 0) {
                 throw std::runtime_error("ロゴ枠が不正です");
             }
+            PrintCliInfo(_T("logo generate params: rect=(%d,%d,%d,%d) aligned=(%d,%d,%d,%d) threshold=%d maxFrames=%d"),
+                rect.x, rect.y, rect.w, rect.h,
+                aligned.x, aligned.y, aligned.w, aligned.h,
+                opt.logoGenThreshold, opt.logoGenSamples);
+
+            LogoGenProgressState logoGenProgressState{};
+            g_logoGenProgressState = &logoGenProgressState;
 
             if (api.ScanLogo(
                 ctx, opt.input.c_str(), serviceId,
                 tempPaths.workFile.c_str(), tempPaths.tempLogo.c_str(), nullptr,
                 aligned.x, aligned.y, aligned.w, aligned.h,
                 opt.logoGenThreshold, opt.logoGenSamples,
-                AlwaysContinueAnalyze) == 0) {
+                ReportAnalyzeProgress) == 0) {
+                g_logoGenProgressState = nullptr;
                 throw std::runtime_error(SafeGetError(api, ctx));
             }
+            g_logoGenProgressState = nullptr;
 
             void* logo = api.LogoFile_Create(ctx, tempPaths.tempLogo.c_str());
             if (logo == nullptr) {
@@ -761,8 +939,11 @@ int Run(const NativeApi& api, const Options& opt) {
                 throw;
             }
             api.LogoFile_Delete(logo);
-            FinalizeOutput(tempPaths.finalTemp, opt.output);
+            const fs::path savedPath = FinalizeOutput(tempPaths.finalTemp, opt.output);
+            PrintCliInfo(_T("saved: %s"), savedPath.c_str());
         } catch (...) {
+            g_autoDetectProgressState = nullptr;
+            g_logoGenProgressState = nullptr;
             api.TsInfo_Delete(tsInfo);
             throw;
         }

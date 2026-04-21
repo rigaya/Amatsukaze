@@ -536,6 +536,7 @@ namespace Amatsukaze.Server
             {
                 queueManager.LoadAppData();
                 Debug.Print("[Init] キュー状態の復元が完了しました");
+                autoLogoPendingResolver?.ScheduleEligiblePendingItems();
                 
                 if (AppData_.setting.PauseOnStarted && queueManager.GetQueueSnapshot().Any(s => s.IsActive))
                 {
@@ -1426,15 +1427,38 @@ namespace Amatsukaze.Server
                 return;
             }
 
-            setting.AutoLogoPendingDivX = AutoLogoPendingDefaultDivX;
-            setting.AutoLogoPendingDivY = AutoLogoPendingDefaultDivY;
-            setting.AutoLogoPendingSearchFrames = AutoLogoPendingDefaultSearchFrames;
-            setting.AutoLogoPendingBlockSize = AutoLogoPendingDefaultBlockSize;
-            setting.AutoLogoPendingThreshold = AutoLogoPendingDefaultThreshold;
-            setting.AutoLogoPendingMarginX = AutoLogoPendingDefaultMarginX;
-            setting.AutoLogoPendingMarginY = AutoLogoPendingDefaultMarginY;
-            setting.AutoLogoPendingThreadN = AutoLogoPendingDefaultThreadN;
-            setting.AutoLogoPendingDetailedDebug = AutoLogoPendingDefaultDetailedDebug;
+            if (setting.AutoLogoPendingDivX <= 0)
+            {
+                setting.AutoLogoPendingDivX = AutoLogoPendingDefaultDivX;
+            }
+            if (setting.AutoLogoPendingDivY <= 0)
+            {
+                setting.AutoLogoPendingDivY = AutoLogoPendingDefaultDivY;
+            }
+            if (setting.AutoLogoPendingSearchFrames <= 0)
+            {
+                setting.AutoLogoPendingSearchFrames = AutoLogoPendingDefaultSearchFrames;
+            }
+            if (setting.AutoLogoPendingBlockSize <= 0)
+            {
+                setting.AutoLogoPendingBlockSize = AutoLogoPendingDefaultBlockSize;
+            }
+            if (setting.AutoLogoPendingThreshold <= 0)
+            {
+                setting.AutoLogoPendingThreshold = AutoLogoPendingDefaultThreshold;
+            }
+            if (setting.AutoLogoPendingMarginX < 0)
+            {
+                setting.AutoLogoPendingMarginX = AutoLogoPendingDefaultMarginX;
+            }
+            if (setting.AutoLogoPendingMarginY < 0)
+            {
+                setting.AutoLogoPendingMarginY = AutoLogoPendingDefaultMarginY;
+            }
+            if (setting.AutoLogoPendingThreadN < 0)
+            {
+                setting.AutoLogoPendingThreadN = AutoLogoPendingDefaultThreadN;
+            }
         }
 
         private Setting GetDefaultSetting()
@@ -2919,10 +2943,6 @@ namespace Amatsukaze.Server
 
                         if (updatedServices.Count > 0)
                         {
-                            foreach (var updatedServiceId in updatedServices.Distinct())
-                            {
-                                ClearAutoLogoPendingFailureLatch(updatedServiceId, "ロゴファイル更新検知");
-                            }
                             // 更新をクライアントに通知
                             foreach (var updatedServiceId in updatedServices.Distinct())
                             {
@@ -3558,7 +3578,6 @@ namespace Amatsukaze.Server
                     }
                     waits.Add(NotifyMessage(message, false));
                 }
-                autoLogoPendingResolver?.ClearFailureLatch(logoData.ServiceId, "ロゴファイル投入");
                 return Task.WhenAll(waits);
             }
             catch (Exception e)
@@ -3753,9 +3772,9 @@ namespace Amatsukaze.Server
             autoLogoPendingResolver?.TryKick(item);
         }
 
-        internal void ClearAutoLogoPendingFailureLatch(int serviceId, string reason)
+        internal void ScheduleEligibleAutoLogoPendingItems()
         {
-            autoLogoPendingResolver?.ClearFailureLatch(serviceId, reason);
+            autoLogoPendingResolver?.ScheduleEligiblePendingItems();
         }
 
 #region QueueManager
@@ -3777,6 +3796,11 @@ namespace Amatsukaze.Server
         internal List<Task> UpdateQueueItems(List<Task> waits)
         {
             return queueManager.UpdateQueueItems(waits);
+        }
+
+        internal List<QueueItem> GetQueueSnapshot()
+        {
+            return queueManager.GetQueueSnapshot();
         }
 
         internal QueueItem[] GetQueueItems(string srcPath)
@@ -4144,7 +4168,6 @@ namespace Amatsukaze.Server
                 }
                 serviceMap[update.ServiceId] = update.Data;
                 settingUpdated = true;
-                ClearAutoLogoPendingFailureLatch(update.ServiceId, "サービス追加");
                 message = "サービス「" + update.Data.ServiceName + "」を追加しました";
             }
             else if(serviceMap.ContainsKey(update.ServiceId))
@@ -4160,7 +4183,6 @@ namespace Amatsukaze.Server
                             update.Data.LogoSettings[i].Exists = old.LogoSettings[i].Exists;
                         }
                         serviceMap[update.ServiceId] = update.Data;
-                        ClearAutoLogoPendingFailureLatch(update.ServiceId, "サービス設定更新");
 
                         var waits = new List<Task>();
                         UpdateQueueItems(waits);
@@ -4172,7 +4194,6 @@ namespace Amatsukaze.Server
                 {
                     var service = serviceMap[update.ServiceId];
                     service.LogoSettings.Add(MakeNoLogoSetting(update.ServiceId));
-                    ClearAutoLogoPendingFailureLatch(update.ServiceId, "ロゴなし設定追加");
                     update.Type = ServiceSettingUpdateType.Update;
                     update.Data = service;
                     message = "サービス「" + service.ServiceName + "」にロゴなしを追加しました";
@@ -4188,7 +4209,6 @@ namespace Amatsukaze.Server
                 {
                     var service = serviceMap[update.ServiceId];
                     service.LogoSettings.RemoveAt(update.RemoveLogoIndex);
-                    ClearAutoLogoPendingFailureLatch(update.ServiceId, "ロゴ設定削除");
                     update.Type = ServiceSettingUpdateType.Update;
                     update.Data = service;
                     message = "サービス「" + service.ServiceName + "」のロゴを削除しました";

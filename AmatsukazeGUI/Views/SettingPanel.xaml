@@ -365,7 +365,7 @@
                 </StackPanel>
                 <StackPanel Grid.Row="4" Grid.Column="1">
                     <CheckBox  Margin="12,0,0,0" Height="22" Content="ロゴ設定がない場合はエラー扱いにする" IsChecked="{Binding Model.Setting.LogoPendAsError, Mode=TwoWay}"/>
-                    <CheckBox  Margin="12,4,0,0" Height="22" Content="自動でロゴを解析・採用する" IsChecked="{Binding Model.Setting.AutoLogoPendingEnabled, Mode=TwoWay}"/>
+                    <CheckBox  Margin="12,4,0,0" Height="22" Content="自動でロゴを解析・採用する" IsChecked="{Binding AutoLogoPendingEnabled, Mode=TwoWay}"/>
                 </StackPanel>
                 <StackPanel Grid.Row="5" Grid.Column="1">
                     <CheckBox  Margin="12,0,0,0" Height="22" Content="フィルタグラフを出力する" IsChecked="{Binding Model.Setting.DumpFilter, Mode=TwoWay}"/>

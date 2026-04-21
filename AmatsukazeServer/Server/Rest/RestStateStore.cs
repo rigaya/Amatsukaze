@@ -979,6 +979,8 @@ namespace Amatsukaze.Server.Rest
                 ProfileName = item.Profile?.Name ?? item.ProfileName,
                 State = item.State.ToString(),
                 StateLabel = GetStateLabel(item),
+                StateDetailText = GetStateDetailText(item),
+                AutoLogoState = GetAutoLogoState(item),
                 Priority = item.Priority,
                 IsBatch = item.IsBatch,
                 EncodeStart = item.EncodeStart == DateTime.MinValue ? null : item.EncodeStart,
@@ -1037,6 +1039,67 @@ namespace Amatsukaze.Server.Rest
                     return "完了";
             }
             return "不明";
+        }
+
+        private static string GetStateDetailText(QueueItem item)
+        {
+            var detail = string.IsNullOrWhiteSpace(item.FailReason) ? string.Empty : item.FailReason.Trim();
+            if (item.State != QueueState.LogoPending)
+            {
+                return string.IsNullOrWhiteSpace(detail) ? string.Empty : " / " + detail;
+            }
+            var auto = GetAutoLogoDetail(item);
+            if (string.IsNullOrWhiteSpace(auto))
+            {
+                return string.IsNullOrWhiteSpace(detail) ? string.Empty : " / " + detail;
+            }
+            if (string.IsNullOrWhiteSpace(detail) || string.Equals(detail, auto, StringComparison.Ordinal))
+            {
+                return " / " + auto;
+            }
+            return " / " + detail + " / " + auto;
+        }
+
+        private static string GetAutoLogoState(QueueItem item)
+        {
+            if (item.AutoLogoInProgress)
+            {
+                return "running";
+            }
+            if (item.AutoLogoQueued)
+            {
+                return "queued";
+            }
+            switch (item.AutoLogoResult)
+            {
+                case AutoLogoResultState.Success:
+                    return "success";
+                case AutoLogoResultState.Failed:
+                    return "failed";
+                default:
+                    return "none";
+            }
+        }
+
+        private static string GetAutoLogoDetail(QueueItem item)
+        {
+            if (item.AutoLogoInProgress)
+            {
+                return "自動ロゴ生成中";
+            }
+            if (item.AutoLogoQueued)
+            {
+                return "自動ロゴ生成待ち";
+            }
+            if (string.IsNullOrWhiteSpace(item.AutoLogoLastMessage))
+            {
+                return string.Empty;
+            }
+            if (item.AutoLogoResult == AutoLogoResultState.Failed)
+            {
+                return "自動ロゴ生成失敗: " + item.AutoLogoLastMessage;
+            }
+            return item.AutoLogoLastMessage;
         }
 
         private static bool IsTooSmall(QueueItem item)

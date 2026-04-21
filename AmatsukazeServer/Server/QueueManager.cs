@@ -109,6 +109,7 @@ namespace Amatsukaze.Server
                             {
                                 item.Profile = server.PendingProfile;
                             }
+                            item.ClearAutoLogoTransientState();
                             // IDを振り直す
                             item.Order = item.Id = nextItemId++;
                         }
@@ -311,6 +312,7 @@ namespace Amatsukaze.Server
                     if(item.State == QueueState.LogoPending)
                     {
                         item.FailReason = "";
+                        item.ClearAutoLogoTransientState();
                         item.State = QueueState.Queue;
                         server.ScheduleQueueItem(item);
                     }
@@ -347,6 +349,7 @@ namespace Amatsukaze.Server
                         if (item.State == QueueState.LogoPending)
                         {
                             item.FailReason = "";
+                            item.ClearAutoLogoTransientState();
                             item.State = QueueState.Queue;
 
                             server.ScheduleQueueItem(item);
@@ -497,6 +500,7 @@ namespace Amatsukaze.Server
                                         Genre = genre,
                                         Tags = new List<string>()
                                     };
+                                    item.ResetAutoLogoAttempt();
 
                                     if (item.IsOneSeg)
                                     {
@@ -584,6 +588,7 @@ namespace Amatsukaze.Server
                                 ProfileName = outitem.Profile,
                                 Tags = new List<string>()
                             };
+                            item.ResetAutoLogoAttempt();
 
                             addItems.Add(item);
                         }
@@ -670,6 +675,7 @@ namespace Amatsukaze.Server
 
         private void ResetStateItem(QueueItem item, List<Task> waits)
         {
+            item.ResetAutoLogoAttempt();
             item.Reset();
             UpdateQueueItem(item, waits);
             waits.Add(NotifyQueueItemUpdate(item));
@@ -764,6 +770,7 @@ namespace Amatsukaze.Server
             }
 
             // 状態はリセットしておく
+            newItem.ResetAutoLogoAttempt();
             newItem.Reset();
             UpdateQueueItem(newItem, null);
 

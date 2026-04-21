@@ -611,12 +611,27 @@ namespace Amatsukaze.Server.Rest
             try
             {
                 var threadN = AutoLogoThreadResolver.Resolve(request.ThreadN);
+                var progressLogger = new global::Amatsukaze.Server.LogoAutoDetectProgressLogger($"[LogoAutoDetectRest] job={job.Id} qid={request.QueueItemId}", filePath);
                 var baseWork = server.AppData_?.setting?.WorkPath;
                 if (string.IsNullOrEmpty(baseWork))
                 {
                     baseWork = Directory.GetCurrentDirectory();
                 }
                 Directory.CreateDirectory(baseWork);
+                global::Amatsukaze.Server.Util.AddLog(
+                    "[LogoAutoDetectRest] 開始: " +
+                    "job=" + job.Id +
+                    ", qid=" + request.QueueItemId +
+                    ", sid=" + serviceId +
+                    ", file=" + filePath +
+                    ", autoDetect={div=" + request.DivX + "x" + request.DivY +
+                    ", searchFrames=" + request.SearchFrames +
+                    ", blockSize=" + request.BlockSize +
+                    ", threshold=" + request.Threshold +
+                    ", margin=(" + request.MarginX + "," + request.MarginY + ")" +
+                    ", threadN=" + threadN +
+                    ", detailedDebug=" + request.DetailedDebug + "}",
+                    null);
 
                 using (var ctx = new AMTContext())
                 {
@@ -661,6 +676,7 @@ namespace Amatsukaze.Server.Rest
                         request.DetailedDebug,
                         (stage, stageProgress, progress, nread, total) =>
                         {
+                            progressLogger.Report(stage, stageProgress, progress, nread, total);
                             job.Stage = stage;
                             job.StageProgress = stageProgress;
                             job.Progress = progress;
@@ -695,6 +711,18 @@ namespace Amatsukaze.Server.Rest
                         Width = w,
                         Height = h
                     };
+                    global::Amatsukaze.Server.Util.AddLog(
+                        "[LogoAutoDetectRest] 完了: " +
+                        "job=" + job.Id +
+                        ", qid=" + request.QueueItemId +
+                        ", rect=(" + x + "," + y + "," + w + "," + h + ")" +
+                        ", pass2={entered=" + result.Pass2Entered +
+                        ", prepare=" + result.Pass2PrepareSucceeded +
+                        ", collect=" + result.Pass2CollectSucceeded +
+                        ", fallback=" + result.Pass2RescueFallbackApplied +
+                        ", acceptedFrames=" + result.Pass2AcceptedFrames +
+                        ", skippedFrames=" + result.Pass2SkippedFrames + "}",
+                        null);
                     SetAutoProgress(job, 4, 1.0f, 1.0f);
                 }
 
@@ -702,6 +730,14 @@ namespace Amatsukaze.Server.Rest
                 }
                 catch (AutoDetectLogoRectException ex)
                 {
+                    global::Amatsukaze.Server.Util.AddLog(
+                        "[LogoAutoDetectRest] 失敗: " +
+                        "job=" + job.Id +
+                        ", qid=" + request.QueueItemId +
+                        ", rectDetectFail=" + ex.RectDetectFail +
+                        ", logoAnalyzeFail=" + ex.LogoAnalyzeFail +
+                        ", error=" + ex.Message,
+                        ex);
                     job.RectDetectFail = ex.RectDetectFail;
                     job.LogoAnalyzeFail = ex.LogoAnalyzeFail;
                     job.Pass1ScoreMax = ex.Pass1ScoreMax;
@@ -722,6 +758,7 @@ namespace Amatsukaze.Server.Rest
                 }
                 catch (Exception ex)
                 {
+                    global::Amatsukaze.Server.Util.AddLog($"[LogoAutoDetectRest] 失敗: job={job.Id}, qid={request.QueueItemId}, error={ex.Message}", ex);
                     job.Error = ex.Message;
                     job.Completed = true;
                 }
