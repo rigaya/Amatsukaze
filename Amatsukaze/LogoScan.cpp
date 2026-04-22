@@ -424,6 +424,96 @@ int logo::LogoScan::med_average(const std::vector<int>& s) {
     return ((int)t);
 }
 
+namespace {
+    struct LogoPresenceFrameResult {
+        int result = 1;
+        float score = 0.0f;
+    };
+
+    struct LogoPresenceSmoothingConfig {
+        float classifyThreshold = 0.0f;
+        float minMaxThreshold = 0.0f;
+        int halfAvgFrames = 0;
+        int avgFrames = 1;
+        int halfMedianFrames = 0;
+        int medianFrames = 1;
+        int halfWinFrames = 0;
+    };
+
+    LogoPresenceSmoothingConfig MakeLogoPresenceSmoothingConfig(const int framesPerSec, const float classifyThreshold, const float minMaxThreshold, const float avgDur, const float medianDur) {
+        LogoPresenceSmoothingConfig config{};
+        config.classifyThreshold = classifyThreshold;
+        config.minMaxThreshold = minMaxThreshold;
+        config.halfAvgFrames = std::max(1, (int)std::round(framesPerSec * avgDur / 2.0f));
+        config.avgFrames = config.halfAvgFrames * 2 + 1;
+        config.halfMedianFrames = std::max(1, (int)std::round(framesPerSec * medianDur / 2.0f));
+        config.medianFrames = config.halfMedianFrames * 2 + 1;
+        config.halfWinFrames = std::max(config.avgFrames, config.medianFrames) / 2;
+        return config;
+    }
+
+    void BuildLogoPresenceSeries(const std::vector<float>& rawScores, const LogoPresenceSmoothingConfig& config, std::vector<float>& paddedRawScores, std::vector<LogoPresenceFrameResult>& frameResult) {
+        frameResult.assign(rawScores.size(), LogoPresenceFrameResult{});
+        if (rawScores.empty()) {
+            paddedRawScores.clear();
+            return;
+        }
+
+        paddedRawScores.assign(rawScores.size() + config.halfWinFrames * 2, 0.0f);
+        float* raw = paddedRawScores.data() + config.halfWinFrames;
+        std::copy(rawScores.begin(), rawScores.end(), raw);
+
+        // 両端を端の値で埋める
+        std::fill(paddedRawScores.begin(), paddedRawScores.begin() + config.halfWinFrames, rawScores.front());
+        std::fill(raw + rawScores.size(), paddedRawScores.data() + paddedRawScores.size(), rawScores.back());
+
+        // フィルタで均す
+        std::vector<float> medianBuf(config.medianFrames);
+        for (int i = 0; i < (int)rawScores.size(); i++) {
+            // MinMax
+            // 前の最大値と後ろの最大値の小さい方を取る
+            // 動きの多い映像でロゴがかき消されることがあるので、それを救済する
+            float beforeMax = *std::max_element(raw + i - config.halfAvgFrames, raw + i);
+            float afterMax = *std::max_element(raw + i + 1, raw + i + 1 + config.halfAvgFrames);
+            float minMax = std::min(beforeMax, afterMax);
+            int minMaxResult = (std::abs(minMax) < config.minMaxThreshold) ? 1 : (minMax < 0.0f) ? 0 : 2;
+
+            // 移動平均
+            // MinMaxだけだと薄くても安定して表示されてるとかが識別できないので
+            // これも必要
+            float avg = std::accumulate(raw + i - config.halfAvgFrames,
+                raw + i + config.halfAvgFrames + 1, 0.0f) / config.avgFrames;
+            int avgResult = (std::abs(avg) < config.classifyThreshold) ? 1 : (avg < 0.0f) ? 0 : 2;
+
+            // 両者が違ってたら不明とする
+            frameResult[i].result = (minMaxResult != avgResult) ? 1 : minMaxResult;
+
+            // 生の値は動きが激しいので少しメディアンフィルタをかけておく
+            std::copy(raw + i - config.halfMedianFrames,
+                raw + i + config.halfMedianFrames + 1, medianBuf.begin());
+            std::sort(medianBuf.begin(), medianBuf.end());
+            frameResult[i].score = medianBuf[config.halfMedianFrames];
+        }
+    }
+
+    void FillUnknownLogoPresenceRanges(std::vector<LogoPresenceFrameResult>& frameResult) {
+        // 不明部分を推測
+        // 両側がロゴありとなっていたらロゴありとする
+        for (auto it = frameResult.begin(); it != frameResult.end();) {
+            auto first1 = std::find_if(it, frameResult.end(), [](const LogoPresenceFrameResult& r) { return r.result == 1; });
+            it = std::find_if_not(first1, frameResult.end(), [](const LogoPresenceFrameResult& r) { return r.result == 1; });
+            const int prevResult = (first1 == frameResult.begin()) ? 0 : (first1 - 1)->result;
+            const int nextResult = (it == frameResult.end()) ? 0 : it->result;
+            if (prevResult == nextResult) {
+                std::transform(first1, it, first1, [=](LogoPresenceFrameResult r) {
+                    r.result = prevResult;
+                    return r;
+                    });
+            }
+        }
+    }
+}
+
 /* static */ float logo::LogoScan::calcDist(float a, float b) {
     return (1.0f / 3.0f) * (a - 1) * (a - 1) + (a - 1) * b + b * b;
 }
@@ -1342,77 +1432,23 @@ void logo::LogoFrame::writeResult(const tstring& outpath, int logoIndex) {
     const float medianDur = 0.5f;
 
     // スコアに変換
-    int halfAvgFrames = int(framesPerSec * avgDur / 2 + 0.5f);
-    int aveFrames = halfAvgFrames * 2 + 1;
-    int halfMedianFrames = int(framesPerSec * medianDur / 2 + 0.5f);
-    int medianFrames = halfMedianFrames * 2 + 1;
-    int winFrames = std::max(aveFrames, medianFrames);
-    int halfWinFrames = winFrames / 2;
-    std::vector<float> rawScores_(numFrames + winFrames);
-    auto rawScores = rawScores_.begin() + halfWinFrames;
+    const auto smoothing = MakeLogoPresenceSmoothingConfig(framesPerSec, THRESH, threshL, avgDur, medianDur);
+    std::vector<float> rawScores(numFrames);
     for (int n = 0; n < numFrames; n++) {
         auto& r = evalResults[n * numLogos + logoIndex];
         // corr0のマイナスとcorr1のプラスはノイズなので消す
         rawScores[n] = std::max(0.0f, r.corr0) + std::min(0.0f, r.corr1);
     }
-    // 両端を端の値で埋める
-    std::fill(rawScores_.begin(), rawScores, rawScores[0]);
-    std::fill(rawScores + numFrames, rawScores_.end(), rawScores[numFrames - 1]);
-
-    struct FrameResult {
-        int result;
-        float score;
-    };
-
-    // フィルタで均す
-    std::vector<FrameResult> frameResult(numFrames);
-    std::vector<float> medianBuf(medianFrames);
-    for (int i = 0; i < numFrames; i++) {
-        // MinMax
-        // 前の最大値と後ろの最大値の小さい方を取る
-        // 動きの多い映像でロゴがかき消されることがあるので、それを救済する
-        float beforeMax = *std::max_element(rawScores + i - halfAvgFrames, rawScores + i);
-        float afterMax = *std::max_element(rawScores + i + 1, rawScores + i + 1 + halfAvgFrames);
-        float minMax = std::min(beforeMax, afterMax);
-        int minMaxResult = (std::abs(minMax) < threshL) ? 1 : (minMax < 0.0f) ? 0 : 2;
-
-        // 移動平均
-        // MinMaxだけだと薄くても安定して表示されてるとかが識別できないので
-        // これも必要
-        float avg = std::accumulate(rawScores + i - halfAvgFrames,
-            rawScores + i + halfAvgFrames + 1, 0.0f) / aveFrames;
-        int avgResult = (std::abs(avg) < THRESH) ? 1 : (avg < 0.0f) ? 0 : 2;
-
-        // 両者が違ってたら不明とする
-        frameResult[i].result = (minMaxResult != avgResult) ? 1 : minMaxResult;
-
-        // 生の値は動きが激しいので少しメディアンフィルタをかけておく
-        std::copy(rawScores + i - halfMedianFrames,
-            rawScores + i + halfMedianFrames + 1, medianBuf.begin());
-        std::sort(medianBuf.begin(), medianBuf.end());
-        frameResult[i].score = medianBuf[halfMedianFrames];
-    }
-
-    // 不明部分を推測
-    // 両側がロゴありとなっていたらロゴありとする
-    for (auto it = frameResult.begin(); it != frameResult.end();) {
-        auto first1 = std::find_if(it, frameResult.end(), [](FrameResult r) { return r.result == 1; });
-        it = std::find_if_not(first1, frameResult.end(), [](FrameResult r) { return r.result == 1; });
-        int prevResult = (first1 == frameResult.begin()) ? 0 : (first1 - 1)->result;
-        int nextResult = (it == frameResult.end()) ? 0 : it->result;
-        if (prevResult == nextResult) {
-            std::transform(first1, it, first1, [=](FrameResult r) {
-                r.result = prevResult;
-                return r;
-                });
-        }
-    }
+    std::vector<float> paddedRawScores;
+    std::vector<LogoPresenceFrameResult> frameResult;
+    BuildLogoPresenceSeries(rawScores, smoothing, paddedRawScores, frameResult);
+    FillUnknownLogoPresenceRanges(frameResult);
 
     // ロゴ区間を出力
     StringBuilder sb;
     for (auto it = frameResult.begin(); it != frameResult.end();) {
-        auto sEnd_ = std::find_if(it, frameResult.end(), [](FrameResult r) { return r.result == 2; });
-        auto eEnd_ = std::find_if(sEnd_, frameResult.end(), [](FrameResult r) { return r.result == 0; });
+        auto sEnd_ = std::find_if(it, frameResult.end(), [](const LogoPresenceFrameResult& r) { return r.result == 2; });
+        auto eEnd_ = std::find_if(sEnd_, frameResult.end(), [](const LogoPresenceFrameResult& r) { return r.result == 0; });
 
         // 移動平均なので実際の値とは時間差がある場合があるので、フレーム時刻を精緻化
         auto sEnd = sEnd_;
@@ -1421,33 +1457,33 @@ void logo::LogoFrame::writeResult(const tstring& outpath, int logoIndex) {
             if (sEnd->score >= THRESH) {
                 // すでに始まっているので戻ってみる
                 sEnd = std::find_if(std::make_reverse_iterator(sEnd), frameResult.rend(),
-                    [=](FrameResult r) { return r.score < THRESH; }).base();
+                    [=](const LogoPresenceFrameResult& r) { return r.score < THRESH; }).base();
             } else {
                 // まだ始まっていないので進んでみる
                 sEnd = std::find_if(sEnd, frameResult.end(),
-                    [=](FrameResult r) { return r.score >= THRESH; });
+                    [=](const LogoPresenceFrameResult& r) { return r.score >= THRESH; });
             }
         }
         if (eEnd != frameResult.end()) {
             if (eEnd->score <= -THRESH) {
                 // すでに終わっているので戻ってみる
                 eEnd = std::find_if(std::make_reverse_iterator(eEnd), std::make_reverse_iterator(sEnd),
-                    [=](FrameResult r) { return r.score > -THRESH; }).base();
+                    [=](const LogoPresenceFrameResult& r) { return r.score > -THRESH; }).base();
             } else {
                 // まだ終わっていないので進んでみる
                 eEnd = std::find_if(eEnd, frameResult.end(),
-                    [=](FrameResult r) { return r.score <= -THRESH; });
+                    [=](const LogoPresenceFrameResult& r) { return r.score <= -THRESH; });
             }
         }
 
         auto sStart = std::find_if(std::make_reverse_iterator(sEnd),
-            std::make_reverse_iterator(it), [=](FrameResult r) { return r.score <= -THRESH; }).base();
+            std::make_reverse_iterator(it), [=](const LogoPresenceFrameResult& r) { return r.score <= -THRESH; }).base();
         auto eStart = std::find_if(std::make_reverse_iterator(eEnd),
-            std::make_reverse_iterator(sEnd), [=](FrameResult r) { return r.score >= THRESH; }).base();
+            std::make_reverse_iterator(sEnd), [=](const LogoPresenceFrameResult& r) { return r.score >= THRESH; }).base();
 
-        auto sBest = std::find_if(sStart, sEnd, [](FrameResult r) { return r.score > 0; });
+        auto sBest = std::find_if(sStart, sEnd, [](const LogoPresenceFrameResult& r) { return r.score > 0; });
         auto eBest = std::find_if(std::make_reverse_iterator(eEnd),
-            std::make_reverse_iterator(eStart), [](FrameResult r) { return r.score > 0; }).base();
+            std::make_reverse_iterator(eStart), [](const LogoPresenceFrameResult& r) { return r.score > 0; }).base();
 
         // 区間がある場合だけ
         if (sEnd != eEnd) {
@@ -2919,6 +2955,49 @@ namespace {
             int area;
         };
 
+        struct RectMergeEval {
+            int overlapW = 0;
+            int overlapH = 0;
+            int gapX = 0;
+            int gapY = 0;
+            bool nearHorizontal = false;
+            bool nearVertical = false;
+            bool nearDiagonal = false;
+            bool overlap = false;
+            bool withinSeedCenterGuard = false;
+            bool withinFinalCenterGuard = false;
+            bool smallCompAllowed = false;
+            bool sizeGuardOk = false;
+            bool farAboveSeed = false;
+            bool accepted = false;
+            AutoDetectRect mergedRect{ 0, 0, 0, 0 };
+        };
+
+        struct BinaryComp {
+            int minX = 0;
+            int minY = 0;
+            int maxX = -1;
+            int maxY = -1;
+            int area = 0;
+            int w = 0;
+            int h = 0;
+            float peakScore = 0.0f;
+            float meanScore = 0.0f;
+            float meanAccepted = 0.0f;
+            float meanAlpha = 0.0f;
+            float meanConsistency = 0.0f;
+            float anchorScore = -1.0f;
+            std::vector<int> pixels;
+        };
+
+        struct AnchorPruneStats {
+            bool hasAnchorBandStat = false;
+            int anchorBandPreOn = 0;
+            int anchorBandPostOn = 0;
+            int removedOn = 0;
+            int removedBelowOn = 0;
+        };
+
         bool getMaskRect(const std::vector<uint8_t>& mask, int& minX, int& minY, int& maxX, int& maxY) const;
         int countMaskOn(const std::vector<uint8_t>& mask) const;
         void buildBinaryFromThreshold(const ScoreStageBuffers& scoreStage, const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
@@ -2929,6 +3008,10 @@ namespace {
         void collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage);
         AutoDetectRect buildAcceptedFallbackRect(const ScoreStageBuffers& scoreStage) const;
         void mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect);
+        RectMergeEval evaluateRectMergeCandidate(const AutoDetectRect& currentRect, const AutoDetectRect& compRect, const int compArea, const AutoDetectRect& seedRect, const double maxSeedDx, const double maxSeedDy) const;
+        void collectBinaryComponentsForPrune(const ScoreStageBuffers& scoreStage, const std::vector<uint8_t>& binary, std::vector<BinaryComp>& comps) const;
+        int selectAnchorComponent(const std::vector<BinaryComp>& comps) const;
+        void filterBinaryByAnchor(const std::vector<BinaryComp>& comps, const int anchorIdx, const bool hasPreRect, const int preMinX, const int preMinY, const int preMaxX, const int preMaxY, const std::vector<uint8_t>& prePruneBinary, std::vector<uint8_t>& filtered, AnchorPruneStats& pruneStats) const;
         AutoDetectRect makeAbsRectFromLocal(const AutoDetectRect& localRect) const;
         AutoDetectRect makeSourceRectFromDetect(const AutoDetectRect& detectRect) const;
         void writeTracePlotBitmap(const std::string& path, const ScoreStageBuffers& scoreStage, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const;
@@ -3681,47 +3764,15 @@ namespace {
             const float kThresh = 0.2f;
             const float kThreshL = 0.5f;
             const int num = (int)pass2.corr0.size();
-            const int fps = std::max(1, framesPerSec);
-            const int halfAvg = std::max(1, (int)std::round(fps * 1.0f / 2.0f));
-            const int avgFrames = halfAvg * 2 + 1;
-            const int halfMedian = std::max(1, (int)std::round(fps * 0.5f / 2.0f));
-            const int medianFrames = halfMedian * 2 + 1;
-            const int halfWin = std::max(avgFrames, medianFrames) / 2;
-            std::vector<float> rawBuf(num + halfWin * 2, 0.0f);
-            auto raw = rawBuf.data() + halfWin;
+            std::vector<float> rawScores(num, 0.0f);
             for (int i = 0; i < num; i++) {
-                raw[i] = std::max(0.0f, pass2.corr0[i]) + std::min(0.0f, pass2.corr1[i]);
+                rawScores[i] = std::max(0.0f, pass2.corr0[i]) + std::min(0.0f, pass2.corr1[i]);
             }
-            std::fill(rawBuf.begin(), rawBuf.begin() + halfWin, raw[0]);
-            std::fill(raw + num, rawBuf.data() + rawBuf.size(), raw[num - 1]);
-
-            // r: 離散判定結果(0/1/2)、s: 予備スコア(中央値)。
-            struct FrameJudge { int r; float s; };
-            std::vector<FrameJudge> judge(num);
-            std::vector<float> medbuf(medianFrames, 0.0f);
-            for (int i = 0; i < num; i++) {
-                float beforeMax = *std::max_element(raw + i - halfAvg, raw + i);
-                float afterMax = *std::max_element(raw + i + 1, raw + i + 1 + halfAvg);
-                float minMax = std::min(beforeMax, afterMax);
-                int minMaxResult = (std::abs(minMax) < kThreshL) ? 1 : (minMax < 0.0f ? 0 : 2);
-                float avg = std::accumulate(raw + i - halfAvg, raw + i + halfAvg + 1, 0.0f) / avgFrames;
-                int avgResult = (std::abs(avg) < kThresh) ? 1 : (avg < 0.0f ? 0 : 2);
-                judge[i].r = (minMaxResult != avgResult) ? 1 : avgResult;
-                std::copy(raw + i - halfMedian, raw + i + halfMedian + 1, medbuf.begin());
-                std::sort(medbuf.begin(), medbuf.end());
-                judge[i].s = medbuf[halfMedian];
-            }
-
-            // 6) 連続する不確定区間(1)は、前後が同一判定ならその値で埋める。
-            for (auto it = judge.begin(); it != judge.end();) {
-                auto first1 = std::find_if(it, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
-                it = std::find_if_not(first1, judge.end(), [](const FrameJudge& v) { return v.r == 1; });
-                const int prev = (first1 == judge.begin()) ? 0 : (first1 - 1)->r;
-                const int next = (it == judge.end()) ? 0 : it->r;
-                if (prev == next) {
-                    for (auto p = first1; p != it; ++p) p->r = prev;
-                }
-            }
+            const auto smoothing = MakeLogoPresenceSmoothingConfig(std::max(1, framesPerSec), kThresh, kThreshL, 1.0f, 0.5f);
+            std::vector<float> paddedRawScores;
+            std::vector<LogoPresenceFrameResult> judge;
+            BuildLogoPresenceSeries(rawScores, smoothing, paddedRawScores, judge);
+            FillUnknownLogoPresenceRanges(judge);
 
             // 7) 最終的に「ロゴあり(2)」だけを pass3投入マスクとして保持する。
             pass2.frameMask.assign(num, 0);
@@ -3730,11 +3781,12 @@ namespace {
             debugPass2Prepare.raw.assign(num, 0.0f);
             debugPass2Prepare.median.assign(num, 0.0f);
             debugPass2Prepare.judge.assign(num, 0);
+            const float* paddedRaw = paddedRawScores.empty() ? nullptr : paddedRawScores.data() + smoothing.halfWinFrames;
             for (int i = 0; i < num; i++) {
-                debugPass2Prepare.raw[i] = raw[i];
-                debugPass2Prepare.median[i] = judge[i].s;
-                debugPass2Prepare.judge[i] = judge[i].r;
-                pass2.frameMask[i] = (judge[i].r == 2) ? 1 : 0;
+                debugPass2Prepare.raw[i] = paddedRaw ? paddedRaw[i] : 0.0f;
+                debugPass2Prepare.median[i] = judge[i].score;
+                debugPass2Prepare.judge[i] = judge[i].result;
+                pass2.frameMask[i] = (judge[i].result == 2) ? 1 : 0;
             }
             debugPass2Prepare.frameMask = pass2.frameMask;
             debugPass2FrameMaskNonZero = (int)std::count_if(pass2.frameMask.begin(), pass2.frameMask.end(), [](uint8_t v) { return v != 0; });
@@ -6784,6 +6836,398 @@ namespace {
             throwIfRectDetectFailed();
         }
 
+        static double smoothstep01(const double t) {
+            const double tc = std::max(0.0, std::min(1.0, t));
+            return tc * tc * (3.0 - 2.0 * tc);
+        }
+
+        static double calcAlphaGainFromAlpha(const double alpha) {
+            // alphaGain: alpha が 0.15〜0.35 付近（半透明ロゴ帯域）を最大評価し、
+            // 完全不透明（alpha >= 0.75）と完全透明（alpha <= 0.03）を排除する。
+            // f(alpha) = S((a-0.03)/0.12) [0.03,0.15), 1 [0.15,0.35], 1-S((a-0.35)/0.40) (0.35,0.75), 0 otherwise
+            if (alpha <= 0.03) return 0.0;
+            if (alpha < 0.15)  return smoothstep01((alpha - 0.03) / 0.12);
+            if (alpha <= 0.35) return 1.0;
+            if (alpha < 0.75)  return 1.0 - smoothstep01((alpha - 0.35) / 0.40);
+            return 0.0;
+        }
+
+        static float calcWhiteConstraintGainFromAB(const float A, const float B) {
+            // 白色拘束逸脱ペナルティ定数:
+            // limited-range white (bg=235/255=k) を白の基準点とし、
+            // dev = |A*k + B - k| = |(A-1)*k + B| で逸脱を評価する。
+            // 透明白ロゴ: fg=A*bg+B が bg=k で fg≈k なら dev≈0 (白を維持)
+            // 暗いオーバーレイ: bg=k でも fg<k → dev>0 で抑制
+            // kWhiteDevThresh でギャップを分離し、kWhiteDevFloor が下限ゲイン。
+            static constexpr double kWhiteDevK = 235.0 / 255.0; // limited-range white
+            static constexpr double kWhiteDevThresh = 0.08;
+            static constexpr double kWhiteDevFloor = 0.40;
+            const double whiteDeviation = std::abs((double)A * kWhiteDevK + B - kWhiteDevK);
+            return (float)(kWhiteDevFloor + (1.0 - kWhiteDevFloor)
+                * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation) / kWhiteDevThresh)));
+        }
+
+        static float composeAcceptedScore(const ScoreStageBuffers& scoreStage, const int i, const float alphaGain, const float whiteConstraintGain) {
+            return scoreStage.mapDiffGain[i]
+                * (0.25f + 0.75f * scoreStage.mapConsistencyGain[i])
+                * (0.15f + 0.85f * alphaGain)
+                * (0.6f + 0.4f * scoreStage.mapLogoGain[i])
+                * (0.20f + 0.80f * scoreStage.mapExtremeGain[i])
+                * scoreStage.mapTemporalGain[i]
+                * scoreStage.mapOpaquePenalty[i]
+                * scoreStage.mapOpaqueStaticPenalty[i]
+                * whiteConstraintGain
+                * scoreStage.mapLineFitGain[i]
+                * scoreStage.mapSplitBranchGain[i];
+        }
+
+        void computeBaseScoreStage(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage) {
+            // 各種出力マップをクリアする。
+            scoreStage.reset(scanw, scanh);
+
+            // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
+            RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
+                auto sat01 = [](const double v) {
+                    return std::max(0.0, std::min(1.0, v));
+                };
+                for (int y = y0; y < y1; y++) {
+                    for (int x = 0; x < scanw; x++) {
+                        const int i = x + y * scanw;
+                        float A, B;
+                        if (!TryGetAB(statsPass.stats[i], A, B)) {
+                            continue;
+                        }
+                        scoreStage.validAB[i] = 1;
+                        scoreStage.mapA[i] = A;
+                        scoreStage.mapB[i] = B;
+                        float alpha = 0.0f;
+                        float logoY = 0.0f;
+                        if (!TryGetAlphaLogo(A, B, alpha, logoY)) {
+                            continue;
+                        }
+                        scoreStage.mapAlpha[i] = std::max(0.0f, std::min(1.0f, alpha));
+                        scoreStage.mapLogoY[i] = std::max(0.0f, std::min(1.0f, logoY));
+
+                        const auto& s = statsPass.stats[i];
+                        const double invN = (s.sumW > 1e-6) ? 1.0 / s.sumW : 0.0;
+                        const double meanF = s.sumF * invN;
+                        const double meanBg = s.sumB * invN;
+                        const double meanDiff = meanF - meanBg;
+                        const double diff2 = (s.sumF2 - 2.0 * s.sumFB + s.sumB2) * invN;
+                        const double varDiff = std::max(0.0, diff2 - meanDiff * meanDiff);
+                        const double stdDiff = std::sqrt(varDiff);
+                        const double consistency = std::abs(meanDiff) / (stdDiff + 1e-6);
+                        const double varFg = std::max(0.0, s.sumF2 * invN - meanF * meanF);
+                        const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
+                        const double fgBgVarRatio = varFg / (varBg + 1e-6);
+                        const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
+                        const double keepRate = (s.observed > 0) ? (double)s.rawSampleCount / (double)s.observed : 0.0;
+                        const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
+                        scoreStage.mapMeanDiff[i] = (float)meanDiff;
+                        scoreStage.mapConsistency[i] = (float)consistency;
+                        scoreStage.mapFgVar[i] = (float)varFg;
+                        scoreStage.mapBgVar[i] = (float)varBg;
+                        scoreStage.mapTransitionRate[i] = (float)transitionRate;
+                        scoreStage.mapKeepRate[i] = (float)keepRate;
+
+                        const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
+                        const double alphaGain = calcAlphaGainFromAlpha(alpha);
+                        const double logoGain = sat01((logoY - 0.45) / 0.30);
+                        const double consistencyGain = sat01((consistency - 0.35) / 1.65);
+                        const double bgGain = sat01((0.080 - varBg) / 0.080);
+                        const double extremeGain = sat01(1.0 - extremeRejectRatio);
+
+                        const double residualDiff = meanDiff;
+                        const double diffGainRaw = sat01((meanDiff - 0.003) / 0.120);
+                        const double residualGain = sat01((residualDiff - 0.001) / 0.105);
+                        // residualBgGain は varBg が小さい（bg幅が狭い）ほど高くなる逆向きの重みだったため除去。
+                        // bg分散が大きい方が回帰の信頼性が高く、diffGain には影響させない。
+                        const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw));
+                        const double lowTransition = sat01((0.10 - transitionRate) / 0.10);
+                        const double lowKeep = sat01((0.08 - keepRate) / 0.08);
+                        const double staticStrength = std::sqrt(lowTransition * lowKeep);
+                        // 不透明固定文字の事前ゲート(保守的):
+                        // 下側帯域に限定し、かつ keep/transition がともに低い強条件のみ除外する。
+                        // ロゴ欠落を避けるため、上側のロゴ帯にはゲートを適用しない。
+                        if (varBg >= 0.0012 && alpha > 0.62) {
+                            const double lowerBand = sat01((yRatio - 0.28) / 0.30);
+                            const bool gateByStaticPair = (lowerBand > 0.0) && (staticStrength > 0.88);
+                            const bool gateByLockedKeep = (lowerBand > 0.35) && (keepRate < 0.020);
+                            if (gateByStaticPair || gateByLockedKeep) {
+                                continue;
+                            }
+                        }
+                        // 時間変動由来の抑制:
+                        // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
+                        double temporalGain = 1.0;
+                        if (varBg >= 0.0012) {
+                            const double ratioGain = sat01((fgBgVarRatio - 0.08) / 0.44);
+                            temporalGain = 0.85 + 0.15 * ratioGain;
+                        }
+                        double opaquePenalty = 1.0;
+                        if (alpha > 0.68) {
+                            const double alphaOpaque = sat01((alpha - 0.68) / 0.22);
+                            const double temporalOpaque = (varBg >= 0.0012) ? sat01((0.22 - fgBgVarRatio) / 0.22) : 0.0;
+                            const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
+                            opaquePenalty = 1.0 / penaltyScale;
+                        }
+                        double opaqueStaticPenalty = 1.0;
+                        if (alpha > 0.55 && varBg >= 0.0012) {
+                            const double alphaOpaque = sat01((alpha - 0.55) / 0.35);
+                            // transition 単独の低値による過抑制を避けるため、閾値と寄与を緩める。
+                            const double lowTransition2 = sat01((0.06 - transitionRate) / 0.06);
+                            const double lowKeep2 = sat01((0.07 - keepRate) / 0.07);
+                            const double staticness = std::max(0.45 * lowTransition2, lowKeep2);
+                            const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness);
+                            opaqueStaticPenalty = 1.0 / penaltyScale;
+                        }
+                        const float whiteConstraintGain = calcWhiteConstraintGainFromAB(A, B);
+                        const float dominantResidualPenalty = calcDominantResidualPenalty(statsPass, i, A, B);
+                        const float lineFitGain = 1.0f / (1.0f + 2.5f * dominantResidualPenalty);
+                        const float splitBranchPenalty = calcSplitBranchPenalty(statsPass, i, alpha);
+                        const float splitBranchGain = 1.0f / (1.0f + 4.0f * splitBranchPenalty);
+                        scoreStage.mapDiffGain[i] = (float)diffGain;
+                        scoreStage.mapDiffGainRaw[i] = (float)diffGainRaw;
+                        scoreStage.mapResidualGain[i] = (float)residualGain;
+                        scoreStage.mapLogoGain[i] = (float)logoGain;
+                        scoreStage.mapConsistencyGain[i] = (float)consistencyGain;
+                        scoreStage.mapAlphaGain[i] = (float)alphaGain;
+                        scoreStage.mapBgGain[i] = (float)bgGain;
+                        scoreStage.mapExtremeGain[i] = (float)extremeGain;
+                        scoreStage.mapTemporalGain[i] = (float)temporalGain;
+                        scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
+                        scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
+                        scoreStage.mapLineFitGain[i] = lineFitGain;
+                        scoreStage.mapDominantResidualPenalty[i] = dominantResidualPenalty;
+                        scoreStage.mapSplitBranchGain[i] = splitBranchGain;
+                        scoreStage.mapSplitBranchPenalty[i] = splitBranchPenalty;
+                        const float d = composeAcceptedScore(scoreStage, i, (float)alphaGain, whiteConstraintGain);
+                        if (d <= 0.0f) continue;
+                        scoreStage.mapAccepted[i] = d;
+                        scoreStage.score[i] = d;
+                    }
+                }
+                });
+        }
+
+        void applySplitBranchLocalPenalty(ScoreStageBuffers& scoreStage) {
+            // split branch は小さい偽塊の中でも 1px だけ検出されることがあるため、
+            // 3x3 近傍の最大 penalty を使って同一小塊をまとめて抑制する。
+            const int pixelCount = scanw * scanh;
+            static constexpr float kSplitBranchLocalSpreadScoreMax = 0.35f;
+            std::vector<float> splitBranchPenalty3x3max(pixelCount, 0.0f);
+            for (int y = 0; y < scanh; y++) {
+                for (int x = 0; x < scanw; x++) {
+                    float maxVal = 0.0f;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            const int nx = x + dx, ny = y + dy;
+                            if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
+                                maxVal = std::max(maxVal, scoreStage.mapSplitBranchPenalty[nx + ny * scanw]);
+                            }
+                        }
+                    }
+                    splitBranchPenalty3x3max[x + y * scanw] = maxVal;
+                }
+            }
+            for (int i = 0; i < pixelCount; i++) {
+                if (!scoreStage.validAB[i]) continue;
+                if (scoreStage.score[i] >= kSplitBranchLocalSpreadScoreMax) continue;
+                const float splitBranchGainOrig = scoreStage.mapSplitBranchGain[i];
+                if (splitBranchGainOrig <= 1e-6f) continue;
+                const float splitBranchPenaltyNew = splitBranchPenalty3x3max[i];
+                const float splitBranchGainNew = 1.0f / (1.0f + 4.0f * splitBranchPenaltyNew);
+                if (splitBranchGainNew >= splitBranchGainOrig) continue;
+                const float scale = splitBranchGainNew / splitBranchGainOrig;
+                scoreStage.mapSplitBranchPenalty[i] = splitBranchPenaltyNew;
+                scoreStage.mapSplitBranchGain[i] = splitBranchGainNew;
+                scoreStage.mapAccepted[i] *= scale;
+                scoreStage.score[i] *= scale;
+            }
+        }
+
+        void applyAlphaNeighborPenalty(ScoreStageBuffers& scoreStage) {
+            // alpha 3x3 max filter による alphaGain 補正:
+            // 近傍の最大 alpha を使い、不透明要素の輪郭 1px を追加抑制する。
+            // alphaGain = min(f(alpha), f(alpha3x3max)) とすることで、
+            // 自身は低 alpha でも近傍に高 alpha がある画素（＝不透明要素の縁）を抑制する。
+            const int pixelCount = scanw * scanh;
+            std::vector<float> alpha3x3max(pixelCount, 0.0f);
+            for (int y = 0; y < scanh; y++) {
+                for (int x = 0; x < scanw; x++) {
+                    float maxVal = 0.0f;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            const int nx = x + dx, ny = y + dy;
+                            if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
+                                maxVal = std::max(maxVal, scoreStage.mapAlpha[nx + ny * scanw]);
+                            }
+                        }
+                    }
+                    alpha3x3max[x + y * scanw] = maxVal;
+                }
+            }
+            for (int i = 0; i < pixelCount; i++) {
+                if (!scoreStage.validAB[i]) continue;
+                const float alphaGainOrig = scoreStage.mapAlphaGain[i];
+                const float alphaGainNeighbor = (float)calcAlphaGainFromAlpha(alpha3x3max[i]);
+                const float alphaGainNew = std::min(alphaGainOrig, alphaGainNeighbor);
+                if (alphaGainNew >= alphaGainOrig) continue;
+                scoreStage.mapAlphaGain[i] = alphaGainNew;
+                // mapA/mapB から白色拘束逸脱ペナルティを再計算する（235/255 評価点）。
+                const float whiteConstraintGain = calcWhiteConstraintGainFromAB(scoreStage.mapA[i], scoreStage.mapB[i]);
+                const float d = composeAcceptedScore(scoreStage, i, alphaGainNew, whiteConstraintGain);
+                scoreStage.mapAccepted[i] = (d > 0.0f) ? d : 0.0f;
+                scoreStage.score[i] = (d > 0.0f) ? d : 0.0f;
+            }
+        }
+
+        float applyAdaptiveAlphaFloor(ScoreStageBuffers& scoreStage) {
+            // 案C改: alphaGain 分布に基づく動的 floor 調整。
+            // 回帰が「明確にロゴ半透明」と判定したピクセル (alphaGain >= 0.80) の個数で
+            // 回帰成功度を測る。非ロゴ背景は alpha≈0 が正常なので P99 等では判別できないが、
+            // 真のロゴピクセルは alphaGain≈1.0 となるため、その個数で回帰の健全性を判定する。
+            // strongCount >= 80: 回帰正常 → floor=0.15 (影響なし)
+            // strongCount <= 5:  回帰完全失敗 → floor=0.50 (最大補正)
+            const int pixelCount = scanw * scanh;
+            int strongAlphaCount = 0;
+            static constexpr float kStrongAlphaThresh = 0.80f;
+            for (int i = 0; i < pixelCount; i++) {
+                if (!scoreStage.validAB[i]) continue;
+                if (scoreStage.score[i] <= 0.0f) continue;
+                if (scoreStage.mapAlphaGain[i] >= kStrongAlphaThresh) {
+                    strongAlphaCount++;
+                }
+            }
+            static constexpr int kStrongCountLo = 5;
+            static constexpr int kStrongCountHi = 80;
+            static constexpr float kAlphaFloorDefault = 0.15f;
+            static constexpr float kAlphaFloorMax = 0.50f;
+            const float regressionHealth = std::min(std::max(
+                (float)(strongAlphaCount - kStrongCountLo) / (kStrongCountHi - kStrongCountLo), 0.0f), 1.0f);
+            const float alphaFloor = kAlphaFloorMax + (kAlphaFloorDefault - kAlphaFloorMax) * regressionHealth;
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] alphaGain strong(>=%.2f)=%d health=%.4f alphaFloor=%.4f\n",
+                    (double)kStrongAlphaThresh, strongAlphaCount, (double)regressionHealth, (double)alphaFloor);
+            }
+            // floor が変わった場合、score を事後補正:
+            // score の alpha 項 (0.15 + 0.85*ag) を (alphaFloor + (1-alphaFloor)*ag) に置き換え
+            if (alphaFloor > kAlphaFloorDefault + 1e-4f) {
+                const float oldCoeff = 1.0f - kAlphaFloorDefault; // 0.85
+                const float newCoeff = 1.0f - alphaFloor;
+                for (int i = 0; i < pixelCount; i++) {
+                    if (!scoreStage.validAB[i]) continue;
+                    if (scoreStage.score[i] <= 0.0f) continue;
+                    const float ag = scoreStage.mapAlphaGain[i];
+                    const float oldTerm = kAlphaFloorDefault + oldCoeff * ag;
+                    const float newTerm = alphaFloor + newCoeff * ag;
+                    if (oldTerm > 1e-6f) {
+                        const float ratio = newTerm / oldTerm;
+                        scoreStage.score[i] *= ratio;
+                        scoreStage.mapAccepted[i] *= ratio;
+                    }
+                }
+            }
+            return regressionHealth;
+        }
+
+        void applyPass1BranchRescue(const StatsPassBuffers& statsPass, ScoreStageBuffers& scoreStage) {
+            // pass1 専用: contaminated branch 検知 + positive/lower branch 補助 fit。
+            // 本流回帰が固定構造で潰れた点だけを救済する。
+            auto sat01 = [](const double v) {
+                return std::max(0.0, std::min(1.0, v));
+            };
+            const int pixelCount = scanw * scanh;
+            const std::vector<float> baseAcceptedBeforeBranch = scoreStage.mapAccepted;
+            int branchCandidateCount = 0;
+            int branchLogoLikeRejectCount = 0;
+            int branchBaseSupportRejectCount = 0;
+            int branchAdoptedCount = 0;
+            auto calcBaseAcceptedLocalMax = [&](const int off, const int radius) {
+                const int cx = off % scanw;
+                const int cy = off / scanw;
+                float maxVal = 0.0f;
+                const int x0 = std::max(0, cx - radius);
+                const int x1 = std::min(scanw - 1, cx + radius);
+                const int y0 = std::max(0, cy - radius);
+                const int y1 = std::min(scanh - 1, cy + radius);
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = x0; x <= x1; x++) {
+                        maxVal = std::max(maxVal, baseAcceptedBeforeBranch[x + y * scanw]);
+                    }
+                }
+                return maxVal;
+            };
+            for (int i = 0; i < pixelCount; i++) {
+                if (!scoreStage.validAB[i]) continue;
+                BranchRescueInfo branch{};
+                if (!analyzeContaminatedBranchFit(statsPass, i, scoreStage.mapConsistency[i], scoreStage.mapAlpha[i], branch)) {
+                    continue;
+                }
+                branchCandidateCount++;
+
+                const double branchAlphaGain = calcAlphaGainFromAlpha(branch.auxAlpha);
+                const double branchLogoGain = sat01((branch.auxLogoY - 0.45f) / 0.30f);
+                const double branchConsistencyGain = sat01((branch.auxConsistency - 0.35f) / 1.65f);
+                const double branchDiffGainRaw = sat01((branch.auxMeanDiff - 0.003f) / 0.120f);
+                const double branchResidualGain = sat01((branch.auxMeanDiff - 0.001f) / 0.105f);
+                const double branchDiffGain = sat01(branchResidualGain * (0.25 + 0.75 * branchDiffGainRaw));
+                const double baseAlphaGain = scoreStage.mapAlphaGain[i];
+                const double baseLogoGain = scoreStage.mapLogoGain[i];
+                const double branchAlphaImprove = branchAlphaGain - baseAlphaGain;
+                const double branchLogoImprove = branchLogoGain - baseLogoGain;
+                const bool branchLooksMoreTransparent =
+                    branch.auxAlpha >= 0.05f &&
+                    branchAlphaGain >= 0.35f &&
+                    branchAlphaImprove >= 0.15f;
+                const bool branchLooksBrighter =
+                    branch.auxLogoY >= 0.46f &&
+                    branchLogoGain >= 0.08f &&
+                    branchLogoImprove >= 0.08f;
+                if (!(branchLooksMoreTransparent && branchLooksBrighter)) {
+                    branchLogoLikeRejectCount++;
+                    continue;
+                }
+                const float baseAcceptedLocalMax = calcBaseAcceptedLocalMax(i, 3);
+                if (baseAcceptedLocalMax < 0.012f) {
+                    branchBaseSupportRejectCount++;
+                    continue;
+                }
+                const double branchAdoptGain =
+                    sat01((branchAlphaImprove - 0.15f) / 0.45f) *
+                    sat01((branchLogoImprove - 0.08f) / 0.45f);
+                const double branchAlphaTerm = 0.35 + 0.65 * std::max(branchAlphaGain, 0.45 * branch.contaminationGain);
+                const double branchScore =
+                    branchDiffGain *
+                    (0.20 + 0.80 * branchConsistencyGain) *
+                    branchAlphaTerm *
+                    (0.55 + 0.45 * branchLogoGain) *
+                    (0.35 + 0.65 * branchAdoptGain) *
+                    branch.contaminationGain *
+                    branch.supportGain *
+                    scoreStage.mapTemporalGain[i] *
+                    scoreStage.mapOpaquePenalty[i] *
+                    scoreStage.mapOpaqueStaticPenalty[i];
+
+                scoreStage.mapBranchRescueScore[i] = (float)branchScore;
+                scoreStage.mapBranchContaminationGain[i] = branch.contaminationGain;
+                scoreStage.mapBranchSupportGain[i] = branch.supportGain;
+                scoreStage.mapBranchDiffGain[i] = (float)branchDiffGain;
+                scoreStage.mapBranchConsistencyGain[i] = (float)branchConsistencyGain;
+                scoreStage.mapBranchAlphaGain[i] = (float)branchAlphaGain;
+
+                if (branchScore > scoreStage.mapAccepted[i]) {
+                    scoreStage.mapAccepted[i] = (float)branchScore;
+                    scoreStage.score[i] = (float)branchScore;
+                    branchAdoptedCount++;
+                }
+            }
+            if (detailedDebug) {
+                fprintf(stderr, "[LogoScan] contaminated branch rescue: candidates=%d rejected_logo_like=%d rejected_base_support=%d adopted=%d\n",
+                    branchCandidateCount, branchLogoLikeRejectCount, branchBaseSupportRejectCount, branchAdoptedCount);
+            }
+        }
+
         // ステージ1: 画素ごとの統計(stats)から評価マップを作り、scoreを算出し、
         // 2値化用の初期閾値(thHigh/thLow)を決める。
         // ここでは「どの画素がロゴ候補としてどれだけ妥当か」を定量化することが目的。
@@ -6793,394 +7237,12 @@ namespace {
                 fprintf(stderr, "[LogoScan] runScoreStage: passIndex=%d enableRescue=%d anchorRect=(%d,%d,%d,%d)\n",
                     passIndex, (int)enableRescue, rescueAnchorRect.x, rescueAnchorRect.y, rescueAnchorRect.w, rescueAnchorRect.h);
             }
-            // 各種出力マップをクリアする。
-            scoreStage.reset(scanw, scanh);
-            // 画素単位で A/B 推定と特徴量計算を行い、score を合成する。
-            auto smoothstep = [](const double t) {
-                const double tc = std::max(0.0, std::min(1.0, t));
-                return tc * tc * (3.0 - 2.0 * tc);
-            };
-            // 白色拘束逸脱ペナルティ定数:
-            // limited-range white (bg=235/255=k) を白の基準点とし、
-            // dev = |A*k + B - k| = |(A-1)*k + B| で逸脱を評価する。
-            // 透明白ロゴ: fg=A*bg+B が bg=k で fg≈k なら dev≈0 (白を維持)
-            // 暗いオーバーレイ: bg=k でも fg<k → dev>0 で抑制
-            // kWhiteDevThresh でギャップを分離し、kWhiteDevFloor が下限ゲイン。
-            static constexpr double kWhiteDevK      = 235.0 / 255.0;  // limited-range white
-            static constexpr double kWhiteDevThresh = 0.08;
-            static constexpr double kWhiteDevFloor  = 0.40;
-            RunParallelRange(threadPool, threadN, scanh, [&](int y0, int y1) {
-                for (int y = y0; y < y1; y++) {
-                    for (int x = 0; x < scanw; x++) {
-                        const int i = x + y * scanw;
-                        float A, B;
-                        if (TryGetAB(statsPass.stats[i], A, B)) {
-                            scoreStage.validAB[i] = 1;
-                            scoreStage.mapA[i] = A;
-                            scoreStage.mapB[i] = B;
-                            float alpha = 0.0f;
-                            float logoY = 0.0f;
-                            if (!TryGetAlphaLogo(A, B, alpha, logoY)) {
-                                continue;
-                            }
-                            scoreStage.mapAlpha[i] = std::max(0.0f, std::min(1.0f, alpha));
-                            scoreStage.mapLogoY[i] = std::max(0.0f, std::min(1.0f, logoY));
-
-                            auto sat01 = [](const double v) {
-                                return std::max(0.0, std::min(1.0, v));
-                            };
-                            const auto& s = statsPass.stats[i];
-                            const double invN = (s.sumW > 1e-6) ? 1.0 / s.sumW : 0.0;
-                            const double meanF = s.sumF * invN;
-                            const double meanBg = s.sumB * invN;
-                            const double meanDiff = meanF - meanBg;
-                            const double diff2 = (s.sumF2 - 2.0 * s.sumFB + s.sumB2) * invN;
-                            const double varDiff = std::max(0.0, diff2 - meanDiff * meanDiff);
-                            const double stdDiff = std::sqrt(varDiff);
-                            const double consistency = std::abs(meanDiff) / (stdDiff + 1e-6);
-                            const double varFg = std::max(0.0, s.sumF2 * invN - meanF * meanF);
-                            const double varBg = std::max(0.0, s.sumB2 * invN - meanBg * meanBg);
-                            const double fgBgVarRatio = varFg / (varBg + 1e-6);
-                            const double transitionRate = (s.observed > 1) ? (double)s.fgTransition / (double)(s.observed - 1) : 0.0;
-                            const double keepRate = (s.observed > 0) ? (double)s.rawSampleCount / (double)s.observed : 0.0;
-                            const double yRatio = (scanh > 1) ? (double)y / (double)(scanh - 1) : 0.0;
-                            scoreStage.mapMeanDiff[i] = (float)meanDiff;
-                            scoreStage.mapConsistency[i] = (float)consistency;
-                            scoreStage.mapFgVar[i] = (float)varFg;
-                            scoreStage.mapBgVar[i] = (float)varBg;
-                            scoreStage.mapTransitionRate[i] = (float)transitionRate;
-                            scoreStage.mapKeepRate[i] = (float)keepRate;
-
-                            const double extremeRejectRatio = (s.totalCandidates > 0) ? (double)s.rejectedExtreme / s.totalCandidates : 0.0;
-                            // alphaGain: alpha が 0.15〜0.35 付近（半透明ロゴ帯域）を最大評価し、
-                            // 完全不透明（alpha >= 0.75）と完全透明（alpha <= 0.03）を排除する。
-                            // f(alpha) = S((a-0.03)/0.12) [0.03,0.15), 1 [0.15,0.35], 1-S((a-0.35)/0.40) (0.35,0.75), 0 otherwise
-                            const double alphaGain = (alpha <= 0.03) ? 0.0
-                                : (alpha < 0.15)  ? smoothstep((alpha - 0.03) / 0.12)
-                                : (alpha <= 0.35)  ? 1.0
-                                : (alpha < 0.75)  ? 1.0 - smoothstep((alpha - 0.35) / 0.40)
-                                : 0.0;
-                            const double logoGain = sat01((logoY - 0.45) / 0.30);
-                            const double consistencyGain = sat01((consistency - 0.35) / 1.65);
-                            const double bgGain = sat01((0.080 - varBg) / 0.080);
-                            const double extremeGain = sat01(1.0 - extremeRejectRatio);
-
-                            const double residualDiff = meanDiff;
-                            const double diffGainRaw = sat01((meanDiff - 0.003) / 0.120);
-                            const double residualGain = sat01((residualDiff - 0.001) / 0.105);
-                            // residualBgGain は varBg が小さい（bg幅が狭い）ほど高くなる逆向きの重みだったため除去。
-                            // bg分散が大きい方が回帰の信頼性が高く、diffGain には影響させない。
-                            const double diffGain = sat01(residualGain * (0.25 + 0.75 * diffGainRaw));
-                            const double lowTransition = sat01((0.10 - transitionRate) / 0.10);
-                            const double lowKeep = sat01((0.08 - keepRate) / 0.08);
-                            const double staticStrength = std::sqrt(lowTransition * lowKeep);
-                            // 不透明固定文字の事前ゲート(保守的):
-                            // 下側帯域に限定し、かつ keep/transition がともに低い強条件のみ除外する。
-                            // ロゴ欠落を避けるため、上側のロゴ帯にはゲートを適用しない。
-                            if (varBg >= 0.0012 && alpha > 0.62) {
-                                const double lowerBand = sat01((yRatio - 0.28) / 0.30);
-                                const bool gateByStaticPair = (lowerBand > 0.0) && (staticStrength > 0.88);
-                                const bool gateByLockedKeep = (lowerBand > 0.35) && (keepRate < 0.020);
-                                if (gateByStaticPair || gateByLockedKeep) {
-                                    continue;
-                                }
-                            }
-                            // 時間変動由来の抑制:
-                            // 透明ロゴでは fg が bg 変動に追従しやすく、opaque固定文字では fg 変動が小さくなりやすい。
-                            double temporalGain = 1.0;
-                            if (varBg >= 0.0012) {
-                                const double ratioGain = sat01((fgBgVarRatio - 0.08) / 0.44);
-                                temporalGain = 0.85 + 0.15 * ratioGain;
-                            }
-                            double opaquePenalty = 1.0;
-                            if (alpha > 0.68) {
-                                const double alphaOpaque = sat01((alpha - 0.68) / 0.22);
-                                const double temporalOpaque = (varBg >= 0.0012) ? sat01((0.22 - fgBgVarRatio) / 0.22) : 0.0;
-                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 0.40 * temporalOpaque);
-                                opaquePenalty = 1.0 / penaltyScale;
-                            }
-                            double opaqueStaticPenalty = 1.0;
-                            if (alpha > 0.55 && varBg >= 0.0012) {
-                                const double alphaOpaque = sat01((alpha - 0.55) / 0.35);
-                                // transition 単独の低値による過抑制を避けるため、閾値と寄与を緩める。
-                                const double lowTransition = sat01((0.06 - transitionRate) / 0.06);
-                                const double lowKeep = sat01((0.07 - keepRate) / 0.07);
-                                const double staticness = std::max(0.45 * lowTransition, lowKeep);
-                                const double penaltyScale = 1.0 + alphaOpaque * (0.20 + 1.40 * staticness);
-                                opaqueStaticPenalty = 1.0 / penaltyScale;
-                            }
-                            // 白色拘束逸脱ペナルティ: limited-range white (235/255) での回帰残差。
-                            // fg=A*bg+B が bg=k=235/255 で fg≈k なら dev≈0、逸脱するほど抑制。
-                            const double whiteDeviation = std::abs((double)A * kWhiteDevK + B - kWhiteDevK);
-                            const double whiteConstraintGain = kWhiteDevFloor + (1.0 - kWhiteDevFloor)
-                                * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation) / kWhiteDevThresh));
-                            const float dominantResidualPenalty = calcDominantResidualPenalty(statsPass, i, A, B);
-                            const float lineFitGain = 1.0f / (1.0f + 2.5f * dominantResidualPenalty);
-                            const float splitBranchPenalty = calcSplitBranchPenalty(statsPass, i, alpha);
-                            const float splitBranchGain = 1.0f / (1.0f + 4.0f * splitBranchPenalty);
-                            scoreStage.mapDiffGain[i] = (float)diffGain;
-                            scoreStage.mapDiffGainRaw[i] = (float)diffGainRaw;
-                            scoreStage.mapResidualGain[i] = (float)residualGain;
-                            scoreStage.mapLogoGain[i] = (float)logoGain;
-                            scoreStage.mapConsistencyGain[i] = (float)consistencyGain;
-                            scoreStage.mapAlphaGain[i] = (float)alphaGain;
-                            scoreStage.mapBgGain[i] = (float)bgGain;
-                            scoreStage.mapExtremeGain[i] = (float)extremeGain;
-                            scoreStage.mapTemporalGain[i] = (float)temporalGain;
-                            scoreStage.mapOpaquePenalty[i] = (float)opaquePenalty;
-                            scoreStage.mapOpaqueStaticPenalty[i] = (float)opaqueStaticPenalty;
-                            scoreStage.mapLineFitGain[i] = lineFitGain;
-                            scoreStage.mapDominantResidualPenalty[i] = dominantResidualPenalty;
-                            scoreStage.mapSplitBranchGain[i] = splitBranchGain;
-                            scoreStage.mapSplitBranchPenalty[i] = splitBranchPenalty;
-                            const float d = (float)(diffGain * (0.25 + 0.75 * consistencyGain) * (0.15 + 0.85 * alphaGain) * (0.6 + 0.4 * logoGain) * (0.20 + 0.80 * extremeGain) * temporalGain * opaquePenalty * opaqueStaticPenalty * whiteConstraintGain * lineFitGain * splitBranchGain);
-                            if (d <= 0.0f) continue;
-                            scoreStage.mapAccepted[i] = d;
-                            scoreStage.score[i] = d;
-                        }
-                    }
-                }
-                });
-
-            // split branch は小さい偽塊の中でも 1px だけ検出されることがあるため、
-            // 3x3 近傍の最大 penalty を使って同一小塊をまとめて抑制する。
-            {
-                const int pixelCount = scanw * scanh;
-                static constexpr float kSplitBranchLocalSpreadScoreMax = 0.35f;
-                std::vector<float> splitBranchPenalty3x3max(pixelCount, 0.0f);
-                for (int y = 0; y < scanh; y++) {
-                    for (int x = 0; x < scanw; x++) {
-                        float maxVal = 0.0f;
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dx = -1; dx <= 1; dx++) {
-                                const int nx = x + dx, ny = y + dy;
-                                if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
-                                    maxVal = std::max(maxVal, scoreStage.mapSplitBranchPenalty[nx + ny * scanw]);
-                                }
-                            }
-                        }
-                        splitBranchPenalty3x3max[x + y * scanw] = maxVal;
-                    }
-                }
-                for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i]) continue;
-                    if (scoreStage.score[i] >= kSplitBranchLocalSpreadScoreMax) continue;
-                    const float splitBranchGainOrig = scoreStage.mapSplitBranchGain[i];
-                    if (splitBranchGainOrig <= 1e-6f) continue;
-                    const float splitBranchPenaltyNew = splitBranchPenalty3x3max[i];
-                    const float splitBranchGainNew = 1.0f / (1.0f + 4.0f * splitBranchPenaltyNew);
-                    if (splitBranchGainNew >= splitBranchGainOrig) continue;
-                    const float scale = splitBranchGainNew / splitBranchGainOrig;
-                    scoreStage.mapSplitBranchPenalty[i] = splitBranchPenaltyNew;
-                    scoreStage.mapSplitBranchGain[i] = splitBranchGainNew;
-                    scoreStage.mapAccepted[i] *= scale;
-                    scoreStage.score[i] *= scale;
-                }
-            }
-
-            // alpha 3x3 max filter による alphaGain 補正:
-            // 近傍の最大 alpha を使い、不透明要素の輪郭 1px を追加抑制する。
-            // alphaGain = min(f(alpha), f(alpha3x3max)) とすることで、
-            // 自身は低 alpha でも近傍に高 alpha がある画素（＝不透明要素の縁）を抑制する。
-            {
-                const int pixelCount = scanw * scanh;
-                std::vector<float> alpha3x3max(pixelCount, 0.0f);
-                for (int y = 0; y < scanh; y++) {
-                    for (int x = 0; x < scanw; x++) {
-                        float maxVal = 0.0f;
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dx = -1; dx <= 1; dx++) {
-                                const int nx = x + dx, ny = y + dy;
-                                if (nx >= 0 && nx < scanw && ny >= 0 && ny < scanh) {
-                                    maxVal = std::max(maxVal, scoreStage.mapAlpha[nx + ny * scanw]);
-                                }
-                            }
-                        }
-                        alpha3x3max[x + y * scanw] = maxVal;
-                    }
-                }
-                auto falpha = [&smoothstep](const double a) -> double {
-                    if (a <= 0.03) return 0.0;
-                    if (a < 0.15)  return smoothstep((a - 0.03) / 0.12);
-                    if (a <= 0.35) return 1.0;
-                    if (a < 0.75)  return 1.0 - smoothstep((a - 0.35) / 0.40);
-                    return 0.0;
-                };
-                for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i]) continue;
-                    const float alphaGainOrig = scoreStage.mapAlphaGain[i];
-                    const float alphaGainNeighbor = (float)falpha(alpha3x3max[i]);
-                    const float alphaGainNew = std::min(alphaGainOrig, alphaGainNeighbor);
-                    if (alphaGainNew >= alphaGainOrig) continue;
-                    scoreStage.mapAlphaGain[i] = alphaGainNew;
-                    // mapA/mapB から白色拘束逸脱ペナルティを再計算する（235/255 評価点）。
-                    const double whiteDeviation3x3 = std::abs((double)scoreStage.mapA[i] * kWhiteDevK + scoreStage.mapB[i] - kWhiteDevK);
-                    const float whiteConstraintGain3x3 = (float)(kWhiteDevFloor + (1.0 - kWhiteDevFloor)
-                        * std::max(0.0, std::min(1.0, (kWhiteDevThresh - whiteDeviation3x3) / kWhiteDevThresh)));
-                    const float d = scoreStage.mapDiffGain[i]
-                        * (0.25f + 0.75f * scoreStage.mapConsistencyGain[i])
-                        * (0.15f + 0.85f * alphaGainNew)
-                        * (0.6f + 0.4f * scoreStage.mapLogoGain[i])
-                        * (0.20f + 0.80f * scoreStage.mapExtremeGain[i])
-                        * scoreStage.mapTemporalGain[i]
-                        * scoreStage.mapOpaquePenalty[i]
-                        * scoreStage.mapOpaqueStaticPenalty[i]
-                        * whiteConstraintGain3x3
-                        * scoreStage.mapLineFitGain[i]
-                        * scoreStage.mapSplitBranchGain[i];
-                    scoreStage.mapAccepted[i] = (d > 0.0f) ? d : 0.0f;
-                    scoreStage.score[i] = (d > 0.0f) ? d : 0.0f;
-                }
-            }
-
-            // 案C改: alphaGain 分布に基づく動的 floor 調整。
-            // 回帰が「明確にロゴ半透明」と判定したピクセル (alphaGain >= 0.80) の個数で
-            // 回帰成功度を測る。非ロゴ背景は alpha≈0 が正常なので P99 等では判別できないが、
-            // 真のロゴピクセルは alphaGain≈1.0 となるため、その個数で回帰の健全性を判定する。
-            // strongCount >= 80: 回帰正常 → floor=0.15 (影響なし)
-            // strongCount <= 5:  回帰完全失敗 → floor=0.50 (最大補正)
-            float regressionHealth = 1.0f;
-            {
-                const int pixelCount = scanw * scanh;
-                int strongAlphaCount = 0;
-                static constexpr float kStrongAlphaThresh = 0.80f;
-                for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i]) continue;
-                    if (scoreStage.score[i] <= 0.0f) continue;
-                    if (scoreStage.mapAlphaGain[i] >= kStrongAlphaThresh) {
-                        strongAlphaCount++;
-                    }
-                }
-                static constexpr int   kStrongCountLo     = 5;
-                static constexpr int   kStrongCountHi     = 80;
-                static constexpr float kAlphaFloorDefault  = 0.15f;
-                static constexpr float kAlphaFloorMax      = 0.50f;
-                regressionHealth = std::min(std::max(
-                    (float)(strongAlphaCount - kStrongCountLo) / (kStrongCountHi - kStrongCountLo), 0.0f), 1.0f);
-                const float alphaFloor = kAlphaFloorMax + (kAlphaFloorDefault - kAlphaFloorMax) * regressionHealth;
-                if (detailedDebug) {
-                    fprintf(stderr, "[LogoScan] alphaGain strong(>=%.2f)=%d health=%.4f alphaFloor=%.4f\n",
-                        (double)kStrongAlphaThresh, strongAlphaCount, (double)regressionHealth, (double)alphaFloor);
-                }
-                // floor が変わった場合、score を事後補正:
-                // score の alpha 項 (0.15 + 0.85*ag) を (alphaFloor + (1-alphaFloor)*ag) に置き換え
-                if (alphaFloor > kAlphaFloorDefault + 1e-4f) {
-                    const float oldCoeff = 1.0f - kAlphaFloorDefault; // 0.85
-                    const float newCoeff = 1.0f - alphaFloor;
-                    for (int i = 0; i < pixelCount; i++) {
-                        if (!scoreStage.validAB[i]) continue;
-                        if (scoreStage.score[i] <= 0.0f) continue;
-                        const float ag = scoreStage.mapAlphaGain[i];
-                        const float oldTerm = kAlphaFloorDefault + oldCoeff * ag;
-                        const float newTerm = alphaFloor + newCoeff * ag;
-                        if (oldTerm > 1e-6f) {
-                            const float ratio = newTerm / oldTerm;
-                            scoreStage.score[i] *= ratio;
-                            scoreStage.mapAccepted[i] *= ratio;
-                        }
-                    }
-                }
-            }
-
-            // pass1 専用: contaminated branch 検知 + positive/lower branch 補助 fit。
-            // 本流回帰が固定構造で潰れた点だけを救済する。
+            computeBaseScoreStage(statsPass, scoreStage);
+            applySplitBranchLocalPenalty(scoreStage);
+            applyAlphaNeighborPenalty(scoreStage);
+            const float regressionHealth = applyAdaptiveAlphaFloor(scoreStage);
             if (passIndex == 0) {
-                auto sat01 = [](const double v) {
-                    return std::max(0.0, std::min(1.0, v));
-                };
-                const int pixelCount = scanw * scanh;
-                const std::vector<float> baseAcceptedBeforeBranch = scoreStage.mapAccepted;
-                int branchCandidateCount = 0;
-                int branchLogoLikeRejectCount = 0;
-                int branchBaseSupportRejectCount = 0;
-                int branchAdoptedCount = 0;
-                auto calcBaseAcceptedLocalMax = [&](const int off, const int radius) {
-                    const int cx = off % scanw;
-                    const int cy = off / scanw;
-                    float maxVal = 0.0f;
-                    const int x0 = std::max(0, cx - radius);
-                    const int x1 = std::min(scanw - 1, cx + radius);
-                    const int y0 = std::max(0, cy - radius);
-                    const int y1 = std::min(scanh - 1, cy + radius);
-                    for (int y = y0; y <= y1; y++) {
-                        for (int x = x0; x <= x1; x++) {
-                            maxVal = std::max(maxVal, baseAcceptedBeforeBranch[x + y * scanw]);
-                        }
-                    }
-                    return maxVal;
-                };
-                for (int i = 0; i < pixelCount; i++) {
-                    if (!scoreStage.validAB[i]) continue;
-                    BranchRescueInfo branch{};
-                    if (!analyzeContaminatedBranchFit(statsPass, i, scoreStage.mapConsistency[i], scoreStage.mapAlpha[i], branch)) {
-                        continue;
-                    }
-                    branchCandidateCount++;
-
-                    const double branchAlphaGain = (branch.auxAlpha <= 0.03f) ? 0.0
-                        : (branch.auxAlpha < 0.15f) ? smoothstep((branch.auxAlpha - 0.03f) / 0.12f)
-                        : (branch.auxAlpha <= 0.35f) ? 1.0
-                        : (branch.auxAlpha < 0.75f) ? 1.0 - smoothstep((branch.auxAlpha - 0.35f) / 0.40f)
-                        : 0.0;
-                    const double branchLogoGain = sat01((branch.auxLogoY - 0.45f) / 0.30f);
-                    const double branchConsistencyGain = sat01((branch.auxConsistency - 0.35f) / 1.65f);
-                    const double branchDiffGainRaw = sat01((branch.auxMeanDiff - 0.003f) / 0.120f);
-                    const double branchResidualGain = sat01((branch.auxMeanDiff - 0.001f) / 0.105f);
-                    const double branchDiffGain = sat01(branchResidualGain * (0.25 + 0.75 * branchDiffGainRaw));
-                    const double baseAlphaGain = scoreStage.mapAlphaGain[i];
-                    const double baseLogoGain = scoreStage.mapLogoGain[i];
-                    const double branchAlphaImprove = branchAlphaGain - baseAlphaGain;
-                    const double branchLogoImprove = branchLogoGain - baseLogoGain;
-                    const bool branchLooksMoreTransparent =
-                        branch.auxAlpha >= 0.05f &&
-                        branchAlphaGain >= 0.35f &&
-                        branchAlphaImprove >= 0.15f;
-                    const bool branchLooksBrighter =
-                        branch.auxLogoY >= 0.46f &&
-                        branchLogoGain >= 0.08f &&
-                        branchLogoImprove >= 0.08f;
-                    if (!(branchLooksMoreTransparent && branchLooksBrighter)) {
-                        branchLogoLikeRejectCount++;
-                        continue;
-                    }
-                    const float baseAcceptedLocalMax = calcBaseAcceptedLocalMax(i, 3);
-                    if (baseAcceptedLocalMax < 0.012f) {
-                        branchBaseSupportRejectCount++;
-                        continue;
-                    }
-                    const double branchAdoptGain =
-                        sat01((branchAlphaImprove - 0.15f) / 0.45f) *
-                        sat01((branchLogoImprove - 0.08f) / 0.45f);
-                    const double branchAlphaTerm = 0.35 + 0.65 * std::max(branchAlphaGain, 0.45 * branch.contaminationGain);
-                    const double branchScore =
-                        branchDiffGain *
-                        (0.20 + 0.80 * branchConsistencyGain) *
-                        branchAlphaTerm *
-                        (0.55 + 0.45 * branchLogoGain) *
-                        (0.35 + 0.65 * branchAdoptGain) *
-                        branch.contaminationGain *
-                        branch.supportGain *
-                        scoreStage.mapTemporalGain[i] *
-                        scoreStage.mapOpaquePenalty[i] *
-                        scoreStage.mapOpaqueStaticPenalty[i];
-
-                    scoreStage.mapBranchRescueScore[i] = (float)branchScore;
-                    scoreStage.mapBranchContaminationGain[i] = branch.contaminationGain;
-                    scoreStage.mapBranchSupportGain[i] = branch.supportGain;
-                    scoreStage.mapBranchDiffGain[i] = (float)branchDiffGain;
-                    scoreStage.mapBranchConsistencyGain[i] = (float)branchConsistencyGain;
-                    scoreStage.mapBranchAlphaGain[i] = (float)branchAlphaGain;
-
-                    if (branchScore > scoreStage.mapAccepted[i]) {
-                        scoreStage.mapAccepted[i] = (float)branchScore;
-                        scoreStage.score[i] = (float)branchScore;
-                        branchAdoptedCount++;
-                    }
-                }
-                if (detailedDebug) {
-                    fprintf(stderr, "[LogoScan] contaminated branch rescue: candidates=%d rejected_logo_like=%d rejected_base_support=%d adopted=%d\n",
-                        branchCandidateCount, branchLogoLikeRejectCount, branchBaseSupportRejectCount, branchAdoptedCount);
-                }
+                applyPass1BranchRescue(statsPass, scoreStage);
             }
 
             // 空間edge時系列統計を全画素に対して計算する (validAB の有無に関わらず)。
@@ -8063,43 +8125,15 @@ namespace {
         }
     }
 
-    // binary 連結成分から anchor を選び、近縁成分のみ残してノイズを除去する。
-    void AutoDetectLogoReader::pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage) {
-        // prune 前状態を保持し、削りすぎ時にロールバックできるようにする。
-        std::vector<uint8_t> prePruneBinary = binaryStage.binary;
-        const int prePruneOn = countMaskOn(prePruneBinary);
-        int preMinX = 0, preMinY = 0, preMaxX = -1, preMaxY = -1;
-        const bool hasPreRect = getMaskRect(prePruneBinary, preMinX, preMinY, preMaxX, preMaxY);
-        bool hasAnchorBandStat = false;
-        int anchorBandPreOn = 0;
-        int anchorBandPostOn = 0;
-        int removedOn = 0;
-        int removedBelowOn = 0;
-        struct BinaryComp {
-            int minX = 0;
-            int minY = 0;
-            int maxX = -1;
-            int maxY = -1;
-            int area = 0;
-            int w = 0;
-            int h = 0;
-            float peakScore = 0.0f;
-            float meanScore = 0.0f;
-            float meanAccepted = 0.0f;
-            float meanAlpha = 0.0f;
-            float meanConsistency = 0.0f;
-            float anchorScore = -1.0f;
-            std::vector<int> pixels;
-        };
-
+    void AutoDetectLogoReader::collectBinaryComponentsForPrune(const ScoreStageBuffers& scoreStage, const std::vector<uint8_t>& binary, std::vector<BinaryComp>& comps) const {
         // 連結成分ごとに面積/信号量/位置先験を集計する。
-        std::vector<BinaryComp> comps;
+        comps.clear();
         std::vector<uint8_t> visited(scanw * scanh, 0);
         std::queue<int> q;
         for (int y = 0; y < scanh; y++) {
             for (int x = 0; x < scanw; x++) {
                 const int start = x + y * scanw;
-                if (!binaryStage.binary[start] || visited[start]) continue;
+                if (!binary[start] || visited[start]) continue;
                 visited[start] = 1;
                 q.push(start);
                 BinaryComp comp{};
@@ -8133,7 +8167,7 @@ namespace {
                             const int ny = cy + dy;
                             if (nx < 0 || nx >= scanw || ny < 0 || ny >= scanh) continue;
                             const int nidx = nx + ny * scanw;
-                            if (!binaryStage.binary[nidx] || visited[nidx]) continue;
+                            if (!binary[nidx] || visited[nidx]) continue;
                             visited[nidx] = 1;
                             q.push(nidx);
                         }
@@ -8166,209 +8200,238 @@ namespace {
                 comps.push_back(std::move(comp));
             }
         }
+    }
 
+    int AutoDetectLogoReader::selectAnchorComponent(const std::vector<BinaryComp>& comps) const {
         // 上側帯域を優先して anchor 成分を選ぶ。
-        if (!comps.empty()) {
-            int anchorIdx = -1;
-            float bestAnchor = -1.0f;
-            int minAnchorY = scanh;
-            for (int i = 0; i < (int)comps.size(); i++) {
-                const auto& c = comps[i];
-                if (c.area < 6) continue;
-                minAnchorY = std::min(minAnchorY, c.minY);
+        if (comps.empty()) {
+            return -1;
+        }
+        int anchorIdx = -1;
+        float bestAnchor = -1.0f;
+        int minAnchorY = scanh;
+        for (int i = 0; i < (int)comps.size(); i++) {
+            const auto& c = comps[i];
+            if (c.area < 6) continue;
+            minAnchorY = std::min(minAnchorY, c.minY);
+        }
+        const int topBandSlack = std::max(12, (int)std::round(scanh * 0.15));
+        const int topBandLimit = (minAnchorY < scanh) ? (minAnchorY + topBandSlack) : scanh;
+        for (int i = 0; i < (int)comps.size(); i++) {
+            const auto& c = comps[i];
+            if (c.area < 6) continue;
+            if (c.minY > topBandLimit) continue;
+            if (c.anchorScore > bestAnchor) {
+                bestAnchor = c.anchorScore;
+                anchorIdx = i;
             }
-            const int topBandSlack = std::max(12, (int)std::round(scanh * 0.15));
-            const int topBandLimit = (minAnchorY < scanh) ? (minAnchorY + topBandSlack) : scanh;
+        }
+        if (anchorIdx < 0) {
             for (int i = 0; i < (int)comps.size(); i++) {
                 const auto& c = comps[i];
                 if (c.area < 6) continue;
-                if (c.minY > topBandLimit) continue;
                 if (c.anchorScore > bestAnchor) {
                     bestAnchor = c.anchorScore;
                     anchorIdx = i;
                 }
             }
-            if (anchorIdx < 0) {
-                for (int i = 0; i < (int)comps.size(); i++) {
-                    const auto& c = comps[i];
-                    if (c.area < 6) continue;
-                    if (c.anchorScore > bestAnchor) {
-                        bestAnchor = c.anchorScore;
-                        anchorIdx = i;
-                    }
+        }
+        if (anchorIdx < 0) {
+            for (int i = 0; i < (int)comps.size(); i++) {
+                const auto& c = comps[i];
+                if (c.area < 3) continue;
+                if (c.anchorScore > bestAnchor) {
+                    bestAnchor = c.anchorScore;
+                    anchorIdx = i;
                 }
             }
-            if (anchorIdx < 0) {
-                for (int i = 0; i < (int)comps.size(); i++) {
-                    const auto& c = comps[i];
-                    if (c.area < 3) continue;
-                    if (c.anchorScore > bestAnchor) {
-                        bestAnchor = c.anchorScore;
-                        anchorIdx = i;
-                    }
+        }
+        return anchorIdx;
+    }
+
+    void AutoDetectLogoReader::filterBinaryByAnchor(const std::vector<BinaryComp>& comps, const int anchorIdx, const bool hasPreRect, const int preMinX, const int preMinY, const int preMaxX, const int preMaxY, const std::vector<uint8_t>& prePruneBinary, std::vector<uint8_t>& filtered, AnchorPruneStats& pruneStats) const {
+        filtered.assign(scanw * scanh, 0);
+        if (anchorIdx < 0 || anchorIdx >= (int)comps.size()) {
+            return;
+        }
+
+        const auto& anchor = comps[anchorIdx];
+        const int anchorW = std::max(1, anchor.w);
+        const int anchorH = std::max(1, anchor.h);
+        const int preW = hasPreRect ? std::max(1, preMaxX - preMinX + 1) : anchorW;
+        const int preH = hasPreRect ? std::max(1, preMaxY - preMinY + 1) : anchorH;
+        const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
+        // prune の keep 判定は anchor に対する相対量を基本にしつつ、
+        // 極端に弱いケースでも完全なノイズ拾いにならない程度の最小値だけ持たせる。
+        // mode1/q49 のように score 全体のスケールが小さいケースでは、
+        // 旧固定下限(0.004/0.003)だと promote 済みの上端・下段成分まで
+        // signalOk を満たせず prune で全落ちしていた。
+        const float minSignalScore = std::max(5.0e-4f, anchor.meanScore * 0.20f);
+        const float minSignalPeak = std::max(6.0e-4f, anchor.peakScore * 0.10f);
+        const float minSignalAccepted = std::max(5.0e-4f, anchor.meanAccepted * 0.20f);
+        const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
+        // 多行ロゴ(放送大学等)の下段行を拾うため、下方向の許容距離を大きく取る。
+        const int maxBelowAnchor = std::max(
+            std::max(40, (int)std::round(anchorH * 2.5)),
+            (int)std::round(preH * 0.85));
+        std::vector<uint8_t> keepComp(comps.size(), 0);
+        keepComp[anchorIdx] = 1;
+        bool changed = true;
+        // keep済み成分に近いものを段階的に採用する。
+        for (int hop = 0; hop < 10 && changed; hop++) {
+            changed = false;
+            for (int i = 0; i < (int)comps.size(); i++) {
+                if (keepComp[i]) continue;
+                const auto& c = comps[i];
+                const int compCenterY = (c.minY + c.maxY) / 2;
+                const int anchorBelowLimitY = anchorCenterY + maxBelowAnchor;
+                const int lowerTopSlack = std::max(4, (int)std::round(c.h * 0.35));
+                // 下段2行ロゴを拾うため、中心Yだけでなく上端Yでも下限判定する。
+                const bool yGuard =
+                    compCenterY <= anchorBelowLimitY ||
+                    c.minY <= anchorBelowLimitY + lowerTopSlack;
+                const bool shapeOk = c.area >= 3 && std::max((double)c.w / std::max(1, c.h), (double)c.h / std::max(1, c.w)) <= 16.0;
+                const bool signalOk =
+                    c.meanScore >= minSignalScore ||
+                    c.peakScore >= minSignalPeak ||
+                    c.meanAccepted >= minSignalAccepted;
+                const bool sameRowComp = std::abs(compCenterY - anchorCenterY) <= std::max(4, (int)std::round(anchorH * 0.45));
+                const int lowerCompThresholdY = anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
+                const bool isLowerComp = compCenterY > lowerCompThresholdY;
+                const bool clearLowerRowComp =
+                    c.minY >= anchor.maxY + std::max(6, (int)std::round(anchorH * 0.35));
+                // q17 で左側の靄成分が残った要因:
+                // 「同じ行にある」だけで弱信号成分まで keep されていた。
+                // sameRow 救済には最低限の信号量(accepted/consistency)を要求する。
+                const bool sameRowSignalRescue =
+                    sameRowComp &&
+                    (c.meanAccepted >= minSignalAccepted || c.meanConsistency >= minSignalConsistency);
+                const bool signalGateOk = signalOk || sameRowSignalRescue;
+                if (!yGuard || !shapeOk || !signalGateOk) continue;
+                const bool farSideComp =
+                    (c.maxX < anchor.minX - std::max(24, (int)std::round(preW * 0.28)) ||
+                     c.minX > anchor.maxX + std::max(28, (int)std::round(preW * 0.28)));
+                const bool weakUpperSideNoise =
+                    farSideComp &&
+                    c.maxY <= anchor.maxY + std::max(6, (int)std::round(anchorH * 0.40)) &&
+                    c.meanAccepted < std::max(0.0025f, minSignalAccepted * 0.80f) &&
+                    c.meanAlpha < std::max(0.15f, anchor.meanAlpha * 0.60f);
+                if (weakUpperSideNoise) continue;
+                const bool weakSideNoise =
+                    farSideComp &&
+                    c.meanAccepted < minSignalAccepted &&
+                    c.meanConsistency < minSignalConsistency &&
+                    c.meanAlpha < std::max(0.12f, anchor.meanAlpha * 0.45f);
+                if (weakSideNoise) continue;
+                bool nearKept = false;
+                bool lowerRowBridge = false;
+                for (int k = 0; k < (int)comps.size(); k++) {
+                    if (!keepComp[k]) continue;
+                    const auto& ref = comps[k];
+                    const int overlapW = std::max(0, std::min(c.maxX, ref.maxX) - std::max(c.minX, ref.minX) + 1);
+                    const int overlapH = std::max(0, std::min(c.maxY, ref.maxY) - std::max(c.minY, ref.minY) + 1);
+                    const int gapX = std::max(0, std::max(c.minX - ref.maxX, ref.minX - c.maxX));
+                    const int gapY = std::max(0, std::max(c.minY - ref.maxY, ref.minY - c.maxY));
+                    // q17 改善意図:
+                    // 横方向 near 判定の gapX が広すぎると、遠方の弱成分(左側靄)が連鎖 keep される。
+                    // 成分の信号強度に応じて許容距離を可変化し、弱信号は短距離のみ許可する。
+                    const int nearHGapBase = std::max(
+                        std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8)),
+                        ClampInt((int)std::round(preW * 0.90), 20, 36));
+                    const float scoreRatio = c.meanScore / std::max(1.0e-6f, minSignalScore);
+                    const float peakRatio = c.peakScore / std::max(1.0e-6f, minSignalPeak);
+                    const float acceptedRatio = c.meanAccepted / std::max(1.0e-6f, minSignalAccepted);
+                    const float consistencyRatio = c.meanConsistency / std::max(1.0e-6f, minSignalConsistency);
+                    const float signalStrength =
+                        std::max(std::max(scoreRatio, peakRatio), std::max(acceptedRatio, consistencyRatio));
+                    const float strengthNorm = std::max(0.0f, std::min(1.0f, (signalStrength - 1.0f) / 1.5f));
+                    const float nearHGapScale = 0.45f + 0.55f * strengthNorm;
+                    const int nearHGapLimit = std::max(8, (int)std::round((double)nearHGapBase * nearHGapScale));
+                    const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
+                        gapX <= nearHGapLimit;
+                    // 多行ロゴの行間ギャップ(18px程度)を許容するため gapY を緩和。
+                    const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
+                        gapY <= std::max(20, (int)std::round(std::max(anchorH, ref.h) * 1.50));
+                    // nearD も多行ロゴの行間を考慮して gapY を緩和。
+                    const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
+                        gapY <= std::max(12, (int)std::round(std::max(anchorH, ref.h) * 1.00));
+                    const int refCenterY = (ref.minY + ref.maxY) / 2;
+                    const bool refIsLowerComp = refCenterY > lowerCompThresholdY;
+                    const bool sameLowerRowNearH =
+                        clearLowerRowComp &&
+                        refIsLowerComp &&
+                        overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.35)) &&
+                        gapX <= std::max(12, (int)std::round(std::max(anchorW, ref.w) * 0.60));
+                    lowerRowBridge = lowerRowBridge || sameLowerRowNearH;
+                    nearKept = nearKept || (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
                 }
+                if (!nearKept) continue;
+                const bool lowerRowSignalRescue =
+                    clearLowerRowComp &&
+                    lowerRowBridge &&
+                    c.area >= std::max(12, (int)std::round(anchorW * 0.18)) &&
+                    (c.meanScore >= minSignalScore * 1.60f || c.peakScore >= minSignalPeak * 1.60f);
+                const bool lowAlphaConsistencyOk =
+                    !isLowerComp ||
+                    c.meanAlpha >= 0.20f ||
+                    c.meanConsistency >= minSignalConsistency ||
+                    lowerRowSignalRescue;
+                if (!lowAlphaConsistencyOk) continue;
+                const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
+                // 多行ロゴの下段行が opaqueFar で除外されないよう gapY を緩和。
+                const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
+                    gapYAnchor > std::max(8, (int)std::round(anchorH * 2.00));
+                if (opaqueFar) continue;
+                keepComp[i] = 1;
+                changed = true;
             }
-            if (anchorIdx >= 0) {
-                const auto& anchor = comps[anchorIdx];
-                const int anchorW = std::max(1, anchor.w);
-                const int anchorH = std::max(1, anchor.h);
-                const int preW = hasPreRect ? std::max(1, preMaxX - preMinX + 1) : anchorW;
-                const int preH = hasPreRect ? std::max(1, preMaxY - preMinY + 1) : anchorH;
-                const int anchorCenterY = (anchor.minY + anchor.maxY) / 2;
-                // prune の keep 判定は anchor に対する相対量を基本にしつつ、
-                // 極端に弱いケースでも完全なノイズ拾いにならない程度の最小値だけ持たせる。
-                // mode1/q49 のように score 全体のスケールが小さいケースでは、
-                // 旧固定下限(0.004/0.003)だと promote 済みの上端・下段成分まで
-                // signalOk を満たせず prune で全落ちしていた。
-                const float minSignalScore = std::max(5.0e-4f, anchor.meanScore * 0.20f);
-                const float minSignalPeak = std::max(6.0e-4f, anchor.peakScore * 0.10f);
-                const float minSignalAccepted = std::max(5.0e-4f, anchor.meanAccepted * 0.20f);
-                const float minSignalConsistency = std::max(0.35f, anchor.meanConsistency * 0.70f);
-                // 多行ロゴ(放送大学等)の下段行を拾うため、下方向の許容距離を大きく取る。
-                const int maxBelowAnchor = std::max(
-                    std::max(40, (int)std::round(anchorH * 2.5)),
-                    (int)std::round(preH * 0.85));
-                std::vector<uint8_t> keepComp(comps.size(), 0);
-                keepComp[anchorIdx] = 1;
-                bool changed = true;
-                // keep済み成分に近いものを段階的に採用する。
-                for (int hop = 0; hop < 10 && changed; hop++) {
-                    changed = false;
-                    for (int i = 0; i < (int)comps.size(); i++) {
-                        if (keepComp[i]) continue;
-                        const auto& c = comps[i];
-                        const int compCenterY = (c.minY + c.maxY) / 2;
-                        const int anchorBelowLimitY = anchorCenterY + maxBelowAnchor;
-                        const int lowerTopSlack = std::max(4, (int)std::round(c.h * 0.35));
-                        // 下段2行ロゴを拾うため、中心Yだけでなく上端Yでも下限判定する。
-                        const bool yGuard =
-                            compCenterY <= anchorBelowLimitY ||
-                            c.minY <= anchorBelowLimitY + lowerTopSlack;
-                        const bool shapeOk = c.area >= 3 && std::max((double)c.w / std::max(1, c.h), (double)c.h / std::max(1, c.w)) <= 16.0;
-                        const bool signalOk =
-                            c.meanScore >= minSignalScore ||
-                            c.peakScore >= minSignalPeak ||
-                            c.meanAccepted >= minSignalAccepted;
-                        const bool sameRowComp = std::abs(compCenterY - anchorCenterY) <= std::max(4, (int)std::round(anchorH * 0.45));
-                        const int lowerCompThresholdY = anchorCenterY + std::max(4, (int)std::round(anchorH * 0.30));
-                        const bool isLowerComp = compCenterY > lowerCompThresholdY;
-                        const bool clearLowerRowComp =
-                            c.minY >= anchor.maxY + std::max(6, (int)std::round(anchorH * 0.35));
-                        // q17 で左側の靄成分が残った要因:
-                        // 「同じ行にある」だけで弱信号成分まで keep されていた。
-                        // sameRow 救済には最低限の信号量(accepted/consistency)を要求する。
-                        const bool sameRowSignalRescue =
-                            sameRowComp &&
-                            (c.meanAccepted >= minSignalAccepted || c.meanConsistency >= minSignalConsistency);
-                        const bool signalGateOk = signalOk || sameRowSignalRescue;
-                        if (!yGuard || !shapeOk || !signalGateOk) continue;
-                        const bool farSideComp =
-                            (c.maxX < anchor.minX - std::max(24, (int)std::round(preW * 0.28)) ||
-                             c.minX > anchor.maxX + std::max(28, (int)std::round(preW * 0.28)));
-                        const bool weakUpperSideNoise =
-                            farSideComp &&
-                            c.maxY <= anchor.maxY + std::max(6, (int)std::round(anchorH * 0.40)) &&
-                            c.meanAccepted < std::max(0.0025f, minSignalAccepted * 0.80f) &&
-                            c.meanAlpha < std::max(0.15f, anchor.meanAlpha * 0.60f);
-                        if (weakUpperSideNoise) continue;
-                        const bool weakSideNoise =
-                            farSideComp &&
-                            c.meanAccepted < minSignalAccepted &&
-                            c.meanConsistency < minSignalConsistency &&
-                            c.meanAlpha < std::max(0.12f, anchor.meanAlpha * 0.45f);
-                        if (weakSideNoise) continue;
-                        bool nearKept = false;
-                        bool lowerRowBridge = false;
-                        for (int k = 0; k < (int)comps.size(); k++) {
-                            if (!keepComp[k]) continue;
-                            const auto& ref = comps[k];
-                            const int overlapW = std::max(0, std::min(c.maxX, ref.maxX) - std::max(c.minX, ref.minX) + 1);
-                            const int overlapH = std::max(0, std::min(c.maxY, ref.maxY) - std::max(c.minY, ref.minY) + 1);
-                            const int gapX = std::max(0, std::max(c.minX - ref.maxX, ref.minX - c.maxX));
-                            const int gapY = std::max(0, std::max(c.minY - ref.maxY, ref.minY - c.maxY));
-                            // q17 改善意図:
-                            // 横方向 near 判定の gapX が広すぎると、遠方の弱成分(左側靄)が連鎖 keep される。
-                            // 成分の信号強度に応じて許容距離を可変化し、弱信号は短距離のみ許可する。
-                            const int nearHGapBase = std::max(
-                                std::max(20, (int)std::round(std::max(anchorW, ref.w) * 3.8)),
-                                ClampInt((int)std::round(preW * 0.90), 20, 36));
-                            const float scoreRatio = c.meanScore / std::max(1.0e-6f, minSignalScore);
-                            const float peakRatio = c.peakScore / std::max(1.0e-6f, minSignalPeak);
-                            const float acceptedRatio = c.meanAccepted / std::max(1.0e-6f, minSignalAccepted);
-                            const float consistencyRatio = c.meanConsistency / std::max(1.0e-6f, minSignalConsistency);
-                            const float signalStrength =
-                                std::max(std::max(scoreRatio, peakRatio), std::max(acceptedRatio, consistencyRatio));
-                            const float strengthNorm = std::max(0.0f, std::min(1.0f, (signalStrength - 1.0f) / 1.5f));
-                            const float nearHGapScale = 0.45f + 0.55f * strengthNorm;
-                            const int nearHGapLimit = std::max(8, (int)std::round((double)nearHGapBase * nearHGapScale));
-                            const bool nearH = overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.15)) &&
-                                gapX <= nearHGapLimit;
-                            // 多行ロゴの行間ギャップ(18px程度)を許容するため gapY を緩和。
-                            const bool nearV = overlapW >= std::max(2, (int)std::round(std::min(c.w, ref.w) * 0.15)) &&
-                                gapY <= std::max(20, (int)std::round(std::max(anchorH, ref.h) * 1.50));
-                            // nearD も多行ロゴの行間を考慮して gapY を緩和。
-                            const bool nearD = gapX <= std::max(10, (int)std::round(std::max(anchorW, ref.w) * 0.50)) &&
-                                gapY <= std::max(12, (int)std::round(std::max(anchorH, ref.h) * 1.00));
-                            const int refCenterY = (ref.minY + ref.maxY) / 2;
-                            const bool refIsLowerComp = refCenterY > lowerCompThresholdY;
-                            const bool sameLowerRowNearH =
-                                clearLowerRowComp &&
-                                refIsLowerComp &&
-                                overlapH >= std::max(2, (int)std::round(std::min(c.h, ref.h) * 0.35)) &&
-                                gapX <= std::max(12, (int)std::round(std::max(anchorW, ref.w) * 0.60));
-                            lowerRowBridge = lowerRowBridge || sameLowerRowNearH;
-                            nearKept = nearKept || (overlapW > 0 && overlapH > 0) || nearH || nearV || nearD;
-                        }
-                        if (!nearKept) continue;
-                        const bool lowerRowSignalRescue =
-                            clearLowerRowComp &&
-                            lowerRowBridge &&
-                            c.area >= std::max(12, (int)std::round(anchorW * 0.18)) &&
-                            (c.meanScore >= minSignalScore * 1.60f || c.peakScore >= minSignalPeak * 1.60f);
-                        const bool lowAlphaConsistencyOk =
-                            !isLowerComp ||
-                            c.meanAlpha >= 0.20f ||
-                            c.meanConsistency >= minSignalConsistency ||
-                            lowerRowSignalRescue;
-                        if (!lowAlphaConsistencyOk) continue;
-                        const int gapYAnchor = std::max(0, std::max(c.minY - anchor.maxY, anchor.minY - c.maxY));
-                        // 多行ロゴの下段行が opaqueFar で除外されないよう gapY を緩和。
-                        const bool opaqueFar = c.meanAlpha >= std::max(0.72f, anchor.meanAlpha + 0.18f) &&
-                            gapYAnchor > std::max(8, (int)std::round(anchorH * 2.00));
-                        if (opaqueFar) continue;
-                        keepComp[i] = 1;
-                        changed = true;
-                    }
-                }
-                // keep対象のみで新しい binary を再構築する。
-                std::vector<uint8_t> filtered(scanw * scanh, 0);
-                for (int i = 0; i < (int)comps.size(); i++) {
-                    if (!keepComp[i]) continue;
-                    const auto& c = comps[i];
-                    for (const int pix : c.pixels) {
-                        filtered[pix] = 1;
-                    }
-                }
-                const int bandY0 = std::max(0, anchor.minY - 2);
-                const int bandY1 = std::min(scanh - 1, anchor.maxY + 2);
-                for (int y = bandY0; y <= bandY1; y++) {
-                    const int row = y * scanw;
-                    for (int x = 0; x < scanw; x++) {
-                        const int off = row + x;
-                        if (prePruneBinary[off]) anchorBandPreOn++;
-                        if (filtered[off]) anchorBandPostOn++;
-                    }
-                }
-                const int belowY = anchor.maxY + std::max(2, (int)std::round(anchorH * 0.12));
-                for (int i = 0; i < scanw * scanh; i++) {
-                    if (!prePruneBinary[i] || filtered[i]) continue;
-                    removedOn++;
-                    const int py = i / scanw;
-                    if (py > belowY) {
-                        removedBelowOn++;
-                    }
-                }
-                hasAnchorBandStat = true;
+        }
+
+        // keep対象のみで新しい binary を再構築する。
+        for (int i = 0; i < (int)comps.size(); i++) {
+            if (!keepComp[i]) continue;
+            const auto& c = comps[i];
+            for (const int pix : c.pixels) {
+                filtered[pix] = 1;
+            }
+        }
+        const int bandY0 = std::max(0, anchor.minY - 2);
+        const int bandY1 = std::min(scanh - 1, anchor.maxY + 2);
+        for (int y = bandY0; y <= bandY1; y++) {
+            const int row = y * scanw;
+            for (int x = 0; x < scanw; x++) {
+                const int off = row + x;
+                if (prePruneBinary[off]) pruneStats.anchorBandPreOn++;
+                if (filtered[off]) pruneStats.anchorBandPostOn++;
+            }
+        }
+        const int belowY = anchor.maxY + std::max(2, (int)std::round(anchorH * 0.12));
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (!prePruneBinary[i] || filtered[i]) continue;
+            pruneStats.removedOn++;
+            const int py = i / scanw;
+            if (py > belowY) {
+                pruneStats.removedBelowOn++;
+            }
+        }
+        pruneStats.hasAnchorBandStat = true;
+    }
+
+    // binary 連結成分から anchor を選び、近縁成分のみ残してノイズを除去する。
+    void AutoDetectLogoReader::pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage) {
+        // prune 前状態を保持し、削りすぎ時にロールバックできるようにする。
+        std::vector<uint8_t> prePruneBinary = binaryStage.binary;
+        const int prePruneOn = countMaskOn(prePruneBinary);
+        int preMinX = 0, preMinY = 0, preMaxX = -1, preMaxY = -1;
+        const bool hasPreRect = getMaskRect(prePruneBinary, preMinX, preMinY, preMaxX, preMaxY);
+        AnchorPruneStats pruneStats{};
+        std::vector<BinaryComp> comps;
+        collectBinaryComponentsForPrune(scoreStage, binaryStage.binary, comps);
+        const int anchorIdx = selectAnchorComponent(comps);
+        if (anchorIdx >= 0) {
+            std::vector<uint8_t> filtered;
+            filterBinaryByAnchor(comps, anchorIdx, hasPreRect, preMinX, preMinY, preMaxX, preMaxY, prePruneBinary, filtered, pruneStats);
+            if (!filtered.empty()) {
                 binaryStage.binary.swap(filtered);
             }
         }
@@ -8397,11 +8460,11 @@ namespace {
                 } else if (severeWidthShrink) {
                     revertReason = "width_collapse";
                 }
-                if (revertPrune && hasAnchorBandStat && anchorBandPreOn > 0 && removedOn > 0) {
-                    const float bandRetention = (float)anchorBandPostOn / std::max(1, anchorBandPreOn);
-                    const float removedBelowRatio = (float)removedBelowOn / std::max(1, removedOn);
+                if (revertPrune && pruneStats.hasAnchorBandStat && pruneStats.anchorBandPreOn > 0 && pruneStats.removedOn > 0) {
+                    const float bandRetention = (float)pruneStats.anchorBandPostOn / std::max(1, pruneStats.anchorBandPreOn);
+                    const float removedBelowRatio = (float)pruneStats.removedBelowOn / std::max(1, pruneStats.removedOn);
                     const bool trimmedMostlyBelow =
-                        removedOn >= std::max(24, (int)std::round(prePruneOn * 0.05)) &&
+                        pruneStats.removedOn >= std::max(24, (int)std::round(prePruneOn * 0.05)) &&
                         removedBelowRatio >= 0.60f;
                     const bool topBandPreserved = bandRetention >= 0.72f;
                     const bool postStillEnough = postPruneOn >= std::max(12, (int)std::round(prePruneOn * 0.10));
@@ -8854,6 +8917,69 @@ namespace {
         }
     }
 
+    AutoDetectLogoReader::RectMergeEval AutoDetectLogoReader::evaluateRectMergeCandidate(const AutoDetectRect& currentRect, const AutoDetectRect& compRect, const int compArea, const AutoDetectRect& seedRect, const double maxSeedDx, const double maxSeedDy) const {
+        RectMergeEval eval{};
+        eval.overlapW = std::max(0, std::min(currentRect.x + currentRect.w, compRect.x + compRect.w) - std::max(currentRect.x, compRect.x));
+        eval.overlapH = std::max(0, std::min(currentRect.y + currentRect.h, compRect.y + compRect.h) - std::max(currentRect.y, compRect.y));
+        eval.gapX = std::max(0, std::max(currentRect.x - (compRect.x + compRect.w), compRect.x - (currentRect.x + currentRect.w)));
+        eval.gapY = std::max(0, std::max(currentRect.y - (compRect.y + compRect.h), compRect.y - (currentRect.y + currentRect.h)));
+        eval.nearHorizontal = eval.overlapH >= std::max(1, (int)std::round(std::min(currentRect.h, compRect.h) * 0.08))
+            && eval.gapX <= std::max(28, (int)std::round(std::min(currentRect.w, compRect.w) * 1.30));
+        eval.nearVertical = eval.overlapW >= std::max(1, (int)std::round(std::min(currentRect.w, compRect.w) * 0.12))
+            && eval.gapY <= std::max(14, (int)std::round(std::min(currentRect.h, compRect.h) * 0.85));
+        eval.nearDiagonal = eval.gapX <= std::max(12, (int)std::round(std::min(currentRect.w, compRect.w) * 0.45))
+            && eval.gapY <= std::max(10, (int)std::round(std::min(currentRect.h, compRect.h) * 0.45));
+        eval.overlap = (eval.overlapW > 0 && eval.overlapH > 0);
+
+        const double seedCx = seedRect.x + seedRect.w * 0.5;
+        const double seedCy = seedRect.y + seedRect.h * 0.5;
+        const double compCx = compRect.x + compRect.w * 0.5;
+        const double compCy = compRect.y + compRect.h * 0.5;
+        eval.withinSeedCenterGuard =
+            std::abs(compCx - seedCx) <= maxSeedDx &&
+            std::abs(compCy - seedCy) <= maxSeedDy;
+
+        const double currentCx = currentRect.x + currentRect.w * 0.5;
+        const double currentCy = currentRect.y + currentRect.h * 0.5;
+        const double maxCurrentDx = std::max(40.0, currentRect.w * 1.45);
+        const double maxCurrentDy = std::max(34.0, currentRect.h * 1.45);
+        eval.withinFinalCenterGuard =
+            std::abs(compCx - currentCx) <= maxCurrentDx &&
+            std::abs(compCy - currentCy) <= maxCurrentDy;
+
+        const bool isSmallComp = compArea < 6;
+        // 小成分は単独だとノイズ率が高いので、既存 rect に上下左右どちらかで
+        // ほぼ接続している場合だけ取り込む。これで q49 の上部点は拾いつつ、
+        // 離れた飛び地ノイズの混入は抑える。
+        const bool smallCompNearVertical =
+            eval.overlapW > 0 &&
+            eval.gapY <= std::max(10, (int)std::round(std::min(currentRect.h, compRect.h) * 2.5));
+        const bool smallCompNearHorizontal =
+            eval.overlapH > 0 &&
+            eval.gapX <= std::max(8, (int)std::round(std::min(currentRect.w, compRect.w) * 2.5));
+        eval.smallCompAllowed = !isSmallComp || smallCompNearVertical || smallCompNearHorizontal;
+
+        eval.mergedRect = AutoDetectRect{
+            std::min(currentRect.x, compRect.x),
+            std::min(currentRect.y, compRect.y),
+            std::max(currentRect.x + currentRect.w, compRect.x + compRect.w) - std::min(currentRect.x, compRect.x),
+            std::max(currentRect.y + currentRect.h, compRect.y + compRect.h) - std::min(currentRect.y, compRect.y)
+        };
+        eval.sizeGuardOk =
+            eval.mergedRect.w <= (int)(scanw * 0.88) &&
+            eval.mergedRect.h <= (int)(scanh * 0.62);
+        eval.farAboveSeed =
+            compRect.y + compRect.h <= seedRect.y &&
+            eval.gapY > std::max(20, (int)std::round(seedRect.h * 0.70));
+        eval.accepted =
+            (eval.overlap || eval.nearHorizontal || eval.nearVertical || eval.nearDiagonal) &&
+            (eval.withinSeedCenterGuard || eval.withinFinalCenterGuard) &&
+            eval.smallCompAllowed &&
+            eval.sizeGuardOk &&
+            !eval.farAboveSeed;
+        return eval;
+    }
+
     // binary 連結成分を列挙し、矩形候補と結合候補を収集する。
     // 同時に最良候補(best)をスコア最大で更新する。
     void AutoDetectLogoReader::collectRectCandidates(std::vector<RectStageCompCandidate>& candidates, std::vector<RectStageCompCandidate>& mergeCandidates, AutoDetectRect& best, bool& hasBest, double& bestScore, const ScoreStageBuffers& scoreStage, const BinaryStageBuffers& binaryStage) {
@@ -8871,8 +8997,6 @@ namespace {
             outRect = seed;
             outClusterArea = seedCand.area;
             outClusterCount = 1;
-            const double seedCx = seed.x + seed.w * 0.5;
-            const double seedCy = seed.y + seed.h * 0.5;
             const double maxSeedDx = std::max(80.0, seed.w * 3.2);
             const double maxSeedDy = std::max(64.0, seed.h * 3.2);
             std::vector<uint8_t> used(mergeCandidates.size(), 0);
@@ -8895,62 +9019,10 @@ namespace {
                     const auto& cand = mergeCandidates[i];
                     if (cand.area < 4) continue;
                     const AutoDetectRect& comp = cand.rect;
-                    const int ix0 = std::max(outRect.x, comp.x);
-                    const int iy0 = std::max(outRect.y, comp.y);
-                    const int ix1 = std::min(outRect.x + outRect.w, comp.x + comp.w);
-                    const int iy1 = std::min(outRect.y + outRect.h, comp.y + comp.h);
-                    const int overlapW = std::max(0, ix1 - ix0);
-                    const int overlapH = std::max(0, iy1 - iy0);
-                    const int gapX = std::max(0, std::max(outRect.x - (comp.x + comp.w), comp.x - (outRect.x + outRect.w)));
-                    const int gapY = std::max(0, std::max(outRect.y - (comp.y + comp.h), comp.y - (outRect.y + outRect.h)));
-                    const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(outRect.h, comp.h) * 0.08)) &&
-                        gapX <= std::max(28, (int)std::round(std::min(outRect.w, comp.w) * 1.30));
-                    const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(outRect.w, comp.w) * 0.12)) &&
-                        gapY <= std::max(14, (int)std::round(std::min(outRect.h, comp.h) * 0.85));
-                    const bool nearDiagonal = gapX <= std::max(12, (int)std::round(std::min(outRect.w, comp.w) * 0.45)) &&
-                        gapY <= std::max(10, (int)std::round(std::min(outRect.h, comp.h) * 0.45));
-                    const bool overlap = (overlapW > 0 && overlapH > 0);
-                    const double compCx = comp.x + comp.w * 0.5;
-                    const double compCy = comp.y + comp.h * 0.5;
-                    const bool withinSeedCenterGuard =
-                        std::abs(compCx - seedCx) <= maxSeedDx &&
-                        std::abs(compCy - seedCy) <= maxSeedDy;
-                    const double finalCx = outRect.x + outRect.w * 0.5;
-                    const double finalCy = outRect.y + outRect.h * 0.5;
-                    const double maxFinalDx = std::max(40.0, outRect.w * 1.45);
-                    const double maxFinalDy = std::max(34.0, outRect.h * 1.45);
-                    const bool withinFinalCenterGuard =
-                        std::abs(compCx - finalCx) <= maxFinalDx &&
-                        std::abs(compCy - finalCy) <= maxFinalDy;
-                    const bool isSmallComp = cand.area < 6;
-                    const bool smallCompNearVertical =
-                        overlapW > 0 &&
-                        gapY <= std::max(10, (int)std::round(std::min(outRect.h, comp.h) * 2.5));
-                    const bool smallCompNearHorizontal =
-                        overlapH > 0 &&
-                        gapX <= std::max(8, (int)std::round(std::min(outRect.w, comp.w) * 2.5));
-                    const bool smallCompAllowed = !isSmallComp || smallCompNearVertical || smallCompNearHorizontal;
-                    AutoDetectRect mergedRect{
-                        std::min(outRect.x, comp.x),
-                        std::min(outRect.y, comp.y),
-                        std::max(outRect.x + outRect.w, comp.x + comp.w) - std::min(outRect.x, comp.x),
-                        std::max(outRect.y + outRect.h, comp.y + comp.h) - std::min(outRect.y, comp.y)
-                    };
-                    const bool sizeGuardOk =
-                        mergedRect.w <= (int)(scanw * 0.88) &&
-                        mergedRect.h <= (int)(scanh * 0.62);
-                    const bool farAboveSeed =
-                        comp.y + comp.h <= seed.y &&
-                        gapY > std::max(20, (int)std::round(seed.h * 0.70));
-                    const bool accepted =
-                        (overlap || nearHorizontal || nearVertical || nearDiagonal) &&
-                        (withinSeedCenterGuard || withinFinalCenterGuard) &&
-                        smallCompAllowed &&
-                        sizeGuardOk &&
-                        !farAboveSeed;
-                    if (!accepted) continue;
+                    const auto eval = evaluateRectMergeCandidate(outRect, comp, cand.area, seed, maxSeedDx, maxSeedDy);
+                    if (!eval.accepted) continue;
                     used[i] = 1;
-                    outRect = mergedRect;
+                    outRect = eval.mergedRect;
                     outClusterArea += cand.area;
                     outClusterCount++;
                     mergedAny = true;
@@ -9182,8 +9254,6 @@ namespace {
     void AutoDetectLogoReader::mergeRectCandidates(const std::vector<RectStageCompCandidate>& mergeCandidates, const AutoDetectRect& best, AutoDetectRect& finalRect) {
         bool mergedAny = true;
         int mergeIter = 0;
-        const double bestCx = best.x + best.w * 0.5;
-        const double bestCy = best.y + best.h * 0.5;
         const double maxCenterDx = std::max(80.0, best.w * 3.2);
         const double maxCenterDy = std::max(64.0, best.h * 3.2);
         while (mergedAny && mergeIter < 8) {
@@ -9195,81 +9265,26 @@ namespace {
                 if (cand.area < 4) continue;
                 const AutoDetectRect& comp = cand.rect;
                 if (comp.x == finalRect.x && comp.y == finalRect.y && comp.w == finalRect.w && comp.h == finalRect.h) continue;
-                const int ix0 = std::max(finalRect.x, comp.x);
-                const int iy0 = std::max(finalRect.y, comp.y);
-                const int ix1 = std::min(finalRect.x + finalRect.w, comp.x + comp.w);
-                const int iy1 = std::min(finalRect.y + finalRect.h, comp.y + comp.h);
-                const int overlapW = std::max(0, ix1 - ix0);
-                const int overlapH = std::max(0, iy1 - iy0);
-                const int gapX = std::max(0, std::max(finalRect.x - (comp.x + comp.w), comp.x - (finalRect.x + finalRect.w)));
-                const int gapY = std::max(0, std::max(finalRect.y - (comp.y + comp.h), comp.y - (finalRect.y + finalRect.h)));
-                const bool nearHorizontal = overlapH >= std::max(1, (int)std::round(std::min(finalRect.h, comp.h) * 0.08)) &&
-                    gapX <= std::max(28, (int)std::round(std::min(finalRect.w, comp.w) * 1.30));
-                const bool nearVertical = overlapW >= std::max(1, (int)std::round(std::min(finalRect.w, comp.w) * 0.12)) &&
-                    gapY <= std::max(14, (int)std::round(std::min(finalRect.h, comp.h) * 0.85));
-                const bool nearDiagonal = gapX <= std::max(12, (int)std::round(std::min(finalRect.w, comp.w) * 0.45)) &&
-                    gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 0.45));
-                const bool overlap = (overlapW > 0 && overlapH > 0);
-                const double compCx = comp.x + comp.w * 0.5;
-                const double compCy = comp.y + comp.h * 0.5;
-                const bool withinSeedCenterGuard =
-                    std::abs(compCx - bestCx) <= maxCenterDx &&
-                    std::abs(compCy - bestCy) <= maxCenterDy;
-                const double finalCx = finalRect.x + finalRect.w * 0.5;
-                const double finalCy = finalRect.y + finalRect.h * 0.5;
-                const double maxFinalDx = std::max(40.0, finalRect.w * 1.45);
-                const double maxFinalDy = std::max(34.0, finalRect.h * 1.45);
-                const bool withinFinalCenterGuard =
-                    std::abs(compCx - finalCx) <= maxFinalDx &&
-                    std::abs(compCy - finalCy) <= maxFinalDy;
-                const bool isSmallComp = cand.area < 6;
-                // 小成分は単独だとノイズ率が高いので、既存 rect に上下左右どちらかで
-                // ほぼ接続している場合だけ取り込む。これで q49 の上部点は拾いつつ、
-                // 離れた飛び地ノイズの混入は抑える。
-                const bool smallCompNearVertical =
-                    overlapW > 0 &&
-                    gapY <= std::max(10, (int)std::round(std::min(finalRect.h, comp.h) * 2.5));
-                const bool smallCompNearHorizontal =
-                    overlapH > 0 &&
-                    gapX <= std::max(8, (int)std::round(std::min(finalRect.w, comp.w) * 2.5));
-                const bool smallCompAllowed = !isSmallComp || smallCompNearVertical || smallCompNearHorizontal;
-                AutoDetectRect mergedRect{
-                    std::min(finalRect.x, comp.x),
-                    std::min(finalRect.y, comp.y),
-                    std::max(finalRect.x + finalRect.w, comp.x + comp.w) - std::min(finalRect.x, comp.x),
-                    std::max(finalRect.y + finalRect.h, comp.y + comp.h) - std::min(finalRect.y, comp.y)
-                };
-                const bool sizeGuardOk =
-                    mergedRect.w <= (int)(scanw * 0.88) &&
-                    mergedRect.h <= (int)(scanh * 0.62);
-                const bool farAboveBest =
-                    comp.y + comp.h <= best.y &&
-                    gapY > std::max(20, (int)std::round(best.h * 0.70));
-                bool accepted = true;
-                if (!(overlap || nearHorizontal || nearVertical || nearDiagonal)) accepted = false;
-                if (!(withinSeedCenterGuard || withinFinalCenterGuard)) accepted = false;
-                if (!smallCompAllowed) accepted = false;
-                if (!sizeGuardOk) accepted = false;
-                if (farAboveBest) accepted = false;
+                const auto eval = evaluateRectMergeCandidate(finalRect, comp, cand.area, best, maxCenterDx, maxCenterDy);
                 if (detailedDebug) {
                     rectMergeDebug.push_back(RectMergeDebug{
                         mergeIter,
                         comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
                         cand.area,
-                        overlapW, overlapH, gapX, gapY,
-                        nearHorizontal ? 1 : 0,
-                        nearVertical ? 1 : 0,
-                        nearDiagonal ? 1 : 0,
-                        overlap ? 1 : 0,
-                        withinSeedCenterGuard ? 1 : 0,
-                        withinFinalCenterGuard ? 1 : 0,
-                        sizeGuardOk ? 1 : 0,
-                        accepted ? 1 : 0
+                        eval.overlapW, eval.overlapH, eval.gapX, eval.gapY,
+                        eval.nearHorizontal ? 1 : 0,
+                        eval.nearVertical ? 1 : 0,
+                        eval.nearDiagonal ? 1 : 0,
+                        eval.overlap ? 1 : 0,
+                        eval.withinSeedCenterGuard ? 1 : 0,
+                        eval.withinFinalCenterGuard ? 1 : 0,
+                        eval.sizeGuardOk ? 1 : 0,
+                        eval.accepted ? 1 : 0
                         });
                 }
-                if (!accepted) continue;
-                if (mergedRect.x != finalRect.x || mergedRect.y != finalRect.y || mergedRect.w != finalRect.w || mergedRect.h != finalRect.h) {
-                    finalRect = mergedRect;
+                if (!eval.accepted) continue;
+                if (eval.mergedRect.x != finalRect.x || eval.mergedRect.y != finalRect.y || eval.mergedRect.w != finalRect.w || eval.mergedRect.h != finalRect.h) {
+                    finalRect = eval.mergedRect;
                     mergedAny = true;
                 }
             }
