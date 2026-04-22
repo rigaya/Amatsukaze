@@ -38,6 +38,8 @@ float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int 
 void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
 void BilateralFilter5x5U8RangeLUT_AVX2(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 void BilateralFilter5x5U8RangeLUT_AVX512(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
+bool TryEstimateBgEvalSideHorizontalInRangeU8_65_AVX2(const uint8_t* ptr, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut);
+bool TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut);
 
 #if 0
 float CalcCorrelation5x5_Debug(const float* k, const float* Y, int x, int y, int w, float* pavg);

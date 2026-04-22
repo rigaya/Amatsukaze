@@ -29,6 +29,7 @@
 #include <inttypes.h>
 #include <sstream>
 #include <iomanip>
+#include <cassert>
 #include <libavutil/error.h>
 #if defined(__GLIBC__)
 #include <malloc.h>
@@ -41,6 +42,8 @@
 #include "rgy_thread_pool.h"
 
 namespace {
+
+constexpr int kTryEstimateBgHorizontalAVX2Pad = 64;
 
 int ResolveAutoDetectThreadCount(const int configured) {
     if (configured > 0) {
@@ -64,6 +67,11 @@ std::string FormatPacketTimestamp(int64_t value) {
         return "NOPTS";
     }
     return StringFormat("%lld", static_cast<long long>(value));
+}
+
+bool HasAVX2AvailableCached() {
+    static const bool available = IsAVX2Available();
+    return available;
 }
 
 }
@@ -1938,96 +1946,87 @@ namespace {
         Vertical,
     };
 
-    enum class TryEstimateBgSideRangeMode {
-        InRange,
-        Clamp,
-    };
-
-    template<typename pixel_t, TryEstimateBgSideAxis Axis, TryEstimateBgSideRangeMode RangeMode, int FixedLen = 0>
-    RGY_FORCEINLINE static bool TryEstimateBgEvalSideImpl(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+    template<typename pixel_t, TryEstimateBgSideAxis Axis, int FixedLen = 0>
+    RGY_FORCEINLINE static bool TryEstimateBgEvalSideImpl(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int sideLen, const int threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+        (void)w;
+        (void)h;
         pixel_t minv = std::numeric_limits<pixel_t>::max();
         pixel_t maxv = std::numeric_limits<pixel_t>::lowest();
         int sum = 0;
-        const int len = (FixedLen > 0) ? FixedLen : sideLen;
-        const float invLen = 1.0f / len;
+        int len = (FixedLen > 0) ? FixedLen : sideLen;
 
-        if constexpr (RangeMode == TryEstimateBgSideRangeMode::InRange) {
-            if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
-                const pixel_t* ptr = &y[sx + sy * w];
-                for (int i = 0; i < len; i++) {
-                    const pixel_t v = ptr[i];
-                    minv = std::min(minv, v);
-                    maxv = std::max(maxv, v);
-                    sum += v;
-                }
-            } else {
-                const pixel_t* ptr = &y[sx + sy * w];
-                for (int i = 0; i < len; i++, ptr += w) {
-                    const pixel_t v = *ptr;
-                    minv = std::min(minv, v);
-                    maxv = std::max(maxv, v);
-                    sum += v;
+        if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
+            const pixel_t* ptr = &y[sx + sy * w];
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                if (HasAVX2AvailableCached()) {
+                    if constexpr (FixedLen == 65) {
+                        return TryEstimateBgEvalSideHorizontalInRangeU8_65_AVX2(ptr, threshold, avg, minvOut, maxvOut);
+                    } else if (len <= 64) {
+                        return TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2(ptr, len, threshold, avg, minvOut, maxvOut);
+                    }
                 }
             }
+            for (int i = 0; i < len; i++) {
+                const pixel_t v = ptr[i];
+                minv = std::min(minv, v);
+                maxv = std::max(maxv, v);
+                sum += v;
+            }
         } else {
-            if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
-                for (int i = 0; i < len; i++) {
-                    const int px = ClampInt(sx + i, 0, w - 1);
-                    const int py = ClampInt(sy, 0, h - 1);
-                    const pixel_t v = y[px + py * w];
-                    minv = std::min(minv, v);
-                    maxv = std::max(maxv, v);
-                    sum += v;
-                }
-            } else {
-                for (int i = 0; i < len; i++) {
-                    const int px = ClampInt(sx, 0, w - 1);
-                    const int py = ClampInt(sy + i, 0, h - 1);
-                    const pixel_t v = y[px + py * w];
-                    minv = std::min(minv, v);
-                    maxv = std::max(maxv, v);
-                    sum += v;
-                }
+            assert(w > 1);
+            const pixel_t* ptr = &y[sx + sy * w];
+            for (int i = 0; i < len; i++, ptr += w) {
+                const pixel_t v = *ptr;
+                minv = std::min(minv, v);
+                maxv = std::max(maxv, v);
+                sum += v;
             }
         }
 
-        avg = (float)sum * invLen;
+        avg = (float)sum / len;
         minvOut = minv;
         maxvOut = maxv;
-        return ((float)maxv - (float)minv) <= threshold;
+        return (int)maxv - (int)minv <= threshold;
     }
 
     // 1辺分の画素列を評価し、平均/最小/最大を返す。
     // max-min が threshold 以下なら「近い色(ほぼ単色)」として true を返す。
     // 範囲外を含む場合は clamp 参照で安全に評価する。
     template<typename pixel_t>
-    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const float threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
-        const int ex = sx + dx * (sideLen - 1);
-        const int ey = sy + dy * (sideLen - 1);
-        const bool inRange = sx >= 0 && sx < w && sy >= 0 && sy < h && ex >= 0 && ex < w && ey >= 0 && ey < h;
+    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const int threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
         const bool horizontal = (dy == 0);
         if (horizontal) {
+            const int ex = sx + sideLen - 1;
+            const bool inRange = sy >= 0 && sy < h && sx >= 0 && ex < w;
             if (inRange) {
                 if (sideLen == 65) {
-                    return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, TryEstimateBgSideRangeMode::InRange, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+                    return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
                 }
-                return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, TryEstimateBgSideRangeMode::InRange, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+                return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
             }
-            return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, TryEstimateBgSideRangeMode::Clamp, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+            const int safeSy = ClampInt(sy, 0, h - 1);
+            const int start = ClampInt(sx, 0, w - 1);
+            const int end = ClampInt(ex, 0, w - 1);
+            return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, 0>(y, w, h, start, safeSy, end - start + 1, threshold, avg, minvOut, maxvOut);
         }
+        const int ey = sy + sideLen - 1;
+        const bool inRange = sx >= 0 && sx < w && sy >= 0 && ey < h;
         if (inRange) {
             if (sideLen == 65) {
-                return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, TryEstimateBgSideRangeMode::InRange, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+                return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
             }
-            return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, TryEstimateBgSideRangeMode::InRange, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+            return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
         }
-        return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, TryEstimateBgSideRangeMode::Clamp, 0>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
+        const int safeSx = ClampInt(sx, 0, w - 1);
+        const int start = ClampInt(sy, 0, h - 1);
+        const int end = ClampInt(ey, 0, h - 1);
+        return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, 0>(y, w, h, safeSx, start, end - start + 1, threshold, avg, minvOut, maxvOut);
     }
 
     // 指定辺の「基準位置」での評価を実施する。
     // 既評価なら再計算せずキャッシュ結果(sideValid)を返す。
     template<typename pixel_t>
-    static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgEvalBaseSide(const std::vector<pixel_t>& y, const int w, const int h, const int side, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const int threshold, TryEstimateBgState<pixel_t>& st) {
         if (st.sideEvaluated[side]) {
             return st.sideValid[side] != 0;
         }
@@ -2040,7 +2039,7 @@ namespace {
     // firstSide と指定 side の平均輝度差が閾値以内なら「同じ近い色の2辺」とみなして確定する。
     // 確定時は有効辺を2辺に絞り、sideCount/sideSum を確定値に更新する。
     template<typename pixel_t>
-    static bool TryEstimateBgTryPairWithFirst(const int side, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgTryPairWithFirst(const int side, const int threshold, TryEstimateBgState<pixel_t>& st) {
         if (st.firstSide < 0 || !st.sideValid[side]) {
             return false;
         }
@@ -2073,7 +2072,7 @@ namespace {
     // firstSide 決定後、基準位置のまま残り3辺を評価して 2辺一致を探す。
     // 評価順は TryEstimateBgBuildRetryOrder に従う。
     template<typename pixel_t>
-    static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgTryRemainingBase(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const int threshold, TryEstimateBgState<pixel_t>& st) {
         int order[3] = {};
         TryEstimateBgBuildRetryOrder(st.firstSide, order);
         for (int i = 0; i < 3; i++) {
@@ -2091,7 +2090,7 @@ namespace {
     // 通常時の探索。
     // 最初の有効辺は「上→下→左→右」の順で決定し、その後は共通ルールで残り辺を評価する。
     template<typename pixel_t>
-    static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const float threshold, TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgFindInitialPair(const std::vector<pixel_t>& y, const int w, const int h, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int sideLen, const int threshold, TryEstimateBgState<pixel_t>& st) {
         // 通常時は 上 -> 下 -> 左 -> 右 の順で最初の有効辺を探す。
         // 最初の有効辺が見つかったら、以後は「反対側を最後」に回して2辺一致を探索する。
         const int initialOrder[4] = { 0, 1, 2, 3 };
@@ -2110,7 +2109,7 @@ namespace {
     // firstSide 以外の辺を外側にシフトして再評価し、2辺一致を探す。
     // 評価順は通常時と同じ規則(反対側を最後)を使う。
     template<typename pixel_t>
-    static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const float threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
+    static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const int threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
         constexpr int kSideRetryCount = 1;
         constexpr int kSideRetryShift = 16;
         int order[3] = {};
@@ -2159,7 +2158,7 @@ namespace {
     // 背景:
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     template<typename pixel_t>
-    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const float threshold, float& bg, BgDebugInfo* dbg = nullptr) {
+    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const int threshold, float& bg, BgDebugInfo* dbg = nullptr) {
         const int baseSx[4] = { x - radius, x - radius, x - radius, x + radius };
         const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
         const int sideDx[4] = { 1, 1, 0, 0 };
@@ -2547,7 +2546,9 @@ namespace {
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 if (bitDepth <= 8) {
-                    frameWork8.resize(scanw * scanh);
+                    // TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2 が
+                    // 行末付近でも 64 byte を直接ロードできるように末尾へ余白を持たせる。
+                    frameWork8.resize(scanw * scanh + kTryEstimateBgHorizontalAVX2Pad);
                     frameWork16.clear();
                     frameWork16.shrink_to_fit();
                 } else {
@@ -4709,7 +4710,7 @@ namespace {
             const pixel_t maxv = (pixel_t)((1 << bitDepth) - 1);
             const float invMaxv = 1.0f / std::max(1.0f, (float)maxv);
             const float rawScale = maxv / 255.0f;
-            const float thresholdRaw = threshold * rawScale;
+            const int thresholdRaw = (int)std::lround((double)threshold * (double)rawScale);
             std::vector<float> traceFgRaw;
             if (statsPass != nullptr && !tracePoints.empty()) {
                 collectTraceRawFromScanLocalSource<pixel_t>(srcY, pitchY, traceFgRaw);
@@ -4767,7 +4768,7 @@ namespace {
             constexpr uint8_t kMaxv = 255;
             constexpr float kInvMaxv = 1.0f / 255.0f;
             constexpr float kRawScale = 1.0f;
-            const float thresholdRaw = (float)threshold;
+            const int thresholdRaw = threshold;
             std::vector<float> traceFgRaw;
             if (statsPass != nullptr && !tracePoints.empty()) {
                 collectTraceRawFromScanLocalSource(srcY, pitchY, traceFgRaw);
@@ -4962,13 +4963,13 @@ namespace {
         }
 
         template<typename pixel_t>
-        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const float thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
+        int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const int thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
             const int pixelCount = scanw * scanh;
-            assert((int)frameWork.size() == pixelCount);
+            assert((int)frameWork.size() >= pixelCount);
             assert((int)stats.size() == pixelCount);
             assert((int)lastObservedFg.size() == pixelCount);
             assert((int)lastObservedValid.size() == pixelCount);
