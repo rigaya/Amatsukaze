@@ -104,6 +104,7 @@ namespace Amatsukaze.Server.Rest
         public int Height { get; set; }
         public int Threshold { get; set; }
         public int MaxFrames { get; set; }
+        public bool ValidateQuality { get; set; }
     }
 
     public class LogoPreviewSessionRequest

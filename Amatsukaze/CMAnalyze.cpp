@@ -34,6 +34,11 @@ extern "C" AMATSUKAZE_API int ScanLogo(AMTContext* ctx,
     const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
     logo::LOGO_ANALYZE_CB cb);
 
+extern "C" AMATSUKAZE_API int ScanLogoWithQualityValidation(AMTContext* ctx,
+    const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
+    const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+    logo::LOGO_ANALYZE_CB cb);
+
 CMAnalyze::CMAnalyze(AMTContext& ctx,
     const ConfigWrapper& setting) :
     AMTObject(ctx),
@@ -454,7 +459,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoF
 
         ctx.info(_T("[自動ロゴ検出] ロゴ生成を開始します"));
         auto scanLogoCb = [](float, int, int, int) -> bool { return true; };
-        if (!ScanLogo(&ctx, srcpath.c_str(), serviceId,
+        if (!ScanLogoWithQualityValidation(&ctx, srcpath.c_str(), serviceId,
             workfile.c_str(), tmpLogoPath.c_str(), nullptr,
             imgx, imgy, logoW, logoH,
             setting_.getAutoLogoDetectThreshold(),

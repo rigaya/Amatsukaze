@@ -52,6 +52,23 @@ enum class LogoColorMode {
     YOnlyNeutralUV,
 };
 
+struct LogoQualityMetrics {
+    int pixelCount = 0;
+    int activePixels = 0;
+    int opaquePixels = 0;
+    double activeAreaRate = 0.0;
+    double opaqueAreaRate = 0.0;
+    double renderedYMean = 0.0;
+    double renderedYP99 = 0.0;
+    double alphaMean = 0.0;
+    double alphaP90 = 0.0;
+    double alphaP99 = 0.0;
+    double yResidualActiveMean = 0.0;
+    double yResidualActiveP90 = 0.0;
+    double uvResidualActiveMean = 0.0;
+    double uvResidualActiveP90 = 0.0;
+};
+
 class LogoDataParam : public LogoData {
     enum {
         KSIZE = 5,
@@ -120,6 +137,8 @@ public:
     * 		回帰直線の傾きと切片を返す X軸:前景 Y軸:背景
     *===================================================================*/
     bool GetAB(float& A, float& B, int data_count) const;
+
+    double CalcResidualRms(float A, float B, int data_count) const;
 };
 
 class LogoScan {
@@ -157,6 +176,8 @@ public:
     void Normalize(int mavx);
 
     std::unique_ptr<LogoData> GetLogo(bool clean, LogoColorMode colorMode = LogoColorMode::NormalYUV) const;
+
+    LogoQualityMetrics CalcQualityMetrics(LogoData& data, LogoColorMode colorMode = LogoColorMode::NormalYUV) const;
 
     template <typename pixel_t>
     void AddScanFrame(
@@ -442,6 +463,8 @@ class LogoAnalyzer : AMTObject {
     int numFrames;
     tstring debugpath;
     std::unique_ptr<LogoData> logodata;
+    LogoQualityMetrics logoQuality;
+    bool validateQuality;
 
     float progressbase;
 
@@ -459,6 +482,9 @@ class LogoAnalyzer : AMTObject {
         } catch (const Exception&) {
         }
     }
+
+    void LogLogoQuality(const tchar* phase) const;
+    void ValidateLogoQuality() const;
 
     template <typename pixel_t>
     void ReMakeLogo()  {
@@ -549,6 +575,10 @@ class LogoAnalyzer : AMTObject {
 
         // ロゴ作成
         logodata = logoscan.GetLogo(true);
+        if (logodata != nullptr) {
+            logoQuality = logoscan.CalcQualityMetrics(*logodata);
+            LogLogoQuality(_T("remake"));
+        }
 
         if (logodata == nullptr) {
             THROWF(RuntimeException, "Insufficient logo frames (eligible=%d, total=%d, dominantFade=%d, dominantFadeRate=%.1f%%)",
@@ -559,7 +589,7 @@ class LogoAnalyzer : AMTObject {
 public:
     LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
         const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
-        LOGO_ANALYZE_CB cb);
+        LOGO_ANALYZE_CB cb, bool validateQuality);
 
     void ScanLogo();
 };

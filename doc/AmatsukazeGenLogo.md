@@ -51,7 +51,7 @@ AmatsukazeGenLogo -i input.ts -o output.lgd --debug-dir ./debug_logo
 - `--auto-logo-detect-threshold <数値>`: 閾値 `[12]`
 - `--auto-logo-detect-margin-x <数値>`: マージン X `[6]`
 - `--auto-logo-detect-margin-y <数値>`: マージン Y `[6]`
-- `--auto-logo-detect-threads <数値>`: スレッド数 `[0=自動=min(論理コア数, 16)]`
+- `--auto-logo-detect-threads <数値>`: スレッド数 `[0=自動]`
 
 ### ロゴ生成
 

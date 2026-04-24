@@ -30,6 +30,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cassert>
+#include <algorithm>
 #include <libavutil/error.h>
 #if defined(__GLIBC__)
 #include <malloc.h>
@@ -414,6 +415,18 @@ bool logo::LogoColor::GetAB(float& A, float& B, int data_count) const {
     return true;
 }
 
+double logo::LogoColor::CalcResidualRms(float A, float B, int data_count) const {
+    if (data_count <= 0 || !std::isfinite(A) || !std::isfinite(B)) {
+        return 0.0;
+    }
+    const double a = A;
+    const double b = B;
+    const double residual2 =
+        sumB2 - 2.0 * a * sumFB - 2.0 * b * sumB
+        + a * a * sumF2 + 2.0 * a * b * sumF + data_count * b * b;
+    return std::sqrt(std::max(0.0, residual2 / data_count));
+}
+
 /*--------------------------------------------------------------------
 *	真中らへんを平均
 *-------------------------------------------------------------------*/
@@ -558,6 +571,18 @@ logo::LogoScan::LogoScan(int scanw, int scanh, int logUVx, int logUVy, int thy) 
     logoU(new LogoColor[scanw * scanh >> (logUVx + logUVy)]),
     logoV(new LogoColor[scanw * scanh >> (logUVx + logUVy)]) {}
 
+namespace {
+    double QuantileCopy(std::vector<double> values, const double q) {
+        if (values.empty()) {
+            return 0.0;
+        }
+        const double clamped = std::max(0.0, std::min(1.0, q));
+        const size_t idx = std::min(values.size() - 1, (size_t)std::floor((values.size() - 1) * clamped + 0.5));
+        std::nth_element(values.begin(), values.begin() + idx, values.end());
+        return values[idx];
+    }
+}
+
 std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean, logo::LogoColorMode colorMode) const {
     int scanUVw = scanw >> logUVx;
     int scanUVh = scanh >> logUVy;
@@ -647,6 +672,102 @@ std::unique_ptr<logo::LogoData> logo::LogoScan::GetLogo(bool clean, logo::LogoCo
     }
 
     return  data;
+}
+
+logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo::LogoColorMode colorMode) const {
+    LogoQualityMetrics metrics{};
+    metrics.pixelCount = scanw * scanh;
+    if (metrics.pixelCount <= 0) {
+        return metrics;
+    }
+
+    const float* aY = data.GetA(PLANAR_Y);
+    const float* bY = data.GetB(PLANAR_Y);
+    const float* aU = data.GetA(PLANAR_U);
+    const float* bU = data.GetB(PLANAR_U);
+    const float* aV = data.GetA(PLANAR_V);
+    const float* bV = data.GetB(PLANAR_V);
+    const int scanUVw = scanw >> logUVx;
+    const int scanUVh = scanh >> logUVy;
+
+    std::vector<double> alphaValues;
+    std::vector<double> renderedYValues;
+    std::vector<double> yResidualActive;
+    std::vector<uint8_t> activeUV(scanUVw * scanUVh, 0);
+    alphaValues.reserve(metrics.pixelCount);
+    renderedYValues.reserve(metrics.pixelCount);
+
+    double alphaSum = 0.0;
+    double renderedYSum = 0.0;
+    for (int y = 0; y < scanh; y++) {
+        for (int x = 0; x < scanw; x++) {
+            const int off = x + y * scanw;
+            const float A = aY[off];
+            const float B = bY[off];
+            if (!std::isfinite(A) || !std::isfinite(B) || A <= 1e-6f) {
+                alphaValues.push_back(0.0);
+                renderedYValues.push_back(0.0);
+                continue;
+            }
+            const double alpha = std::max(0.0, std::min(1.0, 1.0 - 1.0 / A));
+            const double renderedY = std::max(0.0, std::min(1.0, -(double)B / (double)A));
+            alphaValues.push_back(alpha);
+            renderedYValues.push_back(renderedY);
+            alphaSum += alpha;
+            renderedYSum += renderedY;
+
+            const double denom = A - 1.0f;
+            const double logoYValue = (std::abs(denom) < 1e-6) ? 0.0 : (-B / denom);
+            const bool active = alpha > 0.03 && std::isfinite(logoYValue) && logoYValue > 0.03 && logoYValue < 1.2;
+            if (active) {
+                metrics.activePixels++;
+                activeUV[(x >> logUVx) + (y >> logUVy) * scanUVw] = 1;
+                const double residual = this->logoY[off].CalcResidualRms(A, B, nframes);
+                if (std::isfinite(residual) && residual <= 1.0) {
+                    yResidualActive.push_back(residual);
+                }
+            }
+            if (alpha > 0.65) {
+                metrics.opaquePixels++;
+            }
+        }
+    }
+
+    metrics.activeAreaRate = metrics.activePixels / (double)metrics.pixelCount;
+    metrics.opaqueAreaRate = metrics.opaquePixels / (double)metrics.pixelCount;
+    metrics.renderedYMean = renderedYSum / metrics.pixelCount;
+    metrics.renderedYP99 = QuantileCopy(renderedYValues, 0.99);
+    metrics.alphaMean = alphaSum / metrics.pixelCount;
+    metrics.alphaP90 = QuantileCopy(alphaValues, 0.90);
+    metrics.alphaP99 = QuantileCopy(alphaValues, 0.99);
+    metrics.yResidualActiveMean = yResidualActive.empty()
+        ? 0.0
+        : std::accumulate(yResidualActive.begin(), yResidualActive.end(), 0.0) / yResidualActive.size();
+    metrics.yResidualActiveP90 = QuantileCopy(yResidualActive, 0.90);
+
+    if (colorMode == logo::LogoColorMode::NormalYUV) {
+        std::vector<double> uvResidualActive;
+        for (int y = 0; y < scanUVh; y++) {
+            for (int x = 0; x < scanUVw; x++) {
+                const int off = x + y * scanUVw;
+                if (!activeUV[off]) {
+                    continue;
+                }
+                const double ru = logoU[off].CalcResidualRms(aU[off], bU[off], nframes);
+                const double rv = logoV[off].CalcResidualRms(aV[off], bV[off], nframes);
+                const double residual = std::sqrt((ru * ru + rv * rv) * 0.5);
+                if (std::isfinite(residual) && residual <= 1.0) {
+                    uvResidualActive.push_back(residual);
+                }
+            }
+        }
+        metrics.uvResidualActiveMean = uvResidualActive.empty()
+            ? 0.0
+            : std::accumulate(uvResidualActive.begin(), uvResidualActive.end(), 0.0) / uvResidualActive.size();
+        metrics.uvResidualActiveP90 = QuantileCopy(uvResidualActive, 0.90);
+    }
+
+    return metrics;
 }
 logo::SimpleVideoReader::SimpleVideoReader(AMTContext& ctx)
     : AMTObject(ctx) {}
@@ -1024,13 +1145,12 @@ void logo::LogoAnalyzer::MakeInitialLogo() {
 
 logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
     const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
-    LOGO_ANALYZE_CB cb) :
+    LOGO_ANALYZE_CB cb, bool validateQuality) :
     AMTObject(ctx),
     srcpath(srcpath),
     serviceid(serviceid),
     workfile(workfile),
     dstpath(dstpath),
-    debugpath(debugpath ? debugpath : _T("")),
     cb(cb),
     scanx(imgx),
     scany(imgy),
@@ -1043,9 +1163,48 @@ logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serv
     imgw(),
     imgh(),
     numFrames(),
+    debugpath(debugpath ? debugpath : _T("")),
     logodata(),
+    logoQuality(),
+    validateQuality(validateQuality),
     progressbase(0),
     creator() {
+}
+
+void logo::LogoAnalyzer::LogLogoQuality(const tchar* phase) const {
+    ctx.infoF(_T("[GenLogo] quality(%s): active=%d/%d %.4f opaque=%d %.4f renderedY(mean=%.5f,p99=%.5f) alpha(mean=%.5f,p90=%.5f,p99=%.5f) residualY(mean=%.5f,p90=%.5f) residualUV(mean=%.5f,p90=%.5f)"),
+        phase,
+        logoQuality.activePixels, logoQuality.pixelCount, logoQuality.activeAreaRate,
+        logoQuality.opaquePixels, logoQuality.opaqueAreaRate,
+        logoQuality.renderedYMean, logoQuality.renderedYP99,
+        logoQuality.alphaMean, logoQuality.alphaP90, logoQuality.alphaP99,
+        logoQuality.yResidualActiveMean, logoQuality.yResidualActiveP90,
+        logoQuality.uvResidualActiveMean, logoQuality.uvResidualActiveP90);
+}
+
+void logo::LogoAnalyzer::ValidateLogoQuality() const {
+    if (logoQuality.pixelCount <= 0) {
+        THROW(RuntimeException, "Logo quality validation failed: no metrics");
+    }
+    if (logoQuality.renderedYP99 < 0.02 && logoQuality.activeAreaRate < 0.02) {
+        THROWF(RuntimeException,
+            "Logo quality validation failed: no_logo (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+            logoQuality.renderedYP99, logoQuality.activeAreaRate, logoQuality.alphaMean,
+            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+    }
+    if (logoQuality.alphaP99 > 0.70 && logoQuality.opaqueAreaRate > 0.01) {
+        THROWF(RuntimeException,
+            "Logo quality validation failed: opaque_logo (alpha_p99=%.5f opaque_area=%.5f renderedY_p99=%.5f active_area=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+            logoQuality.alphaP99, logoQuality.opaqueAreaRate, logoQuality.renderedYP99,
+            logoQuality.activeAreaRate, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+    }
+    if (logoQuality.renderedYMean > 0.03 && logoQuality.renderedYP99 > 0.15
+        && logoQuality.activeAreaRate < 0.10 && logoQuality.alphaMean < 0.05) {
+        THROWF(RuntimeException,
+            "Logo quality validation failed: unstable_logo (renderedY_mean=%.5f renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+            logoQuality.renderedYMean, logoQuality.renderedYP99, logoQuality.activeAreaRate,
+            logoQuality.alphaMean, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+    }
 }
 
 void logo::LogoAnalyzer::ScanLogo() {
@@ -1069,6 +1228,9 @@ void logo::LogoAnalyzer::ScanLogo() {
     (creator->isHighBitDepth()) ? ReMakeLogo<uint16_t>() : ReMakeLogo<uint8_t>();
     SaveDebugLogo();
     //ReMakeLogo();
+    if (validateQuality) {
+        ValidateLogoQuality();
+    }
 
     if (cb(100, numFrames, numFrames, numFrames) == false) {
         THROW(RuntimeException, "Cancel requested");
@@ -1555,6 +1717,7 @@ namespace {
         FrameMaskEmpty,
         TooFewAcceptedFrames,
         Pass2RectDiverged,
+        WeakPass2Fallback,
     };
 
     static const char* ToString(const LogoRectDetectFail fail) {
@@ -1579,6 +1742,7 @@ namespace {
         case LogoAnalyzeFail::FrameMaskEmpty: return "FrameMaskEmpty";
         case LogoAnalyzeFail::TooFewAcceptedFrames: return "TooFewAcceptedFrames";
         case LogoAnalyzeFail::Pass2RectDiverged: return "Pass2RectDiverged";
+        case LogoAnalyzeFail::WeakPass2Fallback: return "WeakPass2Fallback";
         default: return "Unknown";
         }
     }
@@ -3175,13 +3339,31 @@ namespace {
             }
         }
 
+        bool shouldRejectWeakPass2Fallback() const {
+            return debugPass2RescueFallbackApplied
+                && debugPass2FailBeforeClear == LogoAnalyzeFail::TooFewAcceptedFrames
+                && debugScore.debugMaxScoreBeforeRescue < 0.20;
+        }
+
+        AutoDetectRect rejectWeakPass2FallbackIfNeeded(const AutoDetectRect& rect) {
+            if (!shouldRejectWeakPass2Fallback()) {
+                return rect;
+            }
+            setLogoAnalyzeFail(LogoAnalyzeFail::WeakPass2Fallback);
+            THROWF(RuntimeException,
+                "Pass2 fallback quality too weak (failBeforeClear=%s, finalScoreBeforeRescue=%.5f, acceptedFrames=%d, frameMaskNonZero=%d)",
+                ToString(debugPass2FailBeforeClear), debugScore.debugMaxScoreBeforeRescue,
+                debugPass2AcceptedFrames, debugPass2FrameMaskNonZero);
+            return rect;
+        }
+
         AutoDetectRect run(const tstring& srcpath) {
             debugFrameGateRetryAttemptCount = 0;
             debugFrameGateRetrySuccessAttempt = 0;
             const int retryStep = std::max(1, searchFrames / 2);
             AutoDetectRect rect = runSingleWindow(srcpath, 0);
             if (!shouldRetryFrameGateWindow()) {
-                return rect;
+                return rejectWeakPass2FallbackIfNeeded(rect);
             }
             logCtx.infoF(_T("[LogoScan] frameGate retry start: reason=%s step=%d maxRetry=%d"),
                 char_to_tstring(ToString(debugPass2FailBeforeClear)), retryStep, kFrameGateRetryMax);
@@ -3193,7 +3375,7 @@ namespace {
                     if (!shouldRetryFrameGateWindow()) {
                         debugFrameGateRetrySuccessAttempt = retry;
                         logCtx.infoF(_T("[LogoScan] frameGate retry success: retry=%d startFrame=%d"), retry, startFrame);
-                        return rect;
+                        return rejectWeakPass2FallbackIfNeeded(rect);
                     }
                     logCtx.infoF(_T("[LogoScan] frameGate retry fallback: retry=%d startFrame=%d reason=%s"),
                         retry, startFrame, char_to_tstring(ToString(debugPass2FailBeforeClear)));
@@ -3203,7 +3385,8 @@ namespace {
                 }
             }
             logCtx.info(_T("[LogoScan] frameGate retry exhausted; fallback to initial window"));
-            return runSingleWindow(srcpath, 0);
+            rect = runSingleWindow(srcpath, 0);
+            return rejectWeakPass2FallbackIfNeeded(rect);
         }
 
         AutoDetectRect runSingleWindow(const tstring& srcpath, const int startFrame) {
@@ -9411,19 +9594,34 @@ namespace {
 }
 
 // C API for P/Invoke
-extern "C" AMATSUKAZE_API int ScanLogo(AMTContext * ctx,
+static int ScanLogoImpl(AMTContext* ctx,
     const tchar * srcpath, int serviceid, const tchar * workfile, const tchar * dstpath,
     const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
-    logo::LOGO_ANALYZE_CB cb) {
+    logo::LOGO_ANALYZE_CB cb, bool validateQuality) {
     try {
         logo::LogoAnalyzer analyzer(*ctx,
-            srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb);
+            srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb, validateQuality);
         analyzer.ScanLogo();
         return true;
     } catch (const Exception& exception) {
         ctx->setError(exception);
     }
     return false;
+}
+
+// C API for P/Invoke
+extern "C" AMATSUKAZE_API int ScanLogo(AMTContext * ctx,
+    const tchar * srcpath, int serviceid, const tchar * workfile, const tchar * dstpath,
+    const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+    logo::LOGO_ANALYZE_CB cb) {
+    return ScanLogoImpl(ctx, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb, false);
+}
+
+extern "C" AMATSUKAZE_API int ScanLogoWithQualityValidation(AMTContext * ctx,
+    const tchar * srcpath, int serviceid, const tchar * workfile, const tchar * dstpath,
+    const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
+    logo::LOGO_ANALYZE_CB cb) {
+    return ScanLogoImpl(ctx, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb, true);
 }
 
 extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,

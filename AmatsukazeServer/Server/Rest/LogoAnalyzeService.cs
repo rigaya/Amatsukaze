@@ -795,7 +795,7 @@ namespace Amatsukaze.Server.Rest
                             job.NumTotal = total;
                             job.NumValid = ngather;
                             return true;
-                        });
+                        }, request.ValidateQuality);
 
                     using (var info = new TsInfo(ctx))
                     {

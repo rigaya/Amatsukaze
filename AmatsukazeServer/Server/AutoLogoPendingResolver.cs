@@ -350,7 +350,8 @@ namespace Amatsukaze.Server
                     null);
                 LogoFile.ScanLogo(ctx, request.SrcPath, request.ServiceId, workfile, tmppath, null,
                     imgx, imgy, w, h, threshold, searchFrames,
-                    (progress, nread, total, ngather) => true);
+                    (progress, nread, total, ngather) => true,
+                    true);
 
                 using (var info = new TsInfo(ctx))
                 {

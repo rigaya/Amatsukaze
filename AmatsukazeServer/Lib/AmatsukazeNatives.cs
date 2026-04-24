@@ -37,6 +37,7 @@ namespace Amatsukaze.Lib
         FrameMaskEmpty = 4,
         TooFewAcceptedFrames = 5,
         Pass2RectDiverged = 6,
+        WeakPass2Fallback = 7,
     }
 
     public sealed class AutoDetectLogoRectResult
@@ -656,6 +657,10 @@ namespace Amatsukaze.Lib
             string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
 
         [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
+        private static extern int ScanLogoWithQualityValidation(IntPtr ctx, string srcpath, int serviceid, string workfile, string dstpath,
+            string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
+
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
         private static extern int AutoDetectLogoRect(IntPtr ctx, string srcpath, int serviceid,
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
@@ -807,9 +812,13 @@ namespace Amatsukaze.Lib
         }
 
         public static void ScanLogo(AMTContext ctx, string srcpath, int serviceid, string workfile, string dstpath,
-            string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb)
+            string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb,
+            bool validateQuality = false)
         {
-            if(ScanLogo(ctx.Ptr, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb) == 0)
+            var result = validateQuality
+                ? ScanLogoWithQualityValidation(ctx.Ptr, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb)
+                : ScanLogo(ctx.Ptr, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb);
+            if(result == 0)
             {
                 throw new IOException(ctx.GetError());
             }

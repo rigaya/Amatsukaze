@@ -81,6 +81,7 @@ using TsInfoGetNumServiceFunc = int(*)(void*);
 using TsInfoGetServiceIdFunc = int(*)(void*, int);
 using TsInfoGetServiceNameFunc = const char*(*)(void*, int);
 using ScanLogoFunc = int(*)(void*, const TCHAR*, int, const TCHAR*, const TCHAR*, const TCHAR*, int, int, int, int, int, int, LogoAnalyzeCallback);
+using ScanLogoWithQualityValidationFunc = int(*)(void*, const TCHAR*, int, const TCHAR*, const TCHAR*, const TCHAR*, int, int, int, int, int, int, LogoAnalyzeCallback);
 using AutoDetectLogoRectFunc = int(*)(void*, const TCHAR*, int, int, int, int, int, int, int, int, int,
     int*, int*, int*, int*, int*, int*,
     double*, double*, double*,
@@ -113,6 +114,7 @@ struct NativeApi {
     TsInfoGetServiceIdFunc TsInfo_GetServiceId = nullptr;
     TsInfoGetServiceNameFunc TsInfo_GetServiceName = nullptr;
     ScanLogoFunc ScanLogo = nullptr;
+    ScanLogoWithQualityValidationFunc ScanLogoWithQualityValidation = nullptr;
     AutoDetectLogoRectFunc AutoDetectLogoRect = nullptr;
     LogoFileCreateFunc LogoFile_Create = nullptr;
     LogoFileDeleteFunc LogoFile_Delete = nullptr;
@@ -299,7 +301,7 @@ void PrintUsage() {
         _T("      --auto-logo-detect-threshold <n>      自動ロゴ枠検出の閾値 [12]\n")
         _T("      --auto-logo-detect-margin-x <n>       自動ロゴ枠検出のマージンX [6]\n")
         _T("      --auto-logo-detect-margin-y <n>       自動ロゴ枠検出のマージンY [6]\n")
-        _T("      --auto-logo-detect-threads <n>        自動ロゴ枠検出スレッド数 [0=min(論理コア数,16)]\n")
+        _T("      --auto-logo-detect-threads <n>        自動ロゴ枠検出スレッド数 [0=max(1,min(論理コア数-2,16))]\n")
         _T("\n")
         _T("Logo generate options:\n")
         _T("      --logo-gen-threshold <n>              ロゴ生成の閾値 [auto-detect-thresholdと同値]\n")
@@ -513,6 +515,7 @@ NativeApi LoadNativeApi(HMODULE module) {
     api.TsInfo_GetServiceId = LoadSymbol<TsInfoGetServiceIdFunc>(module, "TsInfo_GetServiceId");
     api.TsInfo_GetServiceName = LoadSymbol<TsInfoGetServiceNameFunc>(module, "TsInfo_GetServiceName");
     api.ScanLogo = LoadSymbol<ScanLogoFunc>(module, "ScanLogo");
+    api.ScanLogoWithQualityValidation = LoadSymbol<ScanLogoWithQualityValidationFunc>(module, "ScanLogoWithQualityValidation");
     api.AutoDetectLogoRect = LoadSymbol<AutoDetectLogoRectFunc>(module, "AutoDetectLogoRect");
     api.LogoFile_Create = LoadSymbol<LogoFileCreateFunc>(module, "LogoFile_Create");
     api.LogoFile_Delete = LoadSymbol<LogoFileDeleteFunc>(module, "LogoFile_Delete");
@@ -833,8 +836,9 @@ int Run(const NativeApi& api, const Options& opt) {
             PrintCliInfo(_T("start: input=%s output=%s serviceId=%d aviutl=%d debugDir=%s"),
                 opt.input.c_str(), opt.output.c_str(), serviceId, (int)opt.aviutlLgd,
                 detailedDebug ? opt.debugDir.c_str() : _T("<none>"));
+            const bool autoDetectedRect = !opt.logoRange.has_value();
             Rect rect = opt.logoRange.value_or(Rect{});
-            if (!opt.logoRange.has_value()) {
+            if (autoDetectedRect) {
                 int x = 0, y = 0, w = 0, h = 0;
                 int rectDetectFail = 0;
                 int logoAnalyzeFail = 0;
@@ -909,7 +913,8 @@ int Run(const NativeApi& api, const Options& opt) {
             LogoGenProgressState logoGenProgressState{};
             g_logoGenProgressState = &logoGenProgressState;
 
-            if (api.ScanLogo(
+            auto scanLogo = autoDetectedRect ? api.ScanLogoWithQualityValidation : api.ScanLogo;
+            if (scanLogo(
                 ctx, opt.input.c_str(), serviceId,
                 tempPaths.workFile.c_str(), tempPaths.tempLogo.c_str(), nullptr,
                 aligned.x, aligned.y, aligned.w, aligned.h,
