@@ -58,6 +58,7 @@ struct Options {
     int logoGenSamples = -1;
     bool aviutlLgd = false;
     tstring debugDir;
+    tstring logoImagePath;
     bool showHelp = false;
     bool showVersion = false;
 };
@@ -96,6 +97,7 @@ using LogoFileDeleteFunc = void(*)(void*);
 using LogoFileSetServiceIdFunc = void(*)(void*, int);
 using LogoFileSetNameFunc = void(*)(void*, const char*);
 using LogoFileSaveFunc = int(*)(void*, const TCHAR*);
+using LogoFileSaveImageJpegFunc = int(*)(void*, const TCHAR*, int, uint8_t);
 
 struct NativeApi {
     InitAmatsukazeDLLFunc InitAmatsukazeDLL = nullptr;
@@ -122,6 +124,7 @@ struct NativeApi {
     LogoFileSetNameFunc LogoFile_SetName = nullptr;
     LogoFileSaveFunc LogoFile_Save = nullptr;
     LogoFileSaveFunc LogoFile_SaveAviUtl = nullptr;
+    LogoFileSaveImageJpegFunc LogoFile_SaveImageJpeg = nullptr;
 };
 
 struct AutoDetectProgressState {
@@ -309,6 +312,7 @@ void PrintUsage() {
         _T("\n")
         _T("Other options:\n")
         _T("      --aviutl-lgd                          AviUtl向けlgdを保存\n")
+        _T("      --output-logo-image <path>            ロゴ画像をJPEGで保存\n")
         _T("      --debug-dir <path>                    自動ロゴ枠検出デバッグ画像出力先\n")
         _T("      --help                                このヘルプを表示\n")
         _T("      --version                             バージョンを表示\n"));
@@ -415,6 +419,8 @@ Options ParseArgs(int argc, const TCHAR* argv[]) {
             opt.logoGenSamples = ParseInt(requireValue(key.c_str()), key.c_str());
         } else if (key == _T("--aviutl-lgd")) {
             opt.aviutlLgd = true;
+        } else if (key == _T("--output-logo-image")) {
+            opt.logoImagePath = requireValue(key.c_str());
         } else if (key == _T("--debug-dir")) {
             opt.debugDir = requireValue(key.c_str());
         } else if (key == _T("--help")) {
@@ -523,6 +529,7 @@ NativeApi LoadNativeApi(HMODULE module) {
     api.LogoFile_SetName = LoadSymbol<LogoFileSetNameFunc>(module, "LogoFile_SetName");
     api.LogoFile_Save = LoadSymbol<LogoFileSaveFunc>(module, "LogoFile_Save");
     api.LogoFile_SaveAviUtl = LoadSymbol<LogoFileSaveFunc>(module, "LogoFile_SaveAviUtl");
+    api.LogoFile_SaveImageJpeg = LoadSymbol<LogoFileSaveImageJpegFunc>(module, "LogoFile_SaveImageJpeg");
     return api;
 }
 
@@ -938,6 +945,15 @@ int Run(const NativeApi& api, const Options& opt) {
                     : api.LogoFile_Save(logo, tempPaths.finalTemp.c_str());
                 if (saveOk == 0) {
                     throw std::runtime_error(SafeGetError(api, ctx));
+                }
+                if (!opt.logoImagePath.empty()) {
+                    constexpr int kJpegQuality = 90;
+                    constexpr uint8_t kBgBlack = 0;
+                    if (api.LogoFile_SaveImageJpeg(logo, opt.logoImagePath.c_str(), kJpegQuality, kBgBlack) == 0) {
+                        PrintCliInfo(_T("warning: ロゴ画像のJPEG保存に失敗しました"));
+                    } else {
+                        PrintCliInfo(_T("logo image saved: %s"), opt.logoImagePath.c_str());
+                    }
                 }
             } catch (...) {
                 api.LogoFile_Delete(logo);

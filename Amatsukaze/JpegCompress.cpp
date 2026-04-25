@@ -81,4 +81,35 @@ bool compressYUV444PToJpeg(
     return success;
 }
 
+bool compressBGRToJpeg(
+    const uint8_t* bgrData, int stride,
+    int width, int height,
+    int quality,
+    std::vector<uint8_t>& output)
+{
+    tjhandle handle = tj3Init(TJINIT_COMPRESS);
+    if (!handle) {
+        return false;
+    }
+
+    bool success = false;
+
+    tj3Set(handle, TJPARAM_QUALITY, quality);
+
+    unsigned char* jpegBuf = nullptr;
+    size_t jpegSize = 0;
+
+    // packed BGR からJPEGに圧縮
+    if (tj3Compress8(handle, bgrData, width, stride, height, TJPF_BGR, &jpegBuf, &jpegSize) == 0) {
+        output.assign(jpegBuf, jpegBuf + jpegSize);
+        success = true;
+    } else {
+        output.clear();
+    }
+
+    tj3Free(jpegBuf);
+    tj3Destroy(handle);
+    return success;
+}
+
 } // namespace jpeg_utils

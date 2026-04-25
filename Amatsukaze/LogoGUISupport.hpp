@@ -9,6 +9,7 @@
 
 #include "ReaderWriterFFmpeg.h"
 #include "LogoScan.h"
+#include "JpegCompress.h"
 
 namespace av {
 
@@ -274,6 +275,29 @@ public:
     bool saveAviUtl(const tchar* filename) {
         try {
             logo.SaveAviUtl(filename, &header);
+            return true;
+        } catch (const Exception& exception) {
+            ctx.setError(exception);
+        }
+        return false;
+    }
+
+    bool saveImageJpeg(const tchar* filename, int quality, uint8_t bg) {
+        try {
+            const int w = header.w;
+            const int h = header.h;
+            const int stride = w * 3;
+            std::vector<uint8_t> rgb(stride * h);
+            getImage(rgb.data(), stride, bg);
+
+            std::vector<uint8_t> jpegData;
+            if (!jpeg_utils::compressBGRToJpeg(rgb.data(), stride, w, h, quality, jpegData)) {
+                ctx.setError(RuntimeException("JPEG圧縮に失敗しました"));
+                return false;
+            }
+
+            File file(tstring(filename), _T("wb"));
+            file.write(MemoryChunk(jpegData.data(), jpegData.size()));
             return true;
         } catch (const Exception& exception) {
             ctx.setError(exception);
@@ -604,3 +628,4 @@ extern "C" AMATSUKAZE_API void LogoFile_SetName(logo::GUILogoFile * ptr, const c
 extern "C" AMATSUKAZE_API void LogoFile_GetImage(logo::GUILogoFile * ptr, uint8_t * rgb, int stride, uint8_t bg) { ptr->getImage(rgb, stride, bg); }
 extern "C" AMATSUKAZE_API int LogoFile_Save(logo::GUILogoFile * ptr, const tchar * filename) { return ptr->save(filename); }
 extern "C" AMATSUKAZE_API int LogoFile_SaveAviUtl(logo::GUILogoFile * ptr, const tchar * filename) { return ptr->saveAviUtl(filename); }
+extern "C" AMATSUKAZE_API int LogoFile_SaveImageJpeg(logo::GUILogoFile * ptr, const tchar * filename, int quality, uint8_t bg) { return ptr->saveImageJpeg(filename, quality, bg); }
