@@ -3118,6 +3118,7 @@ namespace {
             AutoDetectRect rect;
             double score;
             int area;
+            bool requireClusterSupport = false;
         };
 
         struct RectMergeEval {
@@ -9254,7 +9255,7 @@ namespace {
                 const double boxArea = (double)comp.w * comp.h;
                 if (boxArea <= 0.0) continue;
                 if (area >= 4) {
-                    mergeCandidates.push_back(RectStageCompCandidate{ comp, 0.0, area });
+                    mergeCandidates.push_back(RectStageCompCandidate{ comp, 0.0, area, false });
                 }
                 if (area < fallbackMinArea) continue;
 
@@ -9262,9 +9263,6 @@ namespace {
                 const double aspect = std::max((double)comp.w / std::max(1, comp.h), (double)comp.h / std::max(1, comp.w));
                 const double fillRatio = area / boxArea;
                 const double compactness = (perimeter > 0) ? (4.0 * 3.14159265358979323846 * area / (perimeter * perimeter)) : 0.0;
-                if (aspect > 6.5) continue;
-                if (fillRatio < 0.08) continue;
-                if (compactness < 0.010) continue;
 
                 std::vector<int> rowCount(comp.h, 0), colCount(comp.w, 0);
                 for (const int pix : compPixels) {
@@ -9287,26 +9285,25 @@ namespace {
                 const double maxColRatio = (area > 0) ? (double)maxCol / area : 0.0;
                 const double rowCoverage = (comp.h > 0) ? (double)usedRows / comp.h : 0.0;
                 const double colCoverage = (comp.w > 0) ? (double)usedCols / comp.w : 0.0;
-                const bool isWideBand = comp.w > (int)(scanw * 0.45) && comp.h < (int)(scanh * 0.22);
-                const bool isRowLineLike = maxRowRatio > 0.15 && rowCoverage < 0.52 && aspect > 2.4;
-                const bool isColLineLike = maxColRatio > 0.15 && colCoverage < 0.52 && aspect > 2.4;
-                const bool shapeRejected = aspect > 6.5 || fillRatio < 0.08 || compactness < 0.010 || isWideBand || isRowLineLike || isColLineLike;
-                if (shapeRejected) {
-                    if (detailedDebug) {
-                        rectCompScoreDebug.push_back(RectCompScoreDebug{
-                            comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
-                            area, comp.w, comp.h, perimeter,
-                            fillRatio, compactness, maxRowRatio, maxColRatio, rowCoverage, colCoverage,
-                            0.0, -1.0, 0, 0, 0, 0, comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1, -1.0, 0
-                            });
-                    }
-                    continue;
-                }
-
-                // ロゴらしさスコアを計算し、候補リストと best を更新する。
                 const double cxComp = comp.x + comp.w * 0.5;
                 const double cyComp = comp.y + comp.h * 0.5;
                 const double rightTopPrior = std::max(0.0, std::min(1.0, (cxComp / scanw) * 0.60 + ((scanh - cyComp) / scanh) * 0.40));
+                const bool isWideBand = comp.w > (int)(scanw * 0.45) && comp.h < (int)(scanh * 0.22);
+                const bool isRowLineLike = maxRowRatio > 0.15 && rowCoverage < 0.52 && aspect > 2.4;
+                const bool isColLineLike = maxColRatio > 0.15 && colCoverage < 0.52 && aspect > 2.4;
+                const bool bandLikeFallbackSeed =
+                    area >= minArea &&
+                    fillRatio >= 0.12 &&
+                    compactness >= 0.006 &&
+                    aspect <= 20.0 &&
+                    comp.w >= std::max(40, (int)std::round(scanw * 0.20)) &&
+                    comp.w <= (int)std::round(scanw * 0.72) &&
+                    comp.h <= std::max(12, (int)std::round(scanh * 0.10)) &&
+                    cxComp >= scanw * 0.38 &&
+                    cyComp <= scanh * 0.42 &&
+                    rowCoverage >= 0.70 &&
+                    !isColLineLike;
+                const bool shapeRejected = aspect > 6.5 || fillRatio < 0.08 || compactness < 0.010 || isWideBand || isRowLineLike || isColLineLike;
                 const double rowLinePenalty = std::max(0.0, (maxRowRatio - 0.11) * 2.4);
                 const double colLinePenalty = std::max(0.0, (maxColRatio - 0.11) * 2.4);
                 const double compScore =
@@ -9316,17 +9313,34 @@ namespace {
                     rightTopPrior * 0.35 -
                     rowLinePenalty * 1.60 -
                     colLinePenalty * 1.60;
+                if (shapeRejected) {
+                    if (bandLikeFallbackSeed) {
+                        fallbackSeedCandidates.push_back(RectStageCompCandidate{ comp, compScore, area, true });
+                    }
+                    if (detailedDebug) {
+                        rectCompScoreDebug.push_back(RectCompScoreDebug{
+                            comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1,
+                            area, comp.w, comp.h, perimeter,
+                            fillRatio, compactness, maxRowRatio, maxColRatio, rowCoverage, colCoverage,
+                            rightTopPrior, compScore, 0, bandLikeFallbackSeed ? 1 : 0,
+                            0, 0, comp.x, comp.y, comp.x + comp.w - 1, comp.y + comp.h - 1, -1.0, 0
+                            });
+                    }
+                    continue;
+                }
+
+                // ロゴらしさスコアを計算し、候補リストと best を更新する。
                 const bool regularCandidate = area >= minArea;
                 const bool fallbackEligible = area >= fallbackMinArea;
                 if (regularCandidate) {
-                    candidates.push_back(RectStageCompCandidate{ comp, compScore, area });
+                    candidates.push_back(RectStageCompCandidate{ comp, compScore, area, false });
                     if (compScore > bestScore) {
                         bestScore = compScore;
                         best = comp;
                         hasBest = true;
                     }
                 } else if (fallbackEligible) {
-                    fallbackSeedCandidates.push_back(RectStageCompCandidate{ comp, compScore, area });
+                    fallbackSeedCandidates.push_back(RectStageCompCandidate{ comp, compScore, area, false });
                 }
                 if (detailedDebug) {
                     rectCompScoreDebug.push_back(RectCompScoreDebug{
@@ -9353,12 +9367,19 @@ namespace {
                 expandMergeCluster(cand, clusterRect, clusterArea, clusterCount);
                 const double clusterBoxArea = (double)clusterRect.w * clusterRect.h;
                 const double clusterFill = (clusterBoxArea > 0.0) ? (clusterArea / clusterBoxArea) : 0.0;
+                const bool clusterSupported =
+                    !cand.requireClusterSupport ||
+                    (clusterCount >= 3 &&
+                        clusterArea >= std::max(cand.area + 24, (int)std::ceil(cand.area * 1.45)));
+                if (!clusterSupported) {
+                    continue;
+                }
                 const double clusterGain =
                     std::log(1.0 + std::max(clusterArea, cand.area)) * 1.10 +
                     std::log(1.0 + std::max(0, clusterCount - 1)) * 0.45 +
                     clusterFill * 0.70;
                 const double fallbackScore =
-                    cand.score * 0.45 +
+                    cand.score * (cand.requireClusterSupport ? 0.40 : 0.45) +
                     clusterGain;
                 if (detailedDebug) {
                     for (int i = (int)rectCompScoreDebug.size() - 1; i >= 0; i--) {
