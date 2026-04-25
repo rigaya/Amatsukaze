@@ -485,6 +485,22 @@ class LogoAnalyzer : AMTObject {
 
     void LogLogoQuality(const tchar* phase) const;
     void ValidateLogoQuality() const;
+    double GetResolutionScale() const {
+        if (imgw <= 0 || imgh <= 0) {
+            return 1.0;
+        }
+        return std::max(0.25, std::min(1.0, imgh / 1080.0));
+    }
+    int GetAdjustedBackgroundThreshold() const {
+        const double resolutionScale = GetResolutionScale();
+        const double gain = std::max(1.0, std::min(1.75, 1.0 / std::sqrt(std::max(1.0e-6, resolutionScale))));
+        return std::max(1, (int)std::lround(thy * gain));
+    }
+    int GetEligibleFadeMinIndex() const {
+        const double resolutionScale = GetResolutionScale();
+        const double fadeScale = std::max(0.65, std::min(1.0, std::sqrt(std::max(1.0e-6, resolutionScale))));
+        return std::max(5, std::min(9, (int)std::lround(9.0 * fadeScale)));
+    }
 
     template <typename pixel_t>
     void ReMakeLogo()  {
@@ -544,10 +560,11 @@ class LogoAnalyzer : AMTObject {
             numMinFades[minFades[i]]++;
         }
         int maxi = (int)(std::max_element(numMinFades.begin(), numMinFades.end()) - numMinFades.begin());
+        const int eligibleFadeMin = GetEligibleFadeMinIndex();
         ctx.infoF(_T("[GenLogo] dominant fade: index=%d rate=%.1f%% eligibleFadeMin=%d"),
-            maxi, numMinFades[maxi] / (float)numFrames * 100.0f, 9);
+            maxi, numMinFades[maxi] / (float)numFrames * 100.0f, eligibleFadeMin);
 
-        LogoScan logoscan(scanw, scanh, logUVx, logUVy, thy);
+        LogoScan logoscan(scanw, scanh, logUVx, logUVy, GetAdjustedBackgroundThreshold());
         int eligibleFrames = 0;
         {
             int scanUVw = scanw >> logUVx;
@@ -560,7 +577,7 @@ class LogoAnalyzer : AMTObject {
                 memScanData.resize(creator->getFrameSize(i));
                 creator->getFrame(i, memScanData.data());
                 // ロゴのあるフレームだけAddFrame
-                if (minFades[i] > 8) { // TODO: 調整
+                if (minFades[i] >= eligibleFadeMin) {
                     eligibleFrames++;
                     const auto ptr = memScanData.data();
                     logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw, creator->bitdepth());

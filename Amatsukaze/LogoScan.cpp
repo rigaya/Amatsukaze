@@ -1117,7 +1117,12 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
     pThis->imgh = frame->height;
 
     logoscan = std::unique_ptr<LogoScan>(
-        new LogoScan(pThis->scanw, pThis->scanh, pThis->logUVx, pThis->logUVy, pThis->thy));
+        new LogoScan(pThis->scanw, pThis->scanh, pThis->logUVx, pThis->logUVy, pThis->GetAdjustedBackgroundThreshold()));
+
+    pThis->ctx.infoF(_T("[GenLogo] source=%dx%d thresholdAdjusted=%d(base=%d) resolutionScale=%.3f eligibleFadeMin=%d"),
+        pThis->imgw, pThis->imgh,
+        pThis->GetAdjustedBackgroundThreshold(), pThis->thy,
+        pThis->GetResolutionScale(), pThis->GetEligibleFadeMinIndex());
 
     pThis->numFrames = 0;
 }
@@ -1759,6 +1764,20 @@ namespace {
     static int RoundUpBy(const int value, const int unit) {
         if (unit <= 1) return value;
         return std::max(0, ((value + unit - 1) / unit) * unit);
+    }
+
+    static int ScaleCoordFloor(const int value, const int num, const int den) {
+        if (num <= 0 || den <= 0) {
+            return value;
+        }
+        return (int)(((int64_t)value * den) / num);
+    }
+
+    static int ScaleCoordCeil(const int value, const int num, const int den) {
+        if (num <= 0 || den <= 0) {
+            return value;
+        }
+        return (int)((((int64_t)value * den) + num - 1) / num);
     }
 
     static float AutoCalcDist(const float a, const float b) {
@@ -2587,7 +2606,8 @@ namespace {
         int srcImgH;
         int imgw;
         int imgh;
-        int detectScale;
+        int detectScaleNum;
+        int detectScaleDen;
         int scanx;
         int scany;
         int scanw;
@@ -3252,7 +3272,7 @@ namespace {
             , logCtx(ctx)
             , cb(cb)
             , threadPool(ResolveAutoDetectThreadCount(threadN))
-            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScale(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
+            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
@@ -4852,16 +4872,22 @@ namespace {
             }
             srcImgW = frame->width;
             srcImgH = frame->height;
-            detectScale = (srcImgH > 1080) ? 2 : 1;
-            imgw = std::max(32, srcImgW / detectScale);
-            imgh = std::max(32, srcImgH / detectScale);
+            detectScaleNum = 1;
+            detectScaleDen = 1;
+            if (srcImgH > 1080) {
+                detectScaleDen = 2;
+            } else if (srcImgH <= 540) {
+                detectScaleNum = 2;
+            }
+            imgw = std::max(32, (int)(((int64_t)srcImgW * detectScaleNum + detectScaleDen / 2) / detectScaleDen));
+            imgh = std::max(32, (int)(((int64_t)srcImgH * detectScaleNum + detectScaleDen / 2) / detectScaleDen));
             scanw = RoundDownBy(std::max(32, imgw / divx), 4);
             scanh = RoundDownBy(std::max(32, imgh / divy), 4);
             scanx = std::max(0, imgw - scanw);
             scany = 0;
             radius = std::max(4, std::min(blockSize, std::min(scanw, scanh) / 4));
-            logCtx.infoF(_T("[LogoScan] detect geometry: source=%dx%d detect=%dx%d scale=%d scan=(%d,%d,%d,%d)"),
-                srcImgW, srcImgH, imgw, imgh, detectScale, scanx, scany, scanw, scanh);
+            logCtx.infoF(_T("[LogoScan] detect geometry: source=%dx%d detect=%dx%d scale=%d/%d scan=(%d,%d,%d,%d)"),
+                srcImgW, srcImgH, imgw, imgh, detectScaleNum, detectScaleDen, scanx, scany, scanw, scanh);
             configureTracePoints();
             if (roiCacheCaptureActive) {
                 initializeRoiCache();
@@ -5069,28 +5095,44 @@ namespace {
             if (scanw <= 0 || scanh <= 0) {
                 return;
             }
-            const int scale = std::max(1, detectScale);
-            const int srcBaseX = scanx * scale;
-            const int srcBaseY = scany * scale;
-            if (scale == 1) {
+            const int scaleNum = std::max(1, detectScaleNum);
+            const int scaleDen = std::max(1, detectScaleDen);
+            if (scaleNum == scaleDen) {
                 for (int y = 0; y < scanh; y++) {
-                    std::memcpy(out.data() + y * scanw, srcY + srcBaseX + (srcBaseY + y) * pitchY, sizeof(pixel_t) * scanw);
+                    std::memcpy(out.data() + y * scanw, srcY + scanx + (scany + y) * pitchY, sizeof(pixel_t) * scanw);
+                }
+                return;
+            }
+            if (scaleNum == 1 && scaleDen > 1) {
+                const int scale = scaleDen;
+                const int srcBaseX = scanx * scale;
+                const int srcBaseY = scany * scale;
+                for (int y = 0; y < scanh; y++) {
+                    pixel_t* dstLine = out.data() + y * scanw;
+                    const int srcY0 = srcBaseY + y * scale;
+                    for (int x = 0; x < scanw; x++) {
+                        const int srcX0 = srcBaseX + x * scale;
+                        uint64_t sum = 0;
+                        for (int dy = 0; dy < scale; dy++) {
+                            const pixel_t* srcLine = srcY + (srcY0 + dy) * pitchY + srcX0;
+                            for (int dx = 0; dx < scale; dx++) {
+                                sum += (uint64_t)srcLine[dx];
+                            }
+                        }
+                        dstLine[x] = (pixel_t)((sum + (uint64_t)(scale * scale) / 2) / (uint64_t)(scale * scale));
+                    }
                 }
                 return;
             }
             for (int y = 0; y < scanh; y++) {
                 pixel_t* dstLine = out.data() + y * scanw;
-                const int srcY0 = srcBaseY + y * scale;
+                const int detectY = scany + y;
+                const int srcYPos = ClampInt((int)(((int64_t)detectY * scaleDen + scaleNum / 2) / scaleNum), 0, std::max(0, srcImgH - 1));
+                const pixel_t* srcLine = srcY + srcYPos * pitchY;
                 for (int x = 0; x < scanw; x++) {
-                    const int srcX0 = srcBaseX + x * scale;
-                    uint64_t sum = 0;
-                    for (int dy = 0; dy < scale; dy++) {
-                        const pixel_t* srcLine = srcY + (srcY0 + dy) * pitchY + srcX0;
-                        for (int dx = 0; dx < scale; dx++) {
-                            sum += (uint64_t)srcLine[dx];
-                        }
-                    }
-                    dstLine[x] = (pixel_t)((sum + (uint64_t)(scale * scale) / 2) / (uint64_t)(scale * scale));
+                    const int detectX = scanx + x;
+                    const int srcXPos = ClampInt((int)(((int64_t)detectX * scaleDen + scaleNum / 2) / scaleNum), 0, std::max(0, srcImgW - 1));
+                    dstLine[x] = srcLine[srcXPos];
                 }
             }
         }
@@ -9526,11 +9568,15 @@ namespace {
         if (detectRect.w <= 0 || detectRect.h <= 0) {
             return AutoDetectRect{ 0, 0, 0, 0 };
         }
+        const int srcLeft = ScaleCoordFloor(detectRect.x, detectScaleNum, detectScaleDen);
+        const int srcTop = ScaleCoordFloor(detectRect.y, detectScaleNum, detectScaleDen);
+        const int srcRight = ScaleCoordCeil(detectRect.x + detectRect.w, detectScaleNum, detectScaleDen);
+        const int srcBottom = ScaleCoordCeil(detectRect.y + detectRect.h, detectScaleNum, detectScaleDen);
         AutoDetectRect srcRect{
-            detectRect.x * detectScale,
-            detectRect.y * detectScale,
-            detectRect.w * detectScale,
-            detectRect.h * detectScale
+            srcLeft,
+            srcTop,
+            std::max(2, srcRight - srcLeft),
+            std::max(2, srcBottom - srcTop)
         };
         srcRect.x = ClampInt(srcRect.x, 0, std::max(0, srcImgW - 2));
         srcRect.y = ClampInt(srcRect.y, 0, std::max(0, srcImgH - 2));
