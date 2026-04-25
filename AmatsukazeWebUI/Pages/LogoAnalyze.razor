@@ -48,28 +48,6 @@ else
 
         <div class="logo-analyze-actions">
             <button class="btn btn-primary" @onclick="StartAnalyzeAsync" disabled="@_analyzing">ロゴ解析開始</button>
-            <button class="btn btn-outline-primary" @onclick="StartAutoDetectAsync" disabled="@_autoDetecting">ロゴ位置検出</button>
-            <button class="btn btn-outline-secondary" @onclick="ApplyAutoRectToManualRect" disabled="@(!HasAutoRect)">検出結果を選択範囲に反映</button>
-        </div>
-        <div class="logo-analyze-controls">
-            <label>div_x:</label>
-            <input type="number" min="1" @bind="_autoDivX" style="width:72px;" />
-            <label>div_y:</label>
-            <input type="number" min="1" @bind="_autoDivY" style="width:72px;" />
-            <label>search_frame:</label>
-            <input type="number" min="100" @bind="_autoSearchFrames" style="width:110px;" />
-            <label>block_size:</label>
-            <input type="number" min="4" @bind="_autoBlockSize" style="width:90px;" />
-            <label>margin_x:</label>
-            <input type="number" min="0" @bind="_autoMarginX" style="width:72px;" />
-            <label>margin_y:</label>
-            <input type="number" min="0" @bind="_autoMarginY" style="width:72px;" />
-            <label>thread_n (0=auto):</label>
-            <input type="number" min="0" @bind="_autoThreadN" style="width:72px;" />
-            <label style="margin-left:8px;">
-                <input type="checkbox" @bind="_autoDetailedDebug" />
-                詳細デバッグ出力
-            </label>
         </div>
 
     @if (_analyzing || _lastStatus != null)
@@ -78,17 +56,6 @@ else
             <div>Progress: @_progressDisplay</div>
             <div>Read: @_lastStatus?.NumRead / @_lastStatus?.NumTotal (Valid: @_lastStatus?.NumValid)</div>
             <progress value="@_progressValue" max="1"></progress>
-        </div>
-    }
-
-    @if (_autoDetecting || _autoStatus != null)
-    {
-        <div class="logo-analyze-progress">
-            <div>Auto Detect Stage: @_autoStageDisplay @_autoStageNameDisplay</div>
-            <div>Auto Detect Progress: @_autoProgressDisplay</div>
-            <div>Read: @_autoStatus?.NumRead / @_autoStatus?.NumTotal</div>
-            <progress value="@_autoStageProgressValue" max="1"></progress>
-            <progress value="@_autoProgressValue" max="1"></progress>
         </div>
     }
 
@@ -119,71 +86,12 @@ else
                  @onmouseup="OnMouseUp"
                  @onmouseleave="OnMouseUp">
                 <div style="@BuildRectStyle()"></div>
-                <div style="@BuildAutoRectStyle()"></div>
             </div>
         </div>
         @if (!string.IsNullOrEmpty(_frameLoadLog))
         {
             <div class="logo-analyze-meta">@_frameLoadLog</div>
         }
-    }
-
-    @if (_autoDebugEntries.Count > 0 || !string.IsNullOrEmpty(_autoPass2PrepLogoUrl) || !string.IsNullOrEmpty(_autoPass2PrepMaskUrl))
-    {
-        <div class="logo-analyze-result">
-            <h4>自動検出デバッグ表示</h4>
-            @foreach (var entry in _autoDebugEntries)
-            {
-                <div style="margin-bottom: 1rem;">
-                    <div>@entry.Title</div>
-                    <div style="display:flex; flex-wrap:wrap; gap:16px;">
-                        @if (!string.IsNullOrEmpty(entry.Pass1Url))
-                        {
-                            <div>
-                                <div>pass1</div>
-                                <img src="@entry.Pass1Url" />
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(entry.Pass2Url))
-                        {
-                            <div>
-                                <div>pass2</div>
-                                <img src="@entry.Pass2Url" />
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(entry.FinalUrl))
-                        {
-                            <div>
-                                <div>final</div>
-                                <img src="@entry.FinalUrl" />
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-            @if (!string.IsNullOrEmpty(_autoPass2PrepLogoUrl) || !string.IsNullOrEmpty(_autoPass2PrepMaskUrl))
-            {
-                <div style="margin-bottom: 1rem;">
-                    <div>runPass2PrepareMask()</div>
-                    <div style="display:flex; flex-wrap:wrap; gap:16px;">
-                        @if (!string.IsNullOrEmpty(_autoPass2PrepLogoUrl))
-                        {
-                            <div>
-                                <div>仮ロゴ画像</div>
-                                <img src="@_autoPass2PrepLogoUrl" />
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(_autoPass2PrepMaskUrl))
-                        {
-                            <div>
-                                <div>仮ロゴマスク</div>
-                                <img src="@_autoPass2PrepMaskUrl" />
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-        </div>
     }
 
     @if (!string.IsNullOrEmpty(_resultImageUrl))
@@ -194,14 +102,6 @@ else
 }
 
 @code {
-    private sealed class AutoDebugImageEntry
-    {
-        public string Title { get; set; } = "";
-        public string? FinalUrl { get; set; }
-        public string? Pass1Url { get; set; }
-        public string? Pass2Url { get; set; }
-    }
-
     [SupplyParameterFromQuery(Name = "queueItemId")]
     public int? QueueItemId { get; set; }
 
@@ -232,31 +132,6 @@ else
     private string? _frameLoadLog;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
-    private bool _autoDetecting;
-    private string? _autoDetectJobId;
-    private LogoAutoDetectStatus? _autoStatus;
-    private string _autoStageDisplay = "Stage 0/4";
-    private string _autoStageNameDisplay = "";
-    private string _autoProgressDisplay = "0%";
-    private double _autoProgressValue;
-    private double _autoStageProgressValue;
-    private CancellationTokenSource? _autoPollCts;
-    private Task? _autoPollTask;
-    private int _autoRectX;
-    private int _autoRectY;
-    private int _autoRectW;
-    private int _autoRectH;
-    private readonly List<AutoDebugImageEntry> _autoDebugEntries = new();
-    private string? _autoPass2PrepLogoUrl;
-    private string? _autoPass2PrepMaskUrl;
-    private int _autoDivX = 5;
-    private int _autoDivY = 5;
-    private int _autoSearchFrames = 10000;
-    private int _autoBlockSize = 32;
-    private int _autoMarginX = 6;
-    private int _autoMarginY = 6;
-    private int _autoThreadN = 0;
-    private bool _autoDetailedDebug = false;
     private static readonly TimeSpan InitialLoadTimeout = TimeSpan.FromSeconds(30);
 
     protected override async Task OnInitializedAsync()
@@ -393,31 +268,6 @@ else
                "border:2px dashed #5f55ff; background:rgba(95,85,255,0.1);";
     }
 
-    private bool HasAutoRect => _autoRectW > 0 && _autoRectH > 0;
-
-    private string BuildAutoRectStyle()
-    {
-        if (!HasAutoRect)
-        {
-            return "display:none;";
-        }
-        return $"position:absolute; left:{_autoRectX}px; top:{_autoRectY}px; width:{_autoRectW}px; height:{_autoRectH}px; " +
-               "border:2px solid #ff8800; background:rgba(255,136,0,0.08);";
-    }
-
-    private void ApplyAutoRectToManualRect()
-    {
-        if (!HasAutoRect)
-        {
-            return;
-        }
-        _rectX = _autoRectX;
-        _rectY = _autoRectY;
-        _rectW = _autoRectW;
-        _rectH = _autoRectH;
-        _actionMessage = "検出結果を選択範囲に反映しました。";
-    }
-
     private async Task StartAnalyzeAsync()
     {
         _actionMessage = null;
@@ -461,47 +311,6 @@ else
         StartPolling();
     }
 
-    private async Task StartAutoDetectAsync()
-    {
-        _actionMessage = null;
-        _error = null;
-        _autoDebugEntries.Clear();
-        _autoPass2PrepLogoUrl = null;
-        _autoPass2PrepMaskUrl = null;
-        if (!QueueItemId.HasValue || QueueItemId.Value <= 0)
-        {
-            _error = "queueItemId is required.";
-            return;
-        }
-
-        var req = new LogoAutoDetectStartRequest
-        {
-            QueueItemId = QueueItemId.Value,
-            DivX = _autoDivX,
-            DivY = _autoDivY,
-            SearchFrames = _autoSearchFrames,
-            BlockSize = _autoBlockSize,
-            Threshold = _threshold,
-            MarginX = _autoMarginX,
-            MarginY = _autoMarginY,
-            ThreadN = _autoThreadN,
-            DetailedDebug = _autoDetailedDebug
-        };
-
-        var res = await Api.StartLogoAutoDetectAsync(req);
-        if (!res.Ok || res.Data?.JobId == null)
-        {
-            _error = res.Error ?? "Failed to start auto detect.";
-            return;
-        }
-
-        _autoStatus = res.Data;
-        _autoDetectJobId = res.Data.JobId;
-        _autoDetecting = true;
-        UpdateAutoDetectProgress(_autoStatus);
-        StartAutoDetectPolling();
-    }
-
     private void StartPolling()
     {
         _pollCts?.Cancel();
@@ -537,37 +346,6 @@ else
         }, token);
     }
 
-    private void StartAutoDetectPolling()
-    {
-        _autoPollCts?.Cancel();
-        _autoPollCts = new CancellationTokenSource();
-        var token = _autoPollCts.Token;
-        _autoPollTask = Task.Run(async () =>
-        {
-            while (!token.IsCancellationRequested && _autoDetecting && !string.IsNullOrEmpty(_autoDetectJobId))
-            {
-                var res = await Api.GetLogoAutoDetectStatusAsync(_autoDetectJobId);
-                if (res.Ok && res.Data != null)
-                {
-                    _autoStatus = res.Data;
-                    UpdateAutoDetectProgress(_autoStatus);
-                    if (_autoStatus.Completed)
-                    {
-                        _autoDetecting = false;
-                        if (!string.IsNullOrEmpty(_autoStatus.Error))
-                        {
-                            _error = _autoStatus.Error;
-                        }
-                        await InvokeAsync(StateHasChanged);
-                        return;
-                    }
-                }
-                await InvokeAsync(StateHasChanged);
-                await Task.Delay(1000, token);
-            }
-        }, token);
-    }
-
     private string BuildImageUrl(string path, bool noCache = false)
     {
         var baseUri = ApiBase.Uri;
@@ -584,63 +362,6 @@ else
         var sep = tail.Contains("?", StringComparison.Ordinal) ? "&" : "?";
         var nonce = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
         return baseText + tail + sep + "t=" + nonce;
-    }
-
-    private string BuildAutoDebugKindUrl(string jobId, string kind)
-    {
-        return BuildImageUrl($"/api/logo/analyze/auto/{Uri.EscapeDataString(jobId)}/debug/{kind}", true);
-    }
-
-    private void AddAutoDebugEntry(string jobId, string title, string baseKind, string? finalUrl)
-    {
-        if (string.IsNullOrEmpty(finalUrl))
-        {
-            return;
-        }
-        _autoDebugEntries.Add(new AutoDebugImageEntry
-        {
-            Title = title,
-            FinalUrl = BuildImageUrl(finalUrl, true),
-            Pass1Url = BuildAutoDebugKindUrl(jobId, $"{baseKind}-pass1"),
-            Pass2Url = BuildAutoDebugKindUrl(jobId, $"{baseKind}-pass2")
-        });
-    }
-
-    private void UpdateAutoDebugImages(LogoAutoDetectStatus status)
-    {
-        _autoDebugEntries.Clear();
-        _autoPass2PrepLogoUrl = null;
-        _autoPass2PrepMaskUrl = null;
-
-        if (status.DebugImages == null || string.IsNullOrEmpty(status.JobId))
-        {
-            return;
-        }
-
-        var jobId = status.JobId;
-        AddAutoDebugEntry(jobId, "ロゴ輝度/α計算", "score", status.DebugImages.ScoreUrl);
-        AddAutoDebugEntry(jobId, "2値化結果", "binary", status.DebugImages.BinaryUrl);
-        AddAutoDebugEntry(jobId, "CCL結果", "ccl", status.DebugImages.CclUrl);
-        AddAutoDebugEntry(jobId, "有効サンプル数マップ(count)", "count", status.DebugImages.CountUrl);
-        AddAutoDebugEntry(jobId, "Aヒートマップ", "a", status.DebugImages.AUrl);
-        AddAutoDebugEntry(jobId, "Bヒートマップ", "b", status.DebugImages.BUrl);
-        AddAutoDebugEntry(jobId, "αヒートマップ", "alpha", status.DebugImages.AlphaUrl);
-        AddAutoDebugEntry(jobId, "ロゴ輝度ヒートマップ", "logoy", status.DebugImages.LogoYUrl);
-        AddAutoDebugEntry(jobId, "一致度ヒートマップ", "consistency", status.DebugImages.ConsistencyUrl);
-        AddAutoDebugEntry(jobId, "前景分散ヒートマップ", "fgvar", status.DebugImages.FgVarUrl);
-        AddAutoDebugEntry(jobId, "背景分散ヒートマップ", "bgvar", status.DebugImages.BgVarUrl);
-        AddAutoDebugEntry(jobId, "遷移率ヒートマップ", "transition", status.DebugImages.TransitionUrl);
-        AddAutoDebugEntry(jobId, "保持率ヒートマップ", "keeprate", status.DebugImages.KeepRateUrl);
-        AddAutoDebugEntry(jobId, "採用スコア寄与マップ", "accepted", status.DebugImages.AcceptedUrl);
-
-        if (!string.IsNullOrEmpty(status.DebugImages.ScoreUrl))
-        {
-            _autoPass2PrepLogoUrl = BuildAutoDebugKindUrl(jobId, "pass2prep-logo");
-        }
-        if (!string.IsNullOrEmpty(status.DebugImages.BinaryUrl))
-        {
-            _autoPass2PrepMaskUrl = BuildAutoDebugKindUrl(jobId, "pass2prep-mask");
-        }
     }
 
     private void UpdateProgress(LogoAnalyzeStatus? status)
@@ -680,43 +401,6 @@ else
 
         _progressValue = value;
         _progressDisplay = $"Pass {pass}: {value * 100:0}%";
-    }
-
-    private void UpdateAutoDetectProgress(LogoAutoDetectStatus? status)
-    {
-        if (status == null)
-        {
-            _autoProgressValue = 0;
-            _autoStageProgressValue = 0;
-            _autoProgressDisplay = "0%";
-            _autoStageDisplay = "Stage 0/4";
-            _autoDebugEntries.Clear();
-            _autoPass2PrepLogoUrl = null;
-            _autoPass2PrepMaskUrl = null;
-            return;
-        }
-
-        var stage = Math.Max(0, status.Stage);
-        var progress = status.Progress > 1.0 ? status.Progress / 100.0 : status.Progress;
-        var stageProgress = status.StageProgress > 1.0 ? status.StageProgress / 100.0 : status.StageProgress;
-        progress = Math.Max(0.0, Math.Min(1.0, progress));
-        stageProgress = Math.Max(0.0, Math.Min(1.0, stageProgress));
-
-        _autoProgressValue = progress;
-        _autoStageProgressValue = stageProgress;
-        _autoProgressDisplay = $"{progress * 100:0}%";
-        _autoStageDisplay = $"Stage {stage}/4 ({stageProgress * 100:0}%)";
-        _autoStageNameDisplay = string.IsNullOrEmpty(status.StageName) ? "" : $"- {status.StageName}";
-
-        if (status.DetectedRect != null)
-        {
-            _autoRectX = status.DetectedRect.X;
-            _autoRectY = status.DetectedRect.Y;
-            _autoRectW = status.DetectedRect.Width;
-            _autoRectH = status.DetectedRect.Height;
-        }
-
-        UpdateAutoDebugImages(status);
     }
 
     private async Task ApplyResultAsync()
@@ -763,10 +447,6 @@ else
         if (_pollCts != null)
         {
             _pollCts.Cancel();
-        }
-        if (_autoPollCts != null)
-        {
-            _autoPollCts.Cancel();
         }
         if (!string.IsNullOrEmpty(_sessionId))
         {
