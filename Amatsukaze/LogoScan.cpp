@@ -2625,6 +2625,9 @@ namespace {
         static constexpr int kHistBins = 32;
         static constexpr bool kEnableTwoPassFrameGate = true;
         static constexpr bool kEnablePruneBinaryByAnchor = true;
+        // 時間枠をずらす frameGate retry は現状では改善効果が薄く、失敗時の挙動も追いづらくなるため無効化しておく。
+        // retry の実装自体は検証用に残し、必要になったらこのフラグだけ戻す。
+        static constexpr bool kEnableFrameGateRetry = false;
         static constexpr int kFrameGateRetryMax = 3;
         const bool enableTwoPassFrameGate;
         const bool enablePruneBinaryByAnchor;
@@ -3383,7 +3386,7 @@ namespace {
             debugFrameGateRetrySuccessAttempt = 0;
             const int retryStep = std::max(1, searchFrames / 2);
             AutoDetectRect rect = runSingleWindow(srcpath, 0);
-            if (!shouldRetryFrameGateWindow()) {
+            if (!kEnableFrameGateRetry || !shouldRetryFrameGateWindow()) {
                 return rejectWeakPass2FallbackIfNeeded(rect);
             }
             logCtx.infoF(_T("[LogoScan] frameGate retry start: reason=%s step=%d maxRetry=%d"),
