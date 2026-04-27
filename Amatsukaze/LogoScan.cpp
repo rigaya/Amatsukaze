@@ -9262,8 +9262,10 @@ namespace {
             eval.overlapW <= std::max(2, (int)std::round(currentRect.w * 0.12));
         const bool expensiveHeightGrowth =
             heightGrowth >= 6 && compArea <= heightGrowth * 2;
+        // pass2 成功時はフレームゲート済みのため、小さい縦方向成分も局ロゴ本体の一部である
+        // 可能性が高い。小島抑制は pass1/fallback 系の過大マージだけに限定する。
         const bool suspiciousVerticalIsland =
-            verticalOnly && smallIsland && weakOverlap && expensiveHeightGrowth;
+            passIndex != 3 && verticalOnly && smallIsland && weakOverlap && expensiveHeightGrowth;
         eval.accepted =
             (eval.overlap || eval.nearHorizontal || eval.nearVertical || eval.nearDiagonal) &&
             (eval.withinSeedCenterGuard || eval.withinFinalCenterGuard) &&
