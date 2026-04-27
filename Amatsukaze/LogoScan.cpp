@@ -697,6 +697,10 @@ logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo
     alphaValues.reserve(metrics.pixelCount);
     renderedYValues.reserve(metrics.pixelCount);
 
+    metrics.edgeBand = 1;
+    int edgeSidePixels[4] = {};
+    int edgeSideActivePixels[4] = {};
+
     double alphaSum = 0.0;
     double renderedYSum = 0.0;
     for (int y = 0; y < scanh; y++) {
@@ -719,6 +723,24 @@ logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo
             const double denom = A - 1.0f;
             const double logoYValue = (std::abs(denom) < 1e-6) ? 0.0 : (-B / denom);
             const bool active = alpha > 0.03 && std::isfinite(logoYValue) && logoYValue > 0.03 && logoYValue < 1.2;
+            const bool edgeSides[4] = {
+                y < metrics.edgeBand,
+                x >= scanw - metrics.edgeBand,
+                y >= scanh - metrics.edgeBand,
+                x < metrics.edgeBand,
+            };
+            if (edgeSides[0] || edgeSides[1] || edgeSides[2] || edgeSides[3]) {
+                metrics.edgePixels++;
+                if (active) {
+                    metrics.edgeActivePixels++;
+                }
+            }
+            for (int i = 0; i < 4; i++) {
+                if (edgeSides[i]) {
+                    edgeSidePixels[i]++;
+                    edgeSideActivePixels[i] += active ? 1 : 0;
+                }
+            }
             if (active) {
                 metrics.activePixels++;
                 activeUV[(x >> logUVx) + (y >> logUVy) * scanUVw] = 1;
@@ -735,6 +757,16 @@ logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo
 
     metrics.activeAreaRate = metrics.activePixels / (double)metrics.pixelCount;
     metrics.opaqueAreaRate = metrics.opaquePixels / (double)metrics.pixelCount;
+    metrics.edgeActiveRate = metrics.edgePixels > 0
+        ? metrics.edgeActivePixels / (double)metrics.edgePixels
+        : 0.0;
+    metrics.edgeActiveAreaRate = metrics.edgeActivePixels / (double)metrics.pixelCount;
+    for (int i = 0; i < 4; i++) {
+        metrics.edgeSideActiveRate[i] = edgeSidePixels[i] > 0
+            ? edgeSideActivePixels[i] / (double)edgeSidePixels[i]
+            : 0.0;
+        metrics.edgeSideActiveRateMax = std::max(metrics.edgeSideActiveRateMax, metrics.edgeSideActiveRate[i]);
+    }
     metrics.renderedYMean = renderedYSum / metrics.pixelCount;
     metrics.renderedYP99 = QuantileCopy(renderedYValues, 0.99);
     metrics.alphaMean = alphaSum / metrics.pixelCount;
@@ -1177,10 +1209,14 @@ logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serv
 }
 
 void logo::LogoAnalyzer::LogLogoQuality(const tchar* phase) const {
-    ctx.infoF(_T("[GenLogo] quality(%s): active=%d/%d %.4f opaque=%d %.4f renderedY(mean=%.5f,p99=%.5f) alpha(mean=%.5f,p90=%.5f,p99=%.5f) residualY(mean=%.5f,p90=%.5f) residualUV(mean=%.5f,p90=%.5f)"),
+    ctx.infoF(_T("[GenLogo] quality(%s): active=%d/%d %.4f opaque=%d %.4f edge(band=%d active=%d/%d rate=%.4f area=%.4f sideMax=%.4f sides=%.4f/%.4f/%.4f/%.4f) renderedY(mean=%.5f,p99=%.5f) alpha(mean=%.5f,p90=%.5f,p99=%.5f) residualY(mean=%.5f,p90=%.5f) residualUV(mean=%.5f,p90=%.5f)"),
         phase,
         logoQuality.activePixels, logoQuality.pixelCount, logoQuality.activeAreaRate,
         logoQuality.opaquePixels, logoQuality.opaqueAreaRate,
+        logoQuality.edgeBand, logoQuality.edgeActivePixels, logoQuality.edgePixels,
+        logoQuality.edgeActiveRate, logoQuality.edgeActiveAreaRate, logoQuality.edgeSideActiveRateMax,
+        logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1],
+        logoQuality.edgeSideActiveRate[2], logoQuality.edgeSideActiveRate[3],
         logoQuality.renderedYMean, logoQuality.renderedYP99,
         logoQuality.alphaMean, logoQuality.alphaP90, logoQuality.alphaP99,
         logoQuality.yResidualActiveMean, logoQuality.yResidualActiveP90,
@@ -1209,6 +1245,21 @@ void logo::LogoAnalyzer::ValidateLogoQuality() const {
             "Logo quality validation failed: unstable_logo (renderedY_mean=%.5f renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
             logoQuality.renderedYMean, logoQuality.renderedYP99, logoQuality.activeAreaRate,
             logoQuality.alphaMean, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+    }
+    const double edgeAdjacentSideActiveRateMax = std::max(
+        std::max(std::min(logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1]),
+            std::min(logoQuality.edgeSideActiveRate[1], logoQuality.edgeSideActiveRate[2])),
+        std::max(std::min(logoQuality.edgeSideActiveRate[2], logoQuality.edgeSideActiveRate[3]),
+            std::min(logoQuality.edgeSideActiveRate[3], logoQuality.edgeSideActiveRate[0])));
+    if (logoQuality.edgeActiveAreaRate > 0.015 && edgeAdjacentSideActiveRateMax > 0.40) {
+        THROWF(RuntimeException,
+            "Logo quality validation failed: edge_signal (edge_band=%d edge_active=%d/%d edge_rate=%.5f edge_area=%.5f edge_adjacent_side_max=%.5f edge_sides=%.5f/%.5f/%.5f/%.5f active_area=%.5f renderedY_p99=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+            logoQuality.edgeBand, logoQuality.edgeActivePixels, logoQuality.edgePixels,
+            logoQuality.edgeActiveRate, logoQuality.edgeActiveAreaRate, edgeAdjacentSideActiveRateMax,
+            logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1],
+            logoQuality.edgeSideActiveRate[2], logoQuality.edgeSideActiveRate[3],
+            logoQuality.activeAreaRate, logoQuality.renderedYP99, logoQuality.alphaMean,
+            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
     }
 }
 

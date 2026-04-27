@@ -56,8 +56,15 @@ struct LogoQualityMetrics {
     int pixelCount = 0;
     int activePixels = 0;
     int opaquePixels = 0;
+    int edgeBand = 0;
+    int edgePixels = 0;
+    int edgeActivePixels = 0;
     double activeAreaRate = 0.0;
     double opaqueAreaRate = 0.0;
+    double edgeActiveRate = 0.0;
+    double edgeActiveAreaRate = 0.0;
+    double edgeSideActiveRateMax = 0.0;
+    double edgeSideActiveRate[4] = {};
     double renderedYMean = 0.0;
     double renderedYP99 = 0.0;
     double alphaMean = 0.0;
