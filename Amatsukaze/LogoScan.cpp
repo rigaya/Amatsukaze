@@ -9252,12 +9252,25 @@ namespace {
         eval.farAboveSeed =
             compRect.y + compRect.h <= seedRect.y &&
             eval.gapY > std::max(20, (int)std::round(seedRect.h * 0.70));
+        const int heightGrowth = eval.mergedRect.h - currentRect.h;
+        const double currentBoxArea = (double)currentRect.w * currentRect.h;
+        const bool verticalOnly =
+            eval.nearVertical && !eval.overlap && !eval.nearHorizontal && eval.overlapW > 0;
+        const bool smallIsland =
+            compArea <= 8 || compArea <= (int)std::ceil(currentBoxArea * 0.02);
+        const bool weakOverlap =
+            eval.overlapW <= std::max(2, (int)std::round(currentRect.w * 0.12));
+        const bool expensiveHeightGrowth =
+            heightGrowth >= 6 && compArea <= heightGrowth * 2;
+        const bool suspiciousVerticalIsland =
+            verticalOnly && smallIsland && weakOverlap && expensiveHeightGrowth;
         eval.accepted =
             (eval.overlap || eval.nearHorizontal || eval.nearVertical || eval.nearDiagonal) &&
             (eval.withinSeedCenterGuard || eval.withinFinalCenterGuard) &&
             eval.smallCompAllowed &&
             eval.sizeGuardOk &&
-            !eval.farAboveSeed;
+            !eval.farAboveSeed &&
+            !suspiciousVerticalIsland;
         return eval;
     }
 
