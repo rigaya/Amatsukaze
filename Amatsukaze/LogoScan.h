@@ -571,9 +571,11 @@ class LogoAnalyzer : AMTObject {
         ctx.infoF(_T("[GenLogo] dominant fade: index=%d rate=%.1f%% eligibleFadeMin=%d"),
             maxi, numMinFades[maxi] / (float)numFrames * 100.0f, eligibleFadeMin);
 
-        LogoScan logoscan(scanw, scanh, logUVx, logUVy, GetAdjustedBackgroundThreshold());
+        int usedEligibleFadeMin = eligibleFadeMin;
         int eligibleFrames = 0;
-        {
+        auto remakeLogoWithFadeMin = [&](const int fadeMin, int& outEligibleFrames) {
+            LogoScan logoscan(scanw, scanh, logUVx, logUVy, GetAdjustedBackgroundThreshold());
+            outEligibleFrames = 0;
             int scanUVw = scanw >> logUVx;
             int scanUVh = scanh >> logUVy;
             int offU = scanw * scanh;
@@ -584,29 +586,62 @@ class LogoAnalyzer : AMTObject {
                 memScanData.resize(creator->getFrameSize(i));
                 creator->getFrame(i, memScanData.data());
                 // ロゴのあるフレームだけAddFrame
-                if (minFades[i] >= eligibleFadeMin) {
-                    eligibleFrames++;
+                if (minFades[i] >= fadeMin) {
+                    outEligibleFrames++;
                     const auto ptr = memScanData.data();
                     logoscan.AddFrame(ptr, ptr + offU, ptr + offV, scanw, scanUVw, creator->bitdepth());
                 }
 
                 if (((i + 1) % 2000) == 0 || (i + 1) == numFrames) {
-                    ctx.infoF(_T("[GenLogo] eligible frame collect: %d/%d eligible=%d"),
-                        i + 1, numFrames, eligibleFrames);
+                    ctx.infoF(_T("[GenLogo] eligible frame collect: %d/%d fadeMin=%d eligible=%d"),
+                        i + 1, numFrames, fadeMin, outEligibleFrames);
+                }
+            }
+            auto candidate = logoscan.GetLogo(true);
+            if (candidate != nullptr) {
+                logoQuality = logoscan.CalcQualityMetrics(*candidate);
+            }
+            return candidate;
+        };
+
+        // ロゴ作成
+        logodata = remakeLogoWithFadeMin(eligibleFadeMin, eligibleFrames);
+        if (logodata == nullptr && validateQuality) {
+            std::vector<int> retryFadeMins;
+            auto addRetryFadeMin = [&](const int value) {
+                const int fadeMin = std::max(0, std::min(numFade - 1, value));
+                if (fadeMin < eligibleFadeMin &&
+                    std::find(retryFadeMins.begin(), retryFadeMins.end(), fadeMin) == retryFadeMins.end()) {
+                    retryFadeMins.push_back(fadeMin);
+                }
+            };
+            addRetryFadeMin(eligibleFadeMin - 2);
+            addRetryFadeMin(5);
+            addRetryFadeMin(3);
+            addRetryFadeMin(1);
+            addRetryFadeMin(0);
+            for (const int retryFadeMin : retryFadeMins) {
+                int retryEligibleFrames = 0;
+                ctx.infoF(_T("[GenLogo] retry logo remake with relaxed fadeMin=%d (strict=%d)"),
+                    retryFadeMin, eligibleFadeMin);
+                auto retryLogo = remakeLogoWithFadeMin(retryFadeMin, retryEligibleFrames);
+                if (retryLogo != nullptr) {
+                    logodata = std::move(retryLogo);
+                    usedEligibleFadeMin = retryFadeMin;
+                    eligibleFrames = retryEligibleFrames;
+                    ctx.infoF(_T("[GenLogo] relaxed fadeMin succeeded: fadeMin=%d eligible=%d/%d"),
+                        usedEligibleFadeMin, eligibleFrames, numFrames);
+                    break;
                 }
             }
         }
-
-        // ロゴ作成
-        logodata = logoscan.GetLogo(true);
         if (logodata != nullptr) {
-            logoQuality = logoscan.CalcQualityMetrics(*logodata);
             LogLogoQuality(_T("remake"));
         }
 
         if (logodata == nullptr) {
-            THROWF(RuntimeException, "Insufficient logo frames (eligible=%d, total=%d, dominantFade=%d, dominantFadeRate=%.1f%%)",
-                eligibleFrames, numFrames, maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
+            THROWF(RuntimeException, "Insufficient logo frames (eligible=%d, total=%d, eligibleFadeMin=%d, dominantFade=%d, dominantFadeRate=%.1f%%)",
+                eligibleFrames, numFrames, usedEligibleFadeMin, maxi, numMinFades[maxi] / (float)numFrames * 100.0f);
         }
     }
 

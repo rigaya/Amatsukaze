@@ -1246,6 +1246,13 @@ void logo::LogoAnalyzer::ValidateLogoQuality() const {
             logoQuality.renderedYMean, logoQuality.renderedYP99, logoQuality.activeAreaRate,
             logoQuality.alphaMean, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
     }
+    if (logoQuality.renderedYP99 > 0.15 && logoQuality.alphaMean < 0.025
+        && logoQuality.uvResidualActiveP90 > 0.006) {
+        THROWF(RuntimeException,
+            "Logo quality validation failed: chroma_noise (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+            logoQuality.renderedYP99, logoQuality.activeAreaRate, logoQuality.alphaMean,
+            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+    }
     const double edgeAdjacentSideActiveRateMax = std::max(
         std::max(std::min(logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1]),
             std::min(logoQuality.edgeSideActiveRate[1], logoQuality.edgeSideActiveRate[2])),
