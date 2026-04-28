@@ -11,13 +11,105 @@
 #include "LogoScan.h"
 #include "JpegCompress.h"
 
+#if defined(_WIN32) && defined(AMATSUKAZE2DLL)
+#define AMT_LOGO_GUI_WITHOUT_SWSCALE 1
+#endif
+
+#if defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
+#include <type_traits>
+
+extern "C" {
+#include <libavutil/intreadwrite.h>
+#include <libavutil/pixdesc.h>
+}
+
+namespace {
+
+// Logo GUI プレビュー用: naive に BT.709 で YUV→BGR24 変換する(出力は常に 8bit BGR)。
+// - 8bit リミテッド(JPEG以外の通常デコード): Y 16-235 / Cb,Cr は 128 付近を中心とする標準テレビレンジ
+// - YUVJ420P はフルレンジ(8bit)
+// - 10bit(BS4K 等): BT.709 リミテッドの 64..940(Y) / U,V は 512 中心 に相当する係数へ落としてから同じ行列適用
+
+inline uint8_t ClampU8(float v) {
+    if (v <= 0.f)
+        return 0;
+    if (v >= 255.f)
+        return 255;
+    return static_cast<uint8_t>(v + 0.5f);
+}
+
+template<typename TSample, int BitDepth>
+inline void YuvToBgrBt709Limited(TSample y, TSample u, TSample v, uint8_t* bgr) {
+    static_assert(BitDepth == 8 || BitDepth == 10);
+    float y1, cb, cr;
+    if constexpr (BitDepth == 8) {
+        static_assert(std::is_same_v<TSample, uint8_t>, "8bit は uint8_t");
+        const float fy = static_cast<float>(uint8_t(y));
+        const float fu = static_cast<float>(uint8_t(u));
+        const float fv = static_cast<float>(uint8_t(v));
+        y1 = fy - 16.f;
+        cb = fu - 128.f;
+        cr = fv - 128.f;
+    } else if constexpr (BitDepth == 10) {
+        static_assert(std::is_same_v<TSample, uint16_t>, "10bit は uint16_t(下位 Depth bit が有効)");
+        const unsigned mask = (unsigned)((1 << BitDepth) - 1);
+        const unsigned yi = (unsigned(y)) & mask;
+        const unsigned ui = (unsigned(u)) & mask;
+        const unsigned vi = (unsigned(v)) & mask;
+        const float fy8 = 16.f + (float(yi) - 64.f) * (219.f / 876.f);
+        const float fu8 = 128.f + (float(ui) - 512.f) * (112.f / 448.f);
+        const float fv8 = 128.f + (float(vi) - 512.f) * (112.f / 448.f);
+        y1 = fy8 - 16.f;
+        cb = fu8 - 128.f;
+        cr = fv8 - 128.f;
+    }
+    const float r = 1.164383f * y1 + 1.792741f * cr;
+    const float g = 1.164383f * y1 - 0.213249f * cb - 0.532909f * cr;
+    const float b = 1.164383f * y1 + 2.112402f * cb;
+    bgr[0] = ClampU8(b);
+    bgr[1] = ClampU8(g);
+    bgr[2] = ClampU8(r);
+}
+
+// BT.709 / 8bit / full range (YUVJ420P 等)
+inline void YuvToBgrBt709Full(uint8_t y, uint8_t u, uint8_t v, uint8_t* bgr) {
+    const float fy = static_cast<float>(uint8_t(y));
+    const float cb = static_cast<float>(uint8_t(u)) - 128.f;
+    const float cr = static_cast<float>(uint8_t(v)) - 128.f;
+    const float r = fy + 1.5748f * cr;
+    const float g = fy - 0.187324f * cb - 0.468124f * cr;
+    const float b = fy + 1.8556f * cb;
+    bgr[0] = ClampU8(b);
+    bgr[1] = ClampU8(g);
+    bgr[2] = ClampU8(r);
+}
+
+typedef void (*YuvPixelFunc8bit)(uint8_t y, uint8_t u, uint8_t v, uint8_t* bgr);
+
+inline uint16_t ReadU16At(const uint8_t* pixelBytes, bool bigEndian) {
+    return bigEndian ? AV_RB16(pixelBytes) : AV_RL16(pixelBytes);
+}
+
+inline int Normalize10bitWord(uint16_t raw, unsigned shift, unsigned depth) {
+    if (depth == 0u) depth = 10u;
+    if (depth > 14u)
+        depth = 14u;
+    const unsigned mask = (1u << depth) - 1u;
+    return static_cast<int>((unsigned(raw) >> shift) & mask);
+}
+
+} // namespace
+#endif // defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
+
 namespace av {
 
 class GUIMediaFile : public AMTObject {
     InputContext inputCtx;
     CodecContext codecCtx;
     AVStream *videoStream;
+#if !defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
     SwsContext * swsctx;
+#endif
 
     // OnFrameDecodedで直前にデコードされたフレーム
     // まだデコードしてない場合は-1
@@ -44,21 +136,163 @@ class GUIMediaFile : public AMTObject {
     }
 
     void init(AVFrame* frame) {
+#if !defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
         if (swsctx) {
             sws_freeContext(swsctx);
             swsctx = nullptr;
         }
+#endif
         width = frame->width;
         height = frame->height;
+#if !defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
         swsctx = sws_getCachedContext(NULL, width, height,
             (AVPixelFormat)frame->format, width, height,
             AV_PIX_FMT_BGR24, 0, 0, 0, 0);
+#endif
     }
 
+#if defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
+    void ConvertYuv420pToBgr8(uint8_t* bgr, const AVFrame* frame, YuvPixelFunc8bit toBgr) {
+        const uint8_t* yp = frame->data[0];
+        const uint8_t* up = frame->data[1];
+        const uint8_t* vp = frame->data[2];
+        const int ly = frame->linesize[0];
+        const int lu = frame->linesize[1];
+        const int lv = frame->linesize[2];
+        const int w = frame->width;
+        const int h = frame->height;
+        for (int y = 0; y < h; ++y) {
+            uint8_t* row = bgr + y * w * 3;
+            const int y2 = y >> 1;
+            for (int x = 0; x < w; ++x) {
+                const int x2 = x >> 1;
+                const uint8_t Y = yp[y * ly + x];
+                const uint8_t U = up[y2 * lu + x2];
+                const uint8_t V = vp[y2 * lv + x2];
+                toBgr(Y, U, V, row + x * 3);
+            }
+        }
+    }
+
+    // AV_PIX_FMT_YUV420P10*: プラナ 10bit(各サンプル 16bit 字に格納、デスクリプタで shift/deep)。
+    void ConvertYuv420pPlanar10ToBgr(uint8_t* bgr, const AVFrame* frame, bool pixelBigEndian, const AVPixFmtDescriptor* d) {
+        const uint8_t* yPlane = frame->data[0];
+        const uint8_t* uPlane = frame->data[1];
+        const uint8_t* vPlane = frame->data[2];
+        const int ly = frame->linesize[0];
+        const int lu = frame->linesize[1];
+        const int lv = frame->linesize[2];
+        const unsigned shY = d->comp[0].shift;
+        const unsigned dpY = d->comp[0].depth ? d->comp[0].depth : 10u;
+        const unsigned shU = d->comp[1].shift;
+        const unsigned dpU = d->comp[1].depth ? d->comp[1].depth : 10u;
+        const unsigned shV = d->comp[2].shift;
+        const unsigned dpV = d->comp[2].depth ? d->comp[2].depth : 10u;
+        const int w = frame->width;
+        const int h = frame->height;
+        for (int y = 0; y < h; ++y) {
+            uint8_t* row = bgr + y * w * 3;
+            const int y2 = y >> 1;
+            for (int x = 0; x < w; ++x) {
+                const int x2 = x >> 1;
+                const uint16_t rawY = ReadU16At(yPlane + ly * y + x * 2, pixelBigEndian);
+                const uint16_t rawU = ReadU16At(uPlane + lu * y2 + x2 * 2, pixelBigEndian);
+                const uint16_t rawV = ReadU16At(vPlane + lv * y2 + x2 * 2, pixelBigEndian);
+                const unsigned normY = static_cast<unsigned>(Normalize10bitWord(rawY, shY, dpY)) & 0x3FFu;
+                const unsigned normU = static_cast<unsigned>(Normalize10bitWord(rawU, shU, dpU)) & 0x3FFu;
+                const unsigned normV = static_cast<unsigned>(Normalize10bitWord(rawV, shV, dpV)) & 0x3FFu;
+                YuvToBgrBt709Limited<uint16_t, 10>(static_cast<uint16_t>(normY), static_cast<uint16_t>(normU),
+                    static_cast<uint16_t>(normV), row + x * 3);
+            }
+        }
+    }
+
+    // NV12/NV21: 8bit
+    void ConvertNvToBgr8(uint8_t* bgr, const AVFrame* frame, bool nv21, YuvPixelFunc8bit toBgr) {
+        const uint8_t* yp = frame->data[0];
+        const uint8_t* inter = frame->data[1];
+        const int ly = frame->linesize[0];
+        const int luv = frame->linesize[1];
+        const int w = frame->width;
+        const int h = frame->height;
+        const int uIndex = nv21 ? 1 : 0;
+        const int vIndex = nv21 ? 0 : 1;
+        for (int y = 0; y < h; ++y) {
+            uint8_t* row = bgr + y * w * 3;
+            const int y2 = y >> 1;
+            for (int x = 0; x < w; ++x) {
+                const int x2 = x >> 1;
+                const uint8_t Y = yp[y * ly + x];
+                const uint8_t U = inter[y2 * luv + x2 * 2 + uIndex];
+                const uint8_t V = inter[y2 * luv + x2 * 2 + vIndex];
+                toBgr(Y, U, V, row + x * 3);
+            }
+        }
+    }
+
+    // P010: NV12 相当の 10bit(高位に有効 bit、libavutil デスクリプタに従う)
+    void ConvertP010ToBgr(uint8_t* bgr, const AVFrame* frame, bool pixelBigEndian, const AVPixFmtDescriptor* d) {
+        const uint8_t* yPlane = frame->data[0];
+        const uint8_t* uvPlane = frame->data[1];
+        const int ly = frame->linesize[0];
+        const int luv = frame->linesize[1];
+        const unsigned shY = d->comp[0].shift;
+        const unsigned dpY = d->comp[0].depth ? d->comp[0].depth : 10u;
+        const unsigned shU = d->comp[1].shift;
+        const unsigned dpU = d->comp[1].depth ? d->comp[1].depth : 10u;
+        const unsigned shV = d->comp[2].shift;
+        const unsigned dpV = d->comp[2].depth ? d->comp[2].depth : 10u;
+        const int w = frame->width;
+        const int h = frame->height;
+        for (int y = 0; y < h; ++y) {
+            uint8_t* row = bgr + y * w * 3;
+            const int y2 = y >> 1;
+            for (int x = 0; x < w; ++x) {
+                const int x2 = x >> 1;
+                const uint16_t rawY = ReadU16At(yPlane + ly * y + x * 2, pixelBigEndian);
+                const uint16_t rawU = ReadU16At(uvPlane + luv * y2 + x2 * 4, pixelBigEndian);
+                const uint16_t rawV = ReadU16At(uvPlane + luv * y2 + x2 * 4 + 2, pixelBigEndian);
+                const unsigned normY = static_cast<unsigned>(Normalize10bitWord(rawY, shY, dpY)) & 0x3FFu;
+                const unsigned normU = static_cast<unsigned>(Normalize10bitWord(rawU, shU, dpU)) & 0x3FFu;
+                const unsigned normV = static_cast<unsigned>(Normalize10bitWord(rawV, shV, dpV)) & 0x3FFu;
+                YuvToBgrBt709Limited<uint16_t, 10>(static_cast<uint16_t>(normY), static_cast<uint16_t>(normU),
+                    static_cast<uint16_t>(normV), row + x * 3);
+            }
+        }
+    }
+#endif // defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
+
     void ConvertToRGB(uint8_t* rgb, AVFrame* frame) {
+#if defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
+        const auto fmt = static_cast<AVPixelFormat>(frame->format);
+        const AVPixFmtDescriptor* d = av_pix_fmt_desc_get(fmt);
+        if (d == nullptr) {
+            THROW(FormatException, "Logo GUI プレビュー: pixfmtdescriptor が取得できません");
+        }
+        if (fmt == AV_PIX_FMT_YUV420P || fmt == AV_PIX_FMT_YUVJ420P) {
+            const bool full = (fmt == AV_PIX_FMT_YUVJ420P);
+            YuvPixelFunc8bit func = full ? YuvToBgrBt709Full : &YuvToBgrBt709Limited<uint8_t, 8>;
+            ConvertYuv420pToBgr8(rgb, frame, func);
+        } else if (fmt == AV_PIX_FMT_YUV420P10LE || fmt == AV_PIX_FMT_YUV420P10BE) {
+            const bool be = (fmt == AV_PIX_FMT_YUV420P10BE);
+            ConvertYuv420pPlanar10ToBgr(rgb, frame, be, d);
+        } else if (fmt == AV_PIX_FMT_NV12) {
+            ConvertNvToBgr8(rgb, frame, false, &YuvToBgrBt709Limited<uint8_t, 8>);
+        } else if (fmt == AV_PIX_FMT_NV21) {
+            ConvertNvToBgr8(rgb, frame, true, &YuvToBgrBt709Limited<uint8_t, 8>);
+        } else if (fmt == AV_PIX_FMT_P010LE || fmt == AV_PIX_FMT_P010BE) {
+            const bool be = (fmt == AV_PIX_FMT_P010BE);
+            ConvertP010ToBgr(rgb, frame, be, d);
+        } else {
+            THROWF(FormatException,
+                "Logo GUI プレビュー: 未対応のピクセル形式です(YUV420 8bit/10bit と NV12/NV21/P010)。format=%d",
+                (int)fmt);
+        }
+#else
         uint8_t * outData[1] = { rgb };
         int outLinesize[1] = { width * 3 };
         sws_scale(swsctx, frame->data, frame->linesize, 0, height, outData, outLinesize);
+#endif
     }
 
     bool DecodeOneFrame(int64_t startpos) {
@@ -129,7 +363,9 @@ public:
         inputCtx(filepath),
         codecCtx(),
         videoStream(nullptr),
+#if !defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
         swsctx(nullptr),
+#endif
         lastDecodeFrame(-1),
         fileSize(0),
         prevframe(),
@@ -151,10 +387,12 @@ public:
         DecodeOneFrame(0);
     }
 
+#if !defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
     ~GUIMediaFile() {
         sws_freeContext(swsctx);
         swsctx = nullptr;
     }
+#endif
 
     void getFrame(uint8_t* rgb, int width, int height) {
         if (this->width == width && this->height && height) {

@@ -28,7 +28,9 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#if !(defined(_WIN32) && defined(AMATSUKAZE2DLL))
 #include <libswscale/swscale.h>
+#endif
 #if ENABLE_FFMPEG_FILTER
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
@@ -39,7 +41,9 @@ extern "C" {
 #pragma comment(lib, "avutil.lib")
 #pragma comment(lib, "avcodec.lib")
 #pragma comment(lib, "avformat.lib")
+#if !(defined(_WIN32) && defined(AMATSUKAZE2DLL))
 #pragma comment(lib, "swscale.lib")
+#endif
 #if ENABLE_FFMPEG_FILTER
 #pragma comment(lib, "avfilter.lib")
 #endif
