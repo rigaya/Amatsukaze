@@ -3543,6 +3543,15 @@ namespace Amatsukaze.Server
         {
             string dirpath = "logo";
             var message = "ロゴファイルの保存に失敗しました。";
+            if (logoData.IsAutoLogoPendingResult &&
+                logoData.SourceQueueItemId > 0 &&
+                autoLogoPendingResolver != null &&
+                autoLogoPendingResolver.ShouldDiscardAutoResult(logoData.SourceQueueItemId))
+            {
+                return NotifyMessage(
+                    "手動採用済みのため自動ロゴ生成結果を破棄しました: QID=" + logoData.SourceQueueItemId,
+                    false);
+            }
             Directory.CreateDirectory(dirpath);
             string prefix = Path.Combine(dirpath, "SID" + logoData.ServiceId.ToString() + "-");
             try
@@ -3577,6 +3586,10 @@ namespace Amatsukaze.Server
                         catch(IOException) { }
                     }
                     waits.Add(NotifyMessage(message, false));
+                }
+                if (!logoData.IsAutoLogoPendingResult && logoData.SourceQueueItemId > 0)
+                {
+                    autoLogoPendingResolver?.NotifyManualLogoAccepted(logoData.SourceQueueItemId);
                 }
                 return Task.WhenAll(waits);
             }
@@ -3765,6 +3778,11 @@ namespace Amatsukaze.Server
         internal void RequestLogoRescan()
         {
             serviceListUpdated = true;
+        }
+
+        internal void NotifyManualLogoAccepted(int queueItemId)
+        {
+            autoLogoPendingResolver?.NotifyManualLogoAccepted(queueItemId);
         }
 
         internal void TryKickAutoLogoPending(QueueItem item)

@@ -20,6 +20,10 @@ namespace Amatsukaze.Server
         public int ServiceId { get; set; }
         [DataMember]
         public int LogoIdx { get; set; }
+        [DataMember]
+        public int SourceQueueItemId { get; set; }
+        [DataMember]
+        public bool IsAutoLogoPendingResult { get; set; }
     }
 
     public interface IAddTaskServer

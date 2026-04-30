@@ -11,7 +11,14 @@ namespace Amatsukaze.Server
     /// <summary>
     /// ロゴ設定不足でLogoPendingになったタスクに対して、
     /// バックグラウンドでロゴ自動検出→ロゴ解析→採用までを自動実行する。
-    /// 実行は全体で1本に制限し、同一serviceIdの同時実行も行わない。
+    /// 実行は全体で1本に制限し、同一serviceIdの待機・同時実行も行わない。
+    ///
+    /// 自動生成の成否はタスク単位で管理する。
+    /// あるタスクで失敗しても同じserviceIdの別タスクは候補にできるが、
+    /// 失敗したタスク自身はAutoLogoResultがFailedになるため自動再試行しない。
+    ///
+    /// 待機中または実行中に手動ロゴ解析で同じタスクのロゴが採用された場合は、
+    /// 自動生成が完了しても結果を保存せず破棄する。
     /// </summary>
     internal class AutoLogoPendingResolver
     {
@@ -23,6 +30,7 @@ namespace Amatsukaze.Server
         private readonly HashSet<int> queuedTaskIds = new HashSet<int>();
         private readonly HashSet<int> queuedServices = new HashSet<int>();
         private readonly HashSet<int> runningServices = new HashSet<int>();
+        private readonly HashSet<int> manualAcceptedTaskIds = new HashSet<int>();
         private readonly SemaphoreSlim requestSignal = new SemaphoreSlim(0);
 
         private int runningTaskId = -1;
@@ -43,6 +51,37 @@ namespace Amatsukaze.Server
             ScheduleEligiblePendingItems(null);
         }
 
+        public void NotifyManualLogoAccepted(int queueItemId)
+        {
+            if (queueItemId <= 0)
+            {
+                return;
+            }
+
+            lock (sync)
+            {
+                // 手動採用による破棄対象は、このresolverが管理中のタスクだけに限定する。
+                // 通常のロゴ追加や、既に自動処理が終わったタスクの採用履歴を残す必要はない。
+                if (queuedTaskIds.Contains(queueItemId) || runningTaskId == queueItemId)
+                {
+                    manualAcceptedTaskIds.Add(queueItemId);
+                }
+            }
+        }
+
+        public bool ShouldDiscardAutoResult(int queueItemId)
+        {
+            if (queueItemId <= 0)
+            {
+                return false;
+            }
+
+            lock (sync)
+            {
+                return manualAcceptedTaskIds.Contains(queueItemId);
+            }
+        }
+
         private void ScheduleEligiblePendingItems(QueueItem preferredItem)
         {
             var notifyItems = new List<QueueItem>();
@@ -50,6 +89,8 @@ namespace Amatsukaze.Server
 
             lock (sync)
             {
+                // きっかけになったタスクを先に評価し、その後にキュー全体を登録順で再走査する。
+                // これにより、あるタスクの自動生成が失敗しても同じserviceIdの別タスクを次候補にできる。
                 if (preferredItem != null)
                 {
                     shouldSignal |= TryEnqueueNoLock(preferredItem, notifyItems);
@@ -121,6 +162,8 @@ namespace Amatsukaze.Server
             {
                 return false;
             }
+            // 同じserviceIdの複数タスクを同時に待機列へ入れない。
+            // 先行タスクが失敗または成功した後にキュー全体を再走査し、次の候補を選ぶ。
             if (queuedServices.Contains(item.ServiceId))
             {
                 return false;
@@ -138,6 +181,8 @@ namespace Amatsukaze.Server
             {
                 return false;
             }
+            // AutoLogoResultはタスク単位の試行結果。
+            // Failedのタスク自身は自動再試行しないが、同じserviceIdの別タスクはNoneなら候補にできる。
             if (item.AutoLogoResult != AutoLogoResultState.None)
             {
                 return false;
@@ -150,6 +195,8 @@ namespace Amatsukaze.Server
             {
                 return false;
             }
+            // 待機列投入時と実行開始直前の両方で確認する。
+            // 手動採用や別タスクの自動成功でロゴが追加済みなら、自動解析は不要。
             if (HasUsableLogoSetting(item))
             {
                 return false;
@@ -179,9 +226,12 @@ namespace Amatsukaze.Server
                         queuedTaskIds.Remove(request.QueueItemId);
                         queuedServices.Remove(request.ServiceId);
 
+                        // 待機中に手動採用や別タスクの自動成功でロゴが追加されることがある。
+                        // 実行開始直前にも候補条件を再評価し、既に使えるロゴがあれば何もせず捨てる。
                         if (!IsEligibleItem(request.Item) || runningServices.Contains(request.ServiceId))
                         {
                             request.Item.ClearAutoLogoTransientState();
+                            manualAcceptedTaskIds.Remove(request.QueueItemId);
                             skippedItem = request.Item;
                             request = null;
                         }
@@ -235,6 +285,7 @@ namespace Amatsukaze.Server
                             runningTaskId = -1;
                         }
                         runningServices.Remove(request.ServiceId);
+                        manualAcceptedTaskIds.Remove(request.QueueItemId);
                     }
                 }
 
@@ -246,6 +297,8 @@ namespace Amatsukaze.Server
                     : message;
 
                 await server.NotifyQueueItemUpdate(request.Item).ConfigureAwait(false);
+                // 成否確定後にキュー全体を再走査する。
+                // 失敗時は同じserviceIdの別タスク、成功時はまだロゴ未取得の別serviceIdが次候補になる。
                 ScheduleEligiblePendingItems();
             }
         }
@@ -391,12 +444,23 @@ namespace Amatsukaze.Server
                 serviceId = logo.ServiceId;
             }
 
+            if (ShouldDiscardAutoResult(request.QueueItemId))
+            {
+                var discardMessage = "手動採用済みのため自動ロゴ生成結果を破棄";
+                _ = server.NotifyMessage(
+                    "[AutoLogoPending] " + discardMessage + ": QID=" + request.QueueItemId + ", SID=" + request.ServiceId,
+                    false);
+                return discardMessage;
+            }
+
             var data = File.ReadAllBytes(outpath);
             server.SendLogoFile(new LogoFileData()
             {
                 ServiceId = serviceId,
                 LogoIdx = 1,
-                Data = data
+                Data = data,
+                SourceQueueItemId = request.QueueItemId,
+                IsAutoLogoPendingResult = true
             }).GetAwaiter().GetResult();
             server.RequestLogoRescan();
             WaitForLogoRefresh(serviceId);

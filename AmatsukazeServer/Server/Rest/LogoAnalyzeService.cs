@@ -11,6 +11,7 @@ namespace Amatsukaze.Server.Rest
     internal class LogoAnalyzeJob
     {
         public string Id { get; set; }
+        public int QueueItemId { get; set; }
         public float Progress { get; set; }
         public int NumRead { get; set; }
         public int NumTotal { get; set; }
@@ -107,6 +108,7 @@ namespace Amatsukaze.Server.Rest
             var job = new LogoAnalyzeJob()
             {
                 Id = Guid.NewGuid().ToString("N"),
+                QueueItemId = request.QueueItemId,
                 MaxFrames = request.MaxFrames
             };
             jobs[job.Id] = job;
@@ -514,7 +516,8 @@ namespace Amatsukaze.Server.Rest
                 {
                     ServiceId = serviceId,
                     LogoIdx = 1,
-                    Data = data
+                    Data = data,
+                    SourceQueueItemId = job.QueueItemId
                 }).GetAwaiter().GetResult();
                 server.RequestLogoRescan();
                 return true;
