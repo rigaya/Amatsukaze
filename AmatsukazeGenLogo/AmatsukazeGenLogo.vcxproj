@@ -295,6 +295,9 @@
     <ClCompile Include="AmatsukazeGenLogo.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\common\common.vcxproj">
+      <Project>{cd658b7c-4597-411a-a54d-9958287813f5}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Amatsukaze\Amatsukaze.vcxproj">
       <Project>{4e733a88-e41a-4370-b25f-1626a5f439f1}</Project>
     </ProjectReference>

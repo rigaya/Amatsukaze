@@ -8,6 +8,8 @@
 
 #include "rgy_osdep.h"
 #include "rgy_tchar.h"
+#include "rgy_util.h"
+#include "rgy_codepage.h"
 
 #include <array>
 #include <cerrno>
@@ -34,6 +36,24 @@ namespace fs = std::filesystem;
 namespace {
 
 static const char* kVersion = "dev";
+
+/** std::exception::what() は UTF-8(ToErrorString 経由) と CP932(narrow リテラル) が混在するため、まず UTF-8 として解釈し失敗時は CP932 とみなす */
+tstring ExceptionWhatToTString(const char* what) {
+    if (what == nullptr || what[0] == '\0') {
+        return _T("");
+    }
+#if defined(_WIN32) || defined(_WIN64)
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, what, -1, nullptr, 0) > 0) {
+        return char_to_tstring(what, CODE_PAGE_UTF8);
+    }
+#endif
+    return char_to_tstring(what);
+}
+
+void PrintExceptionStderr(const std::exception& ex) {
+    const tstring msg = ExceptionWhatToTString(ex.what());
+    _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), msg.c_str());
+}
 
 struct Rect {
     int x = 0;
@@ -1016,12 +1036,12 @@ int _tmain(int argc, const TCHAR* argv[]) {
             RGY_FREE_LIBRARY(module);
             return result;
         } catch (const std::exception& ex) {
-            fprintf(stderr, "AmatsukazeGenLogo error: %s\n", ex.what());
+            PrintExceptionStderr(ex);
             RGY_FREE_LIBRARY(module);
             return 1;
         }
     } catch (const std::exception& ex) {
-        fprintf(stderr, "AmatsukazeGenLogo error: %s\n", ex.what());
+        PrintExceptionStderr(ex);
         return 1;
     }
 }
