@@ -112,7 +112,7 @@ else
         <tr class="settings-check-row">
             <td colspan="2">
                 <label class="settings-check">
-                    <input type="checkbox" checked="@GetBoolValue(AutoLogoPendingEnabledField)" @onchange="@(e => OnBoolChange(e, AutoLogoPendingEnabledField))" />
+                    <input type="checkbox" checked="@(!GetBoolValue(AutoLogoPendingDisabledField))" @onchange="OnAutoLogoPendingEnabledChange" />
                     自動でロゴを解析・採用する
                 </label>
             </td>
@@ -452,7 +452,7 @@ else
     private const string ProcessPriorityField = "ProcessPriority";
     private const string AffinitySettingField = "AffinitySetting";
     private const string ExclusiveBatExecField = "ExclusiveBatExec";
-    private const string AutoLogoPendingEnabledField = "AutoLogoPendingEnabled";
+    private const string AutoLogoPendingDisabledField = "AutoLogoPendingDisabled";
     private const string EnableX265VfrField = "EnableX265VFRTimeFactor";
     private const string X265VfrFactorField = "X265VFRTimeFactor";
     private const string EnableRunHoursField = "EnableRunHours";
@@ -681,7 +681,7 @@ else
         _boolValues[NoActionExeField] = GetBool(NoActionExeField);
         _boolValues[ExecuteBatchAfterQueueField] = GetBool(ExecuteBatchAfterQueueField);
         _boolValues[ExclusiveBatExecField] = GetBool(ExclusiveBatExecField);
-        _boolValues[AutoLogoPendingEnabledField] = GetBool(AutoLogoPendingEnabledField);
+        _boolValues[AutoLogoPendingDisabledField] = GetBool(AutoLogoPendingDisabledField);
 
         _intValues[DeleteOldLogsDaysField] = NormalizeIntValue(DeleteOldLogsDaysField, GetInt(DeleteOldLogsDaysField));
         _intValues[NumGpuField] = NormalizeIntValue(NumGpuField, GetInt(NumGpuField));
@@ -816,6 +816,11 @@ else
     private void OnBoolChange(ChangeEventArgs e, string name)
     {
         _boolValues[name] = e.Value is bool b && b;
+    }
+
+    private void OnAutoLogoPendingEnabledChange(ChangeEventArgs e)
+    {
+        _boolValues[AutoLogoPendingDisabledField] = !(e.Value is bool b && b);
     }
 
     private void OnX265VfrDefaultChange(ChangeEventArgs e)

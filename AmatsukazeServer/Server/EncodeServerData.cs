@@ -775,12 +775,6 @@ namespace Amatsukaze.Server
     [DataContract]
     public class Setting : IExtensibleDataObject
     {
-        [OnDeserializing]
-        private void OnDeserializing(StreamingContext context)
-        {
-            AutoLogoPendingEnabled = true;
-        }
-
         [DataMember]
         public string AmatsukazePath { get; set; }
         [DataMember]
@@ -861,7 +855,7 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool LogoPendAsError { get; set; }
         [DataMember]
-        public bool AutoLogoPendingEnabled { get; set; }
+        public bool AutoLogoPendingDisabled { get; set; }
         [DataMember]
         public int AutoLogoPendingDivX { get; set; }
         [DataMember]

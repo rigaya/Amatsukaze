@@ -997,7 +997,7 @@ namespace Amatsukaze.Server
             {
                 if (AppData_.setting != null)
                 {
-                    AppData_.setting.AutoLogoPendingEnabled = true;
+                    AppData_.setting.AutoLogoPendingDisabled = false;
                     AppData_.setting.AutoLogoPendingDivX = 5;
                     AppData_.setting.AutoLogoPendingDivY = 5;
                     AppData_.setting.AutoLogoPendingSearchFrames = 10000;
@@ -1468,7 +1468,7 @@ namespace Amatsukaze.Server
                 NumParallel = 1,
                 NumParallelLogoAnalysis = 0,
                 DeleteOldLogsDays = 180,
-                AutoLogoPendingEnabled = true
+                AutoLogoPendingDisabled = false
             });
             NormalizeTrimAdjustSettings(setting);
             NormalizeAutoLogoPendingSettings(setting);
@@ -2366,7 +2366,7 @@ namespace Amatsukaze.Server
                     sb.Append(" --no-delogo");
                 }
                 sb.Append(" --auto-logo-detect ")
-                    .Append(setting.AutoLogoPendingEnabled ? 1 : 0);
+                    .Append(setting.AutoLogoPendingDisabled ? 0 : 1);
                 if (profile.ParallelLogoAnalysis)
                 {
                     sb.Append(" --parallel-logo-analysis ");

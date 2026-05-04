@@ -512,7 +512,7 @@ namespace Amatsukaze.Server
 
         private bool IsEnabled()
         {
-            return server.AppData_ != null && server.AppData_.setting != null && server.AppData_.setting.AutoLogoPendingEnabled;
+            return server.AppData_ != null && server.AppData_.setting != null && server.AppData_.setting.AutoLogoPendingDisabled == false;
         }
 
         private class AutoRequest
