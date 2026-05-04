@@ -3530,15 +3530,15 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        #region AutoLogoPendingEnabled変更通知プロパティ
-        public bool AutoLogoPendingEnabled
+        #region AutoLogoPendingDisabled変更通知プロパティ
+        public bool AutoLogoPendingDisabled
         {
-            get { return !Model.AutoLogoPendingDisabled; }
+            get { return Model.AutoLogoPendingDisabled; }
             set
             {
-                if (Model.AutoLogoPendingDisabled == !value)
+                if (Model.AutoLogoPendingDisabled == value)
                     return;
-                Model.AutoLogoPendingDisabled = !value;
+                Model.AutoLogoPendingDisabled = value;
                 RaisePropertyChanged();
             }
         }
