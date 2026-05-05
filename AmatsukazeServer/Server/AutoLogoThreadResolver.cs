@@ -12,7 +12,7 @@ namespace Amatsukaze.Server
             }
 
             var logical = Math.Max(1, Environment.ProcessorCount);
-            return Math.Clamp(logical - 2, 1, 16);
+            return Math.Clamp(logical - 4, 1, 16);
         }
     }
 }
