@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,23 +38,18 @@ namespace {
 
 static const char* kVersion = "dev";
 
-/** std::exception::what() は UTF-8(ToErrorString 経由) と CP932(narrow リテラル) が混在するため、まず UTF-8 として解釈し失敗時は CP932 とみなす */
-tstring ExceptionWhatToTString(const char* what) {
-    if (what == nullptr || what[0] == '\0') {
-        return _T("");
-    }
-#if defined(_WIN32) || defined(_WIN64)
-    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, what, -1, nullptr, 0) > 0) {
-        return char_to_tstring(what, CODE_PAGE_UTF8);
-    }
-#endif
-    return char_to_tstring(what);
-}
-
-void PrintExceptionStderr(const std::exception& ex) {
-    const tstring msg = ExceptionWhatToTString(ex.what());
-    _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), msg.c_str());
-}
+enum : int {
+    ERR_PARSE_BASE = -100,
+    ERR_RUNTIME_BASE = 100,
+    ERR_RUNTIME_EXE_PATH = 101,
+    ERR_RUNTIME_LOAD_SYMBOL = 102,
+    ERR_RUNTIME_INPUT_NOT_FOUND = 103,
+    ERR_RUNTIME_CONTEXT_CREATE = 104,
+    ERR_RUNTIME_SERVICE_ID = 105,
+    ERR_RUNTIME_OUTPUT_NAME = 106,
+    ERR_RUNTIME_OUTPUT_PLACE = 107,
+    ERR_RUNTIME_NATIVE = 108,
+};
 
 struct Rect {
     int x = 0;
@@ -334,7 +330,7 @@ void PrintUsage() {
         _T("      --aviutl-lgd                          AviUtl向けlgdを保存\n")
         _T("      --output-logo-image <path>            ロゴ画像をJPEGで保存\n")
         _T("      --debug-dir <path>                    自動ロゴ枠検出デバッグ画像出力先\n")
-        _T("      --help                                このヘルプを表示\n")
+        _T("  -h, --help, /?                            このヘルプを表示\n")
         _T("      --version                             バージョンを表示\n"));
 }
 
@@ -346,41 +342,25 @@ void PrintVersion() {
 #endif
 }
 
-std::string ToErrorString(const tstring& message) {
-#if defined(_WIN32) || defined(_WIN64)
-    if (message.empty()) {
-        return std::string();
-    }
-    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (utf8Len <= 0) {
-        return std::string("argument error");
-    }
-    std::string utf8((size_t)utf8Len - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, message.c_str(), -1, utf8.data(), utf8Len, nullptr, nullptr);
-    return utf8;
-#else
-    return message;
-#endif
-}
-
-[[noreturn]] void ThrowArgError(const tstring& message) {
-    throw std::runtime_error(ToErrorString(message));
-}
-
-int ParseInt(const tstring& value, const TCHAR* optionName) {
+bool ParseInt(const tstring& value, const TCHAR* optionName, int& outValue, int& errCode) {
     try {
         size_t pos = 0;
         const int result = std::stoi(value, &pos, 10);
         if (pos != value.size()) {
-            ThrowArgError(tstring(optionName) + _T(" の値が不正です"));
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s の値が不正です\n"), optionName);
+            errCode = ERR_PARSE_BASE - 2;
+            return false;
         }
-        return result;
+        outValue = result;
+        return true;
     } catch (...) {
-        ThrowArgError(tstring(optionName) + _T(" の値が不正です"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s の値が不正です\n"), optionName);
+        errCode = ERR_PARSE_BASE - 2;
+        return false;
     }
 }
 
-Rect ParseRect(const tstring& value) {
+bool ParseRect(const tstring& value, Rect& outRect, int& errCode) {
     std::array<int, 4> values = {};
     size_t start = 0;
     for (int i = 0; i < 4; i++) {
@@ -388,96 +368,138 @@ Rect ParseRect(const tstring& value) {
         if (i == 3) {
             end = tstring::npos;
         } else if (end == tstring::npos) {
-            ThrowArgError(_T("--logo-range の形式は x,y,w,h です"));
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: --logo-range の形式は x,y,w,h です\n"));
+            errCode = ERR_PARSE_BASE - 3;
+            return false;
         }
         const tstring part = value.substr(start, (end == tstring::npos) ? tstring::npos : (end - start));
-        values[i] = ParseInt(part, _T("--logo-range"));
+        if (!ParseInt(part, _T("--logo-range"), values[i], errCode)) {
+            return false;
+        }
         start = (end == tstring::npos) ? end : end + 1;
     }
     if (values[2] <= 0 || values[3] <= 0) {
-        ThrowArgError(_T("--logo-range の幅と高さは1以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: --logo-range の幅と高さは1以上で指定してください\n"));
+        errCode = ERR_PARSE_BASE - 4;
+        return false;
     }
-    return Rect{ values[0], values[1], values[2], values[3] };
+    outRect = Rect{ values[0], values[1], values[2], values[3] };
+    return true;
 }
 
-Options ParseArgs(int argc, const TCHAR* argv[]) {
-    Options opt;
+int ParseArgs(int argc, const TCHAR* argv[], Options& opt) {
     for (int i = 1; i < argc; i++) {
         const tstring key = argv[i];
-        auto requireValue = [&](const TCHAR* optionName) -> tstring {
+        auto requireValue = [&](const TCHAR* optionName, tstring& outValue) -> bool {
             if (i + 1 >= argc) {
-                ThrowArgError(tstring(optionName) + _T(" の値が不足しています"));
+                _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s の値が不足しています\n"), optionName);
+                return false;
             }
-            return argv[++i];
+            outValue = argv[++i];
+            return true;
         };
 
         if (key == _T("-i") || key == _T("--input")) {
-            opt.input = requireValue(key.c_str());
+            if (!requireValue(key.c_str(), opt.input)) return ERR_PARSE_BASE - 1;
         } else if (key == _T("-o") || key == _T("--output")) {
-            opt.output = requireValue(key.c_str());
+            if (!requireValue(key.c_str(), opt.output)) return ERR_PARSE_BASE - 1;
         } else if (key == _T("--logo-range")) {
-            opt.logoRange = ParseRect(requireValue(key.c_str()));
+            tstring value;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            Rect rect{};
+            int errCode = 0;
+            if (!ParseRect(value, rect, errCode)) return errCode;
+            opt.logoRange = rect;
         } else if (key == _T("--auto-logo-detect-search-frames")) {
-            opt.autoSearchFrames = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoSearchFrames, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-div-x")) {
-            opt.autoDivX = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoDivX, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-div-y")) {
-            opt.autoDivY = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoDivY, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-block-size")) {
-            opt.autoBlockSize = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoBlockSize, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-threshold")) {
-            opt.autoThreshold = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoThreshold, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-margin-x")) {
-            opt.autoMarginX = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoMarginX, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-margin-y")) {
-            opt.autoMarginY = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoMarginY, errCode)) return errCode;
         } else if (key == _T("--auto-logo-detect-threads")) {
-            opt.autoThreads = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.autoThreads, errCode)) return errCode;
         } else if (key == _T("--logo-gen-threshold")) {
-            opt.logoGenThreshold = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.logoGenThreshold, errCode)) return errCode;
         } else if (key == _T("--logo-gen-samples")) {
-            opt.logoGenSamples = ParseInt(requireValue(key.c_str()), key.c_str());
+            tstring value; int errCode = 0;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            if (!ParseInt(value, key.c_str(), opt.logoGenSamples, errCode)) return errCode;
         } else if (key == _T("--aviutl-lgd")) {
             opt.aviutlLgd = true;
         } else if (key == _T("--output-logo-image")) {
-            opt.logoImagePath = requireValue(key.c_str());
+            if (!requireValue(key.c_str(), opt.logoImagePath)) return ERR_PARSE_BASE - 1;
         } else if (key == _T("--debug-dir")) {
-            opt.debugDir = requireValue(key.c_str());
-        } else if (key == _T("--help")) {
+            if (!requireValue(key.c_str(), opt.debugDir)) return ERR_PARSE_BASE - 1;
+        } else if (key == _T("-h") || key == _T("--help") || key == _T("/?")) {
             opt.showHelp = true;
         } else if (key == _T("--version")) {
             opt.showVersion = true;
         } else {
-            ThrowArgError(_T("不明なオプションです: ") + key);
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: 不明なオプションです: %s\n"), key.c_str());
+            return ERR_PARSE_BASE - 5;
         }
     }
 
     if (opt.showHelp || opt.showVersion) {
-        return opt;
+        return 0;
     }
     if (opt.input.empty()) {
-        ThrowArgError(_T("--input を指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: --input を指定してください\n"));
+        return ERR_PARSE_BASE - 6;
     }
     if (opt.output.empty()) {
-        ThrowArgError(_T("--output を指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: --output を指定してください\n"));
+        return ERR_PARSE_BASE - 6;
     }
     if (opt.autoDivX <= 0 || opt.autoDivY <= 0) {
-        ThrowArgError(_T("div-x/div-y は1以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: div-x/div-y は1以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.autoSearchFrames < 100) {
-        ThrowArgError(_T("search-frames は100以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: search-frames は100以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.autoBlockSize < 4) {
-        ThrowArgError(_T("block-size は4以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: block-size は4以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.autoThreshold < 1) {
-        ThrowArgError(_T("auto-detect-threshold は1以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: auto-detect-threshold は1以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.autoMarginX < 0 || opt.autoMarginY < 0) {
-        ThrowArgError(_T("margin-x/margin-y は0以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: margin-x/margin-y は0以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.autoThreads < 0) {
-        ThrowArgError(_T("auto-logo-detect-threads は0以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: auto-logo-detect-threads は0以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.logoGenThreshold == -1) {
         opt.logoGenThreshold = opt.autoThreshold;
@@ -486,71 +508,77 @@ Options ParseArgs(int argc, const TCHAR* argv[]) {
         opt.logoGenSamples = opt.autoSearchFrames;
     }
     if (opt.logoGenThreshold < 1) {
-        ThrowArgError(_T("logo-gen-threshold は1以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: logo-gen-threshold は1以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
     if (opt.logoGenSamples < 1) {
-        ThrowArgError(_T("logo-gen-samples は1以上で指定してください"));
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: logo-gen-samples は1以上で指定してください\n"));
+        return ERR_PARSE_BASE - 7;
     }
-    return opt;
+    return 0;
 }
 
-fs::path GetExecutablePath() {
+int GetExecutablePath(fs::path& exePath) {
 #if defined(_WIN32) || defined(_WIN64)
     std::wstring buffer(32768, L'\0');
     DWORD len = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
     if (len == 0 || len >= buffer.size()) {
-        throw std::runtime_error("GetModuleFileNameW failed");
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: GetModuleFileNameW failed\n"));
+        return ERR_RUNTIME_EXE_PATH;
     }
     buffer.resize(len);
-    return fs::path(buffer);
+    exePath = fs::path(buffer);
+    return 0;
 #else
     std::vector<char> buffer(32768, '\0');
     ssize_t len = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
     if (len <= 0) {
-        throw std::runtime_error("readlink(/proc/self/exe) failed");
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: readlink(/proc/self/exe) failed\n"));
+        return ERR_RUNTIME_EXE_PATH;
     }
     buffer[(size_t)len] = '\0';
-    return fs::path(buffer.data());
+    exePath = fs::path(buffer.data());
+    return 0;
 #endif
 }
 
 template<typename T>
-T LoadSymbol(HMODULE module, const char* name) {
-    auto symbol = reinterpret_cast<T>(RGY_GET_PROC_ADDRESS(module, name));
+bool LoadSymbol(HMODULE module, const char* name, T& symbol) {
+    symbol = reinterpret_cast<T>(RGY_GET_PROC_ADDRESS(module, name));
     if (symbol == nullptr) {
-        throw std::runtime_error(std::string("Failed to load symbol: ") + name);
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: Failed to load symbol: %hs\n"), name);
+        return false;
     }
-    return symbol;
+    return true;
 }
 
-NativeApi LoadNativeApi(HMODULE module) {
-    NativeApi api;
-    api.InitAmatsukazeDLL = LoadSymbol<InitAmatsukazeDLLFunc>(module, "InitAmatsukazeDLL");
-    api.AMTContext_Create = LoadSymbol<AMTContextCreateFunc>(module, "AMTContext_Create");
-    api.ATMContext_Delete = LoadSymbol<AMTContextDeleteFunc>(module, "ATMContext_Delete");
-    api.AMTContext_GetError = LoadSymbol<AMTContextGetErrorFunc>(module, "AMTContext_GetError");
-    api.TsInfo_Create = LoadSymbol<TsInfoCreateFunc>(module, "TsInfo_Create");
-    api.TsInfo_Delete = LoadSymbol<TsInfoDeleteFunc>(module, "TsInfo_Delete");
-    api.TsInfo_ReadFile = LoadSymbol<TsInfoReadFileFunc>(module, "TsInfo_ReadFile");
-    api.TsInfo_HasServiceInfo = LoadSymbol<TsInfoHasServiceInfoFunc>(module, "TsInfo_HasServiceInfo");
-    api.TsInfo_GetDay = LoadSymbol<TsInfoGetDayFunc>(module, "TsInfo_GetDay");
-    api.TsInfo_GetTime = LoadSymbol<TsInfoGetTimeFunc>(module, "TsInfo_GetTime");
-    api.TsInfo_GetNumProgram = LoadSymbol<TsInfoGetNumProgramFunc>(module, "TsInfo_GetNumProgram");
-    api.TsInfo_GetProgramInfo = LoadSymbol<TsInfoGetProgramInfoFunc>(module, "TsInfo_GetProgramInfo");
-    api.TsInfo_GetNumService = LoadSymbol<TsInfoGetNumServiceFunc>(module, "TsInfo_GetNumService");
-    api.TsInfo_GetServiceId = LoadSymbol<TsInfoGetServiceIdFunc>(module, "TsInfo_GetServiceId");
-    api.TsInfo_GetServiceName = LoadSymbol<TsInfoGetServiceNameFunc>(module, "TsInfo_GetServiceName");
-    api.ScanLogo = LoadSymbol<ScanLogoFunc>(module, "ScanLogo");
-    api.ScanLogoWithQualityValidation = LoadSymbol<ScanLogoWithQualityValidationFunc>(module, "ScanLogoWithQualityValidation");
-    api.AutoDetectLogoRect = LoadSymbol<AutoDetectLogoRectFunc>(module, "AutoDetectLogoRect");
-    api.LogoFile_Create = LoadSymbol<LogoFileCreateFunc>(module, "LogoFile_Create");
-    api.LogoFile_Delete = LoadSymbol<LogoFileDeleteFunc>(module, "LogoFile_Delete");
-    api.LogoFile_SetServiceId = LoadSymbol<LogoFileSetServiceIdFunc>(module, "LogoFile_SetServiceId");
-    api.LogoFile_SetName = LoadSymbol<LogoFileSetNameFunc>(module, "LogoFile_SetName");
-    api.LogoFile_Save = LoadSymbol<LogoFileSaveFunc>(module, "LogoFile_Save");
-    api.LogoFile_SaveAviUtl = LoadSymbol<LogoFileSaveFunc>(module, "LogoFile_SaveAviUtl");
-    api.LogoFile_SaveImageJpeg = LoadSymbol<LogoFileSaveImageJpegFunc>(module, "LogoFile_SaveImageJpeg");
-    return api;
+int LoadNativeApi(HMODULE module, NativeApi& api) {
+    if (!LoadSymbol(module, "InitAmatsukazeDLL", api.InitAmatsukazeDLL)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "AMTContext_Create", api.AMTContext_Create)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "ATMContext_Delete", api.ATMContext_Delete)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "AMTContext_GetError", api.AMTContext_GetError)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_Create", api.TsInfo_Create)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_Delete", api.TsInfo_Delete)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_ReadFile", api.TsInfo_ReadFile)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_HasServiceInfo", api.TsInfo_HasServiceInfo)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetDay", api.TsInfo_GetDay)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetTime", api.TsInfo_GetTime)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetNumProgram", api.TsInfo_GetNumProgram)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetProgramInfo", api.TsInfo_GetProgramInfo)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetNumService", api.TsInfo_GetNumService)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetServiceId", api.TsInfo_GetServiceId)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "TsInfo_GetServiceName", api.TsInfo_GetServiceName)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "ScanLogo", api.ScanLogo)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "ScanLogoWithQualityValidation", api.ScanLogoWithQualityValidation)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "AutoDetectLogoRect", api.AutoDetectLogoRect)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_Create", api.LogoFile_Create)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_Delete", api.LogoFile_Delete)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_SetServiceId", api.LogoFile_SetServiceId)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_SetName", api.LogoFile_SetName)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_Save", api.LogoFile_Save)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_SaveAviUtl", api.LogoFile_SaveAviUtl)) return ERR_RUNTIME_LOAD_SYMBOL;
+    if (!LoadSymbol(module, "LogoFile_SaveImageJpeg", api.LogoFile_SaveImageJpeg)) return ERR_RUNTIME_LOAD_SYMBOL;
+    return 0;
 }
 
 std::string SafeGetError(const NativeApi& api, void* ctx) {
@@ -729,7 +757,7 @@ DebugPaths MakeDebugPaths(const tstring& dir) {
     };
 }
 
-int ResolveServiceId(const NativeApi& api, void* tsInfo) {
+int ResolveServiceId(const NativeApi& api, void* tsInfo, int& serviceId) {
     std::vector<int> videoPrograms;
     const int numPrograms = api.TsInfo_GetNumProgram(tsInfo);
     for (int i = 0; i < numPrograms; i++) {
@@ -743,15 +771,17 @@ int ResolveServiceId(const NativeApi& api, void* tsInfo) {
         }
     }
     if (videoPrograms.size() == 1) {
-        return videoPrograms[0];
+        serviceId = videoPrograms[0];
+        return 0;
     }
 
     const int numServices = api.TsInfo_GetNumService(tsInfo);
     if (numServices == 1) {
-        return api.TsInfo_GetServiceId(tsInfo, 0);
+        serviceId = api.TsInfo_GetServiceId(tsInfo, 0);
+        return 0;
     }
-
-    throw std::runtime_error("service id を一意に解決できません");
+    _ftprintf(stderr, _T("AmatsukazeGenLogo error: service id を一意に解決できません\n"));
+    return ERR_RUNTIME_SERVICE_ID;
 }
 
 void RemoveIfExists(const tstring& path) {
@@ -781,10 +811,11 @@ tstring MakeOutputTimestamp() {
     return tstring(buffer);
 }
 
-fs::path ResolveFinalOutputPath(const tstring& outputPath) {
+int ResolveFinalOutputPath(const tstring& outputPath, fs::path& finalPath) {
     const fs::path output(outputPath);
     if (!fs::exists(output)) {
-        return output;
+        finalPath = output;
+        return 0;
     }
 
     const fs::path parent = output.has_parent_path() ? output.parent_path() : fs::current_path();
@@ -802,32 +833,69 @@ fs::path ResolveFinalOutputPath(const tstring& outputPath) {
             _ftprintf(stderr,
                 _T("出力先に既存ファイルがあるため、別名で保存します: %s -> %s\n"),
                 output.c_str(), candidate.c_str());
-            return candidate;
+            finalPath = candidate;
+            return 0;
         }
     }
-
-    throw std::runtime_error("退避用の出力ファイル名を決定できません");
+    _ftprintf(stderr, _T("AmatsukazeGenLogo error: 退避用の出力ファイル名を決定できません\n"));
+    return ERR_RUNTIME_OUTPUT_NAME;
 }
 
-fs::path FinalizeOutput(const tstring& tempPath, const tstring& outputPath) {
-    const fs::path finalPath = ResolveFinalOutputPath(outputPath);
+int FinalizeOutput(const tstring& tempPath, const tstring& outputPath, fs::path& finalPath) {
+    int ret = ResolveFinalOutputPath(outputPath, finalPath);
+    if (ret != 0) {
+        return ret;
+    }
     std::error_code ec;
     fs::rename(fs::path(tempPath), finalPath, ec);
     if (!ec) {
-        return finalPath;
+        return 0;
     }
     fs::copy_file(fs::path(tempPath), finalPath, fs::copy_options::none, ec);
     if (ec) {
-        throw std::runtime_error("出力ファイルの配置に失敗しました");
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: 出力ファイルの配置に失敗しました\n"));
+        return ERR_RUNTIME_OUTPUT_PLACE;
     }
     fs::remove(fs::path(tempPath), ec);
-    return finalPath;
+    return 0;
 }
 
 int Run(const NativeApi& api, const Options& opt) {
+    struct ContextDeleter {
+        const NativeApi* apiPtr = nullptr;
+        void operator()(void* p) const {
+            if (p != nullptr && apiPtr != nullptr) {
+                apiPtr->ATMContext_Delete(p);
+            }
+        }
+    };
+    struct TsInfoDeleter {
+        const NativeApi* apiPtr = nullptr;
+        void operator()(void* p) const {
+            if (p != nullptr && apiPtr != nullptr) {
+                apiPtr->TsInfo_Delete(p);
+            }
+        }
+    };
+    struct LogoDeleter {
+        const NativeApi* apiPtr = nullptr;
+        void operator()(void* p) const {
+            if (p != nullptr && apiPtr != nullptr) {
+                apiPtr->LogoFile_Delete(p);
+            }
+        }
+    };
+    struct ProgressGuard {
+        ~ProgressGuard() {
+            g_autoDetectProgressState = nullptr;
+            g_logoGenProgressState = nullptr;
+        }
+    };
+
     const fs::path inputPath(opt.input);
     if (!fs::exists(inputPath)) {
-        throw std::runtime_error("入力ファイルが存在しません");
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: 入力ファイルが存在しません\n"));
+        return ERR_RUNTIME_INPUT_NOT_FOUND;
     }
     if (fs::path(opt.output).has_parent_path()) {
         fs::create_directories(fs::path(opt.output).parent_path());
@@ -844,160 +912,161 @@ int Run(const NativeApi& api, const Options& opt) {
     RemoveIfExists(tempPaths.tempLogo);
     RemoveIfExists(tempPaths.finalTemp);
 
-    void* ctx = api.AMTContext_Create();
-    if (ctx == nullptr) {
-        throw std::runtime_error("AMTContext_Create に失敗しました");
+    std::unique_ptr<void, ContextDeleter> ctx(api.AMTContext_Create(), ContextDeleter{ &api });
+    if (!ctx) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: AMTContext_Create に失敗しました\n"));
+        return ERR_RUNTIME_CONTEXT_CREATE;
+    }
+    ProgressGuard progressGuard{};
+
+    std::unique_ptr<void, TsInfoDeleter> tsInfo(api.TsInfo_Create(ctx.get()), TsInfoDeleter{ &api });
+    if (!tsInfo) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        return ERR_RUNTIME_NATIVE;
+    }
+    if (api.TsInfo_ReadFile(tsInfo.get(), opt.input.c_str()) == 0) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        return ERR_RUNTIME_NATIVE;
     }
 
-    try {
-        void* tsInfo = api.TsInfo_Create(ctx);
-        if (tsInfo == nullptr) {
-            throw std::runtime_error(SafeGetError(api, ctx));
-        }
-        try {
-            if (api.TsInfo_ReadFile(tsInfo, opt.input.c_str()) == 0) {
-                throw std::runtime_error(SafeGetError(api, ctx));
-            }
+    int serviceId = 0;
+    int ret = ResolveServiceId(api, tsInfo.get(), serviceId);
+    if (ret != 0) {
+        return ret;
+    }
+    PrintCliInfo(_T("start: input=%s output=%s serviceId=%d aviutl=%d debugDir=%s"),
+        opt.input.c_str(), opt.output.c_str(), serviceId, (int)opt.aviutlLgd,
+        detailedDebug ? opt.debugDir.c_str() : _T("<none>"));
+    const bool autoDetectedRect = !opt.logoRange.has_value();
+    Rect rect = opt.logoRange.value_or(Rect{});
+    if (autoDetectedRect) {
+        int x = 0, y = 0, w = 0, h = 0;
+        int rectDetectFail = 0;
+        int logoAnalyzeFail = 0;
+        double pass1ScoreMax = 0.0;
+        double pass2ScoreMax = 0.0;
+        double finalScoreBeforeRescueMax = 0.0;
+        int pass2Entered = 0;
+        int pass2PrepareSucceeded = 0;
+        int pass2CollectSucceeded = 0;
+        int pass2RescueFallbackApplied = 0;
+        int pass2FailBeforeClear = 0;
+        int pass2FrameMaskNonZero = 0;
+        int pass2AcceptedFrames = 0;
+        int pass2SkippedFrames = 0;
+        int frameGateRetryAttemptCount = 0;
+        int frameGateRetrySuccessAttempt = 0;
 
-            const int serviceId = ResolveServiceId(api, tsInfo);
-            PrintCliInfo(_T("start: input=%s output=%s serviceId=%d aviutl=%d debugDir=%s"),
-                opt.input.c_str(), opt.output.c_str(), serviceId, (int)opt.aviutlLgd,
-                detailedDebug ? opt.debugDir.c_str() : _T("<none>"));
-            const bool autoDetectedRect = !opt.logoRange.has_value();
-            Rect rect = opt.logoRange.value_or(Rect{});
-            if (autoDetectedRect) {
-                int x = 0, y = 0, w = 0, h = 0;
-                int rectDetectFail = 0;
-                int logoAnalyzeFail = 0;
-                double pass1ScoreMax = 0.0;
-                double pass2ScoreMax = 0.0;
-                double finalScoreBeforeRescueMax = 0.0;
-                int pass2Entered = 0;
-                int pass2PrepareSucceeded = 0;
-                int pass2CollectSucceeded = 0;
-                int pass2RescueFallbackApplied = 0;
-                int pass2FailBeforeClear = 0;
-                int pass2FrameMaskNonZero = 0;
-                int pass2AcceptedFrames = 0;
-                int pass2SkippedFrames = 0;
-                int frameGateRetryAttemptCount = 0;
-                int frameGateRetrySuccessAttempt = 0;
+        PrintCliInfo(_T("auto detect params: div=%dx%d searchFrames=%d blockSize=%d threshold=%d margin=(%d,%d) threadN=%d detailedDebug=%d"),
+            opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
+            opt.autoMarginX, opt.autoMarginY, opt.autoThreads, (int)detailedDebug);
+        AutoDetectProgressState autoDetectProgressState{};
+        g_autoDetectProgressState = &autoDetectProgressState;
 
-                PrintCliInfo(_T("auto detect params: div=%dx%d searchFrames=%d blockSize=%d threshold=%d margin=(%d,%d) threadN=%d detailedDebug=%d"),
-                    opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
-                    opt.autoMarginX, opt.autoMarginY, opt.autoThreads, (int)detailedDebug);
-                AutoDetectProgressState autoDetectProgressState{};
-                g_autoDetectProgressState = &autoDetectProgressState;
-
-                if (api.AutoDetectLogoRect(
-                    ctx, opt.input.c_str(), serviceId,
-                    opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
-                    opt.autoMarginX, opt.autoMarginY, opt.autoThreads,
-                    &x, &y, &w, &h, &rectDetectFail, &logoAnalyzeFail,
-                    &pass1ScoreMax, &pass2ScoreMax, &finalScoreBeforeRescueMax,
-                    &pass2Entered, &pass2PrepareSucceeded, &pass2CollectSucceeded, &pass2RescueFallbackApplied,
-                    &pass2FailBeforeClear, &pass2FrameMaskNonZero, &pass2AcceptedFrames, &pass2SkippedFrames,
-                    &frameGateRetryAttemptCount, &frameGateRetrySuccessAttempt,
-                    detailedDebug ? debugPaths.score.c_str() : nullptr,
-                    detailedDebug ? debugPaths.binary.c_str() : nullptr,
-                    detailedDebug ? debugPaths.ccl.c_str() : nullptr,
-                    detailedDebug ? debugPaths.count.c_str() : nullptr,
-                    detailedDebug ? debugPaths.a.c_str() : nullptr,
-                    detailedDebug ? debugPaths.b.c_str() : nullptr,
-                    detailedDebug ? debugPaths.alpha.c_str() : nullptr,
-                    detailedDebug ? debugPaths.logoY.c_str() : nullptr,
-                    detailedDebug ? debugPaths.consistency.c_str() : nullptr,
-                    detailedDebug ? debugPaths.fgVar.c_str() : nullptr,
-                    detailedDebug ? debugPaths.bgVar.c_str() : nullptr,
-                    detailedDebug ? debugPaths.transition.c_str() : nullptr,
-                    detailedDebug ? debugPaths.keepRate.c_str() : nullptr,
-                    detailedDebug ? debugPaths.accepted.c_str() : nullptr,
-                    detailedDebug ? 1 : 0,
-                    ReportAutoDetectProgress) == 0) {
-                    g_autoDetectProgressState = nullptr;
-                    throw std::runtime_error(SafeGetError(api, ctx));
-                }
-                g_autoDetectProgressState = nullptr;
-                PrintCliInfo(_T("auto detect result: rect=(%d,%d,%d,%d) rectDetectFail=%d logoAnalyzeFail=%d pass1ScoreMax=%.4f pass2ScoreMax=%.4f finalScoreBeforeRescueMax=%.4f pass2={entered=%d prepare=%d collect=%d fallback=%d acceptedFrames=%d skippedFrames=%d retryAttempt=%d retrySuccess=%d}"),
-                    x, y, w, h, rectDetectFail, logoAnalyzeFail,
-                    pass1ScoreMax, pass2ScoreMax, finalScoreBeforeRescueMax,
-                    pass2Entered, pass2PrepareSucceeded, pass2CollectSucceeded, pass2RescueFallbackApplied,
-                    pass2AcceptedFrames, pass2SkippedFrames, frameGateRetryAttemptCount, frameGateRetrySuccessAttempt);
-                rect = Rect{ x, y, w, h };
-            } else {
-                PrintCliInfo(_T("manual logo rect: rect=(%d,%d,%d,%d)"), rect.x, rect.y, rect.w, rect.h);
-            }
-
-            const Rect aligned = AlignRect(rect);
-            if (aligned.w <= 0 || aligned.h <= 0) {
-                throw std::runtime_error("ロゴ枠が不正です");
-            }
-            PrintCliInfo(_T("logo generate params: rect=(%d,%d,%d,%d) aligned=(%d,%d,%d,%d) threshold=%d maxFrames=%d"),
-                rect.x, rect.y, rect.w, rect.h,
-                aligned.x, aligned.y, aligned.w, aligned.h,
-                opt.logoGenThreshold, opt.logoGenSamples);
-
-            LogoGenProgressState logoGenProgressState{};
-            g_logoGenProgressState = &logoGenProgressState;
-
-            auto scanLogo = autoDetectedRect ? api.ScanLogoWithQualityValidation : api.ScanLogo;
-            if (scanLogo(
-                ctx, opt.input.c_str(), serviceId,
-                tempPaths.workFile.c_str(), tempPaths.tempLogo.c_str(), nullptr,
-                aligned.x, aligned.y, aligned.w, aligned.h,
-                opt.logoGenThreshold, opt.logoGenSamples,
-                ReportAnalyzeProgress) == 0) {
-                g_logoGenProgressState = nullptr;
-                throw std::runtime_error(SafeGetError(api, ctx));
-            }
-            g_logoGenProgressState = nullptr;
-
-            void* logo = api.LogoFile_Create(ctx, tempPaths.tempLogo.c_str());
-            if (logo == nullptr) {
-                throw std::runtime_error(SafeGetError(api, ctx));
-            }
-            try {
-                api.LogoFile_SetServiceId(logo, serviceId);
-                const std::string name = TruncateNameBytes(MakeLogoNameCp932(api, tsInfo, serviceId));
-                api.LogoFile_SetName(logo, name.c_str());
-                const int saveOk = opt.aviutlLgd
-                    ? api.LogoFile_SaveAviUtl(logo, tempPaths.finalTemp.c_str())
-                    : api.LogoFile_Save(logo, tempPaths.finalTemp.c_str());
-                if (saveOk == 0) {
-                    throw std::runtime_error(SafeGetError(api, ctx));
-                }
-                if (!opt.logoImagePath.empty()) {
-                    constexpr int kJpegQuality = 90;
-                    constexpr uint8_t kBgBlack = 0;
-                    if (api.LogoFile_SaveImageJpeg(logo, opt.logoImagePath.c_str(), kJpegQuality, kBgBlack) == 0) {
-                        PrintCliInfo(_T("warning: ロゴ画像のJPEG保存に失敗しました"));
-                    } else {
-                        PrintCliInfo(_T("logo image saved: %s"), opt.logoImagePath.c_str());
-                    }
-                }
-            } catch (...) {
-                api.LogoFile_Delete(logo);
-                throw;
-            }
-            api.LogoFile_Delete(logo);
-            const fs::path savedPath = FinalizeOutput(tempPaths.finalTemp, opt.output);
-            PrintCliInfo(_T("saved: %s"), savedPath.c_str());
-        } catch (...) {
+        if (api.AutoDetectLogoRect(
+            ctx.get(), opt.input.c_str(), serviceId,
+            opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
+            opt.autoMarginX, opt.autoMarginY, opt.autoThreads,
+            &x, &y, &w, &h, &rectDetectFail, &logoAnalyzeFail,
+            &pass1ScoreMax, &pass2ScoreMax, &finalScoreBeforeRescueMax,
+            &pass2Entered, &pass2PrepareSucceeded, &pass2CollectSucceeded, &pass2RescueFallbackApplied,
+            &pass2FailBeforeClear, &pass2FrameMaskNonZero, &pass2AcceptedFrames, &pass2SkippedFrames,
+            &frameGateRetryAttemptCount, &frameGateRetrySuccessAttempt,
+            detailedDebug ? debugPaths.score.c_str() : nullptr,
+            detailedDebug ? debugPaths.binary.c_str() : nullptr,
+            detailedDebug ? debugPaths.ccl.c_str() : nullptr,
+            detailedDebug ? debugPaths.count.c_str() : nullptr,
+            detailedDebug ? debugPaths.a.c_str() : nullptr,
+            detailedDebug ? debugPaths.b.c_str() : nullptr,
+            detailedDebug ? debugPaths.alpha.c_str() : nullptr,
+            detailedDebug ? debugPaths.logoY.c_str() : nullptr,
+            detailedDebug ? debugPaths.consistency.c_str() : nullptr,
+            detailedDebug ? debugPaths.fgVar.c_str() : nullptr,
+            detailedDebug ? debugPaths.bgVar.c_str() : nullptr,
+            detailedDebug ? debugPaths.transition.c_str() : nullptr,
+            detailedDebug ? debugPaths.keepRate.c_str() : nullptr,
+            detailedDebug ? debugPaths.accepted.c_str() : nullptr,
+            detailedDebug ? 1 : 0,
+            ReportAutoDetectProgress) == 0) {
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
             g_autoDetectProgressState = nullptr;
-            g_logoGenProgressState = nullptr;
-            api.TsInfo_Delete(tsInfo);
-            throw;
+            return ERR_RUNTIME_NATIVE;
         }
-        api.TsInfo_Delete(tsInfo);
-    } catch (...) {
-        api.ATMContext_Delete(ctx);
-        RemoveIfExists(tempPaths.finalTemp);
-        RemoveIfExists(tempPaths.tempLogo);
-        RemoveIfExists(tempPaths.workFile);
-        throw;
+        g_autoDetectProgressState = nullptr;
+        PrintCliInfo(_T("auto detect result: rect=(%d,%d,%d,%d) rectDetectFail=%d logoAnalyzeFail=%d pass1ScoreMax=%.4f pass2ScoreMax=%.4f finalScoreBeforeRescueMax=%.4f pass2={entered=%d prepare=%d collect=%d fallback=%d acceptedFrames=%d skippedFrames=%d retryAttempt=%d retrySuccess=%d}"),
+            x, y, w, h, rectDetectFail, logoAnalyzeFail,
+            pass1ScoreMax, pass2ScoreMax, finalScoreBeforeRescueMax,
+            pass2Entered, pass2PrepareSucceeded, pass2CollectSucceeded, pass2RescueFallbackApplied,
+            pass2AcceptedFrames, pass2SkippedFrames, frameGateRetryAttemptCount, frameGateRetrySuccessAttempt);
+        rect = Rect{ x, y, w, h };
+    } else {
+        PrintCliInfo(_T("manual logo rect: rect=(%d,%d,%d,%d)"), rect.x, rect.y, rect.w, rect.h);
     }
 
-    api.ATMContext_Delete(ctx);
+    const Rect aligned = AlignRect(rect);
+    if (aligned.w <= 0 || aligned.h <= 0) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: ロゴ枠が不正です\n"));
+        return ERR_RUNTIME_NATIVE;
+    }
+    PrintCliInfo(_T("logo generate params: rect=(%d,%d,%d,%d) aligned=(%d,%d,%d,%d) threshold=%d maxFrames=%d"),
+        rect.x, rect.y, rect.w, rect.h,
+        aligned.x, aligned.y, aligned.w, aligned.h,
+        opt.logoGenThreshold, opt.logoGenSamples);
+
+    LogoGenProgressState logoGenProgressState{};
+    g_logoGenProgressState = &logoGenProgressState;
+
+    auto scanLogo = autoDetectedRect ? api.ScanLogoWithQualityValidation : api.ScanLogo;
+    if (scanLogo(
+        ctx.get(), opt.input.c_str(), serviceId,
+        tempPaths.workFile.c_str(), tempPaths.tempLogo.c_str(), nullptr,
+        aligned.x, aligned.y, aligned.w, aligned.h,
+        opt.logoGenThreshold, opt.logoGenSamples,
+        ReportAnalyzeProgress) == 0) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        g_logoGenProgressState = nullptr;
+        return ERR_RUNTIME_NATIVE;
+    }
+    g_logoGenProgressState = nullptr;
+
+    std::unique_ptr<void, LogoDeleter> logo(api.LogoFile_Create(ctx.get(), tempPaths.tempLogo.c_str()), LogoDeleter{ &api });
+    if (!logo) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        return ERR_RUNTIME_NATIVE;
+    }
+    api.LogoFile_SetServiceId(logo.get(), serviceId);
+    const std::string name = TruncateNameBytes(MakeLogoNameCp932(api, tsInfo.get(), serviceId));
+    api.LogoFile_SetName(logo.get(), name.c_str());
+    const int saveOk = opt.aviutlLgd
+        ? api.LogoFile_SaveAviUtl(logo.get(), tempPaths.finalTemp.c_str())
+        : api.LogoFile_Save(logo.get(), tempPaths.finalTemp.c_str());
+    if (saveOk == 0) {
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        return ERR_RUNTIME_NATIVE;
+    }
+    if (!opt.logoImagePath.empty()) {
+        constexpr int kJpegQuality = 90;
+        constexpr uint8_t kBgBlack = 0;
+        if (api.LogoFile_SaveImageJpeg(logo.get(), opt.logoImagePath.c_str(), kJpegQuality, kBgBlack) == 0) {
+            PrintCliInfo(_T("warning: ロゴ画像のJPEG保存に失敗しました"));
+            const std::string jpegErr = SafeGetError(api, ctx.get());
+            if (!jpegErr.empty()) {
+                PrintCliInfo(_T("warning: %hs"), jpegErr.c_str());
+            }
+        } else {
+            PrintCliInfo(_T("logo image saved: %s"), opt.logoImagePath.c_str());
+        }
+    }
+    logo.reset();
+    {
+        fs::path savedPath;
+        ret = FinalizeOutput(tempPaths.finalTemp, opt.output, savedPath);
+        if (ret != 0) {
+            return ret;
+        }
+        PrintCliInfo(_T("saved: %s"), savedPath.c_str());
+    }
+    RemoveIfExists(tempPaths.finalTemp);
     RemoveIfExists(tempPaths.tempLogo);
     RemoveIfExists(tempPaths.workFile);
     return 0;
@@ -1006,42 +1075,48 @@ int Run(const NativeApi& api, const Options& opt) {
 } // namespace
 
 int _tmain(int argc, const TCHAR* argv[]) {
-    try {
-        const Options opt = ParseArgs(argc, argv);
-        if (opt.showHelp) {
-            PrintUsage();
-            return 0;
-        }
-        if (opt.showVersion) {
-            PrintVersion();
-            return 0;
-        }
-
-        const fs::path exeDir = GetExecutablePath().parent_path();
 #if defined(_WIN32) || defined(_WIN64)
-        const fs::path dllPath = exeDir / L"Amatsukaze.dll";
-#else
-        const fs::path dllPath = exeDir / "libAmatsukaze.so";
+    _tsetlocale(LC_CTYPE, _T(".UTF-8"));
 #endif
-        auto module = RGY_LOAD_LIBRARY(dllPath.c_str());
-        if (module == nullptr) {
-            _ftprintf(stderr, _T("Failed to load %s\n"), dllPath.c_str());
-            return 5;
-        }
-
-        try {
-            const NativeApi api = LoadNativeApi(module);
-            api.InitAmatsukazeDLL();
-            const int result = Run(api, opt);
-            RGY_FREE_LIBRARY(module);
-            return result;
-        } catch (const std::exception& ex) {
-            PrintExceptionStderr(ex);
-            RGY_FREE_LIBRARY(module);
-            return 1;
-        }
-    } catch (const std::exception& ex) {
-        PrintExceptionStderr(ex);
-        return 1;
+    Options opt;
+    int ret = ParseArgs(argc, argv, opt);
+    if (ret != 0) {
+        return ret;
     }
+    if (opt.showHelp) {
+        PrintUsage();
+        return 0;
+    }
+    if (opt.showVersion) {
+        PrintVersion();
+        return 0;
+    }
+
+    fs::path exePath;
+    ret = GetExecutablePath(exePath);
+    if (ret != 0) {
+        return ret;
+    }
+    const fs::path exeDir = exePath.parent_path();
+#if defined(_WIN32) || defined(_WIN64)
+    const fs::path dllPath = exeDir / L"Amatsukaze.dll";
+#else
+    const fs::path dllPath = exeDir / "libAmatsukaze.so";
+#endif
+    auto module = RGY_LOAD_LIBRARY(dllPath.c_str());
+    if (module == nullptr) {
+        _ftprintf(stderr, _T("Failed to load %s\n"), dllPath.c_str());
+        return 5;
+    }
+
+    NativeApi api;
+    ret = LoadNativeApi(module, api);
+    if (ret != 0) {
+        RGY_FREE_LIBRARY(module);
+        return ret;
+    }
+    api.InitAmatsukazeDLL();
+    ret = Run(api, opt);
+    RGY_FREE_LIBRARY(module);
+    return ret;
 }

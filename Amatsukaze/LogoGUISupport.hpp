@@ -529,8 +529,14 @@ public:
             getImage(rgb.data(), stride, bg);
 
             std::vector<uint8_t> jpegData;
-            if (!jpeg_utils::compressBGRToJpeg(rgb.data(), stride, w, h, quality, jpegData)) {
-                ctx.setError(RuntimeException("JPEG圧縮に失敗しました"));
+            std::string turboJpegDetail;
+            if (!jpeg_utils::compressBGRToJpeg(rgb.data(), stride, w, h, quality, jpegData, &turboJpegDetail)) {
+                std::string mes = "JPEG圧縮に失敗しました";
+                if (!turboJpegDetail.empty()) {
+                    mes += ": ";
+                    mes += turboJpegDetail;
+                }
+                ctx.setError(RuntimeException(mes));
                 return false;
             }
 

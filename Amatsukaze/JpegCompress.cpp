@@ -85,26 +85,44 @@ bool compressBGRToJpeg(
     const uint8_t* bgrData, int stride,
     int width, int height,
     int quality,
-    std::vector<uint8_t>& output)
+    std::vector<uint8_t>& output,
+    std::string* turboJpegErrorDetail)
 {
     tjhandle handle = tj3Init(TJINIT_COMPRESS);
     if (!handle) {
+        if (turboJpegErrorDetail != nullptr) {
+            turboJpegErrorDetail->assign(tjGetErrorStr());
+        }
         return false;
     }
 
     bool success = false;
 
-    tj3Set(handle, TJPARAM_QUALITY, quality);
+    // TurboJPEG 3.x: subsamp の既定は TJSAMP_UNKNOWN のままだと圧縮に失敗する。
+    // YUV 系と同様に明示設定する（cjpeg の既定に合わせ 4:2:0）。
+    if (tj3Set(handle, TJPARAM_SUBSAMP, TJSAMP_420) < 0 ||
+        tj3Set(handle, TJPARAM_QUALITY, quality) < 0) {
+        if (turboJpegErrorDetail != nullptr) {
+            turboJpegErrorDetail->assign(tj3GetErrorStr(handle));
+        }
+        tj3Destroy(handle);
+        output.clear();
+        return false;
+    }
 
     unsigned char* jpegBuf = nullptr;
     size_t jpegSize = 0;
 
-    // packed BGR からJPEGに圧縮
-    if (tj3Compress8(handle, bgrData, width, stride, height, TJPF_BGR, &jpegBuf, &jpegSize) == 0) {
+    // packed BGR からJPEGに圧縮（戻り値は公式サンプル同様 0 成功、負値でエラー）
+    const int compressRc = tj3Compress8(handle, bgrData, width, stride, height, TJPF_BGR, &jpegBuf, &jpegSize);
+    if (compressRc >= 0) {
         output.assign(jpegBuf, jpegBuf + jpegSize);
         success = true;
     } else {
         output.clear();
+        if (turboJpegErrorDetail != nullptr) {
+            turboJpegErrorDetail->assign(tj3GetErrorStr(handle));
+        }
     }
 
     tj3Free(jpegBuf);
