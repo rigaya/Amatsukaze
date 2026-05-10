@@ -1498,7 +1498,10 @@ namespace Amatsukaze.Server
                         try
                         {
                             var profileString = item.Profile.ToLongString();
-                            File.WriteAllText(Path.ChangeExtension(item.DstPath, ".profile.txt"), profileString);
+                            // item.DstPath は拡張子を含まないメイン出力先パス。
+                            // ファイル名に "." が含まれる場合に Path.ChangeExtension では
+                            // 意図せず途中の "." 以降が削られてしまうため、文字列連結で付与する。
+                            File.WriteAllText(item.DstPath + ".profile.txt", profileString);
                         }
                         catch (Exception e)
                         {
