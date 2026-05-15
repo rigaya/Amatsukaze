@@ -480,7 +480,10 @@ namespace Amatsukaze.Server.Rest
                             Profile = o.Profile,
                             Priority = o.Priority
                         }).ToList()
-                        : new List<Amatsukaze.Server.OutputInfo>()
+                        : new List<Amatsukaze.Server.OutputInfo>(),
+                    Tags = data.Tags != null && data.Tags.Count > 0
+                        ? new List<string>(data.Tags)
+                        : null
                 };
 
                 using var scope = OperationContextScope.Use(new OperationContext

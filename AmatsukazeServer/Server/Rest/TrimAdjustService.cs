@@ -830,12 +830,14 @@ namespace Amatsukaze.Server.Rest
                 Targets = new List<AddQueueItem> { new AddQueueItem { Path = item.SrcPath, Hash = item.Hash } },
                 Outputs = new List<OutputInfo> { new OutputInfo { DstPath = outDir, Profile = effectiveProfileName, Priority = item.Priority } },
                 DirPath = null,
-                AddQueueBat = null
+                AddQueueBat = null,
+                // カット調整元タスク（同一 queueItemId）のタグをそのまま引き継ぐ
+                Tags = item.Tags != null && item.Tags.Count > 0 ? new List<string>(item.Tags) : null
             };
 
             await encodeServer.AddQueue(addReq).ConfigureAwait(false);
 
-            Util.AddLog($"[TrimAdjust] CM解析再投入: queueItemId={request.QueueItemId}, profile={effectiveProfileName}, derivedCreated={profileCreated}", null);
+            Util.AddLog($"[TrimAdjust] CM解析再投入: queueItemId={request.QueueItemId}, profile={effectiveProfileName}, derivedCreated={profileCreated}, tags={(item.Tags != null ? item.Tags.Count : 0)}", null);
 
             return (true, new PrepareCmAnalysisResponse
             {

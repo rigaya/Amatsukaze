@@ -1111,6 +1111,10 @@ namespace Amatsukaze.Server
         [DataMember]
         public string AddQueueBat { get; set; }
 
+        /// <summary>キュー追加時に各ターゲットへ付与するタグ（null の場合は空リスト）。</summary>
+        [DataMember]
+        public List<string> Tags { get; set; }
+
         public bool IsBatch { get { return Mode == ProcMode.Batch || Mode == ProcMode.AutoBatch; } }
         public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode == ProcMode.CMCheck; } }
     }

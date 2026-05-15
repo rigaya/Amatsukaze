@@ -498,7 +498,9 @@ namespace Amatsukaze.Server
                                         AddTime = DateTime.Now,
                                         ProfileName = outitem.Profile,
                                         Genre = genre,
-                                        Tags = new List<string>()
+                                        Tags = (req.Tags != null && req.Tags.Count > 0)
+                                            ? new List<string>(req.Tags)
+                                            : new List<string>()
                                     };
                                     item.ResetAutoLogoAttempt();
 
@@ -586,7 +588,9 @@ namespace Amatsukaze.Server
                                 FailReason = failReason,
                                 AddTime = DateTime.Now,
                                 ProfileName = outitem.Profile,
-                                Tags = new List<string>()
+                                Tags = (req.Tags != null && req.Tags.Count > 0)
+                                    ? new List<string>(req.Tags)
+                                    : new List<string>()
                             };
                             item.ResetAutoLogoAttempt();
 

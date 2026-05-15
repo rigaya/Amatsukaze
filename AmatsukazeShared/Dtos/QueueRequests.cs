@@ -32,6 +32,8 @@ namespace Amatsukaze.Shared
         public List<OutputInfo>? Outputs { get; set; }
         public string? RequestId { get; set; }
         public string? AddQueueBat { get; set; }
+        /// <summary>キュー追加時に各ターゲットへ付与するタグ（省略時は空リスト）。</summary>
+        public List<string>? Tags { get; set; }
     }
 
     public enum ChangeItemType

@@ -497,6 +497,7 @@
     private string? _queueItemSrcPath; // キューアイテムのソースパス（チェックログ検索・再投入用）
     private string? _queueItemOutDir; // 再投入時の出力先フォルダ
     private int _queueItemPriority = 3; // 再投入時に引き継ぐ優先度
+    private List<string>? _queueItemTags; // 再投入時に引き継ぐタグ（CM解析投入時と同一）
 
     // debounce用タイマー
     private System.Threading.Timer? _debounceTimer;
@@ -792,6 +793,29 @@
         return char.ToLowerInvariant(name[0]) + name.Substring(1);
     }
 
+    /// <summary>CM解析で付与された「名前_CM解析」が保存されている場合、コンボの既定は基底プロファイル名を返す。</summary>
+    private static string? GetDefaultProfileNameForTrimSelect(string? queueProfile, List<string> profiles)
+    {
+        if (string.IsNullOrEmpty(queueProfile) || profiles.Count == 0)
+        {
+            return null;
+        }
+        const string suffix = "_CM解析";
+        if (queueProfile.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            var baseName = queueProfile.Substring(0, queueProfile.Length - suffix.Length);
+            if (!string.IsNullOrEmpty(baseName) && profiles.Contains(baseName))
+            {
+                return baseName;
+            }
+        }
+        if (profiles.Contains(queueProfile))
+        {
+            return queueProfile;
+        }
+        return null;
+    }
+
     private async Task LoadSessionAsync()
     {
         _loading = true;
@@ -880,10 +904,11 @@
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Select(n => n!)
                 .ToList();
-            // 現在のキューアイテムのプロファイルがあればそれを初期選択（前回ユーザーが指定したプロファイル）
-            if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
+            // キューに記録されたプロファイル（CM解析なら「基底名」または派生名）に合わせて初期選択
+            var def = GetDefaultProfileNameForTrimSelect(_queueItemProfileName, _profiles);
+            if (!string.IsNullOrEmpty(def))
             {
-                _selectedProfile = _queueItemProfileName;
+                _selectedProfile = def;
             }
             else if (_profiles.Count > 0)
             {
@@ -950,10 +975,14 @@
                 _queueItemProfileName = item.ProfileName;
                 _queueItemOutDir = item.OutDir;
                 _queueItemPriority = item.Priority;
+                _queueItemTags = item.Tags != null && item.Tags.Count > 0
+                    ? new List<string>(item.Tags)
+                    : null;
                 // プロファイルリストが既にロード済みなら選択を更新
-                if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
+                var def = GetDefaultProfileNameForTrimSelect(_queueItemProfileName, _profiles);
+                if (!string.IsNullOrEmpty(def))
                 {
-                    _selectedProfile = _queueItemProfileName;
+                    _selectedProfile = def;
                     StateHasChanged();
                 }
             }
@@ -1789,7 +1818,10 @@
                     Profile = _selectedProfile,
                     Priority = _queueItemPriority
                 }
-            }
+            },
+            Tags = _queueItemTags != null && _queueItemTags.Count > 0
+                ? new List<string>(_queueItemTags)
+                : null
         });
 
         if (addRes.Ok)
