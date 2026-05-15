@@ -1009,7 +1009,7 @@ namespace Amatsukaze.Server.Rest
                     Children = null
                 }).ToList(),
                 GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList(),
-                CanTrimAdjust = item.Mode == ProcMode.CMCheck && item.State == QueueState.Complete
+                CanTrimAdjust = (item.Mode == ProcMode.Batch || item.Mode == ProcMode.AutoBatch || item.Mode == ProcMode.CMCheck) && item.State == QueueState.Complete
             };
         }
 

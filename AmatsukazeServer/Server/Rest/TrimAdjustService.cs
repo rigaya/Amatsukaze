@@ -2,12 +2,14 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Amatsukaze.Lib;
 using Amatsukaze.Shared;
+using Amatsukaze.Server;
 
 namespace Amatsukaze.Server.Rest
 {
@@ -415,21 +417,30 @@ namespace Amatsukaze.Server.Rest
         private static readonly Regex TrimRegex = new Regex(@"Trim\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", RegexOptions.Compiled);
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(5);
 
+        /// <summary>カット調整に必要な一時データが無い場合のAPIエラーコード（CM解析の再実行が必要）。</summary>
+        public const string TrimAdjustErrorTempDirNotFound = "TEMP_DIR_NOT_FOUND";
+
+        /// <summary>CM解析用に派生プロファイル名へ付与する接尾辞。</summary>
+        public const string CmAnalysisProfileSuffix = "_CM解析";
+
         private readonly RestStateStore state;
+        private readonly EncodeServer encodeServer;
         private readonly ConcurrentDictionary<string, TrimAdjustSession> sessions = new ConcurrentDictionary<string, TrimAdjustSession>();
         // TTL経過後に確実にクリーンアップされるよう、SessionTtl間隔でバックグラウンド実行する
         private readonly Timer cleanupTimer;
 
-        public TrimAdjustService(RestStateStore state)
+        public TrimAdjustService(RestStateStore state, EncodeServer encodeServer)
         {
             this.state = state;
+            this.encodeServer = encodeServer ?? throw new ArgumentNullException(nameof(encodeServer));
             cleanupTimer = new Timer(_ => CleanupExpired(), null, SessionTtl, SessionTtl);
         }
 
-        public bool TryCreateSession(TrimAdjustSessionRequest request, out TrimAdjustSessionResponse response, out string error)
+        public bool TryCreateSession(TrimAdjustSessionRequest request, out TrimAdjustSessionResponse response, out string error, out string errorCode)
         {
             response = null;
             error = null;
+            errorCode = null;
 
             if (request == null || request.QueueItemId <= 0)
             {
@@ -443,18 +454,22 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
+            const string tempMissingUserMessage = "一時フォルダがないため、再度CM解析が必要です";
+
             // ログファイルから一時フォルダを取得
             var logPath = state.ResolveTaskLogPathById(request.QueueItemId);
             if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))
             {
-                error = "ログファイルが見つかりません";
+                error = tempMissingUserMessage;
+                errorCode = TrimAdjustErrorTempDirNotFound;
                 return false;
             }
 
             var tempDir = ExtractTempDirFromLog(logPath);
             if (string.IsNullOrEmpty(tempDir))
             {
-                error = "ログファイルから一時フォルダが取得できませんでした";
+                error = tempMissingUserMessage;
+                errorCode = TrimAdjustErrorTempDirNotFound;
                 return false;
             }
 
@@ -462,7 +477,8 @@ namespace Amatsukaze.Server.Rest
             var datFilePath = Path.Combine(tempDir, "amts0.dat");
             if (!File.Exists(datFilePath))
             {
-                error = $"amts0.datが見つかりません: {datFilePath}";
+                error = tempMissingUserMessage;
+                errorCode = TrimAdjustErrorTempDirNotFound;
                 return false;
             }
 
@@ -725,6 +741,107 @@ namespace Amatsukaze.Server.Rest
             }
 
             return trims;
+        }
+
+        /// <summary>
+        /// カット調整用の一時データが無い場合に、一時フォルダを残す設定のプロファイルでCM解析タスクをキューに追加する。
+        /// </summary>
+        public async Task<(bool Ok, PrepareCmAnalysisResponse Response, string Error)> PrepareTrimAdjustCmAnalysisAsync(PrepareCmAnalysisRequest request)
+        {
+            if (request == null || request.QueueItemId <= 0)
+            {
+                return (false, new PrepareCmAnalysisResponse(), "QueueItemIdが不正です");
+            }
+            if (string.IsNullOrWhiteSpace(request.ProfileName))
+            {
+                return (false, new PrepareCmAnalysisResponse(), "プロファイル名が指定されていません");
+            }
+
+            if (!state.TryGetQueueItem(request.QueueItemId, out var item) || string.IsNullOrEmpty(item.SrcPath))
+            {
+                return (false, new PrepareCmAnalysisResponse(), "キューアイテムが見つかりません");
+            }
+
+            if (item.State != QueueState.Complete)
+            {
+                return (false, new PrepareCmAnalysisResponse(), "完了済みのキューアイテムのみ対象です");
+            }
+
+            if (item.Mode != ProcMode.Batch && item.Mode != ProcMode.AutoBatch && item.Mode != ProcMode.CMCheck)
+            {
+                return (false, new PrepareCmAnalysisResponse(), "このモードのタスクは対象外です");
+            }
+
+            if (!File.Exists(item.SrcPath))
+            {
+                return (false, new PrepareCmAnalysisResponse(), "入力ファイルが見つかりません: " + item.SrcPath);
+            }
+
+            var outDir = Path.GetDirectoryName(item.DstPath);
+            if (string.IsNullOrEmpty(outDir))
+            {
+                return (false, new PrepareCmAnalysisResponse(), "出力先ディレクトリが取得できません");
+            }
+
+            var profiles = state.GetProfiles();
+            var baseProfile = profiles.FirstOrDefault(p => string.Equals(p.Name, request.ProfileName, StringComparison.OrdinalIgnoreCase));
+            if (baseProfile == null)
+            {
+                return (false, new PrepareCmAnalysisResponse(), "プロファイルが見つかりません: " + request.ProfileName);
+            }
+
+            var profileCreated = false;
+            string effectiveProfileName;
+
+            if (baseProfile.NoRemoveTmp)
+            {
+                effectiveProfileName = baseProfile.Name;
+            }
+            else
+            {
+                var derivedName = baseProfile.Name + CmAnalysisProfileSuffix;
+                var derived = profiles.FirstOrDefault(p => string.Equals(p.Name, derivedName, StringComparison.OrdinalIgnoreCase));
+                if (derived != null)
+                {
+                    if (!derived.NoRemoveTmp)
+                    {
+                        var updated = ServerSupport.DeepCopy(derived);
+                        updated.NoRemoveTmp = true;
+                        await encodeServer.SetProfile(new ProfileUpdate { Type = UpdateType.Update, Profile = updated }).ConfigureAwait(false);
+                    }
+                    effectiveProfileName = derivedName;
+                }
+                else
+                {
+                    var copy = ServerSupport.DeepCopy(baseProfile);
+                    copy.Name = derivedName;
+                    copy.NoRemoveTmp = true;
+                    await encodeServer.SetProfile(new ProfileUpdate { Type = UpdateType.Add, Profile = copy }).ConfigureAwait(false);
+                    profileCreated = true;
+                    effectiveProfileName = derivedName;
+                }
+            }
+
+            var requestId = Guid.NewGuid().ToString("N");
+            var addReq = new AddQueueRequest
+            {
+                Mode = ProcMode.CMCheck,
+                RequestId = requestId,
+                Targets = new List<AddQueueItem> { new AddQueueItem { Path = item.SrcPath, Hash = item.Hash } },
+                Outputs = new List<OutputInfo> { new OutputInfo { DstPath = outDir, Profile = effectiveProfileName, Priority = item.Priority } },
+                DirPath = null,
+                AddQueueBat = null
+            };
+
+            await encodeServer.AddQueue(addReq).ConfigureAwait(false);
+
+            Util.AddLog($"[TrimAdjust] CM解析再投入: queueItemId={request.QueueItemId}, profile={effectiveProfileName}, derivedCreated={profileCreated}", null);
+
+            return (true, new PrepareCmAnalysisResponse
+            {
+                ProfileName = effectiveProfileName,
+                ProfileCreated = profileCreated
+            }, string.Empty);
         }
 
         public void Dispose()

@@ -95,6 +95,8 @@ namespace Amatsukaze.Shared
 
         // Trim調整
         Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req);
+        /// <summary>一時フォルダ欠如時に、一時保持付きプロファイルでCM解析をキューへ追加する。</summary>
+        Task<ApiResult<PrepareCmAnalysisResponse>> PrepareTrimAdjustCmAnalysisAsync(PrepareCmAnalysisRequest req);
         Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber);
         Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req);
         Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId);
