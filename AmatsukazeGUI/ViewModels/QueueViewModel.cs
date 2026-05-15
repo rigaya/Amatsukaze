@@ -773,7 +773,7 @@ namespace Amatsukaze.ViewModels
         {
             return item != null &&
                 item.Model != null &&
-                item.Model.Mode == ProcMode.CMCheck &&
+                (item.Model.Mode == ProcMode.Batch || item.Model.Mode == ProcMode.AutoBatch || item.Model.Mode == ProcMode.CMCheck) &&
                 item.Model.State == QueueState.Complete;
         }
 
@@ -797,7 +797,7 @@ namespace Amatsukaze.ViewModels
             var item = selectedItems?.OfType<DisplayQueueItem>().FirstOrDefault();
             if (!CanOpenTrimAdjust(item))
             {
-                MessageBox.Show("カット調整はCM解析が完了したアイテムでのみ使用できます");
+                MessageBox.Show("カット調整はエンコードまたはCM解析が完了したアイテムでのみ使用できます");
                 return;
             }
             if (!TryOpenWebTrimAdjust(item.Model.Id))
