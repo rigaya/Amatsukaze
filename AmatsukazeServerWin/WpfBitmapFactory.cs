@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Amatsukaze.Lib;
 
@@ -11,13 +12,28 @@ namespace Amatsukaze.Win
     public class WpfBitmapFactory : IBitmapFactory
     {
         /// <summary>
+        /// BitmapSource をフリーズし、任意のスレッド（UI 含む）から参照可能にする。
+        /// RPC 受信・DRCS 専用スレッド等で生成した画像を WPF がバインドする際に必須。
+        /// </summary>
+        private static BitmapSource FreezeBitmapSource(BitmapSource bitmap)
+        {
+            if (bitmap == null)
+                return null;
+            if (bitmap.IsFrozen)
+                return bitmap;
+            if (bitmap.CanFreeze)
+                bitmap.Freeze();
+            return bitmap;
+        }
+
+        /// <summary>
         /// バイト配列からBitmapSourceを作成します
         /// </summary>
         public object CreateBitmapFromByteArray(byte[] buffer)
         {
             var stream = new MemoryStream(buffer);
             var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            return decoder.Frames[0];
+            return FreezeBitmapSource(decoder.Frames[0]);
         }
 
         /// <summary>
@@ -26,7 +42,7 @@ namespace Amatsukaze.Win
         public object CreateBitmapFromStream(Stream stream)
         {
             var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            return decoder.Frames[0];
+            return FreezeBitmapSource(decoder.Frames[0]);
         }
 
         /// <summary>
@@ -35,12 +51,18 @@ namespace Amatsukaze.Win
         public object CreateBitmapFromFile(string filePath)
         {
             var uri = new Uri(filePath, UriKind.RelativeOrAbsolute);
-            return new BitmapImage(uri);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.UriSource = uri;
+            bitmap.EndInit();
+            return FreezeBitmapSource(bitmap);
         }
 
         public object CreateBitmapFromRgb(byte[] buffer, int width, int height, int stride)
         {
-            return BitmapSource.Create(width, height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null, buffer, stride);
+            var created = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr24, null, buffer, stride);
+            return FreezeBitmapSource(created);
         }
 
         /// <summary>
