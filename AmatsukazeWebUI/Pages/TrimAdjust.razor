@@ -1,4 +1,4 @@
-@page "/trim-adjust/{QueueItemId:int}"
+﻿@page "/trim-adjust/{QueueItemId:int}"
 @using Amatsukaze.Shared
 @using Microsoft.AspNetCore.Components.Web
 @using System.Globalization
@@ -12,25 +12,22 @@
     <div class="trim-toolbar">
         <button class="trim-btn trim-btn-sm" @onclick="ShowCheckLog" title="CM解析チェックログ">ログ</button>
         <button class="trim-btn trim-btn-primary" @onclick="SaveTrims" disabled="@(!_hasChanges || _session == null)">保存</button>
-        @if (!IsTrimTempDirMissingFlow)
-        {
-            <div class="trim-toolbar-requeue">
-                <select class="trim-profile-select" @bind="_selectedProfile" disabled="@(_profiles == null || _profiles.Count == 0)">
-                    @if (_profiles != null)
+        <div class="trim-toolbar-requeue">
+            <select class="trim-profile-select" @bind="_selectedProfile" disabled="@(_profiles == null || _profiles.Count == 0)">
+                @if (_profiles != null)
+                {
+                    @foreach (var name in _profiles)
                     {
-                        @foreach (var name in _profiles)
-                        {
-                            <option value="@name">@name</option>
-                        }
+                        <option value="@name">@name</option>
                     }
-                </select>
-                <button class="trim-btn trim-btn-sm" @onclick="RequeueWithProfile"
-                        disabled="@(_requeueBusy || string.IsNullOrEmpty(_selectedProfile) || _session == null)"
-                        title="保存してプロファイルを変更し通常モードで再投入">
-                    @(_requeueBusy ? "処理中..." : "保存して再投入")
-                </button>
-            </div>
-        }
+                }
+            </select>
+            <button class="trim-btn trim-btn-sm" @onclick="RequeueWithProfile"
+                    disabled="@(_requeueBusy || string.IsNullOrEmpty(_selectedProfile) || _session == null)"
+                    title="保存してプロファイルを変更し通常モードで再投入">
+                @(_requeueBusy ? "処理中..." : "保存して再投入")
+            </button>
+        </div>
         <span class="trim-toolbar-info">
             @if (!string.IsNullOrEmpty(_statusMessage))
             {
@@ -42,34 +39,6 @@
     @if (_loading)
     {
         <div class="trim-loading">読み込み中...</div>
-    }
-    else if (IsTrimTempDirMissingFlow)
-    {
-        <div class="trim-cm-reprepare trim-main">
-            <p class="trim-error">@(_errorMessage ?? "一時フォルダがないため、再度CM解析が必要です")</p>
-            <div class="trim-toolbar-requeue" style="margin-top:12px;">
-                <label class="trim-label" for="trim-cm-profile">プロファイル</label>
-                <select id="trim-cm-profile" class="trim-profile-select" @bind="_selectedProfile" disabled="@(_profiles == null || _profiles.Count == 0 || _prepareCmBusy)">
-                    @if (_profiles != null)
-                    {
-                        @foreach (var name in _profiles)
-                        {
-                            <option value="@name">@name</option>
-                        }
-                    }
-                </select>
-                <button type="button" class="trim-btn trim-btn-primary" @onclick="PrepareCmAnalysisAsync"
-                        disabled="@(_prepareCmBusy || string.IsNullOrEmpty(_selectedProfile))">
-                    @(_prepareCmBusy ? "処理中..." : "CM解析を開始")
-                </button>
-            </div>
-            @if (ShowsDerivedProfileHintForSelected)
-            {
-                <p class="trim-hint" style="margin-top:10px;">
-                    プロファイル「@_selectedProfile」は一時フォルダを残さない設定のため、「@(_selectedProfile + "_CM解析")」プロファイルを作成（または更新）してCM解析を実行します。
-                </p>
-            }
-        </div>
     }
     else if (!string.IsNullOrEmpty(_errorMessage))
     {
@@ -428,20 +397,6 @@
 
     private bool _loading = true;
     private string? _errorMessage;
-    /// <summary>セッション作成APIの errorCode（例: 一時フォルダ欠如）。</summary>
-    private string? _trimSessionErrorCode;
-    private bool _prepareCmBusy;
-    private const string TrimErrorTempDirNotFound = "TEMP_DIR_NOT_FOUND";
-    /// <summary>プロファイル名 → 一時ファイルを削除せずに残す (NoRemoveTmp)。</summary>
-    private readonly Dictionary<string, bool> _profileNoRemoveTmp = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-
-    private bool IsTrimTempDirMissingFlow => string.Equals(_trimSessionErrorCode, TrimErrorTempDirNotFound, StringComparison.Ordinal);
-
-    private bool ShowsDerivedProfileHintForSelected =>
-        !string.IsNullOrEmpty(_selectedProfile) &&
-        _profileNoRemoveTmp.TryGetValue(_selectedProfile, out var v) &&
-        !v;
-
     private string? _statusMessage;
     private bool _isError;
     private bool _hasChanges;
@@ -793,33 +748,9 @@
         return char.ToLowerInvariant(name[0]) + name.Substring(1);
     }
 
-    /// <summary>CM解析で付与された「名前_CM解析」が保存されている場合、コンボの既定は基底プロファイル名を返す。</summary>
-    private static string? GetDefaultProfileNameForTrimSelect(string? queueProfile, List<string> profiles)
-    {
-        if (string.IsNullOrEmpty(queueProfile) || profiles.Count == 0)
-        {
-            return null;
-        }
-        const string suffix = "_CM解析";
-        if (queueProfile.EndsWith(suffix, StringComparison.Ordinal))
-        {
-            var baseName = queueProfile.Substring(0, queueProfile.Length - suffix.Length);
-            if (!string.IsNullOrEmpty(baseName) && profiles.Contains(baseName))
-            {
-                return baseName;
-            }
-        }
-        if (profiles.Contains(queueProfile))
-        {
-            return queueProfile;
-        }
-        return null;
-    }
-
     private async Task LoadSessionAsync()
     {
         _loading = true;
-        _trimSessionErrorCode = null;
         StateHasChanged();
         await LoadTrimAdjustSettingsAsync();
         // セッション作成前にキュー情報を取得し、プロファイルの初期選択に使う
@@ -833,18 +764,12 @@
 
         if (!result.Ok || result.Data == null)
         {
-            _trimSessionErrorCode = result.ErrorCode;
             _errorMessage = result.Error ?? "セッションの作成に失敗しました";
             _loading = false;
-            if (IsTrimTempDirMissingFlow)
-            {
-                await LoadProfilesAsync();
-            }
             StateHasChanged();
             return;
         }
 
-        _trimSessionErrorCode = null;
         _errorMessage = null;
         _session = result.Data;
         _sessionId = _session.SessionId;
@@ -879,84 +804,20 @@
         var res = await Api.GetProfilesAsync();
         if (res.Ok && res.Data != null)
         {
-            _profileNoRemoveTmp.Clear();
-            foreach (var profile in res.Data)
-            {
-                var name = GetProfileName(profile);
-                if (string.IsNullOrEmpty(name))
-                {
-                    continue;
-                }
-                var noRemove = false;
-                if (profile.TryGetProperty("noRemoveTmp", out var n1) && n1.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                {
-                    noRemove = n1.GetBoolean();
-                }
-                else if (profile.TryGetProperty("NoRemoveTmp", out var n2) && n2.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                {
-                    noRemove = n2.GetBoolean();
-                }
-                _profileNoRemoveTmp[name] = noRemove;
-            }
-
             _profiles = res.Data
                 .Select(GetProfileName)
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Select(n => n!)
                 .ToList();
-            // キューに記録されたプロファイル（CM解析なら「基底名」または派生名）に合わせて初期選択
-            var def = GetDefaultProfileNameForTrimSelect(_queueItemProfileName, _profiles);
-            if (!string.IsNullOrEmpty(def))
+            // 現在のキューアイテムのプロファイルがあればそれを初期選択
+            if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
             {
-                _selectedProfile = def;
+                _selectedProfile = _queueItemProfileName;
             }
             else if (_profiles.Count > 0)
             {
                 _selectedProfile = _profiles[0];
             }
-            StateHasChanged();
-        }
-    }
-
-    private async Task PrepareCmAnalysisAsync()
-    {
-        if (string.IsNullOrEmpty(_selectedProfile))
-        {
-            return;
-        }
-        _prepareCmBusy = true;
-        _statusMessage = null;
-        _isError = false;
-        StateHasChanged();
-        try
-        {
-            var r = await Api.PrepareTrimAdjustCmAnalysisAsync(new PrepareCmAnalysisRequest
-            {
-                QueueItemId = QueueItemId,
-                ProfileName = _selectedProfile
-            });
-            if (r.Ok && r.Data != null)
-            {
-                _statusMessage = "CM解析をキューに追加しました";
-                _isError = false;
-                StateHasChanged();
-                await Task.Delay(500);
-                await JS.InvokeVoidAsync("trimAdjustCloseWindow");
-            }
-            else
-            {
-                _statusMessage = r.Error ?? "CM解析の開始に失敗しました";
-                _isError = true;
-            }
-        }
-        catch (Exception ex)
-        {
-            _statusMessage = ex.Message;
-            _isError = true;
-        }
-        finally
-        {
-            _prepareCmBusy = false;
             StateHasChanged();
         }
     }
@@ -979,10 +840,9 @@
                     ? new List<string>(item.Tags)
                     : null;
                 // プロファイルリストが既にロード済みなら選択を更新
-                var def = GetDefaultProfileNameForTrimSelect(_queueItemProfileName, _profiles);
-                if (!string.IsNullOrEmpty(def))
+                if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
                 {
-                    _selectedProfile = def;
+                    _selectedProfile = _queueItemProfileName;
                     StateHasChanged();
                 }
             }

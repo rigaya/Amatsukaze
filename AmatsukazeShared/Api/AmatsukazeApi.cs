@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -448,7 +448,6 @@ namespace Amatsukaze.Shared
                 if (!res.IsSuccessStatusCode)
                 {
                     var body = await res.Content.ReadAsStringAsync();
-                    string? errorCode = null;
                     var message = body;
                     try
                     {
@@ -458,16 +457,12 @@ namespace Amatsukaze.Shared
                         {
                             message = m.GetString() ?? body;
                         }
-                        if (root.TryGetProperty("errorCode", out var c))
-                        {
-                            errorCode = c.GetString();
-                        }
                     }
                     catch
                     {
                         // JSONでない場合は生本文をそのままエラー文字列にする
                     }
-                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, message, errorCode);
+                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, message);
                 }
                 var data = await res.Content.ReadFromJsonAsync<TrimAdjustSessionResponse>(jsonOptions);
                 if (data == null)
@@ -481,9 +476,6 @@ namespace Amatsukaze.Shared
                 return ApiResult<TrimAdjustSessionResponse>.Fail(0, ex.Message);
             }
         }
-
-        public Task<ApiResult<PrepareCmAnalysisResponse>> PrepareTrimAdjustCmAnalysisAsync(PrepareCmAnalysisRequest req)
-            => PostJsonAsync("/api/trim/prepare-cm-analysis", req, el => el.Deserialize<PrepareCmAnalysisResponse>(jsonOptions) ?? new PrepareCmAnalysisResponse());
 
         public Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req)
             => PostJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/save", req, _ => true);

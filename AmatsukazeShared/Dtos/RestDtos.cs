@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json;
 
@@ -579,22 +579,6 @@ namespace Amatsukaze.Shared
         public int FrameHeight { get; set; }
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
         public List<double> FramePts { get; set; } = new List<double>();
-    }
-
-    /// <summary>カット調整用にCM解析を再投入するリクエスト。</summary>
-    public class PrepareCmAnalysisRequest
-    {
-        public int QueueItemId { get; set; }
-        public string? ProfileName { get; set; }
-    }
-
-    /// <summary>カット調整用CM解析再投入の結果。</summary>
-    public class PrepareCmAnalysisResponse
-    {
-        /// <summary>実際にキューへ適用したプロファイル名（元または「名前_CM解析」）。</summary>
-        public string? ProfileName { get; set; }
-        /// <summary><c>名前_CM解析</c> を新規作成した場合は true。</summary>
-        public bool ProfileCreated { get; set; }
     }
 
     public class TrimSaveRequest

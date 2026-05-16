@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -98,7 +98,7 @@ namespace Amatsukaze.Server.Rest
             this.boundPort = port;
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
-            trimAdjust = new TrimAdjustService(state, server);
+            trimAdjust = new TrimAdjustService(state);
         }
 
         public int Port => boundPort;
@@ -1774,27 +1774,11 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
-                if (!trimAdjust.TryCreateSession(data, out var response, out var error, out var errorCode))
+                if (!trimAdjust.TryCreateSession(data, out var response, out var error))
                 {
-                    return Results.BadRequest(new { message = error ?? "カット調整セッションを作成できませんでした", errorCode });
+                    return Results.BadRequest(new { message = error ?? "カット調整セッションを作成できませんでした" });
                 }
                 return BuildMaybeGzippedJsonResult(request, response);
-            });
-
-            // カット調整: 一時フォルダが無い場合にCM解析を再投入する（プロファイルは必要に応じて「名前_CM解析」を自動作成）
-            app.MapPost("/api/trim/prepare-cm-analysis", async (HttpRequest request) =>
-            {
-                var data = await request.ReadFromJsonAsync<PrepareCmAnalysisRequest>();
-                if (data == null)
-                {
-                    return Results.BadRequest();
-                }
-                var (ok, resp, err) = await trimAdjust.PrepareTrimAdjustCmAnalysisAsync(data).ConfigureAwait(false);
-                if (!ok)
-                {
-                    return Results.BadRequest(new { message = string.IsNullOrEmpty(err) ? "CM解析の準備に失敗しました" : err });
-                }
-                return Results.Json(resp);
             });
 
             app.MapGet("/api/trim/sessions/{sessionId}/bundle", (HttpContext context, string sessionId, int n) =>

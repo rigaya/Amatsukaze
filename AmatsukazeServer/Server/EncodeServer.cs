@@ -1,4 +1,4 @@
-#define PROFILE
+﻿#define PROFILE
 using Amatsukaze.Lib;
 using Amatsukaze.Server.Rest;
 using Amatsukaze.Shared;

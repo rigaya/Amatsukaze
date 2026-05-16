@@ -1,0 +1,8 @@
+# Store file bytes as-is by default. Do not let Git normalize line endings.
+* -text
+
+# Unix/Linux executable scripts must stay LF.
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.fish text eol=lf

@@ -1,4 +1,4 @@
-using Amatsukaze.Lib;
+﻿using Amatsukaze.Lib;
 using System;
 using System.Collections.Generic;
 using System.IO;
