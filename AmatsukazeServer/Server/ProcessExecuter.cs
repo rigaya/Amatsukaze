@@ -81,35 +81,91 @@ namespace Amatsukaze.Server
         }
         #endregion
 
+        private bool IsProcessRunning()
+        {
+            try
+            {
+                return Process != null && !Process.HasExited && Process.ProcessName != string.Empty;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
 
         public void Suspend()
         {
-            if (Process == null || Process.ProcessName == string.Empty)
+            if (!IsProcessRunning())
                 return;
 
             if (SuspendedThreads != null)
                 return;
 
-            SuspendedThreads = Process.Threads.OfType<ProcessThread>()
-                .Select(pT => SystemUtility.OpenThreadNative(ThreadAccess.SUSPEND_RESUME, false, (uint)pT.Id))
-                .Where(pOpenThread => pOpenThread != IntPtr.Zero)
-                .Where(pOpenThread => SystemUtility.SuspendThreadNative(pOpenThread) != 0xFFFFFFFFU).ToArray();
+            var suspendedThreads = new List<IntPtr>();
+            try
+            {
+                foreach (var thread in Process.Threads.OfType<ProcessThread>())
+                {
+                    var pOpenThread = SystemUtility.OpenThreadNative(ThreadAccess.SUSPEND_RESUME, false, (uint)thread.Id);
+                    if (pOpenThread == IntPtr.Zero)
+                    {
+                        continue;
+                    }
+
+                    if (SystemUtility.SuspendThreadNative(pOpenThread) == 0xFFFFFFFFU)
+                    {
+                        SystemUtility.CloseHandleNative(pOpenThread);
+                        continue;
+                    }
+
+                    suspendedThreads.Add(pOpenThread);
+                }
+                SuspendedThreads = suspendedThreads.ToArray();
+            }
+            catch
+            {
+                foreach (var pOpenThread in suspendedThreads)
+                {
+                    try
+                    {
+                        SystemUtility.ResumeThreadNative(pOpenThread);
+                    }
+                    finally
+                    {
+                        SystemUtility.CloseHandleNative(pOpenThread);
+                    }
+                }
+                throw;
+            }
         }
 
         public void Resume()
         {
-            if (Process == null || Process.ProcessName == string.Empty)
-                return;
-
             if (SuspendedThreads == null)
                 return;
-            
+
+            var resumeFailedThreads = new List<IntPtr>();
             foreach(var pOpenThread in SuspendedThreads)
             {
-                SystemUtility.ResumeThreadNative(pOpenThread);
-                SystemUtility.CloseHandleNative(pOpenThread);
+                try
+                {
+                    if (SystemUtility.ResumeThreadNative(pOpenThread) == -1)
+                    {
+                        resumeFailedThreads.Add(pOpenThread);
+                        continue;
+                    }
+                    SystemUtility.CloseHandleNative(pOpenThread);
+                }
+                catch
+                {
+                    resumeFailedThreads.Add(pOpenThread);
+                }
             };
-            SuspendedThreads = null;
+            SuspendedThreads = resumeFailedThreads.Count > 0 ? resumeFailedThreads.ToArray() : null;
+            if (resumeFailedThreads.Count > 0)
+            {
+                throw new InvalidOperationException("一部のスレッドの再開に失敗しました");
+            }
         }
 
         private async Task RedirectOut(Stream stream)

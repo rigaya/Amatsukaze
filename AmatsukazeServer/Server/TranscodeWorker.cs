@@ -1,4 +1,4 @@
-using Amatsukaze.Lib;
+﻿using Amatsukaze.Lib;
 using Codeplex.Data;
 using log4net;
 using System;
@@ -110,7 +110,34 @@ namespace Amatsukaze.Server
 
         public void SetSuspend(bool suspend, bool scheduled)
         {
-            bool current = Suspended;
+            bool prevScheduled = ScheduledSuspended;
+            bool prevUser = UserSuspended;
+            bool prevSuspended = prevScheduled || prevUser;
+            bool nextScheduled = scheduled ? suspend : prevScheduled;
+            bool nextUser = scheduled ? prevUser : suspend;
+            bool nextSuspended = nextScheduled || nextUser;
+
+            if (nextSuspended != prevSuspended)
+            {
+                try
+                {
+                    if (nextSuspended)
+                    {
+                        process?.Suspend();
+                    }
+                    else
+                    {
+                        process?.Resume();
+                    }
+                }
+                catch (Exception e)
+                {
+                    var action = nextSuspended ? "停止" : "再開";
+                    Util.AddLog(Id, string.Format("実行中プロセスの{0}に失敗しました。次回の状態更新で再試行します", action), e);
+                    return;
+                }
+            }
+
             if(scheduled)
             {
                 ScheduledSuspended = suspend;
@@ -118,17 +145,6 @@ namespace Amatsukaze.Server
             else
             {
                 UserSuspended = suspend;
-            }
-            if(Suspended != current)
-            {
-                if(Suspended)
-                {
-                    process?.Suspend();
-                }
-                else
-                {
-                    process?.Resume();
-                }
             }
         }
 

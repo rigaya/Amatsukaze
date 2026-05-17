@@ -26,44 +26,75 @@ namespace Amatsukaze.Server
         {
             Task<bool> timerQRecvTask = timerQ.OutputAvailableAsync();
 
-            while (true)
+            try
             {
-                var setting = server.AppData_.setting;
-                var now = DateTime.Now;
-                var isPauseHour = setting.EnableRunHours && !setting.RunHours[now.Hour];
-
-                workerPool.SetPause(isPauseHour, true);
-                var suspend = isPauseHour && setting.RunHoursSuspendEncoders;
-                // workersの数が変わってるかもしれないので毎回行う
-                foreach(var worker in workerPool.Workers.OfType<TranscodeWorker>())
+                while (true)
                 {
-                    worker.SetSuspend(suspend, true);
-                }
+                    var setting = server.AppData_.setting;
+                    var now = DateTime.Now;
+                    var isPauseHour = setting.EnableRunHours && !setting.RunHours[now.Hour];
 
-                if (setting.EnableRunHours == false)
-                {
-                    break;
-                }
-
-                await server.RequestState();
-
-                var future = now.AddMinutes(60);
-                var elapsed = new DateTime(future.Year, future.Month, future.Day, future.Hour, 0, 0) - now;
-
-                if(await Task.WhenAny(timerQRecvTask, Task.Delay(elapsed)) == timerQRecvTask)
-                {
-                    if(timerQRecvTask.Result == false)
+                    try
                     {
-                        // 完了した
+                        workerPool.SetPause(isPauseHour, true);
+                    }
+                    catch (Exception e)
+                    {
+                        Util.AddLog("稼働時間設定のキュー停止状態更新に失敗", e);
+                    }
+
+                    var suspend = isPauseHour && setting.RunHoursSuspendEncoders;
+                    // workersの数が変わってるかもしれないので毎回行う
+                    foreach(var worker in workerPool.Workers.OfType<TranscodeWorker>().ToArray())
+                    {
+                        try
+                        {
+                            worker.SetSuspend(suspend, true);
+                        }
+                        catch (Exception e)
+                        {
+                            Util.AddLog(worker.GetItemId(), "稼働時間設定のエンコーダ停止状態更新に失敗", e);
+                        }
+                    }
+
+                    if (setting.EnableRunHours == false)
+                    {
                         break;
                     }
-                    timerQ.Receive();
-                    timerQRecvTask = timerQ.OutputAvailableAsync();
+
+                    await server.RequestState();
+
+                    var future = now.AddMinutes(60);
+                    var elapsed = new DateTime(future.Year, future.Month, future.Day, future.Hour, 0, 0) - now;
+
+                    if(await Task.WhenAny(timerQRecvTask, Task.Delay(elapsed)) == timerQRecvTask)
+                    {
+                        if(timerQRecvTask.Result == false)
+                        {
+                            // 完了した
+                            break;
+                        }
+                        timerQ.Receive();
+                        timerQRecvTask = timerQ.OutputAvailableAsync();
+                    }
                 }
             }
-
-            timerThread = null;
-            await server.RequestState();
+            catch (Exception e)
+            {
+                Util.AddLog("稼働時間設定タイマーでエラーが発生", e);
+            }
+            finally
+            {
+                timerThread = null;
+                try
+                {
+                    await server.RequestState();
+                }
+                catch (Exception e)
+                {
+                    Util.AddLog("稼働時間設定タイマー終了時の状態通知に失敗", e);
+                }
+            }
         }
 
         public void NotifySettingChanged()
