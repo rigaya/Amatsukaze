@@ -507,7 +507,8 @@ namespace Amatsukaze.Server
 
         public Task AddDrcsMap(DrcsImage drcsMap)
         {
-            return Server.AddDrcsMap(Copy(drcsMap));
+            return Server.AddDrcsMap(
+                DrcsImage.CreateMapUpdate(drcsMap.MD5, drcsMap.MapStr));
         }
 
         public Task AddQueue(AddQueueRequest dir)

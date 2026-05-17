@@ -133,7 +133,8 @@ namespace Amatsukaze.Server
 
         public Task AddDrcsMap(DrcsImage drcsMap)
         {
-            return Send(RPCMethodId.AddDrcsMap, drcsMap);
+            return Send(RPCMethodId.AddDrcsMap,
+                DrcsImage.CreateMapUpdate(drcsMap.MD5, drcsMap.MapStr));
         }
 
         public Task EndServer()

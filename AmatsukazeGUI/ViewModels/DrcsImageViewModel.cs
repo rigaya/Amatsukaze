@@ -106,8 +106,7 @@ namespace Amatsukaze.ViewModels
 
         public void SetMapStr()
         {
-            Image.MapStr = _MapStr;
-            Model.Server?.AddDrcsMap(Image);
+            Model.Server?.AddDrcsMap(DrcsImage.CreateMapUpdate(Image.MD5, _MapStr));
         }
         #endregion
 
@@ -129,8 +128,7 @@ namespace Amatsukaze.ViewModels
             if (MessageBox.Show("「" + Image.MapStr + "」を削除します。画像ファイルも削除します。\r\nよろしいですか？",
                 "AmatsukazeGUI", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
             {
-                Image.MapStr = null;
-                Model.Server?.AddDrcsMap(Image);
+                Model.Server?.AddDrcsMap(DrcsImage.CreateMapUpdate(Image.MD5, null));
             }
         }
         #endregion

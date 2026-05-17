@@ -1809,6 +1809,17 @@ namespace Amatsukaze.Server
 
         // BitmapFrameをobjectに変更
         public object Image { get; set; }
+
+        // マッピング更新要求では画像本体は不要。
+        // WPFのBitmapSourceをRPCコピー対象にしないため、MD5/MapStrのみを持つDTOを作る。
+        public static DrcsImage CreateMapUpdate(string md5, string mapStr)
+        {
+            return new DrcsImage()
+            {
+                MD5 = md5,
+                MapStr = mapStr
+            };
+        }
     }
 
     [DataContract]
