@@ -69,6 +69,7 @@
                     <TextBlock HorizontalAlignment="Right" Text="" VerticalAlignment="Top" Margin="0,5"/>
                     <TextBlock HorizontalAlignment="Right" Text="" VerticalAlignment="Top" Margin="0,5"/>
                     <TextBlock HorizontalAlignment="Right" Text="" VerticalAlignment="Top" Margin="0,5"/>
+                    <TextBlock HorizontalAlignment="Right" Text="" VerticalAlignment="Top" Margin="0,5"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Margin="12,2,0,0">
@@ -110,6 +111,8 @@
                      ToolTip="重要です。なるべくSSDなどの高速なストレージを使ってください。&#xA;たまにゴミが残るので終了しても残っているファイルがあったら削除してください。"/>
                     <CheckBox Height="16" Margin="0,4"  Content="開始時に一時フォルダを空にする" 
                               IsChecked="{Binding Model.Setting.ClearWorkDirOnStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Height="16" Margin="0,4"  Content="キューからのタスク削除時に、一時フォルダを削除する" 
+                              IsChecked="{Binding Model.Setting.DeleteTaskWorkDirOnQueueRemove, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,4"  Content="エンコード中はスリープしないようにする" 
                               IsChecked="{Binding Model.Setting.SupressSleep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                         <CheckBox.Style>

@@ -847,6 +847,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool ClearWorkDirOnStart { get; set; }
         [DataMember]
+        public bool DeleteTaskWorkDirOnQueueRemove { get; set; }
+        [DataMember]
         public bool HideOneSeg { get; set; }
         [DataMember]
         public int ListStyle { get; set; }

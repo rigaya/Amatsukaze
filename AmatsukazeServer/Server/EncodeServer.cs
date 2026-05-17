@@ -832,6 +832,18 @@ namespace Amatsukaze.Server
             return File.ReadAllText(logpath, Util.AmatsukazeDefaultEncoding);
         }
 
+        internal string ResolveTaskLogPath(QueueItem item)
+        {
+            if (item == null || item.EncodeStart == DateTime.MinValue)
+            {
+                return null;
+            }
+            var path = item.IsCheck
+                ? GetCheckLogFileBase(item.EncodeStart) + ".txt"
+                : GetLogFileBase(item.EncodeStart) + ".txt";
+            return File.Exists(path) ? path : null;
+        }
+
         private string GetLogoDirectoryPath()
         {
             return Path.GetFullPath("logo");
@@ -1468,7 +1480,8 @@ namespace Amatsukaze.Server
                 NumParallel = 1,
                 NumParallelLogoAnalysis = 0,
                 DeleteOldLogsDays = 180,
-                AutoLogoPendingDisabled = false
+                AutoLogoPendingDisabled = false,
+                DeleteTaskWorkDirOnQueueRemove = false
             });
             NormalizeTrimAdjustSettings(setting);
             NormalizeAutoLogoPendingSettings(setting);

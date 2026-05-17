@@ -3396,6 +3396,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region DeleteTaskWorkDirOnQueueRemove変更通知プロパティ
+        public bool DeleteTaskWorkDirOnQueueRemove
+        {
+            get { return Model.DeleteTaskWorkDirOnQueueRemove; }
+            set
+            {
+                if (Model.DeleteTaskWorkDirOnQueueRemove == value)
+                    return;
+                Model.DeleteTaskWorkDirOnQueueRemove = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region HideOneSeg変更通知プロパティ
         public bool HideOneSeg
         {

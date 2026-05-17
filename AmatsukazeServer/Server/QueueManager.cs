@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Amatsukaze.Shared;
@@ -15,6 +16,8 @@ namespace Amatsukaze.Server
     class QueueManager
     {
         private static readonly log4net.ILog LOG = log4net.LogManager.GetLogger("QueueManager");
+        private static readonly Regex TaskTempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
+        private static readonly Regex AmtTaskDirNameRegex = new Regex(@"^amt[0-9]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private EncodeServer server;
         private readonly object queueSync = new object();
 
@@ -825,6 +828,139 @@ namespace Amatsukaze.Server
             }
         }
 
+        private void TryDeleteTaskWorkDirForQueueRemove(QueueItem item)
+        {
+            if (server.AppData_?.setting?.DeleteTaskWorkDirOnQueueRemove != true)
+            {
+                return;
+            }
+            if (item == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (item.State == QueueState.Encoding || item.State == QueueState.LogoPending)
+                {
+                    LogTaskWorkDirDeleteSkipped(item, "タスクが処理中です");
+                    return;
+                }
+
+                var logPath = server.ResolveTaskLogPath(item);
+                if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))
+                {
+                    LogTaskWorkDirDeleteSkipped(item, "ログファイルが見つかりません");
+                    return;
+                }
+
+                if (!TryExtractTaskWorkDirFromLog(logPath, out var workDir))
+                {
+                    LogTaskWorkDirDeleteSkipped(item, "ログファイルから一時フォルダを取得できません");
+                    return;
+                }
+
+                if (!TryNormalizeDeletableTaskWorkDir(workDir, out var fullPath, out var reason))
+                {
+                    LogTaskWorkDirDeleteSkipped(item, reason);
+                    return;
+                }
+
+                Directory.Delete(fullPath, true);
+                Util.AddLog($"[Queue] タスク削除に伴い一時フォルダを削除しました。ItemId={item.Id}, Path={fullPath}", null);
+            }
+            catch (Exception ex)
+            {
+                Util.AddLog($"[Queue] タスク削除に伴う一時フォルダ削除に失敗しました。ItemId={item.Id}", ex);
+            }
+        }
+
+        private static bool TryExtractTaskWorkDirFromLog(string logPath, out string workDir)
+        {
+            workDir = null;
+            try
+            {
+                var bytes = File.ReadAllBytes(logPath);
+                var content = Util.AmatsukazeDefaultEncoding.GetString(bytes);
+                var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                foreach (var line in lines)
+                {
+                    var match = TaskTempDirRegex.Match(line);
+                    if (!match.Success)
+                    {
+                        continue;
+                    }
+                    var dir = match.Groups[1].Value.Trim().Trim('"');
+                    if (string.IsNullOrEmpty(dir))
+                    {
+                        continue;
+                    }
+                    workDir = dir;
+                    return true;
+                }
+            }
+            catch
+            {
+                // ログ読み込み失敗は、キュー削除の付随処理ではスキップ扱いにする。
+            }
+            return false;
+        }
+
+        private static bool TryNormalizeDeletableTaskWorkDir(string workDir, out string fullPath, out string reason)
+        {
+            fullPath = null;
+            reason = null;
+
+            if (string.IsNullOrWhiteSpace(workDir))
+            {
+                reason = "一時フォルダパスが空です";
+                return false;
+            }
+            if (!Path.IsPathRooted(workDir))
+            {
+                reason = "一時フォルダパスが絶対パスではありません";
+                return false;
+            }
+
+            try
+            {
+                fullPath = Path.GetFullPath(workDir);
+            }
+            catch (Exception ex)
+            {
+                reason = "一時フォルダパスを正規化できません: " + ex.Message;
+                return false;
+            }
+
+            var normalized = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var dirName = Path.GetFileName(normalized);
+            if (!AmtTaskDirNameRegex.IsMatch(dirName ?? ""))
+            {
+                reason = "一時フォルダ名がamt<数字>形式ではありません: " + dirName;
+                return false;
+            }
+
+            var dirInfo = new DirectoryInfo(normalized);
+            if (!dirInfo.Exists)
+            {
+                reason = "一時フォルダが存在しません: " + normalized;
+                return false;
+            }
+            if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                reason = "一時フォルダがシンボリックリンクまたは再解析ポイントです: " + normalized;
+                return false;
+            }
+
+            fullPath = normalized;
+            return true;
+        }
+
+        private static void LogTaskWorkDirDeleteSkipped(QueueItem item, string reason)
+        {
+            Util.AddLog($"[Queue] タスク削除に伴う一時フォルダ削除をスキップしました。ItemId={item.Id}, Reason={reason}", null);
+        }
+
         private void RemoveCompleted(List<Task> waits)
         {
             QueueItem[] removeItems;
@@ -843,6 +979,7 @@ namespace Amatsukaze.Server
             {
                 foreach (var item in removeItems)
                 {
+                    TryDeleteTaskWorkDirForQueueRemove(item);
                     waits.Add(ClientQueueUpdate(new QueueUpdate()
                     {
                         Type = UpdateType.Remove,
@@ -1038,6 +1175,7 @@ namespace Amatsukaze.Server
             else if (data.ChangeType == ChangeItemType.RemoveItem)
             {
                 server.CancelItem(target);
+                TryDeleteTaskWorkDirForQueueRemove(target);
                 target.State = QueueState.Canceled;
                 lock (queueSync)
                 {
@@ -1101,6 +1239,7 @@ namespace Amatsukaze.Server
                 }
 
                 // アイテム削除
+                TryDeleteTaskWorkDirForQueueRemove(target);
                 lock (queueSync)
                 {
                     Queue.Remove(target);
