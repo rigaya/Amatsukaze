@@ -423,6 +423,9 @@ namespace Amatsukaze.Server
         /// <summary>追加オプションをコンテナに記録する（mp4/mkv出力時のみ有効）</summary>
         [DataMember]
         public bool MuxerAddEncoderCmd { get; set; }
+        /// <summary>SAR比をエンコーダではなくコンテナのみに記録する（mp4/mkv出力時のみ有効）</summary>
+        [DataMember]
+        public bool SARInContainerOnly { get; set; }
 
         [DataMember]
         public string AdditionalEraseLogo { get; set; }
@@ -611,6 +614,7 @@ namespace Amatsukaze.Server
             }
             keyValue("エンコード分割並列数", profile.EncoderParallel.ToString());
             keyValueBool("追加オプションをコンテナに記録する", profile.MuxerAddEncoderCmd);
+            keyValueBool("SAR比をコンテナにのみ記録する", profile.SARInContainerOnly);
             keyValue("JoinLogoScpコマンドファイル", profile.JLSCommandFile ?? "チャンネル設定に従う");
             keyValue("JoinLogoScpオプション", profile.JLSOption ?? "チャンネル設定に従う");
             keyValue("chapter_exeオプション", profile.ChapterExeOption ?? "");

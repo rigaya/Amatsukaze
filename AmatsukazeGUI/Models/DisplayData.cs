@@ -1368,6 +1368,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region SARInContainerOnly変更通知プロパティ
+        public bool SARInContainerOnly
+        {
+            get { return Data.SARInContainerOnly; }
+            set
+            {
+                if (Data.SARInContainerOnly == value)
+                    return;
+                Data.SARInContainerOnly = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region SplitSub変更通知プロパティ
         public bool SplitSub {
             get { return Data.SplitSub; }

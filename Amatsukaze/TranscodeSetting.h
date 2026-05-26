@@ -138,6 +138,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     bool tsreplaceEdgeTrim,
     int64_t tsreplaceDelay,
     bool muxerAddEncoderCmd,
+    bool sarInContainerOnly,
     const tstring& encoderName,
     const tstring& encoderOptions);
 
@@ -205,6 +206,8 @@ struct Config {
     tstring encoderOptions;
     // 追加オプションをコンテナに記録する（mp4/mkv出力時のみ有効）
     bool muxerAddEncoderCmd;
+    // SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する
+    bool sarInContainerOnly;
     std::pair<int, int> userSAR;
     ENUM_AUDIO_ENCODER audioEncoder;
     tstring audioEncoderPath;
@@ -325,6 +328,8 @@ public:
     tstring getEncoderOptions() const;
 
     bool getMuxerAddEncoderCmd() const;
+
+    bool getSARInContainerOnly() const;
 
     std::pair<int, int> getUserSAR() const;
 

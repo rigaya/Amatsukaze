@@ -331,6 +331,7 @@ static std::string escapeXmlAttr(const std::string& s) {
     bool tsreplaceEdgeTrim,
     int64_t tsreplaceDelay,
     bool muxerAddEncoderCmd,
+    bool sarInContainerOnly,
     const tstring& encoderName,
     const tstring& encoderOptions) {
     std::vector<std::pair<tstring, bool>> ret;
@@ -352,7 +353,7 @@ static std::string escapeXmlAttr(const std::string& s) {
             if (videoFormat.fixedFrameRate) {
                 sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
             }
-            if (encoder == ENCODER_SVTAV1 && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+            if ((encoder == ENCODER_SVTAV1 || sarInContainerOnly) && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
                 const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
                 const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
                 sb.append(_T(":par=%d:%d"), sarW, sarH);
@@ -434,7 +435,7 @@ static std::string escapeXmlAttr(const std::string& s) {
         } else if (!encoderOutputInContainer) {
             sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
         }
-        if (!encoderOutputInContainer && encoder == ENCODER_SVTAV1 && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+        if (!encoderOutputInContainer && (encoder == ENCODER_SVTAV1 || sarInContainerOnly) && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
             const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
             const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
             int x = videoFormat.width * sarW;
@@ -707,6 +708,10 @@ tstring ConfigWrapper::getEncoderOptions() const {
 
 bool ConfigWrapper::getMuxerAddEncoderCmd() const {
     return conf.muxerAddEncoderCmd;
+}
+
+bool ConfigWrapper::getSARInContainerOnly() const {
+    return conf.sarInContainerOnly;
 }
 
 std::pair<int, int> ConfigWrapper::getUserSAR() const {

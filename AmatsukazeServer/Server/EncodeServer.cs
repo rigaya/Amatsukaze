@@ -2076,6 +2076,10 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --muxer-add-encoder-cmd");
                     }
+                    if (profile.SARInContainerOnly)
+                    {
+                        sb.Append(" --sar-in-container-only");
+                    }
 
                     if (profile.OutputFormat == FormatType.MP4)
                     {

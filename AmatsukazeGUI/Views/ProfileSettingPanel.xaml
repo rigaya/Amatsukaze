@@ -166,6 +166,9 @@
                     <CheckBox Margin="0,6" Content="追加オプションをコンテナに記録する"
                               IsChecked="{Binding Model.SelectedProfile.MuxerAddEncoderCmd, Mode=TwoWay}"
                               ToolTip="mp4/mkv出力時のみ有効です。他の出力フォーマットでは反映されません。"/>
+                    <CheckBox Margin="0,6" Content="SAR比をコンテナにのみ記録する"
+                              IsChecked="{Binding Model.SelectedProfile.SARInContainerOnly, Mode=TwoWay}"
+                              ToolTip="mp4/mkv出力時のみ有効です。有効時はエンコーダにSAR比を渡さず、コンテナにのみ記録します。"/>
 
                 </StackPanel>
                 <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0">
