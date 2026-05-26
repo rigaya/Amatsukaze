@@ -141,13 +141,16 @@ void concatenateChunkOutputs(const tstring& finalPath, const std::vector<tstring
     THROW(FormatException, "サポートされていないフィルタ出力形式です");
     return 0;
 }
-Y4MWriter::Y4MWriter(VideoInfo vi, VideoFormat outfmt) : n(0) {
+Y4MWriter::Y4MWriter(VideoInfo vi, VideoFormat outfmt, bool sarInContainerOnly) : n(0) {
+    // sarInContainerOnly 時はエンコーダにSAR比を渡さない（コンテナ側で記録するため1:1にする）
+    const int y4mSarW = sarInContainerOnly ? 1 : outfmt.sarWidth;
+    const int y4mSarH = sarInContainerOnly ? 1 : outfmt.sarHeight;
     StringBuilder sb;
     sb.append("YUV4MPEG2 W%d H%d C%s I%s F%d:%d A%d:%d",
         outfmt.width, outfmt.height,
         getPixelFormat(vi), outfmt.progressive ? "p" : "t",
         vi.fps_numerator, vi.fps_denominator,
-        outfmt.sarWidth, outfmt.sarHeight);
+        y4mSarW, y4mSarH);
     header = sb.str();
     header.push_back(0x0a);
     frameHeader = "FRAME";
@@ -178,13 +181,15 @@ void Y4MWriter::inputFrame(const PVideoFrame& frame) {
     if (vi.Is444()) return "424";
     return "Unknown";
 }
-Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly, StdRedirectedSubProcess::LineCallback lineCallback)
+Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly, StdRedirectedSubProcess::LineCallback lineCallback, bool sarInContainerOnly)
     : AMTObject(ctx)
-    , y4mWriter_(new MyVideoWriter(this, vi, fmt))
+    , y4mWriter_(new MyVideoWriter(this, vi, fmt, sarInContainerOnly))
     , process_(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, lineCallback)) {
+    const int logSarW = sarInContainerOnly ? 1 : fmt.sarWidth;
+    const int logSarH = sarInContainerOnly ? 1 : fmt.sarHeight;
     ctx.infoF(_T("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps"),
         char_to_tstring(getYUV(vi)), vi.BitsPerComponent(), fmt.progressive ? _T("progressive") : _T("tff"),
-        fmt.width, fmt.height, fmt.sarWidth, fmt.sarHeight, vi.fps_numerator, vi.fps_denominator);
+        fmt.width, fmt.height, logSarW, logSarH, vi.fps_numerator, vi.fps_denominator);
 }
 Y4MEncodeWriter::~Y4MEncodeWriter() {
     if (process_->isRunning()) {
@@ -225,8 +230,8 @@ const std::deque<std::vector<char>>& Y4MEncodeWriter::getLastLines() {
 const std::vector<std::vector<char>>& Y4MEncodeWriter::getCapturedLines() const {
     return process_->getCapturedLines();
 }
-Y4MEncodeWriter::MyVideoWriter::MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo vi, VideoFormat fmt)
-    : Y4MWriter(vi, fmt)
+Y4MEncodeWriter::MyVideoWriter::MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo vi, VideoFormat fmt, bool sarInContainerOnly)
+    : Y4MWriter(vi, fmt, sarInContainerOnly)
     , this_(this_) {}
 /* virtual */ void Y4MEncodeWriter::MyVideoWriter::onWrite(MemoryChunk mc) {
     this_->onVideoWrite(mc);
@@ -463,7 +468,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         try {
             for (int p = 0; p < mp; p++) {
                 chunkEncoders[p] = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(
-                    ctx, chunks[p].args, vi_, outfmt_, disablePowerThrottoling, true, logManager.makeCallback(p)));
+                    ctx, chunks[p].args, vi_, outfmt_, disablePowerThrottoling, true, logManager.makeCallback(p), setting_.getSARInContainerOnly()));
                 chunkPumps.emplace_back(new ChunkPumpThread(chunkEncoders[p].get(), &anyError));
                 chunkPumps.back()->start();
             }
@@ -713,7 +718,7 @@ void AMTFilterVideoEncoder::encode(
         ctx.infoF(_T("%s"), argsWithParallel);
 
         // 初期化（子プロセス起動）
-        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling));
+        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly()));
         // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）
         if (useParallel) {
             for (auto& pi : pinfo) {
@@ -732,8 +737,8 @@ void AMTFilterVideoEncoder::encode(
                 // Y4Mヘッダのみを標準入力に送るヘルパークラス
                 class StdinHeaderWriter : public Y4MWriter {
                 public:
-                    StdinHeaderWriter(Y4MEncodeWriter* encoder, VideoInfo vi, VideoFormat fmt)
-                        : Y4MWriter(vi, fmt), encoder_(encoder) {}
+                    StdinHeaderWriter(Y4MEncodeWriter* encoder, VideoInfo vi, VideoFormat fmt, bool sarInContainerOnly)
+                        : Y4MWriter(vi, fmt, sarInContainerOnly), encoder_(encoder) {}
                     void writeHeaderOnly() {
                         // ヘッダーのみを送信（フレームデータは送らない）
                         if (n == 0) {
@@ -754,8 +759,8 @@ void AMTFilterVideoEncoder::encode(
                 // パイプごとのY4M書き込みスレッド
                 class PipeY4MWriter : public Y4MWriter {
                 public:
-                    PipeY4MWriter(RGYAnonymousPipe* pipe, VideoInfo vi, VideoFormat fmt)
-                        : Y4MWriter(vi, fmt), pipe_(pipe) {}
+                    PipeY4MWriter(RGYAnonymousPipe* pipe, VideoInfo vi, VideoFormat fmt, bool sarInContainerOnly)
+                        : Y4MWriter(vi, fmt, sarInContainerOnly), pipe_(pipe) {}
                 protected:
                     virtual void onWrite(MemoryChunk mc) override {
                         if (mc.length == 0) return;
@@ -794,7 +799,7 @@ void AMTFilterVideoEncoder::encode(
                 };
 
                 // 標準入力にY4Mヘッダを送信 (エンコーダの親スレッドが読み取って初期化に使う)
-                auto headerWriter = std::unique_ptr<StdinHeaderWriter>(new StdinHeaderWriter(encoder_.get(), vi_, outfmt_));
+                auto headerWriter = std::unique_ptr<StdinHeaderWriter>(new StdinHeaderWriter(encoder_.get(), vi_, outfmt_, setting_.getSARInContainerOnly()));
                 headerWriter->writeHeaderOnly();
 
                 // ライタとスレッド生成
@@ -803,7 +808,7 @@ void AMTFilterVideoEncoder::encode(
                 writers.reserve((int)pinfo.size());
                 pumps.reserve((int)pinfo.size());
                 for (auto& pi : pinfo) {
-                    writers.emplace_back(new PipeY4MWriter(&pi.pipe, vi_, outfmt_));
+                    writers.emplace_back(new PipeY4MWriter(&pi.pipe, vi_, outfmt_, setting_.getSARInContainerOnly()));
                     pumps.emplace_back(new SegmentPumpThread(writers.back().get(), &anyError));
                 }
 

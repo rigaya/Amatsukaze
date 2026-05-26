@@ -93,6 +93,16 @@ else
                     <span class="text-muted small">mp4/mkv出力時のみ有効です。他の出力フォーマットでは反映されません。</span>
                 </td>
             </tr>
+            <tr>
+                <th>SAR比をコンテナに<br />のみ記録する</th>
+                <td>
+                    <label style="margin-right: 6px;" title="mp4/mkv出力時のみ有効です。有効時はエンコーダにSAR比を渡さず、コンテナにのみ記録します。">
+                        <input type="checkbox" checked="@GetBoolValue("SARInContainerOnly")" @onchange="@(e => OnBoolChanged(e, "SARInContainerOnly"))" />
+                        有効
+                    </label>
+                    <span class="text-muted small">mp4/mkv出力時のみ有効です。有効時はエンコーダにSAR比を渡さず、コンテナにのみ記録します。</span>
+                </td>
+            </tr>
             @if (IsForceSarEnabled())
             {
                 <tr>

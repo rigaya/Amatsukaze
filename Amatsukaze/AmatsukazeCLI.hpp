@@ -37,8 +37,9 @@ static void printHelp(const tchar* bin) {
         "                      入力ファイルの解像度、アスペクト比、インタレースフラグ、\n"
         "                      フレームレート、カラーマトリクス等は自動で追加されるので不要\n"
         "  --muxer-add-encoder-cmd  mp4/mkv出力時にコンテナにエンコーダ名と追加オプションを記録する\n"
+        "  --sar-in-container-only  SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する\n"
         "  --enc-parallel <数値>  エンコード分割並列数[1]\n"
-        "  --sar w:h           SAR比の上書き (SVT-AV1使用時のみ有効)\n"
+        "  --sar w:h           SAR比の上書き (SVT-AV1使用時または --sar-in-container-only 有効時のみ有効)\n"
         "  -b|--bitrate a:b:f  ビットレート計算式 映像ビットレートkbps = f*(a*s+b)\n"
         "                      sは入力映像ビットレート、fは入力がH264の場合は入力されたfだが、\n"
         "                      入力がMPEG2の場合はf=1とする\n"
@@ -199,6 +200,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.workDir = _T("./");
     conf.encoderOptions = _T("");
     conf.muxerAddEncoderCmd = false;
+    conf.sarInContainerOnly = false;
     conf.encoderPath = _T("x264") + exeAppendix;
     conf.timelineditorPath = _T("timelineeditor") + exeAppendix;
     conf.mp4boxPath = _T("MP4Box") + exeAppendix;
@@ -283,6 +285,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.encoderOptions = getParam(argc, argv, i++);
         } else if (key == _T("--muxer-add-encoder-cmd")) {
             conf.muxerAddEncoderCmd = true;
+        } else if (key == _T("--sar-in-container-only")) {
+            conf.sarInContainerOnly = true;
         } else if (key == _T("--enc-parallel")) {
             const auto arg = getParam(argc, argv, i++);
             int parallel = std::stoi(arg);

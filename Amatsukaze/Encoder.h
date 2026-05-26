@@ -19,7 +19,7 @@ class EncoderArgumentGenerator;
 class Y4MWriter {
     static const char* getPixelFormat(VideoInfo vi);
 public:
-    Y4MWriter(VideoInfo vi, VideoFormat outfmt);
+    Y4MWriter(VideoInfo vi, VideoFormat outfmt, bool sarInContainerOnly = false);
     void inputFrame(const PVideoFrame& frame);
 protected:
     virtual void onWrite(MemoryChunk mc) = 0;
@@ -33,7 +33,7 @@ protected:
 class Y4MEncodeWriter : AMTObject, NonCopyable {
     static const char* getYUV(VideoInfo vi);
 public:
-    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly = false, StdRedirectedSubProcess::LineCallback lineCallback = StdRedirectedSubProcess::LineCallback());
+    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly = false, StdRedirectedSubProcess::LineCallback lineCallback = StdRedirectedSubProcess::LineCallback(), bool sarInContainerOnly = false);
     ~Y4MEncodeWriter();
 
     void inputFrame(const PVideoFrame& frame);
@@ -51,7 +51,7 @@ public:
 private:
     class MyVideoWriter : public Y4MWriter {
     public:
-        MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo vi, VideoFormat fmt);
+        MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo vi, VideoFormat fmt, bool sarInContainerOnly = false);
     protected:
         virtual void onWrite(MemoryChunk mc);
     private:
