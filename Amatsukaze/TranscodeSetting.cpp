@@ -353,11 +353,12 @@ static std::string escapeXmlAttr(const std::string& s) {
             if (videoFormat.fixedFrameRate) {
                 sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
             }
-            if ((encoder == ENCODER_SVTAV1 || sarInContainerOnly) && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
-                const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
-                const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
-                sb.append(_T(":par=%d:%d"), sarW, sarH);
-            }
+        }
+        // sarInContainerOnly のときはエンコーダ直出力(mp4)でもmp4box側でSAR上書き
+        if ((!encoderOutputInContainer || sarInContainerOnly) && (encoder == ENCODER_SVTAV1 || sarInContainerOnly) && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+            const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
+            const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
+            sb.append(_T(":par=%d:%d"), sarW, sarH);
         }
         sb.append(_T("\""));
         for (int i = 0; i < (int)inAudios.size(); i++) {
@@ -435,7 +436,8 @@ static std::string escapeXmlAttr(const std::string& s) {
         } else if (!encoderOutputInContainer) {
             sb.append(_T(" --default-duration \"0:%d/%dfps\""), videoFormat.frameRateNum, videoFormat.frameRateDenom);
         }
-        if (!encoderOutputInContainer && (encoder == ENCODER_SVTAV1 || sarInContainerOnly) && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
+        // sarInContainerOnly のときはエンコーダ直出力(mkv)でもmkvmerge側でSAR上書き
+        if ((!encoderOutputInContainer || sarInContainerOnly) && (encoder == ENCODER_SVTAV1 || sarInContainerOnly) && (!videoFormat.isSARUnspecified() || sarValid(userSAR))) {
             const int sarW = sarValid(userSAR) ? userSAR.first : videoFormat.sarWidth;
             const int sarH = sarValid(userSAR) ? userSAR.second : videoFormat.sarHeight;
             int x = videoFormat.width * sarW;
