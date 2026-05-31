@@ -38,6 +38,7 @@ static const EncoderRCMode RCMODES_QSVENC[] = {
 };
 
 static const EncoderRCMode RCMODES_NVENC[] = {
+    // valueMax: H.264/HEVC=51。AV1は getRCModeValueMax で 63
     { "qvbr",  false, true,  1,  51  },
     { "cqp",   false, false, 0, 255 },
     { "cbr",   true,  false, 1, std::numeric_limits<int>::max() },
@@ -52,6 +53,9 @@ static int X265_DEFAULT_CRF = 28;
 static int SVTAV1_DEFAULT_CRF = 35;
 static int QSVENC_DEFAULT_ICQ = 23;
 static int NVENC_DEFAULT_QVBR = 25;
+
+static constexpr int NVENC_QVBR_QUALITY_MAX_H264_HEVC = 51;
+static constexpr int NVENC_QVBR_QUALITY_MAX_AV1 = 63;
 
 static const EncoderRCMode *encoderRCModes(ENUM_ENCODER encoder) {
     switch (encoder) {
@@ -76,6 +80,16 @@ const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const std::string& str) {
         }
     }
     return nullptr;
+}
+
+int getRCModeValueMax(ENUM_ENCODER encoder, const EncoderRCMode* rcMode, VIDEO_STREAM_FORMAT format) {
+    if (rcMode == nullptr) {
+        return 0;
+    }
+    if (encoder == ENCODER_NVENC && std::string(rcMode->name) == "qvbr") {
+        return (format == VS_AV1) ? NVENC_QVBR_QUALITY_MAX_AV1 : NVENC_QVBR_QUALITY_MAX_H264_HEVC;
+    }
+    return rcMode->valueMax;
 }
 
 /* static */ std::vector<std::wstring> SplitOptions(const tstring& str) {

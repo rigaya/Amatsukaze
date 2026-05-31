@@ -45,6 +45,9 @@ struct EncoderRCMode {
 
 const EncoderRCMode *getRCMode(ENUM_ENCODER encoder, const std::string& str);
 
+// NVEnc --qvbr/--vbr-quality の品質上限 (H.264/HEVC: 51, AV1: 63)
+int getRCModeValueMax(ENUM_ENCODER encoder, const EncoderRCMode* rcMode, VIDEO_STREAM_FORMAT format);
+
 static std::vector<std::wstring> SplitOptions(const tstring& str);
 
 EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str);

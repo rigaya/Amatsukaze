@@ -1458,6 +1458,8 @@ tstring ConfigWrapper::getOptions(
                 sb.append(_T(" --option-file \"%s\""), optionFilePath);
             } else if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
+                const int rcValueMin = rcMode->valueMin;
+                const int rcValueMax = getRCModeValueMax(conf.encoder, rcMode, eoInfo.format);
                 bool addOptFileCmd = false;
                 std::unique_ptr<FILE, std::function<void(FILE*)>> fp(_tfopen(optionFilePath.c_str(), _T("w")), [](FILE* f) { if (f) fclose(f); });
                 if (rcMode->isBitrateMode) {
@@ -1476,17 +1478,17 @@ tstring ConfigWrapper::getOptions(
                         if (std::string(rcMode->name) == "cqp") {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d:%d:%d\n",
                                 zone.startFrame, zone.endFrame - 1, rcMode->name,
-                                std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
-                                std::min(std::max((int)std::round(eoInfo.rcModeValue[1] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax),
-                                std::min(std::max((int)std::round(eoInfo.rcModeValue[2] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcValueMin), rcValueMax),
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[1] + zone.qualityOffset), rcValueMin), rcValueMax),
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[2] + zone.qualityOffset), rcValueMin), rcValueMax));
                         } else if (rcMode->isFloat) {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%f\n",
                                 zone.startFrame, zone.endFrame - 1, rcMode->name,
-                                std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcMode->valueMin), (double)rcMode->valueMax));
+                                std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcValueMin), (double)rcValueMax));
                         } else {
                             fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
                                 zone.startFrame, zone.endFrame - 1, rcMode->name,
-                                std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcMode->valueMin), rcMode->valueMax));
+                                std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcValueMin), rcValueMax));
                         }
                     }
                 }
