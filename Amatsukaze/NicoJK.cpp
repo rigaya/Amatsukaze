@@ -236,6 +236,8 @@ void NicoJK::readASS() {
 }
 
 bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int duration) {
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows: 既存の NicoConvAss / NicoJK18Client を使うフロー
     if (setting_.isUseNicoJKLog()) {
         if (nicoConvASS(CONV_ASS_LOG, startTime)) return true;
     }
@@ -245,11 +247,7 @@ bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int durati
 
         // 取得時刻を表示
         tm t;
-#if defined(_WIN32) || defined(_WIN64)
         if (gmtime_s(&t, &startTime) != 0) {
-#else
-        if (gmtime_r(&startTime, &t) == NULL) {
-#endif
             THROW(RuntimeException, "gmtime_s failed ...");
         }
         t.tm_hour += 9; // GMT+9
@@ -266,7 +264,74 @@ bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int durati
         if (setting_.isUseNicoJKLog()) return false;
         return nicoConvASS(CONV_ASS_TS, startTime);
     }
+#else
+    // Linux: tsukumijima API 経由で Python スクリプトを使うフロー
+    // CONV_ASS_LOG / CONV_ASS_TS は Linux 非対応のため、常に API 経由で取得する
+    getJKNum(serviceId);
+    if (jknum_ == -1) return false;
+
+    // 取得時刻を表示
+    tm t;
+    if (gmtime_r(&startTime, &t) == NULL) {
+        THROW(RuntimeException, "gmtime_r failed ...");
+    }
+    t.tm_hour += 9; // GMT+9
+    mktime(&t);
+    ctx.infoF(_T("%s (jk%d) %d年%02d月%02d日 %02d時%02d分%02d秒 から %d時間%02d分%02d秒"),
+        char_to_tstring(tvname_), jknum_,
+        t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
+        duration / 3600, (duration / 60) % 60, duration % 60);
+
+    return makeASSLinux(startTime, duration);
+#endif
 }
+
+#if !(defined(_WIN32) || defined(_WIN64))
+// Linux: nicojk_ass.py スクリプトに渡すコマンドライン引数を生成する
+tstring NicoJK::MakeNicoJKScriptArgs(time_t startTime, int duration, NicoJKType type) {
+    const int width[]  = { 1280, 1280, 1920, 1920 };
+    const int height[] = {  720,  720, 1080, 1080 };
+    return StringFormat(_T("python3 \"%s\" --channel jk%d --starttime %lld --endtime %lld --width %d --height %d --output \"%s\""),
+        setting_.getNicoConvAssPath(),
+        jknum_,
+        (long long)startTime,
+        (long long)(startTime + duration),
+        width[(int)type], height[(int)type],
+        setting_.getTmpNicoJKASSPath(type));
+}
+
+// Linux: 解像度ごとに nicojk_ass.py を呼び出して ASS ファイルを生成する
+bool NicoJK::makeASSLinux(time_t startTime, int duration) {
+    const NicoJKMask mask_i[] = { MASK_720X,  MASK_1080X  };
+    const NicoJKType type_s[] = { NICOJK_720S, NICOJK_1080S };
+    const NicoJKMask mask_t[] = { MASK_720T,  MASK_1080T  };
+    const NicoJKType type_t[] = { NICOJK_720T, NICOJK_1080T };
+
+    const int typemask = setting_.getNicoJKMask();
+    for (int i = 0; i < 2; i++) {
+        if (!(mask_i[i] & typemask)) continue;
+
+        auto args = MakeNicoJKScriptArgs(startTime, duration, type_s[i]);
+        ctx.infoF(_T("%s"), args);
+        StdRedirectedSubProcess process(args);
+        const int exitCode = process.join();
+        if (exitCode == 0 && File::exists(setting_.getTmpNicoJKASSPath(type_s[i]))) {
+            // ASS 生成成功。必要なら透過スタイル版 (T) も生成する
+            if (mask_t[i] & typemask) {
+                makeT(type_s[i], type_t[i]);
+            }
+            continue;
+        }
+        if (exitCode == 100) {
+            // 対応チャンネルなし (スクリプト側で 100 を返す)
+            return false;
+        }
+        isFail_ = true;
+        return false;
+    }
+    return true;
+}
+#endif
 NicoJKFormatter::NicoJKFormatter(AMTContext& ctx)
     : AMTObject(ctx) {}
 

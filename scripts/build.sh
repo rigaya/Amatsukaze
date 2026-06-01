@@ -256,6 +256,8 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeCLI/
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeGenLogo/AmatsukazeGenLogo"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/libAmatsukaze.so"
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
+# ニコニコ実況コメント取得・ASS変換スクリプト（Linux用）
+install -m 755 -D -t "${INSTALL_DIR}/exe_files" ./scripts/nicojk_ass.py
 
 
 # .NET アプリケーションの公開

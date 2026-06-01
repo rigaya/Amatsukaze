@@ -88,6 +88,12 @@ private:
 
     bool nicoConvASS(ConvMode mode, size_t startTime);
 
+#if !(defined(_WIN32) || defined(_WIN64))
+    // Linux: Python スクリプトで API取得 + ASS変換
+    bool makeASSLinux(time_t startTime, int duration);
+    tstring MakeNicoJKScriptArgs(time_t startTime, int duration, NicoJKType type);
+#endif
+
     static double toClock(int h, int m, int s, int ss);
 
     void readASS();

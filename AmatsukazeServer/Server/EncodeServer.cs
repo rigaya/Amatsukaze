@@ -1375,7 +1375,16 @@ namespace Amatsukaze.Server
             }
             if (string.IsNullOrEmpty(setting.NicoConvASSPath))
             {
-                setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
+                if (!Util.IsServerLinux())
+                {
+                    // Windows: NicoConvASS.exe を使用
+                    setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
+                }
+                else
+                {
+                    // Linux: Python スクリプト nicojk_ass.py を使用
+                    setting.NicoConvASSPath = Path.Combine(basePath, "nicojk_ass.py");
+                }
             }
             if (string.IsNullOrEmpty(setting.SCRenamePath))
             {
@@ -2626,7 +2635,9 @@ namespace Amatsukaze.Server
                 {
                     if (string.IsNullOrEmpty(setting.NicoConvASSPath))
                     {
-                        throw new ArgumentException("NicoConvASSパスが設定されていません");
+                        // Windows: NicoConvASS.exe、Linux: nicojk_ass.py
+                        var toolName = Util.IsServerLinux() ? "nicojk_ass.py" : "NicoConvASS";
+                        throw new ArgumentException(toolName + "パスが設定されていません");
                     }
                 }
 

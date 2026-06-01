@@ -103,7 +103,11 @@ static void printHelp(const tchar* bin) {
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
         "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"
+#if defined(_WIN32) || defined(_WIN64)
         "  --nicoass <パス>     NicoConvASSへのパス\n"
+#else
+        "  --nicoass <パス>     nicojk_ass.pyへのパス\n"
+#endif
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
         "                      1 : 通常\n"
         "                      2 : CMをカット\n"
@@ -210,7 +214,13 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.tsreadexPath = _T("tsreadex") + exeAppendix;
     conf.b24tovttPath = _T("b24tovtt") + exeAppendix;
     conf.psisiarcPath = _T("psisiarc") + exeAppendix;
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows: NicoConvASS.exe を使用
     conf.nicoConvAssPath = _T("NicoConvASS") + exeAppendix;
+#else
+    // Linux: Python スクリプト nicojk_ass.py を使用
+    conf.nicoConvAssPath = _T("nicojk_ass.py");
+#endif
     conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
     conf.drcsOutPath = moduleDir + _T("/../drcs");
@@ -627,7 +637,14 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.chapterExePath = search(conf.chapterExePath);
         conf.encoderPath = search(conf.encoderPath);
         conf.joinLogoScpPath = search(conf.joinLogoScpPath);
+#if defined(_WIN32) || defined(_WIN64)
+        // Windows: SearchExe で NicoConvASS.exe を検索
         conf.nicoConvAssPath = search(conf.nicoConvAssPath);
+#else
+        // Linux: Python スクリプトは SearchExe を使わず、パスを正規化するのみ
+        conf.nicoConvAssPath = pathNormalize(conf.nicoConvAssPath);
+#endif
+        // ch_sid.txt は nicojk_ass.py / NicoConvASS.exe と同じディレクトリに配置
         conf.nicoConvChSidPath = pathGetDirectory(conf.nicoConvAssPath) + _T("/ch_sid.txt");
         conf.mp4boxPath = search(conf.mp4boxPath);
         conf.mkvmergePath = search(conf.mkvmergePath);
