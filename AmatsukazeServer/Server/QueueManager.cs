@@ -487,7 +487,7 @@ namespace Amatsukaze.Server
                                         Mode = req.Mode,
                                         SrcPath = additem.Path,
                                         Hash = additem.Hash,
-                                        DstPath = Path.Combine(outitem.DstPath, outname),
+                                        DstPath = Path.Combine(outitem.DstPath ?? "", outname),
                                         StreamFormat = (VideoStreamFormat)prog.Stream,
                                         ServiceId = prog.ServiceId,
                                         ImageWidth = prog.Width,
