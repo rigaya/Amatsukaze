@@ -258,6 +258,15 @@ install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/lib
 install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
 # ニコニコ実況コメント取得・ASS変換スクリプト（Linux用）
 install -m 755 -D -t "${INSTALL_DIR}/exe_files" ./scripts/nicojk_ass.py
+# danmaku2ass（コメントXML→ASS変換、GPL-3.0）: なければダウンロード
+DANMAKU2ASS_COMMIT="ced881747670c2eb1c0dbd292c2a567f444b056a"
+DANMAKU2ASS_PATH="${INSTALL_DIR}/exe_files/danmaku2ass.py"
+if [ ! -s "${DANMAKU2ASS_PATH}" ]; then
+    echo "danmaku2ass.py をダウンロードします..."
+    wget -q "https://raw.githubusercontent.com/m13253/danmaku2ass/${DANMAKU2ASS_COMMIT}/danmaku2ass.py" \
+        -O "${DANMAKU2ASS_PATH}" || { rm -f "${DANMAKU2ASS_PATH}"; echo "danmaku2ass.py のダウンロードに失敗しました"; exit 1; }
+    chmod 755 "${DANMAKU2ASS_PATH}"
+fi
 
 
 # .NET アプリケーションの公開

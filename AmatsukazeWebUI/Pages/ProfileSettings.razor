@@ -632,31 +632,27 @@ else
 
         <hr class="settings-sep" />
         <h4>ニコニコ実況コメント</h4>
-        @if (_options?.IsServerLinux == true)
-        {
-            <p>Linux環境では利用できません。</p>
-        }
-        else
-        {
-            <table class="table">
+        <table class="table">
+            <tr class="profile-check-row">
+                <td colspan="2">
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("EnableNicoJK")" @onchange="@(e => OnBoolChanged(e, "EnableNicoJK"))" />
+                        ニコニコ実況コメントを有効にする
+                    </label>
+                </td>
+            </tr>
+            @if (GetBoolValue("EnableNicoJK"))
+            {
                 <tr class="profile-check-row">
                     <td colspan="2">
                         <label class="settings-check">
-                            <input type="checkbox" checked="@GetBoolValue("EnableNicoJK")" @onchange="@(e => OnBoolChanged(e, "EnableNicoJK"))" />
-                            ニコニコ実況コメントを有効にする
+                            <input type="checkbox" checked="@GetBoolValue("IgnoreNicoJKError")" @onchange="@(e => OnBoolChanged(e, "IgnoreNicoJKError"))" />
+                            エラーを無視
                         </label>
                     </td>
                 </tr>
-                @if (GetBoolValue("EnableNicoJK"))
+                @if (_options?.IsServerLinux != true)
                 {
-                    <tr class="profile-check-row">
-                        <td colspan="2">
-                            <label class="settings-check">
-                                <input type="checkbox" checked="@GetBoolValue("IgnoreNicoJKError")" @onchange="@(e => OnBoolChanged(e, "IgnoreNicoJKError"))" />
-                                エラーを無視
-                            </label>
-                        </td>
-                    </tr>
                     <tr class="profile-check-row">
                         <td colspan="2">
                             <label class="settings-check">
@@ -673,24 +669,24 @@ else
                             </label>
                         </td>
                     </tr>
-                    <tr>
-                        <th>コメント字幕出力フォーマット</th>
-                        <td>
-                            <div>
-                                <strong>1280x720</strong>
-                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat720S")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat720S"))" />通常</label>
-                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat720T")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat720T"))" />半透明</label>
-                            </div>
-                            <div style="margin-top: 6px;">
-                                <strong>1920x1080</strong>
-                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat1080S")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat1080S"))" />通常</label>
-                                <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat1080T")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat1080T"))" />半透明</label>
-                            </div>
-                        </td>
-                    </tr>
                 }
-            </table>
-        }
+                <tr>
+                    <th>コメント字幕出力フォーマット</th>
+                    <td>
+                        <div>
+                            <strong>1280x720</strong>
+                            <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat720S")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat720S"))" />通常</label>
+                            <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat720T")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat720T"))" />半透明</label>
+                        </div>
+                        <div style="margin-top: 6px;">
+                            <strong>1920x1080</strong>
+                            <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat1080S")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat1080S"))" />通常</label>
+                            <label style="margin-left: 8px;"><input type="checkbox" checked="@GetBoolValue("NicoJKFormat1080T")" @onchange="@(e => OnBoolChanged(e, "NicoJKFormat1080T"))" />半透明</label>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </table>
 
         <hr class="settings-sep" />
         <h4>字幕</h4>
@@ -1129,11 +1125,31 @@ else
         return _draftNode;
     }
 
+    // NicoJKFormat個別名 → NicoJKFormats配列インデックスのマッピング
+    private static readonly Dictionary<string, (string ArrayName, int Index)> _arrayPropertyMap
+        = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["NicoJKFormat720S"]  = ("NicoJKFormats", 0),
+        ["NicoJKFormat720T"]  = ("NicoJKFormats", 1),
+        ["NicoJKFormat1080S"] = ("NicoJKFormats", 2),
+        ["NicoJKFormat1080T"] = ("NicoJKFormats", 3),
+    };
+
     private JsonNode? GetNode(string name)
     {
         var obj = EnsureDraftNode();
         if (obj == null)
         {
+            return null;
+        }
+        // 配列プロパティへのマッピング（例: NicoJKFormat720S → NicoJKFormats[0]）
+        if (_arrayPropertyMap.TryGetValue(name, out var mapping))
+        {
+            var arrNode = GetNode(mapping.ArrayName) as JsonArray;
+            if (arrNode != null && mapping.Index < arrNode.Count)
+            {
+                return arrNode[mapping.Index];
+            }
             return null;
         }
         if (obj.TryGetPropertyValue(name, out var node) && node != null)
@@ -1165,6 +1181,24 @@ else
         var obj = EnsureDraftNode();
         if (obj == null)
         {
+            return;
+        }
+        // 配列プロパティへのマッピング（例: NicoJKFormat720S → NicoJKFormats[0]）
+        if (_arrayPropertyMap.TryGetValue(name, out var mapping))
+        {
+            var arrKey = GetMatchingKey(obj, mapping.ArrayName);
+            if (!obj.TryGetPropertyValue(arrKey, out var arrNodeRaw) || arrNodeRaw is not JsonArray arrNode)
+            {
+                arrNode = new JsonArray(false, false, false, false);
+                obj[arrKey] = arrNode;
+            }
+            while (arrNode.Count <= mapping.Index)
+            {
+                arrNode.Add(JsonValue.Create(false));
+            }
+            arrNode[mapping.Index] = value;
+            _draftJson = obj.ToJsonString();
+            _isDirty = true;
             return;
         }
         var key = name;

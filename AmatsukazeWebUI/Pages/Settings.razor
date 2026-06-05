@@ -70,7 +70,7 @@ else
                 continue;
             }
             <tr>
-                <th>@item.Label</th>
+                <th>@GetPathLabel(item.Field, item.Label)</th>
                 <td>
                     <PathSuggestInput Value="@GetStringValue(item.Field)"
                                       ValueChanged="@(v => OnStringValueChanged(v, item.Field))"
@@ -431,7 +431,7 @@ else
         ("b24tovtt", "B24ToVttPath", (string?)".exe", true, true),
         ("psisiarc", "PsisiarcPath", (string?)".exe", true, true),
         ("Whisper", "WhisperPath", (string?)".exe", true, true),
-        ("NicoConvASS", "NicoConvASSPath", (string?)".exe", true, true),
+        ("NicoConvASS", "NicoConvASSPath", (string?)".exe;.py", true, true),
         ("tsreplace", "TsReplacePath", (string?)".exe", true, true),
         ("tsMuxeR", "TsMuxeRPath", (string?)".exe", true, true),
         ("SCRename.vbs/py", "SCRenamePath", (string?)".vbs;.py", true, true),
@@ -1448,10 +1448,15 @@ else
 
     private bool IsNumParallelLogoAuto => GetIntValue(NumParallelLogoField) <= 0;
 
+    private string GetPathLabel(string field, string defaultLabel)
+    {
+        if (IsServerLinux && field == "NicoConvASSPath") return "nicojk_ass.py";
+        return defaultLabel;
+    }
+
     private static bool IsWindowsOnlyPath(string field)
     {
-        return field == "NicoConvASSPath"
-            || field == "TsMuxeRPath"
+        return field == "TsMuxeRPath"
             || field == "AutoVfrPath"
             || field == "NeroAacEncPath"
             || field == "QaacPath";

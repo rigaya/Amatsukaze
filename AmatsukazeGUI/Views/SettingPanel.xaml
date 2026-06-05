@@ -147,12 +147,13 @@
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="b24tovttパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="psisiarcパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="Whisperパス"/>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="NicoConvASSパス">
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                <Setter Property="Text" Value="NicoConvASSパス"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="Text" Value="nicojk_ass.pyパス"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -229,17 +230,7 @@
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearB24tovttPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearPsisiarcPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearWhisperPathCommand}"/>
-                        <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
+                        <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearNicoConvASSPathCommand}"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearTsReplacePathCommand}"/>
                         <Border Height="30"/>
                         <Button Height="22" Content="クリア" Margin="6,4" ToolTip="{StaticResource tooltip}" Command="{Binding ClearSCRenamePathCommand}"/>
@@ -269,17 +260,7 @@
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.B24ToVttPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.PsisiarcPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.WhisperPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
-                        <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
-                            <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBox.Style>
-                        </TextBox>
+                        <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.NicoConvASSPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.TsReplacePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                         <TextBox Height="22" Margin="0,4" Text="{Binding Model.Setting.TsMuxeRPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Top" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop">
                             <TextBox.Style>
