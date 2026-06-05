@@ -260,6 +260,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y \
         gosu \
         git \
+        python3 \
         xz-utils \
         locales \
         openssl \
