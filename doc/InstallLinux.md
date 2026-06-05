@@ -27,13 +27,14 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
   
   まだ対応しきれていない箇所がまだあるかもしれません…
 
-- 未対応
-  - ニコニコ実況コメント関連機能
+- 代替実装あり
 
-    まったく詳しくないので、方法があれば教えてください...
+  完全互換ではありませんが、代替実装を用意しています。
+
+  - AmatsukazeGUI -> WebUI
+  - ニコニコ実況関連 -> nicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass)
 
 - 対応予定なし
-  - AmatsukazeGUI (操作ウィンドウ)
   - 設定画面へのドラッグドロップによるタスク追加
   - 常時表示ディスク
   - エンコード中の一時停止
