@@ -128,9 +128,12 @@ void NicoJK::makeT(NicoJKType srcType, NicoJKType dstType) {
             // Style: white,MS PGothic,28,&H70ffffff,&H70ffffff,&H70000000,&H70000000,-1,0,0,0,200,200,0,0.00,1,1,0,7,20,20,40,1
             auto tokens = split(str, ",");
             for (int i = 3; i < 7; i++) {
-                // 透明度
-                tokens[i][2] = '7';
-                tokens[i][3] = '0';
+                // 透明度（&Hの後の2文字をalpha値に置換）
+                auto pos = tokens[i].find("&H");
+                if (pos != std::string::npos && pos + 3 < tokens[i].size()) {
+                    tokens[i][pos + 2] = '7';
+                    tokens[i][pos + 3] = '0';
+                }
             }
             tokens[16] = "1"; // Outlineあり
             tokens[17] = "0"; // Shadowなし
@@ -214,7 +217,7 @@ void NicoJK::readASS() {
             file.getline(str);
             headerlines_[i].push_back(str);
 
-            std::regex re("Dialogue: 0,(\\d):(\\d\\d):(\\d\\d)\\.(\\d\\d),(\\d):(\\d\\d):(\\d\\d)\\.(\\d\\d)(.*)");
+            std::regex re("Dialogue: 0,(\\d+):(\\d\\d):(\\d\\d)\\.(\\d\\d),(\\d+):(\\d\\d):(\\d\\d)\\.(\\d\\d)(.*)");
 
             while (file.getline(str)) {
                 std::smatch m;
