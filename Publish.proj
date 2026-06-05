@@ -5,6 +5,7 @@
     <PublishProjects Include="AmatsukazeGUI\AmatsukazeGUI.csproj" />
     <PublishProjects Include="ScriptCommand\ScriptCommand.csproj" />
     <WebUiHostProject Include="AmatsukazeServer\AmatsukazeServer.csproj" />
+    <WebUiProject Include="AmatsukazeWebUI\AmatsukazeWebUI.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -13,22 +14,54 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishRoot>$(MSBuildThisFileDirectory)publish\win-x64\</PublishRoot>
+    <WebUIPublishDir>$(PublishRoot)_webui_tmp\</WebUIPublishDir>
   </PropertyGroup>
 
-  <Target Name="PublishAll">
+  <!-- 全プロジェクトのRestoreを1回にまとめる -->
+  <Target Name="RestoreAll">
+    <MSBuild
+      Projects="@(PublishProjects);@(WebUiHostProject);@(WebUiProject)"
+      Targets="Restore"
+      BuildInParallel="true"
+      Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration)">
+    </MSBuild>
+  </Target>
+
+  <Target Name="PublishAll" DependsOnTargets="RestoreAll">
+    <!-- アプリプロジェクト (self-contained, single-file) -->
     <MSBuild
       Projects="@(PublishProjects)"
-      Targets="Restore;Publish"
+      Targets="Publish"
       BuildInParallel="true"
       Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration);SelfContained=$(SelfContained);PublishSingleFile=$(PublishSingleFile);PublishDir=$(PublishRoot)%(Filename)\">
     </MSBuild>
 
+    <!-- サーバー (framework-dependent) — 埋め込みWebUIPublishはスキップ -->
     <MSBuild
       Projects="@(WebUiHostProject)"
-      Targets="Restore;Publish"
+      Targets="Publish"
       BuildInParallel="true"
-      Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration);SelfContained=false;PublishSingleFile=false;PublishDir=$(PublishRoot)%(Filename)\">
+      Properties="RuntimeIdentifier=$(RuntimeIdentifier);Configuration=$(Configuration);SelfContained=false;PublishSingleFile=false;PublishDir=$(PublishRoot)%(Filename)\;SkipWebUIPublish=true">
     </MSBuild>
+
+    <!-- WebUI (Blazor WASM) — サーバーと独立してpublish -->
+    <MSBuild
+      Projects="@(WebUiProject)"
+      Targets="Publish"
+      BuildInParallel="true"
+      Properties="Configuration=$(Configuration);PublishDir=$(WebUIPublishDir)">
+    </MSBuild>
+
+    <!-- WebUIのwwwrootをサーバー出力にコピー -->
+    <RemoveDir Directories="$(PublishRoot)AmatsukazeServer\wwwroot" />
+    <ItemGroup>
+      <WebUIFiles Include="$(WebUIPublishDir)wwwroot\**\*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(WebUIFiles)"
+      DestinationFiles="@(WebUIFiles->'$(PublishRoot)AmatsukazeServer\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+    <RemoveDir Directories="$(WebUIPublishDir)" />
   </Target>
 </Project>
 
