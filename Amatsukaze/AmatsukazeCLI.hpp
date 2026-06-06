@@ -15,6 +15,11 @@
 
 // MSVCのマルチバイトはUnicodeでないので文字列操作に適さないのでwchar_tで文字列操作をする
 
+#if defined(_WIN32) || defined(_WIN64)
+#define AMATSUKAZECLI_HELP_NICOASS_LINE "  --nicoass <パス>     NicoConvASSへのパス\n"
+#else
+#define AMATSUKAZECLI_HELP_NICOASS_LINE "  --nicoass <パス>     nicojk_ass.pyへのパス\n"
+#endif
 
 static void printCopyright() {
     PRINTF(
@@ -103,11 +108,7 @@ static void printHelp(const tchar* bin) {
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
         "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"
-#if defined(_WIN32) || defined(_WIN64)
-        "  --nicoass <パス>     NicoConvASSへのパス\n"
-#else
-        "  --nicoass <パス>     nicojk_ass.pyへのパス\n"
-#endif
+        AMATSUKAZECLI_HELP_NICOASS_LINE
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
         "                      1 : 通常\n"
         "                      2 : CMをカット\n"
