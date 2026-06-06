@@ -460,6 +460,15 @@ namespace Amatsukaze.Server.Rest
                     }
                 }
 
+                if (data.Outputs == null || data.Outputs.Count == 0)
+                {
+                    return Results.BadRequest(new { error = "Output is required." });
+                }
+                if (data.Outputs.Any(o => string.IsNullOrWhiteSpace(o.DstPath)))
+                {
+                    return Results.BadRequest(new { error = "Output directory is required." });
+                }
+
                 var serverReq = new Amatsukaze.Server.AddQueueRequest
                 {
                     DirPath = data.DirPath,

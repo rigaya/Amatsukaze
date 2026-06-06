@@ -49,7 +49,7 @@ namespace Amatsukaze.AddTask
                 "  --proc-mode <mode>      タスクの処理モード(batch|auto|test|drcs|cm)\r\n" +
                 "                          batch: 一括バッチ, auto: 自動バッチ(デフォルト)\r\n" +
                 "                          test: テストエンコードのみ, drcs: DRCS解析のみ, cm: CM解析のみ\r\n" +
-                "  -o|--outdir <パス>      出力先ディレクトリ\r\n" +
+                "  -o|--outdir <パス>      出力先ディレクトリ（-f 指定時は必須）\r\n" +
                 "  -d|--nasdir <パス>      NASのTSファイル置き場\r\n" +
                 "  --remote-dir <パス>     サーバから入力ファイルにアクセスするときのディレクトリパス\r\n" +
                 "                          サーバからだとパスが異なる場合に必要\r\n" +
@@ -263,6 +263,10 @@ namespace Amatsukaze.AddTask
             if(ItemID < 0 && string.IsNullOrEmpty(FilePath))
             {
                 throw new Exception("入力ファイルパスを入力してください");
+            }
+            if(ItemID < 0 && string.IsNullOrEmpty(FilePath) == false && string.IsNullOrWhiteSpace(OutPath))
+            {
+                throw new Exception("出力先ディレクトリを入力してください");
             }
         }
     }

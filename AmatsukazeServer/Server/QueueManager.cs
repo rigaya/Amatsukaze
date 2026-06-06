@@ -400,6 +400,12 @@ namespace Amatsukaze.Server
                 return;
             }
 
+            if (req.Outputs.Any(o => string.IsNullOrWhiteSpace(o.DstPath)))
+            {
+                await server.NotifyError("出力先ディレクトリが指定されていません", enableLog);
+                return;
+            }
+
             // 既に追加されているファイルは除外する
             // バッチのときは全ファイルが対象だが、バッチじゃなければバッチのみが対象
             List<QueueItem> ignoreSnapshot;
