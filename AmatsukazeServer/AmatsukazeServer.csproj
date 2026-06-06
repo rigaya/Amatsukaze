@@ -66,7 +66,7 @@
     <Exec Condition="'$(OS)' == 'Windows_NT'" Command="Version.bat" WorkingDirectory="$(MSBuildProjectDirectory)" />
     <Exec Condition="'$(OS)' != 'Windows_NT'" Command="./Version.sh" WorkingDirectory="$(MSBuildProjectDirectory)" />
   </Target>
-  <Target Name="PublishWebUI" AfterTargets="Publish" Condition="Exists('..\AmatsukazeWebUI\AmatsukazeWebUI.csproj') And '$(SkipWebUIPublish)' != 'true'">
+  <Target Name="PublishWebUI" AfterTargets="Publish" Condition="Exists('..\AmatsukazeWebUI\AmatsukazeWebUI.csproj')">
     <PropertyGroup>
       <WebUIProject>..\AmatsukazeWebUI\AmatsukazeWebUI.csproj</WebUIProject>
       <WebUIPublishDir>$(BaseIntermediateOutputPath)webui-publish\</WebUIPublishDir>
