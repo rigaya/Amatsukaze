@@ -128,7 +128,10 @@ jobs:
       - name: Install .NET WebAssembly build tools
         shell: cmd
         run: |
+          dotnet nuget locals all --clear
           dotnet workload install wasm-tools --skip-manifest-update
+          rem Amatsukaze.sln 全体だと vcxproj を dotnet CLI が評価して失敗するため WebUI のみ対象にする
+          dotnet workload restore AmatsukazeWebUI\AmatsukazeWebUI.csproj
 
       - name: Build (publish.bat)
         shell: cmd
