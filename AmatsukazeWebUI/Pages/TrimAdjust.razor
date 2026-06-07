@@ -49,8 +49,11 @@
         <div class="trim-main">
             @* 左: 編集点リスト *@
             <div class="trim-editpoints">
-                <div class="trim-editpoints-header">編集点</div>
-                <div class="trim-editpoints-list">
+                <div class="trim-editpoints-header" @onclick="ToggleMobileEp">
+                    <span>編集点</span>
+                    <span class="trim-ep-toggle-arrow">@(_mobileEpOpen ? "▲" : "▼")</span>
+                </div>
+                <div class="trim-editpoints-list @(_mobileEpOpen ? "mob-open" : "")">
                     @{
                         var segments = BuildEditPointSegments();
                     }
@@ -66,7 +69,7 @@
                         </div>
                     }
                 </div>
-                <div class="trim-editpoints-actions">
+                <div class="trim-editpoints-actions @(_mobileEpOpen ? "mob-open" : "")">
                     <div class="trim-editpoints-total">
                         <span class="trim-editpoints-total-label">本編 合計</span>
                         <span class="trim-editpoints-total-time">@GetActiveTotalTime()</span>
@@ -435,6 +438,7 @@
     private List<EditPoint> _editPoints = new List<EditPoint>();
     private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
+    private bool _mobileEpOpen;
 
     // プロファイル選択・再投入
     private List<string> _profiles = new List<string>();
@@ -1491,6 +1495,8 @@
     }
 
     // 編集点の切替（なければ追加、あれば削除）
+    private void ToggleMobileEp() => _mobileEpOpen = !_mobileEpOpen;
+
     private void ToggleEditPoint()
     {
         var existing = _editPoints.FindIndex(e => e.Frame == _currentFrame);

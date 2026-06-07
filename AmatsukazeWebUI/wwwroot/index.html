@@ -385,6 +385,49 @@
             document.addEventListener('mouseup', function () {
                 if (dragging) { dragging = false; setHighlight(null); container.style.cursor = ''; }
             });
+            // タッチ対応（Android等）
+            function calcRatioTouch(e) {
+                if (!e.touches || !e.touches.length) return -1;
+                var rect = seekbar.getBoundingClientRect();
+                if (rect.width <= 0) return -1;
+                var r = (e.touches[0].clientX - rect.left) / rect.width;
+                return Math.max(0, Math.min(1, r));
+            }
+            function findNearestMarkerTouch(e) {
+                if (!e.touches || !e.touches.length) return null;
+                var markers = seekbar.querySelectorAll('.trim-seekbar-marker');
+                if (!markers.length) return null;
+                var touchX = e.touches[0].clientX;
+                var best = null, bestDist = Infinity;
+                for (var i = 0; i < markers.length; i++) {
+                    var mr = markers[i].getBoundingClientRect();
+                    var cx = mr.left + mr.width / 2;
+                    var dist = Math.abs(touchX - cx);
+                    if (dist < bestDist) { bestDist = dist; best = markers[i]; }
+                }
+                return (bestDist <= 30) ? best : null;
+            }
+            container.addEventListener('touchstart', function (e) {
+                if (e.touches.length !== 1) return;
+                var r = calcRatioTouch(e);
+                if (r < 0) return;
+                var marker = findNearestMarkerTouch(e);
+                if (marker) {
+                    dotNetRef.invokeMethodAsync('OnSeekBarMarkerClick', r);
+                } else {
+                    dragging = true;
+                    dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
+                }
+                e.preventDefault();
+            }, { passive: false });
+            container.addEventListener('touchmove', function (e) {
+                if (!dragging || e.touches.length !== 1) return;
+                var r = calcRatioTouch(e);
+                if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
+                e.preventDefault();
+            }, { passive: false });
+            container.addEventListener('touchend', function () { dragging = false; });
+            container.addEventListener('touchcancel', function () { dragging = false; });
         };
         // Trim調整: マウスホイールで1フレームずつ移動
         window.trimAdjustSetupWheel = function (dotNetRef) {
