@@ -1,6 +1,7 @@
 /.vs
 /lib
 /.vscode/settings.json
+__pycache__/
 
 /*.VC.VC.opendb
 /*.VC.db
