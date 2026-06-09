@@ -963,3 +963,84 @@
         border: 1px solid #bdd4e9;
     }
 }
+
+/* モバイル (≤640px): アコーディオンレイアウト */
+@media (max-width: 640px) {
+    /* ツールバー: プロファイル行を2行目に折り返し */
+    .trim-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .trim-toolbar-requeue {
+        flex-basis: 100%;
+        margin-left: 0;
+        order: 10;
+    }
+
+    /* メインを縦積みに変換、編集点を下部に移動 */
+    .trim-main {
+        flex-direction: column;
+    }
+
+    .trim-editpoints {
+        order: 2;
+        width: 100%;
+        min-width: 0;
+        border-right: none;
+        border-top: 1px solid #444;
+        height: auto;
+    }
+
+    .trim-preview-area {
+        order: 1;
+    }
+
+    /* 編集点ヘッダー: アコーディオントグル */
+    .trim-editpoints-header {
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 9px 12px;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    /* リスト: 折りたたみ ↔ 展開 */
+    .trim-editpoints-list {
+        flex: none;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+    }
+
+    .trim-editpoints-list.mob-open {
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    /* アクション: 折りたたみ ↔ 展開 */
+    .trim-editpoints-actions {
+        display: none;
+    }
+
+    .trim-editpoints-actions.mob-open {
+        display: flex;
+    }
+
+    /* 波形の高さを縮小 */
+    .trim-waveform-container {
+        height: 44px;
+    }
+
+    .trim-waveform-img {
+        height: 44px;
+    }
+}
+
+/* PC (>640px): 矢印インジケーターは非表示 */
+@media (min-width: 641px) {
+    .trim-ep-toggle-arrow {
+        display: none;
+    }
+}
