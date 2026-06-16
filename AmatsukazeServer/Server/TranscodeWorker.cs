@@ -843,6 +843,10 @@ namespace Amatsukaze.Server
                     .ToArray();
                 if (logofiles.Length == 0)
                 {
+                    if (item.IsCheck)
+                    {
+                        return MakeCheckLogItem(item.Mode, false, item, item.Profile.Name, "ロゴ設定がありません", now, now);
+                    }
                     return FailLogItem(item, item.Profile.Name, "ロゴ設定がありません", now, now);
                 }
                 ignoreNoLogo = !logofiles.All(path => path != LogoSetting.NO_LOGO);
