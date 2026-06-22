@@ -10,32 +10,32 @@
 
 #include "rgy_util.h"
 
-const char* CMTypeToString(CMType cmtype) {
-    if (cmtype == CMTYPE_CM) return "CM";
-    if (cmtype == CMTYPE_NONCM) return "本編";
-    if (cmtype == CMTYPE_EDGE_TRIM) return "前後CMカット";
-    return "";
+const tchar* CMTypeToString(CMType cmtype) {
+    if (cmtype == CMTYPE_CM) return _T("CM");
+    if (cmtype == CMTYPE_NONCM) return _T("本編");
+    if (cmtype == CMTYPE_EDGE_TRIM) return _T("前後CMカット");
+    return _T("");
 }
 
-const char* PictureTypeString(PICTURE_TYPE pic) {
+const tchar* PictureTypeString(PICTURE_TYPE pic) {
     switch (pic) {
-    case PIC_FRAME: return "FRAME";
-    case PIC_FRAME_DOUBLING: return "DBL";
-    case PIC_FRAME_TRIPLING: return "TLP";
-    case PIC_TFF: return "TFF";
-    case PIC_BFF: return "BFF";
-    case PIC_TFF_RFF: return "TFF_RFF";
-    case PIC_BFF_RFF: return "BFF_RFF";
-    default: return "UNK";
+    case PIC_FRAME: return _T("FRAME");
+    case PIC_FRAME_DOUBLING: return _T("DBL");
+    case PIC_FRAME_TRIPLING: return _T("TLP");
+    case PIC_TFF: return _T("TFF");
+    case PIC_BFF: return _T("BFF");
+    case PIC_TFF_RFF: return _T("TFF_RFF");
+    case PIC_BFF_RFF: return _T("BFF_RFF");
+    default: return _T("UNK");
     }
 }
 
-const char* FrameTypeString(FRAME_TYPE frame) {
+const tchar* FrameTypeString(FRAME_TYPE frame) {
     switch (frame) {
-    case FRAME_I: return "I";
-    case FRAME_P: return "P";
-    case FRAME_B: return "B";
-    default: return "UNK";
+    case FRAME_I: return _T("I");
+    case FRAME_P: return _T("P");
+    case FRAME_B: return _T("B");
+    default: return _T("UNK");
     }
 }
 
@@ -54,28 +54,28 @@ double presenting_time(PICTURE_TYPE picType, double frameRate) {
     return 1.0 / frameRate;
 }
 
-const char* getAudioChannelString(AUDIO_CHANNELS channels) {
+const tchar* getAudioChannelString(AUDIO_CHANNELS channels) {
     switch (channels) {
-    case AUDIO_MONO: return "モノラル";
-    case AUDIO_STEREO: return "ステレオ";
-    case AUDIO_30: return "3/0";
-    case AUDIO_31: return "3/1";
-    case AUDIO_32: return "3/2";
-    case AUDIO_32_LFE: return "5.1ch";
-    case AUDIO_21: return "2/1";
-    case AUDIO_22: return "2/2";
-    case AUDIO_2LANG: return "デュアルモノ";
-    case AUDIO_52_LFE: return "7.1ch";
-    case AUDIO_33_LFE: return "3/3.1";
-    case AUDIO_2_22_LFE: return "2/0/0-2/0/2-0.1";
-    case AUDIO_322_LFE: return "3/2/2.1";
-    case AUDIO_2_32_LFE: return "2/0/0-3/0/2-0.1";
-    case AUDIO_020_32_LFE: return "0/2/0-3/0/2-0.1";
-    case AUDIO_2_323_2LFE: return "2/0/0-3/2/3-0.2";
-    case AUDIO_333_523_3_2LFE: return "22.2ch";
+    case AUDIO_MONO: return _T("モノラル");
+    case AUDIO_STEREO: return _T("ステレオ");
+    case AUDIO_30: return _T("3/0");
+    case AUDIO_31: return _T("3/1");
+    case AUDIO_32: return _T("3/2");
+    case AUDIO_32_LFE: return _T("5.1ch");
+    case AUDIO_21: return _T("2/1");
+    case AUDIO_22: return _T("2/2");
+    case AUDIO_2LANG: return _T("デュアルモノ");
+    case AUDIO_52_LFE: return _T("7.1ch");
+    case AUDIO_33_LFE: return _T("3/3.1");
+    case AUDIO_2_22_LFE: return _T("2/0/0-2/0/2-0.1");
+    case AUDIO_322_LFE: return _T("3/2/2.1");
+    case AUDIO_2_32_LFE: return _T("2/0/0-3/0/2-0.1");
+    case AUDIO_020_32_LFE: return _T("0/2/0-3/0/2-0.1");
+    case AUDIO_2_323_2LFE: return _T("2/0/0-3/2/3-0.2");
+    case AUDIO_333_523_3_2LFE: return _T("22.2ch");
     default: break;
     }
-    return "エラー";
+    return _T("エラー");
 }
 
 int getNumAudioChannels(AUDIO_CHANNELS channels) {

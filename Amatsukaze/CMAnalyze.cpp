@@ -576,7 +576,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoF
         cleanup();
         return true;
     } catch (const Exception& e) {
-        ctx.infoF(_T("[自動ロゴ検出] 例外が発生しました: %s"), char_to_tstring(e.message()));
+        ctx.infoF(_T("[自動ロゴ検出] 例外が発生しました: %s"), e.message());
         cleanup();
         return false;
     } catch (const std::exception& e) {
@@ -909,7 +909,7 @@ std::vector<MakeChapter::JlsElement> MakeChapter::makeFileChapter(EncodeFileKey 
 }
 
 void MakeChapter::writeChapter(const std::vector<JlsElement>& chapters, EncodeFileKey key) {
-    ctx.infoF(_T("ファイル: %d-%d-%d %s"), key.video, key.format, key.div, char_to_tstring(CMTypeToString(key.cm)));
+    ctx.infoF(_T("ファイル: %d-%d-%d %s"), key.video, key.format, key.div, CMTypeToString(key.cm));
 
     StringBuilder sb;
     for (int i = 0; i < (int)chapters.size(); i++) {

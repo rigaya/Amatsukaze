@@ -8,6 +8,7 @@
 
 #include "FileUtils.h"
 #include "rgy_osdep.h"
+#include "rgy_codepage.h"
 #if defined(_WIN32) || defined(_WIN64)
 #include <direct.h>
 #endif // #if defined(_WIN32) || defined(_WIN64)
@@ -81,12 +82,21 @@ void PrintFileAll(const tstring& path) {
     File file(path, _T("rb"));
     int sz = (int)file.size();
     if (sz == 0) return;
-    auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[sz]);
+    auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[sz + 1]);
     auto rsz = file.read(MemoryChunk(buf.get(), sz));
-    fwrite(buf.get(), 1, strnlen_s((char*)buf.get(), rsz), stderr);
+    buf[rsz] = '\0';
+    const auto detectedCp = get_code_page(buf.get(), (uint32_t)rsz);
+    const auto inputCp = (detectedCp == CODE_PAGE_UTF8) ? CODE_PAGE_UTF8 : CODE_PAGE_SJIS;
+#if defined(_WIN32) || defined(_WIN64)
+    const auto text = wstring_to_string(char_to_wstring((char *)buf.get(), inputCp), GetACP());
+#else
+    const auto text = char_to_string(CODE_PAGE_UTF8, (char *)buf.get(), inputCp);
+#endif
+    fwrite(text.data(), 1, text.size(), stderr);
     if (buf[rsz - 1] != '\n') {
         // 改行で終わっていないときは改行する
         fprintf(stderr, "\n");
     }
+    fflush(stderr);
 }
 

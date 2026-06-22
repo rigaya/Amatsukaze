@@ -80,16 +80,16 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     return base;
 }
 
-/* static */ const char* encoderToString(ENUM_ENCODER encoder) {
+/* static */ const tchar* encoderToString(ENUM_ENCODER encoder) {
     switch (encoder) {
-    case ENCODER_X264: return "x264";
-    case ENCODER_X265: return "x265";
-    case ENCODER_QSVENC: return "QSVEnc";
-    case ENCODER_NVENC: return "NVEnc";
-    case ENCODER_VCEENC: return "VCEEnc";
-    case ENCODER_SVTAV1: return "SVT-AV1";
+    case ENCODER_X264: return _T("x264");
+    case ENCODER_X265: return _T("x265");
+    case ENCODER_QSVENC: return _T("QSVEnc");
+    case ENCODER_NVENC: return _T("NVEnc");
+    case ENCODER_VCEENC: return _T("VCEEnc");
+    case ENCODER_SVTAV1: return _T("SVT-AV1");
     }
-    return "Unknown";
+    return _T("Unknown");
 }
 
 /* static */ bool encoderOutputInContainer(const ENUM_ENCODER encoder, const ENUM_FORMAT format) {
@@ -210,15 +210,15 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     return sb.str();
 }
 
-/* static */ const char* audioEncoderToString(ENUM_AUDIO_ENCODER fmt) {
+/* static */ const tchar* audioEncoderToString(ENUM_AUDIO_ENCODER fmt) {
     switch (fmt) {
-    case AUDIO_ENCODER_NONE: return "none";
-    case AUDIO_ENCODER_NEROAAC: return "neroaac";
-    case AUDIO_ENCODER_QAAC: return "qaac";
-    case AUDIO_ENCODER_FDKAAC: return "fdkaac";
-    case AUDIO_ENCODER_OPUSENC: return "opus";
+    case AUDIO_ENCODER_NONE: return _T("none");
+    case AUDIO_ENCODER_NEROAAC: return _T("neroaac");
+    case AUDIO_ENCODER_QAAC: return _T("qaac");
+    case AUDIO_ENCODER_FDKAAC: return _T("fdkaac");
+    case AUDIO_ENCODER_OPUSENC: return _T("opus");
     }
-    return "unknown";
+    return _T("unknown");
 }
 
 /* static */ tstring makeAudioEncoderArgs(
@@ -551,29 +551,28 @@ static std::string escapeXmlAttr(const std::string& s) {
     return sb.str();
 }
 
-/* static */ const char* cmOutMaskToString(int outmask) {
+/* static */ tstring cmOutMaskToString(int outmask) {
     struct OptionDesc {
         int bit;
-        const char* text;
+        const tchar* text;
     };
     static const OptionDesc OPTIONS[] = {
-        { 1, "通常" },
-        { 2, "CMをカット" },
-        { 4, "CMのみ出力" },
-        { 8, "前後のCMのみカット" },
+        { 1, _T("通常") },
+        { 2, _T("CMをカット") },
+        { 4, _T("CMのみ出力") },
+        { 8, _T("前後のCMのみカット") },
     };
-    static thread_local std::string desc;
-    desc.clear();
+    tstring desc;
     for (const auto& opt : OPTIONS) {
         if ((outmask & opt.bit) != 0) {
-            if (desc.size()) desc.append("/");
+            if (desc.size()) desc.append(_T("/"));
             desc.append(opt.text);
         }
     }
     if (desc.empty()) {
-        return (outmask == 0) ? "なし" : "不明";
+        return (outmask == 0) ? _T("なし") : _T("不明");
     }
-    return desc.c_str();
+    return desc;
 }
 TempDirectory::TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp)
     : AMTObject(ctx)
@@ -1543,9 +1542,9 @@ void ConfigWrapper::dump() const {
     ctx.infoF(_T("出力: %s"), conf.outVideoPath);
     ctx.infoF(_T("一時フォルダ: %s"), tmpDir.path());
     ctx.infoF(_T("出力フォーマット: %s%s"),
-        char_to_tstring(formatToString(conf.format)),
+        formatToString(conf.format),
         (conf.useMKVWhenSubExist) ? _T(" (字幕ありではMKV)") : _T(""));
-    ctx.infoF(_T("エンコーダ: %s (%s)"), conf.encoderPath, char_to_tstring(encoderToString(conf.encoder)));
+    ctx.infoF(_T("エンコーダ: %s (%s)"), conf.encoderPath, encoderToString(conf.encoder));
     ctx.infoF(_T("エンコーダオプション: %s"), conf.encoderOptions);
     if (conf.userSAR.first > 0 && conf.userSAR.second > 0) {
         ctx.infoF(_T("ユーザー指定SAR: %d:%d"), conf.userSAR.first, conf.userSAR.second);
@@ -1558,7 +1557,7 @@ void ConfigWrapper::dump() const {
     }
     ctx.infoF(_T("エンコード/出力: %s/%s"),
         conf.twoPass ? _T("2パス") : _T("1パス"),
-        char_to_tstring(cmOutMaskToString(conf.cmoutmask)));
+        cmOutMaskToString(conf.cmoutmask).c_str());
     ctx.infoF(_T("エンコード分割並列: %d"), conf.encoderParallel);
     ctx.infoF(_T("チャプター解析: %s%s"),
         conf.chapter ? _T("有効") : _T("無効"),
@@ -1571,7 +1570,7 @@ void ConfigWrapper::dump() const {
     ctx.infoF(_T("ロゴ消し: %s"), conf.noDelogo ? _T("しない") : _T("する"));
     ctx.infoF(_T("並列ロゴ解析: %s"), conf.parallelLogoAnalysis ? (conf.numParallelLogoAnalysis > 0 ? StringFormat(_T("%d並列"), conf.numParallelLogoAnalysis) : _T("オン")) : _T("オフ"));
     if (conf.audioEncoder != AUDIO_ENCODER_NONE) {
-        ctx.infoF(_T("音声: %s (%s)"), conf.audioEncoderPath, char_to_tstring(audioEncoderToString(conf.audioEncoder)));
+        ctx.infoF(_T("音声: %s (%s)"), conf.audioEncoderPath, audioEncoderToString(conf.audioEncoder));
         if (conf.audioBitrateInKbps > 0) {
             ctx.infoF(_T("音声エンコーダビットレート: %d kbps"), conf.audioBitrateInKbps);
         }
@@ -1593,9 +1592,9 @@ void ConfigWrapper::dump() const {
         ctx.info(_T("サービスID: 指定なし"));
     }
     ctx.infoF(_T("デコーダ: MPEG2:%s H264:%s HEVC:%s"),
-        char_to_tstring(decoderToString(conf.decoderSetting.mpeg2)),
-        char_to_tstring(decoderToString(conf.decoderSetting.h264)),
-        char_to_tstring(decoderToString(conf.decoderSetting.hevc)));
+        decoderToString(conf.decoderSetting.mpeg2),
+        decoderToString(conf.decoderSetting.h264),
+        decoderToString(conf.decoderSetting.hevc));
     if (conf.mode == _T("cm")) {
         ctx.infoF(_T("trim.avsをコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
     }
@@ -1605,25 +1604,25 @@ void ConfigWrapper::CreateTempDir() {
     tmpDir.Initialize();
 }
 
-const char* ConfigWrapper::decoderToString(DECODER_TYPE decoder) const {
+const tchar* ConfigWrapper::decoderToString(DECODER_TYPE decoder) const {
     switch (decoder) {
-    case DECODER_QSV: return "QSV";
-    case DECODER_CUVID: return "CUVID";
+    case DECODER_QSV: return _T("QSV");
+    case DECODER_CUVID: return _T("CUVID");
     default: break;
     }
-    return "default";
+    return _T("default");
 }
 
-const char* ConfigWrapper::formatToString(ENUM_FORMAT fmt) const {
+const tchar* ConfigWrapper::formatToString(ENUM_FORMAT fmt) const {
     switch (fmt) {
-    case FORMAT_MP4: return "MP4";
-    case FORMAT_MKV: return "Matroska";
-    case FORMAT_M2TS: return "M2TS";
-    case FORMAT_TS: return "TS";
-    case FORMAT_TSREPLACE: return "TS (replace)";
+    case FORMAT_MP4: return _T("MP4");
+    case FORMAT_MKV: return _T("Matroska");
+    case FORMAT_M2TS: return _T("M2TS");
+    case FORMAT_TS: return _T("TS");
+    case FORMAT_TSREPLACE: return _T("TS (replace)");
     default: break;
     }
-    return "unknown";
+    return _T("unknown");
 }
 
 tstring ConfigWrapper::regtmp(tstring str) const {

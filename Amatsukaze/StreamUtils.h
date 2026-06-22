@@ -450,7 +450,12 @@ public:
     }
 
     const std::string& getError() const {
+#if defined(_WIN32) || defined(_WIN64)
+        errMessageUtf8 = tchar_to_string(errMessage, CP_UTF8);
+        return errMessageUtf8;
+#else
         return errMessage;
+#endif
     }
 
     void setTimePrefix(bool enable) {
@@ -552,53 +557,40 @@ private:
 
     std::set<tstring> tmpFiles;
     std::array<int, AMT_ERR_MAX> errCounter;
-    std::string errMessage;
+    tstring errMessage;
+#if defined(_WIN32) || defined(_WIN64)
+    mutable std::string errMessageUtf8;
+#endif
 
     std::map<std::string, std::wstring> drcsMap;
 
-    void printT(const tchar *str, AMT_LOG_LEVEL level) const {
+    void writeT(const tchar* str) const {
 #if defined(_WIN32) || defined(_WIN64)
-        printWide(str, level);
+        const auto text = tchar_to_string(str, (uint32_t)acp);
+        fwrite(text.data(), 1, text.size(), stderr);
 #else
-        print(str, level);
+        fputs(str, stderr);
 #endif
+        fflush(stderr);
+    }
+
+    void printT(const tchar *str, AMT_LOG_LEVEL level) const {
+        print(str, level);
     }
 
     void printT(const tstring& str, AMT_LOG_LEVEL level) const {
-#if defined(_WIN32) || defined(_WIN64)
-        print(wstring_to_string(str, (uint32_t)acp).c_str(), level);
-#else
         print(str.c_str(), level);
-#endif
     }
 
     void printProgressT(const tchar *str) const {
-#if defined(_WIN32) || defined(_WIN64)
-        printProgressWide(str);
-#else
         printProgress(str);
-#endif
     }
 
     void printProgressT(const tstring& str) const {
-#if defined(_WIN32) || defined(_WIN64)
-        printProgress(wstring_to_string(str, (uint32_t)acp).c_str());
-#else
         printProgress(str.c_str());
-#endif
     }
 
-#if defined(_WIN32) || defined(_WIN64)
-    void printWide(const wchar_t *str, AMT_LOG_LEVEL level) const {
-        printT(std::wstring(str), level);
-    }
-
-    void printProgressWide(const wchar_t *str) const {
-        printProgressT(std::wstring(str));
-    }
-#endif
-
-    void printWithTimePrefix(const char* str, const char *endchar = "\n") const {
+    void printWithTimePrefix(const tchar* str, const tchar *endchar = _T("\n")) const {
         time_t rawtime;
         char buffer[80];
 
@@ -606,23 +598,24 @@ private:
         tm * timeinfo = localtime(&rawtime);
 
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-        PRINTF("%s %s%s", buffer, str, endchar);
+        const auto time = char_to_tstring(buffer);
+        writeT(StringFormat(_T("%s %s%s"), time.c_str(), str, endchar).c_str());
     }
 
-    void print(const char* str, AMT_LOG_LEVEL level) const {
+    void print(const tchar* str, AMT_LOG_LEVEL level) const {
         if (timePrefix) {
             printWithTimePrefix(str);
         } else {
-            static const char* log_levels[] = { "debug", "info", "warn", "error" };
-            PRINTF("AMT [%s] %s\n", log_levels[level], str);
+            static const tchar* log_levels[] = { _T("debug"), _T("info"), _T("warn"), _T("error") };
+            writeT(StringFormat(_T("AMT [%s] %s\n"), log_levels[level], str).c_str());
         }
     }
 
-    void printProgress(const char* str) const {
+    void printProgress(const tchar* str) const {
         if (timePrefix) {
-            printWithTimePrefix(str, "\r");
+            printWithTimePrefix(str, _T("\r"));
         } else {
-            PRINTF("AMT %s\r", str);
+            writeT(StringFormat(_T("AMT %s\r"), str).c_str());
         }
     }
 };
@@ -678,7 +671,7 @@ struct EncodeFileKey {
     }
 };
 
-const char* CMTypeToString(CMType cmtype);
+const tchar* CMTypeToString(CMType cmtype);
 
 enum VIDEO_STREAM_FORMAT {
     VS_UNKNOWN,
@@ -699,7 +692,7 @@ enum PICTURE_TYPE {
     MAX_PIC_TYPE,
 };
 
-const char* PictureTypeString(PICTURE_TYPE pic);
+const tchar* PictureTypeString(PICTURE_TYPE pic);
 
 enum FRAME_TYPE {
     FRAME_NO_INFO = 0,
@@ -710,7 +703,7 @@ enum FRAME_TYPE {
     MAX_FRAME_TYPE,
 };
 
-const char* FrameTypeString(FRAME_TYPE frame);
+const tchar* FrameTypeString(FRAME_TYPE frame);
 
 double presenting_time(PICTURE_TYPE picType, double frameRate);
 
@@ -813,7 +806,7 @@ enum AUDIO_CHANNELS {
     AUDIO_333_523_3_2LFE, // 22.2ch
 };
 
-const char* getAudioChannelString(AUDIO_CHANNELS channels);
+const tchar* getAudioChannelString(AUDIO_CHANNELS channels);
 
 int getNumAudioChannels(AUDIO_CHANNELS channels);
 

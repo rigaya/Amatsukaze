@@ -270,7 +270,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
         setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
-        char_to_tstring(encoderToString(setting_.getEncoder())),
+        encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());
 
     for (int i = 0; i < (int)args.size(); i++) {
@@ -328,7 +328,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
         std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
-        char_to_tstring(encoderToString(setting_.getEncoder())),
+        encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());
     ctx.info(_T("[Mux開始]"));
     ctx.infoF(_T("%s"), args[0].first);

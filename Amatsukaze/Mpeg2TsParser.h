@@ -682,9 +682,9 @@ private:
 
     bool isCaption(uint8_t stream_type);
 
-    static const char* streamTypeString(int stream_type);
+    static const tchar* streamTypeString(int stream_type);
 
-    static const char* componentTagString(int component_tag);
+    static const tchar* componentTagString(int component_tag);
 
     void printPMT(const PMT& pmt);
 };

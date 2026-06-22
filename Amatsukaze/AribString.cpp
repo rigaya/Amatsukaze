@@ -14,26 +14,32 @@
 #define _UNICODE
 #endif
 #include "rgy_osdep.h"
+
+// 他の部分は全部設定なし（Ansi）だが、とりあえずこのファイルだけUnicodeを使うようにする
+#ifndef _T
+#define _T(x) L##x
+#endif
+
+typedef wchar_t TCHAR;
+typedef std::basic_string<TCHAR> tstring;
+typedef const TCHAR* LPCTSTR;
+#if !(defined(_WIN32) || defined(_WIN64))
+typedef const char* LPCSTR;
+typedef const wchar_t* LPCWSTR;
+typedef uint32_t DWORD;
+typedef uint8_t BYTE;
+typedef uint16_t WORD;
+#endif
+
+#define _tcslen wcslen
+
+#define AMT_COREUTILS_USE_EXISTING_TCHAR
 #include "CoreUtils.hpp"
 
 #ifndef _MSC_VER
 std::wstring char_to_wstring(const char *str, uint32_t codepage); // rgy_util.cpp
 #endif
 namespace aribstring {
-
-// 他の部分は全部設定なし（Ansi）だが、とりあえずこのファイルだけUnicodeを使うようにする
-
-#define _T(x) L##x
-
-typedef wchar_t TCHAR;
-typedef const TCHAR* LPCTSTR;
-typedef const char* LPCSTR;
-typedef const wchar_t* LPCWSTR;
-typedef uint32_t DWORD;
-typedef uint8_t BYTE;
-typedef uint16_t WORD;
-
-#define _tcslen wcslen
 
 static const bool abCharSizeTable[] =
 {

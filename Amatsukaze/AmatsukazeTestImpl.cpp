@@ -115,7 +115,7 @@
         size_t readBytes = fread(buf.get(), 1, BUF_SIZE, fp);
         psVerifier.verify(MemoryChunk(buf.get(), readBytes));
     } catch (const Exception& e) {
-        fprintf(stderr, "Verify MPEG2-PS Error: 例外がスローされました -> %s\n", e.message());
+        _ftprintf(stderr, _T("Verify MPEG2-PS Error: 例外がスローされました -> %s\n"), e.message());
         return 1;
     }
     fclose(fp);
@@ -133,7 +133,7 @@
         StreamReformInfo reformInfo = splitter->split();
         reformInfo.serialize(setting.getStreamInfoPath());
     } catch (const Exception& e) {
-        fprintf(stderr, "ReadTS Error: 例外がスローされました -> %s\n", e.message());
+        _ftprintf(stderr, _T("ReadTS Error: 例外がスローされました -> %s\n"), e.message());
         return 1;
     }
 
@@ -189,7 +189,7 @@
     // data chunkを探す
     for (int i = sizeof(RiffHeader); ; ) {
         if (!(i < (int)testBytes - 8)) {
-            fprintf(stderr, "出力が小さすぎます\n");
+            _ftprintf(stderr, _T("出力が小さすぎます\n"));
             return 1;
         }
         if (read32(testbuf.get() + i) == 'data') {
@@ -197,13 +197,13 @@
             const uint16_t* pTest = (const uint16_t*)(testbuf.get() + i + 8);
             const uint16_t* pDec = (const uint16_t*)decoded.ptr();
             if (testLength != (int)decoded.size()) {
-                fprintf(stderr, "結果のサイズが合いません\n");
+                _ftprintf(stderr, _T("結果のサイズが合いません\n"));
                 return 1;
             }
             // AACのデコード結果は小数なので丸め誤差を考慮して
             for (int c = 0; c < testLength / 2; c++) {
                 if ((std::abs((int)pTest[c] - (int)pDec[c]) > 1)) {
-                    fprintf(stderr, "デコード結果が合いません\n");
+                    _ftprintf(stderr, _T("デコード結果が合いません\n"));
                     return 1;
                 }
             }
@@ -399,7 +399,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
             }
         }
     } catch (const Exception& e) {
-        fprintf(stderr, "CaptionASS Error: 例外がスローされました -> %s\n", e.message());
+        _ftprintf(stderr, _T("CaptionASS Error: 例外がスローされました -> %s\n"), e.message());
         return 1;
     }
 

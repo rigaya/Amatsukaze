@@ -1114,40 +1114,40 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
     return (stream_type == 0x06);
 }
 
-/* static */ const char* TsPacketSelector::streamTypeString(int stream_type) {
+/* static */ const tchar* TsPacketSelector::streamTypeString(int stream_type) {
     switch (stream_type) {
     case 0x00:
-        return "ECM";
+        return _T("ECM");
     case 0x02: // ITU-T Rec. H.262 and ISO/IEC 13818-2 (MPEG-2 higher rate interlaced video) in a packetized stream
-        return "MPEG2-VIDEO";
+        return _T("MPEG2-VIDEO");
     case 0x04: // ISO/IEC 13818-3 (MPEG-2 halved sample rate audio) in a packetized stream
-        return "MPEG2-AUDIO";
+        return _T("MPEG2-AUDIO");
     case 0x06: // ITU-T Rec. H.222 and ISO/IEC 13818-1 (MPEG-2 packetized data) privately defined (i.e., DVB subtitles / VBI and AC - 3)
-        return "字幕";
+        return _T("字幕");
     case 0x0D: // ISO/IEC 13818-6 DSM CC tabled data
-        return "データカルーセル";
+        return _T("データカルーセル");
     case 0x0F: // ISO/IEC 13818-7 ADTS AAC (MPEG-2 lower bit-rate audio) in a packetized stream
-        return "ADTS AAC";
+        return _T("ADTS AAC");
     case 0x11: // ISO/IEC 14496-3 (MPEG-4 LOAS multi-format framed audio) in a packetized stream
-        return "MPEG4 AAC";
+        return _T("MPEG4 AAC");
     case 0x1B: // ITU-T Rec. H.264 and ISO/IEC 14496-10 (lower bit-rate video) in a packetized stream
-        return "H.264/AVC";
+        return _T("H.264/AVC");
     case 0x24: // ITU-T Rec. H.265 and ISO/IEC 23008-2 (Ultra HD video) in a packetized stream
-        return "H.265/HEVC";
+        return _T("H.265/HEVC");
     }
     return nullptr;
 }
 
-/* static */ const char* TsPacketSelector::componentTagString(int component_tag) {
-    if (component_tag >= 0x00 && component_tag <= 0x0F) return "映像";
-    if (component_tag >= 0x10 && component_tag <= 0x2F) return "AAC 音声";
-    if (component_tag >= 0x30 && component_tag <= 0x37) return "字幕";
-    if (component_tag >= 0x38 && component_tag <= 0x3F) return "文字スーパー";
-    if (component_tag >= 0x40 && component_tag <= 0x7F) return "データ";
+/* static */ const tchar* TsPacketSelector::componentTagString(int component_tag) {
+    if (component_tag >= 0x00 && component_tag <= 0x0F) return _T("映像");
+    if (component_tag >= 0x10 && component_tag <= 0x2F) return _T("AAC 音声");
+    if (component_tag >= 0x30 && component_tag <= 0x37) return _T("字幕");
+    if (component_tag >= 0x38 && component_tag <= 0x3F) return _T("文字スーパー");
+    if (component_tag >= 0x40 && component_tag <= 0x7F) return _T("データ");
     switch (component_tag) {
     case 0x81:
     case 0x82:
-        return "簡易動画 映像";
+        return _T("簡易動画 映像");
     case 0x83:
     case 0x84:
     case 0x85:
@@ -1156,15 +1156,15 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
     case 0x8D:
     case 0x8E:
     case 0x8F:
-        return "AAC 音声";
+        return _T("AAC 音声");
     case 0x87:
-        return "字幕";
+        return _T("字幕");
     case 0x80:
     case 0x8B:
-        return "データ";
+        return _T("データ");
     case 0x89:
     case 0x8A:
-        return "イベントメッセージ";
+        return _T("イベントメッセージ");
     }
     return nullptr;
 }
@@ -1179,7 +1179,7 @@ void TsPacketSelector::printPMT(const PMT& pmt) {
         ctx.infoF(_T("[PMT更新] ストリーム時刻: %d分%.2f秒"), minutes, sec);
     }
 
-    const char* content = NULL;
+    const tchar* content = NULL;
     for (int i = 0; i < pmt.numElems(); i++) {
         PMTElement elem = pmt.get(i);
         // コンポーネントタグを取得
@@ -1193,15 +1193,15 @@ void TsPacketSelector::printPMT(const PMT& pmt) {
                 }
             }
         }
-        const char* content = streamTypeString(elem.stream_type());
-        const char* tag = componentTagString(component_tag);
+        const tchar* content = streamTypeString(elem.stream_type());
+        const tchar* tag = componentTagString(component_tag);
         if (content != NULL) {
             if (tag != NULL) {
-                ctx.infoF(_T("PID: 0x%04x TYPE: %s TAG: %s(0x%02x)"), elem.elementary_PID(), char_to_tstring(content), char_to_tstring(tag), component_tag);
+                ctx.infoF(_T("PID: 0x%04x TYPE: %s TAG: %s(0x%02x)"), elem.elementary_PID(), content, tag, component_tag);
             } else if (component_tag != -1) {
-                ctx.infoF(_T("PID: 0x%04x TYPE: %s TAG: 不明(0x%02x)"), elem.elementary_PID(), char_to_tstring(content), component_tag);
+                ctx.infoF(_T("PID: 0x%04x TYPE: %s TAG: 不明(0x%02x)"), elem.elementary_PID(), content, component_tag);
             } else {
-                ctx.infoF(_T("PID: 0x%04x TYPE: %s"), elem.elementary_PID(), char_to_tstring(content));
+                ctx.infoF(_T("PID: 0x%04x TYPE: %s"), elem.elementary_PID(), content);
             }
         } else {
             ctx.infoF(_T("PID: 0x%04x TYPE: Unknown (0x%04x)"), elem.elementary_PID(), elem.stream_type());

@@ -299,7 +299,7 @@ void AMTSplitter::printInteraceCount() {
             PTSdiff = int(nextPTS - PTS);
             if (CheckPullDown(frame.pic, nextFrame.pic) == false) {
                 ctx.warnF(_T("Flag Check Error: PTS=%lld %s -> %s"),
-                    PTS, char_to_tstring(PictureTypeString(frame.pic)), char_to_tstring(PictureTypeString(nextFrame.pic)));
+                    PTS, PictureTypeString(frame.pic), PictureTypeString(nextFrame.pic));
             }
         }
         fprintf(framesfp, "%d,%d,%lld,%d,%s,%s,%d\n",
@@ -417,7 +417,7 @@ void AMTSplitter::printInteraceCount() {
 /* virtual */ void AMTSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {
     ctx.infoF(_T("[音声%dフォーマット変更]"), audioIdx);
     ctx.infoF(_T("チャンネル: %s サンプルレート: %d"),
-        char_to_tstring(getAudioChannelString(fmt.channels)), fmt.sampleRate);
+        getAudioChannelString(fmt.channels), fmt.sampleRate);
 
     StreamEvent ev = StreamEvent();
     ev.type = AUDIO_FORMAT_CHANGED;
@@ -474,8 +474,8 @@ void AMTSplitter::printInteraceCount() {
     ret = str_replace(ret, _T("@IMAGE_WIDTH@"), StringFormat(_T("%d"), fmt.width));
     ret = str_replace(ret, _T("@IMAGE_HEIGHT@"), StringFormat(_T("%d"), fmt.height));
     ret = str_replace(ret, _T("@SERVICE_ID@"), StringFormat(_T("%d"), serviceID));
-    ret = str_replace(ret, _T("@AMT_ENCODER@"), char_to_tstring(encoderToString(setting.getEncoder())));
-    ret = str_replace(ret, _T("@AMT_AUDIO_ENCODER@"), char_to_tstring(audioEncoderToString(setting.getAudioEncoder())));
+    ret = str_replace(ret, _T("@AMT_ENCODER@"), encoderToString(setting.getEncoder()));
+    ret = str_replace(ret, _T("@AMT_AUDIO_ENCODER@"), audioEncoderToString(setting.getAudioEncoder()));
     ret = str_replace(ret, _T("@AMT_TEMP_DIR@"), setting.getTmpDir());
     ret = str_replace(ret, _T("@AMT_TEMP_VIDEO@"), _T("\"") + setting.getEncVideoFilePath(key) + _T("\""));
     ret = str_replace(ret, _T("@AMT_TEMP_AUDIO@"), _T("\"") + setting.getIntAudioFilePath(key, 0, setting.getAudioEncoder()) + _T("\""));
@@ -543,8 +543,8 @@ tstring GetDirectoryName(const tstring& path) {
         tmpvar.set(_T("IMAGE_WIDTH"), StringFormat(_T("%d"), fmt.width));
         tmpvar.set(_T("IMAGE_HEIGHT"), StringFormat(_T("%d"), fmt.height));
         tmpvar.set(_T("SERVICE_ID"), StringFormat(_T("%d"), serviceID));
-        tmpvar.set(_T("AMT_ENCODER"), char_to_tstring(encoderToString(setting.getEncoder())));
-        tmpvar.set(_T("AMT_AUDIO_ENCODER"), char_to_tstring(audioEncoderToString(setting.getAudioEncoder())));
+        tmpvar.set(_T("AMT_ENCODER"), encoderToString(setting.getEncoder()));
+        tmpvar.set(_T("AMT_AUDIO_ENCODER"), audioEncoderToString(setting.getAudioEncoder()));
         tmpvar.set(_T("AMT_TEMP_DIR"), setting.getTmpDir());
         tmpvar.set(_T("AMT_TEMP_AVS"), setting.getAvsTmpPath(key));
         tmpvar.set(_T("AMT_TEMP_AVS_TC"), setting.getAvsTimecodePath(key));
@@ -1041,7 +1041,7 @@ void DoBadThing() {
                 reformInfo.genWebVTT(key, setting);
             }
         } catch (const Exception& e) {
-            ctx.warnF(_T("WebVTT生成に失敗: %s"), char_to_tstring(e.message()));
+            ctx.warnF(_T("WebVTT生成に失敗: %s"), e.message());
         }
 
         // Whisperによる字幕生成 (モード制御 + 複数音声)
@@ -1078,7 +1078,7 @@ void DoBadThing() {
                                     ctx.warnF(_T("whisper-cpp用のwav生成に失敗したため、元の音声を使用します: %s"), whisperInput.c_str());
                                 }
                             } catch (const Exception& e) {
-                                ctx.warnF(_T("whisper-cpp用wav生成中に例外: %s"), char_to_tstring(e.message()));
+                                ctx.warnF(_T("whisper-cpp用wav生成中に例外: %s"), e.message());
                                 ctx.warnF(_T("元の音声を使用します: %s"), whisperInput.c_str());
                             }
                         }
@@ -1134,7 +1134,7 @@ void DoBadThing() {
                 }
             }
         } catch (const Exception& e) {
-            ctx.warnF(_T("Whisper字幕生成に失敗: %s"), char_to_tstring(e.message()));
+            ctx.warnF(_T("Whisper字幕生成に失敗: %s"), e.message());
         }
     }
     ctx.infoF(_T("字幕ファイル生成完了: %.2f秒"), sw.getAndReset());
@@ -1173,7 +1173,7 @@ void DoBadThing() {
             auto& outvi = filterClip->GetVideoInfo();
             auto& timeCodes = filterSource.getTimeCodes();
 
-            ctx.infoF(_T("[エンコード開始] %d/%d %s"), i + 1, (int)keys.size(), char_to_tstring(CMTypeToString(key.cm)));
+            ctx.infoF(_T("[エンコード開始] %d/%d %s"), i + 1, (int)keys.size(), CMTypeToString(key.cm));
             auto bitrate = argGen->printBitrate(ctx, key);
 
             fileOut.vfmt = outfmt;
@@ -1289,7 +1289,7 @@ void DoBadThing() {
     for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
 
-        ctx.infoF(_T("[Mux開始] %d/%d %s"), i + 1, (int)keys.size(), char_to_tstring(CMTypeToString(key.cm)));
+        ctx.infoF(_T("[Mux開始] %d/%d %s"), i + 1, (int)keys.size(), CMTypeToString(key.cm));
         muxer->mux(key, eoInfo, nicoOK, outFileInfo[i]);
 
         totalOutSize += outFileInfo[i].fileSize;
@@ -1549,7 +1549,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
     PESPacket packet) {}
 
 /* virtual */ void AudioDetectorSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {
-    printf("インデックス: %d チャンネル: %s サンプルレート: %d\n",
+    _ftprintf(stdout, _T("インデックス: %d チャンネル: %s サンプルレート: %d\n"),
         audioIdx, getAudioChannelString(fmt.channels), fmt.sampleRate);
 }
 

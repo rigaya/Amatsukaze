@@ -81,7 +81,7 @@ struct BitrateSetting {
     double getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBitrate) const;
 };
 
-const char* encoderToString(ENUM_ENCODER encoder);
+const tchar* encoderToString(ENUM_ENCODER encoder);
 
 bool encoderOutputInContainer(const ENUM_ENCODER encoder, const ENUM_FORMAT format);
 
@@ -103,7 +103,7 @@ enum ENUM_AUDIO_ENCODER {
     AUDIO_ENCODER_OPUSENC,
 };
 
-const char* audioEncoderToString(ENUM_AUDIO_ENCODER fmt);
+const tchar* audioEncoderToString(ENUM_AUDIO_ENCODER fmt);
 
 tstring makeAudioEncoderArgs(
     ENUM_AUDIO_ENCODER encoder,
@@ -148,7 +148,7 @@ tstring makeTimelineEditorArgs(
     const tstring& outpath,
     const tstring& timecodepath);
 
-const char* cmOutMaskToString(int outmask);
+tstring cmOutMaskToString(int outmask);
 
 enum AMT_CLI_MODE {
     AMT_CLI_TS,
@@ -613,9 +613,9 @@ private:
     std::vector<CMType> cmtypes;
     std::vector<NicoJKType> nicojktypes;
 
-    const char* decoderToString(DECODER_TYPE decoder) const;
+    const tchar* decoderToString(DECODER_TYPE decoder) const;
 
-    const char* formatToString(ENUM_FORMAT fmt) const;
+    const tchar* formatToString(ENUM_FORMAT fmt) const;
 
     tstring regtmp(tstring str) const;
 };

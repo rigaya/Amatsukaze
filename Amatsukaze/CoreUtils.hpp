@@ -13,26 +13,122 @@
 #include <string>
 #include <cstring>
 #include <cstdarg>
+#include <cstdlib>
+#include <vector>
 //#include <io.h>
+#if defined(AMT_COREUTILS_USE_EXISTING_TCHAR)
+// Some source files intentionally define their own TCHAR before including this file.
+#else
+#include "rgy_tchar.h"
+#endif
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#endif
 
 #define AMT_MAX_PATH 512
 
+namespace core_utils {
+#if defined(_WIN32) || defined(_WIN64)
+inline tstring string_to_tstring_cp932(const std::string& str) {
+#if defined(_UNICODE)
+    if (str.empty()) {
+        return tstring();
+    }
+    const int length = MultiByteToWideChar(932, 0, str.c_str(), -1, nullptr, 0);
+    if (length <= 0) {
+        return tstring();
+    }
+    std::vector<wchar_t> buffer(length, 0);
+    if (MultiByteToWideChar(932, 0, str.c_str(), -1, buffer.data(), (int)buffer.size()) <= 0) {
+        return tstring();
+    }
+    return tstring(buffer.data());
+#else
+    return str;
+#endif
+}
+#endif
+
+inline std::string tstring_to_string_acp(const TCHAR* str) {
+    if (str == nullptr) {
+        return std::string();
+    }
+#if defined(_WIN32) || defined(_WIN64)
+#if defined(_UNICODE)
+    const int length = WideCharToMultiByte(GetACP(), 0, str, -1, nullptr, 0, nullptr, nullptr);
+    if (length <= 0) {
+        return std::string();
+    }
+    std::vector<char> buffer(length, 0);
+    if (WideCharToMultiByte(GetACP(), 0, str, -1, buffer.data(), (int)buffer.size(), nullptr, nullptr) <= 0) {
+        return std::string();
+    }
+    return std::string(buffer.data());
+#else
+    return std::string(str);
+#endif
+#else
+#if defined(AMT_COREUTILS_USE_EXISTING_TCHAR)
+    const auto length = wcstombs(nullptr, str, 0);
+    if (length == (size_t)-1) {
+        return std::string();
+    }
+    std::vector<char> buffer(length + 1, 0);
+    wcstombs(buffer.data(), str, buffer.size());
+    return std::string(buffer.data());
+#else
+    return std::string(str);
+#endif
+#endif
+}
+
+inline void fputs_t_stderr(const TCHAR* str) {
+    const auto text = tstring_to_string_acp(str);
+    fwrite(text.data(), 1, text.size(), stderr);
+}
+
+inline tstring ascii_to_tstring(const char* str) {
+    tstring ret;
+    if (str == nullptr) {
+        return ret;
+    }
+    while (*str) {
+        ret.push_back((TCHAR)(unsigned char)*str++);
+    }
+    return ret;
+}
+}
+
 struct Exception {
     virtual ~Exception() {}
-    virtual const char* message() const {
-        return "No Message ...";
+    virtual const TCHAR* message() const {
+        return _T("No Message ...");
     };
     virtual void raise() const { throw *this; }
 };
 
+#if defined(_WIN32) || defined(_WIN64)
 #define DEFINE_EXCEPTION(name) \
 	struct name : public Exception { \
-		name(const std::string& mes) : mes(mes) { } \
-		virtual const char* message() const { return mes.c_str(); } \
+		name(const tstring& mes) : mes(mes) { } \
+		name(const TCHAR *mes) : mes(mes) { } \
+		name(const std::string& mes) : mes(core_utils::string_to_tstring_cp932(mes)) { } \
+		virtual const TCHAR* message() const { return mes.c_str(); } \
 		virtual void raise() const { throw *this;	} \
 	private: \
-		std::string mes; \
+		tstring mes; \
 	};
+#else
+#define DEFINE_EXCEPTION(name) \
+	struct name : public Exception { \
+		name(const tstring& mes) : mes(mes) { } \
+		name(const TCHAR *mes) : mes(mes) { } \
+		virtual const TCHAR* message() const { return mes.c_str(); } \
+		virtual void raise() const { throw *this;	} \
+	private: \
+		tstring mes; \
+	};
+#endif
 
 DEFINE_EXCEPTION(EOFException)
 DEFINE_EXCEPTION(FormatException)
@@ -59,27 +155,38 @@ constexpr const char* str_end(const char *str) { return *str ? str_end(str + 1) 
 constexpr bool str_slant(const char *str) { return *str == PATH_SEPARATOR ? true : (*str ? str_slant(str + 1) : false); }
 constexpr const char* r_slant(const char* str) { return *str == PATH_SEPARATOR ? (str + 1) : r_slant(str - 1); }
 constexpr const char* file_name(const char* str) { return str_slant(str) ? r_slant(str_end(str)) : str; }
+inline tstring file_name_t(const char* str) { return ascii_to_tstring(file_name(str)); }
 }
 
 #define __FILENAME__ core_utils::file_name(__FILE__)
 
 #if defined(_WIN32) || defined(_WIN64)
 #define THROW(exception, message) \
-	throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " message, __FILENAME__, __LINE__)))
+	throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " message), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__)))
 
 #define THROWF(exception, fmt, ...) \
-	throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " fmt, __FILENAME__, __LINE__, __VA_ARGS__)))
+	throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " fmt), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__, __VA_ARGS__)))
 #else
 #define THROW(exception, message) \
-    throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " message, __FILENAME__, __LINE__)))
+    throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " message), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__)))
 
 // 可変引数マクロを修正
 #define THROWF(exception, fmt, ...) \
-    throw_exception_(exception(StringFormat("Exception thrown at %s:%d\r\nMessage: " fmt, __FILENAME__, __LINE__ __VA_OPT__(,) __VA_ARGS__)))
+    throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " fmt), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__ __VA_OPT__(,) __VA_ARGS__)))
 #endif
 
 static void throw_exception_(const Exception& exc) {
+#if defined(_WIN32) || defined(_WIN64)
+    core_utils::fputs_t_stderr(_T("AMT [error] "));
+    core_utils::fputs_t_stderr(exc.message());
+    core_utils::fputs_t_stderr(_T("\n"));
+    fflush(stderr);
+#elif defined(AMT_COREUTILS_USE_EXISTING_TCHAR)
+    fwprintf(stderr, L"AMT [error] %s\n", exc.message());
+    fflush(stderr);
+#else
     PRINTF("AMT [error] %s\n", exc.message());
+#endif
     //MessageBox(NULL, exc.message(), "Amatsukaze Error", MB_OK);
     exc.raise();
 }

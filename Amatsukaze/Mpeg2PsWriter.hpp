@@ -150,17 +150,20 @@ public:
         do {
             pos += pack(MemoryChunk(mc.data + pos, mc.length - pos));
             if (mc.length - pos < 4) {
-                PRINTF("WARNING: 終了コードがありませんでした\n");
+                _ftprintf(stderr, _T("WARNING: 終了コードがありませんでした\n"));
+                fflush(stderr);
                 goto eof;
             }
             code = read32(mc.data + pos);
         } while (code == PACK_START_CODE);
         if (code != MPEG_PROGRAM_END_CODE) {
-            PRINTF("WARNING: 終了コードがありませんでした\n");
+            _ftprintf(stderr, _T("WARNING: 終了コードがありませんでした\n"));
+            fflush(stderr);
         }
 
     eof:
-        PRINTF("読み取り終了 VideoPackets: %d AudioPackets: %d\n", nVideoPackets, nAudioPackets);
+        _ftprintf(stderr, _T("読み取り終了 VideoPackets: %d AudioPackets: %d\n"), nVideoPackets, nAudioPackets);
+        fflush(stderr);
     }
 private:
     PsProgramStreamMap psm;

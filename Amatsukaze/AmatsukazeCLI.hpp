@@ -16,9 +16,9 @@
 // MSVCのマルチバイトはUnicodeでないので文字列操作に適さないのでwchar_tで文字列操作をする
 
 #if defined(_WIN32) || defined(_WIN64)
-#define AMATSUKAZECLI_HELP_NICOASS_LINE "  --nicoass <パス>     NicoConvASSへのパス\n"
+#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     NicoConvASSへのパス\n")
 #else
-#define AMATSUKAZECLI_HELP_NICOASS_LINE "  --nicoass <パス>     nicojk_ass.pyへのパス\n"
+#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_ass.pyへのパス\n")
 #endif
 
 static void printCopyright() {
@@ -27,9 +27,19 @@ static void printCopyright() {
         "Copyright (c) 2017-2019 Nekopanda\n", AMATSUKAZE_VERSION, __DATE__, __TIME__);
 }
 
+static void printTStderr(const tstring& str) {
+#if defined(_WIN32) || defined(_WIN64)
+    const auto text = tchar_to_string(str, GetACP());
+    fwrite(text.data(), 1, text.size(), stderr);
+#else
+    fwrite(str.data(), sizeof(tchar), str.size(), stderr);
+#endif
+    fflush(stderr);
+}
+
 static void printHelp(const tchar* bin) {
-    PRINTF(
-        "%" PRITSTR " <オプション> -i <input.ts> -o <output.mp4>\n"
+    static const tstring helpText = tstring(_T(
+        " <オプション> -i <input.ts> -o <output.mp4>\n"
         "オプション []はデフォルト値 \n"
         "  -i|--input  <パス>  入力ファイルパス\n"
         "  -o|--output <パス>  出力ファイルパス\n"
@@ -107,8 +117,9 @@ static void printHelp(const tchar* bin) {
         "  --whisper-option <オプション> whisperへ渡す追加オプション\n"
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
-        "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"
-        AMATSUKAZECLI_HELP_NICOASS_LINE
+        "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"))
+        + AMATSUKAZECLI_HELP_NICOASS_LINE
+        + _T(
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
         "                      1 : 通常\n"
         "                      2 : CMをカット\n"
@@ -141,8 +152,8 @@ static void printHelp(const tchar* bin) {
         "  --affinity <グループ>:<マスク> CPUアフィニティ\n"
         "                      グループはプロセッサグループ（64論理コア以下のシステムでは0のみ）\n"
         "  --max-frames        probe_*モード時のみ有効。TSを見る時間を映像フレーム数で指定[9000]\n"
-        "  --dump              処理途中のデータをダンプ（デバッグ用）\n",
-        bin);
+        "  --dump              処理途中のデータをダンプ（デバッグ用）\n");
+    printTStderr(tstring(bin) + helpText);
 }
 
 static tstring getParam(int argc, const tchar* argv[], int ikey) {
@@ -288,7 +299,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             tstring arg = getParam(argc, argv, i++);
             conf.encoder = encoderFtomString(arg);
             if (conf.encoder == (ENUM_ENCODER)-1) {
-                PRINTF("--encoder-typeの指定が間違っています: %" PRITSTR "\n", arg.c_str());
+                printTStderr(StringFormat(_T("--encoder-typeの指定が間違っています: %s\n"), arg.c_str()));
             }
         } else if (key == _T("-e") || key == _T("--encoder")) {
             conf.encoderPath = pathNormalize(getParam(argc, argv, i++));
@@ -315,7 +326,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             tstring arg = getParam(argc, argv, i++);
             conf.audioEncoder = audioEncoderFtomString(arg);
             if (conf.audioEncoder == (ENUM_AUDIO_ENCODER)-1) {
-                PRINTF("--audio-encoder-typeの指定が間違っています: %" PRITSTR "\n", arg.c_str());
+                printTStderr(StringFormat(_T("--audio-encoder-typeの指定が間違っています: %s\n"), arg.c_str()));
             }
         } else if (key == _T("-ae") || key == _T("--audio-encoder")) {
             conf.audioEncoderPath = pathNormalize(getParam(argc, argv, i++));
@@ -404,19 +415,19 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.mpeg2 = decoderFromString(arg);
             if (conf.decoderSetting.mpeg2 == (DECODER_TYPE)-1) {
-                PRINTF("--mpeg2decoderの指定が間違っています: %" PRITSTR "\n", arg.c_str());
+                printTStderr(StringFormat(_T("--mpeg2decoderの指定が間違っています: %s\n"), arg.c_str()));
             }
         } else if (key == _T("--h264decoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.h264 = decoderFromString(arg);
             if (conf.decoderSetting.h264 == (DECODER_TYPE)-1) {
-                PRINTF("--h264decoderの指定が間違っています: %" PRITSTR "\n", arg.c_str());
+                printTStderr(StringFormat(_T("--h264decoderの指定が間違っています: %s\n"), arg.c_str()));
             }
         } else if (key == _T("--hevcdecoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.hevc = decoderFromString(arg);
             if (conf.decoderSetting.hevc == (DECODER_TYPE)-1) {
-                PRINTF("--hevcdecoderの指定が間違っています: %" PRITSTR "\n", arg.c_str());
+                printTStderr(StringFormat(_T("--hevcdecoderの指定が間違っています: %s\n"), arg.c_str()));
             }
         } else if (key == _T("-eb") || key == _T("--encode-buffer")) {
             conf.numEncodeBufferFrames = std::stoi(getParam(argc, argv, i++));
@@ -568,8 +579,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key.size() == 0) {
             continue;
         } else {
-            // なぜか%lsで長い文字列食わすと落ちるので%sで表示
-            THROWF(FormatException, "不明なオプション: %s", tchar_to_string(argv[i]));
+            THROWF(FormatException, "不明なオプション: %s", key.c_str());
         }
     }
 

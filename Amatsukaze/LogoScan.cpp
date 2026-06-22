@@ -3463,7 +3463,7 @@ namespace {
                         retry, startFrame, char_to_tstring(ToString(debugPass2FailBeforeClear)));
                 } catch (const Exception& ex) {
                     logCtx.warnF(_T("[LogoScan] frameGate retry failed: retry=%d startFrame=%d error=%s"),
-                        retry, startFrame, char_to_tstring(ex.message()));
+                        retry, startFrame, ex.message());
                 }
             }
             logCtx.info(_T("[LogoScan] frameGate retry exhausted; fallback to initial window"));
