@@ -1019,13 +1019,11 @@
         overflow-y: auto;
     }
 
-    /* アクション: 折りたたみ ↔ 展開 */
-    .trim-editpoints-actions {
-        display: none;
-    }
-
-    .trim-editpoints-actions.mob-open {
-        display: flex;
+    /* 合計時間を横並びに（モバイルはスペース節約） */
+    .trim-editpoints-total {
+        flex-direction: row;
+        align-items: baseline;
+        gap: 8px;
     }
 
     /* 波形の高さを縮小 */
