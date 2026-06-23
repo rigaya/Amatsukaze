@@ -1,0 +1,5 @@
+﻿<Project>
+  <Import
+    Project="$(MSBuildThisFileDirectory)vcpkg\scripts\buildsystems\msbuild\vcpkg.targets"
+    Condition="'$(MSBuildProjectExtension)'=='.vcxproj' and Exists('$(MSBuildThisFileDirectory)vcpkg\scripts\buildsystems\msbuild\vcpkg.targets')" />
+</Project>
