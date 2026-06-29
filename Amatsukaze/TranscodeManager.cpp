@@ -9,6 +9,7 @@
 #include "TranscodeManager.h"
 #include "rgy_util.h"
 #include "rgy_thread_affinity.h"
+#include <thread>
 #include "AdtsParser.h"
 #include "PacketCache.h"
 #include "rgy_pipe.h"
@@ -941,6 +942,7 @@ void DoBadThing() {
         tstring srtPath;
         tstring vttPath;
         std::unique_ptr<StdRedirectedSubProcess> process;
+        int exitCode = -1; // join()の結果 (-1: 未実行)
     };
     std::vector<WhisperTask> whisperTasks;
     std::vector<int> whisperLocalIndex(keys.size(), 0);
@@ -1092,7 +1094,7 @@ void DoBadThing() {
                         const auto vttPath = setting.getTmpWhisperVttPath(entry.key, entry.localIndex);
 
                         if (setting.isWhisperParallelEnabled()) {
-                            // 並列実行: ここではタスクだけ登録し、実際のプロセス起動はエンコード直前に行う
+                            // エンコードと並列実行: ここではタスクだけ登録し、別スレッドで直列実行する
                             WhisperTask task;
                             task.keyIndex = i;
                             task.key = entry.key;
@@ -1140,6 +1142,18 @@ void DoBadThing() {
     ctx.infoF(_T("字幕ファイル生成完了: %.2f秒"), sw.getAndReset());
 
     auto argGen = std::unique_ptr<EncoderArgumentGenerator>(new EncoderArgumentGenerator(setting, reformInfo));
+
+    // Whisper並列実行時は、別スレッドでwhisperTasksを直列実行する
+    std::unique_ptr<std::thread> whisperThread;
+    if (setting.isWhisperParallelEnabled() && !whisperTasks.empty()) {
+        whisperThread = std::make_unique<std::thread>([&ctx, &whisperTasks]() {
+            SubtitleGenerator whisperGen(ctx);
+            for (auto& task : whisperTasks) {
+                task.process = whisperGen.startWhisperProcess(task.param);
+                task.exitCode = task.process->join();
+            }
+        });
+    }
 
     sw.start();
     for (int i = 0; i < (int)keys.size(); i++) {
@@ -1221,16 +1235,6 @@ void DoBadThing() {
                 return std::unique_ptr<AMTFilterSource>(new AMTFilterSource(ctx, filterSource));
             };
 
-            // Whisper並列実行時は、最初のキーのエンコード直前にすべてのWhisperタスクを起動する
-            if (setting.isWhisperParallelEnabled() && i == 0 && !whisperTasks.empty()) {
-                SubtitleGenerator whisperGen(ctx);
-                for (auto& task : whisperTasks) {
-                    if (!task.process) {
-                        task.process = whisperGen.startWhisperProcess(task.param);
-                    }
-                }
-            }
-
             encoder.encode(filterClip, outfmt,
                 timeCodes, *argGen, passList, bitrateZones, vfrBitrateScale,
                 baseTimecodePath, fileOut.vfrTimingFps, baseOutputPath,
@@ -1244,14 +1248,18 @@ void DoBadThing() {
 
     argGen = nullptr;
 
-    // Whisper並列実行時はここで完了待ち＆ログ出力を行う
+    // Whisper並列実行時はここでバックグラウンドスレッドの完了待ち＆ログ出力を行う
     if (setting.isWhisperParallelEnabled() && !whisperTasks.empty()) {
-        ctx.info(_T("[Whisper字幕生成: 並列処理の完了待ち]"));
+        if (whisperThread && whisperThread->joinable()) {
+            ctx.info(_T("[Whisper字幕生成: バックグラウンド処理の完了待ち]"));
+            whisperThread->join();
+            whisperThread.reset();
+        }
         for (auto& task : whisperTasks) {
             if (!task.process) {
                 continue;
             }
-            int ret = task.process->join();
+            const int ret = task.exitCode;
 
             const auto& lines = task.process->getCapturedLines();
             if (!lines.empty()) {
