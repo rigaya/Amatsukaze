@@ -331,6 +331,9 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "temporalgain", AddInfixBeforeExtension(job.ScoreImagePath, ".temporalgain"), out path))
             {
             }
+            else if (TryResolveStagePath(kind, "pctliftgain", AddInfixBeforeExtension(job.ScoreImagePath, ".pctliftgain"), out path))
+            {
+            }
             else if (TryResolveStagePath(kind, "opaquepenalty", AddInfixBeforeExtension(job.ScoreImagePath, ".opaquepenalty"), out path))
             {
             }
@@ -359,6 +362,15 @@ namespace Amatsukaze.Server.Rest
             {
             }
             else if (TryResolveStagePath(kind, "rescuescore", AddInfixBeforeExtension(job.ScoreImagePath, ".rescuescore"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "pctp5", AddInfixBeforeExtension(job.ScoreImagePath, ".pctp5"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "pctlift", AddInfixBeforeExtension(job.ScoreImagePath, ".pctlift"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "pctrescue", AddInfixBeforeExtension(job.ScoreImagePath, ".pctrescue"), out path))
             {
             }
             else if (TryResolveStagePath(kind, "presencegain", AddInfixBeforeExtension(job.ScoreImagePath, ".presencegain"), out path))
@@ -419,6 +431,10 @@ namespace Amatsukaze.Server.Rest
             else if (string.Equals(kind, "compscorecsv", StringComparison.OrdinalIgnoreCase))
             {
                 path = AddSuffixToPath(job.BinaryImagePath, ".compscore.csv");
+            }
+            else if (string.Equals(kind, "candidatescsv", StringComparison.OrdinalIgnoreCase))
+            {
+                path = AddSuffixToPath(job.BinaryImagePath, ".candidates.csv");
             }
             else if (string.Equals(kind, "tracecsv", StringComparison.OrdinalIgnoreCase))
             {
