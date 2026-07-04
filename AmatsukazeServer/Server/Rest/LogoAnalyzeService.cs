@@ -373,6 +373,12 @@ namespace Amatsukaze.Server.Rest
             else if (TryResolveStagePath(kind, "pctrescue", AddInfixBeforeExtension(job.ScoreImagePath, ".pctrescue"), out path))
             {
             }
+            else if (TryResolveStagePath(kind, "consensus", AddInfixBeforeExtension(job.ScoreImagePath, ".consensus"), out path))
+            {
+            }
+            else if (TryResolveStagePath(kind, "consalpha", AddInfixBeforeExtension(job.ScoreImagePath, ".consalpha"), out path))
+            {
+            }
             else if (TryResolveStagePath(kind, "presencegain", AddInfixBeforeExtension(job.ScoreImagePath, ".presencegain"), out path))
             {
             }
