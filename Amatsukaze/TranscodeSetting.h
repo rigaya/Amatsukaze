@@ -162,7 +162,7 @@ enum AMT_PRINT_PREFIX {
 
 class TempDirectory : AMTObject, NonCopyable {
 public:
-    TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp);
+    TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp, const tstring& resumeDir);
     ~TempDirectory();
 
     void Initialize();
@@ -173,6 +173,7 @@ private:
     tstring path_;
     bool initialized_;
     bool noRemoveTmp_;
+    tstring resumeDir_;
 
     tstring genPath(const tstring& base, int code);
 };
@@ -184,6 +185,7 @@ const char* GetNicoJKSuffix(NicoJKType type);
 struct Config {
     // 一時フォルダ
     tstring workDir;
+    tstring resumeDir;
     tstring mode;
     tstring modeArgs; // テスト用
     // 入力ファイルパス（拡張子を含む）
@@ -310,6 +312,8 @@ public:
     tstring getMode() const;
 
     tstring getModeArgs() const;
+
+    tstring getResumeDir() const;
 
     tstring getSrcFilePath() const;
 
@@ -489,6 +493,8 @@ public:
 
     bool isDumpStreamInfo() const;
 
+    bool isNoRemoveTmp() const;
+
     bool isSystemAvsPlugin() const;
 
     AMT_PRINT_PREFIX getPrintPrefix() const;
@@ -502,6 +508,10 @@ public:
     tstring getIntVideoFilePath(int index) const;
 
     tstring getStreamInfoPath() const;
+
+    tstring getTmpStreamInfoPath() const;
+
+    tstring getTmpResumePath() const;
 
     tstring getEncVideoFilePath(EncodeFileKey key) const;
 

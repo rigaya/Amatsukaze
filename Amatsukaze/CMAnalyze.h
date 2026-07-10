@@ -71,6 +71,8 @@ public:
 
     void inputTrimAVS(int numFrames, const tstring& trimavsPath);
 
+    void restore(const tstring& logoPath, const std::vector<int>& trims, const std::vector<int>& divs, const int numFrames);
+
 private:
     class MySubProcess : public EventBaseSubProcess {
     public:

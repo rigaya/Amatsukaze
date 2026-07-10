@@ -235,6 +235,27 @@ void CMAnalyze::inputTrimAVS(int numFrames, const tstring& trimavsPath) {
     // cmzonesに反映
     makeCMZones(numFrames);
 }
+
+void CMAnalyze::restore(const tstring& logoPath, const std::vector<int>& trims, const std::vector<int>& divs, const int numFrames) {
+    if (trims.size() % 2 != 0) {
+        THROW(FormatException, "再開情報のTrim区間数が不正です");
+    }
+    for (int i = 0; i < (int)trims.size(); i += 2) {
+        if (trims[i] < 0 || trims[i + 1] < trims[i] || trims[i + 1] > numFrames) {
+            THROW(FormatException, "再開情報のTrim区間が不正です");
+        }
+    }
+    logopath = logoPath;
+    this->trims = trims;
+    this->divs = divs;
+    sceneChanges.clear();
+    cmzones.clear();
+    // trimsが空のままmakeCMZonesを呼ぶと全編CM扱いのゾーンができてしまうため、
+    // CM解析結果があるときだけ再構築する
+    if (this->trims.size() > 0) {
+        makeCMZones(numFrames);
+    }
+}
 CMAnalyze::MySubProcess::MySubProcess(const tstring& args, File* out, File* err)
     : EventBaseSubProcess(args)
     , out(out)

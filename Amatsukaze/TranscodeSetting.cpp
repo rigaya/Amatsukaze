@@ -574,11 +574,12 @@ static std::string escapeXmlAttr(const std::string& s) {
     }
     return desc;
 }
-TempDirectory::TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp)
+TempDirectory::TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp, const tstring& resumeDir)
     : AMTObject(ctx)
     , path_(tmpdir)
     , initialized_(false)
-    , noRemoveTmp_(noRemoveTmp) {}
+    , noRemoveTmp_(noRemoveTmp)
+    , resumeDir_(resumeDir) {}
 TempDirectory::~TempDirectory() {
     if (!initialized_ || noRemoveTmp_) {
         return;
@@ -593,6 +594,21 @@ TempDirectory::~TempDirectory() {
 
 void TempDirectory::Initialize() {
     if (initialized_) return;
+
+    if (resumeDir_.size() > 0 && rgy_directory_exists(resumeDir_)) {
+        path_ = resumeDir_;
+        tstring abolutePath;
+        const int sz = GetFullPathNameT(path_.c_str(), 0, 0, 0);
+        if (sz == 0) {
+            THROWF(IOException, "再開用一時ディレクトリの絶対パス取得に失敗: %s", path_);
+        }
+        abolutePath.resize(sz);
+        GetFullPathNameT(path_.c_str(), sz, &abolutePath[0], 0);
+        abolutePath.resize(sz - 1);
+        path_ = pathNormalize(abolutePath);
+        initialized_ = true;
+        return;
+    }
 
     for (int code = (int)time(NULL) & 0xFFFFFF; code > 0; code++) {
         auto path = genPath(path_, code);
@@ -651,7 +667,7 @@ ConfigWrapper::ConfigWrapper(
     const Config& conf)
     : AMTObject(ctx)
     , conf(conf)
-    , tmpDir(ctx, conf.workDir, conf.noRemoveTmp) {
+    , tmpDir(ctx, conf.workDir, conf.noRemoveTmp, conf.resumeDir) {
     if (this->conf.encoderParallel <= 0) {
         this->conf.encoderParallel = 1;
     }
@@ -673,6 +689,10 @@ tstring ConfigWrapper::getMode() const {
 
 tstring ConfigWrapper::getModeArgs() const {
     return conf.modeArgs;
+}
+
+tstring ConfigWrapper::getResumeDir() const {
+    return conf.resumeDir;
 }
 
 tstring ConfigWrapper::getSrcFilePath() const {
@@ -1029,6 +1049,10 @@ bool ConfigWrapper::isDumpStreamInfo() const {
     return conf.dumpStreamInfo;
 }
 
+bool ConfigWrapper::isNoRemoveTmp() const {
+    return conf.noRemoveTmp;
+}
+
 bool ConfigWrapper::isSystemAvsPlugin() const {
     return conf.systemAvsPlugin;
 }
@@ -1055,6 +1079,14 @@ tstring ConfigWrapper::getIntVideoFilePath(int index) const {
 
 tstring ConfigWrapper::getStreamInfoPath() const {
     return conf.outVideoPath + _T("-streaminfo.dat");
+}
+
+tstring ConfigWrapper::getTmpStreamInfoPath() const {
+    return regtmp(StringFormat(_T("%s/streaminfo.dat"), tmpDir.path()));
+}
+
+tstring ConfigWrapper::getTmpResumePath() const {
+    return regtmp(StringFormat(_T("%s/resume.dat"), tmpDir.path()));
 }
 
 tstring ConfigWrapper::getEncVideoFilePath(EncodeFileKey key) const {
