@@ -234,36 +234,45 @@ static bool isSameDecoderSetting(const DecoderSetting& a, const DecoderSetting& 
 }
 
 static bool validateResumeSetting(const ConfigWrapper& setting, const ResumeInfo& info, tstring& reason) {
-    const auto pmtCutSideRate = setting.getPmtCutSideRate();
+    std::vector<tstring> mismatchedFields;
     if (info.srcFileSize != getFileSize(setting.getSrcFilePath())
         || info.srcWriteTime != getFileWriteTime(setting.getSrcFilePath())) {
-        reason = _T("入力TSのサイズまたは更新時刻が一致しません");
-    } else if (info.requestedServiceId != setting.getServiceId()
-        || info.splitSub != setting.isSplitSub()
-        || info.encodeAudio != setting.isEncodeAudio()
-        || info.subtitles != setting.isSubtitlesEnabled()
-        || info.tsreplace != (setting.getFormat() == FORMAT_TSREPLACE)
-        || !isSameDecoderSetting(info.decoderSetting, setting.getDecoderSetting())
-        || info.chapter != setting.isChapterEnabled()
-        || info.pmtCut != setting.isPmtCutEnabled()
-        || info.pmtCutSideRate[0] != pmtCutSideRate[0]
-        || info.pmtCutSideRate[1] != pmtCutSideRate[1]
-        || info.logoPath != setting.getLogoPath()
-        || info.eraseLogoPath != setting.getEraseLogoPath()
-        || info.ignoreNoLogo != setting.isIgnoreNoLogo()
-        || info.noDelogo != setting.isNoDelogo()
-        || info.looseLogoDetection != setting.isLooseLogoDetection()
-        || info.autoLogoDetect != setting.getAutoLogoDetect()
-        || info.autoLogoDetectSearchFrames != setting.getAutoLogoDetectSearchFrames()
-        || info.autoLogoDetectDivX != setting.getAutoLogoDetectDivX()
-        || info.autoLogoDetectDivY != setting.getAutoLogoDetectDivY()
-        || info.autoLogoDetectBlockSize != setting.getAutoLogoDetectBlockSize()
-        || info.autoLogoDetectThreshold != setting.getAutoLogoDetectThreshold()
-        || info.autoLogoDetectMarginX != setting.getAutoLogoDetectMarginX()
-        || info.autoLogoDetectMarginY != setting.getAutoLogoDetectMarginY()) {
-        reason = _T("再開情報と再実行時の設定が一致しません");
+        mismatchedFields.push_back(_T("入力TS"));
     }
-    return reason.size() == 0;
+    if (info.requestedServiceId != setting.getServiceId()) {
+        mismatchedFields.push_back(_T("サービスID"));
+    }
+    if (info.splitSub != setting.isSplitSub()) {
+        mismatchedFields.push_back(_T("字幕分離"));
+    }
+    if (info.encodeAudio != setting.isEncodeAudio()) {
+        mismatchedFields.push_back(_T("音声エンコード"));
+    }
+    if (info.subtitles != setting.isSubtitlesEnabled()) {
+        mismatchedFields.push_back(_T("字幕処理"));
+    }
+    if (info.tsreplace != (setting.getFormat() == FORMAT_TSREPLACE)) {
+        mismatchedFields.push_back(_T("TS置換出力"));
+    }
+    if (!isSameDecoderSetting(info.decoderSetting, setting.getDecoderSetting())) {
+        mismatchedFields.push_back(_T("デコーダ設定"));
+    }
+    if (info.eraseLogoPath != setting.getEraseLogoPath()) {
+        mismatchedFields.push_back(_T("追加ロゴ消し設定"));
+    }
+    if (mismatchedFields.empty()) {
+        return true;
+    }
+
+    reason = _T("再開情報と設定が一致しません(");
+    for (int index = 0; index < (int)mismatchedFields.size(); index++) {
+        if (index > 0) {
+            reason += _T(", ");
+        }
+        reason += mismatchedFields[index];
+    }
+    reason += _T(")");
+    return false;
 }
 
 static bool validateResumeFiles(
@@ -319,6 +328,13 @@ static bool validateResumeFiles(
                     return false;
                 }
             }
+        }
+        const bool requiresSavedLogo = !setting.isNoDelogo()
+            && setting.getLogoPath().size() > 0
+            && numFrames >= 300;
+        if (requiresSavedLogo && video.logoPath.empty()) {
+            reason = StringFormat(_T("ロゴ消しに必要な保存済みロゴ情報がありません: %d"), videoFileIndex);
+            return false;
         }
         if (!File::exists(setting.getIntVideoFilePath(videoFileIndex))
             || !File::exists(setting.getTmpAMTSourcePath(videoFileIndex))) {
