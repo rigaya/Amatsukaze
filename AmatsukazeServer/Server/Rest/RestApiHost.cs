@@ -98,7 +98,7 @@ namespace Amatsukaze.Server.Rest
             this.boundPort = port;
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
-            trimAdjust = new TrimAdjustService(state);
+            trimAdjust = new TrimAdjustService(server, state);
         }
 
         public int Port => boundPort;
@@ -1842,6 +1842,33 @@ namespace Amatsukaze.Server.Rest
                     return Results.BadRequest(new { message = error ?? "Trim保存に失敗しました" });
                 }
                 return Results.Ok(new { });
+            });
+
+            app.MapPost("/api/trim/requeue", async (HttpRequest request) =>
+            {
+                var data = await request.ReadFromJsonAsync<TrimRequeueRequest>();
+                if (data == null)
+                {
+                    return Results.BadRequest(new { message = "再投入要求が不正です" });
+                }
+                try
+                {
+                    var response = await trimAdjust.RequeueAsync(data);
+                    return Results.Ok(response);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest(new { message = ex.Message });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new { message = ex.Message });
+                }
+                catch (Exception ex)
+                {
+                    Util.AddLog("[TrimAdjust] 再投入に失敗しました", ex);
+                    return Results.BadRequest(new { message = "再投入に失敗しました" });
+                }
             });
 
             app.MapDelete("/api/trim/sessions/{sessionId}", (string sessionId) =>

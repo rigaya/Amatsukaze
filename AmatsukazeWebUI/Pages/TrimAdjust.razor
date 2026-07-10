@@ -1620,7 +1620,7 @@
         _checkLogVisible = false;
     }
 
-    // プロファイルを指定して再投入（保存→セッションクローズ→通常モードの新規タスクを追加）
+    // プロファイルを指定して再投入（保存→通常モードの新規タスクを追加）
     private async Task RequeueWithProfile()
     {
         if (string.IsNullOrEmpty(_selectedProfile)) return;
@@ -1639,78 +1639,31 @@
             }
         }
 
-        if (string.IsNullOrEmpty(_queueItemSrcPath))
+        // 2. サーバー側で元タスクを検証して通常モードの新規タスクを追加
+        var addRes = await Api.RequeueTrimAsync(new TrimRequeueRequest
         {
-            _statusMessage = "元の入力ファイル情報が取得できません";
-            _isError = true;
-            _requeueBusy = false;
-            StateHasChanged();
-            return;
-        }
-
-        if (string.IsNullOrEmpty(_queueItemOutDir))
-        {
-            _statusMessage = "元の出力先情報が取得できません";
-            _isError = true;
-            _requeueBusy = false;
-            StateHasChanged();
-            return;
-        }
-
-        // 2. CM解析タスク削除を行う場合、一時フォルダのファイルハンドルを解放するため
-        //    セッションを先にクローズする（セッションが audio.wav / i0.mpg 等を掴んでいるため）
-        if (_deleteCmTask && !string.IsNullOrEmpty(_sessionId))
-        {
-            await Api.DeleteTrimSessionAsync(_sessionId);
-            _sessionId = null; // DisposeAsync での二重削除を防ぐ
-        }
-
-        // 3. 通常モードの新規タスクとして追加
-        var addRes = await Api.AddQueueAsync(new AddQueueRequest
-        {
-            Mode = ProcMode.Batch,
-            Targets = new List<AddQueueItem>()
-            {
-                new AddQueueItem()
-                {
-                    Path = _queueItemSrcPath
-                }
-            },
-            Outputs = new List<OutputInfo>()
-            {
-                new OutputInfo()
-                {
-                    DstPath = _queueItemOutDir,
-                    Profile = _selectedProfile,
-                    Priority = _queueItemPriority
-                }
-            },
+            QueueItemId = QueueItemId,
+            Profile = _selectedProfile,
+            Priority = _queueItemPriority,
             Tags = _queueItemTags != null && _queueItemTags.Count > 0
                 ? new List<string>(_queueItemTags)
-                : null
+                : null,
+            RemoveSourceItem = _deleteCmTask
         });
 
         if (addRes.Ok)
         {
-            // 設定によって元のCM解析タスクを削除（一時フォルダ削除 + キューから削除）
-            if (_deleteCmTask)
+            // 再利用Batchが終了時に一時フォルダを削除できるよう、開いているファイルハンドルを解放する。
+            if (!string.IsNullOrEmpty(_sessionId))
             {
-                // 一時フォルダを削除
-                var deleteTempRes = await Api.DeleteTrimTempDirAsync(QueueItemId);
-                if (!deleteTempRes.Ok)
+                var deleteSessionRes = await Api.DeleteTrimSessionAsync(_sessionId);
+                if (deleteSessionRes.Ok)
                 {
-                    // 削除失敗は警告のみ（再投入は成功しているため続行）
-                    System.Diagnostics.Debug.WriteLine($"[TrimAdjust] 一時フォルダ削除に失敗しました: {deleteTempRes.Error}");
+                    _sessionId = null; // DisposeAsyncでの二重削除を防ぐ
                 }
-                // キューからCM解析タスクを削除
-                var deleteQueueRes = await Api.ChangeQueueAsync(new ChangeItemData
+                else
                 {
-                    ItemId = QueueItemId,
-                    ChangeType = ChangeItemType.RemoveItem
-                });
-                if (!deleteQueueRes.Ok)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[TrimAdjust] CM解析タスクのキュー削除に失敗しました: {deleteQueueRes.Error}");
+                    System.Diagnostics.Debug.WriteLine($"[TrimAdjust] セッション削除に失敗しました: {deleteSessionRes.Error}");
                 }
             }
             _statusMessage = "再投入しました";

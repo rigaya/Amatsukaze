@@ -1234,6 +1234,10 @@ namespace Amatsukaze.Server
         [DataMember]
         public List<string> Tags { get; set; }
 
+        // カット調整後に再利用するCM解析タスクの一時フォルダ
+        [DataMember]
+        public string ResumeDir { get; set; }
+
         [DataMember]
         public AutoLogoResultState AutoLogoResult { get; set; }
         [DataMember]

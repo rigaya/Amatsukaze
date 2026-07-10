@@ -415,13 +415,15 @@ namespace Amatsukaze.Server.Rest
         private static readonly Regex TrimRegex = new Regex(@"Trim\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", RegexOptions.Compiled);
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(5);
 
+        private readonly EncodeServer server;
         private readonly RestStateStore state;
         private readonly ConcurrentDictionary<string, TrimAdjustSession> sessions = new ConcurrentDictionary<string, TrimAdjustSession>();
         // TTL経過後に確実にクリーンアップされるよう、SessionTtl間隔でバックグラウンド実行する
         private readonly Timer cleanupTimer;
 
-        public TrimAdjustService(RestStateStore state)
+        public TrimAdjustService(EncodeServer server, RestStateStore state)
         {
+            this.server = server;
             this.state = state;
             cleanupTimer = new Timer(_ => CleanupExpired(), null, SessionTtl, SessionTtl);
         }
@@ -645,6 +647,62 @@ namespace Amatsukaze.Server.Rest
                 error = $"Trim保存に失敗しました: {ex.Message}";
                 return false;
             }
+        }
+
+        public async Task<TrimRequeueResponse> RequeueAsync(TrimRequeueRequest request)
+        {
+            if (request == null || request.QueueItemId <= 0)
+            {
+                throw new ArgumentException("QueueItemIdが不正です");
+            }
+            if (string.IsNullOrWhiteSpace(request.Profile))
+            {
+                throw new ArgumentException("プロファイルが指定されていません");
+            }
+            if (!state.TryGetQueueItem(request.QueueItemId, out var sourceItem))
+            {
+                throw new InvalidOperationException("元のキューアイテムが見つかりません");
+            }
+            if (sourceItem.State != Amatsukaze.Server.QueueState.Complete)
+            {
+                throw new InvalidOperationException("完了していないキューアイテムは再投入できません");
+            }
+            if (sourceItem.Mode != Amatsukaze.Server.ProcMode.CMCheck && !sourceItem.IsBatch)
+            {
+                throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
+            }
+            if (string.IsNullOrEmpty(sourceItem.SrcPath) || !File.Exists(sourceItem.SrcPath))
+            {
+                throw new InvalidOperationException("入力ファイルが見つかりません");
+            }
+
+            string resumeDir = null;
+            var logPath = state.ResolveTaskLogPathById(sourceItem.Id);
+            if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
+            {
+                var tempDir = ExtractTempDirFromLog(logPath);
+                if (!string.IsNullOrEmpty(tempDir) && File.Exists(Path.Combine(tempDir, "resume.dat")))
+                {
+                    resumeDir = tempDir;
+                }
+            }
+            if (string.IsNullOrEmpty(resumeDir))
+            {
+                Util.AddLog($"[TrimAdjust] 再開情報が見つからないため通常処理として再投入します: ItemId={sourceItem.Id}", null);
+            }
+
+            var newItem = await server.RequeueTrimItem(
+                sourceItem.Id,
+                request.Profile,
+                request.Priority,
+                request.Tags,
+                resumeDir,
+                request.RemoveSourceItem);
+            return new TrimRequeueResponse
+            {
+                QueueItemId = newItem.Id,
+                ReuseTempDir = !string.IsNullOrEmpty(resumeDir)
+            };
         }
 
         // ログファイルから「一時フォルダ: {path}」を抽出

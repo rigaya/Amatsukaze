@@ -1956,7 +1956,7 @@ namespace Amatsukaze.Server
             string src, string srcOrg, string dst, string json,
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
-            bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string batDir,
+            bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string resumeDir, string batDir,
             string inHandle, string outHandle, int pid)
         {
             StringBuilder sb = new StringBuilder();
@@ -2428,6 +2428,10 @@ namespace Amatsukaze.Server
                 {
                     sb.Append(" --trimavs \"").Append(trimavs).Append("\"");
                 }
+                if (string.IsNullOrEmpty(resumeDir) == false)
+                {
+                    sb.Append(" --resume-dir \"").Append(resumeDir).Append("\"");
+                }
                 if (AppData_.setting.ExclusiveBatExec)
                 {
                     sb.Append(" --exclusive-bat-exec");
@@ -2463,12 +2467,35 @@ namespace Amatsukaze.Server
 
         private void CleanTmpDir()
         {
+            var pathComparer = Util.IsServerWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            var resumeDirs = new HashSet<string>(pathComparer);
+            foreach (var item in queueManager.GetQueueSnapshot())
+            {
+                if (string.IsNullOrWhiteSpace(item.ResumeDir))
+                {
+                    continue;
+                }
+                try
+                {
+                    resumeDirs.Add(NormalizeDirectoryPath(item.ResumeDir));
+                }
+                catch (Exception ex)
+                {
+                    Util.AddLog("[Queue] 再利用用一時フォルダを正規化できないため除外できません: " + item.ResumeDir, ex);
+                }
+            }
+
             // amtディレクトリ
             foreach (var dir in Directory
                 .GetDirectories(AppData_.setting.ActualWorkPath, "amt*"))
             {
                 try
                 {
+                    if (resumeDirs.Contains(NormalizeDirectoryPath(dir)))
+                    {
+                        Util.AddLog("[Queue] キューで再利用予定の一時フォルダを削除対象から除外しました: " + dir, null);
+                        continue;
+                    }
                     Directory.Delete(dir, true);
                 }
                 catch (Exception) { } // 例外は無視
@@ -2498,6 +2525,11 @@ namespace Amatsukaze.Server
                 }
                 catch (Exception) { } // 例外は無視
             }
+        }
+
+        private static string NormalizeDirectoryPath(string path)
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         private static void CheckPath(string name, string path)
@@ -3630,6 +3662,17 @@ namespace Amatsukaze.Server
         {
             queueQ.Post(data);
             return Task.FromResult(0);
+        }
+
+        internal Task<QueueItem> RequeueTrimItem(
+            int sourceItemId,
+            string profileName,
+            int priority,
+            List<string> tags,
+            string resumeDir,
+            bool removeSourceItem)
+        {
+            return queueManager.RequeueTrimItem(sourceItemId, profileName, priority, tags, resumeDir, removeSourceItem);
         }
 
         public async Task PauseEncode(PauseRequest request)

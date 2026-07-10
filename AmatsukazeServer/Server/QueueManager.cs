@@ -794,6 +794,80 @@ namespace Amatsukaze.Server
             }));
         }
 
+        public async Task<QueueItem> RequeueTrimItem(
+            int sourceItemId,
+            string profileName,
+            int priority,
+            List<string> tags,
+            string resumeDir,
+            bool removeSourceItem)
+        {
+            QueueItem sourceItem;
+            QueueItem newItem;
+            lock (queueSync)
+            {
+                sourceItem = Queue.FirstOrDefault(item => item.Id == sourceItemId);
+                if (sourceItem == null)
+                {
+                    throw new InvalidOperationException("元のキューアイテムが見つかりません");
+                }
+                if (sourceItem.State != QueueState.Complete)
+                {
+                    throw new InvalidOperationException("完了していないキューアイテムは再投入できません");
+                }
+                if (sourceItem.Mode != ProcMode.CMCheck && !sourceItem.IsBatch)
+                {
+                    throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
+                }
+
+                newItem = ServerSupport.DeepCopy(sourceItem);
+                newItem.Id = Interlocked.Increment(ref nextItemId);
+                newItem.Order = Queue.Count;
+                newItem.Mode = ProcMode.Batch;
+                newItem.Profile = null;
+                newItem.ProfileName = profileName;
+                newItem.Priority = priority;
+                newItem.Tags = tags != null ? new List<string>(tags) : new List<string>();
+                newItem.ResumeDir = resumeDir;
+                newItem.ActualDstPath = null;
+                newItem.ConsoleId = 0;
+                newItem.JlsCommand = null;
+                newItem.FailReason = "";
+                newItem.AddTime = DateTime.Now;
+                newItem.ResetAutoLogoAttempt();
+                newItem.Reset();
+                Queue.Add(newItem);
+
+                if (removeSourceItem)
+                {
+                    Queue.Remove(sourceItem);
+                }
+            }
+
+            var waits = new List<Task>();
+            UpdateProfileItem(newItem, null);
+            UpdateQueueItem(newItem, null);
+            UpdateProgress();
+            waits.Add(ClientQueueUpdate(new QueueUpdate()
+            {
+                Type = UpdateType.Add,
+                Item = newItem
+            }));
+            if (removeSourceItem)
+            {
+                // 再利用Batchが一時フォルダを所有するため、ここではフォルダを削除しない。
+                waits.Add(ClientQueueUpdate(new QueueUpdate()
+                {
+                    Type = UpdateType.Remove,
+                    Item = sourceItem
+                }));
+            }
+            UpdateQueueOrder();
+            waits.Add(server.NotifyMessage("カット調整後のタスクを再投入しました", false));
+            await Task.WhenAll(waits);
+            return newItem;
+        }
+
         internal Task NotifyQueueItemUpdate(QueueItem item)
         {
             UpdateProgress();

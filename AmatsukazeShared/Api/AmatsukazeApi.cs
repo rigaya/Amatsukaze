@@ -480,6 +480,10 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req)
             => PostJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/save", req, _ => true);
 
+        public Task<ApiResult<TrimRequeueResponse>> RequeueTrimAsync(TrimRequeueRequest req)
+            => PostJsonAsync("/api/trim/requeue", req,
+                element => element.Deserialize<TrimRequeueResponse>(jsonOptions) ?? new TrimRequeueResponse());
+
         public async Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber)
         {
             try

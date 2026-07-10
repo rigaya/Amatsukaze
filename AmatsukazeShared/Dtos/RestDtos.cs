@@ -586,6 +586,21 @@ namespace Amatsukaze.Shared
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
     }
 
+    public class TrimRequeueRequest
+    {
+        public int QueueItemId { get; set; }
+        public string? Profile { get; set; }
+        public int Priority { get; set; }
+        public List<string>? Tags { get; set; }
+        public bool RemoveSourceItem { get; set; }
+    }
+
+    public class TrimRequeueResponse
+    {
+        public int QueueItemId { get; set; }
+        public bool ReuseTempDir { get; set; }
+    }
+
     public class TrimAdjustBundleResponse
     {
         public byte[] VideoJpeg { get; set; } = Array.Empty<byte>();

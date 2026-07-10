@@ -995,13 +995,25 @@ namespace Amatsukaze.Server
                     : profile.EnableJLSOption ? profile.JLSOption
                     : serviceSetting.JLSOption;
                 string ceopt = (serviceSetting?.DisableCMCheck ?? true) ? null : profile.ChapterExeOption;
+                string resumeDir = null;
+                if (item.IsBatch && !string.IsNullOrEmpty(item.ResumeDir))
+                {
+                    if (Directory.Exists(item.ResumeDir))
+                    {
+                        resumeDir = item.ResumeDir;
+                    }
+                    else
+                    {
+                        Util.AddLog(Id, "一時ファイル再利用用フォルダが見つからないため通常処理を実行します: " + item.ResumeDir, null);
+                    }
+                }
 
                 string args = server.MakeAmatsukazeArgs(
                     item.Mode, profile,
                     server.AppData_.setting,
                     isMp4,
                     srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
-                    item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, server.GetBatDirectoryPath(),
+                    item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, resumeDir, server.GetBatDirectoryPath(),
                     pipes?.InHandle, pipes?.OutHandle, Id);
                 string exename = server.AppData_.setting.AmatsukazePath;
 
