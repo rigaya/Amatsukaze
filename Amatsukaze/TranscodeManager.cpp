@@ -243,7 +243,7 @@ static bool validateResumeSetting(const ConfigWrapper& setting, const ResumeInfo
         mismatchedFields.push_back(_T("サービスID"));
     }
     if (info.splitSub != setting.isSplitSub()) {
-        mismatchedFields.push_back(_T("字幕分離"));
+        mismatchedFields.push_back(_T("メイン以外のフォーマット結合設定"));
     }
     if (info.encodeAudio != setting.isEncodeAudio()) {
         mismatchedFields.push_back(_T("音声エンコード"));
