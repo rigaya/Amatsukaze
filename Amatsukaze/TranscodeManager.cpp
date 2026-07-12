@@ -29,7 +29,7 @@ struct WhisperAudioEntry {
     int dualMonoChannel; // -1: original stereo, 0/1: dual mono channel selection
 };
 
-constexpr int RESUME_MANIFEST_VERSION = 1;
+constexpr int RESUME_MANIFEST_VERSION = 2;
 
 struct ResumeVideoInfo {
     int numFrames;
@@ -42,11 +42,8 @@ struct ResumeInfo {
     int64_t srcFileSize;
     int64_t srcWriteTime;
     int requestedServiceId;
-    bool splitSub;
-    bool encodeAudio;
-    bool subtitles;
+    bool captionsParsed;
     bool tsreplace;
-    DecoderSetting decoderSetting;
     bool chapter;
     bool pmtCut;
     double pmtCutSideRate[2];
@@ -116,7 +113,6 @@ static int64_t getFileSize(const tstring& path) {
 }
 
 static void saveResumeManifest(
-    AMTContext& ctx,
     const ConfigWrapper& setting,
     StreamReformInfo& reformInfo,
     const std::vector<std::unique_ptr<CMAnalyze>>& cmanalyze,
@@ -124,7 +120,9 @@ static void saveResumeManifest(
     const int64_t numTotalPackets,
     const int64_t numScramblePackets,
     const int64_t totalIntVideoSize,
-    const int64_t srcFileSize) {
+    const int64_t srcFileSize,
+    const int noDrcsMapCount,
+    const bool captionsParsed) {
     const auto srcPath = setting.getSrcFilePath();
     const auto pmtCutSideRate = setting.getPmtCutSideRate();
     File file(setting.getTmpResumePath(), _T("wb"));
@@ -134,11 +132,8 @@ static void saveResumeManifest(
     file.writeValue(getFileWriteTime(srcPath));
 
     file.writeValue(setting.getServiceId());
-    file.writeValue(setting.isSplitSub());
-    file.writeValue(setting.isEncodeAudio());
-    file.writeValue(setting.isSubtitlesEnabled());
+    file.writeValue(captionsParsed);
     file.writeValue(setting.getFormat() == FORMAT_TSREPLACE);
-    file.writeValue(setting.getDecoderSetting());
     file.writeValue(setting.isChapterEnabled());
     file.writeValue(setting.isPmtCutEnabled());
     file.writeValue(pmtCutSideRate[0]);
@@ -162,7 +157,7 @@ static void saveResumeManifest(
     file.writeValue(numScramblePackets);
     file.writeValue(totalIntVideoSize);
     file.writeValue(srcFileSize);
-    file.writeValue(ctx.getErrorCount(AMT_ERR_NO_DRCS_MAP));
+    file.writeValue(noDrcsMapCount);
 
     file.writeValue((int)cmanalyze.size());
     for (int videoFileIndex = 0; videoFileIndex < (int)cmanalyze.size(); videoFileIndex++) {
@@ -186,11 +181,8 @@ static ResumeInfo readResumeManifest(const tstring& path) {
     info.srcFileSize = file.readValue<int64_t>();
     info.srcWriteTime = file.readValue<int64_t>();
     info.requestedServiceId = file.readValue<int>();
-    info.splitSub = file.readValue<bool>();
-    info.encodeAudio = file.readValue<bool>();
-    info.subtitles = file.readValue<bool>();
+    info.captionsParsed = file.readValue<bool>();
     info.tsreplace = file.readValue<bool>();
-    info.decoderSetting = file.readValue<DecoderSetting>();
     info.chapter = file.readValue<bool>();
     info.pmtCut = file.readValue<bool>();
     info.pmtCutSideRate[0] = file.readValue<double>();
@@ -229,10 +221,6 @@ static ResumeInfo readResumeManifest(const tstring& path) {
     return info;
 }
 
-static bool isSameDecoderSetting(const DecoderSetting& a, const DecoderSetting& b) {
-    return a.mpeg2 == b.mpeg2 && a.h264 == b.h264 && a.hevc == b.hevc;
-}
-
 static bool validateResumeSetting(const ConfigWrapper& setting, const ResumeInfo& info, tstring& reason) {
     std::vector<tstring> mismatchedFields;
     if (info.srcFileSize != getFileSize(setting.getSrcFilePath())
@@ -242,20 +230,8 @@ static bool validateResumeSetting(const ConfigWrapper& setting, const ResumeInfo
     if (info.requestedServiceId != setting.getServiceId()) {
         mismatchedFields.push_back(_T("サービスID"));
     }
-    if (info.splitSub != setting.isSplitSub()) {
-        mismatchedFields.push_back(_T("メイン以外のフォーマット結合設定"));
-    }
-    if (info.encodeAudio != setting.isEncodeAudio()) {
-        mismatchedFields.push_back(_T("音声エンコード"));
-    }
-    if (info.subtitles != setting.isSubtitlesEnabled()) {
-        mismatchedFields.push_back(_T("字幕処理"));
-    }
     if (info.tsreplace != (setting.getFormat() == FORMAT_TSREPLACE)) {
         mismatchedFields.push_back(_T("TS置換出力"));
-    }
-    if (!isSameDecoderSetting(info.decoderSetting, setting.getDecoderSetting())) {
-        mismatchedFields.push_back(_T("デコーダ設定"));
     }
     if (info.eraseLogoPath != setting.getEraseLogoPath()) {
         mismatchedFields.push_back(_T("追加ロゴ消し設定"));
@@ -384,7 +360,14 @@ static bool tryLoadResume(
             ctx.warnF(_T("[一時ファイル再利用] %s。通常処理へ戻ります"), reason.c_str());
             return false;
         }
+        if (setting.isSubtitlesEnabled() && !info.captionsParsed) {
+            ctx.warn(_T("[一時ファイル再利用] 再開情報に字幕解析結果が含まれていないため通常処理へ戻ります"));
+            return false;
+        }
         reformInfo = std::make_unique<StreamReformInfo>(StreamReformInfo::deserialize(ctx, setting.getTmpStreamInfoPath()));
+        if (!setting.isSubtitlesEnabled()) {
+            reformInfo->clearCaptionItems();
+        }
         reformInfo->prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE);
         ctx.info(_T("[一時ファイル再利用] ストリーム情報を読み込みました"));
         if (!validateResumeFiles(setting, *reformInfo, info, reason)) {
@@ -412,17 +395,37 @@ static void saveResumeFiles(
     const int64_t numTotalPackets,
     const int64_t numScramblePackets,
     const int64_t totalIntVideoSize,
-    const int64_t srcFileSize) {
+    const int64_t srcFileSize,
+    const int noDrcsMapCount,
+    const bool captionsParsed) {
     try {
-        reformInfo.serialize(setting.getTmpStreamInfoPath());
-        saveResumeManifest(ctx, setting, reformInfo, cmanalyze,
-            serviceId, numTotalPackets, numScramblePackets, totalIntVideoSize, srcFileSize);
+        saveResumeManifest(setting, reformInfo, cmanalyze,
+            serviceId, numTotalPackets, numScramblePackets, totalIntVideoSize, srcFileSize,
+            noDrcsMapCount, captionsParsed);
         ctx.infoF(_T("[一時ファイル再利用] 再開情報を保存しました: %s"), setting.getTmpResumePath().c_str());
     } catch (const Exception& e) {
         ctx.warnF(_T("[一時ファイル再利用] 再開情報の保存に失敗しました: %s"), e.message());
     } catch (const std::exception& e) {
         ctx.warnF(_T("[一時ファイル再利用] 再開情報の保存に失敗しました: %s"), char_to_tstring(e.what()));
     }
+}
+
+static void saveResumeStreamInfo(
+    AMTContext& ctx,
+    const ConfigWrapper& setting,
+    StreamReformInfo& reformInfo) {
+    try {
+        reformInfo.serialize(setting.getTmpStreamInfoPath());
+        ctx.infoF(_T("[一時ファイル再利用] ストリーム情報を保存しました: %s"), setting.getTmpStreamInfoPath().c_str());
+    } catch (const Exception& e) {
+        ctx.warnF(_T("[一時ファイル再利用] ストリーム情報の保存に失敗しました: %s"), e.message());
+    } catch (const std::exception& e) {
+        ctx.warnF(_T("[一時ファイル再利用] ストリーム情報の保存に失敗しました: %s"), char_to_tstring(e.what()));
+    }
+}
+
+static bool isCaptionParsingEnabled(const ConfigWrapper& setting) {
+    return setting.isSubtitlesEnabled() || setting.isNoRemoveTmp();
 }
 
 static void copyTrimAVSForCMOnly(
@@ -574,7 +577,7 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
 } // namespace
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
-    : TsSplitter(ctx, true, true, setting.isSubtitlesEnabled())
+    : TsSplitter(ctx, true, true, isCaptionParsingEnabled(setting))
     , setting_(setting)
     , psWriter(ctx)
     , writeHandler(*this)
@@ -1142,6 +1145,7 @@ void DoBadThing() {
     ResumeInfo resumeInfo;
     std::unique_ptr<StreamReformInfo> reformInfoPtr;
     const bool isReusingTmp = !isNoEncode && tryLoadResume(ctx, setting, resumeInfo, reformInfoPtr);
+    const bool captionsParsed = isReusingTmp ? resumeInfo.captionsParsed : isCaptionParsingEnabled(setting);
     int serviceId;
     int64_t numTotalPackets;
     int64_t numScramblePackets;
@@ -1162,6 +1166,9 @@ void DoBadThing() {
         }
         reformInfoPtr = std::make_unique<StreamReformInfo>(splitter->split());
         ctx.infoF(_T("TS解析完了: %.2f秒"), sw.getAndReset());
+        if (captionsParsed && !setting.isSubtitlesEnabled()) {
+            ctx.info(_T("[一時ファイル再利用] 再開情報保存用に字幕を解析しました（字幕処理は無効のため出力しません）"));
+        }
         serviceId = splitter->getActualServiceId();
         numTotalPackets = splitter->getNumTotalPackets();
         numScramblePackets = splitter->getNumScramblePackets();
@@ -1170,6 +1177,13 @@ void DoBadThing() {
         noDrcsMapCount = ctx.getErrorCount(AMT_ERR_NO_DRCS_MAP);
     }
     StreamReformInfo& reformInfo = *reformInfoPtr;
+
+    if (!isReusingTmp && setting.isNoRemoveTmp()) {
+        saveResumeStreamInfo(ctx, setting, reformInfo);
+    }
+    if (!isReusingTmp && captionsParsed && !setting.isSubtitlesEnabled()) {
+        reformInfo.clearCaptionItems();
+    }
 
     if (setting.isDumpStreamInfo()) {
         reformInfo.serialize(setting.getStreamInfoPath());
@@ -1209,7 +1223,7 @@ void DoBadThing() {
 
     if (!isNoEncode && setting.isIgnoreNoDrcsMap() == false) {
         // DRCSマッピングチェック
-        if (noDrcsMapCount > 0) {
+        if ((setting.isSubtitlesEnabled() ? noDrcsMapCount : 0) > 0) {
             THROW(NoDrcsMapException, "マッピングにないDRCS外字あり正常に字幕処理できなかったため終了します");
         }
     }
@@ -1243,22 +1257,21 @@ void DoBadThing() {
 
     // ソースファイル読み込み用データ保存
     if (isReusingTmp) {
-        ctx.info(_T("[一時ファイル再利用] ソースファイル読み込み用データを再利用します"));
-    } else {
-        for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; videoFileIndex++) {
-            // ファイル読み込み情報を保存
-            auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
-            auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
-            ctx.infoF(_T("ソースファイル読み込み用データ保存[%d/%d]: %s"), videoFileIndex + 1, numVideoFiles, amtsPath.c_str());
-            av::SaveAMTSource(amtsPath,
-                setting.getIntVideoFilePath(videoFileIndex),
-                setting.getWaveFilePath(),
-                fmt.videoFormat, fmt.audioFormat[0],
-                reformInfo.getFilterSourceFrames(videoFileIndex),
-                reformInfo.getFilterSourceAudioFrames(videoFileIndex),
-                setting.getDecoderSetting());
-            ctx.infoF(_T("ソースファイル読み込み用データ保存完了[%d/%d]"), videoFileIndex + 1, numVideoFiles);
-        }
+        ctx.info(_T("[一時ファイル再利用] 現在の設定でソースファイル読み込み用データを再生成します"));
+    }
+    for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; videoFileIndex++) {
+        // ファイル読み込み情報を保存
+        auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
+        auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
+        ctx.infoF(_T("ソースファイル読み込み用データ保存[%d/%d]: %s"), videoFileIndex + 1, numVideoFiles, amtsPath.c_str());
+        av::SaveAMTSource(amtsPath,
+            setting.getIntVideoFilePath(videoFileIndex),
+            setting.getWaveFilePath(),
+            fmt.videoFormat, fmt.audioFormat[0],
+            reformInfo.getFilterSourceFrames(videoFileIndex),
+            reformInfo.getFilterSourceAudioFrames(videoFileIndex),
+            setting.getDecoderSetting());
+        ctx.infoF(_T("ソースファイル読み込み用データ保存完了[%d/%d]"), videoFileIndex + 1, numVideoFiles);
     }
 
     // ロゴ・CM解析
@@ -1326,7 +1339,8 @@ void DoBadThing() {
 
     if (setting.isNoRemoveTmp()) {
         saveResumeFiles(ctx, setting, reformInfo, cmanalyze,
-            serviceId, numTotalPackets, numScramblePackets, totalIntVideoSize, srcFileSize);
+            serviceId, numTotalPackets, numScramblePackets, totalIntVideoSize, srcFileSize,
+            noDrcsMapCount, captionsParsed);
     }
 
     if (isNoEncode) {

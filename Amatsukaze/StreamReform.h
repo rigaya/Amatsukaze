@@ -162,6 +162,9 @@ public:
     // splitSub: メイン以外のフォーマットを結合しない
     void prepare(bool splitSub, bool isEncodeAudio, bool isTsreplace);
 
+    // 字幕処理が無効な場合に、解析済みの字幕情報を破棄する
+    void clearCaptionItems();
+
     time_t getFirstFrameTime() const;
 
     // 2. ニコニコ実況コメントを取得したら呼ぶ

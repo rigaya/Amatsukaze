@@ -378,6 +378,10 @@ void StreamReformInfo::serialize(const File& file) {
     file.writeArray(timeList_);
 }
 
+void StreamReformInfo::clearCaptionItems() {
+    captionItemList_.clear();
+}
+
 /* static */ StreamReformInfo StreamReformInfo::deserialize(AMTContext& ctx, const tstring& path) {
     return deserialize(ctx, File(path, _T("rb")));
 }
