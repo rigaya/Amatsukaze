@@ -2038,13 +2038,13 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        #region TsreplaceNoTsTempFile変更通知プロパティ
-        public bool TsreplaceNoTsTempFile {
-            get { return Data.TsreplaceNoTsTempFile; }
+        #region TsreplaceMuxTsTempFile変更通知プロパティ
+        public bool TsreplaceMuxTsTempFile {
+            get { return Data.TsreplaceMuxTsTempFile; }
             set {
-                if (Data.TsreplaceNoTsTempFile == value)
+                if (Data.TsreplaceMuxTsTempFile == value)
                     return;
-                Data.TsreplaceNoTsTempFile = value;
+                Data.TsreplaceMuxTsTempFile = value;
                 RaisePropertyChanged();
             }
         }

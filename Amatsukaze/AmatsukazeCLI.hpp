@@ -76,7 +76,7 @@ static void printHelp(const tchar* bin) {
         "  --mp4box <パス>     mp4boxへのパス（MP4で字幕処理する場合に必要）[mp4box.exe]\n"
         "  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
         "  --tsreplace-remove-typed  tsreplace実行時に--remove-typedを指定する\n"
-        "  --no-ts-tempfile     tsreplace時に入力TSの一時コピーを作成せず、入力ファイルを直接muxに使用する\n"
+        "  --mux-ts-temp        tsreplace時に入力TSの一時コピーを作成してmuxを高速化する\n"
         "  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
         "  -pf|--postfilter <パス>  ポストフィルタAvisynthスクリプトへのパス[]\n"
         "  --mpeg2decoder <デコーダ>  MPEG2用デコーダ[default]\n"
@@ -266,7 +266,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.parallelLogoAnalysis = false;
     conf.numParallelLogoAnalysis = 0;
     conf.tsreplaceRemoveTypeD = false;
-    conf.noTsTempFile = false;
+    conf.muxTsTemp = false;
     conf.useMKVWhenSubExist = false;
     conf.outputChapter = false;
     bool nicojk = false;
@@ -381,8 +381,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             }
         } else if (key == _T("--tsreplace-remove-typed")) {
             conf.tsreplaceRemoveTypeD = true;
-        } else if (key == _T("--no-ts-tempfile")) {
-            conf.noTsTempFile = true;
+        } else if (key == _T("--mux-ts-temp")) {
+            conf.muxTsTemp = true;
         } else if (key == _T("--use-mkv-when-sub-exists")) {
             conf.useMKVWhenSubExist = true;
         } else if (key == _T("--chapter")) {

@@ -1341,7 +1341,8 @@ void StreamReformInfo::genCaptionStream() {
     }
 }
 
-void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting) {
+void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting,
+    std::vector<PsisiarcTask>& psisiarcTasks) {
     ctx.info(_T("[WebVTT生成]"));
     // 1) tsreadex_dump.txt から最初のPCRを抽出
     int64_t firstPcr = 0;
@@ -1459,18 +1460,16 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
     auto chapterPath = setting.getTmpB24CutChapterPath(key);
     WriteUTF8File(chapterPath, sb.str());
 
-    // psisiarc実行（チャプター生成後、langループの外）
+    // psisiarcは映像エンコードと並行実行するため、ここではタスクだけ登録する。
     {
-        auto rawts = setting.getTmpRawTSPath();
         auto psc = setting.getTmpPSCFilePath(key);
         tstring cmd = StringFormat(_T("\"%s\" -r arib-data -c \"%s\" \"%s\" \"%s\""),
-            setting.getPsisiarcPath(), setting.getTmpB24CutChapterPath(key), rawts, psc);
+            setting.getPsisiarcPath(), setting.getTmpB24CutChapterPath(key), setting.getSrcFilePath(), psc);
         ctx.infoF(_T("psisiarc コマンド: %s"), cmd.c_str());
-        SubProcess proc(cmd);
-        int exitCode = proc.join();
-        if (exitCode != 0) {
-            ctx.warnF(_T("psisiarcがエラーコード(%d)を返しました"), exitCode);
-        }
+        PsisiarcTask task;
+        task.key = key;
+        task.cmd = std::move(cmd);
+        psisiarcTasks.push_back(std::move(task));
     }
 
     // 5) b24tovtt実行: 標準入力にtsreadex_dump.txt、出力はvtt

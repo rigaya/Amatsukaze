@@ -226,9 +226,9 @@ else
             {
                 <tr class="profile-check-row">
                     <td colspan="2">
-                        <label class="settings-check">
-                            <input type="checkbox" checked="@GetBoolValue("TsreplaceNoTsTempFile")" @onchange="@(e => OnBoolChanged(e, "TsreplaceNoTsTempFile"))" />
-                            mux用のts一時ファイルを作成しない
+                        <label class="settings-check" title="ts一時ファイルを作成し、入力がネットワーク上にある場合のmux速度を向上させます">
+                            <input type="checkbox" checked="@GetBoolValue("TsreplaceMuxTsTempFile")" @onchange="@(e => OnBoolChanged(e, "TsreplaceMuxTsTempFile"))" />
+                            ts一時ファイルでmuxを高速化
                         </label>
                     </td>
                 </tr>

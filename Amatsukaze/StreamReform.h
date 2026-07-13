@@ -19,6 +19,7 @@
 #include "CaptionData.h"
 #include "StreamUtils.h"
 #include "Mpeg2TsParser.h"
+#include "ProcessThread.h"
 
 // 時間は全て 90kHz double で計算する
 // 90kHzでも60*1000/1001fpsの1フレームの時間は整数で表せない
@@ -135,6 +136,14 @@ struct NicoJKLine {
 typedef std::array<std::vector<NicoJKLine>, NICOJK_MAX> NicoJKList;
 
 typedef std::pair<int64_t, JSTTime> TimeInfo;
+
+struct PsisiarcTask {
+    EncodeFileKey key;
+    tstring cmd;
+    std::unique_ptr<StdRedirectedSubProcess> process;
+    int exitCode = -1;
+    tstring errorMessage; // 実行スレッドで発生した例外の内容 (同期時に報告する)
+};
 
 struct EncodeFileInput {
     EncodeFileKey key;     // キー
@@ -414,7 +423,8 @@ private:
 
 public:
     // WebVTT生成 (tsreadexのトレースとb24tovttを使用)
-    void genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting);
+    void genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting,
+        std::vector<PsisiarcTask>& psisiarcTasks);
 };
 
 

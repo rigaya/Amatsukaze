@@ -17,12 +17,19 @@
 HMODULE g_DllHandle;
 #else
 #include <dlfcn.h>
+#include <csignal>
 void* g_DllHandle = nullptr;
 #endif
 
 bool g_av_initialized = false;
 
 extern "C" AMATSUKAZE_API int AmatsukazeCLI(int argc, const tchar* argv[]) {
+#if !(defined(_WIN32) || defined(_WIN64))
+    // 子プロセス(tsreadex/エンコーダ等)が先に終了した状態でパイプへ書き込むと
+    // SIGPIPEでプロセスごと落ちるため無視する。書き込み失敗はwrite()の戻り値(EPIPE)で
+    // 検出され、SubProcess::write()の例外として処理される。
+    signal(SIGPIPE, SIG_IGN);
+#endif
     return RunAmatsukazeCLI(argc, argv);
 }
 

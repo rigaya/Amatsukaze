@@ -265,10 +265,9 @@ static bool validateResumeFiles(
         reason = _T("再開に必要な音声一時ファイルがありません");
         return false;
     }
-    if ((setting.isWebVTTEnabled()
-        || (setting.getFormat() == FORMAT_TSREPLACE && !setting.isNoTsTempFile()))
+    if (setting.getFormat() == FORMAT_TSREPLACE && setting.isMuxTsTempEnabled()
         && !File::exists(setting.getTmpRawTSPath())) {
-        reason = _T("再開に必要なraw.tsがありません");
+        reason = _T("tsreplaceの一時TS muxに必要なraw.tsがありません");
         return false;
     }
     if (setting.isWebVTTEnabled() && !File::exists(setting.getTmpTsReadExDumpPath())) {
@@ -575,6 +574,73 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     return wavPath;
 }
 
+// TS解析中にtsreadexへ入力TSを転送し、トレースを保存する。
+// 解析側で例外が発生した場合も、デストラクタで標準入力を閉じて完了を待つ。
+class TsReadExPipe {
+    class TraceProcess : public EventBaseSubProcess {
+    public:
+        TraceProcess(const tstring& args, File* output)
+            : EventBaseSubProcess(args)
+            , output_(output) {}
+
+    protected:
+        void onOut(bool isErr, MemoryChunk mc) override {
+            if (!isErr && output_) {
+                output_->write(mc);
+            }
+        }
+
+    private:
+        File* output_;
+    };
+
+public:
+    TsReadExPipe(AMTContext& ctx, const ConfigWrapper& setting)
+        : output_(new File(setting.getTmpTsReadExDumpPath(), _T("wb")))
+        , process_()
+        , writeEnabled_(true) {
+        ctx.info(_T("[tsreadex 解析]"));
+        const tstring args = StringFormat(
+            _T("\"%s\" -n -1 -r - -"), setting.getTsReadExPath().c_str());
+        ctx.infoF(_T("tsreadex コマンド: %s"), args.c_str());
+        process_.reset(new TraceProcess(args, output_.get()));
+    }
+
+    ~TsReadExPipe() {
+        // EventBaseSubProcess::join()は2回呼ぶとclose済みパイプを操作してしまうため、
+        // 明示的にjoin()済みの場合はここでは何もしない。
+        if (process_ && !joined_) {
+            try {
+                process_->join();
+            } catch (...) {
+            }
+        }
+    }
+
+    void write(MemoryChunk mc) {
+        if (!writeEnabled_) {
+            return;
+        }
+        try {
+            process_->write(mc);
+        } catch (const RuntimeException&) {
+            // tsreadexが早期終了してもTS解析は最後まで継続する。
+            writeEnabled_ = false;
+        }
+    }
+
+    int join() {
+        joined_ = true;
+        return process_->join();
+    }
+
+private:
+    std::unique_ptr<File> output_;
+    std::unique_ptr<TraceProcess> process_;
+    bool writeEnabled_;
+    bool joined_ = false;
+};
+
 } // namespace
 
 AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
@@ -635,22 +701,38 @@ void AMTSplitter::readAll() {
     auto buffer_ptr = std::unique_ptr<uint8_t[]>(new uint8_t[BUFSIZE]);
     MemoryChunk buffer(buffer_ptr.get(), BUFSIZE);
     File srcfile(setting_.getSrcFilePath(), _T("rb"));
-    // 入力TSそのままのコピーを作成 (WebVTT出力ON または tsreplace時の設定が有効な場合)
-    const bool needCopyTS = setting_.isWebVTTEnabled()
-        || (setting_.getFormat() == FORMAT_TSREPLACE && !setting_.isNoTsTempFile());
+    // tsreplaceで一時TSを使う場合だけ、入力TSのコピーを作成する。
+    const bool needCopyTS = setting_.getFormat() == FORMAT_TSREPLACE
+        && setting_.isMuxTsTempEnabled();
     std::unique_ptr<File> rawts;
     if (needCopyTS) {
         rawts.reset(new File(setting_.getTmpRawTSPath(), _T("wb")));
+    }
+    std::unique_ptr<TsReadExPipe> tsreadex;
+    if (setting_.isWebVTTEnabled()) {
+        tsreadex.reset(new TsReadExPipe(ctx, setting_));
     }
     srcFileSize_ = srcfile.size();
     size_t readBytes;
     do {
         readBytes = srcfile.read(buffer);
-        if (readBytes > 0 && rawts) {
-            rawts->write(MemoryChunk(buffer.data, readBytes));
+        if (readBytes > 0) {
+            const MemoryChunk chunk(buffer.data, readBytes);
+            if (rawts) {
+                rawts->write(chunk);
+            }
+            if (tsreadex) {
+                tsreadex->write(chunk);
+            }
         }
         inputTsData(MemoryChunk(buffer.data, readBytes));
     } while (readBytes == buffer.length);
+    if (tsreadex) {
+        const int exitCode = tsreadex->join();
+        if (exitCode != 0) {
+            THROWF(FormatException, "tsreadexがエラーコード(%d)を返しました", exitCode);
+        }
+    }
 }
 
 /* static */ bool AMTSplitter::CheckPullDown(PICTURE_TYPE p0, PICTURE_TYPE p1) {
@@ -1191,29 +1273,6 @@ void DoBadThing() {
         reformInfo.serialize(setting.getStreamInfoPath());
     }
 
-    // tsreadexでトレースを取得 (WebVTT出力時のみ)
-    if (setting.isWebVTTEnabled() && !isReusingTmp) {
-        ctx.info(_T("[tsreadex 解析]"));
-        File stdoutf(setting.getTmpTsReadExDumpPath(), _T("wb"));
-        tstring args = StringFormat(_T("\"%s\" -n -1 -r - \"%s\""), setting.getTsReadExPath().c_str(), setting.getTmpRawTSPath().c_str());
-        ctx.infoF(_T("tsreadex コマンド: %s"), args.c_str());
-        class MyTsReadEx : public EventBaseSubProcess {
-        public:
-            MyTsReadEx(const tstring& args, File* out) : EventBaseSubProcess(args), out(out) {}
-        protected:
-            File* out;
-            virtual void onOut(bool isErr, MemoryChunk mc) {
-                if (!isErr && out) out->write(mc);
-            }
-        };
-        MyTsReadEx process(args, &stdoutf);
-        int exitCode = process.join();
-        if (exitCode != 0) {
-            THROWF(FormatException, "tsreadexがエラーコード(%d)を返しました", exitCode);
-        }
-        ctx.infoF(_T("tsreadex 完了: %.2f秒"), sw.getAndReset());
-    }
-
     // スクランブルパケットチェック
     double scrambleRatio = (double)numScramblePackets / (double)numTotalPackets;
     if (scrambleRatio > 0.01) {
@@ -1461,6 +1520,7 @@ void DoBadThing() {
         }
     }
 
+    std::vector<PsisiarcTask> psisiarcTasks;
     ctx.info(_T("[字幕ファイル生成]"));
     for (int i = 0; i < (int)keys.size(); i++) {
         auto key = keys[i];
@@ -1492,7 +1552,7 @@ void DoBadThing() {
         // 字幕構築 + (必要なら) WebVTT生成
         try {
             if (setting.isWebVTTEnabled()) {
-                reformInfo.genWebVTT(key, setting);
+                reformInfo.genWebVTT(key, setting, psisiarcTasks);
             }
         } catch (const Exception& e) {
             ctx.warnF(_T("WebVTT生成に失敗: %s"), e.message());
@@ -1606,6 +1666,35 @@ void DoBadThing() {
             }
         });
     }
+
+    // psisiarcは専用スレッドでタスクを直列実行し、映像エンコードと並行させる。
+    std::unique_ptr<std::thread> psisiarcThread;
+    if (!psisiarcTasks.empty()) {
+        psisiarcThread = std::make_unique<std::thread>([&psisiarcTasks]() {
+            for (auto& task : psisiarcTasks) {
+                // 例外がスレッド外へ漏れるとterminateするため、タスク単位で捕捉して継続する。
+                // ログはスレッドセーフでないため出さず、同期時にまとめて報告する。
+                try {
+                    task.process = std::make_unique<StdRedirectedSubProcess>(
+                        task.cmd, 0, false, false, true);
+                    task.exitCode = task.process->join();
+                } catch (const Exception& e) {
+                    task.errorMessage = e.message();
+                } catch (...) {
+                    task.errorMessage = _T("不明なエラー");
+                }
+            }
+        });
+    }
+    // エンコード中の例外でunwindする場合もjoinを保証し、joinable時のterminateを防ぐ。
+    struct PsisiarcThreadJoiner {
+        std::unique_ptr<std::thread>& thread;
+        ~PsisiarcThreadJoiner() {
+            if (thread && thread->joinable()) {
+                thread->join();
+            }
+        }
+    } psisiarcThreadJoiner{ psisiarcThread };
 
     sw.start();
     for (int i = 0; i < (int)keys.size(); i++) {
@@ -1738,6 +1827,39 @@ void DoBadThing() {
             }
             if (rgy_file_exists(task.vttPath) && rgy_get_filesize(task.vttPath.c_str(), &filesize) && filesize == 0) {
                 rgy_file_remove(task.vttPath.c_str());
+            }
+        }
+    }
+
+    // muxがpscを読む前にpsisiarcの完了を待ち、捕捉した出力をまとめて記録する。
+    if (!psisiarcTasks.empty()) {
+        if (psisiarcThread && psisiarcThread->joinable()) {
+            ctx.info(_T("[psisiarc: バックグラウンド処理の完了待ち]"));
+            psisiarcThread->join();
+            psisiarcThread.reset();
+        }
+        for (auto& task : psisiarcTasks) {
+            if (!task.errorMessage.empty()) {
+                ctx.warnF(_T("psisiarcの実行に失敗: %s"), task.errorMessage.c_str());
+                continue;
+            }
+            if (!task.process) {
+                continue;
+            }
+            const auto& lines = task.process->getCapturedLines();
+            if (!lines.empty()) {
+                ctx.info(_T("↓↓↓↓↓↓psisiarc出力↓↓↓↓↓↓"));
+                for (const auto& line : lines) {
+                    std::vector<char> buffer = line;
+                    if (buffer.empty() || buffer.back() != '\0') {
+                        buffer.push_back('\0');
+                    }
+                    ctx.infoF(_T("%s"), char_to_tstring(buffer.data()));
+                }
+                ctx.info(_T("↑↑↑↑↑↑psisiarc出力↑↑↑↑↑↑"));
+            }
+            if (task.exitCode != 0) {
+                ctx.warnF(_T("psisiarcがエラーコード(%d)を返しました"), task.exitCode);
             }
         }
     }

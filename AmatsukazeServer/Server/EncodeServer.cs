@@ -2134,9 +2134,9 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --tsreplace-remove-typed");
                     }
-                    if (profile.OutputFormat == FormatType.TSREPLACE && profile.TsreplaceNoTsTempFile)
+                    if (profile.OutputFormat == FormatType.TSREPLACE && profile.TsreplaceMuxTsTempFile)
                     {
-                        sb.Append(" --no-ts-tempfile");
+                        sb.Append(" --mux-ts-temp");
                     }
 
                     if (bitrateCM != 1)
