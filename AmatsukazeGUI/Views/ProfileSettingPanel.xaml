@@ -328,9 +328,9 @@
                                     </Style.Triggers>
                                 </Style>
                             </StackPanel.Style>
-                            <CheckBox Content="mux高速化のため一時tsファイルを作成する" VerticalAlignment="Center" Margin="5,5"
-                                  IsChecked="{Binding Model.SelectedProfile.TsreplaceCreateTsTempFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  ToolTip="入力TSのコピーを一時フォルダに作成してmuxに使用します。&#xA;OFFにすると一時コピーを作らず入力ファイルを直接muxに使用します&#xA;(一時フォルダの容量節約になりますが、入力がネットワーク上にある場合はmuxが遅くなることがあります)"/>
+                            <CheckBox Content="mux用のts一時ファイルを作成しない" VerticalAlignment="Center" Margin="5,5"
+                                  IsChecked="{Binding Model.SelectedProfile.TsreplaceNoTsTempFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="ONにすると入力TSの一時コピーを作らず、入力ファイルを直接muxに使用します&#xA;(一時フォルダの容量節約になりますが、入力がネットワーク上にある場合はmuxが遅くなることがあります)"/>
                         </StackPanel>
 
                         <StackPanel>

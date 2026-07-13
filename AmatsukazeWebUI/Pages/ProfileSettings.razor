@@ -227,8 +227,8 @@ else
                 <tr class="profile-check-row">
                     <td colspan="2">
                         <label class="settings-check">
-                            <input type="checkbox" checked="@(!GetBoolValue("TsreplaceNoTsTempFile"))" @onchange="@(e => OnBoolChangedInverted(e, "TsreplaceNoTsTempFile"))" />
-                            mux高速化のため一時tsファイルを作成する
+                            <input type="checkbox" checked="@GetBoolValue("TsreplaceNoTsTempFile")" @onchange="@(e => OnBoolChanged(e, "TsreplaceNoTsTempFile"))" />
+                            mux用のts一時ファイルを作成しない
                         </label>
                     </td>
                 </tr>
@@ -1274,12 +1274,6 @@ else
     {
         var value = e.Value is bool b && b;
         SetNodeValue(name, JsonValue.Create(value));
-    }
-
-    private void OnBoolChangedInverted(ChangeEventArgs e, string name)
-    {
-        var value = e.Value is bool b && b;
-        SetNodeValue(name, JsonValue.Create(!value));
     }
 
     private void OnMoveInputFileChanged(ChangeEventArgs e)
