@@ -295,6 +295,9 @@ namespace Amatsukaze.Server
         public bool TsreplaceRemoveTypeD { get; set; }
 
         [DataMember]
+        public bool TsreplaceNoTsTempFile { get; set; }
+
+        [DataMember]
         public bool TSReplaceVideo { get; set; }
 
         [DataMember]
@@ -738,6 +741,7 @@ namespace Amatsukaze.Server
                 ? string.Format("{0}:{1}", profile.PmtCutHeadRate, profile.PmtCutTailRate) : "なし");
             keyValue("ロゴ最長フェードフレーム数指定", profile.EnableMaxFadeLength ? profile.MaxFadeLength.ToString() : "なし");
             keyValueBool("tsreplaceでTypeDを削除する", profile.TsreplaceRemoveTypeD);
+            keyValueBool("tsreplaceで一時tsファイルを作成しない", profile.TsreplaceNoTsTempFile);
             keyValueBool("tsreplaceでビデオを置換する", profile.TSReplaceVideo);
             keyValueBool("JoinLogoScpオプションを有効にする", profile.EnableJLSOption);
             keyValueBool("エンコードアフィニティを無視する", profile.IgnoreEncodeAffinity);

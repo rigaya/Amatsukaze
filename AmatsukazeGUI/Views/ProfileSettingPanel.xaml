@@ -328,6 +328,22 @@
                                     </Style.Triggers>
                                 </Style>
                             </StackPanel.Style>
+                            <CheckBox Content="mux高速化のため一時tsファイルを作成する" VerticalAlignment="Center" Margin="5,5"
+                                  IsChecked="{Binding Model.SelectedProfile.TsreplaceCreateTsTempFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="入力TSのコピーを一時フォルダに作成してmuxに使用します。&#xA;OFFにすると一時コピーを作らず入力ファイルを直接muxに使用します&#xA;(一時フォルダの容量節約になりますが、入力がネットワーク上にある場合はmuxが遅くなることがあります)"/>
+                        </StackPanel>
+
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.SelectedProfile.TsreplaceSelected}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
                             <CheckBox Content="データ放送を削除する" VerticalAlignment="Center" Margin="5,5" 
                                   IsChecked="{Binding Model.SelectedProfile.TsreplaceRemoveTypeD, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   ToolTip="データ放送を削除し、出力tsの軽量化を図ります"/>

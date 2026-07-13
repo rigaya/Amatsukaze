@@ -234,6 +234,7 @@ struct Config {
     tstring preEncBatchFile;
     ENUM_FORMAT format;
     bool tsreplaceRemoveTypeD;
+    bool noTsTempFile;
     bool useMKVWhenSubExist;
     bool splitSub;
     bool twoPass;
@@ -352,6 +353,8 @@ public:
     ENUM_FORMAT getFormat() const;
 
     bool getTsreplaceRemoveTypeD() const;
+
+    bool isNoTsTempFile() const;
 
     bool getUseMKVWhenSubExist() const;
 

@@ -2038,6 +2038,19 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region TsreplaceCreateTsTempFile変更通知プロパティ
+        public bool TsreplaceCreateTsTempFile {
+            get { return !Data.TsreplaceNoTsTempFile; }
+            set {
+                bool newValue = !value;
+                if (Data.TsreplaceNoTsTempFile == newValue)
+                    return;
+                Data.TsreplaceNoTsTempFile = newValue;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region IgnoreEncodeAffinity変更通知プロパティ
         public bool IgnoreEncodeAffinity
         {

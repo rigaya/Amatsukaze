@@ -265,7 +265,8 @@ static bool validateResumeFiles(
         reason = _T("再開に必要な音声一時ファイルがありません");
         return false;
     }
-    if ((setting.isWebVTTEnabled() || setting.getFormat() == FORMAT_TSREPLACE)
+    if ((setting.isWebVTTEnabled()
+        || (setting.getFormat() == FORMAT_TSREPLACE && !setting.isNoTsTempFile()))
         && !File::exists(setting.getTmpRawTSPath())) {
         reason = _T("再開に必要なraw.tsがありません");
         return false;
@@ -634,8 +635,9 @@ void AMTSplitter::readAll() {
     auto buffer_ptr = std::unique_ptr<uint8_t[]>(new uint8_t[BUFSIZE]);
     MemoryChunk buffer(buffer_ptr.get(), BUFSIZE);
     File srcfile(setting_.getSrcFilePath(), _T("rb"));
-    // 入力TSそのままのコピーを作成 (WebVTT出力ON または tsreplace時)
-    const bool needCopyTS = setting_.isWebVTTEnabled() || (setting_.getFormat() == FORMAT_TSREPLACE);
+    // 入力TSそのままのコピーを作成 (WebVTT出力ON または tsreplace時の設定が有効な場合)
+    const bool needCopyTS = setting_.isWebVTTEnabled()
+        || (setting_.getFormat() == FORMAT_TSREPLACE && !setting_.isNoTsTempFile());
     std::unique_ptr<File> rawts;
     if (needCopyTS) {
         rawts.reset(new File(setting_.getTmpRawTSPath(), _T("wb")));

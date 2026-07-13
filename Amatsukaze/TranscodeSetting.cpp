@@ -771,6 +771,10 @@ bool ConfigWrapper::getTsreplaceRemoveTypeD() const {
     return conf.tsreplaceRemoveTypeD;
 }
 
+bool ConfigWrapper::isNoTsTempFile() const {
+    return conf.noTsTempFile;
+}
+
 bool ConfigWrapper::getUseMKVWhenSubExist() const {
     return conf.useMKVWhenSubExist;
 }
