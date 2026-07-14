@@ -265,11 +265,6 @@ static bool validateResumeFiles(
         reason = _T("再開に必要な音声一時ファイルがありません");
         return false;
     }
-    if (setting.getFormat() == FORMAT_TSREPLACE && setting.isMuxTsTempEnabled()
-        && !File::exists(setting.getTmpRawTSPath())) {
-        reason = _T("tsreplaceの一時TS muxに必要なraw.tsがありません");
-        return false;
-    }
     if (setting.isWebVTTEnabled() && !File::exists(setting.getTmpTsReadExDumpPath())) {
         reason = _T("再開に必要なtsreadex_dump.txtがありません");
         return false;
