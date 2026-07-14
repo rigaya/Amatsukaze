@@ -886,6 +886,8 @@ else
     private static readonly string[] _d3dvpGpuEnumNames = new[] { "Auto", "Intel", "NVIDIA", "Radeon" };
     private static readonly string[] _qtgmcPresetEnumNames = new[] { "Auto", "Faster", "Fast", "Medium", "Slow", "Slower" };
     private static readonly string[] _audioEncoderEnumNames = new[] { "NeroAac", "Qaac", "Fdkaac", "OpusEnc" };
+    private static readonly string[] _subtitleModeEnumNames = new[] { "Arib", "WhisperFallback", "WhisperAlways" };
+    private static readonly string[] _whisperModelEnumNames = new[] { "Auto", "Unspecified", "Small", "Medium", "LargeV1", "LargeV2", "LargeV3", "LargeV3Turbo" };
     private static readonly string[] _resourcePhaseNames = new[] { "TS解析", "CM解析", "フィルタ映像解析", "エンコード", "Mux" };
 
     protected override Task OnInitializedAsync() => ReloadProfilesAsync();
@@ -1770,12 +1772,18 @@ else
 
     private int GetSubtitleModeIndex()
     {
-        return GetIntValue("SubMode");
+        // SubModeはサーバー側でJsonStringEnumConverterにより文字列("Arib"等)として
+        // 返ってくるため、GetIntValueだけでは常に0="標準"扱いになってしまう。
+        // 他のenum系ドロップダウンと同様にGetEnumIndexで文字列名からも解決する
+        // (これがないと実際のSubModeとUI表示がズレて、保存時にWhisperパス
+        // 未設定エラーが誤って発生する)
+        return GetEnumIndex("SubMode", _subtitleModeEnumNames);
     }
 
     private int GetWhisperModelIndex()
     {
-        return GetIntValue("WhisperModel");
+        // WhisperModelも同様に文字列で返ってくるためGetEnumIndexで解決する
+        return GetEnumIndex("WhisperModel", _whisperModelEnumNames);
     }
 
     private bool IsWhisperMode()
