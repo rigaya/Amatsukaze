@@ -299,6 +299,15 @@ namespace Amatsukaze.Server
             this.finishRequested = finishRequested;
             serverPort = port;
 
+            // 起動時の実行コンテキストをログに残す（EDCB連携等の環境切り分け用）
+            Util.AddLog("[起動診断] " + ServerSupport.GetExecutionContextSummary(), null);
+            if (ServerSupport.IsNonInteractiveServiceContext(out var contextReason))
+            {
+                Util.AddLog($"[起動診断] 警告: {contextReason}。" +
+                    "ネットワークドライブが見えない・AviSynthプラグインがエラーになる等の問題が起きる場合は、" +
+                    "サーバーをユーザーセッションで事前に起動してください。", null);
+            }
+
             queueManager = new QueueManager(this);
             autoLogoPendingResolver = new AutoLogoPendingResolver(this);
             drcsManager = new DRCSManager(this);

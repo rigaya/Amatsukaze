@@ -334,6 +334,9 @@ namespace Amatsukaze.AddTask
 
         public async Task Exec()
         {
+            // 実行コンテキストをログに残す（EDCB録画後バッチ等から起動された場合の環境切り分け用）
+            Console.WriteLine("[AddTask] 実行コンテキスト: " + ServerSupport.GetExecutionContextSummary());
+
             if (!string.IsNullOrEmpty(option.FilePath))
             {
                 string srcpath = option.FilePath;
@@ -474,6 +477,14 @@ namespace Amatsukaze.AddTask
                     // ローカルの場合は、起動を試みる
                     if (isLocal)
                     {
+                        // サービス由来の非対話コンテキストからの成り行き起動は問題が起きやすいので警告する
+                        if (ServerSupport.IsNonInteractiveServiceContext(out var contextReason))
+                        {
+                            Console.WriteLine("[AddTask] 警告: {0}。", contextReason);
+                            Console.WriteLine("[AddTask] このままサーバーを起動すると、サーバーも同じコンテキストを引き継ぎ、" +
+                                "ネットワークドライブが見えない・AviSynthプラグインがエラーになる等の問題が起きることがあります。");
+                            Console.WriteLine("[AddTask] 回避するには、AmatsukazeServerをユーザーセッションで事前に起動しておいてください。");
+                        }
                         Console.WriteLine("[AddTask] Local: attempt launch. Root='{0}', Port={1}", option.AmatsukazeRoot, option.ServerPort);
                         await ServerSupport.TerminateStandalone(option.AmatsukazeRoot);
                         Console.WriteLine("[AddTask] TerminateStandalone completed.");

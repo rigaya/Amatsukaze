@@ -109,14 +109,35 @@ cd Amatsukaze/docker
 ./setup.sh
 # Amatsukazeを実行するユーザーIDとグループIDをRUN_UIDとRUN_GIDで指定
 # 必要に応じて volumes のマウント対象等を調整
-# また、環境に応じて devices や deploy を調整
+# GPUを使う場合はsetup.shが表示したoverride付き起動コマンドを使用
 vi compose.yml
 ```
 
 ## 起動
 
+`compose.yml` はGPUなしでも起動できるbase設定です。GPUを使う場合だけ、対応するoverrideを合成します。
+
+| 環境 | 起動コマンド | 必要条件 |
+|:--|:--|:--|
+| GPUなし | `docker compose -f compose.yml up -d` | なし |
+| Intel QSVのみ | `docker compose -f compose.yml -f compose.qsv.yml up -d` | ホストに`/dev/dri`が存在し、コンテナ実行ユーザーがアクセス可能 |
+| NVIDIAのみ | `docker compose -f compose.yml -f compose.nvidia.yml up -d` | NVIDIA DriverとNVIDIA Container Toolkitが導入済み |
+| Intel QSVとNVIDIAの両方 | `docker compose -f compose.yml -f compose.qsv.yml -f compose.nvidia.yml up -d` | 上記両方の条件を満たす |
+
+`setup.sh` はローカル環境を検出して推奨コマンドを表示します。`DOCKER_HOST`を使うリモートDocker環境では、検出結果と接続先ホストが異なる場合があるため、接続先環境に合わせてコマンドを選択してください。
+
+### 誤設定時の主なエラーと対処
+
+| 症状 | 原因 | 対処 |
+|:--|:--|:--|
+| `/dev/dri` が見つからない、またはデバイス公開時に起動できない | Intel GPUがない、またはホストのデバイスが利用できない | `compose.qsv.yml`を外して起動する。QSVを使う場合はホストのIntel GPU/ドライバ/権限を確認する。 |
+| `could not select device driver "nvidia"` | NVIDIA Container Toolkitが未導入またはDocker Runtimeへ未登録 | 本書のToolkit導入手順を実行し、Dockerを再起動してから`compose.nvidia.yml`を追加する。 |
+| NVIDIA GPUはあるがコンテナ内でNVEncCが使えない | Driver/Toolkit/overrideのいずれかが不足 | `nvidia-smi`、`docker info`のRuntimes、起動コマンドの`compose.nvidia.yml`を順に確認する。 |
+
+毎回`-f`を指定したくない場合は、Linuxでは`.env`に`COMPOSE_FILE=compose.yml:compose.qsv.yml`のように記載できます。NVIDIAも使う場合は末尾に`:compose.nvidia.yml`を追加します。これは手動設定なので、GPU構成を変えた場合は内容も見直してください。
+
 ```sh
-docker compose up -d
+docker compose -f compose.yml up -d
 ```
 
 ## 接続方法

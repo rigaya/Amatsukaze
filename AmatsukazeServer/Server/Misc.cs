@@ -12,6 +12,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Globalization;
@@ -764,6 +765,93 @@ namespace Amatsukaze.Server
             {
                 WorkingDirectory = rootDir,
             });
+        }
+
+        // 実行コンテキスト情報（アカウント・セッション・権限・コードページ）をログ用の1行文字列で返す
+        // EDCB録画後バッチ等から起動された場合の環境切り分けに使用する
+        public static string GetExecutionContextSummary()
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                sb.Append($"アカウント={Environment.UserDomainName}\\{Environment.UserName}");
+                if (OperatingSystem.IsWindows())
+                {
+                    // セッションID・対話型はWindowsでのみ意味を持つ（サービス起動の切り分け用）
+                    sb.Append($", セッションID={Process.GetCurrentProcess().SessionId}");
+                    sb.Append($", 対話型={(Environment.UserInteractive ? "はい" : "いいえ")}");
+                    using (var identity = WindowsIdentity.GetCurrent())
+                    {
+                        var sid = identity.User;
+                        var accountType =
+                            sid.IsWellKnown(WellKnownSidType.LocalSystemSid) ? "LocalSystem" :
+                            sid.IsWellKnown(WellKnownSidType.LocalServiceSid) ? "LocalService" :
+                            sid.IsWellKnown(WellKnownSidType.NetworkServiceSid) ? "NetworkService" : "通常ユーザー";
+                        sb.Append($", アカウント種別={accountType}");
+                        sb.Append($", 管理者権限={(new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator) ? "あり" : "なし")}");
+                    }
+                    // ANSIコードページ (65001の場合はWindows 11の「Unicode UTF-8を使用する」が有効)
+                    sb.Append($", ANSIコードページ={Util.AmatsukazeDefaultEncoding.CodePage}");
+                }
+                else
+                {
+                    sb.Append($", root権限={(Environment.IsPrivilegedProcess ? "あり" : "なし")}");
+                }
+                try
+                {
+                    sb.Append($", コンソール出力={Console.OutputEncoding.WebName}");
+                }
+                catch
+                {
+                    // コンソールが割り当てられていない場合は取得できないので省略
+                }
+            }
+            catch (Exception e)
+            {
+                sb.Append($" (取得中にエラー: {e.Message})");
+            }
+            return sb.ToString();
+        }
+
+        // サービス由来などの非対話コンテキストで動作しているかを判定する
+        // この状態でサーバーを成り行き起動すると、ネットワークドライブ不可視・
+        // ユーザープロファイル差・GUI不可視などの問題が起きやすい
+        public static bool IsNonInteractiveServiceContext(out string reason)
+        {
+            reason = null;
+            if (!OperatingSystem.IsWindows())
+            {
+                return false;
+            }
+            try
+            {
+                if (Process.GetCurrentProcess().SessionId == 0)
+                {
+                    reason = "セッション0（サービス用セッション）で実行されています";
+                    return true;
+                }
+                using (var identity = WindowsIdentity.GetCurrent())
+                {
+                    var sid = identity.User;
+                    if (sid.IsWellKnown(WellKnownSidType.LocalSystemSid) ||
+                        sid.IsWellKnown(WellKnownSidType.LocalServiceSid) ||
+                        sid.IsWellKnown(WellKnownSidType.NetworkServiceSid))
+                    {
+                        reason = "サービス用アカウント（LocalSystem/LocalService/NetworkService）で実行されています";
+                        return true;
+                    }
+                }
+                if (!Environment.UserInteractive)
+                {
+                    reason = "非対話型プロセスとして実行されています";
+                    return true;
+                }
+            }
+            catch
+            {
+                // 判定に失敗した場合は通常コンテキストとして扱う
+            }
+            return false;
         }
 
         // サーバ（serverモード）が既に稼働しているかをロックファイルで推定する
