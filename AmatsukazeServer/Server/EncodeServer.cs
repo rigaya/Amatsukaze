@@ -2337,12 +2337,22 @@ namespace Amatsukaze.Server
                     if (profile.EnableWebVTT)
                     {
                         sb.Append(" --webvtt");
-                        sb.Append(" --tsreadex \"")
-                            .Append(setting.TsReadExPath)
-                            .Append("\" --b24tovtt \"")
+                        sb.Append(" --b24tovtt \"")
                             .Append(setting.B24ToVttPath)
                             .Append("\" --psisiarc \"")
                             .Append(setting.PsisiarcPath)
+                            .Append("\"");
+                    }
+                }
+
+                // tsreadexパスはWebVTT有効時だけでなく、一時ファイル再利用時にも
+                // tsreadex_dump.txtを事前生成するために渡す
+                if (profile.EnableWebVTT || !string.IsNullOrEmpty(resumeDir))
+                {
+                    if (!string.IsNullOrEmpty(setting.TsReadExPath))
+                    {
+                        sb.Append(" --tsreadex \"")
+                            .Append(setting.TsReadExPath)
                             .Append("\"");
                     }
                 }

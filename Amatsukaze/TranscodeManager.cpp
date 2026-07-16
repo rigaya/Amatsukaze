@@ -20,6 +20,13 @@
 
 namespace {
 
+// tsreadexの実行ファイルが利用可能かを判定する（ファイル存在 or PATH上に存在）
+static bool isTsReadExAvailable(const ConfigWrapper& setting) {
+    const auto& path = setting.getTsReadExPath();
+    return !path.empty()
+        && (rgy_file_exists(path) || !find_executable_in_path(path).empty());
+}
+
 struct WhisperAudioEntry {
     int keyIndex;
     EncodeFileKey key;
@@ -265,7 +272,7 @@ static bool validateResumeFiles(
         reason = _T("再開に必要な音声一時ファイルがありません");
         return false;
     }
-    if (setting.isWebVTTEnabled() && !File::exists(setting.getTmpTsReadExDumpPath())) {
+    if (isTsReadExAvailable(setting) && !File::exists(setting.getTmpTsReadExDumpPath())) {
         reason = _T("再開に必要なtsreadex_dump.txtがありません");
         return false;
     }
@@ -704,7 +711,7 @@ void AMTSplitter::readAll() {
         rawts.reset(new File(setting_.getTmpRawTSPath(), _T("wb")));
     }
     std::unique_ptr<TsReadExPipe> tsreadex;
-    if (setting_.isWebVTTEnabled()) {
+    if (isTsReadExAvailable(setting_)) {
         tsreadex.reset(new TsReadExPipe(ctx, setting_));
     }
     srcFileSize_ = srcfile.size();
