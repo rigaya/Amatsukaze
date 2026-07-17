@@ -318,9 +318,9 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
   - join_logo_scp
   
     ```bash
-    (git clone https://github.com/tobitti0/join_logo_scp \
+    (git clone --depth=1 --branch v5.1.1 https://github.com/yobibi/join_logo_scp \
       && cd join_logo_scp/src \
-      && make -j$(nproc) \
+      && make \
       && sudo install -D -t /usr/local/bin join_logo_scp)
     ```
 

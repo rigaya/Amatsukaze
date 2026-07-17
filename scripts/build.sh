@@ -319,10 +319,10 @@ fi
 if [ ! -d "${INSTALL_DIR}/JL" ]; then
     echo "JLファイルのインストールを開始します..."
     mkdir -p "${INSTALL_DIR}/JL" || exit 1
-    wget https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz || exit 1
-    tar -xf Ver4.1.0_Linux.tar.gz || exit 1
-    cp -r join_logo_scp-Ver4.1.0_Linux/JL/* "${INSTALL_DIR}/JL/" || exit 1
-    rm -rf join_logo_scp-Ver4.1.0_Linux Ver4.1.0_Linux.tar.gz || exit 1
+    wget https://github.com/yobibi/join_logo_scp/archive/refs/tags/v5.1.1.tar.gz || exit 1
+    tar -xf v5.1.1.tar.gz || exit 1
+    cp -r join_logo_scp-5.1.1/JL/* "${INSTALL_DIR}/JL/" || exit 1
+    rm -rf join_logo_scp-5.1.1 v5.1.1.tar.gz || exit 1
 fi
 
 echo "インストールが完了しました (WebUI は REST ポート+1 で公開されます)"

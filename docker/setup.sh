@@ -121,10 +121,10 @@ setup_directories() {
     # JLディレクトリのコピー
     if [[ ! -d "$CURRENT_DIR/JL" ]]; then
         echo "JLディレクトリをダウンロード中..."
-        (wget -q https://github.com/tobitti0/join_logo_scp/archive/refs/tags/Ver4.1.0_Linux.tar.gz -O JL.tar.gz \
+        (wget -q https://github.com/yobibi/join_logo_scp/archive/refs/tags/v5.1.1.tar.gz -O JL.tar.gz \
             && tar -xf JL.tar.gz \
-            && mv join_logo_scp-Ver4.1.0_Linux/JL "$CURRENT_DIR/" \
-            && rm -rf join_logo_scp-Ver4.1.0_Linux/ join_logo_scp-Ver4.1.0_Linux JL.tar.gz \
+            && mv join_logo_scp-5.1.1/JL "$CURRENT_DIR/" \
+            && rm -rf join_logo_scp-5.1.1 JL.tar.gz \
             && echo "✅ JLディレクトリを作成しました" \
         )
     else

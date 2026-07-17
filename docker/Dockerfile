@@ -29,7 +29,7 @@ ENV RGTOOLS_VER=1.2
 ENV GPAC_VER=v2.4.0
 ENV LSMASH_REV=18a9ed25c7ff79a7f4f4bf850c345c72179b8998
 ENV CHAPTER_EXE_REV=32880d45f088e574285a101e6a49b032bb04f6ea
-ENV JOIN_LOGO_SCP_VER=Ver4.1.0_Linux
+ENV JOIN_LOGO_SCP_VER=v5.1.1
 ENV FDK_AAC_REV=d8e6b1a3aa606c450241632b64b703f21ea31ce3
 ENV FDKAAC_VER=v1.0.6
 ENV TSREADEX_VER=master-240517
@@ -139,9 +139,9 @@ RUN git clone https://github.com/rigaya/chapter_exe \
     && install -D -t /usr/local/bin chapter_exe
 
 # join_logo_scp
-RUN git clone --depth=1 --branch ${JOIN_LOGO_SCP_VER} https://github.com/tobitti0/join_logo_scp \
+RUN git clone --depth=1 --branch ${JOIN_LOGO_SCP_VER} https://github.com/yobibi/join_logo_scp \
     && cd join_logo_scp/src \
-    && make -j$(nproc) \
+    && make \
     && install -D -t /usr/local/bin join_logo_scp
 
 # 音声エンコーダ
