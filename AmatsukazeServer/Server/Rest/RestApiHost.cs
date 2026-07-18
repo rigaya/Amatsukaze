@@ -1021,6 +1021,15 @@ namespace Amatsukaze.Server.Rest
                     RequestId = requestId,
                     Source = "rest"
                 });
+                // ファイル削除に失敗した場合に設定だけが消える不整合を防ぐ
+                try
+                {
+                    server.DeleteLogoFileForRest(data.FileName);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    return Results.Problem("ロゴファイルを削除できません: " + ex.Message);
+                }
                 await server.SetServiceSetting(new ServiceSettingUpdate()
                 {
                     Type = ServiceSettingUpdateType.RemoveLogo,

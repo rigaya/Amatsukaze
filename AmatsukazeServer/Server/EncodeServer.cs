@@ -868,6 +868,18 @@ namespace Amatsukaze.Server
             return GetLogoFilePath(fileName);
         }
 
+        internal void DeleteLogoFileForRest(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName) || fileName == LogoSetting.NO_LOGO ||
+                Path.GetFileName(fileName) != fileName)
+            {
+                throw new IOException("不正なロゴファイル名です: " + fileName);
+            }
+
+            var filePath = GetLogoFilePath(fileName);
+            File.Delete(filePath);
+        }
+
         private string GetJLDirectoryPath()
         {
             return Path.GetFullPath("JL");
