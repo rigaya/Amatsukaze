@@ -2357,9 +2357,9 @@ namespace Amatsukaze.Server
                     }
                 }
 
-                // tsreadexパスはWebVTT有効時だけでなく、一時ファイル再利用時にも
-                // tsreadex_dump.txtを事前生成するために渡す
-                if (profile.EnableWebVTT || !string.IsNullOrEmpty(resumeDir))
+                // 一時ファイルを残す元タスクでtsreadex_dump.txtを生成しておく。
+                // 再投入時にも、dumpがなければ通常処理へ戻って生成できるようパスを渡す。
+                if (profile.EnableWebVTT || profile.NoRemoveTmp || !string.IsNullOrEmpty(resumeDir))
                 {
                     if (!string.IsNullOrEmpty(setting.TsReadExPath))
                     {
