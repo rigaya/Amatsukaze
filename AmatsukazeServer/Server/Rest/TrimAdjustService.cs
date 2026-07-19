@@ -671,7 +671,8 @@ namespace Amatsukaze.Server.Rest
             {
                 throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
             }
-            if (string.IsNullOrEmpty(sourceItem.SrcPath) || !File.Exists(sourceItem.SrcPath))
+            // 移動済みの入力ファイルはキューへの再投入時に元の場所へ戻す
+            if (string.IsNullOrEmpty(sourceItem.SrcPath))
             {
                 throw new InvalidOperationException("入力ファイルが見つかりません");
             }

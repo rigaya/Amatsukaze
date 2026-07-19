@@ -794,6 +794,44 @@ namespace Amatsukaze.Server
             }));
         }
 
+        // バッチ処理後に succeeded / failed へ移動された入力ファイルを元の場所へ戻す
+        private void RestoreMovedInputFiles(QueueItem item, bool preserveExistingTrim)
+        {
+            if (!item.IsBatch || (item.State != QueueState.Failed && item.State != QueueState.Complete))
+            {
+                return;
+            }
+
+            bool hasActive;
+            lock (queueSync)
+            {
+                hasActive = Queue.Where(queueItem => queueItem.SrcPath == item.SrcPath).Any(queueItem => queueItem.IsActive);
+            }
+            if (hasActive)
+            {
+                return;
+            }
+
+            var dirPath = Path.GetDirectoryName(item.SrcPath);
+            var movedDir = item.State == QueueState.Failed ? ServerSupport.FAIL_DIR : ServerSupport.SUCCESS_DIR;
+            var movedPath = Path.Combine(dirPath, movedDir, Path.GetFileName(item.SrcPath));
+            if (!File.Exists(movedPath))
+            {
+                return;
+            }
+
+            var trimPath = item.SrcPath + ".trim.avs";
+            foreach (var moveItem in ServerSupport.GetMoveList(movedPath, dirPath, true))
+            {
+                // カット調整で保存したTrim指定ファイルは、移動先にある古い内容で上書きしない
+                if (preserveExistingTrim && moveItem.DstPath == trimPath && File.Exists(trimPath))
+                {
+                    continue;
+                }
+                ServerSupport.MoveFile(moveItem.SrcPath, moveItem.DstPath);
+            }
+        }
+
         public async Task<QueueItem> RequeueTrimItem(
             int sourceItemId,
             string profileName,
@@ -818,6 +856,26 @@ namespace Amatsukaze.Server
                 if (sourceItem.Mode != ProcMode.CMCheck && !sourceItem.IsBatch)
                 {
                     throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
+                }
+
+                if (string.IsNullOrEmpty(sourceItem.SrcPath))
+                {
+                    throw new InvalidOperationException("入力ファイルが見つかりません");
+                }
+                if (!File.Exists(sourceItem.SrcPath))
+                {
+                    try
+                    {
+                        RestoreMovedInputFiles(sourceItem, true);
+                    }
+                    catch (Exception e)
+                    {
+                        throw new InvalidOperationException("入力ファイルの移動に失敗しました", e);
+                    }
+                }
+                if (!File.Exists(sourceItem.SrcPath))
+                {
+                    throw new InvalidOperationException("入力ファイルが見つかりません");
                 }
 
                 newItem = ServerSupport.DeepCopy(sourceItem);
@@ -1127,38 +1185,13 @@ namespace Amatsukaze.Server
 
                 var waits = new List<Task>();
 
-                if (target.IsBatch)
+                try
                 {
-                    // バッチモードでfailed/succeededフォルダに移動されていたら戻す
-                    if (target.State == QueueState.Failed || target.State == QueueState.Complete)
-                    {
-                        bool hasActive;
-                        lock (queueSync)
-                        {
-                            hasActive = Queue.Where(s => s.SrcPath == target.SrcPath).Any(s => s.IsActive);
-                        }
-                        if (hasActive == false)
-                        {
-                            var dirPath = Path.GetDirectoryName(target.SrcPath);
-                            var movedDir = (target.State == QueueState.Failed) ? 
-                                ServerSupport.FAIL_DIR : 
-                                ServerSupport.SUCCESS_DIR;
-                            var movedPath = Path.Combine(dirPath, movedDir, Path.GetFileName(target.SrcPath));
-                            if (File.Exists(movedPath))
-                            {
-                                // EDCB関連ファイルも移動したかどうかは分からないが、あれば戻す
-                                try
-                                {
-                                    ServerSupport.MoveTSFile(movedPath, dirPath, true);
-                                }
-                                catch (Exception e)
-                                {
-                                    return server.FatalError(
-                                        "ファイルの移動に失敗しました", e);
-                                }
-                            }
-                        }
-                    }
+                    RestoreMovedInputFiles(target, false);
+                }
+                catch (Exception e)
+                {
+                    return server.FatalError("ファイルの移動に失敗しました", e);
                 }
 
                 if (data.ChangeType == ChangeItemType.ResetState)
