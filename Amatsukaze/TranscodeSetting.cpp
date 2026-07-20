@@ -946,6 +946,9 @@ bool ConfigWrapper::isParallelLogoAnalysis() const {
 int ConfigWrapper::getNumParallelLogoAnalysis() const {
     return conf.numParallelLogoAnalysis;
 }
+bool ConfigWrapper::isDirectLogoAnalysis() const {
+    return conf.directLogoAnalysis;
+}
 int ConfigWrapper::getMaxFadeLength() const {
     return conf.maxFadeLength;
 }
@@ -1605,6 +1608,7 @@ void ConfigWrapper::dump() const {
     }
     ctx.infoF(_T("ロゴ消し: %s"), conf.noDelogo ? _T("しない") : _T("する"));
     ctx.infoF(_T("並列ロゴ解析: %s"), conf.parallelLogoAnalysis ? (conf.numParallelLogoAnalysis > 0 ? StringFormat(_T("%d並列"), conf.numParallelLogoAnalysis) : _T("オン")) : _T("オフ"));
+    ctx.infoF(_T("AVFrame直接ロゴ解析: %s"), conf.directLogoAnalysis ? _T("オン") : _T("オフ"));
     if (conf.audioEncoder != AUDIO_ENCODER_NONE) {
         ctx.infoF(_T("音声: %s (%s)"), conf.audioEncoderPath, audioEncoderToString(conf.audioEncoder));
         if (conf.audioBitrateInKbps > 0) {

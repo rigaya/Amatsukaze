@@ -7,6 +7,7 @@
 */
 
 #include "LogoScan.h"
+#include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
 #include <cstdlib>
@@ -1570,11 +1571,75 @@ logo::LogoFrame::LogoFrame(AMTContext& ctx, const std::vector<tstring>& logofile
 }
 
 void logo::LogoFrame::setClipInfo(PClip clip) {
-    vi = clip->GetVideoInfo();
+    setClipInfo(clip->GetVideoInfo());
+}
+
+void logo::LogoFrame::setClipInfo(const VideoInfo& info) {
+    vi = info;
     evalResults.clear();
     evalResults.resize(vi.num_frames * numLogos, EvalResult{ 0, -1 });
     numFrames = vi.num_frames;
     framesPerSec = (int)std::round((float)vi.fps_numerator / vi.fps_denominator);
+}
+
+void logo::LogoFrame::ScanFrameDirect(const AVFrame* top, const AVFrame* bottom,
+    const int dstBitDepth, const int srcBitDepth, uint16_t* memY,
+    float* memDeint, float* memWork, EvalResult* outResult) {
+    const float maxv = (float)((1 << dstBitDepth) - 1);
+    const int shift = srcBitDepth - dstBitDepth;
+    const int rounding = (shift > 0) ? (1 << (shift - 1)) : 0;
+    const int dstMax = (1 << dstBitDepth) - 1;
+
+    auto convert = [=](const int value) {
+        if (shift > 0) {
+            return std::max(0, std::min(dstMax, (value + rounding) >> shift));
+        }
+        return (shift < 0) ? (value << -shift) : value;
+    };
+
+    for (int i = 0; i < numLogos; i++) {
+        LogoDataParam& logo = deintArr[i];
+        if (!logo.isValid() || logo.getImgWidth() != vi.width || logo.getImgHeight() != vi.height) {
+            outResult[i] = EvalResult{ 0, -1 };
+            continue;
+        }
+
+        const int width = logo.getWidth();
+        const int height = logo.getHeight();
+        const int srcX = logo.getImgX();
+        const int srcY = logo.getImgY();
+        if (srcBitDepth > 8) {
+            const int topPitch = top->linesize[0] / (int)sizeof(uint16_t);
+            const int bottomPitch = bottom->linesize[0] / (int)sizeof(uint16_t);
+            const auto* topY = reinterpret_cast<const uint16_t*>(top->data[0]);
+            const auto* bottomY = reinterpret_cast<const uint16_t*>(bottom->data[0]);
+            for (int y = 0; y < height; y++) {
+                const int absoluteY = srcY + y;
+                const auto* src = ((absoluteY & 1) ? bottomY + absoluteY * bottomPitch : topY + absoluteY * topPitch) + srcX;
+                auto* dst = memY + y * width;
+                for (int x = 0; x < width; x++) {
+                    dst[x] = (uint16_t)convert(src[x]);
+                }
+            }
+        } else {
+            const int topPitch = top->linesize[0];
+            const int bottomPitch = bottom->linesize[0];
+            const auto* topY = top->data[0];
+            const auto* bottomY = bottom->data[0];
+            for (int y = 0; y < height; y++) {
+                const int absoluteY = srcY + y;
+                const auto* src = ((absoluteY & 1) ? bottomY + absoluteY * bottomPitch : topY + absoluteY * topPitch) + srcX;
+                auto* dst = memY + y * width;
+                for (int x = 0; x < width; x++) {
+                    dst[x] = (uint16_t)convert(src[x]);
+                }
+            }
+        }
+
+        DeintY(memDeint, memY, width, width, height);
+        outResult[i].corr0 = logo.EvaluateLogo(memDeint, maxv, 0, memWork);
+        outResult[i].corr1 = logo.EvaluateLogo(memDeint, maxv, 1, memWork);
+    }
 }
 
 void logo::LogoFrame::scanFrames(PClip clip, const std::vector<int>& trims, const int threadId, const int totalThreads, IScriptEnvironment2* env) {
@@ -1587,6 +1652,45 @@ void logo::LogoFrame::scanFrames(PClip clip, const std::vector<int>& trims, cons
     case 2: return IterateFrames<uint16_t>(clip, trims, threadId, totalThreads, env);
     default:
         env->ThrowError("[LogoFrame] Unsupported pixel format");
+    }
+}
+
+void logo::LogoFrame::scanFramesDirect(av::AMTSource& source, const std::vector<int>& trims,
+    const int threadId, const int totalThreads, IScriptEnvironment2* env) {
+    if (vi.num_frames == 0) {
+        setClipInfo(source.GetVideoInfo());
+    }
+
+    std::vector<uint16_t> memY(maxYSize + 8);
+    std::vector<float> memDeint(maxYSize + 8, 0.0f);
+    std::vector<float> memWork(maxYSize + 8, 0.0f);
+    std::vector<EvalResult> decodedResults((size_t)vi.num_frames * numLogos, EvalResult{ 0, -1 });
+    std::vector<uint8_t> decodedValid(vi.num_frames, 0);
+
+    const auto range = getIterateFrameRange(trims, threadId, totalThreads);
+    for (const auto& r : range) {
+        ctx.infoF(_T("  logo scan #%d: %6d-%6d"), threadId, r.first, r.second);
+    }
+    const int threadTotalFrames = getTotalFrames(range);
+    int finished = 0;
+    for (const auto& r : range) {
+        source.ScanFramesDirect(r.first, r.second,
+            [&](const int n, const AVFrame* top, const AVFrame* bottom, const int dstBitDepth, const int srcBitDepth) {
+                ScanFrameDirect(top, bottom, dstBitDepth, srcBitDepth, memY.data(), memDeint.data(), memWork.data(),
+                    &decodedResults[(size_t)n * numLogos]);
+                decodedValid[n] = 1;
+            },
+            [&](const int requested, const int resolved) {
+                if (resolved < 0 || resolved >= vi.num_frames || !decodedValid[resolved]) {
+                    THROWF(RuntimeException, "direct logo scan frame %d resolved to unavailable frame %d", requested, resolved);
+                }
+                std::copy_n(&decodedResults[(size_t)resolved * numLogos], numLogos,
+                    &evalResults[(size_t)requested * numLogos]);
+                if ((finished % 5000) == 0) {
+                    ctx.infoF(_T("  logo scan #%d: Finished %6d/%d frames"), threadId, finished, threadTotalFrames);
+                }
+                finished++;
+            }, env);
     }
 }
 

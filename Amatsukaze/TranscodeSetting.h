@@ -265,6 +265,7 @@ struct Config {
     bool noDelogo;
     bool parallelLogoAnalysis;
     int numParallelLogoAnalysis;
+    bool directLogoAnalysis;
     int maxFadeLength;
     // 自動ロゴ検出設定
     int autoLogoDetect;              // 0:無効, 1:有効
@@ -436,6 +437,8 @@ public:
     bool isParallelLogoAnalysis() const;
 
     int getNumParallelLogoAnalysis() const;
+
+    bool isDirectLogoAnalysis() const;
 
     int getMaxFadeLength() const;
 

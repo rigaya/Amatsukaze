@@ -15,6 +15,20 @@
 #include <sstream>
 #include <thread>
 #include "CMAnalyze.h"
+#include "AMTSource.h"
+
+namespace {
+
+DECODER_TYPE GetLogoAnalysisDecoderType(const DecoderSetting& decoderSetting, const VIDEO_STREAM_FORMAT format) {
+    switch (format) {
+    case VS_MPEG2: return decoderSetting.mpeg2;
+    case VS_H264:  return decoderSetting.h264;
+    case VS_H265:  return decoderSetting.hevc;
+    default:       return DECODER_DEFAULT;
+    }
+}
+
+}
 
 extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     const tchar* srcpath, int serviceid,
@@ -348,35 +362,50 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     const int minFramesPerThread = 600;
     const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread/2) / minFramesPerThread))) : 1;
     const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 8 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
-    ctx.infoF(_T("ロゴ解析 %d並列 x デコード%dスレッド"), totalThreads, decodeThreads);
+    const bool hardwareDecoder = GetLogoAnalysisDecoderType(setting_.getDecoderSetting(), inputFormat.format) != DECODER_DEFAULT;
+    const bool useDirectLogoAnalysis = setting_.isDirectLogoAnalysis() && !hardwareDecoder;
+    if (setting_.isDirectLogoAnalysis() && hardwareDecoder) {
+        ctx.info(_T("AVFrame直接ロゴ解析はCPUデコード専用のため、AviSynth経路へフォールバックします"));
+    }
+    ctx.infoF(_T("ロゴ解析 %d並列 x デコード%dスレッド (%s)"), totalThreads, decodeThreads,
+        useDirectLogoAnalysis ? _T("AVFrame直接") : _T("AviSynth"));
 
     std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
     for (int ith = 0; ith < totalThreads; ith++) {
         logoScanThreads.push_back(std::async(std::launch::async, [&](const int threadID) {
             try {
                 ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
-                AVSValue result;
-                env->Invoke("Eval", AVSValue(makePreamble().c_str()));
-                env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &result);
-                const auto amtsourcePath = tchar_to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
-                AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
-                PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
-
-                auto vi = clip->GetVideoInfo();
-                if (threadID == 0) {
-                    logof.setClipInfo(clip);
-                    duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                if (useDirectLogoAnalysis) {
+                    auto source = av::LoadAMTSourceDirect(ctx, setting_.getTmpAMTSourcePath(videoFileIndex), decodeThreads, env.get());
+                    const auto vi = source->GetVideoInfo();
+                    if (threadID == 0) {
+                        logof.setClipInfo(vi);
+                        duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                    }
+                    startThreads++;
+                    logof.scanFramesDirect(*source, trims, threadID, totalThreads, env.get());
+                } else {
+                    AVSValue result;
+                    env->Invoke("Eval", AVSValue(makePreamble().c_str()));
+                    env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &result);
+                    const auto amtsourcePath = tchar_to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
+                    AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
+                    PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
+                    const auto vi = clip->GetVideoInfo();
+                    if (threadID == 0) {
+                        logof.setClipInfo(clip);
+                        duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                    }
+                    startThreads++;
+                    logof.scanFrames(clip, trims, threadID, totalThreads, env.get());
                 }
-                startThreads++;
-                logof.scanFrames(clip, trims, threadID, totalThreads, env.get());
             } catch (const AvisynthError& avserror) {
-                startThreads++;
                 return std::pair<int, std::string>{ 1, avserror.msg };
+            } catch (const Exception& e) {
+                return std::pair<int, std::string>{ 1, tchar_to_string(e.message()) };
             } catch (const std::exception& e) {
-                startThreads++;
                 return std::pair<int, std::string>{ 1, e.what() };
             } catch (...) {
-                startThreads++;
                 return std::pair<int, std::string>{ 1, "unknown exception" };
             }
             return std::pair<int, std::string>{ 0, "" };
@@ -503,34 +532,47 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoF
         const int minFramesPerThread = 600;
         const int totalThreads = (setting_.isParallelLogoAnalysis()) ? std::max(1, std::min(processorCount, std::min(preferredThreads, (numFrames + minFramesPerThread / 2) / minFramesPerThread))) : 1;
         const int decodeThreads = std::max(1, std::min(totalThreads > 1 ? 8 : ((inputFormat.height > 1080) ? 16 : 8), processorCount / totalThreads));
-        ctx.infoF(_T("[自動ロゴ検出] 再解析 %d並列 x デコード%dスレッド"), totalThreads, decodeThreads);
+        const bool hardwareDecoder = GetLogoAnalysisDecoderType(setting_.getDecoderSetting(), inputFormat.format) != DECODER_DEFAULT;
+        const bool useDirectLogoAnalysis = setting_.isDirectLogoAnalysis() && !hardwareDecoder;
+        ctx.infoF(_T("[自動ロゴ検出] 再解析 %d並列 x デコード%dスレッド (%s)"), totalThreads, decodeThreads,
+            useDirectLogoAnalysis ? _T("AVFrame直接") : _T("AviSynth"));
 
         std::vector<std::future<std::pair<int, std::string>>> logoScanThreads;
         for (int ith = 0; ith < totalThreads; ith++) {
             logoScanThreads.push_back(std::async(std::launch::async, [&](const int threadID) {
                 try {
                     ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
-                    AVSValue result;
-                    env->Invoke("Eval", AVSValue(makePreamble().c_str()));
-                    env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &result);
-                    const auto amtsourcePath = tchar_to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
-                    AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
-                    PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
-                    auto vi = clip->GetVideoInfo();
-                    if (threadID == 0) {
-                        autoLogof.setClipInfo(clip);
-                        duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                    if (useDirectLogoAnalysis) {
+                        auto source = av::LoadAMTSourceDirect(ctx, setting_.getTmpAMTSourcePath(videoFileIndex), decodeThreads, env.get());
+                        const auto vi = source->GetVideoInfo();
+                        if (threadID == 0) {
+                            autoLogof.setClipInfo(vi);
+                            duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                        }
+                        startThreads++;
+                        autoLogof.scanFramesDirect(*source, trims, threadID, totalThreads, env.get());
+                    } else {
+                        AVSValue result;
+                        env->Invoke("Eval", AVSValue(makePreamble().c_str()));
+                        env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &result);
+                        const auto amtsourcePath = tchar_to_string(setting_.getTmpAMTSourcePath(videoFileIndex));
+                        AVSValue up_args[4] = { amtsourcePath.c_str(), "", false, decodeThreads };
+                        PClip clip = env->Invoke("AMTSource", AVSValue(up_args, _countof(up_args))).AsClip();
+                        const auto vi = clip->GetVideoInfo();
+                        if (threadID == 0) {
+                            autoLogof.setClipInfo(clip);
+                            duration = (vi.fps_numerator > 0) ? std::max((int)((int64_t)vi.num_frames * (int64_t)vi.fps_denominator / (int64_t)vi.fps_numerator), 1) : 1;
+                        }
+                        startThreads++;
+                        autoLogof.scanFrames(clip, trims, threadID, totalThreads, env.get());
                     }
-                    startThreads++;
-                    autoLogof.scanFrames(clip, trims, threadID, totalThreads, env.get());
                 } catch (const AvisynthError& avserror) {
-                    startThreads++;
                     return std::pair<int, std::string>{ 1, avserror.msg };
+                } catch (const Exception& e) {
+                    return std::pair<int, std::string>{ 1, tchar_to_string(e.message()) };
                 } catch (const std::exception& e) {
-                    startThreads++;
                     return std::pair<int, std::string>{ 1, e.what() };
                 } catch (...) {
-                    startThreads++;
                     return std::pair<int, std::string>{ 1, "unknown exception" };
                 }
                 return std::pair<int, std::string>{ 0, "" };

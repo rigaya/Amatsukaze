@@ -26,6 +26,10 @@
 #include <fstream>
 #include <numeric>
 
+namespace av {
+class AMTSource;
+}
+
 float CalcCorrelation5x5(const float* k, const float* Y, int x, int y, int w, float* pavg);
 void removeLogoLine(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
 
@@ -883,6 +887,10 @@ class LogoFrame : AMTObject {
         }
     }
 
+    void ScanFrameDirect(const AVFrame* top, const AVFrame* bottom,
+        int dstBitDepth, int srcBitDepth, uint16_t* memY,
+        float* memDeint, float* memWork, EvalResult* outResult);
+
     std::vector<std::pair<int, int>> trimAllTargets(const std::vector<int>& trims) const {
         std::vector<std::pair<int, int>> targetAll; // 全スレッドの対象
         // trimsの長さが0の場合は、すべてのフレームを対象とする
@@ -978,7 +986,12 @@ public:
 
     void setClipInfo(PClip clip);
 
+    void setClipInfo(const VideoInfo& info);
+
     void scanFrames(PClip clip, const std::vector<int>& trims, const int threadId, const int totalThreads, IScriptEnvironment2* env);
+
+    void scanFramesDirect(av::AMTSource& source, const std::vector<int>& trims,
+        const int threadId, const int totalThreads, IScriptEnvironment2* env);
 
     void dumpResult(const tstring& basepath);
 

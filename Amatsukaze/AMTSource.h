@@ -18,6 +18,7 @@
 #include <set>
 #include <deque>
 #include <unordered_map>
+#include <functional>
 #include "ConvertPix.h"
 #include "StreamReform.h"
 #include "ReaderWriterFFmpeg.h"
@@ -42,6 +43,12 @@ struct AMTSourceData {
 };
 
 class AMTSource : public IClip, AMTObject {
+public:
+    // AVFrameはコールバック内でのみ有効。呼び出し側では保持しないこと
+    using DirectFrameCallback = std::function<void(int, const AVFrame*, const AVFrame*, int, int)>;
+    using DirectAliasCallback = std::function<void(int, int)>;
+
+private:
     const std::vector<FilterSourceFrame>& frames;
     const std::vector<FilterAudioFrame>& audioFrames;
     DecoderSetting decoderSetting;
@@ -96,6 +103,9 @@ class AMTSource : public IClip, AMTObject {
     PVideoFrame nonBQPTable;
 
     ConvertPixFuncs convertPix;
+
+    DirectFrameCallback directFrameCallback;
+    bool directScanUsed;
 
     const AVCodec* getHWAccelCodec(AVCodecID vcodecId);
 
@@ -193,6 +203,8 @@ class AMTSource : public IClip, AMTObject {
 
     PVideoFrame MakeFrame(AVFrame * top, AVFrame * bottom, IScriptEnvironment * env);
 
+    void MakeAndPutFrame(int n, Frame& top, Frame& bottom, IScriptEnvironment* env);
+
     void PutFrame(int n, const PVideoFrame & frame);
 
     int AVSFormatBitdepth(const int avsformat);
@@ -208,7 +220,11 @@ class AMTSource : public IClip, AMTObject {
 
     void UpdateAccessed(CacheFrame* frame);
 
-    PVideoFrame ForceGetFrame(int n, IScriptEnvironment* env);
+    void ClearFrameCache();
+
+    int ForceGetFrameIndex(int n);
+
+    int ResolveFrame(int n, IScriptEnvironment* env);
 
     void DecodeLoop(int goal, IScriptEnvironment* env);
 
@@ -233,6 +249,11 @@ public:
 
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
+    void ScanFramesDirect(int begin, int end,
+        const DirectFrameCallback& frameCallback,
+        const DirectAliasCallback& aliasCallback,
+        IScriptEnvironment* env);
+
     void __stdcall GetAudio(void* buf, int64_t start, int64_t count, IScriptEnvironment* env);
 
     const VideoInfo& __stdcall GetVideoInfo();
@@ -254,6 +275,8 @@ void SaveAMTSource(
     const DecoderSetting& decoderSetting);
 
 PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, IScriptEnvironment* env);
+
+std::unique_ptr<AMTSource> LoadAMTSourceDirect(AMTContext& ctx, const tstring& loadpath, int threads, IScriptEnvironment* env);
 
 AVSValue CreateAMTSource(AVSValue args, void* user_data, IScriptEnvironment* env);
 

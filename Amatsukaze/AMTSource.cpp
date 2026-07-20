@@ -301,6 +301,35 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
     return ret;
 }
 
+void AMTSource::MakeAndPutFrame(int n, Frame& top, Frame& bottom, IScriptEnvironment* env) {
+    if (directFrameCallback) {
+        const auto srcFormat = (AVPixelFormat)top()->format;
+        const auto* desc = av_pix_fmt_desc_get(srcFormat);
+        const bool cpuReadable = desc != nullptr
+            && !(desc->flags & (AV_PIX_FMT_FLAG_HWACCEL | AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_RGB))
+            && desc->comp[0].plane == 0
+            && top()->format == bottom()->format
+            && top()->data[0] != nullptr && bottom()->data[0] != nullptr
+            && top()->linesize[0] != 0 && bottom()->linesize[0] != 0;
+        if (!cpuReadable) {
+            const char* formatName = av_get_pix_fmt_name(srcFormat);
+            THROWF(RuntimeException, "AVFrame直接ロゴ解析でCPUから参照できない形式です: %s",
+                formatName ? formatName : "unknown");
+        }
+        const int srcBitDepth = (srcFormat == AV_PIX_FMT_P010LE) ? 16 : desc->comp[0].depth;
+        const int expectedStep = (srcBitDepth > 8) ? 2 : 1;
+        if (desc->comp[0].step != expectedStep) {
+            const char* formatName = av_get_pix_fmt_name(srcFormat);
+            THROWF(RuntimeException, "AVFrame直接ロゴ解析で未対応の輝度形式です: %s",
+                formatName ? formatName : "unknown");
+        }
+        directFrameCallback(n, top(), bottom(), AVSFormatBitdepth(vi.pixel_type), srcBitDepth);
+        PutFrame(n, PVideoFrame());
+    } else {
+        PutFrame(n, MakeFrame(top(), bottom(), env));
+    }
+}
+
 void AMTSource::PutFrame(int n, const PVideoFrame& frame) {
     CacheFrame* pcache = new CacheFrame();
     pcache->data = frame;
@@ -426,7 +455,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
             UpdateAccessed(cacheit->second);
             lastDecodeFrame = frameIndex;
         } else if (prevFrame != nullptr) {
-            PutFrame(frameIndex, MakeFrame((*prevFrame)(), frame(), env));
+            MakeAndPutFrame(frameIndex, *prevFrame, frame, env);
             lastDecodeFrame = frameIndex;
         } else {
             // 直前のフレームがないのでフレームを作れない
@@ -440,7 +469,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
                 // すでにキャッシュにある
                 UpdateAccessed(cachenext->second);
             } else {
-                PutFrame(frameIndex + 1, MakeFrame(frame(), frame(), env));
+                MakeAndPutFrame(frameIndex + 1, frame, frame, env);
             }
             lastDecodeFrame = frameIndex + 1;
         }
@@ -450,7 +479,7 @@ void AMTSource::OnFrameOutput(Frame& frame, IScriptEnvironment* env) {
             // すでにキャッシュにある
             UpdateAccessed(cacheit->second);
         } else {
-            PutFrame(frameIndex, MakeFrame(frame(), frame(), env));
+            MakeAndPutFrame(frameIndex, frame, frame, env);
         }
         lastDecodeFrame = frameIndex;
     }
@@ -467,16 +496,25 @@ void AMTSource::UpdateAccessed(CacheFrame* frame) {
     recentAccessed.push_front(frame);
 }
 
-PVideoFrame AMTSource::ForceGetFrame(int n, IScriptEnvironment* env) {
+void AMTSource::ClearFrameCache() {
+    while (!recentAccessed.empty()) {
+        CacheFrame* frame = recentAccessed.back();
+        frameCache.erase(frame->key);
+        recentAccessed.pop_back();
+        delete frame;
+    }
+}
+
+int AMTSource::ForceGetFrameIndex(int n) {
     if (frameCache.size() == 0) {
-        return env->NewVideoFrame(vi);
+        return -1;
     }
     auto lb = frameCache.lower_bound(n);
     if (lb == frameCache.end() || (lb->first != n && lb != frameCache.begin())) {
         lb--;
     }
     UpdateAccessed(lb->second);
-    return lb->second->data;
+    return lb->first;
 }
 
 void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
@@ -596,7 +634,9 @@ AMTSource::AMTSource(AMTContext& ctx,
     lastDecodeFrame(-1),
     prevFrame(),
     nonBQPTable(),
-    convertPix() {
+    convertPix(),
+    directFrameCallback(),
+    directScanUsed(false) {
 #if !ENABLE_FFMPEG_FILTER
     if (this->filterdesc.size()) {
         env->ThrowError("This AMTSouce build does not support FFmpeg filter option ...");
@@ -618,13 +658,7 @@ AMTSource::AMTSource(AMTContext& ctx,
 }
 
 AMTSource::~AMTSource() {
-    // キャッシュを削除
-    while (recentAccessed.size() > 0) {
-        CacheFrame* pdel = recentAccessed.back();
-        frameCache.erase(pdel->key);
-        recentAccessed.pop_back();
-        delete pdel;
-    }
+    ClearFrameCache();
 }
 
 void AMTSource::TransferStreamInfo(std::unique_ptr<AMTSourceData>&& streamInfo) {
@@ -634,11 +668,20 @@ void AMTSource::TransferStreamInfo(std::unique_ptr<AMTSourceData>&& streamInfo) 
 PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
     std::lock_guard<std::mutex> guard(mutex);
 
+    if (directScanUsed) {
+        env->ThrowError("[AMTSource] AVFrame直接スキャン後にGetFrameは呼び出せません");
+    }
+
+    const int resolved = ResolveFrame(n, env);
+    return (resolved < 0) ? env->NewVideoFrame(vi) : frameCache[resolved]->data;
+}
+
+int AMTSource::ResolveFrame(int n, IScriptEnvironment* env) {
     // キャッシュにあれば返す
     auto it = frameCache.find(n);
     if (it != frameCache.end()) {
         UpdateAccessed(it->second);
-        return it->second->data;
+        return n;
     }
 
     // デコードできないフレームは置換フレームに置き換える
@@ -687,7 +730,41 @@ PVideoFrame __stdcall AMTSource::GetFrame(int n, IScriptEnvironment* env) {
         }
     }
 
-    return ForceGetFrame(n, env);
+    return ForceGetFrameIndex(n);
+}
+
+void AMTSource::ScanFramesDirect(int begin, int end,
+    const DirectFrameCallback& frameCallback,
+    const DirectAliasCallback& aliasCallback,
+    IScriptEnvironment* env) {
+    if (begin > end) {
+        return;
+    }
+    if (!frameCallback || !aliasCallback) {
+        THROW(ArgumentException, "direct scan callback is empty");
+    }
+    if (begin < 0 || end >= vi.num_frames) {
+        THROWF(ArgumentException, "direct scan range is invalid: %d-%d", begin, end);
+    }
+
+    std::lock_guard<std::mutex> guard(mutex);
+    // 前回と異なるコールバックでも安全に再走査できるよう、画像を持たない到達印を破棄する
+    ClearFrameCache();
+    directScanUsed = true;
+    try {
+        directFrameCallback = frameCallback;
+        for (int n = begin; n <= end; n++) {
+            const int resolved = ResolveFrame(n, env);
+            if (resolved < 0) {
+                THROWF(RuntimeException, "direct scan frame %d could not be resolved", n);
+            }
+            aliasCallback(n, resolved);
+        }
+    } catch (...) {
+        directFrameCallback = DirectFrameCallback();
+        throw;
+    }
+    directFrameCallback = DirectFrameCallback();
 }
 
 void __stdcall AMTSource::GetAudio(void* buf, int64_t start, int64_t count, IScriptEnvironment* env) {
@@ -756,7 +833,9 @@ void SaveAMTSource(
     file.writeValue(decoderSetting);
 }
 
-PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, int threads, IScriptEnvironment* env) {
+static std::unique_ptr<AMTSource> LoadAMTSourceInstance(AMTContext& ctx,
+    const tstring& loadpath, const char* filterdesc, bool outputQP, int threads,
+    IScriptEnvironment* env) {
     File file(loadpath, _T("rb"));
     auto srcpathv = file.readArray<tchar>();
     tstring srcpath(srcpathv.begin(), srcpathv.end());
@@ -768,10 +847,18 @@ PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool output
     data->frames = file.readArray<FilterSourceFrame>();
     data->audioFrames = file.readArray<FilterAudioFrame>();
     DecoderSetting decoderSetting = file.readValue<DecoderSetting>();
-    AMTSource* src = new AMTSource(*g_ctx_for_plugin_filter,
+    auto src = std::make_unique<AMTSource>(ctx,
         srcpath, audiopath, vfmt, afmt, data->frames, data->audioFrames, decoderSetting, threads, filterdesc, outputQP, env);
     src->TransferStreamInfo(std::move(data));
     return src;
+}
+
+PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, int threads, IScriptEnvironment* env) {
+    return LoadAMTSourceInstance(*g_ctx_for_plugin_filter, loadpath, filterdesc, outputQP, threads, env).release();
+}
+
+std::unique_ptr<AMTSource> LoadAMTSourceDirect(AMTContext& ctx, const tstring& loadpath, int threads, IScriptEnvironment* env) {
+    return LoadAMTSourceInstance(ctx, loadpath, "", false, threads, env);
 }
 
 AVSValue CreateAMTSource(AVSValue args, void* user_data, IScriptEnvironment* env) {
