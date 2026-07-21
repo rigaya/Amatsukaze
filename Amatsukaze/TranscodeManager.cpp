@@ -699,10 +699,11 @@ int64_t AMTSplitter::StreamFileWriteHandler::getTotalSize() const {
 }
 
 void AMTSplitter::readAll() {
-    enum { BUFSIZE = 4 * 1024 * 1024 };
-    auto buffer_ptr = std::unique_ptr<uint8_t[]>(new uint8_t[BUFSIZE]);
-    MemoryChunk buffer(buffer_ptr.get(), BUFSIZE);
-    File srcfile(setting_.getSrcFilePath(), _T("rb"));
+    enum {
+        BUFSIZE = 4 * 1024 * 1024,
+        BUFFER_COUNT = 4
+    };
+    ReadAheadFile srcfile(setting_.getSrcFilePath(), BUFSIZE, BUFFER_COUNT);
     // tsreplaceで一時TSを使う場合だけ、入力TSのコピーを作成する。
     const bool needCopyTS = setting_.getFormat() == FORMAT_TSREPLACE
         && setting_.isMuxTsTempEnabled();
@@ -715,20 +716,17 @@ void AMTSplitter::readAll() {
         tsreadex.reset(new TsReadExPipe(ctx, setting_));
     }
     srcFileSize_ = srcfile.size();
-    size_t readBytes;
-    do {
-        readBytes = srcfile.read(buffer);
-        if (readBytes > 0) {
-            const MemoryChunk chunk(buffer.data, readBytes);
-            if (rawts) {
-                rawts->write(chunk);
-            }
-            if (tsreadex) {
-                tsreadex->write(chunk);
-            }
+    while (true) {
+        const MemoryChunk chunk = srcfile.read();
+        if (chunk.length == 0) break;
+        if (rawts) {
+            rawts->write(chunk);
         }
-        inputTsData(MemoryChunk(buffer.data, readBytes));
-    } while (readBytes == buffer.length);
+        if (tsreadex) {
+            tsreadex->write(chunk);
+        }
+        inputTsData(chunk);
+    }
     if (tsreadex) {
         const int exitCode = tsreadex->join();
         if (exitCode != 0) {

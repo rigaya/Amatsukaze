@@ -9,10 +9,146 @@
 #include "FileUtils.h"
 #include "rgy_osdep.h"
 #include "rgy_codepage.h"
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <mutex>
+#include <thread>
+#include <vector>
 #if defined(_WIN32) || defined(_WIN64)
 #include <direct.h>
 #endif // #if defined(_WIN32) || defined(_WIN64)
 #include "rgy_filesystem.h"
+
+class ReadAheadFile::Impl : NonCopyable {
+public:
+    Impl(const tstring& path, size_t bufferSize, size_t bufferCount)
+        : file_(path, _T("rb"))
+        , fileSize_(file_.size())
+        , buffers_(bufferCount)
+        , currentBuffer_(NO_BUFFER)
+        , finished_(false)
+        , stop_(false) {
+        if (bufferSize == 0 || bufferCount < 2) {
+            THROW(ArgumentException, "先読みバッファの指定が不正です");
+        }
+        for (size_t i = 0; i < buffers_.size(); i++) {
+            buffers_[i].data.resize(bufferSize);
+            freeBuffers_.push_back(i);
+        }
+        thread_ = std::thread([this]() { run(); });
+    }
+
+    ~Impl() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stop_ = true;
+            canRead_.notify_all();
+            canConsume_.notify_all();
+        }
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+
+    MemoryChunk read() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (currentBuffer_ != NO_BUFFER) {
+            freeBuffers_.push_back(currentBuffer_);
+            currentBuffer_ = NO_BUFFER;
+            canRead_.notify_one();
+        }
+        canConsume_.wait(lock, [this]() {
+            return !readyBuffers_.empty() || finished_ || error_;
+        });
+        if (!readyBuffers_.empty()) {
+            currentBuffer_ = readyBuffers_.front();
+            readyBuffers_.pop_front();
+            auto& buffer = buffers_[currentBuffer_];
+            return MemoryChunk(buffer.data.data(), buffer.length);
+        }
+        if (error_) {
+            std::rethrow_exception(error_);
+        }
+        return MemoryChunk();
+    }
+
+    int64_t size() const {
+        return fileSize_;
+    }
+
+private:
+    struct Buffer {
+        std::vector<uint8_t> data;
+        size_t length = 0;
+    };
+
+    static constexpr size_t NO_BUFFER = static_cast<size_t>(-1);
+
+    File file_;
+    int64_t fileSize_;
+    std::vector<Buffer> buffers_;
+    std::deque<size_t> freeBuffers_;
+    std::deque<size_t> readyBuffers_;
+    size_t currentBuffer_;
+    bool finished_;
+    bool stop_;
+    std::exception_ptr error_;
+    std::mutex mutex_;
+    std::condition_variable canRead_;
+    std::condition_variable canConsume_;
+    std::thread thread_;
+
+    void run() {
+        try {
+            while (true) {
+                size_t index;
+                {
+                    std::unique_lock<std::mutex> lock(mutex_);
+                    canRead_.wait(lock, [this]() { return stop_ || !freeBuffers_.empty(); });
+                    if (stop_) return;
+                    index = freeBuffers_.front();
+                    freeBuffers_.pop_front();
+                }
+
+                auto& buffer = buffers_[index];
+                const size_t length = file_.read(MemoryChunk(buffer.data.data(), buffer.data.size()));
+
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stop_) return;
+                if (length > 0) {
+                    buffer.length = length;
+                    readyBuffers_.push_back(index);
+                } else {
+                    freeBuffers_.push_back(index);
+                }
+                if (length < buffer.data.size()) {
+                    finished_ = true;
+                }
+                canConsume_.notify_one();
+                if (finished_) return;
+            }
+        } catch (...) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            error_ = std::current_exception();
+            finished_ = true;
+            canConsume_.notify_all();
+        }
+    }
+};
+
+ReadAheadFile::ReadAheadFile(const tstring& path, size_t bufferSize, size_t bufferCount)
+    : impl_(new Impl(path, bufferSize, bufferCount)) {}
+
+ReadAheadFile::~ReadAheadFile() = default;
+
+MemoryChunk ReadAheadFile::read() {
+    return impl_->read();
+}
+
+int64_t ReadAheadFile::size() const {
+    return impl_->size();
+}
 
 
 #if (defined(_WIN32) || defined(_WIN64))

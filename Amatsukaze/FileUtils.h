@@ -76,6 +76,9 @@ public:
     size_t read(MemoryChunk mc) const {
         if (mc.length == 0) return 0;
         size_t ret = fread(mc.data, 1, mc.length, fp_);
+        if (ret < mc.length && ferror(fp_)) {
+            THROWF(IOException, "failed to read from file: %s", GetFullPath(path_));
+        }
         if (ret == 0 && feof(fp_)) {
             // ファイル終端
             return 0;
@@ -177,6 +180,22 @@ public:
 private:
     const tstring path_; // エラーメッセージ表示用
     FILE* fp_;
+};
+
+// 逐次読み込みを別スレッドで先行させ、利用側の処理とファイルI/Oを並行実行する。
+// read() は単一スレッドから呼び、返された領域は次の read() 呼び出しまで有効。
+// 終了時に同期read中の場合、そのreadがOSから戻るまでデストラクタは待機する。
+class ReadAheadFile : NonCopyable {
+public:
+    ReadAheadFile(const tstring& path, size_t bufferSize, size_t bufferCount);
+    ~ReadAheadFile();
+
+    MemoryChunk read();
+    int64_t size() const;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 template <typename T>
