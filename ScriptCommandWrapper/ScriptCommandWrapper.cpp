@@ -2,9 +2,27 @@
 #include "rgy_tchar.h"
 #include "rgy_pipe.h"
 #include "rgy_filesystem.h"
+#include "rgy_util.h"
 #include <thread>
 #include <io.h>
 #include <fcntl.h>
+
+static void writeStderrText(const tstring& message) {
+    const HANDLE stderrHandle = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD consoleMode = 0;
+    if (stderrHandle != INVALID_HANDLE_VALUE && stderrHandle != nullptr
+        && GetConsoleMode(stderrHandle, &consoleMode)) {
+        DWORD written = 0;
+        if (WriteConsoleW(stderrHandle, message.data(), (DWORD)message.size(), &written, nullptr)) {
+            return;
+        }
+    }
+
+    // パイプやファイルへのリダイレクト時は、呼び出し元が期待するANSIバイト列で出力する。
+    const std::string ansiMessage = tchar_to_string(message, CP_ACP);
+    fwrite(ansiMessage.data(), 1, ansiMessage.size(), stderr);
+    fflush(stderr);
+}
 
 int _tmain(int argc, TCHAR **argv) {
     _setmode(_fileno(stdout), _O_BINARY);
@@ -41,7 +59,9 @@ int _tmain(int argc, TCHAR **argv) {
         for (auto arg : args) {
             cmd += arg + _T(" ");
         }
-        _ftprintf(stderr, _T("ScriptCommandWrapper: %s\n"), cmd.c_str());
+        // stderr は子プロセスの出力をそのまま中継するためバイナリモードにしている。
+        // コンソールにはUnicode、パイプやファイルにはANSIで診断行を出力する。
+        writeStderrText(_T("ScriptCommandWrapper: ") + cmd + _T("\n"));
 
         // 作業ディレクトリは ScriptCommand.exe のある親ディレクトリに設定
         int runResult = process->run(args, parentDir.c_str(), 0, true, false, false);

@@ -1354,6 +1354,8 @@ namespace Amatsukaze.Server
         {
             try
             {
+                // 前のタスクの実行後バッチ出力に未完の行が残っても、次のエンコードログへ持ち越さない
+                Clear();
                 item = workerItem;
 
                 // キューじゃなかったらダメ
