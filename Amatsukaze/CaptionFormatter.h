@@ -53,6 +53,8 @@ private:
     void setSpacing(int spacing);
 
     void setStyle(int style);
+
+    void appendText(const std::wstring& text);
 };
 
 class CaptionSRTFormatter : public AMTObject {

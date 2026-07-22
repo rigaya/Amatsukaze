@@ -313,6 +313,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AmatsukazeUnitTest.cpp" />
+    <ClCompile Include="CaptionTextLengthTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Amatsukaze\Amatsukaze.vcxproj">

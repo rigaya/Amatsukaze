@@ -99,6 +99,109 @@
     return 0;
 }
 
+/* static */ int test::CaptionTextLength(AMTContext& ctx, const ConfigWrapper& setting) {
+    struct TestCase {
+        LPCWSTR text;
+        int expected;
+    };
+    constexpr WCHAR HIGH_SURROGATE_TEST_VALUE = static_cast<WCHAR>(0xD800);
+    constexpr WCHAR LOW_SURROGATE_TEST_VALUE = static_cast<WCHAR>(0xDC00);
+    const WCHAR unpairedHighSurrogate[] = { HIGH_SURROGATE_TEST_VALUE, 0 };
+    const WCHAR unpairedLowSurrogate[] = { LOW_SURROGATE_TEST_VALUE, 0 };
+    const TestCase testCases[] = {
+        { L"", 0 },
+        { L"AB", 2 },
+        { L"\U00020000", 1 },
+        { L"\u9022\uFE00", 1 },
+        { L"\u9022\uFE0F", 1 },
+        { L"\u9022\uFE10", 2 },
+        { L"\u1820\u180B", 1 },
+        { L"\u1820\u180D", 1 },
+        { L"\u1820\u180F", 1 },
+        { L"\u9022\U000E0101", 1 },
+        { L"\u9022\U000E0100", 1 },
+        { L"\u9022\U000E01EF", 1 },
+        { L"\u9022\U000E00FF", 2 },
+        { L"\u9022\U000E01F0", 2 },
+        { L"A\u9022\U000E0101B", 3 },
+        { L"\U000E0101", 1 },
+        { L"\u9022\U000E0101\U000E0102", 2 },
+        { unpairedHighSurrogate, 1 },
+        { unpairedLowSurrogate, 1 },
+    };
+
+    for (const auto& testCase : testCases) {
+        const int actual = CountCaptionTextCharacters(testCase.text);
+        if (actual != testCase.expected) {
+            ctx.errorF(_T("字幕表示文字数が一致しません: 期待値=%d, 実際=%d"), testCase.expected, actual);
+            return 1;
+        }
+    }
+
+    struct CharacterTestCase {
+        LPCWSTR text;
+        bool expectedZeroSpacing;
+    };
+    const CharacterTestCase characterTestCases[] = {
+        { L"A", false },
+        { L"\u9022", false },
+        { L"\U00020BB7", true },
+        { L"\U0001F600", true },
+        { L"\u9022\uFE00", true },
+        { L"\u9022\U000E0101", true },
+        { L"\u1820\u180B", true },
+        { L"\U000E0101", true },
+    };
+    for (const auto& testCase : characterTestCases) {
+        const CaptionTextCharacter character = GetCaptionTextCharacter(testCase.text);
+        const size_t expectedLength = std::wstring(testCase.text).size();
+        if (character.length != expectedLength
+            || character.requiresASSZeroSpacing != testCase.expectedZeroSpacing) {
+            ctx.errorF(_T("字幕表示文字の解析結果が一致しません: WCHAR数=%zu/%zu, ASS字間0=%d/%d"),
+                character.length, expectedLength,
+                character.requiresASSZeroSpacing, testCase.expectedZeroSpacing);
+            return 1;
+        }
+    }
+
+    CaptionLine captionLine = {};
+    captionLine.text = L"A\u9022\U000E0101B\U00020BB7C\u9022\uFE00D\U0001F600E";
+    captionLine.planeW = 960;
+    captionLine.planeH = 540;
+    captionLine.posX = 100;
+    captionLine.posY = 100;
+
+    CaptionFormat format = {};
+    format.pos = 0;
+    format.charW = 36;
+    format.charH = 36;
+    format.width = 40.0f * CountCaptionTextCharacters(captionLine.text.c_str());
+    format.height = 40;
+    format.textColor = { 0xFF, 0xFF, 0xFF, 0xFF };
+    format.backColor = { 0, 0, 0, 0x80 };
+    format.sizeMode = CP_STR_NORMAL;
+    captionLine.formats.push_back(format);
+
+    const std::vector<OutCaptionLine> lines = { { 0, 90000, &captionLine } };
+    CaptionASSFormatter formatter(ctx);
+    const std::wstring ass = formatter.generate(lines);
+    const std::wstring expectedASS =
+        L"{\\pos(102,98)}A"
+        L"{\\fsp0}\u9022\U000E0101"
+        L"{\\fsp4}B"
+        L"{\\fsp0}\U00020BB7"
+        L"{\\fsp4}C"
+        L"{\\fsp0}\u9022\uFE00"
+        L"{\\fsp4}D"
+        L"{\\fsp0}\U0001F600"
+        L"{\\fsp4}E";
+    if (ass.find(expectedASS) == std::wstring::npos) {
+        ctx.error(_T("ASSの字間回避出力が一致しません"));
+        return 1;
+    }
+    return 0;
+}
+
 /* static */ int test::VerifyMpeg2Ps(AMTContext& ctx, const ConfigWrapper& setting) {
     enum {
         BUF_SIZE = 1400 * 1024 * 1024, // 1GB

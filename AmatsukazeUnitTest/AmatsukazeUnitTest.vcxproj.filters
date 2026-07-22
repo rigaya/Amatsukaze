@@ -21,5 +21,8 @@
     <ClCompile Include="AmatsukazeUnitTest.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="CaptionTextLengthTest.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -219,12 +219,74 @@ EXIT:
     }
 }
 
-/* static */ int StrlenWoLoSurrogate(LPCWSTR str) {
-    int len = 0;
-    for (; *str; str++) {
-        if ((*str & 0xFC00) != 0xDC00) ++len;
+namespace {
+
+constexpr uint32_t HIGH_SURROGATE_FIRST = 0xD800;
+constexpr uint32_t HIGH_SURROGATE_LAST = 0xDBFF;
+constexpr uint32_t LOW_SURROGATE_FIRST = 0xDC00;
+constexpr uint32_t LOW_SURROGATE_LAST = 0xDFFF;
+constexpr uint32_t SUPPLEMENTARY_CODE_POINT_FIRST = 0x10000;
+constexpr uint32_t MONGOLIAN_VARIATION_SELECTOR_FIRST = 0x180B;
+constexpr uint32_t MONGOLIAN_VARIATION_SELECTOR_LAST = 0x180D;
+constexpr uint32_t MONGOLIAN_VARIATION_SELECTOR_FOUR = 0x180F;
+constexpr uint32_t VARIATION_SELECTOR_FIRST = 0xFE00;
+constexpr uint32_t VARIATION_SELECTOR_LAST = 0xFE0F;
+constexpr uint32_t IDEOGRAPHIC_VARIATION_SELECTOR_FIRST = 0xE0100;
+constexpr uint32_t IDEOGRAPHIC_VARIATION_SELECTOR_LAST = 0xE01EF;
+
+uint32_t ReadUnicodeCodePoint(LPCWSTR& str) {
+    const uint32_t first = static_cast<uint32_t>(*str++);
+    if (sizeof(WCHAR) == 2 && HIGH_SURROGATE_FIRST <= first && first <= HIGH_SURROGATE_LAST) {
+        const uint32_t second = static_cast<uint32_t>(*str);
+        if (LOW_SURROGATE_FIRST <= second && second <= LOW_SURROGATE_LAST) {
+            ++str;
+            return SUPPLEMENTARY_CODE_POINT_FIRST
+                + ((first - HIGH_SURROGATE_FIRST) << 10)
+                + (second - LOW_SURROGATE_FIRST);
+        }
     }
-    return len;
+    return first;
+}
+
+bool IsVariationSelector(uint32_t codePoint) {
+    return (MONGOLIAN_VARIATION_SELECTOR_FIRST <= codePoint && codePoint <= MONGOLIAN_VARIATION_SELECTOR_LAST)
+        || codePoint == MONGOLIAN_VARIATION_SELECTOR_FOUR
+        || (VARIATION_SELECTOR_FIRST <= codePoint && codePoint <= VARIATION_SELECTOR_LAST)
+        || (IDEOGRAPHIC_VARIATION_SELECTOR_FIRST <= codePoint && codePoint <= IDEOGRAPHIC_VARIATION_SELECTOR_LAST);
+}
+
+} // namespace
+
+int CountCaptionTextCharacters(LPCWSTR str) {
+    int length = 0;
+    while (*str) {
+        const CaptionTextCharacter character = GetCaptionTextCharacter(str);
+        str += character.length;
+        ++length;
+    }
+    return length;
+}
+
+CaptionTextCharacter GetCaptionTextCharacter(LPCWSTR str) {
+    if (*str == L'\0') {
+        return { 0, false };
+    }
+
+    LPCWSTR end = str;
+    const uint32_t codePoint = ReadUnicodeCodePoint(end);
+    const bool isVariationSelector = IsVariationSelector(codePoint);
+    bool requiresASSZeroSpacing = codePoint >= SUPPLEMENTARY_CODE_POINT_FIRST || isVariationSelector;
+
+    if (!isVariationSelector && *end != L'\0') {
+        LPCWSTR selectorEnd = end;
+        const uint32_t selector = ReadUnicodeCodePoint(selectorEnd);
+        if (IsVariationSelector(selector)) {
+            end = selectorEnd;
+            requiresASSZeroSpacing = true;
+        }
+    }
+
+    return { static_cast<size_t>(end - str), requiresASSZeroSpacing };
 }
 CaptionDLLParser::CaptionDLLParser(AMTContext& ctx)
     : AMTObject(ctx) {}
@@ -395,7 +457,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
             }
 
             // 文字列を描画
-            int lenWos = StrlenWoLoSurrogate(showtext.c_str());
+            int lenWos = CountCaptionTextCharacters(showtext.c_str());
             if (showtext.size() > 0) {
                 AddText(*line, showtext, charW, charH, dirW * lenWos, dirH, charData);
             }
@@ -405,7 +467,7 @@ std::unique_ptr<CaptionLine> CaptionDLLParser::ShowCaptionData(int64_t PTS,
                 if (pszDrcsStr == nullptr) {
                     pszDrcsStr = L"□";
                 }
-                lenWos = StrlenWoLoSurrogate(pszDrcsStr);
+                lenWos = CountCaptionTextCharacters(pszDrcsStr);
                 if (lenWos > 0) {
                     // レイアウト維持のため、何文字であっても1文字幅に詰める
                     AddText(*line, pszDrcsStr, (float)charData.wCharW / lenWos, charH, dirW, dirH, charData);

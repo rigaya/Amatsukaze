@@ -105,7 +105,16 @@ BOOL CalcMD5FromDRCSPattern(std::vector<char>& hash, const DRCS_PATTERN_DLL *pPa
 
 void SaveDRCSImage(const tstring& filename, const DRCS_PATTERN_DLL* pData);
 
-int StrlenWoLoSurrogate(LPCWSTR str);
+struct CaptionTextCharacter {
+    size_t length;
+    bool requiresASSZeroSpacing;
+};
+
+// 先頭の表示文字について、WCHAR数とASSで字間0が必要かを返す
+CaptionTextCharacter GetCaptionTextCharacter(LPCWSTR str);
+
+// UTF-16/UTF-32を区別せず、異体字セレクタを直前の基底文字と一体として数える
+int CountCaptionTextCharacters(LPCWSTR str);
 
 struct DRCSOutInfo {
     tstring filename;

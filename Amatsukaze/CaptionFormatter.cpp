@@ -84,7 +84,7 @@ void CaptionASSFormatter::item(const OutCaptionLine& line) {
         auto fragtext = std::wstring(text.begin() + begin, text.begin() + end);
 
         if (i == 0) {
-            int len = StrlenWoLoSurrogate(fragtext.c_str());
+            int len = CountCaptionTextCharacters(fragtext.c_str());
             float x = line.line->posX + (fmt.width / len - fmt.charW) * DefFontSize / fmt.charW / 2;
             float y = line.line->posY - (fmt.height - fmt.charH) / 2;
             // posは先頭でしか効果がない模様
@@ -98,22 +98,52 @@ void CaptionASSFormatter::item(const OutCaptionLine& line) {
 }
 
 void CaptionASSFormatter::fragment(float scalex, float scaley, const std::wstring& text, const CaptionFormat& fmt) {
-    int len = StrlenWoLoSurrogate(text.c_str());
+    int len = CountCaptionTextCharacters(text.c_str());
     float fsx = fmt.charW / DefFontSize;
     float fsy = fmt.charH / DefFontSize;
-    float spacing = (fmt.width / len - fmt.charW) / fsx;
+    int spacing = (int)std::round((fmt.width / len - fmt.charW) / fsx * scalex);
 
     setColor(fmt.textColor, fmt.backColor);
     setFontSize(fsx * scalex, fsy * scaley);
-    setSpacing((int)std::round(spacing * scalex));
+    setSpacing(spacing);
     setStyle(fmt.style);
 
+    auto setTextRunSpacing = [&](bool requiresZeroSpacing) {
+        // ASSの字間指定の解釈はレンダラーごとに異なり、MPC-HC/MPC-BEで利用される一部のレンダラーでは、
+        // 字間が0以外のときにUTF-16コード単位ごとに描画される場合がある。その場合、1つのコードポイントを
+        // 構成するサロゲートペアや、基底文字に続く異体字セレクタが分離され、代替記号や意図しない字形で表示される。
+        // 一方、通常文字の字間は放送字幕のレイアウト再現に必要なため、字幕全体の字間は変更せず、
+        // 影響を受ける表示文字だけ\fsp0に切り替え、後続する通常文字では計算済みの字間へ戻す。
+        setSpacing(requiresZeroSpacing ? 0 : spacing);
+    };
+
+    size_t runBegin = 0;
+    bool runRequiresZeroSpacing = false;
+    bool hasRun = false;
+    for (size_t pos = 0; pos < text.size();) {
+        const CaptionTextCharacter character = GetCaptionTextCharacter(text.c_str() + pos);
+        if (hasRun && character.requiresASSZeroSpacing != runRequiresZeroSpacing) {
+            setTextRunSpacing(runRequiresZeroSpacing);
+            appendText(text.substr(runBegin, pos - runBegin));
+            runBegin = pos;
+        }
+        runRequiresZeroSpacing = character.requiresASSZeroSpacing;
+        hasRun = true;
+        pos += character.length;
+    }
+    if (hasRun) {
+        setTextRunSpacing(runRequiresZeroSpacing);
+        appendText(text.substr(runBegin));
+    }
+}
+
+void CaptionASSFormatter::appendText(const std::wstring& text) {
     if (attr.getMC().length > 0) {
         // オーバーライドコード出力
         sb.append(L"{%ls}", attr.str());
         attr.clear();
     }
-    sb.append(L"%ls", text);
+    sb.append(L"%ls", text.c_str());
 }
 
 void CaptionASSFormatter::time(double t) {

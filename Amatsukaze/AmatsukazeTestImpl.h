@@ -22,6 +22,8 @@ int ReadBits(AMTContext& ctx, const ConfigWrapper& setting);
 
 int CheckAutoBuffer(AMTContext& ctx, const ConfigWrapper& setting);
 
+int CaptionTextLength(AMTContext& ctx, const ConfigWrapper& setting);
+
 int VerifyMpeg2Ps(AMTContext& ctx, const ConfigWrapper& setting);
 
 int ReadTS(AMTContext& ctx, const ConfigWrapper& setting);

@@ -748,6 +748,8 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
             test::ReadBits(ctx, setting);
         else if (mode == _T("test_auto_buffer"))
             test::CheckAutoBuffer(ctx, setting);
+        else if (mode == _T("test_caption_text_length"))
+            return test::CaptionTextLength(ctx, setting);
         else if (mode == _T("test_verifympeg2ps"))
             test::VerifyMpeg2Ps(ctx, setting);
         else if (mode == _T("test_readts"))
