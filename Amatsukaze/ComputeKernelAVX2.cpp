@@ -10,6 +10,7 @@
 #include "ComputeKernel.h"
 #include "ComputeKernelSIMD.h"
 #include <algorithm>
+#include <cassert>
 
 float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg) {
     return CalcCorrelation5x5_AVX_AVX2<true>(k, Y, x, y, w, pavg);
@@ -95,6 +96,23 @@ RGY_FORCEINLINE void MinMax64BytesToScalar(const __m256i v0, const __m256i v1, u
     maxvOut = ReduceMax16xU8(max128);
 }
 
+RGY_FORCEINLINE void MinMax64BytesToScalarAccurate(const __m256i v0, const __m256i v1, uint8_t& minvOut, uint8_t& maxvOut) {
+    const __m256i vmin8 = _mm256_min_epu8(v0, v1);
+    const __m256i vmax8 = _mm256_max_epu8(v0, v1);
+    __m128i min128 = _mm_min_epu8(_mm256_castsi256_si128(vmin8), _mm256_extracti128_si256(vmin8, 1));
+    __m128i max128 = _mm_max_epu8(_mm256_castsi256_si128(vmax8), _mm256_extracti128_si256(vmax8, 1));
+    min128 = _mm_min_epu8(min128, _mm_srli_si128(min128, 8));
+    max128 = _mm_max_epu8(max128, _mm_srli_si128(max128, 8));
+    min128 = _mm_min_epu8(min128, _mm_srli_si128(min128, 4));
+    max128 = _mm_max_epu8(max128, _mm_srli_si128(max128, 4));
+    min128 = _mm_min_epu8(min128, _mm_srli_si128(min128, 2));
+    max128 = _mm_max_epu8(max128, _mm_srli_si128(max128, 2));
+    min128 = _mm_min_epu8(min128, _mm_srli_si128(min128, 1));
+    max128 = _mm_max_epu8(max128, _mm_srli_si128(max128, 1));
+    minvOut = (uint8_t)_mm_cvtsi128_si32(min128);
+    maxvOut = (uint8_t)_mm_cvtsi128_si32(max128);
+}
+
 RGY_FORCEINLINE uint8_t BilateralFilter5x5U8RangeLUTScalarPixel(const uint8_t* srcBase, const int srcPitch, const int w, const int h, const int x, const int y, const float* spatial, const float* rangeWeight) {
     const int center = srcBase[y * srcPitch + x];
     float wsum = 0.0f;
@@ -151,6 +169,49 @@ bool TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2(const uint8_t* ptr, int 
     uint8_t minv = 0;
     uint8_t maxv = 0;
     MinMax64BytesToScalar(minData0, minData1, minv, maxv);
+    const uint32_t sum = Sum64BytesToU32(data0, data1);
+
+    avg = (float)sum / len;
+    minvOut = minv;
+    maxvOut = maxv;
+    return (int)maxv - (int)minv <= threshold;
+}
+
+bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut) {
+    if (len == 65) {
+        const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 0));
+        const __m256i v1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 32));
+        uint8_t minv = 0;
+        uint8_t maxv = 0;
+        MinMax64BytesToScalarAccurate(v0, v1, minv, maxv);
+        const uint8_t tail = ptr[64];
+        minv = std::min(minv, tail);
+        maxv = std::max(maxv, tail);
+        const uint32_t sum = Sum64BytesToU32(v0, v1) + tail;
+        avg = (float)sum / len;
+        minvOut = minv;
+        maxvOut = maxv;
+        return (int)maxv - (int)minv <= threshold;
+    }
+
+    assert(len > 0 && len <= 64);
+    const uint8_t* validMask = TryEstimateBgValidMaskFFThen00 + (kTryEstimateBgHorizontalLoadBytes - len);
+    const __m256i raw0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 0));
+    const __m256i raw1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 32));
+    const __m256i mask0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(validMask + 0));
+    const __m256i mask1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(validMask + 32));
+    const __m256i data0 = _mm256_and_si256(raw0, mask0);
+    const __m256i data1 = _mm256_and_si256(raw1, mask1);
+    const __m256i zero = _mm256_setzero_si256();
+    const __m256i fill255 = _mm256_cmpeq_epi16(zero, zero);
+    const __m256i minData0 = _mm256_blendv_epi8(fill255, data0, mask0);
+    const __m256i minData1 = _mm256_blendv_epi8(fill255, data1, mask1);
+
+    uint8_t minv = 0;
+    uint8_t maxv = 0;
+    uint8_t unused = 0;
+    MinMax64BytesToScalarAccurate(minData0, minData1, minv, unused);
+    MinMax64BytesToScalarAccurate(data0, data1, unused, maxv);
     const uint32_t sum = Sum64BytesToU32(data0, data1);
 
     avg = (float)sum / len;

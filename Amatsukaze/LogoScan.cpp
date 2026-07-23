@@ -54,7 +54,8 @@ int ResolveAutoDetectThreadCount(const int configured) {
     }
     const unsigned logicalRaw = std::thread::hardware_concurrency();
     const int logical = std::max(1, (int)((logicalRaw > 0) ? logicalRaw : 1));
-    return std::min(logical, 16);
+    // フレームごとに複数回同期するため、過剰なワーカー数はタスク切替コストが支配的になる。
+    return std::min(logical, 8);
 }
 
 std::string FormatAvErrorDetail(int errnum) {
@@ -2285,6 +2286,7 @@ namespace {
         int sideCount = 0;
         float sideSum = 0.0f;
         int firstSide = -1;
+        const std::vector<pixel_t>* transposed = nullptr;
     };
 
     enum class TryEstimateBgSideAxis {
@@ -2339,7 +2341,7 @@ namespace {
     // max-min が threshold 以下なら「近い色(ほぼ単色)」として true を返す。
     // 範囲外を含む場合は clamp 参照で安全に評価する。
     template<typename pixel_t>
-    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const int threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut) {
+    static bool TryEstimateBgEvalSide(const std::vector<pixel_t>& y, const int w, const int h, const int sx, const int sy, const int dx, const int dy, const int sideLen, const int threshold, float& avg, pixel_t& minvOut, pixel_t& maxvOut, const std::vector<pixel_t>* transposed = nullptr) {
         const bool horizontal = (dy == 0);
         if (horizontal) {
             const int ex = sx + sideLen - 1;
@@ -2358,6 +2360,14 @@ namespace {
         const int ey = sy + sideLen - 1;
         const bool inRange = sx >= 0 && sx < w && sy >= 0 && ey < h;
         if (inRange) {
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                if (transposed != nullptr && HasAVX2AvailableCached()) {
+                    const uint8_t* ptr = transposed->data() + sy + sx * h;
+                    if (sideLen <= 65) {
+                        return TryEstimateBgEvalSideContiguousU8_AVX2(ptr, sideLen, threshold, avg, minvOut, maxvOut);
+                    }
+                }
+            }
             if (sideLen == 65) {
                 return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
             }
@@ -2366,6 +2376,13 @@ namespace {
         const int safeSx = ClampInt(sx, 0, w - 1);
         const int start = ClampInt(sy, 0, h - 1);
         const int end = ClampInt(ey, 0, h - 1);
+        if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+            const int len = end - start + 1;
+            if (transposed != nullptr && HasAVX2AvailableCached() && len <= 64) {
+                const uint8_t* ptr = transposed->data() + start + safeSx * h;
+                return TryEstimateBgEvalSideContiguousU8_AVX2(ptr, len, threshold, avg, minvOut, maxvOut);
+            }
+        }
         return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Vertical, 0>(y, w, h, safeSx, start, end - start + 1, threshold, avg, minvOut, maxvOut);
     }
 
@@ -2376,7 +2393,7 @@ namespace {
         if (st.sideEvaluated[side]) {
             return st.sideValid[side] != 0;
         }
-        const bool ok = TryEstimateBgEvalSide(y, w, h, baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side]);
+        const bool ok = TryEstimateBgEvalSide(y, w, h, baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side], st.transposed);
         st.sideEvaluated[side] = 1;
         st.sideValid[side] = ok ? 1 : 0;
         return ok;
@@ -2471,7 +2488,7 @@ namespace {
                 if (sx < 0 || sx >= w || sy < 0 || sy >= h || ex < 0 || ex >= w || ey < 0 || ey >= h) {
                     continue;
                 }
-                const bool ok = TryEstimateBgEvalSide(y, w, h, sx, sy, sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side]);
+                const bool ok = TryEstimateBgEvalSide(y, w, h, sx, sy, sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side], st.transposed);
                 st.sideEvaluated[side] = 1;
                 st.sideValid[side] = ok ? 1 : 0;
                 if (ok && TryEstimateBgTryPairWithFirst(side, threshold, st)) {
@@ -2504,7 +2521,7 @@ namespace {
     // 背景:
     // - ロゴ混入やテクスチャの強い辺を除外し、安定した背景推定点だけを使うため
     template<typename pixel_t>
-    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const int threshold, float& bg, BgDebugInfo* dbg = nullptr) {
+    static bool TryEstimateBg(const std::vector<pixel_t>& y, const int w, const int h, const int x, const int y0, const int radius, const int threshold, float& bg, BgDebugInfo* dbg = nullptr, const std::vector<pixel_t>* transposed = nullptr) {
         const int baseSx[4] = { x - radius, x - radius, x - radius, x + radius };
         const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
         const int sideDx[4] = { 1, 1, 0, 0 };
@@ -2515,6 +2532,7 @@ namespace {
         const int sideLen = radius * 2 + 1;
 
         TryEstimateBgState<pixel_t> st;
+        st.transposed = transposed;
         bool pairFound = TryEstimateBgFindInitialPair(y, w, h, baseSx, baseSy, sideDx, sideDy, sideLen, threshold, st);
         if (!pairFound && st.firstSide >= 0) {
             // 1辺しか取れないときの救済:
@@ -2975,6 +2993,7 @@ namespace {
         struct StatsPassBuffers {
             std::vector<uint8_t> frameWork8;
             std::vector<uint16_t> frameWork16;
+            std::vector<uint8_t> frameTranspose8;
             std::vector<AutoDetectStats> stats;
             // ヒストグラムbin蓄積バッファ (scanw * scanh * kHistBins)
             std::vector<BinAccum> binAccumBuf;
@@ -2988,14 +3007,17 @@ namespace {
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 if (bitDepth <= 8) {
                     // TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2 が
-                    // 行末付近でも 64 byte を直接ロードできるように末尾へ余白を持たせる。
+                    // 行末付近でも 64 byte を直接ロードできるよう、作業画像と転置画像の末尾へ余白を持たせる。
                     frameWork8.resize(scanw * scanh + kTryEstimateBgHorizontalAVX2Pad);
+                    frameTranspose8.resize(scanw * scanh + kTryEstimateBgHorizontalAVX2Pad);
                     frameWork16.clear();
                     frameWork16.shrink_to_fit();
                 } else {
                     frameWork16.resize(scanw * scanh);
                     frameWork8.clear();
                     frameWork8.shrink_to_fit();
+                    frameTranspose8.clear();
+                    frameTranspose8.shrink_to_fit();
                 }
                 stats.assign(scanw * scanh, AutoDetectStats());
                 binAccumBuf.assign(scanw * scanh * kHistBins, BinAccum());
@@ -6385,6 +6407,26 @@ namespace {
             const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
             const int innerWidth = std::max(0, scanw - 2 * kScanEdgeMargin);
             const int segmentConsensusIndex = getSegmentConsensusIndex();
+            // 垂直辺を連続ロードできるよう、AVX2利用時だけROIを列優先に並べ替える。
+            const std::vector<pixel_t>* transposed = nullptr;
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                if (!HasAVX2AvailableCached()) {
+                    transposed = nullptr;
+                } else {
+                    auto& transpose = statsPass.frameTranspose8;
+                    const int pixelCountWithPad = pixelCount + kTryEstimateBgHorizontalAVX2Pad;
+                    if ((int)transpose.size() < pixelCountWithPad) {
+                        transpose.resize(pixelCountWithPad);
+                    }
+                    for (int x = 0; x < scanw; x++) {
+                        uint8_t* dst = transpose.data() + x * scanh;
+                        for (int y = 0; y < scanh; y++) {
+                            dst[y] = frameWork[x + y * scanw];
+                        }
+                    }
+                    transposed = &transpose;
+                }
+            }
 
             auto processRange = [&](const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
                 int localFrameCount = 0;
@@ -6411,7 +6453,7 @@ namespace {
                         float bg = 0.0f;
                         // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                         // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
-                        if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg)) {
+                        if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg, nullptr, transposed)) {
                             continue;
                         }
                         s.totalCandidates++;
@@ -6504,7 +6546,7 @@ namespace {
 
                 float bg = 0.0f;
                 BgDebugInfo dbgBg{};
-                const bool bgOk = TryEstimateBg(frameWork, scanw, scanh, tp.x, tp.y, radius, thresholdRaw, bg, &dbgBg);
+                const bool bgOk = TryEstimateBg(frameWork, scanw, scanh, tp.x, tp.y, radius, thresholdRaw, bg, &dbgBg, transposed);
                 rec.bgOk = bgOk ? 1 : 0;
                 rec.bg = bg;
                 rec.bgSideCount = dbgBg.sideCount;
