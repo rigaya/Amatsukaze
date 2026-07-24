@@ -42,11 +42,151 @@
 #endif
 #include "zlib.h"
 #include "rgy_event.h"
-#include "rgy_thread_pool.h"
 
 namespace {
 
 constexpr int kTryEstimateBgHorizontalAVX2Pad = 64;
+
+class LogoScanWorkerPool {
+    using JobProc = void (*)(void*, int, int);
+
+    struct WorkerContext {
+        unique_event startEvent;
+        unique_event doneEvent;
+        std::thread thread;
+        std::exception_ptr exception;
+
+        WorkerContext()
+            : startEvent(CreateEventUnique(nullptr, false, false))
+            , doneEvent(CreateEventUnique(nullptr, false, false))
+            , thread()
+            , exception() {
+        }
+    };
+
+    std::vector<std::unique_ptr<WorkerContext>> workers;
+    std::vector<HANDLE> doneEvents;
+    std::atomic<bool> stopping;
+    std::atomic<int> nextJob;
+    int jobTotal;
+    int jobGrain;
+    void* jobContext;
+    JobProc jobProc;
+
+    void workerLoop(WorkerContext* worker) {
+        for (;;) {
+            WaitForSingleObject(worker->startEvent.get(), INFINITE);
+            if (stopping.load(std::memory_order_acquire)) {
+                return;
+            }
+            try {
+                for (;;) {
+                    const int start = nextJob.fetch_add(jobGrain, std::memory_order_relaxed);
+                    if (start >= jobTotal) {
+                        break;
+                    }
+                    jobProc(jobContext, start, std::min(jobTotal, start + jobGrain));
+                }
+            } catch (...) {
+                worker->exception = std::current_exception();
+            }
+            SetEvent(worker->doneEvent.get());
+        }
+    }
+
+public:
+    explicit LogoScanWorkerPool(const int threadCount)
+        : workers()
+        , doneEvents()
+        , stopping(false)
+        , nextJob(0)
+        , jobTotal(0)
+        , jobGrain(1)
+        , jobContext(nullptr)
+        , jobProc(nullptr) {
+        const int count = std::max(1, threadCount);
+        workers.reserve(count);
+        doneEvents.reserve(count);
+        for (int i = 0; i < count; i++) {
+            workers.push_back(std::make_unique<WorkerContext>());
+            doneEvents.push_back(workers.back()->doneEvent.get());
+        }
+        try {
+            for (auto& worker : workers) {
+                WorkerContext* const context = worker.get();
+                worker->thread = std::thread([this, context]() {
+                    workerLoop(context);
+                });
+            }
+        } catch (...) {
+            stopping.store(true, std::memory_order_release);
+            for (auto& worker : workers) {
+                if (worker->thread.joinable()) {
+                    SetEvent(worker->startEvent.get());
+                }
+            }
+            for (auto& worker : workers) {
+                if (worker->thread.joinable()) {
+                    worker->thread.join();
+                }
+            }
+            throw;
+        }
+    }
+
+    ~LogoScanWorkerPool() {
+        stopping.store(true, std::memory_order_release);
+        for (auto& worker : workers) {
+            SetEvent(worker->startEvent.get());
+        }
+        for (auto& worker : workers) {
+            if (worker->thread.joinable()) {
+                worker->thread.join();
+            }
+        }
+    }
+
+    LogoScanWorkerPool(const LogoScanWorkerPool&) = delete;
+    LogoScanWorkerPool& operator=(const LogoScanWorkerPool&) = delete;
+
+    template<typename F>
+    void run(const int total, F&& fn, const int grainSize = 0) {
+        const int activeWorkers = std::min((int)workers.size(), total);
+        if (activeWorkers <= 1 || total <= 1) {
+            fn(0, total);
+            return;
+        }
+
+        using Fn = typename std::remove_reference<F>::type;
+        void* const jobContext = const_cast<void*>(static_cast<const void*>(std::addressof(fn)));
+        const JobProc jobProc = [](void* context, const int start, const int end) {
+            (*static_cast<Fn*>(context))(start, end);
+        };
+        this->jobTotal = total;
+        this->jobGrain = (grainSize > 0) ? grainSize : (total + activeWorkers - 1) / activeWorkers;
+        this->jobContext = jobContext;
+        this->jobProc = jobProc;
+        nextJob.store(0, std::memory_order_relaxed);
+        for (int i = 0; i < activeWorkers; i++) {
+            auto& worker = *workers[i];
+            worker.exception = nullptr;
+            SetEvent(worker.startEvent.get());
+        }
+
+        // Linux版は個々のイベントを順に待つ実装だが、完了状態を保持するため
+        // 全ワーカーの完了バリアとして利用できる。Windowsの上限に合わせて分割する。
+        constexpr int kMaxWaitEvents = 64;
+        for (int offset = 0; offset < activeWorkers; offset += kMaxWaitEvents) {
+            const int waitCount = std::min(kMaxWaitEvents, activeWorkers - offset);
+            WaitForMultipleObjects(waitCount, doneEvents.data() + offset, 1, INFINITE);
+        }
+        for (int i = 0; i < activeWorkers; i++) {
+            if (workers[i]->exception) {
+                std::rethrow_exception(workers[i]->exception);
+            }
+        }
+    }
+};
 
 int ResolveAutoDetectThreadCount(const int configured) {
     if (configured > 0) {
@@ -2052,7 +2192,7 @@ namespace {
     }
 
     template<typename pixel_t, int radius>
-    static void BilateralFilter(std::vector<pixel_t>& dst, const pixel_t* srcBase, const int srcPitch, const int w, const int h, const float sigmaSpace, const float sigmaRange, const pixel_t maxv, RGYThreadPool* pool = nullptr, const int threadN = 1) {
+    static void BilateralFilter(std::vector<pixel_t>& dst, const pixel_t* srcBase, const int srcPitch, const int w, const int h, const float sigmaSpace, const float sigmaRange, const pixel_t maxv, LogoScanWorkerPool* pool = nullptr, const int threadN = 1) {
         static_assert(radius > 0, "radius must be positive");
         dst.resize(w * h);
         constexpr int ksize = radius * 2 + 1;
@@ -2094,21 +2234,7 @@ namespace {
                 filterRangeU8(0, h);
                 return;
             }
-            const int workers = std::max(1, std::min(threadN, h));
-            const int chunk = (h + workers - 1) / workers;
-            std::vector<std::future<void>> futures;
-            futures.reserve(workers);
-            for (int worker = 0; worker < workers; worker++) {
-                const int start = worker * chunk;
-                const int end = std::min(h, start + chunk);
-                if (start >= end) break;
-                futures.push_back(pool->enqueue([&filterRangeU8, start, end]() {
-                    filterRangeU8(start, end);
-                }));
-            }
-            for (auto& f : futures) {
-                f.get();
-            }
+            pool->run(h, filterRangeU8);
             return;
         }
         auto filterRange = [&](const int y0, const int y1) {
@@ -2143,21 +2269,7 @@ namespace {
             filterRange(0, h);
             return;
         }
-        const int workers = std::max(1, std::min(threadN, h));
-        const int chunk = (h + workers - 1) / workers;
-        std::vector<std::future<void>> futures;
-        futures.reserve(workers);
-        for (int worker = 0; worker < workers; worker++) {
-            const int start = worker * chunk;
-            const int end = std::min(h, start + chunk);
-            if (start >= end) break;
-            futures.push_back(pool->enqueue([&filterRange, start, end]() {
-                filterRange(start, end);
-            }));
-        }
-        for (auto& f : futures) {
-            f.get();
-        }
+        pool->run(h, filterRange);
     }
 
     static bool TryApproxWeightedLine(const double n, const double sum_x, const double sum_y, const double sum_x2, const double sum_xy, double& a, double& b) {
@@ -2563,29 +2675,14 @@ namespace {
         return true;
     }
 
-    static void RunParallelRange(RGYThreadPool& pool, const int threadN, const int total, const std::function<void(int, int)>& fn, const int blockSize = 0) {
+    template<typename F>
+    static void RunParallelRange(LogoScanWorkerPool& pool, const int threadN, const int total, F&& fn, const int blockSize = 0) {
         const int workers = std::max(1, std::min(threadN, total));
         if (workers <= 1 || total <= 1) {
             fn(0, total);
             return;
         }
-        std::vector<std::future<void>> futures;
-        const int chunk = (blockSize > 0) ? blockSize : (total + workers - 1) / workers;
-        const int numTasks = (total + chunk - 1) / chunk;
-        futures.reserve(numTasks);
-        for (int task = 0; task < numTasks; task++) {
-            const int start = task * chunk;
-            const int end = std::min(total, start + chunk);
-            if (start >= end) {
-                break;
-            }
-            futures.push_back(pool.enqueue([&fn, start, end]() {
-                fn(start, end);
-            }));
-        }
-        for (auto& f : futures) {
-            f.get();
-        }
+        pool.run(total, std::forward<F>(fn), blockSize);
     }
 
     struct ScoreDebugStats {
@@ -2783,7 +2880,7 @@ namespace {
         const bool detailedDebug;
         AMTContext& logCtx;
         logo::LOGO_AUTODETECT_CB cb;
-        RGYThreadPool threadPool;
+        LogoScanWorkerPool threadPool;
 
         int srcImgW;
         int srcImgH;
@@ -2997,7 +3094,7 @@ namespace {
             std::vector<uint16_t> frameWork16;
             std::vector<uint8_t> frameTranspose8;
             std::vector<AutoDetectStats> stats;
-            // ヒストグラムbin蓄積バッファ (scanw * scanh * kHistBins)
+            // bin優先配置のヒストグラム蓄積バッファ: [bin][画素]
             std::vector<BinAccum> binAccumBuf;
             std::vector<float> lastObservedFg;
             std::vector<uint8_t> lastObservedValid;
@@ -3058,6 +3155,7 @@ namespace {
         std::vector<float> temporalP5Map;
         std::vector<float> temporalLiftMap;
         float temporalLiftP995 = 0.0f;
+        // segment優先配置: [segment][画素]
         std::vector<SegmentConsensusMoment> segmentConsensusBuf;
         std::vector<uint8_t> segmentConsensusValid;
         std::vector<float> segmentConsensusA;
@@ -4137,6 +4235,10 @@ namespace {
             return maxValue;
         }
 
+        RGY_FORCEINLINE size_t binAccumIndex(const int off, const int bin) const {
+            return (size_t)bin * (scanw * scanh) + off;
+        }
+
         void accumulateTemporalHistSample(const int off, const float rawValue, const float invMaxv) {
             if (!temporalHistCaptureActive) {
                 return;
@@ -4246,7 +4348,8 @@ namespace {
                 || segmentConsensusBuf.size() != (size_t)pixelCount * kSegmentConsensusK) {
                 return;
             }
-            auto& m = segmentConsensusBuf[(size_t)off * kSegmentConsensusK + segment];
+            // 同一フレームでは全画素が同じsegmentを更新するため、segment優先で連続化する。
+            auto& m = segmentConsensusBuf[(size_t)segment * pixelCount + off];
             m.sumF += (float)fg;
             m.sumB += (float)bg;
             m.sumF2 += (float)(fg * fg);
@@ -4384,7 +4487,7 @@ namespace {
                 bool hasSegment = false;
                 bool hasCleanZeroSegment = false;
                 for (int seg = 0; seg < kSegmentConsensusK; seg++) {
-                    const auto& m = segmentConsensusBuf[(size_t)off * kSegmentConsensusK + seg];
+                    const auto& m = segmentConsensusBuf[(size_t)seg * pixelCount + off];
                     SegmentConsensusLine line{};
                     float seAlpha = 0.0f;
                     if (!tryFitSegmentConsensusMoment(m, line, seAlpha)) {
@@ -6473,7 +6576,7 @@ namespace {
 
                         s.rawSampleCount++;
                         const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
-                        auto& bin = binAccumBuf[off * kHistBins + binIdx];
+                        auto& bin = binAccumBuf[binAccumIndex(off, binIdx)];
                         accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
                         AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
                         // このフレームで有効だった画素数（デバッグ可視化用）。
@@ -6597,7 +6700,7 @@ namespace {
 
                 s.rawSampleCount++;
                 const int binIdx = std::min(kHistBins - 1, (int)(fgFiltered * invMaxv * kHistBins));
-                auto& bin = binAccumBuf[off * kHistBins + binIdx];
+                auto& bin = binAccumBuf[binAccumIndex(off, binIdx)];
                 accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
                 AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
                 rec.histBin = binIdx;
@@ -7023,7 +7126,7 @@ namespace {
             double posSumFB = 0.0;
 
             for (int b = 0; b < kHistBins; b++) {
-                const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                 if (bin.count == 0) continue;
                 double avgFg = 0.0;
                 double avgBg = 0.0;
@@ -7129,7 +7232,7 @@ namespace {
             double dominantResidual = 0.0;
             double badResidualWeight = 0.0;
             for (int b = 0; b < kHistBins; b++) {
-                const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                 if (bin.count == 0) continue;
 
                 double avgFg = 0.0;
@@ -7183,7 +7286,7 @@ namespace {
             bins.reserve(kHistBins);
             double totalWeight = 0.0;
             for (int b = 0; b < kHistBins; b++) {
-                const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                 if (bin.count == 0) continue;
 
                 double avgFg = 0.0;
@@ -7389,7 +7492,7 @@ namespace {
                         AutoDetectStats provisional{};
                         provisional.rawSampleCount = s.rawSampleCount;
                         for (int b = 0; b < kHistBins; b++) {
-                            const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                            const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                             if (bin.count == 0) continue;
                             const double avg_fg = bin.sum_fg / bin.count;
                             const double avg_bg = bin.sum_bg / bin.count;
@@ -7409,7 +7512,7 @@ namespace {
                         s.sumF = 0.0; s.sumB = 0.0; s.sumF2 = 0.0; s.sumB2 = 0.0; s.sumFB = 0.0;
                         s.sumW = 0.0; s.effectiveBinCount = 0;
                         for (int b = 0; b < kHistBins; b++) {
-                            const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                            const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                             if (bin.count == 0) continue;
                             double avg_fg = 0.0;
                             double avg_bg = 0.0;
@@ -7512,7 +7615,7 @@ namespace {
                 fgVals.reserve(kHistBins);
                 lowFgVals.reserve(kHistBins);
                 for (int b = 0; b < kHistBins; b++) {
-                    const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                    const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                     if (bin.count <= 0) continue;
                     const double w = GompertzWeight(bin.count, /*n0=*/5.0, /*c=*/0.7);
                     if (w <= 1e-8) continue;
@@ -7613,7 +7716,7 @@ namespace {
                 const float provisionalConsistency = hasProvisionalLine ? provisionalLineConsistency[off] : 0.0f;
 
                 for (int b = 0; b < kHistBins; b++) {
-                    const auto& bin = statsPass.binAccumBuf[off * kHistBins + b];
+                    const auto& bin = statsPass.binAccumBuf[binAccumIndex(off, b)];
                     if (bin.count == 0) continue;
                     double avgFg = 0.0;
                     double adjustedBg = 0.0;
