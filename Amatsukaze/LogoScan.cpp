@@ -2399,6 +2399,7 @@ namespace {
         float sideSum = 0.0f;
         int firstSide = -1;
         const std::vector<pixel_t>* transposed = nullptr;
+        bool fastContiguousU8 = false;
     };
 
     enum class TryEstimateBgSideAxis {
@@ -2507,7 +2508,20 @@ namespace {
         if (st.sideEvaluated[side]) {
             return st.sideValid[side] != 0;
         }
-        const bool ok = TryEstimateBgEvalSide(y, w, h, baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side], st.transposed);
+        bool ok = false;
+        if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+            if (st.fastContiguousU8) {
+                // 内側画素は4辺とも固定長かつ連続なので、軸判定と境界判定を省く。
+                const uint8_t* ptr = (side < 2)
+                    ? y.data() + baseSx[side] + baseSy[side] * w
+                    : st.transposed->data() + baseSy[side] + baseSx[side] * h;
+                ok = TryEstimateBgEvalSideContiguousU8_AVX2(ptr, sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side]);
+            } else {
+                ok = TryEstimateBgEvalSide(y, w, h, baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side], st.transposed);
+            }
+        } else {
+            ok = TryEstimateBgEvalSide(y, w, h, baseSx[side], baseSy[side], sideDx[side], sideDy[side], sideLen, threshold, st.sideAvg[side], st.sideMin[side], st.sideMax[side], st.transposed);
+        }
         st.sideEvaluated[side] = 1;
         st.sideValid[side] = ok ? 1 : 0;
         return ok;
@@ -2647,6 +2661,13 @@ namespace {
 
         TryEstimateBgState<pixel_t> st;
         st.transposed = transposed;
+        if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+            st.fastContiguousU8 = transposed != nullptr
+                && sideLen <= 65
+                && x - radius >= 0 && x + radius < w
+                && y0 - radius >= 0 && y0 + radius < h
+                && HasAVX2AvailableCached();
+        }
         bool pairFound = TryEstimateBgFindInitialPair(y, w, h, baseSx, baseSy, sideDx, sideDy, sideLen, threshold, st);
         if (!pairFound && st.firstSide >= 0) {
             // 1辺しか取れないときの救済:
