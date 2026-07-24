@@ -3114,6 +3114,9 @@ namespace {
             std::vector<uint8_t> frameWork8;
             std::vector<uint16_t> frameWork16;
             std::vector<uint8_t> frameTranspose8;
+            std::vector<std::vector<uint8_t>> batchFrameWork8;
+            std::vector<std::vector<uint8_t>> batchFrameTranspose8;
+            std::vector<std::vector<uint8_t>> batchRaw8;
             std::vector<AutoDetectStats> stats;
             // bin優先配置のヒストグラム蓄積バッファ: [bin][画素]
             std::vector<BinAccum> binAccumBuf;
@@ -4162,6 +4165,16 @@ namespace {
             return false;
         }
 
+        const uint8_t* getStoredRoiFramePointer(const int frameIndex) const {
+            if (roiCacheBackend != RoiCacheBackend::Ram || frameIndex < 0 || frameIndex >= roiCacheStoredFrames) {
+                return nullptr;
+            }
+            const int slabIndex = frameIndex / kRoiCacheFramesPerSlab;
+            const int frameInSlab = frameIndex % kRoiCacheFramesPerSlab;
+            const auto& slab = roiCacheRamSlabs[slabIndex];
+            return slab.data() + (size_t)frameInSlab * roiCacheFrameBytes;
+        }
+
         template<typename FrameCb>
         void runStoredRoiPassWithProgress(const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan, FrameCb&& onFrame) {
             if (!hasStoredRoiCache()) {
@@ -4179,6 +4192,33 @@ namespace {
                 if (!onFrame(roiReplayFrame.data())) {
                     break;
                 }
+            }
+            if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+        }
+
+        void runStoredRoiStatsPassWithProgress(const int stage, const float stageBase, const float stageSpan,
+            const float overallBase, const float overallSpan, StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
+            const int frameBatch = std::min(32, ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1));
+            // 追跡点はフレームごとの詳細状態を記録するため、従来経路で処理する。
+            // 少数ワーカーでは同期削減よりバッチ内の作業集合増加が勝るため、従来経路を使う。
+            if (threadN < 8 || frameBatch <= 1 || !tracePoints.empty()) {
+                runStoredRoiPassWithProgress(stage, stageBase, stageSpan, overallBase, overallSpan,
+                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, &statsPass, pass2); });
+                return;
+            }
+            if (!hasStoredRoiCache()) {
+                THROW(InvalidOperationException, "ROI cache is not available");
+            }
+            setProgressPlan(stage, stageBase, stageSpan, overallBase, overallSpan);
+            if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+            readFrames = 0;
+            for (int frame = 0; frame < roiCacheStoredFrames; frame += frameBatch) {
+                const int count = std::min(frameBatch, roiCacheStoredFrames - frame);
+                processStoredStatsBatch(frame, count, statsPass, pass2);
             }
             if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
@@ -5307,8 +5347,7 @@ namespace {
             StatsPassBuffers pass3Stats{};
             resetAccumulationState(&pass3Stats, &pass2);
             if (hasStoredRoiCache()) {
-                runStoredRoiPassWithProgress(3, 0.0f, 0.40f, 0.65f, 0.13f,
-                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, &pass3Stats, &pass2); });
+                runStoredRoiStatsPassWithProgress(3, 0.0f, 0.40f, 0.65f, 0.13f, pass3Stats, &pass2);
             } else {
                 runFramePassWithProgress(srcpath, 3, 0.0f, 0.40f, 0.65f, 0.13f,
                     [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass3Stats, &pass2); },
@@ -6475,6 +6514,14 @@ namespace {
             BilateralFilter<uint8_t, kBilateralRadius>(frameWork, srcY, pitchY, scanw, scanh, 1.4f, sigmaRange, (uint8_t)255, &threadPool, threadN);
         }
 
+        void preprocessStoredFrameSingleThread(const uint8_t* srcY, const int pitchY,
+            std::vector<uint8_t>& frameWork, const float thresholdRaw) {
+            constexpr int kBilateralRadius = 2;
+            const float sigmaRange = std::max(6.0f, thresholdRaw * 0.6f);
+            BilateralFilter<uint8_t, kBilateralRadius>(frameWork, srcY, pitchY, scanw, scanh,
+                1.4f, sigmaRange, (uint8_t)255, nullptr, 1);
+        }
+
         template<typename pixel_t>
         void AccumulateCorrectedEdgeFromNeighbor(const std::vector<pixel_t>& frameWork, const int neighborOff, const float fg_i, const float invMaxv, float& maxCorrected, bool& anyPositive) const {
             const float fg_j = (float)frameWork[neighborOff] * invMaxv;
@@ -6513,6 +6560,75 @@ namespace {
         }
 
         template<typename pixel_t>
+        RGY_FORCEINLINE int collectFrameSampleRange(const std::vector<pixel_t>& frameWork, const float invMaxv,
+            const int thresholdRaw, const float transitionThreshold, StatsPassBuffers& statsPass,
+            const std::vector<pixel_t>* transposed, const int segmentConsensusIndex,
+            const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
+            auto& stats = statsPass.stats;
+            auto& binAccumBuf = statsPass.binAccumBuf;
+            auto& lastObservedFg = statsPass.lastObservedFg;
+            auto& lastObservedValid = statsPass.lastObservedValid;
+            int localFrameCount = 0;
+            for (int y = yBegin; y < yEnd; y++) {
+                for (int x = xBegin; x < xEnd; x++) {
+                    const int off = x + y * scanw;
+                    if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
+                        continue;
+                    }
+                    const float fgRaw = (float)frameWork[off];
+                    accumulateTemporalHistSample(off, fgRaw, invMaxv);
+                    AutoDetectStats& s = stats[off];
+                    s.observed++;
+                    if (lastObservedValid[off]) {
+                        if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
+                            s.fgTransition++;
+                        }
+                    }
+                    lastObservedFg[off] = fgRaw;
+                    lastObservedValid[off] = 1;
+
+                    AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
+
+                    float bg = 0.0f;
+                    // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
+                    if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg, nullptr, transposed)) {
+                        continue;
+                    }
+                    s.totalCandidates++;
+                    const double f = (double)frameWork[off] * invMaxv;
+                    const double b = (double)bg * invMaxv;
+
+                    if (IsExtremeContrastSample(f, b)) {
+                        s.rejectedExtreme++;
+                        continue;
+                    }
+
+                    s.rawSampleCount++;
+                    const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
+                    auto& bin = binAccumBuf[binAccumIndex(off, binIdx)];
+                    accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
+                    AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
+                    localFrameCount++;
+                }
+            }
+            return localFrameCount;
+        }
+
+        void buildFrameTranspose8(const std::vector<uint8_t>& frameWork, std::vector<uint8_t>& transpose) const {
+            const int pixelCount = scanw * scanh;
+            const int pixelCountWithPad = pixelCount + kTryEstimateBgHorizontalAVX2Pad;
+            if ((int)transpose.size() < pixelCountWithPad) {
+                transpose.resize(pixelCountWithPad);
+            }
+            for (int x = 0; x < scanw; x++) {
+                uint8_t* dst = transpose.data() + x * scanh;
+                for (int y = 0; y < scanh; y++) {
+                    dst[y] = frameWork[x + y * scanw];
+                }
+            }
+        }
+
+        template<typename pixel_t>
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const int thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
@@ -6540,70 +6656,15 @@ namespace {
                     transposed = nullptr;
                 } else {
                     auto& transpose = statsPass.frameTranspose8;
-                    const int pixelCountWithPad = pixelCount + kTryEstimateBgHorizontalAVX2Pad;
-                    if ((int)transpose.size() < pixelCountWithPad) {
-                        transpose.resize(pixelCountWithPad);
-                    }
-                    for (int x = 0; x < scanw; x++) {
-                        uint8_t* dst = transpose.data() + x * scanh;
-                        for (int y = 0; y < scanh; y++) {
-                            dst[y] = frameWork[x + y * scanw];
-                        }
-                    }
+                    buildFrameTranspose8(frameWork, transpose);
                     transposed = &transpose;
                 }
             }
 
             auto processRange = [&](const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
-                int localFrameCount = 0;
-                for (int y = yBegin; y < yEnd; y++) {
-                    for (int x = xBegin; x < xEnd; x++) {
-                        const int off = x + y * scanw;
-                        if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
-                            continue;
-                        }
-                        const float fgRaw = (float)frameWork[off];
-                        accumulateTemporalHistSample(off, fgRaw, invMaxv);
-                        AutoDetectStats& s = stats[off];
-                        s.observed++;
-                        if (lastObservedValid[off]) {
-                            if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
-                                s.fgTransition++;
-                            }
-                        }
-                        lastObservedFg[off] = fgRaw;
-                        lastObservedValid[off] = 1;
-
-                        AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
-
-                        float bg = 0.0f;
-                        // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
-                        // 例: ブロック辺にロゴ形状や高周波模様が入り、単色背景を仮定できない点。
-                        if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg, nullptr, transposed)) {
-                            continue;
-                        }
-                        s.totalCandidates++;
-                        const double f = (double)frameWork[off] * invMaxv;
-                        const double b = (double)bg * invMaxv;
-
-                        // 極端コントラスト点を棄却。
-                        // 具体例:
-                        //   黒帯/白飛び/フラッシュに起因する「ロゴとは無関係な巨大差分」。
-                        //   これを残すと score の裾が広がり、2値化が不安定になる。
-                        if (IsExtremeContrastSample(f, b)) {
-                            s.rejectedExtreme++;
-                            continue;
-                        }
-
-                        s.rawSampleCount++;
-                        const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
-                        auto& bin = binAccumBuf[binAccumIndex(off, binIdx)];
-                        accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
-                        AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
-                        // このフレームで有効だった画素数（デバッグ可視化用）。
-                        localFrameCount++;
-                    }
-                }
+                const int localFrameCount = collectFrameSampleRange(frameWork, invMaxv, thresholdRaw,
+                    transitionThreshold, statsPass, transposed, segmentConsensusIndex,
+                    yBegin, yEnd, xBegin, xEnd);
                 frameCount.fetch_add(localFrameCount, std::memory_order_relaxed);
             };
 
@@ -6734,6 +6795,129 @@ namespace {
                 statsPass.traceRecords.push_back(rec);
             }
             return frameCount.load(std::memory_order_relaxed);
+        }
+
+        void processStoredStatsBatch(const int firstFrame, const int batchCount,
+            StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
+            struct BatchFrameInfo {
+                const uint8_t* src = nullptr;
+                int segmentConsensusIndex = 0;
+                bool active = false;
+            };
+
+            constexpr float kInvMaxv = 1.0f / 255.0f;
+            constexpr float kRawScale = 1.0f;
+            const int thresholdRaw = threshold;
+            const float transitionThreshold = std::max(0.75f * kRawScale, thresholdRaw * 0.125f);
+            const int pixelCount = scanw * scanh;
+            const int workSize = pixelCount + kTryEstimateBgHorizontalAVX2Pad;
+            const bool useTranspose = HasAVX2AvailableCached();
+
+            statsPass.batchFrameWork8.resize(batchCount);
+            statsPass.batchFrameTranspose8.resize(batchCount);
+            statsPass.batchRaw8.resize(batchCount);
+            std::vector<BatchFrameInfo> frames(batchCount);
+            std::vector<int> activeFrames;
+            activeFrames.reserve(batchCount);
+
+            for (int bi = 0; bi < batchCount; bi++) {
+                const int frameIndex = firstFrame + bi;
+                auto& info = frames[bi];
+                const bool skip = passIndex == 3 && pass2 != nullptr && !pass2->frameMask.empty()
+                    && (frameIndex < 0 || frameIndex >= (int)pass2->frameMask.size() || pass2->frameMask[frameIndex] == 0);
+                if (skip) {
+                    pass2->skippedFrames++;
+                    continue;
+                }
+                if (passIndex == 3 && pass2 != nullptr && !pass2->frameMask.empty()) {
+                    pass2->acceptedFrames++;
+                }
+
+                info.src = getStoredRoiFramePointer(frameIndex);
+                if (info.src == nullptr) {
+                    auto& raw = statsPass.batchRaw8[bi];
+                    if (!readStoredRoiFrame(frameIndex, raw)) {
+                        THROW(IOException, "failed to read ROI cache frame");
+                    }
+                    info.src = raw.data();
+                }
+                info.segmentConsensusIndex = ClampInt((int)(((int64_t)frameIndex * kSegmentConsensusK)
+                    / std::max(1, searchFrames)), 0, kSegmentConsensusK - 1);
+                info.active = true;
+                activeFrames.push_back(bi);
+                statsPass.batchFrameWork8[bi].resize(workSize);
+                if (useTranspose) {
+                    statsPass.batchFrameTranspose8[bi].resize(workSize);
+                }
+            }
+
+            // フレーム間で独立な前処理をまとめて投入し、起床・完了待ちをバッチ単位にする。
+            threadPool.run((int)activeFrames.size(), [&](const int begin, const int end) {
+                for (int ai = begin; ai < end; ai++) {
+                    const int bi = activeFrames[ai];
+                    preprocessStoredFrameSingleThread(frames[bi].src, scanw,
+                        statsPass.batchFrameWork8[bi], thresholdRaw);
+                    if (useTranspose) {
+                        buildFrameTranspose8(statsPass.batchFrameWork8[bi], statsPass.batchFrameTranspose8[bi]);
+                    }
+                }
+            }, 1);
+
+            const int collectYBlock = ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", 16, 1);
+            const int collectXSplits = ParseEnvIntDefault("AMT_LOGO_COLLECT_X_SPLITS", 2, 1);
+            const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
+            const int innerWidth = std::max(0, scanw - 2 * kScanEdgeMargin);
+            const int xSplits = (collectXSplits <= 1 || innerWidth <= 1)
+                ? 1 : std::min(collectXSplits, innerWidth);
+            const int yTasks = (innerHeight + collectYBlock - 1) / collectYBlock;
+            const int totalTasks = yTasks * xSplits;
+            std::vector<int> taskFrameCounts((size_t)totalTasks * batchCount, 0);
+
+            // 各空間タイルを一つのワーカーが所有し、同じ画素をフレーム順に更新する。
+            threadPool.run(totalTasks, [&](const int taskBegin, const int taskEnd) {
+                for (int task = taskBegin; task < taskEnd; task++) {
+                    const int tileY = task / xSplits;
+                    const int tileX = task % xSplits;
+                    const int localY0 = tileY * collectYBlock;
+                    const int localY1 = std::min(innerHeight, localY0 + collectYBlock);
+                    if (localY0 >= localY1) {
+                        continue;
+                    }
+                    const int localX0 = (innerWidth * tileX) / xSplits;
+                    const int localX1 = (innerWidth * (tileX + 1)) / xSplits;
+                    if (localX0 >= localX1) {
+                        continue;
+                    }
+                    for (int bi = 0; bi < batchCount; bi++) {
+                        if (!frames[bi].active) {
+                            continue;
+                        }
+                        const auto* transposed = useTranspose ? &statsPass.batchFrameTranspose8[bi] : nullptr;
+                        taskFrameCounts[(size_t)task * batchCount + bi] = collectFrameSampleRange(
+                            statsPass.batchFrameWork8[bi], kInvMaxv, thresholdRaw, transitionThreshold,
+                            statsPass, transposed, frames[bi].segmentConsensusIndex,
+                            localY0 + kScanEdgeMargin, localY1 + kScanEdgeMargin,
+                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin);
+                    }
+                }
+            }, 1);
+
+            for (int bi = 0; bi < batchCount; bi++) {
+                int frameCount = 0;
+                if (frames[bi].active) {
+                    for (int task = 0; task < totalTasks; task++) {
+                        frameCount += taskFrameCounts[(size_t)task * batchCount + bi];
+                    }
+                }
+                statsPass.frameValidCounts.push_back(frameCount);
+                readFrames++;
+                if (cb && (readFrames % 8) == 0) {
+                    const float passProgress = readFrames / (float)searchFrames;
+                    if (!reportProgressInCurrentPlan(passProgress, readFrames, searchFrames)) {
+                        THROW(RuntimeException, "Cancel requested");
+                    }
+                }
+            }
         }
 
         bool processFrame(AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
@@ -7710,8 +7894,8 @@ namespace {
             sampleResidualReweightActive = true;
             resetAccumulationState(&statsPass, pass2);
             if (hasStoredRoiCache()) {
-                runStoredRoiPassWithProgress(progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan, progressPlan.overallBase, progressPlan.overallSpan,
-                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, &statsPass, pass2); });
+                runStoredRoiStatsPassWithProgress(progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan,
+                    progressPlan.overallBase, progressPlan.overallSpan, statsPass, pass2);
             } else {
                 runFramePassWithProgress(srcpath, progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan, progressPlan.overallBase, progressPlan.overallSpan,
                     [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &statsPass, pass2); },
