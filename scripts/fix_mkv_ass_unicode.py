@@ -38,8 +38,13 @@ SPACING_PATTERN = re.compile(rf"\\fsp(?P<value>{NUMBER_PATTERN})", re.IGNORECASE
 OLD_IVS_SCALE_PATTERN = re.compile(
     rf"(?P<tag_start>\{{[^{{}}\r\n]*?\\fscx)(?P<old>{NUMBER_PATTERN})"
     rf"(?P<tag_end>[^{{}}\r\n]*\}})"
+    rf"(?P<prefix>[^{{}}\r\n]?)"
+    rf"(?:(?P<zero_start>\{{[^{{}}\r\n]*?\\fsp)(?P<zero>{NUMBER_PATTERN})"
+    rf"(?P<zero_end>[^{{}}\r\n]*\}}))?"
     rf"(?P<base>[^{{}}\r\n])"
     rf"(?P<selector>[\u180B-\u180D\u180F\uFE00-\uFE0F\U000E0100-\U000E01EF])"
+    rf"(?:(?P<spacing_start>\{{[^{{}}\r\n]*?\\fsp)(?P<spacing>{NUMBER_PATTERN})"
+    rf"(?P<spacing_end>[^{{}}\r\n]*\}}))?"
     rf"(?P<reset_start>\{{[^{{}}\r\n]*?\\fscx)(?P<new>{NUMBER_PATTERN})"
     rf"(?P<reset_end>[^{{}}\r\n]*\}})",
     re.IGNORECASE,
@@ -101,19 +106,36 @@ def fix_old_ivs_scale(text: str) -> tuple[str, int]:
         nonlocal count
         old_scale = float(match.group("old"))
         restored_scale = float(match.group("new"))
-        # 旧処理による半幅化と断定できる、直後の復帰値がちょうど2倍の場合だけ修正する。
+        # 旧版AmatsukazeではIVSを構成する異体字セレクタを文字数に含めたため、
+        # 書式の切り替え位置が1表示文字ぶん後ろへずれる場合がある。実例では
+        # 「{\fscx50}　逢󠄁{\fscx100}田さんは」となり、「逢󠄁」まで半幅で表示された。
+        # 復帰値が直前の値のちょうど2倍で、復帰タグがIVS直後にある場合に限り、
+        # 復帰タグをIVS直前へ移して旧版による境界ずれを修正する。旧スクリプトが
+        # IVS前後へ追加済みの\fsp0と復帰タグがある場合は、それらを保ったまま移動する。
         if abs(restored_scale - old_scale * 2) > 0.001:
+            return match.group(0)
+        if match.group("zero") is not None:
+            if not spacing_is_zero(match.group("zero")) or match.group("spacing") is None:
+                return match.group(0)
+        elif match.group("spacing") is not None:
             return match.group(0)
         count += 1
         return (
             match.group("tag_start")
-            + match.group("new")
+            + match.group("old")
             + match.group("tag_end")
-            + match.group("base")
-            + match.group("selector")
+            + match.group("prefix")
             + match.group("reset_start")
             + match.group("new")
             + match.group("reset_end")
+            + (match.group("zero_start") or "")
+            + (match.group("zero") or "")
+            + (match.group("zero_end") or "")
+            + match.group("base")
+            + match.group("selector")
+            + (match.group("spacing_start") or "")
+            + (match.group("spacing") or "")
+            + (match.group("spacing_end") or "")
         )
 
     text = OLD_IVS_SCALE_PATTERN.sub(replace, text)
