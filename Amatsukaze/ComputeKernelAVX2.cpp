@@ -64,20 +64,6 @@ RGY_FORCEINLINE uint32_t HorizontalSumEpi16(const __m128i v) {
     return (uint32_t)_mm_extract_epi16(v3, 0);
 }
 
-RGY_FORCEINLINE uint8_t ReduceMin16xU8(__m128i v) {
-    const __m128i vw = _mm_min_epu16(v, _mm_srli_epi16(v, 8));
-    const __m128i minPos = _mm_minpos_epu16(vw);
-    return (uint8_t)_mm_extract_epi16(minPos, 0);
-}
-
-RGY_FORCEINLINE uint8_t ReduceMax16xU8(__m128i v) {
-    const __m128i zero = _mm_setzero_si128();
-    const __m128i vff = _mm_cmpeq_epi16(zero, zero);
-    const __m128i vinv = _mm_xor_si128(v, vff);
-    const uint8_t vmininv = ReduceMin16xU8(vinv);
-    return ~vmininv;
-}
-
 RGY_FORCEINLINE uint32_t Sum64BytesToU32(const __m256i v0, const __m256i v1) {
     const __m256i zero = _mm256_setzero_si256();
     const __m256i sum16 =
@@ -85,15 +71,6 @@ RGY_FORCEINLINE uint32_t Sum64BytesToU32(const __m256i v0, const __m256i v1) {
             _mm256_add_epi16(_mm256_unpacklo_epi8(v0, zero), _mm256_unpackhi_epi8(v0, zero)),
             _mm256_add_epi16(_mm256_unpacklo_epi8(v1, zero), _mm256_unpackhi_epi8(v1, zero)));
     return HorizontalSumEpi16(_mm_add_epi16(_mm256_castsi256_si128(sum16), _mm256_extracti128_si256(sum16, 1)));
-}
-
-RGY_FORCEINLINE void MinMax64BytesToScalar(const __m256i v0, const __m256i v1, uint8_t& minvOut, uint8_t& maxvOut) {
-    const __m256i vmin8 = _mm256_min_epu8(v0, v1);
-    const __m256i vmax8 = _mm256_max_epu8(v0, v1);
-    const __m128i min128 = _mm_min_epu8(_mm256_castsi256_si128(vmin8), _mm256_extracti128_si256(vmin8, 1));
-    const __m128i max128 = _mm_max_epu8(_mm256_castsi256_si128(vmax8), _mm256_extracti128_si256(vmax8, 1));
-    minvOut = ReduceMin16xU8(min128);
-    maxvOut = ReduceMax16xU8(max128);
 }
 
 RGY_FORCEINLINE void MinMax64BytesToScalarAccurate(const __m256i v0, const __m256i v1, uint8_t& minvOut, uint8_t& maxvOut) {
@@ -135,48 +112,6 @@ RGY_FORCEINLINE uint8_t BilateralFilter5x5U8RangeLUTScalarPixel(const uint8_t* s
 
 }
 
-bool TryEstimateBgEvalSideHorizontalInRangeU8_65_AVX2(const uint8_t* ptr, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut) {
-    const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 0));
-    const __m256i v1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 32));
-    uint8_t minv = 0;
-    uint8_t maxv = 0;
-    MinMax64BytesToScalar(v0, v1, minv, maxv);
-
-    const uint8_t tail = ptr[64];
-    minv = std::min(minv, tail);
-    maxv = std::max(maxv, tail);
-    const uint32_t sum = Sum64BytesToU32(v0, v1) + tail;
-
-    avg = (float)sum * (1.0f / 65.0f);
-    minvOut = minv;
-    maxvOut = maxv;
-    return (int)maxv - (int)minv <= threshold;
-}
-
-bool TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut) {
-    const uint8_t* validMask = TryEstimateBgValidMaskFFThen00 + (kTryEstimateBgHorizontalLoadBytes - len);
-    const __m256i raw0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 0));
-    const __m256i raw1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 32));
-    const __m256i mask0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(validMask + 0));
-    const __m256i mask1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(validMask + 32));
-    const __m256i data0 = _mm256_and_si256(raw0, mask0);
-    const __m256i data1 = _mm256_and_si256(raw1, mask1);
-    const __m256i zero = _mm256_setzero_si256();
-    const __m256i fill255 = _mm256_cmpeq_epi16(zero, zero);
-    const __m256i minData0 = _mm256_blendv_epi8(fill255, data0, mask0);
-    const __m256i minData1 = _mm256_blendv_epi8(fill255, data1, mask1);
-
-    uint8_t minv = 0;
-    uint8_t maxv = 0;
-    MinMax64BytesToScalar(minData0, minData1, minv, maxv);
-    const uint32_t sum = Sum64BytesToU32(data0, data1);
-
-    avg = (float)sum / len;
-    minvOut = minv;
-    maxvOut = maxv;
-    return (int)maxv - (int)minv <= threshold;
-}
-
 bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut) {
     if (len == 65) {
         const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 0));
@@ -202,16 +137,14 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
     const __m256i mask1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(validMask + 32));
     const __m256i data0 = _mm256_and_si256(raw0, mask0);
     const __m256i data1 = _mm256_and_si256(raw1, mask1);
-    const __m256i zero = _mm256_setzero_si256();
-    const __m256i fill255 = _mm256_cmpeq_epi16(zero, zero);
-    const __m256i minData0 = _mm256_blendv_epi8(fill255, data0, mask0);
-    const __m256i minData1 = _mm256_blendv_epi8(fill255, data1, mask1);
+    // 無効laneを有効な先頭画素で埋めれば、min/maxを1回の縮約で正確に求められる。
+    const __m256i fill = _mm256_set1_epi8((char)ptr[0]);
+    const __m256i minMaxData0 = _mm256_blendv_epi8(fill, raw0, mask0);
+    const __m256i minMaxData1 = _mm256_blendv_epi8(fill, raw1, mask1);
 
     uint8_t minv = 0;
     uint8_t maxv = 0;
-    uint8_t unused = 0;
-    MinMax64BytesToScalarAccurate(minData0, minData1, minv, unused);
-    MinMax64BytesToScalarAccurate(data0, data1, unused, maxv);
+    MinMax64BytesToScalarAccurate(minMaxData0, minMaxData1, minv, maxv);
     const uint32_t sum = Sum64BytesToU32(data0, data1);
 
     avg = (float)sum / len;

@@ -2305,15 +2305,6 @@ namespace {
 
         if constexpr (Axis == TryEstimateBgSideAxis::Horizontal) {
             const pixel_t* ptr = &y[sx + sy * w];
-            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                if (HasAVX2AvailableCached()) {
-                    if constexpr (FixedLen == 65) {
-                        return TryEstimateBgEvalSideHorizontalInRangeU8_65_AVX2(ptr, threshold, avg, minvOut, maxvOut);
-                    } else if (len <= 64) {
-                        return TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2(ptr, len, threshold, avg, minvOut, maxvOut);
-                    }
-                }
-            }
             for (int i = 0; i < len; i++) {
                 const pixel_t v = ptr[i];
                 minv = std::min(minv, v);
@@ -2347,6 +2338,11 @@ namespace {
             const int ex = sx + sideLen - 1;
             const bool inRange = sy >= 0 && sy < h && sx >= 0 && ex < w;
             if (inRange) {
+                if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                    if (HasAVX2AvailableCached() && sideLen <= 65) {
+                        return TryEstimateBgEvalSideContiguousU8_AVX2(&y[sx + sy * w], sideLen, threshold, avg, minvOut, maxvOut);
+                    }
+                }
                 if (sideLen == 65) {
                     return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, 65>(y, w, h, sx, sy, sideLen, threshold, avg, minvOut, maxvOut);
                 }
@@ -2355,6 +2351,12 @@ namespace {
             const int safeSy = ClampInt(sy, 0, h - 1);
             const int start = ClampInt(sx, 0, w - 1);
             const int end = ClampInt(ex, 0, w - 1);
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                const int len = end - start + 1;
+                if (HasAVX2AvailableCached() && len <= 65) {
+                    return TryEstimateBgEvalSideContiguousU8_AVX2(&y[start + safeSy * w], len, threshold, avg, minvOut, maxvOut);
+                }
+            }
             return TryEstimateBgEvalSideImpl<pixel_t, TryEstimateBgSideAxis::Horizontal, 0>(y, w, h, start, safeSy, end - start + 1, threshold, avg, minvOut, maxvOut);
         }
         const int ey = sy + sideLen - 1;
@@ -2378,7 +2380,7 @@ namespace {
         const int end = ClampInt(ey, 0, h - 1);
         if constexpr (std::is_same_v<pixel_t, uint8_t>) {
             const int len = end - start + 1;
-            if (transposed != nullptr && HasAVX2AvailableCached() && len <= 64) {
+            if (transposed != nullptr && HasAVX2AvailableCached() && len <= 65) {
                 const uint8_t* ptr = transposed->data() + start + safeSx * h;
                 return TryEstimateBgEvalSideContiguousU8_AVX2(ptr, len, threshold, avg, minvOut, maxvOut);
             }
@@ -3006,8 +3008,8 @@ namespace {
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 if (bitDepth <= 8) {
-                    // TryEstimateBgEvalSideHorizontalInRangeU8_LE64_AVX2 が
-                    // 行末付近でも 64 byte を直接ロードできるよう、作業画像と転置画像の末尾へ余白を持たせる。
+                    // 背景辺のAVX2処理が行末付近でも64 byteを直接ロードできるよう、
+                    // 作業画像と転置画像の末尾へ余白を持たせる。
                     frameWork8.resize(scanw * scanh + kTryEstimateBgHorizontalAVX2Pad);
                     frameTranspose8.resize(scanw * scanh + kTryEstimateBgHorizontalAVX2Pad);
                     frameWork16.clear();
