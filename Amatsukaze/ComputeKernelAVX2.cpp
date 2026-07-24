@@ -153,6 +153,46 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
     return (int)maxv - (int)minv <= threshold;
 }
 
+namespace {
+
+RGY_FORCEINLINE void CalcBgSideStatsBlock16U8_AVX2Impl(const uint8_t* ptr, const int step, const int len,
+    uint16_t* sums, uint8_t* minvOut, uint8_t* maxvOut) {
+    __m256i sums16 = _mm256_setzero_si256();
+    __m128i minv = _mm_set1_epi8((char)0xff);
+    __m128i maxv = _mm_setzero_si128();
+    for (int i = 0; i < len; i++, ptr += step) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr));
+        sums16 = _mm256_add_epi16(sums16, _mm256_cvtepu8_epi16(v));
+        minv = _mm_min_epu8(minv, v);
+        maxv = _mm_max_epu8(maxv, v);
+    }
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums), sums16);
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(minvOut), minv);
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(maxvOut), maxv);
+}
+
+}
+
+void CalcBgSideStatsBlock16U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
+    uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
+    constexpr int lanes = 16;
+    const int len = radius * 2 + 1;
+    assert(radius >= 0 && len <= 65);
+
+    // laneを隣接する16画素に割り当て、各辺の同じ位置を連続ロードする。
+    const uint8_t* sidePtr[4] = {
+        src + (y - radius) * stride + x - radius,
+        src + (y + radius) * stride + x - radius,
+        src + (y - radius) * stride + x - radius,
+        src + (y - radius) * stride + x + radius,
+    };
+    const int sideStep[4] = { 1, 1, stride, stride };
+    for (int side = 0; side < 4; side++) {
+        CalcBgSideStatsBlock16U8_AVX2Impl(sidePtr[side], sideStep[side], len,
+            sideSums + side * lanes, sideMins + side * lanes, sideMaxs + side * lanes);
+    }
+}
+
 void BilateralFilter5x5U8RangeLUT_AVX2(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1) {
     (void)maxv;
     constexpr int radius = 2;

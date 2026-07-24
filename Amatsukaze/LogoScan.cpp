@@ -2696,6 +2696,95 @@ namespace {
         return true;
     }
 
+    // 隣接する16画素の基準4辺を一括評価し、通常版と同じ順序規則で背景値を確定する。
+    // 基準辺だけで確定しない画素の救済探索は、結果一致を優先して既存経路へ戻す。
+    static uint16_t TryEstimateBgBlock16U8(const std::vector<uint8_t>& y, const int w, const int h,
+        const int x, const int y0, const int radius, const int threshold, float bg[16],
+        const std::vector<uint8_t>* transposed) {
+        constexpr int lanes = 16;
+        alignas(32) uint16_t sideSums[4][lanes];
+        alignas(16) uint8_t sideMins[4][lanes];
+        alignas(16) uint8_t sideMaxs[4][lanes];
+        CalcBgSideStatsBlock16U8_AVX2(y.data(), w, x, y0, radius,
+            &sideSums[0][0], &sideMins[0][0], &sideMaxs[0][0]);
+
+        const int sideLen = radius * 2 + 1;
+        static constexpr int retryOrder[4][3] = {
+            { 2, 3, 1 },
+            { 2, 3, 0 },
+            { 0, 1, 3 },
+            { 0, 1, 2 },
+        };
+        uint16_t validMask = 0;
+        for (int lane = 0; lane < lanes; lane++) {
+            float sideAvg[4];
+            uint8_t sideValid[4];
+            for (int side = 0; side < 4; side++) {
+                sideAvg[side] = (float)sideSums[side][lane] / sideLen;
+                sideValid[side] = ((int)sideMaxs[side][lane] - (int)sideMins[side][lane] <= threshold) ? 1 : 0;
+            }
+
+            int firstSide = -1;
+            for (int side = 0; side < 4; side++) {
+                if (sideValid[side]) {
+                    firstSide = side;
+                    break;
+                }
+            }
+            bool basePairFound = false;
+            if (firstSide >= 0) {
+                for (int i = 0; i < 3; i++) {
+                    const int side = retryOrder[firstSide][i];
+                    if (sideValid[side]
+                        && std::abs(sideAvg[side] - sideAvg[firstSide]) <= threshold) {
+                        bg[lane] = (sideAvg[firstSide] + sideAvg[side]) / 2;
+                        validMask |= (uint16_t)(1u << lane);
+                        basePairFound = true;
+                        break;
+                    }
+                }
+            }
+            if (basePairFound) {
+                continue;
+            }
+
+            // 基準4辺だけで確定できなかったlaneだけ、既存の救済探索へ渡す。
+            TryEstimateBgState<uint8_t> st;
+            st.transposed = transposed;
+            st.firstSide = firstSide;
+            for (int side = 0; side < 4; side++) {
+                st.sideAvg[side] = sideAvg[side];
+                st.sideMin[side] = sideMins[side][lane];
+                st.sideMax[side] = sideMaxs[side][lane];
+                st.sideValid[side] = sideValid[side];
+                st.sideEvaluated[side] = 1;
+            }
+
+            bool pairFound = false;
+            if (firstSide >= 0) {
+                const int centerX = x + lane;
+                const int baseSx[4] = { centerX - radius, centerX - radius, centerX - radius, centerX + radius };
+                const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
+                const int sideDx[4] = { 1, 1, 0, 0 };
+                const int sideDy[4] = { 0, 0, 1, 1 };
+                const int retryOutX[4] = { 0, 0, -1, 1 };
+                const int retryOutY[4] = { -1, 1, 0, 0 };
+                pairFound = TryEstimateBgFindRetryPair(y, w, h, sideLen, threshold,
+                    baseSx, baseSy, sideDx, sideDy, retryOutX, retryOutY, st);
+            }
+            if (!pairFound) {
+                TryEstimateBgFinalizeSideStats(st);
+            }
+            if (st.sideCount < 2) {
+                bg[lane] = 0.0f;
+                continue;
+            }
+            bg[lane] = st.sideSum / st.sideCount;
+            validMask |= (uint16_t)(1u << lane);
+        }
+        return validMask;
+    }
+
     template<typename F>
     static void RunParallelRange(LogoScanWorkerPool& pool, const int threadN, const int total, F&& fn, const int blockSize = 0) {
         const int workers = std::max(1, std::min(threadN, total));
@@ -6563,17 +6652,17 @@ namespace {
         RGY_FORCEINLINE int collectFrameSampleRange(const std::vector<pixel_t>& frameWork, const float invMaxv,
             const int thresholdRaw, const float transitionThreshold, StatsPassBuffers& statsPass,
             const std::vector<pixel_t>* transposed, const int segmentConsensusIndex,
-            const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
+            const int yBegin, const int yEnd, const int xBegin, const int xEnd, const bool useBgBlock16) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
-                for (int x = xBegin; x < xEnd; x++) {
+                auto collectOne = [&](const int x, const bool bgOk, const float bg) {
                     const int off = x + y * scanw;
                     if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
-                        continue;
+                        return 0;
                     }
                     const float fgRaw = (float)frameWork[off];
                     accumulateTemporalHistSample(off, fgRaw, invMaxv);
@@ -6589,10 +6678,9 @@ namespace {
 
                     AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
 
-                    float bg = 0.0f;
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
-                    if (!TryEstimateBg(frameWork, scanw, scanh, x, y, radius, thresholdRaw, bg, nullptr, transposed)) {
-                        continue;
+                    if (!bgOk) {
+                        return 0;
                     }
                     s.totalCandidates++;
                     const double f = (double)frameWork[off] * invMaxv;
@@ -6600,7 +6688,7 @@ namespace {
 
                     if (IsExtremeContrastSample(f, b)) {
                         s.rejectedExtreme++;
-                        continue;
+                        return 0;
                     }
 
                     s.rawSampleCount++;
@@ -6608,7 +6696,33 @@ namespace {
                     auto& bin = binAccumBuf[binAccumIndex(off, binIdx)];
                     accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
                     AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
-                    localFrameCount++;
+                    return 1;
+                };
+
+                int x = xBegin;
+                for (; x < xEnd;) {
+                    if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                        const bool blockInRange = useBgBlock16
+                            && x + 16 <= xEnd
+                            && x - radius >= 0 && x + 15 + radius < scanw
+                            && y - radius >= 0 && y + radius < scanh;
+                        if (blockInRange) {
+                            float bg[16];
+                            const uint16_t bgValidMask = TryEstimateBgBlock16U8(frameWork, scanw, scanh,
+                                x, y, radius, thresholdRaw, bg, transposed);
+                            for (int lane = 0; lane < 16; lane++) {
+                                localFrameCount += collectOne(x + lane,
+                                    (bgValidMask & (uint16_t)(1u << lane)) != 0, bg[lane]);
+                            }
+                            x += 16;
+                            continue;
+                        }
+                    }
+                    float bg = 0.0f;
+                    const bool bgOk = TryEstimateBg(frameWork, scanw, scanh, x, y,
+                        radius, thresholdRaw, bg, nullptr, transposed);
+                    localFrameCount += collectOne(x, bgOk, bg);
+                    x++;
                 }
             }
             return localFrameCount;
@@ -6646,9 +6760,14 @@ namespace {
             const float transitionThreshold = std::max(0.75f * rawScale, thresholdRaw * 0.125f);
             const int collectYBlock = ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", 16, 1);
             const int collectXSplits = ParseEnvIntDefault("AMT_LOGO_COLLECT_X_SPLITS", 2, 1);
+            const bool enableBgBlock16 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK16", true);
             const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
             const int innerWidth = std::max(0, scanw - 2 * kScanEdgeMargin);
             const int segmentConsensusIndex = getSegmentConsensusIndex();
+            bool useBgBlock16 = false;
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                useBgBlock16 = enableBgBlock16 && HasAVX2AvailableCached() && radius * 2 + 1 <= 65;
+            }
             // 垂直辺を連続ロードできるよう、AVX2利用時だけROIを列優先に並べ替える。
             const std::vector<pixel_t>* transposed = nullptr;
             if constexpr (std::is_same_v<pixel_t, uint8_t>) {
@@ -6664,7 +6783,7 @@ namespace {
             auto processRange = [&](const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
                 const int localFrameCount = collectFrameSampleRange(frameWork, invMaxv, thresholdRaw,
                     transitionThreshold, statsPass, transposed, segmentConsensusIndex,
-                    yBegin, yEnd, xBegin, xEnd);
+                    yBegin, yEnd, xBegin, xEnd, useBgBlock16);
                 frameCount.fetch_add(localFrameCount, std::memory_order_relaxed);
             };
 
@@ -6811,6 +6930,9 @@ namespace {
             const float transitionThreshold = std::max(0.75f * kRawScale, thresholdRaw * 0.125f);
             const int pixelCount = scanw * scanh;
             const int workSize = pixelCount + kTryEstimateBgHorizontalAVX2Pad;
+            const bool enableBgBlock16 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK16", true);
+            const bool useBgBlock16 = enableBgBlock16
+                && HasAVX2AvailableCached() && radius * 2 + 1 <= 65;
             const bool useTranspose = HasAVX2AvailableCached();
 
             statsPass.batchFrameWork8.resize(batchCount);
@@ -6897,7 +7019,7 @@ namespace {
                             statsPass.batchFrameWork8[bi], kInvMaxv, thresholdRaw, transitionThreshold,
                             statsPass, transposed, frames[bi].segmentConsensusIndex,
                             localY0 + kScanEdgeMargin, localY1 + kScanEdgeMargin,
-                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin);
+                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin, useBgBlock16);
                     }
                 }
             }, 1);
