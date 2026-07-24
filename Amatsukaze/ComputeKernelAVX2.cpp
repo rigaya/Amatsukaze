@@ -155,31 +155,34 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
 
 namespace {
 
-RGY_FORCEINLINE void CalcBgSideStatsBlock16U8_AVX2Impl(const uint8_t* ptr, const int step, const int len,
-    uint16_t* sums, uint8_t* minvOut, uint8_t* maxvOut) {
-    __m256i sums16 = _mm256_setzero_si256();
-    __m128i minv = _mm_set1_epi8((char)0xff);
-    __m128i maxv = _mm_setzero_si128();
-    for (int i = 0; i < len; i++, ptr += step) {
-        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr));
-        sums16 = _mm256_add_epi16(sums16, _mm256_cvtepu8_epi16(v));
-        minv = _mm_min_epu8(minv, v);
-        maxv = _mm_max_epu8(maxv, v);
-    }
-    _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums), sums16);
-    _mm_storeu_si128(reinterpret_cast<__m128i*>(minvOut), minv);
-    _mm_storeu_si128(reinterpret_cast<__m128i*>(maxvOut), maxv);
+ RGY_FORCEINLINE void CalcBgSideStatsBlock32U8_AVX2Impl(const uint8_t* ptr, const int step, const int len, uint16_t* sums, uint8_t* minvOut, uint8_t* maxvOut) {
+     const __m256i zero = _mm256_setzero_si256();
+     __m256i sumsLaneLo = _mm256_setzero_si256();
+     __m256i sumsLaneHi = _mm256_setzero_si256();
+     __m256i minv = _mm256_set1_epi8((char)0xff);
+     __m256i maxv = _mm256_setzero_si256();
+     for (int i = 0; i < len; i++, ptr += step) {
+         const __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr));
+         sumsLaneLo = _mm256_add_epi16(sumsLaneLo, _mm256_unpacklo_epi8(v, zero));
+         sumsLaneHi = _mm256_add_epi16(sumsLaneHi, _mm256_unpackhi_epi8(v, zero));
+         minv = _mm256_min_epu8(minv, v);
+         maxv = _mm256_max_epu8(maxv, v);
+     }
+     // unpackは128bit laneごとに動作するため、最後に画素順へ並べ直す。
+     const __m256i sums0To15 = _mm256_permute2x128_si256(sumsLaneLo, sumsLaneHi, 0x20);
+     const __m256i sums16To31 = _mm256_permute2x128_si256(sumsLaneLo, sumsLaneHi, 0x31);
+     _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums), sums0To15);
+     _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums + 16), sums16To31);
+     _mm256_storeu_si256(reinterpret_cast<__m256i*>(minvOut), minv);
 }
 
-}
-
-void CalcBgSideStatsBlock16U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
+void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
-    constexpr int lanes = 16;
+    constexpr int lanes = 32;
     const int len = radius * 2 + 1;
     assert(radius >= 0 && len <= 65);
 
-    // laneを隣接する16画素に割り当て、各辺の同じ位置を連続ロードする。
+    // laneを隣接する32画素に割り当て、各辺の同じ位置を256bit幅で連続ロードする。
     const uint8_t* sidePtr[4] = {
         src + (y - radius) * stride + x - radius,
         src + (y + radius) * stride + x - radius,
@@ -188,7 +191,7 @@ void CalcBgSideStatsBlock16U8_AVX2(const uint8_t* src, int stride, int x, int y,
     };
     const int sideStep[4] = { 1, 1, stride, stride };
     for (int side = 0; side < 4; side++) {
-        CalcBgSideStatsBlock16U8_AVX2Impl(sidePtr[side], sideStep[side], len,
+        CalcBgSideStatsBlock32U8_AVX2Impl(sidePtr[side], sideStep[side], len,
             sideSums + side * lanes, sideMins + side * lanes, sideMaxs + side * lanes);
     }
 }

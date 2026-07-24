@@ -2696,16 +2696,16 @@ namespace {
         return true;
     }
 
-    // 隣接する16画素の基準4辺を一括評価し、通常版と同じ順序規則で背景値を確定する。
+    // 隣接する32画素の基準4辺を一括評価し、通常版と同じ順序規則で背景値を確定する。
     // 基準辺だけで確定しない画素の救済探索は、結果一致を優先して既存経路へ戻す。
-    static uint16_t TryEstimateBgBlock16U8(const std::vector<uint8_t>& y, const int w, const int h,
-        const int x, const int y0, const int radius, const int threshold, float bg[16],
+    static uint32_t TryEstimateBgBlock32U8(const std::vector<uint8_t>& y, const int w, const int h,
+        const int x, const int y0, const int radius, const int threshold, float bg[32],
         const std::vector<uint8_t>* transposed) {
-        constexpr int lanes = 16;
+        constexpr int lanes = 32;
         alignas(32) uint16_t sideSums[4][lanes];
-        alignas(16) uint8_t sideMins[4][lanes];
-        alignas(16) uint8_t sideMaxs[4][lanes];
-        CalcBgSideStatsBlock16U8_AVX2(y.data(), w, x, y0, radius,
+        alignas(32) uint8_t sideMins[4][lanes];
+        alignas(32) uint8_t sideMaxs[4][lanes];
+        CalcBgSideStatsBlock32U8_AVX2(y.data(), w, x, y0, radius,
             &sideSums[0][0], &sideMins[0][0], &sideMaxs[0][0]);
 
         const int sideLen = radius * 2 + 1;
@@ -2715,7 +2715,7 @@ namespace {
             { 0, 1, 3 },
             { 0, 1, 2 },
         };
-        uint16_t validMask = 0;
+        uint32_t validMask = 0;
         for (int lane = 0; lane < lanes; lane++) {
             float sideAvg[4];
             uint8_t sideValid[4];
@@ -2738,7 +2738,7 @@ namespace {
                     if (sideValid[side]
                         && std::abs(sideAvg[side] - sideAvg[firstSide]) <= threshold) {
                         bg[lane] = (sideAvg[firstSide] + sideAvg[side]) / 2;
-                        validMask |= (uint16_t)(1u << lane);
+                        validMask |= 1u << lane;
                         basePairFound = true;
                         break;
                     }
@@ -2780,7 +2780,7 @@ namespace {
                 continue;
             }
             bg[lane] = st.sideSum / st.sideCount;
-            validMask |= (uint16_t)(1u << lane);
+            validMask |= 1u << lane;
         }
         return validMask;
     }
@@ -6652,7 +6652,7 @@ namespace {
         RGY_FORCEINLINE int collectFrameSampleRange(const std::vector<pixel_t>& frameWork, const float invMaxv,
             const int thresholdRaw, const float transitionThreshold, StatsPassBuffers& statsPass,
             const std::vector<pixel_t>* transposed, const int segmentConsensusIndex,
-            const int yBegin, const int yEnd, const int xBegin, const int xEnd, const bool useBgBlock16) {
+            const int yBegin, const int yEnd, const int xBegin, const int xEnd, const bool useBgBlock32) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
@@ -6702,19 +6702,19 @@ namespace {
                 int x = xBegin;
                 for (; x < xEnd;) {
                     if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                        const bool blockInRange = useBgBlock16
-                            && x + 16 <= xEnd
-                            && x - radius >= 0 && x + 15 + radius < scanw
+                        const bool blockInRange = useBgBlock32
+                            && x + 32 <= xEnd
+                            && x - radius >= 0 && x + 31 + radius < scanw
                             && y - radius >= 0 && y + radius < scanh;
                         if (blockInRange) {
-                            float bg[16];
-                            const uint16_t bgValidMask = TryEstimateBgBlock16U8(frameWork, scanw, scanh,
+                            float bg[32];
+                            const uint32_t bgValidMask = TryEstimateBgBlock32U8(frameWork, scanw, scanh,
                                 x, y, radius, thresholdRaw, bg, transposed);
-                            for (int lane = 0; lane < 16; lane++) {
+                            for (int lane = 0; lane < 32; lane++) {
                                 localFrameCount += collectOne(x + lane,
-                                    (bgValidMask & (uint16_t)(1u << lane)) != 0, bg[lane]);
+                                    (bgValidMask & (1u << lane)) != 0, bg[lane]);
                             }
-                            x += 16;
+                            x += 32;
                             continue;
                         }
                     }
@@ -6760,13 +6760,13 @@ namespace {
             const float transitionThreshold = std::max(0.75f * rawScale, thresholdRaw * 0.125f);
             const int collectYBlock = ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", 16, 1);
             const int collectXSplits = ParseEnvIntDefault("AMT_LOGO_COLLECT_X_SPLITS", 2, 1);
-            const bool enableBgBlock16 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK16", true);
+            const bool enableBgBlock32 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK32", true);
             const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
             const int innerWidth = std::max(0, scanw - 2 * kScanEdgeMargin);
             const int segmentConsensusIndex = getSegmentConsensusIndex();
-            bool useBgBlock16 = false;
+            bool useBgBlock32 = false;
             if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                useBgBlock16 = enableBgBlock16 && HasAVX2AvailableCached() && radius * 2 + 1 <= 65;
+                useBgBlock32 = enableBgBlock32 && HasAVX2AvailableCached() && radius * 2 + 1 <= 65;
             }
             // 垂直辺を連続ロードできるよう、AVX2利用時だけROIを列優先に並べ替える。
             const std::vector<pixel_t>* transposed = nullptr;
@@ -6783,7 +6783,7 @@ namespace {
             auto processRange = [&](const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
                 const int localFrameCount = collectFrameSampleRange(frameWork, invMaxv, thresholdRaw,
                     transitionThreshold, statsPass, transposed, segmentConsensusIndex,
-                    yBegin, yEnd, xBegin, xEnd, useBgBlock16);
+                    yBegin, yEnd, xBegin, xEnd, useBgBlock32);
                 frameCount.fetch_add(localFrameCount, std::memory_order_relaxed);
             };
 
@@ -6930,8 +6930,8 @@ namespace {
             const float transitionThreshold = std::max(0.75f * kRawScale, thresholdRaw * 0.125f);
             const int pixelCount = scanw * scanh;
             const int workSize = pixelCount + kTryEstimateBgHorizontalAVX2Pad;
-            const bool enableBgBlock16 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK16", true);
-            const bool useBgBlock16 = enableBgBlock16
+            const bool enableBgBlock32 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK32", true);
+            const bool useBgBlock32 = enableBgBlock32
                 && HasAVX2AvailableCached() && radius * 2 + 1 <= 65;
             const bool useTranspose = HasAVX2AvailableCached();
 
@@ -7019,7 +7019,7 @@ namespace {
                             statsPass.batchFrameWork8[bi], kInvMaxv, thresholdRaw, transitionThreshold,
                             statsPass, transposed, frames[bi].segmentConsensusIndex,
                             localY0 + kScanEdgeMargin, localY1 + kScanEdgeMargin,
-                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin, useBgBlock16);
+                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin, useBgBlock32);
                     }
                 }
             }, 1);
