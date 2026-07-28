@@ -41,8 +41,6 @@ void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const
     }
 }
 
-namespace {
-
 constexpr int kTryEstimateBgHorizontalLoadBytes = 64;
 
 static const uint8_t TryEstimateBgValidMaskFFThen00[kTryEstimateBgHorizontalLoadBytes * 2] = {
@@ -110,8 +108,6 @@ RGY_FORCEINLINE uint8_t BilateralFilter5x5U8RangeLUTScalarPixel(const uint8_t* s
     return (uint8_t)std::clamp((int)(outv + 0.5f), 0, 255);
 }
 
-}
-
 bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut) {
     if (len == 65) {
         const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr + 0));
@@ -152,8 +148,6 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
     maxvOut = maxv;
     return (int)maxv - (int)minv <= threshold;
 }
-
-namespace {
 
  RGY_FORCEINLINE void CalcBgSideStatsBlock32U8_AVX2Impl(const uint8_t* ptr, const int step, const int len, uint16_t* sums, uint8_t* minvOut, uint8_t* maxvOut) {
      const __m256i zero = _mm256_setzero_si256();
