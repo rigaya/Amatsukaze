@@ -1010,16 +1010,21 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
         if (videoEs.pid != this->videoEs.pid) {
             // 映像ストリームが変わる場合
             waitingNewVideo = true;
-            table = nextHandlerTable;
             if (this->videoEs.pid != -1) {
                 ctx.info(_T("PMT 映像ストリームの変更を検知"));
             }
+        }
+        if (waitingNewVideo) {
+            table = nextHandlerTable;
         }
 
         this->videoEs = videoEs;
         this->audioEs = audioEs;
         this->captionEs = captionEs;
 
+        // PMT更新で削除・用途変更されたPIDのハンドラを残さないよう、対象テーブルを再構築する
+        table->clear();
+        table->add(pmtPid, &PsiParserPMT);
         table->add(videoEs.pid, &videoDelegator);
         ensureAudioDelegators(int(audioEs.size()));
         for (int i = 0; i < int(audioEs.size()); i++) {

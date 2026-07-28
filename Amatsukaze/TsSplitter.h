@@ -245,6 +245,7 @@ protected:
     bool enableVideo;
     bool enableAudio;
     bool enableCaption;
+    bool warnedInvalidAudioIndex;
     int preferedServiceId;
     int selectedServiceId;
 

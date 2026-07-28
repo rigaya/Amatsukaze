@@ -315,6 +315,7 @@ TsSplitter::TsSplitter(AMTContext& ctx, bool enableVideo, bool enableAudio, bool
     , enableVideo(enableVideo)
     , enableAudio(enableAudio)
     , enableCaption(enableCaption)
+    , warnedInvalidAudioIndex(false)
     , numTotalPackets(0)
     , numScramblePackets(0) {
     tsPacketParser.setHandler(&tsPacketHandler);
@@ -327,6 +328,7 @@ void TsSplitter::reset() {
     initPhase = PMT_WAITING;
     preferedServiceId = -1;
     selectedServiceId = -1;
+    warnedInvalidAudioIndex = false;
     tsPacketParser.setEnableBuffering(true);
 }
 
@@ -497,7 +499,14 @@ bool TsSplitter::checkScramble(TsPacket packet) {
 
 /* virtual */ void TsSplitter::onAudioPacket(int64_t clock, TsPacket packet, int audioIdx) {
     if (enableAudio && checkScramble(packet)) {
-        ASSERT(audioIdx < (int)audioParsers.size());
+        if (audioIdx < 0 || audioIdx >= (int)audioParsers.size() || audioParsers[audioIdx] == nullptr) {
+            if (!warnedInvalidAudioIndex) {
+                ctx.warnF(_T("音声PIDハンドラのインデックスが範囲外です。該当パケットを無視します: index=%d parsers=%d"),
+                    audioIdx, (int)audioParsers.size());
+                warnedInvalidAudioIndex = true;
+            }
+            return;
+        }
         audioParsers[audioIdx]->onTsPacket(clock, packet);
     }
 }
