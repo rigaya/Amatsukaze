@@ -129,10 +129,11 @@ bool HEVCVideoParser::inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>&
         vfinfo.PTS = m_parserCtx->pts != AV_NOPTS_VALUE ? m_parserCtx->pts : PTS;
         vfinfo.isGopStart = m_parserCtx->pict_type == AV_PICTURE_TYPE_I;
         vfinfo.format.format = VS_H265;
-        vfinfo.format.width = m_codecCtxParser->width;
-        vfinfo.format.height = m_codecCtxParser->height;
-        vfinfo.format.displayWidth = m_codecCtxParser->coded_width ? m_codecCtxParser->coded_width : vfinfo.format.width;
-        vfinfo.format.displayHeight = m_codecCtxParser->coded_height ? m_codecCtxParser->coded_height : vfinfo.format.height;
+        // SPSから解像度を取得できる一般HEVCでは解析値を優先し、取得できないBS4Kでは従来の初期値を使用する
+        vfinfo.format.width = m_parserCtx->width > 0 ? m_parserCtx->width : m_codecCtxParser->width;
+        vfinfo.format.height = m_parserCtx->height > 0 ? m_parserCtx->height : m_codecCtxParser->height;
+        vfinfo.format.displayWidth = vfinfo.format.width;
+        vfinfo.format.displayHeight = vfinfo.format.height;
         if (m_codecCtxParser->sample_aspect_ratio.num > 0 && m_codecCtxParser->sample_aspect_ratio.den > 0) {
             vfinfo.format.sarWidth = m_codecCtxParser->sample_aspect_ratio.num;
             vfinfo.format.sarHeight = m_codecCtxParser->sample_aspect_ratio.den;
