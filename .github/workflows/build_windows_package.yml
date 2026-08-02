@@ -23,7 +23,8 @@ jobs:
       X264_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260720-140556/x264_3223_x64.zip
       X265_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260720-140556/x265_4.2%2B37_x64.zip
       SVT_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260720-140556/SvtAv1EncApp_4.2.0-15_x64_clang.zip
-      BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.5.2/AmatsukazeBasePkg_20260223.7z
+      NNEDI3_URL: https://github.com/rigaya/NNEDI3/releases/download/0.00/nnedi3_0.00_x64.zip
+      BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.8.5/AmatsukazeBasePkg_20260802.7z
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,6 +86,7 @@ jobs:
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x264.zip "%X264_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x265.zip "%X265_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
           echo --- deps contents (after Download) ---
           tree /f deps
 
@@ -121,6 +123,8 @@ jobs:
           7z x -y -o"%DEPS%\x265" "%DEPS%\x265.zip"
           if not exist deps\\svt mkdir deps\\svt
           7z x -y -o"%DEPS%\svt" "%DEPS%\svt.zip"
+          if not exist deps\\nnedi3 mkdir deps\\nnedi3
+          7z x -y -o"%DEPS%\nnedi3" "%DEPS%\nnedi3.zip"
           echo --- deps contents (after Extract) ---
           tree /f deps
 
@@ -197,6 +201,9 @@ jobs:
           ) else (
             robocopy deps\\avscuda package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
           )
+
+          rem avisynth plugins64
+          robocopy deps\\nnedi3 package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
 
           rem lsmash tools (muxer_x64.exe -> muxer.exe, timelineeditor_x64.exe -> timelineeditor.exe)
           for /r deps\\lsmash %%f in (muxer_x64.exe) do copy /y "%%f" package\\exe_files\\muxer.exe
