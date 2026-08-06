@@ -75,7 +75,32 @@
                         <span class="trim-editpoints-total-time">@GetActiveTotalTime()</span>
                     </div>
                     <button class="trim-btn trim-btn-sm" @onclick="ResetEditPoints"
-                            disabled="@(!_hasChanges)">リセット</button>
+                            disabled="@(!_editPointsChanged)">リセット</button>
+                </div>
+                <div class="trim-divisionpoints @(_mobileEpOpen ? "mob-open" : "")">
+                    <div class="trim-divisionpoints-header">分割点</div>
+                    <div class="trim-divisionpoints-list">
+                        @if (_divisionPoints.Count == 0)
+                        {
+                            <div class="trim-divisionpoint-empty">なし</div>
+                        }
+                        @for (int i = 0; i < _divisionPoints.Count; i++)
+                        {
+                            var idx = i;
+                            var point = _divisionPoints[idx];
+                            <div class="trim-divisionpoint @(idx == _selectedDivisionPoint ? "selected" : "")"
+                                 @onclick="(() => OnDivisionPointClick(idx))">
+                                <span class="trim-ep-index">@(idx + 1).</span>
+                                <span class="trim-ep-frame">@point</span>
+                            </div>
+                        }
+                    </div>
+                    <div class="trim-divisionpoints-actions">
+                        <button class="trim-btn trim-btn-sm" @onclick="AddDivisionPoint"
+                                disabled="@(_currentFrame <= 0 || _divisionPoints.Contains(_currentFrame))">追加</button>
+                        <button class="trim-btn trim-btn-sm" @onclick="DeleteDivisionPoint"
+                                disabled="@(_selectedDivisionPoint < 0)">削除</button>
+                    </div>
                 </div>
             </div>
 
@@ -282,6 +307,12 @@
                             <div class="trim-seekbar-marker"
                                  style="left: @(GetFramePercent(epFrame))%"></div>
                         }
+                        @* 分割点マーカー（下側の△） *@
+                        @foreach (var point in _divisionPoints)
+                        {
+                            <div class="trim-seekbar-division-marker"
+                                 style="left: @(GetFramePercent(point))%"></div>
+                        }
                     </div>
                 </div>
             </div>
@@ -402,7 +433,9 @@
     private string? _errorMessage;
     private string? _statusMessage;
     private bool _isError;
-    private bool _hasChanges;
+    private bool _editPointsChanged;
+    private bool _divisionPointsChanged;
+    private bool _hasChanges => _editPointsChanged || _divisionPointsChanged;
 
     // セッション切れ検出・再接続用
     private bool _sessionExpired;
@@ -439,6 +472,10 @@
     private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
     private bool _mobileEpOpen = true;
+
+    // 分割点リスト
+    private List<int> _divisionPoints = new List<int>();
+    private int _selectedDivisionPoint = -1;
 
     // プロファイル選択・再投入
     private List<string> _profiles = new List<string>();
@@ -583,6 +620,21 @@
             var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).First();
             _selectedEditPoint = _editPoints.IndexOf(nearest);
             SetCurrentFrame(nearest.Frame);
+        });
+    }
+
+    // △マーカー領域クリック: 最寄りの分割点にスナップ
+    [JSInvokable]
+    public void OnSeekBarDivisionMarkerClick(double ratio)
+    {
+        if (_session == null || _session.NumFrames <= 1 || _divisionPoints.Count == 0) return;
+        ratio = Math.Clamp(ratio, 0, 1);
+        var targetFrame = (int)(ratio * (_session.NumFrames - 1));
+        InvokeAsync(() =>
+        {
+            var nearest = _divisionPoints.OrderBy(point => Math.Abs(point - targetFrame)).First();
+            _selectedDivisionPoint = _divisionPoints.IndexOf(nearest);
+            SetCurrentFrame(nearest);
         });
     }
 
@@ -783,6 +835,14 @@
         RebuildEditPoints(_session.Trims, _session.NumFrames);
         // 初期状態を保存（リセット用）
         _initialEditPoints = _editPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
+        _divisionPoints = (_session.DivisionPoints ?? new List<int>())
+            .Where(point => point > 0 && point < _session.NumFrames)
+            .Distinct()
+            .OrderBy(point => point)
+            .ToList();
+        _selectedDivisionPoint = -1;
+        _editPointsChanged = false;
+        _divisionPointsChanged = false;
 
         _loading = false;
         _loadingFrame = 0;
@@ -886,8 +946,11 @@
         // セッション情報を更新、編集点はそのまま維持
         var preservedEditPoints = _editPoints;
         var preservedSelected = _selectedEditPoint;
+        var preservedDivisionPoints = _divisionPoints;
+        var preservedSelectedDivisionPoint = _selectedDivisionPoint;
         var preservedFrame = _currentFrame;
-        var preservedHasChanges = _hasChanges;
+        var preservedEditPointsChanged = _editPointsChanged;
+        var preservedDivisionPointsChanged = _divisionPointsChanged;
 
         _session = result.Data;
         _sessionId = _session.SessionId;
@@ -902,9 +965,21 @@
                 .Where(e => e.Frame < _session.NumFrames)
                 .ToList();
             NormalizeEditPoints(selectedFrame);
+            var selectedDivisionFrame = preservedSelectedDivisionPoint >= 0 && preservedSelectedDivisionPoint < preservedDivisionPoints.Count
+                ? preservedDivisionPoints[preservedSelectedDivisionPoint]
+                : (int?)null;
+            _divisionPoints = preservedDivisionPoints
+                .Where(point => point > 0 && point < _session.NumFrames)
+                .Distinct()
+                .OrderBy(point => point)
+                .ToList();
+            _selectedDivisionPoint = selectedDivisionFrame.HasValue
+                ? _divisionPoints.IndexOf(selectedDivisionFrame.Value)
+                : -1;
             _currentFrame = Math.Clamp(preservedFrame, 0, _session.NumFrames - 1);
         }
-        _hasChanges = preservedHasChanges;
+        _editPointsChanged = preservedEditPointsChanged;
+        _divisionPointsChanged = preservedDivisionPointsChanged;
 
         _loadingFrame = _currentFrame;
         _isFrameLoading = false;
@@ -1063,7 +1138,7 @@
         _editPoints = _initialEditPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
         NormalizeEditPoints();
         _selectedEditPoint = -1;
-        _hasChanges = false;
+        _editPointsChanged = false;
         _statusMessage = "編集点をリセットしました";
         _isError = false;
         StateHasChanged();
@@ -1082,7 +1157,7 @@
         }
         _editPoints.Add(new EditPoint { Frame = _currentFrame });
         NormalizeEditPoints(_currentFrame);
-        _hasChanges = true;
+        _editPointsChanged = true;
         StateHasChanged();
     }
 
@@ -1098,7 +1173,45 @@
         {
             _selectedEditPoint = _editPoints.Count - 1;
         }
-        _hasChanges = true;
+        _editPointsChanged = true;
+        StateHasChanged();
+    }
+
+    private void OnDivisionPointClick(int index)
+    {
+        _selectedDivisionPoint = index;
+        if (index >= 0 && index < _divisionPoints.Count)
+        {
+            SetCurrentFrame(_divisionPoints[index]);
+        }
+    }
+
+    private void AddDivisionPoint()
+    {
+        if (_session == null || _currentFrame <= 0 || _currentFrame >= _session.NumFrames ||
+            _divisionPoints.Contains(_currentFrame))
+        {
+            return;
+        }
+        _divisionPoints.Add(_currentFrame);
+        _divisionPoints.Sort();
+        _selectedDivisionPoint = _divisionPoints.IndexOf(_currentFrame);
+        _divisionPointsChanged = true;
+        StateHasChanged();
+    }
+
+    private void DeleteDivisionPoint()
+    {
+        if (_selectedDivisionPoint < 0 || _selectedDivisionPoint >= _divisionPoints.Count)
+        {
+            return;
+        }
+        _divisionPoints.RemoveAt(_selectedDivisionPoint);
+        if (_selectedDivisionPoint >= _divisionPoints.Count)
+        {
+            _selectedDivisionPoint = _divisionPoints.Count - 1;
+        }
+        _divisionPointsChanged = true;
         StateHasChanged();
     }
 
@@ -1511,7 +1624,7 @@
             _editPoints.Add(new EditPoint { Frame = _currentFrame });
         }
         NormalizeEditPoints(_currentFrame);
-        _hasChanges = true;
+        _editPointsChanged = true;
         StateHasChanged();
     }
 
@@ -1528,7 +1641,7 @@
         if (_selectedEditPoint < 0 || _selectedEditPoint >= _editPoints.Count) return;
         _editPoints[_selectedEditPoint].Frame = _currentFrame;
         NormalizeEditPoints(_currentFrame);
-        _hasChanges = true;
+        _editPointsChanged = true;
         StateHasChanged();
     }
 
@@ -1545,12 +1658,18 @@
             return;
         }
 
-        var result = await Api.SaveTrimsAsync(_sessionId, new TrimSaveRequest { Trims = trims });
+        var result = await Api.SaveTrimsAsync(_sessionId, new TrimSaveRequest
+        {
+            Trims = trims,
+            DivisionPoints = new List<int>(_divisionPoints)
+        });
         if (result.Ok)
         {
             _statusMessage = "保存しました";
             _isError = false;
-            _hasChanges = false;
+            _initialEditPoints = _editPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
+            _editPointsChanged = false;
+            _divisionPointsChanged = false;
         }
         else
         {

@@ -183,6 +183,56 @@
     color: #ddd;
 }
 
+/* 左下: 分割点リスト */
+.trim-divisionpoints {
+    flex: 0 0 auto;
+    border-top: 1px solid #444;
+}
+
+.trim-divisionpoints-header {
+    padding: 5px 10px;
+    font-weight: bold;
+    font-size: 0.76rem;
+    border-bottom: 1px solid #444;
+}
+
+.trim-divisionpoints-list {
+    max-height: 112px;
+    overflow-y: auto;
+}
+
+.trim-divisionpoint,
+.trim-divisionpoint-empty {
+    padding: 3px 10px;
+    font-size: 0.74rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid #333;
+}
+
+.trim-divisionpoint {
+    cursor: pointer;
+}
+
+.trim-divisionpoint:hover {
+    background: #333;
+}
+
+.trim-divisionpoint.selected {
+    background: #2060a0;
+}
+
+.trim-divisionpoint-empty {
+    color: #888;
+}
+
+.trim-divisionpoints-actions {
+    display: flex;
+    gap: 6px;
+    padding: 5px 8px;
+}
+
 /* 右: プレビュー */
 .trim-preview-area {
     flex: 1;
@@ -512,7 +562,7 @@
 .trim-seekbar-container {
     flex-shrink: 0;
     min-width: 0;
-    padding: 16px 0 4px 0; /* 上にマーカー領域分の余白 */
+    padding: 16px 0; /* 上下にマーカー領域分の余白 */
 }
 
 .trim-seekbar {
@@ -587,6 +637,45 @@
 
 .trim-seekbar-marker:hover {
     border-top-color: #ffe060;
+}
+
+/* 分割点: バー下側の△と桃色の縦線 */
+.trim-seekbar-division-marker {
+    position: absolute;
+    top: 24px;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 8px solid #f06da8;
+    transform: translateX(-6px);
+    z-index: 3;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.trim-seekbar-division-marker::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: -10px;
+    width: 20px;
+    height: 20px;
+}
+
+.trim-seekbar-division-marker::after {
+    content: "";
+    position: absolute;
+    top: -24px;
+    left: -1px;
+    width: 2px;
+    height: 24px;
+    background: #f06da8;
+    pointer-events: none;
+}
+
+.trim-seekbar-division-marker:hover {
+    border-bottom-color: #ff9ac8;
 }
 
 /* 編集点トグルボタン アクティブ状態 */
@@ -834,6 +923,29 @@
         border-top: 1px solid #bdd4e9;
     }
 
+    .trim-divisionpoints {
+        border-top-color: #bdd4e9;
+    }
+
+    .trim-divisionpoints-header,
+    .trim-divisionpoint,
+    .trim-divisionpoint-empty {
+        border-bottom-color: #d6e6f3;
+    }
+
+    .trim-divisionpoints-header {
+        color: #1f4f76;
+    }
+
+    .trim-divisionpoint:hover {
+        background: #e4f2ff;
+    }
+
+    .trim-divisionpoint.selected {
+        background: #aad9fb;
+        color: #133f64;
+    }
+
     .trim-waveform-container {
         background: #dce8f4;
     }
@@ -1026,6 +1138,14 @@
 
     .trim-editpoints-actions.mob-open {
         display: flex;
+    }
+
+    .trim-divisionpoints {
+        display: none;
+    }
+
+    .trim-divisionpoints.mob-open {
+        display: block;
     }
 
     /* 波形の高さを縮小 */

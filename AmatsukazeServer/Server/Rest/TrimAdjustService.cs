@@ -492,6 +492,7 @@ namespace Amatsukaze.Server.Rest
 
                 // Trim AVSを読み込み
                 var trims = LoadTrims(item.SrcPath, tempDir);
+                var divisionPoints = LoadDivisionPoints(item.SrcPath, session.NumFrames);
 
                 response = new TrimAdjustSessionResponse
                 {
@@ -500,12 +501,14 @@ namespace Amatsukaze.Server.Rest
                     FrameWidth = session.FrameWidth,
                     FrameHeight = session.FrameHeight,
                     Trims = trims,
+                    DivisionPoints = divisionPoints,
                     FramePts = framePts
                 };
                 return true;
             }
             catch (Exception ex)
             {
+                RemoveSession(sessionId);
                 Util.AddLog($"[TrimAdjust] セッション作成失敗: queueItemId={request.QueueItemId}, srcPath={item?.SrcPath}, tempDir={tempDir}, dat={datFilePath}", ex);
                 error = $"セッション作成に失敗しました: {ex.GetType().Name}: {ex.Message}";
                 return false;
@@ -602,7 +605,7 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
-        // Trimを保存: {srcPath}.trim.avs に書き出し
+        // Trimと分割点を保存する
         public bool TrySaveTrims(string sessionId, TrimSaveRequest request, out string error)
         {
             error = null;
@@ -629,6 +632,20 @@ namespace Amatsukaze.Server.Rest
                 }
             }
 
+            var divisionPoints = new SortedSet<int>();
+            if (request.DivisionPoints != null)
+            {
+                foreach (var point in request.DivisionPoints)
+                {
+                    if (point <= 0 || point >= session.NumFrames)
+                    {
+                        error = $"分割点が範囲外です: {point}";
+                        return false;
+                    }
+                    divisionPoints.Add(point);
+                }
+            }
+
             try
             {
                 var avsPath = session.SrcPath + ".trim.avs";
@@ -640,11 +657,13 @@ namespace Amatsukaze.Server.Rest
                 }
                 lines.Add(string.Join(" ++ ", trimParts));
                 File.WriteAllLines(avsPath, lines);
+
+                SaveDivisionPoints(session.SrcPath, divisionPoints);
                 return true;
             }
             catch (Exception ex)
             {
-                error = $"Trim保存に失敗しました: {ex.Message}";
+                error = $"カット情報の保存に失敗しました: {ex.Message}";
                 return false;
             }
         }
@@ -784,6 +803,58 @@ namespace Amatsukaze.Server.Rest
             }
 
             return trims;
+        }
+
+        // 分割点を読み込み: 1行につき1フレーム番号
+        private static List<int> LoadDivisionPoints(string srcPath, int numFrames)
+        {
+            var points = new SortedSet<int>();
+            var divPath = srcPath + ".div.txt";
+            if (!File.Exists(divPath))
+            {
+                return new List<int>();
+            }
+
+            var lineNumber = 0;
+            foreach (var rawLine in File.ReadLines(divPath))
+            {
+                lineNumber++;
+                var line = rawLine.Trim();
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+                if (!int.TryParse(line, out var point))
+                {
+                    throw new FormatException($"分割点ファイルの{lineNumber}行目が整数ではありません: {line}");
+                }
+                if (point <= 0 || point >= numFrames)
+                {
+                    throw new FormatException($"分割点ファイルの{lineNumber}行目が範囲外です: {point}");
+                }
+                points.Add(point);
+            }
+            return new List<int>(points);
+        }
+
+        private static void SaveDivisionPoints(string srcPath, SortedSet<int> points)
+        {
+            var divPath = srcPath + ".div.txt";
+            if (points.Count == 0)
+            {
+                if (File.Exists(divPath))
+                {
+                    File.Delete(divPath);
+                }
+                return;
+            }
+
+            var lines = new List<string>();
+            foreach (var point in points)
+            {
+                lines.Add(point.ToString());
+            }
+            File.WriteAllLines(divPath, lines);
         }
 
         public void Dispose()

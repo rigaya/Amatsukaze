@@ -339,23 +339,45 @@
                 }
                 return (bestDist <= markerMaxDist) ? best : null;
             }
+            // バー下側で最寄りの△分割点マーカーを探す
+            function findNearestDivisionMarker(e) {
+                var rect = seekbar.getBoundingClientRect();
+                if (e.clientY <= rect.bottom) return null;
+                var markers = seekbar.querySelectorAll('.trim-seekbar-division-marker');
+                if (!markers.length) return null;
+                var best = null, bestDist = Infinity;
+                for (var i = 0; i < markers.length; i++) {
+                    var mr = markers[i].getBoundingClientRect();
+                    var cx = mr.left + mr.width / 2;
+                    var dist = Math.abs(e.clientX - cx);
+                    if (dist < bestDist) { bestDist = dist; best = markers[i]; }
+                }
+                return (bestDist <= markerMaxDist) ? best : null;
+            }
             function setHighlight(marker) {
                 if (lastHighlighted === marker) return;
-                if (lastHighlighted) lastHighlighted.style.borderTopColor = '';
+                if (lastHighlighted) {
+                    lastHighlighted.style.borderTopColor = '';
+                    lastHighlighted.style.borderBottomColor = '';
+                }
                 lastHighlighted = marker;
-                if (marker) marker.style.borderTopColor = '#ffe060';
+                if (marker && marker.classList.contains('trim-seekbar-division-marker')) {
+                    marker.style.borderBottomColor = '#ff9ac8';
+                } else if (marker) {
+                    marker.style.borderTopColor = '#ffe060';
+                }
             }
             // ホバー: マーカー領域でポインタ形状＋▽ハイライト
             container.addEventListener('mousemove', function (e) {
                 if (dragging) return; // ドラッグ中はホバー処理しない
                 var rect = seekbar.getBoundingClientRect();
-                if (e.clientY >= rect.top) {
+                if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
                     // バー本体上: ホバー解除（カーソルはCSS側でpointer）
                     setHighlight(null);
                     container.style.cursor = '';
                     return;
                 }
-                var marker = findNearestMarker(e);
+                var marker = e.clientY < rect.top ? findNearestMarker(e) : findNearestDivisionMarker(e);
                 setHighlight(marker);
                 container.style.cursor = marker ? 'pointer' : '';
             });
@@ -370,6 +392,9 @@
                 if (marker) {
                     // ▽マーカー近傍: 最寄り編集点にスナップ（ドラッグ開始しない）
                     dotNetRef.invokeMethodAsync('OnSeekBarMarkerClick', r);
+                } else if ((marker = findNearestDivisionMarker(e))) {
+                    // △マーカー近傍: 最寄り分割点にスナップ
+                    dotNetRef.invokeMethodAsync('OnSeekBarDivisionMarkerClick', r);
                 } else {
                     // シークバー本体: ダイレクト移動＋ドラッグ開始
                     dragging = true;
@@ -395,7 +420,15 @@
             }
             function findNearestMarkerTouch(e) {
                 if (!e.touches || !e.touches.length) return null;
-                var markers = seekbar.querySelectorAll('.trim-seekbar-marker');
+                var rect = seekbar.getBoundingClientRect();
+                var touchY = e.touches[0].clientY;
+                var selector = touchY < rect.top
+                    ? '.trim-seekbar-marker'
+                    : touchY > rect.bottom
+                        ? '.trim-seekbar-division-marker'
+                        : null;
+                if (!selector) return null;
+                var markers = seekbar.querySelectorAll(selector);
                 if (!markers.length) return null;
                 var touchX = e.touches[0].clientX;
                 var best = null, bestDist = Infinity;
@@ -413,7 +446,11 @@
                 if (r < 0) return;
                 var marker = findNearestMarkerTouch(e);
                 if (marker) {
-                    dotNetRef.invokeMethodAsync('OnSeekBarMarkerClick', r);
+                    dotNetRef.invokeMethodAsync(
+                        marker.classList.contains('trim-seekbar-division-marker')
+                            ? 'OnSeekBarDivisionMarkerClick'
+                            : 'OnSeekBarMarkerClick',
+                        r);
                 } else {
                     dragging = true;
                     dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);

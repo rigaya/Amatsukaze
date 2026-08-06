@@ -578,12 +578,14 @@ namespace Amatsukaze.Shared
         public int FrameWidth { get; set; }
         public int FrameHeight { get; set; }
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
+        public List<int> DivisionPoints { get; set; } = new List<int>();
         public List<double> FramePts { get; set; } = new List<double>();
     }
 
     public class TrimSaveRequest
     {
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
+        public List<int> DivisionPoints { get; set; } = new List<int>();
     }
 
     public class TrimRequeueRequest
