@@ -4,11 +4,19 @@ Amatsukazeでは、Whisperを使用した音声からの字幕生成が可能で
 
 字幕モードで「Whisperで生成」を選択することで、音声から文字起こしによりSRT字幕を生成することができます。
 
-Amatsukazeでは、faster-whisperをベースとする[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)と[whisper.cpp](https://github.com/ggml-org/whisper.cpp)に対応しています。
+Amatsukazeでは、
+- faster-whisperをベースとする[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- [whisp-carrier](https://github.com/CVN-68/whisp-carrier)
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+に対応しています。
 
-導入の容易さと精度の観点で、[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)を推奨しますが、[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)はNVIDIA GPUとCPUのみに対応しています。
+導入の容易さと精度の観点で、[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)を推奨します。
 
-CPUでの字幕生成は時間を要するため、NVIDIA GPUのない環境で、Intel/AMD GPUやIntel NPUを使用したい場合には、[whisper.cpp](https://github.com/ggml-org/whisper.cpp)を試してみてください(ただし、導入難易度は高めです)。
+ただ、[whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)はNVIDIA GPUとCPUのみの対応となっているほか、RTX50xxへ最適化されたバージョンはPro版のみ(有償)となっています。
+
+そのため、RTX50xxへ最適化されたライブラリが使用したい場合、[whisp-carrier](https://github.com/CVN-68/whisp-carrier)を活用ください。
+
+また、CPUでの字幕生成は時間を要するため、NVIDIA GPUのない環境で、Intel/AMD GPUやIntel NPUを使用したい場合には、[whisper.cpp](https://github.com/ggml-org/whisper.cpp)を試してみてください(ただし、導入難易度は高めです)。
 
 ---
 ## whisper-standalone-win (faster-whisperの実装)
@@ -27,6 +35,39 @@ CPUでの字幕生成は時間を要するため、NVIDIA GPUのない環境で�
 faster-whisperの場合、whisper-optionは特に指定しなくてもまずは問題なく動作します。
 
 なお、初回実行時にはモデルのダウンロードが行われるため、時間がかかります。
+
+---
+## whisp-carrier
+
+### 通常のインストール方法
+
+pythonをインストール後、whisp-carrierの[インストール](https://github.com/CVN-68/whisp-carrier/blob/main/README_ja.md#%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB)に従ってインストールし、Amatsukazeの[基本設定]タブで `whisp-carrier.bat` を指定してください。
+
+### venvを使用する場合
+
+pythonライブラリのグローバルインストールを避けるためvenvを活用する例を示します。
+
+下記のようにインストールを行います。
+```
+git clone https://github.com/CVN-68/whisp-carrier.git
+cd whisp-carrier
+py -m venv venv
+venv\Scripts\python.exe -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+`whisp-carrier.bat`を変更し、同様にAmatsukazeの[基本設定]タブで `whisp-carrier.bat` を指定してください。
+```
+@echo off
+
+if not exist "%~dp0venv\Scripts\python.exe" (
+    echo venv環境が見つかりません: "%~dp0venv"
+    echo 先にPython 3.11でvenvを作成し、依存関係をインストールしてください。
+    exit /b 1
+)
+
+"%~dp0venv\Scripts\python.exe" "%~dp0whisp_carrier.py" %*
+```
 
 ---
 ## whisper.cpp

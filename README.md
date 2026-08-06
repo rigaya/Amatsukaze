@@ -468,7 +468,13 @@ NVIDIA GPUが使用できると高速ですが、CPUでも多少時間はかか�
 [whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)からFaster-Whisper-XXLをダウンロード・展開したうえで、
 [基本設定]タブでfaster-whisper-xxlのパスを指定してください。
 
-Intel GPU/NPU, AMD GPU向けには、やや難易度は高いですが、Whisper.cppを使用することも可能です。導入方法、設定方法については、[こちら](./doc/GenSubtitle.md)を参照して下さい。
+また以下の実装も利用できます。導入方法、設定方法については、[こちら](./doc/GenSubtitle.md)を参照して下さい。
+
+- [whisp-carrier](https://github.com/CVN-68/whisp-carrier)  
+  python環境構築等が必要ですが、RTX50xxなどでより高速な処理が可能です。
+
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp)  
+  やや難易度は高いですが、Intel GPU/NPU, AMD GPUを使用することができます。
 
 ### VFR（可変フレームレート）
 
