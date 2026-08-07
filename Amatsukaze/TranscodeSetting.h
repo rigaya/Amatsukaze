@@ -262,6 +262,7 @@ struct Config {
     bool ignoreNicoJKError;
     double pmtCutSideRate[2];
     bool looseLogoDetection;
+    bool noLogoInCM;
     bool noDelogo;
     bool parallelLogoAnalysis;
     int numParallelLogoAnalysis;
@@ -431,6 +432,8 @@ public:
     const double* getPmtCutSideRate() const;
 
     bool isLooseLogoDetection() const;
+
+    bool isNoLogoInCM() const;
 
     bool isNoDelogo() const;
 

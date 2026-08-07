@@ -1783,6 +1783,18 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region NoLogoInCM変更通知プロパティ
+        public bool NoLogoInCM {
+            get { return Data.NoLogoInCM; }
+            set {
+                if (Data.NoLogoInCM == value)
+                    return;
+                Data.NoLogoInCM = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region NoDelogo変更通知プロパティ
         public bool NoDelogo {
             get { return Data.NoDelogo; }

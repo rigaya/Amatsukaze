@@ -72,8 +72,8 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
     // チャプター・CM解析
     if (analyzeChapterAndCM) {
         ctx.infoF(_T("チャプター・CM解析開始"));
-        const bool logoOffJL = logoOffInJL(videoFileIndex);
-        if (logoOffJL) {
+        const bool noLogoInCM = setting_.isNoLogoInCM() || logoOffInJL(videoFileIndex);
+        if (noLogoInCM) {
             ctx.info(_T("チャプター・CM解析にロゴを使用しません。"));
         } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う

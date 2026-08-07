@@ -36,7 +36,7 @@ struct WhisperAudioEntry {
     int dualMonoChannel; // -1: original stereo, 0/1: dual mono channel selection
 };
 
-constexpr int RESUME_MANIFEST_VERSION = 2;
+constexpr int RESUME_MANIFEST_VERSION = 3;
 
 struct ResumeVideoInfo {
     int numFrames;
@@ -57,6 +57,7 @@ struct ResumeInfo {
     std::vector<tstring> logoPath;
     std::vector<tstring> eraseLogoPath;
     bool ignoreNoLogo;
+    bool noLogoInCM;
     bool noDelogo;
     bool looseLogoDetection;
     int autoLogoDetect;
@@ -148,6 +149,7 @@ static void saveResumeManifest(
     writeTStringArray(file, setting.getLogoPath());
     writeTStringArray(file, setting.getEraseLogoPath());
     file.writeValue(setting.isIgnoreNoLogo());
+    file.writeValue(setting.isNoLogoInCM());
     file.writeValue(setting.isNoDelogo());
     file.writeValue(setting.isLooseLogoDetection());
     file.writeValue(setting.getAutoLogoDetect());
@@ -197,6 +199,7 @@ static ResumeInfo readResumeManifest(const tstring& path) {
     info.logoPath = readTStringArray(file);
     info.eraseLogoPath = readTStringArray(file);
     info.ignoreNoLogo = file.readValue<bool>();
+    info.noLogoInCM = file.readValue<bool>();
     info.noDelogo = file.readValue<bool>();
     info.looseLogoDetection = file.readValue<bool>();
     info.autoLogoDetect = file.readValue<int>();
@@ -242,6 +245,9 @@ static bool validateResumeSetting(const ConfigWrapper& setting, const ResumeInfo
     }
     if (info.eraseLogoPath != setting.getEraseLogoPath()) {
         mismatchedFields.push_back(_T("追加ロゴ消し設定"));
+    }
+    if (info.noLogoInCM != setting.isNoLogoInCM()) {
+        mismatchedFields.push_back(_T("CM解析でロゴを使用しない設定"));
     }
     if (mismatchedFields.empty()) {
         return true;
@@ -1388,7 +1394,10 @@ void DoBadThing() {
         // ロゴがあったかチェック //
         // 映像ファイルをフレーム数でソート
         std::sort(logoFound.begin(), logoFound.end());
+        const bool logoRequired = !setting.isNoDelogo()
+            || (setting.isChapterEnabled() && !setting.isNoLogoInCM());
         if (setting.getLogoPath().size() > 0 && // ロゴ指定あり
+            logoRequired &&
             setting.isIgnoreNoLogo() == false &&          // ロゴなし無視でない
             logoFound.back().first >= 300 &&
             logoFound.back().second == false)     // 最も長い映像でロゴが見つからなかった

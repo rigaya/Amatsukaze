@@ -356,6 +356,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool IgnoreNoLogo { get; set; }
         [DataMember]
+        public bool NoLogoInCM { get; set; }
+        [DataMember]
         public bool NoDelogo { get; set; }
         [DataMember]
         public bool ParallelLogoAnalysis { get; set; }
@@ -730,6 +732,7 @@ namespace Amatsukaze.Server
             keyValueBool("マッピングにないDRCS外字は無視する", profile.IgnoreNoDrcsMap);
             keyValueBool("ロゴ検出判定しきい値を低くする", profile.LooseLogoDetection);
             keyValueBool("ロゴ検出に失敗しても処理を続行する", profile.IgnoreNoLogo);
+            keyValueBool("CM解析でロゴを使用しない", profile.NoLogoInCM);
             keyValueBool("ロゴ消ししない", profile.NoDelogo);
             keyValueBool("並列ロゴ解析", profile.ParallelLogoAnalysis);
             keyValueBool("メインフォーマット以外は結合しない", profile.SplitSub);

@@ -497,7 +497,8 @@ namespace Amatsukaze.Server
 
         private bool HasUsableLogoSetting(QueueItem item)
         {
-            if (item.Profile != null && item.Profile.DisableChapter && item.Profile.NoDelogo)
+            if (item.Profile != null && item.Profile.NoDelogo &&
+                (item.Profile.DisableChapter || item.Profile.NoLogoInCM))
             {
                 return true;
             }

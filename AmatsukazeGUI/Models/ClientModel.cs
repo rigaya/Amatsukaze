@@ -1935,6 +1935,7 @@ namespace Amatsukaze.Models
                 profile.IgnoreNoDrcsMap = data.Profile.IgnoreNoDrcsMap;
                 profile.LooseLogoDetection = data.Profile.LooseLogoDetection;
                 profile.IgnoreNoLogo = data.Profile.IgnoreNoLogo;
+                profile.NoLogoInCM = data.Profile.NoLogoInCM;
                 profile.NoDelogo = data.Profile.NoDelogo;
                 profile.ParallelLogoAnalysis = data.Profile.ParallelLogoAnalysis;
                 profile.EnableNicoJK = data.Profile.EnableNicoJK;

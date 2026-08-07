@@ -334,7 +334,7 @@ namespace Amatsukaze.Server
                         item.Reset();
                     }
                     else if (!server.AppData_.setting.LogoPendAsError // ロゴ設定をエラー扱いする場合はここでチェックせず、実際に処理してエラーを発生させる
-                        && ((!item.Profile.DisableChapter || !item.Profile.NoDelogo) &&
+                        && (((!item.Profile.DisableChapter && !item.Profile.NoLogoInCM) || !item.Profile.NoDelogo) &&
                         map[item.ServiceId].LogoSettings.Any(s => s.CanUse(item.TsTime)) == false))
                     {
                         item.FailReason = "ロゴ設定がありません";

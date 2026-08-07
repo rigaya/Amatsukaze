@@ -935,6 +935,10 @@ bool ConfigWrapper::isLooseLogoDetection() const {
     return conf.looseLogoDetection;
 }
 
+bool ConfigWrapper::isNoLogoInCM() const {
+    return conf.noLogoInCM;
+}
+
 bool ConfigWrapper::isNoDelogo() const {
     return conf.noDelogo;
 }
@@ -1598,14 +1602,16 @@ void ConfigWrapper::dump() const {
         conf.twoPass ? _T("2パス") : _T("1パス"),
         cmOutMaskToString(conf.cmoutmask).c_str());
     ctx.infoF(_T("エンコード分割並列: %d"), conf.encoderParallel);
+    const bool logoRequiredForChapter = conf.chapter && (!conf.noLogoInCM || !conf.noDelogo);
     ctx.infoF(_T("チャプター解析: %s%s"),
         conf.chapter ? _T("有効") : _T("無効"),
-        (conf.chapter && conf.ignoreNoLogo) ? _T("") : _T("（ロゴ必須）"));
+        (logoRequiredForChapter && !conf.ignoreNoLogo) ? _T("（ロゴ必須）") : _T(""));
     if (conf.chapter) {
         for (int i = 0; i < (int)conf.logoPath.size(); i++) {
             ctx.infoF(_T("logo%d: %s"), (i + 1), conf.logoPath[i]);
         }
     }
+    ctx.infoF(_T("CM解析でロゴを使用: %s"), conf.noLogoInCM ? _T("しない") : _T("する"));
     ctx.infoF(_T("ロゴ消し: %s"), conf.noDelogo ? _T("しない") : _T("する"));
     ctx.infoF(_T("並列ロゴ解析: %s"), conf.parallelLogoAnalysis ? (conf.numParallelLogoAnalysis > 0 ? StringFormat(_T("%d並列"), conf.numParallelLogoAnalysis) : _T("オン")) : _T("オフ"));
     ctx.infoF(_T("AVFrame直接ロゴ解析: %s"), conf.directLogoAnalysis ? _T("オン") : _T("オフ"));

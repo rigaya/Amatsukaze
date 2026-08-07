@@ -92,6 +92,7 @@ static void printHelp(const tchar* bin) {
         "  --ignore-no-drcsmap マッピングにないDRCS外字があっても処理を続行する\n"
         "  --ignore-no-logo    ロゴが見つからなくても処理を続行する\n"
         "  --ignore-nicojk-error ニコニコ実況取得でエラーが発生しても処理を続行する\n"
+        "  --no-logo-in-cm     CM解析でロゴを使用しない\n"
         "  --no-delogo         ロゴ消しをしない（デフォルトはロゴがある場合は消します）\n"
         "  --parallel-logo-analysis auto or <数値> 並列ロゴ解析 (数値は並列数を指定)\n"
         "  --direct-logo-analysis <0|1> AVFrameから直接ロゴ解析[1]\n"
@@ -279,6 +280,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.whisperOption = _T("");
     conf.whisperParallel = false;
     conf.copyTrimAVS = false;
+    conf.noLogoInCM = false;
 
     for (int i = 1; i < argc; i++) {
         tstring key = argv[i];
@@ -444,6 +446,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.ignoreNoDrcsMap = true;
         } else if (key == _T("--ignore-nicojk-error")) {
             conf.ignoreNicoJKError = true;
+        } else if (key == _T("--no-logo-in-cm")) {
+            conf.noLogoInCM = true;
         } else if (key == _T("--loose-logo-detection")) {
             conf.looseLogoDetection = true;
         } else if (key == _T("--max-fade-length")) {
@@ -626,7 +630,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         }
     }
 
-    if (conf.chapter && !conf.ignoreNoLogo) {
+    if (conf.chapter && !conf.ignoreNoLogo && (!conf.noLogoInCM || !conf.noDelogo)) {
         if (conf.logoPath.size() == 0) {
             THROW(ArgumentException, "ロゴが指定されていません");
         }

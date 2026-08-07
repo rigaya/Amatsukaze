@@ -2422,6 +2422,10 @@ namespace Amatsukaze.Server
                 {
                     sb.Append(" --ignore-no-drcsmap");
                 }
+                if (profile.NoLogoInCM)
+                {
+                    sb.Append(" --no-logo-in-cm");
+                }
                 if (profile.NoDelogo)
                 {
                     sb.Append(" --no-delogo");

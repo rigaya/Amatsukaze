@@ -756,6 +756,10 @@
                               ToolTip="ロゴ区間が短いなどでロゴ無し判定を食らう場合などに有効にすると解決するかもです"/>
                     <CheckBox Height="16" Margin="0,3"  Content="ロゴ検出に失敗しても処理を続行する" 
                               IsChecked="{Binding Model.SelectedProfile.IgnoreNoLogo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <CheckBox Height="16" Margin="0,3"  Content="CM解析でロゴを使用しない"
+                              IsChecked="{Binding Model.SelectedProfile.NoLogoInCM, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding Model.SelectedProfile.DisableChapter, Converter={StaticResource InverseBooleanConverter}}"
+                              ToolTip="CM解析時にロゴ情報を使用しません。ロゴ消しを行う場合は、CM解析後にロゴ解析を行います。" />
                     <CheckBox Height="16" Margin="0,3"  Content="ロゴ消ししない" 
                               IsChecked="{Binding Model.SelectedProfile.NoDelogo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="並列ロゴ解析" 
