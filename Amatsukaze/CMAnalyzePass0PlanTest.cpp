@@ -16,7 +16,8 @@ int main() {
     bool ok = true;
     const auto noLogo = cmanalyze_plan::MakeExecutionPlan(true, true, true, true);
     ok &= Expect(noLogo.chapterExeCount == 1 && noLogo.preliminaryJoinCount == 1 && noLogo.finalJoinCount == 0
-        && noLogo.preliminaryPmtApplyCount == 1 && noLogo.reusesPreliminaryForPass0, "noLogoInCMはJLSを重複しない");
+        && noLogo.preliminaryPmtApplyCount == 1 && noLogo.reusesPreliminaryForPass0
+        && noLogo.logoAnalysisUsesPrePmtTrims, "noLogoInCMはJLSを重複せずロゴ収集はPMT前範囲を維持する");
     const auto matched = cmanalyze_plan::MakeExecutionPlan(true, false, false, false);
     ok &= Expect(matched.chapterExeCount == 1 && matched.preliminaryJoinCount == 0 && matched.finalJoinCount == 1
         && matched.finalPmtApplyCount == 0, "ロゴ一致は最終JLSだけを実行する");

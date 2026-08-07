@@ -1,14 +1,19 @@
 ﻿#include "Pass0Support.h"
 
+#include "rgy_util.h"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <fstream>
+#include <mutex>
+#include <random>
 #include <system_error>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #else
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -68,6 +73,40 @@ tstring UInt64ToTString(uint64_t value) {
     return tstring(buffer);
 }
 
+constexpr const TCHAR* kJobPrefix = _T("pass0-genlogo-");
+constexpr const TCHAR* kOwnerMarkerName = _T(".logo-pass0-owner");
+constexpr size_t kTokenLength = 32;
+
+bool IsHexToken(const tstring& token) {
+    if (token.size() != kTokenLength) {
+        return false;
+    }
+    for (const auto ch : token) {
+        if (!((ch >= _T('0') && ch <= _T('9')) || (ch >= _T('a') && ch <= _T('f')))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+tstring MakeRandomToken() {
+    static std::random_device randomDevice;
+    static std::mt19937_64 randomEngine(randomDevice());
+    static std::mutex randomMutex;
+    std::lock_guard<std::mutex> lock(randomMutex);
+    const uint64_t first = randomEngine() ^ CurrentUniqueTick();
+    const uint64_t second = randomEngine() ^ (CurrentProcessId() << 32);
+    const char* hex = "0123456789abcdef";
+    tstring token;
+    token.reserve(kTokenLength);
+    for (int shift = 60; shift >= 0; shift -= 4) token.push_back((TCHAR)hex[(first >> shift) & 0xf]);
+    for (int shift = 60; shift >= 0; shift -= 4) token.push_back((TCHAR)hex[(second >> shift) & 0xf]);
+    // N形式GUIDとしても解釈できるよう、version 4 / RFC 4122 variantを固定する。
+    token[12] = _T('4');
+    token[16] = (TCHAR)hex[8 + ((second >> 62) & 0x3)];
+    return token;
+}
+
 tstring IntToTString(int value) {
 #if defined(_WIN32) || defined(_WIN64)
     return std::to_wstring(value);
@@ -78,11 +117,154 @@ tstring IntToTString(int value) {
 
 bool IsRegularFile(const fs::path& path) {
     std::error_code ec;
-    return fs::is_regular_file(path, ec) && !ec;
+    const auto status = fs::symlink_status(path, ec);
+    return !ec && !fs::is_symlink(status) && fs::is_regular_file(status);
 }
 
 bool HasPrefix(const tstring& value, const tstring& prefix) {
     return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+bool IsJobDirectory(const fs::path& path) {
+    std::error_code ec;
+    const auto status = fs::symlink_status(path, ec);
+    if (ec || fs::is_symlink(status) || !fs::is_directory(status)) {
+        return false;
+    }
+    const auto name = path.filename().native();
+    const tstring prefix(kJobPrefix);
+    return HasPrefix(name, prefix) && IsHexToken(name.substr(prefix.size()));
+}
+
+bool ReadOwnerMarker(const fs::path& path, tstring& token) {
+    const fs::path marker = path / kOwnerMarkerName;
+    if (!IsRegularFile(marker)) {
+        return false;
+    }
+    std::ifstream input(marker, std::ios::binary);
+    std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    if ((!input.good() && !input.eof()) || content.size() != kTokenLength) {
+        return false;
+    }
+    tstring parsed;
+    parsed.reserve(content.size());
+    for (const auto ch : content) {
+        parsed.push_back((TCHAR)(unsigned char)ch);
+    }
+    if (!IsHexToken(parsed)) {
+        return false;
+    }
+    token = std::move(parsed);
+    return true;
+}
+
+bool WriteOwnerMarker(const fs::path& path, const tstring& token) {
+    const fs::path marker = path / kOwnerMarkerName;
+    const std::string content = tchar_to_string(token);
+#if defined(_WIN32) || defined(_WIN64)
+    const HANDLE handle = CreateFileW(marker.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+        FILE_ATTRIBUTE_HIDDEN, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = WriteFile(handle, content.data(), (DWORD)content.size(), &written, nullptr)
+        && written == content.size();
+    CloseHandle(handle);
+    return ok;
+#else
+    const int fd = open(marker.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) return false;
+    size_t offset = 0;
+    while (offset < content.size()) {
+        const ssize_t written = write(fd, content.data() + offset, content.size() - offset);
+        if (written <= 0) {
+            close(fd);
+            return false;
+        }
+        offset += (size_t)written;
+    }
+    return close(fd) == 0;
+#endif
+}
+
+bool IsExpectedJobFileName(const tstring& name) {
+    const auto numbered = [&](const tstring& prefix, const tstring& suffix) {
+        if (!HasPrefix(name, prefix) || name.size() <= prefix.size() + suffix.size()
+            || name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            return false;
+        }
+        for (size_t i = prefix.size(); i < name.size() - suffix.size(); i++) {
+            if (name[i] < _T('0') || name[i] > _T('9')) return false;
+        }
+        return true;
+    };
+    const auto artifactTemp = [&](const tstring& artifactName) {
+        const tstring prefix = artifactName + _T(".tmp.");
+        if (!HasPrefix(name, prefix)) return false;
+        size_t index = prefix.size();
+        for (int part = 0; part < 3; part++) {
+            const size_t begin = index;
+            while (index < name.size() && name[index] >= _T('0') && name[index] <= _T('9')) index++;
+            if (index == begin) return false;
+            if (part < 2) {
+                if (index >= name.size() || name[index++] != _T('.')) return false;
+            }
+        }
+        return index == name.size();
+    };
+    if (name == kOwnerMarkerName || name == _T("audio.dat") || name == _T("audio.wav")
+        || name == _T("streaminfo.dat") || name == _T("resume.dat") || name == _T("tsreadex_dump.txt")
+        || name == _T("pass0.amts") || name == _T("pass0.trim.avs") || name == _T("pass0.ready")
+        || artifactTemp(_T("pass0.amts")) || artifactTemp(_T("pass0.trim.avs"))
+        || artifactTemp(_T("pass0.ready")) || numbered(_T("i"), _T(".mpg"))
+        || numbered(_T("amts"), _T(".dat")) || numbered(_T("amts"), _T(".avs"))
+        || numbered(_T("amts"), _T("_8bit.avs"))
+        || numbered(_T("logof"), _T(".txt")) || numbered(_T("chapter_exe"), _T(".txt"))
+        || numbered(_T("chapter_exe_o"), _T(".txt")) || numbered(_T("trim"), _T(".avs"))
+        || numbered(_T("jls"), _T(".txt")) || numbered(_T("div"), _T(".txt"))) {
+        return true;
+    }
+    return false;
+}
+
+bool HasOnlyExpectedJobContents(const fs::path& path) {
+    std::error_code ec;
+    for (fs::directory_iterator it(path, ec), end; !ec && it != end; it.increment(ec)) {
+        const auto status = it->symlink_status(ec);
+        if (ec || fs::is_symlink(status) || !fs::is_regular_file(status)
+            || !IsExpectedJobFileName(it->path().filename().native())) {
+            return false;
+        }
+    }
+    return !ec;
+}
+
+bool IsOwnedJob(const fs::path& path, const tstring& expectedToken) {
+    tstring markerToken;
+    return IsJobDirectory(path) && IsHexToken(expectedToken) && ReadOwnerMarker(path, markerToken)
+        && markerToken == expectedToken && HasOnlyExpectedJobContents(path);
+}
+
+void CleanupCreationCandidate(const fs::path& path, const tstring& token) {
+    tstring markerToken;
+    std::error_code ec;
+    if (IsJobDirectory(path) && ReadOwnerMarker(path, markerToken) && markerToken == token) {
+        fs::remove(path / kOwnerMarkerName, ec);
+    }
+    ec.clear();
+    // 作成途中の候補は空の場合だけ除去する。外部内容を再帰削除してはならない。
+    fs::remove(path, ec);
+}
+
+bool RemoveOwnedJob(const fs::path& path, const tstring& token, std::error_code& ec) {
+    if (!IsOwnedJob(path, token)) {
+        return false;
+    }
+    // marker確認後の差し替えを縮めるため、削除直前にリンク・所有者・内容を再確認する。
+    if (!IsOwnedJob(path, token)) {
+        return false;
+    }
+    fs::remove_all(path, ec);
+    return !ec;
 }
 
 } // namespace
@@ -176,7 +358,7 @@ ExpiredCleanupResult CleanupExpiredJobs(const fs::path& baseDirectory, const std
         if (ec) {
             break;
         }
-        if (!HasPrefix(name, _T("pass0-genlogo-")) || fs::is_symlink(status) || !fs::is_directory(status)) {
+        if (!HasPrefix(name, kJobPrefix) || fs::is_symlink(status) || !fs::is_directory(status)) {
             continue;
         }
         const auto modified = entry.last_write_time(ec);
@@ -186,9 +368,12 @@ ExpiredCleanupResult CleanupExpiredJobs(const fs::path& baseDirectory, const std
         if (modified >= cutoff) {
             continue;
         }
+        tstring token;
+        if (!ReadOwnerMarker(entry.path(), token) || !IsHexToken(token)) {
+            continue;
+        }
         ec.clear();
-        fs::remove_all(entry.path(), ec);
-        if (ec) {
+        if (!RemoveOwnedJob(entry.path(), token, ec)) {
             result.failed++;
             ec.clear();
         } else {
@@ -229,7 +414,7 @@ OwnedJobDirectory::~OwnedJobDirectory() {
 }
 
 OwnedJobDirectory::OwnedJobDirectory(OwnedJobDirectory&& other) noexcept
-    : path_(std::move(other.path_)), owns_(other.owns_) {
+    : path_(std::move(other.path_)), token_(std::move(other.token_)), owns_(other.owns_) {
     other.owns_ = false;
 }
 
@@ -237,6 +422,7 @@ OwnedJobDirectory& OwnedJobDirectory::operator=(OwnedJobDirectory&& other) noexc
     if (this != &other) {
         Cleanup();
         path_ = std::move(other.path_);
+        token_ = std::move(other.token_);
         owns_ = other.owns_;
         other.owns_ = false;
     }
@@ -250,12 +436,25 @@ std::optional<OwnedJobDirectory> OwnedJobDirectory::Create(const fs::path& baseD
         error = _T("pass0一時ディレクトリの親を作成できません");
         return std::nullopt;
     }
-    const tstring prefix = _T("pass0-genlogo-") + UInt64ToTString(CurrentProcessId()) + _T("-") + UInt64ToTString(CurrentUniqueTick()) + _T("-");
     for (uint64_t index = 0; index < 128; index++) {
-        const fs::path candidate = baseDirectory / (prefix + UInt64ToTString(index));
+        const tstring directoryToken = MakeRandomToken();
+        const tstring ownerToken = MakeRandomToken();
+        const fs::path candidate = baseDirectory / (tstring(kJobPrefix) + directoryToken);
         ec.clear();
         if (fs::create_directory(candidate, ec)) {
-            return OwnedJobDirectory(candidate);
+#if !defined(_WIN32) && !defined(_WIN64)
+            // 共有WorkPathでも別ユーザーからowner markerを読めないようにする。
+            fs::permissions(candidate, fs::perms::owner_all, fs::perm_options::replace, ec);
+            if (ec) {
+                CleanupCreationCandidate(candidate, ownerToken);
+                continue;
+            }
+#endif
+            if (WriteOwnerMarker(candidate, ownerToken) && IsOwnedJob(candidate, ownerToken)) {
+                return OwnedJobDirectory(candidate, ownerToken);
+            }
+            CleanupCreationCandidate(candidate, ownerToken);
+            continue;
         }
         if (ec && ec != std::errc::file_exists) {
             error = _T("pass0一時ディレクトリを作成できません");
@@ -271,10 +470,9 @@ bool OwnedJobDirectory::Cleanup(tstring* error) {
         return true;
     }
     std::error_code ec;
-    fs::remove_all(path_, ec);
-    if (ec) {
+    if (!RemoveOwnedJob(path_, token_, ec)) {
         if (error) {
-            *error = _T("pass0一時ディレクトリを削除できません");
+            *error = _T("pass0一時ディレクトリの所有権または内容を確認できないため削除しません");
         }
         return false;
     }

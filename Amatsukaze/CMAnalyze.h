@@ -105,7 +105,8 @@ private:
     void analyzeLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
     void prepareChapter(const int videoFileIndex, const VideoFormat& inputFormat, Stopwatch& sw, const tstring& avspath);
-    void estimateCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const bool useLogo);
+    void estimateCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw,
+        const bool useLogo, const bool applyPmtCutAfterEstimate = true);
     bool preparePass0Ranges(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw);
     bool capturePass0Ranges(const int numFrames);
     void applyPmtCut(int numFrames, const double* rates, const std::vector<int>& pidChanges);

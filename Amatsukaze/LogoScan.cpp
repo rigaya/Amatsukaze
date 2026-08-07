@@ -35,6 +35,7 @@
 #include <cassert>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <libavutil/error.h>
 #if defined(__GLIBC__)
 #include <malloc.h>
@@ -3970,6 +3971,10 @@ namespace {
             IScriptEnvironment* pass0Env = nullptr, int* pass0AcceptedFrames = nullptr, int* pass0SkippedCmFrames = nullptr) {
             frameWindowStart = std::max(0, startFrame);
             try {
+                const auto totalStart = std::chrono::steady_clock::now();
+                double initialDecodeSeconds = 0.0;
+                double pass1ReplayAndEstimateSeconds = 0.0;
+                double pass2Seconds = 0.0;
                 // 1) 初期化
                 resetRunState();
                 setProgressPlan(1, 0.0f, 0.5f, 0.0f, 0.15f);
@@ -3991,6 +3996,7 @@ namespace {
                         [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
                         [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
                 }
+                initialDecodeSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - totalStart).count();
                 temporalHistCaptureActive = false;
                 segmentConsensusCaptureActive = false;
                 roiCacheCaptureActive = false;
@@ -4005,6 +4011,7 @@ namespace {
                 computeSegmentConsensusLines();
                 prepareResidualReweightMaps(pass1Stats, true);
                 setProgressPlan(1, 0.5f, 0.5f, 0.15f, 0.15f);
+                const auto pass1ReplayStart = std::chrono::steady_clock::now();
                 rerunResidualWeightedPass(srcpath, pass1Stats, nullptr);
                 if (readFrames <= 0) {
                     THROW(RuntimeException, "No frame decoded");
@@ -4022,8 +4029,10 @@ namespace {
                 const AutoDetectRect pass1RectAbs = rectAbs;
                 const AutoDetectRect pass1RectLocal = rectLocal;
                 runLiftCandidateShadow(srcpath, pass1RectLocal);
+                pass1ReplayAndEstimateSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pass1ReplayStart).count();
 
                 // 3) pass2: pass1で得たロゴ近傍のみで「ロゴあり」フレームを再抽出
+                const auto pass2Start = std::chrono::steady_clock::now();
                 Pass2Buffers pass2{};
                 bool pass2Entered = false;
                 bool pass2Succeeded = false;
@@ -4071,10 +4080,18 @@ namespace {
                     captureCurrentDebugSnapshot(debugPass2);
                     clearLogoAnalyzeFail();
                 }
+                pass2Seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pass2Start).count();
                 setProgressPlan(4, 1.0f, 0.0f, 1.0f, 0.0f);
                 if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
                     THROW(RuntimeException, "Cancel requested");
                 }
+                const int roiFrames = roiCacheStoredFrames;
+                const uint64_t roiBytes = (uint64_t)roiCacheFrameBytes * (uint64_t)roiFrames;
+                const auto totalSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - totalStart).count();
+                // pass0では初回だけAMTSourceをデコードし、後続passはROIキャッシュを再生することを通常ログで確認できるようにする。
+                logCtx.infoF(_T("[LogoScan] performance: input=%s initialDecode=%.3fs pass1ReplayAndEstimate=%.3fs pass2=%.3fs total=%.3fs roiFrames=%d roiBytes=%") _T(PRIu64),
+                    pass0Source != nullptr ? _T("AMTSource") : _T("TS"), initialDecodeSeconds,
+                    pass1ReplayAndEstimateSeconds, pass2Seconds, totalSeconds, roiFrames, roiBytes);
                 clearRoiCache();
                 return makeSourceRectFromDetect(rectAbs);
             } catch (...) {
@@ -11582,6 +11599,20 @@ static void CopyAutoDetectOutputs(const AutoDetectLogoReader& reader, const Auto
     if (out.frameGateRetrySuccessAttempt) *out.frameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
 }
 
+static const tchar* GetLogoPass0StateName(const logo::LogoPass0State state) {
+    switch (state) {
+    case logo::LogoPass0State::Disabled: return _T("Disabled");
+    case logo::LogoPass0State::ArtifactMissing: return _T("ArtifactMissing");
+    case logo::LogoPass0State::TrimInvalid: return _T("TrimInvalid");
+    case logo::LogoPass0State::AmtSourceOpenFailed: return _T("AmtSourceOpenFailed");
+    case logo::LogoPass0State::AmtSourceDecodeFailed: return _T("AmtSourceDecodeFailed");
+    case logo::LogoPass0State::NoProgramFrames: return _T("NoProgramFrames");
+    case logo::LogoPass0State::TooFewProgramFrames: return _T("TooFewProgramFrames");
+    case logo::LogoPass0State::Succeeded: return _T("Succeeded");
+    default: return _T("Unknown");
+    }
+}
+
 extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     const tchar* srcpath, int serviceid,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
@@ -11746,12 +11777,13 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRectWithPass0(AMTContext* ctx,
                     throw;
                 }
                 pass0State = logo::LogoPass0State::AmtSourceDecodeFailed;
-                ctx->warnF(_T("[LogoScan] pass0 fallback: reason=%d detail=%s"), (int)pass0State, exception.message());
+                ctx->warnF(_T("[LogoScan] pass0 fallback: state=%s detail=%s; input=TSFallback"),
+                    GetLogoPass0StateName(pass0State), exception.message());
                 ctx->info(_T("[LogoScan] input: TSFallback"));
                 rect = reader.run(fallbackSrcPath);
             }
         } else {
-            ctx->warnF(_T("[LogoScan] pass0 fallback: reason=%d; input=TSFallback"), (int)pass0State);
+            ctx->warnF(_T("[LogoScan] pass0 fallback: state=%s; input=TSFallback"), GetLogoPass0StateName(pass0State));
             ctx->info(_T("[LogoScan] input: TSFallback"));
             rect = reader.run(fallbackSrcPath);
         }
@@ -11826,6 +11858,8 @@ bool logo::AutoDetectLogoRectWithPass0Ranges(AMTContext& ctx, const tstring& fal
                     } else {
                         decodeRanges = std::move(plan.decodeRanges);
                         outPass0SkippedCmFrames = plan.skippedCmFrames;
+                        ctx.infoF(_T("[LogoScan] pass0 start: source=AMTSource frames=%d ranges=%d programFrames=%d"),
+                            totalFrames, (int)decodeRanges.size(), plan.programFrames);
                     }
                 }
             } catch (const Exception& exception) {
@@ -11843,6 +11877,7 @@ bool logo::AutoDetectLogoRectWithPass0Ranges(AMTContext& ctx, const tstring& fal
                 outPass0State = LogoPass0State::Succeeded;
                 ctx.infoF(_T("[LogoScan] pass0 succeeded: accepted=%d skippedCM=%d"),
                     outPass0AcceptedFrames, outPass0SkippedCmFrames);
+                ctx.info(_T("[LogoScan] input: AMTSource"));
             } catch (const Exception& exception) {
                 if (reader.wasCancellationRequested()) {
                     throw;
@@ -11852,11 +11887,14 @@ bool logo::AutoDetectLogoRectWithPass0Ranges(AMTContext& ctx, const tstring& fal
                     throw;
                 }
                 outPass0State = LogoPass0State::AmtSourceDecodeFailed;
-                ctx.warnF(_T("[LogoScan] pass0 fallback: reason=%d detail=%s"), (int)outPass0State, exception.message());
+                ctx.warnF(_T("[LogoScan] pass0 fallback: state=%s detail=%s; input=TSFallback"),
+                    GetLogoPass0StateName(outPass0State), exception.message());
+                ctx.info(_T("[LogoScan] input: TSFallback"));
                 rect = reader.run(fallbackSrcPath);
             }
         } else {
-            ctx.infoF(_T("[LogoScan] pass0 fallback: reason=%d; input=TSFallback"), (int)outPass0State);
+            ctx.infoF(_T("[LogoScan] pass0 fallback: state=%s; input=TSFallback"), GetLogoPass0StateName(outPass0State));
+            ctx.info(_T("[LogoScan] input: TSFallback"));
             rect = reader.run(fallbackSrcPath);
         }
         outX = rect.x;

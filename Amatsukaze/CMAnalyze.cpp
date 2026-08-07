@@ -75,11 +75,20 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
         prepareChapter(videoFileIndex, inputFormat, sw, avsChapterExe);
         if (noLogoInCM) {
             ctx.info(_T("チャプター・CM解析にロゴを使用しません。"));
-            estimateCM(serviceId, videoFileIndex, numFrames, sw, false);
+            // 旧処理ではロゴ収集をPMTカット前の本編範囲で行っていた。
+            // pass0/最終CMにはPMTカット後を使うが、ロゴ/erase-logoの収集範囲は狭めない。
+            estimateCM(serviceId, videoFileIndex, numFrames, sw, false, false);
+            const auto logoAnalysisTrims = trims;
+            if (pmtCut_.enabled) {
+                applyPmtCut(numFrames, pmtCut_.rates.data(), pmtCut_.pidChanges);
+            }
             noLogoCMEstimated = true;
             capturePass0Ranges(numFrames);
             if (!setting_.isNoDelogo()) {
+                const auto finalTrims = trims;
+                trims = logoAnalysisTrims;
                 analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+                trims = finalTrims;
             }
         } else {
             analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
@@ -128,7 +137,8 @@ void CMAnalyze::prepareChapter(const int videoFileIndex, const VideoFormat& inpu
     chapterPrepared = true;
 }
 
-void CMAnalyze::estimateCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const bool useLogo) {
+void CMAnalyze::estimateCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw,
+    const bool useLogo, const bool applyPmtCutAfterEstimate) {
     ctx.info(_T("[CM解析]"));
     sw.start();
     joinLogoScp(videoFileIndex, serviceId, useLogo);
@@ -148,7 +158,7 @@ void CMAnalyze::estimateCM(const int serviceId, const int videoFileIndex, const 
     ctx.infoF(_T("分割情報読み込み完了"));
     makeCMZones(numFrames);
     ctx.infoF(_T("CM区間生成完了"));
-    if (pmtCut_.enabled) {
+    if (applyPmtCutAfterEstimate && pmtCut_.enabled) {
         applyPmtCut(numFrames, pmtCut_.rates.data(), pmtCut_.pidChanges);
     }
 }

@@ -10,6 +10,7 @@ struct ExecutionPlan {
     int preliminaryPmtApplyCount = 0;
     int finalPmtApplyCount = 0;
     bool reusesPreliminaryForPass0 = false;
+    bool logoAnalysisUsesPrePmtTrims = false;
 };
 
 // no-logo CM推定を一度実行したら、pass0範囲の捕捉失敗後も再実行しない。
@@ -28,6 +29,7 @@ inline ExecutionPlan MakeExecutionPlan(const bool chapterEnabled, const bool noL
         plan.preliminaryJoinCount = 1;
         plan.preliminaryPmtApplyCount = pmtEnabled ? 1 : 0;
         plan.reusesPreliminaryForPass0 = true;
+        plan.logoAnalysisUsesPrePmtTrims = pmtEnabled;
         return plan;
     }
     if (logoMismatchRetry) {

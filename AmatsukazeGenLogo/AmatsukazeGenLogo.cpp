@@ -597,7 +597,7 @@ template<typename T>
 bool LoadSymbol(HMODULE module, const char* name, T& symbol) {
     symbol = reinterpret_cast<T>(RGY_GET_PROC_ADDRESS(module, name));
     if (symbol == nullptr) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: Failed to load symbol: %hs\n"), name);
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: Failed to load symbol: %s\n"), char_to_tstring(name).c_str());
         return false;
     }
     return true;
@@ -636,6 +636,11 @@ int LoadNativeApi(HMODULE module, NativeApi& api) {
 std::string SafeGetError(const NativeApi& api, void* ctx) {
     const char* err = (ctx && api.AMTContext_GetError) ? api.AMTContext_GetError(ctx) : nullptr;
     return (err != nullptr) ? std::string(err) : std::string("unknown native error");
+}
+
+void PrintNativeError(const NativeApi& api, void* ctx) {
+    const auto error = SafeGetError(api, ctx);
+    _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(error.c_str()).c_str());
 }
 
 std::string TruncateNameBytes(std::string name) {
@@ -1026,11 +1031,11 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
 
     std::unique_ptr<void, TsInfoDeleter> tsInfo(api.TsInfo_Create(ctx.get()), TsInfoDeleter{ &api });
     if (!tsInfo) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        PrintNativeError(api, ctx.get());
         return ERR_RUNTIME_NATIVE;
     }
     if (api.TsInfo_ReadFile(tsInfo.get(), opt.input.c_str()) == 0) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        PrintNativeError(api, ctx.get());
         return ERR_RUNTIME_NATIVE;
     }
 
@@ -1138,7 +1143,7 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
                         &pass0State, &pass0AcceptedFrames, &pass0SkippedCmFrames) == 0) {
                         // 新APIは成果物検証失敗を内部でTSへフォールバックする。
                         // ここで旧APIを再実行すると、実際の解析失敗を二重実行してしまう。
-                        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+                        PrintNativeError(api, ctx.get());
                         nativePass0Failed = true;
                     } else {
                         autoDetectCompleted = true;
@@ -1188,7 +1193,7 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
             detailedDebug ? debugPaths.accepted.c_str() : nullptr,
             detailedDebug ? 1 : 0,
             ReportAutoDetectProgress) == 0) {
-            _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+            PrintNativeError(api, ctx.get());
             g_autoDetectProgressState = nullptr;
             return ERR_RUNTIME_NATIVE;
         }
@@ -1223,7 +1228,7 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
         aligned.x, aligned.y, aligned.w, aligned.h,
         opt.logoGenThreshold, opt.logoGenSamples,
         ReportAnalyzeProgress) == 0) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        PrintNativeError(api, ctx.get());
         g_logoGenProgressState = nullptr;
         return ERR_RUNTIME_NATIVE;
     }
@@ -1231,7 +1236,7 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
 
     std::unique_ptr<void, LogoDeleter> logo(api.LogoFile_Create(ctx.get(), tempPaths.tempLogo.c_str()), LogoDeleter{ &api });
     if (!logo) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        PrintNativeError(api, ctx.get());
         return ERR_RUNTIME_NATIVE;
     }
     api.LogoFile_SetServiceId(logo.get(), serviceId);
@@ -1241,7 +1246,7 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
         ? api.LogoFile_SaveAviUtl(logo.get(), tempPaths.finalTemp.c_str())
         : api.LogoFile_Save(logo.get(), tempPaths.finalTemp.c_str());
     if (saveOk == 0) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        PrintNativeError(api, ctx.get());
         return ERR_RUNTIME_NATIVE;
     }
     if (!opt.logoImagePath.empty()) {
@@ -1251,7 +1256,7 @@ int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir)
             PrintCliInfo(_T("warning: ロゴ画像のJPEG保存に失敗しました"));
             const std::string jpegErr = SafeGetError(api, ctx.get());
             if (!jpegErr.empty()) {
-                PrintCliInfo(_T("warning: %hs"), jpegErr.c_str());
+                PrintCliInfo(_T("warning: %s"), char_to_tstring(jpegErr.c_str()).c_str());
             }
         } else {
             PrintCliInfo(_T("logo image saved: %s"), opt.logoImagePath.c_str());

@@ -638,7 +638,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     if (!conf.logoPass0Output.empty()) {
         if (conf.mode != _T("cm") || !conf.chapter || !conf.noLogoInCM || !conf.noDelogo
             || conf.autoLogoDetect != 0 || !conf.noRemoveTmp || conf.resumeDir.empty()
-            || !rgy_file_exists(conf.resumeDir)) {
+            || !rgy_directory_exists(conf.resumeDir)) {
             THROW(ArgumentException, "--logo-pass0-outputはcm/chapter/no-logo-in-cm/no-delogo/auto-logo-detect 0/no-remove-tmp/resume-dir直下の通常ファイル名が必要です");
         }
         logopass0::ArtifactPaths artifactPaths;

@@ -51,7 +51,7 @@ struct ExpiredCleanupResult {
     int failed = 0;
 };
 
-// 所有者が存在しない古いpass0ジョブだけを回収する。直下以外とシンボリックリンクは対象外。
+// 所有markerで確認できる古いpass0ジョブだけを回収する。直下以外、リンク、想定外の内容は対象外。
 ExpiredCleanupResult CleanupExpiredJobs(const std::filesystem::path& baseDirectory,
     std::chrono::hours maxAge, tstring& error);
 
@@ -74,8 +74,10 @@ public:
     bool Cleanup(tstring* error = nullptr);
 
 private:
-    explicit OwnedJobDirectory(std::filesystem::path path) : path_(std::move(path)), owns_(true) {}
+    explicit OwnedJobDirectory(std::filesystem::path path, tstring token)
+        : path_(std::move(path)), token_(std::move(token)), owns_(true) {}
     std::filesystem::path path_;
+    tstring token_;
     bool owns_ = false;
 };
 

@@ -96,9 +96,22 @@ namespace AmatsukazeServerPass0Test
                 var owner = "0123456789abcdef0123456789abcdef";
                 File.WriteAllText(Path.Combine(target, ".logo-pass0-owner"), owner);
                 Assert(AutoLogoPass0Validation.IsOwnedJob(target, owner));
+                File.WriteAllText(Path.Combine(target, ".logo-pass0-owner"), owner + "\n");
+                Assert(!AutoLogoPass0Validation.IsOwnedJob(target, owner));
+                File.WriteAllText(Path.Combine(target, ".logo-pass0-owner"), owner + "\0junk");
+                Assert(!AutoLogoPass0Validation.IsOwnedJob(target, owner));
+                File.WriteAllText(Path.Combine(target, ".logo-pass0-owner"), owner + "x");
+                Assert(!AutoLogoPass0Validation.IsOwnedJob(target, owner));
+                File.WriteAllText(Path.Combine(target, ".logo-pass0-owner"), owner);
                 Assert(!AutoLogoPass0Validation.IsOwnedJob(target, "fedcba9876543210fedcba9876543210"));
                 Assert(!AutoLogoPass0Validation.TryDeleteOwnedJob(target, "fedcba9876543210fedcba9876543210"));
                 Assert(Directory.Exists(target));
+                var expectedJobNames = new[] {
+                    "audio.dat", "audio.wav", "i0.mpg", "streaminfo.dat", "resume.dat", "amts0.dat", "amts0.avs",
+                    "amts0_8bit.avs", "chapter_exe0.txt", "chapter_exe_o0.txt", "trim0.avs", "jls0.txt", "div0.txt",
+                    "logof0.txt", "tsreadex_dump.txt", "pass0.amts", "pass0.trim.avs", "pass0.ready", "pass0.amts.tmp.1.0.0"
+                };
+                foreach (var name in expectedJobNames) File.WriteAllText(Path.Combine(target, name), "test");
                 var artifact = Path.Combine(parent, "artifact");
                 Directory.CreateDirectory(artifact);
                 File.WriteAllText(Path.Combine(artifact, "pass0.ready"), "1\n");
@@ -116,10 +129,23 @@ namespace AmatsukazeServerPass0Test
                 }
                 Assert(AutoLogoPass0Validation.TryDeleteOwnedJob(target, owner));
                 Assert(!Directory.Exists(target));
+                foreach (var invalidName in new[] {
+                    "pass0.amts.tmp.1.0", "pass0.trim.avs.tmp.1.0.0.0", "pass0.ready.tmp.1.a.0",
+                    "pass0.amts.tmp.1..0", "pass0.unknown"
+                })
+                {
+                    var invalidPath = Path.Combine(parent, "logo-pass0-" + Guid.NewGuid().ToString("N"));
+                    var invalidOwner = Guid.NewGuid().ToString("N");
+                    Assert(AutoLogoPass0Validation.TryCreateDirectoryAtomically(invalidPath));
+                    File.WriteAllText(Path.Combine(invalidPath, ".logo-pass0-owner"), invalidOwner);
+                    File.WriteAllText(Path.Combine(invalidPath, invalidName), "test");
+                    Assert(!AutoLogoPass0Validation.TryDeleteOwnedJob(invalidPath, invalidOwner));
+                }
                 var oldToken = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
                 var oldPath = Path.Combine(parent, "logo-pass0-" + oldToken);
                 Assert(AutoLogoPass0Validation.TryCreateDirectoryAtomically(oldPath));
-                File.WriteAllText(Path.Combine(oldPath, ".logo-pass0-owner"), oldToken);
+                var oldOwner = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+                File.WriteAllText(Path.Combine(oldPath, ".logo-pass0-owner"), oldOwner);
                 Directory.SetCreationTimeUtc(oldPath, DateTime.UtcNow.AddDays(-2));
                 Assert(AutoLogoPass0Validation.CanCollectOwnedJob(oldPath, DateTime.UtcNow));
                 var newToken = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -127,11 +153,20 @@ namespace AmatsukazeServerPass0Test
                 Assert(AutoLogoPass0Validation.TryCreateDirectoryAtomically(newPath));
                 File.WriteAllText(Path.Combine(newPath, ".logo-pass0-owner"), newToken);
                 Assert(!AutoLogoPass0Validation.CanCollectOwnedJob(newPath, DateTime.UtcNow));
+                File.WriteAllText(Path.Combine(newPath, "external.txt"), "外部内容");
+                Assert(!AutoLogoPass0Validation.TryDeleteOwnedJob(newPath, newToken));
+                Assert(File.Exists(Path.Combine(newPath, "external.txt")));
                 if (OperatingSystem.IsLinux())
                 {
                     var link = Path.Combine(parent, "logo-pass0-cccccccccccccccccccccccccccccccc");
                     Directory.CreateSymbolicLink(link, oldPath);
                     Assert(!AutoLogoPass0Validation.CanCollectOwnedJob(link, DateTime.UtcNow));
+                    var linkContentPath = Path.Combine(parent, "logo-pass0-ffffffffffffffffffffffffffffffff");
+                    Assert(AutoLogoPass0Validation.TryCreateDirectoryAtomically(linkContentPath));
+                    File.WriteAllText(Path.Combine(linkContentPath, ".logo-pass0-owner"), "99999999999999999999999999999999");
+                    File.CreateSymbolicLink(Path.Combine(linkContentPath, "amts0.dat"), Path.Combine(artifact, "pass0.trim.avs"));
+                    Assert(!AutoLogoPass0Validation.TryDeleteOwnedJob(linkContentPath, "99999999999999999999999999999999"));
+                    Assert(File.Exists(Path.Combine(linkContentPath, "amts0.dat")));
                 }
                 var foreignToken = "dddddddddddddddddddddddddddddddd";
                 var foreignPath = Path.Combine(parent, "logo-pass0-" + foreignToken);

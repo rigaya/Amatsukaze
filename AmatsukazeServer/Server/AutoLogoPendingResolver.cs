@@ -632,8 +632,9 @@ namespace Amatsukaze.Server
         {
             for (var i = 0; i < 16; ++i)
             {
+                var directoryToken = Guid.NewGuid().ToString("N");
                 var token = Guid.NewGuid().ToString("N");
-                var path = Path.Combine(workPath, "logo-pass0-" + token);
+                var path = Path.Combine(workPath, "logo-pass0-" + directoryToken);
                 try
                 {
                     if (!AutoLogoPass0Validation.TryCreateDirectoryAtomically(path))
@@ -718,7 +719,11 @@ namespace Amatsukaze.Server
                         {
                             continue;
                         }
-                        Directory.Delete(path, true);
+                        var marker = Path.Combine(path, ".logo-pass0-owner");
+                        if (!AutoLogoPass0Validation.TryDeleteOwnedJob(path, File.ReadAllText(marker)))
+                        {
+                            Util.AddLog("[AutoLogoPending] 古いpass0一時フォルダの所有権を確認できないため削除しません: " + path, null);
+                        }
                     }
                     catch (Exception ex)
                     {
