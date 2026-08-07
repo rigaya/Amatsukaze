@@ -16,6 +16,7 @@
 #include <thread>
 #include "CMAnalyze.h"
 #include "AMTSource.h"
+#include "TrimAvs.h"
 
 namespace {
 
@@ -133,7 +134,7 @@ void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, 
     PrintFileAll(setting_.getTmpJlsPath(videoFileIndex));
 
     // AVSファイルからCM区間を読む
-    readTrimAVS(videoFileIndex, numFrames);
+    readTrimAVS(setting_.getTmpTrimAVSPath(videoFileIndex), numFrames);
     ctx.infoF(_T("trimAVS読み込み完了"));
 
     // シーンチェンジ
@@ -239,12 +240,7 @@ void CMAnalyze::inputTrimAVS(int numFrames, const tstring& trimavsPath) {
     PrintFileAll(trimavsPath);
 
     // AVSファイルからCM区間を読む
-    File file(trimavsPath, _T("r"));
-    std::string str;
-    if (!file.getline(str)) {
-        THROW(FormatException, "TrimAVSファイルが読めません");
-    }
-    readTrimAVS(str, numFrames);
+    readTrimAVS(trimavsPath, numFrames);
 
     // cmzonesに反映
     makeCMZones(numFrames);
@@ -711,26 +707,28 @@ void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     }
 }
 
-void CMAnalyze::readTrimAVS(int videoFileIndex, int numFrames) {
-    File file(setting_.getTmpTrimAVSPath(videoFileIndex), _T("r"));
-    std::string str;
-    if (!file.getline(str)) {
-        THROW(FormatException, "join_logo_scp.exeの出力AVSファイルが読めません");
+void CMAnalyze::readTrimAVS(const tstring& trimavsPath, const int numFrames) {
+    File file(trimavsPath, _T("r"));
+    std::string text;
+    std::string line;
+    while (file.getline(line)) {
+        if (!text.empty()) {
+            text.push_back('\n');
+        }
+        text.append(line);
     }
-    readTrimAVS(str, numFrames);
-}
-
-void CMAnalyze::readTrimAVS(std::string str, int numFrames) {
-    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
-    std::regex re("trim\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
-    std::sregex_iterator iter(str.begin(), str.end(), re);
-    std::sregex_iterator end;
-
-    trims.clear();
-    for (; iter != end; iter++) {
-        trims.push_back(std::stoi((*iter)[1].str()));
-        trims.push_back(std::stoi((*iter)[2].str()) + 1);
+    if (text.empty()) {
+        THROW(FormatException, "TrimAVSファイルが読めません");
     }
+
+    std::vector<trimavs::FrameRange> ranges;
+    std::string error;
+    std::vector<int> parsedTrims;
+    if (!trimavs::ParseTrimAvs(text, numFrames, ranges, error)
+        || !trimavs::FrameRangesToLegacyTrims(ranges, numFrames, parsedTrims, error)) {
+        THROWF(FormatException, "TrimAVSの解析に失敗しました: %s", error.c_str());
+    }
+    trims.swap(parsedTrims);
 }
 
 void CMAnalyze::readDiv(int videoFileIndex, int numFrames) {

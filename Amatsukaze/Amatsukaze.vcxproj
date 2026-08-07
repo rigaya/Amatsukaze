@@ -453,6 +453,7 @@
     <ClInclude Include="StreamUtils.h" />
     <ClInclude Include="StringUtils.h" />
     <ClInclude Include="Subtitle.h" />
+    <ClInclude Include="TrimAvs.h" />
     <ClInclude Include="TranscodeManager.h" />
     <ClInclude Include="TranscodeSetting.h" />
     <ClInclude Include="TsInfo.h" />
@@ -590,6 +591,7 @@
     <ClCompile Include="StreamUtils.cpp" />
     <ClCompile Include="StringUtils.cpp" />
     <ClCompile Include="Subtitle.cpp" />
+    <ClCompile Include="TrimAvs.cpp" />
     <ClCompile Include="TranscodeManager.cpp" />
     <ClCompile Include="TranscodeSetting.cpp" />
     <ClCompile Include="TsInfo.cpp" />

@@ -31,6 +31,7 @@ amatsukaze_sources = [
   'StreamUtils.cpp',
   'StringUtils.cpp',
   'Subtitle.cpp',
+  'TrimAvs.cpp',
   'TranscodeManager.cpp',
   'TranscodeSetting.cpp',
   'TsInfo.cpp',
@@ -76,6 +77,13 @@ else # Linux
   amatsukaze_cpp_args = cpp_args + ['-DAMTSUKAZE_API=__attribute__((visibility("default")))', '-DWINAPI=', '-DAMATSUKAZE2DLL', '-fvisibility=hidden']
   amatsukaze_link_args = [ '-Wl,-Bsymbolic' ] # ffmpegの静的リンクに必要
 endif
+
+# Trim AVSの解析は外部ツールや映像入力に依存しないため、Linuxでも単体実行する。
+trim_avs_test = executable('trim_avs_test',
+  ['TrimAvs.cpp', 'TrimAvsTest.cpp'],
+  cpp_args : cpp_args,
+)
+test('trim_avs', trim_avs_test)
 
 # AVXとAVX2のためのカスタムターゲット
 if host_machine.system() == 'windows'

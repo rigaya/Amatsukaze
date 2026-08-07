@@ -115,9 +115,7 @@ private:
 
     void joinLogoScp(int videoFileIndex, int serviceId);
 
-    void readTrimAVS(int videoFileIndex, int numFrames);
-
-    void readTrimAVS(std::string str, int numFrames);
+    void readTrimAVS(const tstring& trimavsPath, int numFrames);
 
     void readDiv(int videoFileIndex, int numFrames);
 
