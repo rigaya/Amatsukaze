@@ -1012,6 +1012,10 @@ bool ConfigWrapper::isCopyTrimAVSEnabled() const {
     return conf.copyTrimAVS;
 }
 
+tstring ConfigWrapper::getLogoPass0Output() const {
+    return conf.logoPass0Output;
+}
+
 bool ConfigWrapper::isWebVTTEnabled() const {
     return conf.webvtt;
 }
@@ -1643,6 +1647,7 @@ void ConfigWrapper::dump() const {
         decoderToString(conf.decoderSetting.hevc));
     if (conf.mode == _T("cm")) {
         ctx.infoF(_T("trim.avsをコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
+        ctx.infoF(_T("pass0成果物出力: %s"), conf.logoPass0Output.empty() ? _T("無効") : conf.logoPass0Output.c_str());
     }
 }
 

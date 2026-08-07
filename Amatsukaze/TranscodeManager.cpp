@@ -16,6 +16,7 @@
 #include "rgy_mutex.h"
 #include "Subtitle.h"
 #include "WaveWriter.h"
+#include "LogoPass0Artifact.h"
 #include <filesystem>
 
 namespace {
@@ -467,6 +468,48 @@ static void copyTrimAVSForCMOnly(
         }
     } else {
         ctx.warn(_T("[CM解析のみ] コピー対象のtrim*.avsが見つかりませんでした"));
+    }
+}
+
+static void publishLogoPass0Artifacts(AMTContext& ctx, const ConfigWrapper& setting,
+    const StreamReformInfo& reformInfo, const std::vector<std::unique_ptr<CMAnalyze>>& cmanalyze,
+    const int numVideoFiles) {
+    if (setting.getLogoPass0Output().empty()) return;
+    std::vector<int> frameCounts;
+    frameCounts.reserve(numVideoFiles);
+    for (int i = 0; i < numVideoFiles; i++) {
+        frameCounts.push_back((int)reformInfo.getFilterSourceFrames(i).size());
+    }
+    const int bestIndex = logopass0::SelectLargestVideoIndex(frameCounts);
+    const int bestFrames = bestIndex >= 0 ? frameCounts[bestIndex] : -1;
+    if (bestIndex < 0 || bestIndex >= (int)cmanalyze.size()) {
+        THROW(FormatException, "pass0成果物の対象映像がありません");
+    }
+    std::vector<trimavs::FrameRange> ranges;
+    std::string error;
+    if (!trimavs::FrameRangesFromLegacyTrims(cmanalyze[bestIndex]->getTrims(), bestFrames, ranges, error)) {
+        THROWF(FormatException, "pass0成果物のTrim範囲が不正です: %s", error.c_str());
+    }
+    std::string trimText;
+    if (!trimavs::FormatTrimAvs(ranges, bestFrames, trimText, error)) {
+        THROWF(FormatException, "pass0成果物のTrim出力に失敗しました: %s", error.c_str());
+    }
+    const auto base = setting.getLogoPass0Output();
+    logopass0::ArtifactPaths paths;
+    tstring artifactError;
+    if (!logopass0::ResolveArtifactPaths(setting.getResumeDir(), base, paths, artifactError)) {
+        THROWF(ArgumentException, "pass0成果物の出力先が不正です: %s", artifactError.c_str());
+    }
+    if (logopass0::HasExistingArtifact(paths)) {
+        THROW(ArgumentException, "pass0成果物が既に存在します");
+    }
+    const auto srcAmt = setting.getTmpAMTSourcePath(bestIndex);
+    if (!File::exists(srcAmt)) {
+        THROWF(IOException, "pass0成果物のAMTSourceがありません: %s", srcAmt);
+    }
+    ctx.infoF(_T("[CM解析のみ] pass0成果物を公開: video=%d base=%s"), bestIndex, base);
+    if (!logopass0::PublishArtifacts(paths, srcAmt, trimText, artifactError)) {
+        THROWF(IOException, "pass0成果物の公開に失敗しました: %s", artifactError.c_str());
     }
 }
 
@@ -1417,6 +1460,7 @@ void DoBadThing() {
         if (setting.isCopyTrimAVSEnabled()) {
             copyTrimAVSForCMOnly(ctx, setting, reformInfo, numVideoFiles);
         }
+        publishLogoPass0Artifacts(ctx, setting, reformInfo, cmanalyze, numVideoFiles);
         if (setting.isOutputChapterEnabled()) {
             ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {

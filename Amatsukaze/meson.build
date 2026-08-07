@@ -18,6 +18,7 @@ amatsukaze_sources = [
   'HEVCVideoParser.cpp',
   'InterProcessComm.cpp',
   'LogoScan.cpp',
+  'LogoPass0Artifact.cpp',
   'Mpeg2TsParser.cpp',
   'Mpeg2VideoParser.cpp',
   'Muxer.cpp',
@@ -84,6 +85,12 @@ trim_avs_test = executable('trim_avs_test',
   cpp_args : cpp_args,
 )
 test('trim_avs', trim_avs_test)
+
+logo_pass0_artifact_test = executable('logo_pass0_artifact_test',
+  ['LogoPass0Artifact.cpp', 'LogoPass0ArtifactTest.cpp', 'TrimAvs.cpp'],
+  cpp_args : cpp_args,
+)
+test('logo_pass0_artifact', logo_pass0_artifact_test)
 
 cm_analyze_pass0_plan_test = executable('cm_analyze_pass0_plan_test',
   ['CMAnalyzePass0PlanTest.cpp'],

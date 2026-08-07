@@ -291,6 +291,8 @@ struct Config {
     tstring trimavsPath;
     // CM解析のみ実行時にtrim%d.avsを入力ディレクトリへコピーする
     bool copyTrimAVS;
+    // CM解析のみ実行時にpass0用成果物をresume-dir直下へ公開する基底名
+    tstring logoPass0Output;
     // 検出モード用
     int maxframes;
     // ホストプロセスとの通信用
@@ -467,6 +469,8 @@ public:
 
     tstring getTrimAVSPath() const;
     bool isCopyTrimAVSEnabled() const;
+
+    tstring getLogoPass0Output() const;
 
     bool isWebVTTEnabled() const;
 

@@ -66,6 +66,9 @@
     <ClInclude Include="LogoScan.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="LogoPass0Artifact.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="TrimAvs.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -198,6 +201,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="LogoScan.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="LogoPass0Artifact.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="TrimAvs.cpp">

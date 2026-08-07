@@ -11,6 +11,7 @@
 #include <mutex>
 #include "TranscodeManager.h"
 #include "AmatsukazeTestImpl.h"
+#include "LogoPass0Artifact.h"
 #include "Version.h"
 
 // MSVCのマルチバイトはUnicodeでないので文字列操作に適さないのでwchar_tで文字列操作をする
@@ -120,7 +121,8 @@ static void printHelp(const tchar* bin) {
         "  --whisper-option <オプション> whisperへ渡す追加オプション\n"
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
-        "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"))
+        "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"
+        "  --logo-pass0-output <base> CM解析のみでpass0成果物をresume-dir直下へ公開する\n"))
         + AMATSUKAZECLI_HELP_NICOASS_LINE
         + _T(
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
@@ -280,6 +282,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.whisperOption = _T("");
     conf.whisperParallel = false;
     conf.copyTrimAVS = false;
+    conf.logoPass0Output = _T("");
     conf.noLogoInCM = false;
 
     for (int i = 1; i < argc; i++) {
@@ -515,6 +518,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.resumeDir = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--copy-trimavs")) {
             conf.copyTrimAVS = true;
+        } else if (key == _T("--logo-pass0-output")) {
+            conf.logoPass0Output = getParam(argc, argv, i++);
         } else if (key == _T("--nicoass")) {
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--nicojk18")) {
@@ -627,6 +632,23 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     if (conf.mode == _T("drcs") || conf.mode == _T("cm") || starts_with(conf.mode, _T("probe_"))) {
         if (conf.srcFilePath.size() == 0) {
             THROWF(ArgumentException, "入力ファイルを指定してください");
+        }
+    }
+
+    if (!conf.logoPass0Output.empty()) {
+        if (conf.mode != _T("cm") || !conf.chapter || !conf.noLogoInCM || !conf.noDelogo
+            || conf.autoLogoDetect != 0 || !conf.noRemoveTmp || conf.resumeDir.empty()
+            || !rgy_file_exists(conf.resumeDir)) {
+            THROW(ArgumentException, "--logo-pass0-outputはcm/chapter/no-logo-in-cm/no-delogo/auto-logo-detect 0/no-remove-tmp/resume-dir直下の通常ファイル名が必要です");
+        }
+        logopass0::ArtifactPaths artifactPaths;
+        tstring artifactError;
+        if (!logopass0::ResolveArtifactPaths(conf.resumeDir, conf.logoPass0Output, artifactPaths, artifactError)) {
+            THROWF(ArgumentException, "--logo-pass0-outputが不正です: %s", artifactError.c_str());
+        }
+        conf.logoPass0Output = artifactPaths.base;
+        if (logopass0::HasExistingArtifact(artifactPaths)) {
+            THROW(ArgumentException, "--logo-pass0-outputの成果物が既に存在します");
         }
     }
 
