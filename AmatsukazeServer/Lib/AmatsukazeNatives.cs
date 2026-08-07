@@ -40,6 +40,19 @@ namespace Amatsukaze.Lib
         WeakPass2Fallback = 7,
     }
 
+    // ネイティブLogoPass0Stateと同じ値を維持する。
+    public enum LogoPass0State
+    {
+        Disabled = 0,
+        ArtifactMissing = 1,
+        TrimInvalid = 2,
+        AmtSourceOpenFailed = 3,
+        AmtSourceDecodeFailed = 4,
+        NoProgramFrames = 5,
+        TooFewProgramFrames = 6,
+        Succeeded = 7,
+    }
+
     public sealed class AutoDetectLogoRectResult
     {
         public int X { get; init; }
@@ -61,6 +74,9 @@ namespace Amatsukaze.Lib
         public int Pass2SkippedFrames { get; init; }
         public int FrameGateRetryAttemptCount { get; init; }
         public int FrameGateRetrySuccessAttempt { get; init; }
+        public LogoPass0State Pass0State { get; init; }
+        public int Pass0AcceptedFrames { get; init; }
+        public int Pass0SkippedCmFrames { get; init; }
     }
 
     public sealed class AutoDetectLogoRectException : IOException
@@ -80,6 +96,9 @@ namespace Amatsukaze.Lib
         public int Pass2SkippedFrames { get; }
         public int FrameGateRetryAttemptCount { get; }
         public int FrameGateRetrySuccessAttempt { get; }
+        public LogoPass0State Pass0State { get; }
+        public int Pass0AcceptedFrames { get; }
+        public int Pass0SkippedCmFrames { get; }
 
         public AutoDetectLogoRectException(
             string message,
@@ -97,7 +116,10 @@ namespace Amatsukaze.Lib
             int pass2AcceptedFrames,
             int pass2SkippedFrames,
             int frameGateRetryAttemptCount,
-            int frameGateRetrySuccessAttempt)
+            int frameGateRetrySuccessAttempt,
+            LogoPass0State pass0State = LogoPass0State.Disabled,
+            int pass0AcceptedFrames = 0,
+            int pass0SkippedCmFrames = 0)
             : base(message)
         {
             RectDetectFail = rectDetectFail;
@@ -115,6 +137,9 @@ namespace Amatsukaze.Lib
             Pass2SkippedFrames = pass2SkippedFrames;
             FrameGateRetryAttemptCount = frameGateRetryAttemptCount;
             FrameGateRetrySuccessAttempt = frameGateRetrySuccessAttempt;
+            Pass0State = pass0State;
+            Pass0AcceptedFrames = pass0AcceptedFrames;
+            Pass0SkippedCmFrames = pass0SkippedCmFrames;
         }
     }
 
@@ -660,7 +685,8 @@ namespace Amatsukaze.Lib
         private static extern int ScanLogoWithQualityValidation(IntPtr ctx, string srcpath, int serviceid, string workfile, string dstpath,
             string debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames, LogoAnalyzeCallback cb);
 
-        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet)]
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet,
+            CallingConvention = CallingConvention.Cdecl)]
         private static extern int AutoDetectLogoRect(IntPtr ctx, string srcpath, int serviceid,
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
@@ -675,6 +701,26 @@ namespace Amatsukaze.Lib
             string acceptedPath,
             int detailedDebug,
             LogoAutoDetectCallback cb);
+
+        // AutoDetectLogoRectWithPass0の引数順はLogoScan.cppのC ABIと一致させる。
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName, CharSet = AmatsukazeNatives.AmatsukazeLibCharSet,
+            CallingConvention = CallingConvention.Cdecl)]
+        private static extern int AutoDetectLogoRectWithPass0(IntPtr ctx, string fallbackSrcPath, int serviceid,
+            string amtSourcePath, string trimAvsPath,
+            int divx, int divy, int searchFrames, int blockSize, int threshold,
+            int marginX, int marginY, int threadN,
+            ref int x, ref int y, ref int w, ref int h, ref int rectDetectFail, ref int logoAnalyzeFail,
+            ref double pass1ScoreMax, ref double pass2ScoreMax, ref double finalScoreBeforeRescueMax,
+            ref int pass2Entered, ref int pass2PrepareSucceeded, ref int pass2CollectSucceeded, ref int pass2RescueFallbackApplied,
+            ref int pass2FailBeforeClear, ref int pass2FrameMaskNonZero, ref int pass2AcceptedFrames, ref int pass2SkippedFrames,
+            ref int frameGateRetryAttemptCount, ref int frameGateRetrySuccessAttempt,
+            string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
+            string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
+            string transitionPath, string keepRatePath,
+            string acceptedPath,
+            int detailedDebug,
+            LogoAutoDetectCallback cb,
+            ref int pass0State, ref int pass0AcceptedFrames, ref int pass0SkippedCmFrames);
         #endregion
 
         public LogoFile(AMTContext ctx, string filepath)
@@ -753,7 +799,7 @@ namespace Amatsukaze.Lib
 
         private static IntPtr ConvertToCP932(string str) {
             if (string.IsNullOrEmpty(str)) return IntPtr.Zero;
-            
+
             // ロゴフォーマットはCP932固定
             byte[] bytes = global::Amatsukaze.Server.Util.LogoEncoding.GetBytes(str);
             
@@ -824,6 +870,84 @@ namespace Amatsukaze.Lib
             }
         }
 
+        private sealed class AutoDetectLogoRectOutputs
+        {
+            public int X;
+            public int Y;
+            public int W;
+            public int H;
+            public int RectDetectFail;
+            public int LogoAnalyzeFail;
+            public double Pass1ScoreMax;
+            public double Pass2ScoreMax;
+            public double FinalScoreBeforeRescueMax;
+            public int Pass2Entered;
+            public int Pass2PrepareSucceeded;
+            public int Pass2CollectSucceeded;
+            public int Pass2RescueFallbackApplied;
+            public int Pass2FailBeforeClear;
+            public int Pass2FrameMaskNonZero;
+            public int Pass2AcceptedFrames;
+            public int Pass2SkippedFrames;
+            public int FrameGateRetryAttemptCount;
+            public int FrameGateRetrySuccessAttempt;
+            public int Pass0State;
+            public int Pass0AcceptedFrames;
+            public int Pass0SkippedCmFrames;
+        }
+
+        private static AutoDetectLogoRectResult CompleteAutoDetectLogoRect(AMTContext ctx, bool succeeded, AutoDetectLogoRectOutputs o)
+        {
+            if (!succeeded)
+            {
+                throw new AutoDetectLogoRectException(
+                    ctx.GetError(),
+                    (LogoRectDetectFail)o.RectDetectFail,
+                    (LogoAnalyzeFail)o.LogoAnalyzeFail,
+                    o.Pass1ScoreMax,
+                    o.Pass2ScoreMax,
+                    o.FinalScoreBeforeRescueMax,
+                    o.Pass2Entered != 0,
+                    o.Pass2PrepareSucceeded != 0,
+                    o.Pass2CollectSucceeded != 0,
+                    o.Pass2RescueFallbackApplied != 0,
+                    (LogoAnalyzeFail)o.Pass2FailBeforeClear,
+                    o.Pass2FrameMaskNonZero,
+                    o.Pass2AcceptedFrames,
+                    o.Pass2SkippedFrames,
+                    o.FrameGateRetryAttemptCount,
+                    o.FrameGateRetrySuccessAttempt,
+                    (LogoPass0State)o.Pass0State,
+                    o.Pass0AcceptedFrames,
+                    o.Pass0SkippedCmFrames);
+            }
+            return new AutoDetectLogoRectResult()
+            {
+                X = o.X,
+                Y = o.Y,
+                W = o.W,
+                H = o.H,
+                RectDetectFail = (LogoRectDetectFail)o.RectDetectFail,
+                LogoAnalyzeFail = (LogoAnalyzeFail)o.LogoAnalyzeFail,
+                Pass1ScoreMax = o.Pass1ScoreMax,
+                Pass2ScoreMax = o.Pass2ScoreMax,
+                FinalScoreBeforeRescueMax = o.FinalScoreBeforeRescueMax,
+                Pass2Entered = o.Pass2Entered != 0,
+                Pass2PrepareSucceeded = o.Pass2PrepareSucceeded != 0,
+                Pass2CollectSucceeded = o.Pass2CollectSucceeded != 0,
+                Pass2RescueFallbackApplied = o.Pass2RescueFallbackApplied != 0,
+                Pass2FailBeforeClear = (LogoAnalyzeFail)o.Pass2FailBeforeClear,
+                Pass2FrameMaskNonZero = o.Pass2FrameMaskNonZero,
+                Pass2AcceptedFrames = o.Pass2AcceptedFrames,
+                Pass2SkippedFrames = o.Pass2SkippedFrames,
+                FrameGateRetryAttemptCount = o.FrameGateRetryAttemptCount,
+                FrameGateRetrySuccessAttempt = o.FrameGateRetrySuccessAttempt,
+                Pass0State = (LogoPass0State)o.Pass0State,
+                Pass0AcceptedFrames = o.Pass0AcceptedFrames,
+                Pass0SkippedCmFrames = o.Pass0SkippedCmFrames,
+            };
+        }
+
         public static AutoDetectLogoRectResult AutoDetectLogoRect(AMTContext ctx, string srcpath, int serviceid,
             int divx, int divy, int searchFrames, int blockSize, int threshold,
             int marginX, int marginY, int threadN,
@@ -834,74 +958,42 @@ namespace Amatsukaze.Lib
             bool detailedDebug,
             LogoAutoDetectCallback cb)
         {
-            int x = 0;
-            int y = 0;
-            int w = 0;
-            int h = 0;
-            int rectDetectFail = 0;
-            int logoAnalyzeFail = 0;
-            double pass1ScoreMax = 0.0;
-            double pass2ScoreMax = 0.0;
-            double finalScoreBeforeRescueMax = 0.0;
-            int pass2Entered = 0;
-            int pass2PrepareSucceeded = 0;
-            int pass2CollectSucceeded = 0;
-            int pass2RescueFallbackApplied = 0;
-            int pass2FailBeforeClear = 0;
-            int pass2FrameMaskNonZero = 0;
-            int pass2AcceptedFrames = 0;
-            int pass2SkippedFrames = 0;
-            int frameGateRetryAttemptCount = 0;
-            int frameGateRetrySuccessAttempt = 0;
+            var o = new AutoDetectLogoRectOutputs();
             if (AutoDetectLogoRect(ctx.Ptr, srcpath, serviceid,
                 divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
-                ref x, ref y, ref w, ref h, ref rectDetectFail, ref logoAnalyzeFail,
-                ref pass1ScoreMax, ref pass2ScoreMax, ref finalScoreBeforeRescueMax,
-                ref pass2Entered, ref pass2PrepareSucceeded, ref pass2CollectSucceeded, ref pass2RescueFallbackApplied,
-                ref pass2FailBeforeClear, ref pass2FrameMaskNonZero, ref pass2AcceptedFrames, ref pass2SkippedFrames,
-                ref frameGateRetryAttemptCount, ref frameGateRetrySuccessAttempt,
+                ref o.X, ref o.Y, ref o.W, ref o.H, ref o.RectDetectFail, ref o.LogoAnalyzeFail,
+                ref o.Pass1ScoreMax, ref o.Pass2ScoreMax, ref o.FinalScoreBeforeRescueMax,
+                ref o.Pass2Entered, ref o.Pass2PrepareSucceeded, ref o.Pass2CollectSucceeded, ref o.Pass2RescueFallbackApplied,
+                ref o.Pass2FailBeforeClear, ref o.Pass2FrameMaskNonZero, ref o.Pass2AcceptedFrames, ref o.Pass2SkippedFrames,
+                ref o.FrameGateRetryAttemptCount, ref o.FrameGateRetrySuccessAttempt,
                 scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb) == 0)
             {
-                throw new AutoDetectLogoRectException(
-                    ctx.GetError(),
-                    (LogoRectDetectFail)rectDetectFail,
-                    (LogoAnalyzeFail)logoAnalyzeFail,
-                    pass1ScoreMax,
-                    pass2ScoreMax,
-                    finalScoreBeforeRescueMax,
-                    pass2Entered != 0,
-                    pass2PrepareSucceeded != 0,
-                    pass2CollectSucceeded != 0,
-                    pass2RescueFallbackApplied != 0,
-                    (LogoAnalyzeFail)pass2FailBeforeClear,
-                    pass2FrameMaskNonZero,
-                    pass2AcceptedFrames,
-                    pass2SkippedFrames,
-                    frameGateRetryAttemptCount,
-                    frameGateRetrySuccessAttempt);
+                return CompleteAutoDetectLogoRect(ctx, false, o);
             }
-            return new AutoDetectLogoRectResult()
-            {
-                X = x,
-                Y = y,
-                W = w,
-                H = h,
-                RectDetectFail = (LogoRectDetectFail)rectDetectFail,
-                LogoAnalyzeFail = (LogoAnalyzeFail)logoAnalyzeFail,
-                Pass1ScoreMax = pass1ScoreMax,
-                Pass2ScoreMax = pass2ScoreMax,
-                FinalScoreBeforeRescueMax = finalScoreBeforeRescueMax,
-                Pass2Entered = pass2Entered != 0,
-                Pass2PrepareSucceeded = pass2PrepareSucceeded != 0,
-                Pass2CollectSucceeded = pass2CollectSucceeded != 0,
-                Pass2RescueFallbackApplied = pass2RescueFallbackApplied != 0,
-                Pass2FailBeforeClear = (LogoAnalyzeFail)pass2FailBeforeClear,
-                Pass2FrameMaskNonZero = pass2FrameMaskNonZero,
-                Pass2AcceptedFrames = pass2AcceptedFrames,
-                Pass2SkippedFrames = pass2SkippedFrames,
-                FrameGateRetryAttemptCount = frameGateRetryAttemptCount,
-                FrameGateRetrySuccessAttempt = frameGateRetrySuccessAttempt,
-            };
+            return CompleteAutoDetectLogoRect(ctx, true, o);
+        }
+
+        public static AutoDetectLogoRectResult AutoDetectLogoRectWithPass0(AMTContext ctx,
+            string fallbackSrcPath, int serviceid, string amtSourcePath, string trimAvsPath,
+            int divx, int divy, int searchFrames, int blockSize, int threshold,
+            int marginX, int marginY, int threadN,
+            string scorePath, string binaryPath, string cclPath, string countPath, string aPath, string bPath,
+            string alphaPath, string logoYPath, string consistencyPath, string fgVarPath, string bgVarPath,
+            string transitionPath, string keepRatePath, string acceptedPath,
+            bool detailedDebug, LogoAutoDetectCallback cb)
+        {
+            var o = new AutoDetectLogoRectOutputs();
+            var succeeded = AutoDetectLogoRectWithPass0(ctx.Ptr, fallbackSrcPath, serviceid, amtSourcePath, trimAvsPath,
+                divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN,
+                ref o.X, ref o.Y, ref o.W, ref o.H, ref o.RectDetectFail, ref o.LogoAnalyzeFail,
+                ref o.Pass1ScoreMax, ref o.Pass2ScoreMax, ref o.FinalScoreBeforeRescueMax,
+                ref o.Pass2Entered, ref o.Pass2PrepareSucceeded, ref o.Pass2CollectSucceeded, ref o.Pass2RescueFallbackApplied,
+                ref o.Pass2FailBeforeClear, ref o.Pass2FrameMaskNonZero, ref o.Pass2AcceptedFrames, ref o.Pass2SkippedFrames,
+                ref o.FrameGateRetryAttemptCount, ref o.FrameGateRetrySuccessAttempt,
+                scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath,
+                transitionPath, keepRatePath, acceptedPath, detailedDebug ? 1 : 0, cb,
+                ref o.Pass0State, ref o.Pass0AcceptedFrames, ref o.Pass0SkippedCmFrames) != 0;
+            return CompleteAutoDetectLogoRect(ctx, succeeded, o);
         }
     }
 

@@ -1982,12 +1982,11 @@ namespace Amatsukaze.Server
         {
             StringBuilder sb = new StringBuilder();
 
-            bool loadV2 = false;
-            if (   streamFormat != VideoStreamFormat.MPEG2
-                && streamFormat != VideoStreamFormat.H264)
+            var cmPlan = CreateCmAnalysisArgumentPlan(profile, streamFormat, jlscommand, jlsopt, ceopt);
+            bool loadV2 = cmPlan.LoadV2;
+            if (loadV2)
             {
                 sb.Append(" --loadv2");
-                loadV2 = true;
             }
 
             if (mode == ProcMode.CMCheck)
@@ -2369,22 +2368,22 @@ namespace Amatsukaze.Server
                     }
                 }
 
-                if (string.IsNullOrEmpty(jlscommand) == false)
+                if (string.IsNullOrEmpty(cmPlan.JlsCommand) == false)
                 {
                     sb.Append(" --jls-cmd \"")
-                        .Append(Path.Combine(GetJLDirectoryPath(), jlscommand))
+                        .Append(Path.Combine(GetJLDirectoryPath(), cmPlan.JlsCommand))
                         .Append("\"");
                 }
-                if (string.IsNullOrEmpty(jlsopt) == false)
+                if (string.IsNullOrEmpty(cmPlan.JlsOption) == false)
                 {
                     sb.Append(" --jls-option \"")
-                        .Append(jlsopt)
+                        .Append(cmPlan.JlsOption)
                         .Append("\"");
                 }
-                if (string.IsNullOrEmpty(ceopt) == false)
+                if (string.IsNullOrEmpty(cmPlan.ChapterOption) == false)
                 {
                     sb.Append(" --chapter-exe-options \"")
-                        .Append(ceopt)
+                        .Append(cmPlan.ChapterOption)
                         .Append("\"");
                 }
 
@@ -2494,6 +2493,101 @@ namespace Amatsukaze.Server
             }
 
             return sb.ToString();
+        }
+
+        // pass0と通常処理が共有する入力・CM解析条件。出力やバッチ等の副作用は含めない。
+        internal sealed class CmAnalysisArgumentPlan
+        {
+            public string JlsCommand;
+            public string JlsOption;
+            public string ChapterOption;
+            public bool LoadV2;
+        }
+
+        private static CmAnalysisArgumentPlan CreateCmAnalysisArgumentPlan(
+            ProfileSetting profile, VideoStreamFormat streamFormat, string jlsCommand, string jlsOption, string chapterOption)
+        {
+            return new CmAnalysisArgumentPlan()
+            {
+                JlsCommand = jlsCommand,
+                JlsOption = jlsOption,
+                ChapterOption = chapterOption,
+                LoadV2 = streamFormat != VideoStreamFormat.MPEG2 && streamFormat != VideoStreamFormat.H264,
+            };
+        }
+
+        internal static CmAnalysisArgumentPlan ResolvePass0CmAnalysisArgumentPlan(ProfileSetting profile,
+            ServiceSettingElement serviceSetting, VideoStreamFormat streamFormat)
+        {
+            var jlsCommand = !string.IsNullOrEmpty(profile.JLSCommandFile) ? profile.JLSCommandFile
+                    : !string.IsNullOrEmpty(serviceSetting?.JLSCommand) ? serviceSetting.JLSCommand
+                    : "JL_標準.txt";
+            var jlsOption = profile.EnableJLSOption ? profile.JLSOption : serviceSetting?.JLSOption;
+            var chapterOption = profile.ChapterExeOption;
+            return CreateCmAnalysisArgumentPlan(profile, streamFormat, jlsCommand, jlsOption, chapterOption);
+        }
+
+        private CmAnalysisArgumentPlan CreateCmAnalysisArgumentPlan(QueueItem item)
+        {
+            ServiceSettingElement serviceSetting = null;
+            ServiceMap.TryGetValue(item.ServiceId, out serviceSetting);
+            return ResolvePass0CmAnalysisArgumentPlan(item.Profile, serviceSetting, item.StreamFormat);
+        }
+
+        // ProcessStartInfo.ArgumentListへそのまま渡すpass0用argvを作る。通常処理の文字列を再利用しない。
+        internal IReadOnlyList<string> MakeAutoLogoPass0Arguments(QueueItem item, string workPath, string resumeDir, string outputBasePath)
+        {
+            if (item == null || item.Profile == null)
+            {
+                throw new ArgumentException("pass0用のキュー項目またはプロファイルがありません");
+            }
+            if (string.IsNullOrWhiteSpace(workPath) || string.IsNullOrWhiteSpace(resumeDir) || string.IsNullOrWhiteSpace(outputBasePath))
+            {
+                throw new ArgumentException("pass0用一時フォルダまたは出力先がありません");
+            }
+
+            var profile = item.Profile;
+            var setting = AppData_.setting;
+            var plan = CreateCmAnalysisArgumentPlan(item);
+            return BuildAutoLogoPass0Arguments(item.SrcPath, item.ServiceId, profile, plan,
+                GetDRCSMapPath(), setting.ChapterExePath, setting.JoinLogoScpPath,
+                GetJLDirectoryPath(), setting.TsReadExPath, workPath, resumeDir, outputBasePath);
+        }
+
+        internal static IReadOnlyList<string> BuildAutoLogoPass0Arguments(
+            string srcPath, int serviceId, ProfileSetting profile, CmAnalysisArgumentPlan plan,
+            string drcsMapPath, string chapterExePath, string jlsPath,
+            string jlDirectoryPath, string tsReadExPath, string workPath, string resumeDir, string outputBasePath)
+        {
+            var args = new List<string>();
+            if (plan.LoadV2) args.Add("--loadv2");
+            args.Add("--mode"); args.Add("cm");
+            args.Add("-i"); args.Add(srcPath);
+            args.Add("-s"); args.Add(serviceId.ToString(CultureInfo.InvariantCulture));
+            args.Add("--drcs"); args.Add(drcsMapPath);
+            args.Add("-w"); args.Add(workPath);
+            args.Add("--chapter-exe"); args.Add(chapterExePath);
+            args.Add("--jls"); args.Add(jlsPath);
+            args.Add("--cmoutmask"); args.Add((profile.OutputMask == 0 ? 1 : profile.OutputMask).ToString(CultureInfo.InvariantCulture));
+            args.Add("--chapter");
+            // pass0はCM無効サービスでも標準JLを明示して、CM除外の前処理として完結させる。
+            args.Add("--jls-cmd"); args.Add(Path.Combine(jlDirectoryPath, plan.JlsCommand ?? "JL_標準.txt"));
+            if (!string.IsNullOrEmpty(plan.JlsOption)) { args.Add("--jls-option"); args.Add(plan.JlsOption); }
+            if (!string.IsNullOrEmpty(plan.ChapterOption)) { args.Add("--chapter-exe-options"); args.Add(plan.ChapterOption); }
+            var decoderNames = new[] { "default", plan.LoadV2 ? "QSV" : "default", "CUVID" };
+            if (profile.Mpeg2Decoder != DecoderType.Default) { args.Add("--mpeg2decoder"); args.Add(decoderNames[(int)profile.Mpeg2Decoder]); }
+            if (profile.H264Deocder != DecoderType.Default) { args.Add("--h264decoder"); args.Add(decoderNames[(int)profile.H264Deocder]); }
+            if (profile.HEVCDecoder != DecoderType.Default) { args.Add("--hevcdecoder"); args.Add(decoderNames[(int)profile.HEVCDecoder]); }
+            if (!string.IsNullOrEmpty(tsReadExPath)) { args.Add("--tsreadex"); args.Add(tsReadExPath); }
+            if (profile.EnablePmtCut) { args.Add("--pmt-cut"); args.Add((profile.PmtCutHeadRate / 100).ToString(CultureInfo.InvariantCulture) + ":" + (profile.PmtCutTailRate / 100).ToString(CultureInfo.InvariantCulture)); }
+            if (profile.EnableMaxFadeLength) { args.Add("--max-fade-length"); args.Add(profile.MaxFadeLength.ToString(CultureInfo.InvariantCulture)); }
+            args.Add("--no-logo-in-cm");
+            args.Add("--no-delogo");
+            args.Add("--auto-logo-detect"); args.Add("0");
+            args.Add("--no-remove-tmp");
+            args.Add("--resume-dir"); args.Add(resumeDir);
+            args.Add("--logo-pass0-output"); args.Add(outputBasePath);
+            return args;
         }
 
         public Task ClientQueueUpdate(QueueUpdate update)

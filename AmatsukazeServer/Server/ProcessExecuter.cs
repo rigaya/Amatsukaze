@@ -210,9 +210,27 @@ namespace Amatsukaze.Server
         {
             if(Process != null && Process.HasExited == false)
             {
+                try
+                {
+                    // .NETのtree killを優先し、LinuxでもCLIの子孫を残さない。
+                    Process.Kill(entireProcessTree: true);
+                    return;
+                }
+                catch (InvalidOperationException)
+                {
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    // 古い実行環境だけ既存のOS別killへ戻す。
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // 既に終了した場合を含む。従来のkill経路を一度だけ試す。
+                }
+
                 string processName;
                 string arguments;
-
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     processName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "taskkill.exe");
@@ -227,7 +245,6 @@ namespace Amatsukaze.Server
                 {
                     return;
                 }
-
                 using (var procKiller = new System.Diagnostics.Process())
                 {
                     procKiller.StartInfo.FileName = processName;

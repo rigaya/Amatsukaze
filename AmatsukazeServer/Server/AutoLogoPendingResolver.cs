@@ -269,6 +269,11 @@ namespace Amatsukaze.Server
                     message = RunCore(request);
                     success = true;
                 }
+                catch (OperationCanceledException)
+                {
+                    // キューからの取消は通常の解析失敗ではないため、エラー通知を出さない。
+                    message = "自動ロゴ生成をキャンセルしました";
+                }
                 catch (Exception ex)
                 {
                     message = ex.Message;
@@ -317,6 +322,7 @@ namespace Amatsukaze.Server
                 workPath = Directory.GetCurrentDirectory();
             }
             Directory.CreateDirectory(workPath);
+            CleanupOldPass0Directories(workPath);
 
             var jobId = Guid.NewGuid().ToString("N");
             var scorePath = Path.Combine(workPath, "logo-auto-score-" + jobId + ".bmp");
@@ -341,6 +347,8 @@ namespace Amatsukaze.Server
             var rectH = 0;
             var progressLogger = new LogoAutoDetectProgressLogger("[AutoLogoPending]", request.SrcPath);
 
+            ThrowIfCanceled(request);
+
             Util.AddLog(
                 "[AutoLogoPending] 開始: " +
                 "QID=" + request.QueueItemId +
@@ -360,17 +368,10 @@ namespace Amatsukaze.Server
 
             using (var ctx = new AMTContext())
             {
-                var rect = LogoFile.AutoDetectLogoRect(
-                    ctx, request.SrcPath, request.ServiceId,
-                    divX, divY, searchFrames, blockSize, threshold,
-                    marginX, marginY, threadN,
-                    scorePath, binaryPath, cclPath, null, null, null, null, null, null, null, null, null, null, null,
-                    detailedDebug,
-                    (stage, stageProgress, progress, nread, total) =>
-                    {
-                        progressLogger.Report(stage, stageProgress, progress, nread, total);
-                        return true;
-                    });
+                var rect = AutoDetectRectWithPass0OrFallback(
+                    request, ctx, workPath,
+                    divX, divY, searchFrames, blockSize, threshold, marginX, marginY, threadN,
+                    scorePath, binaryPath, cclPath, detailedDebug, progressLogger);
                 rectX = rect.X;
                 rectY = rect.Y;
                 rectW = rect.W;
@@ -401,10 +402,19 @@ namespace Amatsukaze.Server
                     ", threshold=" + threshold +
                     ", maxFrames=" + searchFrames,
                     null);
-                LogoFile.ScanLogo(ctx, request.SrcPath, request.ServiceId, workfile, tmppath, null,
-                    imgx, imgy, w, h, threshold, searchFrames,
-                    (progress, nread, total, ngather) => true,
-                    true);
+                ThrowIfCanceled(request);
+                try
+                {
+                    LogoFile.ScanLogo(ctx, request.SrcPath, request.ServiceId, workfile, tmppath, null,
+                        imgx, imgy, w, h, threshold, searchFrames,
+                        (progress, nread, total, ngather) => !IsCanceled(request),
+                        true);
+                }
+                catch (IOException) when (IsCanceled(request))
+                {
+                    throw new OperationCanceledException("自動ロゴ生成をキャンセルしました");
+                }
+                ThrowIfCanceled(request);
 
                 using (var info = new TsInfo(ctx))
                 {
@@ -438,6 +448,7 @@ namespace Amatsukaze.Server
             }
 
             int serviceId;
+            ThrowIfCanceled(request);
             using (var ctx = new AMTContext())
             using (var logo = new LogoFile(ctx, outpath))
             {
@@ -453,7 +464,9 @@ namespace Amatsukaze.Server
                 return discardMessage;
             }
 
+            ThrowIfCanceled(request);
             var data = File.ReadAllBytes(outpath);
+            ThrowIfCanceled(request);
             server.SendLogoFile(new LogoFileData()
             {
                 ServiceId = serviceId,
@@ -471,6 +484,292 @@ namespace Amatsukaze.Server
                 ", rect=(" + rectX + "," + rectY + "," + rectW + "," + rectH + "), search=" + searchFrames,
                 false);
             return result;
+        }
+
+        private AutoDetectLogoRectResult AutoDetectRectWithPass0OrFallback(
+            AutoRequest request, AMTContext ctx, string workPath,
+            int divX, int divY, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN,
+            string scorePath, string binaryPath, string cclPath, bool detailedDebug, LogoAutoDetectProgressLogger progressLogger)
+        {
+            Pass0Job pass0 = null;
+            try
+                {
+                    pass0 = CreatePass0Job(workPath);
+                }
+                catch (Exception ex)
+                {
+                    Util.AddLog("[AutoLogoPending] pass0用一時フォルダを作成できないため従来入力へフォールバックします", ex);
+                }
+                Pass0Artifact artifact = null;
+                try
+                {
+                    if (pass0 != null)
+                    {
+                        artifact = RunPass0Cli(request, pass0, workPath);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    DeletePass0Job(pass0);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // CLI起動、出力読込、成果物検証の失敗は前処理だけの失敗として扱う。
+                    Util.AddLog("[AutoLogoPending] pass0 CM解析を実行できないため従来入力へフォールバックします", ex);
+                }
+                return AutoLogoPass0Validation.ExecutePass0OrLegacy(
+                    artifact,
+                    pass0Artifact =>
+                    {
+                        try
+                        {
+                            var result = LogoFile.AutoDetectLogoRectWithPass0(
+                                ctx, request.SrcPath, request.ServiceId, pass0Artifact.AmtSourcePath, pass0Artifact.TrimAvsPath,
+                                divX, divY, searchFrames, blockSize, threshold, marginX, marginY, threadN,
+                                scorePath, binaryPath, cclPath, null, null, null, null, null, null, null, null, null, null, null,
+                                detailedDebug,
+                                (stage, stageProgress, progress, nread, total) =>
+                                {
+                                    progressLogger.Report(stage, stageProgress, progress, nread, total);
+                                    return !IsCanceled(request);
+                                });
+                            ThrowIfCanceled(request);
+                            Util.AddLog("[AutoLogoPending] pass0結果: state=" + result.Pass0State +
+                                ", accepted=" + result.Pass0AcceptedFrames + ", skippedCM=" + result.Pass0SkippedCmFrames, null);
+                            return result;
+                        }
+                        catch (AutoDetectLogoRectException) when (IsCanceled(request))
+                        {
+                            throw new OperationCanceledException("自動ロゴ生成のロゴ枠検出をキャンセルしました");
+                        }
+                    },
+                    () =>
+                    {
+                        Util.AddLog("[AutoLogoPending] pass0成果物を使えないため従来入力でロゴ枠検出を実行します", null);
+                        try
+                        {
+                            return LogoFile.AutoDetectLogoRect(
+                                ctx, request.SrcPath, request.ServiceId,
+                                divX, divY, searchFrames, blockSize, threshold, marginX, marginY, threadN,
+                                scorePath, binaryPath, cclPath, null, null, null, null, null, null, null, null, null, null, null,
+                                detailedDebug,
+                                (stage, stageProgress, progress, nread, total) =>
+                                {
+                                    progressLogger.Report(stage, stageProgress, progress, nread, total);
+                                    return !IsCanceled(request);
+                                });
+                        }
+                        catch (AutoDetectLogoRectException) when (IsCanceled(request))
+                        {
+                            throw new OperationCanceledException("自動ロゴ生成のロゴ枠検出をキャンセルしました");
+                        }
+                    },
+                () => DeletePass0Job(pass0),
+                () => IsCanceled(request));
+        }
+
+        private Pass0Artifact RunPass0Cli(AutoRequest request, Pass0Job pass0, string workPath)
+        {
+            ThrowIfCanceled(request);
+            var args = server.MakeAutoLogoPass0Arguments(request.Item, workPath, pass0.DirectoryPath, pass0.OutputBasePath);
+            var setting = server.AppData_.setting;
+            var psi = new System.Diagnostics.ProcessStartInfo(setting.AmatsukazePath)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = Directory.GetCurrentDirectory(),
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                RedirectStandardInput = false,
+                StandardOutputEncoding = Util.AmatsukazeDefaultEncoding,
+                StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
+                CreateNoWindow = true,
+            };
+            foreach (var arg in args)
+            {
+                psi.ArgumentList.Add(arg);
+            }
+            Util.AddLog("[AutoLogoPending] pass0 CM解析開始: " + setting.AmatsukazePath + " " + string.Join(" ", args), null);
+            using (var process = new NormalProcess(psi))
+            {
+                process.OnOutput = (buffer, offset, count) =>
+                {
+                    var text = Util.AmatsukazeDefaultEncoding.GetString(buffer, offset, count);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        Util.AddLog("[AutoLogoPending/pass0] " + text.TrimEnd(), null);
+                    }
+                    return Task.CompletedTask;
+                };
+                var waitTask = process.WaitForExitAsync();
+                while (!waitTask.Wait(250))
+                {
+                    if (!IsCanceled(request))
+                    {
+                        continue;
+                    }
+                    process.Canel();
+                    waitTask.GetAwaiter().GetResult();
+                    throw new OperationCanceledException("自動ロゴ生成のpass0 CM解析をキャンセルしました");
+                }
+                waitTask.GetAwaiter().GetResult();
+                ThrowIfCanceled(request);
+                if (process.Process.ExitCode != 0)
+                {
+                    Util.AddLog("[AutoLogoPending] pass0 CM解析が終了コード" + process.Process.ExitCode + "で失敗しました", null);
+                    return null;
+                }
+            }
+            if (!TryGetPass0Artifact(pass0, out var artifact))
+            {
+                Util.AddLog("[AutoLogoPending] pass0成果物が不完全なため従来入力へフォールバックします", null);
+                return null;
+            }
+            return artifact;
+        }
+
+        private static Pass0Job CreatePass0Job(string workPath)
+        {
+            for (var i = 0; i < 16; ++i)
+            {
+                var token = Guid.NewGuid().ToString("N");
+                var path = Path.Combine(workPath, "logo-pass0-" + token);
+                try
+                {
+                    if (!AutoLogoPass0Validation.TryCreateDirectoryAtomically(path))
+                    {
+                        continue;
+                    }
+                    var markerPath = Path.Combine(path, ".logo-pass0-owner");
+                    using (var marker = new FileStream(markerPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    using (var writer = new StreamWriter(marker, new System.Text.UTF8Encoding(false)))
+                    {
+                        writer.Write(token);
+                    }
+                    // marker以外が存在した場合は所有権を証明できないため、そのフォルダには触れない。
+                    if (Directory.EnumerateFileSystemEntries(path).Any(entry => !string.Equals(entry, markerPath, StringComparison.Ordinal)))
+                    {
+                        AutoLogoPass0Validation.CleanupUnownedCreationCandidate(path, markerPath, token);
+                        continue;
+                    }
+                    return new Pass0Job(path, token, markerPath);
+                }
+                catch (IOException)
+                {
+                    AutoLogoPass0Validation.CleanupUnownedCreationCandidate(path, Path.Combine(path, ".logo-pass0-owner"), token);
+                    // GUID衝突、marker作成失敗、競合時だけ別の名前で再試行する。
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    AutoLogoPass0Validation.CleanupUnownedCreationCandidate(path, Path.Combine(path, ".logo-pass0-owner"), token);
+                }
+            }
+            throw new IOException("pass0用一時フォルダを作成できません");
+        }
+
+        private static bool TryGetPass0Artifact(Pass0Job job, out Pass0Artifact artifact)
+        {
+            artifact = null;
+            try
+            {
+                var amts = Path.Combine(job.DirectoryPath, "pass0.amts");
+                var trim = Path.Combine(job.DirectoryPath, "pass0.trim.avs");
+                if (!AutoLogoPass0Validation.HasCompleteArtifact(job.DirectoryPath))
+                {
+                    return false;
+                }
+                artifact = new Pass0Artifact(amts, trim);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private static void DeletePass0Job(Pass0Job job)
+        {
+            if (job == null || Interlocked.Exchange(ref job.DeleteStarted, 1) != 0)
+            {
+                return;
+            }
+            try
+            {
+                if (Directory.Exists(job.DirectoryPath) && !AutoLogoPass0Validation.TryDeleteOwnedJob(job.DirectoryPath, job.Token))
+                {
+                    Util.AddLog("[AutoLogoPending] pass0一時フォルダの所有権を確認できないため削除しません: " + job.DirectoryPath, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                Util.AddLog("[AutoLogoPending] pass0一時フォルダを削除できません: " + job.DirectoryPath, ex);
+            }
+        }
+
+        private static void CleanupOldPass0Directories(string workPath)
+        {
+            try
+            {
+                foreach (var path in Directory.EnumerateDirectories(workPath, "logo-pass0-*", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        if (!AutoLogoPass0Validation.CanCollectOwnedJob(path, DateTime.UtcNow))
+                        {
+                            continue;
+                        }
+                        Directory.Delete(path, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Util.AddLog("[AutoLogoPending] 古いpass0一時フォルダを回収できません: " + path, ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Util.AddLog("[AutoLogoPending] pass0一時フォルダの期限回収を開始できません", ex);
+            }
+        }
+
+        private static bool IsCanceled(AutoRequest request)
+        {
+            return request.Item.State == QueueState.Canceled;
+        }
+
+        private static void ThrowIfCanceled(AutoRequest request)
+        {
+            if (IsCanceled(request))
+            {
+                throw new OperationCanceledException("自動ロゴ生成をキャンセルしました");
+            }
+        }
+
+        private sealed class Pass0Job
+        {
+            public Pass0Job(string directoryPath, string token, string markerPath)
+            {
+                DirectoryPath = directoryPath;
+                Token = token;
+                MarkerPath = markerPath;
+                OutputBasePath = Path.Combine(directoryPath, "pass0");
+            }
+            public string DirectoryPath { get; }
+            public string Token { get; }
+            public string MarkerPath { get; }
+            public string OutputBasePath { get; }
+            public int DeleteStarted;
+        }
+
+        private sealed class Pass0Artifact
+        {
+            public Pass0Artifact(string amtSourcePath, string trimAvsPath)
+            {
+                AmtSourcePath = amtSourcePath;
+                TrimAvsPath = trimAvsPath;
+            }
+            public string AmtSourcePath { get; }
+            public string TrimAvsPath { get; }
         }
 
         private void WaitForLogoRefresh(int serviceId)
