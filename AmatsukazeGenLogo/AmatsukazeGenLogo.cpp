@@ -10,8 +10,11 @@
 #include "rgy_tchar.h"
 #include "rgy_util.h"
 #include "rgy_codepage.h"
+#include "rgy_pipe.h"
+#include "Pass0Support.h"
 
 #include <array>
+#include <chrono>
 #include <cerrno>
 #include <cstdarg>
 #include <ctime>
@@ -72,6 +75,13 @@ struct Options {
     int autoThreads = 0;
     int logoGenThreshold = -1;
     int logoGenSamples = -1;
+    bool logoPass0 = true;
+    std::optional<tstring> amatsukazeCliPath;
+    std::optional<tstring> chapterExePath;
+    std::optional<tstring> jlsPath;
+    std::optional<tstring> jlsCmdPath;
+    tstring jlsOption;
+    tstring chapterExeOptions;
     bool aviutlLgd = false;
     tstring debugDir;
     tstring logoImagePath;
@@ -108,6 +118,17 @@ using AutoDetectLogoRectFunc = int(*)(void*, const TCHAR*, int, int, int, int, i
     const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*,
     int,
     LogoAutoDetectCallback);
+using AutoDetectLogoRectWithPass0Func = int(*)(void*, const TCHAR*, int, const TCHAR*, const TCHAR*,
+    int, int, int, int, int, int, int, int,
+    int*, int*, int*, int*, int*, int*,
+    double*, double*, double*,
+    int*, int*, int*, int*,
+    int*, int*, int*, int*,
+    int*, int*,
+    const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*,
+    int,
+    LogoAutoDetectCallback,
+    int*, int*, int*);
 using LogoFileCreateFunc = void*(*)(void*, const TCHAR*);
 using LogoFileDeleteFunc = void(*)(void*);
 using LogoFileSetServiceIdFunc = void(*)(void*, int);
@@ -134,6 +155,7 @@ struct NativeApi {
     ScanLogoFunc ScanLogo = nullptr;
     ScanLogoWithQualityValidationFunc ScanLogoWithQualityValidation = nullptr;
     AutoDetectLogoRectFunc AutoDetectLogoRect = nullptr;
+    AutoDetectLogoRectWithPass0Func AutoDetectLogoRectWithPass0 = nullptr;
     LogoFileCreateFunc LogoFile_Create = nullptr;
     LogoFileDeleteFunc LogoFile_Delete = nullptr;
     LogoFileSetServiceIdFunc LogoFile_SetServiceId = nullptr;
@@ -321,6 +343,13 @@ void PrintUsage() {
         _T("      --auto-logo-detect-margin-x <n>       自動ロゴ枠検出のマージンX [6]\n")
         _T("      --auto-logo-detect-margin-y <n>       自動ロゴ枠検出のマージンY [6]\n")
         _T("      --auto-logo-detect-threads <n>        自動ロゴ枠検出スレッド数 [0=max(1,min(論理コア数-2,16))]\n")
+        _T("      --no-logo-pass0                        CM解析を使うpass0を無効化\n")
+        _T("      --amatsukaze-cli <path>                pass0用AmatsukazeCLIのパス\n")
+        _T("      --chapter-exe <path>                   pass0用chapter_exeのパス\n")
+        _T("      --jls <path>                           pass0用join_logo_scpのパス\n")
+        _T("      --jls-cmd <path>                       pass0用JLコマンドファイルのパス\n")
+        _T("      --jls-option <option>                  pass0用join_logo_scpオプション\n")
+        _T("      --chapter-exe-options <option>         pass0用chapter_exeオプション\n")
         _T("\n")
         _T("Logo generate options:\n")
         _T("      --logo-gen-threshold <n>              ロゴ生成の閾値 [auto-detect-thresholdと同値]\n")
@@ -442,6 +471,28 @@ int ParseArgs(int argc, const TCHAR* argv[], Options& opt) {
             tstring value; int errCode = 0;
             if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
             if (!ParseInt(value, key.c_str(), opt.autoThreads, errCode)) return errCode;
+        } else if (key == _T("--no-logo-pass0")) {
+            opt.logoPass0 = false;
+        } else if (key == _T("--amatsukaze-cli")) {
+            tstring value;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            opt.amatsukazeCliPath = value;
+        } else if (key == _T("--chapter-exe")) {
+            tstring value;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            opt.chapterExePath = value;
+        } else if (key == _T("--jls")) {
+            tstring value;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            opt.jlsPath = value;
+        } else if (key == _T("--jls-cmd")) {
+            tstring value;
+            if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
+            opt.jlsCmdPath = value;
+        } else if (key == _T("--jls-option")) {
+            if (!requireValue(key.c_str(), opt.jlsOption)) return ERR_PARSE_BASE - 1;
+        } else if (key == _T("--chapter-exe-options")) {
+            if (!requireValue(key.c_str(), opt.chapterExeOptions)) return ERR_PARSE_BASE - 1;
         } else if (key == _T("--logo-gen-threshold")) {
             tstring value; int errCode = 0;
             if (!requireValue(key.c_str(), value)) return ERR_PARSE_BASE - 1;
@@ -571,6 +622,7 @@ int LoadNativeApi(HMODULE module, NativeApi& api) {
     if (!LoadSymbol(module, "ScanLogo", api.ScanLogo)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "ScanLogoWithQualityValidation", api.ScanLogoWithQualityValidation)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "AutoDetectLogoRect", api.AutoDetectLogoRect)) return ERR_RUNTIME_LOAD_SYMBOL;
+    api.AutoDetectLogoRectWithPass0 = reinterpret_cast<AutoDetectLogoRectWithPass0Func>(RGY_GET_PROC_ADDRESS(module, "AutoDetectLogoRectWithPass0"));
     if (!LoadSymbol(module, "LogoFile_Create", api.LogoFile_Create)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "LogoFile_Delete", api.LogoFile_Delete)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "LogoFile_SetServiceId", api.LogoFile_SetServiceId)) return ERR_RUNTIME_LOAD_SYMBOL;
@@ -791,6 +843,59 @@ void RemoveIfExists(const tstring& path) {
     }
 }
 
+const TCHAR* GetPass0StateName(int state) {
+    switch (state) {
+    case 0: return _T("Disabled");
+    case 1: return _T("ArtifactMissing");
+    case 2: return _T("TrimInvalid");
+    case 3: return _T("AmtSourceOpenFailed");
+    case 4: return _T("AmtSourceDecodeFailed");
+    case 5: return _T("NoProgramFrames");
+    case 6: return _T("TooFewProgramFrames");
+    case 7: return _T("Succeeded");
+    default: return _T("Unknown");
+    }
+}
+
+int RunPass0Cli(const std::vector<tstring>& args) {
+    if (args.empty()) {
+        return -1;
+    }
+#if defined(_WIN32) || defined(_WIN64)
+    tstring commandLine;
+    for (const auto& arg : args) {
+        if (!commandLine.empty()) {
+            commandLine.push_back(_T(' '));
+        }
+        commandLine += genlogo::pass0::QuoteWindowsArgument(arg);
+    }
+    std::vector<TCHAR> mutableCommandLine(commandLine.begin(), commandLine.end());
+    mutableCommandLine.push_back(0);
+    STARTUPINFO startupInfo = {};
+    startupInfo.cb = sizeof(startupInfo);
+    PROCESS_INFORMATION processInfo = {};
+    // 標準ハンドルを指定せず、GenLogo自身の標準出力・標準エラーをそのまま継承する。
+    if (!CreateProcess(nullptr, mutableCommandLine.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startupInfo, &processInfo)) {
+        return -1;
+    }
+    WaitForSingleObject(processInfo.hProcess, INFINITE);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(processInfo.hProcess, &exitCode);
+    CloseHandle(processInfo.hThread);
+    CloseHandle(processInfo.hProcess);
+    return static_cast<int>(exitCode);
+#else
+    auto process = createRGYPipeProcess();
+    if (!process) {
+        return -1;
+    }
+    if (process->run(args, nullptr, 0, false, false) != 0) {
+        return -1;
+    }
+    return process->waitAndGetExitCode();
+#endif
+}
+
 std::tm GetLocalTime(std::time_t now) {
     std::tm localTime = {};
 #if defined(_WIN32) || defined(_WIN64)
@@ -860,7 +965,7 @@ int FinalizeOutput(const tstring& tempPath, const tstring& outputPath, fs::path&
     return 0;
 }
 
-int Run(const NativeApi& api, const Options& opt) {
+int Run(const NativeApi& api, const Options& opt, const fs::path& executableDir) {
     struct ContextDeleter {
         const NativeApi* apiPtr = nullptr;
         void operator()(void* p) const {
@@ -963,7 +1068,102 @@ int Run(const NativeApi& api, const Options& opt) {
         AutoDetectProgressState autoDetectProgressState{};
         g_autoDetectProgressState = &autoDetectProgressState;
 
-        if (api.AutoDetectLogoRect(
+        bool autoDetectCompleted = false;
+        if (genlogo::pass0::ShouldRunPass0(autoDetectedRect, opt.logoPass0)) {
+            tstring pass0Error;
+            const fs::path jobParent = fs::absolute(fs::path(opt.output).has_parent_path()
+                ? fs::path(opt.output).parent_path() : fs::current_path());
+            const auto expiredCleanup = genlogo::pass0::CleanupExpiredJobs(jobParent, std::chrono::hours(24), pass0Error);
+            if (expiredCleanup.removed > 0) {
+                PrintCliInfo(_T("pass0期限切れ一時ディレクトリを回収しました: %d"), expiredCleanup.removed);
+            }
+            if (!pass0Error.empty()) {
+                PrintCliInfo(_T("warning: %s"), pass0Error.c_str());
+                pass0Error.clear();
+            }
+            auto jobDir = genlogo::pass0::OwnedJobDirectory::Create(jobParent, pass0Error);
+            if (!jobDir) {
+                PrintCliInfo(_T("warning: pass0 fallback: %s"), pass0Error.c_str());
+            } else {
+                const auto tools = genlogo::pass0::ResolveToolPaths(executableDir,
+                    opt.amatsukazeCliPath, opt.chapterExePath, opt.jlsPath, opt.jlsCmdPath);
+                const fs::path artifactBase = jobDir->path() / _T("pass0");
+                const genlogo::pass0::InvocationOptions pass0Options{
+                    opt.input, serviceId, tools, opt.jlsOption, opt.chapterExeOptions, jobDir->path(), artifactBase
+                };
+                const auto pass0Args = genlogo::pass0::BuildInvocationArgs(pass0Options);
+                PrintCliInfo(_T("pass0 CM解析開始: cli=%s work=%s"), tools.cli.c_str(), jobDir->path().c_str());
+                const int pass0ExitCode = RunPass0Cli(pass0Args);
+                const bool artifactReady = pass0ExitCode == 0 && genlogo::pass0::IsArtifactReady(artifactBase);
+                const bool fallbackToLegacy = genlogo::pass0::ShouldFallbackToLegacy(
+                    pass0ExitCode == 0, artifactReady, api.AutoDetectLogoRectWithPass0 != nullptr);
+                bool nativePass0Failed = false;
+                if (pass0ExitCode != 0) {
+                    PrintCliInfo(_T("warning: pass0 fallback: CM解析CLIが失敗しました exitCode=%d"), pass0ExitCode);
+                } else if (!artifactReady) {
+                    PrintCliInfo(_T("warning: pass0 fallback: 成果物が不完全です"));
+                } else if (api.AutoDetectLogoRectWithPass0 == nullptr) {
+                    PrintCliInfo(_T("warning: pass0 fallback: AutoDetectLogoRectWithPass0が見つかりません"));
+                } else if (!fallbackToLegacy) {
+                    int pass0State = 0;
+                    int pass0AcceptedFrames = 0;
+                    int pass0SkippedCmFrames = 0;
+                    const tstring amtSourcePath = artifactBase.native() + _T(".amts");
+                    const tstring trimAvsPath = artifactBase.native() + _T(".trim.avs");
+                    if (api.AutoDetectLogoRectWithPass0(
+                        ctx.get(), opt.input.c_str(), serviceId, amtSourcePath.c_str(), trimAvsPath.c_str(),
+                        opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
+                        opt.autoMarginX, opt.autoMarginY, opt.autoThreads,
+                        &x, &y, &w, &h, &rectDetectFail, &logoAnalyzeFail,
+                        &pass1ScoreMax, &pass2ScoreMax, &finalScoreBeforeRescueMax,
+                        &pass2Entered, &pass2PrepareSucceeded, &pass2CollectSucceeded, &pass2RescueFallbackApplied,
+                        &pass2FailBeforeClear, &pass2FrameMaskNonZero, &pass2AcceptedFrames, &pass2SkippedFrames,
+                        &frameGateRetryAttemptCount, &frameGateRetrySuccessAttempt,
+                        detailedDebug ? debugPaths.score.c_str() : nullptr,
+                        detailedDebug ? debugPaths.binary.c_str() : nullptr,
+                        detailedDebug ? debugPaths.ccl.c_str() : nullptr,
+                        detailedDebug ? debugPaths.count.c_str() : nullptr,
+                        detailedDebug ? debugPaths.a.c_str() : nullptr,
+                        detailedDebug ? debugPaths.b.c_str() : nullptr,
+                        detailedDebug ? debugPaths.alpha.c_str() : nullptr,
+                        detailedDebug ? debugPaths.logoY.c_str() : nullptr,
+                        detailedDebug ? debugPaths.consistency.c_str() : nullptr,
+                        detailedDebug ? debugPaths.fgVar.c_str() : nullptr,
+                        detailedDebug ? debugPaths.bgVar.c_str() : nullptr,
+                        detailedDebug ? debugPaths.transition.c_str() : nullptr,
+                        detailedDebug ? debugPaths.keepRate.c_str() : nullptr,
+                        detailedDebug ? debugPaths.accepted.c_str() : nullptr,
+                        detailedDebug ? 1 : 0,
+                        ReportAutoDetectProgress,
+                        &pass0State, &pass0AcceptedFrames, &pass0SkippedCmFrames) == 0) {
+                        // 新APIは成果物検証失敗を内部でTSへフォールバックする。
+                        // ここで旧APIを再実行すると、実際の解析失敗を二重実行してしまう。
+                        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+                        nativePass0Failed = true;
+                    } else {
+                        autoDetectCompleted = true;
+                        if (pass0State == 7) {
+                            PrintCliInfo(_T("pass0 succeeded: accepted=%d skippedCM=%d"), pass0AcceptedFrames, pass0SkippedCmFrames);
+                        } else {
+                            PrintCliInfo(_T("warning: pass0 fallback inside LogoScan: state=%s accepted=%d skippedCM=%d"),
+                                GetPass0StateName(pass0State), pass0AcceptedFrames, pass0SkippedCmFrames);
+                        }
+                    }
+                }
+                tstring cleanupError;
+                if (!jobDir->Cleanup(&cleanupError)) {
+                    PrintCliInfo(_T("warning: %s: %s"), cleanupError.c_str(), jobDir->path().c_str());
+                }
+                if (nativePass0Failed) {
+                    g_autoDetectProgressState = nullptr;
+                    return ERR_RUNTIME_NATIVE;
+                }
+            }
+        } else {
+            PrintCliInfo(_T("pass0 disabled: --no-logo-pass0"));
+        }
+
+        if (!autoDetectCompleted && api.AutoDetectLogoRect(
             ctx.get(), opt.input.c_str(), serviceId,
             opt.autoDivX, opt.autoDivY, opt.autoSearchFrames, opt.autoBlockSize, opt.autoThreshold,
             opt.autoMarginX, opt.autoMarginY, opt.autoThreads,
@@ -1116,7 +1316,7 @@ int _tmain(int argc, const TCHAR* argv[]) {
         return ret;
     }
     api.InitAmatsukazeDLL();
-    ret = Run(api, opt);
+    ret = Run(api, opt, exeDir);
     RGY_FREE_LIBRARY(module);
     return ret;
 }

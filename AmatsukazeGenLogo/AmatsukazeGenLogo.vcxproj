@@ -293,6 +293,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AmatsukazeGenLogo.cpp" />
+    <ClCompile Include="Pass0Support.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Pass0Support.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\common\common.vcxproj">
