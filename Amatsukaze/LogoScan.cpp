@@ -10,10 +10,12 @@
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
+#include "TrimAvs.h"
 #include <cstdlib>
 #include <regex>
 #include <array>
 #include <queue>
+#include <unordered_map>
 #include <thread>
 #include <deque>
 #include <mutex>
@@ -3010,6 +3012,9 @@ namespace {
         int readFrames;
         int sourceFrameIndex;
         int frameWindowStart;
+        bool cancellationRequested;
+        bool pass0InputReady;
+        std::vector<uint8_t> pass0ComposedY;
         static constexpr int kScanEdgeMargin = 16;
         // fg値をkHistBins個のbinに分割してサンプル蓄積する
         static constexpr int kHistBins = 32;
@@ -3808,7 +3813,7 @@ namespace {
             , logCtx(ctx)
             , cb(cb)
             , threadPool(ResolveAutoDetectThreadCount(threadN))
-            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
+            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), cancellationRequested(false), pass0InputReady(false), pass0ComposedY(), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
@@ -3946,7 +3951,23 @@ namespace {
             return rejectWeakPass2FallbackIfNeeded(rect);
         }
 
-        AutoDetectRect runSingleWindow(const tstring& srcpath, const int startFrame) {
+        bool wasCancellationRequested() const {
+            return cancellationRequested;
+        }
+
+        bool isPass0InputReady() const {
+            return pass0InputReady;
+        }
+
+        AutoDetectRect runPass0(av::AMTSource& source, const std::vector<trimavs::FrameRange>& ranges,
+            IScriptEnvironment* env, const tstring& fallbackSrcPath, int& acceptedFrames, int& skippedCmFrames) {
+            acceptedFrames = 0;
+            return runSingleWindow(fallbackSrcPath, 0, &source, &ranges, env, &acceptedFrames, &skippedCmFrames);
+        }
+
+        AutoDetectRect runSingleWindow(const tstring& srcpath, const int startFrame,
+            av::AMTSource* pass0Source = nullptr, const std::vector<trimavs::FrameRange>* pass0Ranges = nullptr,
+            IScriptEnvironment* pass0Env = nullptr, int* pass0AcceptedFrames = nullptr, int* pass0SkippedCmFrames = nullptr) {
             frameWindowStart = std::max(0, startFrame);
             try {
                 // 1) 初期化
@@ -3961,9 +3982,15 @@ namespace {
                 roiCacheCaptureActive = true;
                 temporalHistCaptureActive = true;
                 segmentConsensusCaptureActive = kEnableSegmentConsensus;
-                runFramePassWithProgress(srcpath, 1, 0.0f, 0.5f, 0.0f, 0.15f,
-                    [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
-                    [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
+                if (pass0Source != nullptr && pass0Ranges != nullptr && pass0Env != nullptr) {
+                    runPass0FramePass(*pass0Source, *pass0Ranges, pass0Env, pass1Stats,
+                        pass0AcceptedFrames, pass0SkippedCmFrames);
+                    pass0InputReady = true;
+                } else {
+                    runFramePassWithProgress(srcpath, 1, 0.0f, 0.5f, 0.0f, 0.15f,
+                        [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
+                        [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
+                }
                 temporalHistCaptureActive = false;
                 segmentConsensusCaptureActive = false;
                 roiCacheCaptureActive = false;
@@ -4316,6 +4343,8 @@ namespace {
 
         void resetRunState() {
             clearRoiCache();
+            cancellationRequested = false;
+            pass0InputReady = false;
             passIndex = 0;
             readFrames = 0;
             sourceFrameIndex = 0;
@@ -4914,6 +4943,7 @@ namespace {
             }
             progress = std::max(progress, lastReportedProgress);
             if (!cb(progressPlan.stage, stageProgress, progress, nread, total)) {
+                cancellationRequested = true;
                 return false;
             }
             lastReportedStage = progressPlan.stage;
@@ -4930,6 +4960,130 @@ namespace {
             }
             readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame));
             if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+        }
+
+        static uint16_t convertDirectBitDepth(const uint16_t value, const int srcBitDepth, const int dstBitDepth) {
+            if (dstBitDepth >= srcBitDepth) {
+                return (uint16_t)(value << (dstBitDepth - srcBitDepth));
+            }
+            const int shift = srcBitDepth - dstBitDepth;
+            return (uint16_t)((value + (1 << (shift - 1))) >> shift);
+        }
+
+        std::vector<uint8_t> makePass0DirectRoi(const AVFrame* top, const AVFrame* bottom,
+            const int dstBitDepth, const int srcBitDepth, const int pass0FramesPerSec, StatsPassBuffers& statsPass) {
+            if (top == nullptr || bottom == nullptr || top->width <= 0 || top->height <= 0
+                || dstBitDepth <= 0 || dstBitDepth > 16 || srcBitDepth <= 0 || srcBitDepth > 16) {
+                THROW(RuntimeException, "pass0 direct frame format is invalid");
+            }
+            if (scanw == 0 || scanh == 0) {
+                // 既存の幾何計算・ROIキャッシュ初期化を再利用する。統計はキャッシュと同じ8bitで蓄積する。
+                AVFrame frameInfo = *top;
+                frameInfo.format = AV_PIX_FMT_YUV420P;
+                processFirstFrame(nullptr, &frameInfo, &statsPass, nullptr);
+                framesPerSec = pass0FramesPerSec;
+                // pass0は後続passをROIキャッシュ再生する前提である。確保できない場合は
+                // aliasを安全に再利用できず、CM除外も維持できないためTS経路へ戻す。
+                if (roiCacheBackend == RoiCacheBackend::None) {
+                    THROW(RuntimeException, "pass0 ROI cache is unavailable");
+                }
+                const auto* desc = av_pix_fmt_desc_get((AVPixelFormat)top->format);
+                if (desc == nullptr) {
+                    THROW(RuntimeException, "pass0 direct pixel format is unsupported");
+                }
+                logUVx = std::max(0, (int)desc->log2_chroma_w);
+                logUVy = std::max(0, (int)desc->log2_chroma_h);
+            }
+
+            pass0ComposedY.resize((size_t)top->width * top->height);
+            const int dstMax = 255;
+            for (int y = 0; y < top->height; y++) {
+                const AVFrame* field = (y & 1) ? bottom : top;
+                if (srcBitDepth > 8) {
+                    const auto* src = reinterpret_cast<const uint16_t*>(field->data[0])
+                        + (size_t)y * (field->linesize[0] / (int)sizeof(uint16_t));
+                    for (int x = 0; x < top->width; x++) {
+                        const uint16_t amtsValue = convertDirectBitDepth(src[x], srcBitDepth, dstBitDepth);
+                        pass0ComposedY[(size_t)y * top->width + x] = (uint8_t)std::min(dstMax,
+                            (int)convertDirectBitDepth(amtsValue, dstBitDepth, 8));
+                    }
+                } else {
+                    const auto* src = field->data[0] + (size_t)y * field->linesize[0];
+                    for (int x = 0; x < top->width; x++) {
+                        const uint16_t amtsValue = convertDirectBitDepth(src[x], srcBitDepth, dstBitDepth);
+                        pass0ComposedY[(size_t)y * top->width + x] = (uint8_t)std::min(dstMax,
+                            (int)convertDirectBitDepth(amtsValue, dstBitDepth, 8));
+                    }
+                }
+            }
+            std::vector<uint8_t> roi;
+            buildDetectFrame<uint8_t>(pass0ComposedY.data(), top->width, roi);
+            return roi;
+        }
+
+        void runPass0FramePass(av::AMTSource& source, const std::vector<trimavs::FrameRange>& ranges,
+            IScriptEnvironment* env, StatsPassBuffers& statsPass, int* acceptedFrames, int* skippedCmFrames) {
+            setProgressPlan(1, 0.0f, 0.5f, 0.0f, 0.15f);
+            if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+
+            struct DecodedRoi {
+                std::vector<uint8_t> pixels;
+            };
+            std::unordered_map<int, DecodedRoi> pendingDecoded;
+            trimavs::Pass0RoiCachePlan roiCachePlan;
+            const auto& vi = source.GetVideoInfo();
+            const int pass0FramesPerSec = vi.fps_numerator > 0 && vi.fps_denominator > 0
+                ? ClampInt((int)std::round((double)vi.fps_numerator / vi.fps_denominator), 1, 240) : 30;
+            int accepted = 0;
+            for (const auto& range : ranges) {
+                if (accepted >= searchFrames) {
+                    break;
+                }
+                const int end = std::min(range.end, range.begin + (searchFrames - accepted));
+                source.ScanFramesDirect(range.begin, end - 1,
+                    [&](const int resolved, const AVFrame* top, const AVFrame* bottom, const int dstBitDepth, const int srcBitDepth) {
+                        pendingDecoded[resolved] = DecodedRoi{ makePass0DirectRoi(top, bottom, dstBitDepth, srcBitDepth, pass0FramesPerSec, statsPass) };
+                    },
+                    [&](const int requested, const int resolved) {
+                        std::vector<uint8_t> roi;
+                        const auto cacheFrame = roiCachePlan.appendResolvedFrame(resolved);
+                        if (!cacheFrame.firstResolved) {
+                            if (!readStoredRoiFrame(cacheFrame.sourceCacheIndex, roi)) {
+                                THROW(IOException, "pass0 alias ROI cache read failed");
+                            }
+                        } else {
+                            const auto decodedIt = pendingDecoded.find(resolved);
+                            if (decodedIt == pendingDecoded.end()) {
+                                THROWF(RuntimeException, "pass0 alias frame %d resolved to unavailable frame %d", requested, resolved);
+                            }
+                            roi = std::move(decodedIt->second.pixels);
+                            pendingDecoded.erase(decodedIt);
+                        }
+                        appendDetectFrameToRoiCache(roi.data(), scanw);
+                        if (roiCacheStoredFrames != roiCachePlan.logicalFrameCount()) {
+                            THROW(RuntimeException, "pass0 ROI cache frame count is inconsistent");
+                        }
+                        const int frameCount = addStoredFrame(roi.data(), scanw, &statsPass, nullptr);
+                        statsPass.frameValidCounts.push_back(frameCount);
+                        accepted++;
+                        readFrames++;
+                        if (cb && (accepted % 8) == 0
+                            && !reportProgressInCurrentPlan(accepted / (float)searchFrames, accepted, searchFrames)) {
+                            THROW(RuntimeException, "Cancel requested");
+                        }
+                    }, env);
+            }
+            if (accepted != roiCacheStoredFrames) {
+                THROW(RuntimeException, "pass0 accepted frame count does not match ROI cache");
+            }
+            if (acceptedFrames != nullptr) {
+                *acceptedFrames = accepted;
+            }
+            if (!reportProgressInCurrentPlan(1.0f, accepted, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
         }
@@ -11374,6 +11528,60 @@ extern "C" AMATSUKAZE_API int ScanLogoWithQualityValidation(AMTContext * ctx,
     return ScanLogoImpl(ctx, srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb, true);
 }
 
+struct AutoDetectOutputArgs {
+    int* rectDetectFail;
+    int* logoAnalyzeFail;
+    double* pass1ScoreMax;
+    double* pass2ScoreMax;
+    double* finalScoreBeforeRescueMax;
+    int* pass2Entered;
+    int* pass2PrepareSucceeded;
+    int* pass2CollectSucceeded;
+    int* pass2RescueFallbackApplied;
+    int* pass2FailBeforeClear;
+    int* pass2FrameMaskNonZero;
+    int* pass2AcceptedFrames;
+    int* pass2SkippedFrames;
+    int* frameGateRetryAttemptCount;
+    int* frameGateRetrySuccessAttempt;
+};
+
+static void InitializeAutoDetectOutputs(const AutoDetectOutputArgs& out) {
+    if (out.rectDetectFail) *out.rectDetectFail = 0;
+    if (out.logoAnalyzeFail) *out.logoAnalyzeFail = 0;
+    if (out.pass1ScoreMax) *out.pass1ScoreMax = 0.0;
+    if (out.pass2ScoreMax) *out.pass2ScoreMax = 0.0;
+    if (out.finalScoreBeforeRescueMax) *out.finalScoreBeforeRescueMax = 0.0;
+    if (out.pass2Entered) *out.pass2Entered = 0;
+    if (out.pass2PrepareSucceeded) *out.pass2PrepareSucceeded = 0;
+    if (out.pass2CollectSucceeded) *out.pass2CollectSucceeded = 0;
+    if (out.pass2RescueFallbackApplied) *out.pass2RescueFallbackApplied = 0;
+    if (out.pass2FailBeforeClear) *out.pass2FailBeforeClear = 0;
+    if (out.pass2FrameMaskNonZero) *out.pass2FrameMaskNonZero = 0;
+    if (out.pass2AcceptedFrames) *out.pass2AcceptedFrames = 0;
+    if (out.pass2SkippedFrames) *out.pass2SkippedFrames = 0;
+    if (out.frameGateRetryAttemptCount) *out.frameGateRetryAttemptCount = 0;
+    if (out.frameGateRetrySuccessAttempt) *out.frameGateRetrySuccessAttempt = 0;
+}
+
+static void CopyAutoDetectOutputs(const AutoDetectLogoReader& reader, const AutoDetectOutputArgs& out) {
+    if (out.rectDetectFail) *out.rectDetectFail = reader.getRectDetectFailCode();
+    if (out.logoAnalyzeFail) *out.logoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+    if (out.pass1ScoreMax) *out.pass1ScoreMax = reader.getPass1ScoreMax();
+    if (out.pass2ScoreMax) *out.pass2ScoreMax = reader.getPass2ScoreMax();
+    if (out.finalScoreBeforeRescueMax) *out.finalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
+    if (out.pass2Entered) *out.pass2Entered = reader.didEnterPass2() ? 1 : 0;
+    if (out.pass2PrepareSucceeded) *out.pass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
+    if (out.pass2CollectSucceeded) *out.pass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
+    if (out.pass2RescueFallbackApplied) *out.pass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
+    if (out.pass2FailBeforeClear) *out.pass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
+    if (out.pass2FrameMaskNonZero) *out.pass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
+    if (out.pass2AcceptedFrames) *out.pass2AcceptedFrames = reader.getPass2AcceptedFrames();
+    if (out.pass2SkippedFrames) *out.pass2SkippedFrames = reader.getPass2SkippedFrames();
+    if (out.frameGateRetryAttemptCount) *out.frameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
+    if (out.frameGateRetrySuccessAttempt) *out.frameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
+}
+
 extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     const tchar* srcpath, int serviceid,
     int divx, int divy, int searchFrames, int blockSize, int threshold,
@@ -11387,68 +11595,184 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
     AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
-    if (outRectDetectFail) *outRectDetectFail = 0;
-    if (outLogoAnalyzeFail) *outLogoAnalyzeFail = 0;
-    if (outPass1ScoreMax) *outPass1ScoreMax = 0.0;
-    if (outPass2ScoreMax) *outPass2ScoreMax = 0.0;
-    if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = 0.0;
-    if (outPass2Entered) *outPass2Entered = 0;
-    if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = 0;
-    if (outPass2CollectSucceeded) *outPass2CollectSucceeded = 0;
-    if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = 0;
-    if (outPass2FailBeforeClear) *outPass2FailBeforeClear = 0;
-    if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = 0;
-    if (outPass2AcceptedFrames) *outPass2AcceptedFrames = 0;
-    if (outPass2SkippedFrames) *outPass2SkippedFrames = 0;
-    if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = 0;
-    if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = 0;
+    const AutoDetectOutputArgs out{
+        outRectDetectFail, outLogoAnalyzeFail, outPass1ScoreMax, outPass2ScoreMax, outFinalScoreBeforeRescueMax,
+        outPass2Entered, outPass2PrepareSucceeded, outPass2CollectSucceeded, outPass2RescueFallbackApplied,
+        outPass2FailBeforeClear, outPass2FrameMaskNonZero, outPass2AcceptedFrames, outPass2SkippedFrames,
+        outFrameGateRetryAttemptCount, outFrameGateRetrySuccessAttempt
+    };
+    InitializeAutoDetectOutputs(out);
     try {
         const auto rect = reader.run(srcpath);
         if (outX) *outX = rect.x;
         if (outY) *outY = rect.y;
         if (outW) *outW = rect.w;
         if (outH) *outH = rect.h;
-        if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
-        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
-        if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
-        if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
-        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
-        if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
-        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
-        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
-        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
-        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
-        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
-        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
-        if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
-        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
-        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
+        CopyAutoDetectOutputs(reader, out);
         if (scorePath && binaryPath && cclPath) {
             reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
         }
         return true;
     } catch (const Exception& exception) {
-        if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
-        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
-        if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
-        if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
-        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
-        if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
-        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
-        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
-        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
-        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
-        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
-        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
-        if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
-        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
-        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
+        CopyAutoDetectOutputs(reader, out);
         if (scorePath && binaryPath && cclPath) {
             try {
                 reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
             } catch (...) {
             }
         }
+        ctx->setError(exception);
+    }
+    return false;
+}
+
+extern "C" AMATSUKAZE_API int AutoDetectLogoRectWithPass0(AMTContext* ctx,
+    const tchar* fallbackSrcPath, int serviceid, const tchar* amtSourcePath, const tchar* trimAvsPath,
+    int divx, int divy, int searchFrames, int blockSize, int threshold,
+    int marginX, int marginY, int threadN,
+    int* outX, int* outY, int* outW, int* outH, int* outRectDetectFail, int* outLogoAnalyzeFail,
+    double* outPass1ScoreMax, double* outPass2ScoreMax, double* outFinalScoreBeforeRescueMax,
+    int* outPass2Entered, int* outPass2PrepareSucceeded, int* outPass2CollectSucceeded, int* outPass2RescueFallbackApplied,
+    int* outPass2FailBeforeClear, int* outPass2FrameMaskNonZero, int* outPass2AcceptedFrames, int* outPass2SkippedFrames,
+    int* outFrameGateRetryAttemptCount, int* outFrameGateRetrySuccessAttempt,
+    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
+    int detailedDebug,
+    logo::LOGO_AUTODETECT_CB cb,
+    int* outPass0State, int* outPass0AcceptedFrames, int* outPass0SkippedCmFrames) {
+    const AutoDetectOutputArgs out{
+        outRectDetectFail, outLogoAnalyzeFail, outPass1ScoreMax, outPass2ScoreMax, outFinalScoreBeforeRescueMax,
+        outPass2Entered, outPass2PrepareSucceeded, outPass2CollectSucceeded, outPass2RescueFallbackApplied,
+        outPass2FailBeforeClear, outPass2FrameMaskNonZero, outPass2AcceptedFrames, outPass2SkippedFrames,
+        outFrameGateRetryAttemptCount, outFrameGateRetrySuccessAttempt
+    };
+    InitializeAutoDetectOutputs(out);
+    if (outPass0State) *outPass0State = (int)logo::LogoPass0State::Disabled;
+    if (outPass0AcceptedFrames) *outPass0AcceptedFrames = 0;
+    if (outPass0SkippedCmFrames) *outPass0SkippedCmFrames = 0;
+
+    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold,
+        marginX, marginY, threadN, detailedDebug != 0, cb);
+    logo::LogoPass0State pass0State = logo::LogoPass0State::Disabled;
+    int acceptedFrames = 0;
+    int skippedCmFrames = 0;
+    try {
+        AutoDetectRect rect{};
+        bool usePass0 = true;
+        std::vector<trimavs::FrameRange> ranges;
+        std::unique_ptr<av::AMTSource> source;
+        ScriptEnvironmentPointer env(nullptr, DeleteScriptEnvironment);
+        std::string trimText;
+        if (amtSourcePath == nullptr || trimAvsPath == nullptr || amtSourcePath[0] == 0 || trimAvsPath[0] == 0
+            || !File::exists(amtSourcePath) || !File::exists(trimAvsPath)) {
+            pass0State = logo::LogoPass0State::ArtifactMissing;
+            usePass0 = false;
+        }
+        if (usePass0) {
+            try {
+                File trimFile(trimAvsPath, _T("r"));
+                std::string line;
+                while (trimFile.getline(line)) {
+                    if (!trimText.empty()) trimText.push_back('\n');
+                    trimText.append(line);
+                }
+            } catch (const Exception& exception) {
+                pass0State = logo::LogoPass0State::TrimInvalid;
+                usePass0 = false;
+                ctx->warnF(_T("[LogoScan] pass0 trim read failed: %s"), exception.message());
+            }
+        }
+        if (usePass0) {
+            try {
+                env = make_unique_ptr(CreateScriptEnvironment2());
+                source = av::LoadAMTSourceDirect(*ctx, amtSourcePath, ResolveAutoDetectThreadCount(threadN), env.get());
+            } catch (const Exception& exception) {
+                pass0State = logo::LogoPass0State::AmtSourceOpenFailed;
+                usePass0 = false;
+                ctx->warnF(_T("[LogoScan] pass0 AMTSource open failed: %s"), exception.message());
+            }
+        }
+        if (usePass0) {
+            try {
+                const int totalFrames = source->GetVideoInfo().num_frames;
+                std::string error;
+                const auto parseResult = trimavs::ParseTrimAvsForPass0(trimText, totalFrames, ranges, error);
+                if (parseResult == trimavs::TrimAvsParseResult::EmptyAfterNormalize) {
+                    pass0State = logo::LogoPass0State::NoProgramFrames;
+                    usePass0 = false;
+                } else if (parseResult != trimavs::TrimAvsParseResult::Succeeded) {
+                    pass0State = logo::LogoPass0State::TrimInvalid;
+                    usePass0 = false;
+                } else if (totalFrames < 300) {
+                    pass0State = logo::LogoPass0State::TooFewProgramFrames;
+                    usePass0 = false;
+                } else {
+                    trimavs::Pass0FramePlan plan;
+                    if (!trimavs::BuildPass0FramePlan(ranges, totalFrames, std::max(100, searchFrames), plan, error)) {
+                        pass0State = logo::LogoPass0State::TrimInvalid;
+                        usePass0 = false;
+                    } else if (plan.programFrames <= 0) {
+                        pass0State = logo::LogoPass0State::NoProgramFrames;
+                        usePass0 = false;
+                    } else if (plan.programFrames < plan.minProgramFrames) {
+                        pass0State = logo::LogoPass0State::TooFewProgramFrames;
+                        usePass0 = false;
+                    } else {
+                        ranges = std::move(plan.decodeRanges);
+                        skippedCmFrames = plan.skippedCmFrames;
+                        ctx->infoF(_T("[LogoScan] pass0 start: source=AMTSource frames=%d ranges=%d programFrames=%d"),
+                            totalFrames, (int)ranges.size(), plan.programFrames);
+                    }
+                }
+            } catch (const Exception& exception) {
+                pass0State = logo::LogoPass0State::AmtSourceOpenFailed;
+                usePass0 = false;
+                ctx->warnF(_T("[LogoScan] pass0 AMTSource metadata read failed: %s"), exception.message());
+            }
+        }
+        if (usePass0) {
+            try {
+                rect = reader.runPass0(*source, ranges, env.get(), fallbackSrcPath, acceptedFrames, skippedCmFrames);
+                pass0State = logo::LogoPass0State::Succeeded;
+                ctx->infoF(_T("[LogoScan] pass0 succeeded: accepted=%d skippedCM=%d ranges=%d"),
+                    acceptedFrames, skippedCmFrames, (int)ranges.size());
+                ctx->info(_T("[LogoScan] input: AMTSource"));
+            } catch (const Exception& exception) {
+                if (reader.wasCancellationRequested()) {
+                    throw;
+                }
+                if (reader.isPass0InputReady()) {
+                    // 入力収録後の既存ロゴ解析失敗は、従来の判定結果として返す。
+                    pass0State = logo::LogoPass0State::Succeeded;
+                    throw;
+                }
+                pass0State = logo::LogoPass0State::AmtSourceDecodeFailed;
+                ctx->warnF(_T("[LogoScan] pass0 fallback: reason=%d detail=%s"), (int)pass0State, exception.message());
+                ctx->info(_T("[LogoScan] input: TSFallback"));
+                rect = reader.run(fallbackSrcPath);
+            }
+        } else {
+            ctx->warnF(_T("[LogoScan] pass0 fallback: reason=%d; input=TSFallback"), (int)pass0State);
+            ctx->info(_T("[LogoScan] input: TSFallback"));
+            rect = reader.run(fallbackSrcPath);
+        }
+        if (outX) *outX = rect.x;
+        if (outY) *outY = rect.y;
+        if (outW) *outW = rect.w;
+        if (outH) *outH = rect.h;
+        CopyAutoDetectOutputs(reader, out);
+        if (outPass0State) *outPass0State = (int)pass0State;
+        if (outPass0AcceptedFrames) *outPass0AcceptedFrames = acceptedFrames;
+        if (outPass0SkippedCmFrames) *outPass0SkippedCmFrames = skippedCmFrames;
+        if (scorePath && binaryPath && cclPath) {
+            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath,
+                consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
+        }
+        return true;
+    } catch (const Exception& exception) {
+        CopyAutoDetectOutputs(reader, out);
+        if (outPass0State) *outPass0State = (int)pass0State;
+        if (outPass0AcceptedFrames) *outPass0AcceptedFrames = acceptedFrames;
+        if (outPass0SkippedCmFrames) *outPass0SkippedCmFrames = skippedCmFrames;
         ctx->setError(exception);
     }
     return false;

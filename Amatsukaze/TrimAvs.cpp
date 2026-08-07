@@ -124,12 +124,13 @@ bool NormalizeFrameRanges(const std::vector<FrameRange>& source, const int numFr
     return true;
 }
 
-bool ParseTrimAvs(const std::string& text, const int numFrames,
+TrimAvsParseResult ParseTrimAvsForPass0(const std::string& text, const int numFrames,
     std::vector<FrameRange>& ranges, std::string& error) {
     ranges.clear();
     error.clear();
     if (numFrames <= 0) {
-        return SetError(error, "総フレーム数が不正です");
+        SetError(error, "総フレーム数が不正です");
+        return TrimAvsParseResult::SyntaxInvalid;
     }
 
     static const std::regex trimCall(
@@ -141,10 +142,12 @@ bool ParseTrimAvs(const std::string& text, const int numFrames,
         int64_t begin = 0;
         int64_t endInclusive = 0;
         if (!ParseInt64(match[1].str(), begin) || !ParseInt64(match[2].str(), endInclusive)) {
-            return SetError(error, "Trimのフレーム番号が整数範囲を超えています");
+            SetError(error, "Trimのフレーム番号が整数範囲を超えています");
+            return TrimAvsParseResult::SyntaxInvalid;
         }
         if (begin > endInclusive) {
-            return SetError(error, "Trimの開始フレームが終了フレームより後です");
+            SetError(error, "Trimの開始フレームが終了フレームより後です");
+            return TrimAvsParseResult::SyntaxInvalid;
         }
 
         // endInclusive + 1 は int64_t のまま加算せず、先に出力範囲へ丸める。
@@ -158,12 +161,29 @@ bool ParseTrimAvs(const std::string& text, const int numFrames,
     }
 
     if (HasInvalidTrimCall(text, validCalls)) {
-        return SetError(error, "Trim呼び出しの構文または引数が不正です");
+        SetError(error, "Trim呼び出しの構文または引数が不正です");
+        return TrimAvsParseResult::SyntaxInvalid;
     }
     if (parsed.empty()) {
-        return SetError(error, "Trim呼び出しがありません");
+        SetError(error, "Trim呼び出しがありません");
+        return TrimAvsParseResult::SyntaxInvalid;
     }
-    return NormalizeFrameRanges(parsed, numFrames, ranges, error);
+    const bool hasProgramFrame = std::any_of(parsed.begin(), parsed.end(), [](const FrameRange& range) {
+        return range.begin < range.end;
+    });
+    if (!hasProgramFrame) {
+        SetError(error, "正規化後のTrim区間が空です");
+        return TrimAvsParseResult::EmptyAfterNormalize;
+    }
+    if (!NormalizeFrameRanges(parsed, numFrames, ranges, error)) {
+        return TrimAvsParseResult::SyntaxInvalid;
+    }
+    return TrimAvsParseResult::Succeeded;
+}
+
+bool ParseTrimAvs(const std::string& text, const int numFrames,
+    std::vector<FrameRange>& ranges, std::string& error) {
+    return ParseTrimAvsForPass0(text, numFrames, ranges, error) == TrimAvsParseResult::Succeeded;
 }
 
 bool FrameRangesFromLegacyTrims(const std::vector<int>& trims, const int numFrames,
@@ -215,6 +235,44 @@ bool FormatTrimAvs(const std::vector<FrameRange>& ranges, const int numFrames,
     text = output.str();
     error.clear();
     return true;
+}
+
+bool BuildPass0FramePlan(const std::vector<FrameRange>& ranges, const int totalFrames, const int searchFrames,
+    Pass0FramePlan& plan, std::string& error) {
+    plan = Pass0FramePlan{};
+    if (totalFrames <= 0 || searchFrames <= 0) {
+        return SetError(error, "pass0の総フレーム数または検索フレーム数が不正です");
+    }
+    std::vector<FrameRange> normalized;
+    if (!NormalizeFrameRanges(ranges, totalFrames, normalized, error)) {
+        return false;
+    }
+    plan.targetFrames = std::min(searchFrames, totalFrames);
+    plan.minProgramFrames = std::min(plan.targetFrames,
+        std::max(300, (plan.targetFrames + 9) / 10));
+    for (const auto& range : normalized) {
+        plan.programFrames += range.end - range.begin;
+    }
+    plan.skippedCmFrames = totalFrames - plan.programFrames;
+    int remaining = plan.targetFrames;
+    for (const auto& range : normalized) {
+        if (remaining <= 0) break;
+        const int end = std::min(range.end, range.begin + remaining);
+        plan.decodeRanges.push_back({ range.begin, end });
+        remaining -= end - range.begin;
+    }
+    error.clear();
+    return true;
+}
+
+Pass0RoiCacheFrame Pass0RoiCachePlan::appendResolvedFrame(const int resolved) {
+    const int cacheIndex = logicalFrameCount_++;
+    const auto it = firstCacheIndexByResolved_.find(resolved);
+    if (it != firstCacheIndexByResolved_.end()) {
+        return Pass0RoiCacheFrame{ cacheIndex, it->second, false };
+    }
+    firstCacheIndexByResolved_.emplace(resolved, cacheIndex);
+    return Pass0RoiCacheFrame{ cacheIndex, cacheIndex, true };
 }
 
 } // namespace trimavs

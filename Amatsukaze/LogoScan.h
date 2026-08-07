@@ -52,6 +52,18 @@ float CalcCorrelation5x5_Debug(const float* k, const float* Y, int x, int y, int
 
 namespace logo {
 
+// pass0の結果。数値は外部ABIで利用するため変更しない。
+enum class LogoPass0State : int {
+    Disabled = 0,
+    ArtifactMissing = 1,
+    TrimInvalid = 2,
+    AmtSourceOpenFailed = 3,
+    AmtSourceDecodeFailed = 4,
+    NoProgramFrames = 5,
+    TooFewProgramFrames = 6,
+    Succeeded = 7,
+};
+
 enum class LogoColorMode {
     NormalYUV,
     YOnlyNeutralUV,
