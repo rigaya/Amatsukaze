@@ -9,6 +9,8 @@
 */
 #pragma once
 
+#include <array>
+
 #include <fstream>
 #include <string>
 #include <iostream>
@@ -16,6 +18,7 @@
 #include <regex>
 
 #include "StreamUtils.h"
+#include "TrimAvs.h"
 #include "TranscodeSetting.h"
 #include "LogoScan.h"
 #include "ProcessThread.h"
@@ -54,20 +57,22 @@ public:
 
 class CMAnalyze : public AMTObject {
 public:
+    struct PmtCutSettings {
+        bool enabled = false;
+        std::array<double, 2> rates{ { 0.0, 1.0 } };
+        std::vector<int> pidChanges;
+    };
+
     CMAnalyze(AMTContext& ctx,
         const ConfigWrapper& setting);
 
-    void analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM);
+    void analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames,
+        const bool analyzeChapterAndCM, const PmtCutSettings& pmtCut);
 
     const tstring& getLogoPath() const { return logopath; }
     const std::vector<int>& getTrims() const { return trims; }
     const std::vector<EncoderZone>& getZones() const { return cmzones; }
     const std::vector<int>& getDivs() const { return divs; }
-
-    // PMT変更情報からCM追加認識
-    void applyPmtCut(
-        int numFrames, const double* rates,
-        const std::vector<int>& pidChanges);
 
     void inputTrimAVS(int numFrames, const tstring& trimavsPath);
 
@@ -91,10 +96,19 @@ private:
     std::vector<EncoderZone> cmzones;
     std::vector<int> sceneChanges;
     std::vector<int> divs;
+    std::vector<trimavs::FrameRange> pass0Ranges;
+    PmtCutSettings pmtCut_;
+    bool chapterPrepared;
+    bool noLogoCMEstimated;
+    bool pass0RangesReady;
 
-    void analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
+    void analyzeLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
-    void analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
+    void prepareChapter(const int videoFileIndex, const VideoFormat& inputFormat, Stopwatch& sw, const tstring& avspath);
+    void estimateCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const bool useLogo);
+    bool preparePass0Ranges(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw);
+    bool capturePass0Ranges(const int numFrames);
+    void applyPmtCut(int numFrames, const double* rates, const std::vector<int>& pidChanges);
 
     tstring makeAVSFile(int videoFileIndex, const VideoFormat& inputFormat, const bool forChapterExe);
 
@@ -102,18 +116,18 @@ private:
 
     int getPreferredThreads(const int processorCount) const;
 
-    void logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
+    void logoFrame(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
     // ロゴ不一致時に自動ロゴ枠検出→ロゴ生成→仮ロゴで再解析を試行する
-    bool tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
+    bool tryAutoDetectAndRetryLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
     tstring MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 
     void chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 
-    tstring MakeJoinLogoScpArgs(int videoFileIndex);
+    tstring MakeJoinLogoScpArgs(int videoFileIndex, bool useLogo);
 
-    void joinLogoScp(int videoFileIndex, int serviceId);
+    void joinLogoScp(int videoFileIndex, int serviceId, bool useLogo);
 
     void readTrimAVS(const tstring& trimavsPath, int numFrames);
 

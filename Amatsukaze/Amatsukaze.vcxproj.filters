@@ -45,6 +45,9 @@
     <ClInclude Include="CMAnalyze.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="CMAnalyzePass0Plan.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Encoder.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

@@ -85,6 +85,12 @@ trim_avs_test = executable('trim_avs_test',
 )
 test('trim_avs', trim_avs_test)
 
+cm_analyze_pass0_plan_test = executable('cm_analyze_pass0_plan_test',
+  ['CMAnalyzePass0PlanTest.cpp'],
+  cpp_args : cpp_args,
+)
+test('cm_analyze_pass0_plan', cm_analyze_pass0_plan_test)
+
 # AVXとAVX2のためのカスタムターゲット
 if host_machine.system() == 'windows'
   # Windows用のコンパイラフラグ

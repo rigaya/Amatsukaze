@@ -11777,3 +11777,99 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRectWithPass0(AMTContext* ctx,
     }
     return false;
 }
+
+bool logo::AutoDetectLogoRectWithPass0Ranges(AMTContext& ctx, const tstring& fallbackSrcPath, const int serviceId,
+    const tstring& amtSourcePath, const std::vector<trimavs::FrameRange>& ranges,
+    const int divx, const int divy, const int searchFrames, const int blockSize, const int threshold,
+    const int marginX, const int marginY, const int threadN,
+    int& outX, int& outY, int& outW, int& outH, int& outRectDetectFail, int& outLogoAnalyzeFail,
+    LogoPass0State& outPass0State, int& outPass0AcceptedFrames, int& outPass0SkippedCmFrames,
+    LOGO_AUTODETECT_CB cb) {
+    outX = outY = outW = outH = 0;
+    outRectDetectFail = outLogoAnalyzeFail = 0;
+    outPass0State = LogoPass0State::Disabled;
+    outPass0AcceptedFrames = 0;
+    outPass0SkippedCmFrames = 0;
+    AutoDetectLogoReader reader(ctx, serviceId, divx, divy, searchFrames, blockSize, threshold,
+        marginX, marginY, threadN, false, cb);
+    try {
+        bool usePass0 = !amtSourcePath.empty() && File::exists(amtSourcePath);
+        std::vector<trimavs::FrameRange> decodeRanges;
+        std::unique_ptr<av::AMTSource> source;
+        ScriptEnvironmentPointer env(nullptr, DeleteScriptEnvironment);
+        if (!usePass0) {
+            outPass0State = LogoPass0State::ArtifactMissing;
+        } else if (ranges.empty()) {
+            // chapter/CM解析を実施しない従来再試行では、AMTSourceを初期化せずTSへ戻す。
+            outPass0State = LogoPass0State::NoProgramFrames;
+            usePass0 = false;
+        } else {
+            try {
+                env = make_unique_ptr(CreateScriptEnvironment2());
+                source = av::LoadAMTSourceDirect(ctx, amtSourcePath, ResolveAutoDetectThreadCount(threadN), env.get());
+                const int totalFrames = source->GetVideoInfo().num_frames;
+                if (totalFrames < 300) {
+                    outPass0State = LogoPass0State::TooFewProgramFrames;
+                    usePass0 = false;
+                } else {
+                    trimavs::Pass0FramePlan plan;
+                    std::string error;
+                    if (!trimavs::BuildPass0FramePlan(ranges, totalFrames, std::max(100, searchFrames), plan, error)) {
+                        outPass0State = LogoPass0State::TrimInvalid;
+                        usePass0 = false;
+                    } else if (plan.programFrames <= 0) {
+                        outPass0State = LogoPass0State::NoProgramFrames;
+                        usePass0 = false;
+                    } else if (plan.programFrames < plan.minProgramFrames) {
+                        outPass0State = LogoPass0State::TooFewProgramFrames;
+                        usePass0 = false;
+                    } else {
+                        decodeRanges = std::move(plan.decodeRanges);
+                        outPass0SkippedCmFrames = plan.skippedCmFrames;
+                    }
+                }
+            } catch (const Exception& exception) {
+                outPass0State = LogoPass0State::AmtSourceOpenFailed;
+                usePass0 = false;
+                ctx.warnF(_T("[LogoScan] pass0 AMTSource open failed: %s"), exception.message());
+            }
+        }
+
+        AutoDetectRect rect{};
+        if (usePass0) {
+            try {
+                rect = reader.runPass0(*source, decodeRanges, env.get(), fallbackSrcPath,
+                    outPass0AcceptedFrames, outPass0SkippedCmFrames);
+                outPass0State = LogoPass0State::Succeeded;
+                ctx.infoF(_T("[LogoScan] pass0 succeeded: accepted=%d skippedCM=%d"),
+                    outPass0AcceptedFrames, outPass0SkippedCmFrames);
+            } catch (const Exception& exception) {
+                if (reader.wasCancellationRequested()) {
+                    throw;
+                }
+                if (reader.isPass0InputReady()) {
+                    outPass0State = LogoPass0State::Succeeded;
+                    throw;
+                }
+                outPass0State = LogoPass0State::AmtSourceDecodeFailed;
+                ctx.warnF(_T("[LogoScan] pass0 fallback: reason=%d detail=%s"), (int)outPass0State, exception.message());
+                rect = reader.run(fallbackSrcPath);
+            }
+        } else {
+            ctx.infoF(_T("[LogoScan] pass0 fallback: reason=%d; input=TSFallback"), (int)outPass0State);
+            rect = reader.run(fallbackSrcPath);
+        }
+        outX = rect.x;
+        outY = rect.y;
+        outW = rect.w;
+        outH = rect.h;
+        outRectDetectFail = reader.getRectDetectFailCode();
+        outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+        return true;
+    } catch (const Exception& exception) {
+        outRectDetectFail = reader.getRectDetectFailCode();
+        outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+        ctx.setError(exception);
+    }
+    return false;
+}

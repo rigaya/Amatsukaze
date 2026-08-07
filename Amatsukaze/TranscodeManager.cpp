@@ -1365,13 +1365,13 @@ void DoBadThing() {
         } else {
             const auto& inputVideofmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0)).videoFormat;
             if (analyzeChapterAndCM || delogoEnabled) {
-                cma->analyze(serviceId, videoFileIndex, inputVideofmt, numFrames, analyzeChapterAndCM);
-            }
-
-            if (analyzeChapterAndCM && setting.isPmtCutEnabled()) {
-                // PMT変更によるCM追加認識
-                cma->applyPmtCut(numFrames, setting.getPmtCutSideRate(),
-                    reformInfo.getPidChangedList(videoFileIndex));
+                const auto pmtRates = setting.getPmtCutSideRate();
+                CMAnalyze::PmtCutSettings pmtCut{
+                    analyzeChapterAndCM && setting.isPmtCutEnabled(),
+                    { { pmtRates[0], pmtRates[1] } },
+                    reformInfo.getPidChangedList(videoFileIndex)
+                };
+                cma->analyze(serviceId, videoFileIndex, inputVideofmt, numFrames, analyzeChapterAndCM, pmtCut);
             }
         }
 

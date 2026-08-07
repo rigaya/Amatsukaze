@@ -428,6 +428,7 @@
     <ClInclude Include="CaptionData.h" />
     <ClInclude Include="CaptionFormatter.h" />
     <ClInclude Include="CMAnalyze.h" />
+    <ClInclude Include="CMAnalyzePass0Plan.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="ConvertPix.h" />
     <ClInclude Include="CoreUtils.hpp" />

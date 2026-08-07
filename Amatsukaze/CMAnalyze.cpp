@@ -15,6 +15,7 @@
 #include <sstream>
 #include <thread>
 #include "CMAnalyze.h"
+#include "CMAnalyzePass0Plan.h"
 #include "AMTSource.h"
 #include "TrimAvs.h"
 
@@ -30,19 +31,6 @@ DECODER_TYPE GetLogoAnalysisDecoderType(const DecoderSetting& decoderSetting, co
 }
 
 }
-
-extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
-    const tchar* srcpath, int serviceid,
-    int divx, int divy, int searchFrames, int blockSize, int threshold,
-    int marginX, int marginY, int threadN,
-    int* outX, int* outY, int* outW, int* outH, int* outRectDetectFail, int* outLogoAnalyzeFail,
-    double* outPass1ScoreMax, double* outPass2ScoreMax, double* outFinalScoreBeforeRescueMax,
-    int* outPass2Entered, int* outPass2PrepareSucceeded, int* outPass2CollectSucceeded, int* outPass2RescueFallbackApplied,
-    int* outPass2FailBeforeClear, int* outPass2FrameMaskNonZero, int* outPass2AcceptedFrames, int* outPass2SkippedFrames,
-    int* outFrameGateRetryAttemptCount, int* outFrameGateRetrySuccessAttempt,
-    const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
-    int detailedDebug,
-    logo::LOGO_AUTODETECT_CB cb);
 
 extern "C" AMATSUKAZE_API int ScanLogo(AMTContext* ctx,
     const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
@@ -63,39 +51,53 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     trims(),
     cmzones(),
     sceneChanges(),
-    divs() {}
+    divs(),
+    pass0Ranges(),
+    pmtCut_(),
+    chapterPrepared(false),
+    noLogoCMEstimated(false),
+    pass0RangesReady(false) {}
 
-void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM) {
+void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames,
+    const bool analyzeChapterAndCM, const PmtCutSettings& pmtCut) {
     Stopwatch sw;
     const auto avsAnalyzeLogo = makeAVSFile(videoFileIndex, inputFormat, false);
     const auto avsChapterExe  = makeAVSFile(videoFileIndex, inputFormat, true);
+    pmtCut_ = pmtCut;
+    chapterPrepared = false;
+    noLogoCMEstimated = false;
+    pass0RangesReady = false;
+    pass0Ranges.clear();
 
-    // チャプター・CM解析
     if (analyzeChapterAndCM) {
         ctx.infoF(_T("チャプター・CM解析開始"));
         const bool noLogoInCM = setting_.isNoLogoInCM() || logoOffInJL(videoFileIndex);
+        prepareChapter(videoFileIndex, inputFormat, sw, avsChapterExe);
         if (noLogoInCM) {
             ctx.info(_T("チャプター・CM解析にロゴを使用しません。"));
+            estimateCM(serviceId, videoFileIndex, numFrames, sw, false);
+            noLogoCMEstimated = true;
+            capturePass0Ranges(numFrames);
+            if (!setting_.isNoDelogo()) {
+                analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+            }
         } else {
-            // JLにLogoOffの記述がない場合は先にロゴ解析を行う
-            analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+            analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+            // 自動ロゴ検出の再試行有無にかかわらず、最終結果はロゴありで1回だけ推定する。
+            estimateCM(serviceId, videoFileIndex, numFrames, sw, true);
         }
-        // チャプター・CM解析本体
-        analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsChapterExe);
-    }
-
-    // ロゴ解析 (未実行かつロゴ消しする場合)
-    if (!setting_.isNoDelogo()) {
-        analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+    } else if (!setting_.isNoDelogo()) {
+        // CM解析が無効な場合はpass0用の外部解析を新たに起動しない。
+        analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
     }
 }
 
-void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::analyzeLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     if (!logoAnalysisDone
         && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
         ctx.info(_T("[ロゴ解析]"));
         sw.start();
-        logoFrame(videoFileIndex, inputFormat, numFrames, avspath);
+        logoFrame(serviceId, videoFileIndex, inputFormat, numFrames, avspath);
         ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 
         ctx.info(_T("[ロゴ解析結果]"));
@@ -112,7 +114,7 @@ void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFo
     }
 }
 
-void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::prepareChapter(const int videoFileIndex, const VideoFormat& inputFormat, Stopwatch& sw, const tstring& avspath) {
     // チャプター解析
     ctx.info(_T("[無音・シーンチェンジ解析]"));
     sw.start();
@@ -121,11 +123,15 @@ void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, 
 
     ctx.info(_T("[無音・シーンチェンジ解析結果]"));
     PrintFileAll(setting_.getTmpChapterExeOutPath(videoFileIndex));
+    readSceneChanges(videoFileIndex);
+    ctx.infoF(_T("シーンチェンジ読み込み完了"));
+    chapterPrepared = true;
+}
 
-    // CM推定
+void CMAnalyze::estimateCM(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw, const bool useLogo) {
     ctx.info(_T("[CM解析]"));
     sw.start();
-    joinLogoScp(videoFileIndex, serviceId);
+    joinLogoScp(videoFileIndex, serviceId, useLogo);
     ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 
     ctx.info(_T("[CM解析結果 - TrimAVS]"));
@@ -137,15 +143,36 @@ void CMAnalyze::analyzeChapterCM(const int serviceId, const int videoFileIndex, 
     readTrimAVS(setting_.getTmpTrimAVSPath(videoFileIndex), numFrames);
     ctx.infoF(_T("trimAVS読み込み完了"));
 
-    // シーンチェンジ
-    readSceneChanges(videoFileIndex);
-    ctx.infoF(_T("シーンチェンジ読み込み完了"));
-
     // 分割情報
     readDiv(videoFileIndex, numFrames);
     ctx.infoF(_T("分割情報読み込み完了"));
     makeCMZones(numFrames);
     ctx.infoF(_T("CM区間生成完了"));
+    if (pmtCut_.enabled) {
+        applyPmtCut(numFrames, pmtCut_.rates.data(), pmtCut_.pidChanges);
+    }
+}
+
+bool CMAnalyze::preparePass0Ranges(const int serviceId, const int videoFileIndex, const int numFrames, Stopwatch& sw) {
+    if (!cmanalyze_plan::ShouldRunNoLogoPreliminary(chapterPrepared, noLogoCMEstimated)) {
+        return pass0RangesReady;
+    }
+    ctx.info(_T("[自動ロゴ検出] pass0用にロゴなしCM解析を実行します"));
+    estimateCM(serviceId, videoFileIndex, numFrames, sw, false);
+    noLogoCMEstimated = true;
+    return capturePass0Ranges(numFrames);
+}
+
+bool CMAnalyze::capturePass0Ranges(const int numFrames) {
+    pass0Ranges.clear();
+    pass0RangesReady = false;
+    std::string error;
+    if (!trimavs::FrameRangesFromLegacyTrims(trims, numFrames, pass0Ranges, error)) {
+        ctx.warnF(_T("[自動ロゴ検出] pass0 Trim範囲を利用できないためTSへフォールバックします: %s"), error.c_str());
+        return false;
+    }
+    pass0RangesReady = true;
+    return true;
 }
 
 // PMT変更情報からCM追加認識
@@ -337,7 +364,7 @@ int CMAnalyze::getPreferredThreads(const int processorCount) const {
     return std::max(tmp[0].first, 1);
 }
 
-void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
+void CMAnalyze::logoFrame(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
     const auto& logoPath = setting_.getLogoPath();
     const auto& eraseLogoPath = setting_.getEraseLogoPath();
 
@@ -445,7 +472,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
             ctx.info(_T("この区間はマッチするロゴはありませんでした"));
             if (setting_.isAutoLogoDetectEnabled()) {
                 ctx.info(_T("[自動ロゴ検出] 自動ロゴ検出を試行します"));
-                if (tryAutoDetectAndRetryLogo(videoFileIndex, inputFormat, numFrames, avspath)) {
+                if (tryAutoDetectAndRetryLogo(serviceId, videoFileIndex, inputFormat, numFrames, avspath)) {
                     ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに成功しました"));
                 } else {
                     ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに失敗しました"));
@@ -461,7 +488,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     }
 }
 
-bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
+bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
     const auto workfile = setting_.getTmpDir() + StringFormat(_T("/auto_logo_work_%d.dat"), videoFileIndex);
     const auto tmpLogoPath = setting_.getTmpDir() + StringFormat(_T("/auto_logo_%d.tmp.lgd"), videoFileIndex);
     auto cleanup = [&]() {
@@ -471,27 +498,35 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoF
 
     try {
         const auto srcpath = setting_.getSrcFilePath();
-        const int serviceId = setting_.getServiceId();
         const int autoDetectThreadN = std::min(std::max(std::max(1, GetProcessorCount()) - 2, 1), 16);
 
         ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出を開始します (%dスレッド)"), autoDetectThreadN);
         int rectX = 0, rectY = 0, rectW = 0, rectH = 0;
         int rectDetectFail = 0, logoAnalyzeFail = 0;
+        int pass0AcceptedFrames = 0, pass0SkippedCmFrames = 0;
+        logo::LogoPass0State pass0State = logo::LogoPass0State::Disabled;
         auto autoDetectCb = [](int, float, float, int, int) -> bool { return true; };
-        const int ret = AutoDetectLogoRect(&ctx, srcpath.c_str(), serviceId,
+        if (chapterPrepared && !pass0RangesReady) {
+            try {
+                Stopwatch pass0Sw;
+                preparePass0Ranges(serviceId, videoFileIndex, numFrames, pass0Sw);
+            } catch (const Exception& exception) {
+                ctx.infoF(_T("[自動ロゴ検出] pass0用CM解析に失敗したためTSへフォールバックします: %s"), exception.message());
+                pass0Ranges.clear();
+            }
+        }
+        const bool ret = logo::AutoDetectLogoRectWithPass0Ranges(ctx, srcpath, serviceId,
+            setting_.getTmpAMTSourcePath(videoFileIndex), pass0Ranges,
             setting_.getAutoLogoDetectDivX(), setting_.getAutoLogoDetectDivY(),
             setting_.getAutoLogoDetectSearchFrames(), setting_.getAutoLogoDetectBlockSize(),
             setting_.getAutoLogoDetectThreshold(),
             setting_.getAutoLogoDetectMarginX(), setting_.getAutoLogoDetectMarginY(),
             autoDetectThreadN,
-            &rectX, &rectY, &rectW, &rectH, &rectDetectFail, &logoAnalyzeFail,
-            nullptr, nullptr, nullptr,
-            nullptr, nullptr, nullptr, nullptr,
-            nullptr, nullptr, nullptr, nullptr,
-            nullptr, nullptr,
-            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-            0,
+            rectX, rectY, rectW, rectH, rectDetectFail, logoAnalyzeFail,
+            pass0State, pass0AcceptedFrames, pass0SkippedCmFrames,
             autoDetectCb);
+        ctx.infoF(_T("[自動ロゴ検出] pass0 state=%d accepted=%d skippedCM=%d"),
+            (int)pass0State, pass0AcceptedFrames, pass0SkippedCmFrames);
         if (!ret || rectW <= 0 || rectH <= 0) {
             ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出に失敗しました (rectDetectFail=%d, logoAnalyzeFail=%d)"), rectDetectFail, logoAnalyzeFail);
             return false;
@@ -670,10 +705,10 @@ void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, c
     }
 }
 
-tstring CMAnalyze::MakeJoinLogoScpArgs(int videoFileIndex) {
+tstring CMAnalyze::MakeJoinLogoScpArgs(int videoFileIndex, const bool useLogo) {
     StringBuilderT sb;
     sb.append(_T("\"%s\""), setting_.getJoinLogoScpPath());
-    if (logopath.size() > 0) {
+    if (useLogo && logopath.size() > 0) {
         sb.append(_T(" -inlogo \"%s\""), pathToOS(setting_.getTmpLogoFramePath(videoFileIndex)));
     }
     sb.append(_T(" -inscp \"%s\" -incmd \"%s\" -o \"%s\" -oscp \"%s\" -odiv \"%s\" %s"),
@@ -686,8 +721,8 @@ tstring CMAnalyze::MakeJoinLogoScpArgs(int videoFileIndex) {
     return sb.str();
 }
 
-void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
-    auto args = MakeJoinLogoScpArgs(videoFileIndex);
+void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId, const bool useLogo) {
+    auto args = MakeJoinLogoScpArgs(videoFileIndex, useLogo);
     ctx.infoF(_T("%s"), args);
     // join_logo_scp向けの環境変数を設定
     const tstring clioutpath = setting_.getOutFileBaseWithoutPrefix() + _T(".") + setting_.getOutputExtention(setting_.getFormat());
@@ -753,6 +788,7 @@ void CMAnalyze::readDiv(int videoFileIndex, int numFrames) {
 void CMAnalyze::readSceneChanges(int videoFileIndex) {
     File file(setting_.getTmpChapterExeOutPath(videoFileIndex), _T("r"));
     std::string str;
+    sceneChanges.clear();
 
     // ヘッダ部分をスキップ
     while (1) {

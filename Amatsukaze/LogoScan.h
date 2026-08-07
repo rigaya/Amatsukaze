@@ -18,6 +18,7 @@
 #include "TsInfo.h"
 #include "TextOut.h"
 #include "ReaderWriterFFmpeg.h"
+#include "TrimAvs.h"
 
 #include <cmath>
 #include <functional>
@@ -408,6 +409,15 @@ typedef bool(*LOGO_ANALYZE_CB)(float progress, int nread, int total, int ngather
 //   stage/stageProgress は pass 切替時にも逆走しないよう
 //   大きめの処理区間にまとめて通知する。
 typedef bool(*LOGO_AUTODETECT_CB)(int stage, float stageProgress, float progress, int nread, int total);
+
+// 同一プロセス内のCM解析から、正規化済み本編範囲を直接渡すpass0入口。
+// 範囲の収録失敗時は従来TS経路へフォールバックする。
+bool AutoDetectLogoRectWithPass0Ranges(AMTContext& ctx, const tstring& fallbackSrcPath, int serviceId,
+    const tstring& amtSourcePath, const std::vector<trimavs::FrameRange>& ranges,
+    int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN,
+    int& outX, int& outY, int& outW, int& outH, int& outRectDetectFail, int& outLogoAnalyzeFail,
+    LogoPass0State& outPass0State, int& outPass0AcceptedFrames, int& outPass0SkippedCmFrames,
+    LOGO_AUTODETECT_CB cb);
 
 class LogoScanDataCompressed {
 public:
