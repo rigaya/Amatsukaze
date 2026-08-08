@@ -82,6 +82,97 @@ void HEVCVideoParser::initParser() {
     m_codecCtxParser->framerate = av_make_q(60000, 1001);
 }
 
+struct HEVCStreamInfo {
+    int err;
+    AVMediaType codecType;
+    AVCodecID codecId;
+    int width;
+    int height;
+    int codedWidth;
+    int codedHeight;
+    AVPixelFormat pixelFormat;
+    int bitsPerCodedSample;
+    int bitsPerRawSample;
+    int profile;
+    int level;
+    AVRational sampleAspectRatio;
+    AVRational frameRate;
+    AVFieldOrder fieldOrder;
+    AVColorRange colorRange;
+    AVColorSpace colorSpace;
+    AVColorPrimaries colorPrimaries;
+    AVColorTransferCharacteristic transferCharacteristics;
+    AVChromaLocation chromaLocation;
+};
+
+static HEVCStreamInfo getHEVCStreamInfo(MemoryChunk frame, int64_t PTS, int64_t DTS) {
+    HEVCStreamInfo streamInfo = {};
+    const auto decoder = avcodec_find_decoder(AV_CODEC_ID_HEVC);
+    if (!decoder) {
+        streamInfo.err = AVERROR_DECODER_NOT_FOUND;
+        return streamInfo;
+    }
+
+    std::unique_ptr<AVCodecContext, RGYAVDeleter<AVCodecContext>> decoderCtx(
+        avcodec_alloc_context3(decoder), RGYAVDeleter<AVCodecContext>(avcodec_free_context));
+    if (!decoderCtx) {
+        streamInfo.err = AVERROR(ENOMEM);
+        return streamInfo;
+    }
+    if ((streamInfo.err = avcodec_open2(decoderCtx.get(), decoder, NULL)) < 0) {
+        return streamInfo;
+    }
+    AVPacket packet = AVPacket();
+    packet.data = frame.data;
+    packet.size = (int)frame.length;
+    packet.pts = PTS;
+    packet.dts = DTS;
+
+    if ((streamInfo.err = avcodec_send_packet(decoderCtx.get(), &packet)) < 0) {
+        return streamInfo;
+    }
+
+    av::Frame decoded;
+    const auto receiveErr = avcodec_receive_frame(decoderCtx.get(), decoded());
+    if (receiveErr < 0 && receiveErr != AVERROR(EAGAIN) && receiveErr != AVERROR_EOF) {
+        streamInfo.err = receiveErr;
+        return streamInfo;
+    }
+
+    streamInfo.codecType = decoderCtx->codec_type;
+    streamInfo.codecId = decoderCtx->codec_id;
+    streamInfo.width = decoderCtx->width;
+    streamInfo.height = decoderCtx->height;
+    streamInfo.codedWidth = decoderCtx->coded_width;
+    streamInfo.codedHeight = decoderCtx->coded_height;
+    streamInfo.pixelFormat = decoderCtx->pix_fmt;
+    streamInfo.bitsPerCodedSample = decoderCtx->bits_per_coded_sample;
+    streamInfo.bitsPerRawSample = decoderCtx->bits_per_raw_sample;
+    streamInfo.profile = decoderCtx->profile;
+    streamInfo.level = decoderCtx->level;
+    streamInfo.sampleAspectRatio = decoderCtx->sample_aspect_ratio;
+    streamInfo.frameRate = decoderCtx->framerate;
+    streamInfo.fieldOrder = decoderCtx->field_order;
+    streamInfo.colorRange = decoderCtx->color_range;
+    streamInfo.colorSpace = decoderCtx->colorspace;
+    streamInfo.colorPrimaries = decoderCtx->color_primaries;
+    streamInfo.transferCharacteristics = decoderCtx->color_trc;
+    streamInfo.chromaLocation = decoderCtx->chroma_sample_location;
+    if (receiveErr == 0) {
+        streamInfo.width = decoded()->width;
+        streamInfo.height = decoded()->height;
+        streamInfo.pixelFormat = (AVPixelFormat)decoded()->format;
+        streamInfo.sampleAspectRatio = decoded()->sample_aspect_ratio;
+        streamInfo.colorRange = decoded()->color_range;
+        streamInfo.colorSpace = decoded()->colorspace;
+        streamInfo.colorPrimaries = decoded()->color_primaries;
+        streamInfo.transferCharacteristics = decoded()->color_trc;
+        streamInfo.chromaLocation = decoded()->chroma_location;
+    }
+    streamInfo.err = 0;
+    return streamInfo;
+}
+
 bool HEVCVideoParser::inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>& info, int64_t PTS, int64_t DTS) {
     info.clear();
     if (!m_parserCtx) {
@@ -107,6 +198,28 @@ bool HEVCVideoParser::inputFrame(MemoryChunk frame, std::vector<VideoFrameInfo>&
             THROW(FormatException, "Failed to allocate extradata");
         }
         memcpy(m_codecCtxParser->extradata, vps_sps_pps.data(), vps_sps_pps.size());
+        const auto streamInfo = getHEVCStreamInfo(frame, PTS, DTS);
+        if (streamInfo.err == 0) {
+            m_codecCtxParser->codec_type = streamInfo.codecType;
+            m_codecCtxParser->codec_id = streamInfo.codecId;
+            m_codecCtxParser->width = streamInfo.width;
+            m_codecCtxParser->height = streamInfo.height;
+            m_codecCtxParser->coded_width = streamInfo.codedWidth;
+            m_codecCtxParser->coded_height = streamInfo.codedHeight;
+            m_codecCtxParser->pix_fmt = streamInfo.pixelFormat;
+            m_codecCtxParser->bits_per_coded_sample = streamInfo.bitsPerCodedSample;
+            m_codecCtxParser->bits_per_raw_sample = streamInfo.bitsPerRawSample;
+            m_codecCtxParser->profile = streamInfo.profile;
+            m_codecCtxParser->level = streamInfo.level;
+            m_codecCtxParser->sample_aspect_ratio = streamInfo.sampleAspectRatio;
+            m_codecCtxParser->framerate = streamInfo.frameRate;
+            m_codecCtxParser->field_order = streamInfo.fieldOrder;
+            m_codecCtxParser->color_range = streamInfo.colorRange;
+            m_codecCtxParser->colorspace = streamInfo.colorSpace;
+            m_codecCtxParser->color_primaries = streamInfo.colorPrimaries;
+            m_codecCtxParser->color_trc = streamInfo.transferCharacteristics;
+            m_codecCtxParser->chroma_sample_location = streamInfo.chromaLocation;
+        }
     }
     if (!m_codecCtxParser->extradata) {
         return true;
