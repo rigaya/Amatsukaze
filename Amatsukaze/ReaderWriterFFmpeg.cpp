@@ -86,9 +86,13 @@ void av::CodecContext::Free() {
 AVCodecContext* av::CodecContext::operator()() {
     return ctx_;
 }
-av::InputContext::InputContext(const tstring& src)
+av::InputContext::InputContext(const tstring& src, const char* format)
     : ctx_() {
-    if (avformat_open_input(&ctx_, tchar_to_string(src).c_str(), NULL, NULL) != 0) {
+    auto inputFormat = (format != nullptr) ? av_find_input_format(format) : nullptr;
+    if (format != nullptr && inputFormat == nullptr) {
+        THROWF(FormatException, "unknown input format: %s", format);
+    }
+    if (avformat_open_input(&ctx_, tchar_to_string(src).c_str(), inputFormat, NULL) != 0) {
         THROW(IOException, "failed avformat_open_input");
     }
 }

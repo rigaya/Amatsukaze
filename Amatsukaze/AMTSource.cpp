@@ -615,7 +615,8 @@ AMTSource::AMTSource(AMTContext& ctx,
     audioSamplesPerFrame(0),
     interlaced(false),
     outputQP(outputQP),
-    inputCtx(srcpath),
+    // i*.mpg は元の映像形式によらず PsStreamWriter が生成する MPEG-PS
+    inputCtx(srcpath, "mpeg"),
     codecCtx(),
 #if ENABLE_FFMPEG_FILTER
     filterGraph(),

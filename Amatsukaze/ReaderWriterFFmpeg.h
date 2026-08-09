@@ -82,7 +82,7 @@ private:
 
 class InputContext : NonCopyable {
 public:
-    InputContext(const tstring& src);
+    InputContext(const tstring& src, const char* format = nullptr);
     ~InputContext();
     AVFormatContext* operator()();
 private:
