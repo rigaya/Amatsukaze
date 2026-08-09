@@ -157,10 +157,17 @@ else
                         <div class="autoselect-detail-tab-panel">
                         @if (_detailTab == AutoSelectDetailTab.Genre)
                         {
-                            <label>
-                                <input type="checkbox" checked="@_selectedCondition.ContentConditionEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ContentConditionEnabled)))" />
-                                ジャンル
-                            </label>
+                            <div class="autoselect-genre-options">
+                                <label>
+                                    <input type="checkbox" checked="@_selectedCondition.ContentConditionEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ContentConditionEnabled)))" />
+                                    ジャンル
+                                </label>
+                                <label class="autoselect-secondary-option">
+                                    （
+                                    <input type="checkbox" checked="@_selectedCondition.MatchAllGenres" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.MatchAllGenres)))" disabled="@(!_selectedCondition.ContentConditionEnabled)" />
+                                    全ジャンルを対象）
+                                </label>
+                            </div>
                             <div class="condition-list condition-list-mini" style="max-height: 260px; overflow: auto;" @attributes="GetDisabledAttr(!_selectedCondition.ContentConditionEnabled)">
                                 @foreach (var main in _options?.Genres ?? new List<GenreNodeView>())
                                 {
@@ -467,7 +474,7 @@ else
         if (cond.ContentConditionEnabled && cond.ContentConditions.Count > 0)
         {
             var count = DistinctGenres(cond.ContentConditions).Count;
-            parts.Add($"ジャンル:{count}");
+            parts.Add($"ジャンル:{count}{(cond.MatchAllGenres ? "（全ジャンル対象）" : "")}");
         }
         if (cond.ServiceIdEnabled && cond.ServiceIds.Count > 0)
         {
@@ -558,6 +565,9 @@ else
                 break;
             case nameof(AutoSelectConditionModel.ContentConditionEnabled):
                 _selectedCondition.ContentConditionEnabled = value;
+                break;
+            case nameof(AutoSelectConditionModel.MatchAllGenres):
+                _selectedCondition.MatchAllGenres = value;
                 break;
             case nameof(AutoSelectConditionModel.ServiceIdEnabled):
                 _selectedCondition.ServiceIdEnabled = value;
@@ -882,6 +892,7 @@ else
         public string FileName { get; set; } = "";
         public bool ContentConditionEnabled { get; set; }
         public List<GenreKey> ContentConditions { get; set; } = new();
+        public bool MatchAllGenres { get; set; }
         public bool ServiceIdEnabled { get; set; }
         public List<int> ServiceIds { get; set; } = new();
         public bool VideoSizeEnabled { get; set; }
@@ -960,6 +971,17 @@ else
         border-radius: 0 10px 10px 10px;
         padding: 8px;
         background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+    }
+
+    .autoselect-genre-options {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .autoselect-secondary-option {
+        font-size: 11px;
+        color: var(--text-muted);
     }
 
     .condition-list {

@@ -1099,20 +1099,23 @@ namespace Amatsukaze.Server
             return new ErrorDescription(error).ToString();
         }
 
-        private static bool MatchContentConditions(List<GenreItem> genre, List<GenreItem> conds)
+        private static bool MatchContentConditions(List<GenreItem> genre, List<GenreItem> conds, bool matchAllGenres)
         {
             // ジャンル情報がない場合はダメ
             if (genre.Count == 0) return false;
 
-            // １つ目のジャンルだけ見る
-            var content = genre[0];
-            foreach (var cond in conds)
+            // 通常は１つ目だけ、指定された場合はすべてのジャンルを見る
+            var targetGenre = matchAllGenres ? genre : genre.Take(1);
+            foreach (var content in targetGenre)
             {
-                if (cond.Level1 == content.Level1)
+                foreach (var cond in conds)
                 {
-                    if (cond.Level2 == -1 || cond.Level2 == content.Level2)
+                    if (cond.Level1 == content.Level1)
                     {
-                        return true;
+                        if (cond.Level2 == -1 || cond.Level2 == content.Level2)
+                        {
+                            return true;
+                        }
                     }
                 }
             }
@@ -1159,7 +1162,7 @@ namespace Amatsukaze.Server
                 }
                 if(cond.ContentConditionEnabled)
                 {
-                    if (MatchContentConditions(genre, cond.ContentConditions) == false)
+                    if (MatchContentConditions(genre, cond.ContentConditions, cond.MatchAllGenres) == false)
                     {
                         continue;
                     }

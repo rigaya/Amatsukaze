@@ -2005,6 +2005,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public List<GenreItem> ContentConditions { get; set; }
         [DataMember]
+        public bool MatchAllGenres { get; set; }
+        [DataMember]
         public bool ServiceIdEnabled { get; set; }
         [DataMember]
         public List<int> ServiceIds { get; set; }

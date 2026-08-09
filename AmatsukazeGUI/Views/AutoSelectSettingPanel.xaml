@@ -126,8 +126,17 @@
                 </DockPanel>
 
                 <DockPanel Grid.Column="0" Grid.Row="1">
-                    <CheckBox Content="ジャンル" DockPanel.Dock="Top"
-                            IsChecked="{Binding ContentConditionEnabled, Mode=TwoWay}"/>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <CheckBox Content="ジャンル"
+                                IsChecked="{Binding ContentConditionEnabled, Mode=TwoWay}"/>
+                        <StackPanel Orientation="Horizontal" Margin="10,0,0,0"
+                                IsEnabled="{Binding ContentConditionEnabled}">
+                            <TextBlock Text="（" FontSize="11" VerticalAlignment="Center"/>
+                            <CheckBox Content="全ジャンルを対象" FontSize="11"
+                                    IsChecked="{Binding MatchAllGenres, Mode=TwoWay}"/>
+                            <TextBlock Text="）" FontSize="11" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
                     <ListBox ItemsSource="{Binding GenreItems}"
                             IsEnabled="{Binding ContentConditionEnabled}"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
