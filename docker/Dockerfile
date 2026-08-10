@@ -198,6 +198,9 @@ ARG ARCH=amd64
 ARG BUILD_MODE=release
 ARG ENABLE_FASTER_WHISPER=0
 ARG ENABLE_VCEENCC=0
+ARG SEVENZIP_VER=26.02
+ARG SEVENZIP_PKG=7z2602
+ARG SEVENZIP_ARCHIVE_SHA256=41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e
 
 # 環境変数の設定
 ENV DEBIAN_FRONTEND=noninteractive
@@ -369,6 +372,14 @@ RUN curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
         | grep "browser_download_url.*tar.xz" | grep "Ubuntu${UBUNTU_VERSION}" | cut -d : -f 2,3 | tr -d \" \
         | wget -i - -O - | tar -xJ -C /app \
         && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi
+
+# アーカイブ展開用 7-Zip CLI（Linux x64、静的リンク版）
+RUN wget https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz -O ${SEVENZIP_PKG}-linux-x64.tar.xz \
+    && echo "${SEVENZIP_ARCHIVE_SHA256}  ${SEVENZIP_PKG}-linux-x64.tar.xz" | sha256sum -c - \
+    && mkdir -p /app/exe_files/7z \
+    && tar -xf ${SEVENZIP_PKG}-linux-x64.tar.xz -C /app/exe_files/7z 7zzs License.txt \
+    && chmod 755 /app/exe_files/7z/7zzs \
+    && rm ${SEVENZIP_PKG}-linux-x64.tar.xz
 
 # for debug
 #COPY Amatsukaze_Ubuntu22.04_r926.tar.xz /app

@@ -268,6 +268,45 @@ if [ ! -s "${DANMAKU2ASS_PATH}" ]; then
     chmod 755 "${DANMAKU2ASS_PATH}"
 fi
 
+# アーカイブ展開用 7-Zip CLI（Linux x64、静的リンク版）
+SEVENZIP_VER="26.02"
+SEVENZIP_PKG="7z2602"
+SEVENZIP_ARCHIVE_SHA256="41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e"
+SEVENZIP_BINARY_SHA256="20df89e993594c1bb7686f125dabe1acc56c109fb1d9b40435ea5fcbc1ca3453"
+SEVENZIP_LICENSE_SHA256="1790374e5352329cedb46ee3808930a88e9ca2f08b82b10fcf5cf605d2c301b1"
+SEVENZIP_DIR="${INSTALL_DIR}/exe_files/7z"
+SEVENZIP_PATH="${SEVENZIP_DIR}/7zzs"
+SEVENZIP_LICENSE_PATH="${SEVENZIP_DIR}/License.txt"
+SEVENZIP_ARCHIVE="${BUILD_DIR}/${SEVENZIP_PKG}-linux-x64.tar.xz.tmp"
+if ! printf '%s  %s\n' "${SEVENZIP_BINARY_SHA256}" "${SEVENZIP_PATH}" | sha256sum -c - >/dev/null 2>&1 \
+    || ! printf '%s  %s\n' "${SEVENZIP_LICENSE_SHA256}" "${SEVENZIP_LICENSE_PATH}" | sha256sum -c - >/dev/null 2>&1; then
+    echo "7-Zip CLI ${SEVENZIP_VER} をダウンロードします..."
+    mkdir -p "${SEVENZIP_DIR}"
+    rm -f "${SEVENZIP_ARCHIVE}"
+    wget -q "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz" \
+        -O "${SEVENZIP_ARCHIVE}" || { rm -f "${SEVENZIP_ARCHIVE}"; echo "7-Zip CLI のダウンロードに失敗しました"; exit 1; }
+    if ! printf '%s  %s\n' "${SEVENZIP_ARCHIVE_SHA256}" "${SEVENZIP_ARCHIVE}" | sha256sum -c - >/dev/null 2>&1; then
+        rm -f "${SEVENZIP_ARCHIVE}"
+        echo "7-Zip CLI のアーカイブの SHA-256 が一致しません"
+        exit 1
+    fi
+    if ! tar -xf "${SEVENZIP_ARCHIVE}" -C "${SEVENZIP_DIR}" 7zzs License.txt; then
+        rm -f "${SEVENZIP_ARCHIVE}" "${SEVENZIP_PATH}" "${SEVENZIP_LICENSE_PATH}"
+        echo "7-Zip CLI の展開に失敗しました"
+        exit 1
+    fi
+    rm -f "${SEVENZIP_ARCHIVE}"
+    if ! printf '%s  %s\n' "${SEVENZIP_BINARY_SHA256}" "${SEVENZIP_PATH}" | sha256sum -c - >/dev/null 2>&1 \
+        || ! printf '%s  %s\n' "${SEVENZIP_LICENSE_SHA256}" "${SEVENZIP_LICENSE_PATH}" | sha256sum -c - >/dev/null 2>&1; then
+        rm -f "${SEVENZIP_PATH}" "${SEVENZIP_LICENSE_PATH}"
+        echo "展開した 7-Zip CLI の SHA-256 が一致しません"
+        exit 1
+    fi
+else
+    echo "7-Zip CLI ${SEVENZIP_VER} は配置済みです。"
+fi
+chmod 755 "${SEVENZIP_PATH}" || { echo "7-Zip CLI に実行権限を設定できませんでした"; exit 1; }
+
 
 # .NET アプリケーションの公開
 if [ "$DEBUG_BUILD" = true ]; then
