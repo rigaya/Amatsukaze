@@ -168,6 +168,7 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
      _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums), sums0To15);
      _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums + 16), sums16To31);
      _mm256_storeu_si256(reinterpret_cast<__m256i*>(minvOut), minv);
+     _mm256_storeu_si256(reinterpret_cast<__m256i*>(maxvOut), maxv);
 }
 
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
