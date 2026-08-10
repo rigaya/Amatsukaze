@@ -70,6 +70,7 @@ public:
         const std::vector<int>& pidChanges);
 
     void inputTrimAVS(int numFrames, const tstring& trimavsPath);
+    void inputDivFile(int numFrames, const tstring& divFilePath);
 
     void restore(const tstring& logoPath, const std::vector<int>& trims, const std::vector<int>& divs, const int numFrames);
 

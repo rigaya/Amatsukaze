@@ -1008,6 +1008,10 @@ tstring ConfigWrapper::getTrimAVSPath() const {
     return conf.trimavsPath;
 }
 
+tstring ConfigWrapper::getDivFilePath() const {
+    return conf.divFilePath;
+}
+
 bool ConfigWrapper::isCopyTrimAVSEnabled() const {
     return conf.copyTrimAVS;
 }

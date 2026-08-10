@@ -1977,7 +1977,7 @@ namespace Amatsukaze.Server
             string src, string srcOrg, string dst, string json,
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
-            bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string resumeDir, string batDir,
+            bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
             string inHandle, string outHandle, int pid)
         {
             StringBuilder sb = new StringBuilder();
@@ -2466,6 +2466,10 @@ namespace Amatsukaze.Server
                 if (string.IsNullOrEmpty(trimavs) == false)
                 {
                     sb.Append(" --trimavs \"").Append(trimavs).Append("\"");
+                }
+                if (string.IsNullOrEmpty(divfile) == false)
+                {
+                    sb.Append(" --divfile \"").Append(divfile).Append("\"");
                 }
                 if (string.IsNullOrEmpty(resumeDir) == false)
                 {

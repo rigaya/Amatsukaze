@@ -1380,6 +1380,10 @@ void DoBadThing() {
                 // Trim情報入力
                 cma->inputTrimAVS(numFrames, setting.getTrimAVSPath());
             }
+            if (setting.getDivFilePath().size()) {
+                // 分割点情報入力
+                cma->inputDivFile(numFrames, setting.getDivFilePath());
+            }
         }
 
         logoFound.emplace_back(numFrames, cma->getLogoPath().size() > 0);

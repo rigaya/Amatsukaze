@@ -120,6 +120,7 @@ static void printHelp(const tchar* bin) {
         "  --whisper-option <オプション> whisperへ渡す追加オプション\n"
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
+        "  --divfile <パス>    出力分割点ファイルへのパス。メインファイルでのみ使用される。\n"
         "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"))
         + AMATSUKAZECLI_HELP_NICOASS_LINE
         + _T(
@@ -511,6 +512,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.psisiarcPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--trimavs")) {
             conf.trimavsPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--divfile")) {
+            conf.divFilePath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--resume-dir")) {
             conf.resumeDir = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--copy-trimavs")) {

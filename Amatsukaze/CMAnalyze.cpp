@@ -250,6 +250,49 @@ void CMAnalyze::inputTrimAVS(int numFrames, const tstring& trimavsPath) {
     makeCMZones(numFrames);
 }
 
+void CMAnalyze::inputDivFile(int numFrames, const tstring& divFilePath) {
+    divs.clear();
+
+    // 分割点なしの場合も再開情報に残った古い分割点を消す
+    if (!File::exists(divFilePath)) {
+        ctx.infoF(_T("[分割点情報入力]: ファイルなし (%s)"), divFilePath.c_str());
+        divs.push_back(0);
+        divs.push_back(numFrames);
+        return;
+    }
+
+    ctx.infoF(_T("[分割点情報入力]: %s"), divFilePath.c_str());
+    PrintFileAll(divFilePath);
+
+    File file(divFilePath, _T("r"));
+    std::string str;
+    std::regex re("^\\s*([0-9]+)\\s*$");
+    std::smatch match;
+    int lineNumber = 0;
+    while (file.getline(str)) {
+        lineNumber++;
+        if (!std::regex_match(str, match, re)) {
+            THROWF(FormatException, "分割点ファイルの%d行目が整数ではありません: %s", lineNumber, str.c_str());
+        }
+
+        int point;
+        try {
+            point = std::stoi(match[1].str());
+        } catch (const std::exception&) {
+            THROWF(FormatException, "分割点ファイルの%d行目が整数の範囲外です: %s", lineNumber, str.c_str());
+        }
+        if (point <= 0 || point >= numFrames) {
+            THROWF(FormatException, "分割点ファイルの%d行目が映像の範囲外です: %d", lineNumber, point);
+        }
+        divs.push_back(point);
+    }
+
+    std::sort(divs.begin(), divs.end());
+    divs.erase(std::unique(divs.begin(), divs.end()), divs.end());
+    divs.insert(divs.begin(), 0);
+    divs.push_back(numFrames);
+}
+
 void CMAnalyze::restore(const tstring& logoPath, const std::vector<int>& trims, const std::vector<int>& divs, const int numFrames) {
     if (trims.size() % 2 != 0) {
         THROW(FormatException, "再開情報のTrim区間数が不正です");
