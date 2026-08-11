@@ -894,6 +894,18 @@ namespace Amatsukaze.Server.Update
                 log, cancellationToken).ConfigureAwait(false);
         }
 
+        internal Task<PreparedSelfUpdate> PrepareSelfUpdateAsync(ReleaseAssetInfo asset,
+            string expectedVersion, UpdateLog log, UpdateJobRecord job,
+            CancellationToken cancellationToken)
+        {
+            var environment = UpdateRuntimeEnvironment.Detect();
+            var setting = server.AppData_?.setting;
+            var progress = job == null ? null : new Progress<DownloadProgress>(job.ReportProgress);
+            return new SelfUpdatePreparation(appRoot, setting?.UpdateProxy,
+                FindExtractor(appRoot)).PrepareAsync(asset, expectedVersion, environment.OS,
+                log, progress, cancellationToken);
+        }
+
         private async Task RunApplySafelyAsync(IReadOnlyList<UpdateApplyTarget> targets,
             UpdateJobRecord job)
         {

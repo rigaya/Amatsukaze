@@ -6,6 +6,51 @@ namespace AmatsukazeServerTest;
 
 public sealed class LiveUpdatePreparationTests
 {
+    [EnvironmentFact("AMT_LIVE_P4A", "AMT_LIVE_APP_ROOT", "AMT_LIVE_ARTIFACT_DIR")]
+    public async Task 本体実アセットを専用領域へ展開して検証する()
+    {
+        var appRoot = Environment.GetEnvironmentVariable("AMT_LIVE_APP_ROOT")!;
+        var artifactDir = Environment.GetEnvironmentVariable("AMT_LIVE_ARTIFACT_DIR")!;
+        Directory.CreateDirectory(artifactDir);
+        Assert.True(UpdateCatalog.TryInitialize(out var catalogError), catalogError);
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == "Amatsukaze");
+        var environment = UpdateRuntimeEnvironment.Detect();
+        var rule = Assert.Single(target.AssetRules, item => item.AppliesTo(environment));
+        string logPath;
+        PreparedSelfUpdate prepared;
+        using (var log = new UpdateLog(appRoot))
+        {
+            logPath = log.FilePath;
+            using var releases = new ReleaseClient(string.Empty);
+            var candidates = await releases.GetReleasesAsync(target.Repository, target.Id,
+                target.ReleaseSelect, log, CancellationToken.None);
+            Assert.NotNull(candidates);
+            var selected = candidates.SelectMany(release => release.Assets.Select(asset =>
+                (Release: release, Asset: asset, Match: rule.Match(asset.Name))))
+                .First(item => item.Match.Success);
+            var expectedVersion = selected.Match.Groups["ver"].Value;
+            log.Write(target.Id, "S04_LATEST", "OK", ("tag", selected.Release.TagName),
+                ("version", expectedVersion));
+            log.Write(target.Id, "S05_SELECT_ASSET", "OK", ("asset", selected.Asset.Name),
+                ("size", selected.Asset.Size), ("digest", selected.Asset.Digest));
+            prepared = await new SelfUpdatePreparation(appRoot, string.Empty,
+                UpdateManager.FindExtractor(appRoot)).PrepareAsync(selected.Asset,
+                expectedVersion, environment.OS, log, null, CancellationToken.None);
+        }
+
+        Assert.Equal(Path.Combine(appRoot, ".amatsukaze_update", "staging"),
+            prepared.StagingDirectory);
+        SelfUpdatePolicy.ValidateTopLevel(prepared.StagingDirectory, environment.OS);
+        SelfUpdatePreparation.ValidateProduct(prepared.StagingDirectory, environment.OS);
+        var topLevel = Directory.EnumerateFileSystemEntries(prepared.StagingDirectory)
+            .Select(Path.GetFileName).OrderBy(item => item, StringComparer.Ordinal).ToArray();
+        Assert.DoesNotContain(".", topLevel);
+        await File.WriteAllLinesAsync(Path.Combine(artifactDir,
+            "self_update_top_level.txt"), topLevel!);
+        File.Copy(logPath, Path.Combine(artifactDir,
+            "live_self_update_transaction.log"), true);
+    }
+
     [EnvironmentFact("AMT_LIVE_P2B", "AMT_LIVE_APP_ROOT", "AMT_LIVE_ARTIFACT_DIR")]
     public async Task GitHub実アセット三対象を使い捨てルートへ設置する()
     {
