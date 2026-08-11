@@ -1,0 +1,436 @@
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@inject IJSRuntime Js
+@implements IDisposable
+
+<div class="modal-overlay update-dialog-overlay" @onclick="CloseAsync">
+    <div class="modal-body update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-dialog-title" @onclick:stopPropagation="true">
+        <div class="update-dialog-header">
+            <h4 id="update-dialog-title">更新状況</h4>
+            <button class="btn btn-sm btn-secondary" @onclick="CloseAsync" aria-label="閉じる">閉じる</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_status?.EnvironmentWarning))
+        {
+            <div class="update-environment-warning" role="alert">@_status.EnvironmentWarning</div>
+        }
+
+        @if (_checking)
+        {
+            <p class="update-check-progress">更新を確認しています… @GetProgressText()</p>
+        }
+        else if (!string.IsNullOrEmpty(_error))
+        {
+            <p class="update-dialog-error">@_error</p>
+        }
+
+        @if (_status == null)
+        {
+            <p>-</p>
+        }
+        else
+        {
+            <div class="update-table-scroll">
+                <table class="table update-table">
+                    <thead>
+                        <tr>
+                            <th class="update-select-column">選択</th>
+                            <th>対象名</th>
+                            <th>現在版</th>
+                            <th>最新版</th>
+                            <th>サイズ</th>
+                            <th>再起動</th>
+                            <th>状態</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _status.Items)
+                        {
+                            <tr class="@GetRowClass(item)">
+                                <td class="update-select-column">
+                                    <input type="checkbox"
+                                           checked="@_selectedTargets.Contains(item.Id)"
+                                           disabled="@(!CanSelect(item))"
+                                           aria-label="@($"{item.DisplayName}を選択")"
+                                           @onchange="@(e => OnSelectionChanged(item, e))" />
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(item.ReleaseUrl))
+                                    {
+                                        <a href="@item.ReleaseUrl" target="_blank" rel="noopener">@item.DisplayName</a>
+                                    }
+                                    else
+                                    {
+                                        <span>@item.DisplayName</span>
+                                    }
+                                </td>
+                                <td>@FormatInstalledVersion(item.InstalledVersion)</td>
+                                <td>@FormatLatestVersion(item.LatestVersion)</td>
+                                <td>@FormatDownloadSize(item)</td>
+                                <td>@(item.RequiresRestart ? "必要" : "不要")</td>
+                                <td>
+                                    <div>@GetStateLabel(item)</div>
+                                    @if (!string.IsNullOrEmpty(GetStateDetail(item)))
+                                    {
+                                        <div class="update-state-detail">@GetStateDetail(item)</div>
+                                    }
+                                    @if (IsDockerExecutable(item))
+                                    {
+                                        <div class="update-state-detail">この更新はコンテナを再作成すると失われます</div>
+                                    }
+                                    @if (IsDockerSelfUpdateAvailable(item))
+                                    {
+                                        <div class="docker-update-command">
+                                            <div>新版があります。この手順で更新してください。</div>
+                                            <code>@DockerUpdateCommand</code>
+                                            <button class="btn btn-sm btn-secondary" @onclick="CopyDockerCommandAsync">コピー</button>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div class="update-dialog-actions">
+            <button class="btn btn-primary" disabled title="次のバージョンで対応">更新実行</button>
+            <button class="btn btn-secondary" @onclick="CopyDiagnosticLogAsync" disabled="@(string.IsNullOrEmpty(_jobId))">診断ログをコピー</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_copyMessage))
+        {
+            <p class="update-copy-message" role="status">@_copyMessage</p>
+        }
+        @if (!string.IsNullOrEmpty(_fallbackText))
+        {
+            <label class="update-copy-fallback">
+                手動でコピーしてください
+                <textarea readonly rows="8">@_fallbackText</textarea>
+            </label>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public UpdateStatusView? InitialStatus { get; set; }
+    [Parameter] public EventCallback<UpdateStatusView> StatusChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly TimeSpan ApiTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    // ReleaseClient の最悪所要時間（6リポジトリ×約25秒）に余裕を加える
+    private static readonly TimeSpan PollTimeout = TimeSpan.FromMinutes(5);
+    private const string DockerUpdateCommand = "docker compose pull && docker compose up -d";
+
+    private readonly HashSet<string> _selectedTargets = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CancellationTokenSource _pollCancellation = new();
+    private UpdateStatusView? _status;
+    private UpdateJobView? _job;
+    private string? _jobId;
+    private string? _error;
+    private string? _copyMessage;
+    private string? _fallbackText;
+    private bool _checking = true;
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        _status = InitialStatus;
+        InitializeSelection();
+        _ = CheckForUpdatesAsync(_pollCancellation.Token);
+    }
+
+    private async Task CheckForUpdatesAsync(CancellationToken token)
+    {
+        try
+        {
+            var start = await WaitForApiAsync(Api.StartUpdateCheckAsync(), token);
+            if (start == null || !start.Ok || string.IsNullOrWhiteSpace(start.Data))
+            {
+                SetError(start?.Error ?? "更新チェックを開始できませんでした。");
+                return;
+            }
+            _jobId = start.Data;
+            var deadline = DateTime.UtcNow + PollTimeout;
+            while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+            {
+                var jobResult = await WaitForApiAsync(Api.GetUpdateJobAsync(_jobId), token);
+                if (jobResult == null)
+                {
+                    await HandlePollingTimeoutAsync(token);
+                    return;
+                }
+                if (!jobResult.Ok || jobResult.Data == null)
+                {
+                    SetError(jobResult.Error ?? "更新チェックの状態を取得できませんでした。");
+                    return;
+                }
+                _job = jobResult.Data;
+                await SafeRefreshAsync();
+                if (_job.Finished)
+                {
+                    await RefreshStatusAsync(token);
+                    return;
+                }
+                await Task.Delay(PollInterval, token);
+            }
+            if (!token.IsCancellationRequested)
+            {
+                await HandlePollingTimeoutAsync(token);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetError($"更新チェックに失敗しました: {ex.Message}");
+        }
+        finally
+        {
+            _checking = false;
+            await SafeRefreshAsync();
+        }
+    }
+
+    private async Task HandlePollingTimeoutAsync(CancellationToken token)
+    {
+        // サーバー側で確定済みの対象があれば、打ち切り時点の状態を表示する
+        await RefreshStatusAsync(token, clearError: false);
+        SetError("更新チェックがタイムアウトしました。サーバー側で処理が続いている可能性があります。しばらく待って開き直してください。");
+    }
+
+    private async Task RefreshStatusAsync(CancellationToken token, bool clearError = true)
+    {
+        var result = await WaitForApiAsync(Api.GetUpdateStatusAsync(), token);
+        if (result == null || !result.Ok || result.Data == null)
+        {
+            SetError(result?.Error ?? "更新状況を取得できませんでした。");
+            return;
+        }
+        _status = result.Data;
+        if (clearError)
+        {
+            _error = null;
+        }
+        InitializeSelection();
+        if (!_disposed)
+        {
+            await StatusChanged.InvokeAsync(_status);
+        }
+    }
+
+    private async Task<ApiResult<T>?> WaitForApiAsync<T>(Task<ApiResult<T>> apiTask, CancellationToken token)
+    {
+        var timeoutTask = Task.Delay(ApiTimeout, token);
+        var completed = await Task.WhenAny(apiTask, timeoutTask);
+        if (completed != apiTask)
+        {
+            token.ThrowIfCancellationRequested();
+            return null;
+        }
+        return await apiTask;
+    }
+
+    private void InitializeSelection()
+    {
+        _selectedTargets.Clear();
+        if (_status == null)
+        {
+            return;
+        }
+        foreach (var item in _status.Items.Where(CanSelect))
+        {
+            _selectedTargets.Add(item.Id);
+        }
+    }
+
+    private void OnSelectionChanged(UpdateItemView item, ChangeEventArgs args)
+    {
+        if (!CanSelect(item))
+        {
+            return;
+        }
+        if (args.Value is bool selected && selected)
+        {
+            _selectedTargets.Add(item.Id);
+        }
+        else
+        {
+            _selectedTargets.Remove(item.Id);
+        }
+    }
+
+    private async Task CopyDiagnosticLogAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_jobId))
+        {
+            return;
+        }
+        var result = await Api.GetUpdateJobLogAsync(_jobId);
+        if (!result.Ok || result.Data == null)
+        {
+            _copyMessage = result.Error ?? "診断ログを取得できませんでした。";
+            return;
+        }
+        await CopyTextAsync(result.Data, "診断ログをコピーしました。");
+    }
+
+    private Task CopyDockerCommandAsync()
+        => CopyTextAsync(DockerUpdateCommand, "更新コマンドをコピーしました。");
+
+    private async Task CopyTextAsync(string text, string successMessage)
+    {
+        _copyMessage = null;
+        _fallbackText = null;
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            _copyMessage = successMessage;
+        }
+        catch
+        {
+            _copyMessage = "クリップボードへコピーできませんでした。下の欄から手動でコピーしてください。";
+            _fallbackText = text;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _pollCancellation.Cancel();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task SafeRefreshAsync()
+    {
+        if (!_disposed)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SetError(string message)
+    {
+        if (!_disposed)
+        {
+            _error = message;
+        }
+    }
+
+    private string GetProgressText()
+    {
+        if (_job == null)
+        {
+            return string.Empty;
+        }
+        var target = string.IsNullOrWhiteSpace(_job.CurrentTargetId) ? "-" : _job.CurrentTargetId;
+        var stage = string.IsNullOrWhiteSpace(_job.CurrentStage) ? "-" : _job.CurrentStage;
+        return $"{target} / {stage}";
+    }
+
+    private bool HasEnvironmentWarning => !string.IsNullOrWhiteSpace(_status?.EnvironmentWarning);
+    private static bool IsDockerSelfUpdateAvailable(UpdateItemView item)
+        => item.State == "Unsupported" && item.StateReason == "docker_self_update_available";
+    // 環境警告があり、かつ本体以外の行ならコンテナ再作成時の消失警告を表示する
+    private bool IsDockerExecutable(UpdateItemView item)
+        => HasEnvironmentWarning && !string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
+    private static bool CanSelect(UpdateItemView item) => item.State == "UpdateAvailable";
+
+    private static string FormatInstalledVersion(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "未検出" : value;
+
+    private static string FormatLatestVersion(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "不明" : value;
+
+    private static string FormatDownloadSize(UpdateItemView item)
+        => item.State == "UpdateAvailable" ? FormatBytes(item.DownloadSizeBytes) : "-";
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "-";
+        }
+        var value = (double)bytes;
+        var units = new[] { "B", "KiB", "MiB", "GiB", "TiB" };
+        var index = 0;
+        while (value >= 1024 && index < units.Length - 1)
+        {
+            value /= 1024;
+            index++;
+        }
+        return $"{value:0.##} {units[index]}";
+    }
+
+    private static string GetStateLabel(UpdateItemView item)
+    {
+        return item.State switch
+        {
+            "UpToDate" => "最新",
+            "UpdateAvailable" => "更新あり",
+            "Unknown" => "バージョン取得不可",
+            "Unsupported" => IsDockerSelfUpdateAvailable(item) ? "Dockerで更新してください" : "対応外",
+            "Disabled" => "無効",
+            _ => "状態不明",
+        };
+    }
+
+    private string? GetStateDetail(UpdateItemView item)
+    {
+        if (item.State == "Unknown")
+        {
+            return $"理由: {FormatReason(item.StateReason)}";
+        }
+        if (item.State == "Unsupported" || item.State == "Disabled")
+        {
+            return string.IsNullOrWhiteSpace(item.StateReason)
+                ? null : $"理由: {FormatReason(item.StateReason)}";
+        }
+        return null;
+    }
+
+    private static string FormatReason(string? reason)
+    {
+        return reason switch
+        {
+            "not_checked" => "まだチェックしていません",
+            "invalid_catalog" => "更新対象の定義に問題があります",
+            "version_parse_failed" => "バージョンを比較できませんでした",
+            "version_unknown" => "ローカル版を取得できませんでした",
+            "release_query_failed" => "最新版を取得できませんでした",
+            "asset_not_found" => "対応する配布ファイルがありません",
+            "unsupported_os_or_arch" => "この OS / CPU 向けの配布ファイルがありません",
+            "unsupported_operating_system" => "この OS では更新に対応していません",
+            "docker_self_update_available" => "Dockerでは本体を直接更新できません",
+            "docker_self_update_unsupported" => "Dockerでは本体を直接更新できません",
+            "disabled_by_setting" => "設定で無効です",
+            null or "" => "不明",
+            _ => $"不明な状態 ({reason})",
+        };
+    }
+
+    private static string GetRowClass(UpdateItemView item)
+    {
+        return item.State switch
+        {
+            "UpdateAvailable" => "update-row-available",
+            "Unknown" => "update-row-unknown",
+            "Unsupported" => "update-row-unsupported",
+            "Disabled" => "update-row-disabled",
+            _ => string.Empty,
+        };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+        _pollCancellation.Cancel();
+        _pollCancellation.Dispose();
+    }
+}

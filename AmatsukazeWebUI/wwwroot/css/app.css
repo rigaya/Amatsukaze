@@ -31,6 +31,10 @@
     --success: #7ccfb8;
     --warning: #ffcf8a;
     --danger: #f29aa3;
+    --update-attention-text: #b42318;
+    --update-attention-soft: rgba(180, 35, 24, 0.1);
+    --update-warning-bg: #fff4d6;
+    --update-warning-text: #5f4300;
     --queue-complete-base: #9fe2ff;
     --queue-complete-text: #0f2433;
     --queue-encoding-base: #9ee6c7;
@@ -83,6 +87,10 @@
         --success: #7cd7c4;
         --warning: #ffd39c;
         --danger: #ff9aa2;
+        --update-attention-text: #ff9aa2;
+        --update-attention-soft: rgba(255, 154, 162, 0.14);
+        --update-warning-bg: #4a3811;
+        --update-warning-text: #ffe6a8;
         --queue-complete-base: #255574;
         --queue-complete-text: #f1f6ff;
         --queue-encoding-base: #2d7a5f;
@@ -1382,6 +1390,174 @@ code {
     box-shadow: var(--shadow-lg);
     backdrop-filter: blur(8px);
     border: 1px solid var(--glass-border);
+}
+
+.update-status-button.has-update {
+    color: var(--update-attention-text);
+    background: var(--update-attention-soft);
+    border-color: color-mix(in srgb, var(--update-attention-text) 65%, var(--border));
+    font-weight: 700;
+}
+
+.update-status-button.has-update:hover,
+.update-status-button.has-update:focus-visible {
+    color: var(--update-attention-text);
+    background: color-mix(in srgb, var(--update-attention-soft) 70%, var(--bg-surface));
+}
+
+.update-status-summary {
+    margin-left: 0.65rem;
+    color: var(--muted);
+}
+
+.update-dialog-overlay {
+    padding: 1rem;
+}
+
+.update-dialog {
+    width: min(1100px, calc(100vw - 2rem));
+    max-width: 1100px;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+}
+
+.update-dialog-header,
+.update-dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.update-dialog-header h4 {
+    margin: 0;
+}
+
+.update-dialog-actions {
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+.update-environment-warning {
+    margin-top: 0.8rem;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--update-warning-text) 35%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--update-warning-bg);
+    color: var(--update-warning-text);
+}
+
+.update-check-progress,
+.update-dialog-error,
+.update-copy-message {
+    margin: 0.8rem 0 0;
+}
+
+.update-dialog-error {
+    color: var(--update-attention-text);
+}
+
+.update-table-scroll {
+    margin-top: 0.8rem;
+    overflow-x: auto;
+}
+
+.update-table {
+    min-width: 850px;
+    margin-bottom: 0;
+}
+
+.update-table th,
+.update-table td {
+    vertical-align: top;
+}
+
+.update-select-column {
+    width: 3.5rem;
+    text-align: center;
+}
+
+.update-row-available {
+    background: var(--update-attention-soft);
+}
+
+.update-row-unknown,
+.update-row-unsupported,
+.update-row-disabled,
+.update-state-detail {
+    color: var(--muted);
+}
+
+.update-state-detail {
+    margin-top: 0.15rem;
+    font-size: 0.85em;
+}
+
+.docker-update-command {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin-top: 0.45rem;
+    color: var(--text);
+}
+
+.docker-update-command > div {
+    flex-basis: 100%;
+    color: var(--update-attention-text);
+    font-weight: 600;
+}
+
+.docker-update-command code {
+    padding: 0.25rem 0.4rem;
+    border-radius: var(--radius-sm);
+    background: var(--console-bg);
+    color: var(--console-text);
+}
+
+.update-copy-fallback {
+    display: block;
+    margin-top: 0.6rem;
+    color: var(--muted);
+}
+
+.update-copy-fallback textarea {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-family: monospace;
+    white-space: pre;
+}
+
+.settings-update-hours {
+    width: 6rem;
+}
+
+.settings-update-proxy {
+    width: min(32rem, 100%);
+}
+
+.settings-field-note {
+    margin-left: 0.5rem;
+    color: var(--muted);
+}
+
+@media (max-width: 640.98px) {
+    .update-dialog-overlay {
+        padding: 0.5rem;
+    }
+
+    .update-dialog {
+        min-width: 0;
+        width: calc(100vw - 1rem);
+        max-height: calc(100vh - 1rem);
+        padding: 0.8rem;
+    }
+
+    .settings-field-note {
+        display: block;
+        margin: 0.3rem 0 0;
+    }
 }
 
 .form-row {
