@@ -47,7 +47,7 @@ namespace Amatsukaze.Server.Update
                 ("no_proxy", Safe(() => Environment.GetEnvironmentVariable("NO_PROXY") ?? "(none)")),
                 ("default_proxy", Safe(GetDefaultProxy)),
                 ("docker", Safe(() => IsDockerEnvironment() ? "yes" : "no")),
-                ("exe_files_volume", Safe(IsAppExeFilesMounted)),
+                ("exe_files_volume", Safe(GetAppExeFilesMountState)),
                 ("execution_context", Safe(GetSafeExecutionContext)),
             };
 
@@ -298,7 +298,7 @@ namespace Amatsukaze.Server.Update
             return value;
         }
 
-        private static string IsAppExeFilesMounted()
+        internal static string GetAppExeFilesMountState()
         {
             if (!OperatingSystem.IsLinux())
             {

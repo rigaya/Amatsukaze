@@ -14,6 +14,10 @@ namespace Amatsukaze.Shared
         Task<ApiResult<InfoSummaryView>> GetInfoSummaryAsync();
         Task<ApiResult<List<DiskUsageView>>> GetInfoDisksAsync();
         Task<ApiResult<LatestReleaseInfo>> GetLatestReleaseAsync();
+        Task<ApiResult<UpdateStatusView>> GetUpdateStatusAsync();
+        Task<ApiResult<string>> StartUpdateCheckAsync();
+        Task<ApiResult<UpdateJobView>> GetUpdateJobAsync(string jobId);
+        Task<ApiResult<string>> GetUpdateJobLogAsync(string jobId);
         Task<ApiResult<UiStateView>> GetUiStateAsync();
         Task<ApiResult<bool>> EndServerAsync();
         Task<ApiResult<bool>> CancelSleepAsync();

@@ -210,6 +210,7 @@ namespace Amatsukaze.Server.Update
         public UpdateTargetStatus Status { get; init; }
         public string Reason { get; init; }
         public ReleaseAssetInfo SelectedAsset { get; init; }
+        public string ReleaseUrl { get; init; }
         public DateTime CheckedAtUtc { get; init; }
     }
 }

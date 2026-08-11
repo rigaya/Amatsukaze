@@ -45,6 +45,19 @@ namespace Amatsukaze.Shared
         public Task<ApiResult<LatestReleaseInfo>> GetLatestReleaseAsync()
             => GetJsonAsync<LatestReleaseInfo>("/api/info/latest-release");
 
+        public Task<ApiResult<UpdateStatusView>> GetUpdateStatusAsync()
+            => GetJsonAsync<UpdateStatusView>("/api/update/status");
+
+        public Task<ApiResult<string>> StartUpdateCheckAsync()
+            => PostJsonAsync("/api/update/check", new { },
+                result => result.GetProperty("jobId").GetString() ?? "");
+
+        public Task<ApiResult<UpdateJobView>> GetUpdateJobAsync(string jobId)
+            => GetJsonAsync<UpdateJobView>($"/api/update/job/{Uri.EscapeDataString(jobId)}");
+
+        public Task<ApiResult<string>> GetUpdateJobLogAsync(string jobId)
+            => GetTextAsync($"/api/update/job/{Uri.EscapeDataString(jobId)}/log");
+
         public Task<ApiResult<UiStateView>> GetUiStateAsync()
             => GetJsonAsync<UiStateView>("/api/ui-state");
 

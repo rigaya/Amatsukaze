@@ -25,6 +25,7 @@ namespace Amatsukaze.Server.Update
     {
         public string Repository { get; init; }
         public string TagName { get; init; }
+        public string HtmlUrl { get; init; }
         public DateTimeOffset? PublishedAt { get; init; }
         public IReadOnlyList<ReleaseAssetInfo> Assets { get; init; }
         public string RateLimitRemaining { get; init; }
@@ -277,6 +278,7 @@ namespace Amatsukaze.Server.Update
             {
                 Repository = repository,
                 TagName = GetString(root, "tag_name"),
+                HtmlUrl = GetString(root, "html_url"),
                 PublishedAt = publishedAt,
                 Assets = assets,
                 RateLimitRemaining = rateRemaining,

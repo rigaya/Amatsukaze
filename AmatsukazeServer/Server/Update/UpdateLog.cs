@@ -13,13 +13,15 @@ namespace Amatsukaze.Server.Update
         private const int MaxLogFiles = 50;
         private const long MaxTotalBytes = 50L * 1024 * 1024;
         private readonly object sync = new object();
+        private readonly Action<string> lineObserver;
         private StreamWriter writer;
 
         public string TransactionId { get; }
         public string FilePath { get; }
 
-        public UpdateLog(string appRoot)
+        public UpdateLog(string appRoot, Action<string> lineObserver = null)
         {
+            this.lineObserver = lineObserver;
             TransactionId = CreateTransactionId();
             try
             {
@@ -51,6 +53,14 @@ namespace Amatsukaze.Server.Update
             catch
             {
                 // 更新ログの出力失敗でサーバー本体を停止させない
+            }
+            try
+            {
+                lineObserver?.Invoke(line);
+            }
+            catch
+            {
+                // 進捗通知の失敗を更新チェックへ波及させない
             }
             lock (sync)
             {

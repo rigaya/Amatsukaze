@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Amatsukaze.Shared;
 
 namespace Amatsukaze.Server.Update
 {
@@ -13,6 +14,7 @@ namespace Amatsukaze.Server.Update
     {
         private static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(6);
         private static readonly TimeSpan GuardPollInterval = TimeSpan.FromHours(1);
+        private const int MaxRetainedJobs = 10;
         private static readonly Regex DevelopmentVersionRegex = new Regex(
             @"-\d+-g[0-9a-f]+", RegexOptions.Compiled | RegexOptions.CultureInvariant |
             RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
@@ -21,7 +23,12 @@ namespace Amatsukaze.Server.Update
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private readonly SemaphoreSlim checkLock = new SemaphoreSlim(1, 1);
         private readonly object stateLock = new object();
+        private readonly object jobLock = new object();
+        private readonly Dictionary<string, UpdateJobRecord> jobs =
+            new Dictionary<string, UpdateJobRecord>(StringComparer.Ordinal);
+        private readonly Queue<string> jobOrder = new Queue<string>();
         private IReadOnlyList<UpdateTargetState> states = Array.Empty<UpdateTargetState>();
+        private UpdateJobRecord activeJob;
         private ReleaseClient releaseClient;
         private string releaseClientProxy;
         private Task loopTask;
@@ -66,17 +73,6 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        public bool HasUpdate
-        {
-            get
-            {
-                lock (stateLock)
-                {
-                    return states.Any(state => state.Status == UpdateTargetStatus.UpdateAvailable);
-                }
-            }
-        }
-
         public void Start()
         {
             if (started || disposed)
@@ -89,7 +85,150 @@ namespace Amatsukaze.Server.Update
 
         public Task CheckNowAsync(CancellationToken cancellationToken = default)
         {
-            return RunCheckSafelyAsync(manual: true, cancellationToken);
+            return StartOrJoinCheck(manual: true, cancellationToken).Completion;
+        }
+
+        public UpdateJobView StartCheckJob()
+        {
+            try
+            {
+                return StartOrJoinCheck(manual: true, cancellation.Token).ToView();
+            }
+            catch
+            {
+                return new UpdateJobView
+                {
+                    JobId = string.Empty,
+                    Finished = true,
+                    Succeeded = false,
+                    RecentLogLines = new List<string> { "更新チェックを開始できませんでした。" },
+                };
+            }
+        }
+
+        public bool TryGetJob(string jobId, out UpdateJobView view)
+        {
+            view = null;
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                return false;
+            }
+            lock (jobLock)
+            {
+                if (!jobs.TryGetValue(jobId, out var job))
+                {
+                    return false;
+                }
+                view = job.ToView();
+                return true;
+            }
+        }
+
+        public bool TryGetJobLog(string jobId, out string content)
+        {
+            content = null;
+            string path;
+            lock (jobLock)
+            {
+                if (string.IsNullOrWhiteSpace(jobId) || !jobs.TryGetValue(jobId, out var job))
+                {
+                    return false;
+                }
+                path = job.GetLogFilePath();
+            }
+            if (string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                content = reader.ReadToEnd();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public UpdateStatusView GetStatusView()
+        {
+            try
+            {
+                var setting = server.AppData_?.setting;
+                var checkEnabled = setting?.UpdateCheckEnabled != false;
+                var environment = UpdateRuntimeEnvironment.Detect();
+                var supported = OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+                var lastCheckedAt = server.LastUpdateCheckedAt?.ToUniversalTime();
+                DateTime? nextCheckAt = null;
+                if (checkEnabled && lastCheckedAt.HasValue)
+                {
+                    var hours = Math.Max(6, setting?.UpdateCheckIntervalHours > 0
+                        ? setting.UpdateCheckIntervalHours : 24);
+                    nextCheckAt = lastCheckedAt.Value.AddHours(hours);
+                }
+                IReadOnlyList<UpdateTargetState> stateSnapshot;
+                lock (stateLock)
+                {
+                    stateSnapshot = states.ToArray();
+                }
+                var disabledTargets = new HashSet<string>(setting?.UpdateDisabledTargets ??
+                    new List<string>(), StringComparer.OrdinalIgnoreCase);
+                var items = new List<UpdateItemView>();
+                foreach (var target in UpdateCatalog.Targets)
+                {
+                    var state = stateSnapshot.FirstOrDefault(item =>
+                        string.Equals(item.Id, target.Id, StringComparison.OrdinalIgnoreCase));
+                    var initialStatus = disabledTargets.Contains(target.Id)
+                        ? UpdateTargetStatus.Disabled
+                        : environment.IsDocker && target.IsApplication
+                            ? UpdateTargetStatus.Unsupported : UpdateTargetStatus.Unknown;
+                    items.Add(new UpdateItemView
+                    {
+                        Id = target.Id,
+                        DisplayName = target.DisplayName,
+                        InstalledVersion = state?.CurrentVersion,
+                        LatestVersion = state?.LatestVersion,
+                        State = (state?.Status ?? initialStatus).ToString(),
+                        StateReason = state?.Reason ?? (initialStatus == UpdateTargetStatus.Disabled
+                            ? "disabled_by_setting" : initialStatus == UpdateTargetStatus.Unsupported
+                                ? "docker_self_update_unsupported" : "not_checked"),
+                        RequiresRestart = target.RequiresRestart,
+                        DownloadSizeBytes = state?.SelectedAsset?.Size ?? 0,
+                        ReleaseUrl = state?.ReleaseUrl,
+                        AssetUrl = state?.SelectedAsset?.BrowserDownloadUrl,
+                    });
+                }
+                var exeFilesMounted = UpdateDiagnostics.GetAppExeFilesMountState();
+                return new UpdateStatusView
+                {
+                    CheckEnabled = checkEnabled,
+                    Supported = supported,
+                    UnsupportedReason = supported ? null : "unsupported_operating_system",
+                    EnvironmentWarning = environment.IsDocker && exeFilesMounted != "yes"
+                        ? "Docker コンテナ内の exe 更新はコンテナを再作成すると失われます。" : null,
+                    LastCheckedAt = lastCheckedAt,
+                    NextCheckAt = nextCheckAt,
+                    HasUpdate = items.Any(item =>
+                        item.State == UpdateTargetStatus.UpdateAvailable.ToString() ||
+                        item.StateReason == "docker_self_update_available"),
+                    HasPendingSelfUpdate = false,
+                    Items = items,
+                };
+            }
+            catch
+            {
+                return new UpdateStatusView
+                {
+                    CheckEnabled = true,
+                    Supported = false,
+                    UnsupportedReason = "status_view_failed",
+                    Items = new List<UpdateItemView>(),
+                };
+            }
         }
 
         private async Task RunPeriodicLoopAsync()
@@ -132,7 +271,8 @@ namespace Amatsukaze.Server.Update
                 {
                     return;
                 }
-                await RunCheckSafelyAsync(manual: false, cancellationToken).ConfigureAwait(false);
+                await StartOrJoinCheck(manual: false, cancellationToken).Completion
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -143,19 +283,40 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private async Task RunCheckSafelyAsync(bool manual, CancellationToken cancellationToken)
+        private UpdateJobRecord StartOrJoinCheck(bool manual, CancellationToken cancellationToken)
         {
+            lock (jobLock)
+            {
+                if (activeJob != null && !activeJob.IsFinished)
+                {
+                    return activeJob;
+                }
+                var job = new UpdateJobRecord(Guid.NewGuid().ToString("N"));
+                jobs[job.JobId] = job;
+                jobOrder.Enqueue(job.JobId);
+                activeJob = job;
+                TrimJobsLocked();
+                _ = Task.Run(() => RunCheckSafelyAsync(manual, cancellationToken, job));
+                return job;
+            }
+        }
+
+        private async Task RunCheckSafelyAsync(bool manual, CancellationToken cancellationToken,
+            UpdateJobRecord job)
+        {
+            var succeeded = false;
             try
             {
                 await checkLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
+                CompleteJob(job, false);
                 return;
             }
             try
             {
-                await CheckCoreAsync(manual, cancellationToken).ConfigureAwait(false);
+                succeeded = await CheckCoreAsync(manual, cancellationToken, job).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -167,17 +328,20 @@ namespace Amatsukaze.Server.Update
             finally
             {
                 checkLock.Release();
+                CompleteJob(job, succeeded);
             }
         }
 
-        private async Task CheckCoreAsync(bool manual, CancellationToken cancellationToken)
+        private async Task<bool> CheckCoreAsync(bool manual, CancellationToken cancellationToken,
+            UpdateJobRecord job)
         {
             var setting = server.AppData_?.setting;
             if (setting == null)
             {
-                return;
+                return false;
             }
-            using var log = new UpdateLog(appRoot);
+            using var log = new UpdateLog(appRoot, job.ObserveLine);
+            job.AttachLog(log.TransactionId, log.FilePath);
             await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot).ConfigureAwait(false);
             var checkedAt = DateTime.UtcNow;
 
@@ -201,7 +365,7 @@ namespace Amatsukaze.Server.Update
                 log.Write("-", "S99_SUMMARY", "NG",
                     ("code", "INVALID_CATALOG"),
                     ("targets", invalidStates.Count));
-                return;
+                return false;
             }
 
             var environment = UpdateRuntimeEnvironment.Detect();
@@ -367,7 +531,7 @@ namespace Amatsukaze.Server.Update
                 var status = DetermineStatus(target, local.Version, latestVersion, dockerApplication,
                     out var reason);
                 newStates.Add(CreateState(target, local.Version, latestVersion, status, reason,
-                    checkedAt, selectedAsset));
+                    checkedAt, selectedAsset, release.HtmlUrl));
                 var result = status == UpdateTargetStatus.Unknown ? "NG" :
                     status == UpdateTargetStatus.Unsupported ? "SKIP" : "OK";
                 WriteTargetSummary(log, target.Id, result, local.Version, latestVersion, status,
@@ -386,6 +550,7 @@ namespace Amatsukaze.Server.Update
                 ("unknown", newStates.Count(state => state.Status == UpdateTargetStatus.Unknown)),
                 ("release_success", successfulReleaseQueries),
                 ("manual", manual ? "yes" : "no"));
+            return true;
         }
 
         private static void WriteTargetSummary(UpdateLog log, string target, string result,
@@ -423,26 +588,21 @@ namespace Amatsukaze.Server.Update
         private static UpdateTargetStatus DetermineStatus(UpdateTargetDef target, string current,
             string latest, bool dockerApplication, out string reason)
         {
-            if (dockerApplication)
-            {
-                reason = "docker_self_update_unsupported";
-                return UpdateTargetStatus.Unsupported;
-            }
             if (string.IsNullOrWhiteSpace(current) || string.IsNullOrWhiteSpace(latest))
             {
-                reason = "version_unknown";
-                return UpdateTargetStatus.Unknown;
+                return ApplyDockerStatus(UpdateTargetStatus.Unknown, "version_unknown",
+                    dockerApplication, out reason);
             }
             if (target.IsApplication && DevelopmentVersionRegex.IsMatch(current))
             {
-                reason = "development_build";
-                return UpdateTargetStatus.UpToDate;
+                return ApplyDockerStatus(UpdateTargetStatus.UpToDate, "development_build",
+                    dockerApplication, out reason);
             }
             if (!TryParseVersion(current, out var currentParts) ||
                 !TryParseVersion(latest, out var latestParts))
             {
-                reason = "version_parse_failed";
-                return UpdateTargetStatus.Unknown;
+                return ApplyDockerStatus(UpdateTargetStatus.Unknown, "version_parse_failed",
+                    dockerApplication, out reason);
             }
             var length = Math.Max(currentParts.Length, latestParts.Length);
             for (var index = 0; index < length; index++)
@@ -451,17 +611,30 @@ namespace Amatsukaze.Server.Update
                 var latestPart = index < latestParts.Length ? latestParts[index] : 0;
                 if (latestPart > currentPart)
                 {
-                    reason = "newer_release";
-                    return UpdateTargetStatus.UpdateAvailable;
+                    return ApplyDockerStatus(UpdateTargetStatus.UpdateAvailable, "newer_release",
+                        dockerApplication, out reason);
                 }
                 if (latestPart < currentPart)
                 {
-                    reason = "local_is_newer";
-                    return UpdateTargetStatus.UpToDate;
+                    return ApplyDockerStatus(UpdateTargetStatus.UpToDate, "local_is_newer",
+                        dockerApplication, out reason);
                 }
             }
-            reason = "same_version";
-            return UpdateTargetStatus.UpToDate;
+            return ApplyDockerStatus(UpdateTargetStatus.UpToDate, "same_version",
+                dockerApplication, out reason);
+        }
+
+        private static UpdateTargetStatus ApplyDockerStatus(UpdateTargetStatus status, string statusReason,
+            bool dockerApplication, out string reason)
+        {
+            if (dockerApplication)
+            {
+                reason = status == UpdateTargetStatus.UpdateAvailable
+                    ? "docker_self_update_available" : "docker_self_update_unsupported";
+                return UpdateTargetStatus.Unsupported;
+            }
+            reason = statusReason;
+            return status;
         }
 
         private static bool TryParseVersion(string version, out int[] parts)
@@ -492,7 +665,7 @@ namespace Amatsukaze.Server.Update
 
         private static UpdateTargetState CreateState(UpdateTargetDef target, string current,
             string latest, UpdateTargetStatus status, string reason, DateTime checkedAt,
-            ReleaseAssetInfo selectedAsset)
+            ReleaseAssetInfo selectedAsset, string releaseUrl = null)
         {
             return new UpdateTargetState
             {
@@ -503,6 +676,7 @@ namespace Amatsukaze.Server.Update
                 Status = status,
                 Reason = reason,
                 SelectedAsset = selectedAsset,
+                ReleaseUrl = releaseUrl,
                 CheckedAtUtc = checkedAt,
             };
         }
@@ -541,6 +715,132 @@ namespace Amatsukaze.Server.Update
                 }
             }
             return "(none)";
+        }
+
+        private void CompleteJob(UpdateJobRecord job, bool succeeded)
+        {
+            job.Complete(succeeded);
+            lock (jobLock)
+            {
+                if (ReferenceEquals(activeJob, job))
+                {
+                    activeJob = null;
+                }
+                TrimJobsLocked();
+            }
+        }
+
+        private void TrimJobsLocked()
+        {
+            while (jobOrder.Count > MaxRetainedJobs)
+            {
+                var oldestId = jobOrder.Peek();
+                if (jobs.TryGetValue(oldestId, out var oldest) && !oldest.IsFinished)
+                {
+                    break;
+                }
+                jobOrder.Dequeue();
+                jobs.Remove(oldestId);
+            }
+        }
+
+        private sealed class UpdateJobRecord
+        {
+            private const int MaxRecentLogLines = 50;
+            private readonly object sync = new object();
+            private readonly Queue<string> recentLogLines = new Queue<string>();
+            private readonly TaskCompletionSource<bool> completion =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private string txId;
+            private string currentTargetId;
+            private string currentStage;
+            private string logFilePath;
+            private bool finished;
+            private bool succeeded;
+
+            public UpdateJobRecord(string jobId)
+            {
+                JobId = jobId;
+            }
+
+            public string JobId { get; }
+            public Task Completion => completion.Task;
+
+            public bool IsFinished
+            {
+                get
+                {
+                    lock (sync)
+                    {
+                        return finished;
+                    }
+                }
+            }
+
+            public void AttachLog(string transactionId, string filePath)
+            {
+                lock (sync)
+                {
+                    txId = transactionId;
+                    logFilePath = filePath;
+                }
+            }
+
+            public void ObserveLine(string line)
+            {
+                lock (sync)
+                {
+                    recentLogLines.Enqueue(line);
+                    while (recentLogLines.Count > MaxRecentLogLines)
+                    {
+                        recentLogLines.Dequeue();
+                    }
+                    var parts = line?.Split(']', 5);
+                    if (parts?.Length >= 4)
+                    {
+                        currentTargetId = parts[2].TrimStart('[');
+                        currentStage = parts[3].TrimStart('[');
+                    }
+                }
+            }
+
+            public void Complete(bool result)
+            {
+                lock (sync)
+                {
+                    finished = true;
+                    succeeded = result;
+                }
+                completion.TrySetResult(result);
+            }
+
+            public string GetLogFilePath()
+            {
+                lock (sync)
+                {
+                    return logFilePath;
+                }
+            }
+
+            public UpdateJobView ToView()
+            {
+                lock (sync)
+                {
+                    return new UpdateJobView
+                    {
+                        JobId = JobId,
+                        TxId = txId,
+                        CurrentTargetId = currentTargetId,
+                        CurrentStage = currentStage,
+                        ReceivedBytes = 0,
+                        TotalBytes = 0,
+                        SpeedBytesPerSec = 0,
+                        Finished = finished,
+                        Succeeded = succeeded,
+                        RecentLogLines = recentLogLines.ToList(),
+                    };
+                }
+            }
         }
 
         public void Dispose()

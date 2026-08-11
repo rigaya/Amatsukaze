@@ -365,6 +365,33 @@ namespace Amatsukaze.Server.Rest
                 var info = await GetLatestReleaseInfoAsync();
                 return Results.Json(info ?? new LatestReleaseInfo());
             });
+            app.MapMethods("/api/update/status", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/check", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/job/{jobId}", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/job/{jobId}/log", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapGet("/api/update/status", () => Results.Json(
+                server.UpdateManager?.GetStatusView() ?? new UpdateStatusView
+                {
+                    CheckEnabled = true,
+                    Supported = false,
+                    UnsupportedReason = "update_manager_not_initialized",
+                    Items = new List<UpdateItemView>(),
+                }));
+            app.MapPost("/api/update/check", () =>
+            {
+                var job = server.UpdateManager?.StartCheckJob();
+                return Results.Json(new { jobId = job?.JobId ?? string.Empty });
+            });
+            app.MapGet("/api/update/job/{jobId}", (string jobId) =>
+            {
+                return server.UpdateManager != null && server.UpdateManager.TryGetJob(jobId, out var job)
+                    ? Results.Json(job) : Results.NotFound();
+            });
+            app.MapGet("/api/update/job/{jobId}/log", (string jobId) =>
+            {
+                return server.UpdateManager != null && server.UpdateManager.TryGetJobLog(jobId, out var content)
+                    ? Results.Text(content, "text/plain", Encoding.UTF8) : Results.NotFound();
+            });
             app.MapGet("/api/ui-state", () => Results.Json(state.GetUiStateView()));
             app.MapPost("/api/system/end", async () =>
             {
