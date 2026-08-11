@@ -126,6 +126,47 @@ namespace Amatsukaze.Server.Update
         }
     }
 
+    // アーカイブからステージング対象として取り出すファイルを宣言する。
+    internal sealed class PayloadEntry
+    {
+        private Regex regex;
+
+        // '/' 区切りへ正規化したアーカイブ内相対パスに対する正規表現。
+        public string Pattern { get; init; }
+        // 配置後の名前。null の場合はアーカイブ内のファイル名を維持する。
+        public string DestName { get; init; }
+
+        public bool TryCompile(out string error)
+        {
+            error = null;
+            if (regex != null)
+            {
+                return true;
+            }
+            try
+            {
+                regex = new Regex(Pattern,
+                    RegexOptions.Compiled | RegexOptions.CultureInvariant,
+                    TimeSpan.FromSeconds(1));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.GetType().Name + ":" + ex.Message;
+                return false;
+            }
+        }
+
+        public bool IsMatch(string relativePath)
+        {
+            if (regex == null)
+            {
+                throw new InvalidOperationException("Payload の正規表現がコンパイルされていません");
+            }
+            return regex.IsMatch(relativePath ?? string.Empty);
+        }
+    }
+
     internal sealed class UpdateTargetDef
     {
         private Regex versionRegex;
@@ -142,6 +183,7 @@ namespace Amatsukaze.Server.Update
         public string SettingKey { get; init; }
         public bool RequiresRestart { get; init; }
         public bool IsApplication { get; init; }
+        public PayloadEntry[] Payload { get; init; }
 
         public Regex VersionRegex => versionRegex;
 
@@ -159,6 +201,17 @@ namespace Amatsukaze.Server.Update
                 {
                     error = $"target={Id} regex={rule.Pattern} error={error}";
                     return false;
+                }
+            }
+            if (Payload != null)
+            {
+                foreach (var entry in Payload)
+                {
+                    if (entry == null || !entry.TryCompile(out error))
+                    {
+                        error = $"target={Id} payload_regex={entry?.Pattern ?? "?"} error={error ?? "null_entry"}";
+                        return false;
+                    }
                 }
             }
             if (IsApplication)

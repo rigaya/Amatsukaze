@@ -18,6 +18,7 @@ using System.Runtime.InteropServices;
 // 参照できなくなります。COM からこのアセンブリ内の型にアクセスする必要がある場合は、
 // その型の ComVisible 属性を true に設定してください。
 [assembly: ComVisible(false)]
+[assembly: InternalsVisibleTo("AmatsukazeServerTest")]
 
 // このプロジェクトが COM に公開される場合、次の GUID が typelib の ID になります
 [assembly: Guid("5bac25f7-ead0-4b4c-84a7-6edc9c4c8cd6")]

@@ -44,18 +44,7 @@ namespace Amatsukaze.Server.Update
 
         public ReleaseClient(string proxy)
         {
-            var handler = new HttpClientHandler();
-            if (!string.IsNullOrWhiteSpace(proxy))
-            {
-                handler.Proxy = new WebProxy(proxy);
-                handler.UseProxy = true;
-            }
-            client = new HttpClient(handler)
-            {
-                Timeout = Timeout.InfiniteTimeSpan,
-            };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("AmatsukazeServer-Update/1.0");
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+            client = UpdateHttpClientFactory.Create(proxy, githubApi: true);
         }
 
         public void ClearCache()

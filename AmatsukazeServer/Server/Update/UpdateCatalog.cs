@@ -46,6 +46,11 @@ namespace Amatsukaze.Server.Update
                 VersionArgument = "--version",
                 VersionPattern = @"^x264 \d+\.\d+\.(?<ver>\d+)",
                 SettingKey = nameof(Setting.X264Path),
+                Payload = new[]
+                {
+                    new PayloadEntry { Pattern = @"^x264$" },
+                    new PayloadEntry { Pattern = @"^x264_.+_x64\.exe$" },
+                },
             },
             new UpdateTargetDef
             {
@@ -65,6 +70,11 @@ namespace Amatsukaze.Server.Update
                 VersionArgument = "--version",
                 VersionPattern = @"HEVC encoder version (?<ver>[0-9]+\.[0-9]+\+[0-9]+)",
                 SettingKey = nameof(Setting.X265Path),
+                Payload = new[]
+                {
+                    new PayloadEntry { Pattern = @"^x265$" },
+                    new PayloadEntry { Pattern = @"^x265_.+_x64\.exe$" },
+                },
             },
             new UpdateTargetDef
             {
@@ -84,6 +94,11 @@ namespace Amatsukaze.Server.Update
                 VersionArgument = "--version",
                 VersionPattern = @"^SVT-AV1 v(?<ver>[0-9]+\.[0-9]+\.[0-9]+-[0-9]+)",
                 SettingKey = nameof(Setting.SVTAV1Path),
+                Payload = new[]
+                {
+                    new PayloadEntry { Pattern = @"^SvtAv1EncApp$" },
+                    new PayloadEntry { Pattern = @"^SvtAv1EncApp_.+_x64\.exe$" },
+                },
             },
             CreateRigayaEncoder("QSVEnc", "QSVEnc", "rigaya/QSVEnc", "QSVEncC", "qsvencc", nameof(Setting.QSVEncPath)),
             CreateRigayaEncoder("NVEnc", "NVEnc", "rigaya/NVEnc", "NVEncC", "nvencc", nameof(Setting.NVEncPath)),

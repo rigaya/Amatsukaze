@@ -259,9 +259,10 @@ namespace Amatsukaze.Server.Update
 
         private static long GetAvailableFreeSpace(string path)
         {
-            var fullPath = Path.GetFullPath(path);
-            var root = Path.GetPathRoot(fullPath);
-            return string.IsNullOrEmpty(root) ? -1 : new DriveInfo(root).AvailableFreeSpace;
+            // S06/S08 の空き容量チェック (UpdateDownloader.EnsureFreeSpace) と同じ選択規則を使う。
+            // Path.GetPathRoot は Linux で常に "/" を返すため、ここで食い違うと
+            // NO_SPACE の調査時に S00_ENV のログが誤った値を示すことになる。
+            return UpdateDownloader.SelectDriveForPath(path).AvailableFreeSpace;
         }
 
         private static string GetDefaultProxy()

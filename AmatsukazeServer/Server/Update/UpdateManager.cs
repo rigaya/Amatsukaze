@@ -40,6 +40,7 @@ namespace Amatsukaze.Server.Update
             this.server = server;
             appRoot = GetApplicationRoot();
             UpdateLog.CleanupOldLogs(appRoot);
+            UpdateTransaction.CleanupStale(appRoot);
         }
 
         private static string GetApplicationRoot()
@@ -689,7 +690,41 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static string FindExtractor(string root)
+        internal async Task<PreparedUpdate> PrepareTargetAsync(UpdateTargetDef target,
+            UpdateTransaction transaction, ReleaseAssetInfo asset, string expectedVersion,
+            UpdateLog log, UpdateJobRecord job, CancellationToken cancellationToken)
+        {
+            if (transaction == null || log == null ||
+                !string.Equals(transaction.TxId, log.TransactionId, StringComparison.Ordinal))
+            {
+                throw new UpdatePreparationException("INVALID_TRANSACTION_ID", "S01_PRECHECK",
+                    "ログと一時ディレクトリのトランザクションIDが一致しません");
+            }
+            if (target == null || target.Payload == null || target.Payload.Length == 0)
+            {
+                throw new UpdatePreparationException("INVALID_CATALOG", "S01_PRECHECK",
+                    "更新対象の Payload 宣言がありません");
+            }
+            if (!target.TryCompileRegexes(out var catalogError))
+            {
+                throw new UpdatePreparationException("INVALID_CATALOG", "S01_PRECHECK",
+                    "更新対象の定義が不正です: " + catalogError);
+            }
+            var setting = server.AppData_?.setting;
+            using var downloader = new UpdateDownloader(setting?.UpdateProxy);
+            var progress = job == null ? null : new Progress<DownloadProgress>(job.ReportProgress);
+            var download = await downloader.DownloadAsync(asset,
+                transaction.GetTargetDownloadDirectory(target.Id), target.Id, log, progress,
+                cancellationToken).ConfigureAwait(false);
+            var extractor = new ArchiveExtractor(FindExtractor(appRoot));
+            var extraction = await extractor.ExtractAsync(download,
+                transaction.GetTargetExtractDirectory(target.Id), target.Id, log,
+                cancellationToken, target.Payload).ConfigureAwait(false);
+            return await new UpdateStaging().PrepareAsync(target, extraction, expectedVersion,
+                log, cancellationToken).ConfigureAwait(false);
+        }
+
+        internal static string FindExtractor(string root)
         {
             var bundled = OperatingSystem.IsWindows()
                 ? Path.Combine(root, "exe_files", "7z", "7za.exe")
@@ -744,7 +779,7 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private sealed class UpdateJobRecord
+        internal sealed class UpdateJobRecord
         {
             private const int MaxRecentLogLines = 50;
             private readonly object sync = new object();
@@ -757,6 +792,9 @@ namespace Amatsukaze.Server.Update
             private string logFilePath;
             private bool finished;
             private bool succeeded;
+            private long receivedBytes;
+            private long totalBytes;
+            private double speedBytesPerSec;
 
             public UpdateJobRecord(string jobId)
             {
@@ -804,6 +842,16 @@ namespace Amatsukaze.Server.Update
                 }
             }
 
+            public void ReportProgress(DownloadProgress progress)
+            {
+                lock (sync)
+                {
+                    receivedBytes = progress.ReceivedBytes;
+                    totalBytes = progress.TotalBytes;
+                    speedBytesPerSec = progress.SpeedBytesPerSec;
+                }
+            }
+
             public void Complete(bool result)
             {
                 lock (sync)
@@ -832,9 +880,9 @@ namespace Amatsukaze.Server.Update
                         TxId = txId,
                         CurrentTargetId = currentTargetId,
                         CurrentStage = currentStage,
-                        ReceivedBytes = 0,
-                        TotalBytes = 0,
-                        SpeedBytesPerSec = 0,
+                        ReceivedBytes = receivedBytes,
+                        TotalBytes = totalBytes,
+                        SpeedBytesPerSec = speedBytesPerSec,
                         Finished = finished,
                         Succeeded = succeeded,
                         RecentLogLines = recentLogLines.ToList(),
