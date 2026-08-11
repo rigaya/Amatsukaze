@@ -1675,9 +1675,10 @@
     private async Task SaveTrims()
     {
         if (_session == null || string.IsNullOrEmpty(_sessionId)) return;
+        if (!_hasChanges) return;
 
         var trims = BuildTrimsFromEditPoints();
-        if (trims.Count == 0)
+        if (_editPointsChanged && trims.Count == 0)
         {
             _statusMessage = "本編区間がありません（編集点を確認してください）";
             _isError = true;
@@ -1688,7 +1689,9 @@
         var result = await Api.SaveTrimsAsync(_sessionId, new TrimSaveRequest
         {
             Trims = trims,
-            DivisionPoints = new List<int>(_divisionPoints)
+            DivisionPoints = new List<int>(_divisionPoints),
+            SaveTrims = _editPointsChanged,
+            SaveDivisionPoints = _divisionPointsChanged
         });
         if (result.Ok)
         {

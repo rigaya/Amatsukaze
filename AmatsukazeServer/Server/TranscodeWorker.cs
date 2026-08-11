@@ -941,7 +941,7 @@ namespace Amatsukaze.Server
                 trimavs = null;
             }
             string divfilePath = srcpath + ".div.txt";
-            string divfile = null;
+            string divfile = File.Exists(divfilePath) ? divfilePath : null;
 
             try
             {
@@ -1009,12 +1009,6 @@ namespace Amatsukaze.Server
                     {
                         Util.AddLog(Id, "一時ファイル再利用用フォルダが見つからないため通常処理を実行します: " + item.ResumeDir, null);
                     }
-                }
-
-                // 再利用時はJLSが実行されないため、ファイルがない場合も明示して古い分割点を消す
-                if (!string.IsNullOrEmpty(resumeDir))
-                {
-                    divfile = divfilePath;
                 }
 
                 string args = server.MakeAmatsukazeArgs(

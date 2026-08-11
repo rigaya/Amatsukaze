@@ -290,7 +290,7 @@ struct Config {
     int cmoutmask;
     tstring trimavsPath;
     tstring divFilePath;
-    // CM解析のみ実行時にtrim%d.avsを入力ディレクトリへコピーする
+    // CM解析のみ実行時にTrim・分割点情報を入力ディレクトリへコピーする
     bool copyTrimAVS;
     // 検出モード用
     int maxframes;

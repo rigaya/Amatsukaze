@@ -586,6 +586,8 @@ namespace Amatsukaze.Shared
     {
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
         public List<int> DivisionPoints { get; set; } = new List<int>();
+        public bool SaveTrims { get; set; }
+        public bool SaveDivisionPoints { get; set; }
     }
 
     public class TrimRequeueRequest

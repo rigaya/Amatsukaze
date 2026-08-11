@@ -376,7 +376,7 @@
                 </StackPanel>
                 <StackPanel Grid.Row="9" Grid.Column="1">
                     <CheckBox Height="22" Margin="10,5,0,0"
-                              Content="trim.avsを入力ディレクトリにコピーする(CM解析のみ実行の場合のみ)"
+                              Content="Trim・分割点情報を入力ディレクトリにコピーする(CM解析のみ実行の場合のみ)"
                               IsChecked="{Binding Model.Setting.CopyTrimAVS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
 

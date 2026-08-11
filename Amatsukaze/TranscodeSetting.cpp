@@ -1646,7 +1646,7 @@ void ConfigWrapper::dump() const {
         decoderToString(conf.decoderSetting.h264),
         decoderToString(conf.decoderSetting.hevc));
     if (conf.mode == _T("cm")) {
-        ctx.infoF(_T("trim.avsをコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
+        ctx.infoF(_T("Trim・分割点情報をコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
     }
 }
 
