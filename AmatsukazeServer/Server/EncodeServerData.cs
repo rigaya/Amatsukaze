@@ -1907,6 +1907,10 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool ScheduledPause { get; set; }
 
+        // 更新適用のためにキューを停止中
+        [DataMember]
+        public bool MaintenancePaused { get; set; }
+
         // スケジューリングにより一時停止状態
         [DataMember]
         public bool ScheduledSuspend { get; set; }

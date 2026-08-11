@@ -240,6 +240,36 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public void 更新ジョブの中止はリンクしたTokenへ伝播する()
+    {
+        using var managerCancellation = new CancellationTokenSource();
+        var job = new UpdateManager.UpdateJobRecord("job", managerCancellation.Token,
+            isApply: true);
+
+        Assert.True(job.Cancel());
+        Assert.True(job.Token.IsCancellationRequested);
+        Assert.False(job.Cancel());
+        job.Dispose();
+    }
+
+    [Fact]
+    public void 更新ジョブは対象別結果をスナップショットで返す()
+    {
+        var job = new UpdateManager.UpdateJobRecord("job", CancellationToken.None,
+            isApply: true);
+        job.AddTargetResult("x264", true, null, "更新しました");
+        job.AddTargetResult("x265", false, "VERIFY_FAILED", "検証失敗");
+
+        var view = job.ToView();
+        view.TargetResults[0].Message = "書き換え";
+
+        Assert.True(job.IsApply);
+        Assert.Equal(2, job.ToView().TargetResults.Count);
+        Assert.Equal("更新しました", job.ToView().TargetResults[0].Message);
+        job.Dispose();
+    }
+
+    [Fact]
     public void Windows設定パスはExeFiles直下の同系列だけ更新する()
     {
         Assert.True(UpdateCatalog.TryInitialize(out var error), error);
@@ -257,6 +287,27 @@ public sealed class UpdateInstallerTests
             Path.Combine(fixture.ExeFiles, "unrelated.exe"), newPath, fixture.Root));
         Assert.False(UpdateManager.ShouldUpdateWindowsSettingPath(target, string.Empty,
             newPath, fixture.Root));
+    }
+
+    [Fact]
+    public void P2cで適用できる対象は三対象だけ()
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        var environment = UpdateRuntimeEnvironment.Detect();
+
+        var applicable = UpdateCatalog.Targets.Where(target =>
+            UpdateManager.GetCannotApplyReason(target, environment.OS) == null)
+            .Select(target => target.Id).OrderBy(id => id).ToArray();
+
+        Assert.Equal(new[] { "SVT-AV1", "x264", "x265" }, applicable);
+
+        var qsvenc = UpdateCatalog.Targets.Single(target => target.Id == "QSVEnc");
+        Assert.Equal(InstallLayout.ExeFilesFlat,
+            qsvenc.GetInstallLayout(UpdateOSKind.Linux));
+        Assert.Equal("payload_not_defined_yet",
+            UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Linux));
+        Assert.Equal("layout_not_supported_yet",
+            UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Windows));
     }
 
     private static string Hash(string path) => Convert.ToHexString(

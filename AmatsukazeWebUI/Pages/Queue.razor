@@ -161,11 +161,12 @@
             <span class="status-toggle">
                 <input type="checkbox"
                        checked="@IsQueueRunning"
-                       disabled="@(_systemLoading || _pauseBusy || _system?.State == null)"
+                       disabled="@(_systemLoading || _pauseBusy || _system?.State == null ||
+                           _system.State.MaintenancePaused)"
                        @onchange="OnToggleQueuePause" />
                 <span class="slider"></span>
             </span>
-            <span class="queue-header-state">@(_systemLoading ? "読込中" : (_system?.State == null ? "-" : (IsQueueRunning ? "稼働中" : "停止")))</span>
+            <span class="queue-header-state">@GetQueueStateLabel()</span>
         </span>
     </label>
     <span class="queue-header-sep" aria-hidden="true"></span>
@@ -545,8 +546,17 @@ else
     private string _contextMenuXpx => $"{_contextMenuX:0}px";
     private string _contextMenuYpx => $"{_contextMenuY:0}px";
 
-    private bool IsQueueRunning => _system?.State != null && !_system.State.Pause;
+    private bool IsQueueRunning => _system?.State != null && !_system.State.Pause &&
+        !_system.State.MaintenancePaused;
     private bool IsEncoderOk => _system?.State != null && !_system.State.Suspend;
+
+    private string GetQueueStateLabel()
+    {
+        if (_systemLoading) return "読込中";
+        if (_system?.State == null) return "-";
+        if (_system.State.MaintenancePaused) return "更新の適用中";
+        return IsQueueRunning ? "稼働中" : "停止";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -2339,7 +2349,7 @@ else
 
     private async Task OnToggleQueuePause(ChangeEventArgs e)
     {
-        if (_system?.State == null || _pauseBusy)
+        if (_system?.State == null || _pauseBusy || _system.State.MaintenancePaused)
         {
             return;
         }

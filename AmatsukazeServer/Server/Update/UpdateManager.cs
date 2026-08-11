@@ -10,6 +10,13 @@ using Amatsukaze.Shared;
 
 namespace Amatsukaze.Server.Update
 {
+    internal enum UpdateCancelResult
+    {
+        Accepted,
+        NotFound,
+        AlreadyFinished,
+    }
+
     internal sealed class UpdateManager : IDisposable
     {
         private static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(6);
@@ -29,7 +36,8 @@ namespace Amatsukaze.Server.Update
             new Dictionary<string, UpdateJobRecord>(StringComparer.Ordinal);
         private readonly Queue<string> jobOrder = new Queue<string>();
         private IReadOnlyList<UpdateTargetState> states = Array.Empty<UpdateTargetState>();
-        private UpdateJobRecord activeJob;
+        private UpdateJobRecord activeCheckJob;
+        private UpdateJobRecord activeApplyJob;
         private ReleaseClient releaseClient;
         private string releaseClientProxy;
         private Task loopTask;
@@ -109,6 +117,101 @@ namespace Amatsukaze.Server.Update
             }
         }
 
+        public bool TryStartApplyJob(IReadOnlyList<string> targetIds, out UpdateJobView view,
+            out string error, out bool conflict)
+        {
+            view = null;
+            error = null;
+            conflict = false;
+            var requested = (targetIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (requested.Length == 0)
+            {
+                error = "更新対象が選択されていません";
+                return false;
+            }
+
+            lock (jobLock)
+            {
+                if (activeApplyJob != null && !activeApplyJob.IsFinished)
+                {
+                    conflict = true;
+                    error = "別の更新適用が実行中です";
+                    return false;
+                }
+                if (activeCheckJob != null && !activeCheckJob.IsFinished)
+                {
+                    conflict = true;
+                    error = "更新チェックの完了後に実行してください";
+                    return false;
+                }
+
+                var environment = UpdateRuntimeEnvironment.Detect();
+                var targets = new List<UpdateApplyTarget>();
+                lock (stateLock)
+                {
+                    foreach (var id in requested)
+                    {
+                        var target = UpdateCatalog.Targets.FirstOrDefault(item =>
+                            string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+                        if (target == null)
+                        {
+                            error = $"不明な更新対象です: {id}";
+                            return false;
+                        }
+                        var cannotApplyReason = GetCannotApplyReason(target, environment.OS);
+                        if (cannotApplyReason == "layout_not_supported_yet")
+                        {
+                            error = $"まだ適用できない配置形式です: {id} " +
+                                "(layout_not_supported_yet)";
+                            return false;
+                        }
+                        if (cannotApplyReason == "payload_not_defined_yet")
+                        {
+                            error = $"配置対象がまだ宣言されていません: {id} " +
+                                "(payload_not_defined_yet)";
+                            return false;
+                        }
+                        var state = states.FirstOrDefault(item =>
+                            string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+                        if (state?.Status != UpdateTargetStatus.UpdateAvailable ||
+                            state.SelectedAsset == null || string.IsNullOrWhiteSpace(state.LatestVersion))
+                        {
+                            error = $"適用可能な更新情報がありません: {id}";
+                            return false;
+                        }
+                        targets.Add(new UpdateApplyTarget(target, state.SelectedAsset,
+                            state.LatestVersion));
+                    }
+                }
+
+                var job = new UpdateJobRecord(Guid.NewGuid().ToString("N"), cancellation.Token,
+                    isApply: true);
+                jobs[job.JobId] = job;
+                jobOrder.Enqueue(job.JobId);
+                activeApplyJob = job;
+                TrimJobsLocked();
+                _ = Task.Run(() => RunApplySafelyAsync(targets, job));
+                view = job.ToView();
+                return true;
+            }
+        }
+
+        internal UpdateCancelResult CancelApplyJob(string jobId)
+        {
+            lock (jobLock)
+            {
+                if (string.IsNullOrWhiteSpace(jobId) ||
+                    !jobs.TryGetValue(jobId, out var job) || !job.IsApply)
+                {
+                    return UpdateCancelResult.NotFound;
+                }
+                return job.Cancel() ? UpdateCancelResult.Accepted :
+                    UpdateCancelResult.AlreadyFinished;
+            }
+        }
+
         public bool TryGetJob(string jobId, out UpdateJobView view)
         {
             view = null;
@@ -178,6 +281,12 @@ namespace Amatsukaze.Server.Update
                 {
                     stateSnapshot = states.ToArray();
                 }
+                string activeApplyJobId;
+                lock (jobLock)
+                {
+                    activeApplyJobId = activeApplyJob != null && !activeApplyJob.IsFinished
+                        ? activeApplyJob.JobId : null;
+                }
                 var disabledTargets = new HashSet<string>(setting?.UpdateDisabledTargets ??
                     new List<string>(), StringComparer.OrdinalIgnoreCase);
                 var items = new List<UpdateItemView>();
@@ -189,6 +298,7 @@ namespace Amatsukaze.Server.Update
                         ? UpdateTargetStatus.Disabled
                         : environment.IsDocker && target.IsApplication
                             ? UpdateTargetStatus.Unsupported : UpdateTargetStatus.Unknown;
+                    var cannotApplyReason = GetCannotApplyReason(target, environment.OS);
                     items.Add(new UpdateItemView
                     {
                         Id = target.Id,
@@ -203,6 +313,8 @@ namespace Amatsukaze.Server.Update
                         DownloadSizeBytes = state?.SelectedAsset?.Size ?? 0,
                         ReleaseUrl = state?.ReleaseUrl,
                         AssetUrl = state?.SelectedAsset?.BrowserDownloadUrl,
+                        CanApply = cannotApplyReason == null,
+                        CannotApplyReason = cannotApplyReason,
                     });
                 }
                 var exeFilesMounted = UpdateDiagnostics.GetAppExeFilesMountState();
@@ -219,6 +331,7 @@ namespace Amatsukaze.Server.Update
                         item.State == UpdateTargetStatus.UpdateAvailable.ToString() ||
                         item.StateReason == "docker_self_update_available"),
                     HasPendingSelfUpdate = false,
+                    ActiveApplyJobId = activeApplyJobId,
                     Items = items,
                 };
             }
@@ -264,6 +377,13 @@ namespace Amatsukaze.Server.Update
                 {
                     return;
                 }
+                if (IsApplyInProgress())
+                {
+                    using var log = new UpdateLog(appRoot);
+                    log.Write("-", "S01_PRECHECK", "SKIP",
+                        ("reason", "apply_in_progress"));
+                    return;
+                }
                 var lastCheckedAt = server.LastUpdateCheckedAt;
                 var now = DateTime.UtcNow;
                 var configuredHours = Math.Max(6, setting.UpdateCheckIntervalHours <= 0
@@ -286,18 +406,42 @@ namespace Amatsukaze.Server.Update
             }
         }
 
+        private bool IsApplyInProgress()
+        {
+            lock (jobLock)
+            {
+                return activeApplyJob != null && !activeApplyJob.IsFinished;
+            }
+        }
+
+        internal static string GetCannotApplyReason(UpdateTargetDef target, UpdateOSKind os)
+        {
+            if (target.GetInstallLayout(os) != InstallLayout.ExeFilesFlat)
+            {
+                return "layout_not_supported_yet";
+            }
+            // Payload を宣言する変更は、対象の展開・設置経路が揃ってから入れること。
+            return target.Payload == null || target.Payload.Length == 0
+                ? "payload_not_defined_yet" : null;
+        }
+
         private UpdateJobRecord StartOrJoinCheck(bool manual, CancellationToken cancellationToken)
         {
             lock (jobLock)
             {
-                if (activeJob != null && !activeJob.IsFinished)
+                if (activeCheckJob != null && !activeCheckJob.IsFinished)
                 {
-                    return activeJob;
+                    return activeCheckJob;
                 }
-                var job = new UpdateJobRecord(Guid.NewGuid().ToString("N"));
+                if (activeApplyJob != null && !activeApplyJob.IsFinished)
+                {
+                    throw new UpdateInstallException("UPDATE_BUSY", "S01_PRECHECK",
+                        "更新の適用中は再チェックできません");
+                }
+                var job = new UpdateJobRecord(Guid.NewGuid().ToString("N"), cancellation.Token);
                 jobs[job.JobId] = job;
                 jobOrder.Enqueue(job.JobId);
-                activeJob = job;
+                activeCheckJob = job;
                 TrimJobsLocked();
                 _ = Task.Run(() => RunCheckSafelyAsync(manual, cancellationToken, job));
                 return job;
@@ -314,7 +458,7 @@ namespace Amatsukaze.Server.Update
             }
             catch (OperationCanceledException)
             {
-                CompleteJob(job, false);
+                CompleteCheckJob(job, false);
                 return;
             }
             try
@@ -331,7 +475,7 @@ namespace Amatsukaze.Server.Update
             finally
             {
                 checkLock.Release();
-                CompleteJob(job, succeeded);
+                CompleteCheckJob(job, succeeded);
             }
         }
 
@@ -726,16 +870,140 @@ namespace Amatsukaze.Server.Update
                 log, cancellationToken).ConfigureAwait(false);
         }
 
-        // ダウンロード開始から設置完了まで scheduler の maintenance pause と単一 writer を保持する。
-        internal async Task<InstalledUpdate> ApplyTargetAsync(UpdateTargetDef target,
-            ReleaseAssetInfo asset, string expectedVersion, UpdateLog log,
-            UpdateJobRecord job, CancellationToken cancellationToken)
+        private async Task RunApplySafelyAsync(IReadOnlyList<UpdateApplyTarget> targets,
+            UpdateJobRecord job)
+        {
+            var succeeded = false;
+            UpdateLog log = null;
+            try
+            {
+                log = new UpdateLog(appRoot, job.ObserveLine);
+                job.AttachLog(log.TransactionId, log.FilePath);
+                await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot).ConfigureAwait(false);
+                await ApplyTargetsAsync(targets, log, job, job.Token).ConfigureAwait(false);
+                var snapshot = job.ToView();
+                succeeded = snapshot.TargetResults.Count == targets.Count &&
+                    snapshot.TargetResults.All(result => result.Succeeded);
+                log.Write("-", "S99_SUMMARY", succeeded ? "OK" : "NG",
+                    ("targets", targets.Count),
+                    ("succeeded", snapshot.TargetResults.Count(result => result.Succeeded)),
+                    ("failed", snapshot.TargetResults.Count(result => !result.Succeeded)));
+            }
+            catch (OperationCanceledException) when (job.Token.IsCancellationRequested)
+            {
+                AddMissingTargetResults(targets, job, "CANCELED", "更新は中止されました");
+                log?.Write("-", "S99_SUMMARY", "NG", ("code", "CANCELED"),
+                    ("failed_stage", job.ToView().CurrentStage ?? "S01_PRECHECK"),
+                    ("targets", targets.Count));
+            }
+            catch (Exception ex)
+            {
+                var code = GetApplyErrorCode(ex);
+                AddMissingTargetResults(targets, job, code, ex.Message);
+                if (log != null)
+                {
+                    log.Write("-", "S99_SUMMARY", "NG", ("code", code),
+                        ("failed_stage", GetApplyErrorStage(ex)),
+                        ("error", ex.GetType().Name), ("message", ex.Message));
+                }
+                else
+                {
+                    Util.AddLog($"[Update] 更新適用ログの開始に失敗しました: " +
+                        $"{ex.GetType().Name}: {ex.Message}", ex);
+                }
+            }
+            finally
+            {
+                log?.Dispose();
+                CompleteApplyJob(job, succeeded);
+            }
+        }
+
+        internal async Task ApplyTargetsAsync(IReadOnlyList<UpdateApplyTarget> targets,
+            UpdateLog log, UpdateJobRecord job, CancellationToken cancellationToken)
         {
             using var writer = await UpdateWriterLease.AcquireAsync(applyLock,
                 cancellationToken).ConfigureAwait(false);
             using var lease = await UpdateMaintenanceLease.AcquireAsync(server,
                 cancellationToken).ConfigureAwait(false);
             using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
+            foreach (var applyTarget in targets)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                job.ResetProgress(applyTarget.Target.Id);
+                try
+                {
+                    await ApplyTargetCoreAsync(applyTarget, transaction, log, job,
+                        cancellationToken).ConfigureAwait(false);
+                    MarkTargetApplied(applyTarget);
+                    job.AddTargetResult(applyTarget.Target.Id, true, null,
+                        "更新を適用しました");
+                    log.Write(applyTarget.Target.Id, "S99_SUMMARY", "OK",
+                        ("current", applyTarget.ExpectedVersion),
+                        ("latest", applyTarget.ExpectedVersion));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    job.AddTargetResult(applyTarget.Target.Id, false, "CANCELED",
+                        "更新は中止されました");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    var code = GetApplyErrorCode(ex);
+                    var stage = GetApplyErrorStage(ex);
+                    job.AddTargetResult(applyTarget.Target.Id, false, code, ex.Message);
+                    log.Write(applyTarget.Target.Id, "S99_SUMMARY", "NG", ("code", code),
+                        ("failed_stage", stage), ("message", ex.Message));
+                }
+            }
+        }
+
+        private void MarkTargetApplied(UpdateApplyTarget applied)
+        {
+            lock (stateLock)
+            {
+                states = states.Select(state => string.Equals(state.Id, applied.Target.Id,
+                    StringComparison.OrdinalIgnoreCase) ? CreateState(applied.Target,
+                        applied.ExpectedVersion, applied.ExpectedVersion,
+                        UpdateTargetStatus.UpToDate, "same_version", DateTime.UtcNow,
+                        state.SelectedAsset, state.ReleaseUrl) : state).ToArray();
+            }
+        }
+
+        private static string GetApplyErrorCode(Exception exception) => exception switch
+        {
+            UpdateInstallException install => install.Code,
+            UpdatePreparationException preparation => preparation.Code,
+            _ => "UPDATE_FAILED",
+        };
+
+        private static string GetApplyErrorStage(Exception exception) => exception switch
+        {
+            UpdateInstallException install => install.Stage,
+            UpdatePreparationException preparation => preparation.Stage,
+            _ => "S01_PRECHECK",
+        };
+
+        private static void AddMissingTargetResults(IReadOnlyList<UpdateApplyTarget> targets,
+            UpdateJobRecord job, string code, string message)
+        {
+            var completed = new HashSet<string>(job.ToView().TargetResults.Select(
+                result => result.TargetId), StringComparer.OrdinalIgnoreCase);
+            foreach (var target in targets.Where(item => !completed.Contains(item.Target.Id)))
+            {
+                job.AddTargetResult(target.Target.Id, false, code, message);
+            }
+        }
+
+        // lease と一時ディレクトリは呼び出し側がジョブ全体で保持する。
+        private async Task<InstalledUpdate> ApplyTargetCoreAsync(UpdateApplyTarget applyTarget,
+            UpdateTransaction transaction, UpdateLog log, UpdateJobRecord job,
+            CancellationToken cancellationToken)
+        {
+            var target = applyTarget.Target;
+            var asset = applyTarget.Asset;
+            var expectedVersion = applyTarget.ExpectedVersion;
             PreparedUpdate prepared;
             try
             {
@@ -923,14 +1191,27 @@ namespace Amatsukaze.Server.Update
             return "(none)";
         }
 
-        private void CompleteJob(UpdateJobRecord job, bool succeeded)
+        private void CompleteCheckJob(UpdateJobRecord job, bool succeeded)
         {
             job.Complete(succeeded);
             lock (jobLock)
             {
-                if (ReferenceEquals(activeJob, job))
+                if (ReferenceEquals(activeCheckJob, job))
                 {
-                    activeJob = null;
+                    activeCheckJob = null;
+                }
+                TrimJobsLocked();
+            }
+        }
+
+        private void CompleteApplyJob(UpdateJobRecord job, bool succeeded)
+        {
+            job.Complete(succeeded);
+            lock (jobLock)
+            {
+                if (ReferenceEquals(activeApplyJob, job))
+                {
+                    activeApplyJob = null;
                 }
                 TrimJobsLocked();
             }
@@ -946,9 +1227,15 @@ namespace Amatsukaze.Server.Update
                     break;
                 }
                 jobOrder.Dequeue();
-                jobs.Remove(oldestId);
+                if (jobs.Remove(oldestId, out var removed))
+                {
+                    removed.Dispose();
+                }
             }
         }
+
+        internal sealed record UpdateApplyTarget(UpdateTargetDef Target, ReleaseAssetInfo Asset,
+            string ExpectedVersion);
 
         internal sealed class UpdateJobRecord
         {
@@ -957,6 +1244,9 @@ namespace Amatsukaze.Server.Update
             private readonly Queue<string> recentLogLines = new Queue<string>();
             private readonly TaskCompletionSource<bool> completion =
                 new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly CancellationTokenSource jobCancellation;
+            private readonly List<UpdateTargetResultView> targetResults =
+                new List<UpdateTargetResultView>();
             private string txId;
             private string currentTargetId;
             private string currentStage;
@@ -967,13 +1257,19 @@ namespace Amatsukaze.Server.Update
             private long totalBytes;
             private double speedBytesPerSec;
 
-            public UpdateJobRecord(string jobId)
+            public UpdateJobRecord(string jobId, CancellationToken managerCancellation,
+                bool isApply = false)
             {
                 JobId = jobId;
+                IsApply = isApply;
+                jobCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                    managerCancellation);
             }
 
             public string JobId { get; }
+            public bool IsApply { get; }
             public Task Completion => completion.Task;
+            public CancellationToken Token => jobCancellation.Token;
 
             public bool IsFinished
             {
@@ -1023,6 +1319,46 @@ namespace Amatsukaze.Server.Update
                 }
             }
 
+            public void ResetProgress(string targetId)
+            {
+                lock (sync)
+                {
+                    currentTargetId = targetId;
+                    currentStage = "S01_PRECHECK";
+                    receivedBytes = 0;
+                    totalBytes = 0;
+                    speedBytesPerSec = 0;
+                }
+            }
+
+            public void AddTargetResult(string targetId, bool result, string errorCode,
+                string message)
+            {
+                lock (sync)
+                {
+                    targetResults.Add(new UpdateTargetResultView
+                    {
+                        TargetId = targetId,
+                        Succeeded = result,
+                        ErrorCode = errorCode,
+                        Message = message,
+                    });
+                }
+            }
+
+            public bool Cancel()
+            {
+                lock (sync)
+                {
+                    if (finished || jobCancellation.IsCancellationRequested)
+                    {
+                        return false;
+                    }
+                }
+                jobCancellation.Cancel();
+                return true;
+            }
+
             public void Complete(bool result)
             {
                 lock (sync)
@@ -1057,8 +1393,20 @@ namespace Amatsukaze.Server.Update
                         Finished = finished,
                         Succeeded = succeeded,
                         RecentLogLines = recentLogLines.ToList(),
+                        TargetResults = targetResults.Select(result => new UpdateTargetResultView
+                        {
+                            TargetId = result.TargetId,
+                            Succeeded = result.Succeeded,
+                            ErrorCode = result.ErrorCode,
+                            Message = result.Message,
+                        }).ToList(),
                     };
                 }
+            }
+
+            public void Dispose()
+            {
+                jobCancellation.Dispose();
             }
         }
 

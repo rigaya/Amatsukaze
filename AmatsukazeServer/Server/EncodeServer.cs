@@ -4199,6 +4199,7 @@ namespace Amatsukaze.Server
                 EncoderSuspended = workers.Select(w => w.UserSuspended).ToArray(),
                 Running = nowEncoding,
                 ScheduledPause = workerPool.ScheduledPaused,
+                MaintenancePaused = workerPool.MaintenancePaused,
                 ScheduledSuspend = workers.FirstOrDefault()?.ScheduledSuspended ?? false,
                 Progress = Progress
             };

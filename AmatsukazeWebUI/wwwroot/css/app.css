@@ -1448,12 +1448,41 @@ code {
 }
 
 .update-check-progress,
+.update-apply-progress,
 .update-dialog-error,
+.update-cancel-message,
 .update-copy-message {
     margin: 0.8rem 0 0;
 }
 
 .update-dialog-error {
+    color: var(--update-attention-text);
+}
+
+.update-apply-progress progress {
+    width: min(32rem, 100%);
+}
+
+.update-target-results {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.update-target-results h5 {
+    margin: 0 0 0.5rem;
+}
+
+.update-target-results ul {
+    margin: 0;
+}
+
+.update-result-ok {
+    color: var(--text);
+}
+
+.update-result-ng {
     color: var(--update-attention-text);
 }
 

@@ -28,6 +28,8 @@ namespace Amatsukaze.Shared
         public bool[]? EncoderSuspended { get; set; }
         public bool Running { get; set; }
         public bool ScheduledPause { get; set; }
+        // 更新適用のためにキューを停止中
+        public bool MaintenancePaused { get; set; }
         public bool ScheduledSuspend { get; set; }
         public double Progress { get; set; }
     }

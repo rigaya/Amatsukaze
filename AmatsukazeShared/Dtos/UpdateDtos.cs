@@ -16,6 +16,8 @@ namespace Amatsukaze.Shared
         public bool HasUpdate { get; set; }
         // 再起動後に適用する本体更新が保留されているか
         public bool HasPendingSelfUpdate { get; set; }
+        // 実行中の更新適用ジョブ。存在しない場合は null
+        public string? ActiveApplyJobId { get; set; }
         public List<UpdateItemView> Items { get; set; } = new List<UpdateItemView>();
     }
 
@@ -37,6 +39,10 @@ namespace Amatsukaze.Shared
         public string? ReleaseUrl { get; set; }
         // 更新アセットの直接ダウンロードURL
         public string? AssetUrl { get; set; }
+        // 現在のサーバーがこの対象を適用できるか
+        public bool CanApply { get; set; }
+        // 適用できない理由コード
+        public string? CannotApplyReason { get; set; }
     }
 
     // 非同期更新ジョブの進捗状態
@@ -52,5 +58,29 @@ namespace Amatsukaze.Shared
         public bool Finished { get; set; }
         public bool Succeeded { get; set; }
         public List<string> RecentLogLines { get; set; } = new List<string>();
+        // 適用対象ごとの完了結果
+        public List<UpdateTargetResultView> TargetResults { get; set; } =
+            new List<UpdateTargetResultView>();
+    }
+
+    // 更新適用ジョブの対象別結果
+    public sealed class UpdateTargetResultView
+    {
+        public string TargetId { get; set; } = "";
+        public bool Succeeded { get; set; }
+        public string? ErrorCode { get; set; }
+        public string? Message { get; set; }
+    }
+
+    // 更新適用リクエスト
+    public sealed class UpdateApplyRequest
+    {
+        public List<string> TargetIds { get; set; } = new List<string>();
+    }
+
+    // 更新中止リクエスト
+    public sealed class UpdateCancelRequest
+    {
+        public string JobId { get; set; } = "";
     }
 }
