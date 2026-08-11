@@ -252,6 +252,21 @@ namespace Amatsukaze.Server.Update
                 _ => null,
             };
         }
+
+        public bool SetExecutablePath(Setting setting, string path)
+        {
+            switch (SettingKey)
+            {
+                case nameof(Setting.X264Path): setting.X264Path = path; return true;
+                case nameof(Setting.X265Path): setting.X265Path = path; return true;
+                case nameof(Setting.SVTAV1Path): setting.SVTAV1Path = path; return true;
+                case nameof(Setting.QSVEncPath): setting.QSVEncPath = path; return true;
+                case nameof(Setting.NVEncPath): setting.NVEncPath = path; return true;
+                case nameof(Setting.VCEEncPath): setting.VCEEncPath = path; return true;
+                case nameof(Setting.TsReplacePath): setting.TsReplacePath = path; return true;
+                default: return false;
+            }
+        }
     }
 
     internal sealed class UpdateTargetState

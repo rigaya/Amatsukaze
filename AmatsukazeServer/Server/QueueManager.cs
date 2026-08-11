@@ -1305,7 +1305,11 @@ namespace Amatsukaze.Server
             }
             else if(data.ChangeType == ChangeItemType.ForceStart)
             {
-                if(target.State != QueueState.Queue)
+                if(server.MaintenancePaused)
+                {
+                    return server.NotifyError("更新の適用中のため開始できません", false);
+                }
+                else if(target.State != QueueState.Queue)
                 {
                     return server.NotifyError("待ち状態にないアイテムは開始できません", false);
                 }

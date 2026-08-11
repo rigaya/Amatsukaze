@@ -22,6 +22,7 @@ namespace Amatsukaze.Server.Update
         private readonly string appRoot;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private readonly SemaphoreSlim checkLock = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim applyLock = new SemaphoreSlim(1, 1);
         private readonly object stateLock = new object();
         private readonly object jobLock = new object();
         private readonly Dictionary<string, UpdateJobRecord> jobs =
@@ -41,6 +42,7 @@ namespace Amatsukaze.Server.Update
             appRoot = GetApplicationRoot();
             UpdateLog.CleanupOldLogs(appRoot);
             UpdateTransaction.CleanupStale(appRoot);
+            UpdateInstaller.CleanupStartupResidues(appRoot);
         }
 
         private static string GetApplicationRoot()
@@ -722,6 +724,175 @@ namespace Amatsukaze.Server.Update
                 cancellationToken, target.Payload).ConfigureAwait(false);
             return await new UpdateStaging().PrepareAsync(target, extraction, expectedVersion,
                 log, cancellationToken).ConfigureAwait(false);
+        }
+
+        // ダウンロード開始から設置完了まで scheduler の maintenance pause と単一 writer を保持する。
+        internal async Task<InstalledUpdate> ApplyTargetAsync(UpdateTargetDef target,
+            ReleaseAssetInfo asset, string expectedVersion, UpdateLog log,
+            UpdateJobRecord job, CancellationToken cancellationToken)
+        {
+            using var writer = await UpdateWriterLease.AcquireAsync(applyLock,
+                cancellationToken).ConfigureAwait(false);
+            using var lease = await UpdateMaintenanceLease.AcquireAsync(server,
+                cancellationToken).ConfigureAwait(false);
+            using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
+            PreparedUpdate prepared;
+            try
+            {
+                prepared = await PrepareTargetAsync(target, transaction, asset,
+                    expectedVersion, log, job, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                log.Write(target?.Id ?? "-", "S13_ROLLBACK", "SKIP",
+                    ("reason", "no_files_modified"));
+                throw;
+            }
+
+            // pause の取得直前に開始した worker との競合を、既存ファイルに触る直前にも確認する。
+            if (server.NowEncoding)
+            {
+                log.Write(target.Id, "S10_INSTALL", "NG",
+                    ("code", "ENCODING_ACTIVE"),
+                    ("message", "エンコード実行中のため設置を開始しません"));
+                log.Write(target.Id, "S13_ROLLBACK", "SKIP",
+                    ("reason", "no_files_modified"));
+                throw new UpdateInstallException("ENCODING_ACTIVE", "S10_INSTALL",
+                    "エンコード実行中のため更新を適用できません");
+            }
+
+            var installer = new UpdateInstaller(appRoot);
+            InstalledUpdate installed;
+            try
+            {
+                installed = await installer.InstallAsync(target, prepared, expectedVersion,
+                    log, cancellationToken).ConfigureAwait(false);
+            }
+            catch (UpdateInstallException ex) when (ex.Stage == "S10_INSTALL")
+            {
+                log.Write(target.Id, "S13_ROLLBACK", "SKIP",
+                    ("reason", "no_files_modified"));
+                throw;
+            }
+
+            try
+            {
+                await UpdateInstalledPathAsync(target, installed, log)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                log.Write(target.Id, "S12_SETTINGS", "NG",
+                    ("code", "SETTINGS_UPDATE_FAILED"),
+                    ("key", target.SettingKey ?? "(none)"),
+                    ("error", ex.GetType().Name), ("message", ex.Message));
+                await installer.RollbackInstalledAsync(installed, log).ConfigureAwait(false);
+                throw new UpdateInstallException("SETTINGS_UPDATE_FAILED", "S12_SETTINGS",
+                    "設定パスの反映に失敗したため旧版へ戻しました", ex);
+            }
+
+            log.Write(target.Id, "S13_ROLLBACK", "SKIP",
+                ("reason", "installation_succeeded"));
+            return installed;
+        }
+
+        private async Task UpdateInstalledPathAsync(UpdateTargetDef target,
+            InstalledUpdate installed, UpdateLog log)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                log.Write(target.Id, "S12_SETTINGS", "SKIP",
+                    ("reason", "unchanged_flat_linux"),
+                    ("key", target.SettingKey ?? "(none)"));
+                return;
+            }
+
+            var current = server.AppData_?.setting;
+            var oldPath = current == null ? null : target.GetExecutablePath(current);
+            if (!ShouldUpdateWindowsSettingPath(target, oldPath,
+                installed.DestinationPath, appRoot))
+            {
+                log.Write(target.Id, "S12_SETTINGS", "SKIP",
+                    ("reason", string.IsNullOrEmpty(oldPath) ? "empty_default_path" :
+                        "custom_or_unrelated_path"),
+                    ("key", target.SettingKey ?? "(none)"),
+                    ("old", oldPath ?? "(empty)"));
+                return;
+            }
+
+            var updated = ServerSupport.DeepCopy(current);
+            if (!target.SetExecutablePath(updated, installed.DestinationPath))
+            {
+                throw new InvalidOperationException("設定パスのキーがカタログに定義されていません");
+            }
+            try
+            {
+                await server.SetCommonData(new CommonData { Setting = updated }).ConfigureAwait(false);
+            }
+            catch (Exception applyException)
+            {
+                // 通知だけが失敗しても設定本体は置換済みの可能性があるため、旧値へ戻す。
+                Exception restoreException = null;
+                try
+                {
+                    await server.SetCommonData(new CommonData { Setting = current })
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    restoreException = ex;
+                }
+                var restoredSetting = server.AppData_?.setting;
+                var restoredPath = restoredSetting == null ? null :
+                    target.GetExecutablePath(restoredSetting);
+                if (!string.Equals(restoredPath, oldPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"設定パスの旧値への復元にも失敗しました。old={oldPath} current={restoredPath ?? "(null)"}",
+                        restoreException ?? applyException);
+                }
+                throw;
+            }
+            log.Write(target.Id, "S12_SETTINGS", "OK", ("key", target.SettingKey),
+                ("old", oldPath), ("new", installed.DestinationPath),
+                ("backup", "server_managed"));
+        }
+
+        internal static bool ShouldUpdateWindowsSettingPath(UpdateTargetDef target,
+            string oldPath, string newPath, string root)
+        {
+            if (target?.Payload == null || string.IsNullOrWhiteSpace(oldPath) ||
+                string.IsNullOrWhiteSpace(newPath) || string.IsNullOrWhiteSpace(root))
+            {
+                return false;
+            }
+            if (!oldPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                !newPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            try
+            {
+                if (!target.TryCompileRegexes(out _)) return false;
+                var executableRoot = Path.GetFullPath(Path.Combine(root, "exe_files"));
+                var oldFullPath = Path.GetFullPath(oldPath);
+                var newFullPath = Path.GetFullPath(newPath);
+                if (!string.Equals(Path.GetDirectoryName(oldFullPath), executableRoot,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(Path.GetDirectoryName(newFullPath), executableRoot,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                var oldName = Path.GetFileName(oldFullPath);
+                var newName = Path.GetFileName(newFullPath);
+                return target.Payload.Any(entry => entry.IsMatch(oldName)) &&
+                    target.Payload.Any(entry => entry.IsMatch(newName));
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         internal static string FindExtractor(string root)

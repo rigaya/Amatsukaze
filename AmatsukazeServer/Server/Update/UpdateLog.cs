@@ -10,6 +10,8 @@ namespace Amatsukaze.Server.Update
 {
     internal sealed class UpdateLog : IDisposable
     {
+        internal const string TimestampFormat = "yyyyMMdd-HHmmss";
+        internal const string UnknownTransactionId = "00000000";
         private const int MaxLogFiles = 50;
         private const long MaxTotalBytes = 50L * 1024 * 1024;
         private readonly object sync = new object();
@@ -28,7 +30,7 @@ namespace Amatsukaze.Server.Update
                 var directory = Path.Combine(appRoot, "log", "update");
                 Directory.CreateDirectory(directory);
                 FilePath = Path.Combine(directory,
-                    DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) +
+                    DateTime.Now.ToString(TimestampFormat, CultureInfo.InvariantCulture) +
                     "_" + TransactionId + ".log");
                 writer = new StreamWriter(new FileStream(FilePath, FileMode.CreateNew,
                     FileAccess.Write, FileShare.Read), new UTF8Encoding(false))
@@ -118,6 +120,21 @@ namespace Amatsukaze.Server.Update
                 .Replace("\r", "\\r", StringComparison.Ordinal)
                 .Replace("\n", "\\n", StringComparison.Ordinal)
                 .Replace("\t", "\\t", StringComparison.Ordinal) + "\"";
+        }
+
+        // 独立ログを作れない後始末処理の失敗を既存ログに残す。
+        internal static void WriteFallbackError(string stage, string code, Exception exception)
+        {
+            try
+            {
+                Util.AddLog($"[Update][{UnknownTransactionId}][-][{stage}] NG " +
+                    $"code={code} error={FormatValue(exception.GetType().Name)} " +
+                    $"message={FormatValue(exception.Message)}", exception);
+            }
+            catch
+            {
+                // 後始末ログ自体の障害は本来の失敗理由へ波及させない。
+            }
         }
 
         private static string CreateTransactionId()

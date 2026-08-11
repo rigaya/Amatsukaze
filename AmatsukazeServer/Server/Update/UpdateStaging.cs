@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -11,7 +9,6 @@ namespace Amatsukaze.Server.Update
 {
     internal sealed class UpdateStaging
     {
-        private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
         // AV が展開直後のファイルを削除するケースを設置前に拾うための猶予。
         // 1秒は経験的な値であり、直後のバージョン実行が本命の検出手段になる。
         private static readonly TimeSpan AntivirusDeletionGrace = TimeSpan.FromSeconds(1);
@@ -48,10 +45,11 @@ namespace Amatsukaze.Server.Update
                     "配置対象ファイルが消失または空になりました");
             }
 
-            var probe = await ProbeAsync(selected.Path, target.VersionArgument, cancellationToken)
+            var probe = await UpdateExecutableProbe.RunAsync(selected.Path, target.VersionArgument,
+                cancellationToken)
                 .ConfigureAwait(false);
             var match = target.VersionRegex?.Match(probe.Output ?? string.Empty);
-            if (probe.ExitFailed || match?.Success != true)
+            if (probe.LaunchFailed || match?.Success != true)
             {
                 log.Write(target.Id, "S09_STAGE", "NG", ("code", "VERIFY_FAILED"),
                     ("path", selected.Path), ("exit", probe.ExitCode),
@@ -81,73 +79,5 @@ namespace Amatsukaze.Server.Update
             return new PreparedUpdate(target.Id, selected.Path, destinationName, actualVersion);
         }
 
-        private static async Task<ProbeResult> ProbeAsync(string executable, string argument,
-            CancellationToken cancellationToken)
-        {
-            var start = new ProcessStartInfo(executable)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            if (!string.IsNullOrWhiteSpace(argument))
-            {
-                start.ArgumentList.Add(argument);
-            }
-            Process process = null;
-            try
-            {
-                process = Process.Start(start);
-                if (process == null)
-                {
-                    return new ProbeResult(-1, string.Empty, true);
-                }
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(ProbeTimeout);
-                var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-                return new ProbeResult(process.ExitCode,
-                    (await stdout.ConfigureAwait(false)) + "\n" + (await stderr.ConfigureAwait(false)),
-                    false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                KillTree(process);
-                return new ProbeResult(-1, "タイムアウト", true);
-            }
-            catch (OperationCanceledException)
-            {
-                KillTree(process);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                KillTree(process);
-                return new ProbeResult(-1, ex.GetType().Name + ":" + ex.Message, true);
-            }
-            finally
-            {
-                process?.Dispose();
-            }
-        }
-
-        private static void KillTree(Process process)
-        {
-            try
-            {
-                if (process != null && !process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-            }
-            catch
-            {
-                // 終了競合は無視する。
-            }
-        }
-
-        private sealed record ProbeResult(int ExitCode, string Output, bool ExitFailed);
     }
 }

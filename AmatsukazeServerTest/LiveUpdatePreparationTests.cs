@@ -6,6 +6,69 @@ namespace AmatsukazeServerTest;
 
 public sealed class LiveUpdatePreparationTests
 {
+    [EnvironmentFact("AMT_LIVE_P2B", "AMT_LIVE_APP_ROOT", "AMT_LIVE_ARTIFACT_DIR")]
+    public async Task GitHub実アセット三対象を使い捨てルートへ設置する()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var appRoot = Environment.GetEnvironmentVariable("AMT_LIVE_APP_ROOT")!;
+        var artifactDir = Environment.GetEnvironmentVariable("AMT_LIVE_ARTIFACT_DIR")!;
+        Directory.CreateDirectory(artifactDir);
+        Assert.True(UpdateCatalog.TryInitialize(out var catalogError), catalogError);
+        string installLogPath;
+        using (var log = new UpdateLog(appRoot))
+        {
+            installLogPath = log.FilePath;
+            await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot);
+            using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
+            using var releases = new ReleaseClient(string.Empty);
+            foreach (var target in UpdateCatalog.Targets.Where(target =>
+                target.Id is "x264" or "x265" or "SVT-AV1"))
+            {
+                var (prepared, expectedVersion) = await PrepareLiveTargetAsync(appRoot,
+                    target, transaction, releases, log);
+                var installed = await new UpdateInstaller(appRoot).InstallAsync(target,
+                    prepared, expectedVersion, log, CancellationToken.None);
+                log.Write(target.Id, "S12_SETTINGS", "SKIP",
+                    ("reason", "unchanged_flat_linux"), ("key", target.SettingKey));
+                log.Write(target.Id, "S13_ROLLBACK", "SKIP",
+                    ("reason", "installation_succeeded"));
+                var probe = await UpdateExecutableProbe.RunAsync(installed.DestinationPath,
+                    target.VersionArgument, CancellationToken.None);
+                Assert.Matches(target.VersionRegex!, probe.Output);
+                Assert.DoesNotContain(Directory.EnumerateFiles(
+                    Path.Combine(appRoot, "exe_files"), "*.new.*"), _ => true);
+            }
+        }
+        File.Copy(installLogPath, Path.Combine(artifactDir,
+            "live_install_transaction.log"), true);
+
+        var rollbackTarget = Assert.Single(UpdateCatalog.Targets,
+            target => target.Id == "x264");
+        var rollbackDestination = Path.Combine(appRoot, "exe_files", "x264");
+        var beforeRollback = HashFile(rollbackDestination);
+        string rollbackLogPath;
+        using (var rollbackLog = new UpdateLog(appRoot))
+        {
+            rollbackLogPath = rollbackLog.FilePath;
+            using var transaction = UpdateTransaction.Create(appRoot,
+                rollbackLog.TransactionId);
+            var staged = Path.Combine(transaction.GetTargetExtractDirectory("x264"), "x264");
+            File.Copy(rollbackDestination, staged);
+            File.SetUnixFileMode(staged, File.GetUnixFileMode(staged) |
+                UnixFileMode.UserExecute);
+            var prepared = new PreparedUpdate("x264", staged, "x264", "999999");
+            var exception = await Assert.ThrowsAsync<UpdateInstallException>(() =>
+                new UpdateInstaller(appRoot).InstallAsync(rollbackTarget, prepared,
+                    "999999", rollbackLog, CancellationToken.None));
+            Assert.Equal("VERIFY_FAILED", exception.Code);
+        }
+        Assert.Equal(beforeRollback, HashFile(rollbackDestination));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(appRoot, "exe_files"),
+            "*.new.*"));
+        File.Copy(rollbackLogPath, Path.Combine(artifactDir,
+            "live_rollback_transaction.log"), true);
+    }
+
     [EnvironmentFact("AMT_LIVE_NO_EXTRACTOR", "AMT_LIVE_APP_ROOT",
         "AMT_LIVE_ARTIFACT_DIR")]
     public async Task バンドル展開器不在を診断する()
@@ -112,6 +175,58 @@ public sealed class LiveUpdatePreparationTests
             })
             .OrderBy(line => line, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static async Task<(PreparedUpdate Prepared, string ExpectedVersion)>
+        PrepareLiveTargetAsync(string appRoot, UpdateTargetDef target,
+            UpdateTransaction transaction, ReleaseClient releases, UpdateLog log)
+    {
+        var environment = UpdateRuntimeEnvironment.Detect();
+        var rule = Assert.Single(target.AssetRules, item => item.AppliesTo(environment));
+        var candidates = await releases.GetReleasesAsync(target.Repository, target.Id,
+            target.ReleaseSelect, log, CancellationToken.None);
+        Assert.NotNull(candidates);
+        ReleaseInfo? selectedRelease = null;
+        ReleaseAssetInfo? selectedAsset = null;
+        string? expectedVersion = null;
+        var scanned = 0;
+        foreach (var release in candidates)
+        {
+            scanned++;
+            foreach (var asset in release.Assets)
+            {
+                var match = rule.Match(asset.Name);
+                if (!match.Success) continue;
+                selectedRelease = release;
+                selectedAsset = asset;
+                expectedVersion = match.Groups["ver"].Value;
+                break;
+            }
+            if (selectedAsset != null) break;
+        }
+        Assert.NotNull(selectedRelease);
+        Assert.NotNull(selectedAsset);
+        Assert.False(string.IsNullOrWhiteSpace(expectedVersion));
+        log.Write(target.Id, "S04_LATEST", "OK", ("tag", selectedRelease.TagName),
+            ("version", expectedVersion), ("scanned", scanned));
+        log.Write(target.Id, "S05_SELECT_ASSET", "OK", ("asset", selectedAsset.Name),
+            ("size", selectedAsset.Size), ("digest", selectedAsset.Digest));
+        using var downloader = new UpdateDownloader(string.Empty);
+        var download = await downloader.DownloadAsync(selectedAsset,
+            transaction.GetTargetDownloadDirectory(target.Id), target.Id, log, null,
+            CancellationToken.None);
+        var extraction = await new ArchiveExtractor(UpdateManager.FindExtractor(appRoot))
+            .ExtractAsync(download, transaction.GetTargetExtractDirectory(target.Id),
+                target.Id, log, CancellationToken.None, target.Payload);
+        var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+            expectedVersion!, log, CancellationToken.None);
+        return (prepared, expectedVersion!);
+    }
+
+    private static string HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 }
 

@@ -3763,7 +3763,14 @@ namespace Amatsukaze.Server
         {
             if (request.IsQueue)
             {
-                workerPool.SetPause(request.Pause, false);
+                if (request.Pause == false && workerPool.MaintenancePaused)
+                {
+                    await NotifyError("更新の適用中のため再開できません", false);
+                }
+                else
+                {
+                    workerPool.SetPause(request.Pause, false);
+                }
             }
             else
             {
@@ -3786,6 +3793,17 @@ namespace Amatsukaze.Server
             Task task = RequestState();
             await task;
         }
+
+        /// <summary>
+        /// 更新の適用中だけキューを停止する
+        /// </summary>
+        internal Task SetMaintenancePause(bool pause)
+        {
+            workerPool.SetMaintenancePause(pause);
+            return RequestState();
+        }
+
+        internal bool MaintenancePaused => workerPool.MaintenancePaused;
 
         public Task CancelAddQueue()
         {
