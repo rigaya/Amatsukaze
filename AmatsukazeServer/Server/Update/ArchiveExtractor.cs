@@ -28,6 +28,7 @@ namespace Amatsukaze.Server.Update
                 ["zip"] = new ArchiveFormatHandler(false),
                 ["tar.xz"] = new ArchiveFormatHandler(true),
                 ["deb"] = new ArchiveFormatHandler(true),
+                ["7z"] = new ArchiveFormatHandler(false),
             };
         private readonly string extractorPath;
         private readonly ArchiveSafetyLimits limits;

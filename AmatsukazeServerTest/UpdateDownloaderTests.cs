@@ -12,6 +12,8 @@ public sealed class UpdateDownloaderTests
         [0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, 5, 6];
     private static readonly byte[] DebLikeData =
         [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a];
+    private static readonly byte[] SevenZipLikeData =
+        [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0x00, 0x04];
 
     [Fact]
     public async Task 正常ダウンロードでサイズとハッシュが一致する()
@@ -139,6 +141,35 @@ public sealed class UpdateDownloaderTests
         await using var server = await MockServer.StartAsync((_, response) =>
             WriteResponseAsync(response, ZipLikeData));
         var asset = Asset(server.Url, ZipLikeData, "test.deb");
+
+        var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
+            fixture.Downloader.DownloadAsync(asset, fixture.DownloadDirectory, "test",
+                fixture.Log, null, CancellationToken.None));
+
+        Assert.Equal("VERIFY_FAILED", exception.Code);
+    }
+
+    [Fact]
+    public async Task SevenZipは拡張子とマジックが一致すれば受け入れる()
+    {
+        using var fixture = new DownloadFixture();
+        await using var server = await MockServer.StartAsync((_, response) =>
+            WriteResponseAsync(response, SevenZipLikeData));
+        var asset = Asset(server.Url, SevenZipLikeData, "test.7z");
+
+        var result = await fixture.Downloader.DownloadAsync(asset, fixture.DownloadDirectory,
+            "test", fixture.Log, null, CancellationToken.None);
+
+        Assert.Equal("7z", result.Format);
+    }
+
+    [Fact]
+    public async Task SevenZip拡張子でもマジックが違えば検証失敗になる()
+    {
+        using var fixture = new DownloadFixture();
+        await using var server = await MockServer.StartAsync((_, response) =>
+            WriteResponseAsync(response, ZipLikeData));
+        var asset = Asset(server.Url, ZipLikeData, "test.7z");
 
         var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
             fixture.Downloader.DownloadAsync(asset, fixture.DownloadDirectory, "test",

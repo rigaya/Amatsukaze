@@ -126,6 +126,7 @@ namespace Amatsukaze.Server.Update
                 Payload = new[]
                 {
                     new PayloadEntry { Pattern = @"^(?:usr/bin/)?tsreplace$" },
+                    new PayloadEntry { Pattern = @"^tsreplace\.exe$" },
                 },
             },
         };
@@ -154,6 +155,7 @@ namespace Amatsukaze.Server.Update
                 Payload = new[]
                 {
                     new PayloadEntry { Pattern = $@"^(?:usr/bin/)?{linuxName}$" },
+                    new PayloadEntry { Pattern = $@"^{windowsName}64\.exe$" },
                 },
             };
         }

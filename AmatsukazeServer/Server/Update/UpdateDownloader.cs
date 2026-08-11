@@ -14,6 +14,8 @@ namespace Amatsukaze.Server.Update
         private const int MaxAttempts = 3;
         private static readonly byte[] ArArchiveMagic =
             [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68];
+        private static readonly byte[] SevenZipArchiveMagic =
+            [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c];
         private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
         private readonly HttpClient client;
@@ -209,6 +211,10 @@ namespace Amatsukaze.Server.Update
             if (name.EndsWith(".deb", StringComparison.OrdinalIgnoreCase))
             {
                 return magic.SequenceEqual(ArArchiveMagic) ? "deb" : null;
+            }
+            if (name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase))
+            {
+                return magic.SequenceEqual(SevenZipArchiveMagic) ? "7z" : null;
             }
             return null;
         }

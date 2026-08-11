@@ -50,6 +50,26 @@ public sealed class ArchiveExtractorTests
         Assert.True(File.Exists(prepared.FilePath));
     }
 
+    [Fact]
+    public async Task SevenZipを一段で展開しPayload以外のファイルも維持する()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new ArchiveFixture();
+        var archive = fixture.Create7z(("tool.exe", Script), ("helper.dll", "dll"));
+        using var log = new UpdateLog(fixture.Root);
+        var target = CreateTarget(@"^tool\.exe$");
+
+        var extraction = await fixture.Extractor.ExtractAsync(
+            fixture.DownloadResult(archive, "7z"), fixture.ExtractDirectory,
+            "test", log, CancellationToken.None, target.Payload);
+        var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+            "1.2.3", log, CancellationToken.None);
+
+        Assert.Equal("tool.exe", prepared.DestName);
+        Assert.True(File.Exists(Path.Combine(extraction.DirectoryPath, "helper.dll")));
+        Assert.Equal("1.2.3", prepared.Version);
+    }
+
     [Theory]
     [InlineData("../outside")]
     [InlineData("/absolute")]
@@ -385,6 +405,19 @@ public sealed class ArchiveExtractorTests
             return path;
         }
 
+        public string Create7z(params (string Name, string Content)[] entries)
+        {
+            var source = Directory.CreateDirectory(Path.Combine(downloadDirectory,
+                "sevenzip-" + Guid.NewGuid())).FullName;
+            foreach (var item in entries)
+            {
+                File.WriteAllText(Path.Combine(source, item.Name), item.Content);
+            }
+            var path = Path.Combine(downloadDirectory, Guid.NewGuid() + ".7z");
+            Run(FindExtractor(), ["a", path, "."], source);
+            return path;
+        }
+
         private static void WriteArMember(Stream output, string name, byte[] content)
         {
             const int NameWidth = 16;
@@ -465,9 +498,14 @@ public sealed class ArchiveExtractorTests
             return path;
         }
 
-        private static void Run(string fileName, IEnumerable<string> arguments)
+        private static void Run(string fileName, IEnumerable<string> arguments,
+            string? workingDirectory = null)
         {
-            var start = new ProcessStartInfo(fileName) { UseShellExecute = false };
+            var start = new ProcessStartInfo(fileName)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = workingDirectory ?? string.Empty,
+            };
             foreach (var argument in arguments) start.ArgumentList.Add(argument);
             using var process = Process.Start(start)!;
             process.WaitForExit();

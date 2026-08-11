@@ -77,6 +77,202 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public async Task サブディレクトリは中身全部を差し替えロールバックできる()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new InstallerFixture();
+        var target = fixture.CreateSubDirectoryTarget("QSVEnc", "QSVEncC64.exe");
+        var destination = Path.Combine(fixture.ExeFiles, target.Id);
+        Directory.CreateDirectory(destination);
+        fixture.WriteScript(Path.Combine(destination, "QSVEncC64.exe"), "1.0.0");
+        File.WriteAllText(Path.Combine(destination, "old.dll"), "old");
+        var prepared = fixture.CreateDirectoryPrepared(target, "QSVEncC64.exe", "2.0.0",
+            ("new.dll", "new"));
+        var installer = fixture.CreateInstaller(UpdateOSKind.Windows);
+
+        InstalledUpdate installed;
+        using (var log = new UpdateLog(fixture.Root))
+        {
+            installed = await installer.InstallAsync(target, prepared, "2.0.0", log,
+                CancellationToken.None);
+        }
+
+        Assert.Equal(InstallLayout.ExeFilesSubDir, installed.Layout);
+        Assert.Contains("version 2.0.0", await RunAsync(installed.DestinationPath));
+        Assert.True(File.Exists(Path.Combine(destination, "new.dll")));
+        Assert.False(File.Exists(Path.Combine(destination, "old.dll")));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.ExeFiles, "QSVEnc.new.*"));
+        var old = Assert.Single(Directory.EnumerateDirectories(
+            fixture.ExeFiles, "QSVEnc.old.*"));
+        Assert.Equal(old, installed.BackupPath);
+        Assert.False(Directory.Exists(Path.Combine(fixture.ExeFiles, ".update_backup")));
+
+        using var rollbackLog = new UpdateLog(fixture.Root);
+        await installer.RollbackInstalledAsync(installed, rollbackLog);
+
+        Assert.Contains("version 1.0.0", await RunAsync(installed.DestinationPath));
+        Assert.True(File.Exists(Path.Combine(destination, "old.dll")));
+        Assert.False(File.Exists(Path.Combine(destination, "new.dll")));
+        Assert.False(Directory.Exists(old));
+    }
+
+    [Fact]
+    public async Task サブディレクトリはバックアップ領域へ複製しない()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new InstallerFixture();
+        var target = fixture.CreateSubDirectoryTarget("QSVEnc", "QSVEncC64.exe");
+        var destination = Path.Combine(fixture.ExeFiles, target.Id);
+        Directory.CreateDirectory(destination);
+        fixture.WriteScript(Path.Combine(destination, "QSVEncC64.exe"), "1.0.0");
+        var installer = fixture.CreateInstaller(UpdateOSKind.Windows);
+        using var log = new UpdateLog(fixture.Root);
+
+        await installer.InstallAsync(target,
+            fixture.CreateDirectoryPrepared(target, "QSVEncC64.exe", "2.0.0"),
+            "2.0.0", log, CancellationToken.None);
+
+        Assert.False(Directory.Exists(Path.Combine(fixture.ExeFiles, ".update_backup")));
+        Assert.Single(Directory.EnumerateDirectories(fixture.ExeFiles, "QSVEnc.old.*"));
+    }
+
+    [Fact]
+    public async Task サブディレクトリを再起動せず二回更新してもOldは一個だけ残る()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new InstallerFixture();
+        var target = fixture.CreateSubDirectoryTarget("QSVEnc", "QSVEncC64.exe");
+        var destination = Path.Combine(fixture.ExeFiles, target.Id);
+        Directory.CreateDirectory(destination);
+        fixture.WriteScript(Path.Combine(destination, "QSVEncC64.exe"), "1.0.0");
+
+        using (var firstLog = new UpdateLog(fixture.Root))
+        {
+            await fixture.CreateInstaller(UpdateOSKind.Windows,
+                    new DateTime(2026, 8, 11, 12, 34, 56, DateTimeKind.Utc))
+                .InstallAsync(target,
+                    fixture.CreateDirectoryPrepared(target, "QSVEncC64.exe", "2.0.0"),
+                    "2.0.0", firstLog, CancellationToken.None);
+        }
+        using (var secondLog = new UpdateLog(fixture.Root))
+        {
+            await fixture.CreateInstaller(UpdateOSKind.Windows,
+                    new DateTime(2026, 8, 11, 12, 35, 57, DateTimeKind.Utc))
+                .InstallAsync(target,
+                    fixture.CreateDirectoryPrepared(target, "QSVEncC64.exe", "3.0.0"),
+                    "3.0.0", secondLog, CancellationToken.None);
+        }
+
+        var old = Assert.Single(Directory.EnumerateDirectories(
+            fixture.ExeFiles, "QSVEnc.old.*"));
+        Assert.EndsWith("QSVEnc.old.20260811-123557", old, StringComparison.Ordinal);
+        Assert.Contains("version 3.0.0",
+            await RunAsync(Path.Combine(destination, "QSVEncC64.exe")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.ExeFiles, ".update_backup")));
+    }
+
+    [Fact]
+    public async Task サブディレクトリの設置後検証失敗は旧版全体を戻す()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new InstallerFixture();
+        var target = fixture.CreateSubDirectoryTarget("QSVEnc", "QSVEncC64.exe");
+        var destination = Path.Combine(fixture.ExeFiles, target.Id);
+        Directory.CreateDirectory(destination);
+        fixture.WriteScript(Path.Combine(destination, "QSVEncC64.exe"), "1.0.0");
+        File.WriteAllText(Path.Combine(destination, "old.dll"), "old");
+        var prepared = fixture.CreateDirectoryPrepared(target, "QSVEncC64.exe", "9.9.9",
+            ("new.dll", "new"));
+        var installer = fixture.CreateInstaller(UpdateOSKind.Windows);
+        using var log = new UpdateLog(fixture.Root);
+
+        var exception = await Assert.ThrowsAsync<UpdateInstallException>(() =>
+            installer.InstallAsync(target, prepared with { Version = "2.0.0" }, "2.0.0", log,
+                CancellationToken.None));
+
+        Assert.Equal("VERIFY_FAILED", exception.Code);
+        Assert.Contains("version 1.0.0",
+            await RunAsync(Path.Combine(destination, "QSVEncC64.exe")));
+        Assert.True(File.Exists(Path.Combine(destination, "old.dll")));
+        Assert.False(File.Exists(Path.Combine(destination, "new.dll")));
+    }
+
+    [Fact]
+    public void 起動時復旧は対象ディレクトリだけなら何もしない()
+    {
+        using var fixture = new InstallerFixture();
+        var destination = fixture.WriteDirectoryMarker("QSVEnc", "old");
+
+        var recovered = UpdateInstaller.CleanupStartupResidues(fixture.Root,
+            UpdateOSKind.Windows);
+
+        Assert.Equal(0, recovered);
+        Assert.Equal("old", File.ReadAllText(Path.Combine(destination, "marker")));
+    }
+
+    [Fact]
+    public void 起動時復旧は対象とNewがあればNewだけを削除する()
+    {
+        using var fixture = new InstallerFixture();
+        var destination = fixture.WriteDirectoryMarker("QSVEnc", "old");
+        var pending = fixture.WriteDirectoryMarker("QSVEnc.new.20260811-123456", "new");
+
+        var recovered = UpdateInstaller.CleanupStartupResidues(fixture.Root,
+            UpdateOSKind.Windows);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal("old", File.ReadAllText(Path.Combine(destination, "marker")));
+        Assert.False(Directory.Exists(pending));
+    }
+
+    [Fact]
+    public void 起動時復旧はOldとNewからNewを有効化する()
+    {
+        using var fixture = new InstallerFixture();
+        var old = fixture.WriteDirectoryMarker("QSVEnc.old.20260811-123456", "old");
+        var pending = fixture.WriteDirectoryMarker("QSVEnc.new.20260811-123456", "new");
+
+        var recovered = UpdateInstaller.CleanupStartupResidues(fixture.Root,
+            UpdateOSKind.Windows);
+        var destination = Path.Combine(fixture.ExeFiles, "QSVEnc");
+
+        Assert.Equal(2, recovered);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(destination, "marker")));
+        Assert.False(Directory.Exists(old));
+        Assert.False(Directory.Exists(pending));
+    }
+
+    [Fact]
+    public void 起動時復旧は対象とOldがあればOldだけを削除する()
+    {
+        using var fixture = new InstallerFixture();
+        var destination = fixture.WriteDirectoryMarker("QSVEnc", "new");
+        var old = fixture.WriteDirectoryMarker("QSVEnc.old.20260811-123456", "old");
+
+        var recovered = UpdateInstaller.CleanupStartupResidues(fixture.Root,
+            UpdateOSKind.Windows);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(destination, "marker")));
+        Assert.False(Directory.Exists(old));
+    }
+
+    [Fact]
+    public void 起動時復旧はOldだけなら旧版を戻す()
+    {
+        using var fixture = new InstallerFixture();
+        var old = fixture.WriteDirectoryMarker("QSVEnc.old.20260811-123456", "old");
+
+        var recovered = UpdateInstaller.CleanupStartupResidues(fixture.Root,
+            UpdateOSKind.Windows);
+        var destination = Path.Combine(fixture.ExeFiles, "QSVEnc");
+
+        Assert.Equal(1, recovered);
+        Assert.Equal("old", File.ReadAllText(Path.Combine(destination, "marker")));
+        Assert.False(Directory.Exists(old));
+    }
+
+    [Fact]
     public void 起動時は厳密一致する既知対象のNew残骸だけ削除する()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -350,6 +546,17 @@ public sealed class UpdateInstallerTests
             UpdateOSKind.Windows));
         Assert.False(UpdateManager.ShouldUpdateSettingPath(target, string.Empty,
             newPath, fixture.Root, UpdateOSKind.Windows));
+
+        var qsvenc = Assert.Single(UpdateCatalog.Targets, item => item.Id == "QSVEnc");
+        var oldQsvenc = Path.Combine(fixture.ExeFiles, "QSVEncC64.exe");
+        var newQsvenc = Path.Combine(fixture.ExeFiles, "QSVEnc", "QSVEncC64.exe");
+        Assert.True(UpdateManager.ShouldUpdateSettingPath(qsvenc, oldQsvenc,
+            newQsvenc, fixture.Root, UpdateOSKind.Windows));
+        Assert.True(UpdateManager.ShouldUpdateSettingPath(qsvenc, newQsvenc,
+            newQsvenc, fixture.Root, UpdateOSKind.Windows));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(qsvenc, oldQsvenc,
+            Path.Combine(fixture.ExeFiles, "QSVEnc", "nested", "QSVEncC64.exe"),
+            fixture.Root, UpdateOSKind.Windows));
     }
 
     [Fact]
@@ -366,6 +573,15 @@ public sealed class UpdateInstallerTests
             newPath, fixture.Root, UpdateOSKind.Linux));
         Assert.False(UpdateManager.ShouldUpdateSettingPath(fixture.Target,
             Path.Combine(fixture.Root, "custom", "tool"), newPath, fixture.Root,
+            UpdateOSKind.Linux));
+
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        var qsvenc = Assert.Single(UpdateCatalog.Targets, item => item.Id == "QSVEnc");
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(qsvenc, "qsvencc",
+            Path.Combine(fixture.ExeFiles, "QSVEnc", "qsvencc"), fixture.Root,
+            UpdateOSKind.Linux));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(qsvenc, "QSVEncC64.exe",
+            Path.Combine(fixture.ExeFiles, "QSVEncC64.exe"), fixture.Root,
             UpdateOSKind.Linux));
     }
 
@@ -411,17 +627,20 @@ public sealed class UpdateInstallerTests
             // (既定の比較子はカルチャ依存で "tsreplace" が "VCEEnc" より前に来る)
             .Select(target => target.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
 
-        var expected = environment.OS == UpdateOSKind.Linux
-            ? new[] { "NVEnc", "QSVEnc", "SVT-AV1", "VCEEnc", "tsreplace", "x264", "x265" }
-            : new[] { "SVT-AV1", "x264", "x265" };
+        var expected = new[]
+        {
+            "NVEnc", "QSVEnc", "SVT-AV1", "VCEEnc", "tsreplace", "x264", "x265",
+        };
         Assert.Equal(expected, applicable);
 
         var qsvenc = UpdateCatalog.Targets.Single(target => target.Id == "QSVEnc");
         Assert.Equal(InstallLayout.ExeFilesFlat,
             qsvenc.GetInstallLayout(UpdateOSKind.Linux));
         Assert.Null(UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Linux));
+        Assert.Null(UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Windows));
+        var application = UpdateCatalog.Targets.Single(target => target.Id == "Amatsukaze");
         Assert.Equal("layout_not_supported_yet",
-            UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Windows));
+            UpdateManager.GetCannotApplyReason(application, UpdateOSKind.Windows));
     }
 
     private static string Hash(string path) => Convert.ToHexString(
@@ -465,6 +684,31 @@ public sealed class UpdateInstallerTests
         public UpdateInstaller Installer { get; }
         public UpdateTargetDef Target { get; }
 
+        public UpdateInstaller CreateInstaller(UpdateOSKind os, DateTime? instant = null) =>
+            new UpdateInstaller(Root, () => instant ??
+                new DateTime(2026, 8, 11, 12, 34, 56, DateTimeKind.Utc), os);
+
+        public UpdateTargetDef CreateSubDirectoryTarget(string id, string executableName)
+        {
+            var target = new UpdateTargetDef
+            {
+                Id = id,
+                DisplayName = id,
+                Repository = "test/test",
+                AssetRules = Array.Empty<AssetRule>(),
+                WindowsLayout = InstallLayout.ExeFilesSubDir,
+                LinuxLayout = InstallLayout.ExeFilesFlat,
+                VersionArgument = "--version",
+                VersionPattern = @"version (?<ver>\d+\.\d+\.\d+)",
+                Payload = [new PayloadEntry
+                {
+                    Pattern = "^" + System.Text.RegularExpressions.Regex.Escape(executableName) + "$",
+                }],
+            };
+            Assert.True(target.TryCompileRegexes(out var error), error);
+            return target;
+        }
+
         public string WriteInstalled(string name, string version)
         {
             var path = Path.Combine(ExeFiles, name);
@@ -483,7 +727,30 @@ public sealed class UpdateInstallerTests
             return new PreparedUpdate("test", path, name, version);
         }
 
-        private static void WriteScript(string path, string version, int exitCode)
+        public PreparedUpdate CreateDirectoryPrepared(UpdateTargetDef target, string name,
+            string version, params (string Name, string Content)[] additionalFiles)
+        {
+            var transaction = UpdateTransaction.Create(Root,
+                (transactions.Count + 1).ToString("x8"));
+            transactions.Add(transaction);
+            var directory = transaction.GetTargetExtractDirectory(target.Id);
+            var path = Path.Combine(directory, name);
+            WriteScript(path, version);
+            foreach (var item in additionalFiles)
+            {
+                File.WriteAllText(Path.Combine(directory, item.Name), item.Content);
+            }
+            return new PreparedUpdate(target.Id, path, name, version, directory);
+        }
+
+        public string WriteDirectoryMarker(string name, string value)
+        {
+            var directory = Directory.CreateDirectory(Path.Combine(ExeFiles, name)).FullName;
+            File.WriteAllText(Path.Combine(directory, "marker"), value);
+            return directory;
+        }
+
+        public void WriteScript(string path, string version, int exitCode = 0)
         {
             File.WriteAllText(path, $"#!/bin/sh\necho version {version}\nexit {exitCode}\n");
             if (!OperatingSystem.IsWindows())

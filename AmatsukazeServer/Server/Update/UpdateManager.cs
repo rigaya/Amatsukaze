@@ -425,7 +425,7 @@ namespace Amatsukaze.Server.Update
         internal static string GetCannotApplyReason(UpdateTargetDef target, UpdateOSKind os,
             Setting setting = null, string root = null)
         {
-            if (target.GetInstallLayout(os) != InstallLayout.ExeFilesFlat)
+            if (target.GetInstallLayout(os) == InstallLayout.AppRootPartial)
             {
                 return "layout_not_supported_yet";
             }
@@ -1237,6 +1237,11 @@ namespace Amatsukaze.Server.Update
             {
                 return SettingPathKind.Other;
             }
+            if (os == UpdateOSKind.Linux &&
+                Path.GetFileName(path).EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return SettingPathKind.Other;
+            }
             if (os == UpdateOSKind.Linux && IsBareExecutableName(path))
             {
                 return target.Payload.Any(entry => entry.IsMatch(path))
@@ -1249,7 +1254,13 @@ namespace Amatsukaze.Server.Update
                 var fullPath = Path.GetFullPath(path);
                 var comparison = os == UpdateOSKind.Windows
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-                return string.Equals(Path.GetDirectoryName(fullPath), executableRoot, comparison) &&
+                var parent = Path.GetDirectoryName(fullPath);
+                var subDirectory = target.GetInstallLayout(os) == InstallLayout.ExeFilesSubDir
+                    ? Path.Combine(executableRoot, target.Id) : null;
+                var allowedDirectory = string.Equals(parent, executableRoot, comparison) ||
+                    (!string.IsNullOrEmpty(subDirectory) &&
+                     string.Equals(parent, subDirectory, comparison));
+                return allowedDirectory &&
                     target.Payload.Any(entry => entry.IsMatch(Path.GetFileName(fullPath)))
                     ? SettingPathKind.InstalledPayload : SettingPathKind.Other;
             }

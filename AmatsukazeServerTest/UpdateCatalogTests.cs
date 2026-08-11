@@ -58,10 +58,50 @@ public sealed class UpdateCatalogTests
     {
         Assert.True(UpdateCatalog.TryInitialize(out var error), error);
         var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == targetId);
-        var payload = Assert.Single(target.Payload);
+        var payload = Assert.Single(target.Payload, entry => entry.IsMatch(executableName));
 
         Assert.True(payload.IsMatch(executableName));
         Assert.True(payload.IsMatch("usr/bin/" + executableName));
         Assert.False(payload.IsMatch(executableName + ".exe"));
+    }
+
+    [Theory]
+    [InlineData("QSVEnc", "QSVEncC_8.26_x64.7z", "8.26")]
+    [InlineData("NVEnc", "NVEncC_9.31_x64.7z", "9.31")]
+    [InlineData("VCEEnc", "VCEEncC_9.12_x64.7z", "9.12")]
+    [InlineData("tsreplace", "tsreplace_0.19_x64.7z", "0.19")]
+    public void WindowsX64の実アセット名からバージョンを取得する(
+        string targetId, string assetName, string expectedVersion)
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == targetId);
+        var environment = new UpdateRuntimeEnvironment
+        {
+            OS = UpdateOSKind.Windows,
+            Architecture = UpdateArchitecture.X64,
+        };
+        var rule = Assert.Single(target.AssetRules, item => item.AppliesTo(environment));
+
+        var match = rule.Match(assetName);
+
+        Assert.True(match.Success);
+        Assert.Equal(expectedVersion, match.Groups["ver"].Value);
+    }
+
+    [Theory]
+    [InlineData("QSVEnc", "QSVEncC64.exe", "qsvencc")]
+    [InlineData("NVEnc", "NVEncC64.exe", "nvencc")]
+    [InlineData("VCEEnc", "VCEEncC64.exe", "vceencc")]
+    [InlineData("tsreplace", "tsreplace.exe", "tsreplace")]
+    public void WindowsPayloadは実行ファイルだけに一致しLinux名と混同しない(
+        string targetId, string executableName, string linuxName)
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == targetId);
+        var payload = Assert.Single(target.Payload, entry => entry.IsMatch(executableName));
+
+        Assert.True(payload.IsMatch(executableName));
+        Assert.False(payload.IsMatch(linuxName));
+        Assert.False(payload.IsMatch("usr/bin/" + linuxName));
     }
 }

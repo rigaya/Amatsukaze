@@ -14,7 +14,7 @@ namespace Amatsukaze.Server.Update
         long TotalBytes, int ExitCode);
 
     internal sealed record PreparedUpdate(string TargetId, string FilePath, string DestName,
-        string Version);
+        string Version, string SourceDirectory = null);
 
     internal sealed record PayloadMatch(string Path, PayloadEntry Payload);
 

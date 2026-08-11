@@ -101,7 +101,8 @@ namespace Amatsukaze.Server.Update
                 ("probe_out", probe.Output),
                 ("version", actualVersion), ("expected", expectedVersion),
                 ("dest", destinationName));
-            return new PreparedUpdate(target.Id, selected.Path, destinationName, actualVersion);
+            return new PreparedUpdate(target.Id, selected.Path, destinationName, actualVersion,
+                extraction.DirectoryPath);
         }
 
     }
