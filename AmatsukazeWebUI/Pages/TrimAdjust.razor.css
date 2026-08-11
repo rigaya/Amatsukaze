@@ -243,6 +243,8 @@
     overflow: hidden;
     padding: 8px;
     gap: 6px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .trim-preview-container {
@@ -435,7 +437,7 @@
     justify-content: center;
     gap: 4px;
     transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
-    touch-action: manipulation;
+    touch-action: none;
 }
 
 .trim-control-btn:hover {
