@@ -981,6 +981,19 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool TrimAdjustDeleteCmTask { get; set; }
 
+        // 自動更新チェックを行う（未設定は有効として扱う）
+        [DataMember]
+        public bool? UpdateCheckEnabled { get; set; }
+        // 更新チェック間隔（時間、0 は既定値の 24 時間として扱う）
+        [DataMember]
+        public int UpdateCheckIntervalHours { get; set; }
+        // 更新チェックから除外する対象 ID
+        [DataMember]
+        public List<string> UpdateDisabledTargets { get; set; }
+        // 更新時に使用するプロキシ（空ならシステム設定に従う）
+        [DataMember]
+        public string UpdateProxy { get; set; }
+
         public ExtensionDataObject ExtensionData { get; set; }
 
         public string ActualWorkPath
@@ -1015,6 +1028,8 @@ namespace Amatsukaze.Server
         public string LastAddQueueBat { get; set; }
         [DataMember]
         public List<string> OutputPathHistory { get; set; }
+        [DataMember]
+        public DateTime? LastUpdateCheckedAt { get; set; }
 
         public ExtensionDataObject ExtensionData { get; set; }
     }

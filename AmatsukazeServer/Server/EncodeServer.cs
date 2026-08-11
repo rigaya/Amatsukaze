@@ -1,6 +1,7 @@
 ﻿#define PROFILE
 using Amatsukaze.Lib;
 using Amatsukaze.Server.Rest;
+using Amatsukaze.Server.Update;
 using Amatsukaze.Shared;
 using System;
 using System.Collections.Generic;
@@ -59,6 +60,7 @@ namespace Amatsukaze.Server
         private MultiUserClient multiClient;
         private RestStateStore restState;
         private RestApiHost restApiHost;
+        internal UpdateManager UpdateManager { get; private set; }
 
         private Action finishRequested;
 
@@ -291,6 +293,19 @@ namespace Amatsukaze.Server
             }
         }
 
+        internal DateTime? LastUpdateCheckedAt {
+            get { return UIState_.LastUpdateCheckedAt; }
+        }
+
+        internal void SetLastUpdateCheckedAt(DateTime value)
+        {
+            if (UIState_.LastUpdateCheckedAt != value)
+            {
+                UIState_.LastUpdateCheckedAt = value;
+                uiStateUpdated = true;
+            }
+        }
+
         public EncodeServer(int port, IUserClient client, Action finishRequested)
         {
 #if PROFILE
@@ -488,6 +503,7 @@ namespace Amatsukaze.Server
                 AppData_.setting.NumGPU, AppData_.setting.MaxGPUResources);
 
             pauseScheduler = new PauseScheduler(this, workerPool);
+            UpdateManager = new UpdateManager(this);
 
 #if PROFILE
             prof.PrintTime("EncodeServer 2");
@@ -623,6 +639,8 @@ namespace Amatsukaze.Server
                     Util.AddLog($"[REST] APIサーバ起動失敗: {ex.GetType().Name}: {ex.Message}", ex);
                 }
             }
+            // 更新チェックはサーバー初期化の完了後にバックグラウンドで開始する
+            UpdateManager.Start();
         }
 
         #region IDisposable Support
@@ -637,6 +655,8 @@ namespace Amatsukaze.Server
                 if (disposing)
                 {
                     // TODO: マネージ状態を破棄します (マネージ オブジェクト)。
+
+                    UpdateManager?.Dispose();
 
                     // キュー状態を保存する
                     try
@@ -1503,6 +1523,20 @@ namespace Amatsukaze.Server
             }
         }
 
+        private static void NormalizeUpdateSettings(Setting setting)
+        {
+            if (setting == null)
+            {
+                return;
+            }
+            if (setting.UpdateCheckIntervalHours <= 0)
+            {
+                setting.UpdateCheckIntervalHours = 24;
+            }
+            setting.UpdateDisabledTargets ??= new List<string>();
+            setting.UpdateProxy ??= string.Empty;
+        }
+
         private Setting GetDefaultSetting()
         {
             var setting = SetDefaultPath(new Setting()
@@ -1511,10 +1545,15 @@ namespace Amatsukaze.Server
                 NumParallelLogoAnalysis = 0,
                 DeleteOldLogsDays = 180,
                 AutoLogoPendingDisabled = false,
-                DeleteTaskWorkDirOnQueueRemove = false
+                DeleteTaskWorkDirOnQueueRemove = false,
+                UpdateCheckEnabled = true,
+                UpdateCheckIntervalHours = 24,
+                UpdateDisabledTargets = new List<string>(),
+                UpdateProxy = string.Empty
             });
             NormalizeTrimAdjustSettings(setting);
             NormalizeAutoLogoPendingSettings(setting);
+            NormalizeUpdateSettings(setting);
             return setting;
         }
 
@@ -1564,6 +1603,7 @@ namespace Amatsukaze.Server
             }
             NormalizeTrimAdjustSettings(AppData_.setting);
             NormalizeAutoLogoPendingSettings(AppData_.setting);
+            NormalizeUpdateSettings(AppData_.setting);
             if (AppData_.scriptData == null)
             {
                 AppData_.scriptData = new MakeScriptData();
@@ -3590,6 +3630,7 @@ namespace Amatsukaze.Server
                     SetDefaultPath(data.Setting);
                     CheckSetting(null, data.Setting);
                     NormalizeAutoLogoPendingSettings(data.Setting);
+                    NormalizeUpdateSettings(data.Setting);
                     AppData_.setting = data.Setting;
                     workerPool.SetNumParallel(data.Setting.NumParallel);
                     SetScheduleParam(AppData_.setting.SchedulingEnabled,
