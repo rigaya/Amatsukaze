@@ -922,6 +922,7 @@ namespace Amatsukaze.Server.Update
         internal async Task ApplyTargetsAsync(IReadOnlyList<UpdateApplyTarget> targets,
             UpdateLog log, UpdateJobRecord job, CancellationToken cancellationToken)
         {
+            EnsureWritableUpdateDirectories(appRoot, log);
             using var writer = await UpdateWriterLease.AcquireAsync(applyLock,
                 cancellationToken).ConfigureAwait(false);
             using var lease = await UpdateMaintenanceLease.AcquireAsync(server,
@@ -955,6 +956,35 @@ namespace Amatsukaze.Server.Update
                     job.AddTargetResult(applyTarget.Target.Id, false, code, ex.Message);
                     log.Write(applyTarget.Target.Id, "S99_SUMMARY", "NG", ("code", code),
                         ("failed_stage", stage), ("message", ex.Message));
+                }
+            }
+        }
+
+        internal static void EnsureWritableUpdateDirectories(string appRoot, UpdateLog log)
+        {
+            var executableRoot = Path.GetFullPath(Path.Combine(appRoot, "exe_files"));
+            var temporaryRoot = Path.Combine(executableRoot, ".update_tmp");
+            // Kind はログ用の識別子、Label は利用者に見えるメッセージ用の表記
+            foreach (var item in new[]
+            {
+                (Kind: "install", Label: "配置先", Path: executableRoot, Create: false),
+                (Kind: "temporary", Label: "一時領域", Path: temporaryRoot, Create: true),
+            })
+            {
+                var writable = UpdateDiagnostics.CheckDirectoryWritable(item.Path, item.Create);
+                if (writable == false)
+                {
+                    log.Write("-", "S01_PRECHECK", "NG",
+                        ("code", "WRITE_ACCESS_DENIED"), ("area", item.Kind),
+                        ("path", item.Path));
+                    throw new UpdatePreparationException("WRITE_ACCESS_DENIED", "S01_PRECHECK",
+                        $"更新用の{item.Label}へ書き込めません: {item.Path}");
+                }
+                if (!writable.HasValue)
+                {
+                    log.WriteDiagnostic("-", "S01_PRECHECK",
+                        ("code", "WRITE_CHECK_UNAVAILABLE"), ("area", item.Kind),
+                        ("path", item.Path), ("action", "continue"));
                 }
             }
         }

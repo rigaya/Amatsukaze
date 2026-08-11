@@ -36,10 +36,10 @@ namespace Amatsukaze.Server.Update
                 ("process_arch", Safe(() => RuntimeInformation.ProcessArchitecture.ToString())),
                 ("dotnet", Safe(() => RuntimeInformation.FrameworkDescription)),
                 ("app_root", appRoot),
-                ("app_writable", Safe(() => CheckDirectoryWritable(appRoot) ? "yes" : "no")),
+                ("app_writable", Safe(() => FormatWritable(CheckDirectoryWritable(appRoot)))),
                 ("app_free_bytes", Safe(() => GetAvailableFreeSpace(appRoot))),
                 ("install_root", installRoot),
-                ("install_writable", Safe(() => CheckDirectoryWritable(installRoot) ? "yes" : "no")),
+                ("install_writable", Safe(() => FormatWritable(CheckDirectoryWritable(installRoot)))),
                 ("install_free_bytes", Safe(() => GetAvailableFreeSpace(installRoot))),
                 ("temp_free_bytes", Safe(() => GetAvailableFreeSpace(Path.GetTempPath()))),
                 ("http_proxy", Safe(() => SanitizeProxy(Environment.GetEnvironmentVariable("HTTP_PROXY")))),
@@ -121,21 +121,24 @@ namespace Amatsukaze.Server.Update
             return false;
         }
 
-        public static async Task LogDnsFailureAsync(UpdateLog log, string target, Exception exception)
+        public static async Task LogDnsFailureAsync(UpdateLog log, string target,
+            Exception exception, string apiHost = null)
         {
             var values = new List<(string Key, object Value)>
             {
                 ("code", "DNS_FAILED"),
                 ("type", exception?.GetType().Name),
             };
-            foreach (var host in DiagnosticHosts)
+            var diagnosticHosts = GetDiagnosticHosts(apiHost);
+            for (var index = 0; index < diagnosticHosts.Count; index++)
             {
-                values.Add((host == "api.github.com" ? "api_dns" : "objects_dns",
+                var host = diagnosticHosts[index];
+                values.Add((index == 0 ? "api_dns" : "objects_dns",
                     await ResolveHostAsync(host).ConfigureAwait(false)));
-                values.Add((host == "api.github.com" ? "api_tcp443" : "objects_tcp443",
+                values.Add((index == 0 ? "api_tcp443" : "objects_tcp443",
                     await ProbeTcpAsync(host).ConfigureAwait(false)));
             }
-            var tls = await ProbeTlsAsync("api.github.com").ConfigureAwait(false);
+            var tls = await ProbeTlsAsync(diagnosticHosts[0]).ConfigureAwait(false);
             values.Add(("tls", tls.Protocol));
             values.Add(("cert_issuer", tls.Issuer));
             values.Add(("tls_probe", tls.Result));
@@ -145,21 +148,24 @@ namespace Amatsukaze.Server.Update
             log.WriteDiagnostic(target, "S03_CONNECT", values.ToArray());
         }
 
-        public static async Task LogConnectionFailureAsync(UpdateLog log, string target, Exception exception)
+        public static async Task LogConnectionFailureAsync(UpdateLog log, string target,
+            Exception exception, string apiHost = null)
         {
             var values = new List<(string Key, object Value)>
             {
                 ("code", exception is OperationCanceledException ? "CONNECT_TIMEOUT" : "CONNECT_FAILED"),
                 ("type", exception?.GetType().Name),
             };
-            foreach (var host in DiagnosticHosts)
+            var diagnosticHosts = GetDiagnosticHosts(apiHost);
+            for (var index = 0; index < diagnosticHosts.Count; index++)
             {
-                values.Add((host == "api.github.com" ? "api_dns" : "objects_dns",
+                var host = diagnosticHosts[index];
+                values.Add((index == 0 ? "api_dns" : "objects_dns",
                     await ResolveHostAsync(host).ConfigureAwait(false)));
-                values.Add((host == "api.github.com" ? "api_tcp443" : "objects_tcp443",
+                values.Add((index == 0 ? "api_tcp443" : "objects_tcp443",
                     await ProbeTcpAsync(host).ConfigureAwait(false)));
             }
-            var tls = await ProbeTlsAsync("api.github.com").ConfigureAwait(false);
+            var tls = await ProbeTlsAsync(diagnosticHosts[0]).ConfigureAwait(false);
             values.Add(("tls", tls.Protocol));
             values.Add(("cert_issuer", tls.Issuer));
             values.Add(("tls_probe", tls.Result));
@@ -169,9 +175,10 @@ namespace Amatsukaze.Server.Update
             log.WriteDiagnostic(target, "S03_CONNECT", values.ToArray());
         }
 
-        public static async Task LogTlsFailureAsync(UpdateLog log, string target, Exception exception)
+        public static async Task LogTlsFailureAsync(UpdateLog log, string target,
+            Exception exception, string apiHost = null)
         {
-            var probe = await ProbeTlsAsync("api.github.com").ConfigureAwait(false);
+            var probe = await ProbeTlsAsync(apiHost ?? DiagnosticHosts[0]).ConfigureAwait(false);
             log.WriteDiagnostic(target, "S03_CONNECT",
                 ("code", "TLS_FAILED"),
                 ("type", exception?.GetType().Name),
@@ -231,19 +238,33 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static bool CheckDirectoryWritable(string directory)
+        internal static bool? CheckDirectoryWritable(string directory,
+            bool createIfMissing = false)
         {
             var testPath = Path.Combine(directory, ".amatsukaze-update-write-test-" + Guid.NewGuid().ToString("N"));
             try
             {
+                // シンボリックリンク先でも書き込み可否は実際に試して判定する。
+                // ここで作るのは自前の一時ファイルだけなので、リンクを辿っても危険はない。
+                // 判定不能 (null) を返すと exe_files をリンクにしている環境で
+                // S00_ENV の app_writable / install_writable が常に "?" になり、
+                // 権限まわりの切り分けができなくなる。
+                if (createIfMissing)
+                {
+                    Directory.CreateDirectory(directory);
+                }
                 using (File.Create(testPath, 1, FileOptions.DeleteOnClose))
                 {
                 }
                 return true;
             }
-            catch
+            catch (UnauthorizedAccessException)
             {
                 return false;
+            }
+            catch
+            {
+                return null;
             }
             finally
             {
@@ -256,6 +277,12 @@ namespace Amatsukaze.Server.Update
                 }
             }
         }
+
+        private static string FormatWritable(bool? writable) => writable.HasValue
+            ? writable.Value ? "yes" : "no" : "?";
+
+        private static IReadOnlyList<string> GetDiagnosticHosts(string apiHost) =>
+            string.IsNullOrWhiteSpace(apiHost) ? DiagnosticHosts : new[] { apiHost };
 
         private static long GetAvailableFreeSpace(string path)
         {

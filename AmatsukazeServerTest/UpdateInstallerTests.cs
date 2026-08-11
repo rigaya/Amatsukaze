@@ -100,6 +100,67 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public void T18_起動時掃除後も対象実行ファイルは旧版として残る()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new InstallerFixture();
+        var installed = fixture.WriteInstalled("x264", "1.0.0");
+        var installedHash = Hash(installed);
+        var residue = Path.Combine(fixture.ExeFiles, "x264.new.20260811-123456");
+        File.WriteAllText(residue, "未完了の新版");
+        var stale = Path.Combine(fixture.ExeFiles, ".update_tmp", "deadbeef",
+            "extract", "x264");
+        Directory.CreateDirectory(stale);
+        File.WriteAllText(Path.Combine(stale, "x264"), "一時ファイル");
+
+        UpdateTransaction.CleanupStale(fixture.Root);
+        UpdateInstaller.CleanupStartupResidues(fixture.Root);
+
+        Assert.True(File.Exists(installed));
+        Assert.True(new FileInfo(installed).Length > 0);
+        Assert.Equal(installedHash, Hash(installed));
+        Assert.False(File.Exists(residue));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(
+            Path.Combine(fixture.ExeFiles, ".update_tmp")));
+    }
+
+    [NonRootLinuxFact]
+    public void T14_配置先が書き込み不可ならS01で事前拒否する()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(),
+            "amatsukaze-readonly-test-" + Guid.NewGuid());
+        var executableRoot = Directory.CreateDirectory(Path.Combine(root, "exe_files")).FullName;
+        var readOnlyMode = UnixFileMode.UserRead | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+        try
+        {
+            File.SetUnixFileMode(executableRoot, readOnlyMode);
+            using var log = new UpdateLog(root);
+
+            var exception = Assert.Throws<UpdatePreparationException>(() =>
+                UpdateManager.EnsureWritableUpdateDirectories(root, log));
+            log.Dispose();
+            var text = File.ReadAllText(log.FilePath);
+
+            Assert.Equal("WRITE_ACCESS_DENIED", exception.Code);
+            Assert.Equal("S01_PRECHECK", exception.Stage);
+            Assert.Contains("area=install", text);
+            Assert.Contains("path=", text);
+        }
+        finally
+        {
+            if (Directory.Exists(executableRoot))
+            {
+                File.SetUnixFileMode(executableRoot, UnixFileMode.UserRead |
+                    UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public async Task バックアップは新しい二世代だけ保持する()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -383,6 +444,21 @@ public sealed class UpdateInstallerTests
         {
             foreach (var transaction in transactions) transaction.Dispose();
             Directory.Delete(Root, recursive: true);
+        }
+    }
+}
+
+internal sealed class NonRootLinuxFactAttribute : FactAttribute
+{
+    public NonRootLinuxFactAttribute()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Skip = "Linux のアクセス権テストです";
+        }
+        else if (string.Equals(Environment.UserName, "root", StringComparison.Ordinal))
+        {
+            Skip = "root は配置先のアクセス権を無視するため検証できません";
         }
     }
 }

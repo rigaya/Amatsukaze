@@ -39,10 +39,35 @@ namespace Amatsukaze.Server.Update
                 File.SetUnixFileMode(selected.Path, mode | UnixFileMode.UserExecute);
             }
             await Task.Delay(AntivirusDeletionGrace, cancellationToken).ConfigureAwait(false);
-            if (!File.Exists(selected.Path) || new FileInfo(selected.Path).Length == 0)
+            var existsAfterGrace = File.Exists(selected.Path);
+            long sizeAfterGrace = 0;
+            try
             {
-                throw new UpdatePreparationException("VERIFY_FAILED", "S09_STAGE",
-                    "配置対象ファイルが消失または空になりました");
+                if (existsAfterGrace)
+                {
+                    sizeAfterGrace = new FileInfo(selected.Path).Length;
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                existsAfterGrace = false;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                existsAfterGrace = false;
+            }
+            if (!existsAfterGrace || sizeAfterGrace == 0)
+            {
+                const string hint = "Amatsukaze の exe_files フォルダをウイルス対策ソフトの除外設定に追加してから再試行してください";
+                log.Write(target.Id, "S09_STAGE", "NG",
+                    ("code", "ANTIVIRUS_SUSPECTED"),
+                    ("expect", selected.Path),
+                    ("exists", existsAfterGrace ? "yes" : "no"),
+                    ("extracted_size", sizeAfterGrace),
+                    ("recheck_after", AntivirusDeletionGrace.TotalMilliseconds + "ms"),
+                    ("hint", hint));
+                throw new UpdatePreparationException("ANTIVIRUS_SUSPECTED", "S09_STAGE",
+                    "配置対象ファイルが消失または空になりました。" + hint);
             }
 
             var probe = await UpdateExecutableProbe.RunAsync(selected.Path, target.VersionArgument,

@@ -178,6 +178,75 @@ public sealed class ArchiveExtractorTests
     }
 
     [Fact]
+    public async Task T09_破損アーカイブは終了コードと標準エラーを記録する()
+    {
+        using var fixture = new ArchiveFixture();
+        var archive = fixture.CreateZip(("tool", Script));
+        using (var stream = new FileStream(archive, FileMode.Open, FileAccess.Write))
+        {
+            stream.SetLength(Math.Max(1, stream.Length / 2));
+        }
+        using var log = new UpdateLog(fixture.Root);
+
+        var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
+            fixture.Extractor.ExtractAsync(fixture.DownloadResult(archive, "zip"),
+                fixture.ExtractDirectory, "test", log, CancellationToken.None));
+        log.Dispose();
+        var text = await File.ReadAllTextAsync(log.FilePath);
+
+        Assert.Equal("EXTRACT_FAILED", exception.Code);
+        Assert.Contains("[S08_EXTRACT] NG code=EXTRACT_FAILED", text);
+        Assert.Contains("exit=", text);
+        Assert.Contains("stderr=", text);
+    }
+
+    [Fact]
+    public async Task T11_展開後にPayloadが消えたらウイルス対策の案内を記録する()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new ArchiveFixture();
+        Directory.CreateDirectory(fixture.ExtractDirectory);
+        var payload = Path.Combine(fixture.ExtractDirectory, "tool");
+        await File.WriteAllTextAsync(payload, Script);
+        using var log = new UpdateLog(fixture.Root);
+        var preparation = new UpdateStaging().PrepareAsync(CreateTarget("^tool$"),
+            new ExtractionResult(fixture.ExtractDirectory, 1, Script.Length, 0),
+            "1.2.3", log, CancellationToken.None);
+        await Task.Delay(100);
+        File.Delete(payload);
+
+        var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() => preparation);
+        log.Dispose();
+        var text = await File.ReadAllTextAsync(log.FilePath);
+
+        Assert.Equal("ANTIVIRUS_SUSPECTED", exception.Code);
+        Assert.Contains("[S09_STAGE] NG code=ANTIVIRUS_SUSPECTED", text);
+        Assert.Contains("exe_files", exception.Message);
+        Assert.Contains("除外設定", exception.Message);
+    }
+
+    [Fact]
+    public async Task T12_実行できないPayloadは既存ファイルを変えず検証失敗にする()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new ArchiveFixture();
+        Directory.CreateDirectory(fixture.ExtractDirectory);
+        await File.WriteAllTextAsync(Path.Combine(fixture.ExtractDirectory, "tool"),
+            "#!/bin/sh\nexit 1\n");
+        using var log = new UpdateLog(fixture.Root);
+
+        var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
+            new UpdateStaging().PrepareAsync(CreateTarget("^tool$"),
+                new ExtractionResult(fixture.ExtractDirectory, 1, 17, 0),
+                "1.2.3", log, CancellationToken.None));
+        log.Dispose();
+        var text = await File.ReadAllTextAsync(log.FilePath);
+
+        Assert.Equal("VERIFY_FAILED", exception.Code);
+        Assert.Contains("[S09_STAGE] NG code=VERIFY_FAILED", text);
+    }
+
+    [Fact]
     public async Task 一トランザクションの二対象をまとめて破棄する()
     {
         using var fixture = new ArchiveFixture();

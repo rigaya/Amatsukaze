@@ -35,15 +35,27 @@ namespace Amatsukaze.Server.Update
     internal sealed class ReleaseClient : IDisposable
     {
         private const int MaxAttempts = 3;
+        private const string DefaultApiBaseUrl = "https://api.github.com/";
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
+        private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(8);
         private readonly object cacheLock = new object();
         private readonly Dictionary<string, (DateTime CachedAtUtc, IReadOnlyList<ReleaseInfo> Releases)> cache =
             new Dictionary<string, (DateTime, IReadOnlyList<ReleaseInfo>)>(StringComparer.OrdinalIgnoreCase);
         private readonly HttpClient client;
+        private readonly Uri apiBaseUri;
+        private readonly TimeSpan requestTimeout;
+        private readonly string diagnosticApiHost;
 
-        public ReleaseClient(string proxy)
+        public ReleaseClient(string proxy, string apiBaseUrl = null,
+            TimeSpan? requestTimeout = null)
         {
+            var effectiveBaseUrl = string.IsNullOrWhiteSpace(apiBaseUrl)
+                ? DefaultApiBaseUrl : apiBaseUrl;
+            diagnosticApiHost = string.IsNullOrWhiteSpace(apiBaseUrl) ? null :
+                new Uri(effectiveBaseUrl, UriKind.Absolute).Host;
+            apiBaseUri = new Uri(EnsureTrailingSlash(effectiveBaseUrl),
+                UriKind.Absolute);
+            this.requestTimeout = requestTimeout ?? DefaultRequestTimeout;
             client = UpdateHttpClientFactory.Create(proxy, githubApi: true);
         }
 
@@ -67,7 +79,7 @@ namespace Amatsukaze.Server.Update
                 {
                     var first = cached.Releases.FirstOrDefault();
                     log.Write(target, "S03_CONNECT", "OK",
-                        ("host", "api.github.com"),
+                        ("host", apiBaseUri.Host),
                         ("status", 200),
                         ("elapsed", "0ms"),
                         ("cache", "yes"),
@@ -85,8 +97,8 @@ namespace Amatsukaze.Server.Update
                 try
                 {
                     using var dnsTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    dnsTimeout.CancelAfter(RequestTimeout);
-                    addresses = await Dns.GetHostAddressesAsync("api.github.com", dnsTimeout.Token)
+                    dnsTimeout.CancelAfter(requestTimeout);
+                    addresses = await Dns.GetHostAddressesAsync(apiBaseUri.Host, dnsTimeout.Token)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is SocketException || ex is OperationCanceledException)
@@ -102,18 +114,19 @@ namespace Amatsukaze.Server.Update
                         ("code", "DNS_FAILED"),
                         ("type", ex.GetType().Name),
                         ("attempt", attempt + "/" + MaxAttempts));
-                    await UpdateDiagnostics.LogDnsFailureAsync(log, target, ex).ConfigureAwait(false);
+                    await UpdateDiagnostics.LogDnsFailureAsync(log, target, ex,
+                        diagnosticApiHost).ConfigureAwait(false);
                     return null;
                 }
 
                 var stopwatch = Stopwatch.StartNew();
                 using var request = new HttpRequestMessage(HttpMethod.Get,
-                    "https://api.github.com/repos/" + repository +
-                    (listReleases ? "/releases?per_page=30" : "/releases/latest"));
+                    new Uri(apiBaseUri, "repos/" + repository +
+                    (listReleases ? "/releases?per_page=30" : "/releases/latest")));
                 try
                 {
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeout.CancelAfter(RequestTimeout);
+                    timeout.CancelAfter(requestTimeout);
                     using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
                         timeout.Token).ConfigureAwait(false);
                     var headers = CollectHeaders(response);
@@ -132,7 +145,7 @@ namespace Amatsukaze.Server.Update
                             continue;
                         }
                         log.Write(target, "S03_CONNECT", "NG",
-                            ("host", "api.github.com"),
+                            ("host", apiBaseUri.Host),
                             ("dns", string.Join(",", addresses)),
                             ("status", (int)response.StatusCode),
                             ("elapsed", stopwatch.ElapsedMilliseconds + "ms"),
@@ -151,7 +164,7 @@ namespace Amatsukaze.Server.Update
                     var releases = ParseReleases(repository, responseBody, rateRemaining, rateReset,
                         listReleases);
                     log.Write(target, "S03_CONNECT", "OK",
-                        ("host", "api.github.com"),
+                        ("host", apiBaseUri.Host),
                         ("dns", string.Join(",", addresses)),
                         ("tls", "ok"),
                         ("status", (int)response.StatusCode),
@@ -174,10 +187,11 @@ namespace Amatsukaze.Server.Update
                     }
                     log.Write(target, "S03_CONNECT", "NG",
                         ("code", "CONNECT_TIMEOUT"),
-                        ("timeout", RequestTimeout.TotalSeconds + "s"),
+                        ("timeout", requestTimeout.TotalSeconds + "s"),
                         ("elapsed", stopwatch.ElapsedMilliseconds + "ms"),
                         ("attempt", attempt + "/" + MaxAttempts));
-                    await UpdateDiagnostics.LogConnectionFailureAsync(log, target, ex).ConfigureAwait(false);
+                    await UpdateDiagnostics.LogConnectionFailureAsync(log, target, ex,
+                        diagnosticApiHost).ConfigureAwait(false);
                     return null;
                 }
                 catch (HttpRequestException ex) when (FindInner<AuthenticationException>(ex) != null)
@@ -188,7 +202,8 @@ namespace Amatsukaze.Server.Update
                         ("type", ex.GetType().Name),
                         ("msg", ex.Message),
                         ("attempt", attempt + "/" + MaxAttempts));
-                    await UpdateDiagnostics.LogTlsFailureAsync(log, target, ex).ConfigureAwait(false);
+                    await UpdateDiagnostics.LogTlsFailureAsync(log, target, ex,
+                        diagnosticApiHost).ConfigureAwait(false);
                     return null;
                 }
                 catch (HttpRequestException ex)
@@ -203,7 +218,8 @@ namespace Amatsukaze.Server.Update
                         ("type", ex.GetType().Name),
                         ("msg", ex.Message),
                         ("attempt", attempt + "/" + MaxAttempts));
-                    await UpdateDiagnostics.LogConnectionFailureAsync(log, target, ex).ConfigureAwait(false);
+                    await UpdateDiagnostics.LogConnectionFailureAsync(log, target, ex,
+                        diagnosticApiHost).ConfigureAwait(false);
                     return null;
                 }
                 catch (JsonException ex)
@@ -280,6 +296,9 @@ namespace Amatsukaze.Server.Update
             return element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString() : null;
         }
+
+        private static string EnsureTrailingSlash(string value) =>
+            value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
 
         private static Dictionary<string, string> CollectHeaders(HttpResponseMessage response)
         {
