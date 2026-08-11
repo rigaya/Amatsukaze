@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using Amatsukaze.Server.Update;
 using Xunit;
 
@@ -24,6 +26,26 @@ public sealed class ArchiveExtractorTests
         var prepared = await new UpdateStaging().PrepareAsync(CreateTarget("^tool$"), extraction,
             "1.2.3", log, CancellationToken.None);
 
+        Assert.Equal("1.2.3", prepared.Version);
+        Assert.True(File.Exists(prepared.FilePath));
+    }
+
+    [Fact]
+    public async Task Debを二段パイプで展開してPayloadを一件に確定する()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new ArchiveFixture();
+        var archive = fixture.CreateDeb(("usr/bin/tool", Script));
+        using var log = new UpdateLog(fixture.Root);
+        var target = CreateTarget(@"^(?:usr/bin/)?tool$");
+
+        var extraction = await fixture.Extractor.ExtractAsync(
+            fixture.DownloadResult(archive, "deb"), fixture.ExtractDirectory,
+            "test", log, CancellationToken.None, target.Payload);
+        var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+            "1.2.3", log, CancellationToken.None);
+
+        Assert.Equal("tool", prepared.DestName);
         Assert.Equal("1.2.3", prepared.Version);
         Assert.True(File.Exists(prepared.FilePath));
     }
@@ -348,6 +370,45 @@ public sealed class ArchiveExtractorTests
             Run("tar", ["-cf", tar, "-C", source, "."]);
             Run("xz", [tar]);
             return tar + ".xz";
+        }
+
+        public string CreateDeb(params (string Name, string Content)[] entries)
+        {
+            var controlTarXz = CreateTarXz(("control", "Package: test\nVersion: 1\n"));
+            var dataTarXz = CreateTarXz(entries);
+            var path = Path.Combine(downloadDirectory, Guid.NewGuid() + ".deb");
+            using var output = File.Create(path);
+            output.Write(Encoding.ASCII.GetBytes("!<arch>\n"));
+            WriteArMember(output, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));
+            WriteArMember(output, "control.tar.xz", File.ReadAllBytes(controlTarXz));
+            WriteArMember(output, "data.tar.xz", File.ReadAllBytes(dataTarXz));
+            return path;
+        }
+
+        private static void WriteArMember(Stream output, string name, byte[] content)
+        {
+            const int NameWidth = 16;
+            const int TimestampWidth = 12;
+            const int OwnerWidth = 6;
+            const int GroupWidth = 6;
+            const int ModeWidth = 8;
+            const int SizeWidth = 10;
+            // メンバ名に ar 慣習の末尾 '/' を付けてはいけない。7-Zip は先頭メンバが
+            // 厳密に "debian-binary" であることで SubType = deb と判定し、
+            // data.tar.xz だけを露出する。付けると汎用 ar と見なされて 3 メンバ全部が
+            // 露出し、x -so がそれらを連結して出すため tar として壊れる。
+            var header = name.PadRight(NameWidth) +
+                "0".PadRight(TimestampWidth) +
+                "0".PadRight(OwnerWidth) +
+                "0".PadRight(GroupWidth) +
+                "100644".PadRight(ModeWidth) +
+                content.Length.ToString(CultureInfo.InvariantCulture).PadRight(SizeWidth) + "`\n";
+            output.Write(Encoding.ASCII.GetBytes(header));
+            output.Write(content);
+            if ((content.Length & 1) != 0)
+            {
+                output.WriteByte((byte)'\n');
+            }
         }
 
         public string CreateLinkedTarXz(bool hardLink)

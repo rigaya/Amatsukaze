@@ -160,7 +160,8 @@ namespace Amatsukaze.Server.Update
                             error = $"不明な更新対象です: {id}";
                             return false;
                         }
-                        var cannotApplyReason = GetCannotApplyReason(target, environment.OS);
+                        var cannotApplyReason = GetCannotApplyReason(target, environment.OS,
+                            server.AppData_?.setting, appRoot);
                         if (cannotApplyReason == "layout_not_supported_yet")
                         {
                             error = $"まだ適用できない配置形式です: {id} " +
@@ -171,6 +172,12 @@ namespace Amatsukaze.Server.Update
                         {
                             error = $"配置対象がまだ宣言されていません: {id} " +
                                 "(payload_not_defined_yet)";
+                            return false;
+                        }
+                        if (cannotApplyReason == "setting_path_outside_exe_files")
+                        {
+                            error = $"設定のパスが exe_files の外を指しているため自動更新できません: {id} " +
+                                "(setting_path_outside_exe_files)";
                             return false;
                         }
                         var state = states.FirstOrDefault(item =>
@@ -298,7 +305,8 @@ namespace Amatsukaze.Server.Update
                         ? UpdateTargetStatus.Disabled
                         : environment.IsDocker && target.IsApplication
                             ? UpdateTargetStatus.Unsupported : UpdateTargetStatus.Unknown;
-                    var cannotApplyReason = GetCannotApplyReason(target, environment.OS);
+                    var cannotApplyReason = GetCannotApplyReason(target, environment.OS,
+                        setting, appRoot);
                     items.Add(new UpdateItemView
                     {
                         Id = target.Id,
@@ -414,15 +422,31 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        internal static string GetCannotApplyReason(UpdateTargetDef target, UpdateOSKind os)
+        internal static string GetCannotApplyReason(UpdateTargetDef target, UpdateOSKind os,
+            Setting setting = null, string root = null)
         {
             if (target.GetInstallLayout(os) != InstallLayout.ExeFilesFlat)
             {
                 return "layout_not_supported_yet";
             }
             // Payload を宣言する変更は、対象の展開・設置経路が揃ってから入れること。
-            return target.Payload == null || target.Payload.Length == 0
-                ? "payload_not_defined_yet" : null;
+            if (target.Payload == null || target.Payload.Length == 0)
+            {
+                return "payload_not_defined_yet";
+            }
+            if (os != UpdateOSKind.Linux || setting == null || string.IsNullOrWhiteSpace(root))
+            {
+                return null;
+            }
+            var settingPath = target.GetExecutablePath(setting);
+            if (string.IsNullOrWhiteSpace(settingPath))
+            {
+                return null;
+            }
+            var pathKind = ClassifySettingPath(target, settingPath, root, os);
+            return pathKind == SettingPathKind.BarePayload ||
+                pathKind == SettingPathKind.InstalledPayload
+                ? null : "setting_path_outside_exe_files";
         }
 
         private UpdateJobRecord StartOrJoinCheck(bool manual, CancellationToken cancellationToken)
@@ -1097,24 +1121,33 @@ namespace Amatsukaze.Server.Update
         private async Task UpdateInstalledPathAsync(UpdateTargetDef target,
             InstalledUpdate installed, UpdateLog log)
         {
-            if (!OperatingSystem.IsWindows())
+            var current = server.AppData_?.setting;
+            var oldPath = current == null ? null : target.GetExecutablePath(current);
+            if (string.IsNullOrWhiteSpace(oldPath))
             {
                 log.Write(target.Id, "S12_SETTINGS", "SKIP",
-                    ("reason", "unchanged_flat_linux"),
-                    ("key", target.SettingKey ?? "(none)"));
+                    ("reason", "empty_default_path"),
+                    ("key", target.SettingKey ?? "(none)"),
+                    ("old", "(empty)"));
                 return;
             }
 
-            var current = server.AppData_?.setting;
-            var oldPath = current == null ? null : target.GetExecutablePath(current);
-            if (!ShouldUpdateWindowsSettingPath(target, oldPath,
-                installed.DestinationPath, appRoot))
+            var os = OperatingSystem.IsWindows() ? UpdateOSKind.Windows : UpdateOSKind.Linux;
+            if (os == UpdateOSKind.Linux &&
+                AreSamePath(oldPath, installed.DestinationPath, StringComparison.Ordinal))
             {
                 log.Write(target.Id, "S12_SETTINGS", "SKIP",
-                    ("reason", string.IsNullOrEmpty(oldPath) ? "empty_default_path" :
-                        "custom_or_unrelated_path"),
+                    ("reason", "unchanged_flat_linux"),
                     ("key", target.SettingKey ?? "(none)"),
-                    ("old", oldPath ?? "(empty)"));
+                    ("old", oldPath));
+                return;
+            }
+            if (!ShouldUpdateSettingPath(target, oldPath,
+                installed.DestinationPath, appRoot, os))
+            {
+                log.Write(target.Id, "S12_SETTINGS", "SKIP",
+                    ("reason", "custom_or_unrelated_path"),
+                    ("key", target.SettingKey ?? "(none)"), ("old", oldPath));
                 return;
             }
 
@@ -1156,36 +1189,96 @@ namespace Amatsukaze.Server.Update
                 ("backup", "server_managed"));
         }
 
-        internal static bool ShouldUpdateWindowsSettingPath(UpdateTargetDef target,
-            string oldPath, string newPath, string root)
+        internal static bool ShouldUpdateSettingPath(UpdateTargetDef target,
+            string oldPath, string newPath, string root, UpdateOSKind os)
         {
             if (target?.Payload == null || string.IsNullOrWhiteSpace(oldPath) ||
                 string.IsNullOrWhiteSpace(newPath) || string.IsNullOrWhiteSpace(root))
             {
                 return false;
             }
-            if (!oldPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                !newPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            if (os == UpdateOSKind.Windows &&
+                (!oldPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                 !newPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
             try
             {
-                if (!target.TryCompileRegexes(out _)) return false;
-                var executableRoot = Path.GetFullPath(Path.Combine(root, "exe_files"));
-                var oldFullPath = Path.GetFullPath(oldPath);
-                var newFullPath = Path.GetFullPath(newPath);
-                if (!string.Equals(Path.GetDirectoryName(oldFullPath), executableRoot,
-                        StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(Path.GetDirectoryName(newFullPath), executableRoot,
-                        StringComparison.OrdinalIgnoreCase))
+                if (ClassifySettingPath(target, newPath, root, os) !=
+                    SettingPathKind.InstalledPayload)
                 {
                     return false;
                 }
-                var oldName = Path.GetFileName(oldFullPath);
-                var newName = Path.GetFileName(newFullPath);
-                return target.Payload.Any(entry => entry.IsMatch(oldName)) &&
-                    target.Payload.Any(entry => entry.IsMatch(newName));
+                var oldKind = ClassifySettingPath(target, oldPath, root, os);
+                if (os == UpdateOSKind.Windows)
+                {
+                    return oldKind == SettingPathKind.InstalledPayload;
+                }
+                if (oldKind == SettingPathKind.BarePayload)
+                {
+                    return true;
+                }
+                return oldKind == SettingPathKind.InstalledPayload &&
+                    !AreSamePath(oldPath, newPath, StringComparison.Ordinal);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static SettingPathKind ClassifySettingPath(UpdateTargetDef target,
+            string path, string root, UpdateOSKind os)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return SettingPathKind.Empty;
+            if (target?.Payload == null || string.IsNullOrWhiteSpace(root) ||
+                !target.TryCompileRegexes(out _))
+            {
+                return SettingPathKind.Other;
+            }
+            if (os == UpdateOSKind.Linux && IsBareExecutableName(path))
+            {
+                return target.Payload.Any(entry => entry.IsMatch(path))
+                    ? SettingPathKind.BarePayload : SettingPathKind.Other;
+            }
+            if (!Path.IsPathFullyQualified(path)) return SettingPathKind.Other;
+            try
+            {
+                var executableRoot = Path.GetFullPath(Path.Combine(root, "exe_files"));
+                var fullPath = Path.GetFullPath(path);
+                var comparison = os == UpdateOSKind.Windows
+                    ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                return string.Equals(Path.GetDirectoryName(fullPath), executableRoot, comparison) &&
+                    target.Payload.Any(entry => entry.IsMatch(Path.GetFileName(fullPath)))
+                    ? SettingPathKind.InstalledPayload : SettingPathKind.Other;
+            }
+            catch
+            {
+                return SettingPathKind.Other;
+            }
+        }
+
+        private enum SettingPathKind
+        {
+            Empty,
+            BarePayload,
+            InstalledPayload,
+            Other,
+        }
+
+        private static bool IsBareExecutableName(string path) =>
+            !string.IsNullOrWhiteSpace(path) && !Path.IsPathFullyQualified(path) &&
+            path.IndexOf(Path.DirectorySeparatorChar) < 0 &&
+            path.IndexOf(Path.AltDirectorySeparatorChar) < 0 &&
+            path.IndexOf('/') < 0 && path.IndexOf('\\') < 0;
+
+        private static bool AreSamePath(string first, string second, StringComparison comparison)
+        {
+            try
+            {
+                return Path.IsPathFullyQualified(first) && Path.IsPathFullyQualified(second) &&
+                    string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), comparison);
             }
             catch
             {

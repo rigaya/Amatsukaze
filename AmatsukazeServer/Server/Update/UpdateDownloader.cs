@@ -12,6 +12,8 @@ namespace Amatsukaze.Server.Update
     internal sealed class UpdateDownloader : IDisposable
     {
         private const int MaxAttempts = 3;
+        private static readonly byte[] ArArchiveMagic =
+            [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68];
         private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
         private readonly HttpClient client;
@@ -203,6 +205,10 @@ namespace Amatsukaze.Server.Update
             {
                 return magic.SequenceEqual(new byte[] { 0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00 })
                     ? "tar.xz" : null;
+            }
+            if (name.EndsWith(".deb", StringComparison.OrdinalIgnoreCase))
+            {
+                return magic.SequenceEqual(ArArchiveMagic) ? "deb" : null;
             }
             return null;
         }

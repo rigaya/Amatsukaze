@@ -21,15 +21,17 @@ public sealed class LiveUpdatePreparationTests
             await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot);
             using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
             using var releases = new ReleaseClient(string.Empty);
+            // tsreplace は .deb 展開経路を実物で確認するために含めている
             foreach (var target in UpdateCatalog.Targets.Where(target =>
-                target.Id is "x264" or "x265" or "SVT-AV1"))
+                target.Id is "x264" or "x265" or "SVT-AV1" or "tsreplace"))
             {
                 var (prepared, expectedVersion) = await PrepareLiveTargetAsync(appRoot,
                     target, transaction, releases, log);
                 var installed = await new UpdateInstaller(appRoot).InstallAsync(target,
                     prepared, expectedVersion, log, CancellationToken.None);
+                // 使い捨てルートには設定が無いため、S12 の判定自体はここでは行わない
                 log.Write(target.Id, "S12_SETTINGS", "SKIP",
-                    ("reason", "unchanged_flat_linux"), ("key", target.SettingKey));
+                    ("reason", "live_test_no_setting"), ("key", target.SettingKey));
                 log.Write(target.Id, "S13_ROLLBACK", "SKIP",
                     ("reason", "installation_succeeded"));
                 var probe = await UpdateExecutableProbe.RunAsync(installed.DestinationPath,

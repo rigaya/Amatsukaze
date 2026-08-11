@@ -86,11 +86,10 @@
                                         <div class="update-state-detail">@GetStateDetail(item)</div>
                                     }
                                     @if (!item.CanApply &&
-                                        (item.CannotApplyReason == "layout_not_supported_yet" ||
-                                         item.CannotApplyReason == "payload_not_defined_yet") &&
+                                        !string.IsNullOrWhiteSpace(item.CannotApplyReason) &&
                                         item.State == "UpdateAvailable")
                                     {
-                                        <div class="update-state-detail">次のフェーズで対応</div>
+                                        <div class="update-state-detail">@FormatReason(item.CannotApplyReason)</div>
                                     }
                                     @if (IsDockerExecutable(item))
                                     {
@@ -625,6 +624,8 @@
             "disabled_by_setting" => "設定で無効です",
             "layout_not_supported_yet" => "次のフェーズで対応します",
             "payload_not_defined_yet" => "次のフェーズで対応します",
+            "setting_path_outside_exe_files" =>
+                "設定のパスが exe_files の外を指しているため自動更新できません",
             null or "" => "不明",
             _ => $"不明な状態 ({reason})",
         };

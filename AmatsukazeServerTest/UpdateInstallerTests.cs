@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Amatsukaze.Server;
 using Amatsukaze.Server.Update;
 using Xunit;
 
@@ -339,34 +340,86 @@ public sealed class UpdateInstallerTests
         var oldPath = Path.Combine(fixture.ExeFiles, "x264_3223_x64.exe");
         var newPath = Path.Combine(fixture.ExeFiles, "x264_3333_x64.exe");
 
-        Assert.True(UpdateManager.ShouldUpdateWindowsSettingPath(target, oldPath,
-            newPath, fixture.Root));
-        Assert.False(UpdateManager.ShouldUpdateWindowsSettingPath(target,
+        Assert.True(UpdateManager.ShouldUpdateSettingPath(target, oldPath,
+            newPath, fixture.Root, UpdateOSKind.Windows));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(target,
             Path.Combine(fixture.Root, "custom", "x264_3223_x64.exe"), newPath,
-            fixture.Root));
-        Assert.False(UpdateManager.ShouldUpdateWindowsSettingPath(target,
-            Path.Combine(fixture.ExeFiles, "unrelated.exe"), newPath, fixture.Root));
-        Assert.False(UpdateManager.ShouldUpdateWindowsSettingPath(target, string.Empty,
-            newPath, fixture.Root));
+            fixture.Root, UpdateOSKind.Windows));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(target,
+            Path.Combine(fixture.ExeFiles, "unrelated.exe"), newPath, fixture.Root,
+            UpdateOSKind.Windows));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(target, string.Empty,
+            newPath, fixture.Root, UpdateOSKind.Windows));
     }
 
     [Fact]
-    public void P2cで適用できる対象は三対象だけ()
+    public void Linux設定パスは裸名だけを書き換え同じ絶対パスは維持する()
+    {
+        using var fixture = new InstallerFixture();
+        var newPath = Path.Combine(fixture.ExeFiles, "tool");
+
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(fixture.Target, string.Empty,
+            newPath, fixture.Root, UpdateOSKind.Linux));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(fixture.Target, newPath,
+            newPath, fixture.Root, UpdateOSKind.Linux));
+        Assert.True(UpdateManager.ShouldUpdateSettingPath(fixture.Target, "tool",
+            newPath, fixture.Root, UpdateOSKind.Linux));
+        Assert.False(UpdateManager.ShouldUpdateSettingPath(fixture.Target,
+            Path.Combine(fixture.Root, "custom", "tool"), newPath, fixture.Root,
+            UpdateOSKind.Linux));
+    }
+
+    [Fact]
+    public void Linuxの利用者指定パスは適用前に拒否する()
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        using var fixture = new InstallerFixture();
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == "QSVEnc");
+        var setting = new Setting { QSVEncPath = Path.Combine(fixture.Root, "custom", "qsvencc") };
+
+        Assert.Equal("setting_path_outside_exe_files",
+            UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Linux,
+                setting, fixture.Root));
+
+        setting.QSVEncPath = Path.Combine("custom", "qsvencc");
+        Assert.Equal("setting_path_outside_exe_files",
+            UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Linux,
+                setting, fixture.Root));
+
+        setting.QSVEncPath = "qsvencc";
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Linux,
+            setting, fixture.Root));
+
+        setting.QSVEncPath = Path.Combine(fixture.ExeFiles, "qsvencc");
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Linux,
+            setting, fixture.Root));
+
+        setting.QSVEncPath = string.Empty;
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Linux,
+            setting, fixture.Root));
+    }
+
+    [Fact]
+    public void 対応済みの配置形式とPayloadを対象ごとに判定する()
     {
         Assert.True(UpdateCatalog.TryInitialize(out var error), error);
         var environment = UpdateRuntimeEnvironment.Detect();
 
         var applicable = UpdateCatalog.Targets.Where(target =>
             UpdateManager.GetCannotApplyReason(target, environment.OS) == null)
-            .Select(target => target.Id).OrderBy(id => id).ToArray();
+            // 期待値は序数順で書いてあるので、並べ替えも序数で行う
+            // (既定の比較子はカルチャ依存で "tsreplace" が "VCEEnc" より前に来る)
+            .Select(target => target.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
 
-        Assert.Equal(new[] { "SVT-AV1", "x264", "x265" }, applicable);
+        var expected = environment.OS == UpdateOSKind.Linux
+            ? new[] { "NVEnc", "QSVEnc", "SVT-AV1", "VCEEnc", "tsreplace", "x264", "x265" }
+            : new[] { "SVT-AV1", "x264", "x265" };
+        Assert.Equal(expected, applicable);
 
         var qsvenc = UpdateCatalog.Targets.Single(target => target.Id == "QSVEnc");
         Assert.Equal(InstallLayout.ExeFilesFlat,
             qsvenc.GetInstallLayout(UpdateOSKind.Linux));
-        Assert.Equal("payload_not_defined_yet",
-            UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Linux));
+        Assert.Null(UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Linux));
         Assert.Equal("layout_not_supported_yet",
             UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Windows));
     }

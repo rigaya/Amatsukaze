@@ -123,6 +123,10 @@ namespace Amatsukaze.Server.Update
                 VersionArgument = "--version",
                 VersionPattern = RigayaVersionPattern,
                 SettingKey = nameof(Setting.TsReplacePath),
+                Payload = new[]
+                {
+                    new PayloadEntry { Pattern = @"^(?:usr/bin/)?tsreplace$" },
+                },
             },
         };
 
@@ -147,6 +151,10 @@ namespace Amatsukaze.Server.Update
                 VersionArgument = "--version",
                 VersionPattern = RigayaVersionPattern,
                 SettingKey = settingKey,
+                Payload = new[]
+                {
+                    new PayloadEntry { Pattern = $@"^(?:usr/bin/)?{linuxName}$" },
+                },
             };
         }
 

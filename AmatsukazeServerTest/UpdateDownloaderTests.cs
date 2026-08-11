@@ -10,6 +10,8 @@ public sealed class UpdateDownloaderTests
 {
     private static readonly byte[] ZipLikeData =
         [0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, 5, 6];
+    private static readonly byte[] DebLikeData =
+        [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a];
 
     [Fact]
     public async Task 正常ダウンロードでサイズとハッシュが一致する()
@@ -117,6 +119,35 @@ public sealed class UpdateDownloaderTests
     }
 
     [Fact]
+    public async Task Debは拡張子とArマジックが一致すれば受け入れる()
+    {
+        using var fixture = new DownloadFixture();
+        await using var server = await MockServer.StartAsync((_, response) =>
+            WriteResponseAsync(response, DebLikeData));
+        var asset = Asset(server.Url, DebLikeData, "test.deb");
+
+        var result = await fixture.Downloader.DownloadAsync(asset, fixture.DownloadDirectory,
+            "test", fixture.Log, null, CancellationToken.None);
+
+        Assert.Equal("deb", result.Format);
+    }
+
+    [Fact]
+    public async Task Deb拡張子でもArマジックでなければ検証失敗になる()
+    {
+        using var fixture = new DownloadFixture();
+        await using var server = await MockServer.StartAsync((_, response) =>
+            WriteResponseAsync(response, ZipLikeData));
+        var asset = Asset(server.Url, ZipLikeData, "test.deb");
+
+        var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
+            fixture.Downloader.DownloadAsync(asset, fixture.DownloadDirectory, "test",
+                fixture.Log, null, CancellationToken.None));
+
+        Assert.Equal("VERIFY_FAILED", exception.Code);
+    }
+
+    [Fact]
     public async Task ダウンロード中のキャンセルでトランザクションを残さない()
     {
         using var fixture = new DownloadFixture();
@@ -206,9 +237,10 @@ public sealed class UpdateDownloaderTests
             comparison);
     }
 
-    private static ReleaseAssetInfo Asset(string url, byte[] content) => new ReleaseAssetInfo
+    private static ReleaseAssetInfo Asset(string url, byte[] content,
+        string name = "test.zip") => new ReleaseAssetInfo
     {
-        Name = "test.zip", BrowserDownloadUrl = url, Size = content.Length,
+        Name = name, BrowserDownloadUrl = url, Size = content.Length,
         Digest = "sha256:" + Sha256(content),
     };
 
