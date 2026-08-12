@@ -898,6 +898,7 @@ namespace Amatsukaze.Server.Update
             string expectedVersion, UpdateLog log, UpdateJobRecord job,
             CancellationToken cancellationToken)
         {
+            SelfUpdateWorkspace.EnsureNoPendingUpdate(appRoot);
             var environment = UpdateRuntimeEnvironment.Detect();
             var setting = server.AppData_?.setting;
             var progress = job == null ? null : new Progress<DownloadProgress>(job.ReportProgress);
@@ -958,11 +959,20 @@ namespace Amatsukaze.Server.Update
         internal async Task ApplyTargetsAsync(IReadOnlyList<UpdateApplyTarget> targets,
             UpdateLog log, UpdateJobRecord job, CancellationToken cancellationToken)
         {
-            EnsureWritableUpdateDirectories(appRoot, log);
             using var writer = await UpdateWriterLease.AcquireAsync(applyLock,
                 cancellationToken).ConfigureAwait(false);
             using var lease = await UpdateMaintenanceLease.AcquireAsync(server,
                 cancellationToken).ConfigureAwait(false);
+            var selfUpdateTargets = targets.Where(item => item.Target.IsApplication).ToArray();
+            if (selfUpdateTargets.Length > 0)
+            {
+                ValidateSelfUpdateSelection(targets, log);
+                await ApplySelfUpdateAsync(selfUpdateTargets[0], log, job, lease,
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            EnsureWritableUpdateDirectories(appRoot, log);
             using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
             foreach (var applyTarget in targets)
             {
@@ -994,6 +1004,59 @@ namespace Amatsukaze.Server.Update
                         ("failed_stage", stage), ("message", ex.Message));
                 }
             }
+        }
+
+        internal static void ValidateSelfUpdateSelection(
+            IReadOnlyList<UpdateApplyTarget> targets, UpdateLog log)
+        {
+            if (targets.Count == 1 && targets[0].Target.IsApplication) return;
+            log?.Write("Amatsukaze", "S01_PRECHECK", "NG",
+                ("code", "SELF_UPDATE_NOT_ALONE"), ("targets", targets.Count));
+            throw new UpdateInstallException("SELF_UPDATE_NOT_ALONE", "S01_PRECHECK",
+                "本体更新はほかの更新対象と同時に適用できません");
+        }
+
+        private async Task ApplySelfUpdateAsync(UpdateApplyTarget applyTarget, UpdateLog log,
+            UpdateJobRecord job, UpdateMaintenanceLease lease,
+            CancellationToken cancellationToken)
+        {
+            job.ResetProgress(applyTarget.Target.Id);
+            var prepared = await PrepareSelfUpdateAsync(applyTarget.Asset,
+                applyTarget.ExpectedVersion, log, job, cancellationToken).ConfigureAwait(false);
+            var environment = UpdateRuntimeEnvironment.Detect();
+            var generated = SelfUpdaterScriptGenerator.Generate(appRoot, Environment.ProcessId,
+                prepared, log.TransactionId, environment.OS, DateTime.UtcNow);
+
+            // pause 取得後に開始した worker との競合を、終了処理へ入る直前にも確認する。
+            if (server.NowEncoding)
+            {
+                log.Write(applyTarget.Target.Id, "S01_PRECHECK", "NG",
+                    ("code", "ENCODING_ACTIVE"),
+                    ("message", "エンコード実行中のため本体更新を開始しません"));
+                throw new UpdateInstallException("ENCODING_ACTIVE", "S01_PRECHECK",
+                    "エンコード実行中のため本体更新を適用できません");
+            }
+
+            try
+            {
+                await SelfUpdaterLauncher.StartAndWaitReadyAsync(generated, environment.OS,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (UpdateInstallException ex) when (ex.Code == "UPDATER_START_FAILED")
+            {
+                log.Write(applyTarget.Target.Id, "S01_PRECHECK", "NG",
+                    ("code", ex.Code), ("message", ex.Message),
+                    ("staging", prepared.StagingDirectory));
+                throw;
+            }
+            // ready 確認後は updater がサーバー終了を待つ。終了までキュー停止を維持する。
+            lease.KeepPaused();
+            job.AddTargetResult(applyTarget.Target.Id, true, null,
+                "本体 updater を起動しました。サーバーを再起動します");
+            log.Write(applyTarget.Target.Id, "S99_SUMMARY", "OK",
+                ("current", applyTarget.ExpectedVersion),
+                ("latest", applyTarget.ExpectedVersion), ("action", "restart"));
+            await server.EndServer().ConfigureAwait(false);
         }
 
         internal static void EnsureWritableUpdateDirectories(string appRoot, UpdateLog log)

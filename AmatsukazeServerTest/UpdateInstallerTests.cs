@@ -472,6 +472,22 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public async Task MaintenanceLeaseは本体更新引き渡し後に停止を維持する()
+    {
+        var pauses = new List<bool>();
+        var lease = await UpdateMaintenanceLease.AcquireAsync(() => false, pause =>
+        {
+            pauses.Add(pause);
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        lease.KeepPaused();
+        lease.Dispose();
+
+        Assert.Equal(new[] { true }, pauses);
+    }
+
+    [Fact]
     public async Task 単一Writerは多重適用を区別して拒否し解放後に再取得できる()
     {
         var semaphore = new SemaphoreSlim(1, 1);

@@ -33,6 +33,20 @@ namespace Amatsukaze.Server.Update
         internal string DownloadDirectory => downloadDirectory;
         internal string CandidateDirectory => candidateDirectory;
 
+        // 前回失敗した staging を、新しい準備処理が上書きしないようにする。
+        public static void EnsureNoPendingUpdate(string appRoot)
+        {
+            var fullAppRoot = Path.GetFullPath(appRoot);
+            var root = ValidateChild(fullAppRoot,
+                Path.Combine(fullAppRoot, ".amatsukaze_update"));
+            var staging = ValidateChild(root, Path.Combine(root, "staging"));
+            if (Directory.Exists(staging) || File.Exists(staging))
+            {
+                throw new UpdatePreparationException("SELF_UPDATE_PENDING", "S01_PRECHECK",
+                    "前回の本体更新が完了していません。保留中の更新を再実行してください");
+            }
+        }
+
         public static SelfUpdateWorkspace Create(string appRoot, string transactionId)
         {
             if (!TransactionIdRegex.IsMatch(transactionId ?? string.Empty))

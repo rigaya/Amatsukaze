@@ -47,6 +47,7 @@ namespace Amatsukaze.Server.Update
     {
         private readonly Func<bool, Task> setPause;
         private bool disposed;
+        private bool keepPaused;
 
         private UpdateMaintenanceLease(Func<bool, Task> setPause)
         {
@@ -84,6 +85,7 @@ namespace Amatsukaze.Server.Update
         {
             if (disposed) return;
             disposed = true;
+            if (keepPaused) return;
             // 停止フラグの解除は同期的に行われる。通知失敗は本体の結果を上書きしない。
             try
             {
@@ -94,6 +96,13 @@ namespace Amatsukaze.Server.Update
                 UpdateLog.WriteFallbackError("S13_ROLLBACK",
                     "MAINTENANCE_RESUME_NOTIFY_FAILED", ex);
             }
+        }
+
+        // 本体 updater へ処理を引き渡した後は、サーバー終了までキュー停止を維持する。
+        public void KeepPaused()
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(UpdateMaintenanceLease));
+            keepPaused = true;
         }
 
         private static async Task ResumeWithoutThrowAsync(Func<bool, Task> setPause)
