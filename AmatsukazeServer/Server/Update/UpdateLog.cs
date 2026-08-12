@@ -21,10 +21,12 @@ namespace Amatsukaze.Server.Update
         public string TransactionId { get; }
         public string FilePath { get; }
 
-        public UpdateLog(string appRoot, Action<string> lineObserver = null)
+        public UpdateLog(string appRoot, Action<string> lineObserver = null,
+            string transactionId = null)
         {
             this.lineObserver = lineObserver;
-            TransactionId = CreateTransactionId();
+            TransactionId = string.IsNullOrEmpty(transactionId)
+                ? CreateTransactionId() : transactionId;
             try
             {
                 var directory = Path.Combine(appRoot, "log", "update");
@@ -81,6 +83,21 @@ namespace Amatsukaze.Server.Update
             params (string Key, object Value)[] values)
         {
             Write(target, stage, "DIAG", values);
+        }
+
+        // updater が既に整形した S20 系ログを、文字列を変えずに取り込む。
+        internal void WriteRaw(string line)
+        {
+            if (line == null) return;
+            try { SafeAddLog(line); }
+            catch { }
+            try { lineObserver?.Invoke(line); }
+            catch { }
+            lock (sync)
+            {
+                try { writer?.WriteLine(line); }
+                catch { }
+            }
         }
 
         private string BuildLine(string target, string stage, string result,

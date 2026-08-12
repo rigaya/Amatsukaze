@@ -44,6 +44,8 @@ namespace Amatsukaze.Server.Update
         private bool started;
         private bool disposed;
 
+        internal bool HasPendingSelfUpdate { get; }
+
         public UpdateManager(EncodeServer server)
         {
             this.server = server;
@@ -51,6 +53,7 @@ namespace Amatsukaze.Server.Update
             UpdateLog.CleanupOldLogs(appRoot);
             UpdateTransaction.CleanupStale(appRoot);
             UpdateInstaller.CleanupStartupResidues(appRoot);
+            HasPendingSelfUpdate = SelfUpdateRecovery.RunStartupRecovery(appRoot);
         }
 
         private static string GetApplicationRoot()
