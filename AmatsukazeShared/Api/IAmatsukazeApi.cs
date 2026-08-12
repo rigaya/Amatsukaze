@@ -17,6 +17,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<UpdateStatusView>> GetUpdateStatusAsync();
         Task<ApiResult<string>> StartUpdateCheckAsync();
         Task<ApiResult<string>> ApplyUpdatesAsync(IReadOnlyList<string> targetIds);
+        Task<ApiResult<bool>> DiscardPendingSelfUpdateAsync();
         Task<ApiResult<bool>> CancelUpdateAsync(string jobId);
         Task<ApiResult<UpdateJobView>> GetUpdateJobAsync(string jobId);
         Task<ApiResult<string>> GetUpdateJobLogAsync(string jobId);

@@ -15,6 +15,22 @@
             <div class="update-environment-warning" role="alert">@_status.EnvironmentWarning</div>
         }
 
+        @if (_status?.HasPendingSelfUpdate == true)
+        {
+            <div class="update-environment-warning" role="alert">
+                <div>保留中の本体更新があります。</div>
+                <button class="btn btn-sm btn-warning" @onclick="DiscardAndRetrySelfUpdateAsync"
+                        disabled="@_applying">破棄してやり直す</button>
+            </div>
+        }
+
+        @if (_status?.LastSelfUpdateResult != null)
+        {
+            <div class="update-self-result" role="status">
+                前回の本体更新: @FormatSelfUpdateResult(_status.LastSelfUpdateResult)
+            </div>
+        }
+
         @if (_applying)
         {
             <div class="update-apply-progress" role="status">
@@ -81,6 +97,10 @@
                                 <td>@(item.RequiresRestart ? "必要" : "不要")</td>
                                 <td>
                                     <div>@GetStateLabel(item)</div>
+                                    @if (item.State == "UpdateAvailable" && item.RequiresRestart)
+                                    {
+                                        <div class="update-state-detail">適用時にサーバーを再起動します</div>
+                                    }
                                     @if (!string.IsNullOrEmpty(GetStateDetail(item)))
                                     {
                                         <div class="update-state-detail">@GetStateDetail(item)</div>
@@ -173,6 +193,7 @@
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
     // ReleaseClient の最悪所要時間（6リポジトリ×約25秒）に余裕を加える
     private static readonly TimeSpan PollTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan SelfRestartTimeout = TimeSpan.FromMinutes(2);
     private const string DockerUpdateCommand = "docker compose pull && docker compose up -d";
 
     private readonly HashSet<string> _selectedTargets = new(StringComparer.OrdinalIgnoreCase);
@@ -187,6 +208,7 @@
     private bool _checking = true;
     private bool _applying;
     private bool _cancelBusy;
+    private bool _selfUpdateApplying;
     private bool _disposed;
 
     protected override void OnInitialized()
@@ -295,8 +317,48 @@
     }
 
     private async Task ApplySelectedAsync()
+        => await StartApplyAsync(_selectedTargets.ToArray());
+
+    private async Task DiscardAndRetrySelfUpdateAsync()
     {
-        if (_applying || _checking || _selectedTargets.Count == 0)
+        if (_applying)
+        {
+            return;
+        }
+        _error = null;
+        _cancelMessage = null;
+        try
+        {
+            var discarded = await WaitForApiAsync(Api.DiscardPendingSelfUpdateAsync(),
+                _pollCancellation.Token);
+            if (discarded == null || !discarded.Ok || !discarded.Data)
+            {
+                SetError(discarded?.Error ?? "保留中の本体更新を破棄できませんでした。");
+                return;
+            }
+
+            await RefreshStatusAsync(_pollCancellation.Token);
+            var application = _status?.Items.FirstOrDefault(item =>
+                string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase));
+            if (!_checking && application != null && CanSelect(application))
+            {
+                await StartApplyAsync(new[] { application.Id });
+                return;
+            }
+            _cancelMessage = "保留中の更新を破棄しました。";
+        }
+        catch (OperationCanceledException) when (_pollCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetError($"保留中の本体更新を破棄できませんでした: {ex.Message}");
+        }
+    }
+
+    private async Task StartApplyAsync(IReadOnlyList<string> targetIds)
+    {
+        if (_applying || _checking || targetIds.Count == 0)
         {
             return;
         }
@@ -306,10 +368,11 @@
         _copyMessage = null;
         _fallbackText = null;
         _job = null;
+        _selfUpdateApplying = targetIds.Any(IsApplicationId);
         try
         {
-            var start = await WaitForApiAsync(Api.ApplyUpdatesAsync(
-                _selectedTargets.ToArray()), _pollCancellation.Token);
+            var start = await WaitForApiAsync(Api.ApplyUpdatesAsync(targetIds),
+                _pollCancellation.Token);
             if (start == null || !start.Ok || string.IsNullOrWhiteSpace(start.Data))
             {
                 SetError(start?.Error ?? "更新の適用を開始できませんでした。");
@@ -370,6 +433,10 @@
             }
             if (!result.Ok || result.Data == null)
             {
+                if (_selfUpdateApplying && await WaitForSelfUpdateRestartAsync(token))
+                {
+                    return;
+                }
                 SetError(result.Error ?? "更新の進捗を取得できませんでした。");
                 return;
             }
@@ -382,6 +449,26 @@
             }
             await Task.Delay(PollInterval, token);
         }
+    }
+
+    private async Task<bool> WaitForSelfUpdateRestartAsync(CancellationToken token)
+    {
+        var deadline = DateTime.UtcNow + SelfRestartTimeout;
+        while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(PollInterval, token);
+            var result = await WaitForApiAsync(Api.GetUpdateStatusAsync(), token);
+            if (result?.Ok == true && result.Data != null)
+            {
+                _status = result.Data;
+                _error = null;
+                InitializeSelection();
+                if (!_disposed) await StatusChanged.InvokeAsync(_status);
+                return true;
+            }
+        }
+        SetError("サーバーの再起動を確認できませんでした。しばらく待って画面を開き直してください。");
+        return false;
     }
 
     private async Task CancelApplyAsync()
@@ -427,7 +514,14 @@
         {
             return;
         }
-        foreach (var item in _status.Items.Where(CanSelect))
+        var selectable = _status.Items.Where(CanSelect).ToArray();
+        var application = selectable.FirstOrDefault(item => IsApplicationId(item.Id));
+        if (application != null)
+        {
+            _selectedTargets.Add(application.Id);
+            return;
+        }
+        foreach (var item in selectable)
         {
             _selectedTargets.Add(item.Id);
         }
@@ -447,6 +541,14 @@
         }
         if (args.Value is bool selected && selected)
         {
+            if (IsApplicationId(item.Id))
+            {
+                _selectedTargets.Clear();
+            }
+            else
+            {
+                _selectedTargets.RemoveWhere(IsApplicationId);
+            }
             _selectedTargets.Add(item.Id);
         }
         else
@@ -530,6 +632,8 @@
         => HasEnvironmentWarning && !string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
     private static bool CanSelect(UpdateItemView item)
         => item.State == "UpdateAvailable" && item.CanApply;
+    private static bool IsApplicationId(string id)
+        => string.Equals(id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
 
     private static string FormatInstalledVersion(string? value)
         => string.IsNullOrWhiteSpace(value) ? "未検出" : value;
@@ -622,13 +726,29 @@
             "docker_self_update_available" => "Dockerでは本体を直接更新できません",
             "docker_self_update_unsupported" => "Dockerでは本体を直接更新できません",
             "disabled_by_setting" => "設定で無効です",
-            "layout_not_supported_yet" => "次のフェーズで対応します",
-            "payload_not_defined_yet" => "次のフェーズで対応します",
+            "layout_not_supported_yet" => "この対象の配置方法には対応していません",
+            "payload_not_defined_yet" => "この対象の配置方法が定義されていません",
             "setting_path_outside_exe_files" =>
                 "設定のパスが exe_files の外を指しているため自動更新できません",
             null or "" => "不明",
             _ => $"不明な状態 ({reason})",
         };
+    }
+
+    private static string FormatSelfUpdateResult(SelfUpdateResultView result)
+    {
+        var status = result.Status switch
+        {
+            "success" => "成功",
+            "rolled_back" => "失敗（旧版へ復元済み）",
+            "timeout" => "タイムアウト",
+            _ => "失敗",
+        };
+        var version = string.IsNullOrWhiteSpace(result.Version) ? "" : $" {result.Version}";
+        var error = string.IsNullOrWhiteSpace(result.ErrorCode) ||
+            string.Equals(result.ErrorCode, "none", StringComparison.OrdinalIgnoreCase)
+            ? "" : $" ({result.ErrorCode})";
+        return status + version + error;
     }
 
     private static string GetRowClass(UpdateItemView item)

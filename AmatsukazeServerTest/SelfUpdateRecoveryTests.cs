@@ -137,7 +137,7 @@ public sealed class SelfUpdateRecoveryTests
 
         for (var count = 0; count < 5; count++)
         {
-            Assert.False(SelfUpdateRecovery.RunStartupRecovery(fixture.AppRoot));
+            Assert.False(SelfUpdateRecovery.RunStartupRecovery(fixture.AppRoot).HasPending);
         }
 
         Assert.Empty(fixture.GetServerUpdateLogPaths());
@@ -151,7 +151,12 @@ public sealed class SelfUpdateRecoveryTests
         fixture.WriteResult("success", string.Empty,
             "[Update][f9018168][main][S22_PLACE] OK items=10");
 
-        Assert.False(SelfUpdateRecovery.RunStartupRecovery(fixture.AppRoot));
+        var state = SelfUpdateRecovery.RunStartupRecovery(fixture.AppRoot);
+        Assert.False(state.HasPending);
+        Assert.NotNull(state.LastResult);
+        Assert.Equal("success", state.LastResult.Status);
+        Assert.Equal("1.0.8.8", state.LastResult.Version);
+        Assert.Equal(string.Empty, state.LastResult.ErrorCode);
 
         var paths = fixture.GetServerUpdateLogPaths();
         Assert.Single(paths);
@@ -168,13 +173,44 @@ public sealed class SelfUpdateRecoveryTests
         using var fixture = new RecoveryFixture();
         fixture.CreateResidue("old", "1234abcd", "旧版");
 
-        Assert.False(SelfUpdateRecovery.RunStartupRecovery(fixture.AppRoot));
+        Assert.False(SelfUpdateRecovery.RunStartupRecovery(fixture.AppRoot).HasPending);
 
         var paths = fixture.GetServerUpdateLogPaths();
         Assert.Single(paths);
         Assert.EndsWith("_1234abcd.log", paths[0], StringComparison.Ordinal);
         Assert.Contains("[1234abcd][main][S13_ROLLBACK] OK",
             File.ReadAllText(paths[0]));
+    }
+
+    [Fact]
+    public void 保留Stagingだけを破棄しBackupと外部を保持する()
+    {
+        using var fixture = new RecoveryFixture();
+        Directory.CreateDirectory(fixture.Staging);
+        var backup = Path.Combine(fixture.WorkRoot, "backup", "20260812-120000");
+        Directory.CreateDirectory(backup);
+        File.WriteAllText(Path.Combine(backup, "sentinel"), "保持");
+        var outside = Path.Combine(fixture.AppRoot, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "sentinel"), "保持");
+
+        SelfUpdateRecovery.DiscardPendingStaging(fixture.AppRoot);
+
+        Assert.False(Directory.Exists(fixture.Staging));
+        Assert.Equal("保持", File.ReadAllText(Path.Combine(backup, "sentinel")));
+        Assert.Equal("保持", File.ReadAllText(Path.Combine(outside, "sentinel")));
+    }
+
+    [Fact]
+    public void 適用失敗後の再評価で保留状態をFalseからTrueへ更新する()
+    {
+        using var fixture = new RecoveryFixture();
+        var state = new SelfUpdatePendingState(false);
+        Directory.CreateDirectory(fixture.Staging);
+
+        state.Refresh(fixture.AppRoot);
+
+        Assert.True(state.Value);
     }
 
     private sealed class RecoveryFixture : IDisposable

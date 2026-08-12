@@ -1447,6 +1447,11 @@ code {
     color: var(--update-warning-text);
 }
 
+.update-self-result {
+    margin-top: 0.8rem;
+    color: var(--muted);
+}
+
 .update-check-progress,
 .update-apply-progress,
 .update-dialog-error,

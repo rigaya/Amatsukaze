@@ -645,7 +645,7 @@ public sealed class UpdateInstallerTests
 
         var expected = new[]
         {
-            "NVEnc", "QSVEnc", "SVT-AV1", "VCEEnc", "tsreplace", "x264", "x265",
+            "Amatsukaze", "NVEnc", "QSVEnc", "SVT-AV1", "VCEEnc", "tsreplace", "x264", "x265",
         };
         Assert.Equal(expected, applicable);
 
@@ -655,8 +655,24 @@ public sealed class UpdateInstallerTests
         Assert.Null(UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Linux));
         Assert.Null(UpdateManager.GetCannotApplyReason(qsvenc, UpdateOSKind.Windows));
         var application = UpdateCatalog.Targets.Single(target => target.Id == "Amatsukaze");
-        Assert.Equal("layout_not_supported_yet",
-            UpdateManager.GetCannotApplyReason(application, UpdateOSKind.Windows));
+        Assert.Null(UpdateManager.GetCannotApplyReason(application, UpdateOSKind.Windows));
+    }
+
+    [Fact]
+    public void 本体だけゲートを通しPayload未定義の通常対象は拒否する()
+    {
+        var application = UpdateCatalog.Targets.Single(target => target.IsApplication);
+        Assert.Null(UpdateManager.GetCannotApplyReason(application, UpdateOSKind.Linux));
+        Assert.Null(UpdateManager.GetCannotApplyReason(application, UpdateOSKind.Windows));
+
+        var target = new UpdateTargetDef
+        {
+            Id = "payloadなし", DisplayName = "payloadなし",
+            LinuxLayout = InstallLayout.ExeFilesFlat,
+            WindowsLayout = InstallLayout.ExeFilesFlat,
+        };
+        Assert.Equal("payload_not_defined_yet",
+            UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Linux));
     }
 
     private static string Hash(string path) => Convert.ToHexString(

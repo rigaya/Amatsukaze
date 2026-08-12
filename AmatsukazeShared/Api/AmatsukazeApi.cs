@@ -59,6 +59,10 @@ namespace Amatsukaze.Shared
                 TargetIds = targetIds?.ToList() ?? new List<string>(),
             }, result => result.GetProperty("jobId").GetString() ?? "");
 
+        public Task<ApiResult<bool>> DiscardPendingSelfUpdateAsync()
+            => PostUpdateJsonAsync("/api/update/discard-pending", new { },
+                result => result.GetProperty("ok").GetBoolean());
+
         public Task<ApiResult<bool>> CancelUpdateAsync(string jobId)
             => PostUpdateJsonAsync("/api/update/cancel", new UpdateCancelRequest { JobId = jobId },
                 result => result.GetProperty("ok").GetBoolean());

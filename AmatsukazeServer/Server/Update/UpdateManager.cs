@@ -43,8 +43,10 @@ namespace Amatsukaze.Server.Update
         private Task loopTask;
         private bool started;
         private bool disposed;
+        private readonly SelfUpdatePendingState selfUpdatePendingState;
 
-        internal bool HasPendingSelfUpdate { get; }
+        internal bool HasPendingSelfUpdate => selfUpdatePendingState.Value;
+        internal SelfUpdateResult LastSelfUpdateResult { get; }
 
         public UpdateManager(EncodeServer server)
         {
@@ -53,7 +55,9 @@ namespace Amatsukaze.Server.Update
             UpdateLog.CleanupOldLogs(appRoot);
             UpdateTransaction.CleanupStale(appRoot);
             UpdateInstaller.CleanupStartupResidues(appRoot);
-            HasPendingSelfUpdate = SelfUpdateRecovery.RunStartupRecovery(appRoot);
+            var recovery = SelfUpdateRecovery.RunStartupRecovery(appRoot);
+            selfUpdatePendingState = new SelfUpdatePendingState(recovery.HasPending);
+            LastSelfUpdateResult = recovery.LastResult;
         }
 
         private static string GetApplicationRoot()
@@ -120,8 +124,8 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        public bool TryStartApplyJob(IReadOnlyList<string> targetIds, out UpdateJobView view,
-            out string error, out bool conflict)
+        public bool TryStartApplyJob(IReadOnlyList<string> targetIds,
+            out UpdateJobView view, out string error, out bool conflict)
         {
             view = null;
             error = null;
@@ -204,6 +208,46 @@ namespace Amatsukaze.Server.Update
                 TrimJobsLocked();
                 _ = Task.Run(() => RunApplySafelyAsync(targets, job));
                 view = job.ToView();
+                return true;
+            }
+        }
+
+        public bool TryDiscardPendingSelfUpdate(out string error)
+        {
+            error = null;
+            lock (jobLock)
+            {
+                if (activeApplyJob != null && !activeApplyJob.IsFinished)
+                {
+                    error = "更新適用中のため保留中の本体更新を破棄できません";
+                    return false;
+                }
+
+                try
+                {
+                    SelfUpdateRecovery.DiscardPendingStaging(appRoot);
+                    selfUpdatePendingState.Clear();
+                }
+                catch (Exception ex)
+                {
+                    error = "保留中の本体更新を破棄できませんでした: " + ex.Message;
+                    UpdateLog.WriteFallbackError("S01_PRECHECK",
+                        "SELF_UPDATE_DISCARD_FAILED", ex);
+                    return false;
+                }
+
+                try
+                {
+                    using var log = new UpdateLog(appRoot);
+                    log.Write("Amatsukaze", "S01_PRECHECK", "OK",
+                        ("action", "discard_pending_staging"));
+                }
+                catch (Exception ex)
+                {
+                    // 破棄自体が成功している場合、診断ログの失敗で結果を失敗へ戻さない。
+                    UpdateLog.WriteFallbackError("S01_PRECHECK",
+                        "SELF_UPDATE_DISCARD_LOG_FAILED", ex);
+                }
                 return true;
             }
         }
@@ -341,7 +385,15 @@ namespace Amatsukaze.Server.Update
                     HasUpdate = items.Any(item =>
                         item.State == UpdateTargetStatus.UpdateAvailable.ToString() ||
                         item.StateReason == "docker_self_update_available"),
-                    HasPendingSelfUpdate = false,
+                    HasPendingSelfUpdate = HasPendingSelfUpdate,
+                    LastSelfUpdateResult = LastSelfUpdateResult == null ? null :
+                        new SelfUpdateResultView
+                        {
+                            Status = LastSelfUpdateResult.Status,
+                            Version = LastSelfUpdateResult.Version,
+                            ErrorCode = string.IsNullOrEmpty(LastSelfUpdateResult.ErrorCode)
+                                ? null : LastSelfUpdateResult.ErrorCode,
+                        },
                     ActiveApplyJobId = activeApplyJobId,
                     Items = items,
                 };
@@ -428,6 +480,10 @@ namespace Amatsukaze.Server.Update
         internal static string GetCannotApplyReason(UpdateTargetDef target, UpdateOSKind os,
             Setting setting = null, string root = null)
         {
+            if (target.IsApplication)
+            {
+                return null;
+            }
             if (target.GetInstallLayout(os) == InstallLayout.AppRootPartial)
             {
                 return "layout_not_supported_yet";
@@ -954,9 +1010,19 @@ namespace Amatsukaze.Server.Update
             }
             finally
             {
+                if (targets.Any(target => target.Target.IsApplication))
+                {
+                    ReevaluatePendingSelfUpdate();
+                }
                 log?.Dispose();
                 CompleteApplyJob(job, succeeded);
             }
+        }
+
+        // updater 起動失敗など、サーバーが生存したまま staging が残る経路を反映する。
+        internal void ReevaluatePendingSelfUpdate()
+        {
+            selfUpdatePendingState.Refresh(appRoot);
         }
 
         internal async Task ApplyTargetsAsync(IReadOnlyList<UpdateApplyTarget> targets,

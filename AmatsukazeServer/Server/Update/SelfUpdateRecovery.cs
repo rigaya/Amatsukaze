@@ -7,11 +7,26 @@ using System.Text.RegularExpressions;
 
 namespace Amatsukaze.Server.Update
 {
+    internal sealed record SelfUpdateResult(string Status, string Version, string ErrorCode);
+    internal sealed record SelfUpdateStartupState(bool HasPending, SelfUpdateResult LastResult);
+
+    internal sealed class SelfUpdatePendingState
+    {
+        public bool Value { get; private set; }
+
+        public SelfUpdatePendingState(bool initialValue) => Value = initialValue;
+
+        public void Refresh(string appRoot) => Value = SelfUpdateRecovery.HasPending(appRoot);
+
+        public void Clear() => Value = false;
+    }
+
     // 本体 updater の異常終了残骸を復旧し、再起動後の結果をサーバーログへ取り込む。
     internal static class SelfUpdateRecovery
     {
         private const string WorkDirectoryName = ".amatsukaze_update";
         private const string StagingDirectoryName = "staging";
+        private const string ResultFileName = "result.txt";
         private static readonly Regex WwwRootResidueRegex = new Regex(
             @"^wwwroot\.(?<kind>new|old)\.(?<txid>[0-9a-f]{8})$",
             RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
@@ -20,22 +35,47 @@ namespace Amatsukaze.Server.Update
             RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
             TimeSpan.FromSeconds(1));
 
-        public static bool RunStartupRecovery(string appRoot)
+        public static SelfUpdateStartupState RunStartupRecovery(string appRoot)
         {
             UpdateLog log = null;
             try
             {
+                var result = ReadResultWithoutThrow(appRoot);
                 var transactionId = FindStartupTransactionId(appRoot);
                 UpdateLog GetLog() => log ??= new UpdateLog(appRoot,
                     transactionId: transactionId);
                 RecoverWwwRootWithoutThrow(appRoot, GetLog);
                 ImportResultWithoutThrow(appRoot, GetLog);
-                return DetectPendingWithoutThrow(appRoot, GetLog);
+                var pending = DetectPendingWithoutThrow(appRoot, GetLog);
+                return new SelfUpdateStartupState(pending, result);
             }
             finally
             {
                 log?.Dispose();
             }
+        }
+
+        internal static bool HasPending(string appRoot)
+        {
+            try
+            {
+                return Directory.Exists(GetStagingPath(appRoot));
+            }
+            catch (Exception ex)
+            {
+                UpdateLog.WriteFallbackError("S20_PENDING",
+                    "SELF_UPDATE_PENDING_CHECK_FAILED", ex);
+                return false;
+            }
+        }
+
+        internal static void DiscardPendingStaging(string appRoot)
+        {
+            var staging = GetStagingPath(appRoot);
+            if (!Directory.Exists(staging)) return;
+            var info = new DirectoryInfo(staging);
+            var reparse = (info.Attributes & FileAttributes.ReparsePoint) != 0;
+            info.Delete(recursive: !reparse);
         }
 
         internal static int RecoverWwwRootWithoutThrow(string appRoot)
@@ -136,11 +176,8 @@ namespace Amatsukaze.Server.Update
         {
             try
             {
-                var fullAppRoot = Path.GetFullPath(appRoot);
-                var workRoot = SelfUpdateWorkspace.ValidateChild(fullAppRoot,
-                    Path.Combine(fullAppRoot, WorkDirectoryName));
-                var resultPath = SelfUpdateWorkspace.ValidateChild(workRoot,
-                    Path.Combine(workRoot, "result.txt"));
+                var workRoot = GetWorkRoot(appRoot);
+                var resultPath = GetResultPath(appRoot);
                 if (!File.Exists(resultPath)) return 0;
 
                 var values = ParseResult(File.ReadAllLines(resultPath));
@@ -221,11 +258,7 @@ namespace Amatsukaze.Server.Update
         {
             try
             {
-                var fullAppRoot = Path.GetFullPath(appRoot);
-                var workRoot = SelfUpdateWorkspace.ValidateChild(fullAppRoot,
-                    Path.Combine(fullAppRoot, WorkDirectoryName));
-                var staging = SelfUpdateWorkspace.ValidateChild(workRoot,
-                    Path.Combine(workRoot, StagingDirectoryName));
+                var staging = GetStagingPath(appRoot);
                 var pending = Directory.Exists(staging);
                 if (pending)
                 {
@@ -257,15 +290,28 @@ namespace Amatsukaze.Server.Update
             FindResultTransactionId(appRoot) ?? FindResidueTransactionId(appRoot) ??
             UpdateLog.UnknownTransactionId;
 
+        private static SelfUpdateResult ReadResultWithoutThrow(string appRoot)
+        {
+            try
+            {
+                var resultPath = GetResultPath(appRoot);
+                if (!File.Exists(resultPath)) return null;
+                var values = ParseResult(File.ReadAllLines(resultPath));
+                return new SelfUpdateResult(GetValue(values, "status", "unknown"),
+                    GetValue(values, "version", "?"),
+                    GetValue(values, "error_code", string.Empty));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static string FindResultTransactionId(string appRoot)
         {
             try
             {
-                var fullAppRoot = Path.GetFullPath(appRoot);
-                var workRoot = SelfUpdateWorkspace.ValidateChild(fullAppRoot,
-                    Path.Combine(fullAppRoot, WorkDirectoryName));
-                var resultPath = SelfUpdateWorkspace.ValidateChild(workRoot,
-                    Path.Combine(workRoot, "result.txt"));
+                var resultPath = GetResultPath(appRoot);
                 if (!File.Exists(resultPath)) return null;
                 var values = ParseResult(File.ReadAllLines(resultPath));
                 return values.TryGetValue("txid", out var transactionId) &&
@@ -314,6 +360,27 @@ namespace Amatsukaze.Server.Update
                     .ToString("0.###", CultureInfo.InvariantCulture) + "s";
             }
             return "?";
+        }
+
+        private static string GetWorkRoot(string appRoot)
+        {
+            var fullAppRoot = Path.GetFullPath(appRoot);
+            return SelfUpdateWorkspace.ValidateChild(fullAppRoot,
+                Path.Combine(fullAppRoot, WorkDirectoryName));
+        }
+
+        private static string GetStagingPath(string appRoot)
+        {
+            var workRoot = GetWorkRoot(appRoot);
+            return SelfUpdateWorkspace.ValidateChild(workRoot,
+                Path.Combine(workRoot, StagingDirectoryName));
+        }
+
+        private static string GetResultPath(string appRoot)
+        {
+            var workRoot = GetWorkRoot(appRoot);
+            return SelfUpdateWorkspace.ValidateChild(workRoot,
+                Path.Combine(workRoot, ResultFileName));
         }
 
         private static string GetValue(IReadOnlyDictionary<string, string> values,

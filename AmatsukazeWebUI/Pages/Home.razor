@@ -42,7 +42,7 @@
             }
             else
             {
-                <button class="btn btn-sm btn-secondary update-status-button @(_updateStatus.HasUpdate ? "has-update" : "")"
+                <button class="btn btn-sm btn-secondary update-status-button @((_updateStatus.HasUpdate || _updateStatus.HasPendingSelfUpdate) ? "has-update" : "")"
                         @onclick="OpenUpdateDialog">
                     更新する
                 </button>
@@ -206,6 +206,10 @@ else
 
     private static string GetUpdateStatusSummary(UpdateStatusView status)
     {
+        if (status.HasPendingSelfUpdate)
+        {
+            return "保留中の本体更新があります";
+        }
         if (!status.CheckEnabled)
         {
             return "自動チェック無効";

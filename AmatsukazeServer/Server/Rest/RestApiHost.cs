@@ -369,6 +369,7 @@ namespace Amatsukaze.Server.Rest
             app.MapMethods("/api/update/status", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/update/check", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/update/apply", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/discard-pending", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/update/cancel", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/update/job/{jobId}", new[] { "OPTIONS" }, () => Results.Ok());
             app.MapMethods("/api/update/job/{jobId}/log", new[] { "OPTIONS" }, () => Results.Ok());
@@ -392,13 +393,24 @@ namespace Amatsukaze.Server.Rest
                     return Results.Json(new { error = "更新機能が初期化されていません" },
                         statusCode: StatusCodes.Status503ServiceUnavailable);
                 }
-                if (!server.UpdateManager.TryStartApplyJob(request?.TargetIds, out var job,
-                    out var error, out var conflict))
+                if (!server.UpdateManager.TryStartApplyJob(request?.TargetIds,
+                    out var job, out var error, out var conflict))
                 {
                     return conflict ? Results.Conflict(new { error }) :
                         Results.BadRequest(new { error });
                 }
                 return Results.Json(new { jobId = job.JobId });
+            });
+            app.MapPost("/api/update/discard-pending", () =>
+            {
+                if (server.UpdateManager == null)
+                {
+                    return Results.Json(new { error = "更新機能が初期化されていません" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+                return server.UpdateManager.TryDiscardPendingSelfUpdate(out var error)
+                    ? Results.Json(new { ok = true })
+                    : Results.Conflict(new { error });
             });
             app.MapPost("/api/update/cancel", (UpdateCancelRequest request) =>
             {

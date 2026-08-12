@@ -16,9 +16,19 @@ namespace Amatsukaze.Shared
         public bool HasUpdate { get; set; }
         // 再起動後に適用する本体更新が保留されているか
         public bool HasPendingSelfUpdate { get; set; }
+        // 直前の本体更新結果。updater からの復帰時に読み取り、次の再起動まで保持する
+        public SelfUpdateResultView? LastSelfUpdateResult { get; set; }
         // 実行中の更新適用ジョブ。存在しない場合は null
         public string? ActiveApplyJobId { get; set; }
         public List<UpdateItemView> Items { get; set; } = new List<UpdateItemView>();
+    }
+
+    // updater から復帰した直後の本体更新結果
+    public sealed class SelfUpdateResultView
+    {
+        public string Status { get; set; } = "";
+        public string? Version { get; set; }
+        public string? ErrorCode { get; set; }
     }
 
     // 更新対象ごとの表示状態
