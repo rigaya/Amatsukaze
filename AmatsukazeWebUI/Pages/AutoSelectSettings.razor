@@ -162,7 +162,7 @@ else
                                     <input type="checkbox" checked="@_selectedCondition.ContentConditionEnabled" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.ContentConditionEnabled)))" />
                                     ジャンル
                                 </label>
-                                <label class="autoselect-secondary-option">
+                                <label class="autoselect-secondary-option" title="オン: 番組に複数のジャンルが設定されている際、そのすべてにヒットするかチェックします。&#10;オフ: 番組の最初の主ジャンルのみをチェックします。">
                                     （
                                     <input type="checkbox" checked="@_selectedCondition.MatchAllGenres" @onchange="@(e => OnBoolChanged(e, nameof(AutoSelectConditionModel.MatchAllGenres)))" disabled="@(!_selectedCondition.ContentConditionEnabled)" />
                                     全ジャンルを対象）
