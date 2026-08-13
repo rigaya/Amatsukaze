@@ -267,10 +267,14 @@ void CMAnalyze::inputDivFile(int numFrames, const tstring& divFilePath) {
     File file(divFilePath, _T("r"));
     std::string str;
     std::regex re("^\\s*([0-9]+)\\s*$");
+    std::regex blankRe("^\\s*$");
     std::smatch match;
     int lineNumber = 0;
     while (file.getline(str)) {
         lineNumber++;
+        if (std::regex_match(str, blankRe)) {
+            continue;
+        }
         if (!std::regex_match(str, match, re)) {
             THROWF(FormatException, "分割点ファイルの%d行目が整数ではありません: %s", lineNumber, str.c_str());
         }
@@ -281,7 +285,11 @@ void CMAnalyze::inputDivFile(int numFrames, const tstring& divFilePath) {
         } catch (const std::exception&) {
             THROWF(FormatException, "分割点ファイルの%d行目が整数の範囲外です: %s", lineNumber, str.c_str());
         }
-        if (point <= 0 || point >= numFrames) {
+        // JLSの出力をそのまま利用したファイルでは先頭・終端が含まれることがある
+        if (point == 0 || point == numFrames) {
+            continue;
+        }
+        if (point < 0 || point > numFrames) {
             THROWF(FormatException, "分割点ファイルの%d行目が映像の範囲外です: %d", lineNumber, point);
         }
         divs.push_back(point);

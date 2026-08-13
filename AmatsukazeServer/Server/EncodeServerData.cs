@@ -889,7 +889,7 @@ namespace Amatsukaze.Server
         public bool AutoLogoPendingDetailedDebug { get; set; }
         [DataMember]
         public bool DumpFilter { get; set; }
-        // CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする
+        // CM解析のみ実行時にTrim・分割点情報を入力ディレクトリにコピーする
         [DataMember]
         public bool CopyTrimAVS { get; set; }
         [DataMember]

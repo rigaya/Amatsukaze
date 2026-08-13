@@ -27,46 +27,87 @@ BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset)
     qualityOffset(qualityOffset) {}
 
 // カラースペース3セット
-// x265は数値そのままでもOKだが、x264はhelpを見る限りstringでなければ
-// ならないようなので変換を定義
-// とりあえずARIB STD-B32 v3.7に書いてあるのだけ
+// FFmpegの列挙値を各エンコーダが受理する文字列へ変換する
+
+static bool isHWEncoder(ENUM_ENCODER encoder) {
+    return encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC || encoder == ENCODER_VCEENC;
+}
 
 // 3原色
-/* static */ const char* av::getColorPrimStr(int color_prim) {
+/* static */ const char* av::getColorPrimStr(int color_prim, ENUM_ENCODER encoder) {
     switch (color_prim) {
     case AVCOL_PRI_BT709: return "bt709";
+    case AVCOL_PRI_BT470M: return "bt470m";
+    case AVCOL_PRI_BT470BG: return "bt470bg";
+    case AVCOL_PRI_SMPTE170M: return (encoder == ENCODER_SVTAV1) ? "bt601" : "smpte170m";
+    case AVCOL_PRI_SMPTE240M: return (encoder == ENCODER_SVTAV1) ? "smpte240" : "smpte240m";
+    case AVCOL_PRI_FILM: return "film";
     case AVCOL_PRI_BT2020: return "bt2020";
+    case AVCOL_PRI_SMPTE428:
+        return (encoder == ENCODER_SVTAV1) ? "xyz" : (isHWEncoder(encoder) ? "st428" : "smpte428");
+    case AVCOL_PRI_SMPTE431:
+        return (encoder == ENCODER_SVTAV1) ? "smpte431" : (isHWEncoder(encoder) ? "st431-2" : "smpte431");
+    case AVCOL_PRI_SMPTE432:
+        return (encoder == ENCODER_SVTAV1) ? "smpte432" : (isHWEncoder(encoder) ? "st432-1" : "smpte432");
+    case AVCOL_PRI_JEDEC_P22:
+        if (encoder == ENCODER_SVTAV1) return "ebu3213";
+        if (isHWEncoder(encoder)) return "ebu3213-e";
+        break;
     default:
-        THROWF(FormatException,
-            "Unsupported color primaries (%d)", color_prim);
+        break;
     }
+    THROWF(FormatException, "Unsupported color primaries (%d)", color_prim);
     return NULL;
 }
 
 // ガンマ
-/* static */ const char* av::getTransferCharacteristicsStr(int transfer_characteritics, bool forSVTAV1) {
+/* static */ const char* av::getTransferCharacteristicsStr(int transfer_characteritics, ENUM_ENCODER encoder) {
     switch (transfer_characteritics) {
     case AVCOL_TRC_BT709: return "bt709";
-    case AVCOL_TRC_IEC61966_2_4: return (forSVTAV1) ? "iec61966" : "iec61966-2-4";
+    case AVCOL_TRC_GAMMA22: return "bt470m";
+    case AVCOL_TRC_GAMMA28: return "bt470bg";
+    case AVCOL_TRC_SMPTE170M: return (encoder == ENCODER_SVTAV1) ? "bt601" : "smpte170m";
+    case AVCOL_TRC_SMPTE240M: return (encoder == ENCODER_SVTAV1) ? "smpte240" : "smpte240m";
+    case AVCOL_TRC_LINEAR: return "linear";
+    case AVCOL_TRC_LOG: return "log100";
+    case AVCOL_TRC_LOG_SQRT: return (encoder == ENCODER_SVTAV1) ? "log100-sqrt10" : "log316";
+    case AVCOL_TRC_IEC61966_2_4: return (encoder == ENCODER_SVTAV1) ? "iec61966" : "iec61966-2-4";
+    case AVCOL_TRC_BT1361_ECG: return (encoder == ENCODER_SVTAV1) ? "bt1361" : "bt1361e";
+    case AVCOL_TRC_IEC61966_2_1: return (encoder == ENCODER_SVTAV1) ? "srgb" : "iec61966-2-1";
     case AVCOL_TRC_BT2020_10: return "bt2020-10";
-    case AVCOL_TRC_SMPTEST2084: return (forSVTAV1) ? "smpte2084" : "smpte-st-2084";
-    case AVCOL_TRC_ARIB_STD_B67: return (forSVTAV1) ? "hlg" : "arib-std-b67";
+    case AVCOL_TRC_BT2020_12: return "bt2020-12";
+    case AVCOL_TRC_SMPTE2084: return "smpte2084";
+    case AVCOL_TRC_SMPTE428: return "smpte428";
+    case AVCOL_TRC_ARIB_STD_B67: return (encoder == ENCODER_SVTAV1) ? "hlg" : "arib-std-b67";
     default:
-        THROWF(FormatException,
-            "Unsupported color transfer characteritics (%d)", transfer_characteritics);
+        break;
     }
+    THROWF(FormatException, "Unsupported color transfer characteristics (%d)", transfer_characteritics);
     return NULL;
 }
 
 // 変換係数
-/* static */ const char* av::getColorSpaceStr(int color_space, bool forSVTAV1) {
+/* static */ const char* av::getColorSpaceStr(int color_space, ENUM_ENCODER encoder) {
     switch (color_space) {
+    case AVCOL_SPC_RGB: return (encoder == ENCODER_X265) ? "gbr" : (encoder == ENCODER_SVTAV1 ? "identity" : "GBR");
     case AVCOL_SPC_BT709: return "bt709";
-    case AVCOL_SPC_BT2020_NCL: return (forSVTAV1) ? "bt2020-ncl" : "bt2020nc";
+    case AVCOL_SPC_FCC: return "fcc";
+    case AVCOL_SPC_BT470BG: return "bt470bg";
+    case AVCOL_SPC_SMPTE170M: return (encoder == ENCODER_SVTAV1) ? "bt601" : "smpte170m";
+    case AVCOL_SPC_SMPTE240M: return (encoder == ENCODER_SVTAV1) ? "smpte240" : "smpte240m";
+    case AVCOL_SPC_YCGCO: return (encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1) ? "ycgco" : "YCgCo";
+    case AVCOL_SPC_BT2020_NCL: return (encoder == ENCODER_SVTAV1) ? "bt2020-ncl" : "bt2020nc";
+    case AVCOL_SPC_BT2020_CL: return (encoder == ENCODER_SVTAV1) ? "bt2020-cl" : "bt2020c";
+    case AVCOL_SPC_SMPTE2085: return "smpte2085";
+    case AVCOL_SPC_CHROMA_DERIVED_NCL:
+        return (encoder == ENCODER_SVTAV1) ? "chroma-ncl" : (isHWEncoder(encoder) ? "derived-ncl" : "chroma-derived-nc");
+    case AVCOL_SPC_CHROMA_DERIVED_CL:
+        return (encoder == ENCODER_SVTAV1) ? "chroma-cl" : (isHWEncoder(encoder) ? "derived-cl" : "chroma-derived-c");
+    case AVCOL_SPC_ICTCP: return isHWEncoder(encoder) ? "ictco" : (encoder == ENCODER_X264 ? "ICtCp" : "ictcp");
     default:
-        THROWF(FormatException,
-            "Unsupported color color space (%d)", color_space);
+        break;
     }
+    THROWF(FormatException, "Unsupported color space (%d)", color_space);
     return NULL;
 }
 
@@ -124,23 +165,23 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
 
     if (encoder == ENCODER_SVTAV1) {
         if (fmt.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {
-            sb.append(_T(" --color-primaries %s"), av::getColorPrimStr(fmt.colorPrimaries));
+            sb.append(_T(" --color-primaries %s"), av::getColorPrimStr(fmt.colorPrimaries, encoder));
         }
         if (fmt.transferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --transfer-characteristics %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics, true));
+            sb.append(_T(" --transfer-characteristics %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics, encoder));
         }
-        if (fmt.colorSpace != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --matrix-coefficients %s"), av::getColorSpaceStr(fmt.colorSpace, true));
+        if (fmt.colorSpace != AVCOL_SPC_UNSPECIFIED) {
+            sb.append(_T(" --matrix-coefficients %s"), av::getColorSpaceStr(fmt.colorSpace, encoder));
         }
     } else {
         if (fmt.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {
-            sb.append(_T(" --colorprim %s"), av::getColorPrimStr(fmt.colorPrimaries));
+            sb.append(_T(" --colorprim %s"), av::getColorPrimStr(fmt.colorPrimaries, encoder));
         }
         if (fmt.transferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --transfer %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics, false));
+            sb.append(_T(" --transfer %s"), av::getTransferCharacteristicsStr(fmt.transferCharacteristics, encoder));
         }
-        if (fmt.colorSpace != AVCOL_TRC_UNSPECIFIED) {
-            sb.append(_T(" --colormatrix %s"), av::getColorSpaceStr(fmt.colorSpace, false));
+        if (fmt.colorSpace != AVCOL_SPC_UNSPECIFIED) {
+            sb.append(_T(" --colormatrix %s"), av::getColorSpaceStr(fmt.colorSpace, encoder));
         }
     }
 
@@ -1646,7 +1687,7 @@ void ConfigWrapper::dump() const {
         decoderToString(conf.decoderSetting.h264),
         decoderToString(conf.decoderSetting.hevc));
     if (conf.mode == _T("cm")) {
-        ctx.infoF(_T("trim.avsをコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
+        ctx.infoF(_T("Trim・分割点情報をコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
     }
 }
 

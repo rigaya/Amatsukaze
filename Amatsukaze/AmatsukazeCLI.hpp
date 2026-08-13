@@ -121,7 +121,7 @@ static void printHelp(const tchar* bin) {
         "  --whisper-parallel      Whisperによる字幕生成を映像エンコードと並列実行する\n"
         "  --trimavs <パス>    CMカット用Trim AVSファイルへのパス。メインファイルのCMカット出力でのみ使用される。\n"
         "  --divfile <パス>    出力分割点ファイルへのパス。メインファイルでのみ使用される。\n"
-        "  --copy-trimavs      CM解析のみ実行時にtrimn.avsを入力ディレクトリにコピーする\n"))
+        "  --copy-trimavs      CM解析のみ実行時にTrim・分割点情報を入力ディレクトリにコピーする\n"))
         + AMATSUKAZECLI_HELP_NICOASS_LINE
         + _T(
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"

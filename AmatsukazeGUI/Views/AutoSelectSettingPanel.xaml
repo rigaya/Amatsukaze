@@ -130,7 +130,15 @@
                         <CheckBox Content="ジャンル"
                                 IsChecked="{Binding ContentConditionEnabled, Mode=TwoWay}"/>
                         <StackPanel Orientation="Horizontal" Margin="10,0,0,0"
-                                IsEnabled="{Binding ContentConditionEnabled}">
+                                IsEnabled="{Binding ContentConditionEnabled}"
+                                ToolTipService.ShowOnDisabled="True">
+                            <StackPanel.ToolTip>
+                                <TextBlock>
+                                    <Run Text="オン: 番組に複数のジャンルが設定されている際、"/><LineBreak/>
+                                    <Run Text="　　　そのすべてにヒットするかチェックします。"/><LineBreak/>
+                                    <Run Text="オフ: 番組の最初の主ジャンルのみをチェックします。"/>
+                                </TextBlock>
+                            </StackPanel.ToolTip>
                             <TextBlock Text="（" FontSize="11" VerticalAlignment="Center"/>
                             <CheckBox Content="全ジャンルを対象" FontSize="11"
                                     IsChecked="{Binding MatchAllGenres, Mode=TwoWay}"/>

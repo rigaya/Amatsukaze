@@ -1565,10 +1565,6 @@ namespace Amatsukaze.Server.Rest
                 {
                     EnsureTaskConsoleMapping(data.EncodeState.ConsoleId);
                 }
-                if (data.SleepCancel != null)
-                {
-                    finishSetting = ServerSupport.DeepCopy(data.SleepCancel);
-                }
             }
             return Task.FromResult(0);
         }

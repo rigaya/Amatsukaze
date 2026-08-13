@@ -17,6 +17,15 @@
 
 struct EncoderOptionInfo;
 
+enum ENUM_ENCODER {
+    ENCODER_X264,
+    ENCODER_X265,
+    ENCODER_QSVENC,
+    ENCODER_NVENC,
+    ENCODER_VCEENC,
+    ENCODER_SVTAV1,
+};
+
 struct EncoderZone {
     int startFrame;
     int endFrame;
@@ -34,29 +43,18 @@ struct BitrateZone : EncoderZone {
 namespace av {
 
 // カラースペース3セット
-// x265は数値そのままでもOKだが、x264はhelpを見る限りstringでなければ
-// ならないようなので変換を定義
-// とりあえずARIB STD-B32 v3.7に書いてあるのだけ
+// エンコーダごとに受理する文字列表現が異なるため、FFmpegの列挙値から変換する
 
 // 3原色
-const char* getColorPrimStr(int color_prim);
+const char* getColorPrimStr(int color_prim, ENUM_ENCODER encoder);
 
 // ガンマ
-const char* getTransferCharacteristicsStr(int transfer_characteritics, bool forSVTAV1);
+const char* getTransferCharacteristicsStr(int transfer_characteritics, ENUM_ENCODER encoder);
 
 // 変換係数
-const char* getColorSpaceStr(int color_space, bool forSVTAV1);
+const char* getColorSpaceStr(int color_space, ENUM_ENCODER encoder);
 
 } // namespace av {
-
-enum ENUM_ENCODER {
-    ENCODER_X264,
-    ENCODER_X265,
-    ENCODER_QSVENC,
-    ENCODER_NVENC,
-    ENCODER_VCEENC,
-    ENCODER_SVTAV1,
-};
 
 enum ENUM_FORMAT {
     FORMAT_MP4,
@@ -290,7 +288,7 @@ struct Config {
     int cmoutmask;
     tstring trimavsPath;
     tstring divFilePath;
-    // CM解析のみ実行時にtrim%d.avsを入力ディレクトリへコピーする
+    // CM解析のみ実行時にTrim・分割点情報を入力ディレクトリへコピーする
     bool copyTrimAVS;
     // 検出モード用
     int maxframes;

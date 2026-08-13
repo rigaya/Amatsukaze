@@ -436,12 +436,13 @@ static bool isCaptionParsingEnabled(const ConfigWrapper& setting) {
     return setting.isSubtitlesEnabled() || setting.isNoRemoveTmp();
 }
 
-static void copyTrimAVSForCMOnly(
+static void copyCutInfoForCMOnly(
     AMTContext& ctx,
     const ConfigWrapper& setting,
     const StreamReformInfo& reformInfo,
+    const std::vector<std::unique_ptr<CMAnalyze>>& cmanalyze,
     const int numVideoFiles) {
-    // trimn.avsが複数ある場合、動画時間(フレーム数)が長いものを選択してtrim.avsとしてコピー
+    // 複数映像がある場合、動画時間（フレーム数）が最も長いもののカット情報をコピー
     int bestIndex = -1;
     int bestFrames = -1;
     tstring bestSrcTrim;
@@ -467,6 +468,28 @@ static void copyTrimAVSForCMOnly(
         }
     } else {
         ctx.warn(_T("[CM解析のみ] コピー対象のtrim*.avsが見つかりませんでした"));
+    }
+
+    if (bestIndex >= 0 && File::exists(setting.getTmpDivPath(bestIndex))) {
+        const auto dstDiv = StringFormat(_T("%s.div.txt"), setting.getSrcFileOriginalPath().c_str());
+        const int numFrames = (int)reformInfo.getFilterSourceFrames(bestIndex).size();
+        StringBuilder sb;
+        for (const auto point : cmanalyze[bestIndex]->getDivs()) {
+            if (point > 0 && point < numFrames) {
+                sb.append("%d\n", point);
+            }
+        }
+        ctx.infoF(_T("[CM解析のみ] div%d.txt をdiv.txtとしてコピー: %s"),
+            bestIndex, dstDiv.c_str());
+        try {
+            File file(dstDiv, _T("w"));
+            file.write(sb.getMC());
+        } catch (const Exception& e) {
+            ctx.warnF(_T("[CM解析のみ] div.txtのコピーに失敗: %s -> %s (%s)"),
+                setting.getTmpDivPath(bestIndex).c_str(), dstDiv.c_str(), e.message());
+        }
+    } else if (bestIndex >= 0) {
+        ctx.warnF(_T("[CM解析のみ] コピー対象のdiv%d.txtが見つかりませんでした"), bestIndex);
     }
 }
 
@@ -1419,7 +1442,7 @@ void DoBadThing() {
 
     if (isNoEncode) {
         if (setting.isCopyTrimAVSEnabled()) {
-            copyTrimAVSForCMOnly(ctx, setting, reformInfo, numVideoFiles);
+            copyCutInfoForCMOnly(ctx, setting, reformInfo, cmanalyze, numVideoFiles);
         }
         if (setting.isOutputChapterEnabled()) {
             ctx.info(_T("[チャプター生成]"));

@@ -492,7 +492,7 @@ namespace Amatsukaze.Server.Rest
 
                 // Trim AVSを読み込み
                 var trims = LoadTrims(item.SrcPath, tempDir);
-                var divisionPoints = LoadDivisionPoints(item.SrcPath, session.NumFrames);
+                var divisionPoints = LoadDivisionPoints(item.SrcPath, tempDir, session.NumFrames);
 
                 response = new TrimAdjustSessionResponse
                 {
@@ -605,7 +605,7 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
-        // Trimと分割点を保存する
+        // 変更されたTrimと分割点だけを保存する
         public bool TrySaveTrims(string sessionId, TrimSaveRequest request, out string error)
         {
             error = null;
@@ -616,24 +616,33 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
-            if (request?.Trims == null || request.Trims.Count == 0)
+            if (request == null || (!request.SaveTrims && !request.SaveDivisionPoints))
+            {
+                error = "保存対象が指定されていません";
+                return false;
+            }
+
+            if (request.SaveTrims && (request.Trims == null || request.Trims.Count == 0))
             {
                 error = "Trimデータが空です";
                 return false;
             }
 
             // バリデーション
-            foreach (var trim in request.Trims)
+            if (request.SaveTrims)
             {
-                if (trim.Start < 0 || trim.End < trim.Start || trim.End >= session.NumFrames)
+                foreach (var trim in request.Trims)
                 {
-                    error = $"Trim範囲が不正です: ({trim.Start}, {trim.End})";
-                    return false;
+                    if (trim.Start < 0 || trim.End < trim.Start || trim.End >= session.NumFrames)
+                    {
+                        error = $"Trim範囲が不正です: ({trim.Start}, {trim.End})";
+                        return false;
+                    }
                 }
             }
 
             var divisionPoints = new SortedSet<int>();
-            if (request.DivisionPoints != null)
+            if (request.SaveDivisionPoints && request.DivisionPoints != null)
             {
                 foreach (var point in request.DivisionPoints)
                 {
@@ -648,17 +657,23 @@ namespace Amatsukaze.Server.Rest
 
             try
             {
-                var avsPath = session.SrcPath + ".trim.avs";
-                var lines = new List<string>();
-                var trimParts = new List<string>();
-                foreach (var trim in request.Trims)
+                if (request.SaveTrims)
                 {
-                    trimParts.Add($"Trim({trim.Start},{trim.End})");
+                    var avsPath = session.SrcPath + ".trim.avs";
+                    var lines = new List<string>();
+                    var trimParts = new List<string>();
+                    foreach (var trim in request.Trims)
+                    {
+                        trimParts.Add($"Trim({trim.Start},{trim.End})");
+                    }
+                    lines.Add(string.Join(" ++ ", trimParts));
+                    File.WriteAllLines(avsPath, lines);
                 }
-                lines.Add(string.Join(" ++ ", trimParts));
-                File.WriteAllLines(avsPath, lines);
 
-                SaveDivisionPoints(session.SrcPath, divisionPoints);
+                if (request.SaveDivisionPoints)
+                {
+                    SaveDivisionPoints(session.SrcPath, divisionPoints);
+                }
                 return true;
             }
             catch (Exception ex)
@@ -806,10 +821,14 @@ namespace Amatsukaze.Server.Rest
         }
 
         // 分割点を読み込み: 1行につき1フレーム番号
-        private static List<int> LoadDivisionPoints(string srcPath, int numFrames)
+        private static List<int> LoadDivisionPoints(string srcPath, string tempDir, int numFrames)
         {
             var points = new SortedSet<int>();
             var divPath = srcPath + ".div.txt";
+            if (!File.Exists(divPath))
+            {
+                divPath = Path.Combine(tempDir, "div0.txt");
+            }
             if (!File.Exists(divPath))
             {
                 return new List<int>();
@@ -828,7 +847,12 @@ namespace Amatsukaze.Server.Rest
                 {
                     throw new FormatException($"分割点ファイルの{lineNumber}行目が整数ではありません: {line}");
                 }
-                if (point <= 0 || point >= numFrames)
+                // JLSの出力には先頭・終端が含まれることがあるため、編集点からは除外する
+                if (point == 0 || point == numFrames)
+                {
+                    continue;
+                }
+                if (point < 0 || point > numFrames)
                 {
                     throw new FormatException($"分割点ファイルの{lineNumber}行目が範囲外です: {point}");
                 }
@@ -840,15 +864,6 @@ namespace Amatsukaze.Server.Rest
         private static void SaveDivisionPoints(string srcPath, SortedSet<int> points)
         {
             var divPath = srcPath + ".div.txt";
-            if (points.Count == 0)
-            {
-                if (File.Exists(divPath))
-                {
-                    File.Delete(divPath);
-                }
-                return;
-            }
-
             var lines = new List<string>();
             foreach (var point in points)
             {

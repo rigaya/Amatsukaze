@@ -52,6 +52,13 @@ jobs:
             echo is_tag=false>> %GITHUB_OUTPUT%
           )
 
+      - name: Update Windows certificates
+        shell: cmd
+        run: |
+          certutil -generateSSTFromWU roots.sst
+          certutil -addstore -f root roots.sst
+          del roots.sst
+
       - name: Cache vcpkg
         uses: actions/cache@v4
         with:

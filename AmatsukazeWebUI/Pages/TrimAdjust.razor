@@ -188,7 +188,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdPrevEditPoint)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdBack4)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdBack4)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdBack4)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdBack4)">
                         <span class="trim-control-icon trim-control-icon-left">
@@ -200,7 +203,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack4)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdBack3)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdBack3)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdBack3)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdBack3)">
                         <span class="trim-control-icon trim-control-icon-left">
@@ -211,7 +217,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack3)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdBack2)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdBack2)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdBack2)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdBack2)">
                         <span class="trim-control-icon trim-control-icon-left">
@@ -221,7 +230,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdBack2)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdBack1)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdBack1)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdBack1)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdBack1)">
                         <span class="trim-control-icon trim-control-icon-left">
@@ -240,7 +252,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdToggleEditPoint)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdForward1)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdForward1)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdForward1)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdForward1)">
                         <span class="trim-control-icon trim-control-icon-right">
@@ -249,7 +264,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward1)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdForward2)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdForward2)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdForward2)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdForward2)">
                         <span class="trim-control-icon trim-control-icon-right">
@@ -259,7 +277,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward2)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdForward3)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdForward3)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdForward3)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdForward3)">
                         <span class="trim-control-icon trim-control-icon-right">
@@ -270,7 +291,10 @@
                         <span class="trim-control-distance">@GetTrimCommandDistanceLabel(TrimCmdForward3)</span>
                     </button>
                     <button class="trim-control-btn"
-                            @onclick="() => ExecuteTrimCommand(TrimCmdForward4)"
+                            @onpointerdown="e => OnRepeatBtnDown(e, TrimCmdForward4)"
+                            @onpointerup="OnRepeatBtnUp"
+                            @onpointercancel="OnRepeatBtnUp"
+                            @onpointerleave="OnRepeatBtnUp"
                             title="@GetTrimCommandTooltip(TrimCmdForward4)"
                             aria-label="@GetTrimCommandTooltip(TrimCmdForward4)">
                         <span class="trim-control-icon trim-control-icon-right">
@@ -471,7 +495,7 @@
     private List<EditPoint> _editPoints = new List<EditPoint>();
     private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
-    private bool _mobileEpOpen = true;
+    private bool _mobileEpOpen = false;
 
     // 分割点リスト
     private List<int> _divisionPoints = new List<int>();
@@ -494,6 +518,9 @@
     private string? _queueItemOutDir; // 再投入時の出力先フォルダ
     private int _queueItemPriority = 3; // 再投入時に引き継ぐ優先度
     private List<string>? _queueItemTags; // 再投入時に引き継ぐタグ（CM解析投入時と同一）
+
+    // 長押しリピート用
+    private CancellationTokenSource? _repeatCts;
 
     // debounce用タイマー
     private System.Threading.Timer? _debounceTimer;
@@ -1648,9 +1675,10 @@
     private async Task SaveTrims()
     {
         if (_session == null || string.IsNullOrEmpty(_sessionId)) return;
+        if (!_hasChanges) return;
 
         var trims = BuildTrimsFromEditPoints();
-        if (trims.Count == 0)
+        if (_editPointsChanged && trims.Count == 0)
         {
             _statusMessage = "本編区間がありません（編集点を確認してください）";
             _isError = true;
@@ -1661,7 +1689,9 @@
         var result = await Api.SaveTrimsAsync(_sessionId, new TrimSaveRequest
         {
             Trims = trims,
-            DivisionPoints = new List<int>(_divisionPoints)
+            DivisionPoints = new List<int>(_divisionPoints),
+            SaveTrims = _editPointsChanged,
+            SaveDivisionPoints = _divisionPointsChanged
         });
         if (result.Ok)
         {
@@ -1801,6 +1831,65 @@
 
         _requeueBusy = false;
         StateHasChanged();
+    }
+
+    private void OnRepeatBtnDown(PointerEventArgs e, string commandId)
+    {
+        if (e.IsPrimary) StartRepeat(commandId);
+    }
+
+    private void OnRepeatBtnUp(PointerEventArgs e)
+    {
+        if (e.IsPrimary) StopRepeat();
+    }
+
+    private void StartRepeat(string commandId)
+    {
+        StopRepeat();
+        ExecuteTrimCommand(commandId);
+        _repeatCts = new CancellationTokenSource();
+        var token = _repeatCts.Token;
+        _ = RepeatAsync(commandId, token);
+    }
+
+    private async Task RepeatAsync(string commandId, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(400, token);
+            var intervalMs = GetRepeatIntervalMs(commandId);
+            while (!token.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        ExecuteTrimCommand(commandId);
+                        StateHasChanged();
+                    }
+                });
+                await Task.Delay(intervalMs, token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private static int GetRepeatIntervalMs(string commandId) => commandId switch
+    {
+        TrimCmdBack1    or TrimCmdForward1 => 10,
+        TrimCmdBack2    or TrimCmdForward2 => 100,
+        TrimCmdBack3    or TrimCmdForward3 => 100,
+        TrimCmdBack4    or TrimCmdForward4 => 100,
+        _                                  => 100
+    };
+
+    private void StopRepeat()
+    {
+        _repeatCts?.Cancel();
+        _repeatCts?.Dispose();
+        _repeatCts = null;
     }
 
     private void ExecuteTrimCommand(string commandId)
@@ -2152,6 +2241,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        StopRepeat();
         _debounceTimer?.Dispose();
         _objRef?.Dispose();
         if (!string.IsNullOrEmpty(_sessionId))
