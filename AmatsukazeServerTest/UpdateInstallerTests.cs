@@ -632,6 +632,30 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public void Windowsの利用者指定パスは適用前に拒否する()
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        using var fixture = new InstallerFixture();
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == "QSVEnc");
+        var setting = new Setting
+        {
+            QSVEncPath = Path.Combine(fixture.Root, "custom", "QSVEncC64.exe"),
+        };
+
+        Assert.Equal("setting_path_outside_exe_files",
+            UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+                setting, fixture.Root));
+
+        setting.QSVEncPath = Path.Combine(fixture.ExeFiles, "QSVEncC64.exe");
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+            setting, fixture.Root));
+
+        setting.QSVEncPath = string.Empty;
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+            setting, fixture.Root));
+    }
+
+    [Fact]
     public void 対応済みの配置形式とPayloadを対象ごとに判定する()
     {
         Assert.True(UpdateCatalog.TryInitialize(out var error), error);

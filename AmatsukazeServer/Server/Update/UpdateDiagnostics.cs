@@ -19,6 +19,7 @@ namespace Amatsukaze.Server.Update
 {
     internal static class UpdateDiagnostics
     {
+        private static readonly Encoding CommandOutputEncoding = new UTF8Encoding(false);
         private static readonly string[] DiagnosticHosts =
         {
             "api.github.com",
@@ -53,19 +54,18 @@ namespace Amatsukaze.Server.Update
 
             if (OperatingSystem.IsWindows())
             {
-                values.Add(("winhttp_proxy", await SafeCommandAsync("netsh.exe",
-                    new[] { "winhttp", "show", "proxy" }).ConfigureAwait(false)));
                 values.Add(("antivirus", await SafeCommandAsync("powershell.exe", new[]
                 {
                     "-NoProfile",
                     "-NonInteractive",
                     "-Command",
-                    "Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | Select-Object -ExpandProperty displayName",
+                    "[Console]::OutputEncoding=[Text.Encoding]::UTF8; " +
+                    "Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | " +
+                    "Select-Object -ExpandProperty displayName",
                 }).ConfigureAwait(false)));
             }
             else
             {
-                values.Add(("winhttp_proxy", "n/a"));
                 values.Add(("antivirus", "n/a"));
             }
             log.Write("-", "S00_ENV", "OK", values.ToArray());
@@ -391,6 +391,8 @@ namespace Amatsukaze.Server.Update
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    StandardOutputEncoding = CommandOutputEncoding,
+                    StandardErrorEncoding = CommandOutputEncoding,
                 };
                 foreach (var argument in arguments)
                 {

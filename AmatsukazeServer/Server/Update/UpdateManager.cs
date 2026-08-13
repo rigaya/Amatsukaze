@@ -353,12 +353,25 @@ namespace Amatsukaze.Server.Update
                 {
                     var state = stateSnapshot.FirstOrDefault(item =>
                         string.Equals(item.Id, target.Id, StringComparison.OrdinalIgnoreCase));
-                    var initialStatus = disabledTargets.Contains(target.Id)
-                        ? UpdateTargetStatus.Disabled
-                        : environment.IsDocker && target.IsApplication
-                            ? UpdateTargetStatus.Unsupported : UpdateTargetStatus.Unknown;
                     var cannotApplyReason = GetCannotApplyReason(target, environment.OS,
                         setting, appRoot);
+                    var initialStatus = UpdateTargetStatus.Unknown;
+                    var initialReason = "not_checked";
+                    if (disabledTargets.Contains(target.Id))
+                    {
+                        initialStatus = UpdateTargetStatus.Disabled;
+                        initialReason = "disabled_by_setting";
+                    }
+                    else if (environment.IsDocker && target.IsApplication)
+                    {
+                        initialStatus = UpdateTargetStatus.Unsupported;
+                        initialReason = "docker_self_update_unsupported";
+                    }
+                    else if (cannotApplyReason == "setting_path_outside_exe_files")
+                    {
+                        initialStatus = UpdateTargetStatus.Unsupported;
+                        initialReason = cannotApplyReason;
+                    }
                     items.Add(new UpdateItemView
                     {
                         Id = target.Id,
@@ -366,9 +379,7 @@ namespace Amatsukaze.Server.Update
                         InstalledVersion = state?.CurrentVersion,
                         LatestVersion = state?.LatestVersion,
                         State = (state?.Status ?? initialStatus).ToString(),
-                        StateReason = state?.Reason ?? (initialStatus == UpdateTargetStatus.Disabled
-                            ? "disabled_by_setting" : initialStatus == UpdateTargetStatus.Unsupported
-                                ? "docker_self_update_unsupported" : "not_checked"),
+                        StateReason = state?.Reason ?? initialReason,
                         RequiresRestart = target.RequiresRestart,
                         DownloadSizeBytes = state?.SelectedAsset?.Size ?? 0,
                         ReleaseUrl = state?.ReleaseUrl,
@@ -499,7 +510,7 @@ namespace Amatsukaze.Server.Update
             {
                 return "payload_not_defined_yet";
             }
-            if (os != UpdateOSKind.Linux || setting == null || string.IsNullOrWhiteSpace(root))
+            if (setting == null || string.IsNullOrWhiteSpace(root))
             {
                 return null;
             }
@@ -629,6 +640,25 @@ namespace Amatsukaze.Server.Update
                         "disabled_by_setting", checkedAt, null));
                     WriteTargetSummary(log, target.Id, "SKIP", null, null,
                         UpdateTargetStatus.Disabled, "disabled_by_setting", targetTimer,
+                        null, null);
+                    continue;
+                }
+
+                var cannotApplyReason = GetCannotApplyReason(target, environment.OS,
+                    setting, appRoot);
+                if (cannotApplyReason == "setting_path_outside_exe_files")
+                {
+                    var settingPath = target.GetExecutablePath(setting);
+                    log.Write(target.Id, "S01_PRECHECK", "SKIP",
+                        ("enabled", setting.UpdateCheckEnabled ?? true),
+                        ("target_enabled", "yes"),
+                        ("reason", cannotApplyReason),
+                        ("key", target.SettingKey),
+                        ("path", settingPath));
+                    newStates.Add(CreateState(target, null, null, UpdateTargetStatus.Unsupported,
+                        cannotApplyReason, checkedAt, null));
+                    WriteTargetSummary(log, target.Id, "SKIP", null, null,
+                        UpdateTargetStatus.Unsupported, cannotApplyReason, targetTimer,
                         null, null);
                     continue;
                 }

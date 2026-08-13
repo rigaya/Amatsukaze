@@ -627,6 +627,8 @@
     private bool HasEnvironmentWarning => !string.IsNullOrWhiteSpace(_status?.EnvironmentWarning);
     private static bool IsDockerSelfUpdateAvailable(UpdateItemView item)
         => item.State == "Unsupported" && item.StateReason == "docker_self_update_available";
+    private static bool IsSettingPathOutsideExeFiles(UpdateItemView item)
+        => item.StateReason == "setting_path_outside_exe_files";
     // 環境警告があり、かつ本体以外の行ならコンテナ再作成時の消失警告を表示する
     private bool IsDockerExecutable(UpdateItemView item)
         => HasEnvironmentWarning && !string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
@@ -691,7 +693,8 @@
             "UpToDate" => "最新",
             "UpdateAvailable" => "更新あり",
             "Unknown" => "バージョン取得不可",
-            "Unsupported" => IsDockerSelfUpdateAvailable(item) ? "Dockerで更新してください" : "対応外",
+            "Unsupported" => IsSettingPathOutsideExeFiles(item) ? "対象外" :
+                IsDockerSelfUpdateAvailable(item) ? "Dockerで更新してください" : "対応外",
             "Disabled" => "無効",
             _ => "状態不明",
         };
