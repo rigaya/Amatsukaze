@@ -97,7 +97,7 @@ namespace Amatsukaze.Server.Update
                 Payload = new[]
                 {
                     new PayloadEntry { Pattern = @"^SvtAv1EncApp$" },
-                    new PayloadEntry { Pattern = @"^SvtAv1EncApp_.+_x64\.exe$" },
+                    new PayloadEntry { Pattern = @"^SvtAv1EncApp_.+\.exe$" },
                 },
             },
             CreateRigayaEncoder("QSVEnc", "QSVEnc", "rigaya/QSVEnc", "QSVEncC", "qsvencc", nameof(Setting.QSVEncPath)),

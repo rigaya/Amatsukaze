@@ -6,6 +6,9 @@ namespace AmatsukazeServerTest;
 public sealed class UpdateCatalogTests
 {
     [Theory]
+    [InlineData("x264", "x264_3223_amd64_linux.tar.xz", "3223")]
+    [InlineData("x265", "x265_4.3+13_amd64_linux.tar.xz", "4.3+13")]
+    [InlineData("SVT-AV1", "SvtAv1EncApp_4.2.0-76_amd64_linux_clang.tar.xz", "4.2.0-76")]
     [InlineData("QSVEnc", "qsvencc_8.26_amd64.deb", "8.26")]
     [InlineData("NVEnc", "nvencc_9.31_amd64.deb", "9.31")]
     [InlineData("VCEEnc", "vceencc_9.12_amd64.deb", "9.12")]
@@ -26,6 +29,19 @@ public sealed class UpdateCatalogTests
 
         Assert.True(match.Success);
         Assert.Equal(expectedVersion, match.Groups["ver"].Value);
+    }
+
+    [Theory]
+    [InlineData("x264", "x264")]
+    [InlineData("x265", "x265")]
+    [InlineData("SVT-AV1", "SvtAv1EncApp")]
+    public void Linuxの実行ファイル名がPayloadに一意に一致する(
+        string targetId, string executableName)
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == targetId);
+
+        Assert.Single(target.Payload, entry => entry.IsMatch(executableName));
     }
 
     [Theory]
@@ -66,6 +82,9 @@ public sealed class UpdateCatalogTests
     }
 
     [Theory]
+    [InlineData("x264", "x264_3223_x64.zip", "3223")]
+    [InlineData("x265", "x265_4.3+13_x64.zip", "4.3+13")]
+    [InlineData("SVT-AV1", "SvtAv1EncApp_4.2.0-76_x64_clang.zip", "4.2.0-76")]
     [InlineData("QSVEnc", "QSVEncC_8.26_x64.7z", "8.26")]
     [InlineData("NVEnc", "NVEncC_9.31_x64.7z", "9.31")]
     [InlineData("VCEEnc", "VCEEncC_9.12_x64.7z", "9.12")]
@@ -89,6 +108,9 @@ public sealed class UpdateCatalogTests
     }
 
     [Theory]
+    [InlineData("x264", "x264_3223_x64.exe", "x264")]
+    [InlineData("x265", "x265_4.3+13_x64.exe", "x265")]
+    [InlineData("SVT-AV1", "SvtAv1EncApp_4.2.0-76_x64_clang.exe", "SvtAv1EncApp")]
     [InlineData("QSVEnc", "QSVEncC64.exe", "qsvencc")]
     [InlineData("NVEnc", "NVEncC64.exe", "nvencc")]
     [InlineData("VCEEnc", "VCEEncC64.exe", "vceencc")]

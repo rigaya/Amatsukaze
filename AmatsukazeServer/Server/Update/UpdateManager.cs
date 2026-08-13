@@ -20,6 +20,10 @@ namespace Amatsukaze.Server.Update
     internal sealed class UpdateManager : IDisposable
     {
         private static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(6);
+        // 起動時チェックの下限間隔。再起動直後に状態表示が空のままになるのを防ぐ。
+        private static readonly TimeSpan StartupCheckMinimumInterval = TimeSpan.FromMinutes(15);
+        // サーバー起動処理と競合しないよう、起動時チェックは少し待ってから実行する。
+        private static readonly TimeSpan StartupCheckDelay = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GuardPollInterval = TimeSpan.FromHours(1);
         private const int MaxRetainedJobs = 10;
         private static readonly Regex DevelopmentVersionRegex = new Regex(
@@ -326,7 +330,8 @@ namespace Amatsukaze.Server.Update
                 DateTime? nextCheckAt = null;
                 if (checkEnabled && lastCheckedAt.HasValue)
                 {
-                    var hours = Math.Max(6, setting?.UpdateCheckIntervalHours > 0
+                    var hours = Math.Max(MinimumCheckInterval.TotalHours,
+                        setting?.UpdateCheckIntervalHours > 0
                         ? setting.UpdateCheckIntervalHours : 24);
                     nextCheckAt = lastCheckedAt.Value.AddHours(hours);
                 }
@@ -415,6 +420,7 @@ namespace Amatsukaze.Server.Update
             try
             {
                 await Task.Yield();
+                await Task.Delay(StartupCheckDelay, cancellation.Token).ConfigureAwait(false);
                 await TryRunPeriodicCheckAsync(startup: true, cancellation.Token).ConfigureAwait(false);
                 using var timer = new PeriodicTimer(GuardPollInterval);
                 while (await timer.WaitForNextTickAsync(cancellation.Token).ConfigureAwait(false))
@@ -449,9 +455,9 @@ namespace Amatsukaze.Server.Update
                 }
                 var lastCheckedAt = server.LastUpdateCheckedAt;
                 var now = DateTime.UtcNow;
-                var configuredHours = Math.Max(6, setting.UpdateCheckIntervalHours <= 0
-                    ? 24 : setting.UpdateCheckIntervalHours);
-                var interval = startup ? MinimumCheckInterval : TimeSpan.FromHours(
+                var configuredHours = Math.Max(MinimumCheckInterval.TotalHours,
+                    setting.UpdateCheckIntervalHours <= 0 ? 24 : setting.UpdateCheckIntervalHours);
+                var interval = startup ? StartupCheckMinimumInterval : TimeSpan.FromHours(
                     Math.Min(configuredHours, TimeSpan.MaxValue.TotalHours - 1));
                 if (lastCheckedAt.HasValue && now - lastCheckedAt.Value.ToUniversalTime() < interval)
                 {
