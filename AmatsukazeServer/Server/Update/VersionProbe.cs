@@ -46,8 +46,11 @@ namespace Amatsukaze.Server.Update
             }
 
             var executablePath = target.GetExecutablePath(setting);
-            if (OperatingSystem.IsWindows() &&
-                (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath)))
+            // 設定が裸のコマンド名でも PATH を解決してから実体の有無を見る。
+            // 解決できない = どこにも無い、なので未インストールとして扱う。
+            var installedPath = string.IsNullOrWhiteSpace(executablePath)
+                ? null : ResolveExecutablePath(executablePath);
+            if (string.IsNullOrWhiteSpace(installedPath) || !File.Exists(installedPath))
             {
                 log.Write(target.Id, "S02_LOCAL_VERSION", "SKIP",
                     ("method", "exec"),
@@ -62,17 +65,6 @@ namespace Amatsukaze.Server.Update
                     NotInstalled = true,
                 };
             }
-            if (string.IsNullOrWhiteSpace(executablePath))
-            {
-                log.Write(target.Id, "S02_LOCAL_VERSION", "NG",
-                    ("method", "exec"),
-                    ("path", "?"),
-                    ("cmd", target.VersionArgument),
-                    ("version", "Unknown"),
-                    ("reason", "path_not_configured"));
-                return new LocalVersionInfo { Version = null, Path = executablePath };
-            }
-
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
