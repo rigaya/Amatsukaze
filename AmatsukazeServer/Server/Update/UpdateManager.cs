@@ -1341,8 +1341,7 @@ namespace Amatsukaze.Server.Update
             var os = OperatingSystem.IsWindows() ? UpdateOSKind.Windows : UpdateOSKind.Linux;
             if (string.IsNullOrWhiteSpace(oldPath))
             {
-                if (ClassifySettingPath(target, installed.DestinationPath, appRoot, os) !=
-                    SettingPathKind.InstalledPayload)
+                if (!IsInstallDestination(target, installed.DestinationPath, appRoot, os))
                 {
                     log.Write(target.Id, "S12_SETTINGS", "SKIP",
                         ("reason", "empty_default_path"),
@@ -1424,8 +1423,8 @@ namespace Amatsukaze.Server.Update
             }
             try
             {
-                if (ClassifySettingPath(target, newPath, root, os) !=
-                    SettingPathKind.InstalledPayload)
+                // 設置先は既定の場所でなければならない。設定の現在値と違い、ここは緩めない。
+                if (!IsInstallDestination(target, newPath, root, os))
                 {
                     return false;
                 }
@@ -1440,6 +1439,36 @@ namespace Amatsukaze.Server.Update
                 }
                 return oldKind == SettingPathKind.InstalledPayload &&
                     !AreSamePath(oldPath, newPath, StringComparison.Ordinal);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // 更新機能が実際に設置する場所（exe_files 直下、または exe_files/<対象ID>）かどうか。
+        // 設置先は UpdateInstaller が固定しているので、それ以外は設置先として認めない。
+        private static bool IsInstallDestination(UpdateTargetDef target, string path,
+            string root, UpdateOSKind os)
+        {
+            if (target?.Payload == null || string.IsNullOrWhiteSpace(path) ||
+                string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(path))
+            {
+                return false;
+            }
+            try
+            {
+                var executableRoot = Path.GetFullPath(Path.Combine(root, "exe_files"));
+                var fullPath = Path.GetFullPath(path);
+                var comparison = os == UpdateOSKind.Windows
+                    ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                var parent = Path.GetDirectoryName(fullPath);
+                var subDirectory = target.GetInstallLayout(os) == InstallLayout.ExeFilesSubDir
+                    ? Path.Combine(executableRoot, target.Id) : null;
+                return (string.Equals(parent, executableRoot, comparison) ||
+                    (!string.IsNullOrEmpty(subDirectory) &&
+                     string.Equals(parent, subDirectory, comparison))) &&
+                    target.Payload.Any(entry => entry.IsMatch(Path.GetFileName(fullPath)));
             }
             catch
             {
@@ -1473,13 +1502,13 @@ namespace Amatsukaze.Server.Update
                 var fullPath = Path.GetFullPath(path);
                 var comparison = os == UpdateOSKind.Windows
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-                var parent = Path.GetDirectoryName(fullPath);
-                var subDirectory = target.GetInstallLayout(os) == InstallLayout.ExeFilesSubDir
-                    ? Path.Combine(executableRoot, target.Id) : null;
-                var allowedDirectory = string.Equals(parent, executableRoot, comparison) ||
-                    (!string.IsNullOrEmpty(subDirectory) &&
-                     string.Equals(parent, subDirectory, comparison));
-                return allowedDirectory &&
+                // exe_files 配下なら深さを問わず更新機能の管理領域とみなす。
+                // 既定の設置場所（exe_files 直下 / exe_files/<対象ID>）以外に置かれていても、
+                // 更新時は既定の場所へ設置して設定をそちらへ移す。元の場所は利用者が
+                // 置いたものなので削除しない。
+                var rootPrefix = executableRoot.EndsWith(Path.DirectorySeparatorChar)
+                    ? executableRoot : executableRoot + Path.DirectorySeparatorChar;
+                return fullPath.StartsWith(rootPrefix, comparison) &&
                     target.Payload.Any(entry => entry.IsMatch(Path.GetFileName(fullPath)))
                     ? SettingPathKind.InstalledPayload : SettingPathKind.Other;
             }

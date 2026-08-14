@@ -656,6 +656,40 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public void exe_files配下なら深さを問わず更新対象とする()
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        using var fixture = new InstallerFixture();
+        var target = Assert.Single(UpdateCatalog.Targets, item => item.Id == "QSVEnc");
+        var setting = new Setting();
+        var installedPath = Path.Combine(fixture.ExeFiles, "QSVEnc", "QSVEncC64.exe");
+
+        // 既定の設置場所
+        setting.QSVEncPath = installedPath;
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+            setting, fixture.Root));
+
+        // 配布書庫をそのまま展開したような、既定と異なるフォルダ名
+        setting.QSVEncPath = Path.Combine(fixture.ExeFiles, "QSVEncC_8.26_x64", "QSVEncC64.exe");
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+            setting, fixture.Root));
+        // 更新時は既定の設置場所へ移す
+        Assert.True(UpdateManager.ShouldUpdateSettingPath(target, setting.QSVEncPath,
+            installedPath, fixture.Root, UpdateOSKind.Windows));
+
+        // さらに深い階層でも同じ
+        setting.QSVEncPath = Path.Combine(fixture.ExeFiles, "QSVEnc", "x64", "QSVEncC64.exe");
+        Assert.Null(UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+            setting, fixture.Root));
+
+        // exe_files と前方一致するだけの別ディレクトリは対象外
+        setting.QSVEncPath = Path.Combine(fixture.Root, "exe_files_backup", "QSVEncC64.exe");
+        Assert.Equal("setting_path_outside_exe_files",
+            UpdateManager.GetCannotApplyReason(target, UpdateOSKind.Windows,
+                setting, fixture.Root));
+    }
+
+    [Fact]
     public void ドライバスタックが必要な対象の新規インストールだけ拒否する()
     {
         Assert.True(UpdateCatalog.TryInitialize(out var error), error);
