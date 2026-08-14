@@ -97,6 +97,11 @@
                                 <td>@(item.RequiresRestart ? "必要" : "不要")</td>
                                 <td>
                                     <div>@GetStateLabel(item)</div>
+                                    @if (_applying && _job?.CurrentTargetId == item.Id &&
+                                        !IsTargetCompleted(item.Id))
+                                    {
+                                        <div class="update-state-detail">適用中…</div>
+                                    }
                                     @if (item.State == "UpdateAvailable" && item.RequiresRestart)
                                     {
                                         <div class="update-state-detail">適用時にサーバーを再起動します</div>
@@ -297,7 +302,8 @@
         SetError("更新チェックがタイムアウトしました。サーバー側で処理が続いている可能性があります。しばらく待って開き直してください。");
     }
 
-    private async Task RefreshStatusAsync(CancellationToken token, bool clearError = true)
+    private async Task RefreshStatusAsync(CancellationToken token,
+        bool clearError = true, bool preserveSelection = false)
     {
         var result = await WaitForApiAsync(Api.GetUpdateStatusAsync(), token);
         if (result == null || !result.Ok || result.Data == null)
@@ -310,7 +316,10 @@
         {
             _error = null;
         }
-        InitializeSelection();
+        if (!preserveSelection)
+        {
+            InitializeSelection();
+        }
         if (!_disposed)
         {
             await StatusChanged.InvokeAsync(_status);
@@ -424,6 +433,7 @@
 
     private async Task PollApplyJobAsync(string jobId, CancellationToken token)
     {
+        var completedCount = 0;
         while (!token.IsCancellationRequested)
         {
             var result = await WaitForApiAsync(Api.GetUpdateJobAsync(jobId), token);
@@ -442,6 +452,22 @@
                 return;
             }
             _job = result.Data;
+            // 完了した対象が増えたときだけ一覧を取り直す（毎回だと1秒ごとの無駄な問い合わせになる）
+            // 本体更新は結果を記録した直後にサーバーが終了するため、取りに行くと必ず失敗する。
+            // 対象も1つだけで途中経過に意味が無いので、この経路では取り直さない。
+            if (_job.TargetResults.Count != completedCount && !_selfUpdateApplying)
+            {
+                completedCount = _job.TargetResults.Count;
+                // 成功した対象はもう適用済みなので選択から外す。
+                // 失敗した対象は残す（完了後の InitializeSelection でも選び直されるため、
+                // ここで外すと最後に再選択されてちらつく）
+                foreach (var targetResult in _job.TargetResults.Where(targetResult =>
+                    targetResult.Succeeded))
+                {
+                    _selectedTargets.Remove(targetResult.TargetId);
+                }
+                await RefreshStatusAsync(token, clearError: false, preserveSelection: true);
+            }
             await SafeRefreshAsync();
             if (_job.Finished)
             {
@@ -637,6 +663,9 @@
         => HasEnvironmentWarning && !string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
     private static bool CanSelect(UpdateItemView item)
         => (item.State == "UpdateAvailable" || item.State == "NotInstalled") && item.CanApply;
+    private bool IsTargetCompleted(string id)
+        => _job?.TargetResults.Any(result => string.Equals(result.TargetId, id,
+            StringComparison.OrdinalIgnoreCase)) == true;
     private static bool IsApplicationId(string id)
         => string.Equals(id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
 
