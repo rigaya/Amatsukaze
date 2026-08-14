@@ -656,32 +656,56 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
-    public void 未インストールのdebだけ依存パッケージ不足として拒否する()
+    public void ドライバスタックが必要な対象の新規インストールだけ拒否する()
     {
-        var debAsset = new ReleaseAssetInfo { Name = "QSVEncC_8.00_amd64.deb" };
-        var archiveAsset = new ReleaseAssetInfo { Name = "QSVEncC_8.00_x64.7z" };
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+        var qsvenc = UpdateCatalog.Targets.Single(target => target.Id == "QSVEnc");
+        var tsreplace = UpdateCatalog.Targets.Single(target => target.Id == "tsreplace");
+        var debAsset = new ReleaseAssetInfo { Name = "qsvencc_8.26_amd64.deb" };
+        var archiveAsset = new ReleaseAssetInfo { Name = "QSVEncC_8.26_x64.7z" };
 
+        // ドライバスタックが必要な対象を deb から新規インストールする場合だけ拒否する
         Assert.Equal("fresh_install_requires_dependencies",
-            UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+            UpdateManager.GetStateCannotApplyReason(qsvenc, new UpdateTargetState
             {
                 Status = UpdateTargetStatus.NotInstalled,
                 SelectedAsset = debAsset,
             }));
-        Assert.Null(UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
-        {
-            Status = UpdateTargetStatus.NotInstalled,
-            SelectedAsset = archiveAsset,
-        }));
-        Assert.Null(UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+        // 既存インストールの更新は依存が解決済みなので通す
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(qsvenc, new UpdateTargetState
         {
             Status = UpdateTargetStatus.UpdateAvailable,
             SelectedAsset = debAsset,
         }));
-        Assert.Null(UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+        // Windows の書庫は依存の導入を伴わない
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(qsvenc, new UpdateTargetState
+        {
+            Status = UpdateTargetStatus.NotInstalled,
+            SelectedAsset = archiveAsset,
+        }));
+        // tsreplace は deb でもベースシステムしか要求しないので新規インストールできる
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(tsreplace, new UpdateTargetState
+        {
+            Status = UpdateTargetStatus.NotInstalled,
+            SelectedAsset = new ReleaseAssetInfo { Name = "tsreplace_0.19_amd64.deb" },
+        }));
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(qsvenc, new UpdateTargetState
         {
             Status = UpdateTargetStatus.NotInstalled,
             SelectedAsset = null,
         }));
+    }
+
+    [Fact]
+    public void ドライバスタックを必要とする対象はハードウェアエンコーダに限る()
+    {
+        Assert.True(UpdateCatalog.TryInitialize(out var error), error);
+
+        var requiresDependencies = UpdateCatalog.Targets
+            .Where(target => target.RequiresSystemDependencies)
+            .Select(target => target.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(new[] { "NVEnc", "QSVEnc", "VCEEnc" }, requiresDependencies);
     }
 
     [Fact]

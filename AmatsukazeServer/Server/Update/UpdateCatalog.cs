@@ -103,6 +103,9 @@ namespace Amatsukaze.Server.Update
             CreateRigayaEncoder("QSVEnc", "QSVEnc", "rigaya/QSVEnc", "QSVEncC", "qsvencc", nameof(Setting.QSVEncPath)),
             CreateRigayaEncoder("NVEnc", "NVEnc", "rigaya/NVEnc", "NVEncC", "nvencc", nameof(Setting.NVEncPath)),
             CreateRigayaEncoder("VCEEnc", "VCEEnc", "rigaya/VCEEnc", "VCEEncC", "vceencc", nameof(Setting.VCEEncPath)),
+            // tsreplace の deb は libc6 / libgcc-s1 しか要求せず、実行ファイルも
+            // libc / libm / libpthread しかリンクしていない。ドライバスタックに依存しないので
+            // 実行ファイルを設置するだけで動く（= 新規インストール可）。
             new UpdateTargetDef
             {
                 Id = "tsreplace",
@@ -131,6 +134,11 @@ namespace Amatsukaze.Server.Update
             },
         };
 
+        // ハードウェアエンコーダはいずれも GPU のドライバスタックを必要とする。
+        // QSVEnc は intel-media-va-driver / libmfx、VCEEnc は amf-amdgpu-pro を
+        // deb の依存として要求し、NVEnc は依存宣言こそ libc6 のみだが
+        // 実行ファイルが libcuda.so.1 を直接リンクしている。
+        // いずれも実行ファイルの設置だけでは動かないため、新規インストールは許可しない。
         private static UpdateTargetDef CreateRigayaEncoder(string id, string displayName,
             string repository, string windowsName, string linuxName, string settingKey)
         {
@@ -139,6 +147,7 @@ namespace Amatsukaze.Server.Update
                 Id = id,
                 DisplayName = displayName,
                 Repository = repository,
+                RequiresSystemDependencies = true,
                 ReleaseSelect = ReleaseSelectMode.Latest,
                 AssetRules = new[]
                 {

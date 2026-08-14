@@ -184,6 +184,10 @@ namespace Amatsukaze.Server.Update
         public string SettingKey { get; init; }
         public bool RequiresRestart { get; init; }
         public bool IsApplication { get; init; }
+        // Linux 版がシステムのドライバスタック（パッケージマネージャでしか導入できないもの）を
+        // 必要とする対象。deb から実行ファイルだけを取り出す本経路では依存が揃わないため、
+        // 新規インストールは許可しない。依存が揃っている既存環境の更新は可能。
+        public bool RequiresSystemDependencies { get; init; }
         public PayloadEntry[] Payload { get; init; }
 
         public Regex VersionRegex => versionRegex;

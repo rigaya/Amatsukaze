@@ -26,9 +26,9 @@ namespace Amatsukaze.Server.Update
         private static readonly TimeSpan StartupCheckDelay = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GuardPollInterval = TimeSpan.FromHours(1);
         private const int MaxRetainedJobs = 10;
-        // deb は依存パッケージの導入を伴うが、本経路は実行ファイルを取り出すだけで
-        // dpkg を実行しない。既存インストールなら依存関係は解決済みなので更新は成立するが、
-        // 新規インストールでは依存が入らず動かないため許可しない。
+        // 本経路は deb から実行ファイルを取り出すだけで dpkg を実行しないため、依存は導入されない。
+        // 既存インストールなら依存は解決済みなので更新は成立するが、新規インストールでは揃わない。
+        // 実際に依存が問題になるかは対象ごとに異なるので UpdateTargetDef.RequiresSystemDependencies で持つ。
         private const string DebAssetExtension = ".deb";
         private static readonly Regex DevelopmentVersionRegex = new Regex(
             @"-\d+-g[0-9a-f]+", RegexOptions.Compiled | RegexOptions.CultureInvariant |
@@ -204,7 +204,7 @@ namespace Amatsukaze.Server.Update
                             error = $"適用可能な更新情報がありません: {id}";
                             return false;
                         }
-                        if (GetStateCannotApplyReason(state) ==
+                        if (GetStateCannotApplyReason(target, state) ==
                             "fresh_install_requires_dependencies")
                         {
                             error = $"新規インストールは依存パッケージの導入が必要なため対応していません: {id} " +
@@ -367,7 +367,7 @@ namespace Amatsukaze.Server.Update
                         string.Equals(item.Id, target.Id, StringComparison.OrdinalIgnoreCase));
                     var cannotApplyReason = GetCannotApplyReason(target, environment.OS,
                         setting, appRoot);
-                    cannotApplyReason ??= GetStateCannotApplyReason(state);
+                    cannotApplyReason ??= GetStateCannotApplyReason(target, state);
                     var initialStatus = UpdateTargetStatus.Unknown;
                     var initialReason = "not_checked";
                     if (disabledTargets.Contains(target.Id))
@@ -539,12 +539,15 @@ namespace Amatsukaze.Server.Update
                 ? null : "setting_path_outside_exe_files";
         }
 
-        internal static string GetStateCannotApplyReason(UpdateTargetState state)
+        internal static string GetStateCannotApplyReason(UpdateTargetDef target,
+            UpdateTargetState state)
         {
-            if (state?.Status != UpdateTargetStatus.NotInstalled)
+            if (state?.Status != UpdateTargetStatus.NotInstalled ||
+                target?.RequiresSystemDependencies != true)
             {
                 return null;
             }
+            // deb 経路のときだけ制限する。Windows の書庫は依存の導入を伴わないため対象外。
             return state.SelectedAsset?.Name?.EndsWith(DebAssetExtension,
                 StringComparison.OrdinalIgnoreCase) == true
                 ? "fresh_install_requires_dependencies" : null;
