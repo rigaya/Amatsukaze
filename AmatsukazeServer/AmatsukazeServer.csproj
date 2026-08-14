@@ -71,6 +71,10 @@
       <WebUIProject>..\AmatsukazeWebUI\AmatsukazeWebUI.csproj</WebUIProject>
       <WebUIPublishDir>$(BaseIntermediateOutputPath)webui-publish\</WebUIPublishDir>
     </PropertyGroup>
+    <!-- Blazor WASM の出力はファイル名にコンテンツハッシュを含むため、publish 先を消さずに
+         再publishすると古いハッシュのファイルが際限なく溜まる (実測で 20MB → 299MB)。
+         毎回クリーンな状態から publish する。 -->
+    <RemoveDir Directories="$(WebUIPublishDir)" />
     <Exec Command="dotnet publish &quot;$(WebUIProject)&quot; -c $(Configuration) -o &quot;$(WebUIPublishDir)&quot;" />
     <RemoveDir Directories="$(PublishDir)wwwroot" />
     <ItemGroup>
