@@ -24,6 +24,9 @@ jobs:
       X265_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260808-080802/x265_4.2%2B37_x64.zip
       SVT_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260808-080802/SvtAv1EncApp_4.2.0-71_x64_clang.zip
       NNEDI3_URL: https://github.com/rigaya/NNEDI3/releases/download/0.00/nnedi3_0.00_x64.zip
+      TSREADEX_URL: https://github.com/xtne6f/tsreadex/releases/download/master-260428/tsreadex-master-260428.zip
+      PSISIARC_URL: https://github.com/xtne6f/psisiarc/releases/download/master-230324/psisiarc-master-230324.zip
+      B24TOVTT_URL: https://github.com/xtne6f/b24tovtt/releases/download/master-220402/b24tovtt-master-220402.zip
       BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.8.5/AmatsukazeBasePkg_20260802.7z
     steps:
       - name: Checkout
@@ -94,6 +97,9 @@ jobs:
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x265.zip "%X265_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\tsreadex.zip "%TSREADEX_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\psisiarc.zip "%PSISIARC_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\b24tovtt.zip "%B24TOVTT_URL%"
           echo --- deps contents (after Download) ---
           tree /f deps
 
@@ -132,6 +138,12 @@ jobs:
           7z x -y -o"%DEPS%\svt" "%DEPS%\svt.zip"
           if not exist deps\\nnedi3 mkdir deps\\nnedi3
           7z x -y -o"%DEPS%\nnedi3" "%DEPS%\nnedi3.zip"
+          if not exist deps\\tsreadex mkdir deps\\tsreadex
+          7z x -y -o"%DEPS%\tsreadex" "%DEPS%\tsreadex.zip"
+          if not exist deps\\psisiarc mkdir deps\\psisiarc
+          7z x -y -o"%DEPS%\psisiarc" "%DEPS%\psisiarc.zip"
+          if not exist deps\\b24tovtt mkdir deps\\b24tovtt
+          7z x -y -o"%DEPS%\b24tovtt" "%DEPS%\b24tovtt.zip"
           echo --- deps contents (after Extract) ---
           tree /f deps
 
@@ -223,6 +235,11 @@ jobs:
           for /r deps\\x264 %%f in (*.exe) do copy /y "%%f" package\\exe_files
           for /r deps\\x265 %%f in (*.exe) do copy /y "%%f" package\\exe_files
           for /r deps\\svt %%f in (*.exe) do copy /y "%%f" package\\exe_files
+
+          rem 字幕関連ツール（x64版）
+          if exist deps\\tsreadex\\x64\\tsreadex.exe copy /y deps\\tsreadex\\x64\\tsreadex.exe package\\exe_files
+          if exist deps\\psisiarc\\x64\\psisiarc.exe copy /y deps\\psisiarc\\x64\\psisiarc.exe package\\exe_files
+          if exist deps\\b24tovtt\\x64\\b24tovtt.exe copy /y deps\\b24tovtt\\x64\\b24tovtt.exe package\\exe_files
 
           rem ffmpeg dlls (search recursively - structure may vary)
           for /r ffmpeg_lgpl %%d in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do if exist "%%d" copy /y "%%d" package\\exe_files

@@ -1156,10 +1156,48 @@ namespace Amatsukaze.Server
         }
         #endregion
 
+        private static readonly HashSet<string> AutoPathExcludedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "wwwroot",
+            "plugins64",
+            "7z",
+            "cmd",
+        };
+
+        private static IEnumerable<string> EnumerateAutoPathSearchDirectories(string basePath)
+        {
+            yield return basePath;
+
+            var currentDirectories = new[] { basePath };
+            for (int depth = 0; depth < 2; depth++)
+            {
+                var nextDirectories = new List<string>();
+                foreach (var currentDirectory in currentDirectories)
+                {
+                    foreach (var directory in Directory.EnumerateDirectories(currentDirectory))
+                    {
+                        var directoryName = Path.GetFileName(directory);
+                        if (AutoPathExcludedDirectories.Contains(directoryName) ||
+                            directoryName.StartsWith(".", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        yield return directory;
+                        nextDirectories.Add(directory);
+                    }
+                }
+                currentDirectories = nextDirectories.ToArray();
+            }
+        }
+
         private static string GetExePath(string basePath, string pattern, bool recursive = false)
         {
-            System.IO.SearchOption option = recursive ? System.IO.SearchOption.AllDirectories : System.IO.SearchOption.TopDirectoryOnly;
-            foreach (var path in Directory.GetFiles(basePath, "*", option))
+            IEnumerable<string> paths = recursive
+                ? Directory.GetFiles(basePath, "*", System.IO.SearchOption.AllDirectories)
+                : EnumerateAutoPathSearchDirectories(basePath).SelectMany(
+                    directory => Directory.GetFiles(directory, "*", System.IO.SearchOption.TopDirectoryOnly));
+            foreach (var path in paths)
             {
                 var fname = Path.GetFileName(path);
                 if (fname.StartsWith(pattern)

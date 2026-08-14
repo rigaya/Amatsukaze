@@ -455,8 +455,8 @@ MP4はASSに対応していないためSRTのみが組み込まれ、ASSは別�
 WebVTT字幕を字幕を生成するにチェックを入れると、[b24tovtt](https://github.com/xtne6f/b24tovtt)を使用して、WebVTT形式の字幕を生成します。
 これはTvtPlayなどで読み込み可能です。
 
-別途、[b24tovtt](https://github.com/xtne6f/b24tovtt), [tsreadex](https://github.com/xtne6f/tsreadex), [psisiarc](https://github.com/xtne6f/psisiarc)をダウンロードし、
-[基本設定]タブでパスを指定してください。
+Windows版の配布パッケージには、x64版の[b24tovtt](https://github.com/xtne6f/b24tovtt)、[tsreadex](https://github.com/xtne6f/tsreadex)、[psisiarc](https://github.com/xtne6f/psisiarc)が同梱されています。
+Linux版では別途これらをダウンロードし、[基本設定]タブでパスを指定してください。
 
 ### Whisperによる字幕生成
 
