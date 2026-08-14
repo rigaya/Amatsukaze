@@ -168,6 +168,19 @@ Amatsukazeは以下のようにして構成されます。
 
   ```doc/BuildLinux.md``` を参照
 
+### Windows専用プロジェクトのコンパイル検証 (Linux/WSLから)
+
+```AmatsukazeGUI``` / ```AmatsukazeServerWin``` は ```net10.0-windows``` + WPF だが、
+Linux/WSL からでも ```EnableWindowsTargeting``` を付ければコンパイル検証ができる。
+
+```
+dotnet build AmatsukazeGUI/AmatsukazeGUI.csproj -p:EnableWindowsTargeting=true
+```
+
+- XAMLのマークアップコンパイルも実際に走るため、XAMLの型解決やプロパティ名の誤りもここで検出できる。
+- 実行はできない。バインドパス等の実行時に解決される部分は検証されないので、動作確認はWindows実機で行うこと。
+- WPF側のコードを変更した場合は、コミット前にこれを通すこと。
+
 ## 実装方針
 
 - 日本語のコメントを多めに記述する
