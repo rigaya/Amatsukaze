@@ -656,6 +656,35 @@ public sealed class UpdateInstallerTests
     }
 
     [Fact]
+    public void 未インストールのdebだけ依存パッケージ不足として拒否する()
+    {
+        var debAsset = new ReleaseAssetInfo { Name = "QSVEncC_8.00_amd64.deb" };
+        var archiveAsset = new ReleaseAssetInfo { Name = "QSVEncC_8.00_x64.7z" };
+
+        Assert.Equal("fresh_install_requires_dependencies",
+            UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+            {
+                Status = UpdateTargetStatus.NotInstalled,
+                SelectedAsset = debAsset,
+            }));
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+        {
+            Status = UpdateTargetStatus.NotInstalled,
+            SelectedAsset = archiveAsset,
+        }));
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+        {
+            Status = UpdateTargetStatus.UpdateAvailable,
+            SelectedAsset = debAsset,
+        }));
+        Assert.Null(UpdateManager.GetStateCannotApplyReason(new UpdateTargetState
+        {
+            Status = UpdateTargetStatus.NotInstalled,
+            SelectedAsset = null,
+        }));
+    }
+
+    [Fact]
     public void 対応済みの配置形式とPayloadを対象ごとに判定する()
     {
         Assert.True(UpdateCatalog.TryInitialize(out var error), error);

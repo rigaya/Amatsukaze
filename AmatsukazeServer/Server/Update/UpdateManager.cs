@@ -26,6 +26,10 @@ namespace Amatsukaze.Server.Update
         private static readonly TimeSpan StartupCheckDelay = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GuardPollInterval = TimeSpan.FromHours(1);
         private const int MaxRetainedJobs = 10;
+        // deb は依存パッケージの導入を伴うが、本経路は実行ファイルを取り出すだけで
+        // dpkg を実行しない。既存インストールなら依存関係は解決済みなので更新は成立するが、
+        // 新規インストールでは依存が入らず動かないため許可しない。
+        private const string DebAssetExtension = ".deb";
         private static readonly Regex DevelopmentVersionRegex = new Regex(
             @"-\d+-g[0-9a-f]+", RegexOptions.Compiled | RegexOptions.CultureInvariant |
             RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
@@ -200,6 +204,13 @@ namespace Amatsukaze.Server.Update
                             error = $"適用可能な更新情報がありません: {id}";
                             return false;
                         }
+                        if (GetStateCannotApplyReason(state) ==
+                            "fresh_install_requires_dependencies")
+                        {
+                            error = $"新規インストールは依存パッケージの導入が必要なため対応していません: {id} " +
+                                "(fresh_install_requires_dependencies)";
+                            return false;
+                        }
                         targets.Add(new UpdateApplyTarget(target, state.SelectedAsset,
                             state.LatestVersion));
                     }
@@ -356,6 +367,7 @@ namespace Amatsukaze.Server.Update
                         string.Equals(item.Id, target.Id, StringComparison.OrdinalIgnoreCase));
                     var cannotApplyReason = GetCannotApplyReason(target, environment.OS,
                         setting, appRoot);
+                    cannotApplyReason ??= GetStateCannotApplyReason(state);
                     var initialStatus = UpdateTargetStatus.Unknown;
                     var initialReason = "not_checked";
                     if (disabledTargets.Contains(target.Id))
@@ -525,6 +537,17 @@ namespace Amatsukaze.Server.Update
             return pathKind == SettingPathKind.BarePayload ||
                 pathKind == SettingPathKind.InstalledPayload
                 ? null : "setting_path_outside_exe_files";
+        }
+
+        internal static string GetStateCannotApplyReason(UpdateTargetState state)
+        {
+            if (state?.Status != UpdateTargetStatus.NotInstalled)
+            {
+                return null;
+            }
+            return state.SelectedAsset?.Name?.EndsWith(DebAssetExtension,
+                StringComparison.OrdinalIgnoreCase) == true
+                ? "fresh_install_requires_dependencies" : null;
         }
 
         private UpdateJobRecord StartOrJoinCheck(bool manual, CancellationToken cancellationToken)

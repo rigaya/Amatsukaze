@@ -107,7 +107,8 @@
                                     }
                                     @if (!item.CanApply &&
                                         !string.IsNullOrWhiteSpace(item.CannotApplyReason) &&
-                                        item.State == "UpdateAvailable")
+                                        (item.State == "UpdateAvailable" ||
+                                         item.State == "NotInstalled"))
                                     {
                                         <div class="update-state-detail">@FormatReason(item.CannotApplyReason)</div>
                                     }
@@ -744,6 +745,8 @@
             "payload_not_defined_yet" => "この対象の配置方法が定義されていません",
             "setting_path_outside_exe_files" =>
                 "設定のパスが exe_files の外を指しているため自動更新できません",
+            "fresh_install_requires_dependencies" =>
+                "新規インストールは依存パッケージの導入が必要なため対応していません（更新のみ対応）",
             null or "" => "不明",
             _ => $"不明な状態 ({reason})",
         };
