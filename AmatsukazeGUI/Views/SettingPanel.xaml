@@ -18,11 +18,23 @@
     </UserControl.Resources>
 
     <DockPanel>
+        <DockPanel.Resources>
+            <!-- 更新が無いときはボタンが場所を取らないよう Collapsed にする -->
+            <l:VisibilityAndBooleanConverter x:Key="UpdateAvailableVisibilityConverter" ConvertWhenTrue="Visible" ConvertWhenFalse="Collapsed"/>
+        </DockPanel.Resources>
+
         <DockPanel DockPanel.Dock="Bottom">
             <Button DockPanel.Dock="Right" Content="適用" Margin="5" VerticalAlignment="Center" HorizontalAlignment="Right" Width="60" Command="{Binding SendSettingCommand}" Height="27"/>
             <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="「適用」で反映。「更新」を押すと編集中の設定が失われるので注意"/></TextBlock>
         </DockPanel>
        
+        <DockPanel DockPanel.Dock="Top" Margin="5,4,5,0"
+                   Visibility="{Binding Model.HasUpdate, Mode=OneWay, Converter={StaticResource UpdateAvailableVisibilityConverter}}">
+            <Button Content="更新があります" HorizontalAlignment="Left" Height="27" Padding="10,0"
+                    Command="{Binding OpenUpdatePageCommand}"
+                    ToolTip="更新可能なコンポーネントがあります。押すとWebUIの更新画面を開きます。"/>
+        </DockPanel>
+
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,2,8,4">
             <Grid Grid.IsSharedSizeScope="True">
                 <Grid.Resources>

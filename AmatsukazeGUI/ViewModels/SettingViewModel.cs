@@ -2,6 +2,7 @@
 using Amatsukaze.Server;
 using Livet.Commands;
 using Livet.EventListeners;
+using System.Windows;
 using System.Windows.Markup;
 
 namespace Amatsukaze.ViewModels
@@ -51,7 +52,33 @@ namespace Amatsukaze.ViewModels
          */
         public ClientModel Model { get; set; }
 
+        // このパネルはMainWindowのDataTemplateで表示され、Initializeを呼ぶトリガが無い。
+        // 更新有無の表示はXAMLからModel.HasUpdateへ直接バインドしている。
         public void Initialize() { }
+
+        #region OpenUpdatePageCommand
+        private ViewModelCommand _OpenUpdatePageCommand;
+
+        public ViewModelCommand OpenUpdatePageCommand
+        {
+            get
+            {
+                if (_OpenUpdatePageCommand == null)
+                {
+                    _OpenUpdatePageCommand = new ViewModelCommand(OpenUpdatePage);
+                }
+                return _OpenUpdatePageCommand;
+            }
+        }
+
+        public void OpenUpdatePage()
+        {
+            if (!WebUILauncher.TryOpenPage(Model, "/settings?update=1"))
+            {
+                MessageBox.Show("更新画面の起動に失敗しました");
+            }
+        }
+        #endregion
 
         #region SendSettingCommand
         private ViewModelCommand _SendSettingCommand;

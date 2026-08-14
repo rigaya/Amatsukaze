@@ -5,14 +5,28 @@
 @using System.Text.Json.Nodes
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
+@inject NavigationManager Nav
 
 <h3>基本設定</h3>
 
 <div class="settings-header">
     <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(_loading || _setting == null)">適用</button>
     <button class="btn btn-secondary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
+    @if (_updateStatus != null &&
+         (_updateStatus.HasUpdate || _updateStatus.HasPendingSelfUpdate))
+    {
+        <button class="btn btn-secondary update-status-button has-update"
+                @onclick="OpenUpdateDialog">更新があります</button>
+    }
     <span class="settings-header-note">「適用」で反映。「更新」を押すと編集中の設定が失われるので注意</span>
 </div>
+
+@if (_showUpdateDialog)
+{
+    <UpdateDialog InitialStatus="_updateStatus"
+                  StatusChanged="OnUpdateStatusChanged"
+                  OnClose="CloseUpdateDialog" />
+}
 
 @if (_loading)
 {
@@ -553,6 +567,8 @@ else
 
     private static readonly string[] _processPriorityOptions = new[] { "通常", "通常以下", "低" };
     private static readonly string[] _affinityOptions = new[] { "なし", "コア", "L2", "L3", "NUMA", "Group" };
+    private const string UpdateQueryParameter = "update";
+    private const string UpdateQueryOpenValue = "1";
     private static readonly IntOptionView[] _defaultTrimAdjustPreviewScaleOptions = new[]
     {
         new IntOptionView { Value = 1, Label = "1/2倍" },
@@ -577,8 +593,67 @@ else
     private int _serverLogicalProcessorCount = 128;
     private int _reloadVersion;
     private string? _trimAdjustValidationError;
+    private UpdateStatusView? _updateStatus;
+    private bool _showUpdateDialog;
 
-    protected override Task OnInitializedAsync() => ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _ = LoadUpdateStatusAsync();
+        await ReloadAsync();
+    }
+
+    private async Task LoadUpdateStatusAsync()
+    {
+        try
+        {
+            var result = await Api.GetUpdateStatusAsync();
+            _updateStatus = result.Ok ? result.Data : null;
+        }
+        catch
+        {
+            _updateStatus = null;
+        }
+        if (ShouldOpenUpdateDialog())
+        {
+            _showUpdateDialog = true;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool ShouldOpenUpdateDialog()
+    {
+        var query = Nav.ToAbsoluteUri(Nav.Uri).Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            var name = Uri.UnescapeDataString(parts[0]);
+            var value = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "";
+            if (string.Equals(name, UpdateQueryParameter, StringComparison.Ordinal) &&
+                string.Equals(value, UpdateQueryOpenValue, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void OpenUpdateDialog()
+    {
+        _showUpdateDialog = true;
+    }
+
+    private Task CloseUpdateDialog()
+    {
+        _showUpdateDialog = false;
+        return Task.CompletedTask;
+    }
+
+    private Task OnUpdateStatusChanged(UpdateStatusView status)
+    {
+        _updateStatus = status;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
 
     private async Task ReloadAsync()
     {
