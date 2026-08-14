@@ -918,6 +918,11 @@ code {
     margin-left: 6px;
 }
 
+/* 「アップデートあり」ボタンは設定の「更新」(再読込) と紛らわしいので右端に離して配置する */
+.settings-header-update {
+    margin-left: auto;
+}
+
 .run-hours-grid {
     display: grid;
     gap: 6px;

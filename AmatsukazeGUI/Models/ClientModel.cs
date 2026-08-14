@@ -134,7 +134,7 @@ namespace Amatsukaze.Models
         #region HasUpdate変更通知プロパティ
         private bool _HasUpdate;
 
-        // 更新チェックで更新が見つかっているか。基本設定の「更新があります」ボタンの表示に使う。
+        // 更新チェックで更新が見つかっているか。基本設定の「アップデートあり」ボタンの表示に使う。
         public bool HasUpdate
         {
             get { return _HasUpdate; }

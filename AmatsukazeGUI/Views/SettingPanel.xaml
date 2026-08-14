@@ -28,13 +28,6 @@
             <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="「適用」で反映。「更新」を押すと編集中の設定が失われるので注意"/></TextBlock>
         </DockPanel>
        
-        <DockPanel DockPanel.Dock="Top" Margin="5,4,5,0"
-                   Visibility="{Binding Model.HasUpdate, Mode=OneWay, Converter={StaticResource UpdateAvailableVisibilityConverter}}">
-            <Button Content="更新があります" HorizontalAlignment="Left" Height="27" Padding="10,0"
-                    Command="{Binding OpenUpdatePageCommand}"
-                    ToolTip="更新可能なコンポーネントがあります。押すとWebUIの更新画面を開きます。"/>
-        </DockPanel>
-
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,2,8,4">
             <Grid Grid.IsSharedSizeScope="True">
                 <Grid.Resources>
@@ -137,8 +130,20 @@
                             </Style>
                         </CheckBox.Style>
                     </CheckBox>
-                    <CheckBox Height="16" Margin="0,4"  Content="Amatsukaze起動時にアクティブなアイテムがあるときはキューを停止する" 
-                              IsChecked="{Binding Model.Setting.PauseOnStarted, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" Height="16" Margin="0,4"  Content="Amatsukaze起動時にアクティブなアイテムがあるときはキューを停止する" 
+                                  IsChecked="{Binding Model.Setting.PauseOnStarted, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <!-- 更新がある場合のみ表示。押すとWebUIの更新画面を開く -->
+                        <Button Grid.Column="1" Content="アップデートあり" Height="22" Padding="10,0" Margin="6,4"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding Model.HasUpdate, Mode=OneWay, Converter={StaticResource UpdateAvailableVisibilityConverter}}"
+                                Command="{Binding OpenUpdatePageCommand}"
+                                ToolTip="更新可能なコンポーネントがあります。押すとWebUIの更新画面を開きます。"/>
+                    </Grid>
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Grid.Column="0">

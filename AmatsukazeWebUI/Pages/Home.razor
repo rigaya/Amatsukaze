@@ -36,29 +36,12 @@
     <tr>
         <th>Updates</th>
         <td>
-            @if (_updateStatusLoading || !string.IsNullOrEmpty(_updateStatusError) || _updateStatus == null)
-            {
-                <span>-</span>
-            }
-            else
-            {
-                <button class="btn btn-sm btn-secondary update-status-button @((_updateStatus.HasUpdate || _updateStatus.HasPendingSelfUpdate) ? "has-update" : "")"
-                        @onclick="OpenUpdateDialog">
-                    更新する
-                </button>
-                <span class="update-status-summary">@GetUpdateStatusSummary(_updateStatus)</span>
-            }
+            <UpdateStatusButton Label="更新する" AlwaysShow="true" ShowSummary="true"
+                                ShowPlaceholder="true" ButtonCssClass="btn-sm" />
         </td>
     </tr>
     <tr><th>Platform</th><td>@GetSummaryValue(_summary?.Platform, _summaryLoading)</td></tr>
 </table>
-
-@if (_showUpdateDialog)
-{
-    <UpdateDialog InitialStatus="_updateStatus"
-                  StatusChanged="OnUpdateStatusChanged"
-                  OnClose="CloseUpdateDialog" />
-}
 
 <h2 class="info-section-title">ディスク</h2>
 @if (_disksLoading)
@@ -105,19 +88,14 @@ else
     private string? _summaryError;
     private string? _latestError;
     private string? _disksError;
-    private UpdateStatusView? _updateStatus;
-    private string? _updateStatusError;
     private bool _summaryLoading = true;
     private bool _latestLoading = true;
     private bool _disksLoading = true;
-    private bool _updateStatusLoading = true;
-    private bool _showUpdateDialog;
 
     protected override async Task OnInitializedAsync()
     {
         _ = LoadSummaryAsync();
         _ = LoadLatestReleaseAsync();
-        _ = LoadUpdateStatusAsync();
         _ = LoadDisksAsync();
         await Task.CompletedTask;
     }
@@ -167,63 +145,6 @@ else
         _disks = res.Data ?? new List<DiskUsageView>();
         _disksLoading = false;
         await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task LoadUpdateStatusAsync()
-    {
-        var res = await Api.GetUpdateStatusAsync();
-        if (res.Ok && res.Data != null)
-        {
-            _updateStatus = res.Data;
-            _updateStatusError = null;
-        }
-        else
-        {
-            _updateStatus = null;
-            _updateStatusError = res.Error ?? "更新状況を取得できませんでした。";
-        }
-        _updateStatusLoading = false;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void OpenUpdateDialog()
-    {
-        _showUpdateDialog = true;
-    }
-
-    private Task CloseUpdateDialog()
-    {
-        _showUpdateDialog = false;
-        return Task.CompletedTask;
-    }
-
-    private Task OnUpdateStatusChanged(UpdateStatusView status)
-    {
-        _updateStatus = status;
-        _updateStatusError = null;
-        return Task.CompletedTask;
-    }
-
-    private static string GetUpdateStatusSummary(UpdateStatusView status)
-    {
-        if (status.HasPendingSelfUpdate)
-        {
-            return "保留中の本体更新があります";
-        }
-        if (!status.CheckEnabled)
-        {
-            return "自動チェック無効";
-        }
-        if (status.Items.Count > 0 && status.Items.All(item => item.State == "Unknown"))
-        {
-            return status.Items.All(item => item.StateReason == "not_checked")
-                ? "未確認" : "更新状況を確認できませんでした";
-        }
-        if (status.Items.Any(item => item.State == "Unknown"))
-        {
-            return status.HasUpdate ? "更新があります（一部取得不可）" : "一部取得できませんでした";
-        }
-        return status.HasUpdate ? "更新があります" : "最新です";
     }
 
     private static string GetSummaryValue(string? value, bool loading)
