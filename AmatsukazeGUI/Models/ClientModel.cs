@@ -21,7 +21,6 @@ using System.Text.Json;
 using Microsoft.Win32;
 using System.Windows.Media;
 using Amatsukaze.Lib;
-using Amatsukaze.Shared;
 using System.Net.Http;
 using System.Windows.Threading;
 
@@ -876,7 +875,9 @@ namespace Amatsukaze.Models
                 using var response = await client.GetAsync($"{baseUrl}/api/update/status");
                 response.EnsureSuccessStatusCode();
                 await using var stream = await response.Content.ReadAsStreamAsync();
-                var status = await JsonSerializer.DeserializeAsync<UpdateStatusView>(stream,
+                // Amatsukaze.Shared には Amatsukaze.Server と同名の型（ServerInfo等）があるため、
+                // using は追加せず完全修飾で参照する
+                var status = await JsonSerializer.DeserializeAsync<Amatsukaze.Shared.UpdateStatusView>(stream,
                     new JsonSerializerOptions
                     {
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
