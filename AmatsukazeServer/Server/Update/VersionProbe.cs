@@ -15,6 +15,7 @@ namespace Amatsukaze.Server.Update
         public string FirstOutputLine { get; init; }
         public int? ExitCode { get; init; }
         public bool TimedOut { get; init; }
+        public bool NotInstalled { get; init; }
     }
 
     internal static class VersionProbe
@@ -45,6 +46,22 @@ namespace Amatsukaze.Server.Update
             }
 
             var executablePath = target.GetExecutablePath(setting);
+            if (OperatingSystem.IsWindows() &&
+                (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath)))
+            {
+                log.Write(target.Id, "S02_LOCAL_VERSION", "SKIP",
+                    ("method", "exec"),
+                    ("path", string.IsNullOrWhiteSpace(executablePath) ? "?" : executablePath),
+                    ("cmd", target.VersionArgument),
+                    ("version", "Unknown"),
+                    ("reason", "not_installed"));
+                return new LocalVersionInfo
+                {
+                    Version = null,
+                    Path = executablePath,
+                    NotInstalled = true,
+                };
+            }
             if (string.IsNullOrWhiteSpace(executablePath))
             {
                 log.Write(target.Id, "S02_LOCAL_VERSION", "NG",

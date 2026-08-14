@@ -157,7 +157,7 @@
 
         <div class="update-dialog-actions">
             <button class="btn btn-primary" @onclick="ApplySelectedAsync"
-                    disabled="@(_checking || _applying || _selectedTargets.Count == 0)">更新実行</button>
+                    disabled="@(_checking || _applying || _selectedTargets.Count == 0)">@GetApplyButtonLabel()</button>
             @if (_applying)
             {
                 <button class="btn btn-danger" @onclick="CancelApplyAsync"
@@ -521,7 +521,9 @@
             _selectedTargets.Add(application.Id);
             return;
         }
-        foreach (var item in selectable)
+        // 未インストールは利用しないハードウェア向けの場合もあるため既定では選ばない。
+        // 新規インストールは利用者が明示的に選んだときだけ行う。
+        foreach (var item in selectable.Where(item => item.State == "UpdateAvailable"))
         {
             _selectedTargets.Add(item.Id);
         }
@@ -633,7 +635,7 @@
     private bool IsDockerExecutable(UpdateItemView item)
         => HasEnvironmentWarning && !string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
     private static bool CanSelect(UpdateItemView item)
-        => item.State == "UpdateAvailable" && item.CanApply;
+        => (item.State == "UpdateAvailable" || item.State == "NotInstalled") && item.CanApply;
     private static bool IsApplicationId(string id)
         => string.Equals(id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
 
@@ -644,7 +646,15 @@
         => string.IsNullOrWhiteSpace(value) ? "不明" : value;
 
     private static string FormatDownloadSize(UpdateItemView item)
-        => item.State == "UpdateAvailable" ? FormatBytes(item.DownloadSizeBytes) : "-";
+        => item.State is "UpdateAvailable" or "NotInstalled"
+            ? FormatBytes(item.DownloadSizeBytes) : "-";
+
+    private string GetApplyButtonLabel()
+    {
+        var selected = _status?.Items.Where(item => _selectedTargets.Contains(item.Id)).ToArray();
+        return selected?.Length > 0 && selected.All(item => item.State == "NotInstalled")
+            ? "インストール" : "更新実行";
+    }
 
     private static string FormatBytes(long bytes)
     {
@@ -692,6 +702,7 @@
         {
             "UpToDate" => "最新",
             "UpdateAvailable" => "更新あり",
+            "NotInstalled" => "未インストール",
             "Unknown" => "バージョン取得不可",
             "Unsupported" => IsSettingPathOutsideExeFiles(item) ? "対象外" :
                 IsDockerSelfUpdateAvailable(item) ? "Dockerで更新してください" : "対応外",
@@ -704,12 +715,12 @@
     {
         if (item.State == "Unknown")
         {
-            return $"理由: {FormatReason(item.StateReason)}";
+            return FormatReason(item.StateReason);
         }
         if (item.State == "Unsupported" || item.State == "Disabled")
         {
             return string.IsNullOrWhiteSpace(item.StateReason)
-                ? null : $"理由: {FormatReason(item.StateReason)}";
+                ? null : FormatReason(item.StateReason);
         }
         return null;
     }
@@ -759,6 +770,7 @@
         return item.State switch
         {
             "UpdateAvailable" => "update-row-available",
+            "NotInstalled" => "update-row-notinstalled",
             "Unknown" => "update-row-unknown",
             "Unsupported" => "update-row-unsupported",
             "Disabled" => "update-row-disabled",

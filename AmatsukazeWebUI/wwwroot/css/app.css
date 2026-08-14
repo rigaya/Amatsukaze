@@ -1515,6 +1515,10 @@ code {
     background: var(--update-attention-soft);
 }
 
+.update-row-notinstalled {
+    background: var(--accent-soft);
+}
+
 .update-row-unknown,
 .update-row-unsupported,
 .update-row-disabled,

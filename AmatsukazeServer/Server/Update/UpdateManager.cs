@@ -193,7 +193,8 @@ namespace Amatsukaze.Server.Update
                         }
                         var state = states.FirstOrDefault(item =>
                             string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
-                        if (state?.Status != UpdateTargetStatus.UpdateAvailable ||
+                        if ((state?.Status != UpdateTargetStatus.UpdateAvailable &&
+                             state?.Status != UpdateTargetStatus.NotInstalled) ||
                             state.SelectedAsset == null || string.IsNullOrWhiteSpace(state.LatestVersion))
                         {
                             error = $"適用可能な更新情報がありません: {id}";
@@ -398,6 +399,7 @@ namespace Amatsukaze.Server.Update
                         ? "Docker コンテナ内の exe 更新はコンテナを再作成すると失われます。" : null,
                     LastCheckedAt = lastCheckedAt,
                     NextCheckAt = nextCheckAt,
+                    // 未インストールは利用しないハードウェア向けの場合もあるため、更新ありには数えない。
                     HasUpdate = items.Any(item =>
                         item.State == UpdateTargetStatus.UpdateAvailable.ToString() ||
                         item.StateReason == "docker_self_update_available"),
@@ -794,12 +796,13 @@ namespace Amatsukaze.Server.Update
                     ("digest", selectedAsset.Digest),
                     ("version", latestVersion));
 
-                var status = DetermineStatus(target, local.Version, latestVersion, dockerApplication,
-                    out var reason);
+                var status = DetermineStatus(target, local.Version, latestVersion,
+                    local.NotInstalled, dockerApplication, out var reason);
                 newStates.Add(CreateState(target, local.Version, latestVersion, status, reason,
                     checkedAt, selectedAsset, release.HtmlUrl));
                 var result = status == UpdateTargetStatus.Unknown ? "NG" :
-                    status == UpdateTargetStatus.Unsupported ? "SKIP" : "OK";
+                    status == UpdateTargetStatus.Unsupported ||
+                    status == UpdateTargetStatus.NotInstalled ? "SKIP" : "OK";
                 WriteTargetSummary(log, target.Id, result, local.Version, latestVersion, status,
                     reason, targetTimer,
                     status == UpdateTargetStatus.Unknown ? "LOCAL_VERSION_UNKNOWN" : null,
@@ -813,6 +816,7 @@ namespace Amatsukaze.Server.Update
             log.Write("-", "S99_SUMMARY", "OK",
                 ("targets", newStates.Count),
                 ("updates", newStates.Count(state => state.Status == UpdateTargetStatus.UpdateAvailable)),
+                ("not_installed", newStates.Count(state => state.Status == UpdateTargetStatus.NotInstalled)),
                 ("unknown", newStates.Count(state => state.Status == UpdateTargetStatus.Unknown)),
                 ("release_success", successfulReleaseQueries),
                 ("manual", manual ? "yes" : "no"));
@@ -852,8 +856,13 @@ namespace Amatsukaze.Server.Update
         }
 
         private static UpdateTargetStatus DetermineStatus(UpdateTargetDef target, string current,
-            string latest, bool dockerApplication, out string reason)
+            string latest, bool notInstalled, bool dockerApplication, out string reason)
         {
+            if (notInstalled && !string.IsNullOrWhiteSpace(latest))
+            {
+                reason = "not_installed";
+                return UpdateTargetStatus.NotInstalled;
+            }
             if (string.IsNullOrWhiteSpace(current) || string.IsNullOrWhiteSpace(latest))
             {
                 return ApplyDockerStatus(UpdateTargetStatus.Unknown, "version_unknown",
@@ -1303,17 +1312,20 @@ namespace Amatsukaze.Server.Update
         {
             var current = server.AppData_?.setting;
             var oldPath = current == null ? null : target.GetExecutablePath(current);
+            var os = OperatingSystem.IsWindows() ? UpdateOSKind.Windows : UpdateOSKind.Linux;
             if (string.IsNullOrWhiteSpace(oldPath))
             {
-                log.Write(target.Id, "S12_SETTINGS", "SKIP",
-                    ("reason", "empty_default_path"),
-                    ("key", target.SettingKey ?? "(none)"),
-                    ("old", "(empty)"));
-                return;
+                if (ClassifySettingPath(target, installed.DestinationPath, appRoot, os) !=
+                    SettingPathKind.InstalledPayload)
+                {
+                    log.Write(target.Id, "S12_SETTINGS", "SKIP",
+                        ("reason", "empty_default_path"),
+                        ("key", target.SettingKey ?? "(none)"),
+                        ("old", "(empty)"));
+                    return;
+                }
             }
-
-            var os = OperatingSystem.IsWindows() ? UpdateOSKind.Windows : UpdateOSKind.Linux;
-            if (os == UpdateOSKind.Linux &&
+            else if (os == UpdateOSKind.Linux &&
                 AreSamePath(oldPath, installed.DestinationPath, StringComparison.Ordinal))
             {
                 log.Write(target.Id, "S12_SETTINGS", "SKIP",
@@ -1322,7 +1334,7 @@ namespace Amatsukaze.Server.Update
                     ("old", oldPath));
                 return;
             }
-            if (!ShouldUpdateSettingPath(target, oldPath,
+            else if (!ShouldUpdateSettingPath(target, oldPath,
                 installed.DestinationPath, appRoot, os))
             {
                 log.Write(target.Id, "S12_SETTINGS", "SKIP",
@@ -1365,7 +1377,8 @@ namespace Amatsukaze.Server.Update
                 throw;
             }
             log.Write(target.Id, "S12_SETTINGS", "OK", ("key", target.SettingKey),
-                ("old", oldPath), ("new", installed.DestinationPath),
+                ("old", string.IsNullOrWhiteSpace(oldPath) ? "(empty)" : oldPath),
+                ("new", installed.DestinationPath),
                 ("backup", "server_managed"));
         }
 

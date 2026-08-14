@@ -37,6 +37,7 @@ namespace Amatsukaze.Server.Update
         Unknown,
         UpToDate,
         UpdateAvailable,
+        NotInstalled,
         Unsupported,
         Disabled,
     }
