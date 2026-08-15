@@ -166,14 +166,18 @@ namespace Amatsukaze.Server.Update
             L("  command -v pgrep >/dev/null 2>&1 || return 1");
             L("  pgrep -f '(^|/)([A]matsukazeServerCLI|[A]matsukazeGUI|[A]matsukazeCLI)([[:space:]]|$)' >/dev/null 2>&1");
             L("}");
-            L("restart_server() {");
+            L("spawn_server() {");
             L("  if [ -z \"$RESTART_EXE\" ]; then log_update S24_RESTART NG 'code=RESTART_COMMAND_MISSING'; return 1; fi");
             L("  if [ ! -x \"$RESTART_EXE\" ]; then log_update S24_RESTART NG \"code=RESTART_FAILED reason=not_executable process=$(quote_value \"$RESTART_EXE\")\"; return 1; fi");
             L("  nohup \"$RESTART_EXE\" \"${RESTART_ARGS[@]}\" >/dev/null 2>&1 &");
             L("  restart_pid=$!");
+            L("  log_update S24_RESTART OK \"process=$(quote_value \"$RESTART_EXE\") pid=$restart_pid\"; return 0");
+            L("}");
+            L("probe_server() {");
             L("  sleep \"$RESTART_PROBE_SECONDS\"");
             L("  if ! kill -0 \"$restart_pid\" 2>/dev/null; then log_update S24_RESTART NG \"code=RESTART_FAILED reason=exited_immediately process=$(quote_value \"$RESTART_EXE\")\"; return 1; fi");
-            L("  log_update S24_RESTART OK \"process=$(quote_value \"$RESTART_EXE\") pid=$restart_pid\"; return 0");
+            // 新サーバーが結果取込後にログを削除している可能性があるため、probe 成功時は追記しない。
+            L("  return 0");
             L("}");
             L("backup_file() {");
             L("  local rel=$1 source=\"$APP_ROOT/$1\" destination=\"$BACKUP_DIR/$1\"");
@@ -245,17 +249,17 @@ namespace Amatsukaze.Server.Update
             L("done");
             L("log_update S20_WAIT_EXIT OK \"pid=$SERVER_PID elapsed=${elapsed}s\"");
             L("# 既存ファイルへ触る前に、必要な全バックアップを確定します。");
-            L("rm -rf -- \"$BACKUP_DIR\" && mkdir -p -- \"$BACKUP_DIR\" || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE\"; restart_server || true; write_result; exit 3; }");
+            L("rm -rf -- \"$BACKUP_DIR\" && mkdir -p -- \"$BACKUP_DIR\" || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE\"; spawn_server || true; write_result; exit 3; }");
             L(": > \"$CREATED_LIST\"");
             if (plan.ReplaceDirectories.Count > 0)
             {
-                L("validate_wwwroot || { STATUS=failed; ERROR_CODE=WWWROOT_RESIDUE; log_update S21_BACKUP NG \"code=$ERROR_CODE\"; restart_server || true; write_result; exit 3; }");
-                L("backup_wwwroot || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE path=exe_files/wwwroot\"; restart_server || true; write_result; exit 3; }");
+                L("validate_wwwroot || { STATUS=failed; ERROR_CODE=WWWROOT_RESIDUE; log_update S21_BACKUP NG \"code=$ERROR_CODE\"; spawn_server || true; write_result; exit 3; }");
+                L("backup_wwwroot || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE path=exe_files/wwwroot\"; spawn_server || true; write_result; exit 3; }");
             }
             foreach (var relative in plan.OverwriteFiles)
-                L("backup_file " + QuoteShell(relative) + " || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE path=$(quote_value " + QuoteShell(relative) + ")\"; restart_server || true; write_result; exit 3; }");
+                L("backup_file " + QuoteShell(relative) + " || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE path=$(quote_value " + QuoteShell(relative) + ")\"; spawn_server || true; write_result; exit 3; }");
             foreach (var relative in plan.AddOnlyFiles)
-                L("remember_addition " + QuoteShell(relative) + " || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE path=$(quote_value " + QuoteShell(relative) + ")\"; restart_server || true; write_result; exit 3; }");
+                L("remember_addition " + QuoteShell(relative) + " || { STATUS=failed; ERROR_CODE=BACKUP_FAILED; log_update S21_BACKUP NG \"code=$ERROR_CODE path=$(quote_value " + QuoteShell(relative) + ")\"; spawn_server || true; write_result; exit 3; }");
             L("log_update S21_BACKUP OK \"path=$(quote_value \"$BACKUP_DIR\") files=" + plan.OverwriteFiles.Count.ToString(CultureInfo.InvariantCulture) + "\"");
             L("# 許可リストから生成した明示的な配置計画だけを適用します。");
             L("placement_failed=0");
@@ -272,9 +276,14 @@ namespace Amatsukaze.Server.Update
             L("  if rm -rf -- \"$STAGING\" \"$BACKUP_DIR\"; then log_update S22_PLACE OK \"items=$PLACED_ITEMS staging=removed backup=removed\"; log_update S23_ROLLBACK SKIP 'reason=placement_succeeded';");
             L("  else STATUS=failed; ERROR_CODE=WORKSPACE_CLEANUP_FAILED; log_update S22_PLACE NG \"code=$ERROR_CODE staging=$(quote_value \"$STAGING\") backup=$(quote_value \"$BACKUP_DIR\")\"; log_update S23_ROLLBACK SKIP 'reason=placement_succeeded'; fi");
             L("fi");
-            L("# ロールバックを含む配置結果を確定してから、記録済みコマンドで再起動します。");
-            L("if ! restart_server && [ \"$STATUS\" = success ]; then STATUS=failed; ERROR_CODE=RESTART_FAILED; fi");
+            L("# 新サーバーが起動処理を終える前に、再起動ログと結果ファイルを確定します。");
+            L("restart_failed=0");
+            L("spawn_server || restart_failed=1");
             L("write_result");
+            L("[ \"$restart_failed\" -ne 0 ] || probe_server || restart_failed=1");
+            L("if [ \"$restart_failed\" -ne 0 ] && [ \"$STATUS\" = success ]; then");
+            L("  STATUS=failed; ERROR_CODE=RESTART_FAILED; write_result");
+            L("fi");
             L("[ \"$STATUS\" = success ]");
             return builder.ToString();
         }

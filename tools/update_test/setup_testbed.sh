@@ -100,6 +100,7 @@ PID_FILE="${TESTBED_DIR}/.update-test-server.pid"
 SERVER_LOG="${TESTBED_DIR}/update-test-server.log"
 READY_TIMEOUT_SECONDS=30
 STOP_TIMEOUT_SECONDS=15
+FORCE_STOP_TIMEOUT_SECONDS=5
 POLL_INTERVAL_SECONDS=1
 HTTP_PROBE_TIMEOUT_SECONDS=2
 ERROR_LOG_LINES=80
@@ -161,6 +162,25 @@ start_server() {
     return 1
 }
 
+wait_gone() {
+    local timeout=$1; shift
+    local deadline=$((SECONDS + timeout)) pid
+    while ((SECONDS < deadline)); do
+        local alive=0
+        for pid in "$@"; do
+            if kill -0 "${pid}" 2>/dev/null; then
+                alive=1
+                break
+            fi
+        done
+        if ((alive == 0)); then
+            return 0
+        fi
+        sleep "${POLL_INTERVAL_SECONDS}"
+    done
+    return 1
+}
+
 stop_server() {
     local pids=()
     if [[ -f "${PID_FILE}" ]]; then
@@ -184,24 +204,19 @@ stop_server() {
     fi
     mapfile -t pids < <(printf '%s\n' "${pids[@]}" | awk '!seen[$0]++')
     kill "${pids[@]}" 2>/dev/null || true
-    local deadline=$((SECONDS + STOP_TIMEOUT_SECONDS))
-    while ((SECONDS < deadline)); do
-        local alive=0
-        for pid in "${pids[@]}"; do
-            if kill -0 "${pid}" 2>/dev/null; then
-                alive=1
-                break
-            fi
-        done
-        if ((alive == 0)); then
-            rm -f "${PID_FILE}"
-            echo "[update_test_server] 停止完了: pid=${pids[*]}"
-            return 0
+    if ! wait_gone "${STOP_TIMEOUT_SECONDS}" "${pids[@]}"; then
+        # AmatsukazeServerCLIはSIGTERMでは落ちないことがあるため、
+        # 本番用のtools/amatsukaze_server.shと同じくSIGKILLへ落とす。
+        echo "[update_test_server] SIGTERMで停止しないためSIGKILLする: pid=${pids[*]}" >&2
+        kill -9 "${pids[@]}" 2>/dev/null || true
+        if ! wait_gone "${FORCE_STOP_TIMEOUT_SECONDS}" "${pids[@]}"; then
+            echo "[update_test_server] 停止タイムアウト: pid=${pids[*]}" >&2
+            return 1
         fi
-        sleep "${POLL_INTERVAL_SECONDS}"
-    done
-    echo "[update_test_server] 停止タイムアウト: pid=${pids[*]}" >&2
-    return 1
+    fi
+    rm -f "${PID_FILE}"
+    echo "[update_test_server] 停止完了: pid=${pids[*]}"
+    return 0
 }
 
 status_server() {
