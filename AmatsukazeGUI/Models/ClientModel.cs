@@ -65,7 +65,10 @@ namespace Amatsukaze.Models
         private string currentNewAutoSelect;
 
         private const int ReceiveLogLimit = 5;
-        private static readonly TimeSpan UpdateStatusRefreshInterval = TimeSpan.FromMinutes(30);
+        // サーバー側の /api/update/status はメモリ上の状態を返すだけでネットワークアクセスを伴わないため、
+        // 短い間隔でポーリングしてもコストはほぼない。サーバーが更新チェックを終えてからボタンに
+        // 反映されるまでの待ち時間を抑えるため、短めの間隔にしている。
+        private static readonly TimeSpan UpdateStatusRefreshInterval = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan UpdateStatusRequestTimeout = TimeSpan.FromSeconds(5);
         private readonly Dictionary<string, int> receiveLogCounter = new Dictionary<string, int>();
         private readonly DispatcherTimer updateStatusTimer;
