@@ -20,9 +20,11 @@ else if (ShouldShowButton)
 
 @if (_showUpdateDialog)
 {
-    <UpdateDialog InitialStatus="_updateStatus"
-                  StatusChanged="OnUpdateStatusChanged"
-                  OnClose="CloseUpdateDialog" />
+    <SectionContent SectionId="UiSections.OverlayDialogs">
+        <UpdateDialog InitialStatus="_updateStatus"
+                      StatusChanged="OnUpdateStatusChanged"
+                      OnClose="CloseUpdateDialog" />
+    </SectionContent>
 }
 
 @code {

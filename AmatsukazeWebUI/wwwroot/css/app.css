@@ -1424,6 +1424,8 @@ code {
     max-width: 1100px;
     max-height: calc(100vh - 2rem);
     overflow-y: auto;
+    /* sticky なヘッダの上に隙間ができて中身が透けるため、上の余白はヘッダ側で持つ */
+    padding-top: 0;
 }
 
 .update-dialog-header,
@@ -1436,6 +1438,32 @@ code {
 
 .update-dialog-header h4 {
     margin: 0;
+}
+
+/* 対象が多いとダイアログ内がスクロールするため、見出しと閉じるボタンは常に見えるようにする */
+.update-dialog-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    /* --glass-strong は半透明でスクロールした中身が透けるため、ここは不透明色にする */
+    background: var(--bg-surface);
+    padding: 1rem 0 0.5rem;
+}
+
+.update-dialog-close {
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 20px;
+    line-height: 1;
+    padding: 0.25rem 0.4rem;
+    cursor: pointer;
+}
+
+.update-dialog-close:hover,
+.update-dialog-close:focus-visible {
+    background: var(--bg-surface);
 }
 
 .update-dialog-actions {

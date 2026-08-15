@@ -7,7 +7,8 @@
     <div class="modal-body update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-dialog-title" @onclick:stopPropagation="true">
         <div class="update-dialog-header">
             <h4 id="update-dialog-title">更新状況</h4>
-            <button class="btn btn-sm btn-secondary" @onclick="CloseAsync" aria-label="閉じる">閉じる</button>
+            <button class="update-dialog-close" type="button" @onclick="CloseAsync"
+                    aria-label="閉じる" title="閉じる">×</button>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(_status?.EnvironmentWarning))
