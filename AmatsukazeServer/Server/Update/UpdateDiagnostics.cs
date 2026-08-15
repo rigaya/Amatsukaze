@@ -50,6 +50,8 @@ namespace Amatsukaze.Server.Update
                 ("docker", Safe(() => IsDockerEnvironment() ? "yes" : "no")),
                 ("exe_files_volume", Safe(GetAppExeFilesMountState)),
                 ("execution_context", Safe(GetSafeExecutionContext)),
+                // 開発ビルド除外という安全装置を外している場合、ログだけで判別できるようにする。
+                ("allow_dev_build", UpdateDebugOptions.AllowDevelopmentBuild ? "yes" : "no"),
             };
 
             if (OperatingSystem.IsWindows())

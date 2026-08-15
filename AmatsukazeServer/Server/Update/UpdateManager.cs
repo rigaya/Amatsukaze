@@ -10,6 +10,25 @@ using Amatsukaze.Shared;
 
 namespace Amatsukaze.Server.Update
 {
+    // 更新機能のローカル検証だけで使う注入口。環境変数が未設定なら通常動作のままになる。
+    internal static class UpdateDebugOptions
+    {
+        internal const string ApiBaseUrlEnvironmentVariable = "AMT_UPDATE_API_BASE_URL";
+        internal const string AllowDevelopmentBuildEnvironmentVariable =
+            "AMT_UPDATE_ALLOW_DEV_BUILD";
+        private const string EnabledNumericValue = "1";
+        private const string EnabledTextValue = "true";
+
+        internal static readonly string ApiBaseUrl =
+            Environment.GetEnvironmentVariable(ApiBaseUrlEnvironmentVariable);
+        internal static readonly bool AllowDevelopmentBuild = IsEnabled(
+            Environment.GetEnvironmentVariable(AllowDevelopmentBuildEnvironmentVariable));
+
+        private static bool IsEnabled(string value) =>
+            string.Equals(value, EnabledNumericValue, StringComparison.Ordinal) ||
+            string.Equals(value, EnabledTextValue, StringComparison.OrdinalIgnoreCase);
+    }
+
     internal enum UpdateCancelResult
     {
         Accepted,
@@ -875,7 +894,7 @@ namespace Amatsukaze.Server.Update
             if (releaseClient == null || !string.Equals(releaseClientProxy, proxy, StringComparison.Ordinal))
             {
                 releaseClient?.Dispose();
-                releaseClient = new ReleaseClient(proxy);
+                releaseClient = new ReleaseClient(proxy, UpdateDebugOptions.ApiBaseUrl);
                 releaseClientProxy = proxy;
             }
             return releaseClient;
@@ -894,7 +913,8 @@ namespace Amatsukaze.Server.Update
                 return ApplyDockerStatus(UpdateTargetStatus.Unknown, "version_unknown",
                     dockerApplication, out reason);
             }
-            if (target.IsApplication && DevelopmentVersionRegex.IsMatch(current))
+            if (target.IsApplication && DevelopmentVersionRegex.IsMatch(current) &&
+                !UpdateDebugOptions.AllowDevelopmentBuild)
             {
                 return ApplyDockerStatus(UpdateTargetStatus.UpToDate, "development_build",
                     dockerApplication, out reason);
