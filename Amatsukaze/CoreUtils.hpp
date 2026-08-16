@@ -162,17 +162,17 @@ inline tstring file_name_t(const char* str) { return ascii_to_tstring(file_name(
 
 #if defined(_WIN32) || defined(_WIN64)
 #define THROW(exception, message) \
-	throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " message), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__)))
+	throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: ") _T(message), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__)))
 
 #define THROWF(exception, fmt, ...) \
-	throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " fmt), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__, __VA_ARGS__)))
+	throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: ") _T(fmt), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__, __VA_ARGS__)))
 #else
 #define THROW(exception, message) \
-    throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " message), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__)))
+    throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: ") _T(message), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__)))
 
 // 可変引数マクロを修正
 #define THROWF(exception, fmt, ...) \
-    throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: " fmt), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__ __VA_OPT__(,) __VA_ARGS__)))
+    throw_exception_(exception(StringFormat(_T("Exception thrown at %s:%d\r\nMessage: ") _T(fmt), core_utils::file_name_t(__FILENAME__).c_str(), __LINE__ __VA_OPT__(,) __VA_ARGS__)))
 #endif
 
 static void throw_exception_(const Exception& exc) {
