@@ -925,6 +925,20 @@
         border-top: 1px solid #bdd4e9;
     }
 
+    .trim-editpoints-total {
+        font-size: 0.8rem;
+        color: inherit;
+    }
+
+    .trim-editpoints-total-label {
+        color: inherit;
+    }
+
+    .trim-editpoints-total-time {
+        color: inherit;
+        font-size: 0.75rem;
+    }
+
     .trim-divisionpoints {
         border-top-color: #bdd4e9;
     }
