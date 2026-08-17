@@ -82,6 +82,9 @@ namespace Amatsukaze.Server.Update
             UpdateLog.CleanupOldLogs(appRoot);
             UpdateTransaction.CleanupStale(appRoot);
             UpdateInstaller.CleanupStartupResidues(appRoot);
+            // テスターが更新を適用した後の再起動では、GUI・サービス・手動起動の違いにより
+            // 環境変数が引き継がれる保証がない。ここをゲートすると .amatsukaze_update と
+            // updater_ready が残り続けるため、起動時リカバリは機能ゲートの外に置く。
             var recovery = SelfUpdateRecovery.RunStartupRecovery(appRoot);
             selfUpdatePendingState = new SelfUpdatePendingState(recovery.HasPending);
             LastSelfUpdateResult = recovery.LastResult;
@@ -187,8 +190,8 @@ namespace Amatsukaze.Server.Update
                 {
                     foreach (var id in requested)
                     {
-                        var target = UpdateCatalog.Targets.FirstOrDefault(item =>
-                            string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+                        var target = UpdateFeatureFlags.FindTarget(UpdateCatalog.Targets, id,
+                            UpdateFeatureFlags.SelfUpdateEnabled);
                         if (target == null)
                         {
                             error = $"不明な更新対象です: {id}";
@@ -380,7 +383,8 @@ namespace Amatsukaze.Server.Update
                 var disabledTargets = new HashSet<string>(setting?.UpdateDisabledTargets ??
                     new List<string>(), StringComparer.OrdinalIgnoreCase);
                 var items = new List<UpdateItemView>();
-                foreach (var target in UpdateCatalog.Targets)
+                foreach (var target in UpdateFeatureFlags.FilterTargets(UpdateCatalog.Targets,
+                    UpdateFeatureFlags.SelfUpdateEnabled))
                 {
                     var state = stateSnapshot.FirstOrDefault(item =>
                         string.Equals(item.Id, target.Id, StringComparison.OrdinalIgnoreCase));
@@ -642,7 +646,8 @@ namespace Amatsukaze.Server.Update
             if (!UpdateCatalog.TryInitialize(out var catalogError))
             {
                 var invalidStates = new List<UpdateTargetState>();
-                foreach (var target in UpdateCatalog.Targets)
+                foreach (var target in UpdateFeatureFlags.FilterTargets(UpdateCatalog.Targets,
+                    UpdateFeatureFlags.SelfUpdateEnabled))
                 {
                     log.Write(target.Id, "S01_PRECHECK", "NG",
                         ("code", "INVALID_CATALOG"),
@@ -673,7 +678,8 @@ namespace Amatsukaze.Server.Update
             var extractor = FindExtractor(appRoot);
             var newStates = new List<UpdateTargetState>();
             var successfulReleaseQueries = 0;
-            foreach (var target in UpdateCatalog.Targets)
+            foreach (var target in UpdateFeatureFlags.FilterTargets(UpdateCatalog.Targets,
+                UpdateFeatureFlags.SelfUpdateEnabled))
             {
                 var targetTimer = System.Diagnostics.Stopwatch.StartNew();
                 cancellationToken.ThrowIfCancellationRequested();

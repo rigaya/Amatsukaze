@@ -52,6 +52,7 @@ namespace Amatsukaze.Server.Update
                 ("execution_context", Safe(GetSafeExecutionContext)),
                 // 開発ビルド除外という安全装置を外している場合、ログだけで判別できるようにする。
                 ("allow_dev_build", UpdateDebugOptions.AllowDevelopmentBuild ? "yes" : "no"),
+                ("self_update_enabled", UpdateFeatureFlags.SelfUpdateEnabled ? "yes" : "no"),
             };
 
             if (OperatingSystem.IsWindows())
