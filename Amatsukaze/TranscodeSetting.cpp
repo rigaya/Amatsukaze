@@ -251,6 +251,24 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     return sb.str();
 }
 
+/* static */ tstring makeEncoderFilterArgs(
+    const tstring& binpath,
+    const tstring& options,
+    const VideoFormat& fmt) {
+    StringBuilderT sb;
+
+    sb.append(_T("\"%s\" --y4m -i -"), binpath);
+    if (!fmt.progressive) {
+        // y4mのインタレースフラグが認識されないため明示する
+        sb.append(_T(" --interlace tff"));
+    }
+    if (!options.empty()) {
+        sb.append(_T(" %s"), options);
+    }
+    sb.append(_T(" -c raw -f yuv4mpegpipe -o - --log-level warn"));
+    return sb.str();
+}
+
 /* static */ const tchar* audioEncoderToString(ENUM_AUDIO_ENCODER fmt) {
     switch (fmt) {
     case AUDIO_ENCODER_NONE: return _T("none");

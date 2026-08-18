@@ -93,6 +93,11 @@ tstring makeEncoderArgs(
     const ENUM_FORMAT format,
     const tstring& outpath);
 
+tstring makeEncoderFilterArgs(
+    const tstring& binpath,
+    const tstring& options,
+    const VideoFormat& fmt);
+
 enum ENUM_AUDIO_ENCODER {
     AUDIO_ENCODER_NONE,
     AUDIO_ENCODER_NEROAAC,

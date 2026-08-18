@@ -79,6 +79,17 @@ typedef int PIPE_HANDLE;
 typedef pid_t PROCESS_HANDLE;
 #endif
 
+// パイプハンドルを閉じる (0は何もしない)
+static inline void closePipeHandle(PIPE_HANDLE handle) {
+    if (handle) {
+#if defined(_WIN32) || defined(_WIN64)
+        CloseHandle(handle);
+#else
+        ::close(handle);
+#endif
+    }
+}
+
 struct RGYPipeSet {
     PIPE_HANDLE h_read;
     PIPE_HANDLE h_write;

@@ -181,10 +181,35 @@ void Y4MWriter::inputFrame(const PVideoFrame& frame) {
     if (vi.Is444()) return "424";
     return "Unknown";
 }
-Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly, StdRedirectedSubProcess::LineCallback lineCallback, bool sarInContainerOnly)
+Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly, StdRedirectedSubProcess::LineCallback lineCallback, bool sarInContainerOnly, const tstring& filterArgs)
     : AMTObject(ctx)
     , y4mWriter_(new MyVideoWriter(this, vi, fmt, sarInContainerOnly))
-    , process_(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, lineCallback)) {
+    , filterProcess_()
+    , process_() {
+    PIPE_HANDLE externalStdIn = (PIPE_HANDLE)0;
+    if (!filterArgs.empty()) {
+        ctx.info(_T("[エンコーダフィルタ起動]"));
+        ctx.infoF(_T("%s"), filterArgs);
+        // 引数のctxはコンストラクタを抜けると寿命が尽きるため、メンバのctxを使う
+        auto filterLineCallback = [this](bool, const std::vector<char>& line, bool) {
+            this->ctx.infoF(_T("[エンコーダフィルタ] %s"), char_to_tstring(std::string(line.begin(), line.end())));
+        };
+        filterProcess_.reset(new StdRedirectedSubProcess(filterArgs, 5, false, disablePowerThrottoling, true, filterLineCallback, (PIPE_HANDLE)0, true));
+        // フィルタのstdout読み取り端は所有権ごと受け取り、本エンコーダのstdinに渡す
+        externalStdIn = filterProcess_->detachStdOutReadHandle();
+    }
+    try {
+        process_.reset(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, lineCallback, externalStdIn));
+    } catch (...) {
+        if (filterProcess_) {
+            // 本エンコーダに渡せなかった読み取り端を閉じる
+            closePipeHandle(externalStdIn);
+            // stdinを閉じないとフィルタが入力待ちのままjoin()が返らない
+            filterProcess_->finishWrite();
+            filterProcess_->join();
+        }
+        throw;
+    }
     const int logSarW = sarInContainerOnly ? 1 : fmt.sarWidth;
     const int logSarH = sarInContainerOnly ? 1 : fmt.sarHeight;
     ctx.infoF(_T("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps"),
@@ -192,7 +217,7 @@ Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, V
         fmt.width, fmt.height, logSarW, logSarH, vi.fps_numerator, vi.fps_denominator);
 }
 Y4MEncodeWriter::~Y4MEncodeWriter() {
-    if (process_->isRunning()) {
+    if ((filterProcess_ && filterProcess_->isRunning()) || process_->isRunning()) {
         THROW(InvalidOperationException, "call finish before destroy object ...");
     }
 }
@@ -203,8 +228,22 @@ void Y4MEncodeWriter::inputFrame(const PVideoFrame& frame) {
 
 void Y4MEncodeWriter::finish() {
     if (y4mWriter_ != NULL) {
-        process_->finishWrite();
-        int ret = process_->join();
+        int filterRet = 0;
+        if (filterProcess_) {
+            filterProcess_->finishWrite();
+            filterRet = filterProcess_->join();
+        } else {
+            process_->finishWrite();
+        }
+        const int ret = process_->join();
+        if (filterRet != 0) {
+            ctx.error(_T("↓↓↓↓↓↓エンコーダフィルタ最後の出力↓↓↓↓↓↓"));
+            for (auto v : filterProcess_->getLastLines()) {
+                v.push_back(0); // null terminate
+                ctx.errorF(_T("[エンコーダフィルタ] %s"), char_to_tstring(v.data()));
+            }
+            ctx.error(_T("↑↑↑↑↑↑エンコーダフィルタ最後の出力↑↑↑↑↑↑"));
+        }
         if (ret != 0) {
             ctx.error(_T("↓↓↓↓↓↓エンコーダ最後の出力↓↓↓↓↓↓"));
             for (auto v : process_->getLastLines()) {
@@ -212,6 +251,11 @@ void Y4MEncodeWriter::finish() {
                 ctx.errorF(_T("%s"), char_to_tstring(v.data()));
             }
             ctx.error(_T("↑↑↑↑↑↑エンコーダ最後の出力↑↑↑↑↑↑"));
+        }
+        if (filterRet != 0) {
+            THROWF(RuntimeException, "エンコーダフィルタ終了コード: 0x%x", filterRet);
+        }
+        if (ret != 0) {
             THROWF(RuntimeException, "エンコーダ終了コード: 0x%x", ret);
         }
     }
@@ -219,7 +263,7 @@ void Y4MEncodeWriter::finish() {
 
 void Y4MEncodeWriter::closeInput() {
     if (y4mWriter_ != NULL) {
-        process_->finishWrite();
+        (filterProcess_ ? filterProcess_.get() : process_.get())->finishWrite();
     }
 }
 
@@ -238,7 +282,7 @@ Y4MEncodeWriter::MyVideoWriter::MyVideoWriter(Y4MEncodeWriter* this_, VideoInfo 
 }
 
 void Y4MEncodeWriter::onVideoWrite(MemoryChunk mc) {
-    process_->write(mc);
+    (filterProcess_ ? filterProcess_.get() : process_.get())->write(mc);
 }
 AMTFilterVideoEncoder::AMTFilterVideoEncoder(
     AMTContext&ctx, const ConfigWrapper& setting, int numEncodeBufferFrames)
@@ -718,7 +762,10 @@ void AMTFilterVideoEncoder::encode(
         ctx.infoF(_T("%s"), argsWithParallel);
 
         // 初期化（子プロセス起動）
-        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly()));
+        const tstring filterArgs = setting_.isEncoderFilterSeparate()
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_)
+            : tstring();
+        encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly(), filterArgs));
         // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）
         if (useParallel) {
             for (auto& pi : pinfo) {

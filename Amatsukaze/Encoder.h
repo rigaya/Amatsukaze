@@ -33,7 +33,7 @@ protected:
 class Y4MEncodeWriter : AMTObject, NonCopyable {
     static const char* getYUV(VideoInfo vi);
 public:
-    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly = false, StdRedirectedSubProcess::LineCallback lineCallback = StdRedirectedSubProcess::LineCallback(), bool sarInContainerOnly = false);
+    Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, VideoInfo vi, VideoFormat fmt, bool disablePowerThrottoling, bool captureOutputOnly = false, StdRedirectedSubProcess::LineCallback lineCallback = StdRedirectedSubProcess::LineCallback(), bool sarInContainerOnly = false, const tstring& filterArgs = tstring());
     ~Y4MEncodeWriter();
 
     void inputFrame(const PVideoFrame& frame);
@@ -59,6 +59,7 @@ private:
     };
 
     std::unique_ptr<MyVideoWriter> y4mWriter_;
+    std::unique_ptr<StdRedirectedSubProcess> filterProcess_;
     std::unique_ptr<StdRedirectedSubProcess> process_;
 };
 
@@ -184,4 +185,3 @@ private:
 
     void onAudioPacket(AVPacket& packet);
 };
-
