@@ -356,6 +356,16 @@ else
                     </td>
                 </tr>
             }
+            else if (IsEncoderFilter())
+            {
+                <tr>
+                    <th>フィルタオプション</th>
+                    <td>
+                        <textarea style="width: 100%; height: 80px;" @oninput="OnEncoderFilterOptionChanged">@GetEncoderFilterOption()</textarea>
+                        <div>--vpp-* 等のフィルタオプションを記述します。エンコーダがこのフィルタと同じ場合はエンコーダオプションに結合して1プロセスで処理されます。</div>
+                    </td>
+                </tr>
+            }
             else if (IsSettingFilter())
             {
                 <tr>
@@ -882,7 +892,7 @@ else
     private static readonly string[] _encoderEnumNames = new[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVTAV1" };
     private static readonly string[] _decoderEnumNames = new[] { "Default", "QSV", "CUVID" };
     private static readonly string[] _formatEnumNames = new[] { "MP4", "MKV", "M2TS", "TS", "TSREPLACE" };
-    private static readonly string[] _filterEnumNames = new[] { "None", "Setting", "Custom" };
+    private static readonly string[] _filterEnumNames = new[] { "None", "Setting", "Custom", "QSVEncFilter", "NVEncFilter", "VCEEncFilter" };
     private static readonly string[] _deblockStrengthEnumNames = new[] { "Strong", "Medium", "Weak", "Weaker" };
     private static readonly string[] _d3dvpGpuEnumNames = new[] { "Auto", "Intel", "NVIDIA", "Radeon" };
     private static readonly string[] _qtgmcPresetEnumNames = new[] { "Auto", "Faster", "Fast", "Medium", "Slow", "Slower" };
@@ -1589,6 +1599,35 @@ else
     private bool IsSettingFilter()
     {
         return GetFilterIndex() == 1;
+    }
+
+    private bool IsEncoderFilter()
+    {
+        return GetFilterIndex() >= 3;
+    }
+
+    private string GetEncoderFilterOptionName()
+    {
+        return GetFilterIndex() switch
+        {
+            3 => "QSVEncFilterOption",
+            4 => "NVEncFilterOption",
+            5 => "VCEEncFilterOption",
+            _ => ""
+        };
+    }
+
+    private string GetEncoderFilterOption()
+    {
+        return GetEncoderFilterOptionName() is { Length: > 0 } name ? GetStringValue(name) : "";
+    }
+
+    private void OnEncoderFilterOptionChanged(ChangeEventArgs e)
+    {
+        if (GetEncoderFilterOptionName() is { Length: > 0 } name)
+        {
+            OnStringChanged(e, name);
+        }
     }
 
     private IEnumerable<(string Value, string Label, bool Selected)> GetIndexOptions(List<string>? list, int selectedIndex)

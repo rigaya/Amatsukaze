@@ -1107,6 +1107,68 @@ namespace Amatsukaze.Models
         public string Name { get { return "フィルタなし"; } }
     }
 
+    public class DisplayEncoderFilter : ViewModel
+    {
+        public string Name
+        {
+            get
+            {
+                switch (EncoderType)
+                {
+                    case EncoderType.QSVEnc: return "QSVEncフィルタの設定";
+                    case EncoderType.NVEnc: return "NVEncフィルタの設定";
+                    case EncoderType.VCEEnc: return "VCEEncフィルタの設定";
+                    default: return "エンコーダフィルタの設定";
+                }
+            }
+        }
+
+        public ProfileSetting Data { get; private set; }
+
+        public EncoderType EncoderType { get; private set; }
+
+        public DisplayEncoderFilter(ProfileSetting data, EncoderType encoderType)
+        {
+            Data = data;
+            EncoderType = encoderType;
+        }
+
+        public string FilterOption
+        {
+            get
+            {
+                switch (EncoderType)
+                {
+                    case EncoderType.QSVEnc: return Data.QSVEncFilterOption;
+                    case EncoderType.NVEnc: return Data.NVEncFilterOption;
+                    case EncoderType.VCEEnc: return Data.VCEEncFilterOption;
+                    default: return null;
+                }
+            }
+            set
+            {
+                switch (EncoderType)
+                {
+                    case EncoderType.QSVEnc:
+                        if (Data.QSVEncFilterOption == value) return;
+                        Data.QSVEncFilterOption = value;
+                        break;
+                    case EncoderType.NVEnc:
+                        if (Data.NVEncFilterOption == value) return;
+                        Data.NVEncFilterOption = value;
+                        break;
+                    case EncoderType.VCEEnc:
+                        if (Data.VCEEncFilterOption == value) return;
+                        Data.VCEEncFilterOption = value;
+                        break;
+                    default:
+                        return;
+                }
+                RaisePropertyChanged();
+            }
+        }
+    }
+
     public class DisplayProfile : ViewModel
     {
         public ProfileSetting Data { get; private set; }
@@ -1133,7 +1195,10 @@ namespace Amatsukaze.Models
             {
                 new DisplayNoFilter(),
                 Filter,
-                CustomFilter
+                CustomFilter,
+                new DisplayEncoderFilter(data, EncoderType.QSVEnc),
+                new DisplayEncoderFilter(data, EncoderType.NVEnc),
+                new DisplayEncoderFilter(data, EncoderType.VCEEnc)
             };
 
             CompositeDisposable.Add(new PropertyChangedEventListener(

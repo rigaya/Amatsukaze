@@ -2317,6 +2317,16 @@ namespace Amatsukaze.Server
                                 .Append("\"");
                         }
                     }
+                    else if (ProfileSettingExtensions.GetFilterEncoderType(profile.FilterOption) is EncoderType filterEncoderType)
+                    {
+                        sb.Append(" -eft ")
+                            .Append(GetEncoderName(filterEncoderType))
+                            .Append(" -ef \"")
+                            .Append(GetEncoderPath(filterEncoderType, setting))
+                            .Append("\" -efo \"")
+                            .Append(ProfileSettingExtensions.GetFilterEncoderOption(profile))
+                            .Append("\"");
+                    }
 
                     if (profile.AutoBuffer)
                     {
@@ -2729,6 +2739,20 @@ namespace Amatsukaze.Server
                 if (string.IsNullOrEmpty(encoderPath))
                 {
                     throw new ArgumentException("エンコーダパスが設定されていません");
+                }
+
+                var filterEncoderType = ProfileSettingExtensions.GetFilterEncoderType(profile.FilterOption);
+                if (filterEncoderType.HasValue)
+                {
+                    string filterEncoderPath = GetEncoderPath(filterEncoderType.Value, setting);
+                    if (string.IsNullOrEmpty(filterEncoderPath))
+                    {
+                        throw new ArgumentException(filterEncoderType.Value + "フィルタのエンコーダパスが設定されていません");
+                    }
+                    if (string.IsNullOrWhiteSpace(ProfileSettingExtensions.GetFilterEncoderOption(profile)))
+                    {
+                        Util.AddLog("警告: エンコーダフィルタのオプションが空です（フィルタなしと同じ動作になります）", null);
+                    }
                 }
 
                 if (profile.OutputFormat == FormatType.MP4)

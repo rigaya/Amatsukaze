@@ -175,7 +175,7 @@ namespace Amatsukaze.Server
 
     public enum FilterOption
     {
-        None, Setting, Custom
+        None, Setting, Custom, QSVEncFilter, NVEncFilter, VCEEncFilter
     }
 
     public enum QTGMCPreset
@@ -269,6 +269,12 @@ namespace Amatsukaze.Server
         public string NVEncOption { get; set; }
         [DataMember]
         public string VCEEncOption { get; set; }
+        [DataMember]
+        public string QSVEncFilterOption { get; set; }
+        [DataMember]
+        public string NVEncFilterOption { get; set; }
+        [DataMember]
+        public string VCEEncFilterOption { get; set; }
         [DataMember]
         public string SVTAV1Option { get; set; }
 
@@ -564,6 +570,30 @@ namespace Amatsukaze.Server
             }
         }
 
+        // エンコーダフィルタが有効ならそのEncoderType、無効ならnull
+        public static EncoderType? GetFilterEncoderType(FilterOption opt)
+        {
+            switch (opt)
+            {
+                case FilterOption.QSVEncFilter: return EncoderType.QSVEnc;
+                case FilterOption.NVEncFilter: return EncoderType.NVEnc;
+                case FilterOption.VCEEncFilter: return EncoderType.VCEEnc;
+                default: return null;
+            }
+        }
+
+        // FilterOptionに対応するエンコーダフィルタのオプション文字列（無効時はnull）
+        public static string GetFilterEncoderOption(ProfileSetting profile)
+        {
+            switch (profile.FilterOption)
+            {
+                case FilterOption.QSVEncFilter: return profile.QSVEncFilterOption;
+                case FilterOption.NVEncFilter: return profile.NVEncFilterOption;
+                case FilterOption.VCEEncFilter: return profile.VCEEncFilterOption;
+                default: return null;
+            }
+        }
+
         // リソース文字列を生成
         public static string GetResourceString(ProfileSetting profile)
         {
@@ -691,6 +721,11 @@ namespace Amatsukaze.Server
                 keyValueBool("フィルタ-時間軸安定化", profile.FilterSetting.EnableTemporalNR);
                 keyValueBool("フィルタ-バンディング低減", profile.FilterSetting.EnableDeband);
                 keyValueBool("フィルタ-エッジ強調", profile.FilterSetting.EnableEdgeLevel);
+            }
+            else if (GetFilterEncoderType(profile.FilterOption) is EncoderType filterEncoderType)
+            {
+                keyValue("エンコーダフィルタ", filterEncoderType.ToString());
+                keyValue("エンコーダフィルタ-オプション", GetFilterEncoderOption(profile) ?? "");
             }
             else
             {
