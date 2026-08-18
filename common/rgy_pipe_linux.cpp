@@ -77,7 +77,7 @@ int RGYPipeProcessLinux::startPipes() {
         auto bufsize = m_pipe.stdErr.bufferSize ? m_pipe.stdErr.bufferSize : RGY_PIPE_STDERR_BUFSIZE_DEFAULT;
         m_stdErrBuffer.resize(bufsize);
     }
-    if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
+    if ((m_pipe.stdIn.mode & PIPE_MODE_ENABLE) && !(m_pipe.stdIn.mode & PIPE_MODE_EXTERNAL)) {
         if (-1 == (pipe((int *)&m_pipe.stdIn.h_read)))
             return 1;
         if (set_cloexec((int)m_pipe.stdIn.h_read) == -1
@@ -108,15 +108,21 @@ int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exed
     if (m_phandle == 0) {
         //子プロセス
         if (m_pipe.stdIn.mode) {
-            ::close(m_pipe.stdIn.h_write);
+            if (m_pipe.stdIn.h_write) {
+                ::close(m_pipe.stdIn.h_write);
+            }
             dup2(m_pipe.stdIn.h_read, STDIN_FILENO);
         }
         if (m_pipe.stdOut.mode) {
-            ::close(m_pipe.stdOut.h_read);
+            if (m_pipe.stdOut.h_read) {
+                ::close(m_pipe.stdOut.h_read);
+            }
             dup2(m_pipe.stdOut.h_write, STDOUT_FILENO);
         }
         if (m_pipe.stdErr.mode) {
-            ::close(m_pipe.stdErr.h_read);
+            if (m_pipe.stdErr.h_read) {
+                ::close(m_pipe.stdErr.h_read);
+            }
             dup2(m_pipe.stdErr.h_write, STDERR_FILENO);
         }
         std::vector<const TCHAR *> pargs(args.size() + 1, nullptr);
@@ -128,15 +134,21 @@ int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exed
     }
     //親プロセス
     if (m_pipe.stdIn.mode) {
-        ::close(m_pipe.stdIn.h_read);
+        if (m_pipe.stdIn.h_read) {
+            ::close(m_pipe.stdIn.h_read);
+        }
         m_pipe.stdIn.h_read = 0;
     }
     if (m_pipe.stdOut.mode) {
-        ::close(m_pipe.stdOut.h_write);
+        if (m_pipe.stdOut.h_write) {
+            ::close(m_pipe.stdOut.h_write);
+        }
         m_pipe.stdOut.h_write = 0;
     }
     if (m_pipe.stdErr.mode) {
-        ::close(m_pipe.stdErr.h_write);
+        if (m_pipe.stdErr.h_write) {
+            ::close(m_pipe.stdErr.h_write);
+        }
         m_pipe.stdErr.h_write = 0;
     }
     return 0;

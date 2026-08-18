@@ -71,7 +71,7 @@ int RGYPipeProcessWin::startPipes() {
         auto bufsize = m_pipe.stdErr.bufferSize ? m_pipe.stdErr.bufferSize : RGY_PIPE_STDERR_BUFSIZE_DEFAULT;
         m_stdErrBuffer.resize(bufsize);
     }
-    if (m_pipe.stdIn.mode & PIPE_MODE_ENABLE) {
+    if ((m_pipe.stdIn.mode & PIPE_MODE_ENABLE) && !(m_pipe.stdIn.mode & PIPE_MODE_EXTERNAL)) {
         SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
         if (!CreatePipe(&m_pipe.stdIn.h_read, &m_pipe.stdIn.h_write, &sa, m_pipe.stdIn.bufferSize) ||
             !SetHandleInformation(m_pipe.stdIn.h_read, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
@@ -116,31 +116,50 @@ int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_
     if (new_console)
         flag |= CREATE_NEW_CONSOLE;
 
-    int ret = (CreateProcess(NULL, (TCHAR *)cmd_line.c_str(), NULL, NULL, Inherit, flag, NULL, exedir, &si, &m_pi)) ? 0 : 1;
+    const bool externalStdIn = (m_pipe.stdIn.mode & PIPE_MODE_EXTERNAL) != 0;
+    const BOOL externalStdInInheritSet = !externalStdIn
+        || SetHandleInformation(m_pipe.stdIn.h_read, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    int ret = (externalStdInInheritSet
+        && CreateProcess(NULL, (TCHAR *)cmd_line.c_str(), NULL, NULL, Inherit, flag, NULL, exedir, &si, &m_pi)) ? 0 : 1;
+    if (externalStdIn && externalStdInInheritSet) {
+        SetHandleInformation(m_pipe.stdIn.h_read, HANDLE_FLAG_INHERIT, 0);
+    }
     m_phandle = m_pi.hProcess;
     if (m_pipe.stdOut.mode) {
-        CloseHandle(m_pipe.stdOut.h_write);
+        if (m_pipe.stdOut.h_write) {
+            CloseHandle(m_pipe.stdOut.h_write);
+        }
         m_pipe.stdOut.h_write = nullptr;
         if (ret) {
-            CloseHandle(m_pipe.stdOut.h_read);
+            if (m_pipe.stdOut.h_read) {
+                CloseHandle(m_pipe.stdOut.h_read);
+            }
             m_pipe.stdOut.h_read = nullptr;
             m_pipe.stdOut.mode = PIPE_MODE_DISABLE;
         }
     }
     if (m_pipe.stdErr.mode) {
-        CloseHandle(m_pipe.stdErr.h_write);
+        if (m_pipe.stdErr.h_write) {
+            CloseHandle(m_pipe.stdErr.h_write);
+        }
         m_pipe.stdErr.h_write = nullptr;
         if (ret) {
-            CloseHandle(m_pipe.stdErr.h_read);
+            if (m_pipe.stdErr.h_read) {
+                CloseHandle(m_pipe.stdErr.h_read);
+            }
             m_pipe.stdErr.h_read = nullptr;
             m_pipe.stdErr.mode = PIPE_MODE_DISABLE;
         }
     }
     if (m_pipe.stdIn.mode) {
-        CloseHandle(m_pipe.stdIn.h_read);
+        if (m_pipe.stdIn.h_read) {
+            CloseHandle(m_pipe.stdIn.h_read);
+        }
         m_pipe.stdIn.h_read = nullptr;
         if (ret) {
-            CloseHandle(m_pipe.stdIn.h_write);
+            if (m_pipe.stdIn.h_write) {
+                CloseHandle(m_pipe.stdIn.h_write);
+            }
             m_pipe.stdIn.h_write = nullptr;
             m_pipe.stdIn.mode = PIPE_MODE_DISABLE;
         }

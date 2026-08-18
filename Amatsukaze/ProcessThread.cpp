@@ -10,14 +10,18 @@
 #include "rgy_thread_affinity.h"
 #include "cpu_info.h"
 
-SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling) :
+SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling, const PIPE_HANDLE externalStdIn) :
     process_(createRGYPipeProcess()),
     bufferStdOut(),
     bufferStdErr(),
     exitCode_(0),
-    thSetPowerThrottling() {
+    thSetPowerThrottling(),
+    externalStdIn_(externalStdIn != (PIPE_HANDLE)0) {
     // RGYPipeProcessの初期化（標準入出力のモード設定）
-    process_->init(PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
+    process_->init(externalStdIn_ ? PIPE_MODE_EXTERNAL : PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
+    if (externalStdIn_) {
+        process_->setExternalStdIn(externalStdIn);
+    }
     process_->setStdOutBufferSize(4 * 1024);
     process_->setStdErrBufferSize(4 * 1024);
     
@@ -36,6 +40,9 @@ SubProcess::~SubProcess() {
 }
 
 void SubProcess::write(MemoryChunk mc) {
+    if (externalStdIn_) {
+        THROW(RuntimeException, "外部stdinを使用するプロセスには書き込めません");
+    }
     if (mc.length > 0xFFFFFFFF) {
         THROW(RuntimeException, "buffer too large");
     }
@@ -92,7 +99,14 @@ size_t SubProcess::readOut(MemoryChunk mc) {
 }
 
 void SubProcess::finishWrite() {
+    if (externalStdIn_) {
+        THROW(RuntimeException, "外部stdinを使用するプロセスの入力は閉じられません");
+    }
     process_->stdInClose();
+}
+
+PIPE_HANDLE SubProcess::detachStdOutReadHandle() {
+    return process_->detachStdOutReadHandle();
 }
 
 void SubProcess::runSetPowerThrottling() {
@@ -123,16 +137,19 @@ int SubProcess::join() {
     return exitCode_;
 }
 
-EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling)
-    : SubProcess(args, disablePowerThrottoling)
+EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling, const PIPE_HANDLE externalStdIn, const bool noDrainStdOut)
+    : SubProcess(args, disablePowerThrottoling, externalStdIn)
+    , noDrainStdOut_(noDrainStdOut)
     , drainOut(this, false)
     , drainErr(this, true) {
-    drainOut.start();
+    if (!noDrainStdOut_) {
+        drainOut.start();
+    }
     drainErr.start();
 }
 
 EventBaseSubProcess::~EventBaseSubProcess() {
-    if (drainOut.isRunning()) {
+    if ((noDrainStdOut_ ? drainErr : drainOut).isRunning()) {
         THROW(InvalidOperationException, "call join before destroy object ...");
     }
 }
@@ -150,16 +167,19 @@ int EventBaseSubProcess::join() {
     * -> EventBaseSubProcessのjoin()が完了
     * -> プロセスは終了しているのでSubProcessのデストラクタはすぐに完了
     */
-    try {
-        finishWrite();
-    } catch (RuntimeException&) {
-        // 子プロセスがエラー終了していると書き込みに失敗するが無視する
+    // 外部stdinを使用する場合は書き込み端を保持していないので閉じる必要がない
+    if (!isExternalStdIn()) {
+        try {
+            finishWrite();
+        } catch (RuntimeException&) {
+            // 子プロセスのエラー終了時は入力を閉じられないため無視する
+        }
     }
     drainOut.join();
     drainErr.join();
     return SubProcess::join();
 }
-bool EventBaseSubProcess::isRunning() { return drainOut.isRunning(); }
+bool EventBaseSubProcess::isRunning() { return (noDrainStdOut_ ? drainErr : drainOut).isRunning(); }
 
 EventBaseSubProcess::DrainThread::DrainThread(EventBaseSubProcess* this_, bool isErr)
     : this_(this_)
@@ -181,8 +201,9 @@ void EventBaseSubProcess::drain_thread(bool isErr) {
     }
 }
 
-StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling, bool captureOnly, LineCallback lineCallback) :
-    EventBaseSubProcess(args, disablePowerThrottoling),
+StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling,
+    bool captureOnly, LineCallback lineCallback, const PIPE_HANDLE externalStdIn, const bool noDrainStdOut) :
+    EventBaseSubProcess(args, disablePowerThrottoling, externalStdIn, noDrainStdOut),
     isUtf8(isUtf8),
     bufferLines(bufferLines),
     captureOnly(captureOnly),
