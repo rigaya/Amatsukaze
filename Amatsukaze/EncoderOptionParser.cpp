@@ -192,7 +192,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 }
             }
         }
-        if (encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC) {
+        if (encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC || encoder == ENCODER_VCEENC) {
             if (arg == L"--vbr-quality") {
                 qvbr_quality = std::stod(next);
             } else if (arg == L"--vpp-deinterlace") {
