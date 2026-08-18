@@ -765,7 +765,33 @@ tstring ConfigWrapper::getEncoderPath() const {
 }
 
 tstring ConfigWrapper::getEncoderOptions() const {
+    // 同じエンコーダならフィルタオプションを前置して1プロセスで処理する
+    if (isEncoderFilterEnabled() && !isEncoderFilterSeparate() && conf.encoderFilterOptions.size() > 0) {
+        return conf.encoderOptions.size() > 0
+            ? conf.encoderFilterOptions + _T(" ") + conf.encoderOptions
+            : conf.encoderFilterOptions;
+    }
     return conf.encoderOptions;
+}
+
+bool ConfigWrapper::isEncoderFilterEnabled() const {
+    return conf.encoderFilter >= ENCODER_X264 && conf.encoderFilter <= ENCODER_SVTAV1;
+}
+
+bool ConfigWrapper::isEncoderFilterSeparate() const {
+    return isEncoderFilterEnabled() && conf.encoderFilter != conf.encoder;
+}
+
+ENUM_ENCODER ConfigWrapper::getEncoderFilter() const {
+    return conf.encoderFilter;
+}
+
+tstring ConfigWrapper::getEncoderFilterPath() const {
+    return conf.encoderFilterPath;
+}
+
+tstring ConfigWrapper::getEncoderFilterOptions() const {
+    return conf.encoderFilterOptions;
 }
 
 bool ConfigWrapper::getMuxerAddEncoderCmd() const {
@@ -1486,7 +1512,8 @@ tstring ConfigWrapper::getOptions(
     int pass, const std::vector<BitrateZone>& zones, const tstring& optionFilePath, double vfrBitrateScale,
     EncodeFileKey key, const EncoderOptionInfo& eoInfo) const {
     StringBuilderT sb;
-    sb.append(_T("%s"), conf.encoderOptions);
+    const auto encoderOptions = getEncoderOptions();
+    sb.append(_T("%s"), encoderOptions);
     double targetBitrate = 0;
     if (conf.autoBitrate) {
         targetBitrate = conf.bitrate.getTargetBitrate(srcFormat, srcBitrate);
@@ -1638,6 +1665,10 @@ void ConfigWrapper::dump() const {
         (conf.useMKVWhenSubExist) ? _T(" (字幕ありではMKV)") : _T(""));
     ctx.infoF(_T("エンコーダ: %s (%s)"), conf.encoderPath, encoderToString(conf.encoder));
     ctx.infoF(_T("エンコーダオプション: %s"), conf.encoderOptions);
+    if (isEncoderFilterEnabled()) {
+        ctx.infoF(_T("エンコーダフィルタ: %s (%s)"), conf.encoderFilterPath, encoderToString(conf.encoderFilter));
+        ctx.infoF(_T("エンコーダフィルタオプション: %s"), conf.encoderFilterOptions);
+    }
     if (conf.userSAR.first > 0 && conf.userSAR.second > 0) {
         ctx.infoF(_T("ユーザー指定SAR: %d:%d"), conf.userSAR.first, conf.userSAR.second);
     }

@@ -204,6 +204,9 @@ struct Config {
     ENUM_ENCODER encoder;
     tstring encoderPath;
     tstring encoderOptions;
+    ENUM_ENCODER encoderFilter; // エンコーダフィルタ。無効時は (ENUM_ENCODER)-1
+    tstring encoderFilterPath;
+    tstring encoderFilterOptions;
     // 追加オプションをコンテナに記録する（mp4/mkv出力時のみ有効）
     bool muxerAddEncoderCmd;
     // SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する
@@ -332,6 +335,16 @@ public:
     tstring getEncoderPath() const;
 
     tstring getEncoderOptions() const;
+
+    bool isEncoderFilterEnabled() const;
+
+    bool isEncoderFilterSeparate() const;
+
+    ENUM_ENCODER getEncoderFilter() const;
+
+    tstring getEncoderFilterPath() const;
+
+    tstring getEncoderFilterOptions() const;
 
     bool getMuxerAddEncoderCmd() const;
 

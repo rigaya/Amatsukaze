@@ -51,6 +51,9 @@ static void printHelp(const tchar* bin) {
         "  -eo|--encoder-option <オプション> エンコーダへ渡すオプション[]\n"
         "                      入力ファイルの解像度、アスペクト比、インタレースフラグ、\n"
         "                      フレームレート、カラーマトリクス等は自動で追加されるので不要\n"
+        "  -eft|--encoder-filter-type <タイプ> フィルタとして使用するエンコーダタイプ[]\n"
+        "  -ef |--encoder-filter <パス> フィルタとして使用するエンコーダのパス[]\n"
+        "  -efo|--encoder-filter-option <オプション> エンコーダフィルタへ渡すオプション[]\n"
         "  --muxer-add-encoder-cmd  mp4/mkv出力時にコンテナにエンコーダ名と追加オプションを記録する\n"
         "  --sar-in-container-only  SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する\n"
         "  --enc-parallel <数値>  エンコード分割並列数[1]\n"
@@ -220,6 +223,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     Config conf = Config();
     conf.workDir = _T("./");
     conf.encoderOptions = _T("");
+    conf.encoderFilter = (ENUM_ENCODER)-1;
+    conf.encoderFilterPath = _T("");
+    conf.encoderFilterOptions = _T("");
     conf.muxerAddEncoderCmd = false;
     conf.sarInContainerOnly = false;
     conf.encoderPath = _T("x264") + exeAppendix;
@@ -313,6 +319,16 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.encoderPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("-eo") || key == _T("--encoder-option")) {
             conf.encoderOptions = getParam(argc, argv, i++);
+        } else if (key == _T("-eft") || key == _T("--encoder-filter-type")) {
+            tstring arg = getParam(argc, argv, i++);
+            conf.encoderFilter = encoderFtomString(arg);
+            if (conf.encoderFilter == (ENUM_ENCODER)-1) {
+                printTStderr(StringFormat(_T("--encoder-filter-typeの指定が間違っています: %s\n"), arg.c_str()));
+            }
+        } else if (key == _T("-ef") || key == _T("--encoder-filter")) {
+            conf.encoderFilterPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("-efo") || key == _T("--encoder-filter-option")) {
+            conf.encoderFilterOptions = getParam(argc, argv, i++);
         } else if (key == _T("--muxer-add-encoder-cmd")) {
             conf.muxerAddEncoderCmd = true;
         } else if (key == _T("--sar-in-container-only")) {
@@ -665,6 +681,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             };
         conf.chapterExePath = search(conf.chapterExePath);
         conf.encoderPath = search(conf.encoderPath);
+        if (conf.encoderFilterPath.size() > 0) {
+            conf.encoderFilterPath = search(conf.encoderFilterPath);
+        }
         conf.joinLogoScpPath = search(conf.joinLogoScpPath);
 #if defined(_WIN32) || defined(_WIN64)
         // Windows: SearchExe で NicoConvASS.exe を検索
