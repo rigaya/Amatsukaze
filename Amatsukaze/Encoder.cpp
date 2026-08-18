@@ -716,9 +716,19 @@ void AMTFilterVideoEncoder::encode(
             continue;
         }
 
+        VideoFormat encoderInputFormat = outfmt_;
+        if (setting_.isEncoderFilterSeparate()) {
+            // マージ後のeoInfo.deintは本エンコーダ由来の可能性もあるため、
+            // フィルタ側のオプションを解析して前段でインタレース解除されるかを判定する
+            const auto feInfo = ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions());
+            if (feInfo.deint != ENCODER_DEINT_NONE) {
+                // 前段でインタレース解除済みのため、本エンコーダにはprogressiveとして渡す
+                encoderInputFormat.progressive = true;
+            }
+        }
         tstring args = argGen.GenEncoderOptions(
             vi_.num_frames,
-            outfmt_, bitrateZones, vfrBitrateScale,
+            encoderInputFormat, bitrateZones, vfrBitrateScale,
             timecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, baseOutputPath);
 
         // 並列パイプ用の準備 (OS非依存)

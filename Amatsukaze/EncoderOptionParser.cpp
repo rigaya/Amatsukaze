@@ -118,6 +118,7 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
 
     //デフォルト値をセット
     info.format = VS_H264;
+    info.selectEvery = 1;
     switch (encoder) {
     case ENCODER_X264:
         info.format = VS_H264;

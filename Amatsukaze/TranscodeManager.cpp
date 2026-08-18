@@ -1229,7 +1229,32 @@ void DoBadThing() {
     bool isNoEncode = (setting.getMode() == _T("cm"));
 
     auto eoInfo = ParseEncoderOption(setting.getEncoder(), setting.getEncoderOptions());
+    ctx.info(_T("[本エンコーダ設定]"));
     PrintEncoderInfo(ctx, eoInfo);
+    if (setting.isEncoderFilterEnabled()) {
+        const tstring& filterOptions = setting.getEncoderFilterOptions();
+        if (filterOptions.find(_T("--output-res")) != tstring::npos
+            || filterOptions.find(_T("--crop")) != tstring::npos
+            || filterOptions.find(_T("--vpp-pad")) != tstring::npos) {
+            ctx.warn(_T("エンコーダフィルタによる解像度変更はコンテナのメタデータ (解像度/SAR) に反映されません"));
+        }
+    }
+    if (setting.isEncoderFilterSeparate()) {
+        const auto feInfo = ParseEncoderOption(setting.getEncoderFilter(), setting.getEncoderFilterOptions());
+        ctx.info(_T("[エンコーダフィルタ設定]"));
+        PrintEncoderInfo(ctx, feInfo);
+        if (eoInfo.afsTimecode && feInfo.afsTimecode) {
+            THROW(ArgumentException, "本エンコーダとエンコーダフィルタの両方でVFR化が指定されています");
+        }
+        if (eoInfo.deint != ENCODER_DEINT_NONE && feInfo.deint != ENCODER_DEINT_NONE) {
+            THROW(ArgumentException, "本エンコーダとエンコーダフィルタの両方でインタレース解除が指定されています");
+        }
+        if (feInfo.deint != ENCODER_DEINT_NONE) {
+            eoInfo.deint = feInfo.deint;
+        }
+        eoInfo.selectEvery *= feInfo.selectEvery;
+        eoInfo.afsTimecode = eoInfo.afsTimecode || feInfo.afsTimecode;
+    }
     const int cliParallel = setting.getEncoderParallel();
     const int encoderParallel = (cliParallel > 1) ? cliParallel : ((eoInfo.parallel > 1) ? eoInfo.parallel : 1);
     if (setting.isTwoPass() && encoderParallel > 1) {
