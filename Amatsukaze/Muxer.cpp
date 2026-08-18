@@ -249,6 +249,9 @@ void AMTMuxder::mux(EncodeFileKey key,
 
     // タイムコード用
     auto timebase = std::make_pair(vfmt.frameRateNum * (fileOut.vfrTimingFps / 30), vfmt.frameRateDenom);
+    if (!fileOut.timecode.empty() && timebase.first == 0) {
+        THROW(FormatException, "タイムコード用のタイムベースが0です");
+    }
 
     auto outPath = setting_.getOutFilePath(fileIn.outKey, fileIn.keyMax, muxFormat, eoInfo.format);
     auto muxerPath = setting_.getMuxerPath();

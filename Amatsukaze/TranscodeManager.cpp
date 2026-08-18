@@ -16,6 +16,7 @@
 #include "rgy_mutex.h"
 #include "Subtitle.h"
 #include "WaveWriter.h"
+#include <cmath>
 #include <filesystem>
 
 namespace {
@@ -85,6 +86,65 @@ static void writeTStringArray(const File& file, const std::vector<tstring>& stri
     file.writeValue((int64_t)strings.size());
     for (const auto& str : strings) {
         writeTString(file, str);
+    }
+}
+
+// タイムコードファイルの最大サイズ (1行10バイト強として約150万フレーム分)
+static const int64_t MAX_TIMECODE_FILE_SIZE = 16 * 1024 * 1024;
+
+static void normalizeEncoderFilterTimecode(const tstring& path) {
+    std::string text;
+    {
+        File input(path, _T("rb"));
+        const int64_t fileSize = input.size();
+        if (fileSize <= 0 || fileSize > MAX_TIMECODE_FILE_SIZE) {
+            THROW(FormatException, "エンコーダフィルタのタイムコードが空または大きすぎます");
+        }
+        text.resize((size_t)fileSize);
+        if (input.read(MemoryChunk((uint8_t*)text.data(), (size_t)fileSize)) != (size_t)fileSize) {
+            THROW(RuntimeException, "エンコーダフィルタのタイムコードを読み込めません");
+        }
+    }
+
+    std::vector<double> timestamps;
+    size_t begin = 0;
+    int lineNumber = 0;
+    while (begin < text.size()) {
+        const size_t end = text.find('\n', begin);
+        std::string line = text.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+        begin = (end == std::string::npos) ? text.size() : end + 1;
+        lineNumber++;
+        const size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') {
+            continue;
+        }
+        try {
+            size_t parsed = 0;
+            const double timestamp = std::stod(line.substr(first), &parsed);
+            if (!std::isfinite(timestamp)
+                || line.find_first_not_of(" \t\r", first + parsed) != std::string::npos) {
+                THROW(FormatException, "エンコーダフィルタのタイムコード形式が不正です");
+            }
+            timestamps.push_back(timestamp);
+        } catch (const Exception&) {
+            throw;
+        } catch (...) {
+            THROWF(FormatException, "エンコーダフィルタのタイムコード形式が不正です (%d行目)", lineNumber);
+        }
+    }
+    if (timestamps.empty()) {
+        THROW(FormatException, "エンコーダフィルタのタイムコードにフレーム情報がありません");
+    }
+
+    File output(path, _T("wb"));
+    const char header[] = "# timecode format v2\n";
+    output.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
+    // 既存のタイムコード出力 (Encoder.cpp createChunkTimecodeFile) と同様、
+    // 先頭フレームが0になるように基準を合わせてから整数msに丸める
+    const double base = timestamps.front();
+    for (const auto timestamp : timestamps) {
+        const std::string line = std::to_string((long long)std::llround(timestamp - base)) + "\n";
+        output.write(MemoryChunk((uint8_t*)line.data(), line.size()));
     }
 }
 
@@ -1239,8 +1299,10 @@ void DoBadThing() {
             ctx.warn(_T("エンコーダフィルタによる解像度変更はコンテナのメタデータ (解像度/SAR) に反映されません"));
         }
     }
+    bool encoderFilterAfsTimecode = false;
     if (setting.isEncoderFilterSeparate()) {
         const auto feInfo = ParseEncoderOption(setting.getEncoderFilter(), setting.getEncoderFilterOptions());
+        encoderFilterAfsTimecode = feInfo.afsTimecode;
         ctx.info(_T("[エンコーダフィルタ設定]"));
         PrintEncoderInfo(ctx, feInfo);
         if (eoInfo.afsTimecode && feInfo.afsTimecode) {
@@ -1842,6 +1904,13 @@ void DoBadThing() {
                 baseTimecodePath, fileOut.vfrTimingFps, baseOutputPath,
                 key, serviceId, eoInfo, encoderParallel, disablePowerThrottoling,
                 env, filterFactory, setting.getEncoder());
+            if (encoderFilterAfsTimecode) {
+                const tstring encoderFilterTimecodePath = setting.getEncoderFilterTimecodePath(key);
+                normalizeEncoderFilterTimecode(encoderFilterTimecodePath);
+                fileOut.timecode = encoderFilterTimecodePath;
+                fileOut.vfrTimingFps = 30;
+                ctx.info(_T("エンコーダフィルタのVFRタイムコードを整数msに正規化しました"));
+            }
         } catch (const AvisynthError& avserror) {
             THROWF(AviSynthException, "%s", avserror.msg);
         }

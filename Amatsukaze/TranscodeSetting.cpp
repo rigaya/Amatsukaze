@@ -254,7 +254,8 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
 /* static */ tstring makeEncoderFilterArgs(
     const tstring& binpath,
     const tstring& options,
-    const VideoFormat& fmt) {
+    const VideoFormat& fmt,
+    const tstring& timecodepath) {
     StringBuilderT sb;
 
     sb.append(_T("\"%s\" --y4m -i -"), binpath);
@@ -265,7 +266,11 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     if (!options.empty()) {
         sb.append(_T(" %s"), options);
     }
-    sb.append(_T(" -c raw -f yuv4mpegpipe -o - --log-level warn"));
+    sb.append(_T(" -c raw -f yuv4mpegpipe -o -"));
+    if (!timecodepath.empty()) {
+        sb.append(_T(" --timecode \"%s\""), timecodepath);
+    }
+    sb.append(_T(" --log-level warn"));
     return sb.str();
 }
 
@@ -1219,6 +1224,11 @@ tstring ConfigWrapper::getAvsDurationPath(EncodeFileKey key) const {
 tstring ConfigWrapper::getAvsTimecodePath(EncodeFileKey key) const {
     return regtmp(StringFormat(_T("%s/v%d-%d-%d%s.avstmp"),
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)) + _T(".timecode.txt"));
+}
+
+tstring ConfigWrapper::getEncoderFilterTimecodePath(EncodeFileKey key) const {
+    return regtmp(StringFormat(_T("%s/v%d-%d-%d%s.encoderfilter.timecode.txt"),
+        tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
 }
 
 tstring ConfigWrapper::getFilterAvsPath(EncodeFileKey key) const {

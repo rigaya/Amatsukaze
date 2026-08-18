@@ -698,6 +698,12 @@ void AMTFilterVideoEncoder::encode(
     const bool nativeParallel = wantsParallel && isNativeParallelEncoder(encoderType);
     const bool softwareParallel = wantsParallel && !nativeParallel && isSoftwareSplitEncoder(encoderType);
     const int actualParallel = (nativeParallel || softwareParallel) ? pipeParallel : 1;
+    const auto feInfo = setting_.isEncoderFilterSeparate()
+        ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
+        : EncoderOptionInfo();
+    const tstring encoderFilterTimecodePath = feInfo.afsTimecode
+        ? setting_.getEncoderFilterTimecodePath(key)
+        : tstring();
 
     const int npass = (int)passList.size();
     for (int i = 0; i < npass; i++) {
@@ -720,7 +726,6 @@ void AMTFilterVideoEncoder::encode(
         if (setting_.isEncoderFilterSeparate()) {
             // マージ後のeoInfo.deintは本エンコーダ由来の可能性もあるため、
             // フィルタ側のオプションを解析して前段でインタレース解除されるかを判定する
-            const auto feInfo = ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions());
             if (feInfo.deint != ENCODER_DEINT_NONE) {
                 // 前段でインタレース解除済みのため、本エンコーダにはprogressiveとして渡す
                 encoderInputFormat.progressive = true;
@@ -773,7 +778,7 @@ void AMTFilterVideoEncoder::encode(
 
         // 初期化（子プロセス起動）
         const tstring filterArgs = setting_.isEncoderFilterSeparate()
-            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_)
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath)
             : tstring();
         encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly(), filterArgs));
         // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）

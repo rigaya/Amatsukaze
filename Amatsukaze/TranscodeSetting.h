@@ -96,7 +96,8 @@ tstring makeEncoderArgs(
 tstring makeEncoderFilterArgs(
     const tstring& binpath,
     const tstring& options,
-    const VideoFormat& fmt);
+    const VideoFormat& fmt,
+    const tstring& timecodepath);
 
 enum ENUM_AUDIO_ENCODER {
     AUDIO_ENCODER_NONE,
@@ -551,6 +552,8 @@ public:
     tstring getAvsDurationPath(EncodeFileKey key) const;
 
     tstring getAvsTimecodePath(EncodeFileKey key) const;
+
+    tstring getEncoderFilterTimecodePath(EncodeFileKey key) const;
 
     tstring getFilterAvsPath(EncodeFileKey key) const;
 
