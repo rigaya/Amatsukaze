@@ -66,12 +66,14 @@ namespace Amatsukaze.Models
 
         private const int ReceiveLogLimit = 5;
         // サーバー側の /api/update/status はメモリ上の状態を返すだけでネットワークアクセスを伴わないため、
-        // 短い間隔でポーリングしてもコストはほぼない。サーバーが更新チェックを終えてからボタンに
-        // 反映されるまでの待ち時間を抑えるため、短めの間隔にしている。
+        // 接続直後は10秒間隔で3回ポーリングして起動時チェックへ追い付き、その後は5分間隔で更新する。
+        private static readonly TimeSpan UpdateStatusCatchUpInterval = TimeSpan.FromSeconds(10);
+        private const int UpdateStatusCatchUpCount = 3;
         private static readonly TimeSpan UpdateStatusRefreshInterval = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan UpdateStatusRequestTimeout = TimeSpan.FromSeconds(5);
         private readonly Dictionary<string, int> receiveLogCounter = new Dictionary<string, int>();
         private readonly DispatcherTimer updateStatusTimer;
+        private int updateStatusCatchUpRemaining;
         private int updateStatusRefreshRunning;
 
         private void TraceReceive(string name, string detail = null)
@@ -847,6 +849,8 @@ namespace Amatsukaze.Models
                 {
                     return;
                 }
+                updateStatusCatchUpRemaining = UpdateStatusCatchUpCount;
+                updateStatusTimer.Interval = UpdateStatusCatchUpInterval;
                 if (!updateStatusTimer.IsEnabled)
                 {
                     updateStatusTimer.Start();
@@ -857,7 +861,27 @@ namespace Amatsukaze.Models
 
         private async void UpdateStatusTimer_Tick(object sender, EventArgs e)
         {
+            if (updateStatusCatchUpRemaining > 0)
+            {
+                updateStatusCatchUpRemaining--;
+                if (updateStatusCatchUpRemaining == 0)
+                {
+                    updateStatusTimer.Interval = UpdateStatusRefreshInterval;
+                }
+            }
             await RefreshUpdateStatusAsync();
+        }
+
+        public void RequestUpdateStatusRefresh()
+        {
+            _ = DispatcherHelper.UIDispatcher.InvokeAsync(() =>
+            {
+                if (disposedValue || RestApiPort <= 0)
+                {
+                    return;
+                }
+                _ = RefreshUpdateStatusAsync();
+            });
         }
 
         private async Task RefreshUpdateStatusAsync()

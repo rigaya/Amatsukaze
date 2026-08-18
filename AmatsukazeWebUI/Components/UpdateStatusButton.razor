@@ -1,6 +1,7 @@
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
 @inject NavigationManager Nav
+@implements IDisposable
 
 @if (ShouldShowPlaceholder)
 {
@@ -30,6 +31,9 @@ else if (ShouldShowButton)
 @code {
     private const string UpdateQueryParameter = "update";
     private const string UpdateQueryOpenValue = "1";
+    private static readonly TimeSpan UpdateStatusCatchUpInterval = TimeSpan.FromSeconds(10);
+    private const int UpdateStatusCatchUpCount = 3;
+    private static readonly TimeSpan UpdateStatusRefreshInterval = TimeSpan.FromMinutes(5);
 
     [Parameter]
     public string Label { get; set; } = "更新する";
@@ -57,6 +61,7 @@ else if (ShouldShowButton)
     private string? _updateStatusError;
     private bool _updateStatusLoading = true;
     private bool _showUpdateDialog;
+    private readonly CancellationTokenSource _pollCancellation = new();
 
     private bool HasStatus => !_updateStatusLoading &&
         string.IsNullOrEmpty(_updateStatusError) && _updateStatus != null;
@@ -68,6 +73,7 @@ else if (ShouldShowButton)
     protected override async Task OnInitializedAsync()
     {
         await LoadUpdateStatusAsync();
+        _ = PollUpdateStatusAsync(_pollCancellation.Token);
     }
 
     private async Task LoadUpdateStatusAsync()
@@ -87,6 +93,51 @@ else if (ShouldShowButton)
         if (AutoOpenOnQuery && ShouldOpenUpdateDialog())
         {
             _showUpdateDialog = true;
+        }
+    }
+
+    private async Task PollUpdateStatusAsync(CancellationToken token)
+    {
+        try
+        {
+            for (var count = 0; count < UpdateStatusCatchUpCount; count++)
+            {
+                await Task.Delay(UpdateStatusCatchUpInterval, token);
+                await RefreshUpdateStatusInBackgroundAsync();
+            }
+            while (true)
+            {
+                await Task.Delay(UpdateStatusRefreshInterval, token);
+                await RefreshUpdateStatusInBackgroundAsync();
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // コンポーネント破棄に伴う終了は正常系として扱う
+        }
+    }
+
+    private async Task RefreshUpdateStatusInBackgroundAsync()
+    {
+        if (_showUpdateDialog)
+        {
+            return;
+        }
+        try
+        {
+            var result = await Api.GetUpdateStatusAsync();
+            if (!result.Ok || result.Data == null || _showUpdateDialog)
+            {
+                return;
+            }
+            _updateStatus = result.Data;
+            // 初回取得に失敗していてもここで解除しないとボタンが出ないままになる
+            _updateStatusError = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // 一時的な取得失敗では現在の表示を維持する
         }
     }
 
@@ -153,5 +204,11 @@ else if (ShouldShowButton)
             return status.HasUpdate ? "更新があります（一部取得不可）" : "一部取得できませんでした";
         }
         return status.HasUpdate ? "更新があります" : "最新です";
+    }
+
+    public void Dispose()
+    {
+        _pollCancellation.Cancel();
+        _pollCancellation.Dispose();
     }
 }

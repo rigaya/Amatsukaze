@@ -45,6 +45,15 @@ namespace Amatsukaze.Views
             }
         }
 
+        private void SettingPanel_IsVisibleChanged(object sender,
+            DependencyPropertyChangedEventArgs e)
+        {
+            if ((bool)e.NewValue && DataContext is SettingViewModel vm && vm.Model != null)
+            {
+                vm.Model.RequestUpdateStatusRefresh();
+            }
+        }
+
         private void TrimAdjustResetDefaults_Click(object sender, RoutedEventArgs e)
         {
             if (!(DataContext is SettingViewModel vm) || vm.Model?.Setting == null)

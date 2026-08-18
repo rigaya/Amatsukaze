@@ -10,6 +10,7 @@
              xmlns:c="clr-namespace:Amatsukaze.Components" 
              xmlns:Models="clr-namespace:Amatsukaze.Models" x:Class="Amatsukaze.Views.SettingPanel" 
              mc:Ignorable="d" 
+             IsVisibleChanged="SettingPanel_IsVisibleChanged"
              d:DesignHeight="1900" d:DesignWidth="600" d:Background="White"
              d:DataContext="{d:DesignInstance {x:Type vm:SettingViewModel}}">
     
