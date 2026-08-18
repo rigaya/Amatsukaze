@@ -54,7 +54,8 @@ namespace Amatsukaze.Server
 
         public bool ScheduledPaused { get; private set; }
         public bool UserPaused { get; private set; }
-        public bool IsPaused { get { return ScheduledPaused || UserPaused; } }
+        public bool MaintenancePaused { get; private set; }
+        public bool IsPaused { get { return ScheduledPaused || UserPaused || MaintenancePaused; } }
 
         private async void RunItem(Worker worker, QueueItem item, bool forceStart)
         {
@@ -179,7 +180,25 @@ namespace Amatsukaze.Server
             {
                 UserPaused = pause;
             }
-            if(IsPaused != current)
+            ApplyPauseTransition(current);
+        }
+
+        /// <summary>
+        /// 更新の適用中にキューを停止する
+        /// </summary>
+        public void SetMaintenancePause(bool pause)
+        {
+            var current = IsPaused;
+            MaintenancePaused = pause;
+            ApplyPauseTransition(current);
+        }
+
+        /// <summary>
+        /// 停止状態の切り替わりに応じて待機ワーカーを再構成する
+        /// </summary>
+        private void ApplyPauseTransition(bool previous)
+        {
+            if(IsPaused != previous)
             {
                 if(IsPaused)
                 {
@@ -207,6 +226,10 @@ namespace Amatsukaze.Server
         // アイテムを１つだけ強制的に開始する
         public void ForceStart(QueueItem item)
         {
+            if (MaintenancePaused)
+            {
+                throw new InvalidOperationException("更新の適用中のため開始できません");
+            }
             var idleWorker = workers.FirstOrDefault(w => w.State != State.Running);
             if (idleWorker == null)
             {

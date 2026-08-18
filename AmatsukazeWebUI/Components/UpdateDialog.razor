@@ -1,0 +1,824 @@
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@inject IJSRuntime Js
+@implements IDisposable
+
+<div class="modal-overlay update-dialog-overlay" @onclick="CloseAsync">
+    <div class="modal-body update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-dialog-title" @onclick:stopPropagation="true">
+        <div class="update-dialog-header">
+            <h4 id="update-dialog-title">更新状況</h4>
+            <button class="update-dialog-close" type="button" @onclick="CloseAsync"
+                    aria-label="閉じる" title="閉じる">×</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_status?.EnvironmentWarning))
+        {
+            <div class="update-environment-warning" role="alert">@_status.EnvironmentWarning</div>
+        }
+
+        @if (_status?.HasPendingSelfUpdate == true)
+        {
+            <div class="update-environment-warning" role="alert">
+                <div>保留中の本体更新があります。</div>
+                <button class="btn btn-sm btn-warning" @onclick="DiscardAndRetrySelfUpdateAsync"
+                        disabled="@_applying">破棄してやり直す</button>
+            </div>
+        }
+
+        @if (_status?.LastSelfUpdateResult != null)
+        {
+            <div class="update-self-result" role="status">
+                前回の本体更新: @FormatSelfUpdateResult(_status.LastSelfUpdateResult)
+            </div>
+        }
+
+        @if (_applying)
+        {
+            <div class="update-apply-progress" role="status">
+                <p>更新を適用しています… @GetProgressText()</p>
+                <p>@GetTransferProgressText()</p>
+                @if ((_job?.TotalBytes ?? 0) > 0)
+                {
+                    <progress value="@_job!.ReceivedBytes" max="@_job.TotalBytes"></progress>
+                }
+            </div>
+        }
+        else if (_checking)
+        {
+            <p class="update-check-progress">更新を確認しています… @GetProgressText()</p>
+        }
+        else if (!string.IsNullOrEmpty(_error))
+        {
+            <p class="update-dialog-error">@_error</p>
+        }
+
+        @if (_status == null)
+        {
+            <p>-</p>
+        }
+        else
+        {
+            <div class="update-table-scroll">
+                <table class="table update-table">
+                    <thead>
+                        <tr>
+                            <th class="update-select-column">選択</th>
+                            <th>対象名</th>
+                            <th>現在版</th>
+                            <th>最新版</th>
+                            <th>サイズ</th>
+                            <th>再起動</th>
+                            <th>状態</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _status.Items)
+                        {
+                            <tr class="@GetRowClass(item)">
+                                <td class="update-select-column">
+                                    <input type="checkbox"
+                                           checked="@_selectedTargets.Contains(item.Id)"
+                                           disabled="@(!CanSelect(item))"
+                                           aria-label="@($"{item.DisplayName}を選択")"
+                                           @onchange="@(e => OnSelectionChanged(item, e))" />
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(item.ReleaseUrl))
+                                    {
+                                        <a href="@item.ReleaseUrl" target="_blank" rel="noopener">@item.DisplayName</a>
+                                    }
+                                    else
+                                    {
+                                        <span>@item.DisplayName</span>
+                                    }
+                                </td>
+                                <td>@FormatInstalledVersion(item.InstalledVersion)</td>
+                                <td>@FormatLatestVersion(item.LatestVersion)</td>
+                                <td>@FormatDownloadSize(item)</td>
+                                <td>@(item.RequiresRestart ? "必要" : "不要")</td>
+                                <td>
+                                    <div>@GetStateLabel(item)</div>
+                                    @if (_applying && _job?.CurrentTargetId == item.Id &&
+                                        !IsTargetCompleted(item.Id))
+                                    {
+                                        <div class="update-state-detail">適用中…</div>
+                                    }
+                                    @if (item.State == "UpdateAvailable" && item.RequiresRestart)
+                                    {
+                                        <div class="update-state-detail">適用時にサーバーを再起動します</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(GetStateDetail(item)))
+                                    {
+                                        <div class="update-state-detail">@GetStateDetail(item)</div>
+                                    }
+                                    @if (!item.CanApply &&
+                                        !string.IsNullOrWhiteSpace(item.CannotApplyReason) &&
+                                        (item.State == "UpdateAvailable" ||
+                                         item.State == "NotInstalled"))
+                                    {
+                                        <div class="update-state-detail">@FormatReason(item.CannotApplyReason)</div>
+                                    }
+                                    @if (IsDockerExecutable(item))
+                                    {
+                                        <div class="update-state-detail">この更新はコンテナを再作成すると失われます</div>
+                                    }
+                                    @if (IsDockerSelfUpdateAvailable(item))
+                                    {
+                                        <div class="docker-update-command">
+                                            <div>新版があります。この手順で更新してください。</div>
+                                            <code>@DockerUpdateCommand</code>
+                                            <button class="btn btn-sm btn-secondary" @onclick="CopyDockerCommandAsync">コピー</button>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_job?.Finished == true && _job.TargetResults.Count > 0)
+        {
+            <section class="update-target-results" aria-label="更新適用結果">
+                <h5>適用結果</h5>
+                <ul>
+                    @foreach (var result in _job.TargetResults)
+                    {
+                        <li class="@(result.Succeeded ? "update-result-ok" : "update-result-ng")">
+                            <strong>@GetTargetDisplayName(result.TargetId):</strong>
+                            @(result.Succeeded ? "成功" : "失敗")
+                            @if (!result.Succeeded)
+                            {
+                                <span> @FormatApplyFailure(result)</span>
+                            }
+                        </li>
+                    }
+                </ul>
+                @if (_job.TargetResults.Any(result => !result.Succeeded))
+                {
+                    <p class="update-state-detail">詳細は「診断ログをコピー」から確認できます。</p>
+                }
+            </section>
+        }
+
+        <div class="update-dialog-actions">
+            <button class="btn btn-primary" @onclick="ApplySelectedAsync"
+                    disabled="@(_checking || _applying || _selectedTargets.Count == 0)">@GetApplyButtonLabel()</button>
+            @if (_applying)
+            {
+                <button class="btn btn-danger" @onclick="CancelApplyAsync"
+                        disabled="@_cancelBusy">中止</button>
+            }
+            <button class="btn btn-secondary" @onclick="CopyDiagnosticLogAsync" disabled="@(string.IsNullOrEmpty(_jobId))">診断ログをコピー</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_cancelMessage))
+        {
+            <p class="update-cancel-message" role="status">@_cancelMessage</p>
+        }
+        @if (!string.IsNullOrEmpty(_copyMessage))
+        {
+            <p class="update-copy-message" role="status">@_copyMessage</p>
+        }
+        @if (!string.IsNullOrEmpty(_fallbackText))
+        {
+            <label class="update-copy-fallback">
+                手動でコピーしてください
+                <textarea readonly rows="8">@_fallbackText</textarea>
+            </label>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public UpdateStatusView? InitialStatus { get; set; }
+    [Parameter] public EventCallback<UpdateStatusView> StatusChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly TimeSpan ApiTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    // ReleaseClient の最悪所要時間（6リポジトリ×約25秒）に余裕を加える
+    private static readonly TimeSpan PollTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan SelfRestartTimeout = TimeSpan.FromMinutes(2);
+    private const string DockerUpdateCommand = "docker compose pull && docker compose up -d";
+
+    private readonly HashSet<string> _selectedTargets = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CancellationTokenSource _pollCancellation = new();
+    private UpdateStatusView? _status;
+    private UpdateJobView? _job;
+    private string? _jobId;
+    private string? _error;
+    private string? _cancelMessage;
+    private string? _copyMessage;
+    private string? _fallbackText;
+    private bool _checking = true;
+    private bool _applying;
+    private bool _cancelBusy;
+    private bool _selfUpdateApplying;
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        _status = InitialStatus;
+        InitializeSelection();
+        _ = InitializeDialogAsync(_pollCancellation.Token);
+    }
+
+    private async Task InitializeDialogAsync(CancellationToken token)
+    {
+        if (TryGetActiveApplyJobId(out var activeJobId))
+        {
+            await ReconnectApplyJobAsync(activeJobId, token);
+            return;
+        }
+
+        // Home が保持する状態が古い場合もあるため、チェック開始前に実行中ジョブを再確認する。
+        await RefreshStatusAsync(token);
+        if (TryGetActiveApplyJobId(out activeJobId))
+        {
+            await ReconnectApplyJobAsync(activeJobId, token);
+            return;
+        }
+        await CheckForUpdatesAsync(token);
+    }
+
+    private async Task CheckForUpdatesAsync(CancellationToken token)
+    {
+        try
+        {
+            var start = await WaitForApiAsync(Api.StartUpdateCheckAsync(), token);
+            if (start == null || !start.Ok || string.IsNullOrWhiteSpace(start.Data))
+            {
+                SetError(start?.Error ?? "更新チェックを開始できませんでした。");
+                return;
+            }
+            _jobId = start.Data;
+            var deadline = DateTime.UtcNow + PollTimeout;
+            while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+            {
+                var jobResult = await WaitForApiAsync(Api.GetUpdateJobAsync(_jobId), token);
+                if (jobResult == null)
+                {
+                    await HandlePollingTimeoutAsync(token);
+                    return;
+                }
+                if (!jobResult.Ok || jobResult.Data == null)
+                {
+                    SetError(jobResult.Error ?? "更新チェックの状態を取得できませんでした。");
+                    return;
+                }
+                _job = jobResult.Data;
+                await SafeRefreshAsync();
+                if (_job.Finished)
+                {
+                    await RefreshStatusAsync(token);
+                    return;
+                }
+                await Task.Delay(PollInterval, token);
+            }
+            if (!token.IsCancellationRequested)
+            {
+                await HandlePollingTimeoutAsync(token);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetError($"更新チェックに失敗しました: {ex.Message}");
+        }
+        finally
+        {
+            _checking = false;
+            await SafeRefreshAsync();
+        }
+    }
+
+    private async Task HandlePollingTimeoutAsync(CancellationToken token)
+    {
+        // サーバー側で確定済みの対象があれば、打ち切り時点の状態を表示する
+        await RefreshStatusAsync(token, clearError: false);
+        SetError("更新チェックがタイムアウトしました。サーバー側で処理が続いている可能性があります。しばらく待って開き直してください。");
+    }
+
+    private async Task RefreshStatusAsync(CancellationToken token,
+        bool clearError = true, bool preserveSelection = false)
+    {
+        var result = await WaitForApiAsync(Api.GetUpdateStatusAsync(), token);
+        if (result == null || !result.Ok || result.Data == null)
+        {
+            SetError(result?.Error ?? "更新状況を取得できませんでした。");
+            return;
+        }
+        _status = result.Data;
+        if (clearError)
+        {
+            _error = null;
+        }
+        if (!preserveSelection)
+        {
+            InitializeSelection();
+        }
+        if (!_disposed)
+        {
+            await StatusChanged.InvokeAsync(_status);
+        }
+    }
+
+    private async Task ApplySelectedAsync()
+        => await StartApplyAsync(_selectedTargets.ToArray());
+
+    private async Task DiscardAndRetrySelfUpdateAsync()
+    {
+        if (_applying)
+        {
+            return;
+        }
+        _error = null;
+        _cancelMessage = null;
+        try
+        {
+            var discarded = await WaitForApiAsync(Api.DiscardPendingSelfUpdateAsync(),
+                _pollCancellation.Token);
+            if (discarded == null || !discarded.Ok || !discarded.Data)
+            {
+                SetError(discarded?.Error ?? "保留中の本体更新を破棄できませんでした。");
+                return;
+            }
+
+            await RefreshStatusAsync(_pollCancellation.Token);
+            var application = _status?.Items.FirstOrDefault(item =>
+                string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase));
+            if (!_checking && application != null && CanSelect(application))
+            {
+                await StartApplyAsync(new[] { application.Id });
+                return;
+            }
+            _cancelMessage = "保留中の更新を破棄しました。";
+        }
+        catch (OperationCanceledException) when (_pollCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetError($"保留中の本体更新を破棄できませんでした: {ex.Message}");
+        }
+    }
+
+    private async Task StartApplyAsync(IReadOnlyList<string> targetIds)
+    {
+        if (_applying || _checking || targetIds.Count == 0)
+        {
+            return;
+        }
+        _applying = true;
+        _error = null;
+        _cancelMessage = null;
+        _copyMessage = null;
+        _fallbackText = null;
+        _job = null;
+        _selfUpdateApplying = targetIds.Any(IsApplicationId);
+        try
+        {
+            var start = await WaitForApiAsync(Api.ApplyUpdatesAsync(targetIds),
+                _pollCancellation.Token);
+            if (start == null || !start.Ok || string.IsNullOrWhiteSpace(start.Data))
+            {
+                SetError(start?.Error ?? "更新の適用を開始できませんでした。");
+                return;
+            }
+            _jobId = start.Data;
+            await PollApplyJobAsync(_jobId, _pollCancellation.Token);
+        }
+        catch (OperationCanceledException) when (_pollCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetError($"更新の適用に失敗しました: {ex.Message}");
+        }
+        finally
+        {
+            _applying = false;
+            _cancelBusy = false;
+            await SafeRefreshAsync();
+        }
+    }
+
+    private async Task ReconnectApplyJobAsync(string jobId, CancellationToken token)
+    {
+        _checking = false;
+        _applying = true;
+        _jobId = jobId;
+        _error = null;
+        try
+        {
+            await PollApplyJobAsync(jobId, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetError($"更新の進捗取得に失敗しました: {ex.Message}");
+        }
+        finally
+        {
+            _applying = false;
+            _cancelBusy = false;
+            await SafeRefreshAsync();
+        }
+    }
+
+    private async Task PollApplyJobAsync(string jobId, CancellationToken token)
+    {
+        var completedCount = 0;
+        while (!token.IsCancellationRequested)
+        {
+            var result = await WaitForApiAsync(Api.GetUpdateJobAsync(jobId), token);
+            if (result == null)
+            {
+                SetError("更新の進捗を取得できませんでした。サーバー側で続行中の可能性があります。");
+                return;
+            }
+            if (!result.Ok || result.Data == null)
+            {
+                if (_selfUpdateApplying && await WaitForSelfUpdateRestartAsync(token))
+                {
+                    return;
+                }
+                SetError(result.Error ?? "更新の進捗を取得できませんでした。");
+                return;
+            }
+            _job = result.Data;
+            // 完了した対象が増えたときだけ一覧を取り直す（毎回だと1秒ごとの無駄な問い合わせになる）
+            // 本体更新は結果を記録した直後にサーバーが終了するため、取りに行くと必ず失敗する。
+            // 対象も1つだけで途中経過に意味が無いので、この経路では取り直さない。
+            if (_job.TargetResults.Count != completedCount && !_selfUpdateApplying)
+            {
+                completedCount = _job.TargetResults.Count;
+                // 成功した対象はもう適用済みなので選択から外す。
+                // 失敗した対象は残す（完了後の InitializeSelection でも選び直されるため、
+                // ここで外すと最後に再選択されてちらつく）
+                foreach (var targetResult in _job.TargetResults.Where(targetResult =>
+                    targetResult.Succeeded))
+                {
+                    _selectedTargets.Remove(targetResult.TargetId);
+                }
+                await RefreshStatusAsync(token, clearError: false, preserveSelection: true);
+            }
+            await SafeRefreshAsync();
+            if (_job.Finished)
+            {
+                await RefreshStatusAsync(token);
+                return;
+            }
+            await Task.Delay(PollInterval, token);
+        }
+    }
+
+    private async Task<bool> WaitForSelfUpdateRestartAsync(CancellationToken token)
+    {
+        var deadline = DateTime.UtcNow + SelfRestartTimeout;
+        while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(PollInterval, token);
+            var result = await WaitForApiAsync(Api.GetUpdateStatusAsync(), token);
+            if (result?.Ok == true && result.Data != null)
+            {
+                _status = result.Data;
+                _error = null;
+                InitializeSelection();
+                if (!_disposed) await StatusChanged.InvokeAsync(_status);
+                return true;
+            }
+        }
+        SetError("サーバーの再起動を確認できませんでした。しばらく待って画面を開き直してください。");
+        return false;
+    }
+
+    private async Task CancelApplyAsync()
+    {
+        if (!_applying || _cancelBusy || string.IsNullOrWhiteSpace(_jobId))
+        {
+            return;
+        }
+        _cancelBusy = true;
+        try
+        {
+            var result = await Api.CancelUpdateAsync(_jobId);
+            _cancelMessage = result.Ok
+                ? "更新の中止を要求しました。安全に停止できる位置まで待機します。"
+                : result.Error ?? "更新の中止を要求できませんでした。";
+        }
+        catch (Exception ex)
+        {
+            _cancelMessage = $"更新の中止を要求できませんでした: {ex.Message}";
+        }
+        finally
+        {
+            _cancelBusy = false;
+        }
+    }
+
+    private async Task<ApiResult<T>?> WaitForApiAsync<T>(Task<ApiResult<T>> apiTask, CancellationToken token)
+    {
+        var timeoutTask = Task.Delay(ApiTimeout, token);
+        var completed = await Task.WhenAny(apiTask, timeoutTask);
+        if (completed != apiTask)
+        {
+            token.ThrowIfCancellationRequested();
+            return null;
+        }
+        return await apiTask;
+    }
+
+    private void InitializeSelection()
+    {
+        _selectedTargets.Clear();
+        if (_status == null)
+        {
+            return;
+        }
+        var selectable = _status.Items.Where(CanSelect).ToArray();
+        var application = selectable.FirstOrDefault(item => IsApplicationId(item.Id));
+        if (application != null)
+        {
+            _selectedTargets.Add(application.Id);
+            return;
+        }
+        // 未インストールは利用しないハードウェア向けの場合もあるため既定では選ばない。
+        // 新規インストールは利用者が明示的に選んだときだけ行う。
+        foreach (var item in selectable.Where(item => item.State == "UpdateAvailable"))
+        {
+            _selectedTargets.Add(item.Id);
+        }
+    }
+
+    private bool TryGetActiveApplyJobId(out string jobId)
+    {
+        jobId = _status?.ActiveApplyJobId ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(jobId);
+    }
+
+    private void OnSelectionChanged(UpdateItemView item, ChangeEventArgs args)
+    {
+        if (!CanSelect(item))
+        {
+            return;
+        }
+        if (args.Value is bool selected && selected)
+        {
+            if (IsApplicationId(item.Id))
+            {
+                _selectedTargets.Clear();
+            }
+            else
+            {
+                _selectedTargets.RemoveWhere(IsApplicationId);
+            }
+            _selectedTargets.Add(item.Id);
+        }
+        else
+        {
+            _selectedTargets.Remove(item.Id);
+        }
+    }
+
+    private async Task CopyDiagnosticLogAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_jobId))
+        {
+            return;
+        }
+        var result = await Api.GetUpdateJobLogAsync(_jobId);
+        if (!result.Ok || result.Data == null)
+        {
+            _copyMessage = result.Error ?? "診断ログを取得できませんでした。";
+            return;
+        }
+        await CopyTextAsync(result.Data, "診断ログをコピーしました。");
+    }
+
+    private Task CopyDockerCommandAsync()
+        => CopyTextAsync(DockerUpdateCommand, "更新コマンドをコピーしました。");
+
+    private async Task CopyTextAsync(string text, string successMessage)
+    {
+        _copyMessage = null;
+        _fallbackText = null;
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            _copyMessage = successMessage;
+        }
+        catch
+        {
+            _copyMessage = "クリップボードへコピーできませんでした。下の欄から手動でコピーしてください。";
+            _fallbackText = text;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _pollCancellation.Cancel();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task SafeRefreshAsync()
+    {
+        if (!_disposed)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SetError(string message)
+    {
+        if (!_disposed)
+        {
+            _error = message;
+        }
+    }
+
+    private string GetProgressText()
+    {
+        if (_job == null)
+        {
+            return string.Empty;
+        }
+        var target = string.IsNullOrWhiteSpace(_job.CurrentTargetId) ? "-" : _job.CurrentTargetId;
+        var stage = string.IsNullOrWhiteSpace(_job.CurrentStage) ? "-" : _job.CurrentStage;
+        return $"{target} / {stage}";
+    }
+
+    private bool HasEnvironmentWarning => !string.IsNullOrWhiteSpace(_status?.EnvironmentWarning);
+    private static bool IsDockerSelfUpdateAvailable(UpdateItemView item)
+        => item.State == "Unsupported" && item.StateReason == "docker_self_update_available";
+    private static bool IsSettingPathOutsideExeFiles(UpdateItemView item)
+        => item.StateReason == "setting_path_outside_exe_files";
+    // 環境警告があり、かつ本体以外の行ならコンテナ再作成時の消失警告を表示する
+    private bool IsDockerExecutable(UpdateItemView item)
+        => HasEnvironmentWarning && !string.Equals(item.Id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
+    private static bool CanSelect(UpdateItemView item)
+        => (item.State == "UpdateAvailable" || item.State == "NotInstalled") && item.CanApply;
+    private bool IsTargetCompleted(string id)
+        => _job?.TargetResults.Any(result => string.Equals(result.TargetId, id,
+            StringComparison.OrdinalIgnoreCase)) == true;
+    private static bool IsApplicationId(string id)
+        => string.Equals(id, "Amatsukaze", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatInstalledVersion(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "未検出" : value;
+
+    private static string FormatLatestVersion(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "不明" : value;
+
+    private static string FormatDownloadSize(UpdateItemView item)
+        => item.State is "UpdateAvailable" or "NotInstalled"
+            ? FormatBytes(item.DownloadSizeBytes) : "-";
+
+    private string GetApplyButtonLabel()
+    {
+        var selected = _status?.Items.Where(item => _selectedTargets.Contains(item.Id)).ToArray();
+        return selected?.Length > 0 && selected.All(item => item.State == "NotInstalled")
+            ? "インストール" : "更新実行";
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "-";
+        }
+        var value = (double)bytes;
+        var units = new[] { "B", "KiB", "MiB", "GiB", "TiB" };
+        var index = 0;
+        while (value >= 1024 && index < units.Length - 1)
+        {
+            value /= 1024;
+            index++;
+        }
+        return $"{value:0.##} {units[index]}";
+    }
+
+    private string GetTransferProgressText()
+    {
+        if (_job == null || _job.ReceivedBytes <= 0)
+        {
+            return string.Empty;
+        }
+        var total = _job.TotalBytes > 0 ? FormatBytes(_job.TotalBytes) : "?";
+        return $"{FormatBytes(_job.ReceivedBytes)} / {total} " +
+            $"({FormatBytes((long)_job.SpeedBytesPerSec)}/s)";
+    }
+
+    private string GetTargetDisplayName(string targetId)
+        => _status?.Items.FirstOrDefault(item => string.Equals(item.Id, targetId,
+            StringComparison.OrdinalIgnoreCase))?.DisplayName ?? targetId;
+
+    private static string FormatApplyFailure(UpdateTargetResultView result)
+    {
+        var code = string.IsNullOrWhiteSpace(result.ErrorCode) ? "UPDATE_FAILED" : result.ErrorCode;
+        var message = string.IsNullOrWhiteSpace(result.Message)
+            ? "更新を適用できませんでした。" : result.Message;
+        return $"{message} ({code})";
+    }
+
+    private static string GetStateLabel(UpdateItemView item)
+    {
+        return item.State switch
+        {
+            "UpToDate" => "最新",
+            "UpdateAvailable" => "更新あり",
+            "NotInstalled" => "未インストール",
+            "Unknown" => "バージョン取得不可",
+            "Unsupported" => IsSettingPathOutsideExeFiles(item) ? "対象外" :
+                IsDockerSelfUpdateAvailable(item) ? "Dockerで更新してください" : "対応外",
+            "Disabled" => "無効",
+            _ => "状態不明",
+        };
+    }
+
+    private string? GetStateDetail(UpdateItemView item)
+    {
+        if (item.State == "Unknown")
+        {
+            return FormatReason(item.StateReason);
+        }
+        if (item.State == "Unsupported" || item.State == "Disabled")
+        {
+            return string.IsNullOrWhiteSpace(item.StateReason)
+                ? null : FormatReason(item.StateReason);
+        }
+        return null;
+    }
+
+    private static string FormatReason(string? reason)
+    {
+        return reason switch
+        {
+            "not_checked" => "まだチェックしていません",
+            "invalid_catalog" => "更新対象の定義に問題があります",
+            "version_parse_failed" => "バージョンを比較できませんでした",
+            "version_unknown" => "ローカル版を取得できませんでした",
+            "release_query_failed" => "最新版を取得できませんでした",
+            "asset_not_found" => "対応する配布ファイルがありません",
+            "unsupported_os_or_arch" => "この OS / CPU 向けの配布ファイルがありません",
+            "unsupported_operating_system" => "この OS では更新に対応していません",
+            "docker_self_update_available" => "Dockerでは本体を直接更新できません",
+            "docker_self_update_unsupported" => "Dockerでは本体を直接更新できません",
+            "disabled_by_setting" => "設定で無効です",
+            "layout_not_supported_yet" => "この対象の配置方法には対応していません",
+            "payload_not_defined_yet" => "この対象の配置方法が定義されていません",
+            "setting_path_outside_exe_files" =>
+                "設定のパスが exe_files の外を指しているため自動更新できません",
+            "fresh_install_requires_dependencies" =>
+                "新規インストールは依存パッケージの導入が必要なため対応していません（更新のみ対応）",
+            null or "" => "不明",
+            _ => $"不明な状態 ({reason})",
+        };
+    }
+
+    private static string FormatSelfUpdateResult(SelfUpdateResultView result)
+    {
+        var status = result.Status switch
+        {
+            "success" => "成功",
+            "rolled_back" => "失敗（旧版へ復元済み）",
+            "timeout" => "タイムアウト",
+            _ => "失敗",
+        };
+        var version = string.IsNullOrWhiteSpace(result.Version) ? "" : $" {result.Version}";
+        var error = string.IsNullOrWhiteSpace(result.ErrorCode) ||
+            string.Equals(result.ErrorCode, "none", StringComparison.OrdinalIgnoreCase)
+            ? "" : $" ({result.ErrorCode})";
+        return status + version + error;
+    }
+
+    private static string GetRowClass(UpdateItemView item)
+    {
+        return item.State switch
+        {
+            "UpdateAvailable" => "update-row-available",
+            "NotInstalled" => "update-row-notinstalled",
+            "Unknown" => "update-row-unknown",
+            "Unsupported" => "update-row-unsupported",
+            "Disabled" => "update-row-disabled",
+            _ => string.Empty,
+        };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+        _pollCancellation.Cancel();
+        _pollCancellation.Dispose();
+    }
+}

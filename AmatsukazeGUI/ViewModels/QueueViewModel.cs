@@ -20,7 +20,6 @@ using System.IO;
 using Amatsukaze.Components;
 using System.Windows.Data;
 using System.Collections;
-using System.Net.Http;
 
 namespace Amatsukaze.ViewModels
 {
@@ -464,33 +463,7 @@ namespace Amatsukaze.ViewModels
 
         private bool TryOpenWebPage(string relativePath)
         {
-            var port = Model.RestApiPort;
-            if (port <= 0)
-            {
-                return false;
-            }
-            // standaloneモードではサーバーとクライアントが同一プロセスのため、接続先設定によらず127.0.0.1を使用
-            // また、IPv6/IPv4不一致による接続失敗を避けるため、localhostではなく127.0.0.1を使用
-            var host = (Model.IsStandalone || string.IsNullOrWhiteSpace(Model.ServerIP)) ? "127.0.0.1" : Model.ServerIP;
-            var baseUrl = $"http://{host}:{port}";
-            try
-            {
-                var normalizedPath = relativePath ?? "";
-                if (!normalizedPath.StartsWith("/", StringComparison.Ordinal))
-                {
-                    normalizedPath = "/" + normalizedPath;
-                }
-                var url = $"{baseUrl}{normalizedPath}";
-                // HTTPリクエストでサーバーの応答を確認
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-                var response = client.GetAsync(baseUrl).GetAwaiter().GetResult();
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+            return WebUILauncher.TryOpenPage(Model, relativePath);
         }
 
         private async Task<bool> ConfirmRetryCompleted(IEnumerable<DisplayQueueItem> items, string retry)

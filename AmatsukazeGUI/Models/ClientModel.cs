@@ -21,6 +21,8 @@ using System.Text.Json;
 using Microsoft.Win32;
 using System.Windows.Media;
 using Amatsukaze.Lib;
+using System.Net.Http;
+using System.Windows.Threading;
 
 namespace Amatsukaze.Models
 {
@@ -63,7 +65,14 @@ namespace Amatsukaze.Models
         private string currentNewAutoSelect;
 
         private const int ReceiveLogLimit = 5;
+        // サーバー側の /api/update/status はメモリ上の状態を返すだけでネットワークアクセスを伴わないため、
+        // 短い間隔でポーリングしてもコストはほぼない。サーバーが更新チェックを終えてからボタンに
+        // 反映されるまでの待ち時間を抑えるため、短めの間隔にしている。
+        private static readonly TimeSpan UpdateStatusRefreshInterval = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan UpdateStatusRequestTimeout = TimeSpan.FromSeconds(5);
         private readonly Dictionary<string, int> receiveLogCounter = new Dictionary<string, int>();
+        private readonly DispatcherTimer updateStatusTimer;
+        private int updateStatusRefreshRunning;
 
         private void TraceReceive(string name, string detail = null)
         {
@@ -124,6 +133,23 @@ namespace Amatsukaze.Models
                 return 0;
             }
         }
+
+        #region HasUpdate変更通知プロパティ
+        private bool _HasUpdate;
+
+        // 更新チェックで更新が見つかっているか。基本設定の「アップデートあり」ボタンの表示に使う。
+        public bool HasUpdate
+        {
+            get { return _HasUpdate; }
+            private set
+            {
+                if (_HasUpdate == value)
+                    return;
+                _HasUpdate = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
 
         public EndPoint LocalIP {
             get {
@@ -788,6 +814,14 @@ namespace Amatsukaze.Models
 
             AddLog("クライアント起動");
 
+            // 生成スレッドに依存しないよう、UIのDispatcherを明示して紐付ける
+            updateStatusTimer = new DispatcherTimer(DispatcherPriority.Normal,
+                DispatcherHelper.UIDispatcher)
+            {
+                Interval = UpdateStatusRefreshInterval,
+            };
+            updateStatusTimer.Tick += UpdateStatusTimer_Tick;
+
             ProfileListView = new ListCollectionView(ProfileList);
             ProfileListView.SortDescriptions.Add(new SortDescription("SortKey", ListSortDirection.Ascending));
             ProfileListView.IsLiveSorting = true;
@@ -805,6 +839,68 @@ namespace Amatsukaze.Models
             requestLogoThread = RequestLogoThread();
         }
 
+        private void StartUpdateStatusPolling()
+        {
+            _ = DispatcherHelper.UIDispatcher.InvokeAsync(() =>
+            {
+                if (disposedValue || RestApiPort <= 0)
+                {
+                    return;
+                }
+                if (!updateStatusTimer.IsEnabled)
+                {
+                    updateStatusTimer.Start();
+                }
+                _ = RefreshUpdateStatusAsync();
+            });
+        }
+
+        private async void UpdateStatusTimer_Tick(object sender, EventArgs e)
+        {
+            await RefreshUpdateStatusAsync();
+        }
+
+        private async Task RefreshUpdateStatusAsync()
+        {
+            if (Interlocked.Exchange(ref updateStatusRefreshRunning, 1) != 0)
+            {
+                return;
+            }
+            try
+            {
+                var baseUrl = WebUILauncher.TryGetBaseUrl(this);
+                if (baseUrl == null)
+                {
+                    if (!disposedValue) HasUpdate = false;
+                    return;
+                }
+                using var client = new HttpClient { Timeout = UpdateStatusRequestTimeout };
+                using var response = await client.GetAsync($"{baseUrl}/api/update/status");
+                response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync();
+                // Amatsukaze.Shared には Amatsukaze.Server と同名の型（ServerInfo等）があるため、
+                // using は追加せず完全修飾で参照する
+                var status = await JsonSerializer.DeserializeAsync<Amatsukaze.Shared.UpdateStatusView>(stream,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    });
+                if (!disposedValue)
+                {
+                    HasUpdate = status != null &&
+                        (status.HasUpdate || status.HasPendingSelfUpdate);
+                }
+            }
+            catch
+            {
+                if (!disposedValue) HasUpdate = false;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref updateStatusRefreshRunning, 0);
+            }
+        }
+
         #region IDisposable Support
         private bool disposedValue = false; // 重複する呼び出しを検出するには
 
@@ -816,6 +912,7 @@ namespace Amatsukaze.Models
                 {
                     // TODO: マネージ状態を破棄します (マネージ オブジェクト)。
                     requestLogoQ.Complete();
+                    updateStatusTimer.Stop();
 
                     if (Server is ServerAdapter)
                     {
@@ -1666,6 +1763,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("FinishActionList");
                 RaisePropertyChanged(nameof(ServerCpuCoreCount));
                 _Setting.IsServerLinux = IsServerLinux;
+                StartUpdateStatusPolling();
             }
             if (data.AddQueueBatFiles != null)
             {

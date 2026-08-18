@@ -16,6 +16,10 @@
     </main>
 </div>
 
+@* backdrop-filter を持つヘッダ等の内側だと position:fixed が効かないため、
+   モーダルはページ構造の外側で描画する *@
+<SectionOutlet SectionId="UiSections.OverlayDialogs" />
+
 @code {
     private string PageKey => GetPageKey();
 

@@ -1,0 +1,157 @@
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@inject NavigationManager Nav
+
+@if (ShouldShowPlaceholder)
+{
+    <span>-</span>
+}
+else if (ShouldShowButton)
+{
+    @* WrapperCssClass が未指定なら class 属性自体が出力されず、インラインで並ぶだけになる *@
+    <span class="@WrapperCssClass">
+        <button class="@GetButtonCssClass()" @onclick="OpenUpdateDialog">@Label</button>
+        @if (ShowSummary && _updateStatus != null)
+        {
+            <span class="update-status-summary">@GetUpdateStatusSummary(_updateStatus)</span>
+        }
+    </span>
+}
+
+@if (_showUpdateDialog)
+{
+    <SectionContent SectionId="UiSections.OverlayDialogs">
+        <UpdateDialog InitialStatus="_updateStatus"
+                      StatusChanged="OnUpdateStatusChanged"
+                      OnClose="CloseUpdateDialog" />
+    </SectionContent>
+}
+
+@code {
+    private const string UpdateQueryParameter = "update";
+    private const string UpdateQueryOpenValue = "1";
+
+    [Parameter]
+    public string Label { get; set; } = "更新する";
+
+    [Parameter]
+    public bool AlwaysShow { get; set; }
+
+    [Parameter]
+    public bool ShowSummary { get; set; }
+
+    [Parameter]
+    public bool ShowPlaceholder { get; set; }
+
+    [Parameter]
+    public string ButtonCssClass { get; set; } = "";
+
+    // null のときは包む span に class 属性が出力されない
+    [Parameter]
+    public string? WrapperCssClass { get; set; }
+
+    [Parameter]
+    public bool AutoOpenOnQuery { get; set; }
+
+    private UpdateStatusView? _updateStatus;
+    private string? _updateStatusError;
+    private bool _updateStatusLoading = true;
+    private bool _showUpdateDialog;
+
+    private bool HasStatus => !_updateStatusLoading &&
+        string.IsNullOrEmpty(_updateStatusError) && _updateStatus != null;
+    private bool HasUpdate => _updateStatus?.HasUpdate == true ||
+        _updateStatus?.HasPendingSelfUpdate == true;
+    private bool ShouldShowPlaceholder => ShowPlaceholder && !HasStatus;
+    private bool ShouldShowButton => HasStatus && (AlwaysShow || HasUpdate);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUpdateStatusAsync();
+    }
+
+    private async Task LoadUpdateStatusAsync()
+    {
+        try
+        {
+            var result = await Api.GetUpdateStatusAsync();
+            _updateStatus = result.Ok ? result.Data : null;
+            _updateStatusError = result.Ok ? null : result.Error ?? "更新状況を取得できませんでした。";
+        }
+        catch
+        {
+            _updateStatus = null;
+            _updateStatusError = "更新状況を取得できませんでした。";
+        }
+        _updateStatusLoading = false;
+        if (AutoOpenOnQuery && ShouldOpenUpdateDialog())
+        {
+            _showUpdateDialog = true;
+        }
+    }
+
+    private bool ShouldOpenUpdateDialog()
+    {
+        var query = Nav.ToAbsoluteUri(Nav.Uri).Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            var name = Uri.UnescapeDataString(parts[0]);
+            var value = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "";
+            if (string.Equals(name, UpdateQueryParameter, StringComparison.Ordinal) &&
+                string.Equals(value, UpdateQueryOpenValue, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private string GetButtonCssClass()
+    {
+        var additionalClass = string.IsNullOrWhiteSpace(ButtonCssClass) ? "" : $" {ButtonCssClass.Trim()}";
+        var updateClass = HasUpdate ? " has-update" : "";
+        return $"btn btn-secondary{additionalClass} update-status-button{updateClass}";
+    }
+
+    private void OpenUpdateDialog()
+    {
+        _showUpdateDialog = true;
+    }
+
+    private Task CloseUpdateDialog()
+    {
+        _showUpdateDialog = false;
+        return Task.CompletedTask;
+    }
+
+    private Task OnUpdateStatusChanged(UpdateStatusView status)
+    {
+        _updateStatus = status;
+        _updateStatusError = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private static string GetUpdateStatusSummary(UpdateStatusView status)
+    {
+        if (status.HasPendingSelfUpdate)
+        {
+            return "保留中の本体更新があります";
+        }
+        if (!status.CheckEnabled)
+        {
+            return "自動チェック無効";
+        }
+        if (status.Items.Count > 0 && status.Items.All(item => item.State == "Unknown"))
+        {
+            return status.Items.All(item => item.StateReason == "not_checked")
+                ? "未確認" : "更新状況を確認できませんでした";
+        }
+        if (status.Items.Any(item => item.State == "Unknown"))
+        {
+            return status.HasUpdate ? "更新があります（一部取得不可）" : "一部取得できませんでした";
+        }
+        return status.HasUpdate ? "更新があります" : "最新です";
+    }
+}

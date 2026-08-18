@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Amatsukaze.Shared;
 using Amatsukaze.Lib;
+using Amatsukaze.Server.Update;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
@@ -364,6 +365,79 @@ namespace Amatsukaze.Server.Rest
             {
                 var info = await GetLatestReleaseInfoAsync();
                 return Results.Json(info ?? new LatestReleaseInfo());
+            });
+            app.MapMethods("/api/update/status", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/check", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/apply", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/discard-pending", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/cancel", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/job/{jobId}", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapMethods("/api/update/job/{jobId}/log", new[] { "OPTIONS" }, () => Results.Ok());
+            app.MapGet("/api/update/status", () => Results.Json(
+                server.UpdateManager?.GetStatusView() ?? new UpdateStatusView
+                {
+                    CheckEnabled = true,
+                    Supported = false,
+                    UnsupportedReason = "update_manager_not_initialized",
+                    Items = new List<UpdateItemView>(),
+                }));
+            app.MapPost("/api/update/check", () =>
+            {
+                var job = server.UpdateManager?.StartCheckJob();
+                return Results.Json(new { jobId = job?.JobId ?? string.Empty });
+            });
+            app.MapPost("/api/update/apply", (UpdateApplyRequest request) =>
+            {
+                if (server.UpdateManager == null)
+                {
+                    return Results.Json(new { error = "更新機能が初期化されていません" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+                if (!server.UpdateManager.TryStartApplyJob(request?.TargetIds,
+                    out var job, out var error, out var conflict))
+                {
+                    return conflict ? Results.Conflict(new { error }) :
+                        Results.BadRequest(new { error });
+                }
+                return Results.Json(new { jobId = job.JobId });
+            });
+            app.MapPost("/api/update/discard-pending", () =>
+            {
+                if (server.UpdateManager == null)
+                {
+                    return Results.Json(new { error = "更新機能が初期化されていません" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+                return server.UpdateManager.TryDiscardPendingSelfUpdate(out var error)
+                    ? Results.Json(new { ok = true })
+                    : Results.Conflict(new { error });
+            });
+            app.MapPost("/api/update/cancel", (UpdateCancelRequest request) =>
+            {
+                if (server.UpdateManager == null)
+                {
+                    return Results.Json(new { error = "更新機能が初期化されていません" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+                return server.UpdateManager.CancelApplyJob(request?.JobId) switch
+                {
+                    UpdateCancelResult.Accepted => Results.Json(new { ok = true }),
+                    UpdateCancelResult.AlreadyFinished => Results.Conflict(new
+                    {
+                        error = "既に完了しているため中止できませんでした"
+                    }),
+                    _ => Results.NotFound(),
+                };
+            });
+            app.MapGet("/api/update/job/{jobId}", (string jobId) =>
+            {
+                return server.UpdateManager != null && server.UpdateManager.TryGetJob(jobId, out var job)
+                    ? Results.Json(job) : Results.NotFound();
+            });
+            app.MapGet("/api/update/job/{jobId}/log", (string jobId) =>
+            {
+                return server.UpdateManager != null && server.UpdateManager.TryGetJobLog(jobId, out var content)
+                    ? Results.Text(content, "text/plain", Encoding.UTF8) : Results.NotFound();
             });
             app.MapGet("/api/ui-state", () => Results.Json(state.GetUiStateView()));
             app.MapPost("/api/system/end", async () =>

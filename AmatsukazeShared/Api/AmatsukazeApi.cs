@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
@@ -44,6 +45,33 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<LatestReleaseInfo>> GetLatestReleaseAsync()
             => GetJsonAsync<LatestReleaseInfo>("/api/info/latest-release");
+
+        public Task<ApiResult<UpdateStatusView>> GetUpdateStatusAsync()
+            => GetJsonAsync<UpdateStatusView>("/api/update/status");
+
+        public Task<ApiResult<string>> StartUpdateCheckAsync()
+            => PostJsonAsync("/api/update/check", new { },
+                result => result.GetProperty("jobId").GetString() ?? "");
+
+        public Task<ApiResult<string>> ApplyUpdatesAsync(IReadOnlyList<string> targetIds)
+            => PostUpdateJsonAsync("/api/update/apply", new UpdateApplyRequest
+            {
+                TargetIds = targetIds?.ToList() ?? new List<string>(),
+            }, result => result.GetProperty("jobId").GetString() ?? "");
+
+        public Task<ApiResult<bool>> DiscardPendingSelfUpdateAsync()
+            => PostUpdateJsonAsync("/api/update/discard-pending", new { },
+                result => result.GetProperty("ok").GetBoolean());
+
+        public Task<ApiResult<bool>> CancelUpdateAsync(string jobId)
+            => PostUpdateJsonAsync("/api/update/cancel", new UpdateCancelRequest { JobId = jobId },
+                result => result.GetProperty("ok").GetBoolean());
+
+        public Task<ApiResult<UpdateJobView>> GetUpdateJobAsync(string jobId)
+            => GetJsonAsync<UpdateJobView>($"/api/update/job/{Uri.EscapeDataString(jobId)}");
+
+        public Task<ApiResult<string>> GetUpdateJobLogAsync(string jobId)
+            => GetTextAsync($"/api/update/job/{Uri.EscapeDataString(jobId)}/log");
 
         public Task<ApiResult<UiStateView>> GetUiStateAsync()
             => GetJsonAsync<UiStateView>("/api/ui-state");
@@ -657,6 +685,45 @@ namespace Amatsukaze.Shared
             {
                 return ApiResult<T>.Fail(0, ex.Message);
             }
+        }
+
+        // 更新 API の運用上起こりうるエラーだけは、JSON の本文から表示文言を取り出す。
+        private async Task<ApiResult<T>> PostUpdateJsonAsync<T>(string url, object payload,
+            Func<JsonElement, T> map)
+        {
+            try
+            {
+                using var res = await http.PostAsJsonAsync(url, payload, jsonOptions);
+                if (!res.IsSuccessStatusCode)
+                {
+                    var body = await res.Content.ReadAsStringAsync();
+                    return ApiResult<T>.Fail((int)res.StatusCode, ParseUpdateError(body));
+                }
+                var element = await res.Content.ReadFromJsonAsync<JsonElement>(jsonOptions);
+                return ApiResult<T>.Success(map(element), (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<T>.Fail(0, ex.Message);
+            }
+        }
+
+        private static string ParseUpdateError(string body)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(body);
+                if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                    document.RootElement.TryGetProperty("error", out var error) &&
+                    error.ValueKind == JsonValueKind.String)
+                {
+                    return error.GetString() ?? body;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+            return body;
         }
 
         private Task<ApiResult<T>> PostJsonAsync<T>(string url, object payload, Func<JsonElement, T> map, CancellationToken cancellationToken)

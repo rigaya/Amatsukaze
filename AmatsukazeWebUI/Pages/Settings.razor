@@ -12,6 +12,8 @@
     <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(_loading || _setting == null)">適用</button>
     <button class="btn btn-secondary" @onclick="ReloadAsync" disabled="@_loading">更新</button>
     <span class="settings-header-note">「適用」で反映。「更新」を押すと編集中の設定が失われるので注意</span>
+    <UpdateStatusButton Label="アップデートあり" AutoOpenOnQuery="true"
+                        WrapperCssClass="settings-header-update" />
 </div>
 
 @if (_loading)
@@ -115,6 +117,36 @@ else
                     <input type="checkbox" checked="@(!GetBoolValue(AutoLogoPendingDisabledField))" @onchange="OnAutoLogoPendingEnabledChange" />
                     自動でロゴを解析・採用する
                 </label>
+            </td>
+        </tr>
+    </table>
+
+    <hr class="settings-sep" />
+    <h4>更新</h4>
+    <table class="table">
+        <tr class="settings-check-row">
+            <td colspan="2">
+                <label class="settings-check">
+                    <input type="checkbox" checked="@GetBoolValue(UpdateCheckEnabledField)" @onchange="@(e => OnBoolChange(e, UpdateCheckEnabledField))" />
+                    更新をチェックする
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th>チェック間隔</th>
+            <td>
+                <input type="number" min="0" step="1" class="settings-update-hours" value="@GetIntValue(UpdateCheckIntervalHoursField)" @oninput="@(e => OnIntInput(e, UpdateCheckIntervalHoursField))" />
+                <span class="settings-field-note">時間（0 は 24 時間として扱います。最小 6 時間）</span>
+            </td>
+        </tr>
+        <tr>
+            <th>プロキシ</th>
+            <td>
+                <input type="text"
+                       class="settings-update-proxy"
+                       value="@GetStringValue(UpdateProxyField)"
+                       placeholder="空欄の場合はシステムのプロキシ設定を使用"
+                       @oninput="@(e => OnStringInput(e, UpdateProxyField))" />
             </td>
         </tr>
     </table>
@@ -454,6 +486,9 @@ else
     private const string AffinitySettingField = "AffinitySetting";
     private const string ExclusiveBatExecField = "ExclusiveBatExec";
     private const string AutoLogoPendingDisabledField = "AutoLogoPendingDisabled";
+    private const string UpdateCheckEnabledField = "UpdateCheckEnabled";
+    private const string UpdateCheckIntervalHoursField = "UpdateCheckIntervalHours";
+    private const string UpdateProxyField = "UpdateProxy";
     private const string EnableX265VfrField = "EnableX265VFRTimeFactor";
     private const string X265VfrFactorField = "X265VFRTimeFactor";
     private const string EnableRunHoursField = "EnableRunHours";
@@ -544,9 +579,10 @@ else
     private int _serverLogicalProcessorCount = 128;
     private int _reloadVersion;
     private string? _trimAdjustValidationError;
-
-    protected override Task OnInitializedAsync() => ReloadAsync();
-
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
     private async Task ReloadAsync()
     {
         _loading = true;
@@ -661,6 +697,7 @@ else
         _stringValues[WorkPathField] = GetString(WorkPathField);
         _stringValues[AlwaysShowDiskField] = GetString(AlwaysShowDiskField);
         _stringValues[BatchFileAfterQueuePathField] = GetString(BatchFileAfterQueuePathField);
+        _stringValues[UpdateProxyField] = GetString(UpdateProxyField);
         foreach (var item in _pathFields)
         {
             _stringValues[item.Field] = GetString(item.Field);
@@ -683,8 +720,11 @@ else
         _boolValues[ExecuteBatchAfterQueueField] = GetBool(ExecuteBatchAfterQueueField);
         _boolValues[ExclusiveBatExecField] = GetBool(ExclusiveBatExecField);
         _boolValues[AutoLogoPendingDisabledField] = GetBool(AutoLogoPendingDisabledField);
+        // 既存設定の null / 未定義はサーバーと同じく有効扱いにする
+        _boolValues[UpdateCheckEnabledField] = GetBoolDefaultTrue(UpdateCheckEnabledField);
 
         _intValues[DeleteOldLogsDaysField] = NormalizeIntValue(DeleteOldLogsDaysField, GetInt(DeleteOldLogsDaysField));
+        _intValues[UpdateCheckIntervalHoursField] = NormalizeIntValue(UpdateCheckIntervalHoursField, GetInt(UpdateCheckIntervalHoursField));
         _intValues[NumGpuField] = NormalizeIntValue(NumGpuField, GetInt(NumGpuField));
         _intValues[NumParallelField] = NormalizeIntValue(NumParallelField, GetInt(NumParallelField));
         _intValues[NumParallelLogoField] = NormalizeIntValue(NumParallelLogoField, GetInt(NumParallelLogoField));
@@ -792,6 +832,12 @@ else
             return false;
         }
         return node.GetValue<bool>();
+    }
+
+    private bool GetBoolDefaultTrue(string name)
+    {
+        var node = GetSettingNode(name);
+        return node == null || node.GetValue<bool>();
     }
 
     private string GetStringValue(string name)
@@ -1324,6 +1370,10 @@ else
     private int NormalizeIntValue(string name, int value)
     {
         if (name == DeleteOldLogsDaysField)
+        {
+            return Math.Max(0, value);
+        }
+        if (name == UpdateCheckIntervalHoursField)
         {
             return Math.Max(0, value);
         }

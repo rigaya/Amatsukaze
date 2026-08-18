@@ -1,6 +1,7 @@
 ﻿#define PROFILE
 using Amatsukaze.Lib;
 using Amatsukaze.Server.Rest;
+using Amatsukaze.Server.Update;
 using Amatsukaze.Shared;
 using System;
 using System.Collections.Generic;
@@ -59,6 +60,7 @@ namespace Amatsukaze.Server
         private MultiUserClient multiClient;
         private RestStateStore restState;
         private RestApiHost restApiHost;
+        internal UpdateManager UpdateManager { get; private set; }
 
         private Action finishRequested;
 
@@ -291,6 +293,19 @@ namespace Amatsukaze.Server
             }
         }
 
+        internal DateTime? LastUpdateCheckedAt {
+            get { return UIState_.LastUpdateCheckedAt; }
+        }
+
+        internal void SetLastUpdateCheckedAt(DateTime value)
+        {
+            if (UIState_.LastUpdateCheckedAt != value)
+            {
+                UIState_.LastUpdateCheckedAt = value;
+                uiStateUpdated = true;
+            }
+        }
+
         public EncodeServer(int port, IUserClient client, Action finishRequested)
         {
 #if PROFILE
@@ -488,6 +503,7 @@ namespace Amatsukaze.Server
                 AppData_.setting.NumGPU, AppData_.setting.MaxGPUResources);
 
             pauseScheduler = new PauseScheduler(this, workerPool);
+            UpdateManager = new UpdateManager(this);
 
 #if PROFILE
             prof.PrintTime("EncodeServer 2");
@@ -623,6 +639,8 @@ namespace Amatsukaze.Server
                     Util.AddLog($"[REST] APIサーバ起動失敗: {ex.GetType().Name}: {ex.Message}", ex);
                 }
             }
+            // 更新チェックはサーバー初期化の完了後にバックグラウンドで開始する
+            UpdateManager.Start();
         }
 
         #region IDisposable Support
@@ -637,6 +655,8 @@ namespace Amatsukaze.Server
                 if (disposing)
                 {
                     // TODO: マネージ状態を破棄します (マネージ オブジェクト)。
+
+                    UpdateManager?.Dispose();
 
                     // キュー状態を保存する
                     try
@@ -1136,10 +1156,48 @@ namespace Amatsukaze.Server
         }
         #endregion
 
+        private static readonly HashSet<string> AutoPathExcludedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "wwwroot",
+            "plugins64",
+            "7z",
+            "cmd",
+        };
+
+        private static IEnumerable<string> EnumerateAutoPathSearchDirectories(string basePath)
+        {
+            yield return basePath;
+
+            var currentDirectories = new[] { basePath };
+            for (int depth = 0; depth < 2; depth++)
+            {
+                var nextDirectories = new List<string>();
+                foreach (var currentDirectory in currentDirectories)
+                {
+                    foreach (var directory in Directory.EnumerateDirectories(currentDirectory))
+                    {
+                        var directoryName = Path.GetFileName(directory);
+                        if (AutoPathExcludedDirectories.Contains(directoryName) ||
+                            directoryName.StartsWith(".", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        yield return directory;
+                        nextDirectories.Add(directory);
+                    }
+                }
+                currentDirectories = nextDirectories.ToArray();
+            }
+        }
+
         private static string GetExePath(string basePath, string pattern, bool recursive = false)
         {
-            System.IO.SearchOption option = recursive ? System.IO.SearchOption.AllDirectories : System.IO.SearchOption.TopDirectoryOnly;
-            foreach (var path in Directory.GetFiles(basePath, "*", option))
+            IEnumerable<string> paths = recursive
+                ? Directory.GetFiles(basePath, "*", System.IO.SearchOption.AllDirectories)
+                : EnumerateAutoPathSearchDirectories(basePath).SelectMany(
+                    directory => Directory.GetFiles(directory, "*", System.IO.SearchOption.TopDirectoryOnly));
+            foreach (var path in paths)
             {
                 var fname = Path.GetFileName(path);
                 if (fname.StartsWith(pattern)
@@ -1503,6 +1561,20 @@ namespace Amatsukaze.Server
             }
         }
 
+        private static void NormalizeUpdateSettings(Setting setting)
+        {
+            if (setting == null)
+            {
+                return;
+            }
+            if (setting.UpdateCheckIntervalHours <= 0)
+            {
+                setting.UpdateCheckIntervalHours = 24;
+            }
+            setting.UpdateDisabledTargets ??= new List<string>();
+            setting.UpdateProxy ??= string.Empty;
+        }
+
         private Setting GetDefaultSetting()
         {
             var setting = SetDefaultPath(new Setting()
@@ -1511,10 +1583,15 @@ namespace Amatsukaze.Server
                 NumParallelLogoAnalysis = 0,
                 DeleteOldLogsDays = 180,
                 AutoLogoPendingDisabled = false,
-                DeleteTaskWorkDirOnQueueRemove = false
+                DeleteTaskWorkDirOnQueueRemove = false,
+                UpdateCheckEnabled = true,
+                UpdateCheckIntervalHours = 24,
+                UpdateDisabledTargets = new List<string>(),
+                UpdateProxy = string.Empty
             });
             NormalizeTrimAdjustSettings(setting);
             NormalizeAutoLogoPendingSettings(setting);
+            NormalizeUpdateSettings(setting);
             return setting;
         }
 
@@ -1564,6 +1641,7 @@ namespace Amatsukaze.Server
             }
             NormalizeTrimAdjustSettings(AppData_.setting);
             NormalizeAutoLogoPendingSettings(AppData_.setting);
+            NormalizeUpdateSettings(AppData_.setting);
             if (AppData_.scriptData == null)
             {
                 AppData_.scriptData = new MakeScriptData();
@@ -3590,6 +3668,7 @@ namespace Amatsukaze.Server
                     SetDefaultPath(data.Setting);
                     CheckSetting(null, data.Setting);
                     NormalizeAutoLogoPendingSettings(data.Setting);
+                    NormalizeUpdateSettings(data.Setting);
                     AppData_.setting = data.Setting;
                     workerPool.SetNumParallel(data.Setting.NumParallel);
                     SetScheduleParam(AppData_.setting.SchedulingEnabled,
@@ -3722,7 +3801,14 @@ namespace Amatsukaze.Server
         {
             if (request.IsQueue)
             {
-                workerPool.SetPause(request.Pause, false);
+                if (request.Pause == false && workerPool.MaintenancePaused)
+                {
+                    await NotifyError("更新の適用中のため再開できません", false);
+                }
+                else
+                {
+                    workerPool.SetPause(request.Pause, false);
+                }
             }
             else
             {
@@ -3745,6 +3831,17 @@ namespace Amatsukaze.Server
             Task task = RequestState();
             await task;
         }
+
+        /// <summary>
+        /// 更新の適用中だけキューを停止する
+        /// </summary>
+        internal Task SetMaintenancePause(bool pause)
+        {
+            workerPool.SetMaintenancePause(pause);
+            return RequestState();
+        }
+
+        internal bool MaintenancePaused => workerPool.MaintenancePaused;
 
         public Task CancelAddQueue()
         {
@@ -4140,6 +4237,7 @@ namespace Amatsukaze.Server
                 EncoderSuspended = workers.Select(w => w.UserSuspended).ToArray(),
                 Running = nowEncoding,
                 ScheduledPause = workerPool.ScheduledPaused,
+                MaintenancePaused = workerPool.MaintenancePaused,
                 ScheduledSuspend = workers.FirstOrDefault()?.ScheduledSuspended ?? false,
                 Progress = Progress
             };
