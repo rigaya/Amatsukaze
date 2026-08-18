@@ -732,6 +732,12 @@ ConfigWrapper::ConfigWrapper(
     : AMTObject(ctx)
     , conf(conf)
     , tmpDir(ctx, conf.workDir, conf.noRemoveTmp, conf.resumeDir) {
+    if (this->conf.encoderFilter != (ENUM_ENCODER)-1
+        && this->conf.encoderFilter != ENCODER_QSVENC
+        && this->conf.encoderFilter != ENCODER_NVENC
+        && this->conf.encoderFilter != ENCODER_VCEENC) {
+        THROW(ArgumentException, "エンコーダフィルタにはQSVEnc、NVEnc、VCEEncのみ指定できます");
+    }
     if (this->conf.encoderParallel <= 0) {
         this->conf.encoderParallel = 1;
     }
@@ -798,7 +804,9 @@ tstring ConfigWrapper::getEncoderOptions() const {
 }
 
 bool ConfigWrapper::isEncoderFilterEnabled() const {
-    return conf.encoderFilter >= ENCODER_X264 && conf.encoderFilter <= ENCODER_SVTAV1;
+    return conf.encoderFilter == ENCODER_QSVENC
+        || conf.encoderFilter == ENCODER_NVENC
+        || conf.encoderFilter == ENCODER_VCEENC;
 }
 
 bool ConfigWrapper::isEncoderFilterSeparate() const {
