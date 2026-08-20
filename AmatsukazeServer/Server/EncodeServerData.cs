@@ -183,6 +183,36 @@ namespace Amatsukaze.Server
         Auto, Faster, Fast, Medium, Slow, Slower
     }
 
+    public enum EncoderFilterDeinterlace
+    {
+        Afs, KFM, NNEDI, Yadif, Bwdif, Decomb, IVTC
+    }
+
+    public enum EncoderFilterAfsPreset
+    {
+        Default, Triple, Double, Anime, Cinema, MinAfterimg, Fps24, Fps30
+    }
+
+    public enum EncoderFilterKfmMode
+    {
+        VFR, Fps60, Fps24
+    }
+
+    public enum EncoderFilterDeintMode
+    {
+        Normal, Bob
+    }
+
+    public enum EncoderFilterDenoise
+    {
+        KNN, NLMeans, PMD, HQDN3D, DenoiseDct, Smooth, FFT3D, Convolution3D, MSmooth
+    }
+
+    public enum EncoderFilterEdge
+    {
+        Unsharp, EdgeLevel, WarpSharp, MSharpen
+    }
+
     [DataContract]
     public class FilterSetting : IExtensibleDataObject
     {
@@ -246,6 +276,67 @@ namespace Amatsukaze.Server
         public bool EnableEdgeLevel;
         [DataMember]
         public int SvtAv1BitDepth;
+
+        public ExtensionDataObject ExtensionData { get; set; }
+    }
+
+    [DataContract]
+    public class EncoderFilterSetting : IExtensibleDataObject
+    {
+        [DataMember]
+        public bool EnableDeinterlace;
+        [DataMember]
+        public EncoderFilterDeinterlace DeinterlaceAlgorithm;
+        [DataMember]
+        public EncoderFilterAfsPreset AfsPreset;
+        [DataMember]
+        public EncoderFilterKfmMode KfmMode;
+        [DataMember]
+        public EncoderFilterDeintMode NnediMode;
+        [DataMember]
+        public EncoderFilterDeintMode YadifMode;
+        [DataMember]
+        public EncoderFilterDeintMode BwdifMode;
+        [DataMember]
+        public bool EnableDenoise;
+        [DataMember]
+        public EncoderFilterDenoise DenoiseAlgorithm;
+        [DataMember]
+        public double KnnStrength;
+        [DataMember]
+        public double NlmeansSigma;
+        [DataMember]
+        public double PmdStrength;
+        [DataMember]
+        public double DenoiseDctSigma;
+        [DataMember]
+        public double Fft3dSigma;
+        [DataMember]
+        public double Convolution3dThresh;
+        [DataMember]
+        public int SmoothQP;
+        [DataMember]
+        public int MsmoothStrength;
+        [DataMember]
+        public bool EnableResize;
+        [DataMember]
+        public int ResizeWidth;
+        [DataMember]
+        public int ResizeHeight;
+        [DataMember]
+        public bool EnableEdgeEnhance;
+        [DataMember]
+        public EncoderFilterEdge EdgeAlgorithm;
+        [DataMember]
+        public double UnsharpWeight;
+        [DataMember]
+        public double EdgeLevelStrength;
+        [DataMember]
+        public double WarpSharpDepth;
+        [DataMember]
+        public double MSharpenStrength;
+        [DataMember]
+        public bool EnableDeband;
 
         public ExtensionDataObject ExtensionData { get; set; }
     }
@@ -428,6 +519,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public FilterSetting FilterSetting { get; set; }
         [DataMember]
+        public EncoderFilterSetting EncoderFilterSetting { get; set; }
+        [DataMember]
         public int NumEncodeBufferFrames { get; set; }
         [DataMember]
         public int EncoderParallel { get; set; }
@@ -582,16 +675,156 @@ namespace Amatsukaze.Server
             }
         }
 
+        // エンコーダのオプションに埋め込む数値の文字列化
+        // double既定の書式では小さい値が指数表記 (5E-05) になってしまうため、それを避ける
+        private static string FormatEncoderFilterValue(double value)
+        {
+            return value.ToString("0.##########", CultureInfo.InvariantCulture);
+        }
+
+        public static string BuildEncoderFilterOptions(EncoderFilterSetting s)
+        {
+            if (s == null)
+            {
+                return "";
+            }
+
+            var options = new List<string>();
+            if (s.EnableDeinterlace)
+            {
+                switch (s.DeinterlaceAlgorithm)
+                {
+                    case EncoderFilterDeinterlace.Afs:
+                        string afsPreset;
+                        switch (s.AfsPreset)
+                        {
+                            case EncoderFilterAfsPreset.Triple: afsPreset = "triple"; break;
+                            case EncoderFilterAfsPreset.Double: afsPreset = "double"; break;
+                            case EncoderFilterAfsPreset.Anime: afsPreset = "anime"; break;
+                            case EncoderFilterAfsPreset.Cinema: afsPreset = "cinema"; break;
+                            case EncoderFilterAfsPreset.MinAfterimg: afsPreset = "min_afterimg"; break;
+                            case EncoderFilterAfsPreset.Fps24: afsPreset = "24fps"; break;
+                            case EncoderFilterAfsPreset.Fps30: afsPreset = "30fps"; break;
+                            default: afsPreset = "default"; break;
+                        }
+                        options.Add("--vpp-afs preset=" + afsPreset);
+                        break;
+                    case EncoderFilterDeinterlace.KFM:
+                        string kfmMode;
+                        switch (s.KfmMode)
+                        {
+                            case EncoderFilterKfmMode.Fps60: kfmMode = "60"; break;
+                            case EncoderFilterKfmMode.Fps24: kfmMode = "24"; break;
+                            default: kfmMode = "vfr"; break;
+                        }
+                        options.Add("--vpp-kfm mode=" + kfmMode);
+                        break;
+                    case EncoderFilterDeinterlace.NNEDI:
+                        options.Add("--vpp-nnedi field=" +
+                            (s.NnediMode == EncoderFilterDeintMode.Bob ? "bob" : "auto"));
+                        break;
+                    case EncoderFilterDeinterlace.Yadif:
+                        options.Add("--vpp-yadif mode=" +
+                            (s.YadifMode == EncoderFilterDeintMode.Bob ? "bob" : "auto"));
+                        break;
+                    case EncoderFilterDeinterlace.Bwdif:
+                        options.Add("--vpp-bwdif mode=" +
+                            (s.BwdifMode == EncoderFilterDeintMode.Bob ? "bob" : "frame"));
+                        break;
+                    case EncoderFilterDeinterlace.Decomb:
+                        options.Add("--vpp-decomb");
+                        break;
+                    case EncoderFilterDeinterlace.IVTC:
+                        options.Add("--vpp-ivtc");
+                        break;
+                }
+            }
+
+            if (s.EnableDenoise)
+            {
+                switch (s.DenoiseAlgorithm)
+                {
+                    case EncoderFilterDenoise.KNN:
+                        options.Add("--vpp-knn strength=" + FormatEncoderFilterValue(s.KnnStrength));
+                        break;
+                    case EncoderFilterDenoise.NLMeans:
+                        options.Add("--vpp-nlmeans sigma=" + FormatEncoderFilterValue(s.NlmeansSigma));
+                        break;
+                    case EncoderFilterDenoise.PMD:
+                        options.Add("--vpp-pmd strength=" + FormatEncoderFilterValue(s.PmdStrength));
+                        break;
+                    case EncoderFilterDenoise.HQDN3D:
+                        options.Add("--vpp-hqdn3d");
+                        break;
+                    case EncoderFilterDenoise.DenoiseDct:
+                        options.Add("--vpp-denoise-dct sigma=" + FormatEncoderFilterValue(s.DenoiseDctSigma));
+                        break;
+                    case EncoderFilterDenoise.Smooth:
+                        options.Add("--vpp-smooth qp=" + s.SmoothQP.ToString(CultureInfo.InvariantCulture));
+                        break;
+                    case EncoderFilterDenoise.FFT3D:
+                        options.Add("--vpp-fft3d sigma=" + FormatEncoderFilterValue(s.Fft3dSigma));
+                        break;
+                    case EncoderFilterDenoise.Convolution3D:
+                        string convolutionThreshold = FormatEncoderFilterValue(s.Convolution3dThresh);
+                        options.Add("--vpp-convolution3d ythresh=" + convolutionThreshold +
+                            ",cthresh=" + convolutionThreshold);
+                        break;
+                    case EncoderFilterDenoise.MSmooth:
+                        options.Add("--vpp-msmooth strength=" + s.MsmoothStrength.ToString(CultureInfo.InvariantCulture));
+                        break;
+                }
+            }
+
+            if (s.EnableResize)
+            {
+                options.Add("--output-res " + s.ResizeWidth.ToString(CultureInfo.InvariantCulture) + "x" +
+                    s.ResizeHeight.ToString(CultureInfo.InvariantCulture));
+            }
+
+            if (s.EnableEdgeEnhance)
+            {
+                switch (s.EdgeAlgorithm)
+                {
+                    case EncoderFilterEdge.Unsharp:
+                        options.Add("--vpp-unsharp weight=" + FormatEncoderFilterValue(s.UnsharpWeight));
+                        break;
+                    case EncoderFilterEdge.EdgeLevel:
+                        options.Add("--vpp-edgelevel strength=" + FormatEncoderFilterValue(s.EdgeLevelStrength));
+                        break;
+                    case EncoderFilterEdge.WarpSharp:
+                        options.Add("--vpp-warpsharp depth=" + FormatEncoderFilterValue(s.WarpSharpDepth));
+                        break;
+                    case EncoderFilterEdge.MSharpen:
+                        options.Add("--vpp-msharpen strength=" + FormatEncoderFilterValue(s.MSharpenStrength));
+                        break;
+                }
+            }
+
+            if (s.EnableDeband)
+            {
+                options.Add("--vpp-deband");
+            }
+            return string.Join(" ", options);
+        }
+
         // FilterOptionに対応するエンコーダフィルタのオプション文字列（無効時はnull）
         public static string GetFilterEncoderOption(ProfileSetting profile)
         {
+            string customOption;
             switch (profile.FilterOption)
             {
-                case FilterOption.QSVEncFilter: return profile.QSVEncFilterOption;
-                case FilterOption.NVEncFilter: return profile.NVEncFilterOption;
-                case FilterOption.VCEEncFilter: return profile.VCEEncFilterOption;
+                case FilterOption.QSVEncFilter: customOption = profile.QSVEncFilterOption; break;
+                case FilterOption.NVEncFilter: customOption = profile.NVEncFilterOption; break;
+                case FilterOption.VCEEncFilter: customOption = profile.VCEEncFilterOption; break;
                 default: return null;
             }
+
+            return string.Join(" ", new[]
+            {
+                BuildEncoderFilterOptions(profile.EncoderFilterSetting),
+                customOption
+            }.Where(option => !string.IsNullOrWhiteSpace(option)).Select(option => option.Trim()));
         }
 
         // リソース文字列を生成
