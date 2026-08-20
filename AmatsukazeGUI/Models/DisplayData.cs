@@ -1128,6 +1128,7 @@ namespace Amatsukaze.Models
             new[] { "knn", "nlmeans", "pmd", "hqdn3d", "denoise-dct", "smooth", "fft3d", "convolution3d", "msmooth" };
         public string[] EdgeList { get; } =
             new[] { "unsharp", "edgelevel", "warpsharp", "msharpen" };
+        public string[] OutputDepthList { get; } = new[] { "8bit", "10bit" };
 
         public DisplayEncoderFilterSetting(EncoderFilterSetting data)
         {
@@ -1387,6 +1388,23 @@ namespace Amatsukaze.Models
         {
             get { return Data.EnableDeband; }
             set { if (Data.EnableDeband == value) return; Data.EnableDeband = value; RaisePropertyChanged(); }
+        }
+
+        public bool EnableOutputDepth
+        {
+            get { return Data.EnableOutputDepth; }
+            set { if (Data.EnableOutputDepth == value) return; Data.EnableOutputDepth = value; RaisePropertyChanged(); }
+        }
+
+        public int OutputDepth
+        {
+            get { return (int)Data.OutputDepth; }
+            set
+            {
+                if (Data.OutputDepth == (EncoderFilterOutputDepth)value) return;
+                Data.OutputDepth = (EncoderFilterOutputDepth)value;
+                RaisePropertyChanged();
+            }
         }
     }
 

@@ -213,6 +213,11 @@ namespace Amatsukaze.Server
         Unsharp, EdgeLevel, WarpSharp, MSharpen
     }
 
+    public enum EncoderFilterOutputDepth
+    {
+        Bit8, Bit10
+    }
+
     [DataContract]
     public class FilterSetting : IExtensibleDataObject
     {
@@ -337,6 +342,10 @@ namespace Amatsukaze.Server
         public double MSharpenStrength;
         [DataMember]
         public bool EnableDeband;
+        [DataMember]
+        public bool EnableOutputDepth;
+        [DataMember]
+        public EncoderFilterOutputDepth OutputDepth;
 
         public ExtensionDataObject ExtensionData { get; set; }
     }
@@ -804,6 +813,12 @@ namespace Amatsukaze.Server
             if (s.EnableDeband)
             {
                 options.Add("--vpp-deband");
+            }
+
+            if (s.EnableOutputDepth)
+            {
+                options.Add("--output-depth " +
+                    (s.OutputDepth == EncoderFilterOutputDepth.Bit10 ? "10" : "8"));
             }
             return string.Join(" ", options);
         }

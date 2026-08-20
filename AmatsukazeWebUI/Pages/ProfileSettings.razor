@@ -449,6 +449,18 @@ else
                             <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeband")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeband"))" />
                             バンディング低減
                         </label>
+                        <div style="margin: 4px 8px;">
+                            <label>
+                                <input type="checkbox" checked="@GetEncoderFilterBool("EnableOutputDepth")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableOutputDepth"))" />
+                                出力ビット深度
+                            </label>
+                            <select style="margin-left: 8px;" @onchange="@(e => OnEncoderFilterEnumChanged(e, "OutputDepth", _encoderOutputDepthEnumNames))" disabled="@(!GetEncoderFilterBool("EnableOutputDepth"))">
+                                @foreach (var item in GetArrayOptions(_encoderOutputDepthLabels, GetEncoderFilterEnumIndex("OutputDepth", _encoderOutputDepthEnumNames)))
+                                {
+                                    <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                }
+                            </select>
+                        </div>
                     </td>
                 </tr>
                 <tr>
@@ -1005,6 +1017,8 @@ else
     private static readonly string[] _encoderDenoiseLabels = new[] { "knn", "nlmeans", "pmd", "hqdn3d", "denoise-dct", "smooth", "fft3d", "convolution3d", "msmooth" };
     private static readonly string[] _encoderEdgeEnumNames = new[] { "Unsharp", "EdgeLevel", "WarpSharp", "MSharpen" };
     private static readonly string[] _encoderEdgeLabels = new[] { "unsharp", "edgelevel", "warpsharp", "msharpen" };
+    private static readonly string[] _encoderOutputDepthEnumNames = new[] { "Bit8", "Bit10" };
+    private static readonly string[] _encoderOutputDepthLabels = new[] { "8bit", "10bit" };
 
     protected override Task OnInitializedAsync() => ReloadProfilesAsync();
 

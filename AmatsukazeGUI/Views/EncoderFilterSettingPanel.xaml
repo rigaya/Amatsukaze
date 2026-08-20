@@ -67,5 +67,10 @@
             </StackPanel>
         </GroupBox>
         <CheckBox Margin="8,4" Content="バンディング低減" IsChecked="{Binding EnableDeband, Mode=TwoWay}"/>
+        <StackPanel Orientation="Horizontal" Margin="8,4">
+            <CheckBox Content="出力ビット深度" IsChecked="{Binding EnableOutputDepth, Mode=TwoWay}"/>
+            <ComboBox Width="80" Height="22" Margin="8,0,0,0" ItemsSource="{Binding OutputDepthList}"
+                      SelectedIndex="{Binding OutputDepth, Mode=TwoWay}" IsEnabled="{Binding EnableOutputDepth}"/>
+        </StackPanel>
     </StackPanel>
 </UserControl>

@@ -944,7 +944,8 @@ namespace Amatsukaze.Server
                 UnsharpWeight = 0.5,
                 EdgeLevelStrength = 5.0,
                 WarpSharpDepth = 16.0,
-                MSharpenStrength = 1.0
+                MSharpenStrength = 1.0,
+                OutputDepth = EncoderFilterOutputDepth.Bit10
             };
         }
 
