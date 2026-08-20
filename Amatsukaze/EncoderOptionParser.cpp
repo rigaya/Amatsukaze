@@ -108,6 +108,22 @@ int getRCModeValueMax(ENUM_ENCODER encoder, const EncoderRCMode* rcMode, VIDEO_S
     return argv;
 }
 
+// "key1=value1,key2=value2" 形式のパラメータ文字列から指定キーの値を取り出す
+// 見つからない場合は空文字列を返す。値は小文字化して返す
+static std::wstring GetVppParam(const std::wstring& params, const std::wstring& key) {
+    std::wregex re(L"([^=,]+)=([^,]+),?");
+    std::wsregex_iterator it(params.begin(), params.end(), re);
+    std::wsregex_iterator end;
+    for (; it != end; it++) {
+        if ((*it)[1].str() == key) {
+            auto val = (*it)[2].str();
+            std::transform(val.begin(), val.end(), val.begin(), ::tolower);
+            return val;
+        }
+    }
+    return L"";
+}
+
 EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
     EncoderOptionInfo info = EncoderOptionInfo();
 
@@ -238,6 +254,35 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 } else {
                     info.deint = is24 ? ENCODER_DEINT_24P : ENCODER_DEINT_30P;
                     info.afsTimecode = false;
+                }
+            } else if (arg == L"--vpp-nnedi") {
+                // field=bob/bob_tff/bob_bff で60fps化
+                const auto field = GetVppParam(next, L"field");
+                info.deint = (field.rfind(L"bob", 0) == 0) ? ENCODER_DEINT_60P : ENCODER_DEINT_30P;
+            } else if (arg == L"--vpp-yadif") {
+                // mode=bob/bob_tff/bob_bff で60fps化
+                const auto mode = GetVppParam(next, L"mode");
+                info.deint = (mode.rfind(L"bob", 0) == 0) ? ENCODER_DEINT_60P : ENCODER_DEINT_30P;
+            } else if (arg == L"--vpp-bwdif") {
+                // mode=bob で60fps化 (既定はframe)
+                const auto mode = GetVppParam(next, L"mode");
+                info.deint = (mode == L"bob") ? ENCODER_DEINT_60P : ENCODER_DEINT_30P;
+            } else if (arg == L"--vpp-decomb") {
+                info.deint = ENCODER_DEINT_30P;
+            } else if (arg == L"--vpp-ivtc") {
+                // cycle=0 でデシメーション無効、それ以外は30fps->24fps化
+                const auto cycle = GetVppParam(next, L"cycle");
+                info.deint = (cycle == L"0") ? ENCODER_DEINT_30P : ENCODER_DEINT_24P;
+            } else if (arg == L"--vpp-kfm") {
+                // mode省略時の既定はvfr
+                const auto mode = GetVppParam(next, L"mode");
+                if (mode == L"60") {
+                    info.deint = ENCODER_DEINT_60P;
+                } else if (mode == L"24") {
+                    info.deint = ENCODER_DEINT_24P;
+                } else {
+                    info.deint = ENCODER_DEINT_VFR;
+                    info.afsTimecode = true;
                 }
             } else if (arg == L"--vpp-select-every") {
                 std::wregex re(L"([^=,]+)(=([^,]+))?,?");

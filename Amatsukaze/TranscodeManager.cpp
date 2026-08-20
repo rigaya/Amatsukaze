@@ -1333,6 +1333,12 @@ void DoBadThing() {
     if (!isNoEncode && !setting.isFormatVFRSupported() && eoInfo.afsTimecode) {
         THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
     }
+    if (!isNoEncode && eoInfo.afsTimecode && !setting.isEncoderFilterSeparate()) {
+        // 本エンコーダ自身が出力したタイムコードを回収する仕組みがないため、
+        // そのまま通すとVFR情報が失われた出力になってしまう
+        THROW(ArgumentException, "エンコーダ自身でのVFR出力には対応していません。"
+            "エンコーダフィルタに本エンコーダとは別のエンコーダを指定してください");
+    }
     if (setting.getFormat() == FORMAT_TSREPLACE) {
         auto cmtypes = setting.getCMTypes();
         if (cmtypes.size() != 1 || (cmtypes[0] != CMTYPE_BOTH && cmtypes[0] != CMTYPE_EDGE_TRIM)) {
