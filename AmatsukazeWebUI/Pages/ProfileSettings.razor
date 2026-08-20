@@ -359,6 +359,99 @@ else
             else if (IsEncoderFilter())
             {
                 <tr>
+                    <th>固定フィルタ設定</th>
+                    <td>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">
+                                <label>
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeinterlace")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeinterlace"))" />
+                                    インターレース解除
+                                </label>
+                            </legend>
+                            <div style="margin-top: 6px;">
+                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames))" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))">
+                                    @foreach (var item in GetArrayOptions(_encoderDeinterlaceLabels, GetEncoderFilterEnumIndex("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames)))
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                    }
+                                </select>
+                                @if (HasEncoderDeinterlaceParam())
+                                {
+                                    <select style="margin-left: 6px;" @onchange="OnEncoderDeinterlaceParamChanged" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))">
+                                        @foreach (var item in GetEncoderDeinterlaceParamOptions())
+                                        {
+                                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                        }
+                                    </select>
+                                }
+                            </div>
+                        </fieldset>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">
+                                <label>
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableDenoise")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDenoise"))" />
+                                    ノイズ除去
+                                </label>
+                            </legend>
+                            <div style="margin-top: 6px;">
+                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "DenoiseAlgorithm", _encoderDenoiseEnumNames))" disabled="@(!GetEncoderFilterBool("EnableDenoise"))">
+                                    @foreach (var item in GetArrayOptions(_encoderDenoiseLabels, GetEncoderFilterEnumIndex("DenoiseAlgorithm", _encoderDenoiseEnumNames)))
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                    }
+                                </select>
+                                @if (IsEncoderDenoiseValueVisible())
+                                {
+                                    <span style="margin-left: 8px;" title="@GetEncoderDenoiseValueLabel()">@GetEncoderDenoiseValueLabel()</span>
+                                    <input type="number" step="any" style="width: 90px; margin-left: 4px;" value="@GetEncoderDenoiseValue()"
+                                           title="@GetEncoderDenoiseValueLabel()" @oninput="OnEncoderDenoiseValueChanged"
+                                           disabled="@(!GetEncoderFilterBool("EnableDenoise"))" />
+                                }
+                            </div>
+                        </fieldset>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">
+                                <label>
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableResize")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableResize"))" />
+                                    リサイズ
+                                </label>
+                            </legend>
+                            <div style="margin-top: 6px;">
+                                <span>横</span>
+                                <input type="number" style="width: 80px; margin-left: 4px;" value="@GetEncoderFilterInt("ResizeWidth")"
+                                       @oninput="@(e => OnEncoderFilterIntChanged(e, "ResizeWidth"))" disabled="@(!GetEncoderFilterBool("EnableResize"))" />
+                                <span style="margin-left: 6px;">x 高さ</span>
+                                <input type="number" style="width: 80px; margin-left: 4px;" value="@GetEncoderFilterInt("ResizeHeight")"
+                                       @oninput="@(e => OnEncoderFilterIntChanged(e, "ResizeHeight"))" disabled="@(!GetEncoderFilterBool("EnableResize"))" />
+                            </div>
+                        </fieldset>
+                        <fieldset class="profile-filter-panel">
+                            <legend class="profile-filter-legend">
+                                <label>
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableEdgeEnhance")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableEdgeEnhance"))" />
+                                    エッジ強調
+                                </label>
+                            </legend>
+                            <div style="margin-top: 6px;">
+                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "EdgeAlgorithm", _encoderEdgeEnumNames))" disabled="@(!GetEncoderFilterBool("EnableEdgeEnhance"))">
+                                    @foreach (var item in GetArrayOptions(_encoderEdgeLabels, GetEncoderFilterEnumIndex("EdgeAlgorithm", _encoderEdgeEnumNames)))
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                                    }
+                                </select>
+                                <span style="margin-left: 8px;" title="@GetEncoderEdgeValueLabel()">@GetEncoderEdgeValueLabel()</span>
+                                <input type="number" step="any" style="width: 90px; margin-left: 4px;" value="@GetEncoderEdgeValue()"
+                                       title="@GetEncoderEdgeValueLabel()" @oninput="OnEncoderEdgeValueChanged"
+                                       disabled="@(!GetEncoderFilterBool("EnableEdgeEnhance"))" />
+                            </div>
+                        </fieldset>
+                        <label style="margin: 4px 8px;">
+                            <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeband")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeband"))" />
+                            バンディング低減
+                        </label>
+                    </td>
+                </tr>
+                <tr>
                     <th>フィルタオプション</th>
                     <td>
                         <textarea style="width: 100%; height: 80px;" @oninput="OnEncoderFilterOptionChanged">@GetEncoderFilterOption()</textarea>
@@ -900,6 +993,18 @@ else
     private static readonly string[] _subtitleModeEnumNames = new[] { "Arib", "WhisperFallback", "WhisperAlways" };
     private static readonly string[] _whisperModelEnumNames = new[] { "Auto", "Unspecified", "Small", "Medium", "LargeV1", "LargeV2", "LargeV3", "LargeV3Turbo" };
     private static readonly string[] _resourcePhaseNames = new[] { "TS解析", "CM解析", "フィルタ映像解析", "エンコード", "Mux" };
+    private static readonly string[] _encoderDeinterlaceEnumNames = new[] { "Afs", "KFM", "NNEDI", "Yadif", "Bwdif", "Decomb", "IVTC" };
+    private static readonly string[] _encoderDeinterlaceLabels = new[] { "afs", "kfm", "nnedi", "yadif", "bwdif", "decomb", "ivtc" };
+    private static readonly string[] _encoderAfsPresetEnumNames = new[] { "Default", "Triple", "Double", "Anime", "Cinema", "MinAfterimg", "Fps24", "Fps30" };
+    private static readonly string[] _encoderAfsPresetLabels = new[] { "default", "triple", "double", "anime", "cinema", "min_afterimg", "24fps", "30fps" };
+    private static readonly string[] _encoderKfmModeEnumNames = new[] { "VFR", "Fps60", "Fps24" };
+    private static readonly string[] _encoderKfmModeLabels = new[] { "vfr", "60", "24" };
+    private static readonly string[] _encoderDeintModeEnumNames = new[] { "Normal", "Bob" };
+    private static readonly string[] _encoderDeintModeLabels = new[] { "normal", "bob" };
+    private static readonly string[] _encoderDenoiseEnumNames = new[] { "KNN", "NLMeans", "PMD", "HQDN3D", "DenoiseDct", "Smooth", "FFT3D", "Convolution3D", "MSmooth" };
+    private static readonly string[] _encoderDenoiseLabels = new[] { "knn", "nlmeans", "pmd", "hqdn3d", "denoise-dct", "smooth", "fft3d", "convolution3d", "msmooth" };
+    private static readonly string[] _encoderEdgeEnumNames = new[] { "Unsharp", "EdgeLevel", "WarpSharp", "MSharpen" };
+    private static readonly string[] _encoderEdgeLabels = new[] { "unsharp", "edgelevel", "warpsharp", "msharpen" };
 
     protected override Task OnInitializedAsync() => ReloadProfilesAsync();
 
@@ -1606,6 +1711,242 @@ else
         return GetFilterIndex() >= 3;
     }
 
+    private JsonNode? GetEncoderFilterNode(string name)
+    {
+        return GetNodeFromObject(GetObjectNode("EncoderFilterSetting"), name);
+    }
+
+    private bool GetEncoderFilterBool(string name)
+    {
+        return TryGetBoolFromNode(GetEncoderFilterNode(name), out var value) && value;
+    }
+
+    private int GetEncoderFilterInt(string name)
+    {
+        return TryGetIntFromNode(GetEncoderFilterNode(name), out var value) ? value : 0;
+    }
+
+    private double GetEncoderFilterDouble(string name)
+    {
+        return TryGetDoubleFromNode(GetEncoderFilterNode(name), out var value) ? value : 0;
+    }
+
+    private string GetEncoderFilterEnumString(string name, string[] enumNames)
+    {
+        var node = GetEncoderFilterNode(name);
+        if (TryGetStringFromNode(node, out var value))
+        {
+            return value;
+        }
+        if (TryGetIntFromNode(node, out var index) && index >= 0 && index < enumNames.Length)
+        {
+            return enumNames[index];
+        }
+        return enumNames[0];
+    }
+
+    private int GetEncoderFilterEnumIndex(string name, string[] enumNames)
+    {
+        var current = GetEncoderFilterEnumString(name, enumNames);
+        var index = Array.FindIndex(enumNames,
+            item => string.Equals(item, current, StringComparison.OrdinalIgnoreCase));
+        return index >= 0 ? index : 0;
+    }
+
+    private void SetEncoderFilterValue(string name, JsonNode? value)
+    {
+        var filter = GetObjectNode("EncoderFilterSetting") ?? new JsonObject();
+        filter[GetMatchingKey(filter, name)] = value;
+        SetNodeValue("EncoderFilterSetting", filter);
+    }
+
+    private void OnEncoderFilterBoolChanged(ChangeEventArgs e, string name)
+    {
+        SetEncoderFilterValue(name, JsonValue.Create(e.Value is bool value && value));
+    }
+
+    private void OnEncoderFilterIntChanged(ChangeEventArgs e, string name)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            SetEncoderFilterValue(name, JsonValue.Create(value));
+        }
+    }
+
+    private void OnEncoderFilterEnumChanged(ChangeEventArgs e, string name, string[] enumNames)
+    {
+        var index = ParseIndex(e.Value);
+        if (index < 0 || index >= enumNames.Length)
+        {
+            index = 0;
+        }
+        SetEncoderFilterValue(name, JsonValue.Create(enumNames[index]));
+    }
+
+    private string GetEncoderDeinterlaceParamName()
+    {
+        switch (GetEncoderFilterEnumString("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames))
+        {
+            case "Afs": return "AfsPreset";
+            case "KFM": return "KfmMode";
+            case "NNEDI": return "NnediMode";
+            case "Yadif": return "YadifMode";
+            case "Bwdif": return "BwdifMode";
+            default: return "";
+        }
+    }
+
+    private string[] GetEncoderDeinterlaceParamEnumNames()
+    {
+        switch (GetEncoderFilterEnumString("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames))
+        {
+            case "Afs": return _encoderAfsPresetEnumNames;
+            case "KFM": return _encoderKfmModeEnumNames;
+            case "NNEDI":
+            case "Yadif":
+            case "Bwdif": return _encoderDeintModeEnumNames;
+            default: return Array.Empty<string>();
+        }
+    }
+
+    private string[] GetEncoderDeinterlaceParamLabels()
+    {
+        switch (GetEncoderFilterEnumString("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames))
+        {
+            case "Afs": return _encoderAfsPresetLabels;
+            case "KFM": return _encoderKfmModeLabels;
+            case "NNEDI":
+            case "Yadif":
+            case "Bwdif": return _encoderDeintModeLabels;
+            default: return Array.Empty<string>();
+        }
+    }
+
+    private bool HasEncoderDeinterlaceParam()
+    {
+        return GetEncoderDeinterlaceParamName().Length > 0;
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetEncoderDeinterlaceParamOptions()
+    {
+        var name = GetEncoderDeinterlaceParamName();
+        var enumNames = GetEncoderDeinterlaceParamEnumNames();
+        return GetArrayOptions(GetEncoderDeinterlaceParamLabels(),
+            GetEncoderFilterEnumIndex(name, enumNames));
+    }
+
+    private void OnEncoderDeinterlaceParamChanged(ChangeEventArgs e)
+    {
+        var name = GetEncoderDeinterlaceParamName();
+        var enumNames = GetEncoderDeinterlaceParamEnumNames();
+        if (name.Length > 0 && enumNames.Length > 0)
+        {
+            OnEncoderFilterEnumChanged(e, name, enumNames);
+        }
+    }
+
+    private string GetEncoderDenoiseValueName()
+    {
+        switch (GetEncoderFilterEnumString("DenoiseAlgorithm", _encoderDenoiseEnumNames))
+        {
+            case "KNN": return "KnnStrength";
+            case "NLMeans": return "NlmeansSigma";
+            case "PMD": return "PmdStrength";
+            case "DenoiseDct": return "DenoiseDctSigma";
+            case "Smooth": return "SmoothQP";
+            case "FFT3D": return "Fft3dSigma";
+            case "Convolution3D": return "Convolution3dThresh";
+            case "MSmooth": return "MsmoothStrength";
+            default: return "";
+        }
+    }
+
+    private bool IsEncoderDenoiseInteger()
+    {
+        var algorithm = GetEncoderFilterEnumString("DenoiseAlgorithm", _encoderDenoiseEnumNames);
+        return algorithm == "Smooth" || algorithm == "MSmooth";
+    }
+
+    private bool IsEncoderDenoiseValueVisible()
+    {
+        return GetEncoderDenoiseValueName().Length > 0;
+    }
+
+    private double GetEncoderDenoiseValue()
+    {
+        var name = GetEncoderDenoiseValueName();
+        return IsEncoderDenoiseInteger() ? GetEncoderFilterInt(name) : GetEncoderFilterDouble(name);
+    }
+
+    private string GetEncoderDenoiseValueLabel()
+    {
+        switch (GetEncoderFilterEnumString("DenoiseAlgorithm", _encoderDenoiseEnumNames))
+        {
+            case "KNN": return "強さ (0.0 - 1.0)";
+            case "NLMeans": return "強さ (0.0以上)";
+            case "PMD": return "強さ (0 - 100)";
+            case "DenoiseDct": return "σ (0.0以上)";
+            case "Smooth": return "qp (1 - 63)";
+            case "FFT3D": return "強度 (0.0 - 100.0)";
+            case "Convolution3D": return "強度 (0.0 - 255.0)";
+            case "MSmooth": return "強さ (0 - 20)";
+            default: return "";
+        }
+    }
+
+    private void OnEncoderDenoiseValueChanged(ChangeEventArgs e)
+    {
+        if (!double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            return;
+        }
+        var name = GetEncoderDenoiseValueName();
+        if (name.Length == 0)
+        {
+            return;
+        }
+        SetEncoderFilterValue(name, IsEncoderDenoiseInteger()
+            ? JsonValue.Create((int)Math.Round(value))
+            : JsonValue.Create(value));
+    }
+
+    private string GetEncoderEdgeValueName()
+    {
+        switch (GetEncoderFilterEnumString("EdgeAlgorithm", _encoderEdgeEnumNames))
+        {
+            case "EdgeLevel": return "EdgeLevelStrength";
+            case "WarpSharp": return "WarpSharpDepth";
+            case "MSharpen": return "MSharpenStrength";
+            default: return "UnsharpWeight";
+        }
+    }
+
+    private double GetEncoderEdgeValue()
+    {
+        return GetEncoderFilterDouble(GetEncoderEdgeValueName());
+    }
+
+    private string GetEncoderEdgeValueLabel()
+    {
+        switch (GetEncoderFilterEnumString("EdgeAlgorithm", _encoderEdgeEnumNames))
+        {
+            case "EdgeLevel": return "特性 (-31 - 31)";
+            case "WarpSharp": return "深度 (-128 - 128)";
+            case "MSharpen": return "深度 (0.0 - 1.0)";
+            default: return "強さ (0 - 10)";
+        }
+    }
+
+    private void OnEncoderEdgeValueChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            SetEncoderFilterValue(GetEncoderEdgeValueName(), JsonValue.Create(value));
+        }
+    }
+
     private string GetEncoderFilterOptionName()
     {
         return GetFilterIndex() switch
@@ -1641,6 +1982,14 @@ else
             var value = i.ToString();
             var label = list[i];
             yield return (value, label, i == selectedIndex);
+        }
+    }
+
+    private IEnumerable<(string Value, string Label, bool Selected)> GetArrayOptions(string[] list, int selectedIndex)
+    {
+        for (var i = 0; i < list.Length; i++)
+        {
+            yield return (i.ToString(), list[i], i == selectedIndex);
         }
     }
 

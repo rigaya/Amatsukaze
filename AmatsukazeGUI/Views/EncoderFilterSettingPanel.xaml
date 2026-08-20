@@ -1,0 +1,71 @@
+<UserControl x:Class="Amatsukaze.Views.EncoderFilterSettingPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:m="clr-namespace:Amatsukaze.Models"
+             mc:Ignorable="d"
+             d:DesignHeight="420" d:DesignWidth="420"
+             d:DataContext="{d:DesignInstance {x:Type m:DisplayEncoderFilterSetting}}">
+    <UserControl.Resources>
+        <ResourceDictionary Source="CommonResources.xaml"/>
+    </UserControl.Resources>
+    <StackPanel>
+        <StackPanel.Resources>
+            <BooleanToVisibilityConverter x:Key="BoolVisibilityConverter"/>
+        </StackPanel.Resources>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
+            <GroupBox.Header>
+                <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
+                          Content="インターレース解除" IsChecked="{Binding EnableDeinterlace, Mode=TwoWay}"/>
+            </GroupBox.Header>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableDeinterlace}">
+                <ComboBox Width="120" Height="22" ItemsSource="{Binding DeinterlaceList}"
+                          SelectedIndex="{Binding DeinterlaceAlgorithm, Mode=TwoWay}"/>
+                <ComboBox Width="120" Height="22" Margin="6,0,0,0"
+                          ItemsSource="{Binding DeinterlaceParamList}"
+                          SelectedIndex="{Binding DeinterlaceParamIndex, Mode=TwoWay}"
+                          Visibility="{Binding DeinterlaceParamVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
+            </StackPanel>
+        </GroupBox>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
+            <GroupBox.Header>
+                <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
+                          Content="ノイズ除去" IsChecked="{Binding EnableDenoise, Mode=TwoWay}"/>
+            </GroupBox.Header>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableDenoise}">
+                <ComboBox Width="120" Height="22" ItemsSource="{Binding DenoiseList}"
+                          SelectedIndex="{Binding DenoiseAlgorithm, Mode=TwoWay}"/>
+                <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding DenoiseValueLabel}"
+                           Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
+                <TextBox Width="70" Height="22" Text="{Binding DenoiseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
+            </StackPanel>
+        </GroupBox>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
+            <GroupBox.Header>
+                <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
+                          Content="リサイズ" IsChecked="{Binding EnableResize, Mode=TwoWay}"/>
+            </GroupBox.Header>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableResize}">
+                <TextBlock Margin="2" VerticalAlignment="Center" Text="横"/>
+                <TextBox Width="70" Text="{Binding ResizeWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                <TextBlock Margin="6,2,2,2" VerticalAlignment="Center" Text="x 高さ"/>
+                <TextBox Width="70" Text="{Binding ResizeHeight, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+        </GroupBox>
+        <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
+            <GroupBox.Header>
+                <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
+                          Content="エッジ強調" IsChecked="{Binding EnableEdgeEnhance, Mode=TwoWay}"/>
+            </GroupBox.Header>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableEdgeEnhance}">
+                <ComboBox Width="120" Height="22" ItemsSource="{Binding EdgeList}"
+                          SelectedIndex="{Binding EdgeAlgorithm, Mode=TwoWay}"/>
+                <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding EdgeValueLabel}"/>
+                <TextBox Width="70" Height="22" Text="{Binding EdgeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+        </GroupBox>
+        <CheckBox Margin="8,4" Content="バンディング低減" IsChecked="{Binding EnableDeband, Mode=TwoWay}"/>
+    </StackPanel>
+</UserControl>
