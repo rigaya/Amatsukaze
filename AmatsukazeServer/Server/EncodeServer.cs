@@ -2753,6 +2753,17 @@ namespace Amatsukaze.Server
                     {
                         Util.AddLog("警告: エンコーダフィルタのオプションが空です（フィルタなしと同じ動作になります）", null);
                     }
+                    // 本エンコーダが分割並列を自前で行うエンコーダ(QSVEnc/NVEnc/VCEEnc)の場合、
+                    // 別プロセスのフィルタがフレーム数を変更するとチャンクの開始フレーム位置がずれるため併用できない
+                    if (filterEncoderType.Value != profile.EncoderType
+                        && profile.EncoderParallel > 1 && !profile.TwoPass
+                        && (profile.EncoderType == EncoderType.QSVEnc
+                            || profile.EncoderType == EncoderType.NVEnc
+                            || profile.EncoderType == EncoderType.VCEEnc))
+                    {
+                        throw new ArgumentException(profile.EncoderType +
+                            "では、本エンコーダと異なるエンコーダフィルタとエンコード分割並列を併用できません");
+                    }
                 }
 
                 if (profile.OutputFormat == FormatType.MP4)
