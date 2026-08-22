@@ -13,6 +13,9 @@
 #include <mutex>
 #include <condition_variable>
 #include <chrono>
+#include <iomanip>
+#include <limits>
+#include <sstream>
 #include "rgy_pipe.h"
 #include "StringUtils.h"
 #include <cmath>
@@ -84,6 +87,79 @@ tstring createChunkTimecodeFile(const tstring& basePath, int chunkIndex, int sta
         file.write(MemoryChunk((uint8_t*)line.data(), (int)line.size()));
     }
     return chunkPath;
+}
+
+std::vector<double> readEncoderFilterTimecode(const tstring& path) {
+    static const int64_t MAX_TIMECODE_FILE_SIZE = 16 * 1024 * 1024;
+    std::string text;
+    {
+        File input(path, _T("rb"));
+        const int64_t fileSize = input.size();
+        if (fileSize <= 0 || fileSize > MAX_TIMECODE_FILE_SIZE) {
+            THROW(FormatException, "エンコーダフィルタのチャンクタイムコードが空または大きすぎます");
+        }
+        text.resize((size_t)fileSize);
+        if (input.read(MemoryChunk((uint8_t*)text.data(), (size_t)fileSize)) != (size_t)fileSize) {
+            THROW(RuntimeException, "エンコーダフィルタのチャンクタイムコードを読み込めません");
+        }
+    }
+
+    std::vector<double> timestamps;
+    size_t begin = 0;
+    int lineNumber = 0;
+    while (begin < text.size()) {
+        const size_t end = text.find('\n', begin);
+        const std::string line = text.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+        begin = (end == std::string::npos) ? text.size() : end + 1;
+        lineNumber++;
+        const size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') {
+            continue;
+        }
+        try {
+            size_t parsed = 0;
+            const double timestamp = std::stod(line.substr(first), &parsed);
+            if (!std::isfinite(timestamp)
+                || line.find_first_not_of(" \t\r", first + parsed) != std::string::npos) {
+                THROW(FormatException, "エンコーダフィルタのチャンクタイムコード形式が不正です");
+            }
+            timestamps.push_back(timestamp);
+        } catch (const Exception&) {
+            throw;
+        } catch (...) {
+            THROWF(FormatException, "エンコーダフィルタのチャンクタイムコード形式が不正です (%d行目)", lineNumber);
+        }
+    }
+    if (timestamps.empty()) {
+        THROW(FormatException, "エンコーダフィルタのチャンクタイムコードにフレーム情報がありません");
+    }
+    return timestamps;
+}
+
+void concatenateEncoderFilterTimecodes(
+    const tstring& finalPath,
+    const std::vector<tstring>& chunkPaths,
+    const std::vector<int>& startFrames,
+    const VideoInfo& vi) {
+    if (chunkPaths.size() != startFrames.size() || vi.fps_numerator <= 0) {
+        THROW(RuntimeException, "エンコーダフィルタのチャンクタイムコードを連結できません");
+    }
+
+    File output(finalPath, _T("wb"));
+    const char header[] = "# timecode format v2\n";
+    output.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
+    for (size_t p = 0; p < chunkPaths.size(); p++) {
+        const auto timestamps = readEncoderFilterTimecode(chunkPaths[p]);
+        const double base = timestamps.front();
+        const double chunkStart = startFrames[p] * 1000.0 * vi.fps_denominator / vi.fps_numerator;
+        for (const auto timestamp : timestamps) {
+            std::ostringstream line;
+            line << std::setprecision(std::numeric_limits<double>::max_digits10)
+                << timestamp - base + chunkStart << '\n';
+            const std::string text = line.str();
+            output.write(MemoryChunk((uint8_t*)text.data(), text.size()));
+        }
+    }
 }
 
 void concatenateChunkOutputs(const tstring& finalPath, const std::vector<tstring>& chunkPaths) {
@@ -321,6 +397,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         int endFrame = 0;
         tstring args;
         tstring filterArgs;
+        tstring filterTimecodePath;
         tstring outputPath;
     };
     std::vector<ChunkTask> chunks(mp);
@@ -337,6 +414,12 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     const tstring encoderFilterTimecodePath = feInfo.afsTimecode
         ? setting_.getEncoderFilterTimecodePath(key)
         : tstring();
+    std::vector<tstring> chunkFilterTimecodePaths;
+    std::vector<int> chunkStartFrames;
+    if (feInfo.afsTimecode) {
+        chunkFilterTimecodePaths.reserve(mp);
+        chunkStartFrames.reserve(mp);
+    }
 
     for (int p = 0; p < mp; p++) {
         auto& chunk = chunks[p];
@@ -350,12 +433,18 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         }
         chunk.outputPath = appendChunkSuffix(baseOutputPath, passIndex * mp + p);
         ctx.registerTmpFile(chunk.outputPath);
+        if (feInfo.afsTimecode) {
+            chunk.filterTimecodePath = appendChunkSuffix(encoderFilterTimecodePath, passIndex * mp + p);
+            ctx.registerTmpFile(chunk.filterTimecodePath);
+            chunkFilterTimecodePaths.push_back(chunk.filterTimecodePath);
+            chunkStartFrames.push_back(chunk.startFrame);
+        }
         chunk.args = argGen.GenEncoderOptions(
             chunkFrames,
             encoderInputFormat, std::move(chunkZones), vfrBitrateScale,
             chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath);
         chunk.filterArgs = setting_.isEncoderFilterSeparate()
-            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath)
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, chunk.filterTimecodePath)
             : tstring();
         chunkOutputs.push_back(chunk.outputPath);
     }
@@ -589,6 +678,10 @@ void AMTFilterVideoEncoder::encodeSWParallel(
 
         if (error) {
             THROW(RuntimeException, "エンコード中に不明なエラーが発生");
+        }
+
+        if (feInfo.afsTimecode) {
+            concatenateEncoderFilterTimecodes(encoderFilterTimecodePath, chunkFilterTimecodePaths, chunkStartFrames, vi_);
         }
 
         // エンコード全体の経過時間を計測
