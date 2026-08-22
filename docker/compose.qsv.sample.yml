@@ -1,0 +1,5 @@
+services:
+    amatsukaze:
+        # QSVEncCを使うためのIntel GPUデバイス公開
+        devices:
+          - /dev/dri:/dev/dri

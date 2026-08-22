@@ -13,9 +13,6 @@
 #include <mutex>
 #include <condition_variable>
 #include <chrono>
-#include <iomanip>
-#include <limits>
-#include <sstream>
 #include "rgy_pipe.h"
 #include "StringUtils.h"
 #include <cmath>
@@ -153,11 +150,9 @@ void concatenateEncoderFilterTimecodes(
         const double base = timestamps.front();
         const double chunkStart = startFrames[p] * 1000.0 * vi.fps_denominator / vi.fps_numerator;
         for (const auto timestamp : timestamps) {
-            std::ostringstream line;
-            line << std::setprecision(std::numeric_limits<double>::max_digits10)
-                << timestamp - base + chunkStart << '\n';
-            const std::string text = line.str();
-            output.write(MemoryChunk((uint8_t*)text.data(), text.size()));
+            std::string line = std::to_string(timestamp - base + chunkStart);
+            line.push_back('\n');
+            output.write(MemoryChunk((uint8_t*)line.data(), line.size()));
         }
     }
 }
