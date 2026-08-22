@@ -320,11 +320,23 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         int startFrame = 0;
         int endFrame = 0;
         tstring args;
+        tstring filterArgs;
         tstring outputPath;
     };
     std::vector<ChunkTask> chunks(mp);
     std::vector<tstring> chunkOutputs;
     chunkOutputs.reserve(mp);
+
+    const auto feInfo = setting_.isEncoderFilterSeparate()
+        ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
+        : EncoderOptionInfo();
+    VideoFormat encoderInputFormat = outfmt_;
+    if (setting_.isEncoderFilterSeparate() && feInfo.deint != ENCODER_DEINT_NONE) {
+        encoderInputFormat.progressive = true;
+    }
+    const tstring encoderFilterTimecodePath = feInfo.afsTimecode
+        ? setting_.getEncoderFilterTimecodePath(key)
+        : tstring();
 
     for (int p = 0; p < mp; p++) {
         auto& chunk = chunks[p];
@@ -340,8 +352,11 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         ctx.registerTmpFile(chunk.outputPath);
         chunk.args = argGen.GenEncoderOptions(
             chunkFrames,
-            outfmt_, std::move(chunkZones), vfrBitrateScale,
+            encoderInputFormat, std::move(chunkZones), vfrBitrateScale,
             chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath);
+        chunk.filterArgs = setting_.isEncoderFilterSeparate()
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath)
+            : tstring();
         chunkOutputs.push_back(chunk.outputPath);
     }
 
@@ -512,7 +527,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         try {
             for (int p = 0; p < mp; p++) {
                 chunkEncoders[p] = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(
-                    ctx, chunks[p].args, vi_, outfmt_, disablePowerThrottoling, true, logManager.makeCallback(p), setting_.getSARInContainerOnly()));
+                    ctx, chunks[p].args, vi_, outfmt_, disablePowerThrottoling, true, logManager.makeCallback(p), setting_.getSARInContainerOnly(), chunks[p].filterArgs));
                 chunkPumps.emplace_back(new ChunkPumpThread(chunkEncoders[p].get(), &anyError));
                 chunkPumps.back()->start();
             }
