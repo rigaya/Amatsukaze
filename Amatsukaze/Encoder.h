@@ -16,6 +16,8 @@
 
 class EncoderArgumentGenerator;
 
+bool isSoftwareSplitEncoder(ENUM_ENCODER encoder);
+
 class Y4MWriter {
     static const char* getPixelFormat(VideoInfo vi);
 public:

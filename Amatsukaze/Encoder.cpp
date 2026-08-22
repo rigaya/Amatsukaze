@@ -22,14 +22,14 @@
 #include "TranscodeManager.h"
 #include "rgy_filesystem.h"
 
+bool isSoftwareSplitEncoder(ENUM_ENCODER encoder) {
+    return encoder == ENCODER_X264 || encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1;
+}
+
 namespace {
 
 bool isNativeParallelEncoder(ENUM_ENCODER encoder) {
     return encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC || encoder == ENCODER_VCEENC;
-}
-
-bool isSoftwareSplitEncoder(ENUM_ENCODER encoder) {
-    return encoder == ENCODER_X264 || encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1;
 }
 
 // 実際の動画尺(秒)を取得する
@@ -407,6 +407,11 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     const auto feInfo = setting_.isEncoderFilterSeparate()
         ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
         : EncoderOptionInfo();
+    if (!timeCodes.empty() && setting_.isEncoderFilterSeparate()
+        && (feInfo.selectEvery > 1
+            || (feInfo.deint != ENCODER_DEINT_NONE && feInfo.deint != ENCODER_DEINT_30P))) {
+        THROW(ArgumentException, "AVS由来のVFRタイムコードと、フレーム数を変更するエンコーダフィルタは分割並列エンコードで併用できません");
+    }
     VideoFormat encoderInputFormat = outfmt_;
     if (setting_.isEncoderFilterSeparate() && feInfo.deint != ENCODER_DEINT_NONE) {
         encoderInputFormat.progressive = true;

@@ -1319,8 +1319,8 @@ void DoBadThing() {
     }
     const int cliParallel = setting.getEncoderParallel();
     const int encoderParallel = (cliParallel > 1) ? cliParallel : ((eoInfo.parallel > 1) ? eoInfo.parallel : 1);
-    if (setting.isEncoderFilterSeparate() && encoderParallel > 1) {
-        THROW(ArgumentException, "エンコーダフィルタを別プロセスで使用する場合、パイプが1本しかないため分割並列エンコードは使用できません");
+    if (setting.isEncoderFilterSeparate() && encoderParallel > 1 && !isSoftwareSplitEncoder(setting.getEncoder())) {
+        THROW(ArgumentException, "別プロセスのエンコーダフィルタとネイティブ分割並列エンコードは併用できません。フィルタがフレーム数を変更するとchunk-handlesの開始フレームが本エンコーダの出力フレーム位置と一致しないためです");
     }
     if (setting.isTwoPass() && encoderParallel > 1) {
         THROW(ArgumentException, "2passエンコード時は分割エンコードを使用できません (--enc-parallel / --parallel は無効です)");
