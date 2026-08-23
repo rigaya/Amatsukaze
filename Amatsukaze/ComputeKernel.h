@@ -8,8 +8,18 @@
 
 #pragma once
 
-#include <immintrin.h>
+#ifndef ENABLE_X86_SIMD
+#if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
+#define ENABLE_X86_SIMD 1
+#else
+#define ENABLE_X86_SIMD 0
+#endif
+#endif
+
 #include <cstdint>
+#if ENABLE_X86_SIMD
+#include <immintrin.h>
+#endif
 
 // CPU機能の確認
 bool IsAVXAvailable();
@@ -17,7 +27,9 @@ bool IsAVX2Available();
 bool IsAVX512BWAvailable();
 
 // 関数宣言
+#if ENABLE_X86_SIMD
 __m128 hsum5_256_ps(__m256 x);
+#endif
 float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w, float* pavg);
 float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg);
 void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);

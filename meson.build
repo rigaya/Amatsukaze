@@ -3,6 +3,8 @@ project('AmatsukazeCLI', ['c', 'cpp'],
   default_options : ['warning_level=1', 'cpp_std=c++17']
 )
 
+is_x86 = host_machine.cpu_family() == 'x86' or host_machine.cpu_family() == 'x86_64'
+
 # スクリプトディレクトリの設定
 scripts_dir = meson.current_source_dir() / 'scripts'
 
@@ -11,6 +13,7 @@ cpp_args = []
 if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
   cpp_args += ['-pthread', '-Wno-multichar', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unused-variable', '-Wno-unknown-pragmas', '-Wno-unused-but-set-variable']
 endif
+cpp_args += ['-DENABLE_X86_SIMD=' + (is_x86 ? '1' : '0')]
 
 # SIMD 拡張命令セット用のコンパイルフラグ
 sse2_args = cpp_args + ['-msse2']

@@ -45,39 +45,6 @@ if [ ! -d "${BUILD_DIR}/libjpeg-turbo-3.1.0" ]; then
   )
 fi
 
-# libvpl
-if [ ! -d "${BUILD_DIR}/libvpl-2.15.0" ]; then
-  echo "libvpl のビルドを行います。"
-  (
-    wget https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz -O libvpl.tar.gz \
-    && tar xf libvpl.tar.gz \
-    && rm libvpl.tar.gz \
-    && cd libvpl-2.15.0 \
-    && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${BASELIBS_DIR}" \
-    && cd _build && make -j"$(nproc)" \
-    && make install
-  )
-  # g++ リンクを要求するパッケージのために -lstdc++ を追記
-  if [ -f "${BASELIBS_DIR}/lib/pkgconfig/vpl.pc" ]; then
-    sed -i 's/-lvpl/-lvpl -lstdc++/g' "${BASELIBS_DIR}/lib/pkgconfig/vpl.pc"
-  fi
-fi
-
-# MediaSDK (dispatch)
-if [ ! -d "${BUILD_DIR}/MediaSDK-intel-mediasdk-22.5.4" ]; then
-  echo "Intel MediaSDK のビルドを行います。"
-  (
-    wget https://github.com/Intel-Media-SDK/MediaSDK/archive/refs/tags/intel-mediasdk-22.5.4.tar.gz -O intel-media-sdk.tar.gz \
-    && tar xf intel-media-sdk.tar.gz \
-    && rm intel-media-sdk.tar.gz \
-    && cd MediaSDK-intel-mediasdk-22.5.4/api/mfx_dispatch/linux \
-    && patch < "${SCRIPT_DIR}/mfx.diff" \
-    && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${BASELIBS_DIR}" \
-    && cd _build && make -j"$(nproc)" \
-    && make install
-  )
-fi
-
 # nv-codec-headers
 if [ ! -d "${BUILD_DIR}/nv-codec-headers-12.2.72.0" ]; then
   echo "nv-codec-headers のビルドを行います。"
@@ -101,17 +68,25 @@ else
   FNNK_PREFIX="${SRC_DIR}/build"
 fi
 
-if [ ! -d "${SRC_DIR}" ]; then
+if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
   echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
+  if [ ! -d "${SRC_DIR}" ]; then
+    (
+      git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git "${SRC_DIR}" \
+      && cd "${SRC_DIR}" \
+      && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
+      && patch -p1 < patch0.diff
+    )
+  fi
+  # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する
   (
-    git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git "${SRC_DIR}" \
-    && cd "${SRC_DIR}" \
-    && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
-    && patch -p1 < patch0.diff \
+    cd "${SRC_DIR}" \
+    && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
+    && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
     && CFLAGS="-w" PKG_CONFIG_PATH="${BASELIBS_DIR}/lib/pkgconfig" ./configure --prefix="${FNNK_PREFIX}" --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec --enable-libmfx \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
       --enable-gpl --enable-version3 \
-      --disable-autodetect --disable-doc --disable-network --disable-devices \
+      --disable-doc --disable-network --disable-devices \
     && make -j"$(nproc)" \
     && make install
   )
@@ -129,23 +104,25 @@ else
   FF612_PREFIX="${FF612_SRC}/build"
 fi
 
-if [ ! -d "${FF612_SRC}" ]; then
+if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
   echo "ffmpeg (BS4K向け) のビルドを行います。"
+  if [ ! -d "${FF612_SRC}" ]; then
+    (
+      mkdir -p "${FF612_SRC_PARENT}" \
+      && cd "${FF612_SRC_PARENT}" \
+      && wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
+      && tar -xf ffmpeg-6.1.2.tar.xz
+    )
+  fi
   (
-    mkdir -p "${FF612_SRC_PARENT}" \
-    && cd "${FF612_SRC_PARENT}" \
-    && wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
-    && tar -xf ffmpeg-6.1.2.tar.xz \
-    && cd ffmpeg-6.1.2 \
+    cd "${FF612_SRC}" \
     && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH="${BASELIBS_DIR}/lib/pkgconfig" ./configure --prefix="${FF612_PREFIX}" --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec --enable-libvpl \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
       --enable-gpl --enable-version3 \
-      --disable-autodetect --disable-doc --disable-network --disable-devices \
+      --disable-doc --disable-network --disable-devices \
     && make -j"$(nproc)" \
     && make install
   )
 fi
 
 echo "依存ビルドが完了しました。出力先: ${DEST_ROOT:-${BUILD_DIR}}"
-
-

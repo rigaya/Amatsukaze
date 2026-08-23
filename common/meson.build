@@ -36,25 +36,26 @@ common_lib = static_library('common',
   install : false,
 )
 
-# AVX2ソースのコンパイル
-common_avx2_lib = static_library('common_avx2',
-  common_avx2_sources,
-  include_directories : common_inc,
-  cpp_args : avx2_args,
-  pic : true,
-  install : false,
-)
-
-# AVX512ソースのコンパイル
-common_avx512_lib = static_library('common_avx512',
-  common_avx512_sources,
-  include_directories : common_inc,
-  cpp_args : avx512_args,
-  pic : true,
-  install : false,
-)
+common_simd_libs = []
+if is_x86
+  # x86では実行時判定用にAVX2/AVX512実装を別ライブラリで作る
+  common_simd_libs += static_library('common_avx2',
+    common_avx2_sources,
+    include_directories : common_inc,
+    cpp_args : avx2_args,
+    pic : true,
+    install : false,
+  )
+  common_simd_libs += static_library('common_avx512',
+    common_avx512_sources,
+    include_directories : common_inc,
+    cpp_args : avx512_args,
+    pic : true,
+    install : false,
+  )
+endif
 
 common_dep = declare_dependency(
-  link_with : [common_lib, common_avx2_lib, common_avx512_lib],
+  link_with : [common_lib] + common_simd_libs,
   include_directories : common_inc,
 )

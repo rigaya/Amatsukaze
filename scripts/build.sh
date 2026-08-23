@@ -100,38 +100,6 @@ fi
 
 echo "${BUILD_DIR} にインストールを行います。"
 
-# libvplのビルド
-if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "libvpl-2.15.0" ]; then
-    echo "libvpl のビルドを行います。"
-    (wget https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz -O libvpl.tar.gz \
-    && tar xf libvpl.tar.gz \
-    && rm libvpl.tar.gz \
-    && cd libvpl-2.15.0 \
-    && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
-    && cd _build && make -j$(nproc) \
-    && make install) || exit 1
-    sed -i 's/-lvpl/-lvpl -lstdc++/g' ${BUILD_DIR}/baselibs/lib/pkgconfig/vpl.pc
-fi
-if [ "${USE_PREBUILT_BASELIBS}" = "1" ]; then
-    echo "prebuilt baselibs を使用します。libvpl のビルドをスキップします。"
-fi
-
-# media-sdkのビルド
-if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "MediaSDK-intel-mediasdk-22.5.4" ]; then
-    echo "Intel MediaSDK のビルドを行います。"
-    (wget https://github.com/Intel-Media-SDK/MediaSDK/archive/refs/tags/intel-mediasdk-22.5.4.tar.gz -O intel-media-sdk.tar.gz \
-    && tar xf intel-media-sdk.tar.gz \
-    && rm intel-media-sdk.tar.gz \
-    && cd MediaSDK-intel-mediasdk-22.5.4/api/mfx_dispatch/linux \
-    && patch < ${SCRIPT_DIR}/mfx.diff \
-    && cmake -G "Unix Makefiles" -B _build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
-    && cd _build && make -j$(nproc) \
-    && make install) || exit 1
-fi
-if [ "${USE_PREBUILT_BASELIBS}" = "1" ]; then
-    echo "prebuilt baselibs を使用します。MediaSDK のビルドをスキップします。"
-fi
-
 if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
     if [ "${USE_PREBUILT_BASELIBS}" != "1" ]; then
         echo "nv-codec-headers のビルドを行います。"
@@ -172,16 +140,22 @@ if [ ! -d "build_ffnk" ]; then
     mkdir build_ffnk
 fi
 cd build_ffnk
-if [ ! -d "ffmpeg_nekopanda" ] && [ "${USE_PREBUILT_FFNK}" != "1" ]; then
+if [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FFNK}" != "1" ]; then
     echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
-    (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
-    && cd ffmpeg_nekopanda \
-    && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
-    && patch -p1 < patch0.diff \
+    if [ ! -d "ffmpeg_nekopanda" ]; then
+      (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
+      && cd ffmpeg_nekopanda \
+      && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
+      && patch -p1 < patch0.diff) || exit 1
+    fi
+    # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する
+    (cd ffmpeg_nekopanda \
+    && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
+    && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
     && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec --enable-libmfx \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
       --enable-gpl --enable-version3 \
-      --disable-autodetect --disable-doc --disable-network --disable-devices \
+      --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
     && make install) || exit 1
 fi
@@ -201,15 +175,17 @@ if [ ! -d "build_ff612" ]; then
     mkdir build_ff612
 fi
 cd build_ff612
-if [ ! -d "ffmpeg-6.1.2" ] && [ "${USE_PREBUILT_FF612}" != "1" ]; then
+if [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FF612}" != "1" ]; then
     echo "ffmpeg (BS4K向け) のビルドを行います。"
-  (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
-    && tar -xf ffmpeg-6.1.2.tar.xz \
-    && cd ffmpeg-6.1.2 \
+  if [ ! -d "ffmpeg-6.1.2" ]; then
+    (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
+      && tar -xf ffmpeg-6.1.2.tar.xz) || exit 1
+  fi
+  (cd ffmpeg-6.1.2 \
     && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec --enable-libvpl \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
       --enable-gpl --enable-version3 \
-      --disable-autodetect --disable-doc --disable-network --disable-devices \
+      --disable-doc --disable-network --disable-devices \
     && make -j$(nproc) \
     && make install) || exit 1
 fi
@@ -268,22 +244,38 @@ if [ ! -s "${DANMAKU2ASS_PATH}" ]; then
     chmod 755 "${DANMAKU2ASS_PATH}"
 fi
 
-# アーカイブ展開用 7-Zip CLI（Linux x64、静的リンク版）
+# アーカイブ展開用 7-Zip CLI（静的リンク版）
 SEVENZIP_VER="26.02"
 SEVENZIP_PKG="7z2602"
-SEVENZIP_ARCHIVE_SHA256="41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e"
-SEVENZIP_BINARY_SHA256="20df89e993594c1bb7686f125dabe1acc56c109fb1d9b40435ea5fcbc1ca3453"
+case "$(uname -m)" in
+    x86_64)
+        LINUX_ARCH="x64"
+        DOTNET_RID="linux-x64"
+        SEVENZIP_ARCHIVE_SHA256="41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e"
+        SEVENZIP_BINARY_SHA256="20df89e993594c1bb7686f125dabe1acc56c109fb1d9b40435ea5fcbc1ca3453"
+        ;;
+    aarch64|arm64)
+        LINUX_ARCH="arm64"
+        DOTNET_RID="linux-arm64"
+        SEVENZIP_ARCHIVE_SHA256="70ea6cc737ae1495ea2d7eb20ef3120fe579bd3f1a83a9d2362b62ec5bde2bba"
+        SEVENZIP_BINARY_SHA256="2f9b4ffcdc83eedb737a95bbdb04ab7f4805f8ad92aaef32ccc6b2bf32883209"
+        ;;
+    *)
+        echo "未対応のCPUアーキテクチャです: $(uname -m)"
+        exit 1
+        ;;
+esac
 SEVENZIP_LICENSE_SHA256="1790374e5352329cedb46ee3808930a88e9ca2f08b82b10fcf5cf605d2c301b1"
 SEVENZIP_DIR="${INSTALL_DIR}/exe_files/7z"
 SEVENZIP_PATH="${SEVENZIP_DIR}/7zzs"
 SEVENZIP_LICENSE_PATH="${SEVENZIP_DIR}/License.txt"
-SEVENZIP_ARCHIVE="${BUILD_DIR}/${SEVENZIP_PKG}-linux-x64.tar.xz.tmp"
+SEVENZIP_ARCHIVE="${BUILD_DIR}/${SEVENZIP_PKG}-linux-${LINUX_ARCH}.tar.xz.tmp"
 if ! printf '%s  %s\n' "${SEVENZIP_BINARY_SHA256}" "${SEVENZIP_PATH}" | sha256sum -c - >/dev/null 2>&1 \
     || ! printf '%s  %s\n' "${SEVENZIP_LICENSE_SHA256}" "${SEVENZIP_LICENSE_PATH}" | sha256sum -c - >/dev/null 2>&1; then
     echo "7-Zip CLI ${SEVENZIP_VER} をダウンロードします..."
     mkdir -p "${SEVENZIP_DIR}"
     rm -f "${SEVENZIP_ARCHIVE}"
-    wget -q "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz" \
+    wget -q "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-${LINUX_ARCH}.tar.xz" \
         -O "${SEVENZIP_ARCHIVE}" || { rm -f "${SEVENZIP_ARCHIVE}"; echo "7-Zip CLI のダウンロードに失敗しました"; exit 1; }
     if ! printf '%s  %s\n' "${SEVENZIP_ARCHIVE_SHA256}" "${SEVENZIP_ARCHIVE}" | sha256sum -c - >/dev/null 2>&1; then
         rm -f "${SEVENZIP_ARCHIVE}"
@@ -325,7 +317,7 @@ AmatsukazeAddTask/AmatsukazeAddTask.csproj
 ScriptCommand/ScriptCommand.csproj
 "
 for project in ${DOTNET_PUBLISH_PROJECTS}; do
-    if ! dotnet publish "${project}" -c "${DOTNET_PUBLISH_CONFIG}" -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
+    if ! dotnet publish "${project}" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
         echo ".NET アプリケーションの公開に失敗しました (${project})"
         exit 1
     fi
@@ -334,7 +326,7 @@ done
 # WebUI 静的ファイルの公開（AmatsukazeServer.csproj の AfterPublish を利用）
 WEBUI_PUBLISH_DIR="${BUILD_DIR}/webui_publish"
 echo "WebUI (static) を公開します..."
-if ! dotnet publish "AmatsukazeServer/AmatsukazeServer.csproj" -c "${DOTNET_PUBLISH_CONFIG}" -r linux-x64 --self-contained false -p:PublishSingleFile=false -o "${WEBUI_PUBLISH_DIR}"; then
+if ! dotnet publish "AmatsukazeServer/AmatsukazeServer.csproj" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained false -p:PublishSingleFile=false -o "${WEBUI_PUBLISH_DIR}"; then
     echo "WebUI の公開に失敗しました"
     exit 1
 fi

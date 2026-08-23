@@ -90,32 +90,31 @@ else
   avx512_cpp_args = amatsukaze_cpp_args + avx512_args
 endif
 
-# AVXファイルのターゲット
-avx_lib = static_library('avx_lib',
-  avx_sources,
-  include_directories : amatsukaze_include_dirs,
-  dependencies : amatsukaze_deps,
-  cpp_args : avx_cpp_args,
-  pic : true
-)
-
-# AVX2ファイルのターゲット
-avx2_lib = static_library('avx2_lib',
-  avx2_sources,
-  include_directories : amatsukaze_include_dirs,
-  dependencies : amatsukaze_deps,
-  cpp_args : avx2_cpp_args,
-  pic : true
-)
-
-# AVX512ファイルのターゲット
-avx512_lib = static_library('avx512_lib',
-  avx512_sources,
-  include_directories : amatsukaze_include_dirs,
-  dependencies : amatsukaze_deps,
-  cpp_args : avx512_cpp_args,
-  pic : true
-)
+amatsukaze_simd_libs = []
+if is_x86
+  # x86では実行時判定用にAVX/AVX2/AVX512実装を別ライブラリで作る
+  amatsukaze_simd_libs += static_library('avx_lib',
+    avx_sources,
+    include_directories : amatsukaze_include_dirs,
+    dependencies : amatsukaze_deps,
+    cpp_args : avx_cpp_args,
+    pic : true
+  )
+  amatsukaze_simd_libs += static_library('avx2_lib',
+    avx2_sources,
+    include_directories : amatsukaze_include_dirs,
+    dependencies : amatsukaze_deps,
+    cpp_args : avx2_cpp_args,
+    pic : true
+  )
+  amatsukaze_simd_libs += static_library('avx512_lib',
+    avx512_sources,
+    include_directories : amatsukaze_include_dirs,
+    dependencies : amatsukaze_deps,
+    cpp_args : avx512_cpp_args,
+    pic : true
+  )
+endif
 
 # AribString.cppは_UNICODEマクロ付きで別途ビルド
 aribstring_lib = static_library('aribstring',
@@ -133,7 +132,7 @@ amatsukaze_lib = shared_library('Amatsukaze',
   dependencies : amatsukaze_deps,
   cpp_args : amatsukaze_cpp_args,
   link_args : amatsukaze_link_args,
-  link_with : [avx_lib, avx2_lib, avx512_lib, aribstring_lib],
+  link_with : amatsukaze_simd_libs + [aribstring_lib],
   install : true,
 )
 

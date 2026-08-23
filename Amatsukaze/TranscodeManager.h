@@ -12,7 +12,6 @@
 #include <string>
 #include <memory>
 #include <limits>
-#include <smmintrin.h>
 
 #include "TsSplitter.h"
 #include "Encoder.h"
