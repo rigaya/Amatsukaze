@@ -124,6 +124,8 @@ private:
 
     bool logoOffInJL(const int videoFileIndex) const;
 
+    bool readSceneChangesFromFile(const tstring& path);
+
     void readSceneChanges(int videoFileIndex);
 
     void makeCMZones(int numFrames);

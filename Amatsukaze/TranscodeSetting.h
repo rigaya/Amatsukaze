@@ -556,6 +556,8 @@ public:
 
     tstring getTmpChapterExeOutPath(int vindex) const;
 
+    tstring getTmpChapterExeErrPath(int vindex) const;
+
     tstring getTmpTrimAVSPath(int vindex) const;
 
     tstring getTmpJlsPath(int vindex) const;

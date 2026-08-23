@@ -331,7 +331,9 @@ void CMAnalyze::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
     File* dst = isErr ? err : out;
     if (dst != nullptr) {
         dst->write(mc);
-    } else {
+    }
+    // stderrは解析用に保存する場合も従来どおり実行ログへ表示する
+    if (dst == nullptr || isErr) {
         fwrite(mc.data, mc.length, 1, SUBPROC_OUT);
         fflush(SUBPROC_OUT);
     }
@@ -716,9 +718,10 @@ tstring CMAnalyze::MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inp
 
 void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath) {
     File stdoutf(setting_.getTmpChapterExeOutPath(videoFileIndex), _T("wb"));
+    File stderrf(setting_.getTmpChapterExeErrPath(videoFileIndex), _T("wb"));
     auto args = MakeChapterExeArgs(videoFileIndex, inputFormat, avspath);
     ctx.infoF(_T("%s"), args);
-    MySubProcess process(args, &stdoutf);
+    MySubProcess process(args, &stdoutf, &stderrf);
     int exitCode = process.join();
     if (exitCode != 0) {
         THROWF(FormatException, "ChapterExeがエラーコード(%d)を返しました", exitCode);
@@ -803,18 +806,18 @@ void CMAnalyze::readDiv(int videoFileIndex, int numFrames) {
     divs.push_back(numFrames);
 }
 
-void CMAnalyze::readSceneChanges(int videoFileIndex) {
-    File file(setting_.getTmpChapterExeOutPath(videoFileIndex), _T("r"));
+bool CMAnalyze::readSceneChangesFromFile(const tstring& path) {
+    File file(path, _T("r"));
     std::string str;
 
     // ヘッダ部分をスキップ
-    while (1) {
-        if (!file.getline(str)) {
-            THROW(FormatException, "ChapterExe.exeの出力ファイルが読めません");
-        }
+    while (file.getline(str)) {
         if (starts_with(str, "----")) {
             break;
         }
+    }
+    if (!starts_with(str, "----")) {
+        return false;
     }
 
     std::regex re0("mute\\s*(\\d+):\\s*(\\d+)\\s*-\\s*(\\d+).*");
@@ -829,6 +832,18 @@ void CMAnalyze::readSceneChanges(int videoFileIndex) {
             sceneChanges.push_back(std::stoi(m[1].str()));
         }
     }
+    return true;
+}
+
+void CMAnalyze::readSceneChanges(int videoFileIndex) {
+    sceneChanges.clear();
+    if (readSceneChangesFromFile(setting_.getTmpChapterExeOutPath(videoFileIndex))) {
+        return;
+    }
+    if (readSceneChangesFromFile(setting_.getTmpChapterExeErrPath(videoFileIndex))) {
+        return;
+    }
+    THROW(FormatException, "ChapterExe.exeの標準出力・標準エラー出力から解析結果が読めません");
 }
 
 bool CMAnalyze::logoOffInJL(const int videoFileIndex) const {

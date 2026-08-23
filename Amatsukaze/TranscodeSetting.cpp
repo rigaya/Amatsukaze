@@ -1237,6 +1237,10 @@ tstring ConfigWrapper::getTmpChapterExeOutPath(int vindex) const {
     return regtmp(StringFormat(_T("%s/chapter_exe_o%d.txt"), tmpDir.path(), vindex));
 }
 
+tstring ConfigWrapper::getTmpChapterExeErrPath(int vindex) const {
+    return regtmp(StringFormat(_T("%s/chapter_exe_e%d.txt"), tmpDir.path(), vindex));
+}
+
 tstring ConfigWrapper::getTmpTrimAVSPath(int vindex) const {
     return regtmp(StringFormat(_T("%s/trim%d.avs"), tmpDir.path(), vindex));
 }
