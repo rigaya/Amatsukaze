@@ -1181,6 +1181,7 @@ namespace Amatsukaze.Models
             }
             set
             {
+                if (value < 0 || value >= DeinterlaceParamList.Length) return;
                 switch (Data.DeinterlaceAlgorithm)
                 {
                     case EncoderFilterDeinterlace.Afs:

@@ -931,6 +931,10 @@ namespace Amatsukaze.Server
         {
             return new EncoderFilterSetting()
             {
+                DeinterlaceAlgorithm = EncoderFilterDeinterlace.Afs,
+                KfmMode = EncoderFilterKfmMode.VFR,
+                DenoiseAlgorithm = EncoderFilterDenoise.PMD,
+                EdgeAlgorithm = EncoderFilterEdge.EdgeLevel,
                 KnnStrength = 0.08,
                 NlmeansSigma = 0.005,
                 PmdStrength = 100,
