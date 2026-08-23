@@ -29,6 +29,12 @@ BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset)
 // カラースペース3セット
 // FFmpegの列挙値を各エンコーダが受理する文字列へ変換する
 
+// HWエンコーダ(QSVEnc/NVEnc/VCEEnc)に指定するタイムベース
+// 24000/1001, 30000/1001, 60000/1001, 120000/1001, 25, 30 のいずれのフレーム間隔も
+// 整数tickで表現できるため、VFR時にタイムスタンプの丸め誤差が発生しない
+static const int HWENC_TIMEBASE_NUM = 1;
+static const int HWENC_TIMEBASE_DEN = 120000;
+
 static bool isHWEncoder(ENUM_ENCODER encoder) {
     return encoder == ENCODER_QSVENC || encoder == ENCODER_NVENC || encoder == ENCODER_VCEENC;
 }
@@ -206,6 +212,14 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
         break;
     }
 
+    // タイムベースを明示指定する
+    // 指定しない場合は入力フレームレートから自動決定されるが、
+    // 分母が半端な値になるとVFRのタイムスタンプに丸め誤差が乗るため固定する
+    // optionsより前に置いているので、ユーザが明示指定した場合はそちらが優先される
+    if (isHWEncoder(encoder)) {
+        sb.append(_T(" --timebase %d/%d"), HWENC_TIMEBASE_NUM, HWENC_TIMEBASE_DEN);
+    }
+
     if (encoder == ENCODER_SVTAV1) {
         sb.append(_T(" %s -b \"%s\" --progress 2"), options, outpath);
     } else {
@@ -263,6 +277,9 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
         // y4mのインタレースフラグが認識されないため明示する
         sb.append(_T(" --interlace tff"));
     }
+    // タイムベースを明示指定する (理由はmakeEncoderArgsのコメント参照)
+    // エンコーダフィルタは常にHWエンコーダなので無条件に付加する
+    sb.append(_T(" --timebase %d/%d"), HWENC_TIMEBASE_NUM, HWENC_TIMEBASE_DEN);
     if (!options.empty()) {
         sb.append(_T(" %s"), options);
     }
