@@ -475,6 +475,8 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     // エンコード結果のフレーム数が合わなくなる
     // フィルタの内容次第では変わらないが、内容に依存した判定は取りこぼすと不整合に気づけないため、
     // エンコーダフィルタ使用時は一律で併用不可とする
+    // なお、GUI/WebUIではAVSフィルタとエンコーダフィルタは排他選択のため通常この条件には該当しない
+    // (CLIから両方を指定した場合に備えた防御)
     if (!timeCodes.empty() && setting_.isEncoderFilterSeparate()) {
         THROW(ArgumentException, "AVS由来のVFRタイムコードとエンコーダフィルタは分割並列エンコードで併用できません");
     }
