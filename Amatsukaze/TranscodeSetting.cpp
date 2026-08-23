@@ -283,7 +283,12 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     if (!options.empty()) {
         sb.append(_T(" %s"), options);
     }
-    sb.append(_T(" -c raw -f yuv4mpegpipe -o -"));
+    // -c raw のみでy4m出力となる
+    // -f yuv4mpegpipe を指定するとavformat経由の出力に切り替わってしまい、
+    // --y4m-timestamp によるタイムスタンプ付加が効かなくなるため指定しない
+    // --y4m-timestamp: FRAME行に表示時刻(Xts=秒)を付加する
+    // エンコーダフィルタがVFR出力する場合に、本エンコーダ側へフレームの表示時刻を伝えるために必要
+    sb.append(_T(" -c raw --y4m-timestamp -o -"));
     if (!timecodepath.empty()) {
         sb.append(_T(" --timecode \"%s\""), timecodepath);
     }
