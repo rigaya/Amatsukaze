@@ -1911,7 +1911,11 @@ void DoBadThing() {
                 const bool filterChangesFrameCount = setting.isEncoderFilterSeparate()
                     && (feInfo.selectEvery > 1
                         || (feInfo.deint != ENCODER_DEINT_NONE && feInfo.deint != ENCODER_DEINT_30P));
-                useCMChunkSplit = !setting.isZoneAvailable() || filterChangesFrameCount;
+                // AVS由来のVFRタイムコードとフレーム数を変更するエンコーダフィルタの併用は
+                // 分割エンコード自体ができない(encodeSWParallel()でTHROWする)ため、チャンク分割は使わない
+                if (!(timeCodes.size() > 0 && filterChangesFrameCount)) {
+                    useCMChunkSplit = !setting.isZoneAvailable() || filterChangesFrameCount;
+                }
             }
             if (useCMChunkSplit) {
                 ctx.info(_T("CM境界でチャンク分割してCMビットレート調整を行います"));
