@@ -97,9 +97,9 @@ std::vector<FrameChunk> createCMAwareFrameChunks(
         const int intervalStart = boundaries[intervalIndex];
         const int intervalEnd = boundaries[intervalIndex + 1];
         const int intervalLength = intervalEnd - intervalStart;
-        const double midpoint = intervalStart + intervalLength / 2.0;
+        // 境界はcmzonesの端点から作っているので、区間の先頭がCM区間に入っていれば区間全体がCM
         const bool isCM = std::any_of(cmzones.begin(), cmzones.end(), [&](const EncoderZone& zone) {
-            return zone.startFrame <= midpoint && midpoint < zone.endFrame;
+            return zone.startFrame <= intervalStart && intervalStart < zone.endFrame;
         });
         const int splitCount = std::max(1, (int)std::llround(intervalLength / idealChunkLength));
         for (int i = 0; i < splitCount; i++) {
