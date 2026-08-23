@@ -1901,19 +1901,16 @@ void DoBadThing() {
             // CMビットレート調整を、CM境界でチャンク分割することで行うか
             // ゾーン指定が使えない/使ってもフレーム番号がずれる場合に、
             // CM境界でチャンクを分けて、チャンクごとにビットレート/品質を指定する
-            const auto feInfoForCM = setting.isEncoderFilterSeparate()
-                ? ParseEncoderOption(setting.getEncoderFilter(), setting.getEncoderFilterOptions())
-                : EncoderOptionInfo();
-            // エンコーダフィルタでフレーム数が変わると、ゾーンのフレーム番号がずれる
-            const bool filterChangesFrameCount = setting.isEncoderFilterSeparate()
-                && (feInfoForCM.selectEvery > 1
-                    || (feInfoForCM.deint != ENCODER_DEINT_NONE && feInfoForCM.deint != ENCODER_DEINT_30P));
-            // ゾーンでのCM調整が使えない条件 (SVT-AV1はそもそもゾーン指定がない)
-            const bool cmZoneUnusable = !setting.isZoneAvailable() || filterChangesFrameCount;
+            // ゾーンでのCM調整が使えない条件
+            //  - SVT-AV1: そもそもゾーン指定がない
+            //  - エンコーダフィルタ使用時: フィルタでフレーム数が変わるとゾーンのフレーム番号がずれる
+            //    フィルタの内容次第では変わらないが、内容に依存した判定は取りこぼすと
+            //    ずれに気づけないため、エンコーダフィルタ使用時は常にチャンク分割で対応する
+            const bool cmZoneUnusable = !setting.isZoneAvailable() || setting.isEncoderFilterSeparate();
             // 分割エンコードが可能な条件
-            // 2pass、およびAVS由来VFRとフレーム数変更フィルタの併用では分割エンコードができない
+            // 2pass、およびAVS由来VFRとエンコーダフィルタの併用では分割エンコードができない
             const bool canSplitEncode = isSoftwareSplitEncoder(setting.getEncoder())
-                && !setting.isTwoPass() && !(timeCodes.size() > 0 && filterChangesFrameCount);
+                && !setting.isTwoPass() && !(timeCodes.size() > 0 && setting.isEncoderFilterSeparate());
             // CM分離時はファイル単位でCM調整できるため、CMを残す場合のみ対象
             const bool useCMChunkSplit = setting.isBitrateCMEnabled() && key.cm == CMTYPE_BOTH
                 && !encoderZones.empty() && cmZoneUnusable && canSplitEncode;

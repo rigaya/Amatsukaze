@@ -471,10 +471,12 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     const auto feInfo = setting_.isEncoderFilterSeparate()
         ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
         : EncoderOptionInfo();
-    if (!timeCodes.empty() && setting_.isEncoderFilterSeparate()
-        && (feInfo.selectEvery > 1
-            || (feInfo.deint != ENCODER_DEINT_NONE && feInfo.deint != ENCODER_DEINT_30P))) {
-        THROW(ArgumentException, "AVS由来のVFRタイムコードと、フレーム数を変更するエンコーダフィルタは分割並列エンコードで併用できません");
+    // エンコーダフィルタでフレーム数が変わると、チャンクごとに切り出したタイムコードと
+    // エンコード結果のフレーム数が合わなくなる
+    // フィルタの内容次第では変わらないが、内容に依存した判定は取りこぼすと不整合に気づけないため、
+    // エンコーダフィルタ使用時は一律で併用不可とする
+    if (!timeCodes.empty() && setting_.isEncoderFilterSeparate()) {
+        THROW(ArgumentException, "AVS由来のVFRタイムコードとエンコーダフィルタは分割並列エンコードで併用できません");
     }
     VideoFormat encoderInputFormat = outfmt_;
     if (setting_.isEncoderFilterSeparate() && feInfo.deint != ENCODER_DEINT_NONE) {
