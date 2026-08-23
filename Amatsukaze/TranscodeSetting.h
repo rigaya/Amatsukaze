@@ -643,7 +643,7 @@ public:
         int numFrames,
         VIDEO_STREAM_FORMAT srcFormat, double srcBitrate, bool pulldown,
         int pass, const std::vector<BitrateZone>& zones, const tstring& optionFilePath, double vfrBitrateScale,
-        EncodeFileKey key, const EncoderOptionInfo& eoInfo) const;
+        EncodeFileKey key, const EncoderOptionInfo& eoInfo, bool chunkIsCM = false) const;
 
     void dump() const;
 

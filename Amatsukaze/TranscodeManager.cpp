@@ -1174,7 +1174,8 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
     int vfrTimingFps,
     EncodeFileKey key, int pass, int serviceID,
     const EncoderOptionInfo& eoInfo,
-    const tstring& outPathOverride) {
+    const tstring& outPathOverride,
+    bool chunkIsCM) {
     VIDEO_STREAM_FORMAT srcFormat = reformInfo_.getVideoStreamFormat();
     double srcBitrate = getSourceBitrate(key.video);
     const tstring outPath = (outPathOverride.size() > 0)
@@ -1184,8 +1185,8 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
         setting_.getEncoder(),
         setting_.getEncoderPath(),
         replaceOptions(setting_.getOptions(
-            numFrames,
-            srcFormat, srcBitrate, false, pass, zones, setting_.getEncVideoOptionFilePath(key), vfrBitrateScale, key, eoInfo),
+            numFrames, srcFormat, srcBitrate, false, pass, zones,
+            setting_.getEncVideoOptionFilePath(key), vfrBitrateScale, key, eoInfo, chunkIsCM),
             outfmt, setting_, key, serviceID),
         outfmt,
         timecodepath,
@@ -1897,6 +1898,8 @@ void DoBadThing() {
             }
 
             auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, eoInfo, outvi);
+            // 手順21でCM境界チャンク分割の適用条件判定に置き換える。
+            const bool useCMChunkSplit = false;
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
             const tstring baseTimecodePath = fileOut.timecode;
             const tstring baseOutputPath = setting.getEncVideoFilePath(key);
@@ -1912,7 +1915,7 @@ void DoBadThing() {
             };
 
             encoder.encode(filterClip, outfmt,
-                timeCodes, *argGen, passList, bitrateZones, vfrBitrateScale,
+                timeCodes, *argGen, passList, bitrateZones, encoderZones, useCMChunkSplit, vfrBitrateScale,
                 baseTimecodePath, fileOut.vfrTimingFps, baseOutputPath,
                 key, serviceId, eoInfo, encoderParallel, disablePowerThrottoling,
                 env, filterFactory, setting.getEncoder());

@@ -55,6 +55,7 @@ tstring appendChunkSuffix(const tstring& path, int chunkIndex) {
 struct FrameChunk {
     int startFrame;
     int endFrame;
+    bool isCM = false;
 };
 
 std::vector<FrameChunk> createEqualFrameChunks(int numFrames, int chunkCount) {
@@ -65,6 +66,49 @@ std::vector<FrameChunk> createEqualFrameChunks(int numFrames, int chunkCount) {
             numFrames * i / chunkCount,
             numFrames * (i + 1) / chunkCount
         });
+    }
+    return chunks;
+}
+
+std::vector<FrameChunk> createCMAwareFrameChunks(
+    int numFrames,
+    int chunkCount,
+    const std::vector<EncoderZone>& cmzones) {
+    if (cmzones.empty() || chunkCount <= 1 || numFrames <= 0) {
+        return createEqualFrameChunks(numFrames, chunkCount);
+    }
+
+    std::vector<int> boundaries = { 0, numFrames };
+    boundaries.reserve(2 + cmzones.size() * 2);
+    for (const auto& zone : cmzones) {
+        if (0 < zone.startFrame && zone.startFrame < numFrames) {
+            boundaries.push_back(zone.startFrame);
+        }
+        if (0 < zone.endFrame && zone.endFrame < numFrames) {
+            boundaries.push_back(zone.endFrame);
+        }
+    }
+    std::sort(boundaries.begin(), boundaries.end());
+    boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
+
+    const double idealChunkLength = (double)numFrames / chunkCount;
+    std::vector<FrameChunk> chunks;
+    for (size_t intervalIndex = 0; intervalIndex + 1 < boundaries.size(); intervalIndex++) {
+        const int intervalStart = boundaries[intervalIndex];
+        const int intervalEnd = boundaries[intervalIndex + 1];
+        const int intervalLength = intervalEnd - intervalStart;
+        const double midpoint = intervalStart + intervalLength / 2.0;
+        const bool isCM = std::any_of(cmzones.begin(), cmzones.end(), [&](const EncoderZone& zone) {
+            return zone.startFrame <= midpoint && midpoint < zone.endFrame;
+        });
+        const int splitCount = std::max(1, (int)std::llround(intervalLength / idealChunkLength));
+        for (int i = 0; i < splitCount; i++) {
+            chunks.push_back({
+                intervalStart + intervalLength * i / splitCount,
+                intervalStart + intervalLength * (i + 1) / splitCount,
+                isCM
+            });
+        }
     }
     return chunks;
 }
@@ -389,6 +433,8 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     EncoderArgumentGenerator& argGen,
     const std::vector<double>& timeCodes,
     const std::vector<BitrateZone>& bitrateZones,
+    const std::vector<EncoderZone>& cmzones,
+    bool useCMChunkSplit,
     double vfrBitrateScale,
     const tstring& timecodePath,
     int vfrTimingFps,
@@ -405,7 +451,9 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         THROW(RuntimeException, "分割エンコードにはfilterSourceFactoryが必要です");
     }
     const int mp = actualParallel;
-    const auto chunkRanges = createEqualFrameChunks(vi_.num_frames, mp);
+    const auto chunkRanges = useCMChunkSplit
+        ? createCMAwareFrameChunks(vi_.num_frames, mp, cmzones)
+        : createEqualFrameChunks(vi_.num_frames, mp);
     const int numChunks = (int)chunkRanges.size();
     struct ChunkTask {
         int startFrame = 0;
@@ -414,6 +462,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         tstring filterArgs;
         tstring filterTimecodePath;
         tstring outputPath;
+        bool isCM = false;
     };
     std::vector<ChunkTask> chunks(numChunks);
     std::vector<tstring> chunkOutputs;
@@ -445,8 +494,11 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         auto& chunk = chunks[i];
         chunk.startFrame = chunkRanges[i].startFrame;
         chunk.endFrame = chunkRanges[i].endFrame;
+        chunk.isCM = chunkRanges[i].isCM;
         const int chunkFrames = chunk.endFrame - chunk.startFrame;
-        auto chunkZones = sliceBitrateZones(bitrateZones, chunk.startFrame, chunk.endFrame);
+        auto chunkZones = useCMChunkSplit
+            ? std::vector<BitrateZone>()
+            : sliceBitrateZones(bitrateZones, chunk.startFrame, chunk.endFrame);
         tstring chunkTimecodePath;
         if (timecodePath.size() > 0) {
             chunkTimecodePath = createChunkTimecodeFile(timecodePath, passIndex * numChunks + i, chunk.startFrame, chunk.endFrame, timeCodes, ctx);
@@ -462,7 +514,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         chunk.args = argGen.GenEncoderOptions(
             chunkFrames,
             encoderInputFormat, std::move(chunkZones), vfrBitrateScale,
-            chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath);
+            chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath, chunk.isCM);
         chunk.filterArgs = setting_.isEncoderFilterSeparate()
             ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, chunk.filterTimecodePath)
             : tstring();
@@ -854,7 +906,9 @@ void AMTFilterVideoEncoder::encodeSWParallel(
 void AMTFilterVideoEncoder::encode(
     PClip source, VideoFormat outfmt, const std::vector<double>& timeCodes,
     EncoderArgumentGenerator& argGen, const std::vector<int>& passList,
-    const std::vector<BitrateZone>& bitrateZones, double vfrBitrateScale,
+    const std::vector<BitrateZone>& bitrateZones,
+    const std::vector<EncoderZone>& cmzones, bool useCMChunkSplit,
+    double vfrBitrateScale,
     const tstring& timecodePath, int vfrTimingFps, const tstring& baseOutputPath,
     EncodeFileKey key, int serviceId, const EncoderOptionInfo& eoInfo,
     const int pipeParallel, const bool disablePowerThrottoling,
@@ -890,7 +944,7 @@ void AMTFilterVideoEncoder::encode(
                 THROW(RuntimeException, "分割エンコードは2passと同時に使用できません");
             }
             encodeSWParallel(
-                argGen, timeCodes, bitrateZones, vfrBitrateScale,
+                argGen, timeCodes, bitrateZones, cmzones, useCMChunkSplit, vfrBitrateScale,
                 timecodePath, vfrTimingFps, baseOutputPath,
                 key, serviceId, eoInfo, currentPass, i,
                 actualParallel, disablePowerThrottoling, filterSourceFactory);

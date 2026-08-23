@@ -1546,7 +1546,7 @@ tstring ConfigWrapper::getOptions(
     int numFrames,
     VIDEO_STREAM_FORMAT srcFormat, double srcBitrate, bool pulldown,
     int pass, const std::vector<BitrateZone>& zones, const tstring& optionFilePath, double vfrBitrateScale,
-    EncodeFileKey key, const EncoderOptionInfo& eoInfo) const {
+    EncodeFileKey key, const EncoderOptionInfo& eoInfo, bool chunkIsCM) const {
     StringBuilderT sb;
     const auto encoderOptions = getEncoderOptions();
     sb.append(_T("%s"), encoderOptions);
@@ -1557,7 +1557,7 @@ tstring ConfigWrapper::getOptions(
             // タイムコード非対応エンコーダにおけるビットレートのVFR調整
             targetBitrate *= vfrBitrateScale;
         }
-        if (key.cm == CMTYPE_CM && !isZoneAvailable()) {
+        if ((key.cm == CMTYPE_CM && !isZoneAvailable()) || chunkIsCM) {
             targetBitrate *= conf.bitrateCM;
         }
         double maxBitrate = std::max(targetBitrate * 2, srcBitrate);
@@ -1654,7 +1654,7 @@ tstring ConfigWrapper::getOptions(
     }
     // x264/x265は--zonesで品質オフセットは指定できない、またSVT-AV1にはそもそもzonesがない
     // しかし、CM分離時は--crfを直接上書きすることで対応可能
-    if (key.cm == CMTYPE_CM
+    if ((key.cm == CMTYPE_CM || chunkIsCM)
         && (conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X265 || conf.encoder == ENCODER_SVTAV1)) {
         //ctx.infoF("getOptions: ApplyZone CM eoInfo.rcMode %s, cmQualityOffset %f", eoInfo.rcMode, conf.cmQualityOffset);
         if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode && !rcMode->isBitrateMode && conf.cmQualityOffset != 0.0) {
