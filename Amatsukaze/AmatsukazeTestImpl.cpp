@@ -622,6 +622,49 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
     return 0;
 }
 
+/* static */ int test::VFRInputDetection(AMTContext& ctx, const ConfigWrapper& setting) {
+    auto makeIntervals = [](int normalCount, int alternateCount, double normal, double alternate,
+        double normalRepeat = 1.0, double alternateRepeat = 1.0) {
+        std::vector<VFRFrameInterval> intervals;
+        intervals.reserve(normalCount + alternateCount);
+        for (int i = 0; i < normalCount; i++) intervals.push_back({ normal, normalRepeat });
+        for (int i = 0; i < alternateCount; i++) intervals.push_back({ alternate, alternateRepeat });
+        return intervals;
+        };
+
+    if (AnalyzeVFRFrameIntervals(makeIntervals(1000, 0, 3003.0, 0.0)).detected) {
+        THROW(TestException, "CFRをVFRと誤判定しました");
+    }
+    if (AnalyzeVFRFrameIntervals(makeIntervals(500, 500, 3000.0, 3003.0)).detected) {
+        THROW(TestException, "微小なPTS差をVFRと誤判定しました");
+    }
+    if (AnalyzeVFRFrameIntervals(makeIntervals(750, 250, 3003.0, 4504.5, 1.0, 1.5)).detected) {
+        THROW(TestException, "RFFをVFRと誤判定しました");
+    }
+    if (AnalyzeVFRFrameIntervals(makeIntervals(950, 50, 3003.0, 6006.0)).detected) {
+        THROW(TestException, "少数のdropをVFRと誤判定しました");
+    }
+    if (AnalyzeVFRFrameIntervals(makeIntervals(950, 50, 3003.0, 7507.5, 1.0, 1.5)).detected) {
+        THROW(TestException, "RFF直後の少数dropをVFRと誤判定しました");
+    }
+    if (!AnalyzeVFRFrameIntervals(makeIntervals(750, 250, 3003.0, 4500.0)).detected) {
+        THROW(TestException, "VFRを検出できませんでした");
+    }
+    if (!AnalyzeVFRFrameIntervals(makeIntervals(750, 250, 3003.0, 9009.0)).detected) {
+        THROW(TestException, "継続的なPTS間隔異常を検出できませんでした");
+    }
+    if (AnalyzeVFRFrameIntervals(makeIntervals(950, 50, 3003.0, 4500.0)).detected) {
+        THROW(TestException, "10%未満の副候補をVFRと判定しました");
+    }
+    auto mixedIntervals = makeIntervals(600, 200, 1501.5, 3753.75);
+    const auto fps120 = makeIntervals(0, 200, 0.0, 750.75);
+    mixedIntervals.insert(mixedIntervals.end(), fps120.begin(), fps120.end());
+    if (!AnalyzeVFRFrameIntervals(mixedIntervals).detected) {
+        THROW(TestException, "24/60/120fps混在をVFRとして検出できませんでした");
+    }
+    return 0;
+}
+
 /* static */ int test::PrintfBug(AMTContext& ctx, const ConfigWrapper& setting) {
     File txtf(setting.getSrcFilePath(), _T("rb"));
     std::vector<char> strv(txtf.size());

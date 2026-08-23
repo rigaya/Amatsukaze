@@ -787,6 +787,8 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
             test::BitrateZones(ctx, setting);
         else if (mode == _T("test_zone2"))
             test::BitrateZonesBug(ctx, setting);
+        else if (mode == _T("test_vfr_input"))
+            return test::VFRInputDetection(ctx, setting);
         else if (mode == _T("test_printf"))
             test::PrintfBug(ctx, setting);
         else if (mode == _T("test_resource"))

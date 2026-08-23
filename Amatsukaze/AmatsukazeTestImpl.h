@@ -63,6 +63,8 @@ int BitrateZones(AMTContext& ctx, const ConfigWrapper& setting);
 
 int BitrateZonesBug(AMTContext& ctx, const ConfigWrapper& setting);
 
+int VFRInputDetection(AMTContext& ctx, const ConfigWrapper& setting);
+
 int PrintfBug(AMTContext& ctx, const ConfigWrapper& setting);
 
 int ResourceTest(AMTContext& ctx, const ConfigWrapper& setting);

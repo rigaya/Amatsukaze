@@ -13,6 +13,107 @@
 #include "ProcessThread.h"
 #include "TranscodeSetting.h"
 
+namespace {
+
+struct FrameIntervalCluster {
+    double center;
+    int count;
+};
+
+std::vector<FrameIntervalCluster> clusterFrameIntervals(const std::vector<double>& intervals) {
+    std::vector<double> sorted;
+    sorted.reserve(intervals.size());
+    for (const auto interval : intervals) {
+        if (interval > 0.0 && std::isfinite(interval)) {
+            sorted.push_back(interval);
+        }
+    }
+    std::sort(sorted.begin(), sorted.end());
+
+    std::vector<FrameIntervalCluster> clusters;
+    for (const auto interval : sorted) {
+        if (clusters.empty()) {
+            clusters.push_back({ interval, 1 });
+            continue;
+        }
+
+        auto& cluster = clusters.back();
+        // 90kHzで3000と3003程度の差や、同程度の丸め誤差は同じ間隔として扱う。
+        const double tolerance = std::max(6.0, cluster.center * 0.005);
+        if (std::abs(interval - cluster.center) <= tolerance) {
+            cluster.center = (cluster.center * cluster.count + interval) / (cluster.count + 1);
+            ++cluster.count;
+        } else {
+            clusters.push_back({ interval, 1 });
+        }
+    }
+    return clusters;
+}
+
+const FrameIntervalCluster* findMainCluster(const std::vector<FrameIntervalCluster>& clusters) {
+    if (clusters.empty()) return nullptr;
+    return &*std::max_element(clusters.begin(), clusters.end(), [](const auto& a, const auto& b) {
+        return a.count < b.count;
+        });
+}
+
+double pictureRepeatFactor(PICTURE_TYPE pic) {
+    switch (pic) {
+    case PIC_TFF_RFF:
+    case PIC_BFF_RFF:
+        return 1.5;
+    case PIC_FRAME_DOUBLING:
+        return 2.0;
+    case PIC_FRAME_TRIPLING:
+        return 3.0;
+    default:
+        return 1.0;
+    }
+}
+
+} // namespace
+
+VFRDetectionResult AnalyzeVFRFrameIntervals(const std::vector<VFRFrameInterval>& intervals) {
+    VFRDetectionResult result = {};
+
+    std::vector<double> normalized;
+    normalized.reserve(intervals.size());
+    for (const auto& interval : intervals) {
+        if (interval.ptsInterval > 0.0 && std::isfinite(interval.ptsInterval)
+            && interval.repeatFactor > 0.0 && std::isfinite(interval.repeatFactor)) {
+            const double normalizedInterval = interval.ptsInterval / interval.repeatFactor;
+            normalized.push_back(normalizedInterval);
+        }
+    }
+
+    const auto clusters = clusterFrameIntervals(normalized);
+    const auto main = findMainCluster(clusters);
+    if (main == nullptr) return result;
+
+    const FrameIntervalCluster* representativeSecondary = nullptr;
+    for (const auto& cluster : clusters) {
+        if (&cluster == main) continue;
+        result.secondaryCount += cluster.count;
+        if (representativeSecondary == nullptr || cluster.count > representativeSecondary->count) {
+            representativeSecondary = &cluster;
+        }
+    }
+
+    result.mainInterval = main->center;
+    result.mainCount = main->count;
+    result.validCount = (int)normalized.size();
+    if (representativeSecondary != nullptr) {
+        result.secondaryInterval = representativeSecondary->center;
+    }
+
+    // PTS間隔だけではVFRと継続的なフレームdropを完全には区別できない。
+    // 短い入力と散発的なdropではエラーにせず、十分な標本数と副候補合計10%以上を要求する。
+    result.detected = result.validCount >= 100
+        && result.secondaryCount >= 10
+        && result.secondaryCount * 10 >= result.mainCount;
+    return result;
+}
+
 FileAudioFrameInfo::FileAudioFrameInfo()
     : AudioFrameInfo()
     , audioIdx(0)
@@ -416,18 +517,9 @@ void StreamReformInfo::reformMain(bool splitSub) {
     */
     ctx.info(_T("[ファイル分割/timestamp計算]"));
 
-    // VFR検出
+    // H.264/HEVCのVFR判定はビットストリーム内の宣言を信用せず、後で実PTSから行う。
+    // MPEG-2は従来どおりシーケンスヘッダとRFFを基準に扱う。
     isVFR_ = false;
-    for (int i = 0; i < int(videoFrameList_.size()); i++) {
-        if (videoFrameList_[i].format.fixedFrameRate == false) {
-            isVFR_ = true;
-            break;
-        }
-    }
-
-    if (isVFR_) {
-        THROW(FormatException, "このバージョンはVFRに対応していません");
-    }
 
     // 各コンポーネント開始PTSを映像フレーム基準のラップアラウンドしないPTSに変換
     //（これをやらないと開始フレーム同士が間にラップアラウンドを挟んでると比較できなくなる）
@@ -466,6 +558,38 @@ void StreamReformInfo::reformMain(bool splitSub) {
     std::sort(ordredVideoFrame_.begin(), ordredVideoFrame_.end(), [&](int a, int b) {
         return modifiedPTS_[a] < modifiedPTS_[b];
         });
+
+    // H.264/HEVCの表示順PTS間隔をRFF補正後に集計し、継続的な複数間隔をVFRと判定する。
+    std::vector<VFRFrameInterval> intervals;
+    auto checkIntervals = [&]() {
+        if (intervals.empty()) return;
+        const auto result = AnalyzeVFRFrameIntervals(intervals);
+        intervals.clear();
+        if (result.detected) {
+            isVFR_ = true;
+            THROWF(FormatException,
+                "VFR入力または継続的なPTS間隔異常を検出しました（RFF補正後フレーム間隔: 主候補 %.3fms %d件、副候補合計 %d件、代表 %.3fms）",
+                result.mainInterval * 1000.0 / MPEG_CLOCK_HZ, result.mainCount,
+                result.secondaryCount, result.secondaryInterval * 1000.0 / MPEG_CLOCK_HZ);
+        }
+        };
+    for (int i = 0; i + 1 < (int)ordredVideoFrame_.size(); i++) {
+        const int currentIndex = ordredVideoFrame_[i];
+        const int nextIndex = ordredVideoFrame_[i + 1];
+        const auto& current = videoFrameList_[currentIndex];
+        const auto& next = videoFrameList_[nextIndex];
+        const bool targetCodec = current.format.format == VS_H264 || current.format.format == VS_H265;
+        const bool sameSection = targetCodec
+            && current.format.format == next.format.format
+            && current.format.isBasicEquals(next.format);
+        if (!sameSection) {
+            checkIntervals();
+            continue;
+        }
+        const double ptsInterval = modifiedPTS_[nextIndex] - modifiedPTS_[currentIndex];
+        intervals.push_back({ ptsInterval, pictureRepeatFactor(current.pic) });
+    }
+    checkIntervals();
 
     // dataPTSを生成
     // 後ろから見てその時点で最も小さいPTSをdataPTSとする
