@@ -31,13 +31,23 @@ struct EncoderZone {
     int endFrame;
 };
 
+// BitrateZoneの表示時刻が未算出であることを示す値
+constexpr double BITRATE_ZONE_SEC_UNSET = -1.0;
+
 struct BitrateZone : EncoderZone {
     double bitrate;
     double qualityOffset;
+    // ゾーンの表示時刻(秒)
+    // 負値(BITRATE_ZONE_SEC_UNSET)は未算出を表し、その場合はフレーム番号指定にフォールバックする
+    double startSec;
+    double endSec;
 
     BitrateZone();
     BitrateZone(EncoderZone zone);
     BitrateZone(EncoderZone zone, double bitrate, double qualityOffset);
+
+    // 表示時刻が算出済みかどうか
+    bool hasTimeRange() const;
 };
 
 namespace av {
@@ -634,6 +644,9 @@ public:
     bool isZoneWithoutBitrateAvailable() const;
 
     bool isZoneWithQualityAvailable() const;
+
+    // ゾーンを時刻(秒)で指定するか
+    bool isZoneTimeBased() const;
 
     bool isEncoderSupportVFR() const;
 

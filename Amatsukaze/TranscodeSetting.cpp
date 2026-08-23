@@ -16,15 +16,25 @@
 BitrateZone::BitrateZone() :
     EncoderZone(),
     bitrate(0.0),
-    qualityOffset(0.0) {}
+    qualityOffset(0.0),
+    startSec(BITRATE_ZONE_SEC_UNSET),
+    endSec(BITRATE_ZONE_SEC_UNSET) {}
 BitrateZone::BitrateZone(EncoderZone zone) :
     EncoderZone(zone),
     bitrate(0.0),
-    qualityOffset(0.0) {}
+    qualityOffset(0.0),
+    startSec(BITRATE_ZONE_SEC_UNSET),
+    endSec(BITRATE_ZONE_SEC_UNSET) {}
 BitrateZone::BitrateZone(EncoderZone zone, double bitrate, double qualityOffset) :
     EncoderZone(zone),
     bitrate(bitrate),
-    qualityOffset(qualityOffset) {}
+    qualityOffset(qualityOffset),
+    startSec(BITRATE_ZONE_SEC_UNSET),
+    endSec(BITRATE_ZONE_SEC_UNSET) {}
+
+bool BitrateZone::hasTimeRange() const {
+    return startSec >= 0.0 && endSec >= 0.0;
+}
 
 // カラースペース3セット
 // FFmpegの列挙値を各エンコーダが受理する文字列へ変換する
@@ -1556,12 +1566,33 @@ bool ConfigWrapper::isZoneWithQualityAvailable() const {
     return conf.encoder == ENCODER_NVENC || conf.encoder == ENCODER_QSVENC;
 }
 
+bool ConfigWrapper::isZoneTimeBased() const {
+    // エンコーダフィルタが別プロセスの場合、本エンコーダの入力はフィルタ出力フレームとなるため、
+    // フィルタがフレーム数を変えるとゾーンのフレーム番号がずれる (VFRでは事前補正も不可能)
+    // QSVEnc/NVEncは--dynamic-rcの時刻指定に対応しており、
+    // フィルタ出力y4mのタイムスタンプ(--y4m-timestamp)で実時刻が伝わるため、時刻でゾーンを指定する
+    return isEncoderFilterSeparate() && isZoneWithQualityAvailable();
+}
+
 bool ConfigWrapper::isEncoderSupportVFR() const {
     return conf.encoder == ENCODER_X264;
 }
 
 bool ConfigWrapper::isBitrateCMEnabled() const {
     return conf.bitrateCM != 1.0 || conf.cmQualityOffset != 0.0;
+}
+
+// --dynamic-rcに渡す区間指定を生成する
+// フレーム番号指定は両端閉区間 [start, end] のため終端は-1する
+// 時刻指定は半開区間 [start, end) のため終端はそのまま渡す
+static std::string makeDynamicRcRange(const BitrateZone& zone, bool timeBased) {
+    char buf[128];
+    if (timeBased && zone.hasTimeRange()) {
+        snprintf(buf, sizeof(buf), "start-time=%f,end-time=%f", zone.startSec, zone.endSec);
+    } else {
+        snprintf(buf, sizeof(buf), "%d:%d", zone.startFrame, zone.endFrame - 1);
+    }
+    return std::string(buf);
 }
 
 tstring ConfigWrapper::getOptions(
@@ -1623,13 +1654,15 @@ tstring ConfigWrapper::getOptions(
         } else if (isZoneWithQualityAvailable() && optionFilePath.length() > 0) {
             //ctx.info("getOptions: ApplyZone QSVEnc/NVEnc");
             // QSVEnc/NVEnc
+            // 経路B(エンコーダフィルタが別プロセス)ではフレーム番号がずれるため時刻でゾーンを指定する
+            const bool zoneTimeBased = isZoneTimeBased();
             if (conf.autoBitrate) {
                 // --dynamic-rcが増えすぎた時に備え、ファイル渡しする
                 std::unique_ptr<FILE, std::function<void(FILE*)>> fp(_tfopen(optionFilePath.c_str(), _T("w")), [](FILE* f) { if (f) fclose(f); });
                 for (int i = 0; i < (int)zones.size(); i++) {
                     const auto& zone = zones[i];
-                    fprintf(fp.get(), " --dynamic-rc %d:%d,vbr=%d\n",
-                        zone.startFrame, zone.endFrame - 1, (int)std::round(targetBitrate * zone.bitrate));
+                    fprintf(fp.get(), " --dynamic-rc %s,vbr=%d\n",
+                        makeDynamicRcRange(zone, zoneTimeBased).c_str(), (int)std::round(targetBitrate * zone.bitrate));
                 }
                 sb.append(_T(" --option-file \"%s\""), optionFilePath);
             } else if (auto rcMode = getRCMode(conf.encoder, eoInfo.rcMode); rcMode) {
@@ -1641,8 +1674,8 @@ tstring ConfigWrapper::getOptions(
                 if (rcMode->isBitrateMode) {
                     for (int i = 0; i < (int)zones.size(); i++) {
                         const auto& zone = zones[i];
-                        fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
-                            zone.startFrame, zone.endFrame - 1, rcMode->name,
+                        fprintf(fp.get(), " --dynamic-rc %s,%s=%d\n",
+                            makeDynamicRcRange(zone, zoneTimeBased).c_str(), rcMode->name,
                             (int)std::round(eoInfo.rcModeValue[0] * zone.bitrate));
                         addOptFileCmd = true;
                     }
@@ -1652,18 +1685,18 @@ tstring ConfigWrapper::getOptions(
                         if (zone.qualityOffset == 0.0) continue;
                         addOptFileCmd = true;
                         if (std::string(rcMode->name) == "cqp") {
-                            fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d:%d:%d\n",
-                                zone.startFrame, zone.endFrame - 1, rcMode->name,
+                            fprintf(fp.get(), " --dynamic-rc %s,%s=%d:%d:%d\n",
+                                makeDynamicRcRange(zone, zoneTimeBased).c_str(), rcMode->name,
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcValueMin), rcValueMax),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[1] + zone.qualityOffset), rcValueMin), rcValueMax),
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[2] + zone.qualityOffset), rcValueMin), rcValueMax));
                         } else if (rcMode->isFloat) {
-                            fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%f\n",
-                                zone.startFrame, zone.endFrame - 1, rcMode->name,
+                            fprintf(fp.get(), " --dynamic-rc %s,%s=%f\n",
+                                makeDynamicRcRange(zone, zoneTimeBased).c_str(), rcMode->name,
                                 std::min(std::max(eoInfo.rcModeValue[0] + zone.qualityOffset, (double)rcValueMin), (double)rcValueMax));
                         } else {
-                            fprintf(fp.get(), " --dynamic-rc %d:%d,%s=%d\n",
-                                zone.startFrame, zone.endFrame - 1, rcMode->name,
+                            fprintf(fp.get(), " --dynamic-rc %s,%s=%d\n",
+                                makeDynamicRcRange(zone, zoneTimeBased).c_str(), rcMode->name,
                                 std::min(std::max((int)std::round(eoInfo.rcModeValue[0] + zone.qualityOffset), rcValueMin), rcValueMax));
                         }
                     }

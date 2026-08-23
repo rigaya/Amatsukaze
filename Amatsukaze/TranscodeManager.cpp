@@ -1217,6 +1217,21 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
     return ((double)info.first * 8 / 1000) / ((double)info.second / MPEG_CLOCK_HZ);
 }
 
+// 各ゾーンに、本エンコーダのタイムライン上の表示時刻を設定する
+// エンコーダフィルタが別プロセスの場合、フレーム番号ではずれるため時刻でゾーンを指定する
+// Amatsukazeはy4mをヘッダFPSのCFRとして書き出し(Y4MWriterはFRAME行に時刻を付加しない)、
+// エンコーダフィルタはその時刻軸のままXts=で本エンコーダへ伝えるため、フレーム番号/FPSでよい
+// (AVS由来のVFRタイムコードとエンコーダフィルタは併用不可のため、VFRを考慮する必要はない)
+static void FillBitrateZoneTimes(
+    std::vector<BitrateZone>& zones,
+    const VideoInfo& outvi) {
+    const double tick = (double)outvi.fps_denominator / outvi.fps_numerator;
+    for (auto& zone : zones) {
+        zone.startSec = zone.startFrame * tick;
+        zone.endSec = zone.endFrame * tick;
+    }
+}
+
 /* static */ std::vector<BitrateZone> MakeBitrateZones(
     const std::vector<double>& timeCodes,
     const std::vector<EncoderZone>& cmzones,
@@ -1254,12 +1269,15 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
                     bitrateZones.emplace_back(cmzones[i], setting.getBitrateCM(), setting.getCMQualityOffset());
                 }
             } else {
-                return MakeVFRBitrateZones(
+                bitrateZones = MakeVFRBitrateZones(
                     timeCodes, cmzones, setting.getBitrateCM(),
                     outvi.fps_numerator, outvi.fps_denominator,
                     setting.getX265TimeFactor(), 0.05); // 全体で5%までの差なら許容する
             }
         }
+    }
+    if (setting.isZoneTimeBased()) {
+        FillBitrateZoneTimes(bitrateZones, outvi);
     }
     return bitrateZones;
 }
@@ -1874,6 +1892,15 @@ void DoBadThing() {
 
             if (timeCodes.size() > 0) {
                 // フィルタによるVFRが有効
+                // AVS由来のVFRタイムコードはフレーム番号ベースのため、エンコーダフィルタで
+                // フレーム数が変わると本エンコーダの入力フレームと対応が取れなくなる
+                // フィルタの内容次第では変わらないが、内容に依存した判定は取りこぼすと
+                // 不整合に気づけないため、エンコーダフィルタ使用時は一律で併用不可とする
+                // なお、GUI/WebUIではAVSフィルタとエンコーダフィルタは排他選択のため通常該当しない
+                // (CLIから両方を指定した場合に備えた防御)
+                if (setting.isEncoderFilterSeparate()) {
+                    THROW(ArgumentException, "AVS由来のVFRタイムコードとエンコーダフィルタは併用できません");
+                }
                 if (eoInfo.afsTimecode) {
                     THROW(ArgumentException, "エンコーダとフィルタの両方でVFRタイムコードが出力されています。");
                 }
@@ -1906,11 +1933,12 @@ void DoBadThing() {
             //  - エンコーダフィルタ使用時: フィルタでフレーム数が変わるとゾーンのフレーム番号がずれる
             //    フィルタの内容次第では変わらないが、内容に依存した判定は取りこぼすと
             //    ずれに気づけないため、エンコーダフィルタ使用時は常にチャンク分割で対応する
-            const bool cmZoneUnusable = !setting.isZoneAvailable() || setting.isEncoderFilterSeparate();
+            //    ただしQSVEnc/NVEncは時刻指定ゾーン(isZoneTimeBased)でずれずに指定できるため対象外
+            const bool cmZoneUnusable = !setting.isZoneAvailable()
+                || (setting.isEncoderFilterSeparate() && !setting.isZoneTimeBased());
             // 分割エンコードが可能な条件
             // 2pass、およびAVS由来VFRとエンコーダフィルタの併用では分割エンコードができない
-            const bool canSplitEncode = isSoftwareSplitEncoder(setting.getEncoder())
-                && !setting.isTwoPass() && !(timeCodes.size() > 0 && setting.isEncoderFilterSeparate());
+            const bool canSplitEncode = isSoftwareSplitEncoder(setting.getEncoder()) && !setting.isTwoPass();
             // CM分離時はファイル単位でCM調整できるため、CMを残す場合のみ対象
             const bool useCMChunkSplit = setting.isBitrateCMEnabled() && key.cm == CMTYPE_BOTH
                 && !encoderZones.empty() && cmZoneUnusable && canSplitEncode;
