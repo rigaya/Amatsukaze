@@ -1899,24 +1899,24 @@ void DoBadThing() {
 
             auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, eoInfo, outvi);
             // CMビットレート調整を、CM境界でチャンク分割することで行うか
-            // x264/x265/SVT-AV1では、ゾーン指定が使えない(SVT-AV1)、または
-            // エンコーダフィルタでフレーム数が変わりゾーンのフレーム番号がずれるため、
+            // ゾーン指定が使えない/使ってもフレーム番号がずれる場合に、
             // CM境界でチャンクを分けて、チャンクごとにビットレート/品質を指定する
-            bool useCMChunkSplit = false;
-            if (setting.isBitrateCMEnabled() && isSoftwareSplitEncoder(setting.getEncoder())
-                && !encoderZones.empty() && !setting.isTwoPass()) {
-                const auto feInfo = setting.isEncoderFilterSeparate()
-                    ? ParseEncoderOption(setting.getEncoderFilter(), setting.getEncoderFilterOptions())
-                    : EncoderOptionInfo();
-                const bool filterChangesFrameCount = setting.isEncoderFilterSeparate()
-                    && (feInfo.selectEvery > 1
-                        || (feInfo.deint != ENCODER_DEINT_NONE && feInfo.deint != ENCODER_DEINT_30P));
-                // AVS由来のVFRタイムコードとフレーム数を変更するエンコーダフィルタの併用は
-                // 分割エンコード自体ができない(encodeSWParallel()でTHROWする)ため、チャンク分割は使わない
-                if (!(timeCodes.size() > 0 && filterChangesFrameCount)) {
-                    useCMChunkSplit = !setting.isZoneAvailable() || filterChangesFrameCount;
-                }
-            }
+            const auto feInfoForCM = setting.isEncoderFilterSeparate()
+                ? ParseEncoderOption(setting.getEncoderFilter(), setting.getEncoderFilterOptions())
+                : EncoderOptionInfo();
+            // エンコーダフィルタでフレーム数が変わると、ゾーンのフレーム番号がずれる
+            const bool filterChangesFrameCount = setting.isEncoderFilterSeparate()
+                && (feInfoForCM.selectEvery > 1
+                    || (feInfoForCM.deint != ENCODER_DEINT_NONE && feInfoForCM.deint != ENCODER_DEINT_30P));
+            // ゾーンでのCM調整が使えない条件 (SVT-AV1はそもそもゾーン指定がない)
+            const bool cmZoneUnusable = !setting.isZoneAvailable() || filterChangesFrameCount;
+            // 分割エンコードが可能な条件
+            // 2pass、およびAVS由来VFRとフレーム数変更フィルタの併用では分割エンコードができない
+            const bool canSplitEncode = isSoftwareSplitEncoder(setting.getEncoder())
+                && !setting.isTwoPass() && !(timeCodes.size() > 0 && filterChangesFrameCount);
+            // CM分離時はファイル単位でCM調整できるため、CMを残す場合のみ対象
+            const bool useCMChunkSplit = setting.isBitrateCMEnabled() && key.cm == CMTYPE_BOTH
+                && !encoderZones.empty() && cmZoneUnusable && canSplitEncode;
             if (useCMChunkSplit) {
                 ctx.info(_T("CM境界でチャンク分割してCMビットレート調整を行います"));
             }
