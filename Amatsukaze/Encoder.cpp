@@ -74,7 +74,7 @@ std::vector<FrameChunk> createCMAwareFrameChunks(
     int numFrames,
     int chunkCount,
     const std::vector<EncoderZone>& cmzones) {
-    if (cmzones.empty() || chunkCount <= 1 || numFrames <= 0) {
+    if (cmzones.empty() || numFrames <= 0) {
         return createEqualFrameChunks(numFrames, chunkCount);
     }
 
@@ -91,7 +91,7 @@ std::vector<FrameChunk> createCMAwareFrameChunks(
     std::sort(boundaries.begin(), boundaries.end());
     boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
 
-    const double idealChunkLength = (double)numFrames / chunkCount;
+    const double idealChunkLength = (double)numFrames / std::max(chunkCount, 1);
     std::vector<FrameChunk> chunks;
     for (size_t intervalIndex = 0; intervalIndex + 1 < boundaries.size(); intervalIndex++) {
         const int intervalStart = boundaries[intervalIndex];
@@ -925,7 +925,7 @@ void AMTFilterVideoEncoder::encode(
 
     const bool wantsParallel = pipeParallel > 1;
     const bool nativeParallel = wantsParallel && isNativeParallelEncoder(encoderType);
-    const bool softwareParallel = wantsParallel && !nativeParallel && isSoftwareSplitEncoder(encoderType);
+    const bool softwareParallel = (wantsParallel || useCMChunkSplit) && !nativeParallel && isSoftwareSplitEncoder(encoderType);
     const int actualParallel = (nativeParallel || softwareParallel) ? pipeParallel : 1;
     const auto feInfo = setting_.isEncoderFilterSeparate()
         ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())

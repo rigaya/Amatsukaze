@@ -1898,8 +1898,24 @@ void DoBadThing() {
             }
 
             auto bitrateZones = MakeBitrateZones(timeCodes, encoderZones, setting, eoInfo, outvi);
-            // 手順21でCM境界チャンク分割の適用条件判定に置き換える。
-            const bool useCMChunkSplit = false;
+            // CMビットレート調整を、CM境界でチャンク分割することで行うか
+            // x264/x265/SVT-AV1では、ゾーン指定が使えない(SVT-AV1)、または
+            // エンコーダフィルタでフレーム数が変わりゾーンのフレーム番号がずれるため、
+            // CM境界でチャンクを分けて、チャンクごとにビットレート/品質を指定する
+            bool useCMChunkSplit = false;
+            if (setting.isBitrateCMEnabled() && isSoftwareSplitEncoder(setting.getEncoder())
+                && !encoderZones.empty() && !setting.isTwoPass()) {
+                const auto feInfo = setting.isEncoderFilterSeparate()
+                    ? ParseEncoderOption(setting.getEncoderFilter(), setting.getEncoderFilterOptions())
+                    : EncoderOptionInfo();
+                const bool filterChangesFrameCount = setting.isEncoderFilterSeparate()
+                    && (feInfo.selectEvery > 1
+                        || (feInfo.deint != ENCODER_DEINT_NONE && feInfo.deint != ENCODER_DEINT_30P));
+                useCMChunkSplit = !setting.isZoneAvailable() || filterChangesFrameCount;
+            }
+            if (useCMChunkSplit) {
+                ctx.info(_T("CM境界でチャンク分割してCMビットレート調整を行います"));
+            }
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
             const tstring baseTimecodePath = fileOut.timecode;
             const tstring baseOutputPath = setting.getEncVideoFilePath(key);
