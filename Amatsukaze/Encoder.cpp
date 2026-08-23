@@ -8,6 +8,7 @@
 
 #include "Encoder.h"
 #include "EncoderOptionParser.h"
+#include <algorithm>
 #include <atomic>
 #include <thread>
 #include <mutex>
