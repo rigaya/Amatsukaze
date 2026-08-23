@@ -51,6 +51,23 @@ tstring appendChunkSuffix(const tstring& path, int chunkIndex) {
     return strsprintf(_T("%s.chunk%d%s"), PathRemoveExtensionS(path).c_str(), chunkIndex, rgy_get_extension(path).c_str());
 }
 
+struct FrameChunk {
+    int startFrame;
+    int endFrame;
+};
+
+std::vector<FrameChunk> createEqualFrameChunks(int numFrames, int chunkCount) {
+    std::vector<FrameChunk> chunks;
+    chunks.reserve(chunkCount);
+    for (int i = 0; i < chunkCount; i++) {
+        chunks.push_back({
+            numFrames * i / chunkCount,
+            numFrames * (i + 1) / chunkCount
+        });
+    }
+    return chunks;
+}
+
 std::vector<BitrateZone> sliceBitrateZones(const std::vector<BitrateZone>& zones, int chunkStart, int chunkEnd) {
     std::vector<BitrateZone> result;
     for (const auto& zone : zones) {
@@ -387,6 +404,8 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         THROW(RuntimeException, "分割エンコードにはfilterSourceFactoryが必要です");
     }
     const int mp = actualParallel;
+    const auto chunkRanges = createEqualFrameChunks(vi_.num_frames, mp);
+    const int numChunks = (int)chunkRanges.size();
     struct ChunkTask {
         int startFrame = 0;
         int endFrame = 0;
@@ -395,9 +414,9 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         tstring filterTimecodePath;
         tstring outputPath;
     };
-    std::vector<ChunkTask> chunks(mp);
+    std::vector<ChunkTask> chunks(numChunks);
     std::vector<tstring> chunkOutputs;
-    chunkOutputs.reserve(mp);
+    chunkOutputs.reserve(numChunks);
 
     const auto feInfo = setting_.isEncoderFilterSeparate()
         ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
@@ -417,24 +436,24 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     std::vector<tstring> chunkFilterTimecodePaths;
     std::vector<int> chunkStartFrames;
     if (feInfo.afsTimecode) {
-        chunkFilterTimecodePaths.reserve(mp);
-        chunkStartFrames.reserve(mp);
+        chunkFilterTimecodePaths.reserve(numChunks);
+        chunkStartFrames.reserve(numChunks);
     }
 
-    for (int p = 0; p < mp; p++) {
-        auto& chunk = chunks[p];
-        chunk.startFrame = vi_.num_frames * p / mp;
-        chunk.endFrame = vi_.num_frames * (p + 1) / mp;
+    for (int i = 0; i < numChunks; i++) {
+        auto& chunk = chunks[i];
+        chunk.startFrame = chunkRanges[i].startFrame;
+        chunk.endFrame = chunkRanges[i].endFrame;
         const int chunkFrames = chunk.endFrame - chunk.startFrame;
         auto chunkZones = sliceBitrateZones(bitrateZones, chunk.startFrame, chunk.endFrame);
         tstring chunkTimecodePath;
         if (timecodePath.size() > 0) {
-            chunkTimecodePath = createChunkTimecodeFile(timecodePath, passIndex * mp + p, chunk.startFrame, chunk.endFrame, timeCodes, ctx);
+            chunkTimecodePath = createChunkTimecodeFile(timecodePath, passIndex * numChunks + i, chunk.startFrame, chunk.endFrame, timeCodes, ctx);
         }
-        chunk.outputPath = appendChunkSuffix(baseOutputPath, passIndex * mp + p);
+        chunk.outputPath = appendChunkSuffix(baseOutputPath, passIndex * numChunks + i);
         ctx.registerTmpFile(chunk.outputPath);
         if (feInfo.afsTimecode) {
-            chunk.filterTimecodePath = appendChunkSuffix(encoderFilterTimecodePath, passIndex * mp + p);
+            chunk.filterTimecodePath = appendChunkSuffix(encoderFilterTimecodePath, passIndex * numChunks + i);
             ctx.registerTmpFile(chunk.filterTimecodePath);
             chunkFilterTimecodePaths.push_back(chunk.filterTimecodePath);
             chunkStartFrames.push_back(chunk.startFrame);
@@ -457,14 +476,25 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             , stop_(false)
             , finishedCount_(0) {}
 
-        StdRedirectedSubProcess::LineCallback makeCallback(int idx) {
-            return [this, idx](bool isErr, const std::vector<char>& line, bool isProgress) {
-                std::lock_guard<std::mutex> lock(entries_[idx].mtx);
+        void beginChunk(int slot, int chunkIndex) {
+            std::lock_guard<std::mutex> lock(entries_[slot].mtx);
+            entries_[slot].chunkIndex = chunkIndex;
+            entries_[slot].lastProgress.clear();
+            entries_[slot].hasProgress = false;
+            progressCv_.notify_all();
+        }
+
+        StdRedirectedSubProcess::LineCallback makeCallback(int slot) {
+            return [this, slot](bool isErr, const std::vector<char>& line, bool isProgress) {
+                std::lock_guard<std::mutex> lock(entries_[slot].mtx);
                 if (isProgress) {
-                    entries_[idx].lastProgress.assign(line.begin(), line.end());
-                    entries_[idx].hasProgress = true;
+                    entries_[slot].lastProgress.assign(line.begin(), line.end());
+                    entries_[slot].hasProgress = true;
                 } else {
-                    entries_[idx].logs.emplace_back(line.begin(), line.end());
+                    entries_[slot].logs.push_back({
+                        entries_[slot].chunkIndex,
+                        std::string(line.begin(), line.end())
+                    });
                 }
                 progressCv_.notify_all();
             };
@@ -495,19 +525,25 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         }
 
         void dumpLogs() {
-            for (size_t idx = 0; idx < entries_.size(); idx++) {
-                std::lock_guard<std::mutex> lock(entries_[idx].mtx);
-                for (const auto& line : entries_[idx].logs) {
-                    ctx_.infoF(_T("[chunk%d] %s"), (int)idx, char_to_tstring(line));
+            for (size_t slot = 0; slot < entries_.size(); slot++) {
+                std::lock_guard<std::mutex> lock(entries_[slot].mtx);
+                for (const auto& line : entries_[slot].logs) {
+                    ctx_.infoF(_T("[slot%d] chunk%d %s"), (int)slot, line.chunkIndex, char_to_tstring(line.text));
                 }
             }
         }
 
     private:
+        struct LogLine {
+            int chunkIndex;
+            std::string text;
+        };
+
         struct Entry {
             std::mutex mtx;
-            std::vector<std::string> logs;
+            std::vector<LogLine> logs;
             std::string lastProgress;
+            int chunkIndex = -1;
             bool hasProgress = false;
             bool finished = false;
         };
@@ -525,15 +561,16 @@ void AMTFilterVideoEncoder::encodeSWParallel(
                 }
                 bool printed = false;
                 for (size_t attempt = 0; attempt < entries_.size(); attempt++) {
-                    size_t idx = (offset + attempt) % entries_.size();
-                    std::unique_lock<std::mutex> lock(entries_[idx].mtx);
-                    if (entries_[idx].finished) {
+                    size_t slot = (offset + attempt) % entries_.size();
+                    std::unique_lock<std::mutex> lock(entries_[slot].mtx);
+                    if (entries_[slot].finished || entries_[slot].chunkIndex < 0) {
                         continue;
                     }
-                    std::string message = entries_[idx].hasProgress ? entries_[idx].lastProgress : std::string("Running...");
+                    const int chunkIndex = entries_[slot].chunkIndex;
+                    std::string message = entries_[slot].hasProgress ? entries_[slot].lastProgress : std::string("Running...");
                     lock.unlock();
-                    ctx_.progressF(_T("[chunk%d] %s"), (int)idx, char_to_tstring(message));
-                    offset = idx + 1;
+                    ctx_.progressF(_T("[slot%d] chunk%d %s"), (int)slot, chunkIndex, char_to_tstring(message));
+                    offset = slot + 1;
                     printed = true;
                     break;
                 }
@@ -572,8 +609,8 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     };
 
     ctx.info(_T("[エンコーダ起動]"));
-    for (int p = 0; p < mp; p++) {
-        ctx.infoF(_T("[chunk %d] %s"), p, chunks[p].args.c_str());
+    for (int i = 0; i < numChunks; i++) {
+        ctx.infoF(_T("[chunk %d] %s"), i, chunks[i].args.c_str());
     }
 
     class ChunkPumpThread : public DataPumpThread<std::unique_ptr<PVideoFrame>, true> {
@@ -604,75 +641,105 @@ void AMTFilterVideoEncoder::encodeSWParallel(
 
     bool error = false;
     std::atomic<bool> anyError(false);
-    std::vector<std::unique_ptr<Y4MEncodeWriter>> chunkEncoders(mp);
-    std::vector<std::unique_ptr<ChunkPumpThread>> chunkPumps;
-    chunkPumps.reserve(mp);
+    std::vector<int> executionOrder;
+    executionOrder.reserve(numChunks);
+    for (int i = 0; i < numChunks; i++) {
+        executionOrder.push_back(i);
+    }
+    std::stable_sort(executionOrder.begin(), executionOrder.end(), [&](int lhs, int rhs) {
+        return chunks[lhs].endFrame - chunks[lhs].startFrame
+            > chunks[rhs].endFrame - chunks[rhs].startFrame;
+    });
+    std::atomic<int> nextTask(0);
     std::vector<std::thread> workers;
     workers.reserve(mp);
-    std::vector<std::shared_ptr<AMTFilterSource>> chunkFilters(mp);
     double totalEncodeTime = 0.0;
 
     try {
         try {
-            for (int p = 0; p < mp; p++) {
-                chunkEncoders[p] = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(
-                    ctx, chunks[p].args, vi_, outfmt_, disablePowerThrottoling, true, logManager.makeCallback(p), setting_.getSARInContainerOnly(), chunks[p].filterArgs));
-                chunkPumps.emplace_back(new ChunkPumpThread(chunkEncoders[p].get(), &anyError));
-                chunkPumps.back()->start();
-            }
-
-            for (int p = 0; p < mp; p++) {
-                workers.emplace_back([&, p]() {
+            for (int slot = 0; slot < mp; slot++) {
+                workers.emplace_back([&, slot]() {
                     try {
-                        std::shared_ptr<AMTFilterSource> localFilter(filterSourceFactory().release());
-                        chunkFilters[p] = localFilter;
+                        std::unique_ptr<AMTFilterSource> localFilter = filterSourceFactory();
                         IScriptEnvironment2* localenv = localFilter->getEnv();
                         PClip localClip = localFilter->getClip();
-                        for (int fi = chunks[p].startFrame; fi < chunks[p].endFrame && !anyError.load(); fi++) {
-                            auto frame = localClip->GetFrame(fi, localenv);
-                            chunkPumps[p]->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                        while (!anyError.load()) {
+                            const int orderIndex = nextTask.fetch_add(1);
+                            if (orderIndex >= numChunks || anyError.load()) {
+                                break;
+                            }
+                            const int chunkIndex = executionOrder[orderIndex];
+                            const auto& chunk = chunks[chunkIndex];
+                            logManager.beginChunk(slot, chunkIndex);
+
+                            std::unique_ptr<Y4MEncodeWriter> encoder;
+                            std::unique_ptr<ChunkPumpThread> pump;
+                            bool finishStarted = false;
+                            try {
+                                encoder.reset(new Y4MEncodeWriter(
+                                    ctx, chunk.args, vi_, outfmt_, disablePowerThrottoling, true,
+                                    logManager.makeCallback(slot), setting_.getSARInContainerOnly(), chunk.filterArgs));
+                                pump.reset(new ChunkPumpThread(encoder.get(), &anyError));
+                                pump->start();
+                                for (int fi = chunk.startFrame; fi < chunk.endFrame && !anyError.load(); fi++) {
+                                    auto frame = localClip->GetFrame(fi, localenv);
+                                    pump->put(std::unique_ptr<PVideoFrame>(new PVideoFrame(frame)), 1);
+                                }
+                                pump->join();
+                                pump->force_clear();
+
+                                // フィルタプロセスのハンドル継承を同一ワーカー内で完結させてから次へ進む。
+                                encoder->closeInput();
+                                finishStarted = true;
+                                encoder->finish();
+                            } catch (...) {
+                                anyError.store(true);
+                                if (pump && pump->isRunning()) {
+                                    pump->join();
+                                }
+                                if (pump) {
+                                    pump->force_clear();
+                                }
+                                if (encoder && !finishStarted) {
+                                    try {
+                                        encoder->closeInput();
+                                        encoder->finish();
+                                    } catch (Exception&) {
+                                    }
+                                }
+                                throw;
+                            }
                         }
                     } catch (const AvisynthError& avserror) {
                         ctx.errorF(_T("Avisynthフィルタでエラーが発生: %s"), char_to_tstring(avserror.msg));
                         anyError.store(true);
                     } catch (Exception&) {
                         anyError.store(true);
+                    } catch (...) {
+                        anyError.store(true);
                     }
-                    chunkPumps[p]->join();
-                    chunkPumps[p]->force_clear();
-                    chunkFilters[p].reset();
+                    logManager.markFinished(slot);
                 });
             }
 
-            for (auto& worker : workers) {
-                worker.join();
-            }
         } catch (const AvisynthError& avserror) {
             ctx.errorF(_T("Avisynthフィルタでエラーが発生: %s"), char_to_tstring(avserror.msg));
+            anyError.store(true);
             error = true;
         } catch (Exception&) {
+            anyError.store(true);
             error = true;
         } catch (...) {
+            anyError.store(true);
             error = true;
+        }
+
+        for (auto& worker : workers) {
+            worker.join();
         }
 
         if (anyError.load()) {
             error = true;
-        }
-
-        // まず全エンコーダの入力を閉じる。
-        // これをせずに順番に join() してしまうと、ハンドル継承が発生している場合に
-        // stdin のクローズ待ちとハンドル継承によるパイプクローズ待ちでデッドロックする可能性がある。
-        for (int p = 0; p < mp; p++) {
-            if (chunkEncoders[p]) {
-                chunkEncoders[p]->closeInput();
-            }
-        }
-        for (int p = 0; p < mp; p++) {
-            if (chunkEncoders[p]) {
-                chunkEncoders[p]->finish();
-            }
-            logManager.markFinished(p);
         }
         stopLogs();
 
@@ -763,7 +830,6 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         stopLogs();
         throw;
     }
-    chunkFilters.clear();
     // 実効fps, 実効ビットレートを計算して表示
     const double effectiveFps = (totalEncodeTime > 0.0)
         ? (vi_.num_frames / totalEncodeTime)
