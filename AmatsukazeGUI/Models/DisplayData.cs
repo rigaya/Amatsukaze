@@ -1125,9 +1125,9 @@ namespace Amatsukaze.Models
         public string[] DeinterlaceList { get; } =
             new[] { "afs", "kfm", "nnedi", "yadif", "bwdif", "decomb", "ivtc" };
         public string[] DenoiseList { get; } =
-            new[] { "knn", "nlmeans", "pmd", "hqdn3d", "denoise-dct", "smooth", "fft3d", "convolution3d", "msmooth" };
+            new[] { "pmd", "knn", "nlmeans", "hqdn3d", "denoise-dct", "smooth", "fft3d", "convolution3d", "msmooth" };
         public string[] EdgeList { get; } =
-            new[] { "unsharp", "edgelevel", "warpsharp", "msharpen" };
+            new[] { "edgelevel", "unsharp", "warpsharp", "msharpen" };
         public string[] OutputDepthList { get; } = new[] { "8bit", "10bit" };
 
         public DisplayEncoderFilterSetting(EncoderFilterSetting data)

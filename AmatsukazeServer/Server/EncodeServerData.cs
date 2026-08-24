@@ -205,12 +205,12 @@ namespace Amatsukaze.Server
 
     public enum EncoderFilterDenoise
     {
-        KNN, NLMeans, PMD, HQDN3D, DenoiseDct, Smooth, FFT3D, Convolution3D, MSmooth
+        PMD, KNN, NLMeans, HQDN3D, DenoiseDct, Smooth, FFT3D, Convolution3D, MSmooth
     }
 
     public enum EncoderFilterEdge
     {
-        Unsharp, EdgeLevel, WarpSharp, MSharpen
+        EdgeLevel, Unsharp, WarpSharp, MSharpen
     }
 
     public enum EncoderFilterOutputDepth
