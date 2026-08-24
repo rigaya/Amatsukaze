@@ -1939,8 +1939,10 @@ void DoBadThing() {
             // 分割エンコードが可能な条件
             // 2pass、およびAVS由来VFRとエンコーダフィルタの併用では分割エンコードができない
             const bool canSplitEncode = isSoftwareSplitEncoder(setting.getEncoder()) && !setting.isTwoPass();
-            // CM分離時はファイル単位でCM調整できるため、CMを残す場合のみ対象
-            const bool useCMChunkSplit = setting.isBitrateCMEnabled() && key.cm == CMTYPE_BOTH
+            // CM分離時はファイル単位でCM調整できるため、CMが混在するファイルのみ対象
+            // (前後CMカットは中間のCMが残るため、CMを残す場合と同様に対象となる)
+            const bool cmMixedInFile = (key.cm == CMTYPE_BOTH || key.cm == CMTYPE_EDGE_TRIM);
+            const bool useCMChunkSplit = setting.isBitrateCMEnabled() && cmMixedInFile
                 && !encoderZones.empty() && cmZoneUnusable && canSplitEncode;
             if (useCMChunkSplit) {
                 ctx.info(_T("CM境界でチャンク分割してCMビットレート調整を行います"));
