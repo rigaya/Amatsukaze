@@ -866,6 +866,10 @@ tstring ConfigWrapper::getEncoderFilterOptions() const {
     return conf.encoderFilterOptions;
 }
 
+bool ConfigWrapper::isEncoderFilterDeinterlace() const {
+    return conf.encoderFilterDeinterlace;
+}
+
 bool ConfigWrapper::getMuxerAddEncoderCmd() const {
     return conf.muxerAddEncoderCmd;
 }
@@ -1768,6 +1772,7 @@ void ConfigWrapper::dump() const {
     if (isEncoderFilterEnabled()) {
         ctx.infoF(_T("エンコーダフィルタ: %s (%s)"), conf.encoderFilterPath, encoderToString(conf.encoderFilter));
         ctx.infoF(_T("エンコーダフィルタオプション: %s"), conf.encoderFilterOptions);
+        ctx.infoF(_T("エンコーダフィルタインタレ解除: %s"), conf.encoderFilterDeinterlace ? _T("あり") : _T("なし"));
     }
     if (conf.userSAR.first > 0 && conf.userSAR.second > 0) {
         ctx.infoF(_T("ユーザー指定SAR: %d:%d"), conf.userSAR.first, conf.userSAR.second);

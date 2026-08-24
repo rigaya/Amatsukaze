@@ -225,6 +225,9 @@ struct Config {
     ENUM_ENCODER encoderFilter; // エンコーダフィルタ。無効時は (ENUM_ENCODER)-1
     tstring encoderFilterPath;
     tstring encoderFilterOptions;
+    // エンコーダフィルタでインタレース解除を行うか
+    // (フィルタのオプション文字列を解析して推測すると取りこぼすため、GUI側の設定を明示的に受け取る)
+    bool encoderFilterDeinterlace;
     // 追加オプションをコンテナに記録する（mp4/mkv出力時のみ有効）
     bool muxerAddEncoderCmd;
     // SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する
@@ -363,6 +366,8 @@ public:
     tstring getEncoderFilterPath() const;
 
     tstring getEncoderFilterOptions() const;
+
+    bool isEncoderFilterDeinterlace() const;
 
     bool getMuxerAddEncoderCmd() const;
 

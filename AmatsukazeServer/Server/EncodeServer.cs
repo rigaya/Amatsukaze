@@ -2326,6 +2326,10 @@ namespace Amatsukaze.Server
                             .Append("\" -efo \"")
                             .Append(ProfileSettingExtensions.GetFilterEncoderOption(profile))
                             .Append("\"");
+                        if (profile.EncoderFilterSetting?.EnableDeinterlace == true)
+                        {
+                            sb.Append(" -efd");
+                        }
                     }
 
                     if (profile.AutoBuffer)

@@ -488,19 +488,19 @@ void AMTFilterVideoEncoder::encodeSWParallel(
     std::vector<tstring> chunkOutputs;
     chunkOutputs.reserve(numChunks);
 
-    const auto feInfo = setting_.isEncoderFilterSeparate()
-        ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
-        : EncoderOptionInfo();
     VideoFormat encoderInputFormat = outfmt_;
-    if (setting_.isEncoderFilterSeparate() && feInfo.deint != ENCODER_DEINT_NONE) {
+    if (setting_.isEncoderFilterSeparate() && setting_.isEncoderFilterDeinterlace()) {
         encoderInputFormat.progressive = true;
     }
-    const tstring encoderFilterTimecodePath = feInfo.afsTimecode
+    // フィルタによるフレームレート・フレーム数の変化はオプション文字列の解析では正確に
+    // 判定できないため、常にタイムコードを出力させ、エンコード後に実測値から判定する
+    const tstring encoderFilterTimecodePath = setting_.isEncoderFilterSeparate()
         ? setting_.getEncoderFilterTimecodePath(key)
         : tstring();
+    const bool outputFilterTimecode = !encoderFilterTimecodePath.empty();
     std::vector<tstring> chunkFilterTimecodePaths;
     std::vector<int> chunkStartFrames;
-    if (feInfo.afsTimecode) {
+    if (outputFilterTimecode) {
         chunkFilterTimecodePaths.reserve(numChunks);
         chunkStartFrames.reserve(numChunks);
     }
@@ -520,7 +520,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         }
         chunk.outputPath = appendChunkSuffix(baseOutputPath, passIndex * numChunks + i);
         ctx.registerTmpFile(chunk.outputPath);
-        if (feInfo.afsTimecode) {
+        if (outputFilterTimecode) {
             chunk.filterTimecodePath = appendChunkSuffix(encoderFilterTimecodePath, passIndex * numChunks + i);
             ctx.registerTmpFile(chunk.filterTimecodePath);
             chunkFilterTimecodePaths.push_back(chunk.filterTimecodePath);
@@ -820,7 +820,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             THROW(RuntimeException, "エンコード中に不明なエラーが発生");
         }
 
-        if (feInfo.afsTimecode) {
+        if (outputFilterTimecode) {
             concatenateEncoderFilterTimecodes(encoderFilterTimecodePath, chunkFilterTimecodePaths, chunkStartFrames, vi_);
         }
 
@@ -947,10 +947,9 @@ void AMTFilterVideoEncoder::encode(
     const bool nativeParallel = wantsParallel && isNativeParallelEncoder(encoderType);
     const bool softwareParallel = (wantsParallel || useCMChunkSplit) && !nativeParallel && isSoftwareSplitEncoder(encoderType);
     const int actualParallel = (nativeParallel || softwareParallel) ? pipeParallel : 1;
-    const auto feInfo = setting_.isEncoderFilterSeparate()
-        ? ParseEncoderOption(setting_.getEncoderFilter(), setting_.getEncoderFilterOptions())
-        : EncoderOptionInfo();
-    const tstring encoderFilterTimecodePath = feInfo.afsTimecode
+    // フィルタによるフレームレート・フレーム数の変化はオプション文字列の解析では正確に
+    // 判定できないため、常にタイムコードを出力させ、エンコード後に実測値から判定する
+    const tstring encoderFilterTimecodePath = setting_.isEncoderFilterSeparate()
         ? setting_.getEncoderFilterTimecodePath(key)
         : tstring();
 
@@ -972,13 +971,9 @@ void AMTFilterVideoEncoder::encode(
         }
 
         VideoFormat encoderInputFormat = outfmt_;
-        if (setting_.isEncoderFilterSeparate()) {
-            // マージ後のeoInfo.deintは本エンコーダ由来の可能性もあるため、
-            // フィルタ側のオプションを解析して前段でインタレース解除されるかを判定する
-            if (feInfo.deint != ENCODER_DEINT_NONE) {
-                // 前段でインタレース解除済みのため、本エンコーダにはprogressiveとして渡す
-                encoderInputFormat.progressive = true;
-            }
+        if (setting_.isEncoderFilterSeparate() && setting_.isEncoderFilterDeinterlace()) {
+            // 前段でインタレース解除済みのため、本エンコーダにはprogressiveとして渡す
+            encoderInputFormat.progressive = true;
         }
         // エンコーダフィルタでフレーム数が変わる場合は、入力側のフレーム数を
         // 本エンコーダへ指定せず、フィルタ出力パイプのEOFで終了させる。

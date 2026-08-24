@@ -54,6 +54,7 @@ static void printHelp(const tchar* bin) {
         "  -eft|--encoder-filter-type <タイプ> フィルタとして使用するエンコーダタイプ[]\n"
         "  -ef |--encoder-filter <パス> フィルタとして使用するエンコーダのパス[]\n"
         "  -efo|--encoder-filter-option <オプション> エンコーダフィルタへ渡すオプション[]\n"
+        "  -efd|--encoder-filter-deint エンコーダフィルタでインタレース解除を行う\n"
         "  --muxer-add-encoder-cmd  mp4/mkv出力時にコンテナにエンコーダ名と追加オプションを記録する\n"
         "  --sar-in-container-only  SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する\n"
         "  --enc-parallel <数値>  エンコード分割並列数[1]\n"
@@ -226,6 +227,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.encoderFilter = (ENUM_ENCODER)-1;
     conf.encoderFilterPath = _T("");
     conf.encoderFilterOptions = _T("");
+    conf.encoderFilterDeinterlace = false;
     conf.muxerAddEncoderCmd = false;
     conf.sarInContainerOnly = false;
     conf.encoderPath = _T("x264") + exeAppendix;
@@ -329,6 +331,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.encoderFilterPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("-efo") || key == _T("--encoder-filter-option")) {
             conf.encoderFilterOptions = getParam(argc, argv, i++);
+        } else if (key == _T("-efd") || key == _T("--encoder-filter-deint")) {
+            conf.encoderFilterDeinterlace = true;
         } else if (key == _T("--muxer-add-encoder-cmd")) {
             conf.muxerAddEncoderCmd = true;
         } else if (key == _T("--sar-in-container-only")) {
