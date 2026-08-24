@@ -311,7 +311,9 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     if (!timecodepath.empty()) {
         sb.append(_T(" --timecode \"%s\""), timecodepath);
     }
-    sb.append(_T(" --log-level warn"));
+    // 進捗表示と結果サマリだけ抑制し、
+    // フィルタが実際にどう適用されたか、どのGPUが選択されたかはログに残す
+    sb.append(_T(" --log-level core_progress=error,core_result=error"));
     return sb.str();
 }
 
