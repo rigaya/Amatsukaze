@@ -194,7 +194,9 @@ std::vector<double> readEncoderFilterTimecode(const tstring& path) {
         }
     }
     if (timestamps.empty()) {
-        THROW(FormatException, "エンコーダフィルタのチャンクタイムコードにフレーム情報がありません");
+        THROW(FormatException, "エンコーダフィルタがタイムコードを出力しませんでした。"
+            "raw出力時の--timecode出力に対応したエンコーダが必要です。"
+            "エンコーダフィルタに指定したエンコーダを最新版に更新してください");
     }
     return timestamps;
 }
