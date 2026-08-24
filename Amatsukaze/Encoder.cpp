@@ -322,7 +322,8 @@ Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, V
     : AMTObject(ctx)
     , y4mWriter_(new MyVideoWriter(this, vi, fmt, sarInContainerOnly))
     , filterProcess_()
-    , process_() {
+    , process_()
+    , brokenY4MDelimiterCount_(0) {
     PIPE_HANDLE externalStdIn = (PIPE_HANDLE)0;
     if (!filterArgs.empty()) {
         ctx.info(_T("[エンコーダフィルタ起動]"));
@@ -336,7 +337,18 @@ Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, V
         externalStdIn = filterProcess_->detachStdOutReadHandle();
     }
     try {
-        process_.reset(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, lineCallback, externalStdIn));
+        // SVT-AV1はY4Mのフレーム境界が壊れていても終了コード0を返すことがあるため、
+        // 固有のエラーメッセージも監視して、finish()で必ず失敗として扱う。
+        auto encoderLineCallback = [this, lineCallback](bool isErr, const std::vector<char>& line, bool isProgress) {
+            const std::string message(line.begin(), line.end());
+            if (message.find("Failed to read proper y4m frame delimiter") != std::string::npos) {
+                brokenY4MDelimiterCount_.fetch_add(1, std::memory_order_relaxed);
+            }
+            if (lineCallback) {
+                lineCallback(isErr, line, isProgress);
+            }
+        };
+        process_.reset(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, encoderLineCallback, externalStdIn));
     } catch (...) {
         if (filterProcess_) {
             // 本エンコーダに渡せなかった読み取り端を閉じる
@@ -394,6 +406,10 @@ void Y4MEncodeWriter::finish() {
         }
         if (ret != 0) {
             THROWF(RuntimeException, "エンコーダ終了コード: 0x%x", ret);
+        }
+        const int brokenDelimiterCount = brokenY4MDelimiterCount_.load(std::memory_order_relaxed);
+        if (brokenDelimiterCount > 0) {
+            THROWF(RuntimeException, "Y4Mフレーム境界の破損を検出しました: %d回", brokenDelimiterCount);
         }
     }
 }
@@ -510,12 +526,17 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             chunkFilterTimecodePaths.push_back(chunk.filterTimecodePath);
             chunkStartFrames.push_back(chunk.startFrame);
         }
+        // 別プロセスのフィルタは間引き等で出力フレーム数を変更し得る。
+        // 入力フレーム数を本エンコーダの上限にすると、正常なEOFを破損入力として扱う
+        // エンコーダがあるため、パイプのEOFで終了させる。
+        const int encoderFrameCount = setting_.isEncoderFilterSeparate() ? 0 : chunkFrames;
         chunk.args = argGen.GenEncoderOptions(
-            chunkFrames,
+            encoderFrameCount,
             encoderInputFormat, std::move(chunkZones), vfrBitrateScale,
             chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath, chunk.isCM);
         chunk.filterArgs = setting_.isEncoderFilterSeparate()
-            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, chunk.filterTimecodePath)
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, chunk.filterTimecodePath,
+                setting_.getEncoderFilter(), setting_.getEncoder())
             : tstring();
         chunkOutputs.push_back(chunk.outputPath);
     }
@@ -959,8 +980,11 @@ void AMTFilterVideoEncoder::encode(
                 encoderInputFormat.progressive = true;
             }
         }
+        // エンコーダフィルタでフレーム数が変わる場合は、入力側のフレーム数を
+        // 本エンコーダへ指定せず、フィルタ出力パイプのEOFで終了させる。
+        const int encoderFrameCount = setting_.isEncoderFilterSeparate() ? 0 : vi_.num_frames;
         tstring args = argGen.GenEncoderOptions(
-            vi_.num_frames,
+            encoderFrameCount,
             encoderInputFormat, bitrateZones, vfrBitrateScale,
             timecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, baseOutputPath);
 
@@ -1006,7 +1030,8 @@ void AMTFilterVideoEncoder::encode(
 
         // 初期化（子プロセス起動）
         const tstring filterArgs = setting_.isEncoderFilterSeparate()
-            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath)
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath,
+                setting_.getEncoderFilter(), setting_.getEncoder())
             : tstring();
         encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly(), filterArgs));
         // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）

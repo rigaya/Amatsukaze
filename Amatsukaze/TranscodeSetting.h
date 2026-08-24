@@ -107,7 +107,9 @@ tstring makeEncoderFilterArgs(
     const tstring& binpath,
     const tstring& options,
     const VideoFormat& fmt,
-    const tstring& timecodepath);
+    const tstring& timecodepath,
+    ENUM_ENCODER filterEncoder,
+    ENUM_ENCODER outputEncoder);
 
 enum ENUM_AUDIO_ENCODER {
     AUDIO_ENCODER_NONE,

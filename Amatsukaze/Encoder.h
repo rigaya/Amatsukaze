@@ -12,6 +12,7 @@
 #include "ReaderWriterFFmpeg.h"
 #include "TranscodeSetting.h"
 #include "FilteredSource.h"
+#include <atomic>
 #include <functional>
 
 class EncoderArgumentGenerator;
@@ -63,6 +64,7 @@ private:
     std::unique_ptr<MyVideoWriter> y4mWriter_;
     std::unique_ptr<StdRedirectedSubProcess> filterProcess_;
     std::unique_ptr<StdRedirectedSubProcess> process_;
+    std::atomic<int> brokenY4MDelimiterCount_;
 };
 
 class AMTFilterVideoEncoder : public AMTObject {

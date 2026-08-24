@@ -1968,8 +1968,10 @@ void DoBadThing() {
                 const tstring encoderFilterTimecodePath = setting.getEncoderFilterTimecodePath(key);
                 normalizeEncoderFilterTimecode(encoderFilterTimecodePath);
                 fileOut.timecode = encoderFilterTimecodePath;
-                fileOut.vfrTimingFps = 30;
-                ctx.info(_T("エンコーダフィルタのVFRタイムコードを整数msに正規化しました"));
+                // timelineeditorの丸めで16～17ms間隔が同一timestampにならないよう、
+                // encoder filterのVFR timebaseは常に120000/1001とする。
+                fileOut.vfrTimingFps = 120;
+                ctx.info(_T("エンコーダフィルタのVFRタイムコードを整数msに正規化しました (タイムベース: 120000/1001)"));
             }
         } catch (const AvisynthError& avserror) {
             THROWF(AviSynthException, "%s", avserror.msg);

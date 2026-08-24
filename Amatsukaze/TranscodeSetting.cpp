@@ -279,7 +279,9 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     const tstring& binpath,
     const tstring& options,
     const VideoFormat& fmt,
-    const tstring& timecodepath) {
+    const tstring& timecodepath,
+    ENUM_ENCODER filterEncoder,
+    ENUM_ENCODER outputEncoder) {
     StringBuilderT sb;
 
     sb.append(_T("\"%s\" --y4m -i -"), binpath);
@@ -293,12 +295,19 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     if (!options.empty()) {
         sb.append(_T(" %s"), options);
     }
-    // -c raw のみでy4m出力となる
-    // -f yuv4mpegpipe を指定するとavformat経由の出力に切り替わってしまい、
-    // --y4m-timestamp によるタイムスタンプ付加が効かなくなるため指定しない
-    // --y4m-timestamp: FRAME行に表示時刻(Xts=秒)を付加する
-    // エンコーダフィルタがVFR出力する場合に、本エンコーダ側へフレームの表示時刻を伝えるために必要
-    sb.append(_T(" -c raw --y4m-timestamp -o -"));
+    // HWEncのraw codec出力は、出力形式をrawと明示しない限り内蔵Y4M writerを使用する。
+    sb.append(_T(" -c raw"));
+    if (filterEncoder == ENCODER_VCEENC) {
+        // VCEEncはstdout (拡張子なし) ではraw形式を選ぶため、Y4Mを明示する。
+        // NVEnc/QSVEncの旧版にはy4m指定を受け付けないものがあるのでVCEEncに限定する。
+        sb.append(_T(" --output-format y4m"));
+    }
+    if (isHWEncoder(outputEncoder)) {
+        // HWEnc同士ではFRAME行のXts/Xdur拡張を読み取れるため、VFRの表示時刻を次段へ伝える。
+        // x264/x265/SVT-AV1はこの独自拡張に対応しないので付加しない。
+        sb.append(_T(" --y4m-timestamp"));
+    }
+    sb.append(_T(" -o -"));
     if (!timecodepath.empty()) {
         sb.append(_T(" --timecode \"%s\""), timecodepath);
     }
