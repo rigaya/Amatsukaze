@@ -20,7 +20,7 @@
                           Content="インターレース解除" IsChecked="{Binding EnableDeinterlace, Mode=TwoWay}"/>
             </GroupBox.Header>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableDeinterlace}">
-                <ComboBox Width="120" Height="22" ItemsSource="{Binding DeinterlaceList}"
+                <ComboBox Width="150" Height="22" ItemsSource="{Binding DeinterlaceList}"
                           SelectedIndex="{Binding DeinterlaceAlgorithm, Mode=TwoWay}"/>
                 <ComboBox Width="120" Height="22" Margin="6,0,0,0"
                           ItemsSource="{Binding DeinterlaceParamList}"
@@ -34,7 +34,7 @@
                           Content="ノイズ除去" IsChecked="{Binding EnableDenoise, Mode=TwoWay}"/>
             </GroupBox.Header>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableDenoise}">
-                <ComboBox Width="120" Height="22" ItemsSource="{Binding DenoiseList}"
+                <ComboBox Width="150" Height="22" ItemsSource="{Binding DenoiseList}"
                           SelectedIndex="{Binding DenoiseAlgorithm, Mode=TwoWay}"/>
                 <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding DenoiseValueLabel}"
                            Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
@@ -60,17 +60,19 @@
                           Content="エッジ強調" IsChecked="{Binding EnableEdgeEnhance, Mode=TwoWay}"/>
             </GroupBox.Header>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableEdgeEnhance}">
-                <ComboBox Width="120" Height="22" ItemsSource="{Binding EdgeList}"
+                <ComboBox Width="150" Height="22" ItemsSource="{Binding EdgeList}"
                           SelectedIndex="{Binding EdgeAlgorithm, Mode=TwoWay}"/>
                 <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding EdgeValueLabel}"/>
                 <TextBox Width="70" Height="22" Text="{Binding EdgeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </StackPanel>
         </GroupBox>
         <CheckBox Margin="8,4" Content="バンディング低減" IsChecked="{Binding EnableDeband, Mode=TwoWay}"/>
-        <StackPanel Orientation="Horizontal" Margin="8,4">
-            <CheckBox Content="出力ビット深度" IsChecked="{Binding EnableOutputDepth, Mode=TwoWay}"/>
+        <StackPanel Orientation="Horizontal" Margin="8,4" ToolTip="{Binding OutputDepthToolTip}">
+            <CheckBox Content="出力ビット深度" IsChecked="{Binding EnableOutputDepth, Mode=TwoWay}"
+                      ToolTip="{Binding OutputDepthToolTip}"/>
             <ComboBox Width="120" Height="22" Margin="8,0,0,0" ItemsSource="{Binding OutputDepthList}"
-                      SelectedIndex="{Binding OutputDepth, Mode=TwoWay}" IsEnabled="{Binding EnableOutputDepth}"/>
+                      SelectedIndex="{Binding OutputDepth, Mode=TwoWay}" IsEnabled="{Binding EnableOutputDepth}"
+                      ToolTip="{Binding OutputDepthToolTip}" ToolTipService.ShowOnDisabled="True"/>
         </StackPanel>
     </StackPanel>
 </UserControl>

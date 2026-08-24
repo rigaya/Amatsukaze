@@ -449,7 +449,7 @@ else
                             <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeband")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeband"))" />
                             バンディング低減
                         </label>
-                        <div style="margin: 4px 8px;">
+                        <div style="margin: 4px 8px;" title="@GetEncoderOutputDepthHelp()">
                             <label>
                                 <input type="checkbox" checked="@GetEncoderFilterBool("EnableOutputDepth")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableOutputDepth"))" />
                                 出力ビット深度
@@ -460,6 +460,7 @@ else
                                     <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                                 }
                             </select>
+                            <div class="text-muted small">@GetEncoderOutputDepthHelp()</div>
                         </div>
                     </td>
                 </tr>
@@ -1659,9 +1660,29 @@ else
         return GetStringValue(name);
     }
 
+    // エンコーダフィルタの出力ビット深度のヘルプ文（svt-av1選択時のみ例外の説明を追記）
+    private string GetEncoderOutputDepthHelp()
+    {
+        var text = "エンコーダフィルタの出力ビット深度を指定します。"
+            + "指定しない場合は入力のビット深度がそのまま維持されます。"
+            + "10bitを指定するとフィルタ処理による階調の劣化を抑えられますが、本エンコーダが10bit入力に対応している必要があります。";
+        if (IsSvtAv1Encoder())
+        {
+            text += " ※エンコーダにsvt-av1を選択している場合は例外として、この設定より「入力ビット深度」の指定が優先されます。"
+                + "「入力ビット深度」が「自動」のときのみ、この設定が使われます。";
+        }
+        return text;
+    }
+
     private bool IsForceSarEnabled()
     {
         return GetEncoderIndex() == 5;
+    }
+
+    // エンコーダにsvt-av1が選択されているか
+    private bool IsSvtAv1Encoder()
+    {
+        return GetEncoderIndex() == Array.FindIndex(_encoderEnumNames, v => v == "SVTAV1");
     }
 
     private bool IsMp4Format()

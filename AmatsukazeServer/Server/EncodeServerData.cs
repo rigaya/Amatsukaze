@@ -691,7 +691,7 @@ namespace Amatsukaze.Server
             return value.ToString("0.##########", CultureInfo.InvariantCulture);
         }
 
-        public static string BuildEncoderFilterOptions(EncoderFilterSetting s)
+        public static string BuildEncoderFilterOptions(EncoderFilterSetting s, int outputDepthOverride = 0)
         {
             if (s == null)
             {
@@ -815,7 +815,12 @@ namespace Amatsukaze.Server
                 options.Add("--vpp-deband");
             }
 
-            if (s.EnableOutputDepth)
+            if (outputDepthOverride == 8 || outputDepthOverride == 10)
+            {
+                // エンコーダ側の要求ビット深度が優先される場合（svt-av1の入力ビット深度指定）
+                options.Add("--output-depth " + outputDepthOverride.ToString(CultureInfo.InvariantCulture));
+            }
+            else if (s.EnableOutputDepth)
             {
                 options.Add("--output-depth " +
                     (s.OutputDepth == EncoderFilterOutputDepth.Bit10 ? "10" : "8"));
@@ -837,9 +842,21 @@ namespace Amatsukaze.Server
 
             return string.Join(" ", new[]
             {
-                BuildEncoderFilterOptions(profile.EncoderFilterSetting),
+                BuildEncoderFilterOptions(profile.EncoderFilterSetting, GetEncoderFilterOutputDepthOverride(profile)),
                 customOption
             }.Where(option => !string.IsNullOrWhiteSpace(option)).Select(option => option.Trim()));
+        }
+
+        // エンコーダフィルタの出力ビット深度を本エンコーダ側の要求で上書きする場合の値（上書きしない場合は0）
+        // svt-av1は入力ビット深度を明示指定する必要があるため、例外的にエンコーダフィルタの出力ビット深度設定より優先する
+        public static int GetEncoderFilterOutputDepthOverride(ProfileSetting profile)
+        {
+            if (profile == null || profile.EncoderType != EncoderType.SVTAV1)
+            {
+                return 0;
+            }
+            var bitDepth = profile.FilterSetting?.SvtAv1BitDepth ?? 0;
+            return (bitDepth == 8 || bitDepth == 10) ? bitDepth : 0;
         }
 
         // リソース文字列を生成

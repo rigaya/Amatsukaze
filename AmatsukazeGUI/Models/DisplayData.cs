@@ -1130,9 +1130,40 @@ namespace Amatsukaze.Models
             new[] { "edgelevel", "unsharp", "warpsharp", "msharpen" };
         public string[] OutputDepthList { get; } = new[] { "8bit", "10bit" };
 
-        public DisplayEncoderFilterSetting(EncoderFilterSetting data)
+        // 出力ビット深度の設定元となるプロファイル（エンコーダ種別の参照用）
+        private ProfileSetting Profile { get; set; }
+
+        public DisplayEncoderFilterSetting(ProfileSetting profile)
         {
-            Data = data;
+            Profile = profile;
+            Data = profile.EncoderFilterSetting;
+        }
+
+        // 出力ビット深度のポップアップヘルプ
+        public string OutputDepthToolTip
+        {
+            get
+            {
+                var text =
+                    "エンコーダフィルタの出力ビット深度を指定します。\n" +
+                    "指定しない場合は入力のビット深度がそのまま維持されます。\n" +
+                    "10bitを指定するとフィルタ処理による階調の劣化を抑えられますが、" +
+                    "本エンコーダが10bit入力に対応している必要があります。";
+                if (Profile != null && Profile.EncoderType == EncoderType.SVTAV1)
+                {
+                    text +=
+                        "\n\n※エンコーダにsvt-av1を選択している場合は例外として、" +
+                        "この設定より「入力ビット深度」の指定が優先されます。" +
+                        "「入力ビット深度」が「自動」のときのみ、この設定が使われます。";
+                }
+                return text;
+            }
+        }
+
+        // エンコーダ種別の変更をポップアップヘルプに反映する
+        public void UpdateOutputDepthToolTip()
+        {
+            RaisePropertyChanged("OutputDepthToolTip");
         }
 
         public bool EnableDeinterlace
@@ -1496,7 +1527,7 @@ namespace Amatsukaze.Models
             Data = data;
             Filter = new DisplayFilterSetting(data.FilterSetting, model);
             CustomFilter = new DisplayCustomFilter() { Model = model, Data = data };
-            EncoderFilterSetting = new DisplayEncoderFilterSetting(data.EncoderFilterSetting);
+            EncoderFilterSetting = new DisplayEncoderFilterSetting(data);
             Model = model;
             Resources = resources;
 
@@ -1583,6 +1614,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("EncoderOption");
                 RaisePropertyChanged("CMQualityOffsetEnabled");
                 RaisePropertyChanged("ForceSAREnabled");
+                EncoderFilterSetting.UpdateOutputDepthToolTip();
             }
         }
         #endregion
