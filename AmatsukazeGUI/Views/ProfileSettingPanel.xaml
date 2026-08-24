@@ -446,6 +446,7 @@
                             <DataTemplate DataType="{x:Type m:DisplayEncoderFilter}">
                                 <StackPanel>
                                     <v:EncoderFilterSettingPanel DataContext="{Binding EncoderFilterSetting}"/>
+                                    <TextBlock Margin="0,6,0,0" Text="追加コマンド" />
                                     <TextBox Height="80" Margin="0,3" AcceptsReturn="True" TextWrapping="Wrap"
                                              VerticalScrollBarVisibility="Auto"
                                              Text="{Binding FilterOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
