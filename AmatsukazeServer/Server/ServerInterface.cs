@@ -26,6 +26,16 @@ namespace Amatsukaze.Server
         public bool IsAutoLogoPendingResult { get; set; }
     }
 
+    [DataContract]
+    public class LogFilePathResponse
+    {
+        [DataMember]
+        public string RequestId { get; set; }
+
+        [DataMember]
+        public string Path { get; set; }
+    }
+
     public interface IAddTaskServer
     {
         Task AddQueue(AddQueueRequest dir);
@@ -53,6 +63,7 @@ namespace Amatsukaze.Server
         // 情報取得系
         Task Request(ServerRequest req);
         Task RequestLogFile(LogFileRequest req);
+        Task RequestLogFilePath(LogFileRequest req);
         Task RequestLogoData(string fileName);
         Task RequestDrcsImages();
         Task SendLogoFile(LogoFileData logoData);
@@ -73,6 +84,7 @@ namespace Amatsukaze.Server
         Task OnConsoleUpdate(ConsoleUpdate str);
         Task OnEncodeState(EncodeState state);
         Task OnLogFile(string str);
+        Task OnLogFilePath(LogFilePathResponse response);
 
         Task OnCommonData(CommonData data);
         Task OnProfile(ProfileUpdate data);
@@ -132,7 +144,9 @@ namespace Amatsukaze.Server
         SetOutDir,
         SetPriority,
         GetOutFiles,
-        CancelItem
+        CancelItem,
+        RequestLogFilePath,
+        OnLogFilePath
     }
 
     public struct RPCInfo
@@ -242,7 +256,9 @@ namespace Amatsukaze.Server
             { RPCMethodId.SetOutDir, typeof(string) },
             { RPCMethodId.SetPriority, typeof(string) },
             { RPCMethodId.GetOutFiles, typeof(string) },
-            { RPCMethodId.CancelItem, typeof(string) }
+            { RPCMethodId.CancelItem, typeof(string) },
+            { RPCMethodId.RequestLogFilePath, typeof(LogFileRequest) },
+            { RPCMethodId.OnLogFilePath, typeof(LogFilePathResponse) }
         };
 
         private static List<object> GetImage(object obj)
@@ -450,6 +466,11 @@ namespace Amatsukaze.Server
             return client.OnLogFile(Copy(str));
         }
 
+        public Task OnLogFilePath(LogFilePathResponse response)
+        {
+            return client.OnLogFilePath(Copy(response));
+        }
+
         public Task OnOperationResult(OperationResult result)
         {
             return client.OnOperationResult(Copy(result));
@@ -560,6 +581,11 @@ namespace Amatsukaze.Server
         public Task RequestLogFile(LogFileRequest req)
         {
             return Server.RequestLogFile(Copy(req));
+        }
+
+        public Task RequestLogFilePath(LogFileRequest req)
+        {
+            return Server.RequestLogFilePath(Copy(req));
         }
 
         public Task RequestLogoData(string fileName)

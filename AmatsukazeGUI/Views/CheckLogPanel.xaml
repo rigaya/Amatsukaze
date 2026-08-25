@@ -77,6 +77,11 @@
                     <GridViewColumn Header="プロファイル" DisplayMemberBinding="{Binding Profile}" c:GridViewSort.PropertyName="Profile"/>
                 </GridView>
             </ListView.View>
+            <ListView.ContextMenu>
+                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <MenuItem Header="ログのパスをコピー" Command="{Binding CopyLogPathCommand, Mode=OneWay}" />
+                </ContextMenu>
+            </ListView.ContextMenu>
         </ListView>
 
     </DockPanel>

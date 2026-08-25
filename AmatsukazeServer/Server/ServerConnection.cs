@@ -54,6 +54,9 @@ namespace Amatsukaze.Server
                 case RPCMethodId.OnLogFile:
                     userClient.OnLogFile((string)arg);
                     break;
+                case RPCMethodId.OnLogFilePath:
+                    userClient.OnLogFilePath((LogFilePathResponse)arg);
+                    break;
                 case RPCMethodId.OnCommonData:
                     userClient.OnCommonData((CommonData)arg);
                     break;
@@ -151,6 +154,11 @@ namespace Amatsukaze.Server
         public Task RequestLogFile(LogFileRequest item)
         {
             return Send(RPCMethodId.RequestLogFile, item);
+        }
+
+        public Task RequestLogFilePath(LogFileRequest item)
+        {
+            return Send(RPCMethodId.RequestLogFilePath, item);
         }
 
         public Task RequestDrcsImages()

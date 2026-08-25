@@ -2045,6 +2045,8 @@ namespace Amatsukaze.Server
         public LogItem LogItem { get; set; }
         [DataMember]
         public CheckLogItem CheckLogItem { get; set; }
+        [DataMember]
+        public string RequestId { get; set; }
     }
 
         [DataContract]

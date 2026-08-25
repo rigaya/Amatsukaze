@@ -84,6 +84,11 @@ namespace Amatsukaze.Server
             return Broadcast(client => client.OnLogFile(str));
         }
 
+        public Task OnLogFilePath(LogFilePathResponse response)
+        {
+            return Broadcast(client => client.OnLogFilePath(response));
+        }
+
         public Task OnCommonData(CommonData data)
         {
             return Broadcast(client => client.OnCommonData(data));

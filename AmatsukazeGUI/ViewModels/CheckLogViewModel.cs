@@ -76,6 +76,29 @@ namespace Amatsukaze.ViewModels
             }
         }
 
+        #region ログパスコピーコマンド
+        private ViewModelCommand _CopyLogPathCommand;
+
+        public ViewModelCommand CopyLogPathCommand {
+            get {
+                if (_CopyLogPathCommand == null)
+                {
+                    _CopyLogPathCommand = new ViewModelCommand(CopyLogPath);
+                }
+                return _CopyLogPathCommand;
+            }
+        }
+
+        public void CopyLogPath()
+        {
+            var item = SelectedLogItem;
+            if (item != null)
+            {
+                Model.RequestLogFilePath(new LogFileRequest() { CheckLogItem = item });
+            }
+        }
+        #endregion
+
         #region SelectedLogItem変更通知プロパティ
         private CheckLogItem _SelectedLogItem;
 

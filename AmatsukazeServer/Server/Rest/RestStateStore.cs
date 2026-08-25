@@ -1818,6 +1818,11 @@ namespace Amatsukaze.Server.Rest
             return Task.FromResult(0);
         }
 
+        public Task OnLogFilePath(LogFilePathResponse response)
+        {
+            return Task.FromResult(0);
+        }
+
         public Task OnProfile(ProfileUpdate data)
         {
             if (data == null)

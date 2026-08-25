@@ -4410,6 +4410,24 @@ namespace Amatsukaze.Server
             return Task.FromResult(0);
         }
 
+        public Task RequestLogFilePath(LogFileRequest req)
+        {
+            string path = null;
+            if (req?.LogItem != null)
+            {
+                path = Path.GetFullPath(GetLogFileBase(req.LogItem.EncodeStartDate) + ".txt");
+            }
+            else if (req?.CheckLogItem != null)
+            {
+                path = Path.GetFullPath(GetCheckLogFileBase(req.CheckLogItem.CheckStartDate) + ".txt");
+            }
+            return Client.OnLogFilePath(new LogFilePathResponse()
+            {
+                RequestId = req?.RequestId,
+                Path = path
+            });
+        }
+
         public Task RequestDrcsImages()
         {
             return drcsManager.RequestDrcsImages();

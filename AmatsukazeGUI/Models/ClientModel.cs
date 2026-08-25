@@ -225,6 +225,7 @@ namespace Amatsukaze.Models
 
         #region CurrentLogFile変更通知プロパティ
         private string _CurrentLogFile = "ここに表示するにはログパネルの項目をダブルクリックしてください";
+        private string pendingLogPathRequestId;
 
         public string CurrentLogFile
         {
@@ -1857,6 +1858,35 @@ namespace Amatsukaze.Models
         public Task OnLogFile(string str)
         {
             CurrentLogFile = str;
+            return Task.FromResult(0);
+        }
+
+        public Task RequestLogFilePath(LogFileRequest request)
+        {
+            if (request == null || Server == null)
+            {
+                return Task.FromResult(0);
+            }
+            pendingLogPathRequestId = Guid.NewGuid().ToString("N");
+            request.RequestId = pendingLogPathRequestId;
+            return Server.RequestLogFilePath(request);
+        }
+
+        public Task OnLogFilePath(LogFilePathResponse response)
+        {
+            if (DispatchIfRequired(() => OnLogFilePath(response)))
+            {
+                return Task.FromResult(0);
+            }
+            if (response == null || response.RequestId != pendingLogPathRequestId)
+            {
+                return Task.FromResult(0);
+            }
+            pendingLogPathRequestId = null;
+            if (string.IsNullOrEmpty(response.Path) == false)
+            {
+                App.SetClipboardText(response.Path);
+            }
             return Task.FromResult(0);
         }
 
