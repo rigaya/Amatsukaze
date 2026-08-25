@@ -1110,17 +1110,6 @@ namespace Amatsukaze.Models
 
     public class DisplayEncoderFilterSetting : ViewModel
     {
-        private static readonly string[][] DeinterlaceParamLists = new string[][]
-        {
-            new[] { "default", "triple", "double", "anime", "cinema", "min_afterimg", "24fps", "30fps" },
-            new[] { "vfr", "60", "24" },
-            new[] { "normal", "bob" },
-            new[] { "normal", "bob" },
-            new[] { "normal", "bob" },
-            Array.Empty<string>(),
-            Array.Empty<string>()
-        };
-
         public EncoderFilterSetting Data { get; private set; }
 
         public string[] DeinterlaceList { get; } =
@@ -1130,6 +1119,14 @@ namespace Amatsukaze.Models
         public string[] EdgeList { get; } =
             new[] { "edgelevel", "unsharp", "warpsharp", "msharpen" };
         public string[] OutputDepthList { get; } = new[] { "8bit", "10bit" };
+
+        // インターレース解除のパラメータ欄はアルゴリズムごとに別のComboBoxを用意する。
+        // 1つのComboBoxでItemsSourceを差し替えると、WPFのSelectorが選択状態のリセットを
+        // 遅延実行するため、こちらで設定したSelectedIndexが後から-1で上書きされて空欄になる。
+        public string[] AfsPresetList { get; } =
+            new[] { "default", "triple", "double", "anime", "cinema", "min_afterimg", "24fps", "30fps" };
+        public string[] KfmModeList { get; } = new[] { "vfr", "60", "24" };
+        public string[] DeintModeList { get; } = new[] { "normal", "bob" };
 
         // 出力ビット深度の設定元となるプロファイル（エンコーダ種別の参照用）
         private ProfileSetting Profile { get; set; }
@@ -1211,46 +1208,79 @@ namespace Amatsukaze.Models
                 if (Data.DeinterlaceAlgorithm == (EncoderFilterDeinterlace)value) return;
                 Data.DeinterlaceAlgorithm = (EncoderFilterDeinterlace)value;
                 RaisePropertyChanged();
-                RaisePropertyChanged("DeinterlaceParamList");
-                RaisePropertyChanged("DeinterlaceParamIndex");
-                RaisePropertyChanged("DeinterlaceParamVisible");
+                RaisePropertyChanged("AfsPresetVisible");
+                RaisePropertyChanged("AfsPresetIndex");
+                RaisePropertyChanged("KfmModeVisible");
+                RaisePropertyChanged("KfmModeIndex");
+                RaisePropertyChanged("DeintModeVisible");
+                RaisePropertyChanged("DeintModeIndex");
                 RaisePropertyChanged("DeinterlaceAlgorithmToolTip");
                 RaisePropertyChanged("DeinterlaceParamToolTip");
             }
         }
 
-        public string[] DeinterlaceParamList
+        public bool AfsPresetVisible
         {
-            get { return DeinterlaceParamLists[(int)Data.DeinterlaceAlgorithm]; }
+            get { return Data.DeinterlaceAlgorithm == EncoderFilterDeinterlace.Afs; }
         }
 
-        public int DeinterlaceParamIndex
+        public int AfsPresetIndex
+        {
+            get { return (int)Data.AfsPreset; }
+            set
+            {
+                if (value < 0 || value >= AfsPresetList.Length) return;
+                if (Data.AfsPreset == (EncoderFilterAfsPreset)value) return;
+                Data.AfsPreset = (EncoderFilterAfsPreset)value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public bool KfmModeVisible
+        {
+            get { return Data.DeinterlaceAlgorithm == EncoderFilterDeinterlace.KFM; }
+        }
+
+        public int KfmModeIndex
+        {
+            get { return (int)Data.KfmMode; }
+            set
+            {
+                if (value < 0 || value >= KfmModeList.Length) return;
+                if (Data.KfmMode == (EncoderFilterKfmMode)value) return;
+                Data.KfmMode = (EncoderFilterKfmMode)value;
+                RaisePropertyChanged();
+            }
+        }
+
+        // nnedi/yadif/bwdifは選択肢が同じnormal/bobなので1つのComboBoxを共用する
+        public bool DeintModeVisible
+        {
+            get
+            {
+                return Data.DeinterlaceAlgorithm == EncoderFilterDeinterlace.NNEDI ||
+                    Data.DeinterlaceAlgorithm == EncoderFilterDeinterlace.Yadif ||
+                    Data.DeinterlaceAlgorithm == EncoderFilterDeinterlace.Bwdif;
+            }
+        }
+
+        public int DeintModeIndex
         {
             get
             {
                 switch (Data.DeinterlaceAlgorithm)
                 {
-                    case EncoderFilterDeinterlace.Afs: return (int)Data.AfsPreset;
-                    case EncoderFilterDeinterlace.KFM: return (int)Data.KfmMode;
                     case EncoderFilterDeinterlace.NNEDI: return (int)Data.NnediMode;
                     case EncoderFilterDeinterlace.Yadif: return (int)Data.YadifMode;
                     case EncoderFilterDeinterlace.Bwdif: return (int)Data.BwdifMode;
-                    default: return -1;
+                    default: return 0;
                 }
             }
             set
             {
-                if (value < 0 || value >= DeinterlaceParamList.Length) return;
+                if (value < 0 || value >= DeintModeList.Length) return;
                 switch (Data.DeinterlaceAlgorithm)
                 {
-                    case EncoderFilterDeinterlace.Afs:
-                        if (Data.AfsPreset == (EncoderFilterAfsPreset)value) return;
-                        Data.AfsPreset = (EncoderFilterAfsPreset)value;
-                        break;
-                    case EncoderFilterDeinterlace.KFM:
-                        if (Data.KfmMode == (EncoderFilterKfmMode)value) return;
-                        Data.KfmMode = (EncoderFilterKfmMode)value;
-                        break;
                     case EncoderFilterDeinterlace.NNEDI:
                         if (Data.NnediMode == (EncoderFilterDeintMode)value) return;
                         Data.NnediMode = (EncoderFilterDeintMode)value;
@@ -1267,15 +1297,6 @@ namespace Amatsukaze.Models
                         return;
                 }
                 RaisePropertyChanged();
-            }
-        }
-
-        public bool DeinterlaceParamVisible
-        {
-            get
-            {
-                return Data.DeinterlaceAlgorithm != EncoderFilterDeinterlace.Decomb &&
-                    Data.DeinterlaceAlgorithm != EncoderFilterDeinterlace.IVTC;
             }
         }
 

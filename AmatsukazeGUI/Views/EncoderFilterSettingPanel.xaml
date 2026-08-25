@@ -24,10 +24,17 @@
                 <ComboBox Width="150" Height="22" ItemsSource="{Binding DeinterlaceList}"
                           SelectedIndex="{Binding DeinterlaceAlgorithm, Mode=TwoWay}"
                           ToolTip="{Binding DeinterlaceAlgorithmToolTip}" ToolTipService.ShowOnDisabled="True"/>
-                <ComboBox Width="120" Height="22" Margin="6,0,0,0"
-                          ItemsSource="{Binding DeinterlaceParamList}"
-                          SelectedIndex="{Binding DeinterlaceParamIndex, Mode=TwoWay}"
-                          Visibility="{Binding DeinterlaceParamVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                <ComboBox Width="120" Height="22" Margin="6,0,0,0" ItemsSource="{Binding AfsPresetList}"
+                          SelectedIndex="{Binding AfsPresetIndex, Mode=TwoWay}"
+                          Visibility="{Binding AfsPresetVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                          ToolTip="{Binding DeinterlaceParamToolTip}" ToolTipService.ShowOnDisabled="True"/>
+                <ComboBox Width="120" Height="22" Margin="6,0,0,0" ItemsSource="{Binding KfmModeList}"
+                          SelectedIndex="{Binding KfmModeIndex, Mode=TwoWay}"
+                          Visibility="{Binding KfmModeVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                          ToolTip="{Binding DeinterlaceParamToolTip}" ToolTipService.ShowOnDisabled="True"/>
+                <ComboBox Width="120" Height="22" Margin="6,0,0,0" ItemsSource="{Binding DeintModeList}"
+                          SelectedIndex="{Binding DeintModeIndex, Mode=TwoWay}"
+                          Visibility="{Binding DeintModeVisible, Converter={StaticResource BoolVisibilityConverter}}"
                           ToolTip="{Binding DeinterlaceParamToolTip}" ToolTipService.ShowOnDisabled="True"/>
             </StackPanel>
         </GroupBox>
