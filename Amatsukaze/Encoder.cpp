@@ -210,18 +210,37 @@ void concatenateEncoderFilterTimecodes(
         THROW(RuntimeException, "エンコーダフィルタのチャンクタイムコードを連結できません");
     }
 
-    File output(finalPath, _T("wb"));
-    const char header[] = "# timecode format v2\n";
-    output.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
+    // チャンク境界の時刻は入力フレーム番号から求めるため、フレームレートが変化していると
+    // 境界のフレーム間隔だけが前後とずれる。これをCFR/VFR判定から除外できるよう、
+    // 境界にあたる出力フレーム番号をコメント行として記録しておく
+    std::vector<std::string> lines;
+    std::vector<int> boundaries;
     for (size_t p = 0; p < chunkPaths.size(); p++) {
         const auto timestamps = readEncoderFilterTimecode(chunkPaths[p]);
+        if (p > 0) {
+            boundaries.push_back((int)lines.size());
+        }
         const double base = timestamps.front();
         const double chunkStart = startFrames[p] * 1000.0 * vi.fps_denominator / vi.fps_numerator;
         for (const auto timestamp : timestamps) {
-            std::string line = std::to_string(timestamp - base + chunkStart);
-            line.push_back('\n');
-            output.write(MemoryChunk((uint8_t*)line.data(), line.size()));
+            lines.push_back(std::to_string(timestamp - base + chunkStart));
+            lines.back().push_back('\n');
         }
+    }
+
+    File output(finalPath, _T("wb"));
+    const char header[] = "# timecode format v2\n";
+    output.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
+    if (boundaries.size() > 0) {
+        std::string comment = "# " + std::string(ENCODER_FILTER_CHUNK_BOUNDARY_TAG);
+        for (size_t i = 0; i < boundaries.size(); i++) {
+            comment += (i == 0 ? " " : ",") + std::to_string(boundaries[i]);
+        }
+        comment.push_back('\n');
+        output.write(MemoryChunk((uint8_t*)comment.data(), comment.size()));
+    }
+    for (const auto& line : lines) {
+        output.write(MemoryChunk((uint8_t*)line.data(), line.size()));
     }
 }
 

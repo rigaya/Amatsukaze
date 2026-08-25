@@ -19,6 +19,10 @@ class EncoderArgumentGenerator;
 
 bool isSoftwareSplitEncoder(ENUM_ENCODER encoder);
 
+// エンコーダフィルタのタイムコードに埋め込むチャンク境界コメントのタグ
+// (分割エンコードの連結時に書き込み、CFR/VFR判定時に該当フレーム間隔を除外する)
+#define ENCODER_FILTER_CHUNK_BOUNDARY_TAG "amt-chunk-boundary:"
+
 class Y4MWriter {
     static const char* getPixelFormat(VideoInfo vi);
 public:

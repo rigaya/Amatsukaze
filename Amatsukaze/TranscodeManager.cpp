@@ -92,7 +92,24 @@ static void writeTStringArray(const File& file, const std::vector<tstring>& stri
 // タイムコードファイルの最大サイズ (1行10バイト強として約150万フレーム分)
 static const int64_t MAX_TIMECODE_FILE_SIZE = 16 * 1024 * 1024;
 
-static std::vector<double> readEncoderFilterTimecodeFile(const tstring& path) {
+// タイムコードのコメント行からチャンク境界の出力フレーム番号を読み取る
+static void parseChunkBoundaryComment(const std::string& comment, std::vector<int>& boundaries) {
+    const size_t tagPos = comment.find(ENCODER_FILTER_CHUNK_BOUNDARY_TAG);
+    if (tagPos == std::string::npos) {
+        return;
+    }
+    size_t pos = tagPos + strlen(ENCODER_FILTER_CHUNK_BOUNDARY_TAG);
+    while (pos < comment.size()) {
+        const size_t first = comment.find_first_of("0123456789", pos);
+        if (first == std::string::npos) break;
+        const size_t last = comment.find_first_not_of("0123456789", first);
+        boundaries.push_back(std::atoi(comment.substr(first, last - first).c_str()));
+        if (last == std::string::npos) break;
+        pos = last;
+    }
+}
+
+static std::vector<double> readEncoderFilterTimecodeFile(const tstring& path, std::vector<int>* boundaries = nullptr) {
     std::string text;
     {
         File input(path, _T("rb"));
@@ -116,6 +133,9 @@ static std::vector<double> readEncoderFilterTimecodeFile(const tstring& path) {
         lineNumber++;
         const size_t first = line.find_first_not_of(" \t\r");
         if (first == std::string::npos || line[first] == '#') {
+            if (first != std::string::npos && boundaries != nullptr) {
+                parseChunkBoundaryComment(line, *boundaries);
+            }
             continue;
         }
         try {
@@ -148,7 +168,16 @@ struct EncoderFilterTimecodeInfo {
 // タイムコードの実測値からCFR/VFRとフレームレートを判定する
 // フィルタのオプション文字列からフレームレート変化を推測すると、
 // 解析漏れがあったときに気づけないまま不整合な出力になるため、常に実測値で判定する
-static EncoderFilterTimecodeInfo analyzeEncoderFilterTimecode(const std::vector<double>& timestamps) {
+//
+// boundaries には分割エンコードのチャンク境界にあたる出力フレーム番号を渡す。
+// チャンク境界の時刻は入力フレーム番号から求めるため、フレームレートが変化していると
+// 境界のフレーム間隔だけが前後とずれる。この間隔は判定から除外する。
+//
+// 境界以外のフレーム間隔にわずかでもばらつきがあればVFRとして扱う。
+// CFRと誤判定するとタイムコードが反映されず音ズレになるが、逆にVFR扱いにしても
+// タイムコードをそのまま反映するだけなので実害がないため、判定は厳しめにしておく。
+static EncoderFilterTimecodeInfo analyzeEncoderFilterTimecode(
+    const std::vector<double>& timestamps, const std::vector<int>& boundaries = std::vector<int>()) {
     EncoderFilterTimecodeInfo info = {};
     info.numFrames = (int)timestamps.size();
     if (timestamps.size() < 3) {
@@ -156,15 +185,25 @@ static EncoderFilterTimecodeInfo analyzeEncoderFilterTimecode(const std::vector<
         info.frameDurationMs = (timestamps.size() == 2) ? (timestamps[1] - timestamps[0]) : 0.0;
         return info;
     }
+    // intervals[i] = timestamps[i + 1] - timestamps[i]
+    // チャンク境界のフレーム番号 b に対応する間隔は intervals[b - 1]
+    std::vector<bool> ignored(timestamps.size() - 1, false);
+    for (const auto boundary : boundaries) {
+        if (boundary >= 1 && (size_t)boundary <= ignored.size()) {
+            ignored[boundary - 1] = true;
+        }
+    }
     std::vector<double> intervals;
     intervals.reserve(timestamps.size() - 1);
     for (size_t i = 1; i < timestamps.size(); i++) {
-        intervals.push_back(timestamps[i] - timestamps[i - 1]);
+        if (!ignored[i - 1]) {
+            intervals.push_back(timestamps[i] - timestamps[i - 1]);
+        }
     }
-    // 平均ではなく中央値を基準にする。
-    // 分割エンコード時のチャンク連結では、チャンク境界の時刻を入力フレーム番号から
-    // 求めるため、フレームレートが変化していると境界に1フレーム未満のずれが残る。
-    // 平均や全数一致で判定すると、この少数のずれでVFRと誤判定してしまう。
+    if (intervals.empty()) {
+        return info;
+    }
+    // 平均ではなく中央値を基準にする
     std::vector<double> sorted = intervals;
     std::nth_element(sorted.begin(), sorted.begin() + sorted.size() / 2, sorted.end());
     const double median = sorted[sorted.size() / 2];
@@ -172,19 +211,14 @@ static EncoderFilterTimecodeInfo analyzeEncoderFilterTimecode(const std::vector<
         info.isVFR = true;
         return info;
     }
-    // タイムベースの丸めによる微小なゆらぎはCFRとみなす
+    // タイムベースの丸めによる微小なゆらぎのみCFRとみなす
+    // (30fpsと24fpsの差は8.3ms、120fps基準の丸め誤差でも1ms未満なので十分に区別できる)
     const double tolerance = std::max(median * 0.01, 0.05);
-    size_t outliers = 0;
     for (const auto interval : intervals) {
         if (std::abs(interval - median) > tolerance) {
-            outliers++;
+            info.isVFR = true;
+            return info;
         }
-    }
-    // チャンク境界のずれはチャンク数分しか出ないため、全体の5%を超えることはない。
-    // 一方、間引きによるVFRでは異なる間隔が10%以上を占める。
-    if (outliers * 20 > intervals.size()) {
-        info.isVFR = true;
-        return info;
     }
     info.frameDurationMs = median;
     return info;
@@ -2038,8 +2072,9 @@ void DoBadThing() {
             if (setting.isEncoderFilterSeparate() && File::exists(setting.getEncoderFilterTimecodePath(key))) {
                 // フィルタ出力のタイムコードを実測し、CFR/VFRとフレームレートを判定する
                 const tstring encoderFilterTimecodePath = setting.getEncoderFilterTimecodePath(key);
-                const auto timestamps = readEncoderFilterTimecodeFile(encoderFilterTimecodePath);
-                const auto tcInfo = analyzeEncoderFilterTimecode(timestamps);
+                std::vector<int> chunkBoundaries;
+                const auto timestamps = readEncoderFilterTimecodeFile(encoderFilterTimecodePath, &chunkBoundaries);
+                const auto tcInfo = analyzeEncoderFilterTimecode(timestamps, chunkBoundaries);
                 ctx.infoF(_T("エンコーダフィルタ出力フレーム数: %d"), tcInfo.numFrames);
                 if (setting.isEncoderFilterDeinterlace()) {
                     fileOut.vfmt.progressive = true;
