@@ -766,8 +766,8 @@ namespace Amatsukaze.Server.Rest
                 var filterOptions = new List<FilterOptionItem>
                 {
                     new FilterOptionItem { Id = (int)FilterOption.None, Name = "フィルタなし" },
-                    new FilterOptionItem { Id = (int)FilterOption.Setting, Name = "標準フィルタ" },
-                    new FilterOptionItem { Id = (int)FilterOption.Custom, Name = "カスタムフィルタ" },
+                    new FilterOptionItem { Id = (int)FilterOption.Setting, Name = "AviSynth標準フィルタ" },
+                    new FilterOptionItem { Id = (int)FilterOption.Custom, Name = "AviSynthカスタムフィルタ" },
                     new FilterOptionItem { Id = (int)FilterOption.QSVEncFilter, Name = "QSVEncフィルタ" },
                     new FilterOptionItem { Id = (int)FilterOption.NVEncFilter, Name = "NVEncフィルタ" },
                     new FilterOptionItem { Id = (int)FilterOption.VCEEncFilter, Name = "VCEEncフィルタ" }

@@ -761,7 +761,7 @@ namespace Amatsukaze.Models
 
     public class DisplayFilterSetting : ViewModel
     {
-        public string Name { get { return "フィルタを設定"; } }
+        public string Name { get { return "AviSynthフィルタを設定"; } }
 
         public FilterSetting Data { get; private set; }
 
@@ -1065,7 +1065,7 @@ namespace Amatsukaze.Models
 
     public class DisplayCustomFilter : ViewModel
     {
-        public string Name { get { return "カスタムフィルタを設定"; } }
+        public string Name { get { return "AviSynthカスタムフィルタを設定"; } }
 
         public ClientModel Model { get; set; }
 
