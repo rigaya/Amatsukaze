@@ -364,12 +364,12 @@ else
                         <fieldset class="profile-filter-panel">
                             <legend class="profile-filter-legend">
                                 <label>
-                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeinterlace")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeinterlace"))" />
-                                    インターレース解除
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeinterlace")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeinterlace"))" title="@EncoderFilterHelp.Deinterlace" />
+                                    <span title="@EncoderFilterHelp.Deinterlace">インターレース解除</span>
                                 </label>
                             </legend>
                             <div style="margin-top: 6px;">
-                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames))" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))">
+                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames))" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))" title="@GetEncoderDeinterlaceAlgorithmHelp()">
                                     @foreach (var item in GetArrayOptions(_encoderDeinterlaceLabels, GetEncoderFilterEnumIndex("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames)))
                                     {
                                         <option value="@item.Value" selected="@item.Selected">@item.Label</option>
@@ -377,7 +377,7 @@ else
                                 </select>
                                 @if (HasEncoderDeinterlaceParam())
                                 {
-                                    <select style="margin-left: 6px;" @onchange="OnEncoderDeinterlaceParamChanged" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))">
+                                    <select style="margin-left: 6px;" @onchange="OnEncoderDeinterlaceParamChanged" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))" title="@GetEncoderDeinterlaceParamHelp()">
                                         @foreach (var item in GetEncoderDeinterlaceParamOptions())
                                         {
                                             <option value="@item.Value" selected="@item.Selected">@item.Label</option>
@@ -389,12 +389,12 @@ else
                         <fieldset class="profile-filter-panel">
                             <legend class="profile-filter-legend">
                                 <label>
-                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableDenoise")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDenoise"))" />
-                                    ノイズ除去
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableDenoise")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDenoise"))" title="@EncoderFilterHelp.Denoise" />
+                                    <span title="@EncoderFilterHelp.Denoise">ノイズ除去</span>
                                 </label>
                             </legend>
                             <div style="margin-top: 6px;">
-                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "DenoiseAlgorithm", _encoderDenoiseEnumNames))" disabled="@(!GetEncoderFilterBool("EnableDenoise"))">
+                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "DenoiseAlgorithm", _encoderDenoiseEnumNames))" disabled="@(!GetEncoderFilterBool("EnableDenoise"))" title="@GetEncoderDenoiseAlgorithmHelp()">
                                     @foreach (var item in GetArrayOptions(_encoderDenoiseLabels, GetEncoderFilterEnumIndex("DenoiseAlgorithm", _encoderDenoiseEnumNames)))
                                     {
                                         <option value="@item.Value" selected="@item.Selected">@item.Label</option>
@@ -402,9 +402,9 @@ else
                                 </select>
                                 @if (IsEncoderDenoiseValueVisible())
                                 {
-                                    <span style="margin-left: 8px;" title="@GetEncoderDenoiseValueLabel()">@GetEncoderDenoiseValueLabel()</span>
+                                    <span style="margin-left: 8px;" title="@GetEncoderDenoiseValueHelp()">@GetEncoderDenoiseValueLabel()</span>
                                     <input type="number" step="any" style="width: 90px; margin-left: 4px;" value="@GetEncoderDenoiseValue()"
-                                           title="@GetEncoderDenoiseValueLabel()" @oninput="OnEncoderDenoiseValueChanged"
+                                           title="@GetEncoderDenoiseValueHelp()" @oninput="OnEncoderDenoiseValueChanged"
                                            disabled="@(!GetEncoderFilterBool("EnableDenoise"))" />
                                 }
                             </div>
@@ -412,11 +412,11 @@ else
                         <fieldset class="profile-filter-panel">
                             <legend class="profile-filter-legend">
                                 <label>
-                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableResize")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableResize"))" />
-                                    リサイズ
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableResize")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableResize"))" title="@EncoderFilterHelp.Resize" />
+                                    <span title="@EncoderFilterHelp.Resize">リサイズ</span>
                                 </label>
                             </legend>
-                            <div style="margin-top: 6px;">
+                            <div style="margin-top: 6px;" title="@EncoderFilterHelp.Resize">
                                 <span>横</span>
                                 <input type="number" style="width: 80px; margin-left: 4px;" value="@GetEncoderFilterInt("ResizeWidth")"
                                        @oninput="@(e => OnEncoderFilterIntChanged(e, "ResizeWidth"))" disabled="@(!GetEncoderFilterBool("EnableResize"))" />
@@ -428,24 +428,24 @@ else
                         <fieldset class="profile-filter-panel">
                             <legend class="profile-filter-legend">
                                 <label>
-                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableEdgeEnhance")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableEdgeEnhance"))" />
-                                    エッジ強調
+                                    <input type="checkbox" checked="@GetEncoderFilterBool("EnableEdgeEnhance")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableEdgeEnhance"))" title="@EncoderFilterHelp.EdgeEnhance" />
+                                    <span title="@EncoderFilterHelp.EdgeEnhance">エッジ強調</span>
                                 </label>
                             </legend>
                             <div style="margin-top: 6px;">
-                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "EdgeAlgorithm", _encoderEdgeEnumNames))" disabled="@(!GetEncoderFilterBool("EnableEdgeEnhance"))">
+                                <select @onchange="@(e => OnEncoderFilterEnumChanged(e, "EdgeAlgorithm", _encoderEdgeEnumNames))" disabled="@(!GetEncoderFilterBool("EnableEdgeEnhance"))" title="@GetEncoderEdgeAlgorithmHelp()">
                                     @foreach (var item in GetArrayOptions(_encoderEdgeLabels, GetEncoderFilterEnumIndex("EdgeAlgorithm", _encoderEdgeEnumNames)))
                                     {
                                         <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                                     }
                                 </select>
-                                <span style="margin-left: 8px;" title="@GetEncoderEdgeValueLabel()">@GetEncoderEdgeValueLabel()</span>
+                                <span style="margin-left: 8px;" title="@GetEncoderEdgeAlgorithmHelp()">@GetEncoderEdgeValueLabel()</span>
                                 <input type="number" step="any" style="width: 90px; margin-left: 4px;" value="@GetEncoderEdgeValue()"
-                                       title="@GetEncoderEdgeValueLabel()" @oninput="OnEncoderEdgeValueChanged"
+                                       title="@GetEncoderEdgeAlgorithmHelp()" @oninput="OnEncoderEdgeValueChanged"
                                        disabled="@(!GetEncoderFilterBool("EnableEdgeEnhance"))" />
                             </div>
                         </fieldset>
-                        <label style="margin: 4px 8px;">
+                        <label style="margin: 4px 8px;" title="@EncoderFilterHelp.Deband">
                             <input type="checkbox" checked="@GetEncoderFilterBool("EnableDeband")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "EnableDeband"))" />
                             バンディング低減
                         </label>
@@ -460,15 +460,15 @@ else
                                     <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                                 }
                             </select>
-                            <div class="text-muted small">@GetEncoderOutputDepthHelp()</div>
+                            <div class="text-muted small" style="white-space: pre-line;">@GetEncoderOutputDepthHelp()</div>
                         </div>
                     </td>
                 </tr>
                 <tr>
                     <th>フィルタオプション</th>
                     <td>
-                        <textarea style="width: 100%; height: 80px;" @oninput="OnEncoderFilterOptionChanged">@GetEncoderFilterOption()</textarea>
-                        <div>--vpp-* 等のフィルタオプションを記述します。エンコーダがこのフィルタと同じ場合はエンコーダオプションに結合して1プロセスで処理されます。</div>
+                        <textarea style="width: 100%; height: 80px;" title="@EncoderFilterHelp.FilterOption" @oninput="OnEncoderFilterOptionChanged">@GetEncoderFilterOption()</textarea>
+                        <div class="text-muted small" style="white-space: pre-line;">@EncoderFilterHelp.FilterOption</div>
                     </td>
                 </tr>
             }
@@ -1663,15 +1663,37 @@ else
     // エンコーダフィルタの出力ビット深度のヘルプ文（svt-av1選択時のみ例外の説明を追記）
     private string GetEncoderOutputDepthHelp()
     {
-        var text = "エンコーダフィルタの出力ビット深度を指定します。"
-            + "指定しない場合は入力のビット深度がそのまま維持されます。"
-            + "10bitを指定するとフィルタ処理による階調の劣化を抑えられますが、本エンコーダが10bit入力に対応している必要があります。";
-        if (IsSvtAv1Encoder())
-        {
-            text += " ※エンコーダにsvt-av1を選択している場合は例外として、この設定より「入力ビット深度」の指定が優先されます。"
-                + "「入力ビット深度」が「自動」のときのみ、この設定が使われます。";
-        }
-        return text;
+        return EncoderFilterHelp.OutputDepth(IsSvtAv1Encoder());
+    }
+
+    private string GetEncoderDeinterlaceAlgorithmHelp()
+    {
+        return EncoderFilterHelp.DeinterlaceAlgorithm(
+            GetEncoderFilterEnumString("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames));
+    }
+
+    private string GetEncoderDeinterlaceParamHelp()
+    {
+        return EncoderFilterHelp.DeinterlaceParam(
+            GetEncoderFilterEnumString("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames));
+    }
+
+    private string GetEncoderDenoiseAlgorithmHelp()
+    {
+        return EncoderFilterHelp.DenoiseAlgorithm(
+            GetEncoderFilterEnumString("DenoiseAlgorithm", _encoderDenoiseEnumNames));
+    }
+
+    private string GetEncoderDenoiseValueHelp()
+    {
+        return EncoderFilterHelp.DenoiseValue(
+            GetEncoderFilterEnumString("DenoiseAlgorithm", _encoderDenoiseEnumNames));
+    }
+
+    private string GetEncoderEdgeAlgorithmHelp()
+    {
+        return EncoderFilterHelp.EdgeAlgorithm(
+            GetEncoderFilterEnumString("EdgeAlgorithm", _encoderEdgeEnumNames));
     }
 
     private bool IsForceSarEnabled()

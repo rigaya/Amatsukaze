@@ -449,7 +449,8 @@
                                     <TextBlock Margin="0,6,0,0" Text="追加コマンド" />
                                     <TextBox Height="80" Margin="0,3" AcceptsReturn="True" TextWrapping="Wrap"
                                              VerticalScrollBarVisibility="Auto"
-                                             Text="{Binding FilterOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                             Text="{Binding FilterOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="{Binding FilterOptionToolTip}" />
                                     <TextBlock Margin="0,3" TextWrapping="Wrap"
                                                Text="--vpp-* 等のフィルタオプションを記述します。エンコーダがこのフィルタと同じ場合はエンコーダオプションに結合して1プロセスで処理されます。" />
                                 </StackPanel>

@@ -17,37 +17,46 @@
         <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
                 <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
-                          Content="インターレース解除" IsChecked="{Binding EnableDeinterlace, Mode=TwoWay}"/>
+                          Content="インターレース解除" IsChecked="{Binding EnableDeinterlace, Mode=TwoWay}"
+                          ToolTip="{Binding DeinterlaceToolTip}"/>
             </GroupBox.Header>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableDeinterlace}">
                 <ComboBox Width="150" Height="22" ItemsSource="{Binding DeinterlaceList}"
-                          SelectedIndex="{Binding DeinterlaceAlgorithm, Mode=TwoWay}"/>
+                          SelectedIndex="{Binding DeinterlaceAlgorithm, Mode=TwoWay}"
+                          ToolTip="{Binding DeinterlaceAlgorithmToolTip}" ToolTipService.ShowOnDisabled="True"/>
                 <ComboBox Width="120" Height="22" Margin="6,0,0,0"
                           ItemsSource="{Binding DeinterlaceParamList}"
                           SelectedIndex="{Binding DeinterlaceParamIndex, Mode=TwoWay}"
-                          Visibility="{Binding DeinterlaceParamVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
+                          Visibility="{Binding DeinterlaceParamVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                          ToolTip="{Binding DeinterlaceParamToolTip}" ToolTipService.ShowOnDisabled="True"/>
             </StackPanel>
         </GroupBox>
         <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
                 <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
-                          Content="ノイズ除去" IsChecked="{Binding EnableDenoise, Mode=TwoWay}"/>
+                          Content="ノイズ除去" IsChecked="{Binding EnableDenoise, Mode=TwoWay}"
+                          ToolTip="{Binding DenoiseToolTip}"/>
             </GroupBox.Header>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableDenoise}">
                 <ComboBox Width="150" Height="22" ItemsSource="{Binding DenoiseList}"
-                          SelectedIndex="{Binding DenoiseAlgorithm, Mode=TwoWay}"/>
+                          SelectedIndex="{Binding DenoiseAlgorithm, Mode=TwoWay}"
+                          ToolTip="{Binding DenoiseAlgorithmToolTip}" ToolTipService.ShowOnDisabled="True"/>
                 <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding DenoiseValueLabel}"
-                           Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
+                           Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                           ToolTip="{Binding DenoiseValueToolTip}" ToolTipService.ShowOnDisabled="True"/>
                 <TextBox Width="70" Height="22" Text="{Binding DenoiseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"/>
+                         Visibility="{Binding DenoiseValueVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                         ToolTip="{Binding DenoiseValueToolTip}" ToolTipService.ShowOnDisabled="True"/>
             </StackPanel>
         </GroupBox>
         <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
                 <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
-                          Content="リサイズ" IsChecked="{Binding EnableResize, Mode=TwoWay}"/>
+                          Content="リサイズ" IsChecked="{Binding EnableResize, Mode=TwoWay}"
+                          ToolTip="{Binding ResizeToolTip}"/>
             </GroupBox.Header>
-            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableResize}">
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableResize}"
+                        ToolTip="{Binding ResizeToolTip}" ToolTipService.ShowOnDisabled="True">
                 <TextBlock Margin="2" VerticalAlignment="Center" Text="横"/>
                 <TextBox Width="70" Text="{Binding ResizeWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 <TextBlock Margin="6,2,2,2" VerticalAlignment="Center" Text="x 高さ"/>
@@ -57,16 +66,21 @@
         <GroupBox Tag="{DynamicResource AMT.BackgroundBaseBrush}" Margin="0,4">
             <GroupBox.Header>
                 <CheckBox MinHeight="0" MinWidth="0" Background="{DynamicResource AMT.BackgroundBaseBrush}"
-                          Content="エッジ強調" IsChecked="{Binding EnableEdgeEnhance, Mode=TwoWay}"/>
+                          Content="エッジ強調" IsChecked="{Binding EnableEdgeEnhance, Mode=TwoWay}"
+                          ToolTip="{Binding EdgeEnhanceToolTip}"/>
             </GroupBox.Header>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,2" IsEnabled="{Binding EnableEdgeEnhance}">
                 <ComboBox Width="150" Height="22" ItemsSource="{Binding EdgeList}"
-                          SelectedIndex="{Binding EdgeAlgorithm, Mode=TwoWay}"/>
-                <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding EdgeValueLabel}"/>
-                <TextBox Width="70" Height="22" Text="{Binding EdgeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                          SelectedIndex="{Binding EdgeAlgorithm, Mode=TwoWay}"
+                          ToolTip="{Binding EdgeAlgorithmToolTip}" ToolTipService.ShowOnDisabled="True"/>
+                <TextBlock Margin="8,0,4,0" VerticalAlignment="Center" Text="{Binding EdgeValueLabel}"
+                           ToolTip="{Binding EdgeAlgorithmToolTip}" ToolTipService.ShowOnDisabled="True"/>
+                <TextBox Width="70" Height="22" Text="{Binding EdgeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="{Binding EdgeAlgorithmToolTip}" ToolTipService.ShowOnDisabled="True"/>
             </StackPanel>
         </GroupBox>
-        <CheckBox Margin="8,4" Content="バンディング低減" IsChecked="{Binding EnableDeband, Mode=TwoWay}"/>
+        <CheckBox Margin="8,4" Content="バンディング低減" IsChecked="{Binding EnableDeband, Mode=TwoWay}"
+                  ToolTip="{Binding DebandToolTip}"/>
         <StackPanel Orientation="Horizontal" Margin="8,4" ToolTip="{Binding OutputDepthToolTip}">
             <CheckBox Content="出力ビット深度" IsChecked="{Binding EnableOutputDepth, Mode=TwoWay}"
                       ToolTip="{Binding OutputDepthToolTip}"/>

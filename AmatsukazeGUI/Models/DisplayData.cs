@@ -1,5 +1,6 @@
 ﻿using Amatsukaze.Components;
 using Amatsukaze.Server;
+using EncoderFilterHelp = Amatsukaze.Shared.EncoderFilterHelp;
 using Livet;
 using Livet.Commands;
 using Livet.EventListeners;
@@ -1139,24 +1140,49 @@ namespace Amatsukaze.Models
             Data = profile.EncoderFilterSetting;
         }
 
-        // 出力ビット深度のポップアップヘルプ
+        // ポップアップヘルプ（文言はEncoderFilterHelpでWebUIと共有）
+        public string DeinterlaceToolTip { get { return EncoderFilterHelp.Deinterlace; } }
+
+        public string DeinterlaceAlgorithmToolTip
+        {
+            get { return EncoderFilterHelp.DeinterlaceAlgorithm(Data.DeinterlaceAlgorithm.ToString()); }
+        }
+
+        public string DeinterlaceParamToolTip
+        {
+            get { return EncoderFilterHelp.DeinterlaceParam(Data.DeinterlaceAlgorithm.ToString()); }
+        }
+
+        public string DenoiseToolTip { get { return EncoderFilterHelp.Denoise; } }
+
+        public string DenoiseAlgorithmToolTip
+        {
+            get { return EncoderFilterHelp.DenoiseAlgorithm(Data.DenoiseAlgorithm.ToString()); }
+        }
+
+        public string DenoiseValueToolTip
+        {
+            get { return EncoderFilterHelp.DenoiseValue(Data.DenoiseAlgorithm.ToString()); }
+        }
+
+        public string ResizeToolTip { get { return EncoderFilterHelp.Resize; } }
+
+        public string EdgeEnhanceToolTip { get { return EncoderFilterHelp.EdgeEnhance; } }
+
+        public string EdgeAlgorithmToolTip
+        {
+            get { return EncoderFilterHelp.EdgeAlgorithm(Data.EdgeAlgorithm.ToString()); }
+        }
+
+        public string DebandToolTip { get { return EncoderFilterHelp.Deband; } }
+
+        // 出力ビット深度のポップアップヘルプ（エンコーダ種別で内容が変わる）
         public string OutputDepthToolTip
         {
             get
             {
-                var text =
-                    "エンコーダフィルタの出力ビット深度を指定します。\n" +
-                    "指定しない場合は入力のビット深度がそのまま維持されます。\n" +
-                    "10bitを指定するとフィルタ処理による階調の劣化を抑えられますが、" +
-                    "本エンコーダが10bit入力に対応している必要があります。";
-                if (Profile != null && Profile.EncoderType == EncoderType.SVTAV1)
-                {
-                    text +=
-                        "\n\n※エンコーダにsvt-av1を選択している場合は例外として、" +
-                        "この設定より「入力ビット深度」の指定が優先されます。" +
-                        "「入力ビット深度」が「自動」のときのみ、この設定が使われます。";
-                }
-                return text;
+                return EncoderFilterHelp.OutputDepth(
+                    Profile != null && Profile.EncoderType == EncoderType.SVTAV1);
             }
         }
 
@@ -1188,6 +1214,8 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("DeinterlaceParamList");
                 RaisePropertyChanged("DeinterlaceParamIndex");
                 RaisePropertyChanged("DeinterlaceParamVisible");
+                RaisePropertyChanged("DeinterlaceAlgorithmToolTip");
+                RaisePropertyChanged("DeinterlaceParamToolTip");
             }
         }
 
@@ -1273,6 +1301,8 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("DenoiseValue");
                 RaisePropertyChanged("DenoiseValueLabel");
                 RaisePropertyChanged("DenoiseValueVisible");
+                RaisePropertyChanged("DenoiseAlgorithmToolTip");
+                RaisePropertyChanged("DenoiseValueToolTip");
             }
         }
 
@@ -1374,6 +1404,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged();
                 RaisePropertyChanged("EdgeValue");
                 RaisePropertyChanged("EdgeValueLabel");
+                RaisePropertyChanged("EdgeAlgorithmToolTip");
             }
         }
 
@@ -1469,6 +1500,9 @@ namespace Amatsukaze.Models
             EncoderType = encoderType;
             EncoderFilterSetting = encoderFilterSetting;
         }
+
+        // 追加コマンド欄のポップアップヘルプ（文言はEncoderFilterHelpでWebUIと共有）
+        public string FilterOptionToolTip { get { return EncoderFilterHelp.FilterOption; } }
 
         public string FilterOption
         {
