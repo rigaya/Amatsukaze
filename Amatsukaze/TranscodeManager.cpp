@@ -2079,27 +2079,46 @@ void DoBadThing() {
                 if (setting.isEncoderFilterDeinterlace()) {
                     fileOut.vfmt.progressive = true;
                 }
-                if (tcInfo.isVFR) {
-                    if (!setting.isFormatVFRSupported()) {
-                        THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
-                    }
-                    writeNormalizedEncoderFilterTimecode(encoderFilterTimecodePath, timestamps);
-                    fileOut.timecode = encoderFilterTimecodePath;
-                    // timelineeditorの丸めで16～17ms間隔が同一timestampにならないよう、
-                    // encoder filterのVFR timebaseは常に120000/1001とする。
-                    fileOut.vfrTimingFps = 120;
-                    ctx.info(_T("エンコーダフィルタのVFRタイムコードを整数msに正規化しました (タイムベース: 120000/1001)"));
-                } else if (tcInfo.frameDurationMs > 0.0 && fileOut.vfmt.frameRateNum > 0) {
-                    // CFRなので実測したフレームレートをコンテナのメタデータに反映する
+                // CFRであってもフレームレートが変化しているなら、コンテナのフレームレートを
+                // 書き換えるのではなく実測タイムコードをそのまま反映する。
+                // 実測比を単純な分数で近似する方式は誤差が全フレームに累積するため、
+                // 番組が長いほど音ズレが大きくなるのに対し、タイムコードの反映は
+                // 各フレームの時刻をそのまま渡すので誤差が累積しない。
+                int fpsMul = 1, fpsDiv = 1;
+                bool fpsChanged = false;
+                if (!tcInfo.isVFR && tcInfo.frameDurationMs > 0.0 && fileOut.vfmt.frameRateNum > 0) {
                     const double inFrameMs = 1000.0 * fileOut.vfmt.frameRateDenom / fileOut.vfmt.frameRateNum;
                     const double ratio = inFrameMs / tcInfo.frameDurationMs;
-                    int mul = 1, div = 1;
-                    if (!approximateFpsRatio(ratio, mul, div)) {
-                        ctx.warnF(_T("エンコーダフィルタ出力のフレームレート比(%.4f)を単純な分数で表せません。"
-                            _T("コンテナのフレームレートは入力のままとします")), ratio);
-                    } else if (mul != div) {
-                        fileOut.vfmt.mulDivFps(mul, div);
-                        ctx.infoF(_T("エンコーダフィルタによるフレームレート変化を検出しました (入力の%d/%d倍)"), mul, div);
+                    if (std::abs(ratio - 1.0) > 0.001) {
+                        fpsChanged = true;
+                        if (approximateFpsRatio(ratio, fpsMul, fpsDiv)) {
+                            ctx.infoF(_T("エンコーダフィルタによるフレームレート変化を検出しました (入力の%d/%d倍)"), fpsMul, fpsDiv);
+                        } else {
+                            ctx.infoF(_T("エンコーダフィルタによるフレームレート変化を検出しました (入力の%.4f倍)"), ratio);
+                        }
+                    }
+                }
+
+                if (tcInfo.isVFR || fpsChanged) {
+                    if (setting.isFormatVFRSupported()) {
+                        writeNormalizedEncoderFilterTimecode(encoderFilterTimecodePath, timestamps);
+                        fileOut.timecode = encoderFilterTimecodePath;
+                        // timelineeditorの丸めで16～17ms間隔が同一timestampにならないよう、
+                        // encoder filterのVFR timebaseは常に120000/1001とする。
+                        fileOut.vfrTimingFps = 120;
+                        ctx.info(_T("エンコーダフィルタのタイムコードを整数msに正規化しました (タイムベース: 120000/1001)"));
+                    } else if (tcInfo.isVFR) {
+                        THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
+                    } else if (fpsMul != fpsDiv) {
+                        // VFR非対応フォーマットなのでタイムコードを反映できない。
+                        // 次善策としてコンテナのフレームレートを書き換える
+                        fileOut.vfmt.mulDivFps(fpsMul, fpsDiv);
+                        ctx.warn(_T("M2TS/TS出力ではタイムコードを反映できないため、"
+                            _T("コンテナのフレームレートのみ変更します")));
+                    } else {
+                        ctx.warn(_T("M2TS/TS出力ではタイムコードを反映できず、"
+                            _T("フレームレート変化を単純な分数でも表せないため、"
+                            _T("コンテナのフレームレートは入力のままとします"))));
                     }
                 }
             } else if (setting.isEncoderFilterSeparate()) {
