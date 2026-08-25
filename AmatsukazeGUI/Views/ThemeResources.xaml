@@ -14,6 +14,7 @@
     <SolidColorBrush x:Key="AMT.AccentBrush" Color="#FF569DE5"/>
     <SolidColorBrush x:Key="AMT.AccentLightBrush" Color="#FF7EB4EA"/>
     <SolidColorBrush x:Key="AMT.DisabledForegroundBrush" Color="#FF808080"/>
+    <SolidColorBrush x:Key="AMT.UpdateAttentionForegroundBrush" Color="#FFB42318"/>
     <SolidColorBrush x:Key="AMT.HeaderBackgroundBrush" Color="#F0FFFF"/> <!-- Azure -->
     <SolidColorBrush x:Key="AMT.SelectionBrush" Color="#DDAA88CC"/> <!-- Plum 近似 -->
     <SolidColorBrush x:Key="AMT.SelectionForegroundBrush" Color="#FFFFFFFF"/>

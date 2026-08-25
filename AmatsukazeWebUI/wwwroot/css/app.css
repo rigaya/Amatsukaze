@@ -1397,6 +1397,13 @@ code {
     border: 1px solid var(--glass-border);
 }
 
+/* 更新ボタンのラベルを2行で表示する */
+.update-status-button {
+    white-space: pre-line;
+    text-align: center;
+    line-height: 1.25;
+}
+
 .update-status-button.has-update {
     color: var(--update-attention-text);
     background: var(--update-attention-soft);

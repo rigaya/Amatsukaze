@@ -139,7 +139,7 @@ namespace Amatsukaze.Models
         #region HasUpdate変更通知プロパティ
         private bool _HasUpdate;
 
-        // 更新チェックで更新が見つかっているか。基本設定の「アップデートあり」ボタンの表示に使う。
+        // 更新チェックで更新が見つかっているか。基本設定の更新ボタンの強調表示に使う。
         public bool HasUpdate
         {
             get { return _HasUpdate; }
@@ -1356,6 +1356,7 @@ namespace Amatsukaze.Models
             rd["AMT.SelectionBrush"] = new SolidColorBrush(selection);
             rd["AMT.SelectionForegroundBrush"] = new SolidColorBrush(selectionFg);
             rd["AMT.DisabledForegroundBrush"] = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
+            rd["AMT.UpdateAttentionForegroundBrush"] = new SolidColorBrush(isDark ? Color.FromRgb(0xFF, 0x9A, 0xA2) : Color.FromRgb(0xB4, 0x23, 0x18));
             rd["AMT.AccentBrush"] = accentBrush;
 
             // 挿入インジケータ(ドラッグ時の挿入線)の色

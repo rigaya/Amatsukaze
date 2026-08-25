@@ -19,11 +19,6 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <DockPanel.Resources>
-            <!-- 更新が無いときはボタンが場所を取らないよう Collapsed にする -->
-            <l:VisibilityAndBooleanConverter x:Key="UpdateAvailableVisibilityConverter" ConvertWhenTrue="Visible" ConvertWhenFalse="Collapsed"/>
-        </DockPanel.Resources>
-
         <DockPanel DockPanel.Dock="Bottom">
             <Button DockPanel.Dock="Right" Content="適用" Margin="5" VerticalAlignment="Center" HorizontalAlignment="Right" Width="60" Command="{Binding SendSettingCommand}" Height="27"/>
             <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="「適用」で反映。「更新」を押すと編集中の設定が失われるので注意"/></TextBlock>
@@ -138,12 +133,23 @@
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" Height="16" Margin="0,4"  Content="Amatsukaze起動時にアクティブなアイテムがあるときはキューを停止する" 
                                   IsChecked="{Binding Model.Setting.PauseOnStarted, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                        <!-- 更新がある場合のみ表示。押すとWebUIの更新画面を開く -->
-                        <Button Grid.Column="1" Content="アップデートあり" Height="22" Padding="10,0" Margin="6,4"
+                        <!-- 常時表示。更新を検知したときだけ赤字にする。押すとWebUIの更新画面を開く -->
+                        <Button Grid.Column="1" Padding="10,2" Margin="6,4"
                                 VerticalAlignment="Center"
-                                Visibility="{Binding Model.HasUpdate, Mode=OneWay, Converter={StaticResource UpdateAvailableVisibilityConverter}}"
                                 Command="{Binding OpenUpdatePageCommand}"
-                                ToolTip="更新可能なコンポーネントがあります。押すとWebUIの更新画面を開きます。"/>
+                                ToolTip="実行ファイルのダウンロード・更新を行います。更新があるときは赤字になります。">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Model.HasUpdate}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource AMT.UpdateAttentionForegroundBrush}"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock TextAlignment="Center"><Run Text="実行ファイル"/><LineBreak/><Run Text="ダウンロード・更新"/></TextBlock>
+                        </Button>
                     </Grid>
                 </StackPanel>
 
