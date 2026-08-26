@@ -1005,9 +1005,9 @@ namespace Amatsukaze.Server
             {
                 profile.EncoderParallel = 1;
             }
-            if (profile.MinOutputDuration <= 0)
+            if (profile.MinOutputDuration < 0)
             {
-                profile.MinOutputDuration = 5;
+                profile.MinOutputDuration = 0;
             }
             return profile;
         }

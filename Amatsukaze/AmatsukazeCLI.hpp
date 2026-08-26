@@ -58,7 +58,7 @@ static void printHelp(const tchar* bin) {
         "  --muxer-add-encoder-cmd  mp4/mkv出力時にコンテナにエンコーダ名と追加オプションを記録する\n"
         "  --sar-in-container-only  SAR比をエンコーダに渡さず、mp4/mkvコンテナのみに記録する\n"
         "  --enc-parallel <数値>  エンコード分割並列数[1]\n"
-        "  --min-output-duration <秒> 指定秒数未満の短い区間を出力しない[5]\n"
+        "  --min-output-duration <秒> 指定秒数未満の短い区間を出力しない。0は5秒として扱う[5]\n"
         "  --sar w:h           SAR比の上書き (SVT-AV1使用時または --sar-in-container-only 有効時のみ有効)\n"
         "  -b|--bitrate a:b:f  ビットレート計算式 映像ビットレートkbps = f*(a*s+b)\n"
         "                      sは入力映像ビットレート、fは入力がH264の場合は入力されたfだが、\n"
@@ -676,8 +676,11 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     if (conf.maxFadeLength < 0) {
         THROW(ArgumentException, "max-fade-lengthが不正");
     }
-    if (conf.minOutputDuration < 1) {
-        THROW(ArgumentException, "min-output-durationには1以上の値を指定してください");
+    if (conf.minOutputDuration < 0) {
+        THROW(ArgumentException, "min-output-durationには0以上の値を指定してください");
+    }
+    if (conf.minOutputDuration == 0) {
+        conf.minOutputDuration = 5;
     }
 
     if (conf.mode == _T("enctask")) {

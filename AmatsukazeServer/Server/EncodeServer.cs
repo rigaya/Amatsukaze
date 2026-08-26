@@ -2264,7 +2264,10 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --splitsub");
                     }
-                    sb.Append(" --min-output-duration ").Append(profile.MinOutputDuration);
+                    if (profile.MinOutputDuration > 0)
+                    {
+                        sb.Append(" --min-output-duration ").Append(profile.MinOutputDuration);
+                    }
                     if (!profile.DisableChapter)
                     {
                         sb.Append(" --chapter");
