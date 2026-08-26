@@ -828,6 +828,18 @@ namespace Amatsukaze.Server
             return string.Join(" ", options);
         }
 
+        // コマンドラインに埋め込むオプション文字列を正規化する
+        // 入力欄は複数行入力を許可しているため、改行が混入するとコマンドラインが壊れて
+        // 改行以降のオプションがエンコーダに渡らない。改行は空白に置き換えておく
+        public static string NormalizeCommandLineOption(string option)
+        {
+            if (string.IsNullOrEmpty(option))
+            {
+                return option;
+            }
+            return option.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        }
+
         // FilterOptionに対応するエンコーダフィルタのオプション文字列（無効時はnull）
         public static string GetFilterEncoderOption(ProfileSetting profile)
         {
@@ -844,7 +856,7 @@ namespace Amatsukaze.Server
             {
                 BuildEncoderFilterOptions(profile.EncoderFilterSetting, GetEncoderFilterOutputDepthOverride(profile)),
                 customOption
-            }.Where(option => !string.IsNullOrWhiteSpace(option)).Select(option => option.Trim()));
+            }.Where(option => !string.IsNullOrWhiteSpace(option)).Select(NormalizeCommandLineOption));
         }
 
         // エンコーダフィルタの出力ビット深度を本エンコーダ側の要求で上書きする場合の値（上書きしない場合は0）

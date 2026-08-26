@@ -2186,7 +2186,7 @@ namespace Amatsukaze.Server
                             .Append("\"");
                     }
 
-                    var encoderOption = GetEncoderOption(profile);
+                    var encoderOption = ProfileSettingExtensions.NormalizeCommandLineOption(GetEncoderOption(profile));
                     if (string.IsNullOrEmpty(encoderOption) == false)
                     {
                         sb.Append(" -eo \"")
@@ -2366,7 +2366,7 @@ namespace Amatsukaze.Server
                             .Append(GetAudioEncoderPath(profile.AudioEncoderType, setting))
                             .Append("\"");
 
-                        var audioEncoderOption = GetAudioEncoderOption(profile);
+                        var audioEncoderOption = ProfileSettingExtensions.NormalizeCommandLineOption(GetAudioEncoderOption(profile));
                         if (string.IsNullOrEmpty(audioEncoderOption) == false)
                         {
                             sb.Append(" -aeo \"")
