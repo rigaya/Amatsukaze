@@ -1669,7 +1669,8 @@ void DoBadThing() {
             ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {
                 const auto& fileIn = reformInfo.getEncodeFile(key);
-                if (fileIn.duration >= MPEG_CLOCK_HZ /*1秒以下なら出力しない*/ && chapterMakers[key.video]) {
+                if (fileIn.duration >= (int64_t)setting.getMinOutputDuration() * MPEG_CLOCK_HZ
+                    && chapterMakers[key.video]) {
                     chapterMakers[key.video]->exec(key);
                     const auto path = setting.getTmpChapterPath(key);
                     if (File::exists(path)) {
@@ -1687,9 +1688,10 @@ void DoBadThing() {
 
     const auto& allKeys = reformInfo.getOutFileKeys();
     std::vector<EncodeFileKey> keys;
-    // 1秒以下なら出力しない
+    // 指定秒数未満の短い区間は出力しない
+    const int64_t minOutputDuration = (int64_t)setting.getMinOutputDuration() * MPEG_CLOCK_HZ;
     std::copy_if(allKeys.begin(), allKeys.end(), std::back_inserter(keys),
-        [&](EncodeFileKey key) { return reformInfo.getEncodeFile(key).duration >= MPEG_CLOCK_HZ; });
+        [&](EncodeFileKey key) { return reformInfo.getEncodeFile(key).duration >= minOutputDuration; });
 
     std::vector<EncodeFileOutput> outFileInfo(keys.size());
 
@@ -2226,7 +2228,7 @@ void DoBadThing() {
     thSetPowerThrottling->abortThread();
 
     // 出力結果を表示
-    reformInfo.printOutputMapping([&](EncodeFileKey key) {
+    reformInfo.printOutputMapping(keys, [&](EncodeFileKey key) {
         const auto& file = reformInfo.getEncodeFile(key);
         return setting.getOutFilePath(file.outKey, file.keyMax, getActualOutputFormat(key, reformInfo, setting), eoInfo.format);
         });

@@ -416,6 +416,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool SplitSub { get; set; }
         [DataMember]
+        public int MinOutputDuration { get; set; }
+        [DataMember]
         public int OutputMask { get; set; }
         [DataMember]
         public bool AutoBuffer { get; set; }
@@ -1048,6 +1050,7 @@ namespace Amatsukaze.Server
             keyValueBool("ロゴ消ししない", profile.NoDelogo);
             keyValueBool("並列ロゴ解析", profile.ParallelLogoAnalysis);
             keyValueBool("メインフォーマット以外は結合しない", profile.SplitSub);
+            keyValue("出力する最短区間（秒）", profile.MinOutputDuration.ToString());
             keyValueBool("システムにインストールされているAviSynthプラグインを有効にする", profile.SystemAviSynthPlugin);
             keyValueBool("ネットワーク越しに転送する場合のハッシュチェックを無効にする", profile.DisableHashCheck);
             keyValueBool("ログファイルを出力先に生成しない", profile.DisableLogFile);

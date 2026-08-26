@@ -436,9 +436,14 @@ std::vector<FilterAudioFrame> StreamReformInfo::getWaveInput(const std::vector<i
 }
 
 void StreamReformInfo::printOutputMapping(std::function<tstring(EncodeFileKey)> getFileName) const {
+    printOutputMapping(outFileKeys_, getFileName);
+}
+
+void StreamReformInfo::printOutputMapping(const std::vector<EncodeFileKey>& outputKeys,
+    std::function<tstring(EncodeFileKey)> getFileName) const {
     ctx.info(_T("[出力ファイル]"));
-    for (int i = 0; i < (int)outFileKeys_.size(); i++) {
-        ctx.infoF(_T("%d: %s"), i, getFileName(outFileKeys_[i]));
+    for (int i = 0; i < (int)outputKeys.size(); i++) {
+        ctx.infoF(_T("%d: %s"), i, getFileName(outputKeys[i]));
     }
 
     ctx.info(_T("[入力->出力マッピング]"));

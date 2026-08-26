@@ -270,6 +270,9 @@ public:
 
     void printOutputMapping(std::function<tstring(EncodeFileKey)> getFileName) const;
 
+    void printOutputMapping(const std::vector<EncodeFileKey>& outputKeys,
+        std::function<tstring(EncodeFileKey)> getFileName) const;
+
     // 以下デバッグ用 //
 
     void serialize(const tstring& path);
@@ -442,4 +445,3 @@ public:
     void genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting,
         std::vector<PsisiarcTask>& psisiarcTasks);
 };
-

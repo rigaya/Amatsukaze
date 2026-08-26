@@ -827,6 +827,12 @@
                     <StackPanel>
                         <CheckBox Height="16" Margin="0,3"  Content="メイン以外のフォーマットは結合しない"
                             IsChecked="{Binding Model.SelectedProfile.SplitSub, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <DockPanel ToolTip="指定秒数未満の短い区間は出力しません。">
+                            <TextBlock VerticalAlignment="Center" Text="出力する最短区間:"/>
+                            <TextBlock VerticalAlignment="Center" Text="秒" DockPanel.Dock="Right"/>
+                            <TextBox Margin="4,3" Width="72"
+                                     Text="{Binding Model.SelectedProfile.MinOutputDuration, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </DockPanel>
                         <CheckBox Height="16" Margin="0,3"  Content="ネットワーク越しに転送する場合のハッシュチェックを無効にする"
                               IsChecked="{Binding Model.SelectedProfile.DisableHashCheck, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBox Margin="0,3" Height="40" TextWrapping="Wrap"

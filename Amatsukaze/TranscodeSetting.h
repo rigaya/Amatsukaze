@@ -275,6 +275,7 @@ struct Config {
     int audioBitrateInKbps;
     int numEncodeBufferFrames;
     int encoderParallel;
+    int minOutputDuration;
     // CM解析用設定
     std::vector<tstring> logoPath;
     std::vector<tstring> eraseLogoPath;
@@ -450,6 +451,8 @@ public:
     int getNumEncodeBufferFrames() const;
 
     int getEncoderParallel() const;
+
+    int getMinOutputDuration() const;
 
     const std::vector<tstring>& getLogoPath() const;
 

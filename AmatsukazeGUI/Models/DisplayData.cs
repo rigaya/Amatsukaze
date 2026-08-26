@@ -1815,6 +1815,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region MinOutputDuration変更通知プロパティ
+        public int MinOutputDuration
+        {
+            get { return Data.MinOutputDuration; }
+            set
+            {
+                if (Data.MinOutputDuration == value)
+                    return;
+                Data.MinOutputDuration = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region MuxerAddEncoderCmd変更通知プロパティ
         public bool MuxerAddEncoderCmd
         {

@@ -917,6 +917,10 @@ else
         <h4>詳細設定</h4>
         <table class="table">
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("SplitSub")" @onchange="@(e => OnBoolChanged(e, "SplitSub"))" />メイン以外のフォーマットは結合しない</label></td></tr>
+            <tr>
+                <th>出力する最短区間</th>
+                <td><input type="number" min="1" style="width: 80px;" value="@GetIntValue("MinOutputDuration")" @oninput="@(e => OnIntChanged(e, "MinOutputDuration"))" /> 秒</td>
+            </tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableHashCheck")" @onchange="@(e => OnBoolChanged(e, "DisableHashCheck"))" />ネットワーク越しに転送する場合のハッシュチェックを無効にする</label></td></tr>
             <tr>
                 <th>追加ロゴ消し用のロゴ</th>
@@ -2329,6 +2333,8 @@ else
             case "PmtCutTailRate":
                 return Math.Clamp(value, 0, 100);
             case "MaxFadeLength":
+                return Math.Max(1, value);
+            case "MinOutputDuration":
                 return Math.Max(1, value);
             case "NumEncodeBufferFrames":
                 return Math.Clamp(value, 1, 54);

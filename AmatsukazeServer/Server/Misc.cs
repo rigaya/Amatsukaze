@@ -959,6 +959,7 @@ namespace Amatsukaze.Server
                     BitrateCM = 0.5,
                     CMQualityOffset = 0,
                     OutputMask = 1,
+                    MinOutputDuration = 5,
                     DisableChapter = true, // デフォルトはチャプター解析無効
                     DisableSubs = true, // デフォルトは字幕無効
                     DisableHashCheck = true,
@@ -1003,6 +1004,10 @@ namespace Amatsukaze.Server
             if (profile.EncoderParallel <= 0)
             {
                 profile.EncoderParallel = 1;
+            }
+            if (profile.MinOutputDuration <= 0)
+            {
+                profile.MinOutputDuration = 5;
             }
             return profile;
         }

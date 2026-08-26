@@ -2072,6 +2072,7 @@ namespace Amatsukaze.Models
                 profile.BitrateCM = data.Profile.BitrateCM;
                 profile.TwoPass = data.Profile.TwoPass;
                 profile.SplitSub = data.Profile.SplitSub;
+                profile.MinOutputDuration = data.Profile.MinOutputDuration;
                 profile.OutputMask = profile.OutputOptionList.FirstOrDefault(s => s.Mask == data.Profile.OutputMask);
                 profile.JLSCommandFile = data.Profile.JLSCommandFile;
                 profile.JLSOption = data.Profile.JLSOption;
