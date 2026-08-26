@@ -557,7 +557,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath, chunk.isCM);
         chunk.filterArgs = setting_.isEncoderFilterSeparate()
             ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, chunk.filterTimecodePath,
-                setting_.getEncoderFilter(), setting_.getEncoder())
+                setting_.getEncoder())
             : tstring();
         chunkOutputs.push_back(chunk.outputPath);
     }
@@ -1047,7 +1047,7 @@ void AMTFilterVideoEncoder::encode(
         // 初期化（子プロセス起動）
         const tstring filterArgs = setting_.isEncoderFilterSeparate()
             ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath,
-                setting_.getEncoderFilter(), setting_.getEncoder())
+                setting_.getEncoder())
             : tstring();
         encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly(), filterArgs));
         // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）
