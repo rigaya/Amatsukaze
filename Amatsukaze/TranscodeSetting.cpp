@@ -439,6 +439,7 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     const bool tsreplaceRemoveTypeD,
     bool tsreplaceEdgeTrim,
     int64_t tsreplaceDelay,
+    const tstring& tsreplaceCutList,
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
     const tstring& encoderName,
@@ -644,6 +645,9 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         if (tsreplaceEdgeTrim) {
             sb.append(_T(" --end-at-replace-eof"));
             sb.append(_T(" --replace-delay %lld"), (long long)tsreplaceDelay);
+        }
+        if (!tsreplaceCutList.empty()) {
+            sb.append(_T(" --cut-list \"%s\""), tsreplaceCutList.c_str());
         }
         if (tsreplaceRemoveTypeD) {
             sb.append(_T(" --remove-typed"));
@@ -1397,6 +1401,11 @@ tstring ConfigWrapper::getTmpTsReadExDumpPath() const {
 
 tstring ConfigWrapper::getTmpB24CutChapterPath(EncodeFileKey key) const {
     return regtmp(StringFormat(_T("%s/b24cut%d-%d-%d%s.txt"),
+        tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpTSReplaceCutListPath(EncodeFileKey key) const {
+    return regtmp(StringFormat(_T("%s/tsreplace-cut%d-%d-%d%s.txt"),
         tmpDir.path(), key.video, key.format, key.div, GetCMSuffix(key.cm)));
 }
 

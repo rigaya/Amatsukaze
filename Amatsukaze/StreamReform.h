@@ -285,6 +285,14 @@ public:
 
 private:
 
+    struct KeepSegment {
+        double start;
+        double end;
+    };
+
+    // genWebVTT と tsreplace のカットリストで共通に使う保持区間を返す
+    std::vector<KeepSegment> getKeepSegments(const EncodeFileKey& key) const;
+
     struct CaptionDuration {
         double startPTS, endPTS;
     };
@@ -441,6 +449,9 @@ private:
     void genCaptionStream();
 
 public:
+    // tsreplace 用カットリストを生成する。内側の削除区間がなければ空文字列を返す
+    std::string genTSReplaceCutManifest(const EncodeFileKey& key) const;
+
     // WebVTT生成 (tsreadexのトレースとb24tovttを使用)
     void genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting,
         std::vector<PsisiarcTask>& psisiarcTasks);

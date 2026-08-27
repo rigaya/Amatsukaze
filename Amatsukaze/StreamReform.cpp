@@ -1470,6 +1470,62 @@ void StreamReformInfo::genCaptionStream() {
     }
 }
 
+std::vector<StreamReformInfo::KeepSegment> StreamReformInfo::getKeepSegments(const EncodeFileKey& key) const {
+    const auto& file = outFiles_.at(key.key());
+    const auto& srcFrames = filterFrameList_[key.video];
+    const auto& frames = file.videoFrames;
+    std::vector<KeepSegment> keepSegs;
+    if (frames.empty()) {
+        return keepSegs;
+    }
+
+    int segStart = 0;
+    for (int i = 1; i <= (int)frames.size(); i++) {
+        const bool boundary = (i == (int)frames.size()) || (frames[i] != frames[i - 1] + 1);
+        if (boundary) {
+            const int startIdx = frames[segStart];
+            const int endIdx = frames[i - 1];
+            const double startPts = srcFrames[startIdx].pts - (double)dataPTS_[0];
+            const double endPts = srcFrames[endIdx].pts + srcFrames[endIdx].frameDuration - (double)dataPTS_[0];
+            if (endPts > startPts) {
+                keepSegs.push_back({ startPts, endPts });
+            }
+            segStart = i;
+        }
+    }
+    return keepSegs;
+}
+
+std::string StreamReformInfo::genTSReplaceCutManifest(const EncodeFileKey& key) const {
+    const auto keepSegs = getKeepSegments(key);
+    if (keepSegs.size() < 2) {
+        return std::string();
+    }
+
+    StringBuilder cuts;
+    for (size_t i = 1; i < keepSegs.size(); i++) {
+        const int64_t start = (int64_t)std::llround(keepSegs[i - 1].end);
+        const int64_t end = (int64_t)std::llround(keepSegs[i].start);
+        if (start < end) {
+            cuts.append("cut %lld %lld\n", (long long)start, (long long)end);
+        }
+    }
+    const auto cutLines = cuts.str();
+    if (cutLines.empty()) {
+        return std::string();
+    }
+
+    const int64_t timestampMask = (1LL << 33) - 1;
+    const int64_t originPTS = (int64_t)std::llround(dataPTS_[0]) & timestampMask;
+    StringBuilder manifest;
+    manifest.append("# tsreplace-cut-v1\n");
+    manifest.append("timebase=90000\n");
+    manifest.append("origin=first-frame\n");
+    manifest.append("origin_pts=%lld\n\n", (long long)originPTS);
+    manifest.append("%s", cutLines.c_str());
+    return manifest.str();
+}
+
 void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& setting,
     std::vector<PsisiarcTask>& psisiarcTasks) {
     ctx.info(_T("[WebVTT生成]"));
@@ -1535,23 +1591,8 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
     };
 
     if (!frames.empty()) {
-        // まず保持セグメント（映像が存在する区間）を抽出
-        struct KeepSeg { double start; double end; };
-        std::vector<KeepSeg> keepSegs;
-        int segStart = 0;
-        for (int i = 1; i <= (int)frames.size(); i++) {
-            bool boundary = (i == (int)frames.size()) || (frames[i] != frames[i - 1] + 1);
-            if (boundary) {
-                int startIdx = frames[segStart];
-                int endIdx = frames[i - 1];
-                double startPts = srcFrames[startIdx].pts - (double)dataPTS_[0]; // 90kHz基準
-                double endPts = srcFrames[endIdx].pts + srcFrames[endIdx].frameDuration - (double)dataPTS_[0]; // 終了はフレーム末尾
-                if (endPts > startPts) {
-                    keepSegs.push_back({ startPts, endPts });
-                }
-                segStart = i;
-            }
-        }
+        // 保持セグメントは tsreplace のカットリストと同じ算出結果を使う
+        const auto keepSegs = getKeepSegments(key);
 
         // 入力全体（このファイルの基準）での末尾時刻（90kHz基準）
         double totalEnd = 0.0;

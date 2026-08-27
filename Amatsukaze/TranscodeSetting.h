@@ -152,6 +152,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const bool tsreplaceRemoveTypeD,
     bool tsreplaceEdgeTrim,
     int64_t tsreplaceDelay,
+    const tstring& tsreplaceCutList,
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
     const tstring& encoderName,
@@ -514,6 +515,7 @@ public:
     tstring getTmpRawTSPath() const;
     tstring getTmpTsReadExDumpPath() const;
     tstring getTmpB24CutChapterPath(EncodeFileKey key) const;
+    tstring getTmpTSReplaceCutListPath(EncodeFileKey key) const;
     tstring getTmpVTTFilePath(EncodeFileKey key, int langindex) const;
     tstring getTmpPSCFilePath(EncodeFileKey key) const;
 

@@ -1466,8 +1466,8 @@ void DoBadThing() {
     }
     if (setting.getFormat() == FORMAT_TSREPLACE) {
         auto cmtypes = setting.getCMTypes();
-        if (cmtypes.size() != 1 || (cmtypes[0] != CMTYPE_BOTH && cmtypes[0] != CMTYPE_EDGE_TRIM)) {
-            THROW(FormatException, "tsreplaceは前後CMカット以外のCMカットに対応していません");
+        if (cmtypes.size() != 1 || (cmtypes[0] != CMTYPE_BOTH && cmtypes[0] != CMTYPE_NONCM && cmtypes[0] != CMTYPE_EDGE_TRIM)) {
+            THROW(FormatException, "tsreplaceは本編のみ、または前後CMカットの単一出力にのみ対応しています");
         }
         if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265) {
             THROW(FormatException, "tsreplaceはH.264/H.265以外には対応していません");

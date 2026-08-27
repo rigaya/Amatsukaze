@@ -51,7 +51,8 @@ void AMTMuxder::mux(EncodeFileKey key,
 
     bool tsreplaceEdgeTrim = false;
     int64_t tsreplaceDelay = 0;
-    if (muxFormat == FORMAT_TSREPLACE && key.cm == CMTYPE_EDGE_TRIM) {
+    tstring tsreplaceCutList;
+    if (muxFormat == FORMAT_TSREPLACE && (key.cm == CMTYPE_EDGE_TRIM || key.cm == CMTYPE_NONCM)) {
         if (!fileIn.videoFrames.empty()) {
             const auto& filterFrames = reformInfo_.getFilterSourceFrames(key.video);
             int firstIndex = fileIn.videoFrames.front();
@@ -64,6 +65,15 @@ void AMTMuxder::mux(EncodeFileKey key,
                 }
                 tsreplaceEdgeTrim = true;
             }
+        }
+    }
+    if (muxFormat == FORMAT_TSREPLACE && key.cm == CMTYPE_NONCM) {
+        const auto manifest = reformInfo_.genTSReplaceCutManifest(key);
+        // 内側の削除区間がなければ cut mode に切り替えず、従来動作を維持する
+        if (!manifest.empty()) {
+            tsreplaceCutList = setting_.getTmpTSReplaceCutListPath(key);
+            WriteUTF8File(tsreplaceCutList, manifest);
+            ctx.infoF(_T("tsreplace カットリスト: %s"), tsreplaceCutList.c_str());
         }
     }
 
@@ -272,6 +282,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
         setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay,
+        tsreplaceCutList,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());
@@ -329,7 +340,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
-        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0,
+        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0, tstring(),
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());
