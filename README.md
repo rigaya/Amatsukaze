@@ -470,8 +470,8 @@ NVIDIA GPUが使用できると高速ですが、CPUでも多少時間はかか�
 
 また以下の実装も利用できます。導入方法、設定方法については、[こちら](./doc/GenSubtitle.md)を参照して下さい。
 
-- [whisp-carrier](https://github.com/CVN-68/whisp-carrier)  
-  python環境構築等が必要ですが、RTX50xxなどでより高速な処理が可能です。
+- [whisp-carrier](https://github.com/CVN-68/whisp-carrier/releases/latest)
+  NVIDIA RTX GPU向けの実装です。リリースアーカイブを展開し、`whisp-carrier.exe` を直接指定して利用できます。
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp)  
   やや難易度は高いですが、Intel GPU/NPU, AMD GPUを使用することができます。

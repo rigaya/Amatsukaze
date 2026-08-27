@@ -39,35 +39,9 @@ faster-whisperの場合、whisper-optionは特に指定しなくてもまずは�
 ---
 ## whisp-carrier
 
-### 通常のインストール方法
+[whisp-carrier の最新リリース](https://github.com/CVN-68/whisp-carrier/releases/latest)からアーカイブをダウンロードし、適当な場所に展開し、[基本設定]タブのWhisperパスに、展開したフォルダ内の `whisp-carrier.exe` を直接指定してください。
 
-pythonをインストール後、whisp-carrierの[インストール](https://github.com/CVN-68/whisp-carrier/blob/main/README_ja.md#%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB)に従ってインストールし、Amatsukazeの[基本設定]タブで `whisp-carrier.bat` を指定してください。
-
-### venvを使用する場合
-
-pythonライブラリのグローバルインストールを避けるためvenvを活用する例を示します。
-
-下記のようにインストールを行います。
-```
-git clone https://github.com/CVN-68/whisp-carrier.git
-cd whisp-carrier
-py -m venv venv
-venv\Scripts\python.exe -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-`whisp-carrier.bat`を変更し、同様にAmatsukazeの[基本設定]タブで `whisp-carrier.bat` を指定してください。
-```
-@echo off
-
-if not exist "%~dp0venv\Scripts\python.exe" (
-    echo venv環境が見つかりません: "%~dp0venv"
-    echo 先にPython 3.11でvenvを作成し、依存関係をインストールしてください。
-    exit /b 1
-)
-
-"%~dp0venv\Scripts\python.exe" "%~dp0whisp_carrier.py" %*
-```
+初回実行時にはWhisperモデルがダウンロードされるため、時間と空き容量が必要です。
 
 ---
 ## whisper.cpp
