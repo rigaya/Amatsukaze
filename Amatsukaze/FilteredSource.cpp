@@ -84,7 +84,6 @@ static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo
     if (firstIndex < 0 || firstIndex >= (int)srcFrames.size()) {
         return func;
     }
-    const double basePts = srcFrames[firstIndex].pts;
     func.offsets.resize(outFrames.size(), 0.0);
     double maxGap = 0.0;
     const double LOG_EPS_MS = 1.0; // 1ms以上の増分のみログ（細かな丸め誤差は無視）
@@ -97,14 +96,27 @@ static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo
     // とすることで、timecodeにはdrop分のみが反映される。
     const double stepThreshold = tickMs * 0.75;
     double baseline = 0.0;
+    double accMs = 0.0;
+    int prevIdx = -1;
 
     for (int k = 0; k < (int)outFrames.size(); k++) {
         const int idx = outFrames[k];
-        if (idx < 0 || idx >= (int)srcFrames.size()) {
+        const bool indexValid = 0 <= idx && idx < (int)srcFrames.size();
+        if (k > 0) {
+            // Trim(CMカット)で飛ばした区間はPTSギャップとして現れるが、dropではないので累積時刻に含めない。
+            // 元TSのフレームが連続していればdrop由来の実PTS差を、不連続なら公称1フレーム分を加算する。
+            if (indexValid && prevIdx >= 0 && idx == prevIdx + 1) {
+                accMs += (srcFrames[idx].pts - srcFrames[prevIdx].pts) * 1000.0 / MPEG_CLOCK_HZ;
+            } else {
+                accMs += tickMs;
+            }
+        }
+        if (!indexValid) {
             func.offsets[k] = baseline;
+            prevIdx = -1;
             continue;
         }
-        const double tPtsMs = (srcFrames[idx].pts - basePts) * 1000.0 / MPEG_CLOCK_HZ;
+        const double tPtsMs = accMs;
         const double tCfrMs = k * tickMs;
         double rawOff = tPtsMs - tCfrMs;
         if (!std::isfinite(rawOff)) {
@@ -120,6 +132,7 @@ static PtsGapOffsetFunc buildPtsGapOffsetFunc(const StreamReformInfo& reformInfo
         }
         func.offsets[k] = baseline;
         maxGap = std::max(maxGap, std::abs(baseline));
+        prevIdx = idx;
     }
     if (maxGap > 0.5) {
         ctx.infoF(_T("tsreplace drop補正: 推定最大offset %.3f ms"), maxGap);
@@ -144,6 +157,8 @@ static bool detectActualDrop(const StreamReformInfo& reformInfo, EncodeFileKey k
         const int idx1 = outFrames[k + 1];
         if (idx0 < 0 || idx0 >= (int)srcFrames.size()) continue;
         if (idx1 < 0 || idx1 >= (int)srcFrames.size()) continue;
+        // 元TSのindexが不連続なら意図的なTrim(CMカット)境界なので、dropとして扱わない。
+        if (idx1 != idx0 + 1) continue;
         const double ptsDiff = srcFrames[idx1].pts - srcFrames[idx0].pts;
         if (ptsDiff > gapThreshold) {
             return true;  // drop 検出
