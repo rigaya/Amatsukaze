@@ -7,6 +7,10 @@
 #include <memory>
 #include <stdexcept>
 
+#include "AMTSource.h"
+#include "Encoder.h"
+#include "Mpeg2VideoParser.h"
+#include "OSUtil.h"
 #include "ReaderWriterFFmpeg.h"
 #include "StreamReform.h"
 #include "TranscodeSetting.h"
@@ -28,6 +32,16 @@ struct PacketExpectation {
     int64_t dts;
     int size;
     uint64_t hash;
+};
+
+struct PatchEncodedData {
+    std::vector<std::vector<uint8_t>> pictures;
+};
+
+struct VbvSetting {
+    bool available = false;
+    int maxrateKbps = 0;
+    int bufferKbit = 0;
 };
 
 struct InputContextDeleter {
@@ -167,6 +181,216 @@ AVStream* openVideoInput(
     return input->streams[videoIndex];
 }
 
+VbvSetting readOriginalVbv(
+    const tstring& inputPath,
+    const StreamReformInfo& reformInfo,
+    const Mpeg2PartialEncodePlan& plan) {
+    const auto copy = std::find_if(plan.outputEntries.begin(), plan.outputEntries.end(),
+        [](const auto& entry) { return entry.kind == Mpeg2PartialAction::COPY; });
+    if (copy == plan.outputEntries.end()) {
+        return {};
+    }
+
+    std::unique_ptr<AVFormatContext, InputContextDeleter> input;
+    AVStream* stream = openVideoInput(inputPath, "mpeg", input);
+    std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
+    if (!packet) {
+        THROW(RuntimeException, "AVPacketを確保できません");
+    }
+    int localDts = 0;
+    int readResult = 0;
+    while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
+        if (packet->stream_index != stream->index) {
+            av_packet_unref(packet.get());
+            continue;
+        }
+        if (localDts == copy->localDts) {
+            const auto& sourceFrame = reformInfo.getVideoFrameInfo(plan.dtsFrameStart + localDts);
+            if (packet->size != sourceFrame.codedDataSize) {
+                THROW(FormatException, "VBV取得時の中間PS mappingが不一致です");
+            }
+            for (int i = 0; i + 4 <= packet->size; ++i) {
+                if (packet->data[i] == 0x00 && packet->data[i + 1] == 0x00
+                    && packet->data[i + 2] == 0x01 && packet->data[i + 3] == 0xB3) {
+                    MPEG2SequenceHeader header = {};
+                    if (!header.parse(packet->data + i, packet->size - i)) {
+                        return {};
+                    }
+                    const uint64_t bitrateValue =
+                        ((uint64_t)header.bit_rate_extension << 18) | header.bit_rate_value;
+                    const uint64_t vbvValue =
+                        ((uint64_t)header.vbv_buffer_size_extension << 10)
+                        | header.vbv_buffer_size_value;
+                    return {
+                        true,
+                        (int)((bitrateValue * 400 + 999) / 1000),
+                        (int)((vbvValue * 16 * 1024 + 999) / 1000)
+                    };
+                }
+            }
+            return {};
+        }
+        ++localDts;
+        av_packet_unref(packet.get());
+    }
+    if (readResult != AVERROR_EOF) {
+        checkAv(readResult, "VBV取得用packetの読み出しに失敗しました");
+    }
+    return {};
+}
+
+void removeSequenceEndCode(const tstring& path) {
+    std::vector<uint8_t> data;
+    {
+        File input(path, _T("rb"));
+        const int64_t fileSize = input.size();
+        if (fileSize < 4) {
+            return;
+        }
+        if (fileSize > std::numeric_limits<int>::max()) {
+            THROW(FormatException, "patch ESが大きすぎます");
+        }
+        data.resize((size_t)fileSize);
+        if (input.read(MemoryChunk(data.data(), (int)data.size())) != data.size()) {
+            THROW(IOException, "patch ESを読み出せません");
+        }
+    }
+    const size_t end = data.size();
+    if (data[end - 4] != 0x00 || data[end - 3] != 0x00
+        || data[end - 2] != 0x01 || data[end - 1] != 0xB7) {
+        return;
+    }
+    data.resize(end - 4);
+    File output(path, _T("wb"));
+    output.write(MemoryChunk(data.data(), (int)data.size()));
+}
+
+PatchEncodedData readPatchPictures(const tstring& path, int expectedPictures) {
+    std::unique_ptr<AVFormatContext, InputContextDeleter> input;
+    AVStream* stream = openVideoInput(path, "mpegvideo", input);
+    std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
+    if (!packet) {
+        THROW(RuntimeException, "AVPacketを確保できません");
+    }
+    PatchEncodedData result;
+    int readResult = 0;
+    while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
+        if (packet->stream_index == stream->index) {
+            result.pictures.emplace_back(packet->data, packet->data + packet->size);
+        }
+        av_packet_unref(packet.get());
+    }
+    if (readResult != AVERROR_EOF) {
+        checkAv(readResult, "patch ESのpacket読み出しに失敗しました");
+    }
+    if ((int)result.pictures.size() != expectedPictures) {
+        THROWF(FormatException, "patch ESのpicture数が不一致です: %d/%d",
+            (int)result.pictures.size(), expectedPictures);
+    }
+    return result;
+}
+
+tstring makePatchEncoderArgs(
+    const ConfigWrapper& setting,
+    const VideoFormat& format,
+    const tstring& outputPath,
+    int frames,
+    bool bottomFieldFirst,
+    const VbvSetting& vbv) {
+    StringBuilderT sb;
+    sb.append(_T("\"%s\" --mpeg2 --demuxer y4m"), setting.getEncoderPath())
+        .append(_T(" --keyint infinite --bframes 0 --min-keyint 1 --scenecut 0"));
+    if (!format.progressive) {
+        sb.append(bottomFieldFirst ? _T(" --bff") : _T(" --tff"));
+    }
+    int darWidth = 0;
+    int darHeight = 0;
+    format.getDAR(darWidth, darHeight);
+    // x262はMPEG-2時だけ--sarをsequence headerのDARコードとして扱う。
+    sb.append(_T(" --fps %d/%d --sar %d:%d"),
+        format.frameRateNum, format.frameRateDenom, darWidth, darHeight);
+    if (format.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {
+        sb.append(_T(" --colorprim %s"),
+            char_to_tstring(av::getColorPrimStr(format.colorPrimaries, ENCODER_X262)));
+    }
+    if (format.transferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
+        sb.append(_T(" --transfer %s"),
+            char_to_tstring(av::getTransferCharacteristicsStr(
+                format.transferCharacteristics, ENCODER_X262)));
+    }
+    if (format.colorSpace != AVCOL_SPC_UNSPECIFIED) {
+        sb.append(_T(" --colormatrix %s"),
+            char_to_tstring(av::getColorSpaceStr(format.colorSpace, ENCODER_X262)));
+    }
+    sb.append(_T(" --crf 18"));
+    if (vbv.available) {
+        sb.append(_T(" --vbv-maxrate %d --vbv-bufsize %d"),
+            vbv.maxrateKbps, vbv.bufferKbit);
+    }
+    sb.append(_T(" --frames %d -o \"%s\" -"), frames, outputPath);
+    return sb.str();
+}
+
+std::vector<PatchEncodedData> encodePatches(
+    AMTContext& ctx,
+    const ConfigWrapper& setting,
+    const StreamReformInfo& reformInfo,
+    EncodeFileKey key,
+    const Mpeg2PartialEncodePlan& plan,
+    const tstring& outputPath) {
+    std::vector<PatchEncodedData> result;
+    result.reserve(plan.patches.size());
+    if (plan.patches.empty()) {
+        return result;
+    }
+    const auto& displayFrames = reformInfo.getFilterSourceFrames(key.video);
+    const auto& format = reformInfo.getFormat(key).videoFormat;
+    const auto vbv = readOriginalVbv(
+        setting.getIntVideoFilePath(key.video), reformInfo, plan);
+    if (!vbv.available) {
+        ctx.warn(_T("[MPEG-2部分エンコード] 元sequence headerを取得できないためVBV指定を省略します"));
+    }
+
+    ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
+    const int decodeThreads = std::max(1, std::min(8, GetProcessorCount()));
+    auto source = av::LoadAMTSourceDirect(
+        ctx, setting.getTmpAMTSourcePath(key.video), decodeThreads, env.get());
+    const auto vi = source->GetVideoInfo();
+    if (vi.num_frames != (int)displayFrames.size()) {
+        THROWF(FormatException, "AMTSourceと表示順フレーム数が一致しません: %d/%d",
+            vi.num_frames, (int)displayFrames.size());
+    }
+    for (size_t i = 0; i < plan.patches.size(); ++i) {
+        const auto& patch = plan.patches[i];
+        const int firstDts = reformInfo.getDtsFrameIndex(
+            displayFrames[patch.first].frameIndex);
+        const bool bottomFieldFirst =
+            reformInfo.getVideoFrameInfo(firstDts).pic == PIC_BFF;
+        const tstring patchPath = strsprintf(
+            _T("%s.patch%d.m2v"), outputPath.c_str(), (int)i);
+        ctx.registerTmpFile(patchPath);
+        const int frames = patch.last - patch.first;
+        ctx.infoF(_T("[MPEG-2部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
+            (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
+        // 第5引数disablePowerThrottoling=trueは固定。
+        // 部分エンコードのpatchは必ずx262(=CPUエンコーダ)なので、
+        // TranscodeManager側の判定(x264/x262/x265/SVT-AV1ならtrue)と一致する。
+        // なお最終引数sarInContainerOnly=false(既定)のため、Y4Mヘッダには実SAR(例 A4:3)が載る。
+        // 一方コマンドラインの--sarにはDARを渡している(x262のMPEG-2時の仕様、§8.2/§16.8)。
+        // 両者の値は食い違うが、x262はCLI指定を優先するので意図どおり動く。
+        Y4MEncodeWriter writer(ctx,
+            makePatchEncoderArgs(setting, format, patchPath, frames, bottomFieldFirst, vbv),
+            vi, format, true);
+        for (int display = patch.first; display < patch.last; ++display) {
+            writer.inputFrame(source->GetFrame(display, env.get()));
+        }
+        writer.finish();
+        removeSequenceEndCode(patchPath);
+        result.push_back(readPatchPictures(patchPath, frames));
+    }
+    return result;
+}
+
 void verifyOutput(
     const tstring& outputPath,
     const std::vector<PacketExpectation>& expected) {
@@ -197,7 +421,7 @@ void verifyOutput(
                     (long long)dts, (long long)item.dts);
             }
             if (packet->size != item.size || fnv1a(packet->data, packet->size) != item.hash) {
-                THROWF(FormatException, "出力TSのCOPY byte列が不一致です: packet=%d", (int)index);
+                THROWF(FormatException, "出力TSのpicture byte列が不一致です: packet=%d", (int)index);
             }
             ++index;
         }
@@ -213,10 +437,12 @@ void verifyOutput(
 }
 
 void buildOutput(
+    AMTContext& ctx,
     const tstring& inputPath,
     const tstring& outputPath,
     const StreamReformInfo& reformInfo,
-    const Mpeg2PartialEncodePlan& plan) {
+    const Mpeg2PartialEncodePlan& plan,
+    const std::vector<PatchEncodedData>& patchData) {
     std::unique_ptr<AVFormatContext, InputContextDeleter> input;
     AVStream* inputStream = openVideoInput(inputPath, "mpeg", input);
     const int videoIndex = inputStream->index;
@@ -242,9 +468,39 @@ void buildOutput(
 
     std::vector<PacketExpectation> expectedOutput;
     std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
-    if (!packet) {
+    std::unique_ptr<AVPacket, PacketDeleter> patchPacket(av_packet_alloc());
+    if (!packet || !patchPacket) {
         THROW(RuntimeException, "AVPacketを確保できません");
     }
+
+    size_t outputEntryIndex = 0;
+    auto writePatchEntries = [&]() {
+        while (outputEntryIndex < plan.outputEntries.size()
+            && plan.outputEntries[outputEntryIndex].kind == Mpeg2PartialAction::PATCH) {
+            const auto& entry = plan.outputEntries[outputEntryIndex];
+            if (entry.patchIndex < 0 || entry.patchIndex >= (int)patchData.size()
+                || entry.patchPicture < 0
+                || entry.patchPicture >= (int)patchData[entry.patchIndex].pictures.size()) {
+                THROW(FormatException, "patch picture参照が範囲外です");
+            }
+            const auto& data = patchData[entry.patchIndex].pictures[entry.patchPicture];
+            av_packet_unref(patchPacket.get());
+            checkAv(av_new_packet(patchPacket.get(), (int)data.size()),
+                "patch AVPacketを確保できません");
+            std::memcpy(patchPacket->data, data.data(), data.size());
+            patchPacket->stream_index = outputStream->index;
+            patchPacket->pts = av_rescale_q(entry.pts90k, CLOCK_90K, outputStream->time_base);
+            patchPacket->dts = av_rescale_q(entry.dts90k, CLOCK_90K, outputStream->time_base);
+            patchPacket->duration = 0;
+            patchPacket->pos = -1;
+            expectedOutput.push_back({
+                entry.pts90k, entry.dts90k, (int)data.size(), fnv1a(data.data(), (int)data.size())
+            });
+            checkAv(av_write_frame(output.get(), patchPacket.get()),
+                "MPEG-TS patch packetを書けません");
+            ++outputEntryIndex;
+        }
+    };
 
     int filePacketIndex = 0;
     int readResult = 0;
@@ -270,18 +526,26 @@ void buildOutput(
                 filePacketIndex, packet->size, sourceFrame.codedDataSize);
         }
 
+        writePatchEntries();
         if (plan.actions[filePacketIndex] == Mpeg2PartialAction::COPY) {
+            if (outputEntryIndex >= plan.outputEntries.size()
+                || plan.outputEntries[outputEntryIndex].kind != Mpeg2PartialAction::COPY
+                || plan.outputEntries[outputEntryIndex].localDts != filePacketIndex) {
+                THROW(FormatException, "COPY pictureと出力符号化順のmappingが不一致です");
+            }
+            const auto& entry = plan.outputEntries[outputEntryIndex];
             const auto hash = fnv1a(packet->data, packet->size);
             packet->stream_index = outputStream->index;
-            packet->pts = av_rescale_q(plan.pts90k[filePacketIndex], CLOCK_90K, outputStream->time_base);
-            packet->dts = av_rescale_q(plan.dts90k[filePacketIndex], CLOCK_90K, outputStream->time_base);
+            packet->pts = av_rescale_q(entry.pts90k, CLOCK_90K, outputStream->time_base);
+            packet->dts = av_rescale_q(entry.dts90k, CLOCK_90K, outputStream->time_base);
             // DROP前の間隔を持ち越さず、timestampだけを時刻情報の権威とする。
             packet->duration = 0;
             packet->pos = -1;
             expectedOutput.push_back({
-                plan.pts90k[filePacketIndex], plan.dts90k[filePacketIndex], packet->size, hash
+                entry.pts90k, entry.dts90k, packet->size, hash
             });
             checkAv(av_write_frame(output.get(), packet.get()), "MPEG-TS packetを書けません");
+            ++outputEntryIndex;
         }
         ++filePacketIndex;
         av_packet_unref(packet.get());
@@ -293,6 +557,11 @@ void buildOutput(
         THROWF(FormatException, "中間PSのpicture数が不一致です: %d/%d",
             filePacketIndex, (int)plan.actions.size());
     }
+    writePatchEntries();
+    if (outputEntryIndex != plan.outputEntries.size()) {
+        THROWF(FormatException, "出力符号化順entryを処理しきれません: %d/%d",
+            (int)outputEntryIndex, (int)plan.outputEntries.size());
+    }
     checkAv(av_write_trailer(output.get()), "MPEG-TS trailerを書けません");
     if (output->pb != nullptr) {
         checkAv(avio_closep(&output->pb), "MPEG-TS出力を閉じられません");
@@ -301,6 +570,8 @@ void buildOutput(
     input.reset();
 
     verifyOutput(outputPath, expectedOutput);
+    ctx.infoF(_T("[MPEG-2部分エンコード] 再demux検証: %d picture、PTS/DTS・size・hash不一致0"),
+        (int)expectedOutput.size());
 }
 
 } // namespace
@@ -389,23 +660,38 @@ bool BuildMpeg2PartialEncodePlan(
 
     for (const auto& patch : plan.patches) {
         const auto baseFormat = frameAtDisplay(patch.first).format;
+        const auto basePicture = frameAtDisplay(patch.first).pic;
+        // 注: ここでhalfDelayを弾いてはいけない。
+        // halfDelayはPIC_BFF(とPIC_BFF_RFFの前半)に必ず立つ(StreamReform.cpp)ので、
+        // 条件に入れるとBFF素材のpatchが全部フォールバックしてしまう。
+        // halfDelayによるpts半フレームずらしは出力PTS算出に影響しない
+        // (出力PTSはptsではなくoriginalFramePTSを使うため、§9.3)。
         for (int display = patch.first; display < patch.last; ++display) {
             const auto& source = frameAtDisplay(display);
-            if (displayFrames[display].halfDelay || isPatchUnsupportedPicture(source.pic)) {
-                reason = _T("patch範囲にfield pictureまたはRFF付きフレームがあります");
+            if (isPatchUnsupportedPicture(source.pic)) {
+                reason = _T("patch範囲にRFF付きフレームがあります");
                 return false;
             }
             if (source.format != baseFormat) {
                 reason = _T("patch範囲に映像フォーマット変化があります");
                 return false;
             }
+            if (source.pic != basePicture) {
+                reason = _T("patch範囲でprogressive/TFF/BFFが混在しています");
+                return false;
+            }
+        }
+        const bool pictureMatchesFormat = baseFormat.progressive
+            ? basePicture == PIC_FRAME
+            : (basePicture == PIC_TFF || basePicture == PIC_BFF);
+        if (!pictureMatchesFormat) {
+            reason = _T("patch範囲のprogressive/TFF/BFFと映像フォーマットが一致しません");
+            return false;
         }
     }
 
     plan.dtsFrameStart = frameRange.first;
     plan.actions.assign(codedFrameCount, Mpeg2PartialAction::DROP);
-    plan.pts90k.assign(codedFrameCount, AV_NOPTS_VALUE);
-    plan.dts90k.assign(codedFrameCount, AV_NOPTS_VALUE);
     std::vector<int> firstDisplay(codedFrameCount, -1);
     std::vector<int> keepState(codedFrameCount, -1); // 0: DROP、1: COPY
     std::vector<bool> patchMask(displayFrames.size(), false);
@@ -439,29 +725,64 @@ bool BuildMpeg2PartialEncodePlan(
         }
     }
 
-    // patchに置き換えるpictureはCOPY対象から外す。フェーズ2では後段でフォールバックする。
+    // patchに置き換えるpictureはCOPY対象から外す。
     for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
         if (patchState[localDts] == 1) {
             keepState[localDts] = 0;
         }
     }
 
-    std::vector<int64_t> displayOrderPicturePts;
     for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
         if (keepState[localDts] == 1) {
-            const int display = firstDisplay[localDts];
-            if (display < 0 || outputDisplayPts[display] == AV_NOPTS_VALUE) {
-                reason = _T("COPY pictureの表示順PTSを取得できません");
-                return false;
-            }
             plan.actions[localDts] = Mpeg2PartialAction::COPY;
-            plan.pts90k[localDts] = outputDisplayPts[display];
-            displayOrderPicturePts.push_back(outputDisplayPts[display]);
         }
+    }
+
+    // COPYをDTS順に走査し、表示範囲を追い越す直前へpatchをまとめて挿入する。
+    size_t patchIndex = 0;
+    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
+        if (plan.actions[localDts] != Mpeg2PartialAction::COPY) {
+            continue;
+        }
+        while (patchIndex < plan.patches.size()
+            && firstDisplay[localDts] >= plan.patches[patchIndex].last) {
+            const auto& patch = plan.patches[patchIndex];
+            for (int display = patch.first; display < patch.last; ++display) {
+                plan.outputEntries.push_back({
+                    Mpeg2PartialAction::PATCH, -1, (int)patchIndex, display - patch.first,
+                    outputDisplayPts[display], 0
+                });
+            }
+            ++patchIndex;
+        }
+        const int display = firstDisplay[localDts];
+        if (display < 0 || outputDisplayPts[display] == AV_NOPTS_VALUE) {
+            reason = _T("COPY pictureの表示順PTSを取得できません");
+            return false;
+        }
+        plan.outputEntries.push_back({
+            Mpeg2PartialAction::COPY, localDts, -1, -1, outputDisplayPts[display], 0
+        });
+    }
+    while (patchIndex < plan.patches.size()) {
+        const auto& patch = plan.patches[patchIndex];
+        for (int display = patch.first; display < patch.last; ++display) {
+            plan.outputEntries.push_back({
+                Mpeg2PartialAction::PATCH, -1, (int)patchIndex, display - patch.first,
+                outputDisplayPts[display], 0
+            });
+        }
+        ++patchIndex;
+    }
+
+    std::vector<int64_t> displayOrderPicturePts;
+    displayOrderPicturePts.reserve(plan.outputEntries.size());
+    for (const auto& entry : plan.outputEntries) {
+        displayOrderPicturePts.push_back(entry.pts90k);
     }
     std::sort(displayOrderPicturePts.begin(), displayOrderPicturePts.end());
     if (displayOrderPicturePts.empty()) {
-        reason = _T("COPY pictureがありません");
+        reason = _T("出力pictureがありません");
         return false;
     }
     if (std::adjacent_find(displayOrderPicturePts.begin(), displayOrderPicturePts.end())
@@ -473,32 +794,23 @@ bool BuildMpeg2PartialEncodePlan(
     const auto& format = reformInfo.getFormat(key).videoFormat;
     const int64_t frameDuration = (int64_t)std::llround(
         format.frameRateDenom * (double)MPEG_CLOCK_HZ / format.frameRateNum);
-    size_t outputIndex = 0;
     int64_t previousDts = std::numeric_limits<int64_t>::min();
     const int64_t firstDts = displayOrderPicturePts.front() - frameDuration;
     if (firstDts < 0) {
         reason = _T("出力DTSが負になるためフル再エンコードへフォールバックします");
         return false;
     }
-    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
-        if (plan.actions[localDts] != Mpeg2PartialAction::COPY) {
-            continue;
-        }
-        // フェーズ3ではpatch pictureのPTSもdisplayOrderPicturePtsへ加えてから同じ式を使う。
+    for (size_t outputIndex = 0; outputIndex < plan.outputEntries.size(); ++outputIndex) {
+        auto& entry = plan.outputEntries[outputIndex];
         const int64_t dts = outputIndex == 0
             ? displayOrderPicturePts.front() - frameDuration
             : displayOrderPicturePts[outputIndex - 1];
-        plan.dts90k[localDts] = dts;
-        if (dts <= previousDts || dts > plan.pts90k[localDts]) {
+        entry.dts90k = dts;
+        if (dts <= previousDts || dts > entry.pts90k) {
             reason = _T("出力DTSの単調性またはDTS <= PTS条件を満たしません");
             return false;
         }
         previousDts = dts;
-        ++outputIndex;
-    }
-    if (outputIndex != displayOrderPicturePts.size()) {
-        reason = _T("符号化順と表示順の出力picture数が一致しません");
-        return false;
     }
     for (int display = 0; display < (int)displayFrames.size(); ++display) {
         const int globalDts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
@@ -525,16 +837,17 @@ bool TryMpeg2PartialEncode(
         if (!BuildMpeg2PartialEncodePlan(reformInfo, key, plan, reason)) {
             return false;
         }
-        if (!plan.patches.empty()) {
-            reason = StringFormat(
-                _T("patchが%d区間必要ですが、patchエンコードはフェーズ3で実装します"),
-                (int)plan.patches.size());
-            return false;
-        }
-
-        buildOutput(setting.getIntVideoFilePath(key.video), outputPath, reformInfo, plan);
-        ctx.infoF(_T("[MPEG-2部分エンコード] COPYのみで%d pictureを出力しました"),
-            (int)std::count(plan.actions.begin(), plan.actions.end(), Mpeg2PartialAction::COPY));
+        ctx.infoF(_T("[MPEG-2部分エンコード] プラン: patch %d区間、COPY %d picture、出力 %d picture、keep %d表示位置"),
+            (int)plan.patches.size(),
+            (int)std::count(plan.actions.begin(), plan.actions.end(), Mpeg2PartialAction::COPY),
+            (int)plan.outputEntries.size(),
+            (int)reformInfo.getEncodeFile(key).videoFrames.size());
+        const auto patchData = encodePatches(
+            ctx, setting, reformInfo, key, plan, outputPath);
+        buildOutput(ctx, setting.getIntVideoFilePath(key.video), outputPath,
+            reformInfo, plan, patchData);
+        ctx.infoF(_T("[MPEG-2部分エンコード] %d pictureを出力しました"),
+            (int)plan.outputEntries.size());
         return true;
     } catch (const Exception& e) {
         reason = e.message();
