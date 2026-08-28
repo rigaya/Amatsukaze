@@ -381,8 +381,19 @@ std::vector<PatchEncodedData> encodePatches(
         Y4MEncodeWriter writer(ctx,
             makePatchEncoderArgs(setting, format, patchPath, frames, bottomFieldFirst, vbv),
             vi, format, true);
-        for (int display = patch.first; display < patch.last; ++display) {
-            writer.inputFrame(source->GetFrame(display, env.get()));
+        try {
+            for (int display = patch.first; display < patch.last; ++display) {
+                writer.inputFrame(source->GetFrame(display, env.get()));
+            }
+        } catch (...) {
+            // 子プロセスが入力途中で終了するとinputFrameが例外を投げる。
+            // ~Y4MEncodeWriter()は稼働中なら例外を投げるので、そのまま巻き戻すと
+            // 例外送出中のデストラクタ例外でterminateする。元の例外を投げ直す前に
+            // 必ずfinish() (finishWrite + join) まで済ませること。
+            // finish()自体が投げた場合はエンコーダ終了コードのほうが原因として
+            // 有用なので、そちらを優先して伝播させる。
+            writer.finish();
+            throw;
         }
         writer.finish();
         removeSequenceEndCode(patchPath);
