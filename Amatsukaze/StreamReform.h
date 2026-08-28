@@ -286,8 +286,8 @@ public:
 private:
 
     struct KeepSegment {
-        double start;
-        double end;
+        double start; // 元TS時間軸の絶対PTS
+        double end;   // 元TS時間軸の絶対PTS
     };
 
     // genWebVTT と tsreplace のカットリストで共通に使う保持区間を返す

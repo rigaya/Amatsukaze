@@ -51,6 +51,7 @@ void AMTMuxder::mux(EncodeFileKey key,
 
     bool tsreplaceEdgeTrim = false;
     int64_t tsreplaceDelay = 0;
+    int64_t tsreplaceFirstPTS = 0;
     tstring tsreplaceCutList;
     if (muxFormat == FORMAT_TSREPLACE && (key.cm == CMTYPE_EDGE_TRIM || key.cm == CMTYPE_NONCM)) {
         if (!fileIn.videoFrames.empty()) {
@@ -60,6 +61,7 @@ void AMTMuxder::mux(EncodeFileKey key,
                 double firstPts = filterFrames[firstIndex].pts;
                 double basePts = reformInfo_.getFirstDataPTS();
                 tsreplaceDelay = (int64_t)std::llround(firstPts - basePts);
+                tsreplaceFirstPTS = (int64_t)std::llround(firstPts) & ((1LL << 33) - 1);
                 if (tsreplaceDelay < 0) {
                     tsreplaceDelay = 0;
                 }
@@ -281,7 +283,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
-        setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay,
+        setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay, tsreplaceFirstPTS,
         tsreplaceCutList,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
@@ -340,7 +342,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
-        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0, tstring(),
+        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0, 0, tstring(),
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());

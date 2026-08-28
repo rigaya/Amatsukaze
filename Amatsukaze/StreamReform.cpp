@@ -1485,8 +1485,8 @@ std::vector<StreamReformInfo::KeepSegment> StreamReformInfo::getKeepSegments(con
         if (boundary) {
             const int startIdx = frames[segStart];
             const int endIdx = frames[i - 1];
-            const double startPts = srcFrames[startIdx].pts - (double)dataPTS_[0];
-            const double endPts = srcFrames[endIdx].pts + srcFrames[endIdx].frameDuration - (double)dataPTS_[0];
+            const double startPts = srcFrames[startIdx].pts;
+            const double endPts = srcFrames[endIdx].pts + srcFrames[endIdx].frameDuration;
             if (endPts > startPts) {
                 keepSegs.push_back({ startPts, endPts });
             }
@@ -1503,10 +1503,13 @@ std::string StreamReformInfo::genTSReplaceCutManifest(const EncodeFileKey& key) 
     }
 
     StringBuilder cuts;
+    const int64_t timestampMask = (1LL << 33) - 1;
     for (size_t i = 1; i < keepSegs.size(); i++) {
-        const int64_t start = (int64_t)std::llround(keepSegs[i - 1].end);
-        const int64_t end = (int64_t)std::llround(keepSegs[i].start);
-        if (start < end) {
+        const int64_t absoluteStart = (int64_t)std::llround(keepSegs[i - 1].end);
+        const int64_t absoluteEnd = (int64_t)std::llround(keepSegs[i].start);
+        if (absoluteStart < absoluteEnd) {
+            const int64_t start = absoluteStart & timestampMask;
+            const int64_t end = absoluteEnd & timestampMask;
             cuts.append("cut %lld %lld\n", (long long)start, (long long)end);
         }
     }
@@ -1515,13 +1518,9 @@ std::string StreamReformInfo::genTSReplaceCutManifest(const EncodeFileKey& key) 
         return std::string();
     }
 
-    const int64_t timestampMask = (1LL << 33) - 1;
-    const int64_t originPTS = (int64_t)std::llround(dataPTS_[0]) & timestampMask;
     StringBuilder manifest;
-    manifest.append("# tsreplace-cut-v1\n");
-    manifest.append("timebase=90000\n");
-    manifest.append("origin=first-frame\n");
-    manifest.append("origin_pts=%lld\n\n", (long long)originPTS);
+    manifest.append("# tsreplace-cut-v2\n");
+    manifest.append("timebase=90000\n\n");
     manifest.append("%s", cutLines.c_str());
     return manifest.str();
 }
@@ -1591,7 +1590,7 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
     };
 
     if (!frames.empty()) {
-        // 保持セグメントは tsreplace のカットリストと同じ算出結果を使う
+        // 保持セグメントは絶対PTSなので、チャプター用には従来どおり先頭データPTSからの相対値へ戻す
         const auto keepSegs = getKeepSegments(key);
 
         // 入力全体（このファイルの基準）での末尾時刻（90kHz基準）
@@ -1604,11 +1603,13 @@ void StreamReformInfo::genWebVTT(const EncodeFileKey& key, const ConfigWrapper& 
         // 保持セグメントの補集合（削除区間）を ix/ox で出力
         double prev = 0.0;
         for (const auto& seg : keepSegs) {
-            if (seg.start > prev) {
+            const double start = seg.start - (double)dataPTS_[0];
+            const double end = seg.end - (double)dataPTS_[0];
+            if (start > prev) {
                 writeChap(prev, "ix");
-                writeChap(seg.start, "ox");
+                writeChap(start, "ox");
             }
-            prev = seg.end;
+            prev = end;
         }
         if (totalEnd > prev) {
             writeChap(prev, "ix");

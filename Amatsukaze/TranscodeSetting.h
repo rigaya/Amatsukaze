@@ -152,6 +152,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const bool tsreplaceRemoveTypeD,
     bool tsreplaceEdgeTrim,
     int64_t tsreplaceDelay,
+    int64_t tsreplaceFirstPTS,
     const tstring& tsreplaceCutList,
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
