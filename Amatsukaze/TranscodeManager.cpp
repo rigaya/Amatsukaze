@@ -1469,8 +1469,8 @@ void DoBadThing() {
         if (cmtypes.size() != 1 || (cmtypes[0] != CMTYPE_BOTH && cmtypes[0] != CMTYPE_NONCM && cmtypes[0] != CMTYPE_EDGE_TRIM)) {
             THROW(FormatException, "tsreplaceは本編のみ、または前後CMカットの単一出力にのみ対応しています");
         }
-        if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265) {
-            THROW(FormatException, "tsreplaceはH.264/H.265以外には対応していません");
+        if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265 && eoInfo.format != VS_MPEG2) {
+            THROW(FormatException, "tsreplaceはH.264/H.265/MPEG-2以外には対応していません");
         }
     }
 
@@ -2058,9 +2058,9 @@ void DoBadThing() {
             auto vfrBitrateScale = AdjustVFRBitrate(timeCodes, outvi.fps_numerator, outvi.fps_denominator);
             const tstring baseTimecodePath = fileOut.timecode;
             const tstring baseOutputPath = setting.getEncVideoFilePath(key);
-            // x264, x265, SVT-AV1のときはdisablePowerThrottoling=trueとする
+            // x264系、x265、SVT-AV1のときはdisablePowerThrottoling=trueとする
             // QSV/NV/VCEEncではプロセス内で自動的に最適なように設定されるため不要
-            const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
+            const bool disablePowerThrottoling = (setting.getEncoder() == ENCODER_X264 || setting.getEncoder() == ENCODER_X262 || setting.getEncoder() == ENCODER_X265 || setting.getEncoder() == ENCODER_SVTAV1);
 
             AMTFilterVideoEncoder encoder(ctx, setting, std::max(4, setting.getNumEncodeBufferFrames()));
             // 並列GetFrame用にフィルタチェーンを構築するファクトリを渡す

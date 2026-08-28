@@ -21,7 +21,7 @@
 #include "rgy_filesystem.h"
 
 bool isSoftwareSplitEncoder(ENUM_ENCODER encoder) {
-    return encoder == ENCODER_X264 || encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1;
+    return encoder == ENCODER_X264 || encoder == ENCODER_X262 || encoder == ENCODER_X265 || encoder == ENCODER_SVTAV1;
 }
 
 namespace {

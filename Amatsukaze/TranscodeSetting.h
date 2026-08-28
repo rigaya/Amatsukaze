@@ -24,6 +24,7 @@ enum ENUM_ENCODER {
     ENCODER_NVENC,
     ENCODER_VCEENC,
     ENCODER_SVTAV1,
+    ENCODER_X262,
 };
 
 struct EncoderZone {
@@ -132,6 +133,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const std::pair<int, int>& userSAR,
     const ENUM_FORMAT format,
     const tstring& binpath,
+    const tstring& mkvmergepath,
     const tstring& timelineeditorpath,
     const tstring& mp4boxpath,
     const tstring& srcTSFilePath,

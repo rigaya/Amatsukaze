@@ -46,7 +46,7 @@ static void printHelp(const tchar* bin) {
         "  -s|--serviceid <数値> 処理するサービスIDを指定[]\n"
         "  -w|--work   <パス>  一時ファイルパス[./]\n"
         "  -et|--encoder-type <タイプ>  使用エンコーダタイプ[x264]\n"
-        "                      対応エンコーダ: x264,x265,QSVEnc,NVEnc,VCEEnc,SVT-AV1\n"
+        "                      対応エンコーダ: x264,x265,QSVEnc,NVEnc,VCEEnc,SVT-AV1,x262\n"
         "  -e|--encoder <パス> エンコーダパス[x264.exe]\n"
         "  -eo|--encoder-option <オプション> エンコーダへ渡すオプション[]\n"
         "                      入力ファイルの解像度、アスペクト比、インタレースフラグ、\n"
@@ -74,9 +74,9 @@ static void printHelp(const tchar* bin) {
         "  -ae|--audio-encoder <パス> 音声エンコーダ[]"
         "  -aeo|--audio-encoder-option <オプション> 音声エンコーダへ渡すオプション[]\n"
         "  -fmt|--format <フォーマット> 出力フォーマット[mp4]\n"
-        "                      対応フォーマット: mp4,mkv,m2ts,ts\n"
+        "                      対応フォーマット: mp4,mkv,m2ts,ts,tsreplace\n"
         "  --use-mkv-when-sub-exists 字幕がある場合にはmkv出力を強制する\n"
-        "  -m|--muxer  <パス>  L-SMASHのmuxerまたはmkvmergeまたはtsMuxeRへのパス[muxer.exe]\n"
+        "  -m|--muxer  <パス>  L-SMASHのmuxer、mkvmerge、tsMuxeRまたはtsreplaceへのパス[muxer.exe]\n"
         "  -t|--timelineeditor  <パス>  timelineeditorへのパス（MP4でVFR出力する場合に必要）[timelineeditor.exe]\n"
         "  --mp4box <パス>     mp4boxへのパス（MP4で字幕処理する場合に必要）[mp4box.exe]\n"
         "  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
@@ -187,6 +187,8 @@ static ENUM_ENCODER encoderFtomString(const tstring& str) {
         return ENCODER_VCEENC;
     } else if (str == _T("svt-av1") || str == _T("SVT-AV1")) {
         return ENCODER_SVTAV1;
+    } else if (str == _T("x262")) {
+        return ENCODER_X262;
     }
     return (ENUM_ENCODER)-1;
 }
@@ -629,6 +631,11 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.nicojkmask = 0;
     }
 
+    if (conf.encoder == ENCODER_X262
+        && conf.format != FORMAT_MKV && conf.format != FORMAT_TSREPLACE) {
+        THROW(ArgumentException, "x262はMKVまたはTS (replace)出力でのみ使用できます");
+    }
+
     // muxerのデフォルト値
     if (conf.muxerPath.size() == 0) {
         if (conf.format == FORMAT_MP4) {
@@ -712,6 +719,10 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.mkvmergePath = search(conf.mkvmergePath);
         conf.muxerPath = search(conf.muxerPath);
         conf.timelineditorPath = search(conf.timelineditorPath);
+        if (conf.encoder == ENCODER_X262 && conf.format == FORMAT_TSREPLACE
+            && !File::exists(conf.mkvmergePath)) {
+            THROW(ArgumentException, "x262のTS (replace)出力にはmkvmergeパスが必要です");
+        }
     }
 
     if (conf.srcFilePathOrg.size() == 0) {

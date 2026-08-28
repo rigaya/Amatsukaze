@@ -1685,6 +1685,7 @@ namespace Amatsukaze.Models
                     case EncoderType.NVEnc: return Data.NVEncOption;
                     case EncoderType.VCEEnc: return Data.VCEEncOption;
                     case EncoderType.SVTAV1: return Data.SVTAV1Option;
+                    case EncoderType.x262: return Data.X262Option;
                 }
                 return null;
             }
@@ -1720,6 +1721,11 @@ namespace Amatsukaze.Models
                         if (Data.SVTAV1Option == value)
                             return;
                         Data.SVTAV1Option = value;
+                        break;
+                    case EncoderType.x262:
+                        if (Data.X262Option == value)
+                            return;
+                        Data.X262Option = value;
                         break;
                     default:
                         return;
@@ -1956,7 +1962,7 @@ namespace Amatsukaze.Models
                 {
                     return true;
                 }
-                if ((Data.EncoderType == EncoderType.x264 || Data.EncoderType == EncoderType.x265 || Data.EncoderType == EncoderType.SVTAV1)
+                if ((Data.EncoderType == EncoderType.x264 || Data.EncoderType == EncoderType.x262 || Data.EncoderType == EncoderType.x265 || Data.EncoderType == EncoderType.SVTAV1)
                     && Data.OutputMask == 6 /*本編とCMを分離*/)
                 {
                     return true;
@@ -3018,6 +3024,11 @@ namespace Amatsukaze.Models
             {
                 sb.Append("SVTAV1は2パスに対応していません\r\n");
             }
+            if (Data.EncoderType == EncoderType.x262
+                && Data.OutputFormat != FormatType.MKV && Data.OutputFormat != FormatType.TSREPLACE)
+            {
+                sb.Append("x262はMKVまたはTS (replace)出力でのみ使用できます\r\n");
+            }
             if (Data.TwoPass && Data.EncoderParallel > 1)
             {
                 sb.Append("2パスエンコード時はエンコード分割並列を使用できません (分割並列数は1として扱われます)\r\n");
@@ -3057,15 +3068,16 @@ namespace Amatsukaze.Models
             SettingWarningText = sb.ToString();
         }
 
-        public void SetEncoderOptions(string X264Option, string X265Option, string QSVEncOption, string NVEncOption)
+        public void SetEncoderOptions(string X264Option, string X265Option, string QSVEncOption, string NVEncOption, string X262Option)
         {
             if (X264Option != Data.X264Option || X265Option != Data.X265Option ||
-                QSVEncOption != Data.QSVEncOption || NVEncOption != Data.NVEncOption)
+                QSVEncOption != Data.QSVEncOption || NVEncOption != Data.NVEncOption || X262Option != Data.X262Option)
             {
                 Data.X264Option = X264Option;
                 Data.X265Option = X265Option;
                 Data.QSVEncOption = QSVEncOption;
                 Data.NVEncOption = NVEncOption;
+                Data.X262Option = X262Option;
                 RaisePropertyChanged("EncoderOption");
             }
         }
@@ -3557,6 +3569,20 @@ namespace Amatsukaze.Models
                 if (Model.X264Path == value)
                     return;
                 Model.X264Path = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region X262Path変更通知プロパティ
+        public string X262Path
+        {
+            get { return Model.X262Path; }
+            set
+            {
+                if (Model.X262Path == value)
+                    return;
+                Model.X262Path = value;
                 RaisePropertyChanged();
             }
         }

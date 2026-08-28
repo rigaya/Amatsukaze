@@ -223,8 +223,9 @@ void AMTMuxder::mux(EncodeFileKey key,
         File::copy(srcpsc, dstpsc);
     }
 
-    const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, (muxFormat == FORMAT_TSREPLACE) ? FORMAT_MP4 : muxFormat);
-    const tstring tmpOut2Path = setting_.getVfrTmpFile2Path(key, (muxFormat == FORMAT_TSREPLACE) ? FORMAT_MP4 : muxFormat);
+    const ENUM_FORMAT tsreplaceTempFormat = setting_.getEncoder() == ENCODER_X262 ? FORMAT_MKV : FORMAT_MP4;
+    const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, (muxFormat == FORMAT_TSREPLACE) ? tsreplaceTempFormat : muxFormat);
+    const tstring tmpOut2Path = setting_.getVfrTmpFile2Path(key, (muxFormat == FORMAT_TSREPLACE) ? tsreplaceTempFormat : muxFormat);
 
     tstring metaFile;
     if (muxFormat == FORMAT_M2TS || muxFormat == FORMAT_TS) {
@@ -276,7 +277,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         }
     }
     auto args = makeMuxerArgs(
-        setting_.getEncoder(), setting_.getUserSAR(), muxFormat, muxerPath,
+        setting_.getEncoder(), setting_.getUserSAR(), muxFormat, muxerPath, setting_.getMkvMergePath(),
         setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         (File::exists(setting_.getTmpRawTSPath()) ? setting_.getTmpRawTSPath() : setting_.getSrcFilePath()),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
@@ -337,7 +338,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
     tstring outFilePath = setting_.getOutFilePath(EncodeFileKey(), EncodeFileKey(), setting_.getFormat(), videoFormat.format);
     auto args = makeMuxerArgs(
         setting_.getEncoder(), setting_.getUserSAR(), setting_.getFormat(),
-        setting_.getMuxerPath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
+        setting_.getMuxerPath(), setting_.getMkvMergePath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         setting_.getSrcFilePath(),
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,

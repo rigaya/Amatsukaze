@@ -2055,7 +2055,8 @@ namespace Amatsukaze.Models
 
                 profile.SetEncoderOptions(
                     data.Profile.X264Option, data.Profile.X265Option,
-                    data.Profile.QSVEncOption, data.Profile.NVEncOption);
+                    data.Profile.QSVEncOption, data.Profile.NVEncOption,
+                    data.Profile.X262Option);
                 profile.EncoderTypeInt = (int)data.Profile.EncoderType;
                 profile.ForceSAR = data.Profile.ForceSAR;
                 profile.ForceSARWidth = data.Profile.ForceSARWidth;

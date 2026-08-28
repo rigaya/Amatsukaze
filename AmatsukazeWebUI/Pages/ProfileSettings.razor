@@ -64,6 +64,10 @@ else
                             <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                         }
                     </select>
+                    @if (IsX262InvalidOutputFormat())
+                    {
+                        <span class="text-danger small" style="margin-left: 8px;">x262はMKVまたはTS (replace)出力でのみ使用できます。</span>
+                    }
                 </td>
             </tr>
             <tr>
@@ -999,7 +1003,7 @@ else
     private NameDialogMode _nameDialog = NameDialogMode.None;
     private string _nameDialogTitle = "";
     private string _nameInput = "";
-    private static readonly string[] _encoderEnumNames = new[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVTAV1" };
+    private static readonly string[] _encoderEnumNames = new[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVTAV1", "x262" };
     private static readonly string[] _decoderEnumNames = new[] { "Default", "QSV", "CUVID" };
     private static readonly string[] _formatEnumNames = new[] { "MP4", "MKV", "M2TS", "TS", "TSREPLACE" };
     private static readonly string[] _filterEnumNames = new[] { "None", "Setting", "Custom", "QSVEncFilter", "NVEncFilter", "VCEEncFilter" };
@@ -1442,6 +1446,7 @@ else
             3 => "NVEncOption",
             4 => "VCEEncOption",
             5 => "SVTAV1Option",
+            6 => "X262Option",
             _ => "X264Option"
         };
         SetNodeValue(name, JsonValue.Create(value));
@@ -1659,6 +1664,7 @@ else
             3 => "NVEncOption",
             4 => "VCEEncOption",
             5 => "SVTAV1Option",
+            6 => "X262Option",
             _ => "X264Option"
         };
         return GetStringValue(name);
@@ -1719,6 +1725,13 @@ else
     private bool IsTsreplaceFormat()
     {
         return string.Equals(GetEnumString("OutputFormat", _formatEnumNames), "TSREPLACE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsX262InvalidOutputFormat()
+    {
+        return GetEncoderIndex() == 6
+            && !string.Equals(GetEnumString("OutputFormat", _formatEnumNames), "MKV", StringComparison.OrdinalIgnoreCase)
+            && !IsTsreplaceFormat();
     }
 
     private string GetEnumString(string name, string[] enumNames)

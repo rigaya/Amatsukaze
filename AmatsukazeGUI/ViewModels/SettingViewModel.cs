@@ -139,6 +139,25 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearX262PathCommand
+        private ViewModelCommand _ClearX262PathCommand;
+
+        public ViewModelCommand ClearX262PathCommand {
+            get {
+                if (_ClearX262PathCommand == null)
+                {
+                    _ClearX262PathCommand = new ViewModelCommand(ClearX262Path);
+                }
+                return _ClearX262PathCommand;
+            }
+        }
+
+        public void ClearX262Path()
+        {
+            Model.Setting.X262Path = null;
+        }
+        #endregion
+
         #region ClearX265PathCommand
         private ViewModelCommand _ClearX265PathCommand;
 

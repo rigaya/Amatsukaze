@@ -188,6 +188,10 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
     ```bash
     sudo apt install -y x264 x265 svt-av1
     ```
+
+  - x262
+
+    x262はディストリビューションのパッケージでは提供されないため、x262をビルドして実行ファイルへのパスをAmatsukazeの基本設定で指定します。x262プロファイルの出力形式はMKVまたはTS (replace)のみです。
   
   - qsvencc, nvencc, vceencc
   
@@ -258,6 +262,8 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
   - tsreplace
   
     [こちら](https://github.com/rigaya/tsreplace/releases)から最新版をダウンロードしてインストールします。
+
+    x262でTS (replace)を使用する場合は、MPEG-2 Videoの置き換えに対応したtsreplaceが必要です。通常の公開版では対応していない場合があるため、対応版を使用してください。mkvmergeも必要です。
 
     ```bash
     sudo apt install -y ./tsreplace_<version>_amd64.deb

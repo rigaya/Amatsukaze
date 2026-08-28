@@ -37,7 +37,8 @@ namespace Amatsukaze.Server
         QSVEnc,
         NVEnc,
         VCEEnc,
-        SVTAV1
+        SVTAV1,
+        x262
     }
 
     public enum AudioEncoderType
@@ -377,6 +378,8 @@ namespace Amatsukaze.Server
         public string VCEEncFilterOption { get; set; }
         [DataMember]
         public string SVTAV1Option { get; set; }
+        [DataMember]
+        public string X262Option { get; set; }
 
         [DataMember]
         public bool ForceSAR { get; set; }
@@ -582,7 +585,7 @@ namespace Amatsukaze.Server
     // 文字列リソース（列挙体に対応する文字列配列）
     public static class ProfileSettingExtensions
     {
-        public static string[] EncoderList { get; } = new string[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVT-AV1" };
+        public static string[] EncoderList { get; } = new string[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVT-AV1", "x262" };
         public static string[] Mpeg2DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
         public static string[] H264DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
         public static string[] HEVCDecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
@@ -670,6 +673,7 @@ namespace Amatsukaze.Server
                 case EncoderType.NVEnc: return profile.NVEncOption;
                 case EncoderType.VCEEnc: return profile.VCEEncOption;
                 case EncoderType.SVTAV1: return profile.SVTAV1Option;
+                case EncoderType.x262: return profile.X262Option;
                 default: return null;
             }
         }
@@ -1117,6 +1121,8 @@ namespace Amatsukaze.Server
         public string VCEEncPath { get; set; }
         [DataMember]
         public string SVTAV1Path { get; set; }
+        [DataMember]
+        public string X262Path { get; set; }
         [DataMember]
         public string MuxerPath { get; set; }
         [DataMember]

@@ -1282,6 +1282,9 @@ namespace Amatsukaze.Server
                 case EncoderType.SVTAV1:
                     pattern = "SvtAv1EncApp";
                     break;
+                case EncoderType.x262:
+                    pattern = "x262";
+                    break;
                 default:
                     return null;
             }
@@ -1375,6 +1378,10 @@ namespace Amatsukaze.Server
             if (string.IsNullOrEmpty(setting.SVTAV1Path))
             {
                 setting.SVTAV1Path = GetEncoderExePath(basePath, EncoderType.SVTAV1);
+            }
+            if (string.IsNullOrEmpty(setting.X262Path))
+            {
+                setting.X262Path = GetEncoderExePath(basePath, EncoderType.x262);
             }
             if (string.IsNullOrEmpty(setting.QSVEncPath))
             {
@@ -1925,6 +1932,10 @@ namespace Amatsukaze.Server
             {
                 return setting.VCEEncPath;
             }
+            else if (encoderType == EncoderType.x262)
+            {
+                return setting.X262Path;
+            }
             else
             {
                 return setting.SVTAV1Path;
@@ -1953,6 +1964,10 @@ namespace Amatsukaze.Server
             {
                 return profile.VCEEncOption;
             }
+            else if (profile.EncoderType == EncoderType.x262)
+            {
+                return profile.X262Option;
+            }
             else
             {
                 return profile.SVTAV1Option;
@@ -1980,6 +1995,10 @@ namespace Amatsukaze.Server
             else if (encoderType == EncoderType.VCEEnc)
             {
                 return "VCEEnc";
+            }
+            else if (encoderType == EncoderType.x262)
+            {
+                return "x262";
             }
             else
             {
@@ -2177,7 +2196,8 @@ namespace Amatsukaze.Server
                             .Append(profile.ForceSARHeight);
                     }
 
-                    if (profile.OutputFormat == FormatType.MP4 || profile.OutputFormat == FormatType.TSREPLACE)
+                    if (profile.OutputFormat == FormatType.MP4
+                        || (profile.OutputFormat == FormatType.TSREPLACE && profile.EncoderType != EncoderType.x262))
                     {
                         sb.Append(" --mp4box \"")
                             .Append(setting.MP4BoxPath)
@@ -2221,6 +2241,10 @@ namespace Amatsukaze.Server
                     else if (profile.OutputFormat == FormatType.TSREPLACE)
                     {
                         sb.Append(" -fmt tsreplace -m \"" + setting.TsReplacePath + "\"");
+                        if (profile.EncoderType == EncoderType.x262)
+                        {
+                            sb.Append(" --mkvmerge \"").Append(setting.MKVMergePath).Append("\"");
+                        }
                     }
                     if (profile.OutputFormat == FormatType.MP4 && profile.UseMKVWhenSubExists)
                     {
@@ -2719,6 +2743,7 @@ namespace Amatsukaze.Server
             CheckPath("NVEnc", setting.NVEncPath);
             CheckPath("VCEEnc", setting.VCEEncPath);
             CheckPath("SVTAV1", setting.SVTAV1Path);
+            CheckPath("x262", setting.X262Path);
 
             CheckPath("L-SMASH Muxer", setting.MuxerPath);
             CheckPath("MP4Box", setting.MP4BoxPath);
@@ -2774,6 +2799,12 @@ namespace Amatsukaze.Server
                     }
                 }
 
+                if (profile.EncoderType == EncoderType.x262
+                    && profile.OutputFormat != FormatType.MKV && profile.OutputFormat != FormatType.TSREPLACE)
+                {
+                    throw new ArgumentException("x262はMKVまたはTS (replace)出力でのみ使用できます。");
+                }
+
                 if (profile.OutputFormat == FormatType.MP4)
                 {
                     if (string.IsNullOrEmpty(setting.MuxerPath))
@@ -2805,6 +2836,10 @@ namespace Amatsukaze.Server
                     if (profile.EncoderType == EncoderType.SVTAV1)
                     {
                         throw new ArgumentException("TS (replace)使用時は、SVT-AV1は使用できません。");
+                    }
+                    if (profile.EncoderType == EncoderType.x262 && string.IsNullOrEmpty(setting.MKVMergePath))
+                    {
+                        throw new ArgumentException("x262のTS (replace)出力にはMKVMergeパスが設定されていません。");
                     }
                 }
                 else if (profile.OutputFormat == FormatType.TS || profile.OutputFormat == FormatType.M2TS)

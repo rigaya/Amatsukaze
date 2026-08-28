@@ -18,7 +18,7 @@ TSファイルをエンコードしてmp4やmkvにするソフトです。
 
 ### 対応エンコーダ
 
-x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc
+x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc, x262
 
 ### 対応環境
 
@@ -488,7 +488,7 @@ Amatsukazeでは、VFRで24fps判定されたフレームのタイミングを60
 
 <img src="./data/amatsuakze_parallel_enc_20251206_qsvenc.png" width="718">
 
-x264/x265/svt-av1使用時には、特にコア数の多いCPUでコアを使いきれていない場合、分割並列エンコードによりCPUの使用効率を上げ、高速化できる場合があります。
+x264/x265/svt-av1/x262使用時には、特にコア数の多いCPUでコアを使いきれていない場合、分割並列エンコードによりCPUの使用効率を上げ、高速化できる場合があります。
 
 QSVEnc/NVEnc/VCEEnc使用時には、マルチGPU環境はもちろん、ひとつのGPUにエンコーダが複数搭載されている場合に、これを活用して並列エンコードを行うことで高速化が可能です。
 
@@ -813,7 +813,7 @@ BatchHashChecker.exeで出力mp4(or mkv)ファイルのハッシュチェック�
 - VFRな入力（ワンセグなど）には対応していません
 （VFR出力には対応しています。）
 - 「通常」出力でVCEEncを使用した場合、CMビットレート倍率は適用されません
-（x264,x265は```--zone```オプションで、QSVEnc,NVEncは```--dynamic-rc```で適用します）
+（x264,x262,x265は```--zone```オプションで、QSVEnc,NVEncは```--dynamic-rc```で適用します）
 - HEVCはインタレ保持に対応していないので、
 インタレ解除しないでHEVCを使おうとするとエラーになります。
 

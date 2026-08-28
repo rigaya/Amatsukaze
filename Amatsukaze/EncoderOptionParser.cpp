@@ -62,6 +62,7 @@ static const EncoderRCMode *encoderRCModes(ENUM_ENCODER encoder) {
     case ENCODER_QSVENC: return RCMODES_QSVENC;
     case ENCODER_NVENC:  return RCMODES_NVENC;
     case ENCODER_X264:
+    case ENCODER_X262:
     case ENCODER_X265:   return RCMODES_X264_X265;
     case ENCODER_SVTAV1: return RCMODES_SVTAV1;
     default:             return nullptr;
@@ -121,7 +122,8 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
     info.selectEvery = 1;
     switch (encoder) {
     case ENCODER_X264:
-        info.format = VS_H264;
+    case ENCODER_X262:
+        info.format = encoder == ENCODER_X262 ? VS_MPEG2 : VS_H264;
         info.rcModeValue[0] = X264_DEFAULT_CRF;
         if (rcmodes) info.rcMode = rcmodes[0].name;
         break;
