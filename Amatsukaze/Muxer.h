@@ -24,6 +24,7 @@ struct EncodeFileOutput {
     double targetBitrate;
     int vfrTimingFps;
     tstring timecode;
+    bool isMpeg2Partial = false;
 };
 
 ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting);

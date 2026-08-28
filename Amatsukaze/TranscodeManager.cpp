@@ -17,6 +17,7 @@
 #include "Subtitle.h"
 #include "WaveWriter.h"
 #include <cmath>
+#include "Mpeg2PartialEncode.h"
 #include <filesystem>
 
 namespace {
@@ -1545,6 +1546,17 @@ void DoBadThing() {
     if (!isReusingTmp) {
         reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE);
     }
+    if (setting.isMpeg2PartialEnabled()) {
+        if (reformInfo.getVideoStreamFormat() != VS_MPEG2) {
+            THROW(FormatException, "--mpeg2-partialの入力映像はMPEG-2である必要があります");
+        }
+        for (int videoFileIndex = 0; videoFileIndex < reformInfo.getNumVideoFile(); ++videoFileIndex) {
+            const auto& videoFormat = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0)).videoFormat;
+            if (videoFormat.format != VS_MPEG2 || !videoFormat.fixedFrameRate) {
+                THROW(FormatException, "--mpeg2-partialは固定フレームレートのMPEG-2映像だけに対応しています");
+            }
+        }
+    }
 
     time_t startTime = reformInfo.getFirstFrameTime();
 
@@ -1963,6 +1975,24 @@ void DoBadThing() {
         auto key = keys[i];
         auto& fileOut = outFileInfo[i];
         const CMAnalyze* cma = cmanalyze[key.video].get();
+
+        if (setting.isMpeg2PartialEnabled()) {
+            tstring fallbackReason;
+            ctx.infoF(_T("[MPEG-2部分エンコード開始] %d/%d %s"),
+                i + 1, (int)keys.size(), CMTypeToString(key.cm));
+            if (TryMpeg2PartialEncode(ctx, setting, reformInfo, key, fallbackReason)) {
+                const auto bitrate = argGen->printBitrate(ctx, key);
+                fileOut.vfmt = reformInfo.getFormat(key).videoFormat;
+                fileOut.srcBitrate = bitrate.first;
+                fileOut.targetBitrate = bitrate.second;
+                fileOut.vfrTimingFps = 0;
+                fileOut.timecode.clear();
+                fileOut.isMpeg2Partial = true;
+                continue;
+            }
+            ctx.warnF(_T("[MPEG-2部分エンコード] フル再エンコードへフォールバック: %s"),
+                fallbackReason.c_str());
+        }
 
         AMTFilterSource filterSource(ctx, setting, reformInfo,
             cma->getZones(), cma->getLogoPath(), key, rm);

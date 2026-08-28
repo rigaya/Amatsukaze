@@ -82,6 +82,7 @@ static void printHelp(const tchar* bin) {
         "  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
         "  --tsreplace-remove-typed  tsreplace実行時に--remove-typedを指定する\n"
         "  --mux-ts-temp        tsreplace時に入力TSの一時コピーを作成してmuxを高速化する\n"
+        "  --mpeg2-partial      MPEG-2のCMカット境界周辺だけをx262で再エンコードする\n"
         "  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
         "  -pf|--postfilter <パス>  ポストフィルタAvisynthスクリプトへのパス[]\n"
         "  --mpeg2decoder <デコーダ>  MPEG2用デコーダ[default]\n"
@@ -284,6 +285,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.tsreplaceRemoveTypeD = false;
     conf.muxTsTemp = false;
     conf.useMKVWhenSubExist = false;
+    conf.mpeg2Partial = false;
     conf.outputChapter = false;
     bool nicojk = false;
     conf.webvtt = false;
@@ -416,6 +418,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.muxTsTemp = true;
         } else if (key == _T("--use-mkv-when-sub-exists")) {
             conf.useMKVWhenSubExist = true;
+        } else if (key == _T("--mpeg2-partial")) {
+            conf.mpeg2Partial = true;
         } else if (key == _T("--chapter")) {
             conf.chapter = true;
         } else if (key == _T("--output-chapter")) {
@@ -634,6 +638,31 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     if (conf.encoder == ENCODER_X262
         && conf.format != FORMAT_MKV && conf.format != FORMAT_TSREPLACE) {
         THROW(ArgumentException, "x262はMKVまたはTS (replace)出力でのみ使用できます");
+    }
+
+    if (conf.mpeg2Partial) {
+        if (conf.encoder != ENCODER_X262 || conf.format != FORMAT_TSREPLACE) {
+            THROW(ArgumentException, "--mpeg2-partialにはx262とTS (replace)出力が必要です");
+        }
+        if (conf.cmoutmask != (1 << CMTYPE_NONCM)
+            || (!conf.chapter && conf.trimavsPath.empty())) {
+            THROW(ArgumentException, "--mpeg2-partialにはCMカット本編のみ出力が必要です");
+        }
+        if (!conf.filterScriptPath.empty() || !conf.postFilterScriptPath.empty()
+            || !conf.noDelogo || !conf.eraseLogoPath.empty()) {
+            THROW(ArgumentException, "--mpeg2-partialではフィルタ、ロゴ消しを使用できません");
+        }
+        if (conf.twoPass || conf.encoderParallel != 1
+            || conf.encoderOptions.find(_T("--parallel")) != tstring::npos
+            || conf.encoderOptions.find(_T("--zones")) != tstring::npos) {
+            THROW(ArgumentException, "--mpeg2-partialでは2pass、分割並列、zonesを使用できません");
+        }
+        if (!conf.preEncBatchFile.empty()) {
+            THROW(ArgumentException, "--mpeg2-partialではエンコード前バッチを使用できません");
+        }
+        if (conf.useMKVWhenSubExist) {
+            THROW(ArgumentException, "--mpeg2-partialでは字幕存在時のMKV切替を使用できません");
+        }
     }
 
     // muxerのデフォルト値

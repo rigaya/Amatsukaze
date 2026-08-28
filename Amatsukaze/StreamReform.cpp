@@ -370,6 +370,36 @@ const VideoFrameInfo& StreamReformInfo::getVideoFrameInfo(int frameIndex) const 
     return videoFrameList_[frameIndex];
 }
 
+int StreamReformInfo::getDtsFrameIndex(int ptsOrderIndex) const {
+    return ordredVideoFrame_.at(ptsOrderIndex);
+}
+
+std::pair<int, int> StreamReformInfo::getVideoFrameRange(int videoFileIndex) const {
+    if (videoFileIndex < 0 || videoFileIndex >= numVideoFile_) {
+        THROWF(ArgumentException, "中間映像ファイル番号が範囲外です: %d", videoFileIndex);
+    }
+
+    if (frameFormatId_.size() != videoFrameList_.size()) {
+        THROW(RuntimeException, "DTS順フレームとフォーマット対応表のサイズが一致しません");
+    }
+    // AMTSplitterの分割条件を再現せず、reformMainが確定させた
+    // frameFormatId_から範囲を求める（getEncoderIndexと同じ経路）。
+    int start = -1;
+    int end = -1;
+    for (int i = 0; i < (int)videoFrameList_.size(); ++i) {
+        if (format_[fileFormatId_[frameFormatId_[i]]].videoFileId == videoFileIndex) {
+            if (start < 0) {
+                start = i;
+            }
+            end = i + 1;
+        }
+    }
+    if (start < 0) {
+        THROWF(RuntimeException, "中間映像ファイルのフレーム範囲を取得できません: %d", videoFileIndex);
+    }
+    return std::make_pair(start, end);
+}
+
 // video frame index (DTS順) -> encoder index
 int StreamReformInfo::getEncoderIndex(int frameIndex) const {
     int fileId = frameFormatId_[frameIndex];

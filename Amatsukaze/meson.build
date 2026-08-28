@@ -20,6 +20,7 @@ amatsukaze_sources = [
   'LogoScan.cpp',
   'Mpeg2TsParser.cpp',
   'Mpeg2VideoParser.cpp',
+  'Mpeg2PartialEncode.cpp',
   'Muxer.cpp',
   'NicoJK.cpp',
   'OSUtil.cpp',

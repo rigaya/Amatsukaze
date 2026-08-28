@@ -109,7 +109,7 @@ private:
 
 struct FilterSourceFrame {
     bool halfDelay;
-    int frameIndex; // 内部用(DTS順フレーム番号)
+    int frameIndex; // 内部用(PTS順フレーム番号)。DTS順が必要なら getDtsFrameIndex() で変換すること
     double pts; // 内部用
     double frameDuration; // 内部用
     int64_t originalFramePTS; // AMTSource照合用(ドロップ補正前PTS)
@@ -174,6 +174,11 @@ struct EncodeFileInput {
 
 class StreamReformInfo : public AMTObject {
 public:
+    struct KeepSegment {
+        double start; // 元TS時間軸の絶対PTS
+        double end;   // 元TS時間軸の絶対PTS
+    };
+
     StreamReformInfo(
         AMTContext& ctx,
         int numVideoFile,
@@ -237,6 +242,15 @@ public:
     // video frame index -> VideoFrameInfo
     const VideoFrameInfo& getVideoFrameInfo(int frameIndex) const;
 
+    // PTS順フレーム番号 -> DTS順フレーム番号
+    int getDtsFrameIndex(int ptsOrderIndex) const;
+
+    // 中間映像ファイルに属するDTS順フレーム番号の半開区間
+    std::pair<int, int> getVideoFrameRange(int videoFileIndex) const;
+
+    // genWebVTT、tsreplace、部分エンコードで共通に使う保持区間を返す
+    std::vector<KeepSegment> getKeepSegments(const EncodeFileKey& key) const;
+
     // video frame index (DTS順) -> encoder index
     int getEncoderIndex(int frameIndex) const;
 
@@ -284,14 +298,6 @@ public:
     static StreamReformInfo deserialize(AMTContext& ctx, const File& file);
 
 private:
-
-    struct KeepSegment {
-        double start; // 元TS時間軸の絶対PTS
-        double end;   // 元TS時間軸の絶対PTS
-    };
-
-    // genWebVTT と tsreplace のカットリストで共通に使う保持区間を返す
-    std::vector<KeepSegment> getKeepSegments(const EncodeFileKey& key) const;
 
     struct CaptionDuration {
         double startPTS, endPTS;

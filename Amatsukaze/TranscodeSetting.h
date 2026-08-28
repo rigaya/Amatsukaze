@@ -139,6 +139,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const tstring& srcTSFilePath,
     const tstring& inVideo,
     const bool encoderOutputInContainer,
+    const bool tsreplaceMpegtsInput,
     const VideoFormat& videoFormat,
     const std::vector<tstring>& inAudios,
     const tstring& tmpdir,
@@ -261,6 +262,7 @@ struct Config {
     bool tsreplaceRemoveTypeD;
     bool muxTsTemp;
     bool useMKVWhenSubExist;
+    bool mpeg2Partial;
     bool splitSub;
     bool twoPass;
     bool autoBitrate;
@@ -398,6 +400,8 @@ public:
     bool isMuxTsTempEnabled() const;
 
     bool getUseMKVWhenSubExist() const;
+
+    bool isMpeg2PartialEnabled() const;
 
     bool isFormatVFRSupported() const;
 

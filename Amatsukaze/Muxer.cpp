@@ -223,7 +223,9 @@ void AMTMuxder::mux(EncodeFileKey key,
         File::copy(srcpsc, dstpsc);
     }
 
-    const ENUM_FORMAT tsreplaceTempFormat = setting_.getEncoder() == ENCODER_X262 ? FORMAT_MKV : FORMAT_MP4;
+    const ENUM_FORMAT tsreplaceTempFormat = fileOut.isMpeg2Partial
+        ? FORMAT_TS
+        : (setting_.getEncoder() == ENCODER_X262 ? FORMAT_MKV : FORMAT_MP4);
     const tstring tmpOut1Path = setting_.getVfrTmpFile1Path(key, (muxFormat == FORMAT_TSREPLACE) ? tsreplaceTempFormat : muxFormat);
     const tstring tmpOut2Path = setting_.getVfrTmpFile2Path(key, (muxFormat == FORMAT_TSREPLACE) ? tsreplaceTempFormat : muxFormat);
 
@@ -280,7 +282,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         setting_.getEncoder(), setting_.getUserSAR(), muxFormat, muxerPath, setting_.getMkvMergePath(),
         setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         (File::exists(setting_.getTmpRawTSPath()) ? setting_.getTmpRawTSPath() : setting_.getSrcFilePath()),
-        encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat),
+        encVideoFile, encoderOutputInContainer(setting_.getEncoder(), muxFormat), fileOut.isMpeg2Partial,
         vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
@@ -340,7 +342,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         setting_.getEncoder(), setting_.getUserSAR(), setting_.getFormat(),
         setting_.getMuxerPath(), setting_.getMkvMergePath(), setting_.getTimelineEditorPath(), setting_.getMp4BoxPath(),
         setting_.getSrcFilePath(),
-        encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()),
+        encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()), false,
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
         std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0, 0, tstring(),

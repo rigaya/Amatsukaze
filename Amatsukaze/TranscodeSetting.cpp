@@ -432,6 +432,7 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     const tstring& srcTSFilePath,
     const tstring& inVideo,
     const bool encoderOutputInContainer,
+    const bool tsreplaceMpegtsInput,
     const VideoFormat& videoFormat,
     const std::vector<tstring>& inAudios,
     const tstring& tmpdir,
@@ -608,7 +609,7 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         sb.clear();
     } else if (format == FORMAT_TSREPLACE) {
         tstring tmppath = inVideo;
-        if (encoder == ENCODER_X262) {
+        if (encoder == ENCODER_X262 && !tsreplaceMpegtsInput) {
             // x262のraw MPEG-2 ESへmkvmergeで時刻情報を付与してからtsreplaceへ渡す。
             sb.clear();
             sb.append(_T("\"%s\" -o \"%s\""), mkvmergepath, tmpout1path);
@@ -621,7 +622,7 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
             ret.push_back(std::make_pair(sb.str(), true));
             sb.clear();
             tmppath = tmpout1path;
-        } else if (!encoderOutputInContainer) {
+        } else if (!encoderOutputInContainer && !tsreplaceMpegtsInput) {
             const bool needTimecode = (timecodepath.size() > 0);
 
             sb.clear();
@@ -663,7 +664,9 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         sb.append(_T("\"%s\""), binpath);
         sb.append(_T(" -i \"%s\""), srcTSFilePath);
         sb.append(_T(" -r \"%s\""), tmppath);
-        sb.append(_T(" --replace-format %s"), encoder == ENCODER_X262 ? _T("matroska") : _T("mp4"));
+        sb.append(_T(" --replace-format %s"), tsreplaceMpegtsInput
+            ? _T("mpegts")
+            : (encoder == ENCODER_X262 ? _T("matroska") : _T("mp4")));
         if (tsreplaceEdgeTrim) {
             sb.append(_T(" --end-at-replace-eof"));
             sb.append(_T(" --replace-delay %lld"), (long long)tsreplaceDelay);
@@ -965,6 +968,10 @@ bool ConfigWrapper::isMuxTsTempEnabled() const {
 
 bool ConfigWrapper::getUseMKVWhenSubExist() const {
     return conf.useMKVWhenSubExist;
+}
+
+bool ConfigWrapper::isMpeg2PartialEnabled() const {
+    return conf.mpeg2Partial;
 }
 
 bool ConfigWrapper::isFormatVFRSupported() const {
@@ -1844,6 +1851,7 @@ void ConfigWrapper::dump() const {
         cmOutMaskToString(conf.cmoutmask).c_str());
     ctx.infoF(_T("エンコード分割並列: %d"), conf.encoderParallel);
     ctx.infoF(_T("出力する最短区間: %d秒"), conf.minOutputDuration);
+    ctx.infoF(_T("MPEG-2部分エンコード: %s"), conf.mpeg2Partial ? _T("有効") : _T("無効"));
     const bool logoRequiredForChapter = conf.chapter && (!conf.noLogoInCM || !conf.noDelogo);
     ctx.infoF(_T("チャプター解析: %s%s"),
         conf.chapter ? _T("有効") : _T("無効"),
