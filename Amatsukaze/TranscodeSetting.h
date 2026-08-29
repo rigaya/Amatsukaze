@@ -102,7 +102,8 @@ tstring makeEncoderArgs(
     const tstring& timecodepath,
     int vfrTimingFps,
     const ENUM_FORMAT format,
-    const tstring& outpath);
+    const tstring& outpath,
+    bool sarInContainerOnly);
 
 tstring makeEncoderFilterArgs(
     const tstring& binpath,

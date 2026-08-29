@@ -171,7 +171,8 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     const tstring& timecodepath,
     int vfrTimingFps,
     const ENUM_FORMAT format,
-    const tstring& outpath) {
+    const tstring& outpath,
+    bool sarInContainerOnly) {
     StringBuilderT sb;
 
     sb.append(_T("\"%s\""), binpath);
@@ -180,6 +181,20 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     //ss << " --fps " << fmt.frameRateNum << "/" << fmt.frameRateDenom;
     //ss << " --input-res " << fmt.width << "x" << fmt.height;
     //ss << " --sar " << fmt.sarWidth << ":" << fmt.sarHeight;
+
+    // x262(MPEG-2)だけは例外で、SARをsequence headerの
+    // aspect_ratio_information(Table 6-3 = DARコード)として解釈する。
+    // そのためy4mヘッダの実SARをそのまま使わせると表示アスペクトが狂う
+    // (例: 1440x1080 SAR 4:3 → aspect_ratio_information=2 = DAR 4:3。正しくは16:9)。
+    // CLIの--sarはy4mヘッダより優先されるので、ここでDARを明示して上書きする。
+    // sarInContainerOnly時はエンコーダにSARを渡さない方針なので何もしない。
+    if (encoder == ENCODER_X262 && !sarInContainerOnly && !fmt.isSARUnspecified()) {
+        int darWidth = 0, darHeight = 0;
+        fmt.getDAR(darWidth, darHeight);
+        if (darWidth > 0 && darHeight > 0) {
+            sb.append(_T(" --sar %d:%d"), darWidth, darHeight);
+        }
+    }
 
     if (encoder == ENCODER_SVTAV1) {
         if (fmt.colorPrimaries != AVCOL_PRI_UNSPECIFIED) {

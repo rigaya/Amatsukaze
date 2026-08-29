@@ -1309,7 +1309,8 @@ tstring EncoderArgumentGenerator::GenEncoderOptions(
         timecodepath,
         vfrTimingFps,
         setting_.getFormat(),
-        outPath);
+        outPath,
+        setting_.getSARInContainerOnly());
 }
 
 // src, target

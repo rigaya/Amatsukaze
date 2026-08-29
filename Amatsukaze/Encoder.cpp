@@ -1363,7 +1363,8 @@ void AMTSimpleVideoEncoder::onVideoFormat(AVStream *stream, VideoFormat fmt) {
             0, fmt.format, srcBitrate, false, pass_, std::vector<BitrateZone>(), tstring(), 1, EncodeFileKey(), EncoderOptionInfo()),
         fmt, tstring(), false,
         setting_.getFormat(),
-        setting_.getEncVideoFilePath(EncodeFileKey()));
+        setting_.getEncVideoFilePath(EncodeFileKey()),
+        setting_.getSARInContainerOnly());
 
     ctx.info(_T("[エンコーダ開始]"));
     ctx.infoF(_T("%s"), args);
