@@ -301,7 +301,7 @@ tstring makePatchEncoderArgs(
     const VbvSetting& vbv) {
     StringBuilderT sb;
     sb.append(_T("\"%s\" --mpeg2 --demuxer y4m"), setting.getEncoderPath())
-        .append(_T(" --keyint infinite --bframes 0 --min-keyint 1 --scenecut 0"));
+        .append(_T(" --keyint 15 --bframes 0 --min-keyint 1 --scenecut 0"));
     if (!format.progressive) {
         sb.append(bottomFieldFirst ? _T(" --bff") : _T(" --tff"));
     }
@@ -374,15 +374,17 @@ std::vector<PatchEncodedData> encodePatches(
         const int frames = patch.last - patch.first;
         ctx.infoF(_T("[MPEG-2部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
             (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
+        const tstring encoderArgs = makePatchEncoderArgs(
+            setting, format, patchPath, frames, bottomFieldFirst, vbv);
+        ctx.info(_T("[エンコーダ起動]"));
+        ctx.infoF(_T("%s"), encoderArgs.c_str());
         // 第5引数disablePowerThrottoling=trueは固定。
         // 部分エンコードのpatchは必ずx262(=CPUエンコーダ)なので、
         // TranscodeManager側の判定(x264/x262/x265/SVT-AV1ならtrue)と一致する。
         // なお最終引数sarInContainerOnly=false(既定)のため、Y4Mヘッダには実SAR(例 A4:3)が載る。
         // 一方コマンドラインの--sarにはDARを渡している(x262のMPEG-2時の仕様、§8.2/§16.8)。
         // 両者の値は食い違うが、x262はCLI指定を優先するので意図どおり動く。
-        Y4MEncodeWriter writer(ctx,
-            makePatchEncoderArgs(setting, format, patchPath, frames, bottomFieldFirst, vbv),
-            vi, format, true);
+        Y4MEncodeWriter writer(ctx, encoderArgs, vi, format, true);
         try {
             for (int display = patch.first; display < patch.last; ++display) {
                 writer.inputFrame(source->GetFrame(display, env.get()));
