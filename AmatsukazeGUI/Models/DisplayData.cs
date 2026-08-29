@@ -2828,7 +2828,7 @@ namespace Amatsukaze.Models
         public int[] EncoderParallelList {
             get { return new int[] { 1, 2, 3, 4, 5, 6, 7, 8 }; }
         }
-        private static readonly int[] TsreplaceOutputMasks = new int[] { 1, 8 };
+        private static readonly int[] TsreplaceOutputMasks = new int[] { 1, 2, 8 };
         public DisplayOutputMask[] OutputOptionList_ = new DisplayOutputMask[]
         {
             new DisplayOutputMask()
