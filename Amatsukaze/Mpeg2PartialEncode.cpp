@@ -165,7 +165,9 @@ AVStream* openVideoInput(
     const char* demuxer,
     std::unique_ptr<AVFormatContext, InputContextDeleter>& input) {
     AVFormatContext* rawInput = nullptr;
-    const auto* inputFormat = av_find_input_format(demuxer);
+    // av_find_input_formatの戻り型はlavf59以降const付き、nekopanda版(58)はconst無し。
+    // auto*でどちらのAPIでもそのままavformat_open_inputに渡せるようにする。
+    auto* inputFormat = av_find_input_format(demuxer);
     if (inputFormat == nullptr) {
         THROWF(FormatException, "demuxerが見つかりません: %s", char_to_tstring(demuxer).c_str());
     }
@@ -472,6 +474,11 @@ void buildOutput(
     outputStream->codecpar->codec_tag = 0;
     outputStream->time_base = CLOCK_90K;
     outputStream->avg_frame_rate = inputStream->avg_frame_rate;
+    // AVFMT_AVOID_NEG_TS_DISABLED(=0)はFFmpeg 5.1で追加された名前で、
+    // nekopanda版FFmpeg(lavf58)には無いが値0=補正無効の意味は同じ。
+#ifndef AVFMT_AVOID_NEG_TS_DISABLED
+#define AVFMT_AVOID_NEG_TS_DISABLED 0
+#endif
     output->avoid_negative_ts = AVFMT_AVOID_NEG_TS_DISABLED;
     checkAv(avio_open(&output->pb, tchar_to_string(outputPath).c_str(), AVIO_FLAG_WRITE),
         "部分エンコード出力を開けません");
