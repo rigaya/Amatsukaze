@@ -94,6 +94,7 @@ jobs:
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x265.zip "%X265_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
+          git clone --depth 1 --branch 0.05 --single-branch https://github.com/rigaya/SCRenamePy.git deps\\screname
           echo --- deps contents (after Download) ---
           tree /f deps
 
@@ -197,6 +198,22 @@ jobs:
           if exist defaults\\profile robocopy defaults\\profile package\\profile /E /NFL /NDL /NJH /NJS
           if exist defaults\\drcs\\drcs_map.txt copy /y defaults\\drcs\\drcs_map.txt package\\exe_files
           if exist defaults\\exe_files\\plugins64\\*.avsi copy /y defaults\\exe_files\\plugins64\\*.avsi package\\exe_files\\plugins64
+
+          rem SCRenamePy 0.05タグの全ファイル（.gitを除外）
+          if not exist deps\\screname\\SCRename.py (
+            echo SCRenamePyのクローン先が見つかりません。
+            exit /b 1
+          )
+          if not exist package\\exe_files\\SCRenamePy mkdir package\\exe_files\\SCRenamePy
+          robocopy deps\\screname package\\exe_files\\SCRenamePy /E /XD .git /NFL /NDL /NJH /NJS
+          if errorlevel 8 (
+            echo SCRenamePyの配置に失敗しました。
+            exit /b 1
+          )
+          if not exist package\\exe_files\\SCRenamePy\\SCRename.py (
+            echo SCRename.pyの配置を確認できません。
+            exit /b 1
+          )
 
           rem join_logo + JL
           for /r deps\\join_logo %%f in (join_logo_scp.exe) do copy /y "%%f" package\\exe_files
