@@ -441,6 +441,7 @@
     <ClInclude Include="JpegCompress.h" />
     <ClInclude Include="LogoScan.h" />
     <ClInclude Include="Mpeg2TsParser.h" />
+    <ClInclude Include="Mpeg2PartialEncode.h" />
     <ClInclude Include="Mpeg2VideoParser.h" />
     <ClInclude Include="Muxer.h" />
     <ClInclude Include="NicoJK.h" />
@@ -578,6 +579,7 @@
     <ClCompile Include="JpegCompress.cpp" />
     <ClCompile Include="LogoScan.cpp" />
     <ClCompile Include="Mpeg2TsParser.cpp" />
+    <ClCompile Include="Mpeg2PartialEncode.cpp" />
     <ClCompile Include="Mpeg2VideoParser.cpp" />
     <ClCompile Include="Muxer.cpp" />
     <ClCompile Include="NicoJK.cpp" />

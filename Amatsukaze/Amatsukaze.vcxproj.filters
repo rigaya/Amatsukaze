@@ -66,6 +66,9 @@
     <ClInclude Include="Mpeg2TsParser.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="Mpeg2PartialEncode.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Mpeg2VideoParser.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -195,6 +198,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Mpeg2TsParser.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Mpeg2PartialEncode.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Mpeg2VideoParser.cpp">
