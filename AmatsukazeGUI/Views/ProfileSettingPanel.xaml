@@ -151,6 +151,7 @@
 
                     <TextBox Margin="0,3" Height="85" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.EncoderOption, Mode=TwoWay}"
+                             IsEnabled="{Binding Model.SelectedProfile.Mpeg2PartialConstraintsEnabled}"
                              VerticalAlignment="Top"
                              VerticalContentAlignment="Top"
                              TextAlignment="Left"

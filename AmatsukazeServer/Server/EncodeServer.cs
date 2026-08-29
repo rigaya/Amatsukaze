@@ -2206,7 +2206,9 @@ namespace Amatsukaze.Server
                             .Append("\"");
                     }
 
-                    var encoderOption = ProfileSettingExtensions.NormalizeCommandLineOption(GetEncoderOption(profile));
+                    var encoderOption = profile.Mpeg2Partial
+                        ? null
+                        : ProfileSettingExtensions.NormalizeCommandLineOption(GetEncoderOption(profile));
                     if (string.IsNullOrEmpty(encoderOption) == false)
                     {
                         sb.Append(" -eo \"")
@@ -2800,11 +2802,9 @@ namespace Amatsukaze.Server
                     {
                         throw new ArgumentException("MPEG-2部分エンコードではフィルタ、音声エンコード、ロゴ消し、2パスエンコードを使用できません。");
                     }
-                    var encoderOption = ProfileSettingExtensions.GetEncoderOption(profile) ?? "";
-                    if (profile.EncoderParallel != 1 || encoderOption.Contains("--parallel")
-                        || encoderOption.Contains("--zones"))
+                    if (profile.EncoderParallel != 1)
                     {
-                        throw new ArgumentException("MPEG-2部分エンコードではエンコード分割並列とzonesを使用できません。");
+                        throw new ArgumentException("MPEG-2部分エンコードではエンコード分割並列を使用できません。");
                     }
                     if (!string.IsNullOrEmpty(profile.PreEncodeBatchFile) || profile.UseMKVWhenSubExists)
                     {

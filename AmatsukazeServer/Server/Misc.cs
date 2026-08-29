@@ -1011,6 +1011,7 @@ namespace Amatsukaze.Server
             }
             if (profile.Mpeg2Partial)
             {
+                profile.X262Option = "";
                 profile.FilterOption = FilterOption.None;
                 profile.EnableAudioEncode = false;
                 profile.NoDelogo = true;

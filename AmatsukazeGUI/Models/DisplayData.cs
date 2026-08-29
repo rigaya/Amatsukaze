@@ -1876,6 +1876,7 @@ namespace Amatsukaze.Models
 
         private void ApplyMpeg2PartialConstraints()
         {
+            EncoderOption = "";
             FilterOption = (int)global::Amatsukaze.Server.FilterOption.None;
             EnableAudioEncode = false;
             NoDelogo = true;
