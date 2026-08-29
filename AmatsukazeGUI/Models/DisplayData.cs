@@ -1669,6 +1669,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("EncoderOption");
                 RaisePropertyChanged("CMQualityOffsetEnabled");
                 RaisePropertyChanged("ForceSAREnabled");
+                UpdateMpeg2PartialAvailability();
                 EncoderFilterSetting.UpdateOutputDepthToolTip();
             }
         }
@@ -1835,6 +1836,62 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region Mpeg2Partial変更通知プロパティ
+        public bool Mpeg2Partial
+        {
+            get { return Data.Mpeg2Partial; }
+            set
+            {
+                if (value && !Mpeg2PartialVisible)
+                {
+                    value = false;
+                }
+                if (Data.Mpeg2Partial == value)
+                {
+                    if (value)
+                    {
+                        ApplyMpeg2PartialConstraints();
+                    }
+                    return;
+                }
+                Data.Mpeg2Partial = value;
+                if (value)
+                {
+                    ApplyMpeg2PartialConstraints();
+                }
+                RaisePropertyChanged();
+                RaisePropertyChanged("Mpeg2PartialConstraintsEnabled");
+            }
+        }
+
+        public bool Mpeg2PartialVisible
+        {
+            get { return Data.EncoderType == EncoderType.x262 && Data.OutputMask != 1; }
+        }
+
+        public bool Mpeg2PartialConstraintsEnabled
+        {
+            get { return !Data.Mpeg2Partial; }
+        }
+
+        private void ApplyMpeg2PartialConstraints()
+        {
+            FilterOption = (int)global::Amatsukaze.Server.FilterOption.None;
+            EnableAudioEncode = false;
+            NoDelogo = true;
+            TwoPass = false;
+        }
+
+        private void UpdateMpeg2PartialAvailability()
+        {
+            RaisePropertyChanged("Mpeg2PartialVisible");
+            if (!Mpeg2PartialVisible)
+            {
+                Mpeg2Partial = false;
+            }
+        }
+        #endregion
+
         #region MuxerAddEncoderCmd変更通知プロパティ
         public bool MuxerAddEncoderCmd
         {
@@ -1889,6 +1946,7 @@ namespace Amatsukaze.Models
                 UpdateWarningText();
                 RaisePropertyChanged();
                 RaisePropertyChanged("CMQualityOffsetEnabled");
+                UpdateMpeg2PartialAvailability();
             }
         }
         #endregion

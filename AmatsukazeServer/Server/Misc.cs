@@ -1009,6 +1009,13 @@ namespace Amatsukaze.Server
             {
                 profile.MinOutputDuration = 0;
             }
+            if (profile.Mpeg2Partial)
+            {
+                profile.FilterOption = FilterOption.None;
+                profile.EnableAudioEncode = false;
+                profile.NoDelogo = true;
+                profile.TwoPass = false;
+            }
             return profile;
         }
 

@@ -254,6 +254,13 @@ else
                             <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                         }
                     </select>
+                    @if (IsMpeg2PartialVisible())
+                    {
+                        <label style="margin-left: 8px;" title="MPEG-2のCMカット境界周辺だけをx262で再エンコードします。TS (replace)・CMをカット・チャプター/CM解析が必要です。">
+                            <input type="checkbox" checked="@GetBoolValue("Mpeg2Partial")" @onchange="OnMpeg2PartialChanged" />
+                            部分エンコード
+                        </label>
+                    }
                 </td>
             </tr>
         </table>
@@ -325,7 +332,7 @@ else
             <tr>
                 <th>フィルタ</th>
                 <td>
-                    <select @onchange="OnFilterOptionChanged">
+                    <select @onchange="OnFilterOptionChanged" disabled="@GetBoolValue("Mpeg2Partial")">
                         @foreach (var item in GetFilterOptions())
                         {
                             <option value="@item.Value" selected="@item.Selected">@item.Label</option>
@@ -698,7 +705,7 @@ else
             <tr class="profile-check-row">
                 <td colspan="2">
                     <label class="settings-check">
-                        <input type="checkbox" checked="@GetBoolValue("TwoPass")" @onchange="@(e => OnBoolChanged(e, "TwoPass"))" />
+                        <input type="checkbox" checked="@GetBoolValue("TwoPass")" @onchange="@(e => OnBoolChanged(e, "TwoPass"))" disabled="@GetBoolValue("Mpeg2Partial")" />
                         2パスエンコード
                     </label>
                 </td>
@@ -723,7 +730,7 @@ else
             <tr class="profile-check-row">
                 <td colspan="2">
                     <label class="settings-check">
-                        <input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" />
+                        <input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" disabled="@GetBoolValue("Mpeg2Partial")" />
                         音声をエンコードする
                     </label>
                 </td>
@@ -886,7 +893,7 @@ else
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("LooseLogoDetection")" @onchange="@(e => OnBoolChanged(e, "LooseLogoDetection"))" />ロゴ検出判定しきい値を低くする</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoLogo")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoLogo"))" />ロゴ検出に失敗しても処理を続行する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("NoLogoInCM")" @onchange="@(e => OnBoolChanged(e, "NoLogoInCM"))" disabled="@(GetBoolValue("DisableChapter"))" />CM解析でロゴを使用しない</label></td></tr>
-            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("NoDelogo")" @onchange="@(e => OnBoolChanged(e, "NoDelogo"))" />ロゴ消ししない</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("NoDelogo")" @onchange="@(e => OnBoolChanged(e, "NoDelogo"))" disabled="@GetBoolValue("Mpeg2Partial")" />ロゴ消ししない</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("ParallelLogoAnalysis")" @onchange="@(e => OnBoolChanged(e, "ParallelLogoAnalysis"))" />並列ロゴ解析</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("SystemAviSynthPlugin")" @onchange="@(e => OnBoolChanged(e, "SystemAviSynthPlugin"))" />システムにインストールされているAviSynthプラグインを有効にする</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableLogFile")" @onchange="@(e => OnBoolChanged(e, "DisableLogFile"))" />ログファイルを出力先に生成しない</label></td></tr>
@@ -1104,6 +1111,9 @@ else
             return;
         }
         _error = null;
+
+        DisableMpeg2PartialIfUnavailable();
+        ApplyMpeg2PartialConstraints();
 
         var json = UpdateProfileName(_draftJson, _selectedProfileName);
         using var doc = JsonDocument.Parse(json);
@@ -1432,6 +1442,7 @@ else
         var idx = ParseIndex(e.Value);
         var enumName = idx >= 0 && idx < _encoderEnumNames.Length ? _encoderEnumNames[idx] : _encoderEnumNames[0];
         SetNodeValue("EncoderType", JsonValue.Create(enumName));
+        DisableMpeg2PartialIfUnavailable();
     }
 
     private void OnEncoderOptionChanged(ChangeEventArgs e)
@@ -1506,6 +1517,41 @@ else
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
             SetNodeValue("OutputMask", JsonValue.Create(value));
+            DisableMpeg2PartialIfUnavailable();
+        }
+    }
+
+    private bool IsMpeg2PartialVisible()
+    {
+        var x262Index = Array.FindIndex(_encoderEnumNames,
+            value => string.Equals(value, "x262", StringComparison.OrdinalIgnoreCase));
+        return GetEncoderIndex() == x262Index && GetIntValue("OutputMask") != 1;
+    }
+
+    private void OnMpeg2PartialChanged(ChangeEventArgs e)
+    {
+        var value = e.Value is bool b && b;
+        SetNodeValue("Mpeg2Partial", JsonValue.Create(value));
+        ApplyMpeg2PartialConstraints();
+    }
+
+    private void ApplyMpeg2PartialConstraints()
+    {
+        if (!GetBoolValue("Mpeg2Partial"))
+        {
+            return;
+        }
+        SetNodeValue("FilterOption", JsonValue.Create("None"));
+        SetNodeValue("EnableAudioEncode", JsonValue.Create(false));
+        SetNodeValue("NoDelogo", JsonValue.Create(true));
+        SetNodeValue("TwoPass", JsonValue.Create(false));
+    }
+
+    private void DisableMpeg2PartialIfUnavailable()
+    {
+        if (!IsMpeg2PartialVisible())
+        {
+            SetNodeValue("Mpeg2Partial", JsonValue.Create(false));
         }
     }
 

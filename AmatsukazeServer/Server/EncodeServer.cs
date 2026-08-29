@@ -2246,6 +2246,10 @@ namespace Amatsukaze.Server
                             sb.Append(" --mkvmerge \"").Append(setting.MKVMergePath).Append("\"");
                         }
                     }
+                    if (profile.Mpeg2Partial)
+                    {
+                        sb.Append(" --mpeg2-partial");
+                    }
                     if (profile.OutputFormat == FormatType.MP4 && profile.UseMKVWhenSubExists)
                     {
                         sb.Append(" --use-mkv-when-sub-exists")
@@ -2774,6 +2778,40 @@ namespace Amatsukaze.Server
                     throw new ArgumentException("エンコーダパスが設定されていません");
                 }
 
+                if (profile.EncoderType == EncoderType.x262
+                    && profile.OutputFormat != FormatType.MKV && profile.OutputFormat != FormatType.TSREPLACE)
+                {
+                    throw new ArgumentException("x262はMKVまたはTS (replace)出力でのみ使用できます。");
+                }
+
+                if (profile.Mpeg2Partial)
+                {
+                    if (profile.EncoderType != EncoderType.x262 || profile.OutputFormat != FormatType.TSREPLACE)
+                    {
+                        throw new ArgumentException("MPEG-2部分エンコードにはx262とTS (replace)出力が必要です。");
+                    }
+                    if (profile.OutputMask != 2 || profile.DisableChapter)
+                    {
+                        throw new ArgumentException("MPEG-2部分エンコードにはCMをカット（本編のみ）とチャプター・CM解析が必要です。");
+                    }
+                    if (profile.FilterOption != FilterOption.None || profile.EnableAudioEncode
+                        || !profile.NoDelogo || !string.IsNullOrEmpty(profile.AdditionalEraseLogo)
+                        || profile.TwoPass)
+                    {
+                        throw new ArgumentException("MPEG-2部分エンコードではフィルタ、音声エンコード、ロゴ消し、2パスエンコードを使用できません。");
+                    }
+                    var encoderOption = ProfileSettingExtensions.GetEncoderOption(profile) ?? "";
+                    if (profile.EncoderParallel != 1 || encoderOption.Contains("--parallel")
+                        || encoderOption.Contains("--zones"))
+                    {
+                        throw new ArgumentException("MPEG-2部分エンコードではエンコード分割並列とzonesを使用できません。");
+                    }
+                    if (!string.IsNullOrEmpty(profile.PreEncodeBatchFile) || profile.UseMKVWhenSubExists)
+                    {
+                        throw new ArgumentException("MPEG-2部分エンコードではエンコード前バッチと字幕存在時のMKV切替を使用できません。");
+                    }
+                }
+
                 var filterEncoderType = ProfileSettingExtensions.GetFilterEncoderType(profile.FilterOption);
                 if (filterEncoderType.HasValue)
                 {
@@ -2797,12 +2835,6 @@ namespace Amatsukaze.Server
                         throw new ArgumentException(profile.EncoderType +
                             "では、本エンコーダと異なるエンコーダフィルタとエンコード分割並列を併用できません");
                     }
-                }
-
-                if (profile.EncoderType == EncoderType.x262
-                    && profile.OutputFormat != FormatType.MKV && profile.OutputFormat != FormatType.TSREPLACE)
-                {
-                    throw new ArgumentException("x262はMKVまたはTS (replace)出力でのみ使用できます。");
                 }
 
                 if (profile.OutputFormat == FormatType.MP4)

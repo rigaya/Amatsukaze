@@ -423,6 +423,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public int OutputMask { get; set; }
         [DataMember]
+        public bool Mpeg2Partial { get; set; }
+        [DataMember]
         public bool AutoBuffer { get; set; }
         [DataMember]
         public BitrateSetting Bitrate { get; set; }
@@ -943,6 +945,7 @@ namespace Amatsukaze.Server
             keyValue("出力フォーマット", FormatList[(int)profile.OutputFormat]);
             keyValueBool("出力フォーマット-字幕がある時MKV出力する", profile.UseMKVWhenSubExists);
             keyValue("出力選択", GetOutputMaskName(profile.OutputMask));
+            keyValueBool("MPEG-2部分エンコード", profile.Mpeg2Partial);
             keyValueBool("SCRenameによるリネームを行う", profile.EnableRename);
             keyValue("SCRename書式", profile.RenameFormat ?? "");
             keyValueBool("ジャンルごとにフォルダ分け", profile.EnableGunreFolder);

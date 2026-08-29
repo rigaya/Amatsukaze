@@ -2164,8 +2164,10 @@ namespace Amatsukaze.Models
                 profile.EnableAudioEncode = data.Profile.EnableAudioEncode;
                 profile.AudioEncoderTypeInt = (int)data.Profile.AudioEncoderType;
                 profile.AudioBitrateInKbps = data.Profile.AudioBitrateInKbps;
+                profile.Mpeg2Partial = data.Profile.Mpeg2Partial;
 
                 profile.PreEncodeBatchFile = data.Profile.PreEncodeBatchFile;
+                profile.IsModified = false;
             }
             else
             {
