@@ -30,20 +30,22 @@ struct Mpeg2PartialOutputEntry {
 
 struct Mpeg2PartialEncodePlan {
     int dtsFrameStart = 0;
+    // keepとdropに割れた符号化pictureの数(RFF等で1pictureが複数表示エントリに
+    // 展開されたとき、カット点がその途中に落ちた数)。検証用にログへ出す。
+    int splitPictures = 0;
     std::vector<Mpeg2PartialAction> actions; // 中間映像ファイル内のDTS順
     std::vector<Mpeg2PartialPatchRange> patches;
     std::vector<Mpeg2PartialOutputEntry> outputEntries; // 出力符号化順
 };
 
-bool BuildMpeg2PartialEncodePlan(
+// いずれも失敗時は例外を投げる。フル再エンコードへのフォールバックは廃止した(§20)。
+void BuildMpeg2PartialEncodePlan(
     const StreamReformInfo& reformInfo,
     EncodeFileKey key,
-    Mpeg2PartialEncodePlan& plan,
-    tstring& reason);
+    Mpeg2PartialEncodePlan& plan);
 
-bool TryMpeg2PartialEncode(
+void RunMpeg2PartialEncode(
     AMTContext& ctx,
     const ConfigWrapper& setting,
     const StreamReformInfo& reformInfo,
-    EncodeFileKey key,
-    tstring& reason);
+    EncodeFileKey key);

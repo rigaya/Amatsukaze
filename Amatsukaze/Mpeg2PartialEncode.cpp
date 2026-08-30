@@ -108,18 +108,16 @@ bool isInterlacedPicture(PICTURE_TYPE picture) {
         || picture == PIC_TFF_RFF || picture == PIC_BFF_RFF;
 }
 
-std::vector<KeepRun> makeKeepRuns(const EncodeFileInput& file, int numDisplayFrames, tstring& reason) {
+std::vector<KeepRun> makeKeepRuns(const EncodeFileInput& file, int numDisplayFrames) {
     std::vector<KeepRun> runs;
     if (file.videoFrames.empty()) {
-        reason = _T("出力対象の映像フレームがありません");
-        return runs;
+        THROW(FormatException, "出力対象の映像フレームがありません");
     }
     for (size_t i = 0; i < file.videoFrames.size(); ++i) {
         const int frame = file.videoFrames[i];
         if (frame < 0 || frame >= numDisplayFrames
             || (i > 0 && frame <= file.videoFrames[i - 1])) {
-            reason = _T("keep表示順フレーム列が不正です");
-            return {};
+            THROW(FormatException, "keep表示順フレーム列が不正です");
         }
         if (runs.empty() || frame != runs.back().last) {
             runs.push_back({ frame, frame + 1 });
@@ -341,8 +339,29 @@ std::vector<PatchEncodedData> encodePatches(
         const int frames = patch.last - patch.first;
         ctx.infoF(_T("[MPEG-2部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
             (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
+
+        // progressive_sequence=1 なら frame picture は PIC_FRAME/DOUBLING/TRIPLING に
+        // しかならず(Mpeg2VideoParser.cpp)、PIC_TFF/PIC_BFF が出るのは規格上禁止の
+        // field picture のときだけ。それでも混ざっていたらエラーにはせず、
+        // patch範囲をインタレとしてエンコードして吸収する(§20)。
+        // Y4Mヘッダ側もインタレ("It")に揃える必要があるのでformatごと差し替える。
+        VideoFormat patchFormat = sourceFrame.format;
+        VideoFormat writerFormat = format;
+        if (patchFormat.progressive) {
+            bool hasInterlaced = false;
+            for (int display = patch.first; display < patch.last && !hasInterlaced; ++display) {
+                const int dts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
+                hasInterlaced = isInterlacedPicture(reformInfo.getVideoFrameInfo(dts).pic);
+            }
+            if (hasInterlaced) {
+                ctx.warnF(_T("[MPEG-2部分エンコード] patch %d/%d: progressive映像にインタレpictureが混在するため、patch範囲をインタレとしてエンコードします"),
+                    (int)i + 1, (int)plan.patches.size());
+                patchFormat.progressive = false;
+                writerFormat.progressive = false;
+            }
+        }
         const tstring encoderArgs = makePatchEncoderArgs(
-            setting, sourceFrame.format, patchPath, frames);
+            setting, patchFormat, patchPath, frames);
         ctx.info(_T("[エンコーダ起動]"));
         ctx.infoF(_T("%s"), encoderArgs.c_str());
         // 第5引数disablePowerThrottoling=trueは固定。
@@ -351,7 +370,7 @@ std::vector<PatchEncodedData> encodePatches(
         // なお最終引数sarInContainerOnly=false(既定)のため、Y4Mヘッダには実SAR(例 A4:3)が載る。
         // 一方コマンドラインの--sarにはDARを渡している(x262のMPEG-2時の仕様、§8.2/§16.8)。
         // 両者の値は食い違うが、x262はCLI指定を優先するので意図どおり動く。
-        Y4MEncodeWriter writer(ctx, encoderArgs, vi, format, true);
+        Y4MEncodeWriter writer(ctx, encoderArgs, vi, writerFormat, true);
         try {
             for (int display = patch.first; display < patch.last; ++display) {
                 writer.inputFrame(source->GetFrame(display, env.get()));
@@ -563,30 +582,23 @@ void buildOutput(
 
 } // namespace
 
-bool BuildMpeg2PartialEncodePlan(
+void BuildMpeg2PartialEncodePlan(
     const StreamReformInfo& reformInfo,
     EncodeFileKey key,
-    Mpeg2PartialEncodePlan& plan,
-    tstring& reason) {
+    Mpeg2PartialEncodePlan& plan) {
     plan = Mpeg2PartialEncodePlan();
-    reason.clear();
     const auto& displayFrames = reformInfo.getFilterSourceFrames(key.video);
     const auto& file = reformInfo.getEncodeFile(key);
     const auto frameRange = reformInfo.getVideoFrameRange(key.video);
     const int codedFrameCount = frameRange.second - frameRange.first;
     if (displayFrames.empty() || codedFrameCount <= 0) {
-        reason = _T("中間映像ファイルのフレームがありません");
-        return false;
+        THROW(FormatException, "中間映像ファイルのフレームがありません");
     }
 
-    const auto runs = makeKeepRuns(file, (int)displayFrames.size(), reason);
-    if (runs.empty()) {
-        return false;
-    }
+    const auto runs = makeKeepRuns(file, (int)displayFrames.size());
     const auto keepSegments = reformInfo.getKeepSegments(key);
     if (keepSegments.size() != runs.size()) {
-        reason = _T("keep区間テーブルと表示順フレーム列が一致しません");
-        return false;
+        THROW(FormatException, "keep区間テーブルと表示順フレーム列が一致しません");
     }
 
     std::vector<bool> keepMask(displayFrames.size(), false);
@@ -604,8 +616,7 @@ bool BuildMpeg2PartialEncodePlan(
             displayFrames[run.last - 1].pts + displayFrames[run.last - 1].frameDuration);
         if ((int64_t)std::llround(segment.start) != expectedStart
             || (int64_t)std::llround(segment.end) != expectedEnd) {
-            reason = _T("keep区間テーブルのPTSが表示順フレーム列と一致しません");
-            return false;
+            THROW(FormatException, "keep区間テーブルのPTSが表示順フレーム列と一致しません");
         }
         if (i > 0) {
             cumulativeCut += segment.start - keepSegments[i - 1].end;
@@ -618,59 +629,83 @@ bool BuildMpeg2PartialEncodePlan(
         }
     }
 
+    // 表示エントリ → 中間映像ファイル内のDTS index。以降で繰り返し使うので先に作る。
+    std::vector<int> displayLocalDts(displayFrames.size(), -1);
+    for (int display = 0; display < (int)displayFrames.size(); ++display) {
+        const int globalDts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
+        const int localDts = globalDts - frameRange.first;
+        if (localDts < 0 || localDts >= codedFrameCount) {
+            THROW(FormatException, "表示順からDTS順へのmappingが中間映像ファイル範囲外です");
+        }
+        displayLocalDts[display] = localDts;
+    }
+
     auto frameAtDisplay = [&](int display) -> const VideoFrameInfo& {
-        const int dtsIndex = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
-        return reformInfo.getVideoFrameInfo(dtsIndex);
+        return reformInfo.getVideoFrameInfo(displayLocalDts[display] + frameRange.first);
     };
 
+    // 符号化picture単位でkeep/dropを集計する。
+    // RFF (PIC_BFF_RFF) やPIC_FRAME_DOUBLING/TRIPLINGでは1符号化pictureが複数の
+    // 表示エントリに展開されるため、カット点がその途中に落ちてkeepとdropに
+    // 割れることがある。3:2プルダウンなら4符号化picture→5表示エントリで、
+    // エントリ間5箇所のうち1箇所がPIC_BFF_RFFの内側なので約20%の確率で起きる。
+    // 割れたpictureをそのままCOPYするとdropすべき表示エントリまで出力されるので、
+    // 必ずpatch側で扱う。§20参照。
+    std::vector<uint8_t> codedKeepFlags(codedFrameCount, 0); // bit0: keepあり、bit1: dropあり
+    for (int display = 0; display < (int)displayFrames.size(); ++display) {
+        codedKeepFlags[displayLocalDts[display]] |= keepMask[display] ? 1 : 2;
+    }
+    // その表示エントリの符号化pictureが、全表示エントリをkeepしているか。
+    auto isFullyKept = [&](int display) {
+        return codedKeepFlags[displayLocalDts[display]] == 1;
+    };
+    plan.splitPictures =
+        (int)std::count(codedKeepFlags.begin(), codedKeepFlags.end(), (uint8_t)3);
+
     // 各カット境界の左右で必要になるpatch範囲を表示順で求める。
+    // restoreI / lastAnchor には isFullyKept を要求する。割れたpictureを
+    // lastAnchorにすると、それを参照するB pictureの参照先がpatchに置き換わって
+    // 壊れる。復帰点も同様に、割れたpictureをCOPY開始点にするとdrop側の表示
+    // エントリまで出てしまう。探索でこれらを飛ばせば、割れたpictureのkeep側
+    // エントリは自動的にpatch範囲へ入る(§20)。
     for (const auto& run : runs) {
         if (run.first > 0) {
             int restore = run.first;
-            while (restore < run.last && !isRestoreI(frameAtDisplay(restore))) {
+            while (restore < run.last
+                && !(isRestoreI(frameAtDisplay(restore)) && isFullyKept(restore))) {
                 ++restore;
             }
-            if (restore == run.last && run.last < (int)displayFrames.size()) {
-                reason = _T("カット後のkeep区間内にrestoreIがありません");
-                return false;
-            }
+            // restoreIが見つからなければkeep区間を丸ごとpatchにする(§6.4)。
+            // 地デジ・BSは0.5秒ごとにGOP先頭Iが来るので、この区間は1GOP未満と短い。
             addPatch(plan.patches, run.first, restore);
         }
         if (run.last < (int)displayFrames.size()) {
             int anchor = run.last - 1;
-            while (anchor >= run.first && !isAnchor(frameAtDisplay(anchor))) {
+            while (anchor >= run.first
+                && !(isAnchor(frameAtDisplay(anchor)) && isFullyKept(anchor))) {
                 --anchor;
             }
-            if (anchor < run.first) {
-                reason = _T("カット前のkeep区間内にlastAnchorがありません");
-                return false;
-            }
+            // アンカーが見つからない場合も同様にkeep区間を丸ごとpatchにする。
             addPatch(plan.patches, anchor + 1, run.last);
         }
     }
     mergePatches(plan.patches, keepMask);
 
     for (const auto& patch : plan.patches) {
-        const auto baseFormat = frameAtDisplay(patch.first).format;
         // 注: ここでhalfDelayやTFF/BFFの混在を弾いてはいけない。
         // halfDelayはPIC_BFF(とPIC_BFF_RFFの前半)に必ず立つ(StreamReform.cpp)ので、
-        // 条件に入れるとBFF素材のpatchが全部フォールバックしてしまう。
+        // 条件に入れるとBFF素材のpatchが全部弾かれてしまう。
         // また3:2プルダウン素材はTFF系とBFF系のpictureが必ず交互に現れるため、
-        // 混在を弾くとRFF素材のpatchが必ずフォールバックする。
+        // 混在を弾くとRFF素材のpatchが必ず失敗する。
         // 表示エントリはAMTSourceが常にTFF順へ正規化するので混在は問題ない
         // (isInterlacedPictureのコメント、§19.7)。
-        bool hasInterlaced = false;
+        // progressive映像にインタレpictureが混ざるケースはencodePatches側で
+        // patch範囲をインタレ扱いにして吸収する(§20)。
+        const auto baseFormat = frameAtDisplay(patch.first).format;
         for (int display = patch.first; display < patch.last; ++display) {
-            const auto& source = frameAtDisplay(display);
-            if (source.format != baseFormat) {
-                reason = _T("patch範囲に映像フォーマット変化があります");
-                return false;
+            if (frameAtDisplay(display).format != baseFormat) {
+                THROW(FormatException, "patch範囲に映像フォーマット変化があります");
             }
-            hasInterlaced = hasInterlaced || isInterlacedPicture(source.pic);
-        }
-        if (baseFormat.progressive && hasInterlaced) {
-            reason = _T("progressive映像のpatch範囲にインタレ指定pictureがあります");
-            return false;
         }
     }
 
@@ -684,28 +719,27 @@ bool BuildMpeg2PartialEncodePlan(
     }
     std::vector<int> patchState(codedFrameCount, -1); // 0: COPY候補、1: patch
     for (int display = 0; display < (int)displayFrames.size(); ++display) {
-        const int globalDts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
-        const int localDts = globalDts - frameRange.first;
-        if (localDts < 0 || localDts >= codedFrameCount) {
-            reason = _T("表示順からDTS順へのmappingが中間映像ファイル範囲外です");
-            return false;
-        }
-        const int currentState = keepMask[display] ? 1 : 0;
-        if (keepState[localDts] >= 0 && keepState[localDts] != currentState) {
-            reason = _T("RFFの同一符号化pictureがkeepとdropの境界を跨いでいます");
-            return false;
-        }
-        keepState[localDts] = currentState;
+        const int localDts = displayLocalDts[display];
         if (firstDisplay[localDts] < 0) {
             firstDisplay[localDts] = display;
         }
+        keepState[localDts] = (codedKeepFlags[localDts] & 1) ? 1 : 0;
         if (keepMask[display]) {
             const int currentPatchState = patchMask[display] ? 1 : 0;
             if (patchState[localDts] >= 0 && patchState[localDts] != currentPatchState) {
-                reason = _T("RFFの同一符号化pictureがpatchとCOPYの境界を跨いでいます");
-                return false;
+                // patch範囲の端はrestoreI/lastAnchor探索の結果であり、探索は
+                // 符号化pictureの先頭/末尾の表示エントリでしか止まらないので、
+                // 同一pictureがpatchとCOPYに分かれることは構造上ありえない。
+                THROW(FormatException, "同一符号化pictureがpatchとCOPYに分かれています");
             }
             patchState[localDts] = currentPatchState;
+        }
+    }
+    // keepとdropに割れたpictureは必ずpatch側で扱われていなければならない。
+    // isFullyKeptによるrestoreI/lastAnchor探索でこれは保証される。
+    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
+        if (codedKeepFlags[localDts] == 3 && patchState[localDts] != 1) {
+            THROW(FormatException, "keepとdropに割れた符号化pictureがpatchに入っていません");
         }
     }
 
@@ -731,10 +765,24 @@ bool BuildMpeg2PartialEncodePlan(
     // outputDisplayPtsと完全に一致する(既存挙動の非回帰)。
     // RFFでは1符号化pictureごとにhalfDelayが変わるため、patch終端とCOPYの接合は
     // 最大半フレームずれる(§19.7)。
+    //
+    // anchorShiftの基準は「符号化pictureの先頭表示エントリ」に限る。
+    // δ = originalFramePTS - pts は先頭エントリなら {0, +T/2} しか取らないが、
+    // 継続エントリではPIC_BFF_RFFの2枚目が -T/2、PIC_FRAME_DOUBLINGの2枚目が -T、
+    // TRIPLINGの3枚目が -2T と符号が反転する。keepとdropに割れたpictureのkeep側は
+    // 継続エントリなので、そこを基準にするとpatch全体が最大2フレーム手前へずれて
+    // 直前のCOPY pictureとPTSが衝突する。COPY側はfirstDisplay(=先頭エントリ)を
+    // 使うので、基準を揃えれば隣接間隔は必ず T - T/2 = T/2 > 0 で閉じる(§20)。
+    // 現行で成立しているケースではpatch.firstが必ず先頭エントリなので非回帰。
     auto pushPatchEntries = [&](size_t index) {
         const auto& patch = plan.patches[index];
-        const double anchorShift =
-            (double)outputDisplayPts[patch.first] - displayGridPts[patch.first];
+        double anchorShift = 0;
+        for (int display = patch.first; display < patch.last; ++display) {
+            if (display == 0 || displayLocalDts[display - 1] != displayLocalDts[display]) {
+                anchorShift = (double)outputDisplayPts[display] - displayGridPts[display];
+                break;
+            }
+        }
         for (int display = patch.first; display < patch.last; ++display) {
             plan.outputEntries.push_back({
                 Mpeg2PartialAction::PATCH, -1, (int)index, display - patch.first,
@@ -754,8 +802,7 @@ bool BuildMpeg2PartialEncodePlan(
         }
         const int display = firstDisplay[localDts];
         if (display < 0 || outputDisplayPts[display] == AV_NOPTS_VALUE) {
-            reason = _T("COPY pictureの表示順PTSを取得できません");
-            return false;
+            THROW(FormatException, "COPY pictureの表示順PTSを取得できません");
         }
         plan.outputEntries.push_back({
             Mpeg2PartialAction::COPY, localDts, -1, -1, outputDisplayPts[display], 0
@@ -773,13 +820,11 @@ bool BuildMpeg2PartialEncodePlan(
     }
     std::sort(displayOrderPicturePts.begin(), displayOrderPicturePts.end());
     if (displayOrderPicturePts.empty()) {
-        reason = _T("出力pictureがありません");
-        return false;
+        THROW(FormatException, "出力pictureがありません");
     }
     if (std::adjacent_find(displayOrderPicturePts.begin(), displayOrderPicturePts.end())
         != displayOrderPicturePts.end()) {
-        reason = _T("出力pictureの表示順PTSが重複しています");
-        return false;
+        THROW(FormatException, "出力pictureの表示順PTSが重複しています");
     }
 
     const auto& format = reformInfo.getFormat(key).videoFormat;
@@ -788,8 +833,10 @@ bool BuildMpeg2PartialEncodePlan(
     int64_t previousDts = std::numeric_limits<int64_t>::min();
     const int64_t firstDts = displayOrderPicturePts.front() - frameDuration;
     if (firstDts < 0) {
-        reason = _T("出力DTSが負になるためフル再エンコードへフォールバックします");
-        return false;
+        // 元TSのPTSがほぼ0という極端な素材でのみ発生する。δシフトで回避する案は
+        // Muxer側の--replace-first-pts/--replace-delayとの整合が取れないため
+        // 不採用としており(§18 表11)、ここはエラー停止とする。
+        THROW(FormatException, "出力DTSが負になります");
     }
     for (size_t outputIndex = 0; outputIndex < plan.outputEntries.size(); ++outputIndex) {
         auto& entry = plan.outputEntries[outputIndex];
@@ -798,55 +845,50 @@ bool BuildMpeg2PartialEncodePlan(
             : displayOrderPicturePts[outputIndex - 1];
         entry.dts90k = dts;
         if (dts <= previousDts || dts > entry.pts90k) {
-            reason = _T("出力DTSの単調性またはDTS <= PTS条件を満たしません");
-            return false;
+            THROW(FormatException, "出力DTSの単調性またはDTS <= PTS条件を満たしません");
         }
         previousDts = dts;
     }
     for (int display = 0; display < (int)displayFrames.size(); ++display) {
-        const int globalDts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
-        const bool copied = plan.actions[globalDts - frameRange.first] == Mpeg2PartialAction::COPY;
+        const bool copied =
+            plan.actions[displayLocalDts[display]] == Mpeg2PartialAction::COPY;
         if (keepMask[display] != (copied || patchMask[display])
             || (copied && patchMask[display])) {
-            reason = _T("keep表示位置とCOPY/patchプランが1:1対応していません");
-            return false;
+            THROW(FormatException, "keep表示位置とCOPY/patchプランが1:1対応していません");
         }
     }
-    return true;
 }
 
-bool TryMpeg2PartialEncode(
+// フル再エンコードへのフォールバックは廃止した(§20)。
+// 素材起因で起こりうる条件は全て部分エンコード側で処理し、それ以外は
+// 実装の不整合を意味するのでエラー停止させる。黙って全編再エンコードに
+// 落ちると、遅くなった理由がユーザーから見えないため。
+void RunMpeg2PartialEncode(
     AMTContext& ctx,
     const ConfigWrapper& setting,
     const StreamReformInfo& reformInfo,
-    EncodeFileKey key,
-    tstring& reason) {
-    reason.clear();
+    EncodeFileKey key) {
     const tstring outputPath = setting.getEncVideoFilePath(key);
     try {
         Mpeg2PartialEncodePlan plan;
-        if (!BuildMpeg2PartialEncodePlan(reformInfo, key, plan, reason)) {
-            return false;
-        }
-        ctx.infoF(_T("[MPEG-2部分エンコード] プラン: patch %d区間、COPY %d picture、出力 %d picture、keep %d表示位置"),
+        BuildMpeg2PartialEncodePlan(reformInfo, key, plan);
+        ctx.infoF(_T("[MPEG-2部分エンコード] プラン: patch %d区間、COPY %d picture、出力 %d picture、keep %d表示位置、境界割れpicture %d"),
             (int)plan.patches.size(),
             (int)std::count(plan.actions.begin(), plan.actions.end(), Mpeg2PartialAction::COPY),
             (int)plan.outputEntries.size(),
-            (int)reformInfo.getEncodeFile(key).videoFrames.size());
+            (int)reformInfo.getEncodeFile(key).videoFrames.size(),
+            plan.splitPictures);
         const auto patchData = encodePatches(
             ctx, setting, reformInfo, key, plan, outputPath);
         buildOutput(ctx, setting.getIntVideoFilePath(key.video), outputPath,
             reformInfo, plan, patchData);
         ctx.infoF(_T("[MPEG-2部分エンコード] %d pictureを出力しました"),
             (int)plan.outputEntries.size());
-        return true;
-    } catch (const Exception& e) {
-        reason = e.message();
-    } catch (const std::exception& e) {
-        reason = char_to_tstring(e.what());
+    } catch (...) {
+        // 中途半端な出力ファイルを残さない。
+        if (File::exists(outputPath)) {
+            rgy_file_remove(outputPath.c_str());
+        }
+        throw;
     }
-    if (File::exists(outputPath)) {
-        rgy_file_remove(outputPath.c_str());
-    }
-    return false;
 }

@@ -1978,21 +1978,18 @@ void DoBadThing() {
         const CMAnalyze* cma = cmanalyze[key.video].get();
 
         if (setting.isMpeg2PartialEnabled()) {
-            tstring fallbackReason;
+            // フル再エンコードへのフォールバックは廃止した。失敗は例外で上位へ伝える。
             ctx.infoF(_T("[MPEG-2部分エンコード開始] %d/%d %s"),
                 i + 1, (int)keys.size(), CMTypeToString(key.cm));
-            if (TryMpeg2PartialEncode(ctx, setting, reformInfo, key, fallbackReason)) {
-                const auto bitrate = argGen->printBitrate(ctx, key);
-                fileOut.vfmt = reformInfo.getFormat(key).videoFormat;
-                fileOut.srcBitrate = bitrate.first;
-                fileOut.targetBitrate = bitrate.second;
-                fileOut.vfrTimingFps = 0;
-                fileOut.timecode.clear();
-                fileOut.isMpeg2Partial = true;
-                continue;
-            }
-            ctx.warnF(_T("[MPEG-2部分エンコード] フル再エンコードへフォールバック: %s"),
-                fallbackReason.c_str());
+            RunMpeg2PartialEncode(ctx, setting, reformInfo, key);
+            const auto bitrate = argGen->printBitrate(ctx, key);
+            fileOut.vfmt = reformInfo.getFormat(key).videoFormat;
+            fileOut.srcBitrate = bitrate.first;
+            fileOut.targetBitrate = bitrate.second;
+            fileOut.vfrTimingFps = 0;
+            fileOut.timecode.clear();
+            fileOut.isMpeg2Partial = true;
+            continue;
         }
 
         AMTFilterSource filterSource(ctx, setting, reformInfo,
