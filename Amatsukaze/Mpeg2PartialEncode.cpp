@@ -9,7 +9,6 @@
 
 #include "AMTSource.h"
 #include "Encoder.h"
-#include "Mpeg2VideoParser.h"
 #include "OSUtil.h"
 #include "ReaderWriterFFmpeg.h"
 #include "StreamReform.h"
@@ -36,12 +35,6 @@ struct PacketExpectation {
 
 struct PatchEncodedData {
     std::vector<std::vector<uint8_t>> pictures;
-};
-
-struct VbvSetting {
-    bool available = false;
-    int maxrateKbps = 0;
-    int bufferKbit = 0;
 };
 
 struct InputContextDeleter {
@@ -183,64 +176,6 @@ AVStream* openVideoInput(
     return input->streams[videoIndex];
 }
 
-VbvSetting readOriginalVbv(
-    const tstring& inputPath,
-    const StreamReformInfo& reformInfo,
-    const Mpeg2PartialEncodePlan& plan) {
-    const auto copy = std::find_if(plan.outputEntries.begin(), plan.outputEntries.end(),
-        [](const auto& entry) { return entry.kind == Mpeg2PartialAction::COPY; });
-    if (copy == plan.outputEntries.end()) {
-        return {};
-    }
-
-    std::unique_ptr<AVFormatContext, InputContextDeleter> input;
-    AVStream* stream = openVideoInput(inputPath, "mpeg", input);
-    std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
-    if (!packet) {
-        THROW(RuntimeException, "AVPacketを確保できません");
-    }
-    int localDts = 0;
-    int readResult = 0;
-    while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
-        if (packet->stream_index != stream->index) {
-            av_packet_unref(packet.get());
-            continue;
-        }
-        if (localDts == copy->localDts) {
-            const auto& sourceFrame = reformInfo.getVideoFrameInfo(plan.dtsFrameStart + localDts);
-            if (packet->size != sourceFrame.codedDataSize) {
-                THROW(FormatException, "VBV取得時の中間PS mappingが不一致です");
-            }
-            for (int i = 0; i + 4 <= packet->size; ++i) {
-                if (packet->data[i] == 0x00 && packet->data[i + 1] == 0x00
-                    && packet->data[i + 2] == 0x01 && packet->data[i + 3] == 0xB3) {
-                    MPEG2SequenceHeader header = {};
-                    if (!header.parse(packet->data + i, packet->size - i)) {
-                        return {};
-                    }
-                    const uint64_t bitrateValue =
-                        ((uint64_t)header.bit_rate_extension << 18) | header.bit_rate_value;
-                    const uint64_t vbvValue =
-                        ((uint64_t)header.vbv_buffer_size_extension << 10)
-                        | header.vbv_buffer_size_value;
-                    return {
-                        true,
-                        (int)((bitrateValue * 400 + 999) / 1000),
-                        (int)((vbvValue * 16 * 1024 + 999) / 1000)
-                    };
-                }
-            }
-            return {};
-        }
-        ++localDts;
-        av_packet_unref(packet.get());
-    }
-    if (readResult != AVERROR_EOF) {
-        checkAv(readResult, "VBV取得用packetの読み出しに失敗しました");
-    }
-    return {};
-}
-
 void removeSequenceEndCode(const tstring& path) {
     std::vector<uint8_t> data;
     {
@@ -297,10 +232,44 @@ tstring makePatchEncoderArgs(
     const VideoFormat& format,
     const tstring& outputPath,
     int frames,
-    bool bottomFieldFirst,
-    const VbvSetting& vbv) {
+    bool bottomFieldFirst) {
+    if (format.format != VS_MPEG2) {
+        THROW(FormatException, "MPEG-2以外の映像フォーマットからpatchエンコーダ引数を生成できません");
+    }
+    const uint8_t profileAndLevel = format.mpeg2ProfileAndLevelIndication;
+    if ((profileAndLevel & 0x80) != 0) {
+        THROW(FormatException, "MPEG-2部分エンコードは4:2:2 Profileに対応していません");
+    }
+    const tchar* profile = nullptr;
+    switch ((profileAndLevel >> 4) & 0x07) {
+    case 1: profile = _T("high"); break;
+    case 4: profile = _T("main"); break;
+    case 5: profile = _T("simple"); break;
+    default:
+        THROWF(FormatException,
+            "MPEG-2部分エンコードはprofile_and_level_indication=0x%02XのProfileに対応していません",
+            profileAndLevel);
+    }
+    const tchar* level = nullptr;
+    switch (profileAndLevel & 0x0f) {
+    case 0x0a: level = _T("low"); break;
+    case 0x08: level = _T("main"); break;
+    case 0x06: level = _T("high-1440"); break;
+    case 0x04: level = _T("high"); break;
+    case 0x02: level = _T("highp"); break;
+    default:
+        THROWF(FormatException,
+            "MPEG-2部分エンコードはprofile_and_level_indication=0x%02XのLevelに対応していません",
+            profileAndLevel);
+    }
+    const int maxrateKbps = (int)(
+        ((uint64_t)format.mpeg2BitRateValue * 400 + 999) / 1000);
+    const int bufferKbit = (int)(
+        ((uint64_t)format.mpeg2VbvBufferSizeValue * 16 * 1024 + 999) / 1000);
+
     StringBuilderT sb;
     sb.append(_T("\"%s\" --mpeg2 --demuxer y4m"), setting.getEncoderPath())
+        .append(_T(" --profile %s --level %s"), profile, level)
         .append(_T(" --keyint 15 --bframes 0 --min-keyint 1 --scenecut 0"));
     if (!format.progressive) {
         sb.append(bottomFieldFirst ? _T(" --bff") : _T(" --tff"));
@@ -324,11 +293,8 @@ tstring makePatchEncoderArgs(
         sb.append(_T(" --colormatrix %s"),
             char_to_tstring(av::getColorSpaceStr(format.colorSpace, ENCODER_X262)));
     }
-    sb.append(_T(" --crf 18"));
-    if (vbv.available) {
-        sb.append(_T(" --vbv-maxrate %d --vbv-bufsize %d"),
-            vbv.maxrateKbps, vbv.bufferKbit);
-    }
+    sb.append(_T(" --crf 18 --vbv-maxrate %d --vbv-bufsize %d"),
+        maxrateKbps, bufferKbit);
     sb.append(_T(" --frames %d -o \"%s\" -"), frames, outputPath);
     return sb.str();
 }
@@ -347,11 +313,6 @@ std::vector<PatchEncodedData> encodePatches(
     }
     const auto& displayFrames = reformInfo.getFilterSourceFrames(key.video);
     const auto& format = reformInfo.getFormat(key).videoFormat;
-    const auto vbv = readOriginalVbv(
-        setting.getIntVideoFilePath(key.video), reformInfo, plan);
-    if (!vbv.available) {
-        ctx.warn(_T("[MPEG-2部分エンコード] 元sequence headerを取得できないためVBV指定を省略します"));
-    }
 
     ScriptEnvironmentPointer env = make_unique_ptr(CreateScriptEnvironment2());
     const int decodeThreads = std::max(1, std::min(8, GetProcessorCount()));
@@ -366,8 +327,8 @@ std::vector<PatchEncodedData> encodePatches(
         const auto& patch = plan.patches[i];
         const int firstDts = reformInfo.getDtsFrameIndex(
             displayFrames[patch.first].frameIndex);
-        const bool bottomFieldFirst =
-            reformInfo.getVideoFrameInfo(firstDts).pic == PIC_BFF;
+        const auto& sourceFrame = reformInfo.getVideoFrameInfo(firstDts);
+        const bool bottomFieldFirst = sourceFrame.pic == PIC_BFF;
         const tstring patchPath = strsprintf(
             _T("%s.patch%d.m2v"), outputPath.c_str(), (int)i);
         ctx.registerTmpFile(patchPath);
@@ -375,7 +336,7 @@ std::vector<PatchEncodedData> encodePatches(
         ctx.infoF(_T("[MPEG-2部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
             (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
         const tstring encoderArgs = makePatchEncoderArgs(
-            setting, format, patchPath, frames, bottomFieldFirst, vbv);
+            setting, sourceFrame.format, patchPath, frames, bottomFieldFirst);
         ctx.info(_T("[エンコーダ起動]"));
         ctx.infoF(_T("%s"), encoderArgs.c_str());
         // 第5引数disablePowerThrottoling=trueは固定。

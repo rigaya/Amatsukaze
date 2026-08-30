@@ -270,6 +270,14 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
                 format.frameRateDenom = frameRate.second;
                 format.fixedFrameRate = true;
                 format.progressive = (sequenceHeader.progressive_sequence != 0);
+                format.mpeg2ProfileAndLevelIndication =
+                    sequenceHeader.profile_and_level_indication;
+                format.mpeg2BitRateValue =
+                    ((uint32_t)sequenceHeader.bit_rate_extension << 18)
+                    | sequenceHeader.bit_rate_value;
+                format.mpeg2VbvBufferSizeValue =
+                    ((uint32_t)sequenceHeader.vbv_buffer_size_extension << 10)
+                    | sequenceHeader.vbv_buffer_size_value;
 
                 if (sequenceHeader.colour_description == 0) {
                     format.colorPrimaries = 2;

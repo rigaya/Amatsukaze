@@ -715,6 +715,9 @@ struct VideoFormat {
     int frameRateNum, frameRateDenom; // フレームレート
     uint8_t colorPrimaries, transferCharacteristics, colorSpace; // カラースペース
     bool progressive, fixedFrameRate;
+    uint8_t mpeg2ProfileAndLevelIndication = 0;
+    uint32_t mpeg2BitRateValue = 0;
+    uint32_t mpeg2VbvBufferSizeValue = 0;
 
     bool isEmpty() const {
         return width == 0;
@@ -751,7 +754,8 @@ struct VideoFormat {
     bool operator==(const VideoFormat& o) const {
         return (isBasicEquals(o)
             && displayWidth == o.displayWidth && displayHeight == o.displayHeight
-            && sarWidth == o.sarWidth && sarHeight == o.sarHeight);
+            && sarWidth == o.sarWidth && sarHeight == o.sarHeight
+            && mpeg2ProfileAndLevelIndication == o.mpeg2ProfileAndLevelIndication);
     }
     bool operator!=(const VideoFormat& o) const {
         return !(*this == o);
