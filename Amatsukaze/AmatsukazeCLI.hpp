@@ -748,8 +748,13 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.mkvmergePath = search(conf.mkvmergePath);
         conf.muxerPath = search(conf.muxerPath);
         conf.timelineditorPath = search(conf.timelineditorPath);
+        // x262のTS (replace)出力は、raw MPEG-2 ESにmkvmergeで時刻情報を付けてから
+        // matroskaとしてtsreplaceへ渡す(makeMuxerArgs)。ただし部分エンコードは
+        // timestamp付きMPEG-TSを直接tsreplaceへ渡すのでmkvmergeを一切使わない。
+        // フル再エンコードへのフォールバックも廃止したため、部分エンコード有効時は
+        // 必ずこの経路になる。
         if (conf.encoder == ENCODER_X262 && conf.format == FORMAT_TSREPLACE
-            && !File::exists(conf.mkvmergePath)) {
+            && !conf.mpeg2Partial && !File::exists(conf.mkvmergePath)) {
             THROW(ArgumentException, "x262のTS (replace)出力にはmkvmergeパスが必要です");
         }
     }
