@@ -97,8 +97,14 @@ bool isRestoreI(const VideoFrameInfo& frame) {
     return frame.type == FRAME_I && frame.isGopStart;
 }
 
-bool isPatchUnsupportedPicture(PICTURE_TYPE picture) {
-    return picture == PIC_FRAME_DOUBLING || picture == PIC_FRAME_TRIPLING
+// picture typeがインタレ(フィールド順序を持つ)かどうか。
+// 注: これはpatchエンコードのフィールドオーダー選択には使わない。
+// AMTSourceはhalfDelayエントリを「前フレームのtop + 当該フレームのbottom」で
+// 合成するため、表示エントリはPIC_BFF/PIC_BFF_RFFでも常にTFF順になる。
+// 通常経路も同じ表示エントリを常に--tff/Y4M "It"でエンコードしている
+// (TranscodeSetting.cpp、Encoder.cpp Y4MWriter)。§19.7参照。
+bool isInterlacedPicture(PICTURE_TYPE picture) {
+    return picture == PIC_TFF || picture == PIC_BFF
         || picture == PIC_TFF_RFF || picture == PIC_BFF_RFF;
 }
 
@@ -231,8 +237,7 @@ tstring makePatchEncoderArgs(
     const ConfigWrapper& setting,
     const VideoFormat& format,
     const tstring& outputPath,
-    int frames,
-    bool bottomFieldFirst) {
+    int frames) {
     if (format.format != VS_MPEG2) {
         THROW(FormatException, "MPEG-2以外の映像フォーマットからpatchエンコーダ引数を生成できません");
     }
@@ -272,7 +277,9 @@ tstring makePatchEncoderArgs(
         .append(_T(" --profile %s --level %s"), profile, level)
         .append(_T(" --keyint 15 --bframes 0 --min-keyint 1 --scenecut 0"));
     if (!format.progressive) {
-        sb.append(bottomFieldFirst ? _T(" --bff") : _T(" --tff"));
+        // 表示エントリは常にTFF順(isInterlacedPictureのコメント参照)。
+        // Y4MWriterもprogressiveでなければ"It"を書くので、ここも--tff固定。
+        sb.append(_T(" --tff"));
     }
     int darWidth = 0;
     int darHeight = 0;
@@ -328,7 +335,6 @@ std::vector<PatchEncodedData> encodePatches(
         const int firstDts = reformInfo.getDtsFrameIndex(
             displayFrames[patch.first].frameIndex);
         const auto& sourceFrame = reformInfo.getVideoFrameInfo(firstDts);
-        const bool bottomFieldFirst = sourceFrame.pic == PIC_BFF;
         const tstring patchPath = strsprintf(
             _T("%s.patch%d.m2v"), outputPath.c_str(), (int)i);
         ctx.registerTmpFile(patchPath);
@@ -336,7 +342,7 @@ std::vector<PatchEncodedData> encodePatches(
         ctx.infoF(_T("[MPEG-2部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
             (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
         const tstring encoderArgs = makePatchEncoderArgs(
-            setting, sourceFrame.format, patchPath, frames, bottomFieldFirst);
+            setting, sourceFrame.format, patchPath, frames);
         ctx.info(_T("[エンコーダ起動]"));
         ctx.infoF(_T("%s"), encoderArgs.c_str());
         // 第5引数disablePowerThrottoling=trueは固定。
@@ -584,7 +590,11 @@ bool BuildMpeg2PartialEncodePlan(
     }
 
     std::vector<bool> keepMask(displayFrames.size(), false);
+    // COPY pictureが使う出力PTS。符号化picture本来の表示開始時刻(originalFramePTS)基準。
     std::vector<int64_t> outputDisplayPts(displayFrames.size(), AV_NOPTS_VALUE);
+    // patchが使う表示グリッド。RFFでは1符号化pictureが複数の表示エントリに展開され、
+    // originalFramePTSが重複するので、patchはこちら(等間隔のpts)に載せる(§19.7)。
+    std::vector<double> displayGridPts(displayFrames.size(), 0);
     double cumulativeCut = 0;
     for (size_t i = 0; i < runs.size(); ++i) {
         const auto& run = runs[i];
@@ -604,6 +614,7 @@ bool BuildMpeg2PartialEncodePlan(
             keepMask[display] = true;
             outputDisplayPts[display] = (int64_t)std::llround(
                 displayFrames[display].originalFramePTS - cumulativeCut);
+            displayGridPts[display] = displayFrames[display].pts - cumulativeCut;
         }
     }
 
@@ -641,32 +652,24 @@ bool BuildMpeg2PartialEncodePlan(
 
     for (const auto& patch : plan.patches) {
         const auto baseFormat = frameAtDisplay(patch.first).format;
-        const auto basePicture = frameAtDisplay(patch.first).pic;
-        // 注: ここでhalfDelayを弾いてはいけない。
+        // 注: ここでhalfDelayやTFF/BFFの混在を弾いてはいけない。
         // halfDelayはPIC_BFF(とPIC_BFF_RFFの前半)に必ず立つ(StreamReform.cpp)ので、
         // 条件に入れるとBFF素材のpatchが全部フォールバックしてしまう。
-        // halfDelayによるpts半フレームずらしは出力PTS算出に影響しない
-        // (出力PTSはptsではなくoriginalFramePTSを使うため、§9.3)。
+        // また3:2プルダウン素材はTFF系とBFF系のpictureが必ず交互に現れるため、
+        // 混在を弾くとRFF素材のpatchが必ずフォールバックする。
+        // 表示エントリはAMTSourceが常にTFF順へ正規化するので混在は問題ない
+        // (isInterlacedPictureのコメント、§19.7)。
+        bool hasInterlaced = false;
         for (int display = patch.first; display < patch.last; ++display) {
             const auto& source = frameAtDisplay(display);
-            if (isPatchUnsupportedPicture(source.pic)) {
-                reason = _T("patch範囲にRFF付きフレームがあります");
-                return false;
-            }
             if (source.format != baseFormat) {
                 reason = _T("patch範囲に映像フォーマット変化があります");
                 return false;
             }
-            if (source.pic != basePicture) {
-                reason = _T("patch範囲でprogressive/TFF/BFFが混在しています");
-                return false;
-            }
+            hasInterlaced = hasInterlaced || isInterlacedPicture(source.pic);
         }
-        const bool pictureMatchesFormat = baseFormat.progressive
-            ? basePicture == PIC_FRAME
-            : (basePicture == PIC_TFF || basePicture == PIC_BFF);
-        if (!pictureMatchesFormat) {
-            reason = _T("patch範囲のprogressive/TFF/BFFと映像フォーマットが一致しません");
+        if (baseFormat.progressive && hasInterlaced) {
+            reason = _T("progressive映像のpatch範囲にインタレ指定pictureがあります");
             return false;
         }
     }
@@ -721,19 +724,32 @@ bool BuildMpeg2PartialEncodePlan(
 
     // COPYをDTS順に走査し、表示範囲を追い越す直前へpatchをまとめて挿入する。
     size_t patchIndex = 0;
+    // patchは表示エントリ単位で1 pictureを出力するので、PTSは等間隔の表示グリッド
+    // (displayGridPts)に載せる。ただしそのままだとPIC_BFF系のhalfDelay分だけ
+    // COPY側(originalFramePTS基準)とずれるため、patch先頭のずれ量を全体に足して
+    // 接合させる。RFF以外では両者の差がpatch内で一定なので、結果は
+    // outputDisplayPtsと完全に一致する(既存挙動の非回帰)。
+    // RFFでは1符号化pictureごとにhalfDelayが変わるため、patch終端とCOPYの接合は
+    // 最大半フレームずれる(§19.7)。
+    auto pushPatchEntries = [&](size_t index) {
+        const auto& patch = plan.patches[index];
+        const double anchorShift =
+            (double)outputDisplayPts[patch.first] - displayGridPts[patch.first];
+        for (int display = patch.first; display < patch.last; ++display) {
+            plan.outputEntries.push_back({
+                Mpeg2PartialAction::PATCH, -1, (int)index, display - patch.first,
+                (int64_t)std::llround(displayGridPts[display] + anchorShift), 0
+            });
+        }
+    };
+
     for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
         if (plan.actions[localDts] != Mpeg2PartialAction::COPY) {
             continue;
         }
         while (patchIndex < plan.patches.size()
             && firstDisplay[localDts] >= plan.patches[patchIndex].last) {
-            const auto& patch = plan.patches[patchIndex];
-            for (int display = patch.first; display < patch.last; ++display) {
-                plan.outputEntries.push_back({
-                    Mpeg2PartialAction::PATCH, -1, (int)patchIndex, display - patch.first,
-                    outputDisplayPts[display], 0
-                });
-            }
+            pushPatchEntries(patchIndex);
             ++patchIndex;
         }
         const int display = firstDisplay[localDts];
@@ -746,13 +762,7 @@ bool BuildMpeg2PartialEncodePlan(
         });
     }
     while (patchIndex < plan.patches.size()) {
-        const auto& patch = plan.patches[patchIndex];
-        for (int display = patch.first; display < patch.last; ++display) {
-            plan.outputEntries.push_back({
-                Mpeg2PartialAction::PATCH, -1, (int)patchIndex, display - patch.first,
-                outputDisplayPts[display], 0
-            });
-        }
+        pushPatchEntries(patchIndex);
         ++patchIndex;
     }
 
