@@ -568,12 +568,9 @@ private:
                 checkAv(openResult, "メモリ上の出力TSを開けません");
             }
             std::unique_ptr<AVFormatContext, InputContextDeleter> input(rawInput);
-            checkAv(avformat_find_stream_info(input.get(), nullptr),
-                "メモリ上の出力TSからストリーム情報を取得できません");
-            const int videoIndex = av_find_best_stream(
-                input.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-            checkAv(videoIndex, "メモリ上の出力TSに映像ストリームがありません");
-            AVStream* stream = input->streams[videoIndex];
+            // 非seekableなcustom AVIOでavformat_find_stream_info()を呼ぶと、旧FFmpegでは
+            // プローブ用バッファの拡大・縮小時にassertへ到達するため、packetから逐次判定する。
+            int videoIndex = -1;
 
             std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
             if (!packet) {
@@ -581,6 +578,11 @@ private:
             }
             int readResult = 0;
             while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
+                AVStream* packetStream = input->streams[packet->stream_index];
+                if (videoIndex < 0
+                    && packetStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                    videoIndex = packet->stream_index;
+                }
                 if (packet->stream_index == videoIndex) {
                     PacketExpectation item = {};
                     if (!expectations_.pop(item)) {
@@ -588,9 +590,9 @@ private:
                     }
                     const size_t index = verifiedPictures_.load();
                     const int64_t pts = packet->pts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE
-                        : av_rescale_q(packet->pts, stream->time_base, CLOCK_90K);
+                        : av_rescale_q(packet->pts, packetStream->time_base, CLOCK_90K);
                     const int64_t dts = packet->dts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE
-                        : av_rescale_q(packet->dts, stream->time_base, CLOCK_90K);
+                        : av_rescale_q(packet->dts, packetStream->time_base, CLOCK_90K);
                     if (!timestampEquals(pts, item.pts) || !timestampEquals(dts, item.dts)) {
                         THROWF(FormatException,
                             "出力TSのPTS/DTSが不一致です: packet=%d pts=%lld/%lld dts=%lld/%lld",
@@ -608,6 +610,9 @@ private:
             }
             if (readResult != AVERROR_EOF) {
                 checkAv(readResult, "メモリ上の出力TSのpacket読み出しに失敗しました");
+            }
+            if (videoIndex < 0) {
+                THROW(FormatException, "メモリ上の出力TSに映像ストリームがありません");
             }
             if (verifiedPictures_.load() != totalPictures_) {
                 THROWF(FormatException, "出力TSのpicture数が不一致です: %d/%d",
