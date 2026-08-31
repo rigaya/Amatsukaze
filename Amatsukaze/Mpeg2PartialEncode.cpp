@@ -644,7 +644,9 @@ public:
             THROW(RuntimeException, "部分エンコード出力用AVIOバッファを確保できません");
         }
         context_ = avio_alloc_context(
-            buffer, BUFFER_SIZE, 1, this, nullptr, &Mpeg2PartialOutputIO::writePacket, nullptr);
+            buffer, BUFFER_SIZE, 1, this, nullptr,
+            (RGYArgN<5, decltype(avio_alloc_context)>::type)(&Mpeg2PartialOutputIO::writePacket),
+            nullptr);
         if (context_ == nullptr) {
             av_free(buffer);
             THROW(RuntimeException, "部分エンコード出力用AVIOContextを確保できません");

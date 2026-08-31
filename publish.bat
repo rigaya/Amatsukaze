@@ -1,6 +1,12 @@
 @echo off
 setlocal
 
+cd /d "%~dp0"
+if errorlevel 1 (
+  echo Failed to change to the publish script directory.
+  exit /b 1
+)
+
 where dotnet >nul 2>&1
 if errorlevel 1 (
   echo dotnet command not found. Install .NET 10 SDK.
@@ -11,12 +17,6 @@ if errorlevel 1 (
   echo .NET 10 SDK not found. Check dotnet --list-sdks.
   exit /b 1
 )
-
-if not exist ".\publish\win-x64" mkdir ".\publish\win-x64"
-del .\publish\win-x64\*.dll >nul 2>&1
-del .\publish\win-x64\*.dll.config >nul 2>&1
-del .\publish\win-x64\*.exe >nul 2>&1
-del .\publish\win-x64\*.pdb >nul 2>&1
 
 set "VSWHERE="
 for /f "usebackq delims=" %%I in (`where vswhere.exe 2^>nul`) do (
@@ -62,6 +62,17 @@ echo Using Visual Studio: %VSINSTALL%
 echo Using MSBuild: %MSBUILD%
 call "%VCVARS%" x64
 if errorlevel 1 exit /b %ERRORLEVEL%
+
+if exist ".\publish\win-x64" rmdir /s /q ".\publish\win-x64"
+if exist ".\publish\win-x64" (
+  echo Failed to clean the publish output directory.
+  exit /b 1
+)
+mkdir ".\publish\win-x64"
+if errorlevel 1 (
+  echo Failed to create the publish output directory.
+  exit /b 1
+)
 
 echo Building solution with MSBuild (Release + Release2)...
 "%MSBUILD%" Amatsukaze.sln /restore /p:Configuration=Release /p:Platform=x64 /m
