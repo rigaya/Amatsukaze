@@ -1,6 +1,7 @@
 ﻿#include "Mpeg2PartialEncode.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -20,6 +21,7 @@ namespace {
 constexpr AVRational CLOCK_90K = { 1, MPEG_CLOCK_HZ };
 constexpr int64_t TIMESTAMP_MASK = (int64_t{ 1 } << 33) - 1;
 constexpr int MIN_COPY_FRAMES = 30;
+constexpr int PROGRESS_LOG_INTERVAL_SECONDS = 1;
 
 struct KeepRun {
     int first;
@@ -393,6 +395,7 @@ std::vector<PatchEncodedData> encodePatches(
 }
 
 void verifyOutput(
+    AMTContext& ctx,
     const tstring& outputPath,
     const std::vector<PacketExpectation>& expected) {
     std::unique_ptr<AVFormatContext, InputContextDeleter> input;
@@ -405,6 +408,9 @@ void verifyOutput(
 
     size_t index = 0;
     int readResult = 0;
+    const auto verifyStart = std::chrono::steady_clock::now();
+    auto nextProgressLog = verifyStart
+        + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
     while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
         if (packet->stream_index == videoIndex) {
             if (index >= expected.size()) {
@@ -425,6 +431,17 @@ void verifyOutput(
                 THROWF(FormatException, "出力TSのpicture byte列が不一致です: packet=%d", (int)index);
             }
             ++index;
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= nextProgressLog) {
+                const double progress = expected.empty()
+                    ? 100.0 : 100.0 * index / expected.size();
+                const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    now - verifyStart).count();
+                ctx.progressF(_T("[MPEG-2部分エンコード] 出力検証中: %d/%d picture (%.1f%%、経過 %lld秒)"),
+                    (int)index, (int)expected.size(), progress, (long long)elapsed);
+                nextProgressLog = now
+                    + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
+            }
         }
         av_packet_unref(packet.get());
     }
@@ -472,6 +489,11 @@ void buildOutput(
         "部分エンコード出力を開けません");
     checkAv(avformat_write_header(output.get(), nullptr), "MPEG-TSヘッダを書けません");
 
+    ctx.infoF(_T("[MPEG-2部分エンコード] 統合開始: 元映像COPYと再エンコードpatchをMPEG-TSへ統合します (入力 %d picture、出力予定 %d picture)"),
+        (int)plan.actions.size(), (int)plan.outputEntries.size());
+    ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture"),
+        (int)plan.actions.size(), (int)plan.outputEntries.size());
+
     std::vector<PacketExpectation> expectedOutput;
     std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
     std::unique_ptr<AVPacket, PacketDeleter> patchPacket(av_packet_alloc());
@@ -510,6 +532,9 @@ void buildOutput(
 
     int filePacketIndex = 0;
     int readResult = 0;
+    const auto mergeStart = std::chrono::steady_clock::now();
+    auto nextProgressLog = mergeStart
+        + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
     while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
         if (packet->stream_index != videoIndex) {
             av_packet_unref(packet.get());
@@ -555,6 +580,18 @@ void buildOutput(
         }
         ++filePacketIndex;
         av_packet_unref(packet.get());
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= nextProgressLog) {
+            const double progress = plan.actions.empty()
+                ? 100.0 : 100.0 * filePacketIndex / plan.actions.size();
+            const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                now - mergeStart).count();
+            ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、経過 %lld秒"),
+                filePacketIndex, (int)plan.actions.size(), progress,
+                (int)outputEntryIndex, (int)plan.outputEntries.size(), (long long)elapsed);
+            nextProgressLog = now
+                + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
+        }
     }
     if (readResult != AVERROR_EOF) {
         checkAv(readResult, "中間PSのpacket読み出しに失敗しました");
@@ -575,7 +612,20 @@ void buildOutput(
     output.reset();
     input.reset();
 
-    verifyOutput(outputPath, expectedOutput);
+    const auto mergeElapsed = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - mergeStart).count();
+    ctx.infoF(_T("[MPEG-2部分エンコード] 統合完了: %d pictureを出力しました (経過 %lld秒)"),
+        (int)expectedOutput.size(), (long long)mergeElapsed);
+    ctx.progressF(_T("[MPEG-2部分エンコード] 統合完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture"),
+        (int)plan.actions.size(), (int)plan.actions.size(),
+        (int)outputEntryIndex, (int)plan.outputEntries.size());
+    ctx.infoF(_T("[MPEG-2部分エンコード] 出力検証開始: 再demuxしてPTS/DTS・size・hashを確認します (%d picture)"),
+        (int)expectedOutput.size());
+    ctx.progressF(_T("[MPEG-2部分エンコード] 出力検証中: 0/%d picture (0.0%%)"),
+        (int)expectedOutput.size());
+    verifyOutput(ctx, outputPath, expectedOutput);
+    ctx.progressF(_T("[MPEG-2部分エンコード] 出力検証完了: %d/%d picture (100.0%%)"),
+        (int)expectedOutput.size(), (int)expectedOutput.size());
     ctx.infoF(_T("[MPEG-2部分エンコード] 再demux検証: %d picture、PTS/DTS・size・hash不一致0"),
         (int)expectedOutput.size());
 }
