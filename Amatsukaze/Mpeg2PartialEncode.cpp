@@ -1,12 +1,17 @@
 ﻿#include "Mpeg2PartialEncode.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 
 #include "AMTSource.h"
 #include "Encoder.h"
@@ -15,6 +20,7 @@
 #include "StreamReform.h"
 #include "TranscodeSetting.h"
 #include "rgy_filesystem.h"
+#include "rgy_queue.h"
 
 namespace {
 
@@ -48,9 +54,6 @@ struct InputContextDeleter {
 struct OutputContextDeleter {
     void operator()(AVFormatContext* format) const {
         if (format != nullptr) {
-            if (format->pb != nullptr) {
-                avio_closep(&format->pb);
-            }
             avformat_free_context(format);
         }
     }
@@ -394,65 +397,334 @@ std::vector<PatchEncodedData> encodePatches(
     return result;
 }
 
-void verifyOutput(
-    AMTContext& ctx,
-    const tstring& outputPath,
-    const std::vector<PacketExpectation>& expected) {
-    std::unique_ptr<AVFormatContext, InputContextDeleter> input;
-    AVStream* stream = openVideoInput(outputPath, "mpegts", input);
-    const int videoIndex = stream->index;
-    std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
-    if (!packet) {
-        THROW(RuntimeException, "AVPacketを確保できません");
+class PacketExpectationQueue {
+public:
+    void push(PacketExpectation item) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (finished_ || cancelled_) {
+            THROW(InvalidOperationException, "出力検証の期待値キューは終了しています");
+        }
+        queue_.push_back(std::move(item));
+        condition_.notify_one();
     }
 
-    size_t index = 0;
-    int readResult = 0;
-    const auto verifyStart = std::chrono::steady_clock::now();
-    auto nextProgressLog = verifyStart
-        + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
-    while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
-        if (packet->stream_index == videoIndex) {
-            if (index >= expected.size()) {
-                THROW(FormatException, "出力TSのpicture数が期待値より多いです");
-            }
-            const auto& item = expected[index];
-            const int64_t pts = packet->pts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE
-                : av_rescale_q(packet->pts, stream->time_base, CLOCK_90K);
-            const int64_t dts = packet->dts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE
-                : av_rescale_q(packet->dts, stream->time_base, CLOCK_90K);
-            if (!timestampEquals(pts, item.pts) || !timestampEquals(dts, item.dts)) {
-                THROWF(FormatException,
-                    "出力TSのPTS/DTSが不一致です: packet=%d pts=%lld/%lld dts=%lld/%lld",
-                    (int)index, (long long)pts, (long long)item.pts,
-                    (long long)dts, (long long)item.dts);
-            }
-            if (packet->size != item.size || fnv1a(packet->data, packet->size) != item.hash) {
-                THROWF(FormatException, "出力TSのpicture byte列が不一致です: packet=%d", (int)index);
-            }
-            ++index;
-            const auto now = std::chrono::steady_clock::now();
-            if (now >= nextProgressLog) {
-                const double progress = expected.empty()
-                    ? 100.0 : 100.0 * index / expected.size();
-                const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-                    now - verifyStart).count();
-                ctx.progressF(_T("[MPEG-2部分エンコード] 出力検証中: %d/%d picture (%.1f%%、経過 %lld秒)"),
-                    (int)index, (int)expected.size(), progress, (long long)elapsed);
-                nextProgressLog = now
-                    + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
-            }
+    bool pop(PacketExpectation& item) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condition_.wait(lock, [this]() {
+            return !queue_.empty() || finished_ || cancelled_;
+        });
+        if (cancelled_ || queue_.empty()) {
+            return false;
         }
-        av_packet_unref(packet.get());
+        item = std::move(queue_.front());
+        queue_.pop_front();
+        return true;
     }
-    if (readResult != AVERROR_EOF) {
-        checkAv(readResult, "出力TSのpacket読み出しに失敗しました");
+
+    void finish() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        finished_ = true;
+        condition_.notify_all();
     }
-    if (index != expected.size()) {
-        THROWF(FormatException, "出力TSのpicture数が不一致です: %d/%d",
-            (int)index, (int)expected.size());
+
+    void cancel() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        cancelled_ = true;
+        condition_.notify_all();
     }
-}
+
+private:
+    std::deque<PacketExpectation> queue_;
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    bool finished_ = false;
+    bool cancelled_ = false;
+};
+
+class QueueInputContext {
+public:
+    explicit QueueInputContext(RGYQueueBuffer& queue)
+        : queue_(queue) {
+        constexpr int BUFFER_SIZE = 128 * 1024;
+        auto* buffer = (uint8_t*)av_malloc(BUFFER_SIZE);
+        if (buffer == nullptr) {
+            THROW(RuntimeException, "出力検証用AVIOバッファを確保できません");
+        }
+        context_ = avio_alloc_context(
+            buffer, BUFFER_SIZE, 0, this, &QueueInputContext::readPacket, nullptr, nullptr);
+        if (context_ == nullptr) {
+            av_free(buffer);
+            THROW(RuntimeException, "出力検証用AVIOContextを確保できません");
+        }
+        context_->seekable = 0;
+    }
+
+    ~QueueInputContext() {
+        if (context_ != nullptr) {
+            av_freep(&context_->buffer);
+            avio_context_free(&context_);
+        }
+    }
+
+    AVIOContext* get() const {
+        return context_;
+    }
+
+private:
+    static int readPacket(void* opaque, uint8_t* buffer, int bufferSize) {
+        auto* self = static_cast<QueueInputContext*>(opaque);
+        const int64_t readSize = self->queue_.popDataBlock(buffer, bufferSize);
+        return readSize < 0 ? AVERROR_EOF : (int)readSize;
+    }
+
+    RGYQueueBuffer& queue_;
+    AVIOContext* context_ = nullptr;
+};
+
+class StreamingOutputVerifier {
+public:
+    explicit StreamingOutputVerifier(size_t totalPictures)
+        : totalPictures_(totalPictures) {
+        constexpr int64_t INITIAL_QUEUE_SIZE = 4 * 1024 * 1024;
+        constexpr int64_t MAX_QUEUE_SIZE = 256 * 1024 * 1024;
+        tsQueue_.init(INITIAL_QUEUE_SIZE);
+        // 検証側の一時的な遅れは十分吸収しつつ、異常時の無制限な増加は防ぐ。
+        tsQueue_.setMaxCapacity(MAX_QUEUE_SIZE);
+        thread_ = std::thread([this]() { run(); });
+    }
+
+    ~StreamingOutputVerifier() {
+        cancel();
+        join();
+    }
+
+    void pushTs(const uint8_t* data, int size) {
+        while (!tsQueue_.pushData(data, size, 100)) {
+            // 検証スレッドが停止していた場合、容量待ちを続けず元の例外を返す。
+            rethrowError();
+        }
+        rethrowError();
+    }
+
+    void pushExpectation(PacketExpectation item) {
+        rethrowError();
+        expectations_.push(std::move(item));
+    }
+
+    void finish() {
+        expectations_.finish();
+        tsQueue_.setEOF();
+        join();
+        rethrowError();
+    }
+
+    void cancel() {
+        expectations_.cancel();
+        tsQueue_.setEOF();
+    }
+
+    size_t verifiedPictures() const {
+        return verifiedPictures_.load();
+    }
+
+    void rethrowError() const {
+        if (!failed_.load()) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(errorMutex_);
+        if (error_ != nullptr) {
+            std::rethrow_exception(error_);
+        }
+        THROW(RuntimeException, "出力のストリーム検証に失敗しました");
+    }
+
+private:
+    void join() {
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+
+    void run() noexcept {
+        try {
+            QueueInputContext inputIo(tsQueue_);
+            AVFormatContext* rawInput = avformat_alloc_context();
+            if (rawInput == nullptr) {
+                THROW(RuntimeException, "出力検証用AVFormatContextを確保できません");
+            }
+            rawInput->pb = inputIo.get();
+            rawInput->flags |= AVFMT_FLAG_CUSTOM_IO;
+            auto* inputFormat = av_find_input_format("mpegts");
+            if (inputFormat == nullptr) {
+                avformat_free_context(rawInput);
+                THROW(FormatException, "mpegts demuxerが見つかりません");
+            }
+            const int openResult = avformat_open_input(
+                &rawInput, nullptr, inputFormat, nullptr);
+            if (openResult < 0) {
+                if (rawInput != nullptr) {
+                    avformat_free_context(rawInput);
+                }
+                checkAv(openResult, "メモリ上の出力TSを開けません");
+            }
+            std::unique_ptr<AVFormatContext, InputContextDeleter> input(rawInput);
+            checkAv(avformat_find_stream_info(input.get(), nullptr),
+                "メモリ上の出力TSからストリーム情報を取得できません");
+            const int videoIndex = av_find_best_stream(
+                input.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+            checkAv(videoIndex, "メモリ上の出力TSに映像ストリームがありません");
+            AVStream* stream = input->streams[videoIndex];
+
+            std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
+            if (!packet) {
+                THROW(RuntimeException, "出力検証用AVPacketを確保できません");
+            }
+            int readResult = 0;
+            while ((readResult = av_read_frame(input.get(), packet.get())) >= 0) {
+                if (packet->stream_index == videoIndex) {
+                    PacketExpectation item = {};
+                    if (!expectations_.pop(item)) {
+                        THROW(FormatException, "出力TSのpicture数が期待値より多いです");
+                    }
+                    const size_t index = verifiedPictures_.load();
+                    const int64_t pts = packet->pts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE
+                        : av_rescale_q(packet->pts, stream->time_base, CLOCK_90K);
+                    const int64_t dts = packet->dts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE
+                        : av_rescale_q(packet->dts, stream->time_base, CLOCK_90K);
+                    if (!timestampEquals(pts, item.pts) || !timestampEquals(dts, item.dts)) {
+                        THROWF(FormatException,
+                            "出力TSのPTS/DTSが不一致です: packet=%d pts=%lld/%lld dts=%lld/%lld",
+                            (int)index, (long long)pts, (long long)item.pts,
+                            (long long)dts, (long long)item.dts);
+                    }
+                    if (packet->size != item.size
+                        || fnv1a(packet->data, packet->size) != item.hash) {
+                        THROWF(FormatException,
+                            "出力TSのpicture byte列が不一致です: packet=%d", (int)index);
+                    }
+                    verifiedPictures_.fetch_add(1);
+                }
+                av_packet_unref(packet.get());
+            }
+            if (readResult != AVERROR_EOF) {
+                checkAv(readResult, "メモリ上の出力TSのpacket読み出しに失敗しました");
+            }
+            if (verifiedPictures_.load() != totalPictures_) {
+                THROWF(FormatException, "出力TSのpicture数が不一致です: %d/%d",
+                    (int)verifiedPictures_.load(), (int)totalPictures_);
+            }
+        } catch (...) {
+            {
+                std::lock_guard<std::mutex> lock(errorMutex_);
+                error_ = std::current_exception();
+            }
+            failed_.store(true);
+            expectations_.cancel();
+        }
+    }
+
+    size_t totalPictures_;
+    RGYQueueBuffer tsQueue_;
+    PacketExpectationQueue expectations_;
+    std::thread thread_;
+    std::atomic<size_t> verifiedPictures_ = 0;
+    std::atomic<bool> failed_ = false;
+    mutable std::mutex errorMutex_;
+    std::exception_ptr error_;
+};
+
+class Mpeg2PartialOutputIO {
+public:
+    Mpeg2PartialOutputIO(const tstring& outputPath, size_t totalPictures)
+        : file_(outputPath, _T("wb"))
+        , verifier_(totalPictures) {
+        constexpr int BUFFER_SIZE = 128 * 1024;
+        auto* buffer = (uint8_t*)av_malloc(BUFFER_SIZE);
+        if (buffer == nullptr) {
+            THROW(RuntimeException, "部分エンコード出力用AVIOバッファを確保できません");
+        }
+        context_ = avio_alloc_context(
+            buffer, BUFFER_SIZE, 1, this, nullptr, &Mpeg2PartialOutputIO::writePacket, nullptr);
+        if (context_ == nullptr) {
+            av_free(buffer);
+            THROW(RuntimeException, "部分エンコード出力用AVIOContextを確保できません");
+        }
+        context_->seekable = 0;
+    }
+
+    ~Mpeg2PartialOutputIO() {
+        if (!finished_) {
+            verifier_.cancel();
+        }
+        if (context_ != nullptr) {
+            av_freep(&context_->buffer);
+            avio_context_free(&context_);
+        }
+    }
+
+    AVIOContext* get() const {
+        return context_;
+    }
+
+    void pushExpectation(PacketExpectation item) {
+        verifier_.pushExpectation(std::move(item));
+    }
+
+    size_t verifiedPictures() const {
+        return verifier_.verifiedPictures();
+    }
+
+    void checkResult(int result, const char* operation) const {
+        rethrowWriteError();
+        verifier_.rethrowError();
+        checkAv(result, operation);
+    }
+
+    void finish() {
+        avio_flush(context_);
+        checkResult(context_->error, "部分エンコード出力をflushできません");
+        file_.flush();
+        verifier_.finish();
+        finished_ = true;
+    }
+
+private:
+    static int writePacket(void* opaque, uint8_t* buffer, int bufferSize) {
+        return static_cast<Mpeg2PartialOutputIO*>(opaque)->write(buffer, bufferSize);
+    }
+
+    int write(uint8_t* buffer, int bufferSize) noexcept {
+        try {
+            verifier_.rethrowError();
+            file_.write(MemoryChunk(buffer, bufferSize));
+            verifier_.pushTs(buffer, bufferSize);
+            return bufferSize;
+        } catch (...) {
+            {
+                std::lock_guard<std::mutex> lock(writeErrorMutex_);
+                if (writeError_ == nullptr) {
+                    writeError_ = std::current_exception();
+                }
+            }
+            verifier_.cancel();
+            return AVERROR_EXTERNAL;
+        }
+    }
+
+    void rethrowWriteError() const {
+        std::lock_guard<std::mutex> lock(writeErrorMutex_);
+        if (writeError_ != nullptr) {
+            std::rethrow_exception(writeError_);
+        }
+    }
+
+    File file_;
+    StreamingOutputVerifier verifier_;
+    AVIOContext* context_ = nullptr;
+    bool finished_ = false;
+    mutable std::mutex writeErrorMutex_;
+    std::exception_ptr writeError_;
+};
 
 void buildOutput(
     AMTContext& ctx,
@@ -465,6 +737,7 @@ void buildOutput(
     AVStream* inputStream = openVideoInput(inputPath, "mpeg", input);
     const int videoIndex = inputStream->index;
 
+    Mpeg2PartialOutputIO outputIo(outputPath, plan.outputEntries.size());
     AVFormatContext* rawOutput = nullptr;
     checkAv(avformat_alloc_output_context2(
         &rawOutput, nullptr, "mpegts", tchar_to_string(outputPath).c_str()),
@@ -485,16 +758,17 @@ void buildOutput(
 #define AVFMT_AVOID_NEG_TS_DISABLED 0
 #endif
     output->avoid_negative_ts = AVFMT_AVOID_NEG_TS_DISABLED;
-    checkAv(avio_open(&output->pb, tchar_to_string(outputPath).c_str(), AVIO_FLAG_WRITE),
-        "部分エンコード出力を開けません");
-    checkAv(avformat_write_header(output.get(), nullptr), "MPEG-TSヘッダを書けません");
+    output->pb = outputIo.get();
+    output->flags |= AVFMT_FLAG_CUSTOM_IO;
+    outputIo.checkResult(
+        avformat_write_header(output.get(), nullptr), "MPEG-TSヘッダを書けません");
 
-    ctx.infoF(_T("[MPEG-2部分エンコード] 統合開始: 元映像COPYと再エンコードpatchをMPEG-TSへ統合します (入力 %d picture、出力予定 %d picture)"),
+    ctx.infoF(_T("[MPEG-2部分エンコード] 統合開始: 元映像COPYと再エンコードpatchをMPEG-TSへ統合し、メモリ上で同時検証します (入力 %d picture、出力予定 %d picture)"),
         (int)plan.actions.size(), (int)plan.outputEntries.size());
-    ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture"),
-        (int)plan.actions.size(), (int)plan.outputEntries.size());
+    ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture、検証 0/%d picture"),
+        (int)plan.actions.size(), (int)plan.outputEntries.size(),
+        (int)plan.outputEntries.size());
 
-    std::vector<PacketExpectation> expectedOutput;
     std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
     std::unique_ptr<AVPacket, PacketDeleter> patchPacket(av_packet_alloc());
     if (!packet || !patchPacket) {
@@ -521,11 +795,12 @@ void buildOutput(
             patchPacket->dts = av_rescale_q(entry.dts90k, CLOCK_90K, outputStream->time_base);
             patchPacket->duration = 0;
             patchPacket->pos = -1;
-            expectedOutput.push_back({
+            PacketExpectation expected = {
                 entry.pts90k, entry.dts90k, (int)data.size(), fnv1a(data.data(), (int)data.size())
-            });
-            checkAv(av_write_frame(output.get(), patchPacket.get()),
+            };
+            outputIo.checkResult(av_write_frame(output.get(), patchPacket.get()),
                 "MPEG-TS patch packetを書けません");
+            outputIo.pushExpectation(std::move(expected));
             ++outputEntryIndex;
         }
     };
@@ -572,10 +847,12 @@ void buildOutput(
             // DROP前の間隔を持ち越さず、timestampだけを時刻情報の権威とする。
             packet->duration = 0;
             packet->pos = -1;
-            expectedOutput.push_back({
+            PacketExpectation expected = {
                 entry.pts90k, entry.dts90k, packet->size, hash
-            });
-            checkAv(av_write_frame(output.get(), packet.get()), "MPEG-TS packetを書けません");
+            };
+            outputIo.checkResult(
+                av_write_frame(output.get(), packet.get()), "MPEG-TS packetを書けません");
+            outputIo.pushExpectation(std::move(expected));
             ++outputEntryIndex;
         }
         ++filePacketIndex;
@@ -586,9 +863,11 @@ void buildOutput(
                 ? 100.0 : 100.0 * filePacketIndex / plan.actions.size();
             const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                 now - mergeStart).count();
-            ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、経過 %lld秒"),
+            ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、検証 %d/%d picture、経過 %lld秒"),
                 filePacketIndex, (int)plan.actions.size(), progress,
-                (int)outputEntryIndex, (int)plan.outputEntries.size(), (long long)elapsed);
+                (int)outputEntryIndex, (int)plan.outputEntries.size(),
+                (int)outputIo.verifiedPictures(), (int)plan.outputEntries.size(),
+                (long long)elapsed);
             nextProgressLog = now
                 + std::chrono::seconds(PROGRESS_LOG_INTERVAL_SECONDS);
         }
@@ -605,29 +884,20 @@ void buildOutput(
         THROWF(FormatException, "出力符号化順entryを処理しきれません: %d/%d",
             (int)outputEntryIndex, (int)plan.outputEntries.size());
     }
-    checkAv(av_write_trailer(output.get()), "MPEG-TS trailerを書けません");
-    if (output->pb != nullptr) {
-        checkAv(avio_closep(&output->pb), "MPEG-TS出力を閉じられません");
-    }
+    outputIo.checkResult(av_write_trailer(output.get()), "MPEG-TS trailerを書けません");
+    outputIo.finish();
+    output->pb = nullptr;
     output.reset();
     input.reset();
 
     const auto mergeElapsed = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - mergeStart).count();
-    ctx.infoF(_T("[MPEG-2部分エンコード] 統合完了: %d pictureを出力しました (経過 %lld秒)"),
-        (int)expectedOutput.size(), (long long)mergeElapsed);
-    ctx.progressF(_T("[MPEG-2部分エンコード] 統合完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture"),
+    ctx.infoF(_T("[MPEG-2部分エンコード] 統合・検証完了: %d picture、PTS/DTS・size・hash不一致0 (経過 %lld秒)"),
+        (int)outputEntryIndex, (long long)mergeElapsed);
+    ctx.progressF(_T("[MPEG-2部分エンコード] 統合・検証完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture、検証 %d/%d picture"),
         (int)plan.actions.size(), (int)plan.actions.size(),
-        (int)outputEntryIndex, (int)plan.outputEntries.size());
-    ctx.infoF(_T("[MPEG-2部分エンコード] 出力検証開始: 再demuxしてPTS/DTS・size・hashを確認します (%d picture)"),
-        (int)expectedOutput.size());
-    ctx.progressF(_T("[MPEG-2部分エンコード] 出力検証中: 0/%d picture (0.0%%)"),
-        (int)expectedOutput.size());
-    verifyOutput(ctx, outputPath, expectedOutput);
-    ctx.progressF(_T("[MPEG-2部分エンコード] 出力検証完了: %d/%d picture (100.0%%)"),
-        (int)expectedOutput.size(), (int)expectedOutput.size());
-    ctx.infoF(_T("[MPEG-2部分エンコード] 再demux検証: %d picture、PTS/DTS・size・hash不一致0"),
-        (int)expectedOutput.size());
+        (int)outputEntryIndex, (int)plan.outputEntries.size(),
+        (int)outputIo.verifiedPictures(), (int)plan.outputEntries.size());
 }
 
 } // namespace

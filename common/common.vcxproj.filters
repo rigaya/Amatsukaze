@@ -66,6 +66,9 @@
     <ClInclude Include="rgy_pipe.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="rgy_queue.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="rgy_mutex.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

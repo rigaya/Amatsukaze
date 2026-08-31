@@ -48,6 +48,7 @@
     <ClInclude Include="rgy_mutex.h" />
     <ClInclude Include="rgy_osdep.h" />
     <ClInclude Include="rgy_pipe.h" />
+    <ClInclude Include="rgy_queue.h" />
     <ClInclude Include="rgy_simd.h" />
     <ClInclude Include="rgy_tchar.h" />
     <ClInclude Include="rgy_thread_affinity.h" />
