@@ -1249,19 +1249,10 @@ namespace Amatsukaze.Server
                     }
                     break;
                 case EncoderType.SVTAV1:
-                    //svt-av1はSvtAv1EncApp_2.0.0-31_x64.exeのような形式なので、このうち、2, 0, 0, 31をintに変換して配列で返す
-                    match = System.Text.RegularExpressions.Regex.Match(filename, @"SvtAv1EncApp_(\d+)\.(\d+)\.(\d+)-(\d+)_");
-                    if (match.Success)
-                    {
-                        return new int[] { int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value), int.Parse(match.Groups[4].Value) };
-                    }
-                    //svt-av1はSvtAv1EncApp_v1.8.0_x64のような形式もあるので、このうち、1, 8, 0, 0をintに変換して配列で返す
-                    match = System.Text.RegularExpressions.Regex.Match(filename, @"SvtAv1EncApp_v(\d+)\.(\d+)\.(\d+)_");
-                    if (match.Success)
-                    {
-                        return new int[] { int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value), 0 };
-                    }
-                    break;
+                    Version version;
+                    return SvtAv1Version.TryParseFilename(filename, out version)
+                        ? new int[] { version.Major, version.Minor, version.Build, version.Revision }
+                        : null;
                 default:
                     break;
             }
@@ -1294,23 +1285,34 @@ namespace Amatsukaze.Server
                 var fname = Path.GetFileName(path);
                 if (fname.StartsWith(pattern) && fname.EndsWith(".exe"))
                 {
-                    // pathの「ファイル バージョン」を取得してリストに追加する
+                    // バージョンを取得してリストに追加する
                     int[] version = null;
-                    // versionはa.b.c.dの形式なので、a,b,c,dをintに変換して配列にする
-                    try
+                    if (type == EncoderType.SVTAV1)
                     {
-                        var versionStr = FileVersionInfo.GetVersionInfo(path).FileVersion;
-                        version = versionStr.Split('.').Select(int.Parse).ToArray();
+                        // SVT-AV1はファイル名を優先し、解析できない場合だけ実行して確認する
+                        var svtVersion = SvtAv1Version.GetVersion(path);
+                        if (svtVersion != null)
+                        {
+                            version = new int[] { svtVersion.Major, svtVersion.Minor, svtVersion.Build, svtVersion.Revision };
+                        }
                     }
-                    catch (Exception)
+                    else
                     {
-                        // バージョン情報が取得できない場合はファイル名から取得
                         try
                         {
-                            version = GetEncoderExeVersionFromFilename(fname, type);
+                            var versionStr = FileVersionInfo.GetVersionInfo(path).FileVersion;
+                            version = versionStr.Split('.').Select(int.Parse).ToArray();
                         }
                         catch (Exception)
-                        { }
+                        {
+                            // バージョン情報が取得できない場合はファイル名から取得
+                            try
+                            {
+                                version = GetEncoderExeVersionFromFilename(fname, type);
+                            }
+                            catch (Exception)
+                            { }
+                        }
                     }
                     exeList.Add(new EncodeExeFileInfo() { Path = path, version = version });
                 }

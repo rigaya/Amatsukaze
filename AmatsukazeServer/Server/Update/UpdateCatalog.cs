@@ -92,7 +92,7 @@ namespace Amatsukaze.Server.Update
                 WindowsLayout = InstallLayout.ExeFilesFlat,
                 LinuxLayout = InstallLayout.ExeFilesFlat,
                 VersionArgument = "--version",
-                VersionPattern = @"^SVT-AV1 v(?<ver>[0-9]+\.[0-9]+\.[0-9]+-[0-9]+)",
+                VersionPattern = SvtAv1Version.VersionOutputPattern,
                 SettingKey = nameof(Setting.SVTAV1Path),
                 Payload = new[]
                 {

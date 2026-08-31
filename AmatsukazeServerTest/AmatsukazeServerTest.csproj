@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\AmatsukazeServer\AmatsukazeServer.csproj" />
+    <ProjectReference Include="..\AmatsukazeShared\AmatsukazeShared.csproj" />
   </ItemGroup>
 </Project>
