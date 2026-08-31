@@ -80,7 +80,7 @@ void checkAv(int result, const char* operation) {
 
 uint64_t fnv1a(const uint8_t* data, int size) {
     uint64_t hash = 1469598103934665603ULL;
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < size; i++) {
         hash ^= data[i];
         hash *= 1099511628211ULL;
     }
@@ -118,7 +118,7 @@ std::vector<KeepRun> makeKeepRuns(const EncodeFileInput& file, int numDisplayFra
     if (file.videoFrames.empty()) {
         THROW(FormatException, "出力対象の映像フレームがありません");
     }
-    for (size_t i = 0; i < file.videoFrames.size(); ++i) {
+    for (size_t i = 0; i < file.videoFrames.size(); i++) {
         const int frame = file.videoFrames[i];
         if (frame < 0 || frame >= numDisplayFrames
             || (i > 0 && frame <= file.videoFrames[i - 1])) {
@@ -333,7 +333,7 @@ std::vector<PatchEncodedData> encodePatches(
         THROWF(FormatException, "AMTSourceと表示順フレーム数が一致しません: %d/%d",
             vi.num_frames, (int)displayFrames.size());
     }
-    for (size_t i = 0; i < plan.patches.size(); ++i) {
+    for (size_t i = 0; i < plan.patches.size(); i++) {
         const auto& patch = plan.patches[i];
         const int firstDts = reformInfo.getDtsFrameIndex(
             displayFrames[patch.first].frameIndex);
@@ -354,7 +354,7 @@ std::vector<PatchEncodedData> encodePatches(
         VideoFormat writerFormat = format;
         if (patchFormat.progressive) {
             bool hasInterlaced = false;
-            for (int display = patch.first; display < patch.last && !hasInterlaced; ++display) {
+            for (int display = patch.first; display < patch.last && !hasInterlaced; display++) {
                 const int dts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
                 hasInterlaced = isInterlacedPicture(reformInfo.getVideoFrameInfo(dts).pic);
             }
@@ -377,7 +377,7 @@ std::vector<PatchEncodedData> encodePatches(
         // 両者の値は食い違うが、x262はCLI指定を優先するので意図どおり動く。
         Y4MEncodeWriter writer(ctx, encoderArgs, vi, writerFormat, true);
         try {
-            for (int display = patch.first; display < patch.last; ++display) {
+            for (int display = patch.first; display < patch.last; display++) {
                 writer.inputFrame(source->GetFrame(display, env.get()));
             }
         } catch (...) {
@@ -801,7 +801,7 @@ void buildOutput(
             outputIo.checkResult(av_write_frame(output.get(), patchPacket.get()),
                 "MPEG-TS patch packetを書けません");
             outputIo.pushExpectation(std::move(expected));
-            ++outputEntryIndex;
+            outputEntryIndex++;
         }
     };
 
@@ -853,9 +853,9 @@ void buildOutput(
             outputIo.checkResult(
                 av_write_frame(output.get(), packet.get()), "MPEG-TS packetを書けません");
             outputIo.pushExpectation(std::move(expected));
-            ++outputEntryIndex;
+            outputEntryIndex++;
         }
-        ++filePacketIndex;
+        filePacketIndex++;
         av_packet_unref(packet.get());
         const auto now = std::chrono::steady_clock::now();
         if (now >= nextProgressLog) {
@@ -928,7 +928,7 @@ void BuildMpeg2PartialEncodePlan(
     // originalFramePTSが重複するので、patchはこちら(等間隔のpts)に載せる(§19.7)。
     std::vector<double> displayGridPts(displayFrames.size(), 0);
     double cumulativeCut = 0;
-    for (size_t i = 0; i < runs.size(); ++i) {
+    for (size_t i = 0; i < runs.size(); i++) {
         const auto& run = runs[i];
         const auto& segment = keepSegments[i];
         const int64_t expectedStart = (int64_t)std::llround(displayFrames[run.first].pts);
@@ -941,7 +941,7 @@ void BuildMpeg2PartialEncodePlan(
         if (i > 0) {
             cumulativeCut += segment.start - keepSegments[i - 1].end;
         }
-        for (int display = run.first; display < run.last; ++display) {
+        for (int display = run.first; display < run.last; display++) {
             keepMask[display] = true;
             outputDisplayPts[display] = (int64_t)std::llround(
                 displayFrames[display].originalFramePTS - cumulativeCut);
@@ -951,7 +951,7 @@ void BuildMpeg2PartialEncodePlan(
 
     // 表示エントリ → 中間映像ファイル内のDTS index。以降で繰り返し使うので先に作る。
     std::vector<int> displayLocalDts(displayFrames.size(), -1);
-    for (int display = 0; display < (int)displayFrames.size(); ++display) {
+    for (int display = 0; display < (int)displayFrames.size(); display++) {
         const int globalDts = reformInfo.getDtsFrameIndex(displayFrames[display].frameIndex);
         const int localDts = globalDts - frameRange.first;
         if (localDts < 0 || localDts >= codedFrameCount) {
@@ -972,7 +972,7 @@ void BuildMpeg2PartialEncodePlan(
     // 割れたpictureをそのままCOPYするとdropすべき表示エントリまで出力されるので、
     // 必ずpatch側で扱う。§20参照。
     std::vector<uint8_t> codedKeepFlags(codedFrameCount, 0); // bit0: keepあり、bit1: dropあり
-    for (int display = 0; display < (int)displayFrames.size(); ++display) {
+    for (int display = 0; display < (int)displayFrames.size(); display++) {
         codedKeepFlags[displayLocalDts[display]] |= keepMask[display] ? 1 : 2;
     }
     // その表示エントリの符号化pictureが、全表示エントリをkeepしているか。
@@ -993,7 +993,7 @@ void BuildMpeg2PartialEncodePlan(
             int restore = run.first;
             while (restore < run.last
                 && !(isRestoreI(frameAtDisplay(restore)) && isFullyKept(restore))) {
-                ++restore;
+                restore++;
             }
             // restoreIが見つからなければkeep区間を丸ごとpatchにする(§6.4)。
             // 地デジ・BSは0.5秒ごとにGOP先頭Iが来るので、この区間は1GOP未満と短い。
@@ -1022,7 +1022,7 @@ void BuildMpeg2PartialEncodePlan(
         // progressive映像にインタレpictureが混ざるケースはencodePatches側で
         // patch範囲をインタレ扱いにして吸収する(§20)。
         const auto baseFormat = frameAtDisplay(patch.first).format;
-        for (int display = patch.first; display < patch.last; ++display) {
+        for (int display = patch.first; display < patch.last; display++) {
             if (frameAtDisplay(display).format != baseFormat) {
                 THROW(FormatException, "patch範囲に映像フォーマット変化があります");
             }
@@ -1038,7 +1038,7 @@ void BuildMpeg2PartialEncodePlan(
         std::fill(patchMask.begin() + patch.first, patchMask.begin() + patch.last, true);
     }
     std::vector<int> patchState(codedFrameCount, -1); // 0: COPY候補、1: patch
-    for (int display = 0; display < (int)displayFrames.size(); ++display) {
+    for (int display = 0; display < (int)displayFrames.size(); display++) {
         const int localDts = displayLocalDts[display];
         if (firstDisplay[localDts] < 0) {
             firstDisplay[localDts] = display;
@@ -1057,20 +1057,20 @@ void BuildMpeg2PartialEncodePlan(
     }
     // keepとdropに割れたpictureは必ずpatch側で扱われていなければならない。
     // isFullyKeptによるrestoreI/lastAnchor探索でこれは保証される。
-    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
+    for (int localDts = 0; localDts < codedFrameCount; localDts++) {
         if (codedKeepFlags[localDts] == 3 && patchState[localDts] != 1) {
             THROW(FormatException, "keepとdropに割れた符号化pictureがpatchに入っていません");
         }
     }
 
     // patchに置き換えるpictureはCOPY対象から外す。
-    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
+    for (int localDts = 0; localDts < codedFrameCount; localDts++) {
         if (patchState[localDts] == 1) {
             keepState[localDts] = 0;
         }
     }
 
-    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
+    for (int localDts = 0; localDts < codedFrameCount; localDts++) {
         if (keepState[localDts] == 1) {
             plan.actions[localDts] = Mpeg2PartialAction::COPY;
         }
@@ -1097,13 +1097,13 @@ void BuildMpeg2PartialEncodePlan(
     auto pushPatchEntries = [&](size_t index) {
         const auto& patch = plan.patches[index];
         double anchorShift = 0;
-        for (int display = patch.first; display < patch.last; ++display) {
+        for (int display = patch.first; display < patch.last; display++) {
             if (display == 0 || displayLocalDts[display - 1] != displayLocalDts[display]) {
                 anchorShift = (double)outputDisplayPts[display] - displayGridPts[display];
                 break;
             }
         }
-        for (int display = patch.first; display < patch.last; ++display) {
+        for (int display = patch.first; display < patch.last; display++) {
             plan.outputEntries.push_back({
                 Mpeg2PartialAction::PATCH, -1, (int)index, display - patch.first,
                 (int64_t)std::llround(displayGridPts[display] + anchorShift), 0
@@ -1111,14 +1111,14 @@ void BuildMpeg2PartialEncodePlan(
         }
     };
 
-    for (int localDts = 0; localDts < codedFrameCount; ++localDts) {
+    for (int localDts = 0; localDts < codedFrameCount; localDts++) {
         if (plan.actions[localDts] != Mpeg2PartialAction::COPY) {
             continue;
         }
         while (patchIndex < plan.patches.size()
             && firstDisplay[localDts] >= plan.patches[patchIndex].last) {
             pushPatchEntries(patchIndex);
-            ++patchIndex;
+            patchIndex++;
         }
         const int display = firstDisplay[localDts];
         if (display < 0 || outputDisplayPts[display] == AV_NOPTS_VALUE) {
@@ -1130,7 +1130,7 @@ void BuildMpeg2PartialEncodePlan(
     }
     while (patchIndex < plan.patches.size()) {
         pushPatchEntries(patchIndex);
-        ++patchIndex;
+        patchIndex++;
     }
 
     std::vector<int64_t> displayOrderPicturePts;
@@ -1158,7 +1158,7 @@ void BuildMpeg2PartialEncodePlan(
         // 不採用としており(§18 表11)、ここはエラー停止とする。
         THROW(FormatException, "出力DTSが負になります");
     }
-    for (size_t outputIndex = 0; outputIndex < plan.outputEntries.size(); ++outputIndex) {
+    for (size_t outputIndex = 0; outputIndex < plan.outputEntries.size(); outputIndex++) {
         auto& entry = plan.outputEntries[outputIndex];
         const int64_t dts = outputIndex == 0
             ? displayOrderPicturePts.front() - frameDuration
@@ -1169,7 +1169,7 @@ void BuildMpeg2PartialEncodePlan(
         }
         previousDts = dts;
     }
-    for (int display = 0; display < (int)displayFrames.size(); ++display) {
+    for (int display = 0; display < (int)displayFrames.size(); display++) {
         const bool copied =
             plan.actions[displayLocalDts[display]] == Mpeg2PartialAction::COPY;
         if (keepMask[display] != (copied || patchMask[display])
