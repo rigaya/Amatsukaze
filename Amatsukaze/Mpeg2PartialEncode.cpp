@@ -456,6 +456,11 @@ public:
             av_free(buffer);
             THROW(RuntimeException, "出力検証用AVIOContextを確保できません");
         }
+#if LIBAVFORMAT_VERSION_MAJOR < 59
+        // 旧FFmpegのmpegts demuxerは非seekable入力のプローブ時にAVIOバッファを拡張するが、
+        // その後の縮小処理に不具合がありfill_buffer()内のassertへ到達するため縮小を無効化する。
+        context_->orig_buffer_size = 0;
+#endif
         context_->seekable = 0;
     }
 
