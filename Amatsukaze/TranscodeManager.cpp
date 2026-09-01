@@ -1455,11 +1455,14 @@ void DoBadThing() {
     }
 
     // チェック
-    if (!isNoEncode && eoInfo.afsTimecode) {
-        // 本エンコーダ自身が出力したタイムコードを回収する仕組みがないため、
-        // そのまま通すとVFR情報が失われた出力になってしまう
-        THROW(ArgumentException, "エンコーダ自身でのVFR出力には対応していません。"
-            "エンコーダフィルタに本エンコーダとは別のエンコーダを指定してください");
+    if (!isNoEncode && eoInfo.afsTimecode && !setting.isFormatVFRSupported()) {
+        THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
+    }
+    if (!isNoEncode && eoInfo.afsTimecode && setting.isEncoderFilterSeparate()) {
+        // 別プロセスのエンコーダフィルタ出力へ本エンコーダでさらにVFR化を適用すると、
+        // 両段のタイムライン変更を正しく統合できない。
+        THROW(ArgumentException,
+            "エンコーダフィルタと本エンコーダの両方でVFR化することはできません");
     }
     if (setting.getFormat() == FORMAT_TSREPLACE) {
         auto cmtypes = setting.getCMTypes();
