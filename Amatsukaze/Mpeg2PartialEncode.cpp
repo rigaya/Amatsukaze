@@ -26,7 +26,7 @@ namespace {
 
 constexpr AVRational CLOCK_90K = { 1, MPEG_CLOCK_HZ };
 constexpr int64_t TIMESTAMP_MASK = (int64_t{ 1 } << 33) - 1;
-constexpr int MIN_COPY_FRAMES = 30;
+constexpr int MIN_copy_FRAMES = 30;
 constexpr int PROGRESS_LOG_INTERVAL_SECONDS = 1;
 
 struct KeepRun {
@@ -148,12 +148,12 @@ void mergePatches(
     std::vector<Mpeg2PartialPatchRange> merged;
     for (const auto& patch : patches) {
         const bool overlaps = !merged.empty() && patch.first <= merged.back().last;
-        const bool hasShortCopyGap = !merged.empty()
+        const bool hasShortcopyGap = !merged.empty()
             && patch.first >= merged.back().last
-            && patch.first - merged.back().last < MIN_COPY_FRAMES
+            && patch.first - merged.back().last < MIN_copy_FRAMES
             && std::all_of(keepMask.begin() + merged.back().last,
                 keepMask.begin() + patch.first, [](bool keep) { return keep; });
-        if (overlaps || hasShortCopyGap) {
+        if (overlaps || hasShortcopyGap) {
             merged.back().last = std::max(merged.back().last, patch.last);
         } else {
             merged.push_back(patch);
@@ -246,7 +246,7 @@ tstring makePatchEncoderArgs(
     }
     const uint8_t profileAndLevel = format.mpeg2ProfileAndLevelIndication;
     if ((profileAndLevel & 0x80) != 0) {
-        THROW(FormatException, "MPEG-2部分エンコードは4:2:2 Profileに対応していません");
+        THROW(FormatException, "部分エンコードは4:2:2 Profileに対応していません");
     }
     const tchar* profile = nullptr;
     switch ((profileAndLevel >> 4) & 0x07) {
@@ -255,7 +255,7 @@ tstring makePatchEncoderArgs(
     case 5: profile = _T("simple"); break;
     default:
         THROWF(FormatException,
-            "MPEG-2部分エンコードはprofile_and_level_indication=0x%02XのProfileに対応していません",
+            "部分エンコードはprofile_and_level_indication=0x%02XのProfileに対応していません",
             profileAndLevel);
     }
     const tchar* level = nullptr;
@@ -267,7 +267,7 @@ tstring makePatchEncoderArgs(
     case 0x02: level = _T("highp"); break;
     default:
         THROWF(FormatException,
-            "MPEG-2部分エンコードはprofile_and_level_indication=0x%02XのLevelに対応していません",
+            "部分エンコードはprofile_and_level_indication=0x%02XのLevelに対応していません",
             profileAndLevel);
     }
     const int maxrateKbps = (int)(
@@ -303,8 +303,7 @@ tstring makePatchEncoderArgs(
         sb.append(_T(" --colormatrix %s"),
             char_to_tstring(av::getColorSpaceStr(format.colorSpace, ENCODER_X262)));
     }
-    sb.append(_T(" --crf 18 --vbv-maxrate %d --vbv-bufsize %d"),
-        maxrateKbps, bufferKbit);
+    sb.append(_T(" --crf 6 --vbv-maxrate %d --vbv-bufsize %d"), maxrateKbps, bufferKbit);
     sb.append(_T(" --frames %d -o \"%s\" -"), frames, outputPath);
     return sb.str();
 }
@@ -342,7 +341,7 @@ std::vector<PatchEncodedData> encodePatches(
             _T("%s.patch%d.m2v"), outputPath.c_str(), (int)i);
         ctx.registerTmpFile(patchPath);
         const int frames = patch.last - patch.first;
-        ctx.infoF(_T("[MPEG-2部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
+        ctx.infoF(_T("[部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
             (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
 
         // progressive_sequence=1 なら frame picture は PIC_FRAME/DOUBLING/TRIPLING に
@@ -359,7 +358,7 @@ std::vector<PatchEncodedData> encodePatches(
                 hasInterlaced = isInterlacedPicture(reformInfo.getVideoFrameInfo(dts).pic);
             }
             if (hasInterlaced) {
-                ctx.warnF(_T("[MPEG-2部分エンコード] patch %d/%d: progressive映像にインタレpictureが混在するため、patch範囲をインタレとしてエンコードします"),
+                ctx.warnF(_T("[部分エンコード] patch %d/%d: progressive映像にインタレpictureが混在するため、patch範囲をインタレとしてエンコードします"),
                     (int)i + 1, (int)plan.patches.size());
                 patchFormat.progressive = false;
                 writerFormat.progressive = false;
@@ -775,9 +774,9 @@ void buildOutput(
     outputIo.checkResult(
         avformat_write_header(output.get(), nullptr), "MPEG-TSヘッダを書けません");
 
-    ctx.infoF(_T("[MPEG-2部分エンコード] 統合開始: 元映像COPYと再エンコードpatchをMPEG-TSへ統合し、メモリ上で同時検証します (入力 %d picture、出力予定 %d picture)"),
+    ctx.infoF(_T("[部分エンコード] 統合開始: 元映像と再エンコードpatchをMPEG-TSへ統合します (入力 %d picture、出力予定 %d picture)"),
         (int)plan.actions.size(), (int)plan.outputEntries.size());
-    ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture、検証 0/%d picture"),
+    ctx.progressF(_T("[部分エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture、検証 0/%d picture"),
         (int)plan.actions.size(), (int)plan.outputEntries.size(),
         (int)plan.outputEntries.size());
 
@@ -811,7 +810,7 @@ void buildOutput(
                 entry.pts90k, entry.dts90k, (int)data.size(), fnv1a(data.data(), (int)data.size())
             };
             outputIo.checkResult(av_write_frame(output.get(), patchPacket.get()),
-                "MPEG-TS patch packetを書けません");
+                "MPEG-TS patch packetを書きこめません");
             outputIo.pushExpectation(std::move(expected));
             outputEntryIndex++;
         }
@@ -849,7 +848,7 @@ void buildOutput(
             if (outputEntryIndex >= plan.outputEntries.size()
                 || plan.outputEntries[outputEntryIndex].kind != Mpeg2PartialAction::COPY
                 || plan.outputEntries[outputEntryIndex].localDts != filePacketIndex) {
-                THROW(FormatException, "COPY pictureと出力符号化順のmappingが不一致です");
+                THROW(FormatException, "copy pictureと出力符号化順のmappingが不一致です");
             }
             const auto& entry = plan.outputEntries[outputEntryIndex];
             const auto hash = fnv1a(packet->data, packet->size);
@@ -875,7 +874,7 @@ void buildOutput(
                 ? 100.0 : 100.0 * filePacketIndex / plan.actions.size();
             const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                 now - mergeStart).count();
-            ctx.progressF(_T("[MPEG-2部分エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、検証 %d/%d picture、経過 %lld秒"),
+            ctx.progressF(_T("[部分エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、検証 %d/%d picture、経過 %lld秒"),
                 filePacketIndex, (int)plan.actions.size(), progress,
                 (int)outputEntryIndex, (int)plan.outputEntries.size(),
                 (int)outputIo.verifiedPictures(), (int)plan.outputEntries.size(),
@@ -904,9 +903,9 @@ void buildOutput(
 
     const auto mergeElapsed = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - mergeStart).count();
-    ctx.infoF(_T("[MPEG-2部分エンコード] 統合・検証完了: %d picture、PTS/DTS・size・hash不一致0 (経過 %lld秒)"),
+    ctx.infoF(_T("[部分エンコード] 統合・検証完了: %d picture (経過 %lld秒)"),
         (int)outputEntryIndex, (long long)mergeElapsed);
-    ctx.progressF(_T("[MPEG-2部分エンコード] 統合・検証完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture、検証 %d/%d picture"),
+    ctx.progressF(_T("[部分エンコード] 統合・検証完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture、検証 %d/%d picture"),
         (int)plan.actions.size(), (int)plan.actions.size(),
         (int)outputEntryIndex, (int)plan.outputEntries.size(),
         (int)outputIo.verifiedPictures(), (int)plan.outputEntries.size());
@@ -934,7 +933,7 @@ void BuildMpeg2PartialEncodePlan(
     }
 
     std::vector<bool> keepMask(displayFrames.size(), false);
-    // COPY pictureが使う出力PTS。符号化picture本来の表示開始時刻(originalFramePTS)基準。
+    // copy pictureが使う出力PTS。符号化picture本来の表示開始時刻(originalFramePTS)基準。
     std::vector<int64_t> outputDisplayPts(displayFrames.size(), AV_NOPTS_VALUE);
     // patchが使う表示グリッド。RFFでは1符号化pictureが複数の表示エントリに展開され、
     // originalFramePTSが重複するので、patchはこちら(等間隔のpts)に載せる(§19.7)。
@@ -981,7 +980,7 @@ void BuildMpeg2PartialEncodePlan(
     // 表示エントリに展開されるため、カット点がその途中に落ちてkeepとdropに
     // 割れることがある。3:2プルダウンなら4符号化picture→5表示エントリで、
     // エントリ間5箇所のうち1箇所がPIC_BFF_RFFの内側なので約20%の確率で起きる。
-    // 割れたpictureをそのままCOPYするとdropすべき表示エントリまで出力されるので、
+    // 割れたpictureをそのままcopyするとdropすべき表示エントリまで出力されるので、
     // 必ずpatch側で扱う。§20参照。
     std::vector<uint8_t> codedKeepFlags(codedFrameCount, 0); // bit0: keepあり、bit1: dropあり
     for (int display = 0; display < (int)displayFrames.size(); display++) {
@@ -997,7 +996,7 @@ void BuildMpeg2PartialEncodePlan(
     // 各カット境界の左右で必要になるpatch範囲を表示順で求める。
     // restoreI / lastAnchor には isFullyKept を要求する。割れたpictureを
     // lastAnchorにすると、それを参照するB pictureの参照先がpatchに置き換わって
-    // 壊れる。復帰点も同様に、割れたpictureをCOPY開始点にするとdrop側の表示
+    // 壊れる。復帰点も同様に、割れたpictureをcopy開始点にするとdrop側の表示
     // エントリまで出てしまう。探索でこれらを飛ばせば、割れたpictureのkeep側
     // エントリは自動的にpatch範囲へ入る(§20)。
     for (const auto& run : runs) {
@@ -1044,12 +1043,12 @@ void BuildMpeg2PartialEncodePlan(
     plan.dtsFrameStart = frameRange.first;
     plan.actions.assign(codedFrameCount, Mpeg2PartialAction::DROP);
     std::vector<int> firstDisplay(codedFrameCount, -1);
-    std::vector<int> keepState(codedFrameCount, -1); // 0: DROP、1: COPY
+    std::vector<int> keepState(codedFrameCount, -1); // 0: DROP、1: copy
     std::vector<bool> patchMask(displayFrames.size(), false);
     for (const auto& patch : plan.patches) {
         std::fill(patchMask.begin() + patch.first, patchMask.begin() + patch.last, true);
     }
-    std::vector<int> patchState(codedFrameCount, -1); // 0: COPY候補、1: patch
+    std::vector<int> patchState(codedFrameCount, -1); // 0: copy候補、1: patch
     for (int display = 0; display < (int)displayFrames.size(); display++) {
         const int localDts = displayLocalDts[display];
         if (firstDisplay[localDts] < 0) {
@@ -1061,8 +1060,8 @@ void BuildMpeg2PartialEncodePlan(
             if (patchState[localDts] >= 0 && patchState[localDts] != currentPatchState) {
                 // patch範囲の端はrestoreI/lastAnchor探索の結果であり、探索は
                 // 符号化pictureの先頭/末尾の表示エントリでしか止まらないので、
-                // 同一pictureがpatchとCOPYに分かれることは構造上ありえない。
-                THROW(FormatException, "同一符号化pictureがpatchとCOPYに分かれています");
+                // 同一pictureがpatchとcopyに分かれることは構造上ありえない。
+                THROW(FormatException, "同一符号化pictureがpatchとcopyに分かれています");
             }
             patchState[localDts] = currentPatchState;
         }
@@ -1075,7 +1074,7 @@ void BuildMpeg2PartialEncodePlan(
         }
     }
 
-    // patchに置き換えるpictureはCOPY対象から外す。
+    // patchに置き換えるpictureはcopy対象から外す。
     for (int localDts = 0; localDts < codedFrameCount; localDts++) {
         if (patchState[localDts] == 1) {
             keepState[localDts] = 0;
@@ -1088,14 +1087,14 @@ void BuildMpeg2PartialEncodePlan(
         }
     }
 
-    // COPYをDTS順に走査し、表示範囲を追い越す直前へpatchをまとめて挿入する。
+    // copyをDTS順に走査し、表示範囲を追い越す直前へpatchをまとめて挿入する。
     size_t patchIndex = 0;
     // patchは表示エントリ単位で1 pictureを出力するので、PTSは等間隔の表示グリッド
     // (displayGridPts)に載せる。ただしそのままだとPIC_BFF系のhalfDelay分だけ
-    // COPY側(originalFramePTS基準)とずれるため、patch先頭のずれ量を全体に足して
+    // copy側(originalFramePTS基準)とずれるため、patch先頭のずれ量を全体に足して
     // 接合させる。RFF以外では両者の差がpatch内で一定なので、結果は
     // outputDisplayPtsと完全に一致する(既存挙動の非回帰)。
-    // RFFでは1符号化pictureごとにhalfDelayが変わるため、patch終端とCOPYの接合は
+    // RFFでは1符号化pictureごとにhalfDelayが変わるため、patch終端とcopyの接合は
     // 最大半フレームずれる(§19.7)。
     //
     // anchorShiftの基準は「符号化pictureの先頭表示エントリ」に限る。
@@ -1103,7 +1102,7 @@ void BuildMpeg2PartialEncodePlan(
     // 継続エントリではPIC_BFF_RFFの2枚目が -T/2、PIC_FRAME_DOUBLINGの2枚目が -T、
     // TRIPLINGの3枚目が -2T と符号が反転する。keepとdropに割れたpictureのkeep側は
     // 継続エントリなので、そこを基準にするとpatch全体が最大2フレーム手前へずれて
-    // 直前のCOPY pictureとPTSが衝突する。COPY側はfirstDisplay(=先頭エントリ)を
+    // 直前のcopy pictureとPTSが衝突する。copy側はfirstDisplay(=先頭エントリ)を
     // 使うので、基準を揃えれば隣接間隔は必ず T - T/2 = T/2 > 0 で閉じる(§20)。
     // 現行で成立しているケースではpatch.firstが必ず先頭エントリなので非回帰。
     auto pushPatchEntries = [&](size_t index) {
@@ -1134,7 +1133,7 @@ void BuildMpeg2PartialEncodePlan(
         }
         const int display = firstDisplay[localDts];
         if (display < 0 || outputDisplayPts[display] == AV_NOPTS_VALUE) {
-            THROW(FormatException, "COPY pictureの表示順PTSを取得できません");
+            THROW(FormatException, "copy pictureの表示順PTSを取得できません");
         }
         plan.outputEntries.push_back({
             Mpeg2PartialAction::COPY, localDts, -1, -1, outputDisplayPts[display], 0
@@ -1186,7 +1185,7 @@ void BuildMpeg2PartialEncodePlan(
             plan.actions[displayLocalDts[display]] == Mpeg2PartialAction::COPY;
         if (keepMask[display] != (copied || patchMask[display])
             || (copied && patchMask[display])) {
-            THROW(FormatException, "keep表示位置とCOPY/patchプランが1:1対応していません");
+            THROW(FormatException, "keep表示位置とcopy/patchプランが1:1対応していません");
         }
     }
 }
@@ -1204,7 +1203,7 @@ void RunMpeg2PartialEncode(
     try {
         Mpeg2PartialEncodePlan plan;
         BuildMpeg2PartialEncodePlan(reformInfo, key, plan);
-        ctx.infoF(_T("[MPEG-2部分エンコード] プラン: patch %d区間、COPY %d picture、出力 %d picture、keep %d表示位置、境界割れpicture %d"),
+        ctx.infoF(_T("[部分エンコード] プラン: patch %d区間、copy %d picture、出力 %d picture、keep %d表示位置、境界割れpicture %d"),
             (int)plan.patches.size(),
             (int)std::count(plan.actions.begin(), plan.actions.end(), Mpeg2PartialAction::COPY),
             (int)plan.outputEntries.size(),
@@ -1214,7 +1213,7 @@ void RunMpeg2PartialEncode(
             ctx, setting, reformInfo, key, plan, outputPath);
         buildOutput(ctx, setting.getIntVideoFilePath(key.video), outputPath,
             reformInfo, plan, patchData);
-        ctx.infoF(_T("[MPEG-2部分エンコード] %d pictureを出力しました"),
+        ctx.infoF(_T("[部分エンコード] %d pictureを出力しました"),
             (int)plan.outputEntries.size());
     } catch (...) {
         // 中途半端な出力ファイルを残さない。
