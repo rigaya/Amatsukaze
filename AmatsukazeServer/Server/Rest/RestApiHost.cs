@@ -552,8 +552,7 @@ namespace Amatsukaze.Server.Rest
                     Targets = data.Targets != null
                         ? data.Targets.Select(t => new Amatsukaze.Server.AddQueueItem
                         {
-                            Path = t.Path,
-                            Hash = t.Hash
+                            Path = t.Path
                         }).ToList()
                         : new List<Amatsukaze.Server.AddQueueItem>(),
                     Outputs = data.Outputs != null

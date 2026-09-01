@@ -945,32 +945,13 @@ namespace Amatsukaze.Server
 
             try
             {
-                bool hashEnabled = (item.IsCheck == false && item.Hash != null && profile.DisableHashCheck == false);
                 // システムデフォルトエンコーディングで変換不可なファイル名の場合もコピー
-                bool needCopy = hashEnabled || !IsEncodableString(srcpath + ";" + dstpath);
+                bool needCopy = !IsEncodableString(srcpath + ";" + dstpath);
                 if (needCopy)
                 {
-                    // ハッシュがある（ネットワーク経由）の場合はローカルにコピー
-                    // NASとエンコードPCが同じ場合はローカルでのコピーとなってしまうが
-                    // そこだけ特別処理するのは大変なので、全部同じようにコピーする
-
                     tmpBase = Util.CreateTmpFile(server.AppData_.setting.WorkPath);
                     localsrc = tmpBase + "-in" + Path.GetExtension(srcpath);
-                    string name = Path.GetFileName(srcpath);
-
-                    if(hashEnabled)
-                    {
-                        byte[] hash = await HashUtil.CopyWithHash(srcpath, localsrc);
-                        if (hash.SequenceEqual(item.Hash) == false)
-                        {
-                            File.Delete(localsrc);
-                            return FailLogItem(item, item.Profile.Name, "コピーしたファイルのハッシュが一致しません", now, now);
-                        }
-                    }
-                    else
-                    {
-                        await CopyFileAsync(srcpath, localsrc);
-                    }
+                    await CopyFileAsync(srcpath, localsrc);
                     srcpathOrg = srcpath; // もともとのファイル名を記憶
                     srcpath = localsrc;
                     localdst = tmpBase + "-out";
@@ -1217,23 +1198,13 @@ namespace Amatsukaze.Server
                             }
                         }
 
-                        // ハッシュがある（ネットワーク経由）の場合はリモートにコピー
                         if (needCopy)
                         {
                             log.SrcPath = item.SrcPath;
                             for (int i = 0; i < log.OutPath.Count; i++)
                             {
                                 string outpath = dstpath + log.OutPath[i].Substring(localdst.Length);
-                                if (hashEnabled)
-                                {
-                                    var hash = await HashUtil.CopyWithHash(log.OutPath[i], outpath);
-                                    string name = Path.GetFileName(outpath);
-                                    HashUtil.AppendHash(Path.Combine(Path.GetDirectoryName(item.DstPath), "_encoded.hash"), name, hash);
-                                }
-                                else
-                                {
-                                    await CopyFileAsync(log.OutPath[i], outpath);
-                                }
+                                await CopyFileAsync(log.OutPath[i], outpath);
                                 File.Delete(log.OutPath[i]);
                                 log.OutPath[i] = outpath;
                             }

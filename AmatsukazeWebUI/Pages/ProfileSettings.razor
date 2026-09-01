@@ -932,7 +932,6 @@ else
         <h4>詳細設定</h4>
         <table class="table">
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("SplitSub")" @onchange="@(e => OnBoolChanged(e, "SplitSub"))" />メイン以外のフォーマットは結合しない</label></td></tr>
-            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableHashCheck")" @onchange="@(e => OnBoolChanged(e, "DisableHashCheck"))" />ネットワーク越しに転送する場合のハッシュチェックを無効にする</label></td></tr>
             <tr>
                 <th>追加ロゴ消し用のロゴ</th>
                 <td><textarea style="width: 100%; height: 60px;" @oninput="@(e => OnStringChanged(e, "AdditionalEraseLogo"))">@GetStringValue("AdditionalEraseLogo")</textarea></td>

@@ -23,12 +23,6 @@ namespace Amatsukaze.Server
 
         public List<QueueItem> Queue { get; private set; } = new List<QueueItem>();
 
-        class DirHash
-        {
-            public string DirPath;
-            public Dictionary<string, byte[]> HashDict = new Dictionary<string, byte[]>();
-        }
-
         class ConsoleText : ConsoleTextBase
         {
             private static log4net.ILog LOG = log4net.LogManager.GetLogger("UserScript.Add");
@@ -56,7 +50,6 @@ namespace Amatsukaze.Server
             }
         }
 
-        private Dictionary<string, DirHash> hashCache = new Dictionary<string, DirHash>();
         private ConsoleText consoleText = new ConsoleText();
 
         public List<string> TextLines { get { return consoleText.TextLines; } }
@@ -342,10 +335,6 @@ namespace Amatsukaze.Server
                         // ロゴ設定不足で保留になった場合は、設定に応じて自動補完を非同期実行する
                         server.TryKickAutoLogoPending(item);
                     }
-                    else if(item.IsSeparateHashRequired && item.Hash == null)
-                    {
-                        item.Reset();
-                    }
                     else
                     {
                         // OK
@@ -492,7 +481,6 @@ namespace Amatsukaze.Server
                                     {
                                         Mode = req.Mode,
                                         SrcPath = additem.Path,
-                                        Hash = additem.Hash,
                                         DstPath = Path.Combine(outitem.DstPath, outname),
                                         StreamFormat = (VideoStreamFormat)prog.Stream,
                                         ServiceId = prog.ServiceId,
@@ -585,7 +573,6 @@ namespace Amatsukaze.Server
                                 Mode = req.Mode,
                                 Profile = profile,
                                 SrcPath = additem.Path,
-                                Hash = additem.Hash,
                                 DstPath = "",
                                 StreamFormat = VideoStreamFormat.Unknown,
                                 ServiceId = -1,
@@ -711,51 +698,6 @@ namespace Amatsukaze.Server
                 // 変更
                 item.Profile = profile;
                 item.Priority = priority;
-
-                // ハッシュリスト取得
-                if (profile != server.PendingProfile && // ペンディングの場合は決定したときに実行される
-                    item.IsSeparateHashRequired)
-                {
-                    var hashpath = Path.GetDirectoryName(item.SrcPath) + ".hash";
-                    if(hashCache.ContainsKey(hashpath) == false)
-                    {
-                        if (File.Exists(hashpath) == false)
-                        {
-                            item.State = QueueState.LogoPending;
-                            item.FailReason = "ハッシュファイルがありません: " + hashpath;
-                            return true;
-                        }
-                        else
-                        {
-                            try
-                            {
-                                hashCache.Add(hashpath, new DirHash()
-                                {
-                                    DirPath = hashpath,
-                                    HashDict = HashUtil.ReadHashFile(hashpath)
-                                });
-                            }
-                            catch (IOException e)
-                            {
-                                item.State = QueueState.LogoPending;
-                                item.FailReason = "ハッシュファイルの読み込みに失敗: " + e.Message;
-                                return true;
-                            }
-                        }
-                    }
-
-                    var cacheItem = hashCache[hashpath];
-                    var filename = item.FileName;
-
-                    if(cacheItem.HashDict.ContainsKey(filename) == false)
-                    {
-                        item.State = QueueState.LogoPending;
-                        item.FailReason = "ハッシュファイルにこのファイルのハッシュがありません";
-                        return true;
-                    }
-
-                    item.Hash = cacheItem.HashDict[filename];
-                }
 
                 server.ReScheduleQueue();
                 UpdateQueueItem(item, waits);

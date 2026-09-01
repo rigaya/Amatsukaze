@@ -78,7 +78,7 @@ jobs:
           )
           call vcpkg\\bootstrap-vcpkg.bat
           set VCPKG_ROOT=%CD%\\vcpkg
-          vcpkg\\vcpkg install zlib:x64-windows-static openssl:x64-windows-static libjpeg-turbo:x64-windows-static
+          vcpkg\\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
           echo VCPKG_ROOT=%CD%\\vcpkg>> %GITHUB_ENV%
 
       - name: Download dependencies
@@ -161,6 +161,8 @@ jobs:
           mkdir package
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\base_pkg.7z "%BASE_PKG_URL%"
           7z x -y -o"%GITHUB_WORKSPACE%\package" "%DEPS%\base_pkg.7z"
+          rem 旧base packageに含まれる廃止済みツールを除去する
+          if exist package\\exe_files\\BatchHashChecker.exe del /f /q package\\exe_files\\BatchHashChecker.exe
 
       - name: Assemble package
         shell: cmd
@@ -251,6 +253,11 @@ jobs:
         shell: cmd
         run: |
           cd /d %GITHUB_WORKSPACE%
+          rem 廃止済みツールが配布物へ再混入していないことを保証する
+          if exist package\\exe_files\\BatchHashChecker.exe (
+            echo ERROR: package\\exe_files\\BatchHashChecker.exe remains in package.
+            exit /b 1
+          )
           set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"
           7z a -t7z -mx=9 -m0=lzma2 -mmt=on -ms=on -r "%PKG_NAME%" "%GITHUB_WORKSPACE%\package\*"
           echo pkg_name=%PKG_NAME%>> %GITHUB_OUTPUT%

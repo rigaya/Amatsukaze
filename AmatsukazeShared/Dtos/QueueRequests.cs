@@ -14,7 +14,6 @@ namespace Amatsukaze.Shared
     public class AddQueueItem
     {
         public string? Path { get; set; }
-        public byte[]? Hash { get; set; }
     }
 
     public class OutputInfo

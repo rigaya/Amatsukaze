@@ -477,8 +477,6 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool SystemAviSynthPlugin { get; set; }
         [DataMember]
-        public bool DisableHashCheck { get; set; }
-        [DataMember]
         public bool EnableNicoJK { get; set; }
         [DataMember]
         public bool IgnoreNicoJKError { get; set; }
@@ -1061,7 +1059,6 @@ namespace Amatsukaze.Server
                 ? profile.MinOutputDuration.ToString()
                 : "既定値 (5)");
             keyValueBool("システムにインストールされているAviSynthプラグインを有効にする", profile.SystemAviSynthPlugin);
-            keyValueBool("ネットワーク越しに転送する場合のハッシュチェックを無効にする", profile.DisableHashCheck);
             keyValueBool("ログファイルを出力先に生成しない", profile.DisableLogFile);
             keyValueBool("一時ファイルを削除せずに残す", profile.NoRemoveTmp);
             keyValue("PMT更新によるCM認識", profile.EnablePmtCut
@@ -1434,8 +1431,6 @@ namespace Amatsukaze.Server
     {
         [DataMember]
         public string Path; // フルパス
-        [DataMember]
-        public byte[] Hash; // null可
     }
 
     [DataContract]
@@ -1532,8 +1527,6 @@ namespace Amatsukaze.Server
         public string SrcPath { get; set; }
         [DataMember]
         public string DstPath { get; set; }
-        [DataMember]
-        public byte[] Hash { get; set; }
         [DataMember]
         public QueueState State { get; set; }
         [DataMember]
@@ -1635,17 +1628,6 @@ namespace Amatsukaze.Server
         public bool IsOneSeg {
             get {
                 return ImageWidth <= 320 || ImageHeight <= 260;
-            }
-        }
-
-        // プロファイルが決定してる時だけ有効
-        public bool IsSeparateHashRequired
-        {
-            get
-            {
-                return Mode == ProcMode.Batch &&
-                    Profile.DisableHashCheck == false &&
-                    SrcPath.StartsWith("\\\\");
             }
         }
 

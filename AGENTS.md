@@ -151,7 +151,6 @@ Amatsukazeは以下のようにして構成されます。
   ```Amatsukaze/```の依存モジュール。原則ビルドするのみで開発/変更は行わない。
   
 - ```AmatsukazeUnitTest/```
-- ```BatchHashChecker/```
 - ```FileCutter/```
 - ```googletest/```
 - ```NicoJK18Client/```

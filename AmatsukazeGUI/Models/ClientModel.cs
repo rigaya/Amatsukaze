@@ -2109,7 +2109,6 @@ namespace Amatsukaze.Models
                 profile.EnableMaxFadeLength = data.Profile.EnableMaxFadeLength;
                 profile.MaxFadeLength = data.Profile.MaxFadeLength;
                 profile.SystemAviSynthPlugin = data.Profile.SystemAviSynthPlugin;
-                profile.DisableHashCheck = data.Profile.DisableHashCheck;
                 profile.Mpeg2DecoderInt = (int)data.Profile.Mpeg2Decoder;
                 profile.H264DecoderInt = (int)data.Profile.H264Deocder;
                 profile.OutputFormatInt = (int)data.Profile.OutputFormat;

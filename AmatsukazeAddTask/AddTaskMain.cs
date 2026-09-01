@@ -340,7 +340,6 @@ namespace Amatsukaze.AddTask
             if (!string.IsNullOrEmpty(option.FilePath))
             {
                 string srcpath = option.FilePath;
-                byte[] hash = null;
 
                 if (string.IsNullOrEmpty(option.NasDir) == false)
                 {
@@ -363,7 +362,11 @@ namespace Amatsukaze.AddTask
                     }
                     // NASにコピー
                     var remotepath = option.NasDir + Path.DirectorySeparatorChar + Path.GetFileName(srcpath);
-                    hash = await HashUtil.CopyWithHash(option.FilePath, remotepath);
+                    using (var src = File.OpenRead(option.FilePath))
+                    using (var dst = File.Create(remotepath))
+                    {
+                        await src.CopyToAsync(dst);
+                    }
                     srcpath = remotepath;
                     if (option.WithRelated)
                     {
@@ -414,7 +417,7 @@ namespace Amatsukaze.AddTask
                         }
                     },
                     Targets = new List<AddQueueItem>() {
-                        new AddQueueItem() { Path = srcpath, Hash = hash }
+                        new AddQueueItem() { Path = srcpath }
                     },
                     Mode = option.ProcMode,
                     RequestId = UniqueId(),

@@ -842,8 +842,6 @@
                     <StackPanel>
                         <CheckBox Height="16" Margin="0,3"  Content="メイン以外のフォーマットは結合しない"
                             IsChecked="{Binding Model.SelectedProfile.SplitSub, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                        <CheckBox Height="16" Margin="0,3"  Content="ネットワーク越しに転送する場合のハッシュチェックを無効にする"
-                              IsChecked="{Binding Model.SelectedProfile.DisableHashCheck, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBox Margin="0,3" Height="40" TextWrapping="Wrap"
                              Text="{Binding Model.SelectedProfile.AdditionalEraseLogo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="CM解析用のメインのロゴとは別に、ロゴ消し用のロゴを追加できます。"

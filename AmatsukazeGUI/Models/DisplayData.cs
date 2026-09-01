@@ -2445,18 +2445,6 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        #region DisableHashCheck変更通知プロパティ
-        public bool DisableHashCheck {
-            get { return Data.DisableHashCheck; }
-            set {
-                if (Data.DisableHashCheck == value)
-                    return;
-                Data.DisableHashCheck = value;
-                RaisePropertyChanged();
-            }
-        }
-        #endregion
-
         #region NoRemoveTmp変更通知プロパティ
         public bool NoRemoveTmp {
             get { return Data.NoRemoveTmp; }
