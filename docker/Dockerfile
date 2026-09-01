@@ -357,10 +357,12 @@ RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCR
 RUN wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260901-212333/x264_3223_amd64_linux.tar.xz -O x264.tar.xz \
     && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260901-212333/x265_4.3%2B22_amd64_linux.tar.xz -O x265.tar.xz \
     && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260901-212333/SvtAv1EncApp_4.2.0-107_amd64_linux_clang.tar.xz -O svt-av1.tar.xz \
+    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/x262_20260901.tar.gz -O x262.tar.gz \
     && tar -xf x264.tar.xz -C /app/exe_files \
     && tar -xf x265.tar.xz -C /app/exe_files \
     && tar -xf svt-av1.tar.xz -C /app/exe_files \
-    && rm x264.tar.xz x265.tar.xz svt-av1.tar.xz
+    && tar -xf x262.tar.gz -C /app/exe_files \
+    && rm x264.tar.xz x265.tar.xz svt-av1.tar.xz x262.tar.gz
 
 # ビルド段階から必要なファイルをコピー
 COPY --from=builder /usr/local/lib /usr/local/lib
