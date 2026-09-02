@@ -26,7 +26,7 @@ namespace {
 
 constexpr AVRational CLOCK_90K = { 1, MPEG_CLOCK_HZ };
 constexpr int64_t TIMESTAMP_MASK = (int64_t{ 1 } << 33) - 1;
-constexpr int MIN_copy_FRAMES = 30;
+constexpr int MIN_COPY_FRAMES = 30;
 constexpr int PROGRESS_LOG_INTERVAL_SECONDS = 1;
 
 struct KeepRun {
@@ -150,7 +150,7 @@ void mergePatches(
         const bool overlaps = !merged.empty() && patch.first <= merged.back().last;
         const bool hasShortcopyGap = !merged.empty()
             && patch.first >= merged.back().last
-            && patch.first - merged.back().last < MIN_copy_FRAMES
+            && patch.first - merged.back().last < MIN_COPY_FRAMES
             && std::all_of(keepMask.begin() + merged.back().last,
                 keepMask.begin() + patch.first, [](bool keep) { return keep; });
         if (overlaps || hasShortcopyGap) {
