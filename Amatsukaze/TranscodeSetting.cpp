@@ -8,6 +8,7 @@
 
 #include "TranscodeSetting.h"
 #include "EncoderOptionParser.h"
+#include <algorithm>
 #include <cmath>
 
 // カラースペース定義を使うため
@@ -406,6 +407,13 @@ static std::string escapeXmlAttr(const std::string& s) {
     return ret;
 }
 
+// mp4にmuxされる字幕(tx3g)があるかどうか
+// ASS/WebVTT/NicoJKはmp4には入れず別ファイルとして出力するため、対象はSRTのみ
+static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
+    return std::any_of(subsTitles.begin(), subsTitles.end(),
+        [](const tstring& title) { return title == _T("SRT"); });
+}
+
 /* static */ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const ENUM_ENCODER encoder,
     const std::pair<int, int>& userSAR,
@@ -444,10 +452,20 @@ static std::string escapeXmlAttr(const std::string& s) {
         bool needChapter = (chapterpath.size() > 0);
         bool needSubs = (inSubs.size() > 0);
         const bool needTimecode = (timecodepath.size() > 0);
+        // 字幕(tx3g)を入れる場合は -tight (サンプル単位インターリーブ) を指定する
+        // mp4boxの既定は0.5秒単位のインターリーブだが、1サンプルが数秒ある字幕のような
+        // 疎なトラックは「1周につき1サンプル」書き出されるため、映像より大幅に先行して
+        // ファイル前方に偏る。この状態でシークすると、プレイヤーが字幕を取りに行くために
+        // 数百MB単位の逆方向シークを繰り返し、字幕の更新が数秒〜数十秒止まる
+        const bool tightInterleave = hasMp4Subtitles(subsTitles);
 
         sb.clear();
         sb.append(_T("\"%s\""), mp4boxpath);
         sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
+        // timecodeがない場合は、この呼び出しが字幕入りの最終出力を書く
+        if (tightInterleave && !needTimecode) {
+            sb.append(_T(" -tight"));
+        }
         sb.append(_T(" -tmp \"%s\""), tmpdir);
         sb.append(_T(" -add \"%s#video:name=Video:forcesync"), inVideo);
         if (!encoderOutputInContainer) {
@@ -504,6 +522,10 @@ static std::string escapeXmlAttr(const std::string& s) {
         if (needChapter || needSubs) {
             // 字幕とチャプターを埋め込む
             sb.append(_T("\"%s\" -brand mp42 -ab mp41 -ab iso2"), mp4boxpath);
+            // timecodeがある場合は、こちらが字幕入りの最終出力を書く
+            if (tightInterleave) {
+                sb.append(_T(" -tight"));
+            }
             sb.append(_T(" -add \"%s\""), dst);
             sb.append(_T(" -tmp \"%s\""), tmpdir);
             for (int i = 0; i < (int)inSubs.size(); i++) {
