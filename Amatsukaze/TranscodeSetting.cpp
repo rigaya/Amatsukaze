@@ -461,9 +461,6 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     const std::vector<tstring>& subsTitles,
     const tstring& metapath,
     const bool tsreplaceRemoveTypeD,
-    bool tsreplaceEdgeTrim,
-    int64_t tsreplaceDelay,
-    int64_t tsreplaceFirstPTS,
     const tstring& tsreplaceCutList,
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
@@ -682,11 +679,6 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         sb.append(_T(" --replace-format %s"), tsreplaceMpegtsInput
             ? _T("mpegts")
             : (encoder == ENCODER_X262 ? _T("matroska") : _T("mp4")));
-        if (tsreplaceEdgeTrim) {
-            sb.append(_T(" --end-at-replace-eof"));
-            sb.append(_T(" --replace-delay %lld"), (long long)tsreplaceDelay);
-            sb.append(_T(" --replace-first-pts %lld"), (long long)tsreplaceFirstPTS);
-        }
         if (!tsreplaceCutList.empty()) {
             sb.append(_T(" --cut-list \"%s\""), tsreplaceCutList.c_str());
         }

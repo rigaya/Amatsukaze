@@ -7,7 +7,6 @@
 */
 
 #include "Muxer.h"
-#include <cmath>
 
 /* static */ ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting) {
     if (!setting.getUseMKVWhenSubExist() || setting.getFormat() == FORMAT_MKV) {
@@ -49,29 +48,9 @@ void AMTMuxder::mux(EncodeFileKey key,
     auto muxFormat = getActualOutputFormat(key, reformInfo_, setting_);
     auto vfmt = fileOut.vfmt;
 
-    bool tsreplaceEdgeTrim = false;
-    int64_t tsreplaceDelay = 0;
-    int64_t tsreplaceFirstPTS = 0;
     tstring tsreplaceCutList;
     if (muxFormat == FORMAT_TSREPLACE && (key.cm == CMTYPE_EDGE_TRIM || key.cm == CMTYPE_NONCM)) {
-        if (!fileIn.videoFrames.empty()) {
-            const auto& filterFrames = reformInfo_.getFilterSourceFrames(key.video);
-            int firstIndex = fileIn.videoFrames.front();
-            if (firstIndex >= 0 && firstIndex < (int)filterFrames.size()) {
-                double firstPts = filterFrames[firstIndex].pts;
-                double basePts = reformInfo_.getFirstDataPTS();
-                tsreplaceDelay = (int64_t)std::llround(firstPts - basePts);
-                tsreplaceFirstPTS = (int64_t)std::llround(firstPts) & ((1LL << 33) - 1);
-                if (tsreplaceDelay < 0) {
-                    tsreplaceDelay = 0;
-                }
-                tsreplaceEdgeTrim = true;
-            }
-        }
-    }
-    if (muxFormat == FORMAT_TSREPLACE && key.cm == CMTYPE_NONCM) {
         const auto manifest = reformInfo_.genTSReplaceCutManifest(key);
-        // 内側の削除区間がなければ cut mode に切り替えず、従来動作を維持する
         if (!manifest.empty()) {
             tsreplaceCutList = setting_.getTmpTSReplaceCutListPath(key);
             WriteUTF8File(tsreplaceCutList, manifest);
@@ -286,8 +265,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
-        setting_.getTsreplaceRemoveTypeD(), tsreplaceEdgeTrim, tsreplaceDelay, tsreplaceFirstPTS,
-        tsreplaceCutList,
+        setting_.getTsreplaceRemoveTypeD(), tsreplaceCutList,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());
@@ -345,7 +323,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()), false,
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
-        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, false, 0, 0, tstring(),
+        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, tstring(),
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());

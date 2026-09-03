@@ -1165,7 +1165,7 @@ void BuildMpeg2PartialEncodePlan(
     const int64_t firstDts = displayOrderPicturePts.front() - frameDuration;
     if (firstDts < 0) {
         // 元TSのPTSがほぼ0という極端な素材でのみ発生する。δシフトで回避する案は
-        // Muxer側の--replace-first-pts/--replace-delayとの整合が取れないため
+        // Muxer側のカットリストで指定する先頭トリムPTSとの整合が取れないため
         // 不採用としており(§18 表11)、ここはエラー停止とする。
         THROW(FormatException, "出力DTSが負になります");
     }

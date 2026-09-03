@@ -455,7 +455,7 @@ private:
     void genCaptionStream();
 
 public:
-    // tsreplace 用カットリストを生成する。内側の削除区間がなければ空文字列を返す
+    // tsreplace 用カットリストを生成する。出力フレームがなければ空文字列を返す
     std::string genTSReplaceCutManifest(const EncodeFileKey& key) const;
 
     // WebVTT生成 (tsreadexのトレースとb24tovttを使用)

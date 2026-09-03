@@ -1528,30 +1528,30 @@ std::vector<StreamReformInfo::KeepSegment> StreamReformInfo::getKeepSegments(con
 
 std::string StreamReformInfo::genTSReplaceCutManifest(const EncodeFileKey& key) const {
     const auto keepSegs = getKeepSegments(key);
-    if (keepSegs.size() < 2) {
+    if (keepSegs.empty()) {
         return std::string();
     }
+    const double outputEndPts = keepSegs.back().end;
 
-    StringBuilder cuts;
     const int64_t timestampMask = (1LL << 33) - 1;
+    const auto pts33 = [timestampMask](double pts) {
+        return (int64_t)std::llround(pts) & timestampMask;
+    };
+
+    StringBuilder manifest;
+    manifest.append("# tsreplace-cut-v2\n");
+    manifest.append("timebase=90000\n");
+    manifest.append("cut -1 %lld\n", (long long)pts33(keepSegs.front().start));
     for (size_t i = 1; i < keepSegs.size(); i++) {
         const int64_t absoluteStart = (int64_t)std::llround(keepSegs[i - 1].end);
         const int64_t absoluteEnd = (int64_t)std::llround(keepSegs[i].start);
         if (absoluteStart < absoluteEnd) {
-            const int64_t start = absoluteStart & timestampMask;
-            const int64_t end = absoluteEnd & timestampMask;
-            cuts.append("cut %lld %lld\n", (long long)start, (long long)end);
+            manifest.append("cut %lld %lld\n",
+                (long long)(absoluteStart & timestampMask),
+                (long long)(absoluteEnd & timestampMask));
         }
     }
-    const auto cutLines = cuts.str();
-    if (cutLines.empty()) {
-        return std::string();
-    }
-
-    StringBuilder manifest;
-    manifest.append("# tsreplace-cut-v2\n");
-    manifest.append("timebase=90000\n\n");
-    manifest.append("%s", cutLines.c_str());
+    manifest.append("cut %lld -1\n", (long long)pts33(outputEndPts));
     return manifest.str();
 }
 
