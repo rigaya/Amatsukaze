@@ -541,9 +541,10 @@ private:
         // Shift_JIS → UNICODE
         if (dwDstLen < 1)
             return -1;
-        char cShiftJIS[2];
+        char cShiftJIS[3];
         cShiftJIS[0] = (char)First;
         cShiftJIS[1] = (char)Second;
+        cShiftJIS[2] = '\0';
 #ifdef _MSC_VER
         // Shift_JIS = Code page 932
         int Length = ::MultiByteToWideChar(932, MB_PRECOMPOSED, cShiftJIS, 2, lpszDst, dwDstLen);
