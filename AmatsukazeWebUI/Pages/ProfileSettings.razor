@@ -256,9 +256,9 @@ else
                     </select>
                     @if (IsMpeg2PartialVisible())
                     {
-                        <label style="margin-left: 8px;" title="MPEG-2のCMカット境界周辺だけをx262で再エンコードします。TS (replace)・CMをカット・チャプター/CM解析が必要です。">
+                        <label style="margin-left: 8px;" title="再エンコード範囲をカット境界周辺に抑え、それ以外の映像を無劣化でコピーします。現状はMPEG-2入力とx262、TS (replace)・CMをカット・チャプター/CM解析が必要です。">
                             <input type="checkbox" checked="@GetBoolValue("Mpeg2Partial")" @onchange="OnMpeg2PartialChanged" />
-                            部分エンコード
+                            カット境界のみ再エンコード
                         </label>
                     }
                 </td>

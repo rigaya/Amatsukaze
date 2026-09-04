@@ -248,7 +248,7 @@ public:
     // 中間映像ファイルに属するDTS順フレーム番号の半開区間
     std::pair<int, int> getVideoFrameRange(int videoFileIndex) const;
 
-    // genWebVTT、tsreplace、部分エンコードで共通に使う保持区間を返す
+    // genWebVTT、tsreplace、カット境界再エンコードで共通に使う保持区間を返す
     std::vector<KeepSegment> getKeepSegments(const EncodeFileKey& key) const;
 
     // video frame index (DTS順) -> encoder index

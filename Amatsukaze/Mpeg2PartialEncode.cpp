@@ -246,7 +246,7 @@ tstring makePatchEncoderArgs(
     }
     const uint8_t profileAndLevel = format.mpeg2ProfileAndLevelIndication;
     if ((profileAndLevel & 0x80) != 0) {
-        THROW(FormatException, "部分エンコードは4:2:2 Profileに対応していません");
+        THROW(FormatException, "カット境界再エンコードは4:2:2 Profileに対応していません");
     }
     const tchar* profile = nullptr;
     switch ((profileAndLevel >> 4) & 0x07) {
@@ -255,7 +255,7 @@ tstring makePatchEncoderArgs(
     case 5: profile = _T("simple"); break;
     default:
         THROWF(FormatException,
-            "部分エンコードはprofile_and_level_indication=0x%02XのProfileに対応していません",
+            "カット境界再エンコードはprofile_and_level_indication=0x%02XのProfileに対応していません",
             profileAndLevel);
     }
     const tchar* level = nullptr;
@@ -267,7 +267,7 @@ tstring makePatchEncoderArgs(
     case 0x02: level = _T("highp"); break;
     default:
         THROWF(FormatException,
-            "部分エンコードはprofile_and_level_indication=0x%02XのLevelに対応していません",
+            "カット境界再エンコードはprofile_and_level_indication=0x%02XのLevelに対応していません",
             profileAndLevel);
     }
     const int maxrateKbps = (int)(
@@ -341,7 +341,7 @@ std::vector<PatchEncodedData> encodePatches(
             _T("%s.patch%d.m2v"), outputPath.c_str(), (int)i);
         ctx.registerTmpFile(patchPath);
         const int frames = patch.last - patch.first;
-        ctx.infoF(_T("[部分エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
+        ctx.infoF(_T("[カット境界再エンコード] patch %d/%d: 表示順 [%d,%d) %dフレーム"),
             (int)i + 1, (int)plan.patches.size(), patch.first, patch.last, frames);
 
         // progressive_sequence=1 なら frame picture は PIC_FRAME/DOUBLING/TRIPLING に
@@ -358,7 +358,7 @@ std::vector<PatchEncodedData> encodePatches(
                 hasInterlaced = isInterlacedPicture(reformInfo.getVideoFrameInfo(dts).pic);
             }
             if (hasInterlaced) {
-                ctx.warnF(_T("[部分エンコード] patch %d/%d: progressive映像にインタレpictureが混在するため、patch範囲をインタレとしてエンコードします"),
+                ctx.warnF(_T("[カット境界再エンコード] patch %d/%d: progressive映像にインタレpictureが混在するため、patch範囲をインタレとしてエンコードします"),
                     (int)i + 1, (int)plan.patches.size());
                 patchFormat.progressive = false;
                 writerFormat.progressive = false;
@@ -369,7 +369,7 @@ std::vector<PatchEncodedData> encodePatches(
         ctx.info(_T("[エンコーダ起動]"));
         ctx.infoF(_T("%s"), encoderArgs.c_str());
         // 第5引数disablePowerThrottoling=trueは固定。
-        // 部分エンコードのpatchは必ずx262(=CPUエンコーダ)なので、
+        // カット境界再エンコードのpatchは必ずx262(=CPUエンコーダ)なので、
         // TranscodeManager側の判定(x264/x262/x265/SVT-AV1ならtrue)と一致する。
         // なお最終引数sarInContainerOnly=false(既定)のため、Y4Mヘッダには実SAR(例 A4:3)が載る。
         // 一方コマンドラインの--sarにはDARを渡している(x262のMPEG-2時の仕様、§8.2/§16.8)。
@@ -650,7 +650,7 @@ public:
         constexpr int BUFFER_SIZE = 128 * 1024;
         auto* buffer = (uint8_t*)av_malloc(BUFFER_SIZE);
         if (buffer == nullptr) {
-            THROW(RuntimeException, "部分エンコード出力用AVIOバッファを確保できません");
+            THROW(RuntimeException, "カット境界再エンコード出力用AVIOバッファを確保できません");
         }
         context_ = avio_alloc_context(
             buffer, BUFFER_SIZE, 1, this, nullptr,
@@ -658,7 +658,7 @@ public:
             nullptr);
         if (context_ == nullptr) {
             av_free(buffer);
-            THROW(RuntimeException, "部分エンコード出力用AVIOContextを確保できません");
+            THROW(RuntimeException, "カット境界再エンコード出力用AVIOContextを確保できません");
         }
         context_->seekable = 0;
     }
@@ -693,7 +693,7 @@ public:
 
     void finish() {
         avio_flush(context_);
-        checkResult(context_->error, "部分エンコード出力をflushできません");
+        checkResult(context_->error, "カット境界再エンコード出力をflushできません");
         file_.flush();
         verifier_.finish();
         finished_ = true;
@@ -774,9 +774,9 @@ void buildOutput(
     outputIo.checkResult(
         avformat_write_header(output.get(), nullptr), "MPEG-TSヘッダを書けません");
 
-    ctx.infoF(_T("[部分エンコード] 統合開始: 元映像と再エンコードpatchをMPEG-TSへ統合します (入力 %d picture、出力予定 %d picture)"),
+    ctx.infoF(_T("[カット境界再エンコード] 統合開始: 元映像と再エンコードpatchをMPEG-TSへ統合します (入力 %d picture、出力予定 %d picture)"),
         (int)plan.actions.size(), (int)plan.outputEntries.size());
-    ctx.progressF(_T("[部分エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture、検証 0/%d picture"),
+    ctx.progressF(_T("[カット境界再エンコード] 統合中: 入力 0/%d picture (0.0%%)、出力 0/%d picture、検証 0/%d picture"),
         (int)plan.actions.size(), (int)plan.outputEntries.size(),
         (int)plan.outputEntries.size());
 
@@ -874,7 +874,7 @@ void buildOutput(
                 ? 100.0 : 100.0 * filePacketIndex / plan.actions.size();
             const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                 now - mergeStart).count();
-            ctx.progressF(_T("[部分エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、検証 %d/%d picture、経過 %lld秒"),
+            ctx.progressF(_T("[カット境界再エンコード] 統合中: 入力 %d/%d picture (%.1f%%)、出力 %d/%d picture、検証 %d/%d picture、経過 %lld秒"),
                 filePacketIndex, (int)plan.actions.size(), progress,
                 (int)outputEntryIndex, (int)plan.outputEntries.size(),
                 (int)outputIo.verifiedPictures(), (int)plan.outputEntries.size(),
@@ -903,9 +903,9 @@ void buildOutput(
 
     const auto mergeElapsed = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - mergeStart).count();
-    ctx.infoF(_T("[部分エンコード] 統合・検証完了: %d picture (経過 %lld秒)"),
+    ctx.infoF(_T("[カット境界再エンコード] 統合・検証完了: %d picture (経過 %lld秒)"),
         (int)outputEntryIndex, (long long)mergeElapsed);
-    ctx.progressF(_T("[部分エンコード] 統合・検証完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture、検証 %d/%d picture"),
+    ctx.progressF(_T("[カット境界再エンコード] 統合・検証完了: 入力 %d/%d picture (100.0%%)、出力 %d/%d picture、検証 %d/%d picture"),
         (int)plan.actions.size(), (int)plan.actions.size(),
         (int)outputEntryIndex, (int)plan.outputEntries.size(),
         (int)outputIo.verifiedPictures(), (int)plan.outputEntries.size());
@@ -1191,7 +1191,7 @@ void BuildMpeg2PartialEncodePlan(
 }
 
 // フル再エンコードへのフォールバックは廃止した(§20)。
-// 素材起因で起こりうる条件は全て部分エンコード側で処理し、それ以外は
+// 素材起因で起こりうる条件は全てカット境界再エンコード側で処理し、それ以外は
 // 実装の不整合を意味するのでエラー停止させる。黙って全編再エンコードに
 // 落ちると、遅くなった理由がユーザーから見えないため。
 void RunMpeg2PartialEncode(
@@ -1203,7 +1203,7 @@ void RunMpeg2PartialEncode(
     try {
         Mpeg2PartialEncodePlan plan;
         BuildMpeg2PartialEncodePlan(reformInfo, key, plan);
-        ctx.infoF(_T("[部分エンコード] プラン: patch %d区間、copy %d picture、出力 %d picture、keep %d表示位置、境界割れpicture %d"),
+        ctx.infoF(_T("[カット境界再エンコード] プラン: patch %d区間、copy %d picture、出力 %d picture、keep %d表示位置、境界割れpicture %d"),
             (int)plan.patches.size(),
             (int)std::count(plan.actions.begin(), plan.actions.end(), Mpeg2PartialAction::COPY),
             (int)plan.outputEntries.size(),
@@ -1213,7 +1213,7 @@ void RunMpeg2PartialEncode(
             ctx, setting, reformInfo, key, plan, outputPath);
         buildOutput(ctx, setting.getIntVideoFilePath(key.video), outputPath,
             reformInfo, plan, patchData);
-        ctx.infoF(_T("[部分エンコード] %d pictureを出力しました"),
+        ctx.infoF(_T("[カット境界再エンコード] %d pictureを出力しました"),
             (int)plan.outputEntries.size());
     } catch (...) {
         // 中途半端な出力ファイルを残さない。

@@ -1979,7 +1979,7 @@ void DoBadThing() {
 
         if (setting.isMpeg2PartialEnabled()) {
             // フル再エンコードへのフォールバックは廃止した。失敗は例外で上位へ伝える。
-            ctx.infoF(_T("[MPEG-2部分エンコード開始] %d/%d %s"),
+            ctx.infoF(_T("[カット境界再エンコード開始] %d/%d %s"),
                 i + 1, (int)keys.size(), CMTypeToString(key.cm));
             RunMpeg2PartialEncode(ctx, setting, reformInfo, key);
             const auto bitrate = argGen->printBitrate(ctx, key);

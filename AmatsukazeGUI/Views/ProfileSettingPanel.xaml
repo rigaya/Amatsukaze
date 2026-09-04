@@ -358,10 +358,10 @@
                        SelectedItem="{Binding Model.SelectedProfile.OutputMask, Mode=TwoWay}"
                        ToolTip="CMカットの精度は100%ではありません"
                     />
-                    <CheckBox Margin="10,3,0,3" VerticalAlignment="Center" Content="部分エンコード"
+                    <CheckBox Margin="10,3,0,3" VerticalAlignment="Center" Content="カット境界のみ再エンコード"
                               IsChecked="{Binding Model.SelectedProfile.Mpeg2Partial, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               Visibility="{Binding Model.SelectedProfile.Mpeg2PartialVisible, Converter={StaticResource BoolVisibilityConverter}}"
-                              ToolTip="MPEG-2のCMカット境界周辺だけをx262で再エンコードします。TS (replace)・CMをカット・チャプター/CM解析が必要です。" />
+                              ToolTip="再エンコード範囲をカット境界周辺に抑え、それ以外の映像を無劣化でコピーします。現状はMPEG-2入力とx262、TS (replace)・CMをカット・チャプター/CM解析が必要です。" />
                 </StackPanel>
 
                 <StackPanel Grid.Row="11" Grid.Column="0">

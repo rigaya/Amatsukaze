@@ -82,7 +82,7 @@ static void printHelp(const tchar* bin) {
         "  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
         "  --tsreplace-remove-typed  tsreplace実行時に--remove-typedを指定する\n"
         "  --mux-ts-temp        tsreplace時に入力TSの一時コピーを作成してmuxを高速化する\n"
-        "  --mpeg2-partial      MPEG-2のCMカット境界周辺だけをx262で再エンコードする\n"
+        "  --mpeg2-partial      カット境界再エンコードを有効にする（現在はMPEG-2/x262のみ）\n"
         "  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
         "  -pf|--postfilter <パス>  ポストフィルタAvisynthスクリプトへのパス[]\n"
         "  --mpeg2decoder <デコーダ>  MPEG2用デコーダ[default]\n"
@@ -749,9 +749,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.muxerPath = search(conf.muxerPath);
         conf.timelineditorPath = search(conf.timelineditorPath);
         // x262のTS (replace)出力は、raw MPEG-2 ESにmkvmergeで時刻情報を付けてから
-        // matroskaとしてtsreplaceへ渡す(makeMuxerArgs)。ただし部分エンコードは
+        // matroskaとしてtsreplaceへ渡す(makeMuxerArgs)。ただしカット境界再エンコードは
         // timestamp付きMPEG-TSを直接tsreplaceへ渡すのでmkvmergeを一切使わない。
-        // フル再エンコードへのフォールバックも廃止したため、部分エンコード有効時は
+        // フル再エンコードへのフォールバックも廃止したため、カット境界再エンコード有効時は
         // 必ずこの経路になる。
         if (conf.encoder == ENCODER_X262 && conf.format == FORMAT_TSREPLACE
             && !conf.mpeg2Partial && !File::exists(conf.mkvmergePath)) {
