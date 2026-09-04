@@ -1881,6 +1881,7 @@ namespace Amatsukaze.Models
             EnableAudioEncode = false;
             NoDelogo = true;
             TwoPass = false;
+            DisableChapter = false;
         }
 
         private void UpdateMpeg2PartialAvailability()

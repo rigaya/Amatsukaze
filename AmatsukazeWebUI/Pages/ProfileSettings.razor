@@ -887,7 +887,7 @@ else
         <table class="table">
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetMoveInputFileValue()" @onchange="OnMoveInputFileChanged" />処理の終了後、入力ファイルを別フォルダに移動する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetMoveInputFileValue())" />関連ファイル(*.err,*.program.txtなど)もコピー/移動する</label></td></tr>
-            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" />チャプター・CM解析を無効にする</label></td></tr>
+            <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" disabled="@GetBoolValue("Mpeg2Partial")" />チャプター・CM解析を無効にする</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("OutputChapter")" @onchange="@(e => OnBoolChanged(e, "OutputChapter"))" disabled="@(GetBoolValue("DisableChapter"))" />チャプターを別ファイルに出力する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoDrcsMap")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoDrcsMap"))" />マッピングにないDRCS外字は無視する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("LooseLogoDetection")" @onchange="@(e => OnBoolChanged(e, "LooseLogoDetection"))" />ロゴ検出判定しきい値を低くする</label></td></tr>
@@ -1545,6 +1545,7 @@ else
         SetNodeValue("EnableAudioEncode", JsonValue.Create(false));
         SetNodeValue("NoDelogo", JsonValue.Create(true));
         SetNodeValue("TwoPass", JsonValue.Create(false));
+        SetNodeValue("DisableChapter", JsonValue.Create(false));
     }
 
     private void DisableMpeg2PartialIfUnavailable()

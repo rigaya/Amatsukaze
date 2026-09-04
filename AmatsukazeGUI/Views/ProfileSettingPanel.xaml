@@ -764,7 +764,8 @@
                               IsEnabled="{Binding Model.SelectedProfile.MoveInputFile}"
                               ToolTip="これらのファイルも一緒にコピー・移動されるようになります。" />
                     <CheckBox Height="16" Margin="0,3"  Content="チャプター・CM解析を無効にする" 
-                              IsChecked="{Binding Model.SelectedProfile.DisableChapter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                              IsChecked="{Binding Model.SelectedProfile.DisableChapter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding Model.SelectedProfile.Mpeg2PartialConstraintsEnabled}" />
                     <CheckBox Height="16" Margin="0,3"  Content="チャプターを別ファイルに出力する" 
                               IsChecked="{Binding Model.SelectedProfile.OutputChapter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               IsEnabled="{Binding Model.SelectedProfile.DisableChapter, Converter={StaticResource InverseBooleanConverter}}"
