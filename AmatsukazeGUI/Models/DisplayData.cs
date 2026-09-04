@@ -1882,6 +1882,7 @@ namespace Amatsukaze.Models
             NoDelogo = true;
             TwoPass = false;
             DisableChapter = false;
+            TsreplaceRemoveTypeD = true;
         }
 
         private void UpdateMpeg2PartialAvailability()

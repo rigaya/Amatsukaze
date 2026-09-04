@@ -239,7 +239,7 @@ else
                 <tr class="profile-check-row">
                     <td colspan="2">
                         <label class="settings-check">
-                            <input type="checkbox" checked="@GetBoolValue("TsreplaceRemoveTypeD")" @onchange="@(e => OnBoolChanged(e, "TsreplaceRemoveTypeD"))" />
+                            <input type="checkbox" checked="@GetBoolValue("TsreplaceRemoveTypeD")" @onchange="@(e => OnBoolChanged(e, "TsreplaceRemoveTypeD"))" disabled="@GetBoolValue("Mpeg2Partial")" />
                             データ放送を削除する
                         </label>
                     </td>
@@ -256,7 +256,7 @@ else
                     </select>
                     @if (IsMpeg2PartialVisible())
                     {
-                        <label style="margin-left: 8px;" title="再エンコード範囲をカット境界周辺に抑え、それ以外の映像を無劣化でコピーします。現状はMPEG-2入力とx262、TS (replace)・CMをカット・チャプター/CM解析が必要です。">
+                        <label style="margin-left: 8px;" title="再エンコード範囲をカット境界周辺に抑え、それ以外の映像を無劣化でコピーします。チャプター・CM解析とデータ放送の削除は自動的に有効になります。">
                             <input type="checkbox" checked="@GetBoolValue("Mpeg2Partial")" @onchange="OnMpeg2PartialChanged" />
                             カット境界のみ再エンコード
                         </label>
@@ -1546,6 +1546,7 @@ else
         SetNodeValue("NoDelogo", JsonValue.Create(true));
         SetNodeValue("TwoPass", JsonValue.Create(false));
         SetNodeValue("DisableChapter", JsonValue.Create(false));
+        SetNodeValue("TsreplaceRemoveTypeD", JsonValue.Create(true));
     }
 
     private void DisableMpeg2PartialIfUnavailable()
