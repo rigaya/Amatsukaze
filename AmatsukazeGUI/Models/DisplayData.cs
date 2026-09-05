@@ -1823,6 +1823,30 @@ namespace Amatsukaze.Models
         #endregion
 
         #region MinOutputDuration変更通知プロパティ
+        public bool EnableMinOutputDuration
+        {
+            get { return Data.MinOutputDuration > 0; }
+            set
+            {
+                var enabled = Data.MinOutputDuration > 0;
+                if (enabled == value)
+                    return;
+                Data.MinOutputDuration = value ? 5 : 0;
+                RaisePropertyChanged();
+                RaisePropertyChanged("MinOutputDuration");
+                RaisePropertyChanged("MinOutputDurationInput");
+            }
+        }
+
+        public int MinOutputDurationInput
+        {
+            get { return Data.MinOutputDuration > 0 ? Data.MinOutputDuration : 5; }
+            set
+            {
+                MinOutputDuration = Math.Max(1, value);
+            }
+        }
+
         public int MinOutputDuration
         {
             get { return Data.MinOutputDuration; }
@@ -1830,7 +1854,13 @@ namespace Amatsukaze.Models
             {
                 if (Data.MinOutputDuration == value)
                     return;
+                var enabled = Data.MinOutputDuration > 0;
                 Data.MinOutputDuration = value;
+                if (enabled != (Data.MinOutputDuration > 0))
+                {
+                    RaisePropertyChanged("EnableMinOutputDuration");
+                }
+                RaisePropertyChanged("MinOutputDurationInput");
                 RaisePropertyChanged();
             }
         }

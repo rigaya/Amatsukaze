@@ -924,7 +924,14 @@ else
             </tr>
             <tr>
                 <th>出力する最短区間</th>
-                <td><input type="number" min="0" style="width: 80px;" value="@GetIntValue("MinOutputDuration")" @oninput="@(e => OnIntChanged(e, "MinOutputDuration"))" /> 秒（0は既定値の5秒）</td>
+                <td>
+                    <label>
+                        <input type="checkbox" checked="@IsMinOutputDurationEnabled()" @onchange="OnMinOutputDurationEnabledChanged" />
+                        最短区間の設定
+                    </label>
+                    <input type="number" min="1" style="width: 80px; margin-left: 6px;" value="@GetMinOutputDurationInputValue()" @oninput="@(e => OnIntChanged(e, "MinOutputDuration"))" disabled="@(!IsMinOutputDurationEnabled())" />
+                    <span> 秒</span>
+                </td>
             </tr>
         </table>
 
@@ -1424,6 +1431,23 @@ else
     {
         var value = e.Value is bool b && b;
         SetNodeValue(name, JsonValue.Create(value));
+    }
+
+    private bool IsMinOutputDurationEnabled()
+    {
+        return GetIntValue("MinOutputDuration") > 0;
+    }
+
+    private int GetMinOutputDurationInputValue()
+    {
+        var value = GetIntValue("MinOutputDuration");
+        return value > 0 ? value : 5;
+    }
+
+    private void OnMinOutputDurationEnabledChanged(ChangeEventArgs e)
+    {
+        var value = e.Value is bool b && b;
+        SetNodeValue("MinOutputDuration", JsonValue.Create(value ? GetMinOutputDurationInputValue() : 0));
     }
 
     private void OnMoveInputFileChanged(ChangeEventArgs e)
