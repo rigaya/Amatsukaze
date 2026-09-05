@@ -191,7 +191,13 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
   - x262
 
-    x262はディストリビューションのパッケージでは提供されないため、x262をビルドして実行ファイルへのパスをAmatsukazeの基本設定で指定します。x262プロファイルの出力形式はMKVまたはTS (replace)のみです。
+    ```bash
+    (git clone https://code.videolan.org/videolan/x262.git \
+      && cd x262 \
+      && ./configure --enable-mpeg2 \
+      && make -j$(nproc) \
+      && sudo install -D -t /usr/local/bin x262)
+    ```
   
   - qsvencc, nvencc, vceencc
   
