@@ -133,7 +133,10 @@ std::vector<BitrateZone> sliceBitrateZones(const std::vector<BitrateZone>& zones
     return result;
 }
 
-tstring createChunkTimecodeFile(const tstring& basePath, int chunkIndex, int startFrame, int endFrame, const std::vector<double>& timeCodes, AMTContext& ctx) {
+// includeEndTimeを指定すると終端時刻(endFrame番目)も書き出す。
+// エンコーダフィルタへ--tcfile-inで渡す場合、最終フレームのdurationが
+// 直前フレームの流用ではなく実測値になるため精度が上がる
+tstring createChunkTimecodeFile(const tstring& basePath, int chunkIndex, int startFrame, int endFrame, const std::vector<double>& timeCodes, AMTContext& ctx, bool includeEndTime = false) {
     if (basePath.size() == 0 || timeCodes.size() == 0 || endFrame <= startFrame) {
         return _T("");
     }
@@ -143,7 +146,8 @@ tstring createChunkTimecodeFile(const tstring& basePath, int chunkIndex, int sta
     const char header[] = "# timecode format v2\n";
     file.write(MemoryChunk((uint8_t*)header, sizeof(header) - 1));
     const double base = timeCodes[startFrame];
-    for (int frame = startFrame; frame < endFrame; frame++) {
+    const int lastFrame = (includeEndTime && endFrame < (int)timeCodes.size()) ? endFrame : endFrame - 1;
+    for (int frame = startFrame; frame <= lastFrame; frame++) {
         const int64_t value = (int64_t)std::llround(timeCodes[frame] - base);
         std::string line = std::to_string((long long)value);
         line.push_back('\n');
@@ -205,7 +209,8 @@ void concatenateEncoderFilterTimecodes(
     const tstring& finalPath,
     const std::vector<tstring>& chunkPaths,
     const std::vector<int>& startFrames,
-    const VideoInfo& vi) {
+    const VideoInfo& vi,
+    const std::vector<double>& timeCodes) {
     if (chunkPaths.size() != startFrames.size() || vi.fps_numerator <= 0) {
         THROW(RuntimeException, "エンコーダフィルタのチャンクタイムコードを連結できません");
     }
@@ -221,7 +226,11 @@ void concatenateEncoderFilterTimecodes(
             boundaries.push_back((int)lines.size());
         }
         const double base = timestamps.front();
-        const double chunkStart = startFrames[p] * 1000.0 * vi.fps_denominator / vi.fps_numerator;
+        // チャンクの開始時刻は入力フレームの時刻。
+        // AVS由来のVFRタイムコードがあれば、CFR換算ではなく実時刻を使う
+        const double chunkStart = (startFrames[p] < (int)timeCodes.size())
+            ? timeCodes[startFrames[p]]
+            : startFrames[p] * 1000.0 * vi.fps_denominator / vi.fps_numerator;
         for (const auto timestamp : timestamps) {
             lines.push_back(std::to_string(timestamp - base + chunkStart));
             lines.back().push_back('\n');
@@ -535,10 +544,17 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         auto chunkZones = useCMChunkSplit
             ? std::vector<BitrateZone>()
             : sliceBitrateZones(bitrateZones, chunk.startFrame, chunk.endFrame);
+        // AVS由来のVFRタイムコードは、エンコーダフィルタが別プロセスの場合は
+        // フィルタの入力(--tcfile-in)として渡す。フィルタはフレーム数を変え得るため
+        // 本エンコーダに渡してもフレームの対応が取れないためで、
+        // 最終的なタイムコードはフィルタ出力(--timecode)をmuxerへ渡すことで反映される
         tstring chunkTimecodePath;
         if (timecodePath.size() > 0) {
-            chunkTimecodePath = createChunkTimecodeFile(timecodePath, passIndex * numChunks + i, chunk.startFrame, chunk.endFrame, timeCodes, ctx);
+            chunkTimecodePath = createChunkTimecodeFile(timecodePath, passIndex * numChunks + i, chunk.startFrame, chunk.endFrame, timeCodes, ctx,
+                setting_.isEncoderFilterSeparate());
         }
+        const tstring chunkEncoderTimecodePath = setting_.isEncoderFilterSeparate() ? tstring() : chunkTimecodePath;
+        const tstring chunkFilterInputTimecodePath = setting_.isEncoderFilterSeparate() ? chunkTimecodePath : tstring();
         chunk.outputPath = appendChunkSuffix(baseOutputPath, passIndex * numChunks + i);
         ctx.registerTmpFile(chunk.outputPath);
         if (outputFilterTimecode) {
@@ -554,10 +570,10 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         chunk.args = argGen.GenEncoderOptions(
             encoderFrameCount,
             encoderInputFormat, std::move(chunkZones), vfrBitrateScale,
-            chunkTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath, chunk.isCM);
+            chunkEncoderTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, chunk.outputPath, chunk.isCM);
         chunk.filterArgs = setting_.isEncoderFilterSeparate()
-            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, chunk.filterTimecodePath,
-                setting_.getEncoder())
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_,
+                chunkFilterInputTimecodePath, chunk.filterTimecodePath, setting_.getEncoder())
             : tstring();
         chunkOutputs.push_back(chunk.outputPath);
     }
@@ -842,7 +858,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
         }
 
         if (outputFilterTimecode) {
-            concatenateEncoderFilterTimecodes(encoderFilterTimecodePath, chunkFilterTimecodePaths, chunkStartFrames, vi_);
+            concatenateEncoderFilterTimecodes(encoderFilterTimecodePath, chunkFilterTimecodePaths, chunkStartFrames, vi_, timeCodes);
         }
 
         // エンコード全体の経過時間を計測
@@ -973,6 +989,12 @@ void AMTFilterVideoEncoder::encode(
     const tstring encoderFilterTimecodePath = setting_.isEncoderFilterSeparate()
         ? setting_.getEncoderFilterTimecodePath(key)
         : tstring();
+    // AVS由来のVFRタイムコードは、エンコーダフィルタが別プロセスの場合は
+    // フィルタの入力(--tcfile-in)として渡す。フィルタはフレーム数を変え得るため
+    // 本エンコーダに渡してもフレームの対応が取れないためで、
+    // 最終的なタイムコードはフィルタ出力(--timecode)をmuxerへ渡すことで反映される
+    const tstring encoderTimecodePath = setting_.isEncoderFilterSeparate() ? tstring() : timecodePath;
+    const tstring filterInputTimecodePath = setting_.isEncoderFilterSeparate() ? timecodePath : tstring();
 
     const int npass = (int)passList.size();
     for (int i = 0; i < npass; i++) {
@@ -1002,7 +1024,7 @@ void AMTFilterVideoEncoder::encode(
         tstring args = argGen.GenEncoderOptions(
             encoderFrameCount,
             encoderInputFormat, bitrateZones, vfrBitrateScale,
-            timecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, baseOutputPath);
+            encoderTimecodePath, vfrTimingFps, key, currentPass, serviceId, eoInfo, baseOutputPath);
 
         // 並列パイプ用の準備 (OS非依存)
         const bool useParallel = nativeParallel;
@@ -1046,8 +1068,8 @@ void AMTFilterVideoEncoder::encode(
 
         // 初期化（子プロセス起動）
         const tstring filterArgs = setting_.isEncoderFilterSeparate()
-            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_, encoderFilterTimecodePath,
-                setting_.getEncoder())
+            ? makeEncoderFilterArgs(setting_.getEncoderFilterPath(), setting_.getEncoderFilterOptions(), outfmt_,
+                filterInputTimecodePath, encoderFilterTimecodePath, setting_.getEncoder())
             : tstring();
         encoder_ = std::unique_ptr<Y4MEncodeWriter>(new Y4MEncodeWriter(ctx, argsWithParallel, vi_, outfmt_, disablePowerThrottoling, false, StdRedirectedSubProcess::LineCallback(), setting_.getSARInContainerOnly(), filterArgs));
         // 親側の読み取りハンドルは不要なので直ちに閉じる（子には継承済み）

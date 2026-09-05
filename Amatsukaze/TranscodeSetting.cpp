@@ -302,7 +302,8 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     const tstring& binpath,
     const tstring& options,
     const VideoFormat& fmt,
-    const tstring& timecodepath,
+    const tstring& inputTimecodePath,
+    const tstring& outputTimecodePath,
     ENUM_ENCODER outputEncoder) {
     StringBuilderT sb;
 
@@ -314,6 +315,12 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     // タイムベースを明示指定する (理由はmakeEncoderArgsのコメント参照)
     // エンコーダフィルタは常にHWエンコーダなので無条件に付加する
     sb.append(_T(" --timebase %d/%d"), HWENC_TIMEBASE_NUM, HWENC_TIMEBASE_DEN);
+    if (!inputTimecodePath.empty()) {
+        // AVSフィルタ由来のVFRタイムコードを入力フレームの時刻として与える。
+        // Amatsukazeはy4mをヘッダFPSのCFRとして書き出すため、時刻を伝える手段はこれしかない。
+        // フィルタがフレーム数を変えても、出力タイムコードは入力の時間軸上に得られる。
+        sb.append(_T(" --tcfile-in \"%s\""), inputTimecodePath);
+    }
     if (!options.empty()) {
         sb.append(_T(" %s"), options);
     }
@@ -325,8 +332,8 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
         sb.append(_T(" --y4m-timestamp"));
     }
     sb.append(_T(" -o -"));
-    if (!timecodepath.empty()) {
-        sb.append(_T(" --timecode \"%s\""), timecodepath);
+    if (!outputTimecodePath.empty()) {
+        sb.append(_T(" --timecode \"%s\""), outputTimecodePath);
     }
     // 進捗表示と結果サマリだけ抑制し、
     // フィルタが実際にどう適用されたか、どのGPUが選択されたかはログに残す
@@ -1660,6 +1667,15 @@ bool ConfigWrapper::isEncoderSupportVFR() const {
     return conf.encoder == ENCODER_X264 || conf.encoder == ENCODER_X262;
 }
 
+// 目標ビットレートにVFR補正(vfrBitrateScale)を掛ける必要があるか
+// 本エンコーダがタイムコードを受け取れば、エンコーダ側が実時間でレート制御するため補正は不要。
+// ただしエンコーダフィルタが別プロセスの場合、フィルタがフレーム数を変え得るため
+// 本エンコーダにはタイムコードを渡しておらず、VFR対応エンコーダであっても補正が必要
+// (ゾーンの生成・適用条件はフィルタ出力のフレーム番号を基準とするため、こちらとは分けている)
+bool ConfigWrapper::isVFRBitrateScaleNeeded() const {
+    return isEncoderSupportVFR() == false || isEncoderFilterSeparate();
+}
+
 bool ConfigWrapper::isBitrateCMEnabled() const {
     return conf.bitrateCM != 1.0 || conf.cmQualityOffset != 0.0;
 }
@@ -1688,8 +1704,8 @@ tstring ConfigWrapper::getOptions(
     double targetBitrate = 0;
     if (conf.autoBitrate) {
         targetBitrate = conf.bitrate.getTargetBitrate(srcFormat, srcBitrate);
-        if (isEncoderSupportVFR() == false) {
-            // タイムコード非対応エンコーダにおけるビットレートのVFR調整
+        if (isVFRBitrateScaleNeeded()) {
+            // 本エンコーダにタイムコードを渡さない場合のビットレートのVFR調整
             targetBitrate *= vfrBitrateScale;
         }
         if ((key.cm == CMTYPE_CM && !isZoneAvailable()) || chunkIsCM) {

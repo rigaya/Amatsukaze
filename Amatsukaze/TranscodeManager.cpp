@@ -1338,15 +1338,22 @@ double EncoderArgumentGenerator::getSourceBitrate(int fileId) const {
 // 各ゾーンに、本エンコーダのタイムライン上の表示時刻を設定する
 // エンコーダフィルタが別プロセスの場合、フレーム番号ではずれるため時刻でゾーンを指定する
 // Amatsukazeはy4mをヘッダFPSのCFRとして書き出し(Y4MWriterはFRAME行に時刻を付加しない)、
-// エンコーダフィルタはその時刻軸のままXts=で本エンコーダへ伝えるため、フレーム番号/FPSでよい
-// (AVS由来のVFRタイムコードとエンコーダフィルタは併用不可のため、VFRを考慮する必要はない)
+// エンコーダフィルタはその時刻軸のままXts=で本エンコーダへ伝えるため、通常はフレーム番号/FPSでよい
+// ただしAVS由来のVFRタイムコードがある場合はCFR換算ではずれるため、実時刻をそのまま使う
 static void FillBitrateZoneTimes(
     std::vector<BitrateZone>& zones,
-    const VideoInfo& outvi) {
+    const VideoInfo& outvi,
+    const std::vector<double>& timeCodes) {
     const double tick = (double)outvi.fps_denominator / outvi.fps_numerator;
+    const auto frameToSec = [&](int frame) -> double {
+        if (frame >= 0 && frame < (int)timeCodes.size()) {
+            return timeCodes[frame] / 1000.0;
+        }
+        return frame * tick;
+    };
     for (auto& zone : zones) {
-        zone.startSec = zone.startFrame * tick;
-        zone.endSec = zone.endFrame * tick;
+        zone.startSec = frameToSec(zone.startFrame);
+        zone.endSec = frameToSec(zone.endFrame);
     }
 }
 
@@ -1395,7 +1402,7 @@ static void FillBitrateZoneTimes(
         }
     }
     if (setting.isZoneTimeBased()) {
-        FillBitrateZoneTimes(bitrateZones, outvi);
+        FillBitrateZoneTimes(bitrateZones, outvi, timeCodes);
     }
     return bitrateZones;
 }
@@ -2028,15 +2035,9 @@ void DoBadThing() {
 
             if (timeCodes.size() > 0) {
                 // フィルタによるVFRが有効
-                // AVS由来のVFRタイムコードはフレーム番号ベースのため、エンコーダフィルタで
-                // フレーム数が変わると本エンコーダの入力フレームと対応が取れなくなる
-                // フィルタの内容次第では変わらないが、内容に依存した判定は取りこぼすと
-                // 不整合に気づけないため、エンコーダフィルタ使用時は一律で併用不可とする
-                // なお、GUI/WebUIではAVSフィルタとエンコーダフィルタは排他選択のため通常該当しない
-                // (CLIから両方を指定した場合に備えた防御)
-                if (setting.isEncoderFilterSeparate()) {
-                    THROW(ArgumentException, "AVS由来のVFRタイムコードとエンコーダフィルタは併用できません");
-                }
+                // エンコーダフィルタ使用時は、このタイムコードをフィルタの--tcfile-inとして渡し、
+                // フィルタの出力タイムコード(--timecode)を最終的な時刻としてmuxerへ渡す
+                // (フィルタがフレーム数を変えても、出力は入力の時間軸上に得られる)
                 if (eoInfo.afsTimecode) {
                     THROW(ArgumentException, "エンコーダとフィルタの両方でVFRタイムコードが出力されています。");
                 }
@@ -2073,7 +2074,7 @@ void DoBadThing() {
             const bool cmZoneUnusable = !setting.isZoneAvailable()
                 || (setting.isEncoderFilterSeparate() && !setting.isZoneTimeBased());
             // 分割エンコードが可能な条件
-            // 2pass、およびAVS由来VFRとエンコーダフィルタの併用では分割エンコードができない
+            // 2passでは分割エンコードができない
             const bool canSplitEncode = isSoftwareSplitEncoder(setting.getEncoder()) && !setting.isTwoPass();
             // CM分離時はファイル単位でCM調整できるため、CMが混在するファイルのみ対象
             // (前後CMカットは中間のCMが残るため、CMを残す場合と同様に対象となる)
@@ -2132,7 +2133,10 @@ void DoBadThing() {
                     }
                 }
 
-                if (tcInfo.isVFR || fpsChanged) {
+                // 入力がAVS由来のVFRの場合、フィルタ出力の間隔が一定に見えても
+                // それは入力の時間軸(VFR)上の時刻なので、必ずタイムコードを反映する
+                const bool inputIsVFR = timeCodes.size() > 0;
+                if (tcInfo.isVFR || fpsChanged || inputIsVFR) {
                     if (setting.isFormatVFRSupported()) {
                         writeNormalizedEncoderFilterTimecode(encoderFilterTimecodePath, timestamps);
                         fileOut.timecode = encoderFilterTimecodePath;
@@ -2140,7 +2144,7 @@ void DoBadThing() {
                         // encoder filterのVFR timebaseは常に120000/1001とする。
                         fileOut.vfrTimingFps = 120;
                         ctx.info(_T("エンコーダフィルタのタイムコードを整数msに正規化しました (タイムベース: 120000/1001)"));
-                    } else if (tcInfo.isVFR) {
+                    } else if (tcInfo.isVFR || inputIsVFR) {
                         THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
                     } else if (fpsMul != fpsDiv) {
                         // VFR非対応フォーマットなのでタイムコードを反映できない。
@@ -2155,6 +2159,10 @@ void DoBadThing() {
                     }
                 }
             } else if (setting.isEncoderFilterSeparate()) {
+                if (timeCodes.size() > 0) {
+                    // 入力がVFRの場合、フィルタ出力のタイムコードがないと正しい時刻を復元できない
+                    THROW(RuntimeException, "エンコーダフィルタがタイムコードを出力しなかったため、VFRの時刻を反映できません");
+                }
                 ctx.warn(_T("エンコーダフィルタがタイムコードを出力しませんでした。"
                     _T("フレームレートの変化はコンテナのメタデータに反映されません")));
             }

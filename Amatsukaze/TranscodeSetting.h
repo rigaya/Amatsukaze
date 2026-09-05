@@ -109,7 +109,8 @@ tstring makeEncoderFilterArgs(
     const tstring& binpath,
     const tstring& options,
     const VideoFormat& fmt,
-    const tstring& timecodepath,
+    const tstring& inputTimecodePath,
+    const tstring& outputTimecodePath,
     ENUM_ENCODER outputEncoder);
 
 enum ENUM_AUDIO_ENCODER {
@@ -665,6 +666,9 @@ public:
     bool isZoneTimeBased() const;
 
     bool isEncoderSupportVFR() const;
+
+    // 目標ビットレートにVFR補正(vfrBitrateScale)を掛ける必要があるか
+    bool isVFRBitrateScaleNeeded() const;
 
     bool isBitrateCMEnabled() const;
 
