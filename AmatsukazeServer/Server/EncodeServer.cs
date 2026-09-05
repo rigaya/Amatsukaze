@@ -1226,37 +1226,7 @@ namespace Amatsukaze.Server
         struct EncodeExeFileInfo
         {
             public string Path;
-            public int[] version;
-        }
-        private static int[] GetEncoderExeVersionFromFilename(string filename, EncoderType type)
-        {
-            switch (type)
-            {
-                case EncoderType.x264:
-                    // x264はx264_3186_x64.exeのような形式なので、このうち3186をintに変換して返す
-                    var match = System.Text.RegularExpressions.Regex.Match(filename, @"x264_(\d+)_");
-                    if (match.Success)
-                    {
-                        return new int[] { int.Parse(match.Groups[1].Value), 0, 0, 0 };
-                    }
-                    break;
-                case EncoderType.x265:
-                    // x265はx265_3.6+7_x64.exeのような形式なので、このうち、3, 6, 7をintに変換して配列で返す
-                    match = System.Text.RegularExpressions.Regex.Match(filename, @"x265_(\d+)\.(\d+)\+(\d+)_");
-                    if (match.Success)
-                    {
-                        return new int[] { int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), 0, int.Parse(match.Groups[3].Value) };
-                    }
-                    break;
-                case EncoderType.SVTAV1:
-                    Version version;
-                    return SvtAv1Version.TryParseFilename(filename, out version)
-                        ? new int[] { version.Major, version.Minor, version.Build, version.Revision }
-                        : null;
-                default:
-                    break;
-            }
-            return null;
+            public Version Version;
         }
 
         private static string GetEncoderExePath(string basePath, EncoderType type)
@@ -1286,62 +1256,44 @@ namespace Amatsukaze.Server
                 if (fname.StartsWith(pattern) && fname.EndsWith(".exe"))
                 {
                     // バージョンを取得してリストに追加する
-                    int[] version = null;
+                    Version version = null;
                     if (type == EncoderType.SVTAV1)
                     {
                         // SVT-AV1はファイル名を優先し、解析できない場合だけ実行して確認する
-                        var svtVersion = SvtAv1Version.GetVersion(path);
-                        if (svtVersion != null)
-                        {
-                            version = new int[] { svtVersion.Major, svtVersion.Minor, svtVersion.Build, svtVersion.Revision };
-                        }
+                        version = SvtAv1Version.GetVersion(path);
                     }
                     else
                     {
                         try
                         {
                             var versionStr = FileVersionInfo.GetVersionInfo(path).FileVersion;
-                            version = versionStr.Split('.').Select(int.Parse).ToArray();
+                            version = EncoderExeVersion.ParseFileVersion(versionStr, type);
                         }
                         catch (Exception)
                         {
+                            // バージョンリソースを読み出せない実行ファイルもファイル名による判定を試す
+                        }
+                        if (version == null)
+                        {
                             // バージョン情報が取得できない場合はファイル名から取得
-                            try
-                            {
-                                version = GetEncoderExeVersionFromFilename(fname, type);
-                            }
-                            catch (Exception)
-                            { }
+                            version = EncoderExeVersion.ParseFilename(fname, type);
                         }
                     }
-                    exeList.Add(new EncodeExeFileInfo() { Path = path, version = version });
+                    exeList.Add(new EncodeExeFileInfo() { Path = path, Version = version });
                 }
             }
             // exeList内のバージョン情報を比較して最新のものを返す
-            var maxVersion = new int[] { 0, 0, 0, 0 };
+            var maxVersion = new Version(0, 0, 0, 0);
             string maxPath = null;
             foreach (var exe in exeList)
             {
-                if (exe.version == null)
+                if (exe.Version == null)
                 {
                     continue;
                 }
-                bool isNewer = false;
-                for (int i = 0; i < 4; i++)
+                if (exe.Version.CompareTo(maxVersion) > 0)
                 {
-                    if (exe.version[i] > maxVersion[i])
-                    {
-                        isNewer = true;
-                        break;
-                    }
-                    else if (exe.version[i] < maxVersion[i])
-                    {
-                        break;
-                    }
-                }
-                if (isNewer)
-                {
-                    maxVersion = exe.version;
+                    maxVersion = exe.Version;
                     maxPath = exe.Path;
                 }
             }
