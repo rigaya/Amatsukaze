@@ -52,10 +52,8 @@ RUN apt-get update && apt-get install -y \
     autoconf \
     automake \
     libtool \
-    openssl \
     zlib1g \
     libz-dev \
-    libssl-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && apt-get autoremove -y
@@ -266,7 +264,6 @@ RUN apt-get update && apt-get install -y \
         python3 \
         xz-utils \
         locales \
-        openssl \
         zlib1g \
         mkvtoolnix \
         opus-tools \
@@ -298,7 +295,6 @@ RUN apt-get update && apt-get install -y \
         autoconf \
         automake \
         libtool \
-        libssl-dev \
         libz-dev; \
     fi \
     && rm -rf /var/lib/apt/lists/* \

@@ -60,7 +60,6 @@ amatsukaze_deps = [
   ffmpeg_dep,
   avisynth_dep,
   turbojpeg_dep,
-  openssl_dep,
   zlib_dep,
   version_dep,
 ]

@@ -1016,7 +1016,6 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 - nicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass)
 - [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo)
 - [zlib](https://zlib.net/)
-- [OpenSSL](https://www.openssl.org/)
 - VC14ランタイム
 
 同梱AviSynthプラグイン

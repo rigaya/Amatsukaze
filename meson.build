@@ -36,10 +36,8 @@ ffmpeg_dep = [
 turbojpeg_dep = dependency('libturbojpeg', required : true)
 
 # プラットフォーム依存ライブラリ
-openssl_dep = dependency('', required : false)
 zlib_dep = dependency('', required : false)
 if host_machine.system() != 'windows'
-  openssl_dep = dependency('openssl', required : true, static : true)
   zlib_dep = dependency('zlib', required : true, static : true)
 endif
 

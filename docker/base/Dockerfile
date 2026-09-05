@@ -27,7 +27,6 @@ RUN apt update \
       autoconf \
       automake \
       libtool \
-      libssl-dev \
       libz-dev \
       build-essential \
       locales \

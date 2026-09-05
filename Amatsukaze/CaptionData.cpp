@@ -7,10 +7,7 @@
 */
 
 #include "CaptionData.h"
-#if defined(_WIN32) || defined(_WIN64)
-#include <Wincrypt.h>
-#else
-#include <openssl/md5.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 // Windows互換のRGBQUAD構造体を定義
 typedef struct {
     uint8_t rgbBlue;
@@ -19,6 +16,9 @@ typedef struct {
     uint8_t rgbReserved;
 } RGBQUAD;
 #endif
+extern "C" {
+#include <libavutil/md5.h>
+}
 
 /* static */ int CaptionFormat::GetStyle(const CAPTION_CHAR_DATA_DLL &style) {
     int ret = 0;
@@ -138,67 +138,19 @@ void CaptionItem::Write(const File& file) const {
         dwSizeImage = (dwSizeImage + 3) / 4 * 4;
     }
 
-    BOOL bRet = FALSE;
-#if defined(_WIN32) || defined(_WIN64)
-    // Windows版の実装（WinCrypt）
-    HCRYPTPROV hProv = NULL;
-    HCRYPTHASH hHash = NULL;
-    
-    if (!::CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-        hProv = NULL;
-        goto EXIT;
-    }
-    if (!::CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash)) {
-        hHash = NULL;
-        goto EXIT;
-    }
-    if (!::CryptHashData(hHash, bData, dwDataLen, 0)) goto EXIT;
-    DWORD dwHashLen = 16;
-    BYTE bHash[16];
-    if (!::CryptGetHashParam(hHash, HP_HASHVAL, bHash, &dwHashLen, 0)) goto EXIT;
+    // FFmpegはWindows/Linuxの両方で必須なため、libavutilのMD5実装を共通利用する。
+    constexpr size_t MD5_DIGEST_SIZE = 16;
+    constexpr size_t MD5_HEX_LENGTH = MD5_DIGEST_SIZE * 2;
+    uint8_t digest[MD5_DIGEST_SIZE];
+    av_md5_sum(digest, bData, dwDataLen);
 
     static const char* digits = "0123456789ABCDEF";
-    hash.resize(32);
-    for (int i = 0; i < 16; i++) {
-        hash[i * 2 + 0] = digits[bHash[i] >> 4];
-        hash[i * 2 + 1] = digits[bHash[i] & 0x0F];
-    }
-
-    bRet = TRUE;
-EXIT:
-    if (hHash) ::CryptDestroyHash(hHash);
-    if (hProv) ::CryptReleaseContext(hProv, 0);
-#else
-    // Linux版の実装（OpenSSL）
-    MD5_CTX md5Context;
-    unsigned char digest[16];
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    if (!MD5_Init(&md5Context)) {
-        goto EXIT;
-    }
-    
-    if (!MD5_Update(&md5Context, bData, dwDataLen)) {
-        goto EXIT;
-    }
-    
-    if (!MD5_Final(digest, &md5Context)) {
-        goto EXIT;
-    }
-    
-    // ハッシュ値を16進数文字列に変換
-    static const char* digits = "0123456789ABCDEF";
-    hash.resize(32);
-    for (int i = 0; i < 16; i++) {
+    hash.resize(MD5_HEX_LENGTH);
+    for (size_t i = 0; i < MD5_DIGEST_SIZE; i++) {
         hash[i * 2 + 0] = digits[digest[i] >> 4];
         hash[i * 2 + 1] = digits[digest[i] & 0x0F];
     }
-    #pragma GCC diagnostic pop
-    bRet = TRUE;
-EXIT:
-    // OpenSSLではコンテキストの明示的な解放は不要
-#endif
-    return bRet;
+    return TRUE;
 }
 
 /* static */ void SaveDRCSImage(const tstring& filename, const DRCS_PATTERN_DLL* pData) {

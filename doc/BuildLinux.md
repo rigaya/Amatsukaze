@@ -5,7 +5,7 @@
 ```bash
 sudo apt update
 sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool \
-    libssl-dev libz-dev
+    libz-dev
 ```
 次に .NET 10.0 SDKをインストールします。下記はUbuntu 24.04の例を示します。その他の環境については、[リンク先](https://learn.microsoft.com/ja-jp/dotnet/core/install/linux)を参照してください。
 
