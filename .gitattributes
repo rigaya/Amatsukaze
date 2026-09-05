@@ -6,7 +6,3 @@
 *.bash text eol=lf
 *.zsh text eol=lf
 *.fish text eol=lf
-
-# 既存の改行コードを維持して全行差分を防ぐ。
-Amatsukaze/StreamReform.cpp text eol=lf
-Amatsukaze/StreamReform.h text eol=lf
