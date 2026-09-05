@@ -1065,10 +1065,10 @@ bootstrap-vcpkg.bat
 vcpkg integrate install
 ```
 
-次にzlibをインストールします。
+次にzlibとlibjpeg-turboをインストールします。
 
 ```bat
-vcpkg install zlib:x64-windows-static
+vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
 ```
 
 AvisynthNeoが必要です。ソースを落として、ビルドしてください。
