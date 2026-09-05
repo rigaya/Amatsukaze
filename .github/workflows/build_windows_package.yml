@@ -94,6 +94,7 @@ jobs:
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x264.zip "%X264_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x265.zip "%X265_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x262.zip "%X262_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
           git clone --depth 1 --branch 0.05 --single-branch https://github.com/rigaya/SCRenamePy.git deps\\screname
           echo --- deps contents (after Download) ---
@@ -132,6 +133,8 @@ jobs:
           7z x -y -o"%DEPS%\x265" "%DEPS%\x265.zip"
           if not exist deps\\svt mkdir deps\\svt
           7z x -y -o"%DEPS%\svt" "%DEPS%\svt.zip"
+          if not exist deps\\x262 mkdir deps\\x262
+          7z x -y -o"%DEPS%\x262" "%DEPS%\x262.zip"
           if not exist deps\\nnedi3 mkdir deps\\nnedi3
           7z x -y -o"%DEPS%\nnedi3" "%DEPS%\nnedi3.zip"
           echo --- deps contents (after Extract) ---
@@ -243,6 +246,11 @@ jobs:
           for /r deps\\x264 %%f in (*.exe) do copy /y "%%f" package\\exe_files
           for /r deps\\x265 %%f in (*.exe) do copy /y "%%f" package\\exe_files
           for /r deps\\svt %%f in (*.exe) do copy /y "%%f" package\\exe_files
+          for /r deps\\x262 %%f in (*.exe) do copy /y "%%f" package\\exe_files
+          if not exist package\\exe_files\\x262*.exe (
+            echo ERROR: x262の実行ファイルをパッケージへ配置できませんでした。
+            exit /b 1
+          )
 
           rem ffmpeg dlls (search recursively - structure may vary)
           for /r ffmpeg_lgpl %%d in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do if exist "%%d" copy /y "%%d" package\\exe_files
