@@ -12,6 +12,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Threading.Tasks;
+using System.Windows.Data;
 
 namespace Amatsukaze.ViewModels
 {
@@ -80,6 +81,12 @@ namespace Amatsukaze.ViewModels
                     await RealCloseWindow();
                 });
                 await Server.Init();
+                // 接続一覧の変更と WPF の読み取りを同じロックで同期してから公開する。
+                if (Server.ClientManager != null)
+                {
+                    BindingOperations.EnableCollectionSynchronization(
+                        Server.ClientManager.ClientList, Server.ClientManager.ClientListSyncRoot);
+                }
                 RaisePropertyChanged("Server");
                 WindowCaption = "AmatsukazeServer" + Server.Version+"@" + Dns.GetHostName() + ":" + App.Option.ServerPort;
 

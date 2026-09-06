@@ -4282,10 +4282,18 @@ namespace Amatsukaze.Server
 
         private void PlaySound(string name)
         {
-            var localClientRunning = ClientManager?.HasLocalClient() ?? true;
-            if (localClientRunning == false)
+            try
             {
-                Util.PlayRandomSound(Path.Combine("sound", name));
+                var localClientRunning = ClientManager?.HasLocalClient() ?? true;
+                if (localClientRunning == false)
+                {
+                    Util.PlayRandomSound(Path.Combine("sound", name));
+                }
+            }
+            catch (Exception e)
+            {
+                // 通知音の失敗でエンコード結果を変更せず、状態通知を続行する。
+                Util.AddLog("通知音の処理に失敗: " + name, e);
             }
         }
 

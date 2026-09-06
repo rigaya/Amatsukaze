@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Amatsukaze.Lib;
 
@@ -18,17 +18,9 @@ namespace Amatsukaze.Server
         public string HostName { get; private set; }
         public int Port { get; private set; }
 
-        public IPEndPoint RemoteIP {
-            get {
-                return (IPEndPoint)client.Client.RemoteEndPoint;
-            }
-        }
-
-        public IPEndPoint LocalIP {
-            get {
-                return (IPEndPoint)client.Client.LocalEndPoint;
-            }
-        }
+        // 切断後も一時的な一覧から安全に参照できるよう、接続時の情報を保持する。
+        public IPEndPoint RemoteIP { get; }
+        public IPEndPoint LocalIP { get; }
 
         #region TotalSendCount変更通知プロパティ
         private int _TotalSendCount;
@@ -63,6 +55,8 @@ namespace Amatsukaze.Server
             this.manager = manager;
             this.client = client;
             this.stream = client.GetStream();
+            RemoteIP = (IPEndPoint)client.Client.RemoteEndPoint;
+            LocalIP = (IPEndPoint)client.Client.LocalEndPoint;
 
             var endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
             try
@@ -101,11 +95,8 @@ namespace Amatsukaze.Server
 
         public void Close()
         {
-            if (client != null)
-            {
-                client.Close();
-                client = null;
-            }
+            // 送受信と終了処理から同時に呼ばれても、一度だけ閉じる。
+            Interlocked.Exchange(ref client, null)?.Close();
         }
 
         public NetworkStream GetStream()
@@ -118,7 +109,10 @@ namespace Amatsukaze.Server
     {
         private TcpListener listener;
         private bool finished = false;
-        private List<Task> receiveTask = new List<Task>();
+        private readonly object clientListLock = new object();
+
+        // WPF の一覧読み取りにも、内部の追加・削除と同じ同期を適用する。
+        public object ClientListSyncRoot => clientListLock;
 
         public ObservableCollection<Client> ClientList { get; private set; }
 
@@ -130,6 +124,20 @@ namespace Amatsukaze.Server
             ClientList = new ObservableCollection<Client>();
         }
 
+        private Client[] GetClientSnapshot()
+        {
+            // 呼び出し元の処理中だけ使用し、フィールドやキャッシュには保存しない。
+            lock (clientListLock)
+            {
+                return ClientList.ToArray();
+            }
+        }
+
+        private int ClientCount
+        {
+            get { lock (clientListLock) { return ClientList.Count; } }
+        }
+
         public void Finish()
         {
             finished = true;
@@ -138,7 +146,7 @@ namespace Amatsukaze.Server
                 listener.Stop();
                 listener = null;
 
-                foreach (var client in ClientList)
+                foreach (var client in GetClientSnapshot())
                 {
                     client.Close();
                 }
@@ -168,10 +176,14 @@ namespace Amatsukaze.Server
                     while (true)
                     {
                         var client = new Client(await listener.AcceptTcpClientAsync(), this);
-                        Util.AddLog($"[ClientManager] 接続受付: {client.RemoteIP}, 現在クライアント数: {ClientList.Count}", null);
-                        ClientList.Add(client);
-                        Util.AddLog($"[ClientManager] 接続登録完了: {client.RemoteIP}, 登録後クライアント数: {ClientList.Count}", null);
-                        receiveTask.Add(client.Start());
+                        Util.AddLog($"[ClientManager] 接続受付: {client.RemoteIP}, 現在クライアント数: {ClientCount}", null);
+                        lock (clientListLock)
+                        {
+                            ClientList.Add(client);
+                        }
+                        Util.AddLog($"[ClientManager] 接続登録完了: {client.RemoteIP}, 登録後クライアント数: {ClientCount}", null);
+                        // 登録後に受信を開始する。終了時は Start 内で一覧から削除する。
+                        _ = client.Start();
                         errorCount = 0;
                     }
                 }
@@ -221,7 +233,7 @@ namespace Amatsukaze.Server
         public bool HasLocalClient()
         {
             IPHostEntry iphostentry = Dns.GetHostEntry(Dns.GetHostName());
-            return ClientList.Any(client => IsRemoteHost(iphostentry, client.RemoteIP.Address) == false);
+            return GetClientSnapshot().Any(client => IsRemoteHost(iphostentry, client.RemoteIP.Address) == false);
         }
 
         public byte[] GetMacAddress()
@@ -229,7 +241,7 @@ namespace Amatsukaze.Server
             // リモートのクライアントを見つけて、
             // 接続に使っているNICのMACアドレスを取得する
             IPHostEntry iphostentry = Dns.GetHostEntry(Dns.GetHostName());
-            foreach (var client in ClientList)
+            foreach (var client in GetClientSnapshot())
             {
                 if (IsRemoteHost(iphostentry, client.RemoteIP.Address))
                 {
@@ -243,28 +255,37 @@ namespace Amatsukaze.Server
         {
             byte[] bytes = RPCTypes.Serialize(id, obj);
             //Util.AddLog($"[ClientManager] 送信準備: {id}, バイト数: {bytes.Length}, クライアント数: {ClientList.Count}", null);
-            foreach (var client in ClientList.ToArray())
+            var clients = GetClientSnapshot();
+            try
             {
-                try
+                foreach (var client in clients)
                 {
-                    //Util.AddLog($"[ClientManager] 送信中: {id} -> {client.RemoteIP}", null);
-                    await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
-                    //Util.AddLog($"[ClientManager] 送信完了: {id} -> {client.RemoteIP}", null);
-                    client.TotalSendCount++;
+                    try
+                    {
+                        //Util.AddLog($"[ClientManager] 送信中: {id} -> {client.RemoteIP}", null);
+                        await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+                        //Util.AddLog($"[ClientManager] 送信完了: {id} -> {client.RemoteIP}", null);
+                        client.TotalSendCount++;
+                    }
+                    catch (Exception)
+                    {
+                        Util.AddLog("クライアント(" +
+                            client.HostName + ":" + client.Port + ")との接続が切れました", null);
+                        client.Close();
+                        OnClientClosed(client);
+                    }
                 }
-                catch (Exception)
-                {
-                    Util.AddLog("クライアント(" +
-                        client.HostName + ":" + client.Port + ")との接続が切れました", null);
-                    client.Close();
-                    OnClientClosed(client);
-                }
+            }
+            finally
+            {
+                // 非同期処理の Task が保持されても、一時配列に接続の参照を残さない。
+                Array.Clear(clients, 0, clients.Length);
             }
         }
 
         internal void OnRequestReceived(Client client, RPCMethodId methodId, object arg)
         {
-            Util.AddLog($"[ClientManager] 要求受信: {methodId}, 登録クライアント数: {ClientList.Count}", null);
+            Util.AddLog($"[ClientManager] 要求受信: {methodId}, 登録クライアント数: {ClientCount}", null);
             switch (methodId)
             {
                 case RPCMethodId.SetProfile:
@@ -304,9 +325,9 @@ namespace Amatsukaze.Server
                     server.EndServer();
                     break;
                 case RPCMethodId.Request:
-                    Debug.Print($"[ClientManager] Request処理開始: {((ServerRequest)arg).ToDebugString()}, クライアント数: {ClientList.Count}");
+                    Debug.Print($"[ClientManager] Request処理開始: {((ServerRequest)arg).ToDebugString()}, クライアント数: {ClientCount}");
                     server.Request((ServerRequest)arg);
-                    Debug.Print($"[ClientManager] Request処理完了: {((ServerRequest)arg).ToDebugString()}, クライアント数: {ClientList.Count}");
+                    Debug.Print($"[ClientManager] Request処理完了: {((ServerRequest)arg).ToDebugString()}, クライアント数: {ClientCount}");
                     break;
                 case RPCMethodId.RequestLogFile:
                     server.RequestLogFile((LogFileRequest)arg);
@@ -328,14 +349,17 @@ namespace Amatsukaze.Server
 
         internal void OnClientClosed(Client client)
         {
-            int index = ClientList.IndexOf(client);
-            if (index >= 0)
+            int index;
+            int count;
+            lock (clientListLock)
             {
-                receiveTask.RemoveAt(index);
+                index = ClientList.IndexOf(client);
+                if (index < 0) return;
                 ClientList.RemoveAt(index);
-                // client.Close() 済みだと client.RemoteIP が null 参照になる可能性があるため参照しない
-                Util.AddLog($"[ClientManager] 接続終了: index={index}, HostName={client?.HostName ?? "<null>"}:{client?.Port ?? -1}, 残りクライアント数: {ClientList.Count}", null);
+                count = ClientList.Count;
             }
+            // 切断済みでも保持される接続情報でログを記録する。
+            Util.AddLog($"[ClientManager] 接続終了: index={index}, HostName={client?.HostName ?? "<null>"}:{client?.Port ?? -1}, 残りクライアント数: {count}", null);
         }
 
         #region IUserClient
