@@ -39,9 +39,63 @@ faster-whisperの場合、whisper-optionは特に指定しなくてもまずは�
 ---
 ## whisp-carrier
 
+### Windows版
+
 [whisp-carrier の最新リリース](https://github.com/CVN-68/whisp-carrier/releases/latest)からアーカイブをダウンロードし、適当な場所に展開し、[基本設定]タブのWhisperパスに、展開したフォルダ内の `whisp-carrier.exe` を直接指定してください。
 
 初回実行時にはWhisperモデルがダウンロードされるため、時間と空き容量が必要です。
+
+### Linux版（venv・NVIDIA CUDA）
+
+Linuxでは、PythonのvenvにCUDA版PyTorchとwhisp-carrierの依存パッケージを導入して実行できます。あらかじめNVIDIAドライバーを導入し、`nvidia-smi` を実行してGPUが表示されることを確認してください。
+
+CUDAライブラリは、PyTorchのCUDA 12.8版wheelから導入されます。
+
+まず、Pythonのvenv、ビルドに必要なツール、ffmpeg、TEN VADが必要とするC++ランタイムを導入します。
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-dev build-essential ffmpeg libc++1 libc++abi1
+```
+
+whisp-carrierを取得し、リポジトリ内にvenvを作成します。
+
+```bash
+git clone https://github.com/CVN-68/whisp-carrier.git
+cd whisp-carrier
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+
+# CUDA 12.8版を先に導入する
+python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install -r requirements.txt
+```
+
+次のコマンドでCUDAが認識されていることを確認します。`--version` の出力に `backend=cuda`、`CUDA: True`、使用するGPU名が表示され、`--checkcuda` が `1` 以上を返せば正常です。
+
+```bash
+python whisp_carrier.py --version
+python whisp_carrier.py --checkcuda
+```
+
+次に、venv内のPythonでwhisp-carrierを起動するラッパースクリプト `whisp-carrier.sh` をリポジトリ直下に作成します。
+
+```bash
+#!/bin/sh
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/whisp_carrier.py" "$@"
+```
+
+実行権限を付け、単体でCUDAを認識できることを確認します。
+
+```bash
+chmod +x whisp-carrier.sh
+./whisp-carrier.sh --checkcuda
+```
+
+[基本設定]タブのWhisperパスには、作成した `whisp-carrier.sh` のパスを指定してください。プロファイルの[字幕モード]でWhisperによる字幕生成を選択します。通常、whisper-optionは空のままで構いません。
 
 ---
 ## whisper.cpp
