@@ -6,6 +6,18 @@ namespace AmatsukazeServerTest;
 public sealed class ProfileSettingTests
 {
     [Fact]
+    public void Tsreplaceはすべての出力選択に対応する()
+    {
+        Assert.Equal(new[] { 1, 2, 4, 6, 8 }, ProfileSettingExtensions.TsreplaceOutputMasks);
+    }
+
+    [Fact]
+    public void カット境界再エンコードは通常以外の出力選択に対応する()
+    {
+        Assert.Equal(new[] { 2, 4, 6, 8 }, ProfileSettingExtensions.Mpeg2PartialOutputMasks);
+    }
+
+    [Fact]
     public void 新規プロファイルの最短出力時間は5秒になる()
     {
         var profile = ServerSupport.NormalizeProfile(null);

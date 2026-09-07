@@ -644,9 +644,16 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         if (conf.encoder != ENCODER_X262 || conf.format != FORMAT_TSREPLACE) {
             THROW(ArgumentException, "--mpeg2-partialにはx262とTS (replace)出力が必要です");
         }
-        if (conf.cmoutmask != (1 << CMTYPE_NONCM)
+        const int nonCmMask = 1 << CMTYPE_NONCM;
+        const int cmMask = 1 << CMTYPE_CM;
+        const int edgeTrimMask = 1 << CMTYPE_EDGE_TRIM;
+        const bool supportedOutput = conf.cmoutmask == nonCmMask
+            || conf.cmoutmask == cmMask
+            || conf.cmoutmask == (nonCmMask | cmMask)
+            || conf.cmoutmask == edgeTrimMask;
+        if (!supportedOutput
             || (!conf.chapter && conf.trimavsPath.empty())) {
-            THROW(ArgumentException, "--mpeg2-partialにはCMカット本編のみ出力が必要です");
+            THROW(ArgumentException, "--mpeg2-partialにはCM解析を伴うカット出力が必要です");
         }
         if (!conf.filterScriptPath.empty() || !conf.postFilterScriptPath.empty()
             || !conf.noDelogo || !conf.eraseLogoPath.empty()) {

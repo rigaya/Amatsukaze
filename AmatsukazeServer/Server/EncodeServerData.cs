@@ -590,6 +590,8 @@ namespace Amatsukaze.Server
         public static string[] H264DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
         public static string[] HEVCDecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
         public static string[] FormatList { get; } = new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" };
+        public static int[] TsreplaceOutputMasks { get; } = new int[] { 1, 2, 4, 6, 8 };
+        public static int[] Mpeg2PartialOutputMasks { get; } = new int[] { 2, 4, 6, 8 };
         public static string[] SubtitleModeList { get; } = new string[] { "標準", "tsに字幕がない場合Whisperで生成", "常にWhisperで生成" };
         public static string[] WhisperModelList { get; } = new string[] { "自動", "未指定", "small", "medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo" };
         public static string[] AudioEncoderList { get; } = new string[] { "NeroAAC", "qaac", "fdkaac", "opusenc" };

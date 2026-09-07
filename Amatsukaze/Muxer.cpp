@@ -49,7 +49,7 @@ void AMTMuxder::mux(EncodeFileKey key,
     auto vfmt = fileOut.vfmt;
 
     tstring tsreplaceCutList;
-    if (muxFormat == FORMAT_TSREPLACE && (key.cm == CMTYPE_EDGE_TRIM || key.cm == CMTYPE_NONCM)) {
+    if (muxFormat == FORMAT_TSREPLACE && key.cm != CMTYPE_BOTH) {
         const auto manifest = reformInfo_.genTSReplaceCutManifest(key);
         if (!manifest.empty()) {
             tsreplaceCutList = setting_.getTmpTSReplaceCutListPath(key);

@@ -793,7 +793,7 @@ namespace Amatsukaze.Server.Rest
                     HevcDecoderList = ProfileSettingExtensions.HEVCDecoderList.ToList(),
                     FormatList = ProfileSettingExtensions.FormatList.ToList(),
                     OutputOptionList = outputOptions,
-                    TsreplaceOutputMasks = new List<int> { 1, 2, 8 },
+                    TsreplaceOutputMasks = ProfileSettingExtensions.TsreplaceOutputMasks.ToList(),
                     PreBatFiles = state.GetPreBatFiles(),
                     PreEncodeBatFiles = state.GetPreEncodeBatFiles(),
                     PostBatFiles = state.GetPostBatFiles(),

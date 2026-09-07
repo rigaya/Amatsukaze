@@ -1475,8 +1475,11 @@ void DoBadThing() {
     }
     if (setting.getFormat() == FORMAT_TSREPLACE) {
         auto cmtypes = setting.getCMTypes();
-        if (cmtypes.size() != 1 || (cmtypes[0] != CMTYPE_BOTH && cmtypes[0] != CMTYPE_NONCM && cmtypes[0] != CMTYPE_EDGE_TRIM)) {
-            THROW(FormatException, "tsreplaceは本編のみ、または前後CMカットの単一出力にのみ対応しています");
+        const bool supportedSingleOutput = cmtypes.size() == 1;
+        const bool supportedSplitOutput = cmtypes.size() == 2
+            && cmtypes[0] == CMTYPE_NONCM && cmtypes[1] == CMTYPE_CM;
+        if (!supportedSingleOutput && !supportedSplitOutput) {
+            THROW(FormatException, "tsreplaceの出力選択が不正です");
         }
         if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265 && eoInfo.format != VS_MPEG2) {
             THROW(FormatException, "tsreplaceはH.264/H.265/MPEG-2以外には対応していません");

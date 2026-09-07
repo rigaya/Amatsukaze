@@ -2746,9 +2746,10 @@ namespace Amatsukaze.Server
                     {
                         throw new ArgumentException("カット境界再エンコードにはx262とTS (replace)出力が必要です。");
                     }
-                    if (profile.OutputMask != 2 || profile.DisableChapter)
+                    if (!ProfileSettingExtensions.Mpeg2PartialOutputMasks.Contains(profile.OutputMask)
+                        || profile.DisableChapter)
                     {
-                        throw new ArgumentException("カット境界再エンコードにはCMをカット（本編のみ）とチャプター・CM解析が必要です。");
+                        throw new ArgumentException("カット境界再エンコードにはCM解析を伴うカット出力が必要です。");
                     }
                     if (profile.FilterOption != FilterOption.None || profile.EnableAudioEncode
                         || !profile.NoDelogo || !string.IsNullOrEmpty(profile.AdditionalEraseLogo)
