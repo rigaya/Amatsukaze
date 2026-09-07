@@ -95,6 +95,7 @@ subdir('TVCaptionMod2/Caption_src')
 subdir('Amatsukaze')
 subdir('AmatsukazeCLI')
 subdir('AmatsukazeGenLogo')
+subdir('tests/native')
 
 ## C#プロジェクトのビルドを追加（Linux対応）
 #if get_option('build_csharp_projects')

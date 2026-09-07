@@ -833,54 +833,56 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
             detectAudioMain(ctx, setting);
 
         else if (mode == _T("test_print_crc"))
-            test::PrintCRCTable(ctx, setting);
+            return test::PrintCRCTable(ctx, setting);
         else if (mode == _T("test_crc"))
-            test::CheckCRC(ctx, setting);
+            return test::CheckCRC(ctx, setting);
         else if (mode == _T("test_read_bits"))
-            test::ReadBits(ctx, setting);
+            return test::ReadBits(ctx, setting);
         else if (mode == _T("test_auto_buffer"))
-            test::CheckAutoBuffer(ctx, setting);
+            return test::CheckAutoBuffer(ctx, setting);
         else if (mode == _T("test_caption_text_length"))
             return test::CaptionTextLength(ctx, setting);
         else if (mode == _T("test_verifympeg2ps"))
-            test::VerifyMpeg2Ps(ctx, setting);
+            return test::VerifyMpeg2Ps(ctx, setting);
         else if (mode == _T("test_readts"))
-            test::ReadTS(ctx, setting);
+            return test::ReadTS(ctx, setting);
         else if (mode == _T("test_aacdec"))
-            test::AacDecode(ctx, setting);
+            return test::AacDecode(ctx, setting);
         else if (mode == _T("test_wavewrite"))
-            test::WaveWriteHeader(ctx, setting);
+            return test::WaveWriteHeader(ctx, setting);
         else if (mode == _T("test_process"))
-            test::ProcessTest(ctx, setting);
+            return test::ProcessTest(ctx, setting);
         else if (mode == _T("test_streamreform"))
-            test::FileStreamInfo(ctx, setting);
+            return test::FileStreamInfo(ctx, setting);
         else if (mode == _T("test_parseargs"))
-            test::ParseArgs(ctx, setting);
+            return test::ParseArgs(ctx, setting);
         else if (mode == _T("test_logoframe"))
-            test::LogoFrameTest(ctx, setting);
+            return test::LogoFrameTest(ctx, setting);
         else if (mode == _T("test_dualmono"))
-            test::SplitDualMonoAAC(ctx, setting);
+            return test::SplitDualMonoAAC(ctx, setting);
         else if (mode == _T("test_aacdecode"))
-            test::AACDecodeTest(ctx, setting);
+            return test::AACDecodeTest(ctx, setting);
         else if (mode == _T("test_ass"))
-            test::CaptionASS(ctx, setting);
+            return test::CaptionASS(ctx, setting);
         else if (mode == _T("test_eo"))
-            test::EncoderOptionParse(ctx, setting);
+            return test::EncoderOptionParse(ctx, setting);
         else if (mode == _T("test_perf"))
-            test::DecodePerformance(ctx, setting);
+            return test::DecodePerformance(ctx, setting);
         else if (mode == _T("test_zone"))
-            test::BitrateZones(ctx, setting);
+            return test::BitrateZones(ctx, setting);
         else if (mode == _T("test_zone2"))
-            test::BitrateZonesBug(ctx, setting);
+            return test::BitrateZonesBug(ctx, setting);
         else if (mode == _T("test_vfr_input"))
             return test::VFRInputDetection(ctx, setting);
         else if (mode == _T("test_printf"))
-            test::PrintfBug(ctx, setting);
+            return test::PrintfBug(ctx, setting);
         else if (mode == _T("test_resource"))
-            test::ResourceTest(ctx, setting);
+            return test::ResourceTest(ctx, setting);
 
-        else
+        else {
             ctx.errorF(_T("--modeの指定が間違っています: %s\n"), mode.c_str());
+            return 1;
+        }
 
         return 0;
     } catch (const NoLogoException&) {

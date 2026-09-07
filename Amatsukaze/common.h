@@ -13,7 +13,11 @@
 // Windows関連の定義
 #if !defined(AMATSUKAZE_API)
   #if defined(_WIN32) || defined(_WIN64)
-    #define AMATSUKAZE_API __declspec(dllexport)
+    #if defined(AMATSUKAZE_IMPORTS)
+      #define AMATSUKAZE_API __declspec(dllimport)
+    #else
+      #define AMATSUKAZE_API __declspec(dllexport)
+    #endif
     #define WINAPI __stdcall
   #else
     #define AMATSUKAZE_API __attribute__((visibility("default")))

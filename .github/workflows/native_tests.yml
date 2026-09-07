@@ -1,0 +1,63 @@
+name: Native Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - windows
+      - WebUI
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Build test image
+        run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2404 || true
+          docker build \
+            --build-arg GHCR_OWNER=${{ github.repository_owner }} \
+            --tag amatsukaze-native-tests \
+            --file docker/docker_ubuntu2404 .
+      - name: Build and run
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            amatsukaze-native-tests \
+            bash -lc 'git config --global --add safe.directory /work && cd /work && meson setup build-native --buildtype release --pkg-config-path "$AMT_PKGCONFIG_FFNK_DIR:$AMT_BASELIBS_DIR/lib/pkgconfig" && meson compile -C build-native AmatsukazeNativeTests && meson test -C build-native --suite native --print-errorlogs'
+
+  windows:
+    name: Windows Release
+    runs-on: windows-2025-vs2026
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Build and run
+        shell: cmd
+        run: |
+          call tests\native\build_windows.cmd
+
+  csharp_offline:
+    name: C# Offline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore and run offline tests
+        run: |
+          dotnet restore AmatsukazeServerTest/AmatsukazeServerTest.csproj
+          dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --no-restore --filter "Category!=Network"

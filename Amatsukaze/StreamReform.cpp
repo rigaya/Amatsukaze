@@ -114,6 +114,24 @@ VFRDetectionResult AnalyzeVFRFrameIntervals(const std::vector<VFRFrameInterval>&
     return result;
 }
 
+extern "C" int AnalyzeVFRFrameIntervalsForTest(
+    const VFRFrameInterval* intervals, size_t intervalCount, VFRDetectionResult* result) {
+    if (result == nullptr || (intervalCount != 0 && intervals == nullptr)) {
+        return VFR_INPUT_DETECTION_FOR_TEST_INVALID_ARGUMENT;
+    }
+    try {
+        std::vector<VFRFrameInterval> inputIntervals;
+        if (intervalCount != 0) {
+            inputIntervals.assign(intervals, intervals + intervalCount);
+        }
+        *result = AnalyzeVFRFrameIntervals(inputIntervals);
+        return VFR_INPUT_DETECTION_FOR_TEST_SUCCESS;
+    } catch (...) {
+        *result = {};
+        return VFR_INPUT_DETECTION_FOR_TEST_FAILED;
+    }
+}
+
 FileAudioFrameInfo::FileAudioFrameInfo()
     : AudioFrameInfo()
     , audioIdx(0)

@@ -9,6 +9,7 @@
 */
 #pragma once
 
+#include <cstddef>
 #include <time.h>
 
 #include <vector>
@@ -40,6 +41,17 @@ struct VFRDetectionResult {
 };
 
 VFRDetectionResult AnalyzeVFRFrameIntervals(const std::vector<VFRFrameInterval>& intervals);
+
+enum VFRInputDetectionForTestResult {
+    VFR_INPUT_DETECTION_FOR_TEST_SUCCESS = 0,
+    VFR_INPUT_DETECTION_FOR_TEST_INVALID_ARGUMENT = -1,
+    VFR_INPUT_DETECTION_FOR_TEST_FAILED = -2,
+};
+
+// ネイティブ単体テストからVFR入力判定を呼び出すためのC ABI。
+// DLL境界を越えてstd::vectorの所有権や実装を受け渡ししない。
+extern "C" AMATSUKAZE_API int AnalyzeVFRFrameIntervalsForTest(
+    const VFRFrameInterval* intervals, size_t intervalCount, VFRDetectionResult* result);
 
 struct FileAudioFrameInfo : public AudioFrameInfo {
     int audioIdx;

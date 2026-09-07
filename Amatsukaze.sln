@@ -12,6 +12,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Amatsukaze", "Amatsukaze\Am
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AmatsukazeUnitTest", "AmatsukazeUnitTest\AmatsukazeUnitTest.vcxproj", "{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AmatsukazeNativeTests", "tests\native\AmatsukazeNativeTests.vcxproj", "{C2C4565E-3B35-4D69-BD3E-73076F61751F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmatsukazeGUI", "AmatsukazeGUI\AmatsukazeGUI.csproj", "{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AmatsukazeCLI", "AmatsukazeCLI\AmatsukazeCLI.vcxproj", "{CC117231-C6D9-434F-B5AA-5C8A4FCE6F9E}"
@@ -83,6 +85,9 @@ Global
 		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Release|x64.ActiveCfg = Release|x64
 		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Release2|Any CPU.ActiveCfg = Release2|x64
 		{8C95EAD9-DE23-4DA4-8FEE-0D0B6E289055}.Release2|x64.ActiveCfg = Release2|x64
+		{C2C4565E-3B35-4D69-BD3E-73076F61751F}.Release|Any CPU.ActiveCfg = Release|x64
+		{C2C4565E-3B35-4D69-BD3E-73076F61751F}.Release|x64.ActiveCfg = Release|x64
+		{C2C4565E-3B35-4D69-BD3E-73076F61751F}.Release|x64.Build.0 = Release|x64
 		{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B54EA021-05BC-4CAF-87A5-74081B0ED1CB}.Debug|x64.ActiveCfg = Debug|x64

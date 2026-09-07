@@ -9,6 +9,7 @@
 */
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <numeric>
 #include <regex>
@@ -142,6 +143,38 @@ public:
 std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCodes,
     const std::vector<EncoderZone>& cmzones, double bitrateCM,
     int fpsNum, int fpsDenom, double timeFactor, double costLimit);
+
+// ネイティブ単体テストからMakeVFRBitrateZonesを呼び出すためのC ABI入出力。
+// DLL境界を越えてstd::vectorの所有権を受け渡ししない。
+struct VFRBitrateZoneInputForTest {
+    int startFrame;
+    int endFrame;
+};
+
+struct VFRBitrateZoneOutputForTest {
+    int startFrame;
+    int endFrame;
+    double bitrate;
+    double qualityOffset;
+    double startSec;
+    double endSec;
+};
+
+enum VFRBitrateZonesForTestResult {
+    VFR_BITRATE_ZONES_FOR_TEST_SUCCESS = 0,
+    VFR_BITRATE_ZONES_FOR_TEST_BUFFER_TOO_SMALL = 1,
+    VFR_BITRATE_ZONES_FOR_TEST_INVALID_ARGUMENT = -1,
+    VFR_BITRATE_ZONES_FOR_TEST_FAILED = -2,
+};
+
+// 出力件数を取得するにはoutputをnullptr、outputCapacityを0で呼び出す。
+// timeCodeCountはフレーム数+1であり、0または2以上を指定する。
+// 必要件数より小さいバッファを渡した場合は出力せず、必要件数をoutputCountへ返す。
+extern "C" AMATSUKAZE_API int MakeVFRBitrateZonesForTest(
+    const double* timeCodes, size_t timeCodeCount,
+    const VFRBitrateZoneInputForTest* cmzones, size_t cmzoneCount,
+    double bitrateCM, int fpsNum, int fpsDenom, double timeFactor, double costLimit,
+    VFRBitrateZoneOutputForTest* output, size_t outputCapacity, size_t* outputCount);
 
 // VFRに対応していないエンコーダでビットレート指定を行うとき用の
 // 平均フレームレートを考慮したビットレートを計算する

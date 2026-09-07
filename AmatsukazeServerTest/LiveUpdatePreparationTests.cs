@@ -6,6 +6,7 @@ namespace AmatsukazeServerTest;
 
 public sealed class LiveUpdatePreparationTests
 {
+    [Trait("Category", "Network")]
     [EnvironmentFact("AMT_LIVE_P4A", "AMT_LIVE_APP_ROOT", "AMT_LIVE_ARTIFACT_DIR")]
     public async Task 本体実アセットを専用領域へ展開して検証する()
     {
@@ -51,6 +52,7 @@ public sealed class LiveUpdatePreparationTests
             "live_self_update_transaction.log"), true);
     }
 
+    [Trait("Category", "Network")]
     [EnvironmentFact("AMT_LIVE_P2B", "AMT_LIVE_APP_ROOT", "AMT_LIVE_ARTIFACT_DIR")]
     public async Task GitHub実アセット三対象を使い捨てルートへ設置する()
     {
@@ -138,6 +140,7 @@ public sealed class LiveUpdatePreparationTests
         File.Copy(logPath, Path.Combine(artifactDir, "no_extractor_transaction.log"), true);
     }
 
+    [Trait("Category", "Network")]
     [EnvironmentFact("AMT_LIVE_APP_ROOT", "AMT_LIVE_ARTIFACT_DIR")]
     public async Task GitHub実アセット三対象を設置直前まで検証する()
     {

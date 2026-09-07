@@ -1016,6 +1016,52 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     return zones;
 }
 
+extern "C" int MakeVFRBitrateZonesForTest(
+    const double* timeCodes, size_t timeCodeCount,
+    const VFRBitrateZoneInputForTest* cmzones, size_t cmzoneCount,
+    double bitrateCM, int fpsNum, int fpsDenom, double timeFactor, double costLimit,
+    VFRBitrateZoneOutputForTest* output, size_t outputCapacity, size_t* outputCount) {
+    if (outputCount == nullptr || (timeCodeCount != 0 && timeCodes == nullptr) ||
+        (cmzoneCount != 0 && cmzones == nullptr)) {
+        return VFR_BITRATE_ZONES_FOR_TEST_INVALID_ARGUMENT;
+    }
+    *outputCount = 0;
+    if (timeCodeCount == 1) {
+        return VFR_BITRATE_ZONES_FOR_TEST_INVALID_ARGUMENT;
+    }
+    try {
+        std::vector<double> inputTimeCodes;
+        if (timeCodeCount != 0) {
+            inputTimeCodes.assign(timeCodes, timeCodes + timeCodeCount);
+        }
+        std::vector<EncoderZone> inputCmzones;
+        inputCmzones.reserve(cmzoneCount);
+        for (size_t i = 0; i < cmzoneCount; ++i) {
+            inputCmzones.push_back({ cmzones[i].startFrame, cmzones[i].endFrame });
+        }
+        const auto zones = MakeVFRBitrateZones(inputTimeCodes, inputCmzones, bitrateCM,
+            fpsNum, fpsDenom, timeFactor, costLimit);
+        *outputCount = zones.size();
+        if (output == nullptr) {
+            return outputCapacity == 0 ? VFR_BITRATE_ZONES_FOR_TEST_SUCCESS
+                : VFR_BITRATE_ZONES_FOR_TEST_INVALID_ARGUMENT;
+        }
+        if (outputCapacity < zones.size()) {
+            return VFR_BITRATE_ZONES_FOR_TEST_BUFFER_TOO_SMALL;
+        }
+        for (size_t i = 0; i < zones.size(); ++i) {
+            output[i] = {
+                zones[i].startFrame, zones[i].endFrame, zones[i].bitrate,
+                zones[i].qualityOffset, zones[i].startSec, zones[i].endSec,
+            };
+        }
+        return VFR_BITRATE_ZONES_FOR_TEST_SUCCESS;
+    } catch (...) {
+        *outputCount = 0;
+        return VFR_BITRATE_ZONES_FOR_TEST_FAILED;
+    }
+}
+
 // VFRに対応していないエンコーダでビットレート指定を行うとき用の
 // 平均フレームレートを考慮したビットレートを計算する
 double AdjustVFRBitrate(const std::vector<double>& timeCodes, int fpsNum, int fpsDenom) {
