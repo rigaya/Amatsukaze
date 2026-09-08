@@ -1739,6 +1739,7 @@ void DoBadThing() {
         tstring vttPath;
         std::unique_ptr<StdRedirectedSubProcess> process;
         int exitCode = -1; // join()の結果 (-1: 未実行)
+        tstring errorMessage;
     };
     std::vector<WhisperTask> whisperTasks;
     std::vector<int> whisperLocalIndex(keys.size(), 0);
@@ -1940,17 +1941,91 @@ void DoBadThing() {
 
     auto argGen = std::unique_ptr<EncoderArgumentGenerator>(new EncoderArgumentGenerator(setting, reformInfo));
 
-    // Whisper並列実行時は、別スレッドでwhisperTasksを直列実行する
+    // Whisperは対象出力のエンコード用リソースを確保してから起動し、
+    // 次のリソースフェーズへ移る前に完了させる。
     std::unique_ptr<std::thread> whisperThread;
-    if (setting.isWhisperParallelEnabled() && !whisperTasks.empty()) {
-        whisperThread = std::make_unique<std::thread>([&ctx, &whisperTasks]() {
+    auto hasWhisperTasks = [&](int keyIndex) {
+        return setting.isWhisperParallelEnabled()
+            && std::any_of(whisperTasks.begin(), whisperTasks.end(),
+                [keyIndex](const WhisperTask& task) { return task.keyIndex == keyIndex; });
+    };
+    auto startWhisperTasks = [&](int keyIndex) {
+        if (!hasWhisperTasks(keyIndex)) {
+            return;
+        }
+        whisperThread = std::make_unique<std::thread>([&ctx, &whisperTasks, keyIndex]() {
             SubtitleGenerator whisperGen(ctx);
             for (auto& task : whisperTasks) {
-                task.process = whisperGen.startWhisperProcess(task.param);
-                task.exitCode = task.process->join();
+                if (task.keyIndex != keyIndex) {
+                    continue;
+                }
+                try {
+                    task.process = whisperGen.startWhisperProcess(task.param);
+                    task.exitCode = task.process->join();
+                } catch (const Exception& e) {
+                    task.errorMessage = e.message();
+                } catch (...) {
+                    task.errorMessage = _T("不明なエラー");
+                }
             }
         });
-    }
+    };
+    auto finishWhisperTasks = [&](int keyIndex) {
+        if (whisperThread && whisperThread->joinable()) {
+            ctx.info(_T("[Whisper字幕生成: バックグラウンド処理の完了待ち]"));
+            whisperThread->join();
+            whisperThread.reset();
+        }
+        for (auto& task : whisperTasks) {
+            if (task.keyIndex != keyIndex) {
+                continue;
+            }
+            if (!task.errorMessage.empty()) {
+                ctx.warnF(_T("Whisper字幕生成に失敗: %s"), task.errorMessage.c_str());
+                continue;
+            }
+            if (!task.process) {
+                continue;
+            }
+            const int ret = task.exitCode;
+
+            const auto& lines = task.process->getCapturedLines();
+            if (!lines.empty()) {
+                ctx.info(_T("↓↓↓↓↓↓Whisper出力↓↓↓↓↓↓"));
+                for (const auto& v : lines) {
+                    std::vector<char> buf = v;
+                    if (buf.empty() || buf.back() != '\0') {
+                        buf.push_back('\0');
+                    }
+                    ctx.infoF(_T("%s"), char_to_tstring(buf.data()));
+                }
+                ctx.info(_T("↑↑↑↑↑↑Whisper出力↑↑↑↑↑↑"));
+            }
+
+            if (ret != 0) {
+                ctx.warnF(_T("Whisper字幕生成に失敗 (終了コード: 0x%x)"), ret);
+                continue;
+            }
+
+            // 正常終了時のみ、空SRT/VTTファイルの削除を行う
+            uint64_t filesize = 0;
+            if (rgy_file_exists(task.srtPath) && rgy_get_filesize(task.srtPath.c_str(), &filesize) && filesize == 0) {
+                rgy_file_remove(task.srtPath.c_str());
+            }
+            if (rgy_file_exists(task.vttPath) && rgy_get_filesize(task.vttPath.c_str(), &filesize) && filesize == 0) {
+                rgy_file_remove(task.vttPath.c_str());
+            }
+        }
+    };
+    // エンコード中の例外でunwindする場合もjoinを保証し、joinable時のterminateを防ぐ。
+    struct WhisperThreadJoiner {
+        std::unique_ptr<std::thread>& thread;
+        ~WhisperThreadJoiner() {
+            if (thread && thread->joinable()) {
+                thread->join();
+            }
+        }
+    } whisperThreadJoiner{ whisperThread };
 
     // psisiarcは専用スレッドでタスクを直列実行し、映像エンコードと並行させる。
     std::unique_ptr<std::thread> psisiarcThread;
@@ -1991,7 +2066,12 @@ void DoBadThing() {
             // フル再エンコードへのフォールバックは廃止した。失敗は例外で上位へ伝える。
             ctx.infoF(_T("[カット境界再エンコード開始] %d/%d %s"),
                 i + 1, (int)keys.size(), CMTypeToString(key.cm));
+            if (hasWhisperTasks(i)) {
+                rm.wait(HOST_CMD_Encode);
+            }
+            startWhisperTasks(i);
             RunMpeg2PartialEncode(ctx, setting, reformInfo, key);
+            finishWhisperTasks(i);
             const auto bitrate = argGen->printBitrate(ctx, key);
             fileOut.vfmt = reformInfo.getFormat(key).videoFormat;
             fileOut.srcBitrate = bitrate.first;
@@ -2101,6 +2181,7 @@ void DoBadThing() {
                 return std::unique_ptr<AMTFilterSource>(new AMTFilterSource(ctx, filterSource));
             };
 
+            startWhisperTasks(i);
             encoder.encode(filterClip, outfmt,
                 timeCodes, *argGen, passList, bitrateZones, encoderZones, useCMChunkSplit, vfrBitrateScale,
                 baseTimecodePath, fileOut.vfrTimingFps, baseOutputPath,
@@ -2172,52 +2253,11 @@ void DoBadThing() {
         } catch (const AvisynthError& avserror) {
             THROWF(AviSynthException, "%s", avserror.msg);
         }
+        finishWhisperTasks(i);
     }
     ctx.infoF(_T("エンコード完了: %.2f秒"), sw.getAndReset());
 
     argGen = nullptr;
-
-    // Whisper並列実行時はここでバックグラウンドスレッドの完了待ち＆ログ出力を行う
-    if (setting.isWhisperParallelEnabled() && !whisperTasks.empty()) {
-        if (whisperThread && whisperThread->joinable()) {
-            ctx.info(_T("[Whisper字幕生成: バックグラウンド処理の完了待ち]"));
-            whisperThread->join();
-            whisperThread.reset();
-        }
-        for (auto& task : whisperTasks) {
-            if (!task.process) {
-                continue;
-            }
-            const int ret = task.exitCode;
-
-            const auto& lines = task.process->getCapturedLines();
-            if (!lines.empty()) {
-                ctx.info(_T("↓↓↓↓↓↓Whisper出力↓↓↓↓↓↓"));
-                for (const auto& v : lines) {
-                    std::vector<char> buf = v;
-                    if (buf.empty() || buf.back() != '\0') {
-                        buf.push_back('\0');
-                    }
-                    ctx.infoF(_T("%s"), char_to_tstring(buf.data()));
-                }
-                ctx.info(_T("↑↑↑↑↑↑Whisper出力↑↑↑↑↑↑"));
-            }
-
-            if (ret != 0) {
-                ctx.warnF(_T("Whisper字幕生成に失敗 (終了コード: 0x%x)"), ret);
-                continue;
-            }
-
-            // 正常終了時のみ、空SRT/VTTファイルの削除を行う
-            uint64_t filesize = 0;
-            if (rgy_file_exists(task.srtPath) && rgy_get_filesize(task.srtPath.c_str(), &filesize) && filesize == 0) {
-                rgy_file_remove(task.srtPath.c_str());
-            }
-            if (rgy_file_exists(task.vttPath) && rgy_get_filesize(task.vttPath.c_str(), &filesize) && filesize == 0) {
-                rgy_file_remove(task.vttPath.c_str());
-            }
-        }
-    }
 
     // muxがpscを読む前にpsisiarcの完了を待ち、捕捉した出力をまとめて記録する。
     if (!psisiarcTasks.empty()) {
