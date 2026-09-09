@@ -1896,7 +1896,11 @@ namespace Amatsukaze.Models
 
         public bool Mpeg2PartialVisible
         {
-            get { return Data.EncoderType == EncoderType.x262 && Data.OutputMask != 1; }
+            get
+            {
+                return Data.EncoderType == EncoderType.x262
+                    && ProfileSettingExtensions.Mpeg2PartialOutputMasks.Contains(Data.OutputMask);
+            }
         }
 
         public bool Mpeg2PartialConstraintsEnabled
@@ -2573,6 +2577,10 @@ namespace Amatsukaze.Models
                 if (outputMaskChanged || Data.OutputFormat == FormatType.TSREPLACE)
                 {
                     RaisePropertyChanged("OutputMask");
+                }
+                if (outputMaskChanged)
+                {
+                    UpdateMpeg2PartialAvailability();
                 }
                 RaisePropertyChanged("TsreplaceSelected");
             }

@@ -122,6 +122,7 @@ namespace Amatsukaze.Shared
         public List<string>? FormatList { get; set; }
         public List<OutputOptionItem>? OutputOptionList { get; set; }
         public List<int>? TsreplaceOutputMasks { get; set; }
+        public List<int>? Mpeg2PartialOutputMasks { get; set; }
         public List<string>? PreBatFiles { get; set; }
         public List<string>? PreEncodeBatFiles { get; set; }
         public List<string>? PostBatFiles { get; set; }

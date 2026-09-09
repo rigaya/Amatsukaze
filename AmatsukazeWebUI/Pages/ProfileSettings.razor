@@ -1548,7 +1548,9 @@ else
     {
         var x262Index = Array.FindIndex(_encoderEnumNames,
             value => string.Equals(value, "x262", StringComparison.OrdinalIgnoreCase));
-        return GetEncoderIndex() == x262Index && GetIntValue("OutputMask") != 1;
+        var masks = _options?.Mpeg2PartialOutputMasks;
+        return GetEncoderIndex() == x262Index
+            && masks?.Contains(GetIntValue("OutputMask")) == true;
     }
 
     private void OnMpeg2PartialChanged(ChangeEventArgs e)

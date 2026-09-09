@@ -794,6 +794,7 @@ namespace Amatsukaze.Server.Rest
                     FormatList = ProfileSettingExtensions.FormatList.ToList(),
                     OutputOptionList = outputOptions,
                     TsreplaceOutputMasks = ProfileSettingExtensions.TsreplaceOutputMasks.ToList(),
+                    Mpeg2PartialOutputMasks = ProfileSettingExtensions.Mpeg2PartialOutputMasks.ToList(),
                     PreBatFiles = state.GetPreBatFiles(),
                     PreEncodeBatFiles = state.GetPreEncodeBatFiles(),
                     PostBatFiles = state.GetPostBatFiles(),
