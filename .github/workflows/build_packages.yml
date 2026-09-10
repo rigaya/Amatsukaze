@@ -85,6 +85,15 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      - name: Check wasm-tools workload
+        run: |
+          # wasm-tools が無いとWebUIが最適化なしで発行され、静かにサイズが増える。
+          # ベースイメージ側で入れているので、無い場合はイメージが古い。
+          if ! dotnet workload list | grep -q "wasm-tools"; then
+            echo "wasm-toolsワークロードがありません。build_base_image.ymlを再実行してベースイメージを更新してください。" >&2
+            exit 1
+          fi
+
       - name: Build .NET
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
