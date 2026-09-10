@@ -58,4 +58,5 @@ endif
 common_dep = declare_dependency(
   link_with : [common_lib] + common_simd_libs,
   include_directories : common_inc,
+  dependencies : [dl_dep],
 )

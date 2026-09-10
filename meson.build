@@ -35,6 +35,13 @@ ffmpeg_dep = [
 # libjpeg-turbo (TurboJPEG API)
 turbojpeg_dep = dependency('libturbojpeg', required : true)
 
+# glibc 2.34未満では dlopen/dlsym/dladdr が libdl にあるため、明示的にリンクする。
+# 2.34以降はlibc本体へ統合され、libdlは互換用の空ライブラリになるので付けても害はない。
+dl_dep = dependency('', required : false)
+if host_machine.system() != 'windows'
+  dl_dep = meson.get_compiler('cpp').find_library('dl', required : false)
+endif
+
 # プラットフォーム依存ライブラリ
 zlib_dep = dependency('', required : false)
 if host_machine.system() != 'windows'
