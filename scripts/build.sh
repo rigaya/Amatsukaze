@@ -180,6 +180,24 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         fi
     fi
 
+    ## zlibのビルド
+    # ディストリの libz-dev に依存しないよう、ffmpeg と Amatsukaze の双方でこれを使う。
+    # 共有ライブラリへリンクするため -fPIC 付きでビルドする。
+    if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "zlib-1.3.1" ]; then
+      echo "zlib のビルドを行います。"
+      (
+        wget https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz -O zlib.tar.gz \
+        && tar xf zlib.tar.gz \
+        && rm zlib.tar.gz \
+        && cd zlib-1.3.1 \
+        && CFLAGS="-O3 -fPIC" ./configure --prefix=${BUILD_DIR}/baselibs --static \
+        && make -j"$(nproc)" \
+        && make install
+      ) || exit 1
+    else
+      echo "prebuilt baselibs を使用します。zlib のビルドをスキップします。"
+    fi
+
     ## libjpeg-turboのビルド
     if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "libjpeg-turbo-3.1.0" ]; then
       echo "libjpeg-turbo のビルドを行います。"
@@ -220,11 +238,15 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
         && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
         && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
+          --extra-cflags="-I${BUILD_DIR}/baselibs/include" --extra-ldflags="-L${BUILD_DIR}/baselibs/lib" \
           --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
           --enable-gpl --enable-version3 \
           --disable-doc --disable-network --disable-devices \
         && make -j$(nproc) \
         && make install) || exit 1
+        # 旧FFmpeg(nekopanda版)のconfigureは -L を .pc へ書き出さないため、
+        # baselibs の libz.a を解決できるよう後から補う。
+        sed -i "s|^Libs: -L\${libdir}|Libs: -L\${libdir} -L${BUILD_DIR}/baselibs/lib|" ffmpeg_nekopanda/build/lib/pkgconfig/*.pc || exit 1
     fi
 
     # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
@@ -250,6 +272,7 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
       fi
       (cd ffmpeg-6.1.2 \
         && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
+          --extra-cflags="-I${BUILD_DIR}/baselibs/include" --extra-ldflags="-L${BUILD_DIR}/baselibs/lib" \
           --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
           --enable-gpl --enable-version3 \
           --disable-doc --disable-network --disable-devices \

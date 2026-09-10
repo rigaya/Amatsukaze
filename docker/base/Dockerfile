@@ -39,7 +39,6 @@ RUN apt update \
       autoconf \
       automake \
       libtool \
-      libz-dev \
       build-essential \
       locales \
     && if [ "${PIP_BUILD_TOOLS}" = "1" ]; then \
