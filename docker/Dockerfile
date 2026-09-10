@@ -366,10 +366,15 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
 
 # Amatsukazeのインストール
-RUN curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
-        | grep "browser_download_url.*tar.xz" | grep "Ubuntu${UBUNTU_VERSION}" | cut -d : -f 2,3 | tr -d \" \
-        | wget -i - -O - | tar -xJ -C /app \
-        && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi
+# 配布パッケージはOSバージョン別 (Amatsukaze_Ubuntuxx.xx_*) から単一の Amatsukaze_linux_* へ移行した。
+# 移行前のリリースも扱えるよう、_linux が無ければ従来の名前を探す。
+RUN URLS=$(curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
+        | grep "browser_download_url.*tar.xz" | cut -d : -f 2,3 | tr -d \") \
+    && URL=$(echo "${URLS}" | grep "Amatsukaze_linux_" | head -1) \
+    && if [ -z "${URL}" ]; then URL=$(echo "${URLS}" | grep "Ubuntu${UBUNTU_VERSION}" | head -1); fi \
+    && if [ -z "${URL}" ]; then echo "Amatsukazeの配布パッケージが見つかりません" >&2; exit 1; fi \
+    && wget -O - "${URL}" | tar -xJ -C /app \
+    && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi
 
 # アーカイブ展開用 7-Zip CLI（Linux x64、静的リンク版）
 RUN wget https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz -O ${SEVENZIP_PKG}-linux-x64.tar.xz \

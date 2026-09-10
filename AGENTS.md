@@ -122,10 +122,17 @@ Amatsukazeは以下のようにして構成されます。
   - ```readme.md```
     AmatsukazeServer実行用のdockerコンテナの作成用。```readme.md```がその使用方法
 	
+  - ```docker_ubuntu2004```
+  
+    Linux用配布パッケージのネイティブ側 (C++) のビルド用のdockerfile。CIで使用。
+    ここでビルドしたものは glibc 2.31 以降のディストリで動くため、配布パッケージは
+    OSバージョン別に分けず1本にしている。
+    .NET側は .NET 10 SDK のある Ubuntu 24.04 のベースイメージで別途ビルドする。
+  
   - ```docker_ubuntu2204```
   - ```docker_ubuntu2404```
   
-    Linux用配布パッケージのビルド用のdockerfile。CIで使用。
+    OSバージョン別にビルドしていた頃のdockerfile。現在CIでは使用しない。
   
 - ```defaults/```
 

@@ -9,55 +9,112 @@ on:
     tags:
       - '*'
 
+# Amatsukazeのビルドは、必要なツールチェインの異なる2つの環境へ分割している。
+#  - ネイティブ (C++): Ubuntu 20.04。ここでビルドしたものは glibc 2.31 以降の
+#    ディストリで動くため、配布パッケージはOSバージョン別に分けず1本にする。
+#  - .NET: Ubuntu 24.04。20.04 には .NET 10 SDK が提供されない。
+#    .NET側の成果物は自己完結型で発行され、ビルドホストのglibcには依存しない。
+# 最後に package ジョブで両者を1つのツリーに重ねて配布パッケージを作る。
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - dockerimg: ubuntu2404
-            osver: Ubuntu24.04
-            pkgtype: deb
-            arch: x86_64
-          - dockerimg: ubuntu2204
-            osver: Ubuntu22.04
-            pkgtype: deb
-            arch: x86_64
-
-    env:
-      DOCKER_FILE:  docker/docker_${{ matrix.dockerimg }}
-      DOCKER_IMAGE: ${{ matrix.dockerimg }}
-      PKG_TYPE: ${{ matrix.pkgtype }}
-
-    name: Upload Release Asset
+  build-native:
+    name: Build native (Ubuntu 20.04)
     runs-on: ubuntu-latest
     steps:
-      - name: Prepare
-        id: prep
-        run: |
-          REPOSITORY=$(echo ${{ github.repository }} | sed -e "s#.*/##")
-          VERSION=$(echo ${{ github.ref }} | sed -e "s#refs/tags/##g")
-          IMAGE="build_amatsukaze_"${{ env.DOCKER_IMAGE }}
-          TAG=$(echo $GITHUB_SHA | head -c7)
-          NPROC=$(grep 'processor' /proc/cpuinfo | wc -l)
-          OUTPUT_DIR=`pwd`/output
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tagged_image=${IMAGE}:${TAG}" >> $GITHUB_OUTPUT
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "nproc=${NPROC}" >> $GITHUB_OUTPUT
-          echo "output_dir=${OUTPUT_DIR}" >> $GITHUB_OUTPUT
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
+
+      - name: Build native
+        run: |
+          # 古いキャッシュを掴まないよう、ベースイメージを明示的に取得する
+          docker pull ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004 || true
+          docker build \
+            --build-arg GHCR_OWNER=${{ github.repository_owner }} \
+            --tag build_amatsukaze_native \
+            --file docker/docker_ubuntu2004 ./
+          docker run -dit --rm \
+            -v ${{ github.workspace }}:/work \
+            --name build_native build_amatsukaze_native
+          docker exec build_native git config --global --add safe.directory /work
+          docker exec build_native bash -lc "cd /work && ./scripts/build.sh buildAmatsukaze/Amatsukaze --native-only"
+
+      - name: Check ABI floor
+        run: |
+          # 20.04 でビルドした意味が失われていないことを確認する。
+          # RHEL/Rocky/Alma 9 が持つ値 (GLIBC 2.34 / GLIBCXX 3.4.29 / CXXABI 1.3.13) を超えたら失敗させる。
+          fail=0
+          for f in $(find buildAmatsukaze/Amatsukaze -type f); do
+            if ! file -b "${f}" | grep -q "ELF 64"; then continue; fi
+            for spec in "GLIBC:2.34" "GLIBCXX:3.4.29" "CXXABI:1.3.13"; do
+              sym="${spec%%:*}"
+              limit="${spec#*:}"
+              max=$(objdump -p "${f}" | grep -oE "\\b${sym}_[0-9][0-9.]*" | sed "s/${sym}_//" | sort -uV | tail -1)
+              if [ -n "${max}" ] && [ "$(printf "%s\\n%s\\n" "${max}" "${limit}" | sort -V | tail -1)" != "${limit}" ]; then
+                echo "NG: ${f} requires ${sym}_${max} (> ${sym}_${limit})"
+                fail=1
+              fi
+            done
+          done
+          if [ "${fail}" -ne 0 ]; then exit 1; fi
+          echo "ABI floor OK"
+
+      - name: Pack native tree
+        run: |
+          # アーティファクトは実行属性を保持しないため、tarに包んで受け渡す
+          tar -cf native.tar -C buildAmatsukaze/Amatsukaze .
+
+      - name: Upload native tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: amatsukaze-native
+          path: native.tar
+          retention-days: 1
+
+  build-dotnet:
+    name: Build .NET (Ubuntu 24.04)
+    runs-on: ubuntu-latest
+    # AviSynth+ を必要としないので、派生イメージを作らずベースイメージをそのまま使う
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2404
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Build .NET
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+          ./scripts/build.sh buildAmatsukaze/Amatsukaze --dotnet-only
+
+      - name: Pack .NET tree
+        run: |
+          tar -cf dotnet.tar -C buildAmatsukaze/Amatsukaze .
+
+      - name: Upload .NET tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: amatsukaze-dotnet
+          path: dotnet.tar
+          retention-days: 1
+
+  package:
+    name: Upload Release Asset
+    needs: [build-native, build-dotnet]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Set version name
         id: rev
         run: |
-          cd ${{ github.workspace }}
           REVCOUNT=`git rev-list --count HEAD`
-          echo "rev_count=${REVCOUNT}" >> $GITHUB_OUTPUT
           if [[ "${{ github.ref }}" =~ "refs/tags/" ]]; then
             VERSION=$(echo ${{ github.ref }} | sed -e "s#refs/tags/##g")
           else
@@ -65,57 +122,50 @@ jobs:
           fi
           echo "version_name=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Create Output Dir
-        run: |
-          mkdir -p ${{ steps.prep.outputs.output_dir }}
+      - name: Download native tree
+        uses: actions/download-artifact@v4
+        with:
+          name: amatsukaze-native
+          path: parts
 
-      - name: Set up QEMU
-        if: matrix.arch != 'x86_64'
-        uses: docker/setup-qemu-action@v3
+      - name: Download .NET tree
+        uses: actions/download-artifact@v4
+        with:
+          name: amatsukaze-dotnet
+          path: parts
 
-      - name: Build Exec
-        id: build_exec
+      - name: Create package
+        id: create_pkg
         run: |
-          # Ensure latest base image tag is pulled (avoid stale cache)
-          docker pull ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:${{ matrix.dockerimg }} || true
-          docker build \
-            --build-arg GHCR_OWNER=${{ github.repository_owner }} \
-            --tag ${{ steps.prep.outputs.tagged_image }} \
-            --platform linux/${{ matrix.arch }} \
-            --file ${{ env.DOCKER_FILE }} ./
-          docker run -dit --rm \
-            -v ${{ github.workspace }}:/work \
-            -v ${{ steps.prep.outputs.output_dir }}:/output \
-            --name build_pkg ${{ steps.prep.outputs.tagged_image }}
-          docker exec build_pkg git config --global --add safe.directory /work
-          docker exec build_pkg bash -lc "cd /work && ./scripts/build.sh buildAmatsukaze/Amatsukaze"
-          docker exec build_pkg bash -lc "cd /work/buildAmatsukaze/Amatsukaze && tar -Jcvf /output/Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz ."
-          cp ${{ steps.prep.outputs.output_dir }}/Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz .
-          echo "pkg_name=Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}.tar.xz" >> $GITHUB_OUTPUT
+          # 2つの成果物は内容が重ならないので、同じツリーに重ねるだけでよい
+          mkdir -p pkg
+          tar -xf parts/native.tar -C pkg
+          tar -xf parts/dotnet.tar -C pkg
+          PKG_NAME=Amatsukaze_linux_${{ steps.rev.outputs.version_name }}.tar.xz
+          tar -Jcf ${PKG_NAME} -C pkg .
+          echo "pkg_name=${PKG_NAME}" >> $GITHUB_OUTPUT
 
       - name: Calc hash
-        id: calc_hash
         run: |
-          7z h -scrc* ${{ steps.build_exec.outputs.pkg_name }}
+          7z h -scrc* ${{ steps.create_pkg.outputs.pkg_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Amatsukaze_${{ matrix.osver }}_${{ steps.rev.outputs.version_name }}
-          path: ${{ steps.build_exec.outputs.pkg_name }}
+          name: Amatsukaze_linux_${{ steps.rev.outputs.version_name }}
+          path: ${{ steps.create_pkg.outputs.pkg_name }}
 
       - name: Upload Release Asset
-        id: upload-release-asset 
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: |
-            ${{ steps.build_exec.outputs.pkg_name }}
+            ${{ steps.create_pkg.outputs.pkg_name }}
 
   build-docker:
-    needs: build
+    needs: package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

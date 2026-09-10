@@ -14,12 +14,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Ubuntu 20.04 はネイティブ側 (C++) 専用。.NET 10 SDK が提供されないため入れない。
+          # apt の meson 0.53 / cmake 3.16 は依存のビルドに古すぎるので pip 版を使い、
+          # masktools が要求する組み込み関数のため gcc-10 を既定にする。
+          - ubuntu_version: "20.04"
+            ubuntu_name: "focal"
+            tag: "ubuntu2004"
+            install_dotnet: "0"
+            pip_build_tools: "1"
+            gcc_version: "10"
           - ubuntu_version: "22.04"
             ubuntu_name: "jammy"
             tag: "ubuntu2204"
+            install_dotnet: "1"
+            pip_build_tools: "0"
+            gcc_version: ""
           - ubuntu_version: "24.04"
             ubuntu_name: "noble"
             tag: "ubuntu2404"
+            install_dotnet: "1"
+            pip_build_tools: "0"
+            gcc_version: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,6 +59,9 @@ jobs:
             --push \
             --build-arg UBUNTU_VERSION=${{ matrix.ubuntu_version }} \
             --build-arg UBUNTU_NAME=${{ matrix.ubuntu_name }} \
+            --build-arg INSTALL_DOTNET=${{ matrix.install_dotnet }} \
+            --build-arg PIP_BUILD_TOOLS=${{ matrix.pip_build_tools }} \
+            --build-arg GCC_VERSION=${{ matrix.gcc_version }} \
             -f docker/base/Dockerfile \
             -t ${IMAGE} \
             .
