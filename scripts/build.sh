@@ -1,11 +1,59 @@
 #!/bin/sh
 
-# 引数のチェック
-if [ $# -lt 1 ]; then
-    echo "Usage: $0 installdir [builddir] [--debug]"
+usage() {
+    echo "Usage: $0 installdir [builddir] [--debug] [--deps-only] [--native-only] [--dotnet-only]"
     echo "  installdir: インストール先ディレクトリ"
     echo "  builddir: ビルド用ディレクトリ (省略時は 'build')"
     echo "  --debug: デバッグビルドを実行 (省略時はリリースビルド)"
+    echo "  --deps-only: 依存ライブラリのみビルドして終了"
+    echo "  --native-only: ネイティブ側(C++)のビルドと資材の配置のみ行う"
+    echo "  --dotnet-only: .NET側のビルドと公開のみ行う"
+    echo ""
+    echo "  --native-only と --dotnet-only は、必要なツールチェインの異なる"
+    echo "  ビルド環境へ処理を分割するためのもの。同じinstalldirに対して"
+    echo "  両方を実行すると、指定なしで実行した場合と同じ内容になる。"
+}
+
+DEBUG_BUILD=false
+DEPS_ONLY=false
+BUILD_NATIVE=true
+BUILD_DOTNET=true
+INSTALL_DIR=""
+BUILD_DIR=""
+
+# オプションは位置に依存せず解釈する
+for arg in "$@"; do
+    case "${arg}" in
+        --debug)       DEBUG_BUILD=true ;;
+        --deps-only)   DEPS_ONLY=true ;;
+        --native-only) BUILD_DOTNET=false ;;
+        --dotnet-only) BUILD_NATIVE=false ;;
+        -h|--help)     usage; exit 0 ;;
+        -*)
+            echo "不明なオプションです: ${arg}"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "${INSTALL_DIR}" ]; then
+                INSTALL_DIR="${arg}"
+            elif [ -z "${BUILD_DIR}" ]; then
+                BUILD_DIR="${arg}"
+            else
+                echo "引数が多すぎます: ${arg}"
+                usage
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [ -z "${INSTALL_DIR}" ]; then
+    usage
+    exit 1
+fi
+if [ "${BUILD_NATIVE}" = "false" ] && [ "${BUILD_DOTNET}" = "false" ]; then
+    echo "--native-only と --dotnet-only は同時に指定できません。"
     exit 1
 fi
 
@@ -13,43 +61,36 @@ SCRIPT_DIR=`dirname $0`
 SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
 PROJECT_ROOT=`cd ${SCRIPT_DIR}/.. && pwd`
 
-INSTALL_DIR=`realpath -m "$1"`
-BUILD_DIR="${2:-build}"
+INSTALL_DIR=`realpath -m "${INSTALL_DIR}"`
+BUILD_DIR="${BUILD_DIR:-build}"
 
-# .NET 10 SDK 必須チェック
-if ! command -v dotnet >/dev/null 2>&1; then
-    echo "dotnet コマンドが見つかりません。.NET 10 SDK をインストールしてください。"
-    exit 1
-fi
-if ! dotnet --list-sdks | awk '{print $1}' | grep -Eq '^10\.'; then
-    echo ".NET 10 SDK が見つかりません。dotnet --list-sdks を確認してください。"
-    exit 1
-fi
-
-# デバッグビルドのオプションをチェック
-DEBUG_BUILD=false
-if [ "$2" = "--debug" ] || [ "$3" = "--debug" ]; then
-    DEBUG_BUILD=true
+if [ "${DEBUG_BUILD}" = "true" ]; then
     echo "デバッグビルドモードで実行します"
-    # builddirが--debugの場合はデフォルト値を使用
-    if [ "$2" = "--debug" ]; then
-        BUILD_DIR="build"
-    fi
 else
     echo "リリースビルドモードで実行します"
 fi
-# 依存のみビルドオプション
-DEPS_ONLY=false
-if [ "$2" = "--deps-only" ] || [ "$3" = "--deps-only" ]; then
-    DEPS_ONLY=true
-    # builddirが--deps-onlyの場合はデフォルト値を使用
-    if [ "$2" = "--deps-only" ]; then
-        BUILD_DIR="build"
+if [ "${BUILD_DOTNET}" = "false" ]; then
+    echo "ネイティブ側のみビルドします"
+fi
+if [ "${BUILD_NATIVE}" = "false" ]; then
+    echo ".NET側のみビルドします"
+fi
+
+# .NET 10 SDK 必須チェック (.NET側をビルドする場合のみ)
+if [ "${BUILD_DOTNET}" = "true" ] && [ "${DEPS_ONLY}" = "false" ]; then
+    if ! command -v dotnet >/dev/null 2>&1; then
+        echo "dotnet コマンドが見つかりません。.NET 10 SDK をインストールしてください。"
+        exit 1
+    fi
+    if ! dotnet --list-sdks | awk '{print $1}' | grep -Eq '^10\.'; then
+        echo ".NET 10 SDK が見つかりません。dotnet --list-sdks を確認してください。"
+        exit 1
     fi
 fi
+
 # buildディレクトリがない場合は作成
 if [ ! -d "${BUILD_DIR}" ]; then
-    mkdir "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
 fi
 
 # buildディレクトリに移動
@@ -64,187 +105,7 @@ if [ "${DEPS_ONLY}" = "true" ]; then
     exit 0
 fi
 
-# /amt の事前ビルド検出とリンク設定
-AMT_BASELIBS_DIR=${AMT_BASELIBS_DIR:-/amt/baselibs}
-AMT_PKGCONFIG_FFNK_DIR=${AMT_PKGCONFIG_FFNK_DIR:-/amt/ffmpeg_nekopanda/build/lib/pkgconfig}
-AMT_PKGCONFIG_FF612_DIR=${AMT_PKGCONFIG_FF612_DIR:-/amt/ffmpeg_612/build/lib/pkgconfig}
-USE_PREBUILT_BASELIBS=0
-USE_PREBUILT_FFNK=0
-USE_PREBUILT_FF612=0
-if [ -d "${AMT_BASELIBS_DIR}" ]; then
-    ln -sfn "${AMT_BASELIBS_DIR}" "${BUILD_DIR}/baselibs"
-    export PKG_CONFIG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig:${PKG_CONFIG_PATH}"
-    USE_PREBUILT_BASELIBS=1
-fi
-if [ -d "${AMT_PKGCONFIG_FFNK_DIR}" ]; then
-    USE_PREBUILT_FFNK=1
-fi
-if [ -d "${AMT_PKGCONFIG_FF612_DIR}" ]; then
-    USE_PREBUILT_FF612=1
-fi
-
-# フォールバック検出（ENV未設定でも /amt がある場合を考慮）
-if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ -d "/amt/baselibs/lib/pkgconfig" ]; then
-    ln -sfn "/amt/baselibs" "${BUILD_DIR}/baselibs"
-    export PKG_CONFIG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig:${PKG_CONFIG_PATH}"
-    USE_PREBUILT_BASELIBS=1
-fi
-if [ "${USE_PREBUILT_FFNK}" != "1" ] && [ -d "/amt/ffmpeg_nekopanda/build/lib/pkgconfig" ]; then
-    AMT_PKGCONFIG_FFNK_DIR="/amt/ffmpeg_nekopanda/build/lib/pkgconfig"
-    USE_PREBUILT_FFNK=1
-fi
-if [ "${USE_PREBUILT_FF612}" != "1" ] && [ -d "/amt/ffmpeg_612/build/lib/pkgconfig" ]; then
-    AMT_PKGCONFIG_FF612_DIR="/amt/ffmpeg_612/build/lib/pkgconfig"
-    USE_PREBUILT_FF612=1
-fi
-
-echo "${BUILD_DIR} にインストールを行います。"
-
-if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
-    if [ "${USE_PREBUILT_BASELIBS}" != "1" ]; then
-        echo "nv-codec-headers のビルドを行います。"
-        (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
-        && tar xf nv-codec-headers.tar.gz \
-        && rm nv-codec-headers.tar.gz \
-        && cd nv-codec-headers-12.2.72.0 \
-        && make PREFIX=${BUILD_DIR}/baselibs install) || exit 1
-    else
-        echo "prebuilt baselibs を使用します。nv-codec-headers のビルドをスキップします。"
-    fi
-fi
-
-## libjpeg-turboのビルド
-if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "libjpeg-turbo-3.1.0" ]; then
-  echo "libjpeg-turbo のビルドを行います。"
-  (
-    wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz -O libjpeg-turbo.tar.gz \
-    && tar xf libjpeg-turbo.tar.gz \
-    && rm libjpeg-turbo.tar.gz \
-    && cd libjpeg-turbo-3.1.0 \
-    && cmake -G "Unix Makefiles" -B _build \
-      -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
-      -DENABLE_SHARED=OFF \
-      -DENABLE_STATIC=ON \
-    && cd _build && make -j"$(nproc)" \
-    && make install
-  ) || exit 1
-else
-  echo "prebuilt baselibs を使用します。libjpeg-turbo のビルドをスキップします。"
-fi
-
-# ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
-if [ ! -d "build_ffnk" ]; then
-    mkdir build_ffnk
-fi
-cd build_ffnk
-if [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FFNK}" != "1" ]; then
-    echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
-    if [ ! -d "ffmpeg_nekopanda" ]; then
-      (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
-      && cd ffmpeg_nekopanda \
-      && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
-      && patch -p1 < patch0.diff) || exit 1
-    fi
-    # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する
-    (cd ffmpeg_nekopanda \
-    && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
-    && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
-    && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
-      --enable-gpl --enable-version3 \
-      --disable-doc --disable-network --disable-devices \
-    && make -j$(nproc) \
-    && make install) || exit 1
-fi
-
-# ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
-echo "AmatsukazeCLI (地デジ/BS向け) のビルドを行います。"
-FFNK_PKGCFG_PATH="`pwd`/ffmpeg_nekopanda/build/lib/pkgconfig"
-if [ "${USE_PREBUILT_FFNK}" = "1" ]; then
-    FFNK_PKGCFG_PATH="${AMT_PKGCONFIG_FFNK_DIR}"
-fi
-BASELIBS_PKGCFG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig"
-(meson setup --buildtype release --pkg-config-path "${FFNK_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
-cd ..
-
-# ----- BS4K向け ffmpeg_6.1.2ベースのAmatsukazeCLIのビルド -----
-if [ ! -d "build_ff612" ]; then
-    mkdir build_ff612
-fi
-cd build_ff612
-if [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FF612}" != "1" ]; then
-    echo "ffmpeg (BS4K向け) のビルドを行います。"
-  if [ ! -d "ffmpeg-6.1.2" ]; then
-    (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
-      && tar -xf ffmpeg-6.1.2.tar.xz) || exit 1
-  fi
-  (cd ffmpeg-6.1.2 \
-    && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
-      --enable-gpl --enable-version3 \
-      --disable-doc --disable-network --disable-devices \
-    && make -j$(nproc) \
-    && make install) || exit 1
-fi
-
-# ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う
-echo "AmatsukazeCLI (BS4K向け) のビルドを行います。"
-FF612_PKGCFG_PATH="`pwd`/ffmpeg-6.1.2/build/lib/pkgconfig"
-if [ "${USE_PREBUILT_FF612}" = "1" ]; then
-  FF612_PKGCFG_PATH="${AMT_PKGCONFIG_FF612_DIR}"
-fi
-(meson setup --buildtype release --pkg-config-path "${FF612_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
-cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
-cd ..
-
-# dotnet の AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルド
-if [ "$DEBUG_BUILD" = true ]; then
-    echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のデバッグビルドを行います。"
-    cd "${PROJECT_ROOT}" || exit 1
-    (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Debug) || exit 1
-else
-    echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のリリースビルドを行います。"
-    cd "${PROJECT_ROOT}" || exit 1
-    (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Release) || exit 1
-fi
-
-
-# ----- インストール -----
-# インストール先ディレクトリの作成
-mkdir -p "${INSTALL_DIR}/avs"
-mkdir -p "${INSTALL_DIR}/avscache"
-mkdir -p "${INSTALL_DIR}/bat"
-mkdir -p "${INSTALL_DIR}/drcs"
-mkdir -p "${INSTALL_DIR}/exe_files"
-mkdir -p "${INSTALL_DIR}/exe_files/plugins64"
-mkdir -p "${INSTALL_DIR}/logo"
-mkdir -p "${INSTALL_DIR}/profile"
-mkdir -p "${INSTALL_DIR}/scripts"
-touch "${INSTALL_DIR}/drcs/drcs_map.txt"
-
-# 実行ファイルのインストール
-echo "実行ファイルをインストールします..."
-install -D -t "${INSTALL_DIR}" ./scripts/AmatsukazeServer.sh
-install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeCLI/AmatsukazeCLI"
-install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeGenLogo/AmatsukazeGenLogo"
-install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/libAmatsukaze.so"
-install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
-# ニコニコ実況コメント取得・ASS変換スクリプト（Linux用）
-install -m 755 -D -t "${INSTALL_DIR}/exe_files" ./scripts/nicojk_ass.py
-# danmaku2ass（コメントXML→ASS変換、GPL-3.0）: なければダウンロード
-DANMAKU2ASS_COMMIT="ced881747670c2eb1c0dbd292c2a567f444b056a"
-DANMAKU2ASS_PATH="${INSTALL_DIR}/exe_files/danmaku2ass.py"
-if [ ! -s "${DANMAKU2ASS_PATH}" ]; then
-    echo "danmaku2ass.py をダウンロードします..."
-    wget -q "https://raw.githubusercontent.com/m13253/danmaku2ass/${DANMAKU2ASS_COMMIT}/danmaku2ass.py" \
-        -O "${DANMAKU2ASS_PATH}" || { rm -f "${DANMAKU2ASS_PATH}"; echo "danmaku2ass.py のダウンロードに失敗しました"; exit 1; }
-    chmod 755 "${DANMAKU2ASS_PATH}"
-fi
-
-# アーカイブ展開用 7-Zip CLI（静的リンク版）
+# CPUアーキテクチャの判定 (7-Zip の取得と .NET の publish の双方で使用する)
 SEVENZIP_VER="26.02"
 SEVENZIP_PKG="7z2602"
 case "$(uname -m)" in
@@ -266,94 +127,296 @@ case "$(uname -m)" in
         ;;
 esac
 SEVENZIP_LICENSE_SHA256="1790374e5352329cedb46ee3808930a88e9ca2f08b82b10fcf5cf605d2c301b1"
-SEVENZIP_DIR="${INSTALL_DIR}/exe_files/7z"
-SEVENZIP_PATH="${SEVENZIP_DIR}/7zzs"
-SEVENZIP_LICENSE_PATH="${SEVENZIP_DIR}/License.txt"
-SEVENZIP_ARCHIVE="${BUILD_DIR}/${SEVENZIP_PKG}-linux-${LINUX_ARCH}.tar.xz.tmp"
-if ! printf '%s  %s\n' "${SEVENZIP_BINARY_SHA256}" "${SEVENZIP_PATH}" | sha256sum -c - >/dev/null 2>&1 \
-    || ! printf '%s  %s\n' "${SEVENZIP_LICENSE_SHA256}" "${SEVENZIP_LICENSE_PATH}" | sha256sum -c - >/dev/null 2>&1; then
-    echo "7-Zip CLI ${SEVENZIP_VER} をダウンロードします..."
-    mkdir -p "${SEVENZIP_DIR}"
-    rm -f "${SEVENZIP_ARCHIVE}"
-    wget -q "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-${LINUX_ARCH}.tar.xz" \
-        -O "${SEVENZIP_ARCHIVE}" || { rm -f "${SEVENZIP_ARCHIVE}"; echo "7-Zip CLI のダウンロードに失敗しました"; exit 1; }
-    if ! printf '%s  %s\n' "${SEVENZIP_ARCHIVE_SHA256}" "${SEVENZIP_ARCHIVE}" | sha256sum -c - >/dev/null 2>&1; then
-        rm -f "${SEVENZIP_ARCHIVE}"
-        echo "7-Zip CLI のアーカイブの SHA-256 が一致しません"
-        exit 1
+
+# ----- ネイティブ(C++)側のビルド -----
+if [ "${BUILD_NATIVE}" = "true" ]; then
+
+    # /amt の事前ビルド検出とリンク設定
+    AMT_BASELIBS_DIR=${AMT_BASELIBS_DIR:-/amt/baselibs}
+    AMT_PKGCONFIG_FFNK_DIR=${AMT_PKGCONFIG_FFNK_DIR:-/amt/ffmpeg_nekopanda/build/lib/pkgconfig}
+    AMT_PKGCONFIG_FF612_DIR=${AMT_PKGCONFIG_FF612_DIR:-/amt/ffmpeg_612/build/lib/pkgconfig}
+    USE_PREBUILT_BASELIBS=0
+    USE_PREBUILT_FFNK=0
+    USE_PREBUILT_FF612=0
+    if [ -d "${AMT_BASELIBS_DIR}" ]; then
+        ln -sfn "${AMT_BASELIBS_DIR}" "${BUILD_DIR}/baselibs"
+        export PKG_CONFIG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig:${PKG_CONFIG_PATH}"
+        USE_PREBUILT_BASELIBS=1
     fi
-    if ! tar -xf "${SEVENZIP_ARCHIVE}" -C "${SEVENZIP_DIR}" 7zzs License.txt; then
-        rm -f "${SEVENZIP_ARCHIVE}" "${SEVENZIP_PATH}" "${SEVENZIP_LICENSE_PATH}"
-        echo "7-Zip CLI の展開に失敗しました"
-        exit 1
+    if [ -d "${AMT_PKGCONFIG_FFNK_DIR}" ]; then
+        USE_PREBUILT_FFNK=1
     fi
-    rm -f "${SEVENZIP_ARCHIVE}"
+    if [ -d "${AMT_PKGCONFIG_FF612_DIR}" ]; then
+        USE_PREBUILT_FF612=1
+    fi
+
+    # フォールバック検出（ENV未設定でも /amt がある場合を考慮）
+    if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ -d "/amt/baselibs/lib/pkgconfig" ]; then
+        ln -sfn "/amt/baselibs" "${BUILD_DIR}/baselibs"
+        export PKG_CONFIG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig:${PKG_CONFIG_PATH}"
+        USE_PREBUILT_BASELIBS=1
+    fi
+    if [ "${USE_PREBUILT_FFNK}" != "1" ] && [ -d "/amt/ffmpeg_nekopanda/build/lib/pkgconfig" ]; then
+        AMT_PKGCONFIG_FFNK_DIR="/amt/ffmpeg_nekopanda/build/lib/pkgconfig"
+        USE_PREBUILT_FFNK=1
+    fi
+    if [ "${USE_PREBUILT_FF612}" != "1" ] && [ -d "/amt/ffmpeg_612/build/lib/pkgconfig" ]; then
+        AMT_PKGCONFIG_FF612_DIR="/amt/ffmpeg_612/build/lib/pkgconfig"
+        USE_PREBUILT_FF612=1
+    fi
+
+    echo "${BUILD_DIR} にインストールを行います。"
+
+    if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
+        if [ "${USE_PREBUILT_BASELIBS}" != "1" ]; then
+            echo "nv-codec-headers のビルドを行います。"
+            (wget https://github.com/FFmpeg/nv-codec-headers/releases/download/n12.2.72.0/nv-codec-headers-12.2.72.0.tar.gz -O nv-codec-headers.tar.gz \
+            && tar xf nv-codec-headers.tar.gz \
+            && rm nv-codec-headers.tar.gz \
+            && cd nv-codec-headers-12.2.72.0 \
+            && make PREFIX=${BUILD_DIR}/baselibs install) || exit 1
+        else
+            echo "prebuilt baselibs を使用します。nv-codec-headers のビルドをスキップします。"
+        fi
+    fi
+
+    ## libjpeg-turboのビルド
+    if [ "${USE_PREBUILT_BASELIBS}" != "1" ] && [ ! -d "libjpeg-turbo-3.1.0" ]; then
+      echo "libjpeg-turbo のビルドを行います。"
+      (
+        wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz -O libjpeg-turbo.tar.gz \
+        && tar xf libjpeg-turbo.tar.gz \
+        && rm libjpeg-turbo.tar.gz \
+        && cd libjpeg-turbo-3.1.0 \
+        && cmake -G "Unix Makefiles" -B _build \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/baselibs \
+          -DENABLE_SHARED=OFF \
+          -DENABLE_STATIC=ON \
+        && cd _build && make -j"$(nproc)" \
+        && make install
+      ) || exit 1
+    else
+      echo "prebuilt baselibs を使用します。libjpeg-turbo のビルドをスキップします。"
+    fi
+
+    # ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
+    if [ ! -d "build_ffnk" ]; then
+        mkdir build_ffnk
+    fi
+    cd build_ffnk
+    if [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FFNK}" != "1" ]; then
+        echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
+        if [ ! -d "ffmpeg_nekopanda" ]; then
+          (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
+          && cd ffmpeg_nekopanda \
+          && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
+          && patch -p1 < patch0.diff) || exit 1
+        fi
+        # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する
+        (cd ffmpeg_nekopanda \
+        && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
+        && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
+        && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
+          --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
+          --enable-gpl --enable-version3 \
+          --disable-doc --disable-network --disable-devices \
+        && make -j$(nproc) \
+        && make install) || exit 1
+    fi
+
+    # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
+    echo "AmatsukazeCLI (地デジ/BS向け) のビルドを行います。"
+    FFNK_PKGCFG_PATH="`pwd`/ffmpeg_nekopanda/build/lib/pkgconfig"
+    if [ "${USE_PREBUILT_FFNK}" = "1" ]; then
+        FFNK_PKGCFG_PATH="${AMT_PKGCONFIG_FFNK_DIR}"
+    fi
+    BASELIBS_PKGCFG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig"
+    (meson setup --buildtype release --pkg-config-path "${FFNK_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
+    cd ..
+
+    # ----- BS4K向け ffmpeg_6.1.2ベースのAmatsukazeCLIのビルド -----
+    if [ ! -d "build_ff612" ]; then
+        mkdir build_ff612
+    fi
+    cd build_ff612
+    if [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FF612}" != "1" ]; then
+        echo "ffmpeg (BS4K向け) のビルドを行います。"
+      if [ ! -d "ffmpeg-6.1.2" ]; then
+        (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
+          && tar -xf ffmpeg-6.1.2.tar.xz) || exit 1
+      fi
+      (cd ffmpeg-6.1.2 \
+        && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
+          --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
+          --enable-gpl --enable-version3 \
+          --disable-doc --disable-network --disable-devices \
+        && make -j$(nproc) \
+        && make install) || exit 1
+    fi
+
+    # ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う
+    echo "AmatsukazeCLI (BS4K向け) のビルドを行います。"
+    FF612_PKGCFG_PATH="`pwd`/ffmpeg-6.1.2/build/lib/pkgconfig"
+    if [ "${USE_PREBUILT_FF612}" = "1" ]; then
+      FF612_PKGCFG_PATH="${AMT_PKGCONFIG_FF612_DIR}"
+    fi
+    (meson setup --buildtype release --pkg-config-path "${FF612_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
+    cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
+    cd ..
+
+fi
+
+# ----- dotnet の AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルド -----
+if [ "${BUILD_DOTNET}" = "true" ]; then
+    if [ "$DEBUG_BUILD" = true ]; then
+        echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のデバッグビルドを行います。"
+        cd "${PROJECT_ROOT}" || exit 1
+        (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Debug) || exit 1
+    else
+        echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のリリースビルドを行います。"
+        cd "${PROJECT_ROOT}" || exit 1
+        (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Release) || exit 1
+    fi
+fi
+
+
+# ----- インストール -----
+# 以降は相対パスでソースツリーを参照するため、必ずプロジェクトルートを起点にする
+cd "${PROJECT_ROOT}" || exit 1
+
+# インストール先ディレクトリの作成
+mkdir -p "${INSTALL_DIR}/avs"
+mkdir -p "${INSTALL_DIR}/avscache"
+mkdir -p "${INSTALL_DIR}/bat"
+mkdir -p "${INSTALL_DIR}/drcs"
+mkdir -p "${INSTALL_DIR}/exe_files"
+mkdir -p "${INSTALL_DIR}/exe_files/plugins64"
+mkdir -p "${INSTALL_DIR}/logo"
+mkdir -p "${INSTALL_DIR}/profile"
+mkdir -p "${INSTALL_DIR}/scripts"
+touch "${INSTALL_DIR}/drcs/drcs_map.txt"
+
+# ネイティブのビルド結果と、ツールチェインに依存しない資材の配置。
+# 資材側はネイティブ側と同じ工程にまとめ、分割ビルドしても二重配置にならないようにする。
+if [ "${BUILD_NATIVE}" = "true" ]; then
+
+    # 実行ファイルのインストール
+    echo "実行ファイルをインストールします..."
+    install -D -t "${INSTALL_DIR}" ./scripts/AmatsukazeServer.sh
+    install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeCLI/AmatsukazeCLI"
+    install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeGenLogo/AmatsukazeGenLogo"
+    install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/libAmatsukaze.so"
+    install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
+    # ニコニコ実況コメント取得・ASS変換スクリプト（Linux用）
+    install -m 755 -D -t "${INSTALL_DIR}/exe_files" ./scripts/nicojk_ass.py
+    # danmaku2ass（コメントXML→ASS変換、GPL-3.0）: なければダウンロード
+    DANMAKU2ASS_COMMIT="ced881747670c2eb1c0dbd292c2a567f444b056a"
+    DANMAKU2ASS_PATH="${INSTALL_DIR}/exe_files/danmaku2ass.py"
+    if [ ! -s "${DANMAKU2ASS_PATH}" ]; then
+        echo "danmaku2ass.py をダウンロードします..."
+        wget -q "https://raw.githubusercontent.com/m13253/danmaku2ass/${DANMAKU2ASS_COMMIT}/danmaku2ass.py" \
+            -O "${DANMAKU2ASS_PATH}" || { rm -f "${DANMAKU2ASS_PATH}"; echo "danmaku2ass.py のダウンロードに失敗しました"; exit 1; }
+        chmod 755 "${DANMAKU2ASS_PATH}"
+    fi
+
+    # アーカイブ展開用 7-Zip CLI（静的リンク版）
+    SEVENZIP_DIR="${INSTALL_DIR}/exe_files/7z"
+    SEVENZIP_PATH="${SEVENZIP_DIR}/7zzs"
+    SEVENZIP_LICENSE_PATH="${SEVENZIP_DIR}/License.txt"
+    SEVENZIP_ARCHIVE="${BUILD_DIR}/${SEVENZIP_PKG}-linux-${LINUX_ARCH}.tar.xz.tmp"
     if ! printf '%s  %s\n' "${SEVENZIP_BINARY_SHA256}" "${SEVENZIP_PATH}" | sha256sum -c - >/dev/null 2>&1 \
         || ! printf '%s  %s\n' "${SEVENZIP_LICENSE_SHA256}" "${SEVENZIP_LICENSE_PATH}" | sha256sum -c - >/dev/null 2>&1; then
-        rm -f "${SEVENZIP_PATH}" "${SEVENZIP_LICENSE_PATH}"
-        echo "展開した 7-Zip CLI の SHA-256 が一致しません"
-        exit 1
+        echo "7-Zip CLI ${SEVENZIP_VER} をダウンロードします..."
+        mkdir -p "${SEVENZIP_DIR}"
+        rm -f "${SEVENZIP_ARCHIVE}"
+        wget -q "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-${LINUX_ARCH}.tar.xz" \
+            -O "${SEVENZIP_ARCHIVE}" || { rm -f "${SEVENZIP_ARCHIVE}"; echo "7-Zip CLI のダウンロードに失敗しました"; exit 1; }
+        if ! printf '%s  %s\n' "${SEVENZIP_ARCHIVE_SHA256}" "${SEVENZIP_ARCHIVE}" | sha256sum -c - >/dev/null 2>&1; then
+            rm -f "${SEVENZIP_ARCHIVE}"
+            echo "7-Zip CLI のアーカイブの SHA-256 が一致しません"
+            exit 1
+        fi
+        if ! tar -xf "${SEVENZIP_ARCHIVE}" -C "${SEVENZIP_DIR}" 7zzs License.txt; then
+            rm -f "${SEVENZIP_ARCHIVE}" "${SEVENZIP_PATH}" "${SEVENZIP_LICENSE_PATH}"
+            echo "7-Zip CLI の展開に失敗しました"
+            exit 1
+        fi
+        rm -f "${SEVENZIP_ARCHIVE}"
+        if ! printf '%s  %s\n' "${SEVENZIP_BINARY_SHA256}" "${SEVENZIP_PATH}" | sha256sum -c - >/dev/null 2>&1 \
+            || ! printf '%s  %s\n' "${SEVENZIP_LICENSE_SHA256}" "${SEVENZIP_LICENSE_PATH}" | sha256sum -c - >/dev/null 2>&1; then
+            rm -f "${SEVENZIP_PATH}" "${SEVENZIP_LICENSE_PATH}"
+            echo "展開した 7-Zip CLI の SHA-256 が一致しません"
+            exit 1
+        fi
+    else
+        echo "7-Zip CLI ${SEVENZIP_VER} は配置済みです。"
     fi
-else
-    echo "7-Zip CLI ${SEVENZIP_VER} は配置済みです。"
+    chmod 755 "${SEVENZIP_PATH}" || { echo "7-Zip CLI に実行権限を設定できませんでした"; exit 1; }
+
+    # defaultファイルのコピー
+    cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
+    cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
+    cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
+    cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
+    cp -r scripts/*            "${INSTALL_DIR}/scripts/"
+
+    # ラッパースクリプトに実行権限を付与
+    if [ -d "${INSTALL_DIR}/exe_files/cmd" ]; then
+      chmod +x "${INSTALL_DIR}/exe_files/cmd"/* || true
+    fi
+
+    # JLファイルのインストール
+    if [ ! -d "${INSTALL_DIR}/JL" ]; then
+        echo "JLファイルのインストールを開始します..."
+        mkdir -p "${INSTALL_DIR}/JL" || exit 1
+        # ソースツリーを汚さないよう、取得と展開はビルドディレクトリ側で行う
+        (cd "${BUILD_DIR}" \
+            && wget https://github.com/yobibi/join_logo_scp/archive/refs/tags/v5.1.1.tar.gz \
+            && tar -xf v5.1.1.tar.gz \
+            && cp -r join_logo_scp-5.1.1/JL/* "${INSTALL_DIR}/JL/" \
+            && rm -rf join_logo_scp-5.1.1 v5.1.1.tar.gz) || exit 1
+    fi
+
 fi
-chmod 755 "${SEVENZIP_PATH}" || { echo "7-Zip CLI に実行権限を設定できませんでした"; exit 1; }
 
+# ----- .NET アプリケーションの公開 -----
+if [ "${BUILD_DOTNET}" = "true" ]; then
+    if [ "$DEBUG_BUILD" = true ]; then
+        echo ".NET アプリケーションをデバッグモードで公開します..."
+        DOTNET_PUBLISH_CONFIG=Debug
+    else
+        echo ".NET アプリケーションをリリースモードで公開します..."
+        DOTNET_PUBLISH_CONFIG=Release
+    fi
 
-# .NET アプリケーションの公開
-if [ "$DEBUG_BUILD" = true ]; then
-    echo ".NET アプリケーションをデバッグモードで公開します..."
-    DOTNET_PUBLISH_CONFIG=Debug
-else
-    echo ".NET アプリケーションをリリースモードで公開します..."
-    DOTNET_PUBLISH_CONFIG=Release
-fi
-
-# ソリューション全体の publish だと WebUI が PublishSingleFile に非対応のため失敗するため、
-# 実行ファイルが必要なプロジェクトのみ publish する
-DOTNET_PUBLISH_PROJECTS="
+    # ソリューション全体の publish だと WebUI が PublishSingleFile に非対応のため失敗するため、
+    # 実行ファイルが必要なプロジェクトのみ publish する
+    DOTNET_PUBLISH_PROJECTS="
 AmatsukazeServerCLI/AmatsukazeServerCLI.csproj
 AmatsukazeAddTask/AmatsukazeAddTask.csproj
 ScriptCommand/ScriptCommand.csproj
 "
-for project in ${DOTNET_PUBLISH_PROJECTS}; do
-    if ! dotnet publish "${project}" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
-        echo ".NET アプリケーションの公開に失敗しました (${project})"
+    for project in ${DOTNET_PUBLISH_PROJECTS}; do
+        if ! dotnet publish "${project}" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then
+            echo ".NET アプリケーションの公開に失敗しました (${project})"
+            exit 1
+        fi
+    done
+
+    # WebUI 静的ファイルの公開（AmatsukazeServer.csproj の AfterPublish を利用）
+    WEBUI_PUBLISH_DIR="${BUILD_DIR}/webui_publish"
+    echo "WebUI (static) を公開します..."
+    if ! dotnet publish "AmatsukazeServer/AmatsukazeServer.csproj" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained false -p:PublishSingleFile=false -o "${WEBUI_PUBLISH_DIR}"; then
+        echo "WebUI の公開に失敗しました"
         exit 1
     fi
-done
-
-# WebUI 静的ファイルの公開（AmatsukazeServer.csproj の AfterPublish を利用）
-WEBUI_PUBLISH_DIR="${BUILD_DIR}/webui_publish"
-echo "WebUI (static) を公開します..."
-if ! dotnet publish "AmatsukazeServer/AmatsukazeServer.csproj" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained false -p:PublishSingleFile=false -o "${WEBUI_PUBLISH_DIR}"; then
-    echo "WebUI の公開に失敗しました"
-    exit 1
-fi
-if [ -d "${WEBUI_PUBLISH_DIR}/wwwroot" ]; then
-    rm -rf "${INSTALL_DIR}/exe_files/wwwroot"
-    cp -r "${WEBUI_PUBLISH_DIR}/wwwroot" "${INSTALL_DIR}/exe_files/wwwroot"
-fi
-# defaultファイルのコピー
-cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"
-cp -r defaults/bat_linux/* "${INSTALL_DIR}/bat/"
-cp -r defaults/exe_files/* "${INSTALL_DIR}/exe_files/"
-cp -r defaults/profile/*   "${INSTALL_DIR}/profile/"
-cp -r scripts/*            "${INSTALL_DIR}/scripts/"
-
-# ラッパースクリプトに実行権限を付与
-if [ -d "${INSTALL_DIR}/exe_files/cmd" ]; then
-  chmod +x "${INSTALL_DIR}/exe_files/cmd"/* || true
-fi
-
-# JLファイルのインストール
-if [ ! -d "${INSTALL_DIR}/JL" ]; then
-    echo "JLファイルのインストールを開始します..."
-    mkdir -p "${INSTALL_DIR}/JL" || exit 1
-    wget https://github.com/yobibi/join_logo_scp/archive/refs/tags/v5.1.1.tar.gz || exit 1
-    tar -xf v5.1.1.tar.gz || exit 1
-    cp -r join_logo_scp-5.1.1/JL/* "${INSTALL_DIR}/JL/" || exit 1
-    rm -rf join_logo_scp-5.1.1 v5.1.1.tar.gz || exit 1
+    if [ -d "${WEBUI_PUBLISH_DIR}/wwwroot" ]; then
+        rm -rf "${INSTALL_DIR}/exe_files/wwwroot"
+        cp -r "${WEBUI_PUBLISH_DIR}/wwwroot" "${INSTALL_DIR}/exe_files/wwwroot"
+    fi
 fi
 
 echo "インストールが完了しました (WebUI は REST ポート+1 で公開されます)"
