@@ -166,8 +166,9 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
   **展開先は実行するユーザーが読み書きできる権限のあるディレクトリとしてください。** (下記では ```$HOME/Amatsukaze```)
 
   ```bash
-  wget https://github.com/rigaya/Amatsukaze/releases/download/<version>/Amatsukaze_<version>_Ubuntuxx.xx.tar.xz
-  tar xf Amatsukaze_<version>_Ubuntuxx.xx.tar.xz -C $HOME/Amatsukaze
+  wget https://github.com/rigaya/Amatsukaze/releases/download/<version>/Amatsukaze_linux_<version>_x64.tar.xz
+  mkdir -p $HOME/Amatsukaze
+  tar xf Amatsukaze_linux_<version>_x64.tar.xz -C $HOME/Amatsukaze
   ```
 
 - 各Avisynthプラグインへのリンクの作成

@@ -150,7 +150,7 @@ jobs:
           mkdir -p pkg
           tar -xf parts/native.tar -C pkg
           tar -xf parts/dotnet.tar -C pkg
-          PKG_NAME=Amatsukaze_linux_${{ steps.rev.outputs.version_name }}.tar.xz
+          PKG_NAME=Amatsukaze_linux_${{ steps.rev.outputs.version_name }}_x64.tar.xz
           tar -Jcf ${PKG_NAME} -C pkg .
           echo "pkg_name=${PKG_NAME}" >> $GITHUB_OUTPUT
 

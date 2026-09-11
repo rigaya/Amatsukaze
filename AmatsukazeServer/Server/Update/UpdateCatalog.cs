@@ -18,10 +18,9 @@ namespace Amatsukaze.Server.Update
                 {
                     new AssetRule(UpdateOSKind.Windows, UpdateArchitecture.X64,
                         @"^Amatsukaze_(?<ver>[0-9]+(?:\.[0-9]+)+)\.7z$"),
+                    // Linux版はディストリ非依存の単一パッケージになったため、ディストリバージョンでは振り分けない
                     new AssetRule(UpdateOSKind.Linux, UpdateArchitecture.X64,
-                        @"^Amatsukaze_Ubuntu22\.04_(?<ver>[0-9]+(?:\.[0-9]+)+)\.tar\.xz$", "22.04"),
-                    new AssetRule(UpdateOSKind.Linux, UpdateArchitecture.X64,
-                        @"^Amatsukaze_Ubuntu24\.04_(?<ver>[0-9]+(?:\.[0-9]+)+)\.tar\.xz$", "24.04"),
+                        @"^Amatsukaze_linux_(?<ver>[0-9]+(?:\.[0-9]+)+)_x64\.tar\.xz$"),
                 },
                 WindowsLayout = InstallLayout.AppRootPartial,
                 LinuxLayout = InstallLayout.AppRootPartial,

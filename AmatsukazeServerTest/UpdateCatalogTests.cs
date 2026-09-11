@@ -6,6 +6,7 @@ namespace AmatsukazeServerTest;
 public sealed class UpdateCatalogTests
 {
     [Theory]
+    [InlineData("Amatsukaze", "Amatsukaze_linux_1.1.0.0_x64.tar.xz", "1.1.0.0")]
     [InlineData("x264", "x264_3223_amd64_linux.tar.xz", "3223")]
     [InlineData("x265", "x265_4.3+13_amd64_linux.tar.xz", "4.3+13")]
     [InlineData("SVT-AV1", "SvtAv1EncApp_4.2.0-76_amd64_linux_clang.tar.xz", "4.2.0-76")]
@@ -45,6 +46,8 @@ public sealed class UpdateCatalogTests
     }
 
     [Theory]
+    [InlineData("Amatsukaze", "Amatsukaze_linux_1.1.0.0_arm64.tar.xz")]
+    [InlineData("Amatsukaze", "Amatsukaze_1.1.0.0.7z")]
     [InlineData("tsreplace", "tsreplace_0.19_arm64.deb")]
     [InlineData("QSVEnc", "QSVEncC_8.26_x64.7z")]
     [InlineData("NVEnc", "nvencc_9.31_arm64.deb")]

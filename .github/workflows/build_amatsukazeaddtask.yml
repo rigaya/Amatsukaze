@@ -73,7 +73,7 @@ jobs:
           sudo apt-get install -y xz-utils
 
           cd "${PUBLISH_DIR}"
-          PKG_NAME="AmatsukazeAddTask_Linux_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.tar.xz"
+          PKG_NAME="AmatsukazeAddTask_linux_${{ steps.version.outputs.version_name }}_${{ matrix.arch }}.tar.xz"
           tar --exclude='*.pdb' -cJf "../${PKG_NAME}" ./*
 
           echo "pkg_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
