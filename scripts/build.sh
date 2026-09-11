@@ -292,14 +292,14 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
 
 fi
 
-# ----- dotnet の AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のビルド -----
+# ----- .NET アプリケーションのビルド -----
 if [ "${BUILD_DOTNET}" = "true" ]; then
     if [ "$DEBUG_BUILD" = true ]; then
-        echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のデバッグビルドを行います。"
+        echo ".NET アプリケーションのデバッグビルドを行います。"
         cd "${PROJECT_ROOT}" || exit 1
         (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Debug) || exit 1
     else
-        echo "AmatsukazeServer, AmatsukazeAddTask, AmatsukazeServerCLI のリリースビルドを行います。"
+        echo ".NET アプリケーションのリリースビルドを行います。"
         cd "${PROJECT_ROOT}" || exit 1
         (dotnet build "${PROJECT_ROOT}/AmatsukazeLinux.sln" -c Release) || exit 1
     fi
@@ -421,6 +421,7 @@ if [ "${BUILD_DOTNET}" = "true" ]; then
 AmatsukazeServerCLI/AmatsukazeServerCLI.csproj
 AmatsukazeAddTask/AmatsukazeAddTask.csproj
 ScriptCommand/ScriptCommand.csproj
+AmatsukazeDockerConfigFix/AmatsukazeDockerConfigFix.csproj
 "
     for project in ${DOTNET_PUBLISH_PROJECTS}; do
         if ! dotnet publish "${project}" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained true -p:PublishSingleFile=true -o "${INSTALL_DIR}/exe_files"; then

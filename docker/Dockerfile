@@ -441,6 +441,11 @@ if [ -n "$RENDER_GROUP" ]; then GROUPS_TO_ADD+=("$RENDER_GROUP"); elif getent gr
 if [ ${#GROUPS_TO_ADD[@]} -gt 0 ]; then
   usermod -aG "$(IFS=,; echo "${GROUPS_TO_ADD[*]}")" "$(id -nu "${DEFAULT_UID}")"
 fi
+if [ -x /app/exe_files/AmatsukazeDockerConfigFix ]; then
+  gosu "$DEFAULT_UID" /app/exe_files/AmatsukazeDockerConfigFix \
+    /app/config/AmatsukazeServer.xml /app/exe_files || \
+    echo "警告: Docker用実行ファイル設定の補正に失敗しました" >&2
+fi
 exec gosu "$DEFAULT_UID" "$@"
 EOF
 RUN sed -i 's/\r$//' /app/entrypoint.sh \

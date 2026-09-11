@@ -15,6 +15,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\AmatsukazeDockerConfigFix\AmatsukazeDockerConfigFix.csproj" />
     <ProjectReference Include="..\AmatsukazeServer\AmatsukazeServer.csproj" />
     <ProjectReference Include="..\AmatsukazeShared\AmatsukazeShared.csproj" />
   </ItemGroup>
