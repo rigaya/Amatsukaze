@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Amatsukaze NicoJK ASS Generator for Linux
+# Amatsukaze NicoJK ASS Generator for Windows / Linux
 # Copyright (c) 2017-2019 Nekopanda
 # This software is released under the MIT License.
 # http://opensource.org/licenses/mit-license.php

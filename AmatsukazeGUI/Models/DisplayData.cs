@@ -3878,6 +3878,20 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region NicoJKAssPath変更通知プロパティ
+        public string NicoJKAssPath
+        {
+            get { return Model.NicoJKAssPath; }
+            set
+            {
+                if (Model.NicoJKAssPath == value)
+                    return;
+                Model.NicoJKAssPath = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region TsReplacePath変更通知プロパティ
         public string TsReplacePath
         {

@@ -184,6 +184,20 @@ jobs:
           if exist publish\\win-x64\\*.dll copy /y publish\\win-x64\\*.dll package\\exe_files
           if exist publish\\win-x64\\*.dll.config copy /y publish\\win-x64\\*.dll.config package\\exe_files
           if exist publish\\win-x64\\*.xml copy /y publish\\win-x64\\*.xml package\\exe_files
+          if exist publish\\win-x64\\nicojk_ass.py copy /y publish\\win-x64\\nicojk_ass.py package\\exe_files
+
+          rem danmaku2ass.pyは固定コミットから取得する
+          set "DANMAKU2ASS_COMMIT=ced881747670c2eb1c0dbd292c2a567f444b056a"
+          curl.exe -fL --retry 3 --retry-delay 10 -o package\\exe_files\\danmaku2ass.py "https://raw.githubusercontent.com/m13253/danmaku2ass/%DANMAKU2ASS_COMMIT%/danmaku2ass.py"
+          if errorlevel 1 (
+            echo danmaku2ass.pyの取得に失敗しました。
+            exit /b 1
+          )
+          certutil -hashfile package\\exe_files\\danmaku2ass.py SHA256 | findstr /I /C:"899526b7a8f31ab20987bdcebc543f67be9accdcec6120d20f39cfc4efa001cf" >nul
+          if errorlevel 1 (
+            echo danmaku2ass.pyのSHA-256が一致しません。
+            exit /b 1
+          )
 
           if exist package\\exe_files\\wwwroot rmdir /s /q package\\exe_files\\wwwroot
           if exist publish\\win-x64\\wwwroot robocopy publish\\win-x64\\wwwroot package\\exe_files\\wwwroot /E /NFL /NDL /NJH /NJS
@@ -264,6 +278,14 @@ jobs:
           rem 廃止済みツールが配布物へ再混入していないことを保証する
           if exist package\\exe_files\\BatchHashChecker.exe (
             echo ERROR: package\\exe_files\\BatchHashChecker.exe remains in package.
+            exit /b 1
+          )
+          if not exist package\\exe_files\\nicojk_ass.py (
+            echo ERROR: package\\exe_files\\nicojk_ass.py がありません。
+            exit /b 1
+          )
+          if not exist package\\exe_files\\danmaku2ass.py (
+            echo ERROR: package\\exe_files\\danmaku2ass.py がありません。
             exit /b 1
           )
           set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"

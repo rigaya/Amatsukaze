@@ -1415,16 +1415,15 @@ namespace Amatsukaze.Server
             }
             if (string.IsNullOrEmpty(setting.NicoConvASSPath))
             {
+                // NicoConvASS は Windows でのみ使用する
                 if (!Util.IsServerLinux())
-                {
-                    // Windows: NicoConvASS.exe を使用
                     setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
-                }
-                else
-                {
-                    // Linux: Python スクリプト nicojk_ass.py を使用
-                    setting.NicoConvASSPath = Path.Combine(basePath, "nicojk_ass.py");
-                }
+            }
+            if (string.IsNullOrEmpty(setting.NicoJKAssPath))
+            {
+                var nicoJKAssPath = Path.Combine(basePath, "nicojk_ass.py");
+                if (File.Exists(nicoJKAssPath))
+                    setting.NicoJKAssPath = nicoJKAssPath;
             }
             if (string.IsNullOrEmpty(setting.SCRenamePath))
             {
@@ -2277,8 +2276,10 @@ namespace Amatsukaze.Server
                         }
                         sb.Append(" --nicojkmask ")
                             .Append(profile.NicoJKFormatMask);
-                        sb.Append(" --nicoass \"")
-                            .Append(setting.NicoConvASSPath)
+                        var useNicoConvAss = !Util.IsServerLinux()
+                            && !string.IsNullOrEmpty(setting.NicoConvASSPath);
+                        sb.Append(useNicoConvAss ? " --nicoass \"" : " --nicojkass \"")
+                            .Append(useNicoConvAss ? setting.NicoConvASSPath : setting.NicoJKAssPath)
                             .Append("\"");
                     }
 
@@ -2712,6 +2713,7 @@ namespace Amatsukaze.Server
             CheckPath("ChapterExe", setting.ChapterExePath);
             CheckPath("JoinLogoScp", setting.JoinLogoScpPath);
             CheckPath("NicoConvAss", setting.NicoConvASSPath);
+            CheckPath("nicojk_ass.py", setting.NicoJKAssPath);
             CheckPath("tsMuxeR", setting.TsMuxeRPath);
             CheckPath("SCRename.vbs", setting.SCRenamePath);
             CheckPath("AutoVfr.exe", setting.AutoVfrPath);
@@ -2851,11 +2853,15 @@ namespace Amatsukaze.Server
 
                 if (profile.EnableNicoJK)
                 {
-                    if (string.IsNullOrEmpty(setting.NicoConvASSPath))
+                    if (Util.IsServerLinux() && string.IsNullOrEmpty(setting.NicoJKAssPath))
                     {
-                        // Windows: NicoConvASS.exe、Linux: nicojk_ass.py
-                        var toolName = Util.IsServerLinux() ? "nicojk_ass.py" : "NicoConvASS";
-                        throw new ArgumentException(toolName + "パスが設定されていません");
+                        throw new ArgumentException("nicojk_ass.pyパスが設定されていません");
+                    }
+                    if (!Util.IsServerLinux()
+                        && string.IsNullOrEmpty(setting.NicoConvASSPath)
+                        && string.IsNullOrEmpty(setting.NicoJKAssPath))
+                    {
+                        throw new ArgumentException("NicoConvASSまたはnicojk_ass.pyのパスが設定されていません");
                     }
                 }
 

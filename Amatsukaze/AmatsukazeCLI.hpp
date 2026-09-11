@@ -18,8 +18,9 @@
 #if defined(_WIN32) || defined(_WIN64)
 #define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     NicoConvASSへのパス\n")
 #else
-#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_ass.pyへのパス\n")
+#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_ass.pyへのパス（互換オプション）\n")
 #endif
+#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_ass.pyへのパス\n")
 
 static void printCopyright() {
     PRINTF(
@@ -129,6 +130,7 @@ static void printHelp(const tchar* bin) {
         "  --divfile <パス>    出力分割点ファイルへのパス。メインファイルでのみ使用される。\n"
         "  --copy-trimavs      CM解析のみ実行時にTrim・分割点情報を入力ディレクトリにコピーする\n"))
         + AMATSUKAZECLI_HELP_NICOASS_LINE
+        + AMATSUKAZECLI_HELP_NICOJKASS_LINE
         + _T(
         "  -om|--cmoutmask <数値> 出力マスク[1]\n"
         "                      1 : 通常\n"
@@ -246,9 +248,11 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 #if defined(_WIN32) || defined(_WIN64)
     // Windows: NicoConvASS.exe を使用
     conf.nicoConvAssPath = _T("NicoConvASS") + exeAppendix;
+    conf.nicoJKAssPath = _T("");
 #else
+    conf.nicoConvAssPath = _T("");
     // Linux: Python スクリプト nicojk_ass.py を使用
-    conf.nicoConvAssPath = _T("nicojk_ass.py");
+    conf.nicoJKAssPath = _T("nicojk_ass.py");
 #endif
     conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
@@ -549,7 +553,14 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("--copy-trimavs")) {
             conf.copyTrimAVS = true;
         } else if (key == _T("--nicoass")) {
+#if defined(_WIN32) || defined(_WIN64)
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
+#else
+            // Linux では旧オプションも Python スクリプト指定として扱う
+            conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
+#endif
+        } else if (key == _T("--nicojkass")) {
+            conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--nicojk18")) {
             conf.nicojk18 = true;
         } else if (key == _T("--webvtt")) {
@@ -742,15 +753,16 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.encoderFilterPath = search(conf.encoderFilterPath);
         }
         conf.joinLogoScpPath = search(conf.joinLogoScpPath);
-#if defined(_WIN32) || defined(_WIN64)
-        // Windows: SearchExe で NicoConvASS.exe を検索
-        conf.nicoConvAssPath = search(conf.nicoConvAssPath);
-#else
-        // Linux: Python スクリプトは SearchExe を使わず、パスを正規化するのみ
-        conf.nicoConvAssPath = pathNormalize(conf.nicoConvAssPath);
-#endif
-        // ch_sid.txt は nicojk_ass.py / NicoConvASS.exe と同じディレクトリに配置
-        conf.nicoConvChSidPath = pathGetDirectory(conf.nicoConvAssPath) + _T("/ch_sid.txt");
+        if (!conf.nicoConvAssPath.empty()) {
+            conf.nicoConvAssPath = search(conf.nicoConvAssPath);
+        }
+        if (!conf.nicoJKAssPath.empty()) {
+            conf.nicoJKAssPath = pathNormalize(conf.nicoJKAssPath);
+        }
+        // ch_sid.txt は実際に使用する変換ツールと同じディレクトリに配置
+        const auto& nicoJKToolPath = !conf.nicoJKAssPath.empty()
+            ? conf.nicoJKAssPath : conf.nicoConvAssPath;
+        conf.nicoConvChSidPath = pathGetDirectory(nicoJKToolPath) + _T("/ch_sid.txt");
         conf.mp4boxPath = search(conf.mp4boxPath);
         conf.mkvmergePath = search(conf.mkvmergePath);
         conf.muxerPath = search(conf.muxerPath);

@@ -101,5 +101,11 @@ if errorlevel 8 exit /b %ERRORLEVEL%
 if exist "%SRC_BASE%\AmatsukazeServer\wwwroot" robocopy "%SRC_BASE%\AmatsukazeServer\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
 
+rem ニコニコ実況コメント取得・ASS変換スクリプト
+copy /y ".\scripts\nicojk_ass.py" "%MERGED_DIR%\nicojk_ass.py" >nul
+if errorlevel 1 (
+  echo nicojk_ass.py の配置に失敗しました。
+  exit /b 1
+)
 echo Done. Merged outputs are in %MERGED_DIR% (WebUI is served on REST port+1).
 exit /b 0

@@ -392,6 +392,27 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        #region ClearNicoJKAssPathCommand
+        private ViewModelCommand _ClearNicoJKAssPathCommand;
+
+        public ViewModelCommand ClearNicoJKAssPathCommand
+        {
+            get
+            {
+                if (_ClearNicoJKAssPathCommand == null)
+                {
+                    _ClearNicoJKAssPathCommand = new ViewModelCommand(ClearNicoJKAssPath);
+                }
+                return _ClearNicoJKAssPathCommand;
+            }
+        }
+
+        public void ClearNicoJKAssPath()
+        {
+            Model.Setting.NicoJKAssPath = null;
+        }
+        #endregion
+
         #region ClearTsReplacePathCommand
         private ViewModelCommand _ClearTsReplacePathCommand;
 

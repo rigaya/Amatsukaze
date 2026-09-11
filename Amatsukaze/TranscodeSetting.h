@@ -254,6 +254,7 @@ struct Config {
     // 字幕生成モード
     SUBTITLE_MODE subtitleMode;
     tstring nicoConvAssPath;
+    tstring nicoJKAssPath;
     tstring nicoConvChSidPath;
     bool exclusiveBatExec;
     tstring preEncBatchFile;
@@ -418,6 +419,10 @@ public:
     bool isWhisperParallelEnabled() const;
 
     tstring getNicoConvAssPath() const;
+
+    tstring getNicoJKAssPath() const;
+
+    bool isNicoJKAssEnabled() const;
 
     tstring getNicoConvChSidPath() const;
 

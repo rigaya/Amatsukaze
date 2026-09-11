@@ -1146,6 +1146,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public string NicoConvASSPath { get; set; }
         [DataMember]
+        public string NicoJKAssPath { get; set; }
+        [DataMember]
         public string TsMuxeRPath { get; set; }
         [DataMember]
         public string TsReplacePath { get; set; }

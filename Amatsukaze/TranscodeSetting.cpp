@@ -1032,6 +1032,14 @@ tstring ConfigWrapper::getNicoConvAssPath() const {
     return conf.nicoConvAssPath;
 }
 
+tstring ConfigWrapper::getNicoJKAssPath() const {
+    return conf.nicoJKAssPath;
+}
+
+bool ConfigWrapper::isNicoJKAssEnabled() const {
+    return !conf.nicoJKAssPath.empty();
+}
+
 tstring ConfigWrapper::getNicoConvChSidPath() const {
     return conf.nicoConvChSidPath;
 }

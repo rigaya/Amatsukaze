@@ -555,11 +555,13 @@ EDCBがサービスで動いてて、EpgTimerもAmatsukazeサーバも立ち上�
     
     NicoConvAssのパラメータを設定したい場合は、NicoConvAss.exeを起動して設定してください。
 
-- Linux環境 (nicojk_ass.py)
+- Windows/Linux環境 (nicojk_ass.py)
 
-  Linux環境では、NicoConvAssが使用できないため、同梱のnicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass) を使用してass字幕変換を行います。
+  同梱のnicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass) を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_ass.pyのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_ass.pyを使用します。
 
-  nicojk_ass.pyでは、NicoJKログからデータを取得後、danmaku2ass.pyでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
+  nicojk_ass.pyの実行にはPython 3が必要です。Windowsでは`python`、Linuxでは`python3`コマンドをPATHから実行できるようにしてください。
+
+  nicojk_ass.pyでは、ニコニコ実況の過去ログAPIからデータを取得し、danmaku2ass.pyでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
   NicoConvAssの出力と完全互換ではないほか、細かい調整を行うことはできません。
 
   - 設定方法
@@ -996,54 +998,63 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 - libfaad2: GPL
 
 ## 同梱&依存ライブラリ
-- [FFmpeg](https://github.com/nekopanda/FFmpeg/tree/amatsukaze)(デブロッキングフィルタの精度を上げるため、少し改造しています)
-- [FAAD2](http://www.audiocoding.com/faad2.html)
-- [L-SMASH](https://github.com/rigaya/l-smash)
-- [x264](https://code.videolan.org/videolan/x264)
-- [x265](https://bitbucket.org/multicoreware/x265_git)（本家版はzonesを多く指定すると落ちるバグがあるので少し[改造しています](https://github.com/rigaya/AutoBuildForAviUtlPlugins/tree/master/x265/patch))
-- [svt-av1](https://gitlab.com/AOMediaCodec/SVT-AV1)
-- [AviSynthNeo](https://github.com/nekopanda/AviSynthPlus)
-- [join_logo_scp](https://github.com/yobibi/join_logo_scp)
-- [chapter_exe 改造版](https://github.com/nekopanda/chapter_exe)（VFWに依存しないでAvisynthスクリプトを読めるように改造しています）, [Linux版](https://github.com/rigaya/chapter_exe)
-- [Livet](http://ugaya40.hateblo.jp/entry/Livet)
-- [MP4Box](https://gpac.wp.imt.fr/mp4box/)
-- [Caption.dll](https://github.com/nekopanda/TVCaptionMod2)（使いやすいように少し改造しています）
-- [mkvmerge](https://github.com/mbunkus/mkvtoolnix)
-- [tsreadex](https://github.com/xtne6f/tsreadex)
-- [b24tovtt](https://github.com/xtne6f/b24tovtt)
-- [psisiarc](https://github.com/xtne6f/psisiarc)
-- SCRename/[SCRenamePy](https://github.com/rigaya/SCRenamePy)
-- nicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass)
-- [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo)
-- [zlib](https://zlib.net/)
-- VC14ランタイム
+
+| モジュール | ライセンス |
+|:--|:--|
+| [FFmpeg](https://github.com/nekopanda/FFmpeg/tree/amatsukaze)（Amatsukaze向け改造版） | LGPL-2.1-or-later / GPL-2.0-or-later（ビルド構成による） |
+| [FAAD2](http://www.audiocoding.com/faad2.html) | GPL-2.0-or-later |
+| [L-SMASH](https://github.com/rigaya/l-smash) | ISC |
+| [x264](https://code.videolan.org/videolan/x264) | GPL-2.0-or-later |
+| [x265](https://bitbucket.org/multicoreware/x265_git)（[適用パッチ](https://github.com/rigaya/AutoBuildForAviUtlPlugins/tree/master/x265/patch)） | GPL-2.0 / 商用ライセンス |
+| [SVT-AV1](https://gitlab.com/AOMediaCodec/SVT-AV1) | BSD-3-Clause-Clear、Alliance for Open Media Patent License 1.0 |
+| [AviSynthNeo](https://github.com/nekopanda/AviSynthPlus) | GPL-2.0-or-later |
+| [join_logo_scp](https://github.com/yobibi/join_logo_scp) | GPL-2.0 |
+| [chapter_exe 改造版](https://github.com/nekopanda/chapter_exe) / [Linux版](https://github.com/rigaya/chapter_exe) | GPL-2.0 |
+| [Livet](http://ugaya40.hateblo.jp/entry/Livet) | zlib License |
+| [MP4Box](https://gpac.wp.imt.fr/mp4box/) | LGPL-2.1-or-later / 商用ライセンス |
+| [Caption.dll](https://github.com/nekopanda/TVCaptionMod2)（改造版） | 独自ライセンス |
+| [mkvmerge](https://github.com/mbunkus/mkvtoolnix) | GPL-2.0 |
+| [tsreadex](https://github.com/xtne6f/tsreadex) | MIT |
+| [b24tovtt](https://github.com/xtne6f/b24tovtt) | MIT |
+| [psisiarc](https://github.com/xtne6f/psisiarc) | MIT |
+| SCRename | 配布元の個別条件に従う |
+| [SCRenamePy](https://github.com/rigaya/SCRenamePy) | 配布元の個別条件に従う |
+| [nicojk_ass.py](./scripts/nicojk_ass.py) | MIT |
+| [danmaku2ass.py](https://github.com/m13253/danmaku2ass) | GPL-3.0 |
+| [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) | BSD系ライセンス（複数） |
+| [zlib](https://zlib.net/) | zlib License |
+| [Microsoft Visual C++ランタイム](https://visualstudio.microsoft.com/license-terms/) | Microsoft Software License Terms |
 
 同梱AviSynthプラグイン
 
-- [LSMASH Works](https://github.com/VFR-maniac/L-SMASH-Works)
-- [QTGMC](http://avisynth.nl/index.php/QTGMC)
-- [RgTools](https://github.com/pinterf/RgTools)
-- [NNEDI3](https://github.com/rigaya/NNEDI3)
-- [mvtools](https://github.com/pinterf/mvtools)
-- [masktools](https://github.com/rigaya/masktools)
-- [AvsCUDA,KTGMC,KNNEDI3,KFM](https://github.com/rigaya/AviSynthCUDAFilters)
-- [SMDegrain](http://avisynth.nl/index.php/SMDegrain)
-- [D3DVP](https://github.com/nekopanda/D3DVP)
+| モジュール | ライセンス |
+|:--|:--|
+| [LSMASH Works](https://github.com/VFR-maniac/L-SMASH-Works) | ISC |
+| [QTGMC](http://avisynth.nl/index.php/QTGMC) | GPL-2.0 |
+| [RgTools](https://github.com/pinterf/RgTools) | GPL-2.0 |
+| [NNEDI3](https://github.com/rigaya/NNEDI3) | GPL-2.0 |
+| [mvtools](https://github.com/pinterf/mvtools) | GPL-2.0 |
+| [masktools](https://github.com/rigaya/masktools) | GPL-2.0 |
+| [AvsCUDA、KTGMC、KNNEDI3、KFM](https://github.com/rigaya/AviSynthCUDAFilters) | 各コンポーネントのライセンスに従う |
+| [SMDegrain](http://avisynth.nl/index.php/SMDegrain) | GPL-2.0 |
+| [D3DVP](https://github.com/nekopanda/D3DVP) | MIT |
 
 Amatsukazeと同梱&依存ライブラリはすべて64bitに統一されています。
 
 ## オプションのアプリケーション
 
-- [QSVEnc](https://github.com/rigaya/QSVEnc)
-- [NVEnc](https://github.com/rigaya/NVEnc)
-- [VCEEnc](https://github.com/rigaya/VCEEnc)
-- [Whisper](https://github.com/Purfview/whisper-standalone-win)
-- [tsreplace](https://github.com/rigaya/tsreplace)
-- [tsMuxeR](https://github.com/justdan96/tsMuxer)
-- [neroaacenc](https://www.videohelp.com/software/Nero-AAC-Codec)
-- [qaac](https://github.com/nu774/qaac)
-- [fdkaac](https://github.com/nu774/fdkaac)
-- [opusenc](https://opus-codec.org)
+| モジュール | ライセンス |
+|:--|:--|
+| [QSVEnc](https://github.com/rigaya/QSVEnc) | MIT |
+| [NVEnc](https://github.com/rigaya/NVEnc) | MIT |
+| [VCEEnc](https://github.com/rigaya/VCEEnc) | MIT |
+| [Whisper](https://github.com/Purfview/whisper-standalone-win) | 配布元および各構成要素のライセンスに従う |
+| [tsreplace](https://github.com/rigaya/tsreplace) | MIT |
+| [tsMuxeR](https://github.com/justdan96/tsMuxer) | GPL-2.0 |
+| [neroaacenc](https://www.videohelp.com/software/Nero-AAC-Codec) | Nero AAC Codec End User License Agreement |
+| [qaac](https://github.com/nu774/qaac) | MIT |
+| [fdkaac](https://github.com/nu774/fdkaac) | zlib License |
+| [opusenc](https://opus-codec.org) | BSD-2-Clause |
 
 ## ビルド方法
 
