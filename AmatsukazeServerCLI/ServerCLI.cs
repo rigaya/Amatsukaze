@@ -5,7 +5,8 @@ using Amatsukaze.Lib;
 using log4net;
 using log4net.Appender;
 using log4net.Layout;
-using System.Runtime.Loader;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Amatsukaze.Server
 {
@@ -55,47 +56,29 @@ namespace Amatsukaze.Server
 
                         // この時点でtaskが完了していなくてもEnterMessageLoop()で続きが処理される
 
-                        // Ctrl+C やプロセス終了時にグレースフルシャットダウンする
-                        bool exiting = false;
-                        ConsoleCancelEventHandler cancelHandler = (s, e) =>
+                        // Ctrl+C や SIGTERM でグレースフルシャットダウンする。
+                        // .NET 10 では SIGTERM を送っても AppDomain.ProcessExit も
+                        // AssemblyLoadContext.Unloading も発生せず即座にプロセスが落ちるため、
+                        // PosixSignalRegistration で自前に受ける必要がある。
+                        // (Windows でも Ctrl+C / Ctrl+Break / コンソールの終了に対応する)
+                        int signalCount = 0;
+                        Action<PosixSignalContext> signalHandler = ctx =>
                         {
-                            if (exiting)
+                            if (Interlocked.Increment(ref signalCount) > 1)
                             {
-                                // 2回目以降は即時終了を許可
-                                e.Cancel = false;
+                                // 2回目以降は既定動作 (即時終了) に任せる
                                 return;
                             }
-                            exiting = true;
-                            e.Cancel = true; // 自前で終了処理を行う
-                            server.EndServer();
-                        };
-                        EventHandler processExitHandler = (s, e) =>
-                        {
-                            if (exiting) return;
-                            exiting = true;
-                            server.EndServer();
-                        };
-                        Action<AssemblyLoadContext> unloadingHandler = _ =>
-                        {
-                            if (exiting) return;
-                            exiting = true;
+                            ctx.Cancel = true; // 自前で終了処理を行う
+                            Console.WriteLine(ctx.Signal + " を受信しました。終了処理を行います。");
                             server.EndServer();
                         };
 
-                        Console.CancelKeyPress += cancelHandler; // SIGINT/Ctrl+C
-                        AppDomain.CurrentDomain.ProcessExit += processExitHandler; // プロセス終了
-                        AssemblyLoadContext.Default.Unloading += unloadingHandler; // SIGTERM 
-
-                        try
+                        using (PosixSignalRegistration.Create(PosixSignal.SIGTERM, signalHandler))
+                        using (PosixSignalRegistration.Create(PosixSignal.SIGINT, signalHandler))
+                        using (PosixSignalRegistration.Create(PosixSignal.SIGQUIT, signalHandler))
                         {
                             TaskSupport.EnterMessageLoop();
-                        }
-                        finally
-                        {
-                            // ハンドラを解除
-                            Console.CancelKeyPress -= cancelHandler;
-                            AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
-                            AssemblyLoadContext.Default.Unloading -= unloadingHandler;
                         }
 
                         // この時点では"継続"を処理する人がいないので、

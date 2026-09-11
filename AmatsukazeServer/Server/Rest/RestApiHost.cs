@@ -227,6 +227,15 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        // プロセスの終了シグナルに関与しないIHostLifetime。
+        // 組み込みのWebホストがプロセス全体の寿命を握らないようにするために使う。
+        private sealed class NoSignalHostLifetime : IHostLifetime
+        {
+            public Task WaitForStartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+            public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
         private WebApplication BuildWebApp(int port)
         {
             var baseDir = AppContext.BaseDirectory;
@@ -236,6 +245,11 @@ namespace Amatsukaze.Server.Rest
                 ContentRootPath = baseDir,
                 WebRootPath = webRoot,
             });
+            // 既定のConsoleLifetimeはSIGTERM/SIGINTを自分で受けてcontext.Cancel=trueにするため、
+            // プロセスの終了シグナルが握り潰されてサーバーが終了しなくなる。
+            // プロセスの寿命はAmatsukazeServerCLI側で管理するので、ここでは何もしないものに差し替える。
+            builder.Services.AddSingleton<IHostLifetime, NoSignalHostLifetime>();
+
             var httpLogEnabled = Environment.GetEnvironmentVariable("AMT_REST_HTTP_LOG");
             var enableHttpLog = !string.IsNullOrEmpty(httpLogEnabled) &&
                 (httpLogEnabled == "1" || httpLogEnabled.Equals("true", StringComparison.OrdinalIgnoreCase));
