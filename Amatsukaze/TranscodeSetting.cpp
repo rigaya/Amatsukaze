@@ -649,6 +649,11 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
             sb.append(_T(" -brand mp42 -ab mp41 -ab iso2"));
             sb.append(_T(" -add \"%s#video:name=Video:forcesync"), inVideo);
             if (!encoderOutputInContainer) {
+                if (encoder == ENCODER_SVTAV1) {
+                    // svt-av1の生出力はOBU形式 (start codeなし) のrawファイルなので
+                    // 拡張子から判定できないMP4Boxに対して形式を明示する
+                    sb.append(_T(":fmt=obu"));
+                }
                 if (videoFormat.fixedFrameRate) {
                     sb.append(_T(":fps=%d/%d"), videoFormat.frameRateNum, videoFormat.frameRateDenom);
                 }

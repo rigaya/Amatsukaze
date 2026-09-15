@@ -2822,13 +2822,24 @@ namespace Amatsukaze.Server
                     {
                         throw new ArgumentException("tsreplaceパスが設定されていません");
                     }
-                    if (profile.EncoderType == EncoderType.SVTAV1)
+                    if (profile.EncoderType == EncoderType.x262)
                     {
-                        throw new ArgumentException("TS (replace)使用時は、SVT-AV1は使用できません。");
+                        if (string.IsNullOrEmpty(setting.MKVMergePath))
+                        {
+                            throw new ArgumentException("x262のTS (replace)出力にはMKVMergeパスが設定されていません。");
+                        }
                     }
-                    if (profile.EncoderType == EncoderType.x262 && string.IsNullOrEmpty(setting.MKVMergePath))
+                    else
                     {
-                        throw new ArgumentException("x262のTS (replace)出力にはMKVMergeパスが設定されていません。");
+                        // x264/x265/SVT-AV1等の場合、エンコード映像をMP4BoxでMP4に包んでからtsreplaceへ渡す
+                        if (string.IsNullOrEmpty(setting.MP4BoxPath))
+                        {
+                            throw new ArgumentException("TS (replace)出力にはMP4Boxパスが設定されていません。");
+                        }
+                        if (string.IsNullOrEmpty(setting.TimelineEditorPath))
+                        {
+                            throw new ArgumentException("TS (replace)出力にはTimelineeditorパスが設定されていません。");
+                        }
                     }
                 }
                 else if (profile.OutputFormat == FormatType.TS || profile.OutputFormat == FormatType.M2TS)

@@ -271,6 +271,8 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
     x262でTS (replace)を使用する場合は、MPEG-2 Videoの置き換えに対応したtsreplaceが必要です。通常の公開版では対応していない場合があるため、対応版を使用してください。mkvmergeも必要です。
 
+    SVT-AV1でTS (replace)を使用する場合は、AV1の置き換えに対応したtsreplaceが必要です。[trprkkk/tsreplace](https://github.com/trprkkk/tsreplace)のAV1対応版などを使用してください。
+
     ```bash
     sudo apt install -y ./tsreplace_<version>_amd64.deb
     ```
