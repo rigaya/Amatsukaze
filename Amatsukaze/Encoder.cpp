@@ -1234,6 +1234,12 @@ void AMTFilterVideoEncoder::encode(
             error = true;
         }
 
+        // encoder_->finish() が終了コードで例外を投げてもデストラクタで
+        // 未joinのDataPumpThreadを破棄しないよう、先に必ず終了を待つ
+        if (thread_.isRunning()) {
+            thread_.join();
+        }
+
         // 子プロセスの終了待ち（stdinはfinishで閉じる）。
         // 並列モードでは独自パイプは既に閉じ済み。
         encoder_->finish();
