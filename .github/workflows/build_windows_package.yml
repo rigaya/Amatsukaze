@@ -217,6 +217,7 @@ jobs:
           if exist defaults\\bat_win robocopy defaults\\bat_win package\\bat /E /NFL /NDL /NJH /NJS
           if exist defaults\\profile robocopy defaults\\profile package\\profile /E /NFL /NDL /NJH /NJS
           if exist defaults\\drcs\\drcs_map.txt copy /y defaults\\drcs\\drcs_map.txt package\\exe_files
+          if exist defaults\\exe_files\\ch_sid.txt copy /y defaults\\exe_files\\ch_sid.txt package\\exe_files
           if exist defaults\\exe_files\\plugins64\\*.avsi copy /y defaults\\exe_files\\plugins64\\*.avsi package\\exe_files\\plugins64
 
           rem SCRenamePy 0.05タグの全ファイル（.gitを除外）
