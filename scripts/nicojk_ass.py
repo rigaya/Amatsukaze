@@ -213,12 +213,6 @@ _MOVE_RE = re.compile(
 _POS_RE = re.compile(r"\\pos\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)")
 _COLOR_TAG_RE = re.compile(r"\\c&H([0-9A-Fa-f]{6})&")
 _3COLOR_TAG_RE = re.compile(r"\\3c&H[0-9A-Fa-f]+&")
-_FONT_SIZE_TAG_RE = re.compile(r"\\fs(\d+)")
-
-
-def _to_nicoconv_fontsize(fontsize):
-    """実効サイズを保ったままNicoConvAssの200%スタイル用サイズへ変換する。"""
-    return max(1, (fontsize + 1) // 2)
 
 
 def _convert_color_bt709(rgb):
@@ -283,12 +277,6 @@ def _fixup_dialogue(line, y_offset):
     text = _COLOR_TAG_RE.sub("", text)
     text = _3COLOR_TAG_RE.sub("", text)
 
-    # StyleのScaleX/ScaleYをNicoConvAssと同じ200%にするため、
-    # big/smallコメントに付く個別フォントサイズも半分にする
-    text = _FONT_SIZE_TAG_RE.sub(
-        lambda m: "\\fs%d" % _to_nicoconv_fontsize(int(m.group(1))),
-        text)
-
     # moveのY座標にオフセット追加（上端見切れ防止）
     text = _MOVE_RE.sub(
         lambda m: "\\move(%s,%d,%s,%d)" % (
@@ -320,7 +308,6 @@ def fixup_ass(ass_path, width, height, fontsize, font):
             dialogues.append(line)
 
     y_offset = max(1, round(height / 120))
-    style_fontsize = _to_nicoconv_fontsize(fontsize)
     out = []
 
     # [Script Info]
@@ -344,8 +331,8 @@ def fixup_ass(ass_path, width, height, fontsize, font):
     for name, color in _NICOCONVASS_COLORS:
         out.append(
             "Style: %s,%s,%d,%s,%s,&H00000000,&H00000000,"
-            "-1,0,0,0,200,200,0,0.00,1,0,4,7,20,20,40,1"
-            % (name, font, style_fontsize, color, color))
+            "-1,0,0,0,100,100,0,0.00,1,0,4,7,20,20,40,1"
+            % (name, font, fontsize, color, color))
     out.append("")
 
     # [Events]
