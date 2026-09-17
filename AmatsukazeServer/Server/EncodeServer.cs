@@ -2022,7 +2022,7 @@ namespace Amatsukaze.Server
         internal string MakeAmatsukazeArgs(
             ProcMode mode,
             ProfileSetting profile,
-            Setting setting,
+            Setting setting, string workPath,
             bool isGeneric,
             string src, string srcOrg, string dst, string json,
             VideoStreamFormat streamFormat,
@@ -2109,7 +2109,7 @@ namespace Amatsukaze.Server
                 }
 
                 sb.Append(" -w \"")
-                    .Append(setting.WorkPath)
+                    .Append(workPath)
                     .Append("\" --chapter-exe \"")
                     .Append(setting.ChapterExePath)
                     .Append("\" --jls \"")

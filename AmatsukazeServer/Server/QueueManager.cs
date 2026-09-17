@@ -366,7 +366,7 @@ namespace Amatsukaze.Server
                 var firstOutput = (req.Outputs != null && req.Outputs.Count > 0) ? req.Outputs[0] : null;
                 var firstTarget = (req.Targets != null && req.Targets.Count > 0) ? req.Targets[0] : null;
                 var msg = string.Format(
-                    "[AddQueue/Receive] DirPath='{0}', Targets={1}, FirstTarget='{2}', OutDir='{3}', Profile='{4}', Priority={5}, Mode={6}, RequestId='{7}', AddQueueBat='{8}'",
+                    "[AddQueue/Receive] DirPath='{0}', Targets={1}, FirstTarget='{2}', OutDir='{3}', Profile='{4}', Priority={5}, Mode={6}, RequestId='{7}', AddQueueBat='{8}', WorkPathOverride='{9}'",
                     req.DirPath ?? "<null>",
                     req.Targets?.Count ?? 0,
                     firstTarget?.Path ?? "<null>",
@@ -375,13 +375,20 @@ namespace Amatsukaze.Server
                     firstOutput?.Priority ?? 0,
                     req.Mode,
                     req.RequestId ?? "<null>",
-                    req.AddQueueBat ?? "<null>");
+                    req.AddQueueBat ?? "<null>",
+                    req.WorkPathOverride ?? "<null>");
                 Debug.Print(msg);
             }
             catch { }
 
             // ユーザ操作でない場合はログを記録する
             bool enableLog = (req.Mode == ProcMode.AutoBatch);
+
+            // 未指定の状態をキューに保持する。ここでグローバル設定を補完すると、
+            // タスク実行前に一時フォルダ設定を変更した場合の既存挙動が変わってしまう。
+            string workPathOverride = string.IsNullOrWhiteSpace(req.WorkPathOverride)
+                ? null
+                : req.WorkPathOverride;
 
             if (req.Outputs.Count == 0)
             {
@@ -494,6 +501,7 @@ namespace Amatsukaze.Server
                                         Priority = outitem.Priority,
                                         AddTime = DateTime.Now,
                                         ProfileName = outitem.Profile,
+                                        WorkPathOverride = workPathOverride,
                                         Genre = genre,
                                         Tags = (req.Tags != null && req.Tags.Count > 0)
                                             ? new List<string>(req.Tags)
@@ -584,6 +592,7 @@ namespace Amatsukaze.Server
                                 FailReason = failReason,
                                 AddTime = DateTime.Now,
                                 ProfileName = outitem.Profile,
+                                WorkPathOverride = workPathOverride,
                                 Tags = (req.Tags != null && req.Tags.Count > 0)
                                     ? new List<string>(req.Tags)
                                     : new List<string>()

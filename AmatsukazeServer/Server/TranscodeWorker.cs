@@ -778,6 +778,7 @@ namespace Amatsukaze.Server
             }
 
             ProfileSetting profile = item.Profile;
+            string workPath = item.GetEffectiveWorkPath(server.AppData_.setting);
             ServiceSettingElement serviceSetting =
                 (item.Mode != ProcMode.DrcsCheck) ?
                 server.AppData_.services.ServiceMap[item.ServiceId] :
@@ -850,8 +851,8 @@ namespace Amatsukaze.Server
                 try
                 {
                     newName = await SCRename(
-                        server.AppData_.setting.SCRenamePath, 
-                        server.AppData_.setting.WorkPath,
+                        server.AppData_.setting.SCRenamePath,
+                        workPath,
                         profile.RenameFormat, item);
                 }
                 catch (Exception)
@@ -949,7 +950,7 @@ namespace Amatsukaze.Server
                 bool needCopy = !IsEncodableString(srcpath + ";" + dstpath);
                 if (needCopy)
                 {
-                    tmpBase = Util.CreateTmpFile(server.AppData_.setting.WorkPath);
+                    tmpBase = Util.CreateTmpFile(workPath);
                     localsrc = tmpBase + "-in" + Path.GetExtension(srcpath);
                     await CopyFileAsync(srcpath, localsrc);
                     srcpathOrg = srcpath; // もともとのファイル名を記憶
@@ -994,7 +995,7 @@ namespace Amatsukaze.Server
 
                 string args = server.MakeAmatsukazeArgs(
                     item.Mode, profile,
-                    server.AppData_.setting,
+                    server.AppData_.setting, workPath,
                     isMp4,
                     srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
                     item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, divfile, resumeDir, server.GetBatDirectoryPath(),

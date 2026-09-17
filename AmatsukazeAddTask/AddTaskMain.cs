@@ -22,6 +22,7 @@ namespace Amatsukaze.AddTask
         public string OutPath;
         public string Profile;
         public string AddQueueBat;
+        public string WorkPathOverride;
         public int Priority = 3;
 
         public int ItemID = -1;
@@ -45,6 +46,7 @@ namespace Amatsukaze.AddTask
                 "  -f|--file <パス>        入力ファイルパス\r\n" +
                 "  -s|--setting <プロファイル名> エンコード設定プロファイル\r\n" +
                 "  -b|--bat <バッチファイル名> 追加時実行バッチ\r\n" +
+                "  -w|--work <パス>       このタスクで使用する一時フォルダ（サーバーから見えるパス）\r\n" +
                 "  --priority <優先度>     優先度\r\n" +
                 "  --proc-mode <mode>      タスクの処理モード(batch|auto|test|drcs|cm)\r\n" +
                 "                          batch: 一括バッチ, auto: 自動バッチ(デフォルト)\r\n" +
@@ -182,6 +184,12 @@ namespace Amatsukaze.AddTask
                 else if (arg == "-b" || arg == "--bat")
                 {
                     AddQueueBat = args[i + 1];
+                    i++;
+                }
+                else if (arg == "-w" || arg == "--work")
+                {
+                    // サーバー側から見えるパスなので、AddTask側では絶対パスへ変換しない。
+                    WorkPathOverride = args[i + 1];
                     i++;
                 }
                 else if (arg == "--priority")
@@ -394,14 +402,15 @@ namespace Amatsukaze.AddTask
                 Console.WriteLine(srcpath + " を追加します");
                 // 送信内容の事前ログ
                 Console.WriteLine(
-                    "[AddTask] Send AddQueue: DirPath='{0}', Target='{1}', OutDir='{2}', Profile='{3}', Priority={4}, Mode={5}, AddQueueBat='{6}'",
+                    "[AddTask] Send AddQueue: DirPath='{0}', Target='{1}', OutDir='{2}', Profile='{3}', Priority={4}, Mode={5}, AddQueueBat='{6}', WorkPathOverride='{7}'",
                     Path.GetDirectoryName(srcpath),
                     srcpath,
                     option.OutPath,
                     option.Profile ?? "<null>",
                     option.Priority,
                     option.ProcMode,
-                    option.AddQueueBat ?? "<null>");
+                    option.AddQueueBat ?? "<null>",
+                    option.WorkPathOverride ?? "<null>");
 
                 // リクエストを生成
                 addRequest = new AddQueueRequest()
@@ -421,7 +430,8 @@ namespace Amatsukaze.AddTask
                     },
                     Mode = option.ProcMode,
                     RequestId = UniqueId(),
-                    AddQueueBat = option.AddQueueBat
+                    AddQueueBat = option.AddQueueBat,
+                    WorkPathOverride = option.WorkPathOverride
                 };
             }
             else if (option.ItemID >= 0)

@@ -1464,6 +1464,13 @@ namespace Amatsukaze.Server
         [DataMember]
         public string AddQueueBat { get; set; }
 
+        /// <summary>
+        /// タスク固有の一時フォルダ。nullの場合は、タスク実行時点のグローバル設定を使用する。
+        /// 登録時点のグローバル設定をここへコピーすると、設定変更が待機中タスクへ反映されなくなるため禁止。
+        /// </summary>
+        [DataMember]
+        public string WorkPathOverride { get; set; }
+
         /// <summary>キュー追加時に各ターゲットへ付与するタグ（null の場合は空リスト）。</summary>
         [DataMember]
         public List<string> Tags { get; set; }
@@ -1583,6 +1590,13 @@ namespace Amatsukaze.Server
         [DataMember]
         public string ResumeDir { get; set; }
 
+        /// <summary>
+        /// タスク固有の一時フォルダ。nullの場合は、タスク実行時点のグローバル設定を使用する。
+        /// 登録時点のグローバル設定を保存せず、未指定の状態を維持すること。
+        /// </summary>
+        [DataMember]
+        public string WorkPathOverride { get; set; }
+
         [DataMember]
         public AutoLogoResultState AutoLogoResult { get; set; }
         [DataMember]
@@ -1612,7 +1626,16 @@ namespace Amatsukaze.Server
         public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode == ProcMode.CMCheck; } }
         public bool IsTest { get { return Mode == ProcMode.Test; } }
 
-        public string DirName { 
+        /// <summary>
+        /// タスク実行時に使用する一時フォルダを取得する。
+        /// WorkPathOverrideが未指定の場合は、登録時の値ではなく現在のグローバル設定を使用する。
+        /// </summary>
+        public string GetEffectiveWorkPath(Setting setting)
+        {
+            return string.IsNullOrWhiteSpace(WorkPathOverride) ? setting.WorkPath : WorkPathOverride;
+        }
+
+        public string DirName {
             get { 
                 var dir = Path.GetDirectoryName(SrcPath);
                 var delimiter = SrcPath.Contains('\\') ? '\\' : '/';

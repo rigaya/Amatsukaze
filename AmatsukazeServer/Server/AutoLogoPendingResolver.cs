@@ -311,7 +311,7 @@ namespace Amatsukaze.Server
                 throw new InvalidOperationException("設定が取得できません");
             }
 
-            var workPath = setting.WorkPath;
+            var workPath = request.Item.GetEffectiveWorkPath(setting);
             if (string.IsNullOrWhiteSpace(workPath))
             {
                 workPath = Directory.GetCurrentDirectory();
