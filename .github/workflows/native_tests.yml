@@ -36,12 +36,35 @@ jobs:
   windows:
     name: Windows Release
     runs-on: windows-2025-vs2026
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_CRT_LINKAGE: static
+      DEPLIB_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeDepLibs_20260131.7z
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg
+            vcpkg_installed
+          key: vcpkg-windows-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-
+      - name: Setup native dependencies
+        shell: cmd
+        run: |
+          if not exist vcpkg git clone https://github.com/microsoft/vcpkg vcpkg
+          call vcpkg\bootstrap-vcpkg.bat
+          vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
+          if not exist deps mkdir deps
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\deplib.7z "%DEPLIB_URL%"
+          if not exist lib mkdir lib
+          7z x -y -olib deps\deplib.7z
       - name: Build and run
         shell: cmd
         run: |
@@ -53,6 +76,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
