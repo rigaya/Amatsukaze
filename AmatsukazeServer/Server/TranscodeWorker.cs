@@ -223,7 +223,7 @@ namespace Amatsukaze.Server
 
         private static string MakeSCRenameArgs(string screnamepath, string format, string filepath)
         {
-            var ext = (screnamepath.Length > 0) ? Path.GetExtension(screnamepath).ToLower() : "";
+            var ext = (screnamepath.Length > 0) ? Path.GetExtension(screnamepath).ToLowerInvariant() : "";
             var sb = new StringBuilder();
 
             if (ext == ".vbs")
@@ -261,7 +261,7 @@ namespace Amatsukaze.Server
             var serviceName = item.ServiceName;
 
             var ext = ".ts";
-            var scriptExt = Path.GetExtension(screnamepath).ToLower();
+            var scriptExt = Path.GetExtension(screnamepath).ToLowerInvariant();
 
             // 情報がある時はその情報を元にファイル名を作成
             // ないときはファイル名をそのまま使う
@@ -287,6 +287,7 @@ namespace Amatsukaze.Server
                 using (File.Create(srcpath)) { }
 
                 string exename;
+                PythonExecutable python = null;
 
                 if (scriptExt == ".vbs")
                 {
@@ -294,14 +295,8 @@ namespace Amatsukaze.Server
                 }
                 else if (scriptExt == ".py")
                 {
-                    if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-                    {
-                        exename = "py";
-                    }
-                    else
-                    {
-                        exename = "python3";
-                    }
+                    python = PythonExecutableResolver.ResolveOrThrow("SCRename.py");
+                    exename = python.FileName;
                 }
                 else
                 {
@@ -309,6 +304,10 @@ namespace Amatsukaze.Server
                 }
 
                 string args = MakeSCRenameArgs(exename == screnamepath ? "" : screnamepath, format, srcpath);
+                if (python != null)
+                {
+                    args = python.PrependLauncherArguments(args);
+                }
 
                 var psi = new ProcessStartInfo(exename, args)
                 {
@@ -323,7 +322,7 @@ namespace Amatsukaze.Server
                 };
 
                 // Pythonの場合は出力エンコーディングをUTF-8に固定
-                if (scriptExt != ".vbs")
+                if (scriptExt == ".py")
                 {
                     psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
                 }

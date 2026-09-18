@@ -7,6 +7,76 @@
 */
 
 #include "NicoJK.h"
+#include "OSUtil.h"
+#include "rgy_filesystem.h"
+
+namespace {
+
+struct PythonCandidate {
+    tstring path;
+    bool launcher;
+};
+
+static void AddPythonCandidate(std::vector<PythonCandidate>& candidates,
+    const tstring& path, bool launcher) {
+    if (path.empty() || !rgy_file_exists(path)) {
+        return;
+    }
+    const auto duplicate = std::find_if(candidates.begin(), candidates.end(),
+        [&path](const PythonCandidate& candidate) { return candidate.path == path; });
+    if (duplicate == candidates.end()) {
+        candidates.push_back({ path, launcher });
+    }
+}
+
+static bool CanRunPython3(const tstring& command) {
+    static const std::string marker = "AMATSUKAZE_PYTHON3_OK";
+    try {
+        const auto args = command
+            + _T(" -c \"import sys; print('AMATSUKAZE_PYTHON3_OK') if sys.version_info >= (3, 6) else sys.exit(1)\"");
+        StdRedirectedSubProcess process(args, 0, true, false, true);
+        if (process.join() != 0) {
+            return false;
+        }
+        const auto& lines = process.getCapturedLines();
+        return std::any_of(lines.begin(), lines.end(), [](const std::vector<char>& line) {
+            return std::string(line.begin(), line.end()) == marker;
+        });
+    } catch (Exception&) {
+        return false;
+    }
+}
+
+static tstring ResolvePythonCommand() {
+    std::vector<PythonCandidate> candidates;
+    const auto moduleDir = GetModuleDirectory();
+#if defined(_WIN32) || defined(_WIN64)
+    AddPythonCandidate(candidates, PathCombineS(moduleDir, _T("python.exe")), false);
+    AddPythonCandidate(candidates, PathCombineS(moduleDir, _T("python3.exe")), false);
+    AddPythonCandidate(candidates, PathCombineS(moduleDir, _T("py.exe")), true);
+    AddPythonCandidate(candidates, find_executable_in_path(_T("py.exe")), true);
+    AddPythonCandidate(candidates, find_executable_in_path(_T("python.exe")), false);
+    AddPythonCandidate(candidates, find_executable_in_path(_T("python3.exe")), false);
+#else
+    AddPythonCandidate(candidates, PathCombineS(moduleDir, _T("python3")), false);
+    AddPythonCandidate(candidates, PathCombineS(moduleDir, _T("python")), false);
+    AddPythonCandidate(candidates, find_executable_in_path(_T("python3")), false);
+    AddPythonCandidate(candidates, find_executable_in_path(_T("python")), false);
+#endif
+
+    for (const auto& candidate : candidates) {
+        auto command = _T("\"") + candidate.path + _T("\"");
+        if (candidate.launcher) {
+            command += _T(" -3");
+        }
+        if (CanRunPython3(command)) {
+            return command;
+        }
+    }
+    return tstring();
+}
+
+}
 
 NicoJK::NicoJK(AMTContext& ctx,
     const ConfigWrapper& setting)
@@ -299,16 +369,12 @@ bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int durati
 }
 
 // nicojk_ass.py スクリプトに渡すコマンドライン引数を生成する
-tstring NicoJK::MakeNicoJKScriptArgs(time_t startTime, int duration, NicoJKType type) {
+tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
+    time_t startTime, int duration, NicoJKType type) {
     const int width[]  = { 1280, 1280, 1920, 1920 };
     const int height[] = {  720,  720, 1080, 1080 };
-#if defined(_WIN32) || defined(_WIN64)
-    const tchar* python = _T("python");
-#else
-    const tchar* python = _T("python3");
-#endif
     return StringFormat(_T("%s \"%s\" --channel jk%d --starttime %lld --endtime %lld --width %d --height %d --output \"%s\""),
-        python,
+        pythonCommand.c_str(),
         pathToOS(setting_.getNicoJKAssPath()),
         jknum_,
         (long long)startTime,
@@ -324,11 +390,18 @@ bool NicoJK::makeASSByScript(time_t startTime, int duration) {
     const NicoJKMask mask_t[] = { MASK_720T,  MASK_1080T  };
     const NicoJKType type_t[] = { NICOJK_720T, NICOJK_1080T };
 
+    const auto pythonCommand = ResolvePythonCommand();
+    if (pythonCommand.empty()) {
+        THROW(RuntimeException,
+            "nicojk_ass.pyの実行に必要なPython 3が見つかりません。"
+            "exe_filesにPythonを配置するか、Pythonの実行ファイルにPATHを通してください。");
+    }
+
     const int typemask = setting_.getNicoJKMask();
     for (int i = 0; i < 2; i++) {
         if (!(mask_i[i] & typemask)) continue;
 
-        auto args = MakeNicoJKScriptArgs(startTime, duration, type_s[i]);
+        auto args = MakeNicoJKScriptArgs(pythonCommand, startTime, duration, type_s[i]);
         ctx.infoF(_T("%s"), args);
         StdRedirectedSubProcess process(args);
         const int exitCode = process.join();

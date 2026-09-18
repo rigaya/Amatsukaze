@@ -2863,6 +2863,11 @@ namespace Amatsukaze.Server
                     {
                         throw new ArgumentException("NicoConvASSまたはnicojk_ass.pyのパスが設定されていません");
                     }
+                    if (!string.IsNullOrEmpty(setting.NicoJKAssPath)
+                        && (Util.IsServerLinux() || string.IsNullOrEmpty(setting.NicoConvASSPath)))
+                    {
+                        PythonExecutableResolver.ResolveOrThrow("nicojk_ass.py");
+                    }
                 }
 
                 if (profile.EnableRename)
@@ -2872,6 +2877,10 @@ namespace Amatsukaze.Server
                         throw new ArgumentException("SCRenameパスが設定されていません");
                     }
                     var fileName = Path.GetFileName(setting.SCRenamePath);
+                    if (string.Equals(Path.GetExtension(fileName), ".py", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PythonExecutableResolver.ResolveOrThrow("SCRename.py");
+                    }
                     // 間違える人がいるかも知れないので一応チェックしておく
                     if(fileName.Equals("SCRename.bat", StringComparison.OrdinalIgnoreCase) ||
                         fileName.Equals("SCRenameEDCB.bat", StringComparison.OrdinalIgnoreCase))

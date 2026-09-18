@@ -90,7 +90,7 @@ private:
 
     // Python スクリプトで API取得 + ASS変換
     bool makeASSByScript(time_t startTime, int duration);
-    tstring MakeNicoJKScriptArgs(time_t startTime, int duration, NicoJKType type);
+    tstring MakeNicoJKScriptArgs(const tstring& pythonCommand, time_t startTime, int duration, NicoJKType type);
 
     static double toClock(int h, int m, int s, int ss);
 
