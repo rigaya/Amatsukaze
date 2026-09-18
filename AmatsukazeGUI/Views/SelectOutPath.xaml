@@ -112,7 +112,7 @@
             </TextBlock>
         </Button>
 
-        <Expander Header="他のモード">
+        <GroupBox Header="他のモード">
             <StackPanel>
                 <Button Margin="2" Height="Auto" Command="{Binding SearchCommand, Mode=OneWay}">
                     <TextBlock TextAlignment="Center" TextWrapping="Wrap">
@@ -122,11 +122,11 @@
 
                 <Button Margin="2" Height="Auto" Command="{Binding CMCheckCommand, Mode=OneWay}">
                     <TextBlock TextAlignment="Center" TextWrapping="Wrap">
-                <Run FontSize="20" Text="CM解析のみ"/><LineBreak/><Run Text="CM解析のみ行います。エンコードはしません。結果はログを確認してください。"/>
+                <Run FontSize="20" Text="CM解析のみ"/><LineBreak/><Run Text="CM解析のみ行います。エンコードはしません。プロファイルで一時フォルダを残しておくことで、カット調整機能が使用可能です。"/>
                     </TextBlock>
                 </Button>
             </StackPanel>
-        </Expander>
+        </GroupBox>
 
         <Button Margin="2" Height="50" >
             <i:Interaction.Triggers>
