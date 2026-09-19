@@ -203,8 +203,12 @@ jobs:
       - name: Install yq
         run: |
           YQ_VERSION=v4.44.3
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+          yq_tmp=$(mktemp)
+          trap 'rm -f "$yq_tmp"' EXIT
+          curl --fail --location --no-progress-meter --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 300 --connect-timeout 15 --max-time 120 --output "$yq_tmp" \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo install -m 0755 "$yq_tmp" /usr/local/bin/yq
+          yq --version
 
       - name: Disable GPU-related blocks in compose.yml (safe delete)
         working-directory: docker
