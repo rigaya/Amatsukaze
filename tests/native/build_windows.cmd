@@ -40,5 +40,44 @@ call "%VCVARS%" x64
 if errorlevel 1 exit /b %ERRORLEVEL%
 "%MSBUILD%" Amatsukaze.sln /t:AmatsukazeNativeTests /p:Configuration=Release /p:Platform=x64 /m:1
 if errorlevel 1 exit /b %ERRORLEVEL%
-x64\Release\AmatsukazeNativeTests.exe
-exit /b %ERRORLEVEL%
+
+set "TEST_RUNTIME=%CD%\x64\Release"
+if not "%AMT_NATIVE_TEST_RUNTIME_DIR%"=="" (
+  set "TEST_RUNTIME=%AMT_NATIVE_TEST_RUNTIME_DIR%"
+  if not exist "%AMT_NATIVE_TEST_RUNTIME_DIR%" (
+    echo テスト用ランタイムディレクトリが見つかりません: %AMT_NATIVE_TEST_RUNTIME_DIR%
+    exit /b 1
+  )
+
+  rem リリースパッケージと同じ順序でベースパッケージへ今回のビルド成果物を上書きする。
+  copy /y x64\Release\*.dll "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
+  if errorlevel 1 exit /b 1
+  copy /y x64\Release\AmatsukazeNativeTests.exe "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
+  if errorlevel 1 exit /b 1
+  if exist lib\x64\*.dll copy /y lib\x64\*.dll "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
+  if errorlevel 1 exit /b 1
+
+  rem FFmpeg DLLの名前と探索方法はリリースパッケージ作成CIに合わせる。
+  for /r ffmpeg_lgpl %%D in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do if exist "%%D" (
+    copy /y "%%D" "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
+    if errorlevel 1 exit /b 1
+  )
+
+  rem 現在のAmatsukaze.dllがリンクする旧FFmpeg DLLと、リリースへ同梱する新FFmpeg DLLの両方を確認する。
+  for %%F in (AviSynth.dll Caption.dll libfaad2.dll avcodec-58.dll avformat-58.dll avutil-56.dll swscale-5.dll avcodec-61.dll) do (
+    if not exist "%AMT_NATIVE_TEST_RUNTIME_DIR%\%%F" (
+      echo テスト用ランタイムに%%Fがありません。
+      exit /b 1
+    )
+  )
+
+  dumpbin /dependents "%AMT_NATIVE_TEST_RUNTIME_DIR%\Amatsukaze.dll"
+  if errorlevel 1 exit /b 1
+)
+
+pushd "%TEST_RUNTIME%"
+if errorlevel 1 exit /b %ERRORLEVEL%
+AmatsukazeNativeTests.exe
+set "TEST_EXIT=%ERRORLEVEL%"
+popd
+exit /b %TEST_EXIT%

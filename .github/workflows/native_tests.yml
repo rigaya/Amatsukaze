@@ -39,7 +39,10 @@ jobs:
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_CRT_LINKAGE: static
+      FFMPEG_URL: https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20241102/ffmpeg_dlls_for_hwenc_20241102.7z
       DEPLIB_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeDepLibs_20260131.7z
+      BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/AmatsukazeBasePkg_20260902.7z
+      AMT_NATIVE_TEST_RUNTIME_DIR: ${{ github.workspace }}\native-test-runtime\exe_files
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,9 +65,29 @@ jobs:
           call vcpkg\bootstrap-vcpkg.bat
           vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
           if not exist deps mkdir deps
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\ffmpeg.7z "%FFMPEG_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\deplib.7z "%DEPLIB_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\base_pkg.7z "%BASE_PKG_URL%"
+          if not exist ffmpeg_lgpl mkdir ffmpeg_lgpl
+          7z x -y -offmpeg_lgpl deps\ffmpeg.7z
+          if not exist ffmpeg_lgpl\include (
+            for /d %%d in (ffmpeg_lgpl\*) do (
+              robocopy "%%d" "ffmpeg_lgpl" /E /NFL /NDL /NJH /NJS
+              if errorlevel 8 exit /b 1
+              rmdir /s /q "%%d"
+              goto :ffmpeg_flatten_done
+            )
+          )
+          :ffmpeg_flatten_done
           if not exist lib mkdir lib
           7z x -y -olib deps\deplib.7z
+          if exist native-test-runtime rmdir /s /q native-test-runtime
+          mkdir native-test-runtime
+          7z x -y -onative-test-runtime deps\base_pkg.7z
+          if not exist "%AMT_NATIVE_TEST_RUNTIME_DIR%" (
+            echo テスト用ランタイムのexe_filesがありません: %AMT_NATIVE_TEST_RUNTIME_DIR%
+            exit /b 1
+          )
       - name: Build and run
         shell: cmd
         run: |
@@ -73,6 +96,10 @@ jobs:
   csharp_offline:
     name: C# Offline
     runs-on: ubuntu-latest
+    env:
+      SEVENZIP_VER: 26.02
+      SEVENZIP_PKG: 7z2602
+      SEVENZIP_ARCHIVE_SHA256: 41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,6 +109,17 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - name: Set up release 7-Zip
+        run: |
+          archive="${RUNNER_TEMP}/${SEVENZIP_PKG}-linux-x64.tar.xz"
+          destination="${GITHUB_WORKSPACE}/../build/exe_files/7z"
+          curl -fL --retry 3 --retry-delay 10 \
+            "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz" \
+            -o "${archive}"
+          printf '%s  %s\n' "${SEVENZIP_ARCHIVE_SHA256}" "${archive}" | sha256sum -c -
+          mkdir -p "${destination}"
+          tar -xf "${archive}" -C "${destination}" 7zzs License.txt
+          chmod 755 "${destination}/7zzs"
       - name: Restore and run offline tests
         run: |
           dotnet restore AmatsukazeServerTest/AmatsukazeServerTest.csproj
