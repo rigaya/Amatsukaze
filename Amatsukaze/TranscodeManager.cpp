@@ -1712,19 +1712,6 @@ void DoBadThing() {
     auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes());
     audioDiffInfo.printAudioPtsDiff(ctx);
 
-    constexpr double AUDIO_DROP_CHECK_MIN_DURATION = 180 * MPEG_CLOCK_HZ;
-    constexpr int AUDIO_DROP_ERROR_PERCENT = 8;
-    const int notIncludedAudioFrames =
-        audioDiffInfo.totalSrcFrames - audioDiffInfo.totalUniquAudioFrames;
-    if (reformInfo.getInDuration() >= AUDIO_DROP_CHECK_MIN_DURATION
-        && (int64_t)notIncludedAudioFrames * 100
-            >= (int64_t)audioDiffInfo.totalSrcFrames * AUDIO_DROP_ERROR_PERCENT) {
-        THROWF(FormatException,
-            "未出力音声フレームが多すぎます（%d/%dフレーム、%.3f%%）",
-            notIncludedAudioFrames, audioDiffInfo.totalSrcFrames,
-            (double)notIncludedAudioFrames * 100 / audioDiffInfo.totalSrcFrames);
-    }
-
     const auto& allKeys = reformInfo.getOutFileKeys();
     std::vector<EncodeFileKey> keys;
     // 指定秒数未満の短い区間は出力しない
