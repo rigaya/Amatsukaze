@@ -3,7 +3,7 @@ FROM ghcr.io/${GHCR_OWNER}/amatsukaze-builder:ubuntu2204
 
 ARG DEBIAN_FRONTEND=noninteractive \
     OSVER=ubuntu2204 \
-    AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.3/avisynth_3.7.5-1_amd64_Ubuntu22.04.deb
+    AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/0.7.4/avisynth_3.7.5-1_amd64_linux.deb
 
 ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8

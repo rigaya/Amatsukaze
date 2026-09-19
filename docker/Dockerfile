@@ -18,7 +18,7 @@ ENV ARCH=${ARCH}
 ENV BUILD_MODE=${BUILD_MODE}
 
 # バージョン定義
-ENV AVISYNTHCUDAFILTERS_VER=0.7.1
+ENV AVISYNTHCUDAFILTERS_VER=0.7.4
 ENV AVISYNTH_VER=3.7.5
 ENV YADIFMOD2_VER=0.2.8
 ENV TIVTC_VER=v1.0.29
@@ -59,7 +59,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get autoremove -y
 
 # AviSynth+のインストール
-RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_Ubuntu${UBUNTU_VERSION}.deb -O avisynth.deb \
+RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_linux.deb -O avisynth.deb \
     && apt-get install -y ./avisynth.deb \
     && rm ./avisynth.deb
 
@@ -217,7 +217,7 @@ ENV VCEENCC_VER=9.17
 ENV AMDGPU_INSTALL_VER=25.35.1
 ENV AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
 ENV TSREPLACE_VER=0.20
-ENV AVISYNTHCUDAFILTERS_VER=0.7.3
+ENV AVISYNTHCUDAFILTERS_VER=0.7.4
 ENV AVISYNTH_VER=3.7.5
 ENV FASTER_WHISPER_VER=r245.4
 
@@ -319,10 +319,10 @@ RUN if [ "$BUILD_MODE" = "debug" ]; then \
     fi
 
 # AviSynth+/AvisynthCUDAFiltersのインストール（実行段階でも必要）
-RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_Ubuntu${UBUNTU_VERSION}.deb -O avisynth.deb \
+RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_linux.deb -O avisynth.deb \
     && apt-get install -y ./avisynth.deb \
     && rm ./avisynth.deb \
-    && wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynthcudafilters_${AVISYNTHCUDAFILTERS_VER}-1_${ARCH}_Ubuntu${UBUNTU_VERSION}.deb -O avisynthcudafilters.deb \
+    && wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynthcudafilters_${AVISYNTHCUDAFILTERS_VER}-1_${ARCH}_linux.deb -O avisynthcudafilters.deb \
     && apt-get install -y ./avisynthcudafilters.deb \
     && rm ./avisynthcudafilters.deb
 
