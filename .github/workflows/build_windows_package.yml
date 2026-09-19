@@ -179,6 +179,8 @@ jobs:
           if exist x64\\Release2\\*.dll copy /y x64\\Release2\\*.dll package\\exe_files
           if exist x64\\Release\\*.dll copy /y x64\\Release\\*.dll package\\exe_files
           if exist x64\\Release\\*.exe copy /y x64\\Release\\*.exe package\\exe_files
+          rem 単体テスト用の実行ファイルは配布物から除外する
+          if exist package\\exe_files\\AmatsukazeNativeTests.exe del /f /q package\\exe_files\\AmatsukazeNativeTests.exe
 
           if exist publish\\win-x64\\*.exe copy /y publish\\win-x64\\*.exe package\\exe_files
           if exist publish\\win-x64\\*.dll copy /y publish\\win-x64\\*.dll package\\exe_files
