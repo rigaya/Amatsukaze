@@ -711,7 +711,12 @@ struct TempPaths {
 
 TempPaths MakeTempPaths(const tstring& outputPath) {
     const fs::path output(outputPath);
-    const fs::path parent = output.has_parent_path() ? output.parent_path() : fs::current_path();
+    fs::path parent = output.parent_path();
+    if (parent.empty()) {
+        std::error_code ec;
+        parent = fs::current_path(ec);
+        if (ec) parent = fs::path(_T("."));
+    }
     const tstring stem = output.stem().native();
     const tstring tag = stem + _T(".genlogo.") + IntToTString(GetProcessIdValue());
     const fs::path workFile = parent / (tag + _T(".work.dat"));
@@ -813,12 +818,24 @@ tstring MakeOutputTimestamp() {
 
 int ResolveFinalOutputPath(const tstring& outputPath, fs::path& finalPath) {
     const fs::path output(outputPath);
-    if (!fs::exists(output)) {
+    std::error_code ec;
+    if (!fs::exists(output, ec)) {
+        if (ec) {
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: 出力先を確認できません\n"));
+            return ERR_RUNTIME_OUTPUT_PLACE;
+        }
         finalPath = output;
         return 0;
     }
 
-    const fs::path parent = output.has_parent_path() ? output.parent_path() : fs::current_path();
+    fs::path parent = output.parent_path();
+    if (parent.empty()) {
+        parent = fs::current_path(ec);
+        if (ec) {
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: 作業ディレクトリを取得できません\n"));
+            return ERR_RUNTIME_OUTPUT_PLACE;
+        }
+    }
     const tstring stem = output.stem().native();
     const tstring ext = output.has_extension() ? output.extension().native() : tstring(_T(".lgd"));
     const tstring timestamp = MakeOutputTimestamp();
@@ -829,7 +846,11 @@ int ResolveFinalOutputPath(const tstring& outputPath, fs::path& finalPath) {
         }
         filename += ext;
         const fs::path candidate = parent / filename;
-        if (!fs::exists(candidate)) {
+        if (!fs::exists(candidate, ec)) {
+            if (ec) {
+                _ftprintf(stderr, _T("AmatsukazeGenLogo error: 退避先を確認できません\n"));
+                return ERR_RUNTIME_OUTPUT_PLACE;
+            }
             _ftprintf(stderr,
                 _T("出力先に既存ファイルがあるため、別名で保存します: %s -> %s\n"),
                 output.c_str(), candidate.c_str());
@@ -893,17 +914,28 @@ int Run(const NativeApi& api, const Options& opt) {
     };
 
     const fs::path inputPath(opt.input);
-    if (!fs::exists(inputPath)) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: 入力ファイルが存在しません\n"));
+    std::error_code fsError;
+    if (!fs::exists(inputPath, fsError)) {
+        _ftprintf(stderr, fsError
+            ? _T("AmatsukazeGenLogo error: 入力ファイルを確認できません\n")
+            : _T("AmatsukazeGenLogo error: 入力ファイルが存在しません\n"));
         return ERR_RUNTIME_INPUT_NOT_FOUND;
     }
     if (fs::path(opt.output).has_parent_path()) {
-        fs::create_directories(fs::path(opt.output).parent_path());
+        fs::create_directories(fs::path(opt.output).parent_path(), fsError);
+        if (fsError) {
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: 出力先ディレクトリを作成できません\n"));
+            return ERR_RUNTIME_OUTPUT_PLACE;
+        }
     }
     const bool detailedDebug = !opt.debugDir.empty();
     DebugPaths debugPaths{};
     if (detailedDebug) {
-        fs::create_directories(fs::path(opt.debugDir));
+        fs::create_directories(fs::path(opt.debugDir), fsError);
+        if (fsError) {
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: デバッグ出力先を作成できません\n"));
+            return ERR_RUNTIME_OUTPUT_PLACE;
+        }
         debugPaths = MakeDebugPaths(opt.debugDir);
     }
 
