@@ -211,9 +211,9 @@ ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8
 ENV LC_CTYPE=ja_JP.UTF-8
 
-ENV QSVENCC_VER=8.28
-ENV NVENCC_VER=9.33
-ENV VCEENCC_VER=9.15
+ENV QSVENCC_VER=8.30
+ENV NVENCC_VER=9.35
+ENV VCEENCC_VER=9.17
 ENV AMDGPU_INSTALL_VER=25.35.1
 ENV AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
 ENV TSREPLACE_VER=0.20
@@ -350,9 +350,9 @@ RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCR
     && mv tmp_SCRenamePy/SCRename.* exe_files/SCRenamePy/ \
     && rm -rf tmp_SCRenamePy
 
-RUN wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260905-074217/x264_3223_amd64_linux.tar.xz -O x264.tar.xz \
-    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260905-074217/x265_4.3%2B24_amd64_linux.tar.xz -O x265.tar.xz \
-    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260905-074217/SvtAv1EncApp_4.2.0-107_amd64_linux_clang.tar.xz -O svt-av1.tar.xz \
+RUN wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260919-084954/x264_3223_amd64_linux.tar.xz -O x264.tar.xz \
+    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260919-084954/x265_4.3%2B45_amd64_linux.tar.xz -O x265.tar.xz \
+    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260919-084954/SvtAv1EncApp_4.2.0-146_amd64_linux_clang.tar.xz -O svt-av1.tar.xz \
     && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/x262_20260901.tar.gz -O x262.tar.gz \
     && tar -xf x264.tar.xz -C /app/exe_files \
     && tar -xf x265.tar.xz -C /app/exe_files \
