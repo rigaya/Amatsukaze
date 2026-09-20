@@ -35,6 +35,11 @@ RUN apt update \
       yasm \
       ninja-build \
       pkg-config \
+      patchelf \
+      ruby \
+      rake \
+      docbook-xsl \
+      xsltproc \
       checkinstall \
       autoconf \
       automake \
