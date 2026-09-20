@@ -379,6 +379,13 @@ done
 
 if [[ "$assets_only" == true ]]; then
     if want SCRenamePy; then build_screname; fi
+    for path in "$stage/exe_files/cmd/"*; do
+        [[ -f "$path" ]] || continue
+        sed -i 's/\r$//' "$path"
+    done
+    if [[ -f "$stage/exe_files/cmd/SetPriority" ]]; then
+        sed -i 's|^exec .*SetPriority.*$|exec "$(dirname "$0")/../ScriptCommand" SetPriority "$@"|' "$stage/exe_files/cmd/SetPriority"
+    fi
     if [[ -f "$stage/exe_files/lib/libicuuc.so.76.1" && -f "$stage/exe_files/lib/libcrypto.so.3" ]]; then
         cat > "$stage/AmatsukazeServer.sh" <<'LAUNCHER'
 #!/bin/sh
