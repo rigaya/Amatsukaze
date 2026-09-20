@@ -1,0 +1,97 @@
+name: Build Linux BasePkg
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: BasePkg の版（英数字、ピリオド、アンダースコア、ハイフン）
+        required: true
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  build-basepkg:
+    name: Build BasePkg (Ubuntu 20.04)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Set version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_VERSION" ]]; then
+            VERSION="$REQUESTED_VERSION"
+          else
+            VERSION="r${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:12}"
+          fi
+          if [[ ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "BasePkg の版に使用できない文字があります" >&2
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Pull build image
+        run: docker pull "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004"
+
+      - name: Check BasePkg build tools
+        run: |
+          docker run --rm "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004" \
+            bash -ec 'command -v patchelf; command -v rake; command -v xsltproc' || {
+              echo 'BaseImage が古いため、build_base_image.yml で ubuntu2004 を更新してください。' >&2
+              exit 1
+            }
+
+      - name: Build and verify BasePkg
+        env:
+          BASEPKG_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/basepkg build_tmp/dep_tools
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004" \
+            bash ./scripts/build_dep_tools.sh \
+              --work-dir /work/build_tmp/dep_tools \
+              --output-dir /work/artifacts/basepkg \
+              --version "$BASEPKG_VERSION"
+          ARCHIVE="artifacts/basepkg/Amatsukaze_Linux_BasePkg_${BASEPKG_VERSION}_x64.tar.xz"
+          test -s "$ARCHIVE"
+          mkdir -p artifacts/basepkg/verify
+          tar -xf "$ARCHIVE" -C artifacts/basepkg/verify
+          test "$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' artifacts/basepkg/verify/basepkg-manifest.json)" = "$BASEPKG_VERSION"
+          ./scripts/test_basepkg.sh --basepkg artifacts/basepkg/verify
+
+      - name: Check minimal distributions
+        run: |
+          set -euo pipefail
+          for image in ubuntu:20.04 debian:13; do
+            docker run --rm \
+              -v "${{ github.workspace }}/artifacts/basepkg/verify:/pkg:ro" \
+              "$image" bash -ec '
+                export LD_LIBRARY_PATH=/pkg/exe_files/lib:/pkg/exe_files
+                /pkg/exe_files/mkvmerge --version
+                /pkg/exe_files/opusenc --version
+                for file in /pkg/exe_files/lib/*.so*; do
+                  if ldd "$file" 2>&1 | grep -q "not found"; then
+                    echo "共有ライブラリが不足しています: $file" >&2
+                    exit 1
+                  fi
+                done
+              '
+          done
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Amatsukaze_Linux_BasePkg_${{ steps.version.outputs.value }}_x64
+          path: artifacts/basepkg/Amatsukaze_Linux_BasePkg_${{ steps.version.outputs.value }}_x64.tar.xz
+          if-no-files-found: error
