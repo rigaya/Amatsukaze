@@ -3,7 +3,7 @@ FROM ghcr.io/${GHCR_OWNER}/amatsukaze-builder:ubuntu2004
 
 # AviSynth+ は Ubuntu 20.04 でビルドした単一資産 (_linux) を使う。
 # 20.04 でビルドしたものは glibc 2.31 以降のディストリで動くため、OS別に分ける必要がない。
-ARG ACF_VERSION=0.7.4
+ARG ACF_VERSION=0.7.5
 ARG DEBIAN_FRONTEND=noninteractive \
     OSVER=ubuntu2004
 ARG AVISYNTHPLUS_DEB_NAME=https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${ACF_VERSION}/avisynth_3.7.5-1_amd64_linux.deb
