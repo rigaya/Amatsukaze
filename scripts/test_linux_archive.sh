@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc != 2) return 2;
-    void *library = dlopen("libavisynth.so.11", RTLD_NOW | RTLD_LOCAL);
+    void *library = dlopen("/source/exe_files/lib/libavisynth.so.11", RTLD_NOW | RTLD_LOCAL);
     if (!library) {
         fprintf(stderr, "AviSynthを読み込めません: %s\n", dlerror());
         return 1;
@@ -92,7 +92,6 @@ docker run --rm -v "$test_dir:/test" "$builder_image" \
 
 cat > "$test_dir/container_test.sh" <<'TEST'
 set -euo pipefail
-export LD_LIBRARY_PATH="/source/exe_files/lib:/source/exe_files"
 export OPENSSL_MODULES=/source/exe_files/lib/ossl-modules
 export DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU=76.1
 cd /source
@@ -112,6 +111,19 @@ while IFS= read -r -d '' path; do
         echo "$result" >&2
         exit 1
     fi
+    while IFS= read -r line; do
+        case "$line" in
+            *'libstdc++.so.6 => '*|*'libgcc_s.so.1 => '*|*'libavisynth.so.11 => '*|\
+            *'libssl.so.3 => '*|*'libcrypto.so.3 => '*|*'libicuuc.so.76 => '*|\
+            *'libicui18n.so.76 => '*|*'libicudata.so.76 => '*)
+                library_path=${line#*' => '}
+                library_path=${library_path%% *}
+                if [[ $(realpath -m "$library_path") != /source/exe_files/lib/* ]]; then
+                    echo "同梱ライブラリを参照していません: ${path#/source/}: $line" >&2
+                    exit 1
+                fi ;;
+        esac
+    done <<< "$result"
 done < <(find /source/exe_files -type f -print0)
 echo "ELF依存検査成功: $elf_count 件"
 (( elf_count > 0 )) || exit 1

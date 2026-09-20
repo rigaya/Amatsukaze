@@ -390,7 +390,7 @@ if [[ "$assets_only" == true ]]; then
         cat > "$stage/AmatsukazeServer.sh" <<'LAUNCHER'
 #!/bin/sh
 cd "$(dirname "$0")" || exit 1
-export LD_LIBRARY_PATH="$PWD/exe_files/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export PATH="$PWD/exe_files:$PATH"
 export OPENSSL_MODULES="$PWD/exe_files/lib/ossl-modules"
 export DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU=76.1
 exec ./exe_files/AmatsukazeServerCLI -p 32768
@@ -400,14 +400,13 @@ LAUNCHER
     while IFS= read -r -d '' path; do
         readelf -d "$path" 2>/dev/null | grep -q '(NEEDED)' || continue
         case "$path" in
-            "$stage/exe_files/plugins64/"*) patchelf --set-rpath '$ORIGIN/../lib' "$path" ;;
-            "$stage/exe_files/lib/"*) patchelf --set-rpath '$ORIGIN' "$path" ;;
+            "$stage/exe_files/lib/ossl-modules/"*) rpath='$ORIGIN/..' ;;
+            "$stage/exe_files/lib/"*) rpath='$ORIGIN' ;;
+            "$stage/exe_files/plugins64/"*|"$stage/exe_files/7z/"*) rpath='$ORIGIN/../lib' ;;
+            *) rpath='$ORIGIN/lib' ;;
         esac
-    done < <(find "$stage/exe_files/lib" "$stage/exe_files/plugins64" -type f -print0)
-    for path in "$stage/exe_files/libAmatsukaze.so" "$stage/exe_files/libAmatsukaze2.so"; do
-        [[ -f "$path" ]] || continue
-        patchelf --set-rpath '$ORIGIN/lib' "$path"
-    done
+        patchelf --set-rpath "$rpath" "$path"
+    done < <(find "$stage/exe_files" -type f -print0)
     echo "配布アセットを配置しました: $stage"
     exit 0
 fi
