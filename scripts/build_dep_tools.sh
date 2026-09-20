@@ -357,6 +357,10 @@ if [[ "$assets_only" == true ]]; then
             "$stage/exe_files/lib/"*) patchelf --set-rpath '$ORIGIN' "$path" ;;
         esac
     done < <(find "$stage/exe_files/lib" "$stage/exe_files/plugins64" -type f -print0)
+    for path in "$stage/exe_files/libAmatsukaze.so" "$stage/exe_files/libAmatsukaze2.so"; do
+        [[ -f "$path" ]] || continue
+        patchelf --set-rpath '$ORIGIN/lib' "$path"
+    done
     echo "配布アセットを配置しました: $stage"
     exit 0
 fi

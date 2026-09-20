@@ -1,0 +1,130 @@
+name: Verify Linux archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 通常のLinuxパッケージを作成したActions実行ID
+        required: true
+        type: string
+      basepkg_run_id:
+        description: BasePkgを作成したActions実行ID
+        required: true
+        type: string
+      basepkg_version:
+        description: BasePkgの版
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    name: Assemble and verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download existing artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          BASEPKG_RUN_ID: ${{ inputs.basepkg_run_id }}
+          BASEPKG_VERSION: ${{ inputs.basepkg_version }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ && "$BASEPKG_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$BASEPKG_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+          mkdir -p parts/source parts/basepkg
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'Amatsukaze_linux_*' \
+            --dir parts/source
+          gh run download "$BASEPKG_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "Amatsukaze_Linux_BasePkg_${BASEPKG_VERSION}_x64" \
+            --dir parts/basepkg
+
+      - name: Assemble archive
+        env:
+          BASEPKG_VERSION: ${{ inputs.basepkg_version }}
+        run: |
+          set -euo pipefail
+          mapfile -t source_archives < <(find parts/source -type f -name 'Amatsukaze_linux_*_x64.tar.xz')
+          (( ${#source_archives[@]} == 1 )) || { echo '通常パッケージのアーカイブが1件ではありません' >&2; exit 1; }
+          basepkg_archive="parts/basepkg/Amatsukaze_Linux_BasePkg_${BASEPKG_VERSION}_x64.tar.xz"
+          test -s "$basepkg_archive"
+          mkdir -p pkg
+          tar -xf "${source_archives[0]}" -C pkg
+          tar -xf "$basepkg_archive" -C pkg
+          grep -Fq "\"version\":\"${BASEPKG_VERSION}\"" pkg/basepkg-manifest.json
+          grep -Fq '"complete":true' pkg/basepkg-manifest.json
+          docker pull "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004"
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004" \
+            bash ./scripts/build_dep_tools.sh \
+              --assets-only \
+              --package-dir /work/pkg \
+              --work-dir /work/build_tmp/package_assets \
+              --output-dir /work/artifacts/package_assets
+          tar -C pkg -cJf "Amatsukaze_linux_trial_${GITHUB_RUN_ID}_x64.tar.xz" .
+
+      - name: Upload trial archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Amatsukaze_linux_trial_${{ github.run_id }}_x64
+          path: Amatsukaze_linux_trial_${{ github.run_id }}_x64.tar.xz
+          if-no-files-found: error
+
+      - name: Verify complete package
+        run: ./scripts/test_basepkg.sh --package pkg
+
+      - name: Check minimal distributions
+        run: |
+          set -euo pipefail
+          for image in ubuntu:20.04 debian:13; do
+            docker run --rm -v "${{ github.workspace }}/pkg:/pkg:ro" "$image" bash -ec '
+              export LD_LIBRARY_PATH=/pkg/exe_files/lib:/pkg/exe_files
+              for file in /pkg/exe_files/AmatsukazeServerCLI /pkg/exe_files/AmatsukazeCLI \
+                /pkg/exe_files/libAmatsukaze.so /pkg/exe_files/libAmatsukaze2.so \
+                /pkg/exe_files/plugins64/*.so /pkg/exe_files/lib/*.so* /pkg/exe_files/tsreplace; do
+                if ldd "$file" 2>&1 | grep -q "not found"; then
+                  echo "共有ライブラリが不足しています: $file" >&2
+                  exit 1
+                fi
+              done
+            '
+          done
+
+      - name: Check server startup on minimal Ubuntu
+        run: |
+          docker run --rm -v "${{ github.workspace }}/pkg:/pkg" ubuntu:20.04 bash -ec '
+            cd /pkg
+            timeout 20s ./AmatsukazeServer.sh > /tmp/server.log 2>&1 &
+            server_pid=$!
+            ready=false
+            for i in {1..15}; do
+              if (echo > /dev/tcp/127.0.0.1/32768) 2>/dev/null; then
+                ready=true
+                break
+              fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if [[ "$ready" == true ]]; then
+              sleep 3
+              kill -0 "$server_pid" 2>/dev/null || ready=false
+            fi
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            if [[ "$ready" != true ]]; then
+              cat /tmp/server.log >&2
+              echo 'サーバーを起動できませんでした' >&2
+              exit 1
+            fi
+          '
