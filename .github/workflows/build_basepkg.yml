@@ -80,7 +80,7 @@ jobs:
                 export LD_LIBRARY_PATH=/pkg/exe_files/lib:/pkg/exe_files
                 /pkg/exe_files/mkvmerge --version
                 /pkg/exe_files/opusenc --version
-                for file in /pkg/exe_files/lib/*.so*; do
+                for file in /pkg/exe_files/lib/*.so* /pkg/exe_files/lib/ossl-modules/*.so; do
                   if ldd "$file" 2>&1 | grep -q "not found"; then
                     echo "共有ライブラリが不足しています: $file" >&2
                     exit 1

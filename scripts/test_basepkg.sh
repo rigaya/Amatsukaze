@@ -85,6 +85,10 @@ if [[ "$mode" == --package && "$complete" != true ]]; then
 fi
 
 if [[ "$complete" == true ]]; then
+    for library_name in libicuuc.so.76.1 libicui18n.so.76.1 libicudata.so.76.1 \
+        libssl.so.3 libcrypto.so.3; do
+        require_file "exe_files/lib/$library_name"
+    done
     for tool_name in opusenc mkvmerge MP4Box muxer timelineeditor \
         chapter_exe join_logo_scp tsreadex psisiarc b24tovtt; do
         require_executable "exe_files/$tool_name"

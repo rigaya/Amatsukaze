@@ -31,7 +31,7 @@ if [[ -n "$only" ]]; then
     IFS=, read -r -a requested <<< "$only"
     for name in "${requested[@]}"; do
         case "$name" in
-            avisynth|avisynthcudafilters|x264|x265|svt_av1|x262|tsreplace|yadifmod2|tivtc|nnedi3|masktools|mvtools|rgtools|mp4box|lsmash|chapter_exe|join_logo_scp|tsreadex|psisiarc|b24tovtt|opusenc|mkvmerge|SCRenamePy) ;;
+            avisynth|avisynthcudafilters|x264|x265|svt_av1|x262|tsreplace|yadifmod2|tivtc|nnedi3|masktools|mvtools|rgtools|mp4box|lsmash|chapter_exe|join_logo_scp|tsreadex|psisiarc|b24tovtt|opusenc|mkvmerge|icu|openssl|SCRenamePy) ;;
             *) echo "不明な対象: $name" >&2; exit 2 ;;
         esac
         if [[ "$assets_only" == true ]]; then
@@ -304,6 +304,35 @@ build_opusenc() {
     assert_static "$stage/exe_files/opusenc"
 }
 
+build_icu() {
+    local archive
+    archive=$(fetch icu4c-76_1-src.tgz https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz)
+    if [[ ! -f "$sources/icu/source/configure" ]]; then
+        tar -xf "$archive" -C "$sources"
+    fi
+    mkdir -p "$builds/icu"
+    if [[ ! -f "$builds/icu/Makefile" ]]; then
+        run_in "$builds/icu" "$sources/icu/source/configure" --prefix="$prefix" --libdir="$prefix/lib" --disable-tests --disable-samples --disable-extras
+    fi
+    run_in "$builds/icu" make -j "$(nproc)"
+    run_in "$builds/icu" make install
+    cp -a "$prefix/lib/"libicuuc.so* "$prefix/lib/"libicui18n.so* "$prefix/lib/"libicudata.so* "$stage/exe_files/lib/"
+}
+
+build_openssl() {
+    download openssl-3.5.8.tar.gz https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz
+    if [[ ! -f "$sources/openssl-3.5.8/Makefile" ]]; then
+        run_in "$sources/openssl-3.5.8" ./Configure linux-x86_64 shared no-tests no-apps no-docs --prefix="$prefix" --libdir=lib
+    fi
+    run_in "$sources/openssl-3.5.8" make -j "$(nproc)"
+    run_in "$sources/openssl-3.5.8" make install_sw
+    cp -a "$prefix/lib/"libssl.so* "$prefix/lib/"libcrypto.so* "$stage/exe_files/lib/"
+    if [[ -d "$prefix/lib/ossl-modules" ]]; then
+        mkdir -p "$stage/exe_files/lib/ossl-modules"
+        cp -a "$prefix/lib/ossl-modules/"*.so "$stage/exe_files/lib/ossl-modules/"
+    fi
+}
+
 assert_static() {
     if readelf -d "$1" | grep -q '(NEEDED)' || readelf -l "$1" | grep -q INTERP; then
         echo "共有依存が残っています: $1" >&2
@@ -350,6 +379,17 @@ done
 
 if [[ "$assets_only" == true ]]; then
     if want SCRenamePy; then build_screname; fi
+    if [[ -f "$stage/exe_files/lib/libicuuc.so.76.1" && -f "$stage/exe_files/lib/libcrypto.so.3" ]]; then
+        cat > "$stage/AmatsukazeServer.sh" <<'LAUNCHER'
+#!/bin/sh
+cd "$(dirname "$0")" || exit 1
+export LD_LIBRARY_PATH="$PWD/exe_files/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export OPENSSL_MODULES="$PWD/exe_files/lib/ossl-modules"
+export DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU=76.1
+exec ./exe_files/AmatsukazeServerCLI -p 32768
+LAUNCHER
+        chmod +x "$stage/AmatsukazeServer.sh"
+    fi
     while IFS= read -r -d '' path; do
         readelf -d "$path" 2>/dev/null | grep -q '(NEEDED)' || continue
         case "$path" in
@@ -389,6 +429,8 @@ SOURCES
 
 if want opusenc; then build_opusenc; fi
 if want mkvmerge; then build_mkvmerge; assert_static "$stage/exe_files/mkvmerge"; fi
+if want icu; then build_icu; fi
+if want openssl; then build_openssl; fi
 
 if want avisynth; then
     cp "$(c++ -print-file-name=libstdc++.so.6)" "$stage/exe_files/lib/"

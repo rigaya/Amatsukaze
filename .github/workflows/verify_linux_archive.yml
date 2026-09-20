@@ -92,7 +92,8 @@ jobs:
               export LD_LIBRARY_PATH=/pkg/exe_files/lib:/pkg/exe_files
               for file in /pkg/exe_files/AmatsukazeServerCLI /pkg/exe_files/AmatsukazeCLI \
                 /pkg/exe_files/libAmatsukaze.so /pkg/exe_files/libAmatsukaze2.so \
-                /pkg/exe_files/plugins64/*.so /pkg/exe_files/lib/*.so* /pkg/exe_files/tsreplace; do
+                /pkg/exe_files/plugins64/*.so /pkg/exe_files/lib/*.so* \
+                /pkg/exe_files/lib/ossl-modules/*.so /pkg/exe_files/tsreplace; do
                 if ldd "$file" 2>&1 | grep -q "not found"; then
                   echo "共有ライブラリが不足しています: $file" >&2
                   exit 1
@@ -101,30 +102,32 @@ jobs:
             '
           done
 
-      - name: Check server startup on minimal Ubuntu
+      - name: Check server startup on minimal distributions
         run: |
-          docker run --rm -v "${{ github.workspace }}/pkg:/pkg" ubuntu:20.04 bash -ec '
-            cd /pkg
-            timeout 20s ./AmatsukazeServer.sh > /tmp/server.log 2>&1 &
-            server_pid=$!
-            ready=false
-            for i in {1..15}; do
-              if (echo > /dev/tcp/127.0.0.1/32768) 2>/dev/null; then
-                ready=true
-                break
+          for image in ubuntu:20.04 debian:13; do
+            docker run --rm -e IMAGE="$image" -v "${{ github.workspace }}/pkg:/pkg" "$image" bash -ec '
+              cd /pkg
+              timeout 20s ./AmatsukazeServer.sh > /tmp/server.log 2>&1 &
+              server_pid=$!
+              ready=false
+              for i in {1..15}; do
+                if (echo > /dev/tcp/127.0.0.1/32768) 2>/dev/null; then
+                  ready=true
+                  break
+                fi
+                if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+                sleep 1
+              done
+              if [[ "$ready" == true ]]; then
+                sleep 3
+                kill -0 "$server_pid" 2>/dev/null || ready=false
               fi
-              if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
-              sleep 1
-            done
-            if [[ "$ready" == true ]]; then
-              sleep 3
-              kill -0 "$server_pid" 2>/dev/null || ready=false
-            fi
-            kill "$server_pid" 2>/dev/null || true
-            wait "$server_pid" 2>/dev/null || true
-            if [[ "$ready" != true ]]; then
-              cat /tmp/server.log >&2
-              echo 'サーバーを起動できませんでした' >&2
-              exit 1
-            fi
-          '
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+              if [[ "$ready" != true ]]; then
+                cat /tmp/server.log >&2
+                echo "サーバーを起動できませんでした: $IMAGE" >&2
+                exit 1
+              fi
+            '
+          done
