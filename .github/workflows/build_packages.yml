@@ -117,6 +117,10 @@ jobs:
     name: Upload Release Asset
     needs: [build-native, build-dotnet]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      BASEPKG_VERSION: ${{ vars.LINUX_BASEPKG_VERSION }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -146,13 +150,54 @@ jobs:
           name: amatsukaze-dotnet
           path: parts
 
+      - name: Check BasePkg selection
+        id: basepkg
+        run: |
+          set -euo pipefail
+          if [[ -z "$BASEPKG_VERSION" ]]; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          else
+            [[ "$BASEPKG_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo 'LINUX_BASEPKG_VERSIONが不正です' >&2; exit 1; }
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download BasePkg
+        if: steps.basepkg.outputs.enabled == 'true'
+        run: |
+          mkdir -p parts/basepkg
+          curl -fL --retry 3 \
+            "https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/Amatsukaze_Linux_BasePkg_${BASEPKG_VERSION}_x64.tar.xz" \
+            -o "parts/basepkg/Amatsukaze_Linux_BasePkg_${BASEPKG_VERSION}_x64.tar.xz"
+
       - name: Create package
         id: create_pkg
+        env:
+          USE_BASEPKG: ${{ steps.basepkg.outputs.enabled }}
         run: |
+          set -euo pipefail
           # 2つの成果物は内容が重ならないので、同じツリーに重ねるだけでよい
           mkdir -p pkg
           tar -xf parts/native.tar -C pkg
           tar -xf parts/dotnet.tar -C pkg
+          if [[ "$USE_BASEPKG" == true ]]; then
+            basepkg_archive="parts/basepkg/Amatsukaze_Linux_BasePkg_${BASEPKG_VERSION}_x64.tar.xz"
+            test -s "$basepkg_archive"
+            tar -xf "$basepkg_archive" -C pkg
+            grep -Fq "\"version\":\"${BASEPKG_VERSION}\"" pkg/basepkg-manifest.json
+            grep -Fq '"complete":true' pkg/basepkg-manifest.json
+            docker pull "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004"
+            docker run --rm \
+              -v "${{ github.workspace }}:/work" \
+              -w /work \
+              "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004" \
+              bash ./scripts/build_dep_tools.sh \
+                --assets-only \
+                --package-dir /work/pkg \
+                --work-dir /work/build_tmp/package_assets \
+                --output-dir /work/artifacts/package_assets
+            ./scripts/test_basepkg.sh --package pkg
+            ./scripts/test_linux_archive.sh --package pkg
+          fi
           PKG_NAME=Amatsukaze_linux_${{ steps.rev.outputs.version_name }}_x64.tar.xz
           tar -Jcf ${PKG_NAME} -C pkg .
           echo "pkg_name=${PKG_NAME}" >> $GITHUB_OUTPUT
