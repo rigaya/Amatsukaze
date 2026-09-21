@@ -1,4 +1,5 @@
 using Amatsukaze.Server;
+using System.Runtime.Serialization;
 using Xunit;
 
 namespace AmatsukazeServerTest;
@@ -23,6 +24,28 @@ public sealed class ProfileSettingTests
         var profile = ServerSupport.NormalizeProfile(null);
 
         Assert.Equal(5, profile.MinOutputDuration);
+    }
+
+    [Fact]
+    public void 新規プロファイルではCM解析ログを出力しない()
+    {
+        var profile = ServerSupport.NormalizeProfile(null);
+
+        Assert.False(profile.EnableCMLogFile);
+    }
+
+    [Fact]
+    public void CM解析ログ設定は保存と読み込みで維持される()
+    {
+        var serializer = new DataContractSerializer(typeof(ProfileSetting));
+        var source = new ProfileSetting { EnableCMLogFile = true };
+        using var stream = new MemoryStream();
+
+        serializer.WriteObject(stream, source);
+        stream.Position = 0;
+        var restored = Assert.IsType<ProfileSetting>(serializer.ReadObject(stream));
+
+        Assert.True(restored.EnableCMLogFile);
     }
 
     [Fact]

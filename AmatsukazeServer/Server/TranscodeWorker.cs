@@ -508,6 +508,20 @@ namespace Amatsukaze.Server
             }
         }
 
+        internal static string GetOutputLogPath(ProcMode mode, string dstPath,
+            bool disableLogFile, bool enableCMLogFile)
+        {
+            if (mode == ProcMode.DrcsCheck)
+            {
+                return null;
+            }
+            if (mode == ProcMode.CMCheck)
+            {
+                return enableCMLogFile ? dstPath + "-cm.log" : null;
+            }
+            return disableLogFile ? null : dstPath + "-enc.log";
+        }
+
         private async Task ReadBytes(PipeStream readPipe, byte[] buf)
         {
             int readBytes = 0;
@@ -967,9 +981,12 @@ namespace Amatsukaze.Server
                 string json = Path.Combine(
                     Path.GetDirectoryName(localdst),
                     Path.GetFileName(localdst)) + "-enc.json";
-                string logpath = Path.Combine(
-                    Path.GetDirectoryName(dstpath),
-                    Path.GetFileName(dstpath)) + "-enc.log";
+                string logpath = GetOutputLogPath(
+                    item.Mode, dstpath, profile.DisableLogFile, profile.EnableCMLogFile);
+                if (logpath != null)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(logpath));
+                }
                 string jlscmd = (serviceSetting?.DisableCMCheck ?? true) ?
                     null :
                     (!string.IsNullOrEmpty(profile.JLSCommandFile) ? profile.JLSCommandFile
@@ -1054,7 +1071,7 @@ namespace Amatsukaze.Server
 
                         try
                         {
-                            if (item.IsCheck == false && profile.DisableLogFile == false)
+                            if (logpath != null)
                             {
                                 logWriter = new LogWriter(logpath);
                             }
@@ -1125,7 +1142,7 @@ namespace Amatsukaze.Server
                 }
 
                 // ログを整形したテキストに置き換える
-                if (item.IsCheck == false && profile.DisableLogFile == false)
+                if (logpath != null)
                 {
                     using (var fs = new StreamWriter(File.Create(logpath), Util.AmatsukazeDefaultEncoding))
                     {

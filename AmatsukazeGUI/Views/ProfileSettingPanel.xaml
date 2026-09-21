@@ -790,8 +790,10 @@
                               ToolTip="ロゴ解析を並列で行い高速化します。最大スレッド数は[基本設定]タブで設定可能です。"/>
                     <CheckBox Height="16" Margin="0,3"  Content="システムにインストールされているAviSynthプラグインを有効にする" 
                               IsChecked="{Binding Model.SelectedProfile.SystemAviSynthPlugin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <CheckBox Height="16" Margin="0,3"  Content="ログファイルを出力先に生成しない"
+                    <CheckBox Height="16" Margin="0,3"  Content="エンコードログファイルを出力先に生成しない"
                               IsChecked="{Binding Model.SelectedProfile.DisableLogFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Height="16" Margin="0,3"  Content="CM解析ログファイルを出力先に生成する"
+                              IsChecked="{Binding Model.SelectedProfile.EnableCMLogFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="プロファイルの情報を出力先にテキストとして保存"
                               IsChecked="{Binding Model.SelectedProfile.SaveProfileText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="一時ファイルを削除せずに残す"

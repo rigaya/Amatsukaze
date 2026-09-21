@@ -2505,6 +2505,18 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region EnableCMLogFile変更通知プロパティ
+        public bool EnableCMLogFile {
+            get { return Data.EnableCMLogFile; }
+            set {
+                if (Data.EnableCMLogFile == value)
+                    return;
+                Data.EnableCMLogFile = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region SaveProfileText変更通知プロパティ
         public bool SaveProfileText {
             get { return Data.SaveProfileText; }

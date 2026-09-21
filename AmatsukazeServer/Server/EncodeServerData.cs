@@ -495,6 +495,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool DisableLogFile { get; set; }
         [DataMember]
+        public bool EnableCMLogFile { get; set; }
+        [DataMember]
         public bool SaveProfileText { get; set; }
 
         [DataMember]
@@ -1061,7 +1063,8 @@ namespace Amatsukaze.Server
                 ? profile.MinOutputDuration.ToString()
                 : "既定値 (5)");
             keyValueBool("システムにインストールされているAviSynthプラグインを有効にする", profile.SystemAviSynthPlugin);
-            keyValueBool("ログファイルを出力先に生成しない", profile.DisableLogFile);
+            keyValueBool("エンコードログファイルを出力先に生成しない", profile.DisableLogFile);
+            keyValueBool("CM解析ログファイルを出力先に生成する", profile.EnableCMLogFile);
             keyValueBool("一時ファイルを削除せずに残す", profile.NoRemoveTmp);
             keyValue("PMT更新によるCM認識", profile.EnablePmtCut
                 ? string.Format("{0}:{1}", profile.PmtCutHeadRate, profile.PmtCutTailRate) : "なし");
