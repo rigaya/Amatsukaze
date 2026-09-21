@@ -2071,6 +2071,13 @@ namespace Amatsukaze.Server
                 .Append(GetDRCSMapPath())
                 .Append("\"");
 
+            if (!string.IsNullOrEmpty(setting.TsReadExPath))
+            {
+                sb.Append(" --tsreadex \"")
+                    .Append(setting.TsReadExPath)
+                    .Append("\"");
+            }
+
             if (srcOrg != null)
             {
                 sb.Append(" --original-input-file \"").Append(srcOrg).Append("\"");
@@ -2434,18 +2441,6 @@ namespace Amatsukaze.Server
                             .Append(setting.B24ToVttPath)
                             .Append("\" --psisiarc \"")
                             .Append(setting.PsisiarcPath)
-                            .Append("\"");
-                    }
-                }
-
-                // 一時ファイルを残す元タスクでtsreadex_dump.txtを生成しておく。
-                // 再投入時にも、dumpがなければ通常処理へ戻って生成できるようパスを渡す。
-                if (profile.EnableWebVTT || profile.NoRemoveTmp || !string.IsNullOrEmpty(resumeDir))
-                {
-                    if (!string.IsNullOrEmpty(setting.TsReadExPath))
-                    {
-                        sb.Append(" --tsreadex \"")
-                            .Append(setting.TsReadExPath)
                             .Append("\"");
                     }
                 }
