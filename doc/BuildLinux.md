@@ -46,13 +46,13 @@ cd Amatsukaze
 
 [こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードします。なお、自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。
 
-CUDAを使用する場合、CUDAを有効にしてビルドした下記AviSynth+をインストールする必要があります。
-- avisynth_&lt;version&gt;_amd64_Ubuntuxx.xx.deb
-- avisynthcudafilters_&lt;version&gt;_amd64_Ubuntuxx.xx.deb
+CUDAを使用する場合、CUDAを有効にしてビルドした下記AviSynth+をインストールする必要があります。以下は0.7.5リリースのファイル名です。
+- avisynth_3.7.5-1_amd64_linux.deb
+- avisynthcudafilters_0.7.5-1_amd64_linux.deb
 
 ```bash
-sudo apt install -y ./avisynth_<version>_amd64_Ubuntuxx.xx.deb
-sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
+sudo apt install -y ./avisynth_3.7.5-1_amd64_linux.deb
+sudo apt install -y ./avisynthcudafilters_0.7.5-1_amd64_linux.deb
 ```
 
 <details>
@@ -60,13 +60,13 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 
 ```bash
 (curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
-  | grep "browser_download_url.*deb" | grep "avisynth_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+  | grep "browser_download_url.*deb" | grep "avisynth_" | grep "amd64_linux" | cut -d : -f 2,3 | tr -d \" \
   | wget -i - -O avisynth.deb \
   && sudo apt install -y ./avisynth.deb \
   && rm ./avisynth.deb)
 
 (curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
-  | grep "browser_download_url.*deb" | grep "avisynthcudafilters_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+  | grep "browser_download_url.*deb" | grep "avisynthcudafilters_" | grep "amd64_linux" | cut -d : -f 2,3 | tr -d \" \
   | wget -i - -O avisynthcudafilters.deb \
   && sudo apt install -y ./avisynthcudafilters.deb \
   && rm ./avisynthcudafilters.deb)
@@ -140,6 +140,10 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
 - エンコーダ
 
   - x264, x265, svt-av1
+  
+    新しめの実行ファイルは[こちら](https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases)からダウンロードできます。
+
+    または、パッケージからの導入も可能です。
 
     ```bash
     sudo apt install -y x264 x265 svt-av1
@@ -154,7 +158,6 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
       && make -j$(nproc) \
       && sudo install -D -t /usr/local/bin x262)
     ```
-
 
 - muxer
 
@@ -188,8 +191,6 @@ sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
   - tsreplace
 
     [こちら](https://github.com/rigaya/tsreplace/releases)から最新版をダウンロードしてインストールします。
-
-    x262でTS (replace)を使用する場合は、MPEG-2 Videoの置き換えに対応したtsreplaceが必要です。通常の公開版では対応していない場合があるため、対応版を使用してください。mkvmergeも必要です。
 
     ```bash
     sudo apt install -y ./tsreplace_<version>_amd64.deb

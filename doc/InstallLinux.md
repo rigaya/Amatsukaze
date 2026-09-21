@@ -52,9 +52,11 @@ dockerでのインストール方法は[こちら](../docker/readme.md)。
 
 ## インストール手順 (通常)
 
-この手順はBasePkg同梱版のLinux向け配布アーカイブを対象とします。AviSynth、フィルタ、ソフトウェアエンコーダ、muxer、字幕処理ツールなどは同梱されています。追加で必要なのはPython 3.7以降です。SCRenameやニコニコ実況関連のスクリプトは、環境のPython 3を使用します。追加のpipパッケージは不要です。
+ここでは、配布アーカイブを使用してインストールします。
 
-Python 3がない場合は、使用するディストリビューションのパッケージマネージャーでインストールしてください。Ubuntu／Debianでは次のとおりです。
+AviSynth、フィルタ、ソフトウェアエンコーダ、muxer、字幕ツールなどは同梱されているので、展開するだけで使用できます。
+
+追加でpython3.7以降が必要ですので、例えばUbuntu／Debianでは下記の通りインストールしてください。
 
 ```bash
 sudo apt install python3
@@ -67,7 +69,7 @@ mkdir -p "$HOME/Amatsukaze"
 tar -xf ./Amatsukaze_linux_*.tar.xz -C "$HOME/Amatsukaze"
 ```
 
-自分で本体や依存モジュールをビルドする場合は[BuildLinux.md](./BuildLinux.md)を参照してください。fdkaacは配布アーカイブに含まれません。
+自分で本体や依存モジュールをビルドする場合は[BuildLinux.md](./BuildLinux.md)を参照してください。
 
 ### HWエンコーダの導入
 
@@ -83,7 +85,6 @@ tar -xf ./Amatsukaze_linux_*.tar.xz -C "$HOME/Amatsukaze"
   <details>
   <summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
 
-  Ubuntu24.04 のところは対象OSにあわせて適宜置き換えてください。
   ```bash
   # qsvencc
   (curl -s https://api.github.com/repos/rigaya/QSVEnc/releases/latest \
