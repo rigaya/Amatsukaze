@@ -11,6 +11,7 @@ ARG VCEENCC_VER=9.17
 ARG AMDGPU_INSTALL_VER=25.35.1
 ARG AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
 ARG FASTER_WHISPER_VER=r245.4
+ARG AMATSUKAZE_ARCHIVE=
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
@@ -20,7 +21,8 @@ ENV LC_CTYPE=ja_JP.UTF-8
 ENV PATH="/app/exe_files:$PATH"
 
 # 同梱されないPythonとGPU用の実行時依存を導入する
-RUN apt-get update \
+RUN --mount=type=bind,source=.,target=/build-context,readonly \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl wget gpg tzdata locales gosu python3 xz-utils \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key \
@@ -60,11 +62,15 @@ RUN apt-get update \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo "$TZ" > /etc/timezone \
     && mkdir -p /app \
-    && ARCHIVE_URL=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
-        | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p' \
-        | grep 'Amatsukaze_linux_.*_x64\.tar\.xz' | head -1) \
-    && test -n "$ARCHIVE_URL" \
-    && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app \
+    && if [ -n "$AMATSUKAZE_ARCHIVE" ]; then \
+        tar -xf "/build-context/$AMATSUKAZE_ARCHIVE" -C /app; \
+    else \
+        ARCHIVE_URL=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
+            | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p' \
+            | grep 'Amatsukaze_linux_.*_x64\.tar\.xz' | head -1) \
+        && test -n "$ARCHIVE_URL" \
+        && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app; \
+    fi \
     && grep -Fq '"complete":true' /app/basepkg-manifest.json \
     && if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
         wget -q "https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_${FASTER_WHISPER_VER}_linux.7z" -O /tmp/faster-whisper.7z \
