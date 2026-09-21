@@ -1,456 +1,124 @@
-# Amatsukaze Dockerfile
-# Ubuntu 22.04ベースでAmatsukazeを実行するためのマルチステージビルド
-# デバッグモードとリリースモードの両方に対応
+# 配布アーカイブを使用するLinuxコンテナ
+FROM nvidia/cuda:11.8.0-base-ubuntu22.04
 
-# ビルド段階
-FROM ubuntu:22.04 AS builder
-
-# 変数の定義
-ARG UBUNTU_VERSION=22.04
 ARG ARCH=amd64
-ARG BUILD_MODE=release
-
-# 環境変数の設定
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Tokyo
-ENV UBUNTU_VERSION=${UBUNTU_VERSION}
-ENV ARCH=${ARCH}
-ENV BUILD_MODE=${BUILD_MODE}
-
-# バージョン定義
-ENV AVISYNTHCUDAFILTERS_VER=0.7.5
-ENV AVISYNTH_VER=3.7.5
-ENV YADIFMOD2_VER=0.2.8
-ENV TIVTC_VER=v1.0.29
-ENV NNEDI3_REV=a09c8e743ac42c7552bdf2514605e7e0253da0b6
-ENV MASKTOOLS_REV=8291927bf6956981a6412d353da8ca39d49c9d3a
-ENV MVTOOLS_VER=2.7.46
-ENV RGTOOLS_VER=1.2
-ENV GPAC_VER=v2.4.0
-ENV LSMASH_REV=18a9ed25c7ff79a7f4f4bf850c345c72179b8998
-ENV CHAPTER_EXE_REV=32880d45f088e574285a101e6a49b032bb04f6ea
-ENV JOIN_LOGO_SCP_VER=v5.1.1
-ENV FDK_AAC_REV=d8e6b1a3aa606c450241632b64b703f21ea31ce3
-ENV FDKAAC_VER=v1.0.6
-ENV TSREADEX_VER=master-240517
-ENV PSISIARC_VER=master-230324
-ENV B24TOVTT_VER=master-220402
-
-# ビルドツールのインストール
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    curl \
-    wget \
-    tzdata \
-    p7zip-full \
-    nasm \
-    cmake \
-    meson \
-    ninja-build \
-    pkg-config \
-    autoconf \
-    automake \
-    libtool \
-    zlib1g \
-    libz-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && apt-get autoremove -y
-
-# AviSynth+のインストール
-RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_linux.deb -O avisynth.deb \
-    && apt-get install -y ./avisynth.deb \
-    && rm ./avisynth.deb
-
-# Avisynthプラグインのビルドとインストール
-WORKDIR /tmp/plugins
-
-# yadif
-RUN git clone --depth=1 --branch ${YADIFMOD2_VER} https://github.com/Asd-g/yadifmod2 \
-    && cd yadifmod2 \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && make install
-
-# TIVTC
-RUN git clone --depth=1 --branch ${TIVTC_VER} https://github.com/pinterf/TIVTC \
-    && cd TIVTC/src \
-    && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S . \
-    && cmake --build build -j $(nproc) \
-    && cd build \
-    && make install
-
-# nnedi3
-RUN git clone -b avsp --single-branch https://github.com/rigaya/NNEDI3.git \
-    && cd NNEDI3 \
-    && git checkout ${NNEDI3_REV} \
-    && mkdir build && cd build && meson setup .. \
-    && ninja \
-    && ninja install
-
-# masktools
-RUN git clone https://github.com/pinterf/masktools.git \
-    && cd masktools \
-    && git checkout ${MASKTOOLS_REV} \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && make install
-
-# mvtools
-RUN git clone --depth=1 --branch ${MVTOOLS_VER} https://github.com/pinterf/mvtools.git \
-    && cd mvtools \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && make install
-
-# RgTools
-RUN git clone --depth=1 --branch ${RGTOOLS_VER} https://github.com/pinterf/RgTools.git \
-    && cd RgTools \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && make install
-
-# muxerのインストール（ビルドが必要なもののみ）
-# mp4box
-RUN git clone --depth=1 --branch ${GPAC_VER} https://github.com/gpac/gpac.git \
-    && cd gpac \
-    && ./configure --static-bin \
-    && make -j$(nproc) \
-    && make install
-
-# L-SMASH
-RUN git clone https://github.com/l-smash/l-smash.git \
-    && cd l-smash \
-    && git checkout ${LSMASH_REV} \
-    && ./configure \
-    && make -j$(nproc) \
-    && make install
-
-# CM/ロゴ解析ツール
-# chapter_exe
-RUN git clone https://github.com/rigaya/chapter_exe \
-    && cd chapter_exe \
-    && git checkout ${CHAPTER_EXE_REV} \
-    && cd src \
-    && make -j$(nproc) \
-    && install -D -t /usr/local/bin chapter_exe
-
-# join_logo_scp
-RUN git clone --depth=1 --branch ${JOIN_LOGO_SCP_VER} https://github.com/yobibi/join_logo_scp \
-    && cd join_logo_scp/src \
-    && make \
-    && install -D -t /usr/local/bin join_logo_scp
-
-# 音声エンコーダ
-# fdkaac
-RUN git clone https://github.com/mstorsjo/fdk-aac.git \
-    && cd fdk-aac \
-    && git checkout ${FDK_AAC_REV} \
-    && ./autogen.sh \
-    && ./configure --disable-shared --prefix=$(pwd)/fdk-aac-libs \
-    && make -j$(nproc) \
-    && make install \
-    && cd .. \
-    && git clone --depth=1 --branch ${FDKAAC_VER} https://github.com/nu774/fdkaac.git \
-    && cd fdkaac \
-    && autoreconf -i \
-    && PKG_CONFIG_PATH=../fdk-aac/fdk-aac-libs/lib/pkgconfig ./configure \
-    && make -j$(nproc) \
-    && make install
-
-# tsreadex
-RUN git clone --depth=1 --branch ${TSREADEX_VER} https://github.com/xtne6f/tsreadex.git \
-    && cd tsreadex \
-    && make -j$(nproc) \
-    && install -D -t /usr/local/bin tsreadex
-
-# psisiarc
-RUN git clone --depth=1 --branch ${PSISIARC_VER} https://github.com/xtne6f/psisiarc.git \
-    && cd psisiarc \
-    && make -j$(nproc) \
-    && install -D -t /usr/local/bin psisiarc
-
-# b24tovtt
-RUN git clone --depth=1 --branch ${B24TOVTT_VER} https://github.com/xtne6f/b24tovtt.git \
-    && cd b24tovtt \
-    && make -j$(nproc) \
-    && install -D -t /usr/local/bin b24tovtt
-
-# ビルド段階のクリーンアップ
-RUN rm -rf /tmp/plugins \
-    && rm -rf /var/cache/apt/* \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /usr/share/doc/* \
-    && rm -rf /usr/share/man/* \
-    && rm -rf /usr/share/locale/* \
-    && rm -rf /usr/share/info/*
-
-# 実行段階
-FROM nvidia/cuda:11.8.0-base-ubuntu22.04 AS runtime
-
-# 変数の定義（実行段階でも使用）
-ARG UBUNTU_VERSION=22.04
 ARG UBUNTU_NAME=jammy
-ARG ARCH=amd64
-ARG BUILD_MODE=release
 ARG ENABLE_FASTER_WHISPER=0
 ARG ENABLE_VCEENCC=0
-ARG SEVENZIP_VER=26.02
-ARG SEVENZIP_PKG=7z2602
-ARG SEVENZIP_ARCHIVE_SHA256=41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e
+ARG QSVENCC_VER=8.30
+ARG NVENCC_VER=9.35
+ARG VCEENCC_VER=9.17
+ARG AMDGPU_INSTALL_VER=25.35.1
+ARG AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
+ARG FASTER_WHISPER_VER=r245.4
 
-# 環境変数の設定
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
-ENV UBUNTU_VERSION=${UBUNTU_VERSION}
-ENV UBUNTU_NAME=${UBUNTU_NAME}
-ENV ARCH=${ARCH}
-ENV BUILD_MODE=${BUILD_MODE}
 ENV LANG=ja_JP.UTF-8
 ENV LC_ALL=ja_JP.UTF-8
 ENV LC_CTYPE=ja_JP.UTF-8
+ENV PATH="/app/exe_files:$PATH"
 
-ENV QSVENCC_VER=8.30
-ENV NVENCC_VER=9.35
-ENV VCEENCC_VER=9.17
-ENV AMDGPU_INSTALL_VER=25.35.1
-ENV AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
-ENV TSREPLACE_VER=0.20
-ENV AVISYNTHCUDAFILTERS_VER=0.7.5
-ENV AVISYNTH_VER=3.7.5
-ENV FASTER_WHISPER_VER=r245.4
-
-# 実行に必要なパッケージのみインストール（デバッグモードの場合はビルドツールも含める）
-# ENABLE_VCEENCC 時の AMF: repo.radeon.com amdgpu/6.4.4 pool は jammy(22.04): *_2202160.22.04_* と noble(24.04): *_2203192.24.04_* の二系統。ベース Ubuntu 22.04 のため前者を取得する。
-RUN apt-get update && apt-get install -y \
-    gpg \
-    ca-certificates \
-    curl \
-    wget \
-    tzdata \
-    software-properties-common \
-    p7zip-full \
-    && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
-    && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${UBUNTU_NAME} unified" \
-      | tee /etc/apt/sources.list.d/intel-gpu-${UBUNTU_NAME}.list \
-    && if [ "$ENABLE_VCEENCC" = "1" ]; then \
-        wget https://repo.radeon.com/amdgpu-install/${AMDGPU_INSTALL_VER}/ubuntu/${UBUNTU_NAME}/amdgpu-install_${AMDGPU_INSTALL_DEB_VER}_all.deb -O amdgpu-install.deb \
-        && apt-get install -y ./amdgpu-install.deb \
-        && rm ./amdgpu-install.deb \
-        && apt-get update \
-        && amdgpu-install -y --usecase=opencl --opencl=rocr --no-dkms \
-        && wget https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/a/amdgpu-pro-core/amdgpu-pro-core_25.10-2202160.22.04_all.deb \
-        && wget https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/liba/libamdenc-amdgpu-pro/libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb \
-        && wget https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/a/amf-amdgpu-pro/amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb \
-        && apt-get remove --purge -y amf-amdgpu-pro libamdenc-amdgpu-pro || true \
-        && apt-get install -y --allow-downgrades \
-            ./amdgpu-pro-core_25.10-2202160.22.04_all.deb \
-            ./libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb \
-            ./amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb \
-        && apt-mark hold amdgpu-pro-core libamdenc-amdgpu-pro amf-amdgpu-pro \
-        && rm -f \
-            ./amdgpu-pro-core_25.10-2202160.22.04_all.deb \
-            ./libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb \
-            ./amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb \
-        && if [ ! -e /lib/x86_64-linux-gnu/libOpenCL.so ] && [ -e /lib/x86_64-linux-gnu/libOpenCL.so.1 ]; then \
-            ln -s /lib/x86_64-linux-gnu/libOpenCL.so.1 /lib/x86_64-linux-gnu/libOpenCL.so; \
-        fi; \
-    fi \
+# 同梱されないPythonとGPU用の実行時依存を導入する
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget gpg tzdata locales gosu python3 xz-utils \
+    && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key \
+        | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
+    && echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu $UBUNTU_NAME unified" \
+        > /etc/apt/sources.list.d/intel-gpu-$UBUNTU_NAME.list \
     && apt-get update \
-    && apt-get install -y \
-        gosu \
-        git \
-        python3 \
-        xz-utils \
-        locales \
-        zlib1g \
-        mkvtoolnix \
-        opus-tools \
-        intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-opencl-dev \
+    && apt-get install -y --no-install-recommends \
+        intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 \
+        libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-libopencl1 \
         cuda-nvrtc-11-8 libnpp-11-8 \
-    && wget https://github.com/rigaya/QSVEnc/releases/download/${QSVENCC_VER}/qsvencc_${QSVENCC_VER}_${ARCH}.deb -O qsvencc.deb \
-        && apt-get install -y ./qsvencc.deb \
-        && rm ./qsvencc.deb \
-    && wget https://github.com/rigaya/NVEnc/releases/download/${NVENCC_VER}/nvencc_${NVENCC_VER}_${ARCH}.deb -O nvencc.deb \
-        && apt-get install -y ./nvencc.deb \
-        && rm ./nvencc.deb \
+    && wget -q "https://github.com/rigaya/QSVEnc/releases/download/${QSVENCC_VER}/qsvencc_${QSVENCC_VER}_${ARCH}.deb" -O /tmp/qsvencc.deb \
+    && apt-get install -y --no-install-recommends /tmp/qsvencc.deb \
+    && wget -q "https://github.com/rigaya/NVEnc/releases/download/${NVENCC_VER}/nvencc_${NVENCC_VER}_${ARCH}.deb" -O /tmp/nvencc.deb \
+    && apt-get install -y --no-install-recommends /tmp/nvencc.deb \
+    && if [ ! -e /lib/x86_64-linux-gnu/libOpenCL.so ] && [ -e /lib/x86_64-linux-gnu/libOpenCL.so.1 ]; then \
+        ln -s /lib/x86_64-linux-gnu/libOpenCL.so.1 /lib/x86_64-linux-gnu/libOpenCL.so; \
+    fi \
     && if [ "$ENABLE_VCEENCC" = "1" ]; then \
-        wget https://github.com/rigaya/VCEEnc/releases/download/${VCEENCC_VER}/vceencc_${VCEENCC_VER}_${ARCH}.deb -O vceencc.deb \
-        && apt-get install -y ./vceencc.deb \
-        && rm ./vceencc.deb; \
+        wget -q "https://repo.radeon.com/amdgpu-install/${AMDGPU_INSTALL_VER}/ubuntu/${UBUNTU_NAME}/amdgpu-install_${AMDGPU_INSTALL_DEB_VER}_all.deb" -O /tmp/amdgpu-install.deb \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends software-properties-common /tmp/amdgpu-install.deb \
+        && amdgpu-install -y --usecase=opencl --opencl=rocr --no-dkms \
+        && wget -q https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/a/amdgpu-pro-core/amdgpu-pro-core_25.10-2202160.22.04_all.deb -O /tmp/amdgpu-pro-core.deb \
+        && wget -q https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/liba/libamdenc-amdgpu-pro/libamdenc-amdgpu-pro_25.10-2202160.22.04_amd64.deb -O /tmp/libamdenc-amdgpu-pro.deb \
+        && wget -q https://repo.radeon.com/amdgpu/6.4.4/ubuntu/pool/proprietary/a/amf-amdgpu-pro/amf-amdgpu-pro_1.4.37-2202160.22.04_amd64.deb -O /tmp/amf-amdgpu-pro.deb \
+        && (apt-get remove --purge -y amf-amdgpu-pro libamdenc-amdgpu-pro || true) \
+        && apt-get install -y --allow-downgrades \
+            /tmp/amdgpu-pro-core.deb /tmp/libamdenc-amdgpu-pro.deb /tmp/amf-amdgpu-pro.deb \
+        && apt-mark hold amdgpu-pro-core libamdenc-amdgpu-pro amf-amdgpu-pro \
+        && wget -q "https://github.com/rigaya/VCEEnc/releases/download/${VCEENCC_VER}/vceencc_${VCEENCC_VER}_${ARCH}.deb" -O /tmp/vceencc.deb \
+        && apt-get install -y --no-install-recommends /tmp/vceencc.deb \
+        && rm -f /tmp/amdgpu-install.deb /tmp/amdgpu-pro-core.deb \
+            /tmp/libamdenc-amdgpu-pro.deb /tmp/amf-amdgpu-pro.deb /tmp/vceencc.deb; \
     fi \
-    && wget https://github.com/rigaya/tsreplace/releases/download/${TSREPLACE_VER}/tsreplace_${TSREPLACE_VER}_${ARCH}.deb -O tsreplace.deb \
-        && apt-get install -y ./tsreplace.deb \
-        && rm ./tsreplace.deb \
-    && if [ "$BUILD_MODE" = "debug" ]; then \
-        apt-get install -y \
-        software-properties-common \
-        build-essential \
-        nasm \
-        cmake \
-        meson \
-        ninja-build \
-        pkg-config \
-        autoconf \
-        automake \
-        libtool \
-        libz-dev; \
-    fi \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && apt-get autoremove -y
-
-# タイムゾーンを確実にJSTへ固定
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
-    && echo $TZ > /etc/timezone
-
-# 日本語ロケールの設定
-RUN locale-gen ja_JP.UTF-8 \
-    && locale-gen en_US.UTF-8 \
-    && update-locale LANG=ja_JP.UTF-8
-
-# .NET SDK 10.0のインストール（デバッグモードの場合のみ）
-RUN if [ "$BUILD_MODE" = "debug" ]; then \
-        apt add-apt-repository ppa:dotnet/backports \
-        && apt update \
-        && apt install -y dotnet-sdk-10.0 \
-        && rm -rf /var/lib/apt/lists/*; \
-    fi
-
-# AviSynth+/AvisynthCUDAFiltersのインストール（実行段階でも必要）
-RUN wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynth_${AVISYNTH_VER}-1_${ARCH}_linux.deb -O avisynth.deb \
-    && apt-get install -y ./avisynth.deb \
-    && rm ./avisynth.deb \
-    && wget https://github.com/rigaya/AviSynthCUDAFilters/releases/download/${AVISYNTHCUDAFILTERS_VER}/avisynthcudafilters_${AVISYNTHCUDAFILTERS_VER}-1_${ARCH}_linux.deb -O avisynthcudafilters.deb \
-    && apt-get install -y ./avisynthcudafilters.deb \
-    && rm ./avisynthcudafilters.deb
-
-RUN if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
-        wget https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_${FASTER_WHISPER_VER}_linux.7z -O faster-whisper.7z \
-        && mkdir -p /opt /app/exe_files \
-        && 7z x faster-whisper.7z -o/opt/ \
-        && chmod 755 /opt/ \
+    && locale-gen ja_JP.UTF-8 en_US.UTF-8 \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo "$TZ" > /etc/timezone \
+    && mkdir -p /app \
+    && ARCHIVE_URL=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
+        | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p' \
+        | grep 'Amatsukaze_linux_.*_x64\.tar\.xz' | head -1) \
+    && test -n "$ARCHIVE_URL" \
+    && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app \
+    && grep -Fq '"complete":true' /app/basepkg-manifest.json \
+    && if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
+        wget -q "https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_${FASTER_WHISPER_VER}_linux.7z" -O /tmp/faster-whisper.7z \
+        && mkdir -p /opt \
+        && /app/exe_files/7z/7zzs x /tmp/faster-whisper.7z -o/opt/ \
+        && chmod 755 /opt/Faster-Whisper-XXL/faster-whisper-xxl \
         && ln -s /opt/Faster-Whisper-XXL /app/exe_files/Faster-Whisper-XXL \
-        && rm faster-whisper.7z; \
-    fi
+        && rm -f /tmp/faster-whisper.7z; \
+    fi \
+    && mkdir -p /app/bat /app/config /app/recorded /app/logo /app/output /app/profile /app/temp \
+    && rm -f /tmp/qsvencc.deb /tmp/nvencc.deb \
+    && rm -rf /var/lib/apt/lists/*
 
-# ライブラリパスの設定
-ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
-
-# 作業ディレクトリの設定
 WORKDIR /app
 
-# ディレクトリ構造の作成
-RUN mkdir -p /app/bat /app/config /app/exe_files/plugins64 /app/recorded /app/logo /app/output /app/profile /app/temp
-
-# SCRename.py
-RUN git clone --depth 1 -b 0.04 https://github.com/rigaya/SCRenamePy.git tmp_SCRenamePy \
-    && mkdir -p exe_files/SCRenamePy \
-    && mv tmp_SCRenamePy/SCRename.* exe_files/SCRenamePy/ \
-    && rm -rf tmp_SCRenamePy
-
-RUN wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260919-084954/x264_3223_amd64_linux.tar.xz -O x264.tar.xz \
-    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260919-084954/x265_4.3%2B45_amd64_linux.tar.xz -O x265.tar.xz \
-    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20260919-084954/SvtAv1EncApp_4.2.0-146_amd64_linux_clang.tar.xz -O svt-av1.tar.xz \
-    && wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/x262_20260901.tar.gz -O x262.tar.gz \
-    && tar -xf x264.tar.xz -C /app/exe_files \
-    && tar -xf x265.tar.xz -C /app/exe_files \
-    && tar -xf svt-av1.tar.xz -C /app/exe_files \
-    && tar -xf x262.tar.gz -C /app/exe_files \
-    && rm x264.tar.xz x265.tar.xz svt-av1.tar.xz x262.tar.gz
-
-# ビルド段階から必要なファイルをコピー
-COPY --from=builder /usr/local/lib /usr/local/lib
-COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
-
-# Amatsukazeのインストール
-# 配布パッケージはOSバージョン別 (Amatsukaze_Ubuntuxx.xx_*) から単一の Amatsukaze_linux_* へ移行した。
-# 移行前のリリースも扱えるよう、_linux が無ければ従来の名前を探す。
-RUN URLS=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
-        | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p') \
-    && URL=$(echo "${URLS}" | grep "Amatsukaze_linux_" | head -1) \
-    && if [ -z "${URL}" ]; then URL=$(echo "${URLS}" | grep "Ubuntu${UBUNTU_VERSION}" | head -1); fi \
-    && if [ -z "${URL}" ]; then echo "Amatsukazeの配布パッケージが見つかりません" >&2; exit 1; fi \
-    && wget -O - "${URL}" | tar -xJ -C /app \
-    && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi
-
-# アーカイブ展開用 7-Zip CLI（Linux x64、静的リンク版）
-RUN wget https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz -O ${SEVENZIP_PKG}-linux-x64.tar.xz \
-    && echo "${SEVENZIP_ARCHIVE_SHA256}  ${SEVENZIP_PKG}-linux-x64.tar.xz" | sha256sum -c - \
-    && mkdir -p /app/exe_files/7z \
-    && tar -xf ${SEVENZIP_PKG}-linux-x64.tar.xz -C /app/exe_files/7z 7zzs License.txt \
-    && chmod 755 /app/exe_files/7z/7zzs \
-    && rm ${SEVENZIP_PKG}-linux-x64.tar.xz
-
-# for debug
-#COPY Amatsukaze_Ubuntu22.04_r926.tar.xz /app
-#RUN tar -xJf /app/Amatsukaze_Ubuntu22.04_r926.tar.xz -C /app \
-#    && if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi \
-#    && rm /app/Amatsukaze_Ubuntu22.04_r926.tar.xz
-
-# デバッグ用のシェルスクリプトを作成（デバッグモードの場合のみ）
-RUN if [ "$BUILD_MODE" = "debug" ]; then \
-        echo '#!/bin/bash' > /app/debug-build.sh && \
-        echo 'cd /app/Amatsukaze-src' >> /app/debug-build.sh && \
-        echo './scripts/build.sh /app build --debug' >> /app/debug-build.sh && \
-        echo 'if [ -f /app/scripts/install.sh ]; then /app/scripts/install.sh; fi' >> /app/debug-build.sh && \
-        chmod +x /app/debug-build.sh; \
-    fi
-
-# エントリーポイントスクリプトを作成
-RUN cat <<'EOF' > /app/entrypoint.sh
+# 起動時にホストのUIDとGIDへ合わせる
+RUN cat <<'ENTRYPOINT_SCRIPT' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 #!/bin/bash
 set -e
 umask 022
 
-DEFAULT_UID=${RUN_UID:-1000}; DEFAULT_GID=${RUN_GID:-1000};
+DEFAULT_UID=${RUN_UID:-1000}
+DEFAULT_GID=${RUN_GID:-1000}
 if ! getent group "$DEFAULT_GID" >/dev/null 2>&1; then groupadd -g "$DEFAULT_GID" appgroup; fi
+if ! getent passwd "$DEFAULT_UID" >/dev/null 2>&1; then useradd -u "$DEFAULT_UID" -g "$DEFAULT_GID" -m -s /bin/bash appuser; fi
 
 RENDER_GROUP=""
-if [ -d /dev/dri ]; then
-  ls -l /dev/dri/ || true
-  if [ -c /dev/dri/renderD128 ]; then
-    RENDER_GID=$(stat -c "%g" /dev/dri/renderD128 2>/dev/null || echo "")
-    echo "RENDER_GID: $RENDER_GID"
-    if [ -n "$RENDER_GID" ] && [ "$RENDER_GID" != "" ]; then
-      RENDER_GROUP=$(getent group "$RENDER_GID" | cut -d: -f1 || true)
-      if [ -z "$RENDER_GROUP" ]; then
+if [ -c /dev/dri/renderD128 ]; then
+    RENDER_GID=$(stat -c "%g" /dev/dri/renderD128)
+    RENDER_GROUP=$(getent group "$RENDER_GID" | cut -d: -f1 || true)
+    if [ -z "$RENDER_GROUP" ]; then
         if getent group render >/dev/null 2>&1; then
-          groupmod -o -g "$RENDER_GID" render
-          RENDER_GROUP=render
+            groupmod -o -g "$RENDER_GID" render
         else
-          groupadd -g "$RENDER_GID" render
-          RENDER_GROUP=render
+            groupadd -g "$RENDER_GID" render
         fi
-      fi
+        RENDER_GROUP=render
     fi
-  fi
 fi
 
-if ! getent passwd "$DEFAULT_UID" >/dev/null 2>&1; then useradd -u "$DEFAULT_UID" -g "$DEFAULT_GID" -m -s /bin/bash appuser; fi
+USER_NAME=$(id -nu "$DEFAULT_UID")
+if getent group video >/dev/null 2>&1; then usermod -aG video "$USER_NAME"; fi
+if [ -n "$RENDER_GROUP" ]; then usermod -aG "$RENDER_GROUP" "$USER_NAME"; fi
 chown -R --no-dereference "$DEFAULT_UID:$DEFAULT_GID" /app
 if [ -d /opt/Faster-Whisper-XXL ]; then
-  find /opt/Faster-Whisper-XXL -type d -exec chown "$DEFAULT_UID:$DEFAULT_GID" {} +
-  chmod ugo+rx /opt/Faster-Whisper-XXL/faster-whisper-xxl
-fi
-GROUPS_TO_ADD=()
-if getent group video >/dev/null 2>&1; then GROUPS_TO_ADD+=("video"); fi
-if [ -n "$RENDER_GROUP" ]; then GROUPS_TO_ADD+=("$RENDER_GROUP"); elif getent group render >/dev/null 2>&1; then GROUPS_TO_ADD+=("render"); fi
-if [ ${#GROUPS_TO_ADD[@]} -gt 0 ]; then
-  usermod -aG "$(IFS=,; echo "${GROUPS_TO_ADD[*]}")" "$(id -nu "${DEFAULT_UID}")"
+    find /opt/Faster-Whisper-XXL -type d -exec chown "$DEFAULT_UID:$DEFAULT_GID" {} +
 fi
 if [ -x /app/exe_files/AmatsukazeDockerConfigFix ]; then
-  gosu "$DEFAULT_UID" /app/exe_files/AmatsukazeDockerConfigFix \
-    /app/config/AmatsukazeServer.xml /app/exe_files || \
-    echo "警告: Docker用実行ファイル設定の補正に失敗しました" >&2
+    gosu "$DEFAULT_UID" /app/exe_files/AmatsukazeDockerConfigFix \
+        /app/config/AmatsukazeServer.xml /app/exe_files || \
+        echo "警告: Docker用実行ファイル設定の補正に失敗しました" >&2
 fi
 exec gosu "$DEFAULT_UID" "$@"
-EOF
-RUN sed -i 's/\r$//' /app/entrypoint.sh \
-    && chmod +x /app/entrypoint.sh
+ENTRYPOINT_SCRIPT
 
-# デフォルトコマンド（モードに応じて切り替え）
 ENTRYPOINT ["./entrypoint.sh"]
-CMD if [ "$BUILD_MODE" = "debug" ]; then /bin/bash; else ./AmatsukazeServer.sh; fi
+CMD ["./AmatsukazeServer.sh"]
