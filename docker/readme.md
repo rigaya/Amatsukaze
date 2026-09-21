@@ -194,3 +194,15 @@ docker compose build --pull
 # 最新のイメージを元に起動
 docker compose up -d
 ```
+
+### デバッグ
+
+リリース前のローカルアーカイブを使ってDockerイメージをビルドする場合は、アーカイブを`docker`ディレクトリに置き、`AMATSUKAZE_ARCHIVE`でファイル名を指定します。
+
+```sh
+docker build --no-cache \
+  --build-arg AMATSUKAZE_ARCHIVE=Amatsukaze_linux_trial_x64.tar.xz \
+  -t amatsukaze .
+```
+
+`AMATSUKAZE_ARCHIVE`を指定しない場合は、最新リリースのアーカイブを自動的に取得します。
