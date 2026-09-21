@@ -12,7 +12,7 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
 
 ## 想定動作環境
 
-- x64のLinux環境
+- x86_64のglibc系Linux環境
 
   dockerでも利用できます。
 
@@ -24,7 +24,7 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
   - AmatsukazeAddTask
   - AmatsukazeWebUI
   - ScriptCommand
-  
+
   まだ対応しきれていない箇所がまだあるかもしれません…
 
 - 代替実装あり
@@ -50,322 +50,63 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
 
 dockerでのインストール方法は[こちら](../docker/readme.md)。
 
-手動でのインストール手順は複雑なので、こちらのほうが楽かもしれません。
-
 ## インストール手順 (通常)
 
-### ビルドツールインストール
+この手順はBasePkg同梱版のLinux向け配布アーカイブを対象とします。AviSynth、フィルタ、ソフトウェアエンコーダ、muxer、字幕処理ツールなどは同梱されています。追加で必要なのはPython 3.7以降です。SCRenameやニコニコ実況関連のスクリプトは、環境のPython 3を使用します。追加のpipパッケージは不要です。
 
-エンコーダやmuxer、CM解析ツールのビルドに使用します。
-self-buildする場合は、あわせて .NET 10.0 SDK が必要です (詳細は [BuildLinux.md](./BuildLinux.md) を参照)。
-
-```bash
-sudo apt update
-sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool
-```
-
-### AviSynth+/AvisynthCUDAFiltersのインストール
-
-[こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードします。なお、自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。
-
-CUDAを使用する場合、CUDAを有効にしてビルドした下記AviSynth+をインストールする必要があります。
-- avisynth_&lt;version&gt;_amd64_Ubuntuxx.xx.deb
-- avisynthcudafilters_&lt;version&gt;_amd64_Ubuntuxx.xx.deb
+Python 3がない場合は、使用するディストリビューションのパッケージマネージャーでインストールしてください。Ubuntu／Debianでは次のとおりです。
 
 ```bash
-sudo apt install -y ./avisynth_<version>_amd64_Ubuntuxx.xx.deb
-sudo apt install -y ./avisynthcudafilters_<version>_amd64_Ubuntuxx.xx.deb
+sudo apt install python3
 ```
 
-<details>
-<summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
+[リリース一覧](https://github.com/rigaya/Amatsukaze/releases)からLinux x64向けアーカイブをダウンロードし、実行するユーザーが読み書きできる場所に展開します。ダウンロードしたアーカイブが現在のディレクトリにある場合の例です。
 
 ```bash
-(curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
-  | grep "browser_download_url.*deb" | grep "avisynth_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-  | wget -i - -O avisynth.deb \
-  && sudo apt install -y ./avisynth.deb \
-  && rm ./avisynth.deb)
-
-(curl -s https://api.github.com/repos/rigaya/AviSynthCUDAFilters/releases/latest \
-  | grep "browser_download_url.*deb" | grep "avisynthcudafilters_" | grep "Ubuntu24.04" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-  | wget -i - -O avisynthcudafilters.deb \
-  && sudo apt install -y ./avisynthcudafilters.deb \
-  && rm ./avisynthcudafilters.deb)
+mkdir -p "$HOME/Amatsukaze"
+tar -xf ./Amatsukaze_linux_*.tar.xz -C "$HOME/Amatsukaze"
 ```
-</details>
 
-### その他必要なAvisynthプラグインのインストール
+自分で本体や依存モジュールをビルドする場合は[BuildLinux.md](./BuildLinux.md)を参照してください。fdkaacは配布アーカイブに含まれません。
 
-- yadif
+### HWエンコーダの導入
 
+- qsvencc, nvencc, vceencc
+
+  hwエンコードを使用する場合、qsvencc (Intel GPU), nvencc (NVIDIA GPU), vceencc (AMD GPU)を使用します。
+
+  - ドライバも含めたインストール方法は下記リンク先を参照してください。
+    - [qsvencc](https://github.com/rigaya/QSVEnc/blob/master/Install.ja.md)
+    - [nvencc](https://github.com/rigaya/NVEnc/blob/master/Install.ja.md)
+    - [vceencc](https://github.com/rigaya/VCEEnc/blob/master/Install.ja.md)
+
+  <details>
+  <summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
+
+  Ubuntu24.04 のところは対象OSにあわせて適宜置き換えてください。
   ```bash
-  (git clone https://github.com/Asd-g/yadifmod2 \
-    && cd yadifmod2 \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && sudo make install)
+  # qsvencc
+  (curl -s https://api.github.com/repos/rigaya/QSVEnc/releases/latest \
+    | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+    | wget -i - -O qsvencc.deb \
+    && sudo apt install -y ./qsvencc.deb \
+    && rm ./qsvencc.deb)
+
+  # nvencc
+  (curl -s https://api.github.com/repos/rigaya/NVEnc/releases/latest \
+    | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+    | wget -i - -O nvencc.deb \
+    && sudo apt install -y ./nvencc.deb \
+    && rm ./nvencc.deb)
+
+  # vceencc
+  (curl -s https://api.github.com/repos/rigaya/VCEEnc/releases/latest \
+    | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
+    | wget -i - -O vceencc.deb \
+    && sudo apt install -y ./vceencc.deb \
+    && rm ./vceencc.deb)
   ```
-
-- TIVTC
-
-  ```bash
-  (git clone https://github.com/pinterf/TIVTC \
-    && cd TIVTC/src \
-    && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build -S . \
-    && cmake --build build \
-    && sudo make install)
-  ```
-
-- nnedi3
-
-  ```bash
-  (git clone -b avsp https://github.com/rigaya/NNEDI3.git \
-    && cd NNEDI3 && mkdir build && cd build && meson setup .. \
-    && ninja \
-    && sudo ninja install)
-  ```
-
-- masktools
-
-  ```bash
-  (git clone https://github.com/pinterf/masktools.git \
-    && cd masktools \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && sudo make install)
-  ```
-
-- mvtools
-
-  ```bash
-  (git clone https://github.com/pinterf/mvtools.git \
-    && cd mvtools \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && sudo make install)
-  ```
-
-- RgTools
-
-  ```bash
-  (git clone https://github.com/pinterf/RgTools.git \
-    && cd RgTools \
-    && mkdir build && cd build && cmake .. \
-    && make -j$(nproc) \
-    && sudo make install)
-  ```
-
-### Amatsukazeのインストール
-
-- Amatsukazeのアーカイブの展開
-
-  ここではビルド済みアーカイブを展開してインストールする方法を示します。自ビルドする場合は[こちら](./BuildLinux.md)を参考にしてください。
-
-  [こちら](https://github.com/rigaya/Amatsukaze/releases)からAmatsukazeのアーカイブをダウンロードして展開してください。
-  **展開先は実行するユーザーが読み書きできる権限のあるディレクトリとしてください。** (下記では ```$HOME/Amatsukaze```)
-
-  ```bash
-  wget https://github.com/rigaya/Amatsukaze/releases/download/<version>/Amatsukaze_linux_<version>_x64.tar.xz
-  mkdir -p $HOME/Amatsukaze
-  tar xf Amatsukaze_linux_<version>_x64.tar.xz -C $HOME/Amatsukaze
-  ```
-
-- 各Avisynthプラグインへのリンクの作成
-
-  ```./scripts/install.sh```を実行するとインストール済みの各Avisynthプラグインへのリンクが```exe_files/plugins64```に自動的に作成されます。
-
-  ```bash
-  cd $HOME/Amatsukaze
-  ./scripts/install.sh
-  ```
-
-### 必要な実行ファイルのインストール
-
-- エンコーダ
-
-  - x264, x265, svt-av1
-  
-    ```bash
-    sudo apt install -y x264 x265 svt-av1
-    ```
-
-  - x262
-
-    ```bash
-    (git clone https://code.videolan.org/videolan/x262.git \
-      && cd x262 \
-      && ./configure --enable-mpeg2 \
-      && make -j$(nproc) \
-      && sudo install -D -t /usr/local/bin x262)
-    ```
-  
-  - qsvencc, nvencc, vceencc
-  
-    hwエンコードを使用する場合、qsvencc (Intel GPU), nvencc (NVIDIA GPU), vceencc (AMD GPU)を使用します。
-  
-    - ドライバも含めたインストール方法は下記リンク先を参照してください。
-      - [qsvencc](https://github.com/rigaya/QSVEnc/blob/master/Install.ja.md)
-      - [nvencc](https://github.com/rigaya/NVEnc/blob/master/Install.ja.md)
-      - [vceencc](https://github.com/rigaya/VCEEnc/blob/master/Install.ja.md)
-  
-    <details>
-    <summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
-
-    Ubuntu24.04 のところは対象OSにあわせて適宜置き換えてください。
-    ```bash
-    # qsvencc
-    (curl -s https://api.github.com/repos/rigaya/QSVEnc/releases/latest \
-      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-      | wget -i - -O qsvencc.deb \
-      && sudo apt install -y ./qsvencc.deb \
-      && rm ./qsvencc.deb)
-    
-    # nvencc
-    (curl -s https://api.github.com/repos/rigaya/NVEnc/releases/latest \
-      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-      | wget -i - -O nvencc.deb \
-      && sudo apt install -y ./nvencc.deb \
-      && rm ./nvencc.deb)
-    
-    # vceencc
-    (curl -s https://api.github.com/repos/rigaya/VCEEnc/releases/latest \
-      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-      | wget -i - -O vceencc.deb \
-      && sudo apt install -y ./vceencc.deb \
-      && rm ./vceencc.deb)
-    ```
-    </details>
-
-- muxer
-
-  - mp4box
-  
-    ```bash
-    (sudo apt install libz-dev \
-      && git clone https://github.com/gpac/gpac.git \
-      && cd gpac \
-      && ./configure --static-bin \
-      && make -j$(nproc) \
-      && sudo make install)
-    ```
-  
-  - mkvmerge
-  
-    ```bash
-    sudo apt install mkvtoolnix
-    ```
-  
-  - L-SMASH (muxer, timelineeditor)
-  
-    ```bash
-    (git clone https://github.com/l-smash/l-smash.git \
-      && cd l-smash \
-      && ./configure \
-      && make -j$(nproc) \
-      && sudo make install)
-    ```
-
-  - tsreplace
-  
-    [こちら](https://github.com/rigaya/tsreplace/releases)から最新版をダウンロードしてインストールします。
-
-    x262でTS (replace)を使用する場合は、MPEG-2 Videoの置き換えに対応したtsreplaceが必要です。通常の公開版では対応していない場合があるため、対応版を使用してください。mkvmergeも必要です。
-
-    ```bash
-    sudo apt install -y ./tsreplace_<version>_amd64.deb
-    ```
-  
-    <details>
-    <summary>最新版をすべてコマンドでインストールする場合 (クリックで展開)</summary>
-
-    ```bash
-    (curl -s https://api.github.com/repos/rigaya/tsreplace/releases/latest \
-      | grep "browser_download_url.*deb" | grep "amd64" | cut -d : -f 2,3 | tr -d \" \
-      | wget -i - -O tsreplace.deb \
-      && sudo apt install -y ./tsreplace.deb \
-      && rm ./tsreplace.deb)
-    ```
-    </details>
-
-- 字幕処理等
-
-  - tsreadex
-    
-    ```bash
-    (git clone https://github.com/xtne6f/tsreadex.git \
-      && cd tsreadex \
-      && make -j$(nproc) \
-      && sudo install -D -t /usr/local/bin tsreadex)
-    ```
-
-  - psisiarc
-    
-    ```bash
-    (git clone https://github.com/xtne6f/psisiarc.git \
-    && cd psisiarc \
-    && make -j$(nproc) \
-    && sudo install -D -t /usr/local/bin psisiarc)
-    ```
-
-  - b24tovtt
-    
-    ```bash
-    (git clone https://github.com/xtne6f/b24tovtt.git \
-    && cd b24tovtt \
-    && make -j$(nproc) \
-    && sudo install -D -t /usr/local/bin b24tovtt)
-    ```
-
-- CM/ロゴ解析等
-
-  - chapter_exe
-  
-    ```bash
-    (git clone https://github.com/rigaya/chapter_exe \
-      && cd chapter_exe/src \
-      && make -j$(nproc) \
-      && sudo install -D -t /usr/local/bin chapter_exe)
-    ```
-  
-  - join_logo_scp
-  
-    ```bash
-    (git clone --depth=1 --branch v5.1.1 https://github.com/yobibi/join_logo_scp \
-      && cd join_logo_scp/src \
-      && make \
-      && sudo install -D -t /usr/local/bin join_logo_scp)
-    ```
-
-- 音声エンコーダ
-
-  - fdkaac
-  
-    ```bash
-    (git clone https://github.com/mstorsjo/fdk-aac.git \
-      && cd fdk-aac \
-      && ./autogen.sh \
-      && ./configure --disable-shared --prefix=$(pwd)/fdk-aac-libs \
-      && make -j$(nproc) \
-      && make install \
-      && cd .. \
-      && git clone https://github.com/nu774/fdkaac.git \
-      && cd fdkaac \
-      && autoreconf -i \
-      && PKG_CONFIG_PATH=../fdk-aac/fdk-aac-libs/lib/pkgconfig ./configure \
-      && make -j$(nproc) \
-      && sudo make install)
-    ```
-  
-  - opusenc
-  
-    ```bash
-    sudo apt install -y opus-tools
-    ```
-
-- リネーム
-
-  - [SCRename.py](https://github.com/rigaya/SCRenamePy)を使用してください。(SCRename.vbsはLinuxでは使用できません)
+  </details>
 
 ## 実行方法
 
@@ -394,7 +135,8 @@ cd $HOME/Amatsukaze
 
 - `http://<サーバーIP>:32769/`
 
-`32769` は既定値です。  
+`32769` は既定値です。
+
 `AmatsukazeServerCLI` を `-p <port>` で起動している場合は `http://<サーバーIP>:<port+1>/` を使用してください。
 
 <img src="../data/AmatsukazeWebUI_20260212.webp" width="720">
