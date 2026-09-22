@@ -12,7 +12,19 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
 
 ## 想定動作環境
 
-- x86_64のglibc系Linux環境
+- 配布アーカイブを直接実行する場合
+
+  x86_64のglibc系Linux環境（glibc 2.31以降）
+
+  glibcのバージョンから見た下限は、
+
+  - Ubuntu 20.04
+  - Debian 11
+  - AlmaLinux／Rocky Linux 9
+  - Fedora 32
+  - openSUSE Leap 15.3
+  
+  などです。各ディストリビューションのサポート期間内にあるバージョンを使用してください。glibcのバージョンは`ldd --version`で確認できます。
 
   dockerでも利用できます。
 
