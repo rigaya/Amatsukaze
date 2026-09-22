@@ -90,12 +90,13 @@ sudo apt install intel-media-va-driver-non-free intel-opencl-icd libmfx1 libmfx-
 コンテナ外で唯一必要になるAmatsukazeAddTaskを(コンテナ外に)準備します。
 
 ```sh
-  UBUNTU_VERSION=24.04
   # /usr/local/bin/にインストールする例
   mkdir -p /tmp/Amatsukaze \
-    && curl -s https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
-        | grep "browser_download_url.*tar.xz" | grep "Ubuntu${UBUNTU_VERSION}" | cut -d : -f 2,3 | tr -d \" \
-        | wget -i - -O - | tar -xJ -C /tmp/Amatsukaze \
+    && ARCHIVE_URL=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
+        | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p' \
+        | grep 'Amatsukaze_linux_.*_x64\.tar\.xz' | head -1) \
+    && test -n "$ARCHIVE_URL" \
+    && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /tmp/Amatsukaze \
     && sudo install /tmp/Amatsukaze/exe_files/AmatsukazeAddTask /usr/local/bin/ \
     && rm -rf /tmp/Amatsukaze
 ```
@@ -190,7 +191,7 @@ docker compose down
 ```sh
 # 更新
 git pull
-docker compose build --pull
+docker compose build --pull --build-arg AMATSUKAZE_CACHE_BUST=$(date +%s)
 # 最新のイメージを元に起動
 docker compose up -d
 ```

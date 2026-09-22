@@ -62,8 +62,10 @@ RUN apt-get update \
 
 # Amatsukaze本体を展開する
 ARG AMATSUKAZE_ARCHIVE=
+ARG AMATSUKAZE_CACHE_BUST=
 RUN --mount=type=bind,source=.,target=/build-context,readonly \
-    mkdir -p /app \
+    : "$AMATSUKAZE_CACHE_BUST" \
+    && mkdir -p /app \
     && if [ -n "$AMATSUKAZE_ARCHIVE" ]; then \
         tar -xf "/build-context/$AMATSUKAZE_ARCHIVE" -C /app; \
     else \
