@@ -200,7 +200,7 @@ docker compose up -d
 リリース前のローカルアーカイブを使ってDockerイメージをビルドする場合は、アーカイブを`docker`ディレクトリに置き、`AMATSUKAZE_ARCHIVE`でファイル名を指定します。
 
 ```sh
-docker build --no-cache \
+docker build \
   --build-arg AMATSUKAZE_ARCHIVE=Amatsukaze_linux_trial_x64.tar.xz \
   -t amatsukaze .
 ```

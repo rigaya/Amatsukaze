@@ -3,15 +3,12 @@ FROM nvidia/cuda:11.8.0-base-ubuntu22.04
 
 ARG ARCH=amd64
 ARG UBUNTU_NAME=jammy
-ARG ENABLE_FASTER_WHISPER=0
 ARG ENABLE_VCEENCC=0
 ARG QSVENCC_VER=8.30
 ARG NVENCC_VER=9.35
 ARG VCEENCC_VER=9.17
 ARG AMDGPU_INSTALL_VER=25.35.1
 ARG AMDGPU_INSTALL_DEB_VER=7.2.1.70201-1
-ARG FASTER_WHISPER_VER=r245.4
-ARG AMATSUKAZE_ARCHIVE=
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
@@ -21,8 +18,7 @@ ENV LC_CTYPE=ja_JP.UTF-8
 ENV PATH="/app/exe_files:$PATH"
 
 # 同梱されないPythonとGPU用の実行時依存を導入する
-RUN --mount=type=bind,source=.,target=/build-context,readonly \
-    apt-get update \
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl wget gpg tzdata locales gosu python3 xz-utils \
     && wget -qO - https://repositories.intel.com/gpu/intel-graphics.key \
@@ -61,7 +57,13 @@ RUN --mount=type=bind,source=.,target=/build-context,readonly \
     && locale-gen ja_JP.UTF-8 en_US.UTF-8 \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo "$TZ" > /etc/timezone \
-    && mkdir -p /app \
+    && rm -f /tmp/qsvencc.deb /tmp/nvencc.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Amatsukaze本体を展開する
+ARG AMATSUKAZE_ARCHIVE=
+RUN --mount=type=bind,source=.,target=/build-context,readonly \
+    mkdir -p /app \
     && if [ -n "$AMATSUKAZE_ARCHIVE" ]; then \
         tar -xf "/build-context/$AMATSUKAZE_ARCHIVE" -C /app; \
     else \
@@ -72,17 +74,19 @@ RUN --mount=type=bind,source=.,target=/build-context,readonly \
         && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app; \
     fi \
     && grep -Fq '"complete":true' /app/basepkg-manifest.json \
-    && if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
+    && mkdir -p /app/bat /app/config /app/recorded /app/logo /app/output /app/profile /app/temp
+
+# Faster-Whisper-XXLを展開する
+ARG ENABLE_FASTER_WHISPER=0
+ARG FASTER_WHISPER_VER=r245.4
+RUN if [ "$ENABLE_FASTER_WHISPER" = "1" ]; then \
         wget -q "https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_${FASTER_WHISPER_VER}_linux.7z" -O /tmp/faster-whisper.7z \
         && mkdir -p /opt \
         && /app/exe_files/7z/7zzs x /tmp/faster-whisper.7z -o/opt/ \
         && chmod 755 /opt/Faster-Whisper-XXL/faster-whisper-xxl \
         && ln -s /opt/Faster-Whisper-XXL /app/exe_files/Faster-Whisper-XXL \
         && rm -f /tmp/faster-whisper.7z; \
-    fi \
-    && mkdir -p /app/bat /app/config /app/recorded /app/logo /app/output /app/profile /app/temp \
-    && rm -f /tmp/qsvencc.deb /tmp/nvencc.deb \
-    && rm -rf /var/lib/apt/lists/*
+    fi
 
 WORKDIR /app
 
