@@ -63,8 +63,9 @@ RUN apt-get update \
 # Amatsukaze本体を展開する
 ARG AMATSUKAZE_ARCHIVE=
 ARG AMATSUKAZE_CACHE_BUST=
-RUN --mount=type=bind,source=.,target=/build-context,readonly \
-    : "$AMATSUKAZE_CACHE_BUST" \
+# アーカイブ未指定時にもCOPYを成立させるため、Dockerfileは常にコピーする
+COPY Dockerfile ${AMATSUKAZE_ARCHIVE} /build-context/
+RUN : "$AMATSUKAZE_CACHE_BUST" \
     && mkdir -p /app \
     && if [ -n "$AMATSUKAZE_ARCHIVE" ]; then \
         tar -xf "/build-context/$AMATSUKAZE_ARCHIVE" -C /app; \
@@ -76,6 +77,7 @@ RUN --mount=type=bind,source=.,target=/build-context,readonly \
         && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app; \
     fi \
     && grep -Fq '"complete":true' /app/basepkg-manifest.json \
+    && rm -rf /build-context \
     && mkdir -p /app/bat /app/config /app/recorded /app/logo /app/output /app/profile /app/temp
 
 # Faster-Whisper-XXLを展開する
