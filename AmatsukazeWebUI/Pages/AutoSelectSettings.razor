@@ -333,7 +333,7 @@ else
     {
         cond.FileName ??= "";
         cond.ContentConditions ??= new List<GenreKey>();
-        cond.ContentConditions = DistinctGenres(cond.ContentConditions);
+        cond.ContentConditions = CollapseFullySelectedMainGenres(DistinctGenres(cond.ContentConditions));
         cond.ServiceIds ??= new List<int>();
         cond.VideoSizes ??= new List<string>();
         cond.Tag ??= "";
@@ -619,10 +619,13 @@ else
             return;
         }
         var value = e.Value is bool b ? b : e.Value?.ToString() == "true";
-        foreach (var child in main.Children ?? new List<GenreNodeView>())
+        var list = _selectedCondition.ContentConditions;
+        list.RemoveAll(g => IsSameMainGenre(g, main));
+        if (value)
         {
-            UpdateGenreSelection(child, value);
+            list.Add(new GenreKey { Space = main.Space, Level1 = main.Level1, Level2 = -1 });
         }
+        _selectedCondition.ContentConditions = DistinctGenres(list);
         _isDirty = true;
     }
 
@@ -632,7 +635,9 @@ else
         {
             return false;
         }
-        return _selectedCondition.ContentConditions.Any(g => g.Space == node.Space && g.Level1 == node.Level1 && g.Level2 == node.Level2);
+        return _selectedCondition.ContentConditions.Any(g =>
+            IsSameMainGenre(g, node) ||
+            (g.Space == node.Space && g.Level1 == node.Level1 && g.Level2 == node.Level2));
     }
 
     private bool IsMainGenreChecked(GenreNodeView main)
@@ -656,6 +661,19 @@ else
             return;
         }
         var list = _selectedCondition.ContentConditions;
+
+        // 大分類キーは WPF と同じく Level2=-1 の1件で保持する。
+        // 小分類だけ変更するときは、いったん既知の小分類へ展開してから更新する。
+        if (list.Any(g => IsSameMainGenre(g, node)))
+        {
+            list.RemoveAll(g => IsSameMainGenre(g, node));
+            var main = _options?.Genres?.FirstOrDefault(g => IsSameMainGenre(node, g));
+            foreach (var child in main?.Children ?? new List<GenreNodeView>())
+            {
+                list.Add(new GenreKey { Space = child.Space, Level1 = child.Level1, Level2 = child.Level2 });
+            }
+        }
+
         var existing = list.FirstOrDefault(g => g.Space == node.Space && g.Level1 == node.Level1 && g.Level2 == node.Level2);
         if (selected)
         {
@@ -671,7 +689,37 @@ else
                 list.Remove(existing);
             }
         }
-        _selectedCondition.ContentConditions = DistinctGenres(_selectedCondition.ContentConditions);
+        _selectedCondition.ContentConditions = CollapseFullySelectedMainGenres(DistinctGenres(_selectedCondition.ContentConditions));
+    }
+
+    private static bool IsSameMainGenre(GenreKey genre, GenreNodeView node)
+        => genre.Space == node.Space && genre.Level1 == node.Level1 && genre.Level2 == -1;
+
+    private static bool IsSameMainGenre(GenreNodeView left, GenreNodeView right)
+        => left.Space == right.Space && left.Level1 == right.Level1;
+
+    private List<GenreKey> CollapseFullySelectedMainGenres(List<GenreKey> genres)
+    {
+        foreach (var main in _options?.Genres ?? new List<GenreNodeView>())
+        {
+            var children = main.Children ?? new List<GenreNodeView>();
+            if (children.Count == 0)
+            {
+                continue;
+            }
+
+            var hasMain = genres.Any(g => IsSameMainGenre(g, main));
+            var hasAllChildren = children.All(child => genres.Any(g =>
+                g.Space == child.Space && g.Level1 == child.Level1 && g.Level2 == child.Level2));
+            if (!hasMain && !hasAllChildren)
+            {
+                continue;
+            }
+
+            genres.RemoveAll(g => IsSameMainGenre(g, main) || (g.Space == main.Space && g.Level1 == main.Level1));
+            genres.Add(new GenreKey { Space = main.Space, Level1 = main.Level1, Level2 = -1 });
+        }
+        return DistinctGenres(genres);
     }
 
     private static List<GenreKey> DistinctGenres(List<GenreKey> items)
