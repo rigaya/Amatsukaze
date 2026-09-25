@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Amatsukaze.Lib;
 
@@ -587,6 +588,28 @@ namespace Amatsukaze.Server
     // 文字列リソース（列挙体に対応する文字列配列）
     public static class ProfileSettingExtensions
     {
+        private static readonly Regex DeinterlaceOptionPattern = new Regex(
+            @"(?<!\S)--vpp-(?<name>kfm|afs|nnedi|yadif|bwdif|decomb|ivtc|deinterlace)(?=\s|=|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        public static bool HasDeinterlaceOption(string option)
+        {
+            if (string.IsNullOrWhiteSpace(option))
+            {
+                return false;
+            }
+            foreach (Match match in DeinterlaceOptionPattern.Matches(option))
+            {
+                if (!match.Groups["name"].Value.Equals("deinterlace", StringComparison.OrdinalIgnoreCase)
+                    || !Regex.IsMatch(option.Substring(match.Index + match.Length),
+                        @"^\s*(?:=\s*)?none(?=\s|$)", RegexOptions.IgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public static string[] EncoderList { get; } = new string[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVT-AV1", "x262" };
         public static string[] Mpeg2DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
         public static string[] H264DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
