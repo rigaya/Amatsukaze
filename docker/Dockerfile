@@ -1,4 +1,30 @@
 # 配布アーカイブを使用するLinuxコンテナ
+FROM ubuntu:22.04 AS fdkaac-builder
+
+ARG FDK_AAC_REV=d8e6b1a3aa606c450241632b64b703f21ea31ce3
+ARG FDKAAC_VER=v1.0.6
+
+# fdkaacは配布アーカイブに含めず、ソースからビルドする
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential ca-certificates git autoconf automake libtool pkg-config \
+    && git clone https://github.com/mstorsjo/fdk-aac.git /tmp/fdk-aac \
+    && cd /tmp/fdk-aac \
+    && git checkout "$FDK_AAC_REV" \
+    && ./autogen.sh \
+    && ./configure --disable-shared --prefix=/tmp/fdk-aac-libs \
+    && make -j"$(nproc)" \
+    && make install \
+    && git clone --depth=1 --branch "$FDKAAC_VER" https://github.com/nu774/fdkaac.git /tmp/fdkaac \
+    && cd /tmp/fdkaac \
+    && autoreconf -i \
+    && PKG_CONFIG_PATH=/tmp/fdk-aac-libs/lib/pkgconfig ./configure --prefix=/tmp/fdkaac-install \
+    && make -j"$(nproc)" \
+    && make install \
+    && mkdir -p /fdkaac-output \
+    && install -D /tmp/fdkaac-install/bin/fdkaac /fdkaac-output/fdkaac \
+    && rm -rf /var/lib/apt/lists/*
+
 FROM nvidia/cuda:11.8.0-base-ubuntu22.04
 
 ARG ARCH=amd64
@@ -65,6 +91,8 @@ ARG AMATSUKAZE_ARCHIVE=
 ARG AMATSUKAZE_CACHE_BUST=
 # アーカイブ未指定時にもCOPYを成立させるため、Dockerfileは常にコピーする
 COPY Dockerfile ${AMATSUKAZE_ARCHIVE} /build-context/
+# ビルド段階で生成したfdkaacだけを実行イメージへ引き継ぐ
+COPY --from=fdkaac-builder /fdkaac-output/ /usr/local/bin/
 RUN : "$AMATSUKAZE_CACHE_BUST" \
     && mkdir -p /app \
     && if [ -n "$AMATSUKAZE_ARCHIVE" ]; then \
