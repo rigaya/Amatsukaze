@@ -87,26 +87,24 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Amatsukaze本体を展開する
-ARG AMATSUKAZE_ARCHIVE=
 ARG AMATSUKAZE_CACHE_BUST=
-# アーカイブ未指定時にもCOPYを成立させるため、Dockerfileは常にコピーする
-COPY Dockerfile ${AMATSUKAZE_ARCHIVE} /build-context/
 # ビルド段階で生成したfdkaacだけを実行イメージへ引き継ぐ
 COPY --from=fdkaac-builder /fdkaac-output/ /usr/local/bin/
 RUN : "$AMATSUKAZE_CACHE_BUST" \
     && mkdir -p /app \
-    && if [ -n "$AMATSUKAZE_ARCHIVE" ]; then \
-        tar -xf "/build-context/$AMATSUKAZE_ARCHIVE" -C /app; \
-    else \
-        ARCHIVE_URL=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
-            | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p' \
-            | grep 'Amatsukaze_linux_.*_x64\.tar\.xz' | head -1) \
-        && test -n "$ARCHIVE_URL" \
-        && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app; \
-    fi \
+    && ARCHIVE_URL=$(curl -fsSL https://api.github.com/repos/rigaya/Amatsukaze/releases/latest \
+        | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\.tar\.xz\)".*/\1/p' \
+        | grep 'Amatsukaze_linux_.*_x64\.tar\.xz' | head -1) \
+    && test -n "$ARCHIVE_URL" \
+    && curl -fL --retry 3 "$ARCHIVE_URL" | tar -xJ -C /app \
     && grep -Fq '"complete":true' /app/basepkg-manifest.json \
-    && rm -rf /build-context \
     && mkdir -p /app/bat /app/config /app/recorded /app/logo /app/output /app/profile /app/temp
+
+# ローカルアーカイブでデバッグするときだけ、ファイル名を合わせて次の2命令を有効にする
+#COPY Amatsukaze_linux_trial_x64.tar.xz /tmp/amatsukaze-debug.tar.xz
+#RUN tar -xJf /tmp/amatsukaze-debug.tar.xz -C /app \
+#    && grep -Fq '"complete":true' /app/basepkg-manifest.json \
+#    && rm /tmp/amatsukaze-debug.tar.xz
 
 # Faster-Whisper-XXLを展開する
 ARG ENABLE_FASTER_WHISPER=0

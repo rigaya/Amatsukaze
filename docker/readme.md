@@ -198,12 +198,10 @@ docker compose up -d
 
 ### デバッグ
 
-リリース前のローカルアーカイブを使ってDockerイメージをビルドする場合は、アーカイブを`docker`ディレクトリに置き、`AMATSUKAZE_ARCHIVE`でファイル名を指定します。
+リリース前のローカルアーカイブを使ってDockerイメージをビルドする場合は、アーカイブを`docker`ディレクトリに置き、`Dockerfile`のAmatsukaze本体展開処理にあるデバッグ用の`COPY`と`RUN`のコメントを外します。`COPY`のアーカイブ名は実際のファイル名に合わせてください。
 
 ```sh
-docker build \
-  --build-arg AMATSUKAZE_ARCHIVE=Amatsukaze_linux_trial_x64.tar.xz \
-  -t amatsukaze .
+docker build -t amatsukaze .
 ```
 
-`AMATSUKAZE_ARCHIVE`を指定しない場合は、最新リリースのアーカイブを自動的に取得します。
+通常のDockerfileではローカルファイルをコピーせず、最新リリースのアーカイブを自動的に取得します。
