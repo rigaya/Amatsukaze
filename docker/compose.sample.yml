@@ -7,7 +7,7 @@ services:
           dockerfile: Dockerfile
           args:
             ENABLE_FASTER_WHISPER: "0"  # Faster-Whisper-XXLを含める場合は "1" に変更
-            ENABLE_VCEENCC: "0"  # VCEEncCを含める場合は "1" に変更
+            ENABLE_VCEENC_AMF: "0"  # VCEEncCでAMFも使う場合は "1" に変更 (既定はVA-APIのみ)
         restart: always
         ports:
           - "32768:32768"
@@ -32,6 +32,14 @@ services:
         # /dev/driが環境にない場合は無効化が必要
         devices:
           - /dev/dri:/dev/dri
+          # ENABLE_VCEENC_AMF: "1" でVCEEncCのOpenCLフィルタを使う場合に必要 (ROCm OpenCL)
+          # - /dev/kfd:/dev/kfd
+          # /dev/kfdを渡す場合に、ROCm非対応のGPU(Ryzen APUの内蔵GPUなど)が同居していると、
+          # そのGPUでのVA-APIデコード等でGPUハングが発生することがあるため、
+          # 上の /dev/dri の代わりに、使用するGPUのデバイスだけを渡す (複数GPUを使う場合はそれぞれ列挙する)
+          # (対応は ls -l /dev/dri/by-path で確認)
+          # - /dev/dri/card1:/dev/dri/card1
+          # - /dev/dri/renderD128:/dev/dri/renderD128
         # CUDA/NVEncCを使うための設定
         # ホスト側にNVIDIA Graphics DriverとNVIDIA Container Toolkitのインストールが必要
         # NVIDIA GPUが環境にない場合は無効化が必要
