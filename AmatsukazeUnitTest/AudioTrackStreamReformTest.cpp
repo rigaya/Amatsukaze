@@ -1,8 +1,11 @@
 ﻿#include "StreamReform.h"
 #include "TranscodeSetting.h"
 #include "AudioTrackBuilder.h"
+#include "AudioTrackConverter.h"
 #include "AdtsParser.h"
 #include <fstream>
+#include <filesystem>
+#include <sstream>
 #include <iostream>
 #include <stdexcept>
 
@@ -147,15 +150,18 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     const auto audioInfo = audio;
     StreamReformInfo reform(ctx, 1, video, audio, captions, events, times);
     reform.prepare(false, false, false, mode, audioPath);
-    if (fallback != 0 && fallback != 5) {
-        Require(reform.getNumEncoders(0) > 1, "未対応音声がジョブ全体のsplitに戻りません");
-        return;
-    }
     // cut時は、track1の最初の出現区間とtrack0の変更を含む範囲を落とす。
     std::vector<EncoderZone> zones;
     if (cut) zones.push_back({ 120, 220 });
     reform.applyCMZones(0, zones, {});
     reform.genAudio({ cut ? CMTYPE_NONCM : CMTYPE_BOTH });
+    if (fallback != 0 && fallback != 5) {
+        Require(reform.getOutFileKeys().size() > 1, "未対応音声がジョブ全体のsplitに戻りません");
+        for (const auto& key : reform.getOutFileKeys()) {
+            Require(!reform.getEncodeFile(key).isAudioTrackPlanned, "fallbackに統合音声計画が残りました");
+        }
+        return;
+    }
     Require(reform.getOutFileKeys().size() == 1, "音声変更でファイルが分割されました");
     const auto& file = reform.getEncodeFile(reform.getOutFileKeys()[0]);
     Require(file.audioFrames.size() == 2, "途中で増えた音声トラックが失われました");
@@ -175,8 +181,11 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
         for (size_t i = 1; i < file.audioFrames[0].size(); ++i) {
             const int previous = file.audioFrames[0][i - 1];
             const int current = file.audioFrames[0][i];
-            Require(previous >= 0 && current >= 0 && audioInfo[current].PTS - audioInfo[previous].PTS == audioTicks,
-                "位相が0.7フレームの連続音声を再選択または欠落しました");
+            if (previous < 0 || current < 0 || audioInfo[current].PTS - audioInfo[previous].PTS != audioTicks) {
+                throw std::runtime_error("位相ずれのある連続音声を再選択または欠落しました: 位相="
+                    + std::to_string(sourcePhaseTicks) + " 出力位置="
+                    + std::to_string(i) + " 前参照=" + std::to_string(previous) + " 現参照=" + std::to_string(current));
+            }
         }
     }
     if (mode == AFC_MERGE) {
@@ -329,16 +338,447 @@ void BuilderMergeSilenceTest(const tstring& directory) {
     }
 }
 
+void ConverterExcludedWarmTest(const tstring& directory) {
+    AMTContext ctx;
+    constexpr int SOURCE_FRAME_COUNT = 4;
+    constexpr int SOURCE_AUDIO_TICKS = 1920;
+    const auto silent = GenerateSilentAdtsFrame(AUDIO_STEREO, 3);
+    std::vector<FileAudioFrameInfo> info(SOURCE_FRAME_COUNT);
+    std::vector<int64_t> offsets = { 0 };
+    for (int index = 0; index < SOURCE_FRAME_COUNT; ++index) {
+        info[index].audioIdx = 0;
+        info[index].PTS = index * SOURCE_AUDIO_TICKS;
+        info[index].format = { AUDIO_STEREO, 48000 };
+        info[index].numSamples = AAC_LC_FRAME_SAMPLES;
+        info[index].fileOffset = offsets.back();
+        info[index].codedDataSize = static_cast<int>(silent.size());
+        offsets.push_back(offsets.back() + silent.size());
+    }
+    AudioTrackPlan plan;
+    plan.layout = AUDIO_32_LFE;
+    plan.sampleRate = 48000;
+    plan.samplingFrequencyIndex = 3;
+    for (int index = 1; index < SOURCE_FRAME_COUNT; ++index) {
+        plan.frames.push_back({ AudioTrackOperation::CONVERT, index, -1, AUDIO_STEREO, AUDIO_32_LFE });
+    }
+    Require(GetAudioTrackDecoderWarmFrames(plan, info) == std::vector<int>({ 0 }),
+        "通常助走の元packet集合が実変換と一致しません");
+    auto excludedPlan = plan;
+    excludedPlan.excludedDecoderFrames = { 0 };
+    Require(GetAudioTrackDecoderWarmFrames(excludedPlan, info).empty(),
+        "最短除外packetが助走元集合へ戻りました");
+    auto convert = [&](bool corrupt, bool excluded) {
+        const auto source = directory + (corrupt ? _T("/warm-invalid-source.aac") : _T("/warm-normal-source.aac"));
+        {
+            File file(source, _T("wb"));
+            for (int index = 0; index < SOURCE_FRAME_COUNT; ++index) {
+                auto bytes = silent;
+                if (corrupt && index == 0) bytes[0] = 0;
+                file.write(MemoryChunk(bytes.data(), bytes.size()));
+            }
+        }
+        auto current = plan;
+        if (excluded) current.excludedDecoderFrames = { 0 };
+        PacketCache cache(ctx, source, offsets, 2, 2);
+        return ConvertAudioTrackRun(ctx, cache, current, 0, current.frames.size(), info);
+    };
+    const auto baseline = convert(false, false);
+    Require(baseline.size() == plan.frames.size(), "通常助走の変換AAC数が不正です");
+    bool rejected = false;
+    try {
+        convert(true, false);
+    } catch (const FormatException& error) {
+        Require(tstring(error.message()).find(_T("ADTSヘッダ")) != tstring::npos,
+            "通常助走の不正ADTSがヘッダ検査で拒否されませんでした");
+        rejected = true;
+    }
+    Require(rejected, "除外指定のない不正助走packetが黙って無視されました");
+    Require(convert(true, true) == baseline, "最短除外助走の代替無音が正常packetと一致しません");
+    Require(convert(false, true) == baseline, "正常助走packetの除外指定で変換AACが変わりました");
+    std::cout << "Converter最短除外助走・通常不正ADTS拒否テスト成功\n";
+}
+
+namespace {
+constexpr int MIN_DURATION_UNIT_TICKS = 48000;
+constexpr int MIN_DURATION_VIDEO_TICKS = 3000;
+constexpr int MIN_DURATION_AUDIO_TICKS = 1920;
+constexpr int MIN_DURATION_THRESHOLD_SECONDS = 5;
+constexpr int MIN_DURATION_SHORT_UNITS = 8;
+constexpr int MIN_DURATION_LONG_UNITS = 24;
+constexpr int MIN_DURATION_RESELECT_UNITS = 12;
+
+enum class MinimumDurationFault { NONE, SAMPLE_RATE, UNKNOWN_RATE, SAMPLE_COUNT, LAYOUT, NON_LC, SFI, PCE, ADTS };
+
+struct MinimumDurationSection {
+    int units;
+    AUDIO_CHANNELS layout;
+    int tracks = 1;
+    MinimumDurationFault fault = MinimumDurationFault::NONE;
+    int videoDisplayWidth = 1920;
+};
+
+struct MinimumDurationFixture {
+    std::vector<FileVideoFrameInfo> video;
+    std::vector<FileAudioFrameInfo> audio;
+    std::vector<StreamEvent> events;
+    tstring audioPath;
+};
+
+MinimumDurationFixture MakeMinimumDurationFixture(const std::vector<MinimumDurationSection>& sections,
+    const tstring& directory, const tstring& name) {
+    MinimumDurationFixture fixture;
+    fixture.audioPath = directory + _T("/minimum-") + name + _T(".aac");
+    int totalUnits = 0;
+    for (const auto& section : sections) totalUnits += section.units;
+    const int totalVideo = totalUnits * MIN_DURATION_UNIT_TICKS / MIN_DURATION_VIDEO_TICKS;
+    fixture.video.resize(totalVideo);
+    for (int index = 0; index < totalVideo; ++index) {
+        auto& frame = fixture.video[index];
+        frame.PTS = frame.DTS = index * MIN_DURATION_VIDEO_TICKS;
+        frame.pic = PIC_FRAME;
+        frame.isGopStart = index % 30 == 0;
+        frame.progressive = true;
+        frame.format.format = VS_MPEG2;
+        frame.format.width = frame.format.displayWidth = 1920;
+        frame.format.height = frame.format.displayHeight = 1080;
+        frame.format.frameRateNum = 30;
+        frame.format.frameRateDenom = 1;
+        frame.format.sarWidth = frame.format.sarHeight = 1;
+        frame.format.progressive = true;
+        frame.codedDataSize = 100;
+    }
+    File file(fixture.audioPath, _T("wb"));
+    int64_t offset = 0;
+    int sourceAudioFrame = 0;
+    for (size_t sectionIndex = 0; sectionIndex < sections.size(); ++sectionIndex) {
+        const auto& section = sections[sectionIndex];
+        const int videoStart = sourceAudioFrame * MIN_DURATION_AUDIO_TICKS / MIN_DURATION_VIDEO_TICKS;
+        const int firstAudio = static_cast<int>(fixture.audio.size());
+        fixture.events.push_back({ PID_TABLE_CHANGED, videoStart, 0, section.tracks });
+        const int sectionVideo = section.units * MIN_DURATION_UNIT_TICKS / MIN_DURATION_VIDEO_TICKS;
+        for (int index = videoStart; index < videoStart + sectionVideo; ++index) {
+            fixture.video[index].format.displayWidth = section.videoDisplayWidth;
+        }
+        if (sectionIndex == 0 || section.videoDisplayWidth != sections[sectionIndex - 1].videoDisplayWidth) {
+            fixture.events.push_back({ VIDEO_FORMAT_CHANGED, videoStart, 0, 0 });
+        }
+        for (int track = 0; track < section.tracks; ++track) {
+            fixture.events.push_back({ AUDIO_FORMAT_CHANGED, firstAudio + track, track, 0 });
+        }
+        const int sectionAudio = section.units * MIN_DURATION_UNIT_TICKS / MIN_DURATION_AUDIO_TICKS;
+        for (int index = 0; index < sectionAudio; ++index, ++sourceAudioFrame) {
+            for (int track = 0; track < section.tracks; ++track) {
+                FileAudioFrameInfo frame;
+                frame.PTS = sourceAudioFrame * MIN_DURATION_AUDIO_TICKS;
+                frame.audioIdx = track;
+                frame.numSamples = AAC_LC_FRAME_SAMPLES;
+                frame.format = { track == 0 ? section.layout : AUDIO_STEREO, 48000 };
+                auto bytes = frame.format.channels == AUDIO_2LANG ? MakePceSilentFrame(true)
+                    : GenerateSilentAdtsFrame(frame.format.channels, 3);
+                if (track == 0) {
+                    switch (section.fault) {
+                    case MinimumDurationFault::SAMPLE_RATE: frame.format.sampleRate = 44100; break;
+                    case MinimumDurationFault::UNKNOWN_RATE: frame.format.sampleRate = 12345; break;
+                    case MinimumDurationFault::SAMPLE_COUNT: frame.numSamples = 2048; break;
+                    case MinimumDurationFault::LAYOUT: frame.format.channels = AUDIO_NONE; break;
+                    case MinimumDurationFault::NON_LC: bytes[2] &= 0x3f; break;
+                    case MinimumDurationFault::SFI: bytes[2] = (bytes[2] & 0xc3) | (15 << 2); break;
+                    case MinimumDurationFault::PCE: bytes = MakePceSilentFrame(); break;
+                    case MinimumDurationFault::ADTS: bytes[0] = 0; break;
+                    default: break;
+                    }
+                }
+                frame.fileOffset = offset;
+                frame.codedDataSize = static_cast<int>(bytes.size());
+                offset += bytes.size();
+                fixture.audio.push_back(frame);
+                file.write(MemoryChunk(bytes.data(), bytes.size()));
+            }
+        }
+    }
+    return fixture;
+}
+
+void MinimumDurationCmWaveTest(const tstring& directory) {
+    constexpr int PCM_BYTES_PER_SAMPLE = 4;
+    const int shortAudioFrames = MIN_DURATION_SHORT_UNITS * MIN_DURATION_UNIT_TICKS / MIN_DURATION_AUDIO_TICKS;
+    auto fixture = MakeMinimumDurationFixture({ { MIN_DURATION_SHORT_UNITS, AUDIO_STEREO },
+        { MIN_DURATION_LONG_UNITS, AUDIO_32_LFE } }, directory, _T("cm-wave-2048"));
+    for (size_t index = 0; index < fixture.audio.size(); ++index) {
+        fixture.audio[index].waveDataSize = AAC_LC_FRAME_SAMPLES * PCM_BYTES_PER_SAMPLE;
+        fixture.audio[index].waveOffset = index * AAC_LC_FRAME_SAMPLES * PCM_BYTES_PER_SAMPLE;
+    }
+    const auto normalFixture = fixture;
+    // 冒頭区間の音声を2048サンプル/42.667msへ作り直す。PCM長とPTSを同じ尺にそろえる。
+    std::vector<FileAudioFrameInfo> audio;
+    int64_t waveOffset = 0;
+    for (int index = 0; index < static_cast<int>(fixture.audio.size()); ++index) {
+        if (index < shortAudioFrames && index % 2 != 0) continue;
+        auto frame = fixture.audio[index];
+        if (index < shortAudioFrames) frame.numSamples = 2 * AAC_LC_FRAME_SAMPLES;
+        frame.waveDataSize = frame.numSamples * PCM_BYTES_PER_SAMPLE;
+        frame.waveOffset = waveOffset;
+        waveOffset += frame.waveDataSize;
+        audio.push_back(frame);
+    }
+    fixture.audio = std::move(audio);
+    for (auto& event : fixture.events) {
+        if (event.type == AUDIO_FORMAT_CHANGED && event.frameIdx >= shortAudioFrames) event.frameIdx -= shortAudioFrames / 2;
+    }
+    auto getWave = [&](AUDIO_FORMAT_CHANGE_MODE mode, bool normal = false) {
+        const auto& current = normal ? normalFixture : fixture;
+        AMTContext ctx;
+        auto video = current.video;
+        auto sourceAudio = current.audio;
+        auto events = current.events;
+        std::vector<CaptionItem> captions;
+        std::vector<TimeInfo> times;
+        StreamReformInfo reform(ctx, 1, video, sourceAudio, captions, events, times);
+        // prepareのCMwaveだけを対象とし、出力ADTS検査や最短区間判定はまだ行わない。
+        reform.prepare(false, false, false, mode);
+        return std::vector<FilterAudioFrame>(reform.getFilterSourceAudioFrames(0));
+    };
+    // 初回は修正前の正常LC参照列を保存し、以後は同じ列と完全一致することを確認する。
+    for (const auto mode : { AFC_SPLIT, AFC_MERGE, AFC_SEPARATE }) {
+        const auto normalWave = getWave(mode, true);
+        std::ostringstream serialized;
+        for (const auto& frame : normalWave) serialized << frame.frameIndex << ' ' << frame.waveOffset << ' ' << frame.waveLength << '\n';
+        const auto path = std::filesystem::path(directory + _T("/normal-lc-wave-") + std::to_string(static_cast<int>(mode)) + _T(".tsv"));
+        std::ifstream previous(path);
+        if (previous.good()) {
+            std::ostringstream contents;
+            contents << previous.rdbuf();
+            Require(contents.str() == serialized.str(), "正常LCのprepare CMwave参照が修正前から変わりました");
+        } else {
+            std::ofstream captured(path);
+            captured << serialized.str();
+            Require(captured.good(), "正常LCのCMwave基準参照を保存できませんでした");
+        }
+        std::cout << "正常LC CMwave基準一致 モード=" << static_cast<int>(mode) << " 参照数=" << normalWave.size() << std::endl;
+    }
+    const auto baseline = getWave(AFC_SPLIT);
+    auto report = [&](const std::vector<FilterAudioFrame>& wave, const char* name) {
+        int64_t totalBytes = 0;
+        int64_t shortBytes = 0;
+        size_t shortReferences = 0;
+        for (const auto& frame : wave) {
+            totalBytes += frame.waveLength;
+            if (frame.frameIndex >= 0 && frame.frameIndex < shortAudioFrames / 2) {
+                shortBytes += frame.waveLength;
+                ++shortReferences;
+            }
+        }
+        std::cout << "CMwave " << name << " 参照数=" << wave.size() << " PCMバイト=" << totalBytes
+            << " 2048区間参照数=" << shortReferences << " 2048区間PCMバイト=" << shortBytes << std::endl;
+    };
+    report(baseline, "split");
+    bool matched = true;
+    for (const auto mode : { AFC_MERGE, AFC_SEPARATE }) {
+        const auto wave = getWave(mode);
+        report(wave, mode == AFC_MERGE ? "merge" : "separate");
+        const bool same = baseline.size() == wave.size() && std::equal(baseline.begin(), baseline.end(), wave.begin(),
+            [](const FilterAudioFrame& a, const FilterAudioFrame& b) {
+                return a.frameIndex == b.frameIndex && a.waveOffset == b.waveOffset && a.waveLength == b.waveLength;
+            });
+        matched &= same;
+    }
+    Require(matched, "2048サンプル短区間のprepare CMwave参照が旧splitの実尺割当と一致しません");
+    std::cout << "CMwave metadata不適合区間の旧split互換テスト成功\n";
+}
+
+struct MinimumDurationResult {
+    std::set<int> sourceAudioIndices;
+    std::set<int> excludedDecoderIndices;
+    std::map<std::pair<int, CMType>, std::set<int64_t>> videoPts;
+    bool planned = true;
+    size_t maximumTracks = 0;
+    bool hasConvert = false;
+};
+
+MinimumDurationResult CollectMinimumDurationResult(const MinimumDurationFixture& fixture,
+    AUDIO_FORMAT_CHANGE_MODE mode, int thresholdSeconds, const std::vector<CMType>& cmtypes,
+    const std::vector<EncoderZone>& zones = {}, const std::vector<int>& divisions = {}, bool splitSub = false) {
+    AMTContext ctx;
+    auto video = fixture.video;
+    auto audio = fixture.audio;
+    auto events = fixture.events;
+    std::vector<CaptionItem> captions;
+    std::vector<TimeInfo> times;
+    StreamReformInfo reform(ctx, 1, video, audio, captions, events, times);
+    reform.prepare(splitSub, false, false, mode, fixture.audioPath);
+    reform.applyCMZones(0, zones, divisions);
+    reform.genAudio(cmtypes, thresholdSeconds);
+    MinimumDurationResult result;
+    for (const auto& key : reform.getOutFileKeys()) {
+        const auto& file = reform.getEncodeFile(key);
+        // splitは既存TranscodeManagerと同じ最終判定を使い、参照集合の基準とする。
+        if (file.duration < thresholdSeconds * static_cast<double>(MPEG_CLOCK_HZ)) continue;
+        if (file.videoFrames.empty()) continue;
+        auto& pts = result.videoPts[{ key.div, key.cm }];
+        const auto& frames = reform.getFilterSourceFrames(key.video);
+        for (int index : file.videoFrames) pts.insert(frames[index].originalFramePTS);
+        result.planned &= file.isAudioTrackPlanned;
+        result.maximumTracks = std::max(result.maximumTracks, file.audioFrames.size());
+        for (const auto& track : file.audioFrames) {
+            for (int index : track) if (index >= 0) result.sourceAudioIndices.insert(index);
+        }
+        for (const auto& plan : file.audioTrackPlan) {
+            result.excludedDecoderIndices.insert(plan.excludedDecoderFrames.begin(), plan.excludedDecoderFrames.end());
+            for (const auto& reference : plan.frames) result.hasConvert |= reference.operation == AudioTrackOperation::CONVERT;
+        }
+        if (file.isAudioTrackPlanned) ValidateAudioTrackPlans(file.audioTrackPlan, file.duration);
+    }
+    return result;
+}
+
+size_t MinimumDurationFrameCount(const MinimumDurationResult& result) {
+    size_t count = 0;
+    for (const auto& entry : result.videoPts) count += entry.second.size();
+    return count;
+}
+
+void VerifyMinimumDurationCase(const MinimumDurationFixture& fixture, size_t expectedFrames,
+    bool expectConvert = false, const std::vector<CMType>& cmtypes = { CMTYPE_BOTH },
+    const std::vector<EncoderZone>& zones = {}, const std::vector<int>& divisions = {}, bool splitSub = false, size_t expectedTracks = 1) {
+    std::cout << "最短区間検証 " << fixture.audioPath << " cm=" << cmtypes.size() << " div=" << divisions.size() << " splitSub=" << splitSub << std::endl;
+    const auto split = CollectMinimumDurationResult(fixture, AFC_SPLIT, MIN_DURATION_THRESHOLD_SECONDS, cmtypes, zones, divisions, splitSub);
+    Require(MinimumDurationFrameCount(split) == expectedFrames, "最短区間テストのsplit基準フレーム数が想定と異なります");
+    for (const auto mode : { AFC_MERGE, AFC_SEPARATE }) {
+        const auto planned = CollectMinimumDurationResult(fixture, mode, MIN_DURATION_THRESHOLD_SECONDS, cmtypes, zones, divisions, splitSub);
+        Require(planned.videoPts == split.videoPts, "最短区間除外後の映像PTSがsplitと一致しません");
+        Require(std::includes(split.sourceAudioIndices.begin(), split.sourceAudioIndices.end(),
+            planned.sourceAudioIndices.begin(), planned.sourceAudioIndices.end()),
+            "除外したsplitキーの元音声が統合音声に参照されました");
+        Require(planned.planned && planned.maximumTracks == (expectedFrames == 0 ? 0 : expectedTracks), "除外区間の異常または副音声が残区間へ影響しました");
+        Require(planned.hasConvert == (mode == AFC_MERGE && expectConvert), "除外後のCONVERT有無が不正です");
+    }
+}
+void RunMinimumDurationTests(const tstring& directory) {
+    const MinimumDurationSection stereoShort = { MIN_DURATION_SHORT_UNITS, AUDIO_STEREO };
+    const MinimumDurationSection surroundLong = { MIN_DURATION_LONG_UNITS, AUDIO_32_LFE };
+    const size_t shortFrames = MIN_DURATION_SHORT_UNITS * MIN_DURATION_UNIT_TICKS / MIN_DURATION_VIDEO_TICKS;
+    const size_t longFrames = MIN_DURATION_LONG_UNITS * MIN_DURATION_UNIT_TICKS / MIN_DURATION_VIDEO_TICKS;
+    const auto beginning = MakeMinimumDurationFixture({ stereoShort, surroundLong }, directory, _T("beginning"));
+    const auto middle = MakeMinimumDurationFixture({ surroundLong, stereoShort, surroundLong }, directory, _T("middle"));
+    const auto end = MakeMinimumDurationFixture({ surroundLong, stereoShort }, directory, _T("end"));
+    VerifyMinimumDurationCase(beginning, longFrames);
+    VerifyMinimumDurationCase(middle, 2 * longFrames);
+    VerifyMinimumDurationCase(end, longFrames);
+    const auto aggregate = MakeMinimumDurationFixture({ stereoShort, surroundLong, stereoShort }, directory, _T("aggregate"));
+    VerifyMinimumDurationCase(aggregate, 2 * shortFrames + longFrames, true);
+    VerifyMinimumDurationCase(aggregate, longFrames, false, { CMTYPE_BOTH }, {}, {}, true);
+    VerifyMinimumDurationCase(aggregate, longFrames, false, { CMTYPE_BOTH }, {},
+        { 0, static_cast<int>(shortFrames + longFrames / 2), static_cast<int>(2 * shortFrames + longFrames) });
+    VerifyMinimumDurationCase(aggregate, 2 * shortFrames + 2 * longFrames, true,
+        { CMTYPE_BOTH, CMTYPE_NONCM, CMTYPE_CM }, { { 0, static_cast<int>(shortFrames) } });
+    const std::vector<EncoderZone> edgesAndMiddle = {
+        { 0, static_cast<int>(shortFrames) },
+        { static_cast<int>(2 * shortFrames), static_cast<int>(3 * shortFrames) },
+        { static_cast<int>(shortFrames + longFrames), static_cast<int>(2 * shortFrames + longFrames) }
+    };
+    VerifyMinimumDurationCase(aggregate, 3 * longFrames + 3 * shortFrames, true,
+        { CMTYPE_BOTH, CMTYPE_EDGE_TRIM, CMTYPE_NONCM, CMTYPE_CM }, edgesAndMiddle);
+    VerifyMinimumDurationCase(beginning, 0, false, { CMTYPE_CM }, { { 0, static_cast<int>(shortFrames) } });
+    for (const auto mode : { AFC_MERGE, AFC_SEPARATE }) {
+        const auto zeroThreshold = CollectMinimumDurationResult(beginning, mode, 0, { CMTYPE_BOTH });
+        Require(MinimumDurationFrameCount(zeroThreshold) == shortFrames + longFrames && zeroThreshold.planned,
+            "最短区間0秒で従来の音声区間が除外されました");
+        Require(zeroThreshold.excludedDecoderIndices.empty(), "最短区間0秒で助走禁止frameが設定されました");
+        const auto cmOnly = CollectMinimumDurationResult(beginning, mode, 0, { CMTYPE_NONCM },
+            { { 0, static_cast<int>(shortFrames) } });
+        Require(cmOnly.planned && cmOnly.excludedDecoderIndices.empty(), "CM除外音声が最短除外の助走禁止frameになりました");
+    }
+    const auto exact = MakeMinimumDurationFixture({ surroundLong }, directory, _T("exact"));
+    for (const auto mode : { AFC_SPLIT, AFC_MERGE, AFC_SEPARATE }) {
+        const auto result = CollectMinimumDurationResult(exact, mode, 10, { CMTYPE_NONCM }, { { 300, static_cast<int>(longFrames) } });
+        Require(MinimumDurationFrameCount(result) == 300, "最短区間と同じ10秒のキーが除外されました");
+    }
+    const auto extraTrack = MakeMinimumDurationFixture({ { MIN_DURATION_SHORT_UNITS, AUDIO_STEREO, 2 }, surroundLong }, directory, _T("extra-track"));
+    VerifyMinimumDurationCase(extraTrack, longFrames);
+    const auto retainedExtraTrack = MakeMinimumDurationFixture({ stereoShort, { MIN_DURATION_LONG_UNITS, AUDIO_32_LFE, 2 } },
+        directory, _T("retained-extra-track"));
+    VerifyMinimumDurationCase(retainedExtraTrack, longFrames, false, { CMTYPE_BOTH }, {}, {}, false, 2);
+    const auto dual = MakeMinimumDurationFixture({ { MIN_DURATION_SHORT_UNITS, AUDIO_2LANG }, surroundLong }, directory, _T("dual"));
+    VerifyMinimumDurationCase(dual, longFrames);
+    int faultIndex = 0;
+    for (const auto fault : { MinimumDurationFault::SAMPLE_RATE, MinimumDurationFault::UNKNOWN_RATE,
+        MinimumDurationFault::SAMPLE_COUNT, MinimumDurationFault::LAYOUT, MinimumDurationFault::NON_LC,
+        MinimumDurationFault::SFI, MinimumDurationFault::PCE, MinimumDurationFault::ADTS }) {
+        const auto excluded = MakeMinimumDurationFixture({ { MIN_DURATION_SHORT_UNITS, AUDIO_STEREO, 1, fault }, surroundLong },
+            directory, _T("excluded-fault-") + std::to_string(faultIndex));
+        VerifyMinimumDurationCase(excluded, longFrames);
+        const auto retained = MakeMinimumDurationFixture({ stereoShort, { MIN_DURATION_LONG_UNITS, AUDIO_32_LFE, 1, fault } },
+            directory, _T("retained-fault-") + std::to_string(faultIndex));
+        const auto split = CollectMinimumDurationResult(retained, AFC_SPLIT, MIN_DURATION_THRESHOLD_SECONDS, { CMTYPE_BOTH });
+        for (const auto mode : { AFC_MERGE, AFC_SEPARATE }) {
+            const auto fallback = CollectMinimumDurationResult(retained, mode, MIN_DURATION_THRESHOLD_SECONDS, { CMTYPE_BOTH });
+            Require(!fallback.planned && fallback.videoPts == split.videoPts,
+                "残区間の異常によるsplitフォールバックがsplitの残フレームと一致しません");
+        }
+        ++faultIndex;
+    }
+    // splitの主Aは合計12.8秒、統合後の主Bは合計19.2秒。主変更後のAサブ各4.267秒も除外する。
+    const MinimumDurationSection reselectedShort = { MIN_DURATION_SHORT_UNITS, AUDIO_STEREO, 1, MinimumDurationFault::ADTS };
+    const auto reselected = MakeMinimumDurationFixture({ reselectedShort,
+        { MIN_DURATION_RESELECT_UNITS, AUDIO_MONO, 1, MinimumDurationFault::NONE, 1280 }, reselectedShort,
+        { MIN_DURATION_RESELECT_UNITS, AUDIO_32_LFE, 1, MinimumDurationFault::NONE, 1280 }, reselectedShort,
+        { MIN_DURATION_RESELECT_UNITS, AUDIO_STEREO, 1, MinimumDurationFault::NONE, 1280 } },
+        directory, _T("reselected-main"));
+    const size_t reselectedLongFrames = 3 * MIN_DURATION_RESELECT_UNITS * MIN_DURATION_UNIT_TICKS / MIN_DURATION_VIDEO_TICKS;
+    const auto originalSplit = CollectMinimumDurationResult(reselected, AFC_SPLIT, MIN_DURATION_THRESHOLD_SECONDS,
+        { CMTYPE_BOTH }, {}, {}, true);
+    Require(MinimumDurationFrameCount(originalSplit) == 3 * shortFrames + reselectedLongFrames,
+        "主フォーマット再選択fixtureの元splitキーが不正です");
+    std::set<int64_t> expectedReselectedPTS;
+    for (const auto& frame : reselected.video) {
+        if (frame.format.displayWidth == 1280) expectedReselectedPTS.insert(frame.PTS);
+    }
+    for (const auto mode : { AFC_MERGE, AFC_SEPARATE }) {
+        const auto result = CollectMinimumDurationResult(reselected, mode, MIN_DURATION_THRESHOLD_SECONDS,
+            { CMTYPE_BOTH }, {}, {}, true);
+        Require(result.planned && MinimumDurationFrameCount(result) == reselectedLongFrames,
+            "主再選択後に除外した短サブのADTS異常でsplitへ戻りました");
+        Require(result.videoPts.size() == 1 && result.videoPts.begin()->second == expectedReselectedPTS,
+            "主再選択後の残映像PTSが最終主フォーマットBと一致しません");
+        Require(result.hasConvert == (mode == AFC_MERGE), "主再選択後のCONVERT有無が不正です");
+        const size_t excludedAudioCount = 3 * MIN_DURATION_SHORT_UNITS * MIN_DURATION_UNIT_TICKS / MIN_DURATION_AUDIO_TICKS;
+        const size_t expectedExcludedAudioCount = mode == AFC_MERGE ? excludedAudioCount : 0;
+        if (result.excludedDecoderIndices.size() != expectedExcludedAudioCount) {
+            throw std::runtime_error("主再選択後に除外した短サブの助走禁止frame数が不正です: モード="
+                + std::to_string(static_cast<int>(mode)) + " 実値=" + std::to_string(result.excludedDecoderIndices.size())
+                + " 期待=" + std::to_string(expectedExcludedAudioCount));
+        }
+        for (int index : result.excludedDecoderIndices) {
+            Require(reselected.video[reselected.audio[index].PTS / MIN_DURATION_VIDEO_TICKS].format.displayWidth != 1280,
+                "最終主フォーマットBの元音声が助走禁止frameに含まれました");
+        }
+    }
+    std::cout << "最短区間・CM別キー・div・残区間事前検査テスト成功\n";
+}
+
+}
+
 int main(int argc, char** argv) {
     try {
+        if (argc > 2 && std::string(argv[2]) == "--cm-wave") {
+            MinimumDurationCmWaveTest(argv[1]);
+            return 0;
+        }
+        if (argc > 1) MinimumDurationCmWaveTest(argv[1]);
+#ifndef AUDIO_TRACK_PLANNER_ONLY
+        if (argc > 1) ConverterExcludedWarmTest(argv[1]);
+#endif
+        if (argc > 1) RunMinimumDurationTests(argv[1]);
         RunScenario(5, false);
         RunScenario(6, false);
         RunScenario(20, true);
         RunScenario(0, false, 1344);
+        RunScenario(0, false, -576);
         RunScenario(5, false, 0, 0, tstring(), AFC_MERGE);
         RunScenario(6, false, 0, 0, tstring(), AFC_MERGE);
         RunScenario(20, true, 0, 0, tstring(), AFC_MERGE);
         RunScenario(0, false, 1344, 0, tstring(), AFC_MERGE);
+        RunScenario(0, false, -576, 0, tstring(), AFC_MERGE);
         if (argc > 1) {
 #ifndef AUDIO_TRACK_PLANNER_ONLY
             BuilderCopyTest(argv[1]);

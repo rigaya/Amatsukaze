@@ -1737,7 +1737,7 @@ void DoBadThing() {
         return; // CM解析のみならここで終了
     }
 
-    auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes());
+    auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes(), setting.getMinOutputDuration());
     audioDiffInfo.printAudioPtsDiff(ctx);
 
     const auto& allKeys = reformInfo.getOutFileKeys();

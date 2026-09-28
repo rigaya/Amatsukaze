@@ -224,7 +224,7 @@ public:
 
     // 3. CM解析が終了したらエンコード前に呼ぶ
     // cmtypes: 出力するCMタイプリスト
-    AudioDiffInfo genAudio(const std::vector<CMType>& cmtypes);
+    AudioDiffInfo genAudio(const std::vector<CMType>& cmtypes, int minOutputDurationSeconds = 0);
 
     // 中間映像ファイルの個数
     int getNumVideoFile() const;
@@ -344,6 +344,17 @@ private:
     AUDIO_FORMAT_CHANGE_MODE audioMode_ = AFC_SPLIT;
     int numMaxAudio_ = 1;
     int audioSampleRate_ = 0;
+    tstring audioPath_;
+    std::vector<int> minExcludedDecoderFrames_;
+
+    // 再開ファイルには保存せず、prepareで音声考慮/映像のみの対応を作り直す。
+    struct FormatMapping {
+        std::vector<OutVideoFormat> formats;
+        std::vector<int> formatStarts, fileFormats, fileStarts, frameFormats;
+    };
+    FormatMapping splitMapping_, mergedMapping_;
+    std::vector<int> mergedSections_, frameSections_;
+    bool splitSub_ = false;
 
     // 計算データ
     bool isVFR_;
@@ -392,7 +403,12 @@ private:
 
     void reformMain(bool splitSub);
 
-    void calcSizeAndTime(const std::vector<CMType>& cmtypes);
+    void calcSizeAndTime(const std::vector<CMType>& cmtypes, int minOutputDurationSeconds);
+    void buildOutputFiles(const std::vector<CMType>& cmtypes);
+    void buildFileFormatMapping(const std::vector<int>& sections, const std::vector<int>& frameSections, bool splitSub, const std::vector<int>* retainedCounts = nullptr);
+    FormatMapping getFormatMapping() const;
+    void setFormatMapping(const FormatMapping& mapping);
+    bool checkOutputAudio(const std::vector<bool>& referenced);
 
     template<typename I>
     void makeModifiedPTS(int64_t modifiedFirstPTS, std::vector<double>& modifiedPTS, const std::vector<I>& frames) {
@@ -425,9 +441,9 @@ private:
         }
     }
 
-    void registerOrGetFormat(OutVideoFormat& format);
+    void registerOrGetFormat(OutVideoFormat& format, bool ignoreAudio = false);
 
-    bool isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b);
+    bool isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b, bool ignoreAudio = false);
 
     struct AudioState {
         double time = 0; // 追加された音声フレームの合計時間
@@ -445,6 +461,8 @@ private:
     AudioDiffInfo initAudioDiffInfo();
 
     // フィルタ入力から音声構築
+    void genAudioFrameReferences();
+    void planAudioTracks();
     AudioDiffInfo genAudioStream();
 
     void genWaveAudioStream();
