@@ -15,6 +15,10 @@
                 disabled="@(!HasJlsSegments)"
                 title="@(HasJlsSegments ? "join_logo_scpの構成区間をシークバーに表示" : "join_logo_scpの構成区間情報(jls0.txt)がありません")">jls区間</button>
         <button class="trim-btn trim-btn-primary" @onclick="SaveTrims" disabled="@(!_hasChanges || _session == null)">保存</button>
+        <button class="trim-btn trim-btn-sm trim-btn-history" @onclick="UndoEdit" disabled="@(_undoStack.Count == 0)"
+                title="元に戻す (Ctrl+Z)" aria-label="元に戻す">&#x21B6;</button>
+        <button class="trim-btn trim-btn-sm trim-btn-history" @onclick="RedoEdit" disabled="@(_redoStack.Count == 0)"
+                title="やり直し (Ctrl+Y)" aria-label="やり直し">&#x21B7;</button>
         <div class="trim-toolbar-requeue">
             <select class="trim-profile-select" @bind="_selectedProfile" disabled="@(_profiles == null || _profiles.Count == 0)">
                 @if (_profiles != null)
@@ -542,7 +546,14 @@
 
     // 分割点リスト
     private List<int> _divisionPoints = new List<int>();
+    private List<int> _savedDivisionPoints = new List<int>(); // 最後に読み込み/保存した分割点（変更有無の判定用）
     private int _selectedDivisionPoint = -1;
+
+    // 元に戻す/やり直し（画面内のみ保持、閉じたら破棄）
+    private sealed record EditSnapshot(int[] EditFrames, int[] DivisionPoints, int SelectedEditPoint, int SelectedDivisionPoint);
+    private const int UndoLimit = 200;
+    private readonly List<EditSnapshot> _undoStack = new List<EditSnapshot>();
+    private readonly List<EditSnapshot> _redoStack = new List<EditSnapshot>();
 
     // プロファイル選択・再投入
     private List<string> _profiles = new List<string>();
@@ -922,9 +933,12 @@
             .Distinct()
             .OrderBy(point => point)
             .ToList();
+        _savedDivisionPoints = new List<int>(_divisionPoints);
         _selectedDivisionPoint = -1;
         _editPointsChanged = false;
         _divisionPointsChanged = false;
+        _undoStack.Clear();
+        _redoStack.Clear();
 
         _loading = false;
         _loadingFrame = 0;
@@ -1217,10 +1231,11 @@
     // 編集点を初期状態にリセット
     private void ResetEditPoints()
     {
+        var before = CaptureEditSnapshot();
         _editPoints = _initialEditPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
         NormalizeEditPoints();
         _selectedEditPoint = -1;
-        _editPointsChanged = false;
+        CommitUndo(before);
         _statusMessage = "編集点をリセットしました";
         _isError = false;
         StateHasChanged();
@@ -1237,9 +1252,10 @@
         {
             return; // 既に存在
         }
+        var before = CaptureEditSnapshot();
         _editPoints.Add(new EditPoint { Frame = _currentFrame });
         NormalizeEditPoints(_currentFrame);
-        _editPointsChanged = true;
+        CommitUndo(before);
         StateHasChanged();
     }
 
@@ -1249,13 +1265,90 @@
         {
             return;
         }
+        var before = CaptureEditSnapshot();
         _editPoints.RemoveAt(_selectedEditPoint);
         NormalizeEditPoints();
         if (_selectedEditPoint >= _editPoints.Count)
         {
             _selectedEditPoint = _editPoints.Count - 1;
         }
-        _editPointsChanged = true;
+        CommitUndo(before);
+        StateHasChanged();
+    }
+
+    private EditSnapshot CaptureEditSnapshot()
+        => new EditSnapshot(_editPoints.Select(e => e.Frame).ToArray(), _divisionPoints.ToArray(), _selectedEditPoint, _selectedDivisionPoint);
+
+    // 編集操作の後に呼ぶ: 実際に変化していれば操作前の状態を履歴に積み、変更フラグを更新
+    private void CommitUndo(EditSnapshot before)
+    {
+        if (!before.EditFrames.SequenceEqual(_editPoints.Select(e => e.Frame)) ||
+            !before.DivisionPoints.SequenceEqual(_divisionPoints))
+        {
+            _undoStack.Add(before);
+            if (_undoStack.Count > UndoLimit)
+            {
+                _undoStack.RemoveAt(0);
+            }
+            _redoStack.Clear();
+            // 直前の「保存しました」「元に戻しました」等は状態と合わなくなるので消す
+            _statusMessage = null;
+            _isError = false;
+        }
+        UpdateChangedFlags();
+    }
+
+    // 変更有無は最後に読み込み/保存した状態との比較で決める（元に戻して一致すれば未変更）
+    private void UpdateChangedFlags()
+    {
+        _editPointsChanged = !_editPoints.Select(e => e.Frame).SequenceEqual(_initialEditPoints.Select(e => e.Frame));
+        _divisionPointsChanged = !_divisionPoints.SequenceEqual(_savedDivisionPoints);
+    }
+
+    private void UndoEdit() => StepEditHistory(_undoStack, _redoStack, "元に戻しました", "これ以上元に戻せません");
+
+    private void RedoEdit() => StepEditHistory(_redoStack, _undoStack, "やり直しました", "やり直す操作がありません");
+
+    private void StepEditHistory(List<EditSnapshot> from, List<EditSnapshot> to, string doneMessage, string emptyMessage)
+    {
+        if (_session == null) return;
+        if (from.Count == 0)
+        {
+            _statusMessage = emptyMessage;
+            _isError = false;
+            StateHasChanged();
+            return;
+        }
+        var current = CaptureEditSnapshot();
+        var target = from[from.Count - 1];
+        from.RemoveAt(from.Count - 1);
+        to.Add(current);
+
+        var maxFrame = _session.NumFrames - 1;
+        _editPoints = target.EditFrames.Select(frame => new EditPoint { Frame = frame }).ToList();
+        NormalizeEditPoints();
+        _divisionPoints = target.DivisionPoints.Where(point => point > 0 && point <= maxFrame).ToList();
+        _selectedEditPoint = Math.Min(target.SelectedEditPoint, _editPoints.Count - 1);
+        _selectedDivisionPoint = Math.Min(target.SelectedDivisionPoint, _divisionPoints.Count - 1);
+        UpdateChangedFlags();
+
+        // 変化した位置へ移動して、何が戻ったか見えるようにする（復活した点を優先）
+        var changed = target.EditFrames.Except(current.EditFrames)
+            .Concat(target.DivisionPoints.Except(current.DivisionPoints))
+            .Concat(current.EditFrames.Except(target.EditFrames))
+            .Concat(current.DivisionPoints.Except(target.DivisionPoints))
+            .Where(frame => frame >= 0 && frame <= maxFrame)
+            .Select(frame => (int?)frame)
+            .FirstOrDefault();
+        if (changed.HasValue)
+        {
+            var idx = _editPoints.FindIndex(e => e.Frame == changed.Value);
+            if (idx >= 0) _selectedEditPoint = idx;
+            SetCurrentFrame(changed.Value);
+        }
+
+        _statusMessage = doneMessage;
+        _isError = false;
         StateHasChanged();
     }
 
@@ -1275,10 +1368,11 @@
         {
             return;
         }
+        var before = CaptureEditSnapshot();
         _divisionPoints.Add(_currentFrame);
         _divisionPoints.Sort();
         _selectedDivisionPoint = _divisionPoints.IndexOf(_currentFrame);
-        _divisionPointsChanged = true;
+        CommitUndo(before);
         StateHasChanged();
     }
 
@@ -1288,12 +1382,13 @@
         {
             return;
         }
+        var before = CaptureEditSnapshot();
         _divisionPoints.RemoveAt(_selectedDivisionPoint);
         if (_selectedDivisionPoint >= _divisionPoints.Count)
         {
             _selectedDivisionPoint = _divisionPoints.Count - 1;
         }
-        _divisionPointsChanged = true;
+        CommitUndo(before);
         StateHasChanged();
     }
 
@@ -1694,6 +1789,7 @@
 
     private void ToggleEditPoint()
     {
+        var before = CaptureEditSnapshot();
         var existing = _editPoints.FindIndex(e => e.Frame == _currentFrame);
         if (existing >= 0)
         {
@@ -1706,7 +1802,7 @@
             _editPoints.Add(new EditPoint { Frame = _currentFrame });
         }
         NormalizeEditPoints(_currentFrame);
-        _editPointsChanged = true;
+        CommitUndo(before);
         StateHasChanged();
     }
 
@@ -1721,9 +1817,10 @@
     private void MoveSelectedEditPointToCurrentFrame()
     {
         if (_selectedEditPoint < 0 || _selectedEditPoint >= _editPoints.Count) return;
+        var before = CaptureEditSnapshot();
         _editPoints[_selectedEditPoint].Frame = _currentFrame;
         NormalizeEditPoints(_currentFrame);
-        _editPointsChanged = true;
+        CommitUndo(before);
         StateHasChanged();
     }
 
@@ -1753,6 +1850,7 @@
             _statusMessage = "保存しました";
             _isError = false;
             _initialEditPoints = _editPoints.Select(e => new EditPoint { Frame = e.Frame }).ToList();
+            _savedDivisionPoints = new List<int>(_divisionPoints);
             _editPointsChanged = false;
             _divisionPointsChanged = false;
         }
@@ -2208,6 +2306,21 @@
         {
             ExecuteTrimCommand(commandId);
             return;
+        }
+        // 元に戻す: Ctrl+Z / やり直し: Ctrl+Y, Ctrl+Shift+Z（MacはCmdも可）
+        if ((e.CtrlKey || e.MetaKey) && !e.AltKey)
+        {
+            var key = e.Key.ToLowerInvariant();
+            if (key == "z")
+            {
+                if (e.ShiftKey) RedoEdit(); else UndoEdit();
+                return;
+            }
+            if (key == "y")
+            {
+                RedoEdit();
+                return;
+            }
         }
         switch (e.Key)
         {
