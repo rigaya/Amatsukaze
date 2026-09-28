@@ -1720,6 +1720,8 @@ void DoBadThing() {
             copyCutInfoForCMOnly(ctx, setting, reformInfo, cmanalyze, numVideoFiles);
         }
         if (setting.isOutputChapterEnabled()) {
+            // CM解析のみでも、最短区間を反映した出力キーと保持フレーム列を確定する。
+            reformInfo.genAudio(setting.getCMTypes(), setting.getMinOutputDuration());
             ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {
                 const auto& fileIn = reformInfo.getEncodeFile(key);
@@ -1728,7 +1730,7 @@ void DoBadThing() {
                     chapterMakers[key.video]->exec(key);
                     const auto path = setting.getTmpChapterPath(key);
                     if (File::exists(path)) {
-                        const auto dstchapter = setting.getOutChapterPath(fileIn.key, fileIn.keyMax, setting.getFormat(), eoInfo.format);
+                        const auto dstchapter = setting.getOutChapterPath(fileIn.outKey, fileIn.keyMax, setting.getFormat(), eoInfo.format);
                         File::copy(path, dstchapter);
                     }
                 }
