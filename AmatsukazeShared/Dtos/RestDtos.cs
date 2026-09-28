@@ -584,6 +584,20 @@ namespace Amatsukaze.Shared
         public List<TrimRange> Trims { get; set; } = new List<TrimRange>();
         public List<int> DivisionPoints { get; set; } = new List<int>();
         public List<double> FramePts { get; set; } = new List<double>();
+        // join_logo_scpの構成区間(jls0.txt)。ファイルがなければ空
+        public List<JlsSegment> JlsSegments { get; set; } = new List<JlsSegment>();
+    }
+
+    // join_logo_scp -oscp 出力の1区間
+    public class JlsSegment
+    {
+        public int Start { get; set; }
+        public int End { get; set; } // inclusive
+        public int Seconds { get; set; }      // 区間長(秒, 整数)
+        public int FrameDiff { get; set; }    // 秒数からの端数フレーム
+        public int LogoSeconds { get; set; }  // 区間内のロゴ表示秒数
+        public string Label { get; set; } = ""; // "CM", "L", "Trailer(add)" など(旧形式は空)
+        public bool JlsKeep { get; set; }     // jls出力Trim(trim0.avs)で本編として残る区間か
     }
 
     public class TrimSaveRequest

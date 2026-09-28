@@ -318,6 +318,11 @@
             var dragging = false;
             var markerMaxDist = 20; // ▽クリック有効範囲(px)
             var lastHighlighted = null; // ホバー中のハイライト対象マーカー
+            // ドラッグ中はCSS側でjls区間ポップアップを抑止する
+            function setDragging(v) {
+                dragging = v;
+                container.classList.toggle('is-dragging', v);
+            }
             function calcRatio(e) {
                 var rect = seekbar.getBoundingClientRect();
                 if (rect.width <= 0) return -1;
@@ -397,7 +402,7 @@
                     dotNetRef.invokeMethodAsync('OnSeekBarDivisionMarkerClick', r);
                 } else {
                     // シークバー本体: ダイレクト移動＋ドラッグ開始
-                    dragging = true;
+                    setDragging(true);
                     dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
                 }
                 e.preventDefault();
@@ -408,7 +413,7 @@
                 if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
             });
             document.addEventListener('mouseup', function () {
-                if (dragging) { dragging = false; setHighlight(null); container.style.cursor = ''; }
+                if (dragging) { setDragging(false); setHighlight(null); container.style.cursor = ''; }
             });
             // タッチ対応（Android等）
             function calcRatioTouch(e) {
@@ -452,7 +457,7 @@
                             : 'OnSeekBarMarkerClick',
                         r);
                 } else {
-                    dragging = true;
+                    setDragging(true);
                     dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
                 }
                 e.preventDefault();
@@ -463,8 +468,8 @@
                 if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
                 e.preventDefault();
             }, { passive: false });
-            container.addEventListener('touchend', function () { dragging = false; });
-            container.addEventListener('touchcancel', function () { dragging = false; });
+            container.addEventListener('touchend', function () { setDragging(false); });
+            container.addEventListener('touchcancel', function () { setDragging(false); });
         };
         // Trim調整: マウスホイールで1フレームずつ移動
         window.trimAdjustSetupWheel = function (dotNetRef) {

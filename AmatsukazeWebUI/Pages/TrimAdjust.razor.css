@@ -680,6 +680,113 @@
     border-bottom-color: #ff9ac8;
 }
 
+/* jls構成区間: 区間頭に薄い区切り線、ホバーで区間を少し浮かせて詳細を表示 */
+.trim-jls-seg {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 1px;
+    border-left: 1px solid rgba(170, 220, 255, 0.35);
+    box-sizing: border-box;
+}
+
+.trim-jls-seg.is-first {
+    border-left-color: transparent;
+}
+
+/* jls判定と現在のTrimが食い違う区間: バー上端に細い帯 */
+.trim-jls-seg.is-diff::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: rgba(255, 214, 120, 0.55);
+    pointer-events: none;
+}
+
+.trim-jls-seg:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-left-color: rgba(190, 230, 255, 0.7);
+}
+
+.trim-jls-tip {
+    position: absolute;
+    bottom: calc(100% + 16px); /* ▽マーカー領域の上 */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    padding: 5px 9px;
+    border: 1px solid rgba(170, 220, 255, 0.35);
+    border-radius: 4px;
+    background: rgba(24, 30, 38, 0.94);
+    color: #dde6ee;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: nowrap;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.1s ease 0s, visibility 0s linear 0.1s;
+}
+
+.trim-jls-seg.tip-left .trim-jls-tip {
+    left: 0;
+    transform: none;
+}
+
+.trim-jls-seg.tip-right .trim-jls-tip {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+/* 横切るだけでちらつかないよう少し遅らせて表示 */
+.trim-jls-seg:hover .trim-jls-tip {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 0.12s ease 0.15s, visibility 0s linear 0.15s;
+}
+
+.trim-seekbar-container.is-dragging .trim-jls-seg:hover {
+    background: none;
+}
+
+.trim-seekbar-container.is-dragging .trim-jls-tip {
+    visibility: hidden;
+    opacity: 0;
+}
+
+.trim-jls-tip-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.trim-jls-tip-index {
+    color: #8fa3b5;
+}
+
+.trim-jls-tip-label {
+    font-weight: 600;
+    color: #bfe3ff;
+}
+
+.trim-jls-tip-raw {
+    color: #8fa3b5;
+    font-size: 0.72rem;
+}
+
+.trim-jls-tip-diff {
+    color: #ffd678;
+    font-weight: 600;
+}
+
+.trim-frame-jls {
+    color: #9ccbee;
+}
+
 /* 編集点トグルボタン アクティブ状態 */
 .trim-btn-active {
     background: #e88030;
@@ -968,6 +1075,29 @@
 
     .trim-frame-info {
         color: #26547a;
+    }
+
+    .trim-frame-jls {
+        color: #2f78b0;
+    }
+
+    .trim-jls-tip {
+        background: rgba(246, 251, 255, 0.97);
+        border-color: rgba(70, 146, 204, 0.5);
+        color: #1f3b52;
+    }
+
+    .trim-jls-tip-index,
+    .trim-jls-tip-raw {
+        color: #6a8196;
+    }
+
+    .trim-jls-tip-label {
+        color: #1f6aa5;
+    }
+
+    .trim-jls-tip-diff {
+        color: #b36b00;
     }
 
     .trim-control-btn {

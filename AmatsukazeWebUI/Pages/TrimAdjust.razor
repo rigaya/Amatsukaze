@@ -11,6 +11,9 @@
 <div class="trim-adjust-page" @onkeydown="OnKeyDown" @onkeydown:preventDefault="true" tabindex="0" @ref="_pageRef">
     <div class="trim-toolbar">
         <button class="trim-btn trim-btn-sm" @onclick="ShowCheckLog" title="CM解析チェックログ">ログ</button>
+        <button class="trim-btn trim-btn-sm @(_showJls && HasJlsSegments ? "trim-btn-active" : "")" @onclick="ToggleShowJls"
+                disabled="@(!HasJlsSegments)"
+                title="@(HasJlsSegments ? "join_logo_scpの構成区間をシークバーに表示" : "join_logo_scpの構成区間情報(jls0.txt)がありません")">jls区間</button>
         <button class="trim-btn trim-btn-primary" @onclick="SaveTrims" disabled="@(!_hasChanges || _session == null)">保存</button>
         <div class="trim-toolbar-requeue">
             <select class="trim-profile-select" @bind="_selectedProfile" disabled="@(_profiles == null || _profiles.Count == 0)">
@@ -173,6 +176,12 @@
                     <span>Frame: @_currentFrame</span>
                     <span> | </span>
                     <span>@FormatTime(_currentFrame)</span>
+                    @if (_showJls && FindJlsSegmentIndex(_currentFrame) is var curJlsIdx && curJlsIdx >= 0)
+                    {
+                        var curJls = _session!.JlsSegments[curJlsIdx];
+                        <span> | </span>
+                        <span class="trim-frame-jls">jls #@(curJlsIdx + 1) @GetJlsLabelText(curJls.Label) @(curJls.Seconds)秒</span>
+                    }
                 </div>
 
                 @* 移動ボタン *@
@@ -321,6 +330,37 @@
                 <div class="trim-seekbar-container">
                     <div class="trim-seekbar" @ref="_seekBarRef">
                         <div class="trim-seekbar-bg" style="@GetSeekBarGradient()"></div>
+                        @* jls構成区間（薄い区切り線＋ホバーで詳細ポップアップ、操作はシークバー本体と同じ） *@
+                        @if (_showJls && HasJlsSegments)
+                        {
+                            var editSegments = BuildEditPointSegments();
+                            for (var jlsIdx = 0; jlsIdx < _session!.JlsSegments.Count; jlsIdx++)
+                            {
+                                var jls = _session.JlsSegments[jlsIdx];
+                                var jlsCenter = (jls.Start + jls.End) / 2;
+                                var curKeep = editSegments.Any(s => s.IsMain && jlsCenter >= s.Start && jlsCenter <= s.EndInclusive);
+                                var isDiff = curKeep != jls.JlsKeep;
+                                <div class="trim-jls-seg @(jls.Start <= 0 ? "is-first" : "") @(isDiff ? "is-diff" : "") @GetJlsTipAlignClass(jls)"
+                                     style="left: @(GetFramePercent(jls.Start))%; width: @(GetFrameSpanPercent(jls.Start, jls.End))%">
+                                    <div class="trim-jls-tip">
+                                        <div class="trim-jls-tip-head">
+                                            <span class="trim-jls-tip-index">#@(jlsIdx + 1)</span>
+                                            <span class="trim-jls-tip-label">@GetJlsLabelText(jls.Label)</span>
+                                            @if (!string.IsNullOrEmpty(jls.Label) && GetJlsLabelText(jls.Label) != jls.Label)
+                                            {
+                                                <span class="trim-jls-tip-raw">@jls.Label</span>
+                                            }
+                                            <span class="trim-jls-tip-sec">@(jls.Seconds)秒@(jls.FrameDiff != 0 ? $" ({jls.FrameDiff:+0;-0}f)" : "")</span>
+                                        </div>
+                                        <div>@jls.Start – @jls.End (@(jls.End - jls.Start + 1)f)　@FormatTime(jls.Start) – @FormatTime(jls.End)</div>
+                                        <div>
+                                            ロゴ @(jls.LogoSeconds)秒 | jls: @(jls.JlsKeep ? "本編" : "カット")
+                                            <span class="@(isDiff ? "trim-jls-tip-diff" : "")">/ 現在: @(curKeep ? "本編" : "カット")</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
                         @* 現在位置マーカー *@
                         <div class="trim-seekbar-cursor"
                              style="left: @(GetFramePercent(_currentFrame))%"></div>
@@ -496,6 +536,8 @@
     private List<EditPoint> _initialEditPoints = new List<EditPoint>(); // 初期ロード時の編集点（リセット用）
     private int _selectedEditPoint = -1;
     private bool _mobileEpOpen = false;
+    private const string ShowJlsStorageKey = "amatsukaze.trimAdjust.showJls";
+    private bool _showJls = true;
 
     // 分割点リスト
     private List<int> _divisionPoints = new List<int>();
@@ -556,6 +598,7 @@
         {
             _objRef = DotNetObjectReference.Create(this);
             await _pageRef.FocusAsync();
+            await LoadShowJlsSettingAsync();
             await LoadSessionAsync();
         }
         // セッション確立後、JSハンドラを設定
@@ -2187,6 +2230,98 @@
         if (seconds < 0) seconds = 0;
         var ts = TimeSpan.FromSeconds(seconds);
         return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
+    }
+
+    // start〜end(inclusive)のシークバー上の幅(%)
+    private string GetFrameSpanPercent(int start, int end)
+    {
+        if (_session == null || _session.NumFrames <= 1) return "0";
+        var pct = (double)(Math.Max(end, start) - start) / (_session.NumFrames - 1) * 100.0;
+        return pct.ToString("F4", CultureInfo.InvariantCulture);
+    }
+
+    private bool HasJlsSegments => _session?.JlsSegments != null && _session.JlsSegments.Count > 0;
+
+    // jls区間表示のON/OFFはブラウザごとの設定としてlocalStorageに保存
+    private async Task LoadShowJlsSettingAsync()
+    {
+        try
+        {
+            var value = await JS.InvokeAsync<string?>("localStorage.getItem", ShowJlsStorageKey);
+            if (value != null)
+            {
+                _showJls = value != "0";
+            }
+        }
+        catch
+        {
+            // localStorageが使えない環境では既定値(表示)のまま
+        }
+    }
+
+    private async Task ToggleShowJls()
+    {
+        _showJls = !_showJls;
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", ShowJlsStorageKey, _showJls ? "1" : "0");
+        }
+        catch
+        {
+            // 保存できなくても表示切替は有効
+        }
+        await _pageRef.FocusAsync();
+    }
+
+    // 指定フレームを含むjls区間のインデックス(区間の隙間なら-1)
+    private int FindJlsSegmentIndex(int frame)
+    {
+        if (!HasJlsSegments) return -1;
+        var list = _session!.JlsSegments;
+        int lo = 0, hi = list.Count - 1;
+        while (lo <= hi)
+        {
+            var mid = (lo + hi) / 2;
+            if (frame < list[mid].Start) hi = mid - 1;
+            else if (frame > list[mid].End) lo = mid + 1;
+            else return mid;
+        }
+        return -1;
+    }
+
+    // join_logo_scpのラベルを表示用の名称に変換（未知のラベルはそのまま）
+    private static string GetJlsLabelText(string label) => label switch
+    {
+        "" => "(ラベルなし)",
+        "CM" => "CM",
+        "L" => "本編(ロゴあり)",
+        "Nologo" => "ロゴなし",
+        "Nologo(cut)" => "ロゴなし(カット)",
+        "N-Edge(cut)" => "ロゴなし端(カット)",
+        "N-Edge(add)" => "ロゴなし端(残す)",
+        "L-Edge(cut)" => "ロゴ端(カット)",
+        "L-Edge(add)" => "ロゴ端(残す)",
+        "Trailer" => "予告",
+        "Trailer(cut)" => "予告(カット)",
+        "Trailer(add)" => "予告(残す)",
+        "Trailer(cut-cancel)" => "予告(カット取消)",
+        "Sponsor(cut)" => "提供(カット)",
+        "Sponsor(add)" => "提供(残す)",
+        "Endcard(add)" => "エンドカード(残す)",
+        "Border" => "境界",
+        "Border15s" => "境界(15秒)",
+        "Mix" => "ロゴ混在",
+        _ => label
+    };
+
+    // ポップアップが画面端ではみ出さないよう、区間位置で寄せ方向を変える
+    private string GetJlsTipAlignClass(JlsSegment seg)
+    {
+        if (_session == null || _session.NumFrames <= 1) return "";
+        var center = (seg.Start + seg.End) / 2.0 / (_session.NumFrames - 1);
+        if (center < 0.2) return "tip-left";
+        if (center > 0.8) return "tip-right";
+        return "";
     }
 
     private string GetFramePercent(int frame)

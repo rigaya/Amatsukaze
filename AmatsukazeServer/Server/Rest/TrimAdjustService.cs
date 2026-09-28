@@ -413,6 +413,8 @@ namespace Amatsukaze.Server.Rest
     {
         private static readonly Regex TempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
         private static readonly Regex TrimRegex = new Regex(@"Trim\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", RegexOptions.Compiled);
+        // jls0.txt: "開始 終了 秒数 端数フレーム ロゴ秒数 :ラベル"(ラベルなしの旧形式もあり)
+        private static readonly Regex JlsLineRegex = new Regex(@"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(\d+)(?:\s*:(\S*))?", RegexOptions.Compiled);
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(5);
 
         private readonly EncodeServer server;
@@ -502,7 +504,8 @@ namespace Amatsukaze.Server.Rest
                     FrameHeight = session.FrameHeight,
                     Trims = trims,
                     DivisionPoints = divisionPoints,
-                    FramePts = framePts
+                    FramePts = framePts,
+                    JlsSegments = LoadJlsSegments(tempDir)
                 };
                 return true;
             }
@@ -818,6 +821,71 @@ namespace Amatsukaze.Server.Rest
             }
 
             return trims;
+        }
+
+        // join_logo_scpの構成区間を読み込み: {tempDir}/jls0.txt
+        // JlsKeepはjls出力のTrim({tempDir}/trim0.avs)で区間中央が残るかどうか
+        private static List<JlsSegment> LoadJlsSegments(string tempDir)
+        {
+            var segments = new List<JlsSegment>();
+            var jlsPath = Path.Combine(tempDir, "jls0.txt");
+            if (!File.Exists(jlsPath))
+            {
+                return segments;
+            }
+
+            try
+            {
+                foreach (var line in File.ReadLines(jlsPath))
+                {
+                    var m = JlsLineRegex.Match(line);
+                    if (!m.Success)
+                    {
+                        continue;
+                    }
+                    var start = int.Parse(m.Groups[1].Value);
+                    var end = int.Parse(m.Groups[2].Value);
+                    if (end < start)
+                    {
+                        continue;
+                    }
+                    segments.Add(new JlsSegment
+                    {
+                        Start = start,
+                        End = end,
+                        Seconds = int.Parse(m.Groups[3].Value),
+                        FrameDiff = int.Parse(m.Groups[4].Value),
+                        LogoSeconds = int.Parse(m.Groups[5].Value),
+                        Label = m.Groups[6].Success ? m.Groups[6].Value : ""
+                    });
+                }
+
+                // {srcPath}.trim.avs ではなく jls自身の出力を基準にする
+                var jlsTrims = new List<TrimRange>();
+                var trimPath = Path.Combine(tempDir, "trim0.avs");
+                if (File.Exists(trimPath))
+                {
+                    foreach (Match match in TrimRegex.Matches(File.ReadAllText(trimPath)))
+                    {
+                        jlsTrims.Add(new TrimRange
+                        {
+                            Start = int.Parse(match.Groups[1].Value),
+                            End = int.Parse(match.Groups[2].Value)
+                        });
+                    }
+                }
+                foreach (var seg in segments)
+                {
+                    var mid = (seg.Start + seg.End) / 2;
+                    seg.JlsKeep = jlsTrims.Exists(t => t.Start <= mid && mid <= t.End);
+                }
+            }
+            catch
+            {
+                // 読み込み失敗時は表示しないだけなので空で返す
+                segments.Clear();
+            }
+            return segments;
         }
 
         // 分割点を読み込み: 1行につき1フレーム番号
