@@ -696,7 +696,7 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     if (fileIn.isAudioTrackPlanned) {
         const auto& track = fileIn.audioTrackPlan.at(entry.localIndex);
         for (const auto& ref : track.frames) {
-            plannedFrames.push_back(ref.operation == AudioTrackOperation::COPY ? ref.frameIndex : -1);
+            plannedFrames.push_back(ref.operation != AudioTrackOperation::SILENCE ? ref.frameIndex : -1);
         }
     }
     const auto& frameIndexList = !fileIn.isAudioTrackPlanned
@@ -752,7 +752,10 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     std::vector<uint8_t> srcBuffer;
     std::vector<uint8_t> dstBuffer;
 
-    for (const auto& frame : waveFrames) {
+    for (size_t waveIndex = 0; waveIndex < waveFrames.size(); ++waveIndex) {
+        const auto& frame = waveFrames[waveIndex];
+        const int sourceDualMonoChannel = fileIn.isAudioTrackPlanned
+            ? fileIn.audioTrackPlan.at(entry.localIndex).frames[waveIndex].dualMonoChannel : entry.dualMonoChannel;
         int frameSamples = (frame.waveLength > 0)
             ? (int)(frame.waveLength / (bytesPerSample * srcChannels))
             : samplesPerFrame;
@@ -774,16 +777,28 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
         }
 
         if (destChannels == srcChannels) {
+            if (fileIn.isAudioTrackPlanned && sourceDualMonoChannel >= 0) {
+                // mergeの目標が2chでも、元デュアルモノ区間は指定言語だけを両側へ渡す。
+                auto* samples = reinterpret_cast<int16_t*>(srcBuffer.data());
+                for (int sample = 0; sample < frameSamples; ++sample) {
+                    const int16_t value = samples[sample * srcChannels + sourceDualMonoChannel];
+                    samples[sample * srcChannels] = samples[sample * srcChannels + 1] = value;
+                }
+            }
             if (fwrite(srcBuffer.data(), srcBytes, 1, fp.get()) != 1) {
                 THROWF(IOException, "Whisper入力wav作成: 書き込みに失敗 (%s)", wavPath.c_str());
             }
         } else {
             dstBuffer.resize((size_t)frameSamples * bytesPerSample);
-            const int channelIndex = (entry.dualMonoChannel >= 0 && entry.dualMonoChannel < srcChannels) ? entry.dualMonoChannel : 0;
+            const int channelIndex = (sourceDualMonoChannel >= 0 && sourceDualMonoChannel < srcChannels) ? sourceDualMonoChannel : 0;
             const int16_t* srcSamples = reinterpret_cast<const int16_t*>(srcBuffer.data());
             int16_t* dstSamples = reinterpret_cast<int16_t*>(dstBuffer.data());
             for (int s = 0; s < frameSamples; s++) {
-                dstSamples[s] = srcSamples[s * srcChannels + channelIndex];
+                if (fileIn.isAudioTrackPlanned && sourceDualMonoChannel < 0) {
+                    dstSamples[s] = static_cast<int16_t>((static_cast<int>(srcSamples[s * srcChannels]) + srcSamples[s * srcChannels + 1]) / 2);
+                } else {
+                    dstSamples[s] = srcSamples[s * srcChannels + channelIndex];
+                }
             }
             if (fwrite(dstBuffer.data(), dstBuffer.size(), 1, fp.get()) != 1) {
                 THROWF(IOException, "Whisper入力wav作成: 書き込みに失敗 (%s)", wavPath.c_str());
@@ -1784,7 +1799,7 @@ void DoBadThing() {
                 for (int adst = 0; adst < (int)fileIn.audioTrackPlan.size(); ++adst) {
                     const auto& track = fileIn.audioTrackPlan[adst];
                     const auto filepath = setting.getIntAudioFilePath(key, adst, setting.getAudioEncoder());
-                    BuildAudioTrack(ctx, audioCache, track, filepath);
+                    BuildAudioTrack(ctx, audioCache, track, filepath, reformInfo.getAudioFrameList());
                     // Whisperも出力プランの無音区間とデュアルモノ展開を反映する。
                     const int dualMonoChannel = track.layout == AUDIO_MONO ? track.logicalTrack : -1;
                     whisperAudioEntries.push_back({ i, key, adst, filepath, track.sourceTrack, dualMonoChannel });

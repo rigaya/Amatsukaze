@@ -58,7 +58,7 @@ std::vector<uint8_t> MakePceSilentFrame(bool dualMono = false) {
     return stereo;
 }
 
-void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fallback = 0, const tstring& directory = tstring()) {
+void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fallback = 0, const tstring& directory = tstring(), AUDIO_FORMAT_CHANGE_MODE mode = AFC_SEPARATE) {
     AMTContext ctx;
     const int audioTicks = AAC_LC_FRAME_SAMPLES * MPEG_CLOCK_HZ / 48000;
     const int audioCount = 600;
@@ -146,7 +146,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     std::vector<TimeInfo> times;
     const auto audioInfo = audio;
     StreamReformInfo reform(ctx, 1, video, audio, captions, events, times);
-    reform.prepare(false, false, false, AFC_SEPARATE, audioPath);
+    reform.prepare(false, false, false, mode, audioPath);
     if (fallback != 0 && fallback != 5) {
         Require(reform.getNumEncoders(0) > 1, "未対応音声がジョブ全体のsplitに戻りません");
         return;
@@ -177,6 +177,19 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
             const int current = file.audioFrames[0][i];
             Require(previous >= 0 && current >= 0 && audioInfo[current].PTS - audioInfo[previous].PTS == audioTicks,
                 "位相が0.7フレームの連続音声を再選択または欠落しました");
+        }
+    }
+    if (mode == AFC_MERGE) {
+        const size_t expectedTracks = fallback == 5 ? 3 : 2;
+        Require(file.audioTrackPlan.size() == expectedTracks, "統合音声の論理トラック数が不正です");
+        for (size_t track = 0; track < file.audioTrackPlan.size(); ++track) {
+            Require(file.audioTrackPlan[track].name == _T("Audio") + std::to_string(track), "統合音声のトラック名が不正です");
+        }
+        if (fallback != 5) {
+            const auto& plan = file.audioTrackPlan.front();
+            Require(std::any_of(plan.frames.begin(), plan.frames.end(), [](const AudioTrackReference& ref) {
+                return ref.operation == AudioTrackOperation::CONVERT;
+            }), "異なるレイアウトがCONVERT参照になりませんでした");
         }
     }
     if (fallback == 5) Require(file.audioTrackPlan.size() == 3, "cfg0デュアルモノが主副monoへ展開されませんでした");
@@ -284,21 +297,61 @@ void BuilderRejectPceTest(const tstring& directory) {
     }
 }
 
+void BuilderMergeSilenceTest(const tstring& directory) {
+    AMTContext ctx;
+    for (const bool upmix : { false, true }) {
+        const auto stereo = GenerateSilentAdtsFrame(AUDIO_STEREO, 3);
+        const auto surround = GenerateSilentAdtsFrame(AUDIO_32_LFE, 3);
+        const auto source = directory + (upmix ? _T("/merge-up-source.aac") : _T("/merge-down-source.aac"));
+        const auto destination = directory + (upmix ? _T("/merge-up.aac") : _T("/merge-down.aac"));
+        std::vector<FileAudioFrameInfo> info(3);
+        std::vector<int64_t> offsets = { 0 };
+        {
+            File file(source, _T("wb"));
+            for (int index = 0; index < 3; ++index) {
+                const auto layout = upmix ? (index == 0 ? AUDIO_STEREO : AUDIO_32_LFE)
+                    : (index == 2 ? AUDIO_32_LFE : AUDIO_STEREO);
+                const auto& bytes = layout == AUDIO_STEREO ? stereo : surround;
+                info[index].audioIdx = 0;
+                info[index].PTS = index * 1920;
+                info[index].format = { layout, 48000 };
+                info[index].numSamples = AAC_LC_FRAME_SAMPLES;
+                info[index].fileOffset = offsets.back();
+                info[index].codedDataSize = static_cast<int>(bytes.size());
+                offsets.push_back(offsets.back() + bytes.size());
+                file.write(MemoryChunk(const_cast<uint8_t*>(bytes.data()), bytes.size()));
+            }
+        }
+        const auto plans = PlanMergeAudioTracks({ { 0, 1, 2 } }, info, 3.0 * AAC_LC_FRAME_SAMPLES * MPEG_CLOCK_HZ / 48000);
+        Require(plans.size() == 1 && plans.front().layout == (upmix ? AUDIO_32_LFE : AUDIO_STEREO), "統合変換の目標レイアウトが不正です");
+        PacketCache cache(ctx, source, offsets, 2, 2);
+        BuildAudioTrack(ctx, cache, plans.front(), destination, info);
+    }
+}
+
 int main(int argc, char** argv) {
     try {
         RunScenario(5, false);
         RunScenario(6, false);
         RunScenario(20, true);
         RunScenario(0, false, 1344);
+        RunScenario(5, false, 0, 0, tstring(), AFC_MERGE);
+        RunScenario(6, false, 0, 0, tstring(), AFC_MERGE);
+        RunScenario(20, true, 0, 0, tstring(), AFC_MERGE);
+        RunScenario(0, false, 1344, 0, tstring(), AFC_MERGE);
         if (argc > 1) {
+#ifndef AUDIO_TRACK_PLANNER_ONLY
             BuilderCopyTest(argv[1]);
             BuilderDualMonoTest(argv[1]);
             BuilderRejectPceTest(argv[1]);
+            BuilderMergeSilenceTest(argv[1]);
+#endif
             RunScenario(0, false, 0, 1);
             RunScenario(0, false, 0, 2);
             RunScenario(0, false, 0, 3, argv[1]);
             RunScenario(0, false, 0, 4, argv[1]);
             RunScenario(0, false, 0, 5, argv[1]);
+            for (int fallback = 1; fallback <= 5; ++fallback) RunScenario(0, false, 0, fallback, argv[1], AFC_MERGE);
         }
         std::cout << "StreamReform合成入力テスト成功\n";
         return 0;

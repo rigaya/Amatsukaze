@@ -2,6 +2,7 @@
 """既存Linuxビルドのヘッダ設定を使い、音声プランと無音生成を単独で検証する。"""
 import argparse
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -10,6 +11,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("build_dir", type=Path)
 parser.add_argument("output_dir", type=Path)
 parser.add_argument("--integration", action="store_true", help="StreamReform合成入力とPacketCacheコピーも検証する")
+parser.add_argument("--planner-only", action="store_true", help="統合時にPlannerとStreamReformだけを検証する")
 args = parser.parse_args()
 build = args.build_dir.resolve()
 output = args.output_dir.resolve()
@@ -32,12 +34,25 @@ print((output / "test.log").read_text(), end="")
 
 if args.integration:
     command = command[:command.index("-DAUDIO_TRACK_STANDALONE")]
+    if args.planner_only:
+        command += ["-DAUDIO_TRACK_PLANNER_ONLY"]
     command += [str(project / "Amatsukaze" / name) for name in (
         "StreamReform.cpp", "StreamUtils.cpp", "StringUtils.cpp", "FileUtils.cpp", "OSUtil.cpp", "AdtsParser.cpp",
         "Mpeg2TsParser.cpp", "AudioTrackPlanner.cpp", "AudioTrackBuilder.cpp", "PacketCache.cpp")]
+    converter = project / "Amatsukaze/AudioTrackConverter.cpp"
+    converter_libraries = []
+    if converter.exists() and not args.planner_only:
+        command += [str(converter), str(project / "Amatsukaze/ReaderWriterFFmpeg.cpp")]
+        ffmpeg_include = next(Path(item[2:]) for item in command if item.startswith("-I")
+                              and (Path(item[2:]) / "libavcodec/avcodec.h").exists())
+        environment = dict(os.environ)
+        environment["PKG_CONFIG_PATH"] = str(ffmpeg_include.parent / "lib/pkgconfig") + os.pathsep + environment.get("PKG_CONFIG_PATH", "")
+        flags = subprocess.check_output(["pkg-config", "--libs", "--static", "libavcodec", "libavutil"], env=environment, text=True)
+        converter_libraries = shlex.split(flags)
     command += [str(Path(__file__).with_name("AudioTrackStreamReformTest.cpp")),
                 str(build / "common/libcommon.a"), str(build / "libfaad/libfaad.a"),
                 "-Wl,--gc-sections", "-o", str(output / "stream_reform_test")]
+    command += converter_libraries
     (output / "stream-build-command.json").write_text(json.dumps(command, ensure_ascii=False, indent=2))
     with (output / "stream-build.log").open("w") as log:
         subprocess.run(command, cwd=entry["directory"], stdout=log, stderr=subprocess.STDOUT, check=True)
@@ -59,9 +74,10 @@ print((output / "faad-test.log").read_text(), end="")
 import array
 checks = []
 files = [(output / ("silent" + str(ch) + ".aac"), 200) for ch in range(1, 7)]
-if args.integration:
+if args.integration and not args.planner_only:
     files += [(output / ("builder-dual-" + str(track) + ".aac"), 3) for track in range(3)]
     files += [(output / "builder-pce-source.aac", 1)]
+    files += [(output / "merge-up.aac", 3), (output / "merge-down.aac", 3)]
 for path, expected_packets in files:
     decode = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le", "-"], capture_output=True, check=True)
     samples = array.array("h", decode.stdout)

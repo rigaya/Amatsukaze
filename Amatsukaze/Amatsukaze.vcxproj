@@ -428,6 +428,7 @@
     <ClInclude Include="AudioFormatChange.h" />
     <ClInclude Include="AudioTrackPlanner.h" />
     <ClInclude Include="AudioTrackBuilder.h" />
+    <ClInclude Include="AudioTrackConverter.h" />
     <ClInclude Include="CaptionData.h" />
     <ClInclude Include="CaptionFormatter.h" />
     <ClInclude Include="CMAnalyze.h" />
@@ -508,6 +509,7 @@
     <ClCompile Include="AudioEncoder.cpp" />
     <ClCompile Include="AudioTrackPlanner.cpp" />
     <ClCompile Include="AudioTrackBuilder.cpp" />
+    <ClCompile Include="AudioTrackConverter.cpp" />
     <ClCompile Include="CaptionData.cpp" />
     <ClCompile Include="CaptionFormatter.cpp" />
     <ClCompile Include="CMAnalyze.cpp" />

@@ -1,7 +1,9 @@
 ﻿#pragma once
 
 #include "AudioTrackPlanner.h"
+#include "StreamReform.h"
 #include "PacketCache.h"
 
 std::vector<uint8_t> GenerateSilentAdtsFrame(AUDIO_CHANNELS layout, int samplingFrequencyIndex);
-void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& plan, const tstring& path);
+void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& plan, const tstring& path,
+    const std::vector<FileAudioFrameInfo>& frameInfo = {});

@@ -32,4 +32,8 @@ std::vector<AudioTrackPlan> PlanSeparateAudioTracks(
     const std::vector<std::vector<int>>& input,
     const std::vector<FileAudioFrameInfo>& frameInfo,
     double duration90kHz);
+std::vector<AudioTrackPlan> PlanMergeAudioTracks(
+    const std::vector<std::vector<int>>& input,
+    const std::vector<FileAudioFrameInfo>& frameInfo,
+    double duration90kHz);
 void ValidateAudioTrackPlans(const std::vector<AudioTrackPlan>& plans, double duration90kHz);

@@ -57,17 +57,21 @@ void ValidateAudioTrackPlans(const std::vector<AudioTrackPlan>& plans, double du
         if (std::abs(count * frameDuration - duration90kHz) > frameDuration + 1e-6) {
             THROW(FormatException, "音声トラックと映像の時間差が1フレームを超えています");
         }
-        bool hasCopy = false;
+        bool hasAudio = false;
         for (const auto& ref : plan.frames) {
             if (ref.dstLayout != plan.layout ||
-                (ref.operation != AudioTrackOperation::COPY && ref.operation != AudioTrackOperation::SILENCE) ||
+                (ref.operation != AudioTrackOperation::COPY && ref.operation != AudioTrackOperation::SILENCE &&
+                    ref.operation != AudioTrackOperation::CONVERT) ||
+                (ref.operation == AudioTrackOperation::CONVERT &&
+                    (ref.frameIndex < 0 || GetAudioAdtsChannelConfiguration(ref.srcLayout) < 0 ||
+                        ref.srcLayout == plan.layout || ref.dualMonoChannel < -1 || ref.dualMonoChannel > 1)) ||
                 (ref.operation == AudioTrackOperation::COPY &&
                     (ref.frameIndex < 0 || ref.srcLayout != plan.layout || ref.dualMonoChannel < -1 || ref.dualMonoChannel > 1))) {
-                THROW(FormatException, "分離音声トラックの参照が不正です");
+                THROW(FormatException, "音声トラックの参照が不正です");
             }
-            hasCopy |= ref.operation == AudioTrackOperation::COPY;
+            hasAudio |= ref.operation != AudioTrackOperation::SILENCE;
         }
-        if (!hasCopy) THROW(FormatException, "全区間が無音の音声トラックが残っています");
+        if (!hasAudio) THROW(FormatException, "全区間が無音の音声トラックが残っています");
     }
 }
 
@@ -150,6 +154,46 @@ std::vector<AudioTrackPlan> PlanSeparateAudioTracks(
             return a.plan.logicalTrack < b.plan.logicalTrack;
         });
         for (auto& candidate : candidates) output.push_back(std::move(candidate.plan));
+    }
+    ValidateAudioTrackPlans(output, duration90kHz);
+    return output;
+}
+
+std::vector<AudioTrackPlan> PlanMergeAudioTracks(
+    const FileAudioFrameList& input, const std::vector<FileAudioFrameInfo>& frameInfo, double duration90kHz) {
+    const auto separated = PlanSeparateAudioTracks(input, frameInfo, duration90kHz);
+    std::vector<AudioTrackPlan> output;
+    for (size_t source = 0; source < input.size(); ++source) {
+        for (int logical = 0; logical < 2; ++logical) {
+            const AudioTrackPlan* longest = nullptr;
+            size_t longestCount = 0;
+            for (const auto& plan : separated) {
+                if (plan.sourceTrack != static_cast<int>(source) || plan.logicalTrack != logical) continue;
+                const size_t count = std::count_if(plan.frames.begin(), plan.frames.end(), [](const AudioTrackReference& ref) {
+                    return ref.operation == AudioTrackOperation::COPY;
+                });
+                if (!longest || count > longestCount || (count == longestCount &&
+                    GetAudioAdtsChannelConfiguration(plan.layout) > GetAudioAdtsChannelConfiguration(longest->layout))) {
+                    longest = &plan;
+                    longestCount = count;
+                }
+            }
+            if (!longest) continue;
+            AudioTrackPlan merged = *longest;
+            merged.name = StringFormat(_T("Audio%d"), static_cast<int>(output.size()));
+            for (const auto& plan : separated) {
+                if (plan.sourceTrack != static_cast<int>(source) || plan.logicalTrack != logical || plan.layout == merged.layout) continue;
+                for (size_t index = 0; index < plan.frames.size(); ++index) {
+                    const auto& sourceRef = plan.frames[index];
+                    if (sourceRef.operation != AudioTrackOperation::COPY) continue;
+                    auto& targetRef = merged.frames[index];
+                    targetRef = sourceRef;
+                    targetRef.operation = AudioTrackOperation::CONVERT;
+                    targetRef.dstLayout = merged.layout;
+                }
+            }
+            output.push_back(std::move(merged));
+        }
     }
     ValidateAudioTrackPlans(output, duration90kHz);
     return output;

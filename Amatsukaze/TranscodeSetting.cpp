@@ -849,8 +849,6 @@ ConfigWrapper::ConfigWrapper(
     if (conf.audioFormatChangeMode != AFC_SPLIT
         && (isEncodeAudio() || conf.format == FORMAT_TSREPLACE)) {
         ctx.info(_T("音声フォーマット変更設定は音声エンコードまたはtsreplace出力では無視し、splitとして扱います。"));
-    } else if (getAudioFormatChangeMode() == AFC_MERGE) {
-        THROW(ArgumentException, "--audio-format-change mergeは未実装です");
     }
     if (this->conf.encoderFilter != (ENUM_ENCODER)-1
         && this->conf.encoderFilter != ENCODER_QSVENC

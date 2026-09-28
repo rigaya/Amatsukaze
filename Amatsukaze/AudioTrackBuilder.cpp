@@ -1,5 +1,6 @@
 ﻿#include "AudioTrackBuilder.h"
 #include "AdtsParser.h"
+#include "AudioTrackConverter.h"
 
 namespace {
 constexpr int ADTS_HEADER_BYTES = 7;
@@ -87,11 +88,13 @@ std::vector<uint8_t> GenerateSilentAdtsFrame(AUDIO_CHANNELS layout, int sampling
     return std::vector<uint8_t>(result.ptr(), result.ptr() + result.size());
 }
 
-void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& plan, const tstring& path) {
+void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& plan, const tstring& path,
+    const std::vector<FileAudioFrameInfo>& frameInfo) {
     auto silence = GenerateSilentAdtsFrame(plan.layout, plan.samplingFrequencyIndex);
     File file(path, _T("wb"));
     TrackDualMonoSplitter splitter(ctx, file);
-    for (const auto& ref : plan.frames) {
+    for (size_t position = 0; position < plan.frames.size(); ++position) {
+        const auto& ref = plan.frames[position];
         if (ref.dstLayout != plan.layout) THROW(FormatException, "出力音声のレイアウトが一致しません");
         switch (ref.operation) {
         case AudioTrackOperation::SILENCE:
@@ -122,9 +125,15 @@ void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& 
             }
             break;
         }
-        case AudioTrackOperation::CONVERT:
-            THROW(InvalidOperationException, "音声の再エンコードは未実装です");
+        case AudioTrackOperation::CONVERT: {
+            size_t end = position + 1;
+            while (end < plan.frames.size() && plan.frames[end].operation == AudioTrackOperation::CONVERT &&
+                plan.frames[end].srcLayout == ref.srcLayout && plan.frames[end].dualMonoChannel == ref.dualMonoChannel) ++end;
+            auto converted = ConvertAudioTrackRun(ctx, cache, plan, position, end, frameInfo);
+            for (auto& frame : converted) file.write(MemoryChunk(frame.data(), frame.size()));
+            position = end - 1;
             break;
+        }
         default:
             THROW(FormatException, "音声トラックの出力操作が不正です");
         }

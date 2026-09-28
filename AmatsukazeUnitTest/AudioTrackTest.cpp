@@ -101,6 +101,45 @@ void PlannerTests() {
     Check(PlanSeparateAudioTracks({ { -1, -1 } }, info, Duration(2)).empty(), "全区間が無音のトラックが残っています");
 }
 
+void MergePlannerTests() {
+    auto info = MakeFrames({ AUDIO_STEREO, AUDIO_32_LFE, AUDIO_32_LFE, AUDIO_32_LFE, AUDIO_STEREO, AUDIO_2LANG });
+    auto plans = PlanMergeAudioTracks({ { 0, 1, 2, -1 }, { -1, 4, -1, -1 } }, info, Duration(4));
+    Check(plans.size() == 2 && plans[0].layout == AUDIO_32_LFE && plans[0].name == _T("Audio0") &&
+        plans[1].sourceTrack == 1 && plans[1].name == _T("Audio1"), "統合の最長レイアウトまたはトラック順が不正です");
+    Check(plans[0].frames[0].operation == AudioTrackOperation::CONVERT && plans[0].frames[0].frameIndex == 0 &&
+        plans[0].frames[0].srcLayout == AUDIO_STEREO && plans[0].frames[0].dstLayout == AUDIO_32_LFE &&
+        plans[0].frames[1].operation == AudioTrackOperation::COPY && plans[0].frames[3].operation == AudioTrackOperation::SILENCE,
+        "統合のCOPY/CONVERT/SILENCE参照が不正です");
+    plans = PlanMergeAudioTracks({ { 0, 4, 1 } }, info, Duration(3));
+    Check(plans[0].layout == AUDIO_STEREO && plans[0].frames[2].operation == AudioTrackOperation::CONVERT &&
+        plans[0].frames[2].srcLayout == AUDIO_32_LFE && plans[0].frames[2].dstLayout == AUDIO_STEREO,
+        "ステレオ最長時の5.1ch変換が不正です");
+    plans = PlanMergeAudioTracks({ { 0, 1 } }, info, Duration(2));
+    Check(plans.size() == 1 && plans[0].layout == AUDIO_32_LFE, "統合の同率時に多チャンネルを選びません");
+    plans = PlanMergeAudioTracks({ { 0, 4, 5 } }, info, Duration(3));
+    Check(plans.size() == 2 && plans[0].layout == AUDIO_STEREO && plans[1].layout == AUDIO_MONO,
+        "デュアルモノ論理トラックの統合レイアウトが不正です");
+    Check(plans[0].frames[2].operation == AudioTrackOperation::CONVERT && plans[0].frames[2].dualMonoChannel == 0 &&
+        plans[0].frames[2].srcLayout == AUDIO_MONO && plans[1].frames[2].operation == AudioTrackOperation::COPY &&
+        plans[1].frames[2].dualMonoChannel == 1 && plans[1].frames[0].operation == AudioTrackOperation::SILENCE,
+        "デュアルモノ統合の主副言語参照が不正です");
+    plans = PlanMergeAudioTracks({ { 0, 5, 5 } }, info, Duration(3));
+    Check(plans[0].layout == AUDIO_MONO && plans[0].frames[0].operation == AudioTrackOperation::CONVERT &&
+        plans[0].frames[1].dualMonoChannel == 0, "モノラル最長時のステレオ変換が不正です");
+    auto invalid = plans;
+    invalid[0].frames[0].srcLayout = AUDIO_MONO;
+    ExpectFormatError([&] { ValidateAudioTrackPlans(invalid, Duration(3)); });
+    invalid = plans;
+    invalid[0].frames[0].frameIndex = -1;
+    ExpectFormatError([&] { ValidateAudioTrackPlans(invalid, Duration(3)); });
+    invalid = plans;
+    invalid[0].frames[0].srcLayout = AUDIO_NONE;
+    ExpectFormatError([&] { ValidateAudioTrackPlans(invalid, Duration(3)); });
+    Check(PlanMergeAudioTracks({ { 0 }, { -1 } }, info, Duration(1)).size() == 1,
+        "統合でCMカット後の全無音トラックが残っています");
+    Check(PlanMergeAudioTracks({ { -1 } }, info, Duration(1)).empty(), "統合で全無音トラックが残っています");
+}
+
 std::vector<uint8_t> FromHex(const std::string& hex) {
     std::vector<uint8_t> bytes;
     for (size_t i = 0; i < hex.size(); i += 2) bytes.push_back(static_cast<uint8_t>(std::stoul(hex.substr(i, 2), nullptr, 16)));
@@ -136,6 +175,7 @@ void SilenceTests(const std::string& directory = "") {
 int main(int argc, char** argv) {
     try {
         PlannerTests();
+        MergePlannerTests();
         SilenceTests(argc > 1 ? argv[1] : "");
         std::cout << "Planner・無音AAC単体テスト成功\n";
         return 0;
@@ -148,5 +188,6 @@ int main(int argc, char** argv) {
 }
 #else
 TEST(AudioTrack, SeparatePlanner) { EXPECT_NO_THROW(PlannerTests()); }
+TEST(AudioTrack, MergePlanner) { EXPECT_NO_THROW(MergePlannerTests()); }
 TEST(AudioTrack, SilentAdtsBytes) { EXPECT_NO_THROW(SilenceTests()); }
 #endif

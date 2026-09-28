@@ -287,6 +287,7 @@ public:
         int encoderIndex, int videoFileIndex, CMType cmtype, double infps, double outfps) const;
 
     const std::vector<int64_t>& getAudioFileOffsets() const;
+    const std::vector<FileAudioFrameInfo>& getAudioFrameList() const { return audioFrameList_; }
 
     bool isVFR() const;
 

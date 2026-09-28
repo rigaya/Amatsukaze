@@ -275,14 +275,11 @@ void StreamReformInfo::prepare(bool splitSub, bool isEncodeAudio, bool isTsrepla
     AUDIO_FORMAT_CHANGE_MODE audioMode, const tstring& audioPath) {
     const auto prepareStart = std::chrono::steady_clock::now();
     audioMode_ = isEncodeAudio || isTsreplace ? AFC_SPLIT : audioMode;
-    const bool measureAudioCheck = audioMode_ == AFC_SEPARATE;
+    const bool measureAudioCheck = audioMode_ != AFC_SPLIT;
     double audioCheckSeconds = 0;
     audioSampleRate_ = 0;
     numMaxAudio_ = 1;
-    if (audioMode_ == AFC_MERGE) {
-        THROW(FormatException, "音声フォーマット変更のmergeモードは未実装です");
-    }
-    if (audioMode_ == AFC_SEPARATE) {
+    if (audioMode_ != AFC_SPLIT) {
         // 分割構成を確定する前に検査する。再開データの構造体は変更しない。
         const auto audioCheckStart = std::chrono::steady_clock::now();
         std::unique_ptr<File> audioFile;
@@ -790,7 +787,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     double curVideoFromPTS = -1;
     curFormat.videoFileId = -1;
     auto addSection = [&]() {
-        if (audioMode_ == AFC_SEPARATE) {
+        if (audioMode_ != AFC_SPLIT) {
             numMaxAudio_ = std::max(numMaxAudio_, (int)curFormat.audioFormat.size());
         }
         registerOrGetFormat(curFormat);
@@ -1033,7 +1030,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     for (int i = 0; i < (int)format_.size(); i++) {
         numMaxAudio = std::max(numMaxAudio, (int)format_[i].audioFormat.size());
     }
-    if (audioMode_ == AFC_SEPARATE) {
+    if (audioMode_ != AFC_SPLIT) {
         for (const auto& event : streamEventList_) {
             if (event.type == PID_TABLE_CHANGED) numMaxAudio_ = std::max(numMaxAudio_, event.numAudio);
         }
@@ -1220,7 +1217,7 @@ void StreamReformInfo::registerOrGetFormat(OutVideoFormat& format) {
 
 bool StreamReformInfo::isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b) {
     if (a.videoFormat != b.videoFormat) return false;
-    if (isEncodeAudio_ || isTsreplace_ || audioMode_ == AFC_SEPARATE) return true;
+    if (isEncodeAudio_ || isTsreplace_ || audioMode_ != AFC_SPLIT) return true;
     if (a.audioFormat.size() != b.audioFormat.size()) return false;
     for (int i = 0; i < (int)a.audioFormat.size(); i++) {
         if (a.audioFormat[i] != b.audioFormat[i]) {
@@ -1239,16 +1236,16 @@ AudioDiffInfo StreamReformInfo::initAudioDiffInfo() {
 
 // フィルタ入力から音声構築
 AudioDiffInfo StreamReformInfo::genAudioStream() {
-    std::vector<AudioFormat> separateAudioFormats;
-    if (audioMode_ == AFC_SEPARATE) separateAudioFormats.resize(numMaxAudio_);
+    std::vector<AudioFormat> plannedAudioFormats;
+    if (audioMode_ != AFC_SPLIT) plannedAudioFormats.resize(numMaxAudio_);
     // 各ファイルの音声構築
     for (int v = 0; v < (int)outFileKeys_.size(); v++) {
         auto key = outFileKeys_[v];
         int formatId = fileFormatStartIndex_[key.video] + key.format;
         auto& file = outFiles_[key.key()];
         const auto& srcFrames = filterFrameList_[key.video];
-        const auto& audioFormats = audioMode_ == AFC_SEPARATE
-            ? separateAudioFormats : format_[fileFormatId_[formatId]].audioFormat;
+        const auto& audioFormats = audioMode_ != AFC_SPLIT
+            ? plannedAudioFormats : format_[fileFormatId_[formatId]].audioFormat;
         int numAudio = (int)audioFormats.size();
         OutFileState state;
         state.formatId = formatId;
@@ -1260,10 +1257,12 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
             addVideoFrame(state, audioFormats, frame.pts, frame.frameDuration, nullptr);
         }
         file.audioFrames = std::move(state.audioFrameList);
-        file.isAudioTrackPlanned = audioMode_ == AFC_SEPARATE;
+        file.isAudioTrackPlanned = audioMode_ != AFC_SPLIT;
         file.audioTrackPlan.clear();
         if (file.isAudioTrackPlanned && !file.videoFrames.empty()) {
-            file.audioTrackPlan = PlanSeparateAudioTracks(file.audioFrames, audioFrameList_, file.duration);
+            file.audioTrackPlan = audioMode_ == AFC_MERGE
+                ? PlanMergeAudioTracks(file.audioFrames, audioFrameList_, file.duration)
+                : PlanSeparateAudioTracks(file.audioFrames, audioFrameList_, file.duration);
         }
     }
 
@@ -1271,7 +1270,7 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
     AudioDiffInfo adiff = initAudioDiffInfo();
     std::vector<OutFileState> states(fileFormatId_.size());
     for (int i = 0; i < (int)states.size(); i++) {
-        int numAudio = audioMode_ == AFC_SEPARATE ? numMaxAudio_ : (int)format_[fileFormatId_[i]].audioFormat.size();
+        int numAudio = audioMode_ != AFC_SPLIT ? numMaxAudio_ : (int)format_[fileFormatId_[i]].audioFormat.size();
         states[i].formatId = i;
         states[i].time = 0;
         states[i].audioState.resize(numAudio);
@@ -1282,8 +1281,8 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
         for (int i = 0; i < (int)frameList.size(); i++) {
             const auto& frame = frameList[i];
             int fileFormatId = frameFormatId_[frame.frameIndex];
-            const auto& audioFormats = audioMode_ == AFC_SEPARATE
-                ? separateAudioFormats : format_[fileFormatId_[fileFormatId]].audioFormat;
+            const auto& audioFormats = audioMode_ != AFC_SPLIT
+                ? plannedAudioFormats : format_[fileFormatId_[fileFormatId]].audioFormat;
             addVideoFrame(states[fileFormatId],
                 audioFormats, frame.pts, frame.frameDuration, &adiff);
         }
@@ -1387,7 +1386,7 @@ void StreamReformInfo::addVideoFrame(OutFileState& file,
         }
         double audioDuration = file.time - audioState.time;
         double audioPts = endPts - audioDuration;
-        const AudioFormat* format = isEncodeAudio_ || isTsreplace_ || audioMode_ == AFC_SEPARATE ? nullptr : &audioFormat[i];
+        const AudioFormat* format = isEncodeAudio_ || isTsreplace_ || audioMode_ != AFC_SPLIT ? nullptr : &audioFormat[i];
         fillAudioFrames(file, i, format, audioPts, audioDuration, adiff);
     }
 }
@@ -1442,7 +1441,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
     auto& state = file.audioState[index];
     auto& outFrameList = file.audioFrameList.at(index);
     const auto& frameList = indexAudioFrameList_[index];
-    if (audioMode_ == AFC_SEPARATE) {
+    if (audioMode_ != AFC_SPLIT) {
         // 全トラックを同じ1024サンプルの時間格子に載せる。長い欠落と末尾は無音にする。
         const double frameDuration = AAC_LC_FRAME_SAMPLES * MPEG_CLOCK_HZ / (double)audioSampleRate_;
         // 早めに採用したフレームを次の映像呼び出しで再選択しない。

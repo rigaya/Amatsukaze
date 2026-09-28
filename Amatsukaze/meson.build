@@ -7,6 +7,7 @@ amatsukaze_sources = [
   'AudioEncoder.cpp',
   'AudioTrackPlanner.cpp',
   'AudioTrackBuilder.cpp',
+  'AudioTrackConverter.cpp',
   'CMAnalyze.cpp',
   'CaptionData.cpp',
   'CaptionFormatter.cpp',
