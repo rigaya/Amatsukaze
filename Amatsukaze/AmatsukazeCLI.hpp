@@ -74,6 +74,7 @@ static void printHelp(const tchar* bin) {
         "                      指定しなければ音声はエンコードしない\n"
         "  -ae|--audio-encoder <パス> 音声エンコーダ[]"
         "  -aeo|--audio-encoder-option <オプション> 音声エンコーダへ渡すオプション[]\n"
+        "  --audio-format-change split|merge|separate 音声フォーマット変更時の出力方法[split]\n"
         "  -fmt|--format <フォーマット> 出力フォーマット[mp4]\n"
         "                      対応フォーマット: mp4,mkv,m2ts,ts,tsreplace\n"
         "  --use-mkv-when-sub-exists 字幕がある場合にはmkv出力を強制する\n"
@@ -367,6 +368,17 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.audioEncoder = audioEncoderFtomString(arg);
             if (conf.audioEncoder == (ENUM_AUDIO_ENCODER)-1) {
                 printTStderr(StringFormat(_T("--audio-encoder-typeの指定が間違っています: %s\n"), arg.c_str()));
+            }
+        } else if (key == _T("--audio-format-change")) {
+            const tstring arg = getParam(argc, argv, i++);
+            if (arg == _T("split")) {
+                conf.audioFormatChangeMode = AFC_SPLIT;
+            } else if (arg == _T("merge")) {
+                conf.audioFormatChangeMode = AFC_MERGE;
+            } else if (arg == _T("separate")) {
+                conf.audioFormatChangeMode = AFC_SEPARATE;
+            } else {
+                THROW(ArgumentException, "--audio-format-changeにはsplit、merge、separateを指定してください");
             }
         } else if (key == _T("-ae") || key == _T("--audio-encoder")) {
             conf.audioEncoderPath = pathNormalize(getParam(argc, argv, i++));

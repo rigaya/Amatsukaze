@@ -472,7 +472,11 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
     const tstring& encoderName,
-    const tstring& encoderOptions) {
+    const tstring& encoderOptions,
+    const std::vector<tstring>& audioTrackNames) {
+    if (!audioTrackNames.empty() && audioTrackNames.size() != inAudios.size()) {
+        THROW(ArgumentException, "音声トラック名の数が音声ファイル数と一致しません");
+    }
     std::vector<std::pair<tstring, bool>> ret;
 
     StringBuilderT sb;
@@ -511,7 +515,11 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         }
         sb.append(_T("\""));
         for (int i = 0; i < (int)inAudios.size(); i++) {
-            sb.append(_T(" -add \"%s\"#audio:name=Audio%d"), inAudios[i], i);
+            if (audioTrackNames.empty()) {
+                sb.append(_T(" -add \"%s\"#audio:name=Audio%d"), inAudios[i], i);
+            } else {
+                sb.append(_T(" -add \"%s\"#audio:name=%s"), inAudios[i], audioTrackNames[i]);
+            }
         }
         if (needChapter && !needTimecode) {
             sb.append(_T(" -chap \"%s\""), chapterpath);
@@ -609,8 +617,11 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         }
         sb.append(_T(" \"%s\""), inVideo);
 
-        for (const auto& inAudio : inAudios) {
-            sb.append(_T(" \"%s\""), inAudio);
+        for (int i = 0; i < (int)inAudios.size(); i++) {
+            if (!audioTrackNames.empty()) {
+                sb.append(_T(" --track-name \"0:%s\""), audioTrackNames[i]);
+            }
+            sb.append(_T(" \"%s\""), inAudios[i]);
         }
         for (int i = 0; i < (int)inSubs.size(); i++) {
             sb.append(_T(" --track-name \"0:%s\" \"%s\""), subsTitles[i], inSubs[i]);
@@ -835,6 +846,12 @@ ConfigWrapper::ConfigWrapper(
     : AMTObject(ctx)
     , conf(conf)
     , tmpDir(ctx, conf.workDir, conf.noRemoveTmp, conf.resumeDir) {
+    if (conf.audioFormatChangeMode != AFC_SPLIT
+        && (isEncodeAudio() || conf.format == FORMAT_TSREPLACE)) {
+        ctx.info(_T("音声フォーマット変更設定は音声エンコードまたはtsreplace出力では無視し、splitとして扱います。"));
+    } else if (getAudioFormatChangeMode() == AFC_MERGE) {
+        THROW(ArgumentException, "--audio-format-change mergeは未実装です");
+    }
     if (this->conf.encoderFilter != (ENUM_ENCODER)-1
         && this->conf.encoderFilter != ENCODER_QSVENC
         && this->conf.encoderFilter != ENCODER_NVENC
@@ -950,6 +967,11 @@ ENUM_AUDIO_ENCODER ConfigWrapper::getAudioEncoder() const {
 
 bool ConfigWrapper::isEncodeAudio() const {
     return conf.audioEncoder != AUDIO_ENCODER_NONE;
+}
+
+AUDIO_FORMAT_CHANGE_MODE ConfigWrapper::getAudioFormatChangeMode() const {
+    return (isEncodeAudio() || conf.format == FORMAT_TSREPLACE)
+        ? AFC_SPLIT : conf.audioFormatChangeMode;
 }
 
 tstring ConfigWrapper::getAudioEncoderPath() const {

@@ -92,7 +92,13 @@ void AMTMuxder::mux(EncodeFileKey key,
 
     // 音声ファイルを作成
     std::vector<tstring> audioFiles;
-    if (setting_.isEncodeAudio()) {
+    std::vector<tstring> audioTrackNames;
+    if (fileIn.isAudioTrackPlanned) {
+        for (int i = 0; i < (int)fileIn.audioTrackPlan.size(); i++) {
+            audioFiles.push_back(setting_.getIntAudioFilePath(key, i, setting_.getAudioEncoder()));
+            audioTrackNames.push_back(fileIn.audioTrackPlan[i].name);
+        }
+    } else if (setting_.isEncodeAudio()) {
         audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
     } else if (setting_.getFormat() != FORMAT_TSREPLACE
         || (setting_.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting_.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK)) {
@@ -268,7 +274,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         setting_.getTsreplaceRemoveTypeD(), tsreplaceCutList,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
-        setting_.getEncoderOptions());
+        setting_.getEncoderOptions(), audioTrackNames);
 
     for (int i = 0; i < (int)args.size(); i++) {
         ctx.infoF(_T("%s"), args[i].first);
