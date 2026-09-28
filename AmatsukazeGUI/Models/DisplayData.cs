@@ -2816,6 +2816,19 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region AudioFormatChangeMode変更通知プロパティ
+        public int AudioFormatChangeMode {
+            get { return Server.ProfileSettingExtensions.NormalizeAudioFormatChangeMode(Data.AudioFormatChangeMode); }
+            set {
+                int mode = Server.ProfileSettingExtensions.NormalizeAudioFormatChangeMode(value);
+                if (Data.AudioFormatChangeMode == mode)
+                    return;
+                Data.AudioFormatChangeMode = mode;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region AudioEncoderType変更通知プロパティ
         public int AudioEncoderTypeInt {
             get { return (int)Data.AudioEncoderType; }
@@ -2968,6 +2981,9 @@ namespace Amatsukaze.Models
         }
         public string[] WhisperModelList {
             get { return Server.ProfileSettingExtensions.WhisperModelList; }
+        }
+        public string[] AudioFormatChangeModeList {
+            get { return Server.ProfileSettingExtensions.AudioFormatChangeModeList; }
         }
         public string[] AudioEncoderList {
             get { 

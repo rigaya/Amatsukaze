@@ -132,6 +132,7 @@ namespace Amatsukaze.Shared
         public List<string>? SubtitleModeList { get; set; }
         public List<string>? WhisperModelList { get; set; }
         public List<string>? AudioEncoderList { get; set; }
+        public List<string>? AudioFormatChangeModeList { get; set; }
         public bool IsServerLinux { get; set; }
     }
 

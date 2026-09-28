@@ -42,6 +42,15 @@ namespace Amatsukaze.Server
         x262
     }
 
+    // 欠損したDataMemberは0になるため、サーバではmergeを0にする。
+    // C++側はsplit=0だが、CLIには文字列で渡すので番号の違いは問題ない。
+    public enum AudioFormatChangeMode
+    {
+        Merge = 0,
+        Split = 1,
+        Separate = 2
+    }
+
     public enum AudioEncoderType
     {
         NeroAac,
@@ -554,6 +563,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool EnableAudioEncode { get; set; }
         [DataMember]
+        public int AudioFormatChangeMode { get; set; }
+        [DataMember]
         public AudioEncoderType AudioEncoderType { get; set; }
         [DataMember]
         public string NeroAacOption { get; set; }
@@ -588,6 +599,32 @@ namespace Amatsukaze.Server
     // 文字列リソース（列挙体に対応する文字列配列）
     public static class ProfileSettingExtensions
     {
+        public static string[] AudioFormatChangeModeList { get; } = new string[]
+        {
+            "トラック統合 (merge)", "ファイル分割 (split)", "トラック分離 (separate)"
+        };
+
+        public static int NormalizeAudioFormatChangeMode(int mode)
+        {
+            return mode == (int)AudioFormatChangeMode.Split || mode == (int)AudioFormatChangeMode.Separate
+                ? mode : (int)AudioFormatChangeMode.Merge;
+        }
+
+        public static string GetAudioFormatChangeModeArgument(this ProfileSetting profile)
+        {
+            switch (NormalizeAudioFormatChangeMode(profile?.AudioFormatChangeMode ?? (int)AudioFormatChangeMode.Merge))
+            {
+                case (int)AudioFormatChangeMode.Split: return "split";
+                case (int)AudioFormatChangeMode.Separate: return "separate";
+                default: return "merge";
+            }
+        }
+
+        public static string GetAudioFormatChangeModeDisplayName(this ProfileSetting profile)
+        {
+            return AudioFormatChangeModeList[NormalizeAudioFormatChangeMode(profile?.AudioFormatChangeMode ?? (int)AudioFormatChangeMode.Merge)];
+        }
+
         private static readonly Regex DeinterlaceOptionPattern = new Regex(
             @"(?<!\S)--vpp-(?<name>kfm|afs|nnedi|yadif|bwdif|decomb|ivtc|deinterlace)(?=\s|=|$)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -1099,6 +1136,7 @@ namespace Amatsukaze.Server
             keyValueBool("エンコードアフィニティを無視する", profile.IgnoreEncodeAffinity);
             keyValue("エンコードバッファフレーム数", profile.NumEncodeBufferFrames.ToString());
             keyValue("追加ロゴ消去", profile.AdditionalEraseLogo ?? "なし");
+            keyValue("音声フォーマット変更", profile.GetAudioFormatChangeModeDisplayName());
             keyValueBool("音声エンコードを有効にする", profile.EnableAudioEncode);
             if (profile.EnableAudioEncode)
             {
