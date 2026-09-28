@@ -359,6 +359,26 @@
                 }
                 return (bestDist <= markerMaxDist) ? best : null;
             }
+            // バー本体上で最寄りのjls区切り線(区間の左端)がmaxDist(px)以内ならその区間要素を返す
+            var jlsSnapDist = 6;
+            var lastJlsSnap = null;
+            function findNearestJlsBoundary(clientX, clientY, maxDist) {
+                var rect = seekbar.getBoundingClientRect();
+                if (clientY < rect.top || clientY > rect.bottom) return null;
+                var segs = seekbar.querySelectorAll('.trim-jls-seg');
+                var best = null, bestDist = Infinity;
+                for (var i = 0; i < segs.length; i++) {
+                    var dist = Math.abs(clientX - segs[i].getBoundingClientRect().left);
+                    if (dist < bestDist) { bestDist = dist; best = segs[i]; }
+                }
+                return (bestDist <= maxDist) ? best : null;
+            }
+            function setJlsSnap(seg) {
+                if (lastJlsSnap === seg) return;
+                if (lastJlsSnap) lastJlsSnap.classList.remove('is-snap');
+                lastJlsSnap = seg;
+                if (seg) seg.classList.add('is-snap');
+            }
             function setHighlight(marker) {
                 if (lastHighlighted === marker) return;
                 if (lastHighlighted) {
@@ -377,17 +397,19 @@
                 if (dragging) return; // ドラッグ中はホバー処理しない
                 var rect = seekbar.getBoundingClientRect();
                 if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                    // バー本体上: ホバー解除（カーソルはCSS側でpointer）
+                    // バー本体上: マーカーのホバー解除、近いjls区切り線を強調
                     setHighlight(null);
+                    setJlsSnap(findNearestJlsBoundary(e.clientX, e.clientY, jlsSnapDist));
                     container.style.cursor = '';
                     return;
                 }
+                setJlsSnap(null);
                 var marker = e.clientY < rect.top ? findNearestMarker(e) : findNearestDivisionMarker(e);
                 setHighlight(marker);
                 container.style.cursor = marker ? 'pointer' : '';
             });
             container.addEventListener('mouseleave', function () {
-                if (!dragging) { setHighlight(null); container.style.cursor = ''; }
+                if (!dragging) { setHighlight(null); setJlsSnap(null); container.style.cursor = ''; }
             });
             container.addEventListener('mousedown', function (e) {
                 if (e.button !== 0) return;
@@ -400,6 +422,9 @@
                 } else if ((marker = findNearestDivisionMarker(e))) {
                     // △マーカー近傍: 最寄り分割点にスナップ
                     dotNetRef.invokeMethodAsync('OnSeekBarDivisionMarkerClick', r);
+                } else if ((marker = findNearestJlsBoundary(e.clientX, e.clientY, jlsSnapDist))) {
+                    // バー本体の区切り線近傍: その区間の先頭へ移動（ドラッグ開始しない）
+                    dotNetRef.invokeMethodAsync('OnSeekBarJlsBoundaryClick', parseInt(marker.dataset.frame, 10));
                 } else {
                     // シークバー本体: ダイレクト移動＋ドラッグ開始
                     setDragging(true);
@@ -413,7 +438,7 @@
                 if (r >= 0) dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);
             });
             document.addEventListener('mouseup', function () {
-                if (dragging) { setDragging(false); setHighlight(null); container.style.cursor = ''; }
+                if (dragging) { setDragging(false); setHighlight(null); setJlsSnap(null); container.style.cursor = ''; }
             });
             // タッチ対応（Android等）
             function calcRatioTouch(e) {
@@ -450,12 +475,15 @@
                 var r = calcRatioTouch(e);
                 if (r < 0) return;
                 var marker = findNearestMarkerTouch(e);
+                var jlsSeg;
                 if (marker) {
                     dotNetRef.invokeMethodAsync(
                         marker.classList.contains('trim-seekbar-division-marker')
                             ? 'OnSeekBarDivisionMarkerClick'
                             : 'OnSeekBarMarkerClick',
                         r);
+                } else if ((jlsSeg = findNearestJlsBoundary(e.touches[0].clientX, e.touches[0].clientY, 10))) {
+                    dotNetRef.invokeMethodAsync('OnSeekBarJlsBoundaryClick', parseInt(jlsSeg.dataset.frame, 10));
                 } else {
                     setDragging(true);
                     dotNetRef.invokeMethodAsync('OnSeekBarDrag', r);

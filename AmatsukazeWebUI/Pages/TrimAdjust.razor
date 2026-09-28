@@ -341,6 +341,7 @@
                                 var curKeep = editSegments.Any(s => s.IsMain && jlsCenter >= s.Start && jlsCenter <= s.EndInclusive);
                                 var isDiff = curKeep != jls.JlsKeep;
                                 <div class="trim-jls-seg @(jls.Start <= 0 ? "is-first" : "") @(isDiff ? "is-diff" : "") @GetJlsTipAlignClass(jls)"
+                                     data-frame="@jls.Start"
                                      style="left: @(GetFramePercent(jls.Start))%; width: @(GetFrameSpanPercent(jls.Start, jls.End))%">
                                     <div class="trim-jls-tip">
                                         <div class="trim-jls-tip-head">
@@ -690,6 +691,17 @@
             var nearest = _editPoints.OrderBy(ep => Math.Abs(ep.Frame - targetFrame)).First();
             _selectedEditPoint = _editPoints.IndexOf(nearest);
             SetCurrentFrame(nearest.Frame);
+        });
+    }
+
+    // シークバー本体で区切り線近傍をクリック: そのjls区間の先頭フレームへ移動
+    [JSInvokable]
+    public void OnSeekBarJlsBoundaryClick(int frame)
+    {
+        if (_session == null || _session.NumFrames <= 0) return;
+        InvokeAsync(() =>
+        {
+            SetCurrentFrame(Math.Clamp(frame, 0, _session.NumFrames - 1));
         });
     }
 

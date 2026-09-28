@@ -711,6 +711,24 @@
     border-left-color: rgba(190, 230, 255, 0.7);
 }
 
+/* クリックで吸着する区切り線: 吸着範囲内では線を少し太く強調（1pxの線を中心に3px） */
+.trim-jls-seg.is-snap {
+    border-left-color: transparent;
+}
+
+.trim-jls-seg.is-snap::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: -2px;
+    width: 3px;
+    border-radius: 1px;
+    background: rgba(215, 240, 255, 0.95);
+    box-shadow: 0 0 3px rgba(170, 220, 255, 0.8);
+    pointer-events: none;
+}
+
 .trim-jls-tip {
     position: absolute;
     bottom: calc(100% + 16px); /* ▽マーカー領域の上 */
