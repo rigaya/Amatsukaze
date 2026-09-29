@@ -359,7 +359,7 @@ namespace Amatsukaze.AddTask
                     if (option.ClearSucceeded)
                     {
                         // succeededを空にする
-                        var succeeded = option.NasDir + Path.DirectorySeparatorChar + "succeeded";
+                        var succeeded = option.NasDir + Path.DirectorySeparatorChar + ServerSupport.SUCCESS_DIR;
                         if (Directory.Exists(succeeded))
                         {
                             foreach (var file in Directory.GetFiles(succeeded))
