@@ -741,7 +741,7 @@ else
                     <th>音声フォーマット変更</th>
                     <td>
                         <select @onchange="@(e => OnIntChanged(e, "AudioFormatChangeMode"))">
-                            @foreach (var item in GetIndexOptions(_options?.AudioFormatChangeModeList, GetAudioFormatChangeMode()))
+                            @foreach (var item in GetAudioFormatChangeModeOptions())
                             {
                                 <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                             }
@@ -2310,6 +2310,26 @@ else
     {
         var value = GetIntValue("AudioFormatChangeMode");
         return value is >= 0 and <= 2 ? value : 0;
+    }
+
+    // 保存値はモード値のまま、サーバが指定する表示順で並べる。
+    private IEnumerable<(string Value, string Label, bool Selected)> GetAudioFormatChangeModeOptions()
+    {
+        var list = _options?.AudioFormatChangeModeList;
+        if (list == null)
+        {
+            yield break;
+        }
+        var selected = GetAudioFormatChangeMode();
+        var order = _options?.AudioFormatChangeModeDisplayOrder ?? Enumerable.Range(0, list.Count).ToList();
+        foreach (var mode in order)
+        {
+            if (mode < 0 || mode >= list.Count)
+            {
+                continue;
+            }
+            yield return (mode.ToString(), list[mode], mode == selected);
+        }
     }
 
     private int GetAudioEncoderIndex()

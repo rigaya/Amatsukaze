@@ -732,6 +732,12 @@ namespace Amatsukaze.Models
         #endregion
     }
 
+    public class AudioFormatChangeModeItem
+    {
+        public int Value { get; set; }
+        public string Name { get; set; }
+    }
+
     public class FormatText
     {
         private StringBuilder builder = new StringBuilder();
@@ -2982,9 +2988,11 @@ namespace Amatsukaze.Models
         public string[] WhisperModelList {
             get { return Server.ProfileSettingExtensions.WhisperModelList; }
         }
-        public string[] AudioFormatChangeModeList {
-            get { return Server.ProfileSettingExtensions.AudioFormatChangeModeList; }
-        }
+        public AudioFormatChangeModeItem[] AudioFormatChangeModeList { get; } =
+            Server.ProfileSettingExtensions.AudioFormatChangeModeDisplayOrder.Select(mode => new AudioFormatChangeModeItem() {
+                Value = mode,
+                Name = Server.ProfileSettingExtensions.AudioFormatChangeModeList[mode]
+            }).ToArray();
         public string[] AudioEncoderList {
             get { 
                 if (Model?.Setting?.IsServerLinux ?? false) {

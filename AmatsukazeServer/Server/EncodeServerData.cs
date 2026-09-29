@@ -604,6 +604,12 @@ namespace Amatsukaze.Server
             "トラック統合 (merge)", "ファイル分割 (split)", "トラック分離 (separate)"
         };
 
+        // UIでの表示順（モード値の並び）。保存値はモード値のまま。
+        public static int[] AudioFormatChangeModeDisplayOrder { get; } = new int[]
+        {
+            (int)AudioFormatChangeMode.Merge, (int)AudioFormatChangeMode.Separate, (int)AudioFormatChangeMode.Split
+        };
+
         public static int NormalizeAudioFormatChangeMode(int mode)
         {
             return mode == (int)AudioFormatChangeMode.Split || mode == (int)AudioFormatChangeMode.Separate

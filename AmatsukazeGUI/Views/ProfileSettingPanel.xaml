@@ -569,7 +569,8 @@
                         <TextBlock Text="音声フォーマット変更" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox HorizontalAlignment="Left" Width="220" Height="22"
                                   ItemsSource="{Binding Model.SelectedProfile.AudioFormatChangeModeList}"
-                                  SelectedIndex="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                  DisplayMemberPath="Name" SelectedValuePath="Value"
+                                  SelectedValue="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                     <StackPanel>
                         <StackPanel.Style>
