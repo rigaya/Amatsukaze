@@ -311,6 +311,7 @@ else
                     <tr @key="item.Id"
                         class="@GetRowClass(item, rowIndex)"
                         draggable="true"
+                        data-long-press-menu="true"
                         data-queue-index="@rowIndex"
                         data-queue-id="@item.Id"
                         ondragstart="return amatsukazeDnd.setDataWithQueueId(event)"
@@ -497,6 +498,7 @@ else
     private double _contextMenuX;
     private double _contextMenuY;
     private const double ContextMenuHeight = 260;
+    private const double ContextMenuWidth = 200;
     private const double ContextMenuMargin = 8;
     private int _dropIndex = -1;
     private bool _isDragging;
@@ -2035,7 +2037,16 @@ else
             _selectedIds.Add(item.Id);
         }
         _selectionAnchorId = item.Id;
-        _contextMenuX = e.ClientX;
+        // スマートフォン等の狭い画面で右端からはみ出さないようにする
+        var viewportWidth = await JS.InvokeAsync<double>("amatsukazeUi.getViewportWidth");
+        if (viewportWidth > 0 && e.ClientX + ContextMenuWidth + ContextMenuMargin > viewportWidth)
+        {
+            _contextMenuX = Math.Max(ContextMenuMargin, viewportWidth - ContextMenuWidth - ContextMenuMargin);
+        }
+        else
+        {
+            _contextMenuX = e.ClientX;
+        }
         var viewportHeight = await JS.InvokeAsync<double>("amatsukazeUi.getViewportHeight");
         if (viewportHeight > 0 && e.ClientY + ContextMenuHeight + ContextMenuMargin > viewportHeight)
         {

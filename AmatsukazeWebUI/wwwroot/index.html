@@ -633,6 +633,13 @@
                     return 0;
                 }
             },
+            getViewportWidth: function () {
+                try {
+                    return window.innerWidth || document.documentElement.clientWidth || 0;
+                } catch (e) {
+                    return 0;
+                }
+            },
             openInNewTab: function (url) {
                 try {
                     if (!url || typeof url !== "string") {
@@ -643,6 +650,102 @@
                 }
             }
         };
+        // タッチ端末向け: data-long-press-menu を付けた要素の長押しで contextmenu イベントを発火する
+        // iOS Safari は長押しで contextmenu を発火しないため、Blazor側の @oncontextmenu をここから駆動する
+        (function () {
+            var LONG_PRESS_MS = 500;        // 長押し判定時間
+            var MOVE_TOLERANCE_PX = 10;     // この距離以上動いたらスクロール等とみなしキャンセル
+            var SUPPRESS_AFTER_MS = 400;    // 長押し後の指離し直後に来る click/contextmenu を抑止する時間
+            var timer = null;
+            var target = null;
+            var startX = 0, startY = 0;
+            var pressing = false;           // 長押し発火後、指を離すまで true
+            var suppressUntil = 0;
+            var suppressedRow = null;
+            function cancelTimer() {
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                target = null;
+            }
+            function isSuppressing() {
+                return pressing || Date.now() < suppressUntil;
+            }
+            document.addEventListener('touchstart', function (e) {
+                cancelTimer();
+                pressing = false;
+                suppressUntil = 0;
+                suppressedRow = null;
+                if (!e.touches || e.touches.length !== 1 || !e.target || !e.target.closest) return;
+                if (!e.target.closest('[data-long-press-menu]')) return;
+                // 入力系要素上では通常操作を優先
+                if (e.target.closest('input, select, textarea, button')) return;
+                var t = e.touches[0];
+                startX = t.clientX;
+                startY = t.clientY;
+                target = e.target;
+                timer = setTimeout(function () {
+                    var el = target;
+                    timer = null;
+                    target = null;
+                    if (!el || !el.isConnected) return;
+                    pressing = true;
+                    suppressedRow = el.closest('[data-long-press-menu]');
+                    el.dispatchEvent(new MouseEvent('contextmenu', {
+                        bubbles: true, cancelable: true, view: window,
+                        clientX: startX, clientY: startY, button: 2
+                    }));
+                }, LONG_PRESS_MS);
+            }, { passive: true, capture: true });
+            document.addEventListener('touchmove', function (e) {
+                if (!timer || !e.touches || !e.touches.length) return;
+                var t = e.touches[0];
+                if (Math.abs(t.clientX - startX) > MOVE_TOLERANCE_PX || Math.abs(t.clientY - startY) > MOVE_TOLERANCE_PX) {
+                    cancelTimer();
+                }
+            }, { passive: true, capture: true });
+            document.addEventListener('touchend', function (e) {
+                cancelTimer();
+                if (pressing) {
+                    pressing = false;
+                    suppressUntil = Date.now() + SUPPRESS_AFTER_MS;
+                    // 指を離した際の click 生成を抑止（開いたメニューが即閉じられるのを防ぐ）
+                    if (e.cancelable) e.preventDefault();
+                }
+            }, { passive: false, capture: true });
+            document.addEventListener('touchcancel', function () {
+                cancelTimer();
+                if (pressing) {
+                    pressing = false;
+                    suppressUntil = Date.now() + SUPPRESS_AFTER_MS;
+                }
+            }, { passive: true, capture: true });
+            // Android等ネイティブの長押し contextmenu と二重発火しないようにする
+            window.addEventListener('contextmenu', function (e) {
+                if (!e.isTrusted) return;
+                if (timer) {
+                    // ネイティブが先に来た場合はそちらを採用
+                    cancelTimer();
+                    return;
+                }
+                if (isSuppressing()) {
+                    var row = e.target && e.target.closest ? e.target.closest('[data-long-press-menu]') : null;
+                    if (row && row === suppressedRow) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                    }
+                }
+            }, true);
+            window.addEventListener('click', function (e) {
+                if (Date.now() < suppressUntil && suppressedRow && suppressedRow.contains(e.target)) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    suppressUntil = 0;
+                    suppressedRow = null;
+                }
+            }, true);
+        })();
     </script>
 </body>
 
