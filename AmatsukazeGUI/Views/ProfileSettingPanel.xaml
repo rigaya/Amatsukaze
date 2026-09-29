@@ -551,13 +551,26 @@
                     <CheckBox Content="音声をエンコードする" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,4"
                                   IsChecked="{Binding Model.SelectedProfile.EnableAudioEncode, Mode=TwoWay}"
                                   IsEnabled="{Binding Model.SelectedProfile.Mpeg2PartialConstraintsEnabled}"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                    <StackPanel Orientation="Horizontal" Margin="0,3"
+                                ToolTip="音声をエンコードする / tsreplace出力では無効です">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.SelectedProfile.EnableAudioEncode}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Model.SelectedProfile.TsreplaceSelected}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
                         <TextBlock Text="音声フォーマット変更" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox HorizontalAlignment="Left" Width="220" Height="22"
                                   ItemsSource="{Binding Model.SelectedProfile.AudioFormatChangeModeList}"
                                   SelectedIndex="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
-                    <TextBlock Text="音声エンコード / tsreplace 出力では無効" Margin="0,0,0,4" TextWrapping="Wrap"/>
                     <StackPanel>
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">

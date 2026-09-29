@@ -735,18 +735,20 @@ else
                     </label>
                 </td>
             </tr>
-            <tr>
-                <th>音声フォーマット変更</th>
-                <td>
-                    <select @onchange="@(e => OnIntChanged(e, "AudioFormatChangeMode"))" disabled="@(GetBoolValue("EnableAudioEncode") || IsTsreplaceFormat())">
-                        @foreach (var item in GetIndexOptions(_options?.AudioFormatChangeModeList, GetAudioFormatChangeMode()))
-                        {
-                            <option value="@item.Value" selected="@item.Selected">@item.Label</option>
-                        }
-                    </select>
-                    <span class="profile-hint">音声エンコード/tsreplace時は無効</span>
-                </td>
-            </tr>
+            @if (!GetBoolValue("EnableAudioEncode") && !IsTsreplaceFormat())
+            {
+                <tr title="音声をエンコードする / tsreplace出力では無効です">
+                    <th>音声フォーマット変更</th>
+                    <td>
+                        <select @onchange="@(e => OnIntChanged(e, "AudioFormatChangeMode"))">
+                            @foreach (var item in GetIndexOptions(_options?.AudioFormatChangeModeList, GetAudioFormatChangeMode()))
+                            {
+                                <option value="@item.Value" selected="@item.Selected">@item.Label</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+            }
             @if (GetBoolValue("EnableAudioEncode"))
             {
                 <tr>
