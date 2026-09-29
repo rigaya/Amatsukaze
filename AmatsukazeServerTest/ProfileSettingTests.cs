@@ -69,7 +69,7 @@ public sealed class ProfileSettingTests
 
         Assert.Equal(0, ProfileSettingExtensions.NormalizeAudioFormatChangeMode(mode));
         Assert.Equal("merge", profile.GetAudioFormatChangeModeArgument());
-        Assert.Equal("トラック統合 (merge)", profile.GetAudioFormatChangeModeDisplayName());
+        Assert.Equal("トラック統合", profile.GetAudioFormatChangeModeDisplayName());
     }
 
     [Fact]

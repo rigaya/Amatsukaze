@@ -599,7 +599,7 @@ namespace Amatsukaze.Server
     {
         public static string[] AudioFormatChangeModeList { get; } = new string[]
         {
-            "トラック統合 (merge)", "ファイル分割 (split)", "トラック分離 (separate)"
+            "トラック統合", "ファイル分割", "トラック分離"
         };
 
         // UIでの表示順（モード値の並び）。保存値はモード値のまま。
@@ -612,7 +612,7 @@ namespace Amatsukaze.Server
         private static readonly string[] AudioFormatChangeModeDescriptionList = new string[]
         {
             "元の音声トラックごとに1本のトラックへまとめて出力します。\n途中でチャンネル数が変わる区間は、主となる構成へ変換して再エンコードします。",
-            "音声フォーマットが変わる位置でファイルを分割して出力します。(従来の動作)",
+            "音声フォーマットが変わる位置でファイルを分割して出力します。",
             "チャンネル数などの構成ごとに別トラックとして出力します。\n再エンコードはせず、音声がない区間は無音で埋めます。"
         };
 
