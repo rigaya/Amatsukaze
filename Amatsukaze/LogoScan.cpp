@@ -385,11 +385,14 @@ void logo::LogoDataParam::CreateLogoMask(float maskratio) {
     kernels = std::unique_ptr<float[]>(new float[maskpixels * KLEN + 8]);
     // 各ピクセルx各単色背景での相関値スケール
     scales = std::unique_ptr<ScaleLimit[]>(new ScaleLimit[maskpixels * CLEN]);
+    maskCoordinates.clear();
+    maskCoordinates.reserve(maskpixels);
     int count = 0;
     float avgCorr = 0.0f;
     for (int y = 2; y < h - 2; y++) {
         for (int x = 2; x < w - 2; x++) {
             if (mask[x + y * w]) {
+                maskCoordinates.emplace_back(x, y);
                 float* k = &kernels[count * KLEN];
                 ScaleLimit* s = &scales[count * CLEN];
                 makeKernel(k, memWork.get(), x, y, w);
@@ -448,6 +451,25 @@ float logo::LogoDataParam::EvaluateLogo(const float *src, float maxv, float fade
     return CorrelationScore(work, maxv) / blackScore;
 }
 
+void logo::LogoDataParam::PrepareLogoBackground(const float* src, float maxv, float* background, int stride) {
+    if (stride == -1) stride = w;
+    const float* logoAY = GetA(PLANAR_Y);
+    const float* logoBY = GetB(PLANAR_Y);
+    for (int y = 0; y < h; y++) {
+        prepareLogoBackgroundLineAVX2(background + y * w, src + y * stride,
+            logoAY + y * w, logoBY + y * w, w, maxv);
+    }
+}
+
+float logo::LogoDataParam::EvaluateLogoWithBackground(const float* src, const float* background,
+    float maxv, float fade, float* work, int stride) {
+    if (stride == -1) stride = w;
+    for (int y = 0; y < h; y++) {
+        blendLogoBackgroundLineAVX2(work + y * w, src + y * stride, background + y * w, w, fade);
+    }
+    return CorrelationScore(work, maxv) / blackScore;
+}
+
 std::unique_ptr<logo::LogoDataParam> logo::LogoDataParam::MakeFieldLogo(bool bottom) {
     auto logo = std::unique_ptr<logo::LogoDataParam>(
         new logo::LogoDataParam(LogoData(w, h / 2, logUVx, logUVy), imgw, imgh / 2, imgx, imgy / 2));
@@ -477,32 +499,25 @@ std::unique_ptr<logo::LogoDataParam> logo::LogoDataParam::MakeFieldLogo(bool bot
 
 // 画素ごとにロゴとの相関を計算
 float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
-    const uint8_t* mask = GetMask();
     const float* kernels = GetKernels();
 
-    // ロゴとの相関を評価
-    int count = 0;
+    // マスクの有効座標を元の行優先順に走査する。
     float result = 0;
-    for (int y = 2; y < h - 2; y++) {
-        for (int x = 2; x < w - 2; x++) {
-            if (mask[x + y * w]) {
-                const float* k = &kernels[count * KLEN];
+    for (size_t count = 0; count < maskCoordinates.size(); count++) {
+        const int x = maskCoordinates[count].first;
+        const int y = maskCoordinates[count].second;
+        const float* k = &kernels[count * KLEN];
 
-                float avg;
-                float sum = pCalcCorrelation5x5(k, work, x, y, w, &avg);
-                // avg単色の場合の相関値が1になるように正規化
-                const int idx = std::max(0, std::min((int)CLEN, (int)(avg * CLEN / maxv)));
-                ScaleLimit s = scales[count * CLEN + idx];
-                // 1を超える部分は捨てる（ロゴによる相関ではない部分なので）
-                float normalized = std::max(-1.0f, std::min(1.0f, sum * s.scale));
-                // 相関が下限値以下の場合は一部元に戻す
-                float score = normalized * s.scale2;
-
-                result += score;
-
-                count++;
-            }
-        }
+        float avg;
+        float sum = pCalcCorrelation5x5(k, work, x, y, w, &avg);
+        // avg単色の場合の相関値が1になるように正規化
+        const int idx = std::max(0, std::min((int)CLEN, (int)(avg * CLEN / maxv)));
+        ScaleLimit s = scales[count * CLEN + idx];
+        // 1を超える部分は捨てる（ロゴによる相関ではない部分なので）
+        float normalized = std::max(-1.0f, std::min(1.0f, sum * s.scale));
+        // 相関が下限値以下の場合は一部元に戻す
+        float score = normalized * s.scale2;
+        result += score;
     }
 
     return result;

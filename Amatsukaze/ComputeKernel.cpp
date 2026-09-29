@@ -56,6 +56,16 @@ void removeLogoLineAVX2(float* dst, const float* src, int srcStride, const float
     removeLogoLine(dst, src, srcStride, logoAY, logoBY, logoWidth, maxValue, fade);
 }
 
+void prepareLogoBackgroundLineAVX2(float *dst, const float *src, const float *logoAY,
+    const float *logoBY, int width, float maxv) {
+    for (int x = 0; x < width; x++) dst[x] = logoAY[x] * src[x] + logoBY[x] * maxv;
+}
+
+void blendLogoBackgroundLineAVX2(float *dst, const float *src, const float *background,
+    int width, float fade) {
+    for (int x = 0; x < width; x++) dst[x] = fade * background[x] + (1.0f - fade) * src[x];
+}
+
 static uint8_t BilateralFilterPixel(const uint8_t* src, int pitch, int width, int height,
     int x, int y, const float* spatial, const float* rangeWeight) {
     const int center = src[y * pitch + x];

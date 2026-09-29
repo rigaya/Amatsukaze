@@ -41,6 +41,43 @@ void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const
     }
 }
 
+void prepareLogoBackgroundLineAVX2(float *dst, const float *src, const float *logoAY,
+    const float *logoBY, int width, float maxv) {
+    const __m256 vmaxv = _mm256_broadcast_ss(&maxv);
+    int x = 0;
+    for (; x < (width & ~7); x += 8) {
+        const __m256 srcv = _mm256_loadu_ps(src + x);
+        const __m256 a = _mm256_loadu_ps(logoAY + x);
+        const __m256 b = _mm256_loadu_ps(logoBY + x);
+        _mm256_storeu_ps(dst + x, _mm256_fmadd_ps(a, srcv, _mm256_mul_ps(b, vmaxv)));
+    }
+    for (; x < width; x++) {
+        const __m128 srcv = _mm_load_ss(src + x);
+        const __m128 a = _mm_load_ss(logoAY + x);
+        const __m128 b = _mm_load_ss(logoBY + x);
+        _mm_store_ss(dst + x, _mm_fmadd_ss(a, srcv, _mm_mul_ss(b, _mm256_castps256_ps128(vmaxv))));
+    }
+}
+
+void blendLogoBackgroundLineAVX2(float *dst, const float *src, const float *background,
+    int width, float fade) {
+    const float invfade = 1.0f - fade;
+    const __m256 vfade = _mm256_broadcast_ss(&fade);
+    const __m256 v1_fade = _mm256_broadcast_ss(&invfade);
+    int x = 0;
+    for (; x < (width & ~7); x += 8) {
+        const __m256 srcv = _mm256_loadu_ps(src + x);
+        const __m256 bg = _mm256_loadu_ps(background + x);
+        _mm256_storeu_ps(dst + x, _mm256_fmadd_ps(vfade, bg, _mm256_mul_ps(v1_fade, srcv)));
+    }
+    for (; x < width; x++) {
+        const __m128 srcv = _mm_load_ss(src + x);
+        const __m128 bg = _mm_load_ss(background + x);
+        _mm_store_ss(dst + x, _mm_fmadd_ss(_mm256_castps256_ps128(vfade), bg,
+            _mm_mul_ss(_mm256_castps256_ps128(v1_fade), srcv)));
+    }
+}
+
 constexpr int kTryEstimateBgHorizontalLoadBytes = 64;
 
 static const uint8_t TryEstimateBgValidMaskFFThen00[kTryEstimateBgHorizontalLoadBytes * 2] = {

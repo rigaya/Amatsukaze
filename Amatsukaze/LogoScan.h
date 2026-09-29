@@ -40,6 +40,8 @@ bool IsAVX512BWAvailable();
 float CalcCorrelation5x5_AVX(const float* k, const float* Y, int x, int y, int w, float* pavg);
 float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int w, float* pavg);
 void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
+void prepareLogoBackgroundLineAVX2(float *dst, const float *src, const float *logoAY, const float *logoBY, int width, float maxv);
+void blendLogoBackgroundLineAVX2(float *dst, const float *src, const float *background, int width, float fade);
 void BilateralFilter5x5U8RangeLUT_AVX2(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 void BilateralFilter5x5U8RangeLUT_AVX512(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut);
@@ -90,6 +92,7 @@ class LogoDataParam : public LogoData {
     };
     int imgw, imgh, imgx, imgy; // この4つはすべて2の倍数
     std::unique_ptr<uint8_t[]> mask;
+    std::vector<std::pair<int, int>> maskCoordinates;
     std::unique_ptr<float[]> kernels;
     struct ScaleLimit {
         float scale;   // 正規化用スケール（想定される相関が1になるようにするため）
@@ -123,6 +126,8 @@ public:
     void CreateLogoMask(float maskratio);
 
     float EvaluateLogo(const float *src, float maxv, float fade, float* work, int stride = -1);
+    void PrepareLogoBackground(const float* src, float maxv, float* background, int stride = -1);
+    float EvaluateLogoWithBackground(const float* src, const float* background, float maxv, float fade, float* work, int stride = -1);
 
     std::unique_ptr<LogoDataParam> MakeFieldLogo(bool bottom);
 
@@ -552,12 +557,15 @@ class LogoAnalyzer : AMTObject {
                 std::vector<pixel_t> scan;
                 std::unique_ptr<float[]> deint;
                 std::unique_ptr<float[]> work;
+                std::unique_ptr<float[]> background;
             };
+            const bool usePreparedBackground = IsAVX2Available();
             const int threadCount = std::min(GetLogoRemakeEvaluationThreadCount(), std::max(1, numFrames));
             std::vector<EvaluationBuffer> buffers(threadCount);
             for (auto& buffer : buffers) {
                 buffer.deint.reset(new float[YSize + 8]);
                 buffer.work.reset(new float[YSize + 8]);
+                if (usePreparedBackground) buffer.background.reset(new float[YSize + 8]);
             }
             // 各タスクは専用バッファを所有し、同じフレーム内のfade順と演算を維持する。
             const auto evaluateRange = [&](const int worker, const int start, const int end) {
@@ -567,11 +575,16 @@ class LogoAnalyzer : AMTObject {
                     creator->getFrame(i, buffer.scan.data());
                     const float maxv = (float)((1 << creator->bitdepth()) - 1);
                     DeintY(buffer.deint.get(), buffer.scan.data(), scanw, scanw, scanh);
+                    if (usePreparedBackground) {
+                        deintLogo.PrepareLogoBackground(buffer.deint.get(), maxv, buffer.background.get());
+                    }
                     float minResult = std::numeric_limits<float>::max();
                     int minFadeIndex = 0;
                     for (int fi = 0; fi < numFade; fi++) {
                         float fade = 0.1f * fi;
-                        float result = std::abs(deintLogo.EvaluateLogo(buffer.deint.get(), maxv, fade, buffer.work.get()));
+                        float result = std::abs(usePreparedBackground
+                            ? deintLogo.EvaluateLogoWithBackground(buffer.deint.get(), buffer.background.get(), maxv, fade, buffer.work.get())
+                            : deintLogo.EvaluateLogo(buffer.deint.get(), maxv, fade, buffer.work.get()));
                         if (result < minResult) {
                             minResult = result;
                             minFadeIndex = fi;
