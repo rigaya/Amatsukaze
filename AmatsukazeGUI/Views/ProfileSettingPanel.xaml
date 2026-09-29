@@ -551,10 +551,12 @@
                     <CheckBox Content="音声をエンコードする" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,4"
                                   IsChecked="{Binding Model.SelectedProfile.EnableAudioEncode, Mode=TwoWay}"
                                   IsEnabled="{Binding Model.SelectedProfile.Mpeg2PartialConstraintsEnabled}"/>
-                    <TextBlock Text="音声フォーマット変更" Margin="0,6,0,0"/>
-                    <ComboBox Margin="0,3" HorizontalAlignment="Left" Width="220" Height="22"
-                              ItemsSource="{Binding Model.SelectedProfile.AudioFormatChangeModeList}"
-                              SelectedIndex="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                        <TextBlock Text="音声フォーマット変更" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox HorizontalAlignment="Left" Width="220" Height="22"
+                                  ItemsSource="{Binding Model.SelectedProfile.AudioFormatChangeModeList}"
+                                  SelectedIndex="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
                     <TextBlock Text="音声エンコード / tsreplace 出力では無効" Margin="0,0,0,4" TextWrapping="Wrap"/>
                     <StackPanel>
                         <StackPanel.Style>
