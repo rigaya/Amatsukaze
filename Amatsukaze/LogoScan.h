@@ -409,11 +409,12 @@ public:
     ~LogoScanDataCompressed();
 
     void compress(const void *ptr, size_t datasize);
+    void storeRaw(const void *ptr, size_t datasize);
     void decompress(void *ptr);
     int originalSize() const { return original_size; }
 protected:
     std::vector<char> compressed_data;
-    
+    std::vector<uint8_t> raw_data;
     unsigned long original_size;
 };
 
@@ -425,6 +426,7 @@ class LogoAnalyzer : AMTObject {
         int bitDepth;
         int readCount;
         int64_t filesize;
+        bool retainRaw;
         std::vector<uint8_t> memScanData;
         std::unique_ptr<LogoScan> logoscan;
         std::vector<std::unique_ptr<LogoScanDataCompressed>> scanData;
@@ -460,7 +462,16 @@ class LogoAnalyzer : AMTObject {
                 CopyYV12((pixel_t *)memScanData.data(), scanY, scanU, scanV, pitchY, pitchUV, pThis->scanw, pThis->scanh);
                 //ここでメモリにためる
                 auto scanDataCompressed = std::make_unique<LogoScanDataCompressed>();
-                scanDataCompressed->compress(memScanData.data(), scanDataSize * sizeof(pixel_t));
+                if (retainRaw) {
+                    try {
+                        scanDataCompressed->storeRaw(memScanData.data(), scanDataSize * sizeof(pixel_t));
+                    } catch (const std::bad_alloc&) {
+                        retainRaw = false;
+                    }
+                }
+                if (!retainRaw) {
+                    scanDataCompressed->compress(memScanData.data(), scanDataSize * sizeof(pixel_t));
+                }
                 scanData.push_back(std::move(scanDataCompressed));
             }
         }

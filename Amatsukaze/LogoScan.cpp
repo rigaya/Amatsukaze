@@ -1256,7 +1256,17 @@ void logo::LogoScanDataCompressed::compress(const void *ptr, size_t datasize) {
     memcpy(compressed_data.data(), tmp.data(), compressed_size);
 }
 
+void logo::LogoScanDataCompressed::storeRaw(const void *ptr, size_t datasize) {
+    original_size = (unsigned long)datasize;
+    raw_data.resize(datasize);
+    memcpy(raw_data.data(), ptr, datasize);
+}
+
 void logo::LogoScanDataCompressed::decompress(void *ptr) {
+    if (!raw_data.empty()) {
+        memcpy(ptr, raw_data.data(), original_size);
+        return;
+    }
     unsigned long buf_size = original_size;
     uncompress((BYTE *)ptr, &buf_size, (BYTE *)compressed_data.data(), (unsigned long)compressed_data.size());
 }
@@ -1268,6 +1278,7 @@ logo::LogoAnalyzer::InitialLogoCreator::InitialLogoCreator(LogoAnalyzer* pThis) 
     bitDepth(8),
     readCount(0),
     filesize(0),
+    retainRaw(false),
     memScanData(),
     scanData() {}
 
@@ -1285,6 +1296,35 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
 
     bitDepth = desc->comp[0].depth;
+
+    // 非圧縮ROIが小さく、追加分を除いてもメモリに余裕がある場合だけ保持する。
+    const uint64_t rawBytes = uint64_t(scanDataSize) * (bitDepth > 8 ? 2 : 1) * pThis->numMaxFrames;
+    uint64_t availableBytes = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    MEMORYSTATUSEX memoryStatus = { 0 };
+    memoryStatus.dwLength = sizeof(memoryStatus);
+    if (GlobalMemoryStatusEx(&memoryStatus)) {
+        availableBytes = memoryStatus.ullAvailPhys;
+    }
+#else
+    struct sysinfo memoryStatus;
+    if (sysinfo(&memoryStatus) == 0) {
+        availableBytes = uint64_t(memoryStatus.freeram) * memoryStatus.mem_unit;
+    }
+    FILE* memoryInfo = fopen("/proc/meminfo", "r");
+    if (memoryInfo != nullptr) {
+        char line[256];
+        while (fgets(line, sizeof(line), memoryInfo) != nullptr) {
+            uint64_t kb = 0;
+            if (sscanf(line, "MemAvailable: %" PRIu64 " kB", &kb) == 1) {
+                availableBytes = kb * 1024;
+                break;
+            }
+        }
+        fclose(memoryInfo);
+    }
+#endif
+    retainRaw = rawBytes <= (128ULL << 20) && availableBytes > rawBytes + (2ULL << 30);
 
     pThis->logUVx = desc->log2_chroma_w;
     pThis->logUVy = desc->log2_chroma_h;
