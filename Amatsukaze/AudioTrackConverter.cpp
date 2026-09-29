@@ -316,90 +316,26 @@ AudioTrackReference SourceReference(int index, const AudioTrackPlan& plan,
     return ref;
 }
 
-std::vector<int> GetSourceFrames(const AudioTrackPlan& plan, const std::vector<FileAudioFrameInfo>& info) {
-    std::vector<int> source;
-    for (size_t i = 0; i < info.size(); ++i) {
-        if (info[i].audioIdx == plan.sourceTrack) source.push_back(static_cast<int>(i));
-    }
-    return source;
-}
-
-int FindDecoderWarmFrame(const AudioTrackPlan& plan, const AudioTrackReference& ref,
-    const std::vector<int>& source, size_t position, const std::vector<FileAudioFrameInfo>& info) {
-    if (position == 0) return -1;
-    const int index = source[position - 1];
-    const auto candidate = SourceReference(index, plan, info);
-    const double ptsGap = static_cast<double>(info[ref.frameIndex].PTS) - info[index].PTS;
-    const double maximumGap = MAX_WARM_PTS_GAP_FRAMES * AAC_LC_FRAME_SAMPLES * MPEG_CLOCK_HZ / plan.sampleRate;
-    // 長欠落前の古い音声を履歴に入れない。PTS不明時は元packetの順序を使う。
-    const bool continuous = info[ref.frameIndex].PTS < 0 || info[index].PTS < 0 || (ptsGap >= 0 && ptsGap <= maximumGap);
-    if (candidate.frameIndex >= 0 &&
-        !std::binary_search(plan.excludedDecoderFrames.begin(), plan.excludedDecoderFrames.end(), index) &&
-        candidate.srcLayout == ref.srcLayout && continuous &&
-        candidate.dualMonoChannel == ref.dualMonoChannel && info[index].format.sampleRate == plan.sampleRate &&
-        info[index].numSamples == AAC_LC_FRAME_SAMPLES) {
-        return index;
-    }
-    return -1;
-}
-
 void WarmDecoder(AMTContext& ctx, TrackDecoder& decoder, PacketCache& cache, const AudioTrackPlan& plan,
     const AudioTrackReference& ref, const std::vector<int>& source, size_t position,
     const std::vector<FileAudioFrameInfo>& info) {
     // FAADの初回出力だけを捨てる。プリロール自身のPCMはエンコーダへ渡す。
     auto warm = GenerateSilentAdtsFrame(ref.srcLayout, plan.samplingFrequencyIndex);
-    const int index = FindDecoderWarmFrame(plan, ref, source, position, info);
-    if (index >= 0) warm = SourcePacket(ctx, cache, SourceReference(index, plan, info), plan.samplingFrequencyIndex);
+    if (position > 0) {
+        const int index = source[position - 1];
+        const auto candidate = SourceReference(index, plan, info);
+        const double ptsGap = static_cast<double>(info[ref.frameIndex].PTS) - info[index].PTS;
+        const double maximumGap = MAX_WARM_PTS_GAP_FRAMES * AAC_LC_FRAME_SAMPLES * MPEG_CLOCK_HZ / plan.sampleRate;
+        // 長欠落前の古い音声を履歴に入れない。PTS不明時は元packetの順序を使う。
+        const bool continuous = info[ref.frameIndex].PTS < 0 || info[index].PTS < 0 || (ptsGap >= 0 && ptsGap <= maximumGap);
+        if (candidate.frameIndex >= 0 && candidate.srcLayout == ref.srcLayout && continuous &&
+            candidate.dualMonoChannel == ref.dualMonoChannel && info[index].format.sampleRate == plan.sampleRate &&
+            info[index].numSamples == AAC_LC_FRAME_SAMPLES) {
+            warm = SourcePacket(ctx, cache, candidate, plan.samplingFrequencyIndex);
+        }
+    }
     decoder.decode(warm, true);
 }
-
-// 実デコードと事前検査で、出力上の前後2枚・レイアウト切替・CMカット時のリセットを共有する。
-template<typename Callback>
-void VisitAudioTrackDecoderInputs(const AudioTrackPlan& plan, size_t begin, size_t end,
-    const std::vector<FileAudioFrameInfo>& info, const std::vector<int>& source, Callback callback) {
-    const auto& first = plan.frames[begin];
-    bool active = false;
-    AUDIO_CHANNELS layout = AUDIO_NONE;
-    int language = -1;
-    size_t previousPosition = source.size();
-    for (int64_t outputPosition = static_cast<int64_t>(begin) - PREROLL_FRAMES;
-         outputPosition < static_cast<int64_t>(end) + POSTROLL_FRAMES; ++outputPosition) {
-        if (outputPosition >= static_cast<int64_t>(begin) && outputPosition < static_cast<int64_t>(end)) {
-            const auto& ref = plan.frames[outputPosition];
-            if (ref.operation != AudioTrackOperation::CONVERT || ref.srcLayout != first.srcLayout ||
-                ref.dualMonoChannel != first.dualMonoChannel) THROW(FormatException, "連続音声変換区間の参照が一致しません");
-        }
-        if (outputPosition < 0 || outputPosition >= static_cast<int64_t>(plan.frames.size()) ||
-            plan.frames[outputPosition].operation == AudioTrackOperation::SILENCE) {
-            callback(nullptr, source.size(), false);
-            active = false;
-            previousPosition = source.size();
-            continue;
-        }
-        const auto& ref = plan.frames[outputPosition];
-        if (ref.frameIndex < 0 || static_cast<size_t>(ref.frameIndex) >= info.size() ||
-            ref.dstLayout != plan.layout || info[ref.frameIndex].audioIdx != plan.sourceTrack ||
-            info[ref.frameIndex].format.sampleRate != plan.sampleRate ||
-            info[ref.frameIndex].numSamples != AAC_LC_FRAME_SAMPLES) {
-            THROW(FormatException, "音声変換の隣接フレーム参照が不正です");
-        }
-        const auto original = SourceReference(ref.frameIndex, plan, info);
-        if (original.srcLayout != ref.srcLayout || original.dualMonoChannel != ref.dualMonoChannel) {
-            THROW(FormatException, "音声変換参照と元フォーマットが一致しません");
-        }
-        const auto position = std::lower_bound(source.begin(), source.end(), ref.frameIndex);
-        if (position == source.end() || *position != ref.frameIndex) THROW(FormatException, "音声変換元のトラックが一致しません");
-        const size_t currentPosition = position - source.begin();
-        const bool reset = !active || layout != ref.srcLayout || language != ref.dualMonoChannel ||
-            (currentPosition != previousPosition && currentPosition != previousPosition + 1);
-        callback(&ref, currentPosition, reset);
-        active = true;
-        layout = ref.srcLayout;
-        language = ref.dualMonoChannel;
-        previousPosition = currentPosition;
-    }
-}
-
 }
 
 std::vector<float> ConvertAudioChannels(const std::vector<float>& pcm, AUDIO_CHANNELS src, AUDIO_CHANNELS dst) {
@@ -436,52 +372,60 @@ std::vector<std::vector<uint8_t>> ConvertAudioTrackRun(AMTContext& ctx, PacketCa
         THROW(FormatException, "音声変換区間または元フレーム情報が不正です");
     }
     const auto& first = plan.frames[begin];
-    const auto source = GetSourceFrames(plan, frameInfo);
+    std::vector<int> source;
+    for (size_t i = 0; i < frameInfo.size(); ++i) {
+        if (frameInfo[i].audioIdx == plan.sourceTrack) source.push_back(static_cast<int>(i));
+    }
     TrackEncoder encoder(ctx, plan, end - begin);
     std::unique_ptr<TrackDecoder> decoder;
-    VisitAudioTrackDecoderInputs(plan, begin, end, frameInfo, source,
-        [&](const AudioTrackReference* ref, size_t position, bool reset) {
-            if (!ref) {
-                encoder.input(std::vector<float>(AAC_LC_FRAME_SAMPLES * ChannelCount(plan.layout), 0));
-                decoder.reset();
-                return;
-            }
-            if (reset) {
-                decoder = std::make_unique<TrackDecoder>(ref->srcLayout, plan.sampleRate);
-                WarmDecoder(ctx, *decoder, cache, plan, *ref, source, position, frameInfo);
-            }
-            auto packet = SourcePacket(ctx, cache, *ref, plan.samplingFrequencyIndex);
-            encoder.input(ConvertAudioChannels(decoder->decode(packet), ref->srcLayout, plan.layout));
-        });
+    AUDIO_CHANNELS decoderLayout = AUDIO_NONE;
+    int decoderLanguage = -1;
+    size_t previousPosition = source.size();
+    auto inputFrame = [&](int64_t outputPosition) {
+        if (outputPosition < 0 || outputPosition >= static_cast<int64_t>(plan.frames.size()) ||
+            plan.frames[outputPosition].operation == AudioTrackOperation::SILENCE) {
+            encoder.input(std::vector<float>(AAC_LC_FRAME_SAMPLES * ChannelCount(plan.layout), 0));
+            decoder.reset();
+            previousPosition = source.size();
+            return;
+        }
+        const auto& ref = plan.frames[outputPosition];
+        if (ref.frameIndex < 0 || static_cast<size_t>(ref.frameIndex) >= frameInfo.size() ||
+            ref.dstLayout != plan.layout || frameInfo[ref.frameIndex].audioIdx != plan.sourceTrack ||
+            frameInfo[ref.frameIndex].format.sampleRate != plan.sampleRate ||
+            frameInfo[ref.frameIndex].numSamples != AAC_LC_FRAME_SAMPLES) {
+            THROW(FormatException, "音声変換の隣接フレーム参照が不正です");
+        }
+        const auto original = SourceReference(ref.frameIndex, plan, frameInfo);
+        if (original.srcLayout != ref.srcLayout || original.dualMonoChannel != ref.dualMonoChannel) {
+            THROW(FormatException, "音声変換参照と元フォーマットが一致しません");
+        }
+        const auto position = std::lower_bound(source.begin(), source.end(), ref.frameIndex);
+        if (position == source.end() || *position != ref.frameIndex) THROW(FormatException, "音声変換元のトラックが一致しません");
+        const size_t currentPosition = position - source.begin();
+        // 出力の隣接フレームはCOPY側の別レイアウトでもよい。切替とCMカットでは専用FAADを再作成する。
+        if (!decoder || decoderLayout != ref.srcLayout || decoderLanguage != ref.dualMonoChannel ||
+            (currentPosition != previousPosition && currentPosition != previousPosition + 1)) {
+            decoder = std::make_unique<TrackDecoder>(ref.srcLayout, plan.sampleRate);
+            WarmDecoder(ctx, *decoder, cache, plan, ref, source, currentPosition, frameInfo);
+            decoderLayout = ref.srcLayout;
+            decoderLanguage = ref.dualMonoChannel;
+        }
+        auto packet = SourcePacket(ctx, cache, ref, plan.samplingFrequencyIndex);
+        encoder.input(ConvertAudioChannels(decoder->decode(packet), ref.srcLayout, plan.layout));
+        previousPosition = currentPosition;
+    };
+    // 前後2枚は元ストリームの隣ではなく、カット・無音を反映した出力トラック上の隣を使う。
+    for (int64_t i = static_cast<int64_t>(begin) - PREROLL_FRAMES; i < static_cast<int64_t>(begin); ++i) inputFrame(i);
+    for (size_t i = begin; i < end; ++i) {
+        const auto& ref = plan.frames[i];
+        if (ref.operation != AudioTrackOperation::CONVERT || ref.srcLayout != first.srcLayout ||
+            ref.dualMonoChannel != first.dualMonoChannel) THROW(FormatException, "連続音声変換区間の参照が一致しません");
+        inputFrame(static_cast<int64_t>(i));
+    }
+    for (int64_t i = static_cast<int64_t>(end); i < static_cast<int64_t>(end) + POSTROLL_FRAMES; ++i) inputFrame(i);
     auto output = encoder.finish();
     ctx.infoF(_T("音声変換: %s 開始=%zu N=%zu src=%d dst=%d rate=%d"), plan.name.c_str(), begin, end - begin,
         ChannelCount(first.srcLayout), ChannelCount(plan.layout), plan.sampleRate);
     return output;
-}
-
-std::vector<int> GetAudioTrackDecoderWarmFrames(const AudioTrackPlan& plan,
-    const std::vector<FileAudioFrameInfo>& frameInfo) {
-    const auto source = GetSourceFrames(plan, frameInfo);
-    std::vector<int> warmFrames;
-    for (size_t begin = 0; begin < plan.frames.size();) {
-        const auto& first = plan.frames[begin];
-        if (first.operation != AudioTrackOperation::CONVERT) {
-            ++begin;
-            continue;
-        }
-        size_t end = begin + 1;
-        while (end < plan.frames.size() && plan.frames[end].operation == AudioTrackOperation::CONVERT &&
-            plan.frames[end].srcLayout == first.srcLayout && plan.frames[end].dualMonoChannel == first.dualMonoChannel) ++end;
-        VisitAudioTrackDecoderInputs(plan, begin, end, frameInfo, source,
-            [&](const AudioTrackReference* ref, size_t position, bool reset) {
-                if (ref && reset) {
-                    const int index = FindDecoderWarmFrame(plan, *ref, source, position, frameInfo);
-                    if (index >= 0) warmFrames.push_back(index);
-                }
-            });
-        begin = end;
-    }
-    std::sort(warmFrames.begin(), warmFrames.end());
-    warmFrames.erase(std::unique(warmFrames.begin(), warmFrames.end()), warmFrames.end());
-    return warmFrames;
 }

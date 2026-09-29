@@ -24,8 +24,6 @@ struct AudioTrackPlan {
     int samplingFrequencyIndex = -1;
     tstring name;
     std::vector<AudioTrackReference> frames;
-    // 最短区間で除外した元フレームは、デコーダの助走にも使わない。昇順。
-    std::vector<int> excludedDecoderFrames;
 };
 
 int GetAudioSamplingFrequencyIndex(int sampleRate);

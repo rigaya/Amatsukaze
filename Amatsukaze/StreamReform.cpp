@@ -10,12 +10,10 @@
 #include <cmath>
 #include <chrono>
 #include <regex>
-#include <set>
 #include <fstream>
 #include "ProcessThread.h"
 #include "TranscodeSetting.h"
 #include "AdtsParser.h"
-#include "AudioTrackConverter.h"
 
 namespace {
 
@@ -24,21 +22,6 @@ constexpr int MAX_DUP_GAP_FRAMES = 5;
 constexpr double AUDIO_SYNC_MARGIN_FRAMES = 0.75;
 constexpr int ADTS_HEADER_BYTES = 7;
 constexpr int ADTS_PCE_CHANNEL_CONFIGURATION = 0;
-constexpr int DEFAULT_AUDIO_GRID_RATE = 48000;
-
-// CM判定用PCMの割当てと、最終出力の事前検査で同じメタデータ条件を使う。
-const tchar* CheckAudioFrameMetadata(const FileAudioFrameInfo& frame, int referenceSampleRate) {
-    const auto layout = frame.format.channels;
-    if (GetAudioAdtsChannelConfiguration(layout) < 0 && layout != AUDIO_2LANG)
-        return _T("未対応の音声レイアウト");
-    if (frame.numSamples != AAC_LC_FRAME_SAMPLES)
-        return _T("AAC-LCの1024サンプルフレーム以外の音声");
-    if (GetAudioSamplingFrequencyIndex(frame.format.sampleRate) < 0)
-        return _T("未対応の音声サンプルレート");
-    if (referenceSampleRate != 0 && referenceSampleRate != frame.format.sampleRate)
-        return _T("音声サンプルレートの混在");
-    return nullptr;
-}
 
 struct FrameIntervalCluster {
     double center;
@@ -290,30 +273,68 @@ StreamReformInfo::StreamReformInfo(
 // splitSub: メイン以外のフォーマットを結合しない
 void StreamReformInfo::prepare(bool splitSub, bool isEncodeAudio, bool isTsreplace,
     AUDIO_FORMAT_CHANGE_MODE audioMode, const tstring& audioPath) {
+    const auto prepareStart = std::chrono::steady_clock::now();
     audioMode_ = isEncodeAudio || isTsreplace ? AFC_SPLIT : audioMode;
-    audioPath_ = audioPath;
-    splitSub_ = splitSub;
-    // CM用waveは除外前の入力を使う。出力用の事前検査はCM/最短区間確定後に行う。
-    audioSampleRate_ = audioFrameList_.empty() ? 0 : audioFrameList_.front().format.sampleRate;
+    const bool measureAudioCheck = audioMode_ != AFC_SPLIT;
+    double audioCheckSeconds = 0;
+    audioSampleRate_ = 0;
     numMaxAudio_ = 1;
+    if (audioMode_ != AFC_SPLIT) {
+        // 分割構成を確定する前に検査する。再開データの構造体は変更しない。
+        const auto audioCheckStart = std::chrono::steady_clock::now();
+        std::unique_ptr<File> audioFile;
+        if (!audioPath.empty()) audioFile = std::make_unique<File>(audioPath, _T("rb"));
+        const tchar* reason = nullptr;
+        for (const auto& frame : audioFrameList_) {
+            const auto layout = frame.format.channels;
+            if (GetAudioAdtsChannelConfiguration(layout) < 0 && layout != AUDIO_2LANG) {
+                reason = _T("未対応の音声レイアウト");
+            } else if (frame.numSamples != AAC_LC_FRAME_SAMPLES) {
+                reason = _T("AAC-LCの1024サンプルフレーム以外の音声");
+            } else if (GetAudioSamplingFrequencyIndex(frame.format.sampleRate) < 0) {
+                reason = _T("未対応の音声サンプルレート");
+            } else if (audioSampleRate_ != 0 && audioSampleRate_ != frame.format.sampleRate) {
+                reason = _T("音声サンプルレートの混在");
+            }
+            if (reason) break;
+            audioSampleRate_ = frame.format.sampleRate;
+            if (audioFile) {
+                uint8_t data[ADTS_HEADER_BYTES];
+                audioFile->seek(frame.fileOffset, SEEK_SET);
+                audioFile->read(MemoryChunk(data, ADTS_HEADER_BYTES));
+                AdtsHeader header;
+                int sampleRate = 0;
+                if (!header.parse(data, ADTS_HEADER_BYTES)) {
+                    reason = _T("不正なADTSヘッダ");
+                } else {
+                    header.getSamplingRate(sampleRate);
+                    if (header.channel_configuration == ADTS_PCE_CHANNEL_CONFIGURATION && layout != AUDIO_2LANG) {
+                        reason = _T("PCE形式のAAC(channel_configuration=0)");
+                    } else if (header.profile != AAC_LC_PROFILE || header.number_of_raw_data_blocks_in_frame != 0) {
+                        reason = _T("非AAC-LCまたは複数ブロックのADTS音声");
+                    } else if (sampleRate != frame.format.sampleRate) {
+                        reason = _T("ADTSとデコード結果のサンプルレート不一致");
+                    }
+                }
+            }
+            if (reason) break;
+        }
+        audioCheckSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - audioCheckStart).count();
+        if (reason) {
+            audioMode_ = AFC_SPLIT;
+            ctx.warnF(_T("%sを検出したため、ジョブ全体をsplitで出力します"), reason);
+        }
+    }
+
     isEncodeAudio_ = isEncodeAudio;
     isTsreplace_ = isTsreplace;
     reformMain(splitSub);
-    const auto outputMode = audioMode_;
-    if (outputMode != AFC_SPLIT) {
-        int referenceSampleRate = 0;
-        for (const auto& frame : audioFrameList_) {
-            if (const auto reason = CheckAudioFrameMetadata(frame, referenceSampleRate)) {
-                // 出力の可否は最短区間確定後に判定する。CM用PCMだけ旧splitの割当てを保つ。
-                audioMode_ = AFC_SPLIT;
-                ctx.infoF(_T("CM判定用音声: %sのため従来割当"), reason);
-                break;
-            }
-            referenceSampleRate = frame.format.sampleRate;
-        }
-    }
     genWaveAudioStream();
-    audioMode_ = outputMode;
+    if (measureAudioCheck) {
+        const double prepareSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - prepareStart).count();
+        ctx.infoF(_T("音声フォーマット事前検査: %zuフレーム %.3f秒、prepare全体 %.3f秒"),
+            audioFrameList_.size(), audioCheckSeconds, prepareSeconds);
+    }
 }
 
 time_t StreamReformInfo::getFirstFrameTime() const {
@@ -351,8 +372,8 @@ void StreamReformInfo::applyCMZones(int videoFileIndex, const std::vector<Encode
 
 // 3. CM解析が終了したらエンコード前に呼ぶ
 // cmtypes: 出力するCMタイプリスト
-AudioDiffInfo StreamReformInfo::genAudio(const std::vector<CMType>& cmtypes, int minOutputDurationSeconds) {
-    calcSizeAndTime(cmtypes, minOutputDurationSeconds);
+AudioDiffInfo StreamReformInfo::genAudio(const std::vector<CMType>& cmtypes) {
+    calcSizeAndTime(cmtypes);
     genCaptionStream();
     return genAudioStream();
 }
@@ -766,6 +787,9 @@ void StreamReformInfo::reformMain(bool splitSub) {
     double curVideoFromPTS = -1;
     curFormat.videoFileId = -1;
     auto addSection = [&]() {
+        if (audioMode_ != AFC_SPLIT) {
+            numMaxAudio_ = std::max(numMaxAudio_, (int)curFormat.audioFormat.size());
+        }
         registerOrGetFormat(curFormat);
         sectionFormatList.push_back(curFormat.formatId);
         startPtsList.push_back(curFromPTS);
@@ -846,6 +870,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
 
     // frameSectionIdを生成
     ctx.info(_T("frameSectionId生成"));
+    std::vector<int> outFormatFrames(format_.size());
     std::vector<int> frameSectionId(videoFrameList_.size());
     for (int i = 0; i < int(videoFrameList_.size()); i++) {
         double pts = modifiedPTS_[i];
@@ -859,32 +884,57 @@ void StreamReformInfo::reformMain(bool splitSub) {
                 sectionId, (int)sectionFormatList.size(), i);
         }
         frameSectionId[i] = sectionId;
+        outFormatFrames[sectionFormatList[sectionId]]++;
     }
 
-    buildFileFormatMapping(sectionFormatList, frameSectionId, splitSub);
-    splitMapping_ = getFormatMapping();
-    mergedSections_ = sectionFormatList;
-    frameSections_ = frameSectionId;
-    if (audioMode_ != AFC_SPLIT) {
-        // 区間境界は共通にし、音声の差を無視した対応だけを別に作る。
-        const auto splitFormats = format_;
-        const auto splitStarts = formatStartIndex_;
-        std::vector<int> mergedIds(splitFormats.size());
-        format_.clear();
-        formatStartIndex_.clear();
-        for (int video = 0; video < numVideoFile_; ++video) {
-            formatStartIndex_.push_back(static_cast<int>(format_.size()));
-            for (int i = splitStarts[video]; i < splitStarts[video + 1]; ++i) {
-                auto merged = splitFormats[i];
-                registerOrGetFormat(merged, true);
-                mergedIds[i] = merged.formatId;
+    // セクション→ファイルマッピングを生成
+    std::vector<int> sectionFileList(sectionFormatList.size());
+
+    if (splitSub) {
+        // メインフォーマット以外は結合しない //
+
+        int mainFormatId = int(std::max_element(
+            outFormatFrames.begin(), outFormatFrames.end()) - outFormatFrames.begin());
+
+        fileFormatStartIndex_.push_back(0);
+        for (int i = 0, mainFileId = -1, nextFileId = 0, videoId = 0;
+            i < (int)sectionFormatList.size(); i++) {
+            int vid = format_[sectionFormatList[i]].videoFileId;
+            if (videoId != vid) {
+                fileFormatStartIndex_.push_back(nextFileId);
+                videoId = vid;
+            }
+            if (sectionFormatList[i] == mainFormatId) {
+                if (mainFileId == -1) {
+                    mainFileId = nextFileId++;
+                    fileFormatId_.push_back(mainFormatId);
+                }
+                sectionFileList[i] = mainFileId;
+            } else {
+                sectionFileList[i] = nextFileId++;
+                fileFormatId_.push_back(sectionFormatList[i]);
             }
         }
-        formatStartIndex_.push_back(static_cast<int>(format_.size()));
-        for (int& id : mergedSections_) id = mergedIds[id];
-        buildFileFormatMapping(mergedSections_, frameSections_, splitSub);
+        fileFormatStartIndex_.push_back((int)fileFormatId_.size());
+    } else {
+        for (int i = 0; i < (int)sectionFormatList.size(); i++) {
+            // ファイルとフォーマットは同じ
+            sectionFileList[i] = sectionFormatList[i];
+        }
+        for (int i = 0; i < (int)format_.size(); i++) {
+            // ファイルとフォーマットは恒等変換
+            fileFormatId_.push_back(i);
+        }
+        fileFormatStartIndex_ = formatStartIndex_;
     }
-    mergedMapping_ = getFormatMapping();
+
+    // frameFormatId_を生成
+    ctx.info(_T("frameFormatId_生成"));
+    frameFormatId_.resize(videoFrameList_.size());
+    for (int i = 0; i < int(videoFrameList_.size()); i++) {
+        frameFormatId_[i] = sectionFileList[frameSectionId[i]];
+    }
+
     // フィルタ用入力フレームリスト生成
     ctx.info(_T("フィルタ用入力フレームリスト生成"));
     filterFrameList_ = std::vector<std::vector<FilterSourceFrame>>(numVideoFile_);
@@ -981,7 +1031,10 @@ void StreamReformInfo::reformMain(bool splitSub) {
         numMaxAudio = std::max(numMaxAudio, (int)format_[i].audioFormat.size());
     }
     if (audioMode_ != AFC_SPLIT) {
-        for (const auto& frame : audioFrameList_) numMaxAudio = std::max(numMaxAudio, frame.audioIdx + 1);
+        for (const auto& event : streamEventList_) {
+            if (event.type == PID_TABLE_CHANGED) numMaxAudio_ = std::max(numMaxAudio_, event.numAudio);
+        }
+        numMaxAudio = numMaxAudio_;
     }
     indexAudioFrameList_.resize(numMaxAudio);
     for (int i = 0; i < (int)audioFrameList_.size(); i++) {
@@ -1024,298 +1077,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     fileDivs_.resize(numVideoFile_);
 }
 
-bool StreamReformInfo::checkOutputAudio(const std::vector<bool>& referenced) {
-    audioSampleRate_ = 0;
-    const auto audioCheckStart = std::chrono::steady_clock::now();
-    std::unique_ptr<File> audioFile;
-    if (!audioPath_.empty() && std::any_of(referenced.begin(), referenced.end(), [](bool value) { return value; }))
-        audioFile = std::make_unique<File>(audioPath_, _T("rb"));
-    const tchar* reason = nullptr;
-    size_t checked = 0;
-    for (size_t i = 0; i < audioFrameList_.size(); ++i) {
-        if (!referenced[i]) continue;
-        const auto& frame = audioFrameList_[i];
-        ++checked;
-        const auto layout = frame.format.channels;
-        reason = CheckAudioFrameMetadata(frame, audioSampleRate_);
-        if (reason) break;
-        audioSampleRate_ = frame.format.sampleRate;
-        if (audioFile) {
-            uint8_t data[ADTS_HEADER_BYTES];
-            audioFile->seek(frame.fileOffset, SEEK_SET);
-            audioFile->read(MemoryChunk(data, ADTS_HEADER_BYTES));
-            AdtsHeader header;
-            int sampleRate = 0;
-            if (!header.parse(data, ADTS_HEADER_BYTES)) {
-                reason = _T("不正なADTSヘッダ");
-            } else {
-                header.getSamplingRate(sampleRate);
-                if (header.channel_configuration == ADTS_PCE_CHANNEL_CONFIGURATION && layout != AUDIO_2LANG) {
-                    reason = _T("PCE形式のAAC(channel_configuration=0)");
-                } else if (header.profile != AAC_LC_PROFILE || header.number_of_raw_data_blocks_in_frame != 0) {
-                    reason = _T("非AAC-LCまたは複数ブロックのADTS音声");
-                } else if (sampleRate != frame.format.sampleRate) {
-                    reason = _T("ADTSとデコード結果のサンプルレート不一致");
-                }
-            }
-        }
-        if (reason) break;
-    }
-    const double audioCheckSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - audioCheckStart).count();
-    if (reason) {
-        ctx.warnF(_T("%sを検出したため、ジョブ全体をsplitで出力します"), reason);
-    }
-    ctx.infoF(_T("音声フォーマット事前検査: 出力参照%zuフレーム %.3f秒"), checked, audioCheckSeconds);
-    return reason == nullptr;
-}
-
-void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes, int minOutputDurationSeconds) {
-    if (audioMode_ == AFC_SPLIT) {
-        buildOutputFiles(cmtypes);
-        return;
-    }
-    minExcludedDecoderFrames_.clear();
-    const auto requestedMode = audioMode_;
-    int inputTracks = 1;
-    for (const auto& frame : audioFrameList_) inputTracks = std::max(inputTracks, frame.audioIdx + 1);
-    indexAudioFrameList_.assign(inputTracks, {});
-    for (size_t i = 0; i < audioFrameList_.size(); ++i) indexAudioFrameList_[audioFrameList_[i].audioIdx].push_back(static_cast<int>(i));
-    const int64_t minimum = static_cast<int64_t>(minOutputDurationSeconds) * MPEG_CLOCK_HZ;
-    setFormatMapping(splitMapping_);
-    audioMode_ = AFC_SPLIT;
-    buildOutputFiles(cmtypes);
-    // CMカット等で元から出力しない区間と、今回の最短判定による除外を区別する。
-    std::vector<KeepSegment> originalSegments;
-    for (auto key : outFileKeys_) {
-        const auto segments = getKeepSegments(key);
-        originalSegments.insert(originalSegments.end(), segments.begin(), segments.end());
-    }
-    outFileKeys_.erase(std::remove_if(outFileKeys_.begin(), outFileKeys_.end(), [&](EncodeFileKey key) {
-        const auto& file = outFiles_.at(key.key());
-        if (file.duration >= minimum && !file.videoFrames.empty()) return false;
-        // 判定はキー合計。ログは実際に除外した連続区間ごとに出す。
-        const auto& frames = filterFrameList_[key.video];
-        const auto& audio = getFormat(key).audioFormat;
-        tstring layout;
-        for (const auto& format : audio) {
-            if (!layout.empty()) layout += _T("+");
-            layout += format.channels == AUDIO_2LANG ? _T("デュアルモノ")
-                : StringFormat(_T("%dch"), GetAudioAdtsChannelConfiguration(format.channels));
-        }
-        for (size_t i = 0; i < file.videoFrames.size();) {
-            const size_t start = i;
-            double duration = frames[file.videoFrames[i++]].frameDuration;
-            while (i < file.videoFrames.size() && file.videoFrames[i] == file.videoFrames[i - 1] + 1) {
-                duration += frames[file.videoFrames[i++]].frameDuration;
-            }
-            ctx.infoF(_T("出力最短区間(%d秒)未満のキーを除外: 開始 %.2f秒 長さ %.2f秒 (音声 %s、キー合計 %.2f秒)"),
-                minOutputDurationSeconds, (frames[file.videoFrames[start]].pts - dataPTS_.front()) / MPEG_CLOCK_HZ,
-                duration / MPEG_CLOCK_HZ, layout.c_str(), file.duration / MPEG_CLOCK_HZ);
-        }
-        return true;
-    }), outFileKeys_.end());
-
-    // 出力の保持時間から元音声を絞る。短いPID変化を区間解析がまとめても副音声を失わない。
-    std::map<int, std::vector<bool>> keptFrames;
-    for (auto key : outFileKeys_) {
-        const auto& file = outFiles_.at(key.key());
-        auto& kept = keptFrames[EncodeFileKey(key.video, 0, key.div, key.cm).key()];
-        kept.resize(filterFrameList_[key.video].size(), false);
-        for (int index : file.videoFrames) kept[index] = true;
-    }
-    audioMode_ = requestedMode;
-    setFormatMapping(mergedMapping_);
-    // splitSubの主フォーマットも、除外後の保持フレーム数で選び直す。
-    std::vector<int> retainedCounts(format_.size(), 0);
-    std::vector<std::vector<bool>> counted(numVideoFile_);
-    for (int video = 0; video < numVideoFile_; ++video) counted[video].resize(filterFrameList_[video].size(), false);
-    for (auto key : outFileKeys_) {
-        for (int i : outFiles_.at(key.key()).videoFrames) if (!counted[key.video][i]) {
-            counted[key.video][i] = true;
-            const int frame = filterFrameList_[key.video][i].frameIndex;
-            ++retainedCounts[mergedSections_[frameSections_[frame]]];
-        }
-    }
-    buildFileFormatMapping(mergedSections_, frameSections_, splitSub_, &retainedCounts);
-    buildOutputFiles(cmtypes);
-    for (auto key : outFileKeys_) {
-        auto& file = outFiles_.at(key.key());
-        const auto kept = keptFrames.find(EncodeFileKey(key.video, 0, key.div, key.cm).key());
-        file.videoFrames.erase(std::remove_if(file.videoFrames.begin(), file.videoFrames.end(), [&](int index) {
-            return kept == keptFrames.end() || !kept->second[index];
-        }), file.videoFrames.end());
-        file.duration = 0;
-        for (int index : file.videoFrames) file.duration += filterFrameList_[key.video][index].frameDuration;
-    }
-    outFileKeys_.erase(std::remove_if(outFileKeys_.begin(), outFileKeys_.end(), [&](EncodeFileKey key) {
-        const auto& file = outFiles_.at(key.key());
-        return file.videoFrames.empty() || file.duration < minimum;
-    }), outFileKeys_.end());
-    // splitSub再選択後の最終キーから、検査とトラック数の対象を確定する。
-    std::vector<KeepSegment> retainedSegments;
-    for (auto key : outFileKeys_) {
-        const auto segments = getKeepSegments(key);
-        retainedSegments.insert(retainedSegments.end(), segments.begin(), segments.end());
-    }
-    std::vector<bool> referenced(audioFrameList_.size(), false);
-    numMaxAudio_ = inputTracks;
-    int gridSampleRate = 0;
-    std::sort(retainedSegments.begin(), retainedSegments.end(), [](const KeepSegment& a, const KeepSegment& b) {
-        return a.start < b.start;
-    });
-    std::vector<KeepSegment> united;
-    for (const auto& segment : retainedSegments) {
-        if (united.empty() || segment.start > united.back().end) united.push_back(segment);
-        else united.back().end = std::max(united.back().end, segment.end);
-    }
-    // 最短判定で消えた区間だけを助走禁止にする。既存CMカットの履歴は維持する。
-    std::vector<bool> minExcluded(audioFrameList_.size(), false);
-    for (size_t i = 0; i < audioFrameList_.size(); ++i) {
-        const double pts = modifiedAudioPTS_[i];
-        const bool wasOutput = std::any_of(originalSegments.begin(), originalSegments.end(),
-            [&](const KeepSegment& segment) { return segment.start <= pts && pts < segment.end; });
-        const bool kept = std::any_of(united.begin(), united.end(),
-            [&](const KeepSegment& segment) { return segment.start <= pts && pts < segment.end; });
-        minExcluded[i] = wasOutput && !kept;
-        if (minExcluded[i]) minExcludedDecoderFrames_.push_back(static_cast<int>(i));
-        // 入力メタデータが不正でも、所属区間を広げず標準AAC格子で候補を作る。
-        const int sourceRate = audioFrameList_[i].format.sampleRate;
-        if (kept && gridSampleRate == 0)
-            gridSampleRate = GetAudioSamplingFrequencyIndex(sourceRate) >= 0 ? sourceRate : DEFAULT_AUDIO_GRID_RATE;
-    }
-    auto restoreSplit = [&]() {
-        // 派生処理はこの後に1回だけ行い、splitの元キー構成をそのまま復元する。
-        audioMode_ = AFC_SPLIT;
-        setFormatMapping(splitMapping_);
-        indexAudioFrameList_.assign(inputTracks, {});
-        for (size_t i = 0; i < audioFrameList_.size(); ++i)
-            indexAudioFrameList_[audioFrameList_[i].audioIdx].push_back(static_cast<int>(i));
-        buildOutputFiles(cmtypes);
-    };
-    // 実際の同期補正・短欠落複製で選ぶ元フレームを先に確定する。
-    audioSampleRate_ = gridSampleRate != 0 ? gridSampleRate : DEFAULT_AUDIO_GRID_RATE;
-    std::set<int> testedGridRates;
-    while (true) {
-        const int rate = audioSampleRate_;
-        // 位相端の採否がレート変更で揺れる場合も、未検査の格子へ進まない。
-        if (!testedGridRates.insert(rate).second) {
-            ctx.warn(_T("音声サンプルレートの時間格子が確定できないため、ジョブ全体をsplitで出力します"));
-            restoreSplit();
-            return;
-        }
-        numMaxAudio_ = inputTracks;
-        indexAudioFrameList_.assign(numMaxAudio_, {});
-        for (size_t index = 0; index < minExcluded.size(); ++index) {
-            const int track = audioFrameList_[index].audioIdx;
-            if (!minExcluded[index] && track < numMaxAudio_) indexAudioFrameList_[track].push_back(static_cast<int>(index));
-        }
-        genAudioFrameReferences();
-        std::fill(referenced.begin(), referenced.end(), false);
-        numMaxAudio_ = 1;
-        for (auto key : outFileKeys_) for (const auto& frames : outFiles_.at(key.key()).audioFrames)
-            for (int index : frames) if (index >= 0) {
-                referenced[index] = true;
-                numMaxAudio_ = std::max(numMaxAudio_, audioFrameList_[index].audioIdx + 1);
-            }
-        indexAudioFrameList_.resize(numMaxAudio_);
-        for (auto key : outFileKeys_) outFiles_.at(key.key()).audioFrames.resize(numMaxAudio_);
-        if (!checkOutputAudio(referenced)) {
-            restoreSplit();
-            return;
-        }
-        if (audioSampleRate_ == 0) audioSampleRate_ = rate;
-        if (audioSampleRate_ == rate) break;
-    }
-    planAudioTracks();
-    bool hasWarmFrames = false;
-    if (audioMode_ == AFC_MERGE) for (auto key : outFileKeys_) {
-        for (const auto& plan : outFiles_.at(key.key()).audioTrackPlan) {
-            for (int index : GetAudioTrackDecoderWarmFrames(plan, audioFrameList_)) if (!referenced[index]) {
-                referenced[index] = true;
-                hasWarmFrames = true;
-            }
-        }
-    }
-    // CMカットの実音声による助走も検査する。最短区間で除外した候補はAPIが返さない。
-    if (hasWarmFrames && !checkOutputAudio(referenced)) {
-        restoreSplit();
-        return;
-    }
-    outTotalDuration_ = 0;
-    for (auto key : outFileKeys_) outTotalDuration_ += outFiles_.at(key.key()).duration;
-}
-
-StreamReformInfo::FormatMapping StreamReformInfo::getFormatMapping() const {
-    return { format_, formatStartIndex_, fileFormatId_, fileFormatStartIndex_, frameFormatId_ };
-}
-
-void StreamReformInfo::setFormatMapping(const FormatMapping& mapping) {
-    format_ = mapping.formats;
-    formatStartIndex_ = mapping.formatStarts;
-    fileFormatId_ = mapping.fileFormats;
-    fileFormatStartIndex_ = mapping.fileStarts;
-    frameFormatId_ = mapping.frameFormats;
-}
-
-void StreamReformInfo::buildFileFormatMapping(const std::vector<int>& sections,
-    const std::vector<int>& frameSections, bool splitSub, const std::vector<int>* retainedCounts) {
-    fileFormatId_.clear();
-    fileFormatStartIndex_.clear();
-    std::vector<int> outFormatFrames(format_.size(), 0);
-    for (int section : frameSections) ++outFormatFrames[sections[section]];
-    if (retainedCounts) outFormatFrames = *retainedCounts;
-    // セクション→ファイルマッピングを生成
-    std::vector<int> sectionFileList(sections.size());
-
-    if (splitSub) {
-        // メインフォーマット以外は結合しない //
-
-        int mainFormatId = int(std::max_element(
-            outFormatFrames.begin(), outFormatFrames.end()) - outFormatFrames.begin());
-
-        fileFormatStartIndex_.push_back(0);
-        for (int i = 0, mainFileId = -1, nextFileId = 0, videoId = 0;
-            i < (int)sections.size(); i++) {
-            int vid = format_[sections[i]].videoFileId;
-            if (videoId != vid) {
-                fileFormatStartIndex_.push_back(nextFileId);
-                videoId = vid;
-            }
-            if (sections[i] == mainFormatId) {
-                if (mainFileId == -1) {
-                    mainFileId = nextFileId++;
-                    fileFormatId_.push_back(mainFormatId);
-                }
-                sectionFileList[i] = mainFileId;
-            } else {
-                sectionFileList[i] = nextFileId++;
-                fileFormatId_.push_back(sections[i]);
-            }
-        }
-        fileFormatStartIndex_.push_back((int)fileFormatId_.size());
-    } else {
-        for (int i = 0; i < (int)sections.size(); i++) {
-            // ファイルとフォーマットは同じ
-            sectionFileList[i] = sections[i];
-        }
-        for (int i = 0; i < (int)format_.size(); i++) {
-            // ファイルとフォーマットは恒等変換
-            fileFormatId_.push_back(i);
-        }
-        fileFormatStartIndex_ = formatStartIndex_;
-    }
-
-    // frameFormatId_を生成
-    ctx.info(_T("frameFormatId_生成"));
-    frameFormatId_.resize(videoFrameList_.size());
-    for (int i = 0; i < int(videoFrameList_.size()); i++) {
-        frameFormatId_[i] = sectionFileList[frameSections[i]];
-    }
-
-}
-
-void StreamReformInfo::buildOutputFiles(const std::vector<CMType>& cmtypes) {
-    outFiles_.clear();
+void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
     // CM解析がないときはfileDivs_が設定されていないのでここで設定
     for (int i = 0; i < numVideoFile_; i++) {
         auto& divs = fileDivs_[i];
@@ -1440,10 +1202,10 @@ void StreamReformInfo::buildOutputFiles(const std::vector<CMType>& cmtypes) {
     }
 }
 
-void StreamReformInfo::registerOrGetFormat(OutVideoFormat& format, bool ignoreAudio) {
+void StreamReformInfo::registerOrGetFormat(OutVideoFormat& format) {
     // すでにあるのから探す
     for (int i = formatStartIndex_.back(); i < (int)format_.size(); i++) {
-        if (isEquealFormat(format_[i], format, ignoreAudio)) {
+        if (isEquealFormat(format_[i], format)) {
             format.formatId = i;
             return;
         }
@@ -1453,9 +1215,9 @@ void StreamReformInfo::registerOrGetFormat(OutVideoFormat& format, bool ignoreAu
     format_.push_back(format);
 }
 
-bool StreamReformInfo::isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b, bool ignoreAudio) {
+bool StreamReformInfo::isEquealFormat(const OutVideoFormat& a, const OutVideoFormat& b) {
     if (a.videoFormat != b.videoFormat) return false;
-    if (isEncodeAudio_ || isTsreplace_ || ignoreAudio) return true;
+    if (isEncodeAudio_ || isTsreplace_ || audioMode_ != AFC_SPLIT) return true;
     if (a.audioFormat.size() != b.audioFormat.size()) return false;
     for (int i = 0; i < (int)a.audioFormat.size(); i++) {
         if (a.audioFormat[i] != b.audioFormat[i]) {
@@ -1473,7 +1235,7 @@ AudioDiffInfo StreamReformInfo::initAudioDiffInfo() {
 }
 
 // フィルタ入力から音声構築
-void StreamReformInfo::genAudioFrameReferences() {
+AudioDiffInfo StreamReformInfo::genAudioStream() {
     std::vector<AudioFormat> plannedAudioFormats;
     if (audioMode_ != AFC_SPLIT) plannedAudioFormats.resize(numMaxAudio_);
     // 各ファイルの音声構築
@@ -1495,29 +1257,14 @@ void StreamReformInfo::genAudioFrameReferences() {
             addVideoFrame(state, audioFormats, frame.pts, frame.frameDuration, nullptr);
         }
         file.audioFrames = std::move(state.audioFrameList);
-    }
-}
-
-void StreamReformInfo::planAudioTracks() {
-    for (auto key : outFileKeys_) {
-        auto& file = outFiles_.at(key.key());
         file.isAudioTrackPlanned = audioMode_ != AFC_SPLIT;
         file.audioTrackPlan.clear();
         if (file.isAudioTrackPlanned && !file.videoFrames.empty()) {
             file.audioTrackPlan = audioMode_ == AFC_MERGE
                 ? PlanMergeAudioTracks(file.audioFrames, audioFrameList_, file.duration)
                 : PlanSeparateAudioTracks(file.audioFrames, audioFrameList_, file.duration);
-            if (audioMode_ == AFC_MERGE)
-                for (auto& plan : file.audioTrackPlan) plan.excludedDecoderFrames = minExcludedDecoderFrames_;
         }
     }
-}
-
-AudioDiffInfo StreamReformInfo::genAudioStream() {
-    genAudioFrameReferences();
-    planAudioTracks();
-    std::vector<AudioFormat> plannedAudioFormats;
-    if (audioMode_ != AFC_SPLIT) plannedAudioFormats.resize(numMaxAudio_);
 
     // 音ズレ統計情報のためもう1パス実行
     AudioDiffInfo adiff = initAudioDiffInfo();
@@ -1529,15 +1276,9 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
         states[i].audioState.resize(numAudio);
         states[i].audioFrameList.resize(numAudio);
     }
-    std::vector<std::vector<bool>> retained(numVideoFile_);
-    if (audioMode_ != AFC_SPLIT) {
-        for (int video = 0; video < numVideoFile_; ++video) retained[video].resize(filterFrameList_[video].size(), false);
-        for (auto key : outFileKeys_) for (int index : outFiles_.at(key.key()).videoFrames) retained[key.video][index] = true;
-    }
     for (int videoId = 0; videoId < numVideoFile_; videoId++) {
         const auto& frameList = filterFrameList_[videoId];
         for (int i = 0; i < (int)frameList.size(); i++) {
-            if (audioMode_ != AFC_SPLIT && !retained[videoId][i]) continue;
             const auto& frame = frameList[i];
             int fileFormatId = frameFormatId_[frame.frameIndex];
             const auto& audioFormats = audioMode_ != AFC_SPLIT

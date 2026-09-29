@@ -1720,8 +1720,8 @@ void DoBadThing() {
             copyCutInfoForCMOnly(ctx, setting, reformInfo, cmanalyze, numVideoFiles);
         }
         if (setting.isOutputChapterEnabled()) {
-            // CM解析のみでも、最短区間を反映した出力キーと保持フレーム列を確定する。
-            reformInfo.genAudio(setting.getCMTypes(), setting.getMinOutputDuration());
+            // CM解析のみでも、チャプター出力に使う出力キーと保持フレーム列を確定する。
+            reformInfo.genAudio(setting.getCMTypes());
             ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {
                 const auto& fileIn = reformInfo.getEncodeFile(key);
@@ -1739,7 +1739,7 @@ void DoBadThing() {
         return; // CM解析のみならここで終了
     }
 
-    auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes(), setting.getMinOutputDuration());
+    auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes());
     audioDiffInfo.printAudioPtsDiff(ctx);
 
     const auto& allKeys = reformInfo.getOutFileKeys();
