@@ -397,6 +397,12 @@ typedef bool(*LOGO_ANALYZE_CB)(float progress, int nread, int total, int ngather
 //   大きめの処理区間にまとめて通知する。
 typedef bool(*LOGO_AUTODETECT_CB)(int stage, float stageProgress, float progress, int nread, int total);
 
+// 再生成のフレーム評価だけを並列実行する。進捗通知は呼び出し元スレッドで行う。
+int GetLogoRemakeEvaluationThreadCount();
+void RunLogoRemakeFrameEvaluation(int numFrames, int threadCount,
+    const std::function<void(int, int, int)>& evaluateRange,
+    const std::function<void(int)>& reportProgress);
+
 class LogoScanDataCompressed {
 public:
     LogoScanDataCompressed();
@@ -528,41 +534,48 @@ class LogoAnalyzer : AMTObject {
         const size_t YSize = scanw * scanh;
         std::vector<pixel_t> memScanData;
 
-        auto memDeint = std::unique_ptr<float[]>(new float[YSize + 8]);
-        auto memWork = std::unique_ptr<float[]>(new float[YSize + 8]);
-
         const int numFade = 20;
         auto minFades = std::unique_ptr<int[]>(new int[numFrames]);
         {
-
-            // 全フレームループ
-            for (int i = 0; i < numFrames; i++) {
-                memScanData.resize(creator->getFrameSize(i));
-                creator->getFrame(i, memScanData.data());
-                const float maxv = (float)((1 << creator->bitdepth()) - 1);
-                // フレームをインタレ解除
-                DeintY(memDeint.get(), memScanData.data(), scanw, scanw, scanh);
-                // fade値ループ
-                float minResult = std::numeric_limits<float>::max();
-                int minFadeIndex = 0;
-                for (int fi = 0; fi < numFade; fi++) {
-                    float fade = 0.1f * fi;
-                    // ロゴを評価
-                    float result = std::abs(deintLogo.EvaluateLogo(memDeint.get(), maxv, fade, memWork.get()));
-                    if (result < minResult) {
-                        minResult = result;
-                        minFadeIndex = fi;
-                    }
-                }
-                minFades[i] = minFadeIndex;
-
-                if ((i % 100) == 0) {
-                    float progress = (float)i / numFrames * 25 + progressbase;
-                    if (cb(progress, i, numFrames, numFrames) == false) {
-                        THROW(RuntimeException, "Cancel requested");
-                    }
-                }
+            struct EvaluationBuffer {
+                std::vector<pixel_t> scan;
+                std::unique_ptr<float[]> deint;
+                std::unique_ptr<float[]> work;
+            };
+            const int threadCount = std::min(GetLogoRemakeEvaluationThreadCount(), std::max(1, numFrames));
+            std::vector<EvaluationBuffer> buffers(threadCount);
+            for (auto& buffer : buffers) {
+                buffer.deint.reset(new float[YSize + 8]);
+                buffer.work.reset(new float[YSize + 8]);
             }
+            // 各タスクは専用バッファを所有し、同じフレーム内のfade順と演算を維持する。
+            const auto evaluateRange = [&](const int worker, const int start, const int end) {
+                auto& buffer = buffers[worker];
+                for (int i = start; i < end; i++) {
+                    buffer.scan.resize(creator->getFrameSize(i));
+                    creator->getFrame(i, buffer.scan.data());
+                    const float maxv = (float)((1 << creator->bitdepth()) - 1);
+                    DeintY(buffer.deint.get(), buffer.scan.data(), scanw, scanw, scanh);
+                    float minResult = std::numeric_limits<float>::max();
+                    int minFadeIndex = 0;
+                    for (int fi = 0; fi < numFade; fi++) {
+                        float fade = 0.1f * fi;
+                        float result = std::abs(deintLogo.EvaluateLogo(buffer.deint.get(), maxv, fade, buffer.work.get()));
+                        if (result < minResult) {
+                            minResult = result;
+                            minFadeIndex = fi;
+                        }
+                    }
+                    minFades[i] = minFadeIndex;
+                }
+            };
+            const auto reportProgress = [&](const int i) {
+                float progress = (float)i / numFrames * 25 + progressbase;
+                if (cb(progress, i, numFrames, numFrames) == false) {
+                    THROW(RuntimeException, "Cancel requested");
+                }
+            };
+            RunLogoRemakeFrameEvaluation(numFrames, threadCount, evaluateRange, reportProgress);
         }
 
         // 評価値を集約

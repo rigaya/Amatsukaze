@@ -1323,6 +1323,47 @@ void logo::LogoAnalyzer::MakeInitialLogo() {
     creator->readAll(srcpath, serviceid);
 }
 
+int logo::GetLogoRemakeEvaluationThreadCount() {
+    return ResolveAutoDetectThreadCount(0);
+}
+
+void logo::RunLogoRemakeFrameEvaluation(const int numFrames, const int threadCount,
+    const std::function<void(int, int, int)>& evaluateRange,
+    const std::function<void(int)>& reportProgress) {
+    constexpr int kProgressInterval = 100;
+    if (threadCount <= 1) {
+        for (int i = 0; i < numFrames; i++) {
+            evaluateRange(0, i, i + 1);
+            if ((i % kProgressInterval) == 0) {
+                reportProgress(i);
+            }
+        }
+        return;
+    }
+    if (numFrames <= 0) {
+        return;
+    }
+    LogoScanWorkerPool pool(threadCount);
+    // 最初の通知位置も従来と合わせ、以降は100フレーム単位で完了を待つ。
+    evaluateRange(0, 0, 1);
+    reportProgress(0);
+    for (int start = 1; start < numFrames; start += kProgressInterval) {
+        const int end = std::min(numFrames, start + kProgressInterval);
+        const int activeWorkers = std::min(threadCount, end - start);
+        pool.run(activeWorkers, [&](const int firstWorker, const int lastWorker) {
+            for (int worker = firstWorker; worker < lastWorker; worker++) {
+                const int frameStart = start + (end - start) * worker / activeWorkers;
+                const int frameEnd = start + (end - start) * (worker + 1) / activeWorkers;
+                evaluateRange(worker, frameStart, frameEnd);
+            }
+        }, 1);
+        // 全ワーカー停止後に通知するため、キャンセルや例外時もバッファを安全に破棄できる。
+        if (((end - 1) % kProgressInterval) == 0) {
+            reportProgress(end - 1);
+        }
+    }
+}
+
 logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
     const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
     LOGO_ANALYZE_CB cb, bool validateQuality) :
@@ -3206,6 +3247,8 @@ namespace {
             std::vector<std::vector<uint8_t>> batchFrameWork8;
             std::vector<std::vector<uint8_t>> batchFrameTranspose8;
             std::vector<std::vector<uint8_t>> batchRaw8;
+            // 初回走査で受け取ったが、まだ統計へ反映していないフレーム数。
+            int pendingInitialFrames = 0;
             std::vector<AutoDetectStats> stats;
             // bin優先配置のヒストグラム蓄積バッファ: [bin][画素]
             std::vector<BinAccum> binAccumBuf;
@@ -3217,6 +3260,7 @@ namespace {
             std::vector<SpatialEdgeAccum> edgeAccumBuf;
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
+                pendingInitialFrames = 0;
                 if (bitDepth <= 8) {
                     // 背景辺のAVX2処理が行末付近でも64 byteを直接ロードできるよう、
                     // 作業画像と転置画像の末尾へ余白を持たせる。
@@ -3255,6 +3299,9 @@ namespace {
         int roiCacheFrameBytes = 0;
         int roiCacheStoredFrames = 0;
         std::vector<std::vector<uint8_t>> roiCacheRamSlabs;
+        // 生ROIとは別に、8bitの同一条件で求めたフィルタ結果だけを保持する。
+        std::vector<std::vector<uint8_t>> filteredRoiCacheSlabs;
+        std::vector<uint8_t> filteredRoiCacheValid;
         std::vector<uint8_t> roiReplayFrame;
         std::vector<uint8_t> detectFrame8;
         std::vector<uint16_t> detectFrame16;
@@ -3963,7 +4010,7 @@ namespace {
                 segmentConsensusCaptureActive = kEnableSegmentConsensus;
                 runFramePassWithProgress(srcpath, 1, 0.0f, 0.5f, 0.0f, 0.15f,
                     [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, &pass1Stats, nullptr); },
-                    [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); });
+                    [&](AVFrame* frame) { return processFrame(frame, &pass1Stats, nullptr); }, &pass1Stats);
                 temporalHistCaptureActive = false;
                 segmentConsensusCaptureActive = false;
                 roiCacheCaptureActive = false;
@@ -4150,6 +4197,10 @@ namespace {
             roiCacheStoredFrames = 0;
             roiCacheRamSlabs.clear();
             roiCacheRamSlabs.shrink_to_fit();
+            filteredRoiCacheSlabs.clear();
+            filteredRoiCacheSlabs.shrink_to_fit();
+            filteredRoiCacheValid.clear();
+            filteredRoiCacheValid.shrink_to_fit();
             roiReplayFrame.clear();
             roiReplayFrame.shrink_to_fit();
             detectFrame8.clear();
@@ -4181,6 +4232,7 @@ namespace {
                         roiCacheRamSlabs.emplace_back((size_t)roiCacheFrameBytes * (size_t)framesInSlab);
                     }
                     roiCacheBackend = RoiCacheBackend::Ram;
+                    initializeFilteredRoiCache(estimatedBytes, slabCount);
                     logCtx.infoF(_T("[LogoScan] ROI cache: RAM slabs=%d (%") _T(PRIu64) _T(" bytes, avail=%") _T(PRIu64) _T(")"), slabCount, estimatedBytes, availBytes);
                     return;
                 }
@@ -4199,6 +4251,53 @@ namespace {
                 clearRoiCache();
                 logCtx.warn(_T("[LogoScan] ROI cache init failed; fallback to full decode reruns"));
             }
+        }
+
+        void initializeFilteredRoiCache(const uint64_t estimatedBytes, const int slabCount) {
+            constexpr uint64_t kMemoryReserveBytes = 2ull * 1024ull * 1024ull * 1024ull;
+            const uint64_t availableBytes = getAvailableSystemMemoryBytes();
+            // 空き量を取得できない場合と、高bit深度の再走査では従来経路を使う。
+            if (bitDepth != 8) {
+                return;
+            }
+            if (availableBytes < estimatedBytes + kMemoryReserveBytes) {
+                logCtx.infoF(_T("[LogoScan] フィルタ済みROIキャッシュを省略: 空き=%") _T(PRIu64) _T(" bytes, 必要=%") _T(PRIu64) _T(" bytes"), availableBytes, estimatedBytes + kMemoryReserveBytes);
+                return;
+            }
+            try {
+                filteredRoiCacheSlabs.reserve(slabCount);
+                for (int slab = 0; slab < slabCount; slab++) {
+                    const int count = std::min(kRoiCacheFramesPerSlab, searchFrames - slab * kRoiCacheFramesPerSlab);
+                    filteredRoiCacheSlabs.emplace_back((size_t)roiCacheFrameBytes * count);
+                }
+                filteredRoiCacheValid.assign(searchFrames, 0);
+                logCtx.infoF(_T("[LogoScan] フィルタ済みROIキャッシュ: %") _T(PRIu64) _T(" bytes (空き=%") _T(PRIu64) _T(")"), estimatedBytes, availableBytes);
+            } catch (const std::bad_alloc&) {
+                filteredRoiCacheSlabs.clear();
+                filteredRoiCacheValid.clear();
+                logCtx.info(_T("[LogoScan] フィルタ済みROIキャッシュを確保できないため従来経路を使用"));
+            }
+        }
+
+        bool loadFilteredRoiFrame(const int frameIndex, std::vector<uint8_t>& out) const {
+            if (frameIndex < 0 || frameIndex >= (int)filteredRoiCacheValid.size()
+                || filteredRoiCacheValid[frameIndex] == 0) {
+                return false;
+            }
+            out.resize(roiCacheFrameBytes);
+            const auto& slab = filteredRoiCacheSlabs[frameIndex / kRoiCacheFramesPerSlab];
+            std::memcpy(out.data(), slab.data() + (size_t)(frameIndex % kRoiCacheFramesPerSlab) * roiCacheFrameBytes, roiCacheFrameBytes);
+            return true;
+        }
+
+        void storeFilteredRoiFrame(const int frameIndex, const std::vector<uint8_t>& work) {
+            if (frameIndex < 0 || frameIndex >= (int)filteredRoiCacheValid.size()
+                || work.size() < (size_t)roiCacheFrameBytes) {
+                return;
+            }
+            auto& slab = filteredRoiCacheSlabs[frameIndex / kRoiCacheFramesPerSlab];
+            std::memcpy(slab.data() + (size_t)(frameIndex % kRoiCacheFramesPerSlab) * roiCacheFrameBytes, work.data(), roiCacheFrameBytes);
+            filteredRoiCacheValid[frameIndex] = 1;
         }
 
         template<typename pixel_t>
@@ -4923,12 +5022,16 @@ namespace {
         }
 
         template<typename FirstFrameCb, typename FrameCb>
-        void runFramePassWithProgress(const tstring& srcpath, const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan, FirstFrameCb&& onFirstFrame, FrameCb&& onFrame) {
+        void runFramePassWithProgress(const tstring& srcpath, const int stage, const float stageBase, const float stageSpan, const float overallBase, const float overallSpan, FirstFrameCb&& onFirstFrame, FrameCb&& onFrame, StatsPassBuffers* pendingStats = nullptr) {
             setProgressPlan(stage, stageBase, stageSpan, overallBase, overallSpan);
             if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
             readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame));
+            // 入力終端がバッチ境界と一致しない場合も、最後の端数を集計する。
+            if (pendingStats != nullptr) {
+                flushInitialStatsBatch(*pendingStats);
+            }
             if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
@@ -6423,6 +6526,11 @@ namespace {
             }
             auto& frameWork = getFrameWorkBuffer<pixel_t>(*statsPass);
             preprocessFrame<pixel_t>(srcY, pitchY, frameWork, maxv, rawScale, thresholdRaw);
+            if constexpr (std::is_same<pixel_t, uint8_t>::value) {
+                if (roiCacheCaptureActive) {
+                    storeFilteredRoiFrame(readFrames, frameWork);
+                }
+            }
             return collectFrameSamples<pixel_t>(frameWork, invMaxv, rawScale, thresholdRaw, *statsPass, traceFgRaw);
         }
 
@@ -6598,17 +6706,25 @@ namespace {
         }
 
         void preprocessStoredFrame(const uint8_t* srcY, const int pitchY, std::vector<uint8_t>& frameWork, const float thresholdRaw) {
+            if (loadFilteredRoiFrame(readFrames, frameWork)) {
+                return;
+            }
             constexpr int kBilateralRadius = 2;
             const float sigmaRange = std::max(6.0f, thresholdRaw * 0.6f);
             BilateralFilter<uint8_t, kBilateralRadius>(frameWork, srcY, pitchY, scanw, scanh, 1.4f, sigmaRange, (uint8_t)255, &threadPool, threadN);
+            storeFilteredRoiFrame(readFrames, frameWork);
         }
 
         void preprocessStoredFrameSingleThread(const uint8_t* srcY, const int pitchY,
-            std::vector<uint8_t>& frameWork, const float thresholdRaw) {
+            std::vector<uint8_t>& frameWork, const float thresholdRaw, const int frameIndex) {
+            if (loadFilteredRoiFrame(frameIndex, frameWork)) {
+                return;
+            }
             constexpr int kBilateralRadius = 2;
             const float sigmaRange = std::max(6.0f, thresholdRaw * 0.6f);
             BilateralFilter<uint8_t, kBilateralRadius>(frameWork, srcY, pitchY, scanw, scanh,
                 1.4f, sigmaRange, (uint8_t)255, nullptr, 1);
+            storeFilteredRoiFrame(frameIndex, frameWork);
         }
 
         template<typename pixel_t>
@@ -6978,7 +7094,7 @@ namespace {
                 for (int ai = begin; ai < end; ai++) {
                     const int bi = activeFrames[ai];
                     preprocessStoredFrameSingleThread(frames[bi].src, scanw,
-                        statsPass.batchFrameWork8[bi], thresholdRaw);
+                        statsPass.batchFrameWork8[bi], thresholdRaw, firstFrame + bi);
                     if (useTranspose) {
                         buildFrameTranspose8(statsPass.batchFrameWork8[bi], statsPass.batchFrameTranspose8[bi]);
                     }
@@ -7042,12 +7158,29 @@ namespace {
             }
         }
 
+        bool useInitialStatsBatch(const StatsPassBuffers* statsPass, const Pass2Buffers* pass2) const {
+            // 高bit入力は元の精度を保ち、追跡ログとディスクキャッシュは従来経路へ戻す。
+            return threadN >= 8 && bitDepth == 8 && roiCacheCaptureActive
+                && roiCacheBackend == RoiCacheBackend::Ram && statsPass != nullptr && pass2 == nullptr
+                && tracePoints.empty() && ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1) > 1;
+        }
+
+        void flushInitialStatsBatch(StatsPassBuffers& statsPass) {
+            if (statsPass.pendingInitialFrames <= 0) {
+                return;
+            }
+            const int count = statsPass.pendingInitialFrames;
+            processStoredStatsBatch(readFrames, count, statsPass, nullptr);
+            statsPass.pendingInitialFrames = 0;
+        }
+
         bool processFrame(AVFrame* frame, StatsPassBuffers* statsPass, Pass2Buffers* pass2) {
             if (sourceFrameIndex < frameWindowStart) {
                 sourceFrameIndex++;
                 return true;
             }
-            if (readFrames >= searchFrames) {
+            const int pendingFrames = statsPass != nullptr ? statsPass->pendingInitialFrames : 0;
+            if (readFrames + pendingFrames >= searchFrames) {
                 return false;
             }
 
@@ -7057,12 +7190,31 @@ namespace {
                 const auto* srcY = reinterpret_cast<const uint8_t*>(frame->data[0]);
                 const int pitchY = frame->linesize[0] / sizeof(uint8_t);
                 buildDetectFrame<uint8_t>(srcY, pitchY, detectFrame8);
+                if (useInitialStatsBatch(statsPass, pass2)) {
+                    // 生ROIを保存してからバッチを処理し、デコードとの同期をまとめる。
+                    appendDetectFrameToRoiCache(detectFrame8.data(), scanw);
+                    statsPass->pendingInitialFrames++;
+                    sourceFrameIndex++;
+                    const int frameBatch = std::min(32, ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1));
+                    if (statsPass->pendingInitialFrames >= frameBatch
+                        || readFrames + statsPass->pendingInitialFrames >= searchFrames) {
+                        flushInitialStatsBatch(*statsPass);
+                    }
+                    return true;
+                }
+                // 万一、途中でバッチ条件が変わった場合も入力順を維持する。
+                if (statsPass != nullptr) {
+                    flushInitialStatsBatch(*statsPass);
+                }
                 frameCount = addFrame<uint8_t>(detectFrame8.data(), scanw, statsPass, pass2);
                 appendDetectFrameToRoiCache(detectFrame8.data(), scanw);
             } else {
                 const auto* srcY = reinterpret_cast<const uint16_t*>(frame->data[0]);
                 const int pitchY = frame->linesize[0] / sizeof(uint16_t);
                 buildDetectFrame<uint16_t>(srcY, pitchY, detectFrame16);
+                if (statsPass != nullptr) {
+                    flushInitialStatsBatch(*statsPass);
+                }
                 frameCount = addFrame<uint16_t>(detectFrame16.data(), scanw, statsPass, pass2);
                 appendDetectFrameToRoiCache(detectFrame16.data(), scanw);
             }
