@@ -2096,7 +2096,6 @@ namespace Amatsukaze.Models
                 profile.ParallelLogoAnalysis = data.Profile.ParallelLogoAnalysis;
                 profile.EnableNicoJK = data.Profile.EnableNicoJK;
                 profile.IgnoreNicoJKError = data.Profile.IgnoreNicoJKError;
-                profile.NicoJK18 = data.Profile.NicoJK18;
                 profile.NicoJKLog = data.Profile.NicoJKLog;
                 profile.NicoJKFormat720S = data.Profile.NicoJKFormats[0];
                 profile.NicoJKFormat720T = data.Profile.NicoJKFormats[1];

@@ -19,7 +19,6 @@
 
 class NicoJK : public AMTObject {
     enum ConvMode {
-        CONV_ASS_XML,  // nicojk18でxmlを取得して変換
         CONV_ASS_TS,   // そのままtsを投げて変換
         CONV_ASS_LOG,  // NicoJKログを優先的に使って変換
     };
@@ -69,10 +68,6 @@ private:
 
     void getJKNum(int serviceId);
 
-    tstring MakeNicoJK18Args(int jknum, size_t startTime, size_t endTime);
-
-    bool getNicoJKXml(time_t startTime, int duration);
-
     enum NicoJKMask {
         MASK_720S = 1,
         MASK_720T = 2,
@@ -96,7 +91,7 @@ private:
 
     void readASS();
 
-    bool makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int duration);
+    bool makeASS_(int serviceId, time_t startTime, int duration);
 };
 
 class NicoJKFormatter : public AMTObject {

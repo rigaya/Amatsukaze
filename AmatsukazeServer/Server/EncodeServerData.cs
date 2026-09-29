@@ -491,8 +491,6 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool IgnoreNicoJKError { get; set; }
         [DataMember]
-        public bool NicoJK18 { get; set; }
-        [DataMember]
         public bool NicoJKLog { get; set; }
         [DataMember]
         public bool[] NicoJKFormats { get; set; }
@@ -1108,7 +1106,6 @@ namespace Amatsukaze.Server
             keyValueBool("ニコニコ実況コメントを有効にする", profile.EnableNicoJK);
             keyValueBool("ニコニコ実況コメントのエラーを無視する", profile.IgnoreNicoJKError);
             keyValueBool("NicoJKログから優先的にコメントを取得する", profile.NicoJKLog);
-            keyValueBool("NicoJK18サーバからコメントを取得する", profile.NicoJK18);
             keyValue("コメント出力フォーマット", profile.NicoJKFormatMask.ToString());
             keyValueBool("入力ファイルの移動を無効にする", profile.DisableMoveInputFile);
             keyValueBool("関連ファイル(*.err,*.program.txt)も処理", profile.MoveEDCBFiles);

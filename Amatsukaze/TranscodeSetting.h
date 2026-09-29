@@ -273,7 +273,6 @@ struct Config {
     bool outputChapter;
     bool subtitles;
     int nicojkmask;
-    bool nicojk18;
     bool useNicoJKLog;
     BitrateSetting bitrate;
     double bitrateCM;
@@ -445,7 +444,6 @@ public:
 
     bool isNicoJKEnabled() const;
 
-    bool isNicoJK18Enabled() const;
 
     bool isUseNicoJKLog() const;
 
@@ -624,7 +622,6 @@ public:
 
     tstring getTmpChapterPath(EncodeFileKey key) const;
 
-    tstring getTmpNicoJKXMLPath() const;
 
     tstring getTmpNicoJKASSPath(NicoJKType type) const;
 

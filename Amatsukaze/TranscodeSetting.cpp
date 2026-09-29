@@ -1092,10 +1092,6 @@ bool ConfigWrapper::isNicoJKEnabled() const {
     return conf.nicojkmask != 0;
 }
 
-bool ConfigWrapper::isNicoJK18Enabled() const {
-    return conf.nicojk18;
-}
-
 bool ConfigWrapper::isUseNicoJKLog() const {
     return conf.useNicoJKLog;
 }
@@ -1523,10 +1519,6 @@ tstring ConfigWrapper::getTmpWhisperWavPath(EncodeFileKey key, int aindex) const
 tstring ConfigWrapper::getTmpWhisperVttPath(EncodeFileKey key, int aindex) const {
     return regtmp(StringFormat(_T("%s/a%d-%d-%d-%d%s.vtt"),
         getTmpWhisperDir(), key.video, key.format, key.div, aindex, GetCMSuffix(key.cm)));
-}
-
-tstring ConfigWrapper::getTmpNicoJKXMLPath() const {
-    return regtmp(StringFormat(_T("%s/nicojk.xml"), tmpDir.path()));
 }
 
 tstring ConfigWrapper::getTmpNicoJKASSPath(NicoJKType type) const {

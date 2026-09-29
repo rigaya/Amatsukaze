@@ -2265,18 +2265,6 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        #region NicoJK18変更通知プロパティ
-        public bool NicoJK18 {
-            get { return Data.NicoJK18; }
-            set {
-                if (Data.NicoJK18 == value)
-                    return;
-                Data.NicoJK18 = value;
-                RaisePropertyChanged();
-            }
-        }
-        #endregion
-
         #region NicoJKLog変更通知プロパティ
         public bool NicoJKLog {
             get { return Data.NicoJKLog; }

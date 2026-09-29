@@ -88,7 +88,7 @@ NicoJK::NicoJK(AMTContext& ctx,
 bool NicoJK::makeASS(int serviceId, time_t startTime, int duration) {
     Stopwatch sw;
     sw.start();
-    if (!makeASS_(sw, serviceId, startTime, duration)) return false;
+    if (!makeASS_(serviceId, startTime, duration)) return false;
     ctx.infoF(_T("コメントASS生成: %.2f秒"), sw.getAndReset());
     readASS();
     ctx.infoF(_T("コメントASS読み込み: %.2f秒"), sw.getAndReset());
@@ -153,29 +153,6 @@ void NicoJK::getJKNum(int serviceId) {
     jknum_ = -1;
 }
 
-tstring NicoJK::MakeNicoJK18Args(int jknum, size_t startTime, size_t endTime) {
-    return StringFormat(_T("\"%s\" jk%d %zu %zu -x -f \"%s\""),
-        pathNormalize(GetModuleDirectory()) + _T("/NicoJK18Client.exe"),
-        jknum, startTime, endTime,
-        pathToOS(setting_.getTmpNicoJKXMLPath()));
-}
-
-bool NicoJK::getNicoJKXml(time_t startTime, int duration) {
-    auto args = MakeNicoJK18Args(jknum_, (size_t)startTime, (size_t)startTime + duration);
-    ctx.infoF(_T("%s"), args);
-    StdRedirectedSubProcess process(args);
-    int exitCode = process.join();
-    if (exitCode == 0 && File::exists(setting_.getTmpNicoJKXMLPath())) {
-        return true;
-    }
-    if (exitCode == 100) {
-        // チャンネルがない
-        return false;
-    }
-    isFail_ = true;
-    return false;
-}
-
 void NicoJK::makeT(NicoJKType srcType, NicoJKType dstType) {
     File file(setting_.getTmpNicoJKASSPath(srcType), _T("r"));
     File dst(setting_.getTmpNicoJKASSPath(dstType), _T("w"));
@@ -236,8 +213,7 @@ tstring NicoJK::MakeNicoConvASSArgs(ConvMode mode, size_t startTime, NicoJKType 
         sb.append(_T(" -nicojk 1"), startTime);
     }
     sb.append(_T(" -tx_starttime %zu"), startTime);
-    sb.append(_T(" \"%s\""), pathToOS(
-        (mode != CONV_ASS_XML) ? setting_.getSrcFilePath() : setting_.getTmpNicoJKXMLPath()));
+    sb.append(_T(" \"%s\""), pathToOS(setting_.getSrcFilePath()));
     return sb.str();
 }
 
@@ -308,7 +284,7 @@ void NicoJK::readASS() {
     }
 }
 
-bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int duration) {
+bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
     if (setting_.isNicoJKAssEnabled()) {
         getJKNum(serviceId);
         if (jknum_ == -1) return false;
@@ -334,38 +310,7 @@ bool NicoJK::makeASS_(Stopwatch& sw, int serviceId, time_t startTime, int durati
         return makeASSByScript(startTime, duration);
     }
 
-#if defined(_WIN32) || defined(_WIN64)
-    // Windows: 既存の NicoConvAss / NicoJK18Client を使うフロー
-    if (setting_.isUseNicoJKLog()) {
-        if (nicoConvASS(CONV_ASS_LOG, startTime)) return true;
-    }
-    if (setting_.isNicoJK18Enabled()) {
-        getJKNum(serviceId);
-        if (jknum_ == -1) return false;
-
-        // 取得時刻を表示
-        tm t;
-        if (gmtime_s(&t, &startTime) != 0) {
-            THROW(RuntimeException, "gmtime_s failed ...");
-        }
-        t.tm_hour += 9; // GMT+9
-        mktime(&t);
-        ctx.infoF(_T("%s (jk%d) %d年%02d月%02d日 %02d時%02d分%02d秒 から %d時間%02d分%02d秒"),
-            char_to_tstring(tvname_), jknum_,
-            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
-            duration / 3600, (duration / 60) % 60, duration % 60);
-
-        if (!getNicoJKXml(startTime, duration)) return false;
-        ctx.infoF(_T("コメントXML取得: %.2f秒"), sw.getAndReset());
-        return nicoConvASS(CONV_ASS_XML, startTime);
-    } else {
-        if (setting_.isUseNicoJKLog()) return false;
-        return nicoConvASS(CONV_ASS_TS, startTime);
-    }
-#else
-    // Linux では既定でスクリプトが指定されるため、通常はここに到達しない
     return nicoConvASS(setting_.isUseNicoJKLog() ? CONV_ASS_LOG : CONV_ASS_TS, startTime);
-#endif
 }
 
 // nicojk_ass.py スクリプトに渡すコマンドライン引数を生成する

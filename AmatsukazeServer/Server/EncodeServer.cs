@@ -2279,10 +2279,6 @@ namespace Amatsukaze.Server
                         {
                             sb.Append(" --ignore-nicojk-error");
                         }
-                        if (profile.NicoJK18)
-                        {
-                            sb.Append(" --nicojk18");
-                        }
                         if (profile.NicoJKLog)
                         {
                             sb.Append(" --nicojklog");
