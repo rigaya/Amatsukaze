@@ -2993,6 +2993,9 @@ namespace Amatsukaze.Models
                 Value = mode,
                 Name = Server.ProfileSettingExtensions.AudioFormatChangeModeList[mode]
             }).ToArray();
+        public string AudioFormatChangeModeToolTip {
+            get { return Server.ProfileSettingExtensions.AudioFormatChangeModeToolTip; }
+        }
         public string[] AudioEncoderList {
             get { 
                 if (Model?.Setting?.IsServerLinux ?? false) {

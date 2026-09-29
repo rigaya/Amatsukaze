@@ -570,7 +570,8 @@
                         <ComboBox HorizontalAlignment="Left" Width="220" Height="22"
                                   ItemsSource="{Binding Model.SelectedProfile.AudioFormatChangeModeList}"
                                   DisplayMemberPath="Name" SelectedValuePath="Value"
-                                  SelectedValue="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                  SelectedValue="{Binding Model.SelectedProfile.AudioFormatChangeMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="{Binding Model.SelectedProfile.AudioFormatChangeModeToolTip}"/>
                     </StackPanel>
                     <StackPanel>
                         <StackPanel.Style>

@@ -740,7 +740,7 @@ else
                 <tr title="音声をエンコードする / tsreplace出力では無効です">
                     <th>音声フォーマット変更</th>
                     <td>
-                        <select @onchange="@(e => OnIntChanged(e, "AudioFormatChangeMode"))">
+                        <select @onchange="@(e => OnIntChanged(e, "AudioFormatChangeMode"))" title="@_options?.AudioFormatChangeModeToolTip">
                             @foreach (var item in GetAudioFormatChangeModeOptions())
                             {
                                 <option value="@item.Value" selected="@item.Selected">@item.Label</option>

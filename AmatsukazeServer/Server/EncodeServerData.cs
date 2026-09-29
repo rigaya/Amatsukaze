@@ -610,6 +610,19 @@ namespace Amatsukaze.Server
             (int)AudioFormatChangeMode.Merge, (int)AudioFormatChangeMode.Separate, (int)AudioFormatChangeMode.Split
         };
 
+        // AudioFormatChangeModeListと同じくモード値の順に並べる。
+        private static readonly string[] AudioFormatChangeModeDescriptionList = new string[]
+        {
+            "元の音声トラックごとに1本のトラックへまとめて出力します。\n途中でチャンネル数が変わる区間は、主となる構成へ変換して再エンコードします。",
+            "音声フォーマットが変わる位置でファイルを分割して出力します。(従来の動作)",
+            "チャンネル数などの構成ごとに別トラックとして出力します。\n再エンコードはせず、音声がない区間は無音で埋めます。"
+        };
+
+        // 選択中の項目によらず、全モードの説明を表示順でまとめたツールチップ。
+        public static string AudioFormatChangeModeToolTip { get; } = string.Join("\n\n",
+            AudioFormatChangeModeDisplayOrder.Select(mode => "- " + AudioFormatChangeModeList[mode] + "\n  "
+                + AudioFormatChangeModeDescriptionList[mode].Replace("\n", "\n  ")));
+
         public static int NormalizeAudioFormatChangeMode(int mode)
         {
             return mode == (int)AudioFormatChangeMode.Split || mode == (int)AudioFormatChangeMode.Separate

@@ -133,6 +133,7 @@ namespace Amatsukaze.Shared
         public List<string>? WhisperModelList { get; set; }
         public List<string>? AudioEncoderList { get; set; }
         public List<string>? AudioFormatChangeModeList { get; set; }
+        public string? AudioFormatChangeModeToolTip { get; set; }
         public List<int>? AudioFormatChangeModeDisplayOrder { get; set; }
         public bool IsServerLinux { get; set; }
     }
