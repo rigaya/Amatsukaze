@@ -470,6 +470,40 @@ float logo::LogoDataParam::EvaluateLogoWithBackground(const float* src, const fl
     return CorrelationScore(work, maxv) / blackScore;
 }
 
+void logo::LogoDataParam::EvaluateLogoFadesAVX2(const float* src, const float* background,
+    float maxv, const float* fades, int fadeCount, float* work, float* scores) {
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
+    constexpr int kFadeLanes = 8;
+    const float* kernelData = GetKernels();
+    for (int firstFade = 0; firstFade < fadeCount; firstFade += kFadeLanes) {
+        const int activeFades = std::min(kFadeLanes, fadeCount - firstFade);
+        blendLogoBackgroundFadesAVX2(work, src, background, w * h, fades + firstFade, activeFades);
+        float results[kFadeLanes] = {};
+        for (size_t count = 0; count < maskCoordinates.size(); count++) {
+            const int x = maskCoordinates[count].first;
+            const int y = maskCoordinates[count].second;
+            const float* k = kernelData + count * KLEN;
+            float avgs[kFadeLanes], sums[kFadeLanes];
+            CalcCorrelation5x5Fades_AVX2(k, work, x, y, w, avgs, sums);
+            for (int fi = 0; fi < activeFades; fi++) {
+                const int idx = std::max(0, std::min((int)CLEN, (int)(avgs[fi] * CLEN / maxv)));
+                const ScaleLimit s = scales[count * CLEN + idx];
+                const float normalized = std::max(-1.0f, std::min(1.0f, sums[fi] * s.scale));
+                const float score = normalized * s.scale2;
+                results[fi] += score;
+            }
+        }
+        for (int fi = 0; fi < activeFades; fi++) {
+            scores[firstFade + fi] = results[fi] / blackScore;
+        }
+    }
+#else
+    for (int fi = 0; fi < fadeCount; fi++) {
+        scores[fi] = EvaluateLogo(src, maxv, fades[fi], work);
+    }
+#endif
+}
+
 std::unique_ptr<logo::LogoDataParam> logo::LogoDataParam::MakeFieldLogo(bool bottom) {
     auto logo = std::unique_ptr<logo::LogoDataParam>(
         new logo::LogoDataParam(LogoData(w, h / 2, logUVx, logUVy), imgw, imgh / 2, imgx, imgy / 2));

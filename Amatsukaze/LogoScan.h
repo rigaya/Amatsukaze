@@ -42,6 +42,8 @@ float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int 
 void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade);
 void prepareLogoBackgroundLineAVX2(float *dst, const float *src, const float *logoAY, const float *logoBY, int width, float maxv);
 void blendLogoBackgroundLineAVX2(float *dst, const float *src, const float *background, int width, float fade);
+void blendLogoBackgroundFadesAVX2(float* dst, const float* src, const float* background, int count, const float* fades, int activeFades);
+void CalcCorrelation5x5Fades_AVX2(const float* k, const float* work, int x, int y, int w, float* avgs, float* sums);
 void BilateralFilter5x5U8RangeLUT_AVX2(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 void BilateralFilter5x5U8RangeLUT_AVX512(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut);
@@ -128,6 +130,8 @@ public:
     float EvaluateLogo(const float *src, float maxv, float fade, float* work, int stride = -1);
     void PrepareLogoBackground(const float* src, float maxv, float* background, int stride = -1);
     float EvaluateLogoWithBackground(const float* src, const float* background, float maxv, float fade, float* work, int stride = -1);
+    void EvaluateLogoFadesAVX2(const float* src, const float* background, float maxv,
+        const float* fades, int fadeCount, float* work, float* scores);
 
     std::unique_ptr<LogoDataParam> MakeFieldLogo(bool bottom);
 
@@ -558,14 +562,19 @@ class LogoAnalyzer : AMTObject {
                 std::unique_ptr<float[]> deint;
                 std::unique_ptr<float[]> work;
                 std::unique_ptr<float[]> background;
+                std::unique_ptr<float[]> fadeWork;
             };
             const bool usePreparedBackground = IsAVX2Available();
+            const bool useFadeSIMD = usePreparedBackground;
+            float fades[numFade];
+            for (int fi = 0; fi < numFade; fi++) fades[fi] = 0.1f * fi;
             const int threadCount = std::min(GetLogoRemakeEvaluationThreadCount(), std::max(1, numFrames));
             std::vector<EvaluationBuffer> buffers(threadCount);
             for (auto& buffer : buffers) {
                 buffer.deint.reset(new float[YSize + 8]);
                 buffer.work.reset(new float[YSize + 8]);
                 if (usePreparedBackground) buffer.background.reset(new float[YSize + 8]);
+                if (useFadeSIMD) buffer.fadeWork.reset(new float[YSize * 8]);
             }
             // 各タスクは専用バッファを所有し、同じフレーム内のfade順と演算を維持する。
             const auto evaluateRange = [&](const int worker, const int start, const int end) {
@@ -580,14 +589,26 @@ class LogoAnalyzer : AMTObject {
                     }
                     float minResult = std::numeric_limits<float>::max();
                     int minFadeIndex = 0;
-                    for (int fi = 0; fi < numFade; fi++) {
-                        float fade = 0.1f * fi;
-                        float result = std::abs(usePreparedBackground
-                            ? deintLogo.EvaluateLogoWithBackground(buffer.deint.get(), buffer.background.get(), maxv, fade, buffer.work.get())
-                            : deintLogo.EvaluateLogo(buffer.deint.get(), maxv, fade, buffer.work.get()));
-                        if (result < minResult) {
-                            minResult = result;
-                            minFadeIndex = fi;
+                    if (useFadeSIMD) {
+                        float scores[numFade];
+                        deintLogo.EvaluateLogoFadesAVX2(buffer.deint.get(), buffer.background.get(), maxv,
+                            fades, numFade, buffer.fadeWork.get(), scores);
+                        for (int fi = 0; fi < numFade; fi++) {
+                            const float result = std::abs(scores[fi]);
+                            if (result < minResult) {
+                                minResult = result;
+                                minFadeIndex = fi;
+                            }
+                        }
+                    } else {
+                        for (int fi = 0; fi < numFade; fi++) {
+                            const float result = std::abs(usePreparedBackground
+                                ? deintLogo.EvaluateLogoWithBackground(buffer.deint.get(), buffer.background.get(), maxv, fades[fi], buffer.work.get())
+                                : deintLogo.EvaluateLogo(buffer.deint.get(), maxv, fades[fi], buffer.work.get()));
+                            if (result < minResult) {
+                                minResult = result;
+                                minFadeIndex = fi;
+                            }
                         }
                     }
                     minFades[i] = minFadeIndex;

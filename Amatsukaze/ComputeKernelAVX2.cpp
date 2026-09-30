@@ -16,6 +16,62 @@ float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int 
     return CalcCorrelation5x5_AVX_AVX2<true>(k, Y, x, y, w, pavg);
 }
 
+// 各laneを別のfade候補とし、画素側のFMA順序を既存のAVX2経路に合わせる。
+void blendLogoBackgroundFadesAVX2(float* dst, const float* src, const float* background,
+    int count, const float* fades, int activeFades) {
+    alignas(32) float fadeValues[8] = {};
+    alignas(32) float invFadeValues[8] = {};
+    for (int fi = 0; fi < activeFades; fi++) {
+        fadeValues[fi] = fades[fi];
+        invFadeValues[fi] = 1.0f - fades[fi];
+    }
+    const __m256 vfade = _mm256_load_ps(fadeValues);
+    const __m256 vinvfade = _mm256_load_ps(invFadeValues);
+    for (int i = 0; i < count; i++) {
+        const __m256 vsrc = _mm256_broadcast_ss(src + i);
+        const __m256 vbg = _mm256_broadcast_ss(background + i);
+        const __m256 value = _mm256_fmadd_ps(vfade, vbg, _mm256_mul_ps(vinvfade, vsrc));
+        _mm256_storeu_ps(dst + i * 8, value);
+    }
+}
+
+// 元の空間方向AVX2処理と同じ縮約木を、fadeごとのlane内で再現する。
+void CalcCorrelation5x5Fades_AVX2(const float* k, const float* work,
+    int x, int y, int w, float* avgs, float* sums) {
+    __m256 row[5][5];
+    for (int ky = 0; ky < 5; ky++) {
+        for (int kx = 0; kx < 5; kx++) {
+            row[ky][kx] = _mm256_loadu_ps(work + ((y + ky - 2) * w + x + kx - 2) * 8);
+        }
+    }
+    __m256 ysum[5];
+    for (int c = 0; c < 5; c++) {
+        ysum[c] = _mm256_add_ps(_mm256_add_ps(_mm256_add_ps(row[0][c], row[1][c]),
+            _mm256_add_ps(row[2][c], row[3][c])), row[4][c]);
+    }
+    const __m256 avg = _mm256_mul_ps(_mm256_add_ps(_mm256_add_ps(
+        _mm256_add_ps(ysum[0], ysum[2]), ysum[4]), _mm256_add_ps(ysum[1], ysum[3])),
+        _mm256_set1_ps(1.0f / 25.0f));
+    __m256 corr[5];
+    for (int c = 0; c < 5; c++) {
+        const __m256 d0 = _mm256_sub_ps(row[0][c], avg);
+        const __m256 d1 = _mm256_sub_ps(row[1][c], avg);
+        const __m256 d2 = _mm256_sub_ps(row[2][c], avg);
+        const __m256 d3 = _mm256_sub_ps(row[3][c], avg);
+        const __m256 d4 = _mm256_sub_ps(row[4][c], avg);
+        const __m256 lower = _mm256_fmadd_ps(_mm256_set1_ps(k[c]), d0,
+            _mm256_mul_ps(_mm256_set1_ps(k[5 + c]), d1));
+        const __m256 upper = _mm256_fmadd_ps(_mm256_set1_ps(k[10 + c]), d2,
+            _mm256_mul_ps(_mm256_set1_ps(k[15 + c]), d3));
+        corr[c] = _mm256_fmadd_ps(_mm256_set1_ps(k[20 + c]), d4,
+            _mm256_add_ps(lower, upper));
+    }
+    const __m256 sum = _mm256_add_ps(_mm256_add_ps(
+        _mm256_add_ps(corr[0], corr[2]), corr[4]), _mm256_add_ps(corr[1], corr[3]));
+    _mm256_storeu_ps(avgs, avg);
+    _mm256_storeu_ps(sums, sum);
+}
+
 void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const float *logoAY, const float *logoBY, const int logowidth, const float maxv, const float fade) {
     const float invfade = 1.0f - fade;
     const __m256 vmaxv = _mm256_broadcast_ss(&maxv);
