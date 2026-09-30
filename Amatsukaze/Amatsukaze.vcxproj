@@ -444,6 +444,7 @@
     <ClInclude Include="InterProcessComm.h" />
     <ClInclude Include="JpegCompress.h" />
     <ClInclude Include="LogoScan.h" />
+    <ClInclude Include="LogoDecodeSession.h" />
     <ClInclude Include="Mpeg2TsParser.h" />
     <ClInclude Include="Mpeg2PartialEncode.h" />
     <ClInclude Include="Mpeg2VideoParser.h" />

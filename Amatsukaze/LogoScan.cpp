@@ -7,6 +7,7 @@
 */
 
 #include "LogoScan.h"
+#include "LogoDecodeSession.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -1094,7 +1095,14 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
                 }
 
                 currentPos = qf.pos;
-                const bool keepReading = onFrameCb ? onFrameCb(qf.frame) : true;
+                bool keepReading;
+                try {
+                    keepReading = onFrameCb ? onFrameCb(qf.frame) : true;
+                } catch (...) {
+                    // 処理中のフレームも、例外でキューから外れたまま残さない。
+                    av_frame_free(&qf.frame);
+                    throw;
+                }
                 if (qf.frame != nullptr) {
                     av_frame_free(&qf.frame);
                 }
@@ -1334,7 +1342,19 @@ logo::LogoAnalyzer::InitialLogoCreator::InitialLogoCreator(LogoAnalyzer* pThis) 
 void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int serviceid) {
     { File file(src, _T("rb")); filesize = file.size(); }
 
-    SimpleVideoReader::readAll(src, serviceid);
+    const size_t cachedFrames = activeLogoDecodeSession != nullptr ? activeLogoDecodeSession->cachedFrames() : 0;
+    const bool reused = activeLogoDecodeSession != nullptr && activeLogoDecodeSession->generate(
+        src, serviceid, pThis->scanx, pThis->scany, pThis->scanw, pThis->scanh,
+        [&](AVStream* stream, AVFrame* frame) { onFirstFrame(stream, frame); },
+        [&](AVFrame* frame, int originX, int originY, int64_t position) {
+            inputOriginX = originX;
+            inputOriginY = originY;
+            currentPos = position;
+            return onFrame(frame);
+        });
+    inputOriginX = inputOriginY = 0;
+    if (!reused) SimpleVideoReader::readAll(src, serviceid);
+    else pThis->ctx.infoF(_T("[GenLogo] decoded frame reuse: %zu"), cachedFrames);
 
     pThis->logodata = logoscan->GetLogo(false);
     if (pThis->logodata == nullptr) {
@@ -5116,7 +5136,16 @@ namespace {
             if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
                 THROW(RuntimeException, "Cancel requested");
             }
-            readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame));
+            auto* session = logo::activeLogoDecodeSession;
+            if (session != nullptr && session->matches(srcpath, serviceid) && !session->hasStarted()
+                && roiCacheCaptureActive && frameWindowStart == 0 && pendingStats != nullptr) {
+                session->detect(onFirstFrame, onFrame, [&](AVFrame* frame) {
+                    session->configure(frame, scanx, scany, scanw, scanh, detectScaleNum, detectScaleDen,
+                        searchFrames, getAvailableSystemMemoryBytes());
+                });
+            } else {
+                readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame));
+            }
             // 入力終端がバッチ境界と一致しない場合も、最後の端数を集計する。
             if (pendingStats != nullptr) {
                 flushInitialStatsBatch(*pendingStats);
@@ -11582,6 +11611,23 @@ namespace {
             THROW(RuntimeException, "Cancel requested");
         }
     }
+}
+
+// 検出と生成を同じ呼び出しスレッドで行うCLI用の任意API。
+extern "C" AMATSUKAZE_API void* LogoDecodeSession_Create(AMTContext* ctx, const tchar* srcpath, int serviceid) {
+    if (ctx == nullptr || srcpath == nullptr || logo::activeLogoDecodeSession != nullptr) return nullptr;
+    try {
+        logo::activeLogoDecodeSession = new logo::LogoDecodeSession(*ctx, srcpath, serviceid);
+        return logo::activeLogoDecodeSession;
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
+}
+
+extern "C" AMATSUKAZE_API void LogoDecodeSession_Delete(void* session) {
+    auto* decoder = static_cast<logo::LogoDecodeSession*>(session);
+    if (logo::activeLogoDecodeSession == decoder) logo::activeLogoDecodeSession = nullptr;
+    delete decoder;
 }
 
 // C API for P/Invoke

@@ -63,6 +63,9 @@
     <ClInclude Include="LogoScan.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="LogoDecodeSession.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Mpeg2TsParser.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

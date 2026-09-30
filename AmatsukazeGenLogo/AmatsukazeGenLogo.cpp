@@ -108,6 +108,8 @@ using AutoDetectLogoRectFunc = int(*)(void*, const TCHAR*, int, int, int, int, i
     const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*, const TCHAR*,
     int,
     LogoAutoDetectCallback);
+using LogoDecodeSessionCreateFunc = void*(*)(void*, const TCHAR*, int);
+using LogoDecodeSessionDeleteFunc = void(*)(void*);
 using LogoFileCreateFunc = void*(*)(void*, const TCHAR*);
 using LogoFileDeleteFunc = void(*)(void*);
 using LogoFileSetServiceIdFunc = void(*)(void*, int);
@@ -134,6 +136,8 @@ struct NativeApi {
     ScanLogoFunc ScanLogo = nullptr;
     ScanLogoWithQualityValidationFunc ScanLogoWithQualityValidation = nullptr;
     AutoDetectLogoRectFunc AutoDetectLogoRect = nullptr;
+    LogoDecodeSessionCreateFunc LogoDecodeSession_Create = nullptr;
+    LogoDecodeSessionDeleteFunc LogoDecodeSession_Delete = nullptr;
     LogoFileCreateFunc LogoFile_Create = nullptr;
     LogoFileDeleteFunc LogoFile_Delete = nullptr;
     LogoFileSetServiceIdFunc LogoFile_SetServiceId = nullptr;
@@ -571,6 +575,8 @@ int LoadNativeApi(HMODULE module, NativeApi& api) {
     if (!LoadSymbol(module, "ScanLogo", api.ScanLogo)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "ScanLogoWithQualityValidation", api.ScanLogoWithQualityValidation)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "AutoDetectLogoRect", api.AutoDetectLogoRect)) return ERR_RUNTIME_LOAD_SYMBOL;
+    api.LogoDecodeSession_Create = reinterpret_cast<LogoDecodeSessionCreateFunc>(RGY_GET_PROC_ADDRESS(module, "LogoDecodeSession_Create"));
+    api.LogoDecodeSession_Delete = reinterpret_cast<LogoDecodeSessionDeleteFunc>(RGY_GET_PROC_ADDRESS(module, "LogoDecodeSession_Delete"));
     if (!LoadSymbol(module, "LogoFile_Create", api.LogoFile_Create)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "LogoFile_Delete", api.LogoFile_Delete)) return ERR_RUNTIME_LOAD_SYMBOL;
     if (!LoadSymbol(module, "LogoFile_SetServiceId", api.LogoFile_SetServiceId)) return ERR_RUNTIME_LOAD_SYMBOL;
@@ -970,6 +976,10 @@ int Run(const NativeApi& api, const Options& opt) {
         opt.input.c_str(), opt.output.c_str(), serviceId, (int)opt.aviutlLgd,
         detailedDebug ? opt.debugDir.c_str() : _T("<none>"));
     const bool autoDetectedRect = !opt.logoRange.has_value();
+    std::unique_ptr<void, LogoDecodeSessionDeleteFunc> decodeSession(nullptr, api.LogoDecodeSession_Delete);
+    if (autoDetectedRect && api.LogoDecodeSession_Create != nullptr && api.LogoDecodeSession_Delete != nullptr) {
+        decodeSession.reset(api.LogoDecodeSession_Create(ctx.get(), opt.input.c_str(), serviceId));
+    }
     Rect rect = opt.logoRange.value_or(Rect{});
     if (autoDetectedRect) {
         int x = 0, y = 0, w = 0, h = 0;
@@ -1060,6 +1070,7 @@ int Run(const NativeApi& api, const Options& opt) {
         return ERR_RUNTIME_NATIVE;
     }
     g_logoGenProgressState = nullptr;
+    decodeSession.reset();
 
     std::unique_ptr<void, LogoDeleter> logo(api.LogoFile_Create(ctx.get(), tempPaths.tempLogo.c_str()), LogoDeleter{ &api });
     if (!logo) {

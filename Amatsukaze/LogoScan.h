@@ -436,6 +436,7 @@ class LogoAnalyzer : AMTObject {
         int readCount;
         int64_t filesize;
         bool retainRaw;
+        int inputOriginX = 0, inputOriginY = 0;
         std::vector<uint8_t> memScanData;
         std::unique_ptr<LogoScan> logoscan;
         std::vector<std::unique_ptr<LogoScanDataCompressed>> scanData;
@@ -456,8 +457,8 @@ class LogoAnalyzer : AMTObject {
             // スキャン部分だけ
             const int pitchY = frame->linesize[0] / sizeof(pixel_t);
             const int pitchUV = frame->linesize[1] / sizeof(pixel_t);
-            const int offY = pThis->scanx + pThis->scany * pitchY;
-            const int offUV = (pThis->scanx >> pThis->logUVx) + (pThis->scany >> pThis->logUVy) * pitchUV;
+            const int offY = (pThis->scanx - inputOriginX) + (pThis->scany - inputOriginY) * pitchY;
+            const int offUV = ((pThis->scanx - inputOriginX) >> pThis->logUVx) + ((pThis->scany - inputOriginY) >> pThis->logUVy) * pitchUV;
             const pixel_t* scanY = (const pixel_t *)frame->data[0] + offY;
             const pixel_t* scanU = (const pixel_t *)frame->data[1] + offUV;
             const pixel_t* scanV = (const pixel_t *)frame->data[2] + offUV;
