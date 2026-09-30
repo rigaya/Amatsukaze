@@ -7227,6 +7227,20 @@ namespace {
                 ? 1 : std::min(collectXSplits, innerWidth);
             const int yTasks = (innerHeight + collectYBlock - 1) / collectYBlock;
             const int totalTasks = yTasks * xSplits;
+            std::vector<int> xBoundaries(xSplits + 1);
+            for (int tile = 0; tile <= xSplits; tile++) {
+                xBoundaries[tile] = kScanEdgeMargin + (innerWidth * tile) / xSplits;
+            }
+            if (useBgBlock32) {
+                // 内側の開始位置とタイル境界を同じ32画素の区切りへ合わせる。
+                const int anchor = std::max(kScanEdgeMargin, radius);
+                for (int tile = 1; tile < xSplits; tile++) {
+                    const int aligned = anchor + ((xBoundaries[tile] - anchor) / 32) * 32;
+                    if (aligned > xBoundaries[tile - 1] && aligned < xBoundaries[tile + 1]) {
+                        xBoundaries[tile] = aligned;
+                    }
+                }
+            }
             std::vector<int> taskFrameCounts((size_t)totalTasks * batchCount, 0);
 
             // 各空間タイルを一つのワーカーが所有し、同じ画素をフレーム順に更新する。
@@ -7239,8 +7253,8 @@ namespace {
                     if (localY0 >= localY1) {
                         continue;
                     }
-                    const int localX0 = (innerWidth * tileX) / xSplits;
-                    const int localX1 = (innerWidth * (tileX + 1)) / xSplits;
+                    const int localX0 = xBoundaries[tileX] - kScanEdgeMargin;
+                    const int localX1 = xBoundaries[tileX + 1] - kScanEdgeMargin;
                     if (localX0 >= localX1) {
                         continue;
                     }
