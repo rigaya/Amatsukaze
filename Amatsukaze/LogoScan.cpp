@@ -3408,6 +3408,12 @@ namespace {
         int roiCacheFrameBytes = 0;
         int roiCacheStoredFrames = 0;
         std::vector<std::vector<uint8_t>> roiCacheRamSlabs;
+        // 背景値は生のfloatで保持し、未計算はNaN、不適合は-1で区別する。
+        std::vector<std::vector<float>> backgroundCacheSlabs;
+        bool backgroundCacheAttempted = false;
+        int backgroundCacheWidth = 0, backgroundCacheHeight = 0;
+        int backgroundCacheX = 0, backgroundCacheY = 0;
+        int backgroundCacheRadius = 0, backgroundCacheThreshold = 0;
         // 生ROIとは別に、8bitの同一条件で求めたフィルタ結果だけを保持する。
         std::vector<std::vector<uint8_t>> filteredRoiCacheSlabs;
         std::vector<uint8_t> filteredRoiCacheValid;
@@ -4306,6 +4312,9 @@ namespace {
             roiCacheStoredFrames = 0;
             roiCacheRamSlabs.clear();
             roiCacheRamSlabs.shrink_to_fit();
+            backgroundCacheSlabs.clear();
+            backgroundCacheSlabs.shrink_to_fit();
+            backgroundCacheAttempted = false;
             filteredRoiCacheSlabs.clear();
             filteredRoiCacheSlabs.shrink_to_fit();
             filteredRoiCacheValid.clear();
@@ -6885,15 +6894,94 @@ namespace {
             }
         }
 
+        void initializeBackgroundCache() {
+            if (backgroundCacheAttempted) return;
+            backgroundCacheAttempted = true;
+            const int width = std::max(0, scanw - 2 * kScanEdgeMargin);
+            const int height = std::max(0, scanh - 2 * kScanEdgeMargin);
+            if (bitDepth != 8 || width == 0 || height == 0 || searchFrames <= 0
+                || !tracePoints.empty() || filteredRoiCacheSlabs.empty()) return;
+            const uint64_t bytes = uint64_t(width) * height * searchFrames * sizeof(float);
+            // 共有デコーダは検出ROIが別サイズの場合もあるため、上限2GiBを留保する。
+            const uint64_t decodeReserve = logo::activeLogoDecodeSession != nullptr
+                ? (2ULL << 30) : 0;
+            const uint64_t available = getAvailableSystemMemoryBytes();
+            if (bytes > (2ULL << 30) || available < bytes + decodeReserve + (2ULL << 30)) {
+                logCtx.info(_T("[LogoScan] 背景推定キャッシュを省略: メモリ上限または空き量不足"));
+                return;
+            }
+            try {
+                const int slabs = (searchFrames + kRoiCacheFramesPerSlab - 1) / kRoiCacheFramesPerSlab;
+                backgroundCacheSlabs.reserve(slabs);
+                for (int slab = 0; slab < slabs; slab++) {
+                    const int count = std::min(kRoiCacheFramesPerSlab, searchFrames - slab * kRoiCacheFramesPerSlab);
+                    backgroundCacheSlabs.emplace_back((size_t)width * height * count,
+                        std::numeric_limits<float>::quiet_NaN());
+                }
+                backgroundCacheWidth = scanw;
+                backgroundCacheHeight = scanh;
+                backgroundCacheX = scanx;
+                backgroundCacheY = scany;
+                backgroundCacheRadius = radius;
+                backgroundCacheThreshold = threshold;
+                logCtx.infoF(_T("[LogoScan] 背景推定キャッシュ: %") _T(PRIu64) _T(" bytes"), bytes);
+            } catch (const std::bad_alloc&) {
+                backgroundCacheSlabs.clear();
+                logCtx.info(_T("[LogoScan] 背景推定キャッシュの確保失敗により従来計算へ戻す"));
+            }
+        }
+
+        float* backgroundCacheFrame(const int frame, const int thresholdRaw) {
+            if (backgroundCacheSlabs.empty() || bitDepth != 8 || scanw != backgroundCacheWidth
+                || scanh != backgroundCacheHeight || radius != backgroundCacheRadius
+                || scanx != backgroundCacheX || scany != backgroundCacheY
+                || thresholdRaw != backgroundCacheThreshold || frame < 0 || frame >= searchFrames
+                || frame >= (int)filteredRoiCacheValid.size() || !filteredRoiCacheValid[frame]) return nullptr;
+            const size_t pixels = (size_t)(scanw - 2 * kScanEdgeMargin) * (scanh - 2 * kScanEdgeMargin);
+            return backgroundCacheSlabs[frame / kRoiCacheFramesPerSlab].data()
+                + (size_t)(frame % kRoiCacheFramesPerSlab) * pixels;
+        }
+
+        size_t backgroundCacheIndex(const int x, const int y) const {
+            return (size_t)(y - kScanEdgeMargin) * (scanw - 2 * kScanEdgeMargin) + x - kScanEdgeMargin;
+        }
+
+        uint32_t estimateBackgroundBlock(const std::vector<uint8_t>& frameWork, const int x, const int y,
+            const int thresholdRaw, const std::vector<uint8_t>* transpose, float* cache, float* bg) {
+            const size_t offset = cache ? backgroundCacheIndex(x, y) : 0;
+            bool complete = cache != nullptr;
+            if (cache) {
+                for (int lane = 0; lane < 32; lane++) {
+                    if (std::isnan(cache[offset + lane])) { complete = false; break; }
+                }
+            }
+            if (complete) {
+                uint32_t mask = 0;
+                for (int lane = 0; lane < 32; lane++) {
+                    const float value = cache[offset + lane];
+                    bg[lane] = value >= 0.0f ? value : 0.0f;
+                    if (value >= 0.0f) mask |= 1u << lane;
+                }
+                return mask;
+            }
+            const uint32_t mask = TryEstimateBgBlock32U8(frameWork, scanw, scanh,
+                x, y, radius, thresholdRaw, bg, transpose);
+            if (cache) {
+                for (int lane = 0; lane < 32; lane++) cache[offset + lane] = (mask & (1u << lane)) ? bg[lane] : -1.0f;
+            }
+            return mask;
+        }
+
         template<typename pixel_t>
         RGY_FORCEINLINE int collectFrameSampleRange(const std::vector<pixel_t>& frameWork, const float invMaxv,
             const int thresholdRaw, const float transitionThreshold, StatsPassBuffers& statsPass,
             const std::vector<pixel_t>* transposed, const int segmentConsensusIndex,
-            const int yBegin, const int yEnd, const int xBegin, const int xEnd, const bool useBgBlock32) {
+            const int yBegin, const int yEnd, const int xBegin, const int xEnd, const bool useBgBlock32, const int frameIndex = -1) {
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
+            float* cache = backgroundCacheFrame(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
                 auto collectOne = [&](const int x, const bool bgOk, const float bg, const float preparedEdge = -1.0f) {
@@ -6954,8 +7042,7 @@ namespace {
                             float bg[32];
                             float preparedEdges[32];
                             CalcCorrectedEdges32U8_AVX2(frameWork.data() + x + y * scanw, scanw, invMaxv, preparedEdges);
-                            const uint32_t bgValidMask = TryEstimateBgBlock32U8(frameWork, scanw, scanh,
-                                x, y, radius, thresholdRaw, bg, transposed);
+                            const uint32_t bgValidMask = estimateBackgroundBlock(frameWork, x, y, thresholdRaw, transposed, cache, bg);
                             for (int lane = 0; lane < 32; lane++) {
                                 localFrameCount += collectOne(x + lane,
                                     (bgValidMask & (1u << lane)) != 0, bg[lane], preparedEdges[lane]);
@@ -6965,8 +7052,16 @@ namespace {
                         }
                     }
                     float bg = 0.0f;
-                    const bool bgOk = TryEstimateBg(frameWork, scanw, scanh, x, y,
-                        radius, thresholdRaw, bg, nullptr, transposed);
+                    bool bgOk = false;
+                    const size_t offset = cache ? backgroundCacheIndex(x, y) : 0;
+                    if (cache && !std::isnan(cache[offset])) {
+                        bgOk = cache[offset] >= 0.0f;
+                        if (bgOk) bg = cache[offset];
+                    } else {
+                        bgOk = TryEstimateBg(frameWork, scanw, scanh, x, y,
+                            radius, thresholdRaw, bg, nullptr, transposed);
+                        if (cache) cache[offset] = bgOk ? bg : -1.0f;
+                    }
                     localFrameCount += collectOne(x, bgOk, bg);
                     x++;
                 }
@@ -7164,6 +7259,7 @@ namespace {
 
         void processStoredStatsBatch(const int firstFrame, const int batchCount,
             StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
+            initializeBackgroundCache();
             struct BatchFrameInfo {
                 const uint8_t* src = nullptr;
                 int segmentConsensusIndex = 0;
@@ -7279,7 +7375,7 @@ namespace {
                             statsPass.batchFrameWork8[bi], kInvMaxv, thresholdRaw, transitionThreshold,
                             statsPass, transposed, frames[bi].segmentConsensusIndex,
                             localY0 + kScanEdgeMargin, localY1 + kScanEdgeMargin,
-                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin, useBgBlock32);
+                            localX0 + kScanEdgeMargin, localX1 + kScanEdgeMargin, useBgBlock32, firstFrame + bi);
                     }
                 }
             }, 1);
