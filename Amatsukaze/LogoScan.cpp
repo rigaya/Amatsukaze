@@ -3359,7 +3359,7 @@ namespace {
             // 初回走査で受け取ったが、まだ統計へ反映していないフレーム数。
             int pendingInitialFrames = 0;
             std::vector<AutoDetectStats> stats;
-            // bin優先配置のヒストグラム蓄積バッファ: [bin][画素]
+            // タイル単位のヒストグラム蓄積バッファ: [タイル][bin][画素]
             std::vector<BinAccum> binAccumBuf;
             std::vector<float> lastObservedFg;
             std::vector<uint8_t> lastObservedValid;
@@ -4594,7 +4594,10 @@ namespace {
         }
 
         RGY_FORCEINLINE size_t binAccumIndex(const int off, const int bin) const {
-            return (size_t)bin * (scanw * scanh) + off;
+            constexpr int tilePixels = 128;
+            const int first = off & ~(tilePixels - 1);
+            const int count = std::min(tilePixels, scanw * scanh - first);
+            return (size_t)first * kHistBins + (size_t)bin * count + (off - first);
         }
 
         void accumulateTemporalHistSample(const int off, const float rawValue, const float invMaxv) {
