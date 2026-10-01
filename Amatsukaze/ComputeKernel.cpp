@@ -134,6 +134,32 @@ void CalcCorrectedEdges32U8_AVX2(const uint8_t* src, int stride, float invMaxv, 
     }
 }
 
+// AVX2を使用しない環境でも同じ短い区間を集計する。
+void CalcBgSideStatsVerticalBoundary32U8_AVX2(const uint8_t* src, int stride, int height,
+    int x, int y, int radius, uint16_t* sums, uint8_t* mins, uint8_t* maxs) {
+    const int first = std::max(0, y - radius);
+    const int last = std::min(height - 1, y + radius);
+    for (int side = 0; side < 4; side++) {
+        for (int lane = 0; lane < 32; lane++) {
+            unsigned sum = 0;
+            uint8_t minv = 255, maxv = 0;
+            const int len = side < 2 ? 2 * radius + 1 : last - first + 1;
+            for (int i = 0; i < len; i++) {
+                const int sx = side < 2 ? x + lane - radius + i : x + lane + (side == 2 ? -radius : radius);
+                const int sy = side < 2 ? (side == 0 ? first : last) : first + i;
+                const uint8_t value = src[sy * stride + sx];
+                sum += value;
+                minv = std::min(minv, value);
+                maxv = std::max(maxv, value);
+            }
+            const int index = side * 32 + lane;
+            sums[index] = (uint16_t)sum;
+            mins[index] = minv;
+            maxs[index] = maxv;
+        }
+    }
+}
+
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
     constexpr int lanes = 32;

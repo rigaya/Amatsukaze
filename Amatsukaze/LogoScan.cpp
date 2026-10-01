@@ -2855,8 +2855,15 @@ namespace {
         alignas(32) uint16_t sideSums[4][lanes];
         alignas(32) uint8_t sideMins[4][lanes];
         alignas(32) uint8_t sideMaxs[4][lanes];
-        CalcBgSideStatsBlock32U8_AVX2(y.data(), w, x, y0, radius,
-            &sideSums[0][0], &sideMins[0][0], &sideMaxs[0][0]);
+        const bool verticalBoundary = y0 - radius < 0 || y0 + radius >= h;
+        if (verticalBoundary) {
+            CalcBgSideStatsVerticalBoundary32U8_AVX2(y.data(), w, h, x, y0, radius,
+                &sideSums[0][0], &sideMins[0][0], &sideMaxs[0][0]);
+        } else {
+            CalcBgSideStatsBlock32U8_AVX2(y.data(), w, x, y0, radius,
+                &sideSums[0][0], &sideMins[0][0], &sideMaxs[0][0]);
+        }
+        const int verticalLen = std::min(h - 1, y0 + radius) - std::max(0, y0 - radius) + 1;
 
         const int sideLen = radius * 2 + 1;
         static constexpr int retryOrder[4][3] = {
@@ -2870,7 +2877,7 @@ namespace {
             float sideAvg[4];
             uint8_t sideValid[4];
             for (int side = 0; side < 4; side++) {
-                sideAvg[side] = (float)sideSums[side][lane] / sideLen;
+                sideAvg[side] = (float)sideSums[side][lane] / (side < 2 ? sideLen : verticalLen);
                 sideValid[side] = ((int)sideMaxs[side][lane] - (int)sideMins[side][lane] <= threshold) ? 1 : 0;
             }
 
@@ -7036,8 +7043,7 @@ namespace {
                     if constexpr (std::is_same_v<pixel_t, uint8_t>) {
                         const bool blockInRange = useBgBlock32
                             && x + 32 <= xEnd
-                            && x - radius >= 0 && x + 31 + radius < scanw
-                            && y - radius >= 0 && y + radius < scanh;
+                            && x - radius >= 0 && x + 31 + radius < scanw;
                         if (blockInRange) {
                             float bg[32];
                             float preparedEdges[32];
