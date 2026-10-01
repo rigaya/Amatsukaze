@@ -119,6 +119,21 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int length, int 
     return (int)maxValue - (int)minValue <= threshold;
 }
 
+// 非x86向けの補正edge計算。各画素内の順序を維持する。
+void CalcCorrectedEdges32U8_AVX2(const uint8_t* src, int stride, float invMaxv, float* edges) {
+    const int offsets[4] = {-1, 1, -stride, stride};
+    for (int lane = 0; lane < 32; lane++) {
+        const float center = (float)src[lane] * invMaxv;
+        float maximum = 0.0f;
+        for (int side = 0; side < 4; side++) {
+            const float neighbor = (float)src[lane + offsets[side]] * invMaxv;
+            const float raw = center - neighbor;
+            if (raw > 0.0f) maximum = std::max(maximum, raw / (1.0f - neighbor + 1e-4f));
+        }
+        edges[lane] = maximum;
+    }
+}
+
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
     constexpr int lanes = 32;

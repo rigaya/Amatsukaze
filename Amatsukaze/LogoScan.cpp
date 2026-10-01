@@ -6896,7 +6896,7 @@ namespace {
             auto& lastObservedValid = statsPass.lastObservedValid;
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
-                auto collectOne = [&](const int x, const bool bgOk, const float bg) {
+                auto collectOne = [&](const int x, const bool bgOk, const float bg, const float preparedEdge = -1.0f) {
                     const int off = x + y * scanw;
                     if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
                         return 0;
@@ -6913,7 +6913,14 @@ namespace {
                     lastObservedFg[off] = fgRaw;
                     lastObservedValid[off] = 1;
 
-                    AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
+                    if (preparedEdge < 0.0f) {
+                        AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
+                    } else if (preparedEdge > 0.0f) {
+                        auto& edge = statsPass.edgeAccumBuf[off];
+                        edge.sumEdge += preparedEdge;
+                        edge.sumEdge2 += preparedEdge * preparedEdge;
+                        edge.edgeCount++;
+                    }
 
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                     if (!bgOk) {
@@ -6945,11 +6952,13 @@ namespace {
                             && y - radius >= 0 && y + radius < scanh;
                         if (blockInRange) {
                             float bg[32];
+                            float preparedEdges[32];
+                            CalcCorrectedEdges32U8_AVX2(frameWork.data() + x + y * scanw, scanw, invMaxv, preparedEdges);
                             const uint32_t bgValidMask = TryEstimateBgBlock32U8(frameWork, scanw, scanh,
                                 x, y, radius, thresholdRaw, bg, transposed);
                             for (int lane = 0; lane < 32; lane++) {
                                 localFrameCount += collectOne(x + lane,
-                                    (bgValidMask & (1u << lane)) != 0, bg[lane]);
+                                    (bgValidMask & (1u << lane)) != 0, bg[lane], preparedEdges[lane]);
                             }
                             x += 32;
                             continue;

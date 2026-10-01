@@ -264,6 +264,34 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
      _mm256_storeu_si256(reinterpret_cast<__m256i*>(maxvOut), maxv);
 }
 
+// 各画素の4近傍の補正edgeを、元と同じ順序で8画素ずつ求める。
+void CalcCorrectedEdges32U8_AVX2(const uint8_t* src, int stride, float invMaxv, float* edges) {
+    const __m256 scale = _mm256_set1_ps(invMaxv);
+    const __m256 one = _mm256_set1_ps(1.0f);
+    const __m256 epsilon = _mm256_set1_ps(1e-4f);
+    const int offsets[4] = {-1, 1, -stride, stride};
+    for (int lane = 0; lane < 32; lane += 8) {
+        const __m256 center = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(
+            _mm_loadl_epi64((const __m128i*)(src + lane)))), scale);
+        const __m256 centerValue = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(
+            _mm_loadl_epi64((const __m128i*)(src + lane))));
+        __m256 maximum = _mm256_setzero_ps();
+        for (int side = 0; side < 4; side++) {
+            const __m256 neighbor = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(
+                _mm_loadl_epi64((const __m128i*)(src + lane + offsets[side])))), scale);
+            const __m256 raw = _mm256_sub_ps(center, neighbor);
+            const __m256 denominator = _mm256_add_ps(_mm256_sub_ps(one, neighbor), epsilon);
+            const __m256 neighborValue = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(
+                _mm_loadl_epi64((const __m128i*)(src + lane + offsets[side]))));
+            // 同値画素にFMAの丸め差から正のedgeが生じることを防ぐ。
+            const __m256 positive = _mm256_cmp_ps(centerValue, neighborValue, _CMP_GT_OQ);
+            const __m256 corrected = _mm256_and_ps(positive, _mm256_div_ps(raw, denominator));
+            maximum = _mm256_max_ps(maximum, corrected);
+        }
+        _mm256_storeu_ps(edges + lane, maximum);
+    }
+}
+
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
     constexpr int lanes = 32;
