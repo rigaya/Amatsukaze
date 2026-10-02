@@ -557,7 +557,7 @@ class LogoAnalyzer : AMTObject {
         const size_t YSize = scanw * scanh;
         std::vector<pixel_t> memScanData;
 
-        const int numFade = 20;
+        static constexpr int numFade = 20;
         auto minFades = std::unique_ptr<int[]>(new int[numFrames]);
         {
             struct EvaluationBuffer {
