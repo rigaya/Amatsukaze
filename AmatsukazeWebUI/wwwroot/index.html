@@ -289,22 +289,6 @@
                 return true;
             }
         };
-        // Trim調整: imgのonload/onerrorハンドラ
-        window.trimAdjustSetupImgHandler = function (dotNetRef) {
-            var img = document.querySelector('.trim-preview-img');
-            if (img) {
-                img.onload = function () {
-                    dotNetRef.invokeMethodAsync('OnFrameLoaded');
-                };
-                img.onerror = function () {
-                    var rawSrc = this.getAttribute('src') || '';
-                    if (!rawSrc || rawSrc.indexOf('data:') === 0) {
-                        return;
-                    }
-                    dotNetRef.invokeMethodAsync('OnFrameLoadError');
-                };
-            }
-        };
         // Trim調整: シークバーのmousedown/mousemove/mouseup対応
         // シークバー本体: ダイレクト移動（スナップなし）
         // シークバー上部（▽マーカー領域）: 最寄り編集点にスナップ
