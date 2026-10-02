@@ -7,6 +7,7 @@
 */
 
 #include "StreamReform.h"
+#include <algorithm>
 #include <cmath>
 #include <regex>
 #include <fstream>
@@ -656,18 +657,25 @@ void StreamReformInfo::reformMain(bool splitSub) {
     }
 
     // 字幕の開始・終了を計算
+    // 言語ごとに終了時刻を管理する
     captionDuration_.resize(captionItemList_.size());
-    double curEnd = dataPTS_.back();
+    std::vector<double> curEnd;
     for (int i = (int)captionItemList_.size() - 1; i >= 0; --i) {
         double modPTS = modifiedCaptionPTS_[i] + (captionItemList_[i].waitTime * (MPEG_CLOCK_HZ / 1000));
+        int langIndex = captionItemList_[i].langIndex;
+        // 負値(未設定・破損キャッシュ等)は0として扱う (下位境界の防御)
+        langIndex = std::max(langIndex, 0);
+        if (langIndex >= (int)curEnd.size()) {
+            curEnd.resize(langIndex + 1, dataPTS_.back());
+        }
         if (captionItemList_[i].line) {
             captionDuration_[i].startPTS = modPTS;
-            captionDuration_[i].endPTS = curEnd;
+            captionDuration_[i].endPTS = curEnd[langIndex];
         } else {
             // クリア
             captionDuration_[i].startPTS = captionDuration_[i].endPTS = modPTS;
             // 終了を更新
-            curEnd = modPTS;
+            curEnd[langIndex] = modPTS;
         }
     }
 
