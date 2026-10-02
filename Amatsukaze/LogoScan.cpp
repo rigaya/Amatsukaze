@@ -3365,6 +3365,8 @@ namespace {
             std::vector<std::vector<uint8_t>> batchRaw8;
             // 初回走査で受け取ったが、まだ統計へ反映していないフレーム数。
             int pendingInitialFrames = 0;
+            bool allFramesBatched = true;
+            bool reuseUnweighted = false;
             std::vector<AutoDetectStats> stats;
             // タイル単位のヒストグラム蓄積バッファ: [タイル][bin][画素]
             std::vector<BinAccum> binAccumBuf;
@@ -3377,6 +3379,8 @@ namespace {
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 pendingInitialFrames = 0;
+                allFramesBatched = true;
+                reuseUnweighted = false;
                 if (bitDepth <= 8) {
                     // 背景辺のAVX2処理が行末付近でも64 byteを直接ロードできるよう、
                     // 作業画像と転置画像の末尾へ余白を持たせる。
@@ -6988,6 +6992,7 @@ namespace {
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
+            const bool reuseUnweighted = statsPass.reuseUnweighted;
             float* cache = backgroundCacheFrame(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
@@ -6997,44 +7002,53 @@ namespace {
                         return 0;
                     }
                     const float fgRaw = (float)frameWork[off];
-                    accumulateTemporalHistSample(off, fgRaw, invMaxv);
                     AutoDetectStats& s = stats[off];
-                    s.observed++;
-                    if (lastObservedValid[off]) {
-                        if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
-                            s.fgTransition++;
+                    if (!reuseUnweighted) {
+                        accumulateTemporalHistSample(off, fgRaw, invMaxv);
+                        s.observed++;
+                        if (lastObservedValid[off]) {
+                            if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
+                                s.fgTransition++;
+                            }
                         }
-                    }
-                    lastObservedFg[off] = fgRaw;
-                    lastObservedValid[off] = 1;
+                        lastObservedFg[off] = fgRaw;
+                        lastObservedValid[off] = 1;
 
-                    if (preparedEdge < 0.0f) {
-                        AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
-                    } else if (preparedEdge > 0.0f) {
-                        auto& edge = statsPass.edgeAccumBuf[off];
-                        edge.sumEdge += preparedEdge;
-                        edge.sumEdge2 += preparedEdge * preparedEdge;
-                        edge.edgeCount++;
+                        if (preparedEdge < 0.0f) {
+                            AccumulateCorrectedEdge(frameWork, off, x, y, invMaxv, statsPass);
+                        } else if (preparedEdge > 0.0f) {
+                            auto& edge = statsPass.edgeAccumBuf[off];
+                            edge.sumEdge += preparedEdge;
+                            edge.sumEdge2 += preparedEdge * preparedEdge;
+                            edge.edgeCount++;
+                        }
                     }
 
                     // 背景推定不可(周辺辺が不一致など)な点は無効サンプルとして棄却。
                     if (!bgOk) {
                         return 0;
                     }
-                    s.totalCandidates++;
+                    if (!reuseUnweighted) s.totalCandidates++;
                     const double f = (double)frameWork[off] * invMaxv;
                     const double b = (double)bg * invMaxv;
 
                     if (IsExtremeContrastSample(f, b)) {
-                        s.rejectedExtreme++;
+                        if (!reuseUnweighted) s.rejectedExtreme++;
                         return 0;
                     }
 
-                    s.rawSampleCount++;
+                    if (!reuseUnweighted) s.rawSampleCount++;
                     const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
                     auto& bin = binAccumBuf[binAccumIndex(off, binIdx)];
-                    accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
-                    AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
+                    if (reuseUnweighted) {
+                        const double w = std::max(0.0, calcSampleResidualWeight(off, f, b));
+                        bin.sum_weight += w;
+                        bin.sum_weighted_fg += w * f;
+                        bin.sum_weighted_bg += w * b;
+                    } else {
+                        accumulateSegmentConsensusSample(off, segmentConsensusIndex, f, b);
+                        AddBinAccumSample(bin, f, b, calcSampleResidualWeight(off, f, b));
+                    }
                     return 1;
                 };
 
@@ -7047,11 +7061,13 @@ namespace {
                         if (blockInRange) {
                             float bg[32];
                             float preparedEdges[32];
-                            CalcCorrectedEdges32U8_AVX2(frameWork.data() + x + y * scanw, scanw, invMaxv, preparedEdges);
+                            if (!reuseUnweighted) {
+                                CalcCorrectedEdges32U8_AVX2(frameWork.data() + x + y * scanw, scanw, invMaxv, preparedEdges);
+                            }
                             const uint32_t bgValidMask = estimateBackgroundBlock(frameWork, x, y, thresholdRaw, transposed, cache, bg);
                             for (int lane = 0; lane < 32; lane++) {
                                 localFrameCount += collectOne(x + lane,
-                                    (bgValidMask & (1u << lane)) != 0, bg[lane], preparedEdges[lane]);
+                                    (bgValidMask & (1u << lane)) != 0, bg[lane], reuseUnweighted ? 0.0f : preparedEdges[lane]);
                             }
                             x += 32;
                             continue;
@@ -7091,6 +7107,7 @@ namespace {
 
         template<typename pixel_t>
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const int thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
+            statsPass.allFramesBatched = false;
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
@@ -8412,7 +8429,28 @@ namespace {
             // q43 のように「bin代表点だけ見るとまだ二股だが、sample 単位では本流が見える」
             // ケースを拾うため、ここは再走査してでも sample 単位で処理する。
             sampleResidualReweightActive = true;
-            resetAccumulationState(&statsPass, pass2);
+            // 同じキャッシュと選別マスクを再走査する場合だけ、重みに依存しない統計を保持する。
+            const bool reuseUnweighted = bitDepth == 8 && hasStoredRoiCache()
+                && statsPass.allFramesBatched && threadN >= 8 && tracePoints.empty()
+                && ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1) > 1;
+            if (reuseUnweighted) {
+                readFrames = 0;
+                sourceFrameIndex = 0;
+                statsPass.frameValidCounts.clear();
+                for (auto& bin : statsPass.binAccumBuf) {
+                    bin.sum_weight = bin.sum_weighted_fg = bin.sum_weighted_bg = 0.0;
+                }
+                if (pass2 != nullptr) {
+                    pass2->acceptedFrames = pass2->skippedFrames = 0;
+                }
+                statsPass.reuseUnweighted = true;
+            } else {
+                resetAccumulationState(&statsPass, pass2);
+            }
+            struct RestoreReuseFlag {
+                StatsPassBuffers& buffers;
+                ~RestoreReuseFlag() { buffers.reuseUnweighted = false; }
+            } restoreReuseFlag{ statsPass };
             if (hasStoredRoiCache()) {
                 runStoredRoiStatsPassWithProgress(progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan,
                     progressPlan.overallBase, progressPlan.overallSpan, statsPass, pass2);
