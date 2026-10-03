@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# エンコーダ関連のURL・バージョンを最新リリースから取得して更新するスクリプト
+#
+# 更新対象:
+#   - .github/workflows/build_windows_package.yml
+#       X264_URL / X265_URL / SVT_URL (rigaya/AutoBuildForAviUtlPlugins の最新リリース)
+#       ※ LSMASH_URL / X262_URL は最新リリースに該当アセットが無いため更新対象外
+#   - docker/Dockerfile
+#       ARG QSVENCC_VER / NVENCC_VER / VCEENCC_VER (各エンコーダdebの最新リリースタグ)
+#       ※ Linux版x264/x265/SVT-AV1は配布アーカイブ(basepkg)に含まれるためDockerfile側にはURL不存在
 import requests
 import re
 import sys
@@ -14,6 +23,13 @@ WIN_PACKAGE_ENV_VARS = (
     "SVT_URL",
     "BASE_PKG_URL",
 )
+
+# Dockerfileでバージョン管理しているエンコーダdeb (ENVではなくARGで定義されている)
+DOCKER_ENCODER_ARGS = {
+    "QSVENCC_VER": "rigaya/QSVEnc",
+    "NVENCC_VER": "rigaya/NVEnc",
+    "VCEENCC_VER": "rigaya/VCEEnc",
+}
 
 def get_latest_release(repo):
     url = f"https://api.github.com/repos/{repo}/releases/latest"
@@ -109,36 +125,52 @@ def validate_win_package_env(content):
     if missing:
         raise ValueError(f"Missing env var(s) in build_windows_package.yml: {', '.join(missing)}")
 
-def update_file(file_path, pattern, replacement, is_env_var=False, var_name=None, value=None):
-    path = repo_path(file_path)
-    if not path.exists():
-        print(f"Error: File {path} not found")
-        return
-    
-    with open(path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    if is_env_var:
-        new_content = update_job_env_var(content, "build-windows", var_name, value)
-    else:
-        new_content, count = re.subn(pattern, replacement, content, flags=re.MULTILINE)
-        if count == 0:
-            raise ValueError(f"Pattern not found in {path}: {pattern}")
-    
+def write_if_changed(path, content, new_content):
     if new_content != content:
-        with open(path, 'w', encoding='utf-8') as f:
+        # newline='' で改行コード (CRLF等) を変換せずそのまま書き戻す
+        with open(path, 'w', encoding='utf-8', newline='') as f:
             f.write(new_content)
         print(f"Updated {path}")
     else:
         print(f"No changes for {path}")
 
-def update_file_if_value(new_value, description, *args, **kwargs):
+def read_preserving_newlines(path):
+    # newline='' で読み、各行の改行コードを保持したまま取得する
+    with open(path, 'r', encoding='utf-8', newline='') as f:
+        return f.read()
+
+def update_workflow_env_var(file_path, var_name, value):
+    path = repo_path(file_path)
+    if not path.exists():
+        print(f"Error: File {path} not found")
+        return
+
+    content = read_preserving_newlines(path)
+    new_content = update_job_env_var(content, "build-windows", var_name, value)
+    write_if_changed(path, content, new_content)
+
+def update_dockerfile_arg(file_path, arg_name, value):
+    path = repo_path(file_path)
+    if not path.exists():
+        print(f"Error: File {path} not found")
+        return
+
+    content = read_preserving_newlines(path)
+
+    pattern = rf"^ARG {re.escape(arg_name)}=[^ \n\r]+"
+    replacement = f"ARG {arg_name}={value}"
+    new_content, count = re.subn(pattern, replacement, content, flags=re.MULTILINE)
+    if count == 0:
+        raise ValueError(f"Pattern not found in {path}: {pattern}")
+    write_if_changed(path, content, new_content)
+
+def update_if_value(new_value, description, updater, *args):
     if not new_value:
         print(f"Warning: {description} not found. Keeping existing value.")
         return False
 
     try:
-        update_file(*args, **kwargs)
+        updater(*args)
         return True
     except Exception as e:
         print(f"Warning: Failed to update {description}: {e}. Keeping existing value.")
@@ -159,67 +191,45 @@ def verify_changes():
     print("--- Verification ---", flush=True)
     subprocess.run([
         "rg", "-n",
-        "x264|x265|svt-av1|SvtAv1EncApp|AutoBuildForAviUtlPlugins|QSVENCC_VER|NVENCC_VER|VCEENCC_VER|TSREPLACE_VER|QSVEnc|NVEnc|VCEEnc|tsreplace|BASE_PKG_URL",
+        "x264|x265|svt|SvtAv1|QSVENCC_VER|NVENCC_VER|VCEENCC_VER|BASE_PKG_URL",
         ".github/workflows/build_windows_package.yml",
         "docker/Dockerfile",
     ], cwd=REPO_ROOT, check=True)
 
 def main():
     try:
-        # 1. AutoBuildForAviUtlPlugins
-        x264_win = x265_win = svt_win = None
-        x264_linux = x265_linux = svt_linux = None
         dockerfile = "docker/Dockerfile"
         win_yml = ".github/workflows/build_windows_package.yml"
 
+        # 1. AutoBuildForAviUtlPlugins → WindowsパッケージのエンコーダURL
         try:
             print("Fetching AutoBuildForAviUtlPlugins latest release...")
             ab_release = get_latest_release("rigaya/AutoBuildForAviUtlPlugins")
             assets = ab_release['assets']
 
             for asset in assets:
-                name = asset['name']
-                print(f"  Asset found: {name}")
+                print(f"  Asset found: {asset['name']}")
 
             x264_win = find_asset(assets, "x264", "x64.zip")
             x265_win = find_asset(assets, "x265", "x64.zip")
             svt_win = find_asset(assets, "SvtAv1EncApp", "x64_clang.zip")
-            x264_linux = find_asset(assets, "x264", "amd64_linux.tar.xz")
-            x265_linux = find_asset(assets, "x265", "amd64_linux.tar.xz")
-            svt_linux = find_asset(assets, "SvtAv1EncApp", "amd64_linux_clang.tar.xz")
         except Exception as e:
             print(f"Warning: Failed to fetch AutoBuildForAviUtlPlugins latest release: {e}. Keeping existing AutoBuild URLs.")
+            x264_win = x265_win = svt_win = None
 
-        # Update .github/workflows/build_windows_package.yml
-        update_file_if_value(x264_win, "Windows x264 URL", win_yml, r"^\s*X264_URL: .*", f"X264_URL: {x264_win}", is_env_var=True, var_name="X264_URL", value=x264_win)
-        update_file_if_value(x265_win, "Windows x265 URL", win_yml, r"^\s*X265_URL: .*", f"X265_URL: {x265_win}", is_env_var=True, var_name="X265_URL", value=x265_win)
-        update_file_if_value(svt_win, "Windows SVT-AV1 URL", win_yml, r"^\s*SVT_URL: .*", f"SVT_URL: {svt_win}", is_env_var=True, var_name="SVT_URL", value=svt_win)
+        update_if_value(x264_win, "Windows x264 URL", update_workflow_env_var, win_yml, "X264_URL", x264_win)
+        update_if_value(x265_win, "Windows x265 URL", update_workflow_env_var, win_yml, "X265_URL", x265_win)
+        update_if_value(svt_win, "Windows SVT-AV1 URL", update_workflow_env_var, win_yml, "SVT_URL", svt_win)
 
-        # Update docker/Dockerfile (AutoBuildForAviUtlPlugins part)
-        update_file_if_value(x264_linux, "Docker x264 URL", dockerfile, r"wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/[^/]+/[^/]+ -O x264.tar.xz", f"wget {x264_linux} -O x264.tar.xz")
-        update_file_if_value(x265_linux, "Docker x265 URL", dockerfile, r"wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/[^/]+/[^/]+ -O x265.tar.xz", f"wget {x265_linux} -O x265.tar.xz")
-        update_file_if_value(svt_linux, "Docker SVT-AV1 URL", dockerfile, r"wget https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/[^/]+/[^/]+ -O svt-av1.tar.xz", f"wget {svt_linux} -O svt-av1.tar.xz")
-
-        # 2. Docker encoders
-        encoder_repos = {
-            "QSVENCC_VER": "rigaya/QSVEnc",
-            "NVENCC_VER": "rigaya/NVEnc",
-            "VCEENCC_VER": "rigaya/VCEEnc",
-            "TSREPLACE_VER": "rigaya/tsreplace"
-        }
-        
-        for env_var, repo in encoder_repos.items():
+        # 2. Dockerfileのエンコーダdebバージョン (ARG)
+        for arg_name, repo in DOCKER_ENCODER_ARGS.items():
             try:
                 print(f"Fetching {repo} latest release...")
                 release = get_latest_release(repo)
                 ver = release['tag_name']
-
-                # Update all occurrences of ENV var
-                pattern = rf"ENV {env_var}=[^ \n]+"
-                replacement = f"ENV {env_var}={ver}"
-                update_file_if_value(ver, env_var, dockerfile, pattern, replacement)
+                update_if_value(ver, arg_name, update_dockerfile_arg, dockerfile, arg_name, ver)
             except Exception as e:
-                print(f"Warning: Failed to update {env_var} from {repo}: {e}. Keeping existing value.")
+                print(f"Warning: Failed to update {arg_name} from {repo}: {e}. Keeping existing value.")
 
         # 3. Verification
         print("Verifying changes...")
