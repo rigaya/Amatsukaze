@@ -34,7 +34,7 @@ ARG ARCH=amd64
 ARG UBUNTU_NAME=noble
 # VCEEncCは常にVA-API (Mesa) で導入し、AMFは任意とする
 ARG ENABLE_VCEENC_AMF=0
-ARG QSVENCC_VER=8.31
+ARG QSVENCC_VER=8.32
 ARG NVENCC_VER=9.36
 ARG VCEENCC_VER=9.20
 # NVEncCのnvrtc用。24.04向けリポジトリに11.8は無いため、22.04向けのdebを直接導入する
@@ -42,6 +42,7 @@ ARG VCEENCC_VER=9.20
 ARG CUDA_NVRTC_DEB=cuda-nvrtc-11-8_11.8.89-1_amd64.deb
 ARG CUDA_NVRTC_SHA256=6f083fcd63b7f8ef7478bfb7b8aba938d8ca0b5684d610df1243302b12a54f06
 # Intel GPUのドライバ類はUbuntu向けのkobuk-team PPAから導入する
+# Haswell以前はi965のみ対応のため、QSVEncCのVA-APIバックエンド用にi965も導入する
 ARG INTEL_GRAPHICS_PPA_KEY=0C0E6AF955CE463C03FC51574D098D70AFBE5E1F
 # PPAのintel-opencl-icdはGen12以降のみ対応のため、Gen11以前 (Kaby Lake等) 向けに
 # Intel公式のlegacy1ランタイムを追加する (別パッケージ・別ICDのため併存できる)
@@ -75,7 +76,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 \
         libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-libopencl1 \
-        mesa-va-drivers mesa-opencl-icd \
+        mesa-va-drivers mesa-opencl-icd i965-va-driver-shaders \
     && wget -q "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/${CUDA_NVRTC_DEB}" -O /tmp/cuda-nvrtc.deb \
     && echo "${CUDA_NVRTC_SHA256}  /tmp/cuda-nvrtc.deb" | sha256sum -c - \
     && apt-get install -y --no-install-recommends /tmp/cuda-nvrtc.deb \
