@@ -160,6 +160,13 @@ void CalcBgSideStatsVerticalBoundary32U8_AVX2(const uint8_t* src, int stride, in
     }
 }
 
+void PackBackground32Fixed88_AVX2(const float* bg, uint32_t validMask, uint16_t* out) {
+    for (int lane = 0; lane < 32; lane++) {
+        out[lane] = (validMask & (1u << lane))
+            ? (uint16_t)(std::max(0.0f, std::min(255.0f, bg[lane])) * 256.0f + 0.5f) : 0xfffe;
+    }
+}
+
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
     constexpr int lanes = 32;

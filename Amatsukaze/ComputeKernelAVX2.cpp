@@ -309,6 +309,28 @@ void CalcBgSideStatsVerticalBoundary32U8_AVX2(const uint8_t* src, int stride, in
     }
 }
 
+void PackBackground32Fixed88_AVX2(const float* bg, uint32_t validMask, uint16_t* out) {
+    const __m256 scale = _mm256_set1_ps(256.0f);
+    const __m256 half = _mm256_set1_ps(0.5f);
+    const __m256 zero = _mm256_setzero_ps();
+    const __m256 limit = _mm256_set1_ps(255.0f);
+    const __m256i bits = _mm256_setr_epi32(1, 2, 4, 8, 16, 32, 64, 128);
+    for (int first = 0; first < 32; first += 16) {
+        __m256i converted[2];
+        for (int block = 0; block < 2; block++) {
+            const int offset = first + block * 8;
+            const __m256 value = _mm256_min_ps(limit, _mm256_max_ps(zero, _mm256_loadu_ps(bg + offset)));
+            const __m256i packed = _mm256_cvttps_epi32(_mm256_add_ps(_mm256_mul_ps(value, scale), half));
+            const __m256i mask = _mm256_set1_epi32((int)(validMask >> offset));
+            const __m256i invalid = _mm256_cmpeq_epi32(_mm256_and_si256(mask, bits), _mm256_setzero_si256());
+            converted[block] = _mm256_blendv_epi8(packed, _mm256_set1_epi32(0xfffe), invalid);
+        }
+        // pack命令の128bitレーン内順序を、元の画素順へ戻す。
+        const __m256i words = _mm256_permute4x64_epi64(_mm256_packus_epi32(converted[0], converted[1]), 0xd8);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + first), words);
+    }
+}
+
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
     constexpr int lanes = 32;

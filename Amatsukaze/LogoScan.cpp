@@ -2942,6 +2942,39 @@ namespace {
         return validMask;
     }
 
+    // 8bit背景値は小数8bitで保存し、未計算と不適合も同じ16bit領域で表す。
+    static constexpr uint16_t kBackgroundMissing = 0xffff;
+    static constexpr uint16_t kBackgroundInvalid = 0xfffe;
+
+    static bool BackgroundIsMissing(const uint16_t value) {
+        return value == kBackgroundMissing;
+    }
+    static bool BackgroundIsValid(const uint16_t value) {
+        return value <= 0xff00;
+    }
+    static uint16_t EncodeBackgroundValue(const float value) {
+        return (uint16_t)(std::max(0.0f, std::min(255.0f, value)) * 256.0f + 0.5f);
+    }
+
+    static bool TryEstimateBgFixed88(const std::vector<uint8_t>& frame, const int w, const int h,
+        const int x, const int y, const int radius, const int threshold, uint16_t& bg,
+        const std::vector<uint8_t>* transposed) {
+        float raw = 0.0f;
+        const bool valid = TryEstimateBg(frame, w, h, x, y, radius, threshold, raw, nullptr, transposed);
+        bg = valid ? EncodeBackgroundValue(raw) : kBackgroundInvalid;
+        return valid;
+    }
+
+    static uint32_t TryEstimateBgBlock32U8Fixed88(const std::vector<uint8_t>& frame, const int w, const int h,
+        const int x, const int y, const int radius, const int threshold, uint16_t bg[32],
+        const std::vector<uint8_t>* transposed) {
+        float raw[32];
+        const uint32_t mask = TryEstimateBgBlock32U8(frame, w, h, x, y, radius, threshold, raw, transposed);
+        // 平均と辺の選別は従来精度を維持し、確定した結果だけを一括変換する。
+        PackBackground32Fixed88_AVX2(raw, mask, bg);
+        return mask;
+    }
+
     template<typename F>
     static void RunParallelRange(LogoScanWorkerPool& pool, const int threadN, const int total, F&& fn, const int blockSize = 0) {
         const int workers = std::max(1, std::min(threadN, total));
@@ -3419,8 +3452,8 @@ namespace {
         int roiCacheFrameBytes = 0;
         int roiCacheStoredFrames = 0;
         std::vector<std::vector<uint8_t>> roiCacheRamSlabs;
-        // 背景値は生のfloatで保持し、未計算はNaN、不適合は-1で区別する。
-        std::vector<std::vector<float>> backgroundCacheSlabs;
+        // 8bit背景値は8.8固定小数点で保持する。
+        std::vector<std::vector<uint16_t>> backgroundCacheSlabs;
         bool backgroundCacheAttempted = false;
         int backgroundCacheWidth = 0, backgroundCacheHeight = 0;
         int backgroundCacheX = 0, backgroundCacheY = 0;
@@ -6912,7 +6945,8 @@ namespace {
             const int height = std::max(0, scanh - 2 * kScanEdgeMargin);
             if (bitDepth != 8 || width == 0 || height == 0 || searchFrames <= 0
                 || !tracePoints.empty() || filteredRoiCacheSlabs.empty()) return;
-            const uint64_t bytes = uint64_t(width) * height * searchFrames * sizeof(float);
+            const uint64_t bytes = uint64_t(width) * height * searchFrames
+                * sizeof(uint16_t);
             // 共有デコーダは検出ROIが別サイズの場合もあるため、上限2GiBを留保する。
             const uint64_t decodeReserve = logo::activeLogoDecodeSession != nullptr
                 ? (2ULL << 30) : 0;
@@ -6926,8 +6960,8 @@ namespace {
                 backgroundCacheSlabs.reserve(slabs);
                 for (int slab = 0; slab < slabs; slab++) {
                     const int count = std::min(kRoiCacheFramesPerSlab, searchFrames - slab * kRoiCacheFramesPerSlab);
-                    backgroundCacheSlabs.emplace_back((size_t)width * height * count,
-                        std::numeric_limits<float>::quiet_NaN());
+                    const size_t size = (size_t)width * height * count;
+                    backgroundCacheSlabs.emplace_back(size, kBackgroundMissing);
                 }
                 backgroundCacheWidth = scanw;
                 backgroundCacheHeight = scanh;
@@ -6938,18 +6972,19 @@ namespace {
                 logCtx.infoF(_T("[LogoScan] 背景推定キャッシュ: %") _T(PRIu64) _T(" bytes"), bytes);
             } catch (const std::bad_alloc&) {
                 backgroundCacheSlabs.clear();
-                logCtx.info(_T("[LogoScan] 背景推定キャッシュの確保失敗により従来計算へ戻す"));
+                logCtx.info(_T("[LogoScan] 背景推定キャッシュの確保失敗により背景値を再計算する"));
             }
         }
 
-        float* backgroundCacheFrame(const int frame, const int thresholdRaw) {
-            if (backgroundCacheSlabs.empty() || bitDepth != 8 || scanw != backgroundCacheWidth
+        uint16_t* backgroundCacheFrame(const int frame, const int thresholdRaw) {
+            auto& slabs = backgroundCacheSlabs;
+            if (slabs.empty() || bitDepth != 8 || scanw != backgroundCacheWidth
                 || scanh != backgroundCacheHeight || radius != backgroundCacheRadius
                 || scanx != backgroundCacheX || scany != backgroundCacheY
                 || thresholdRaw != backgroundCacheThreshold || frame < 0 || frame >= searchFrames
                 || frame >= (int)filteredRoiCacheValid.size() || !filteredRoiCacheValid[frame]) return nullptr;
             const size_t pixels = (size_t)(scanw - 2 * kScanEdgeMargin) * (scanh - 2 * kScanEdgeMargin);
-            return backgroundCacheSlabs[frame / kRoiCacheFramesPerSlab].data()
+            return slabs[frame / kRoiCacheFramesPerSlab].data()
                 + (size_t)(frame % kRoiCacheFramesPerSlab) * pixels;
         }
 
@@ -6958,27 +6993,27 @@ namespace {
         }
 
         uint32_t estimateBackgroundBlock(const std::vector<uint8_t>& frameWork, const int x, const int y,
-            const int thresholdRaw, const std::vector<uint8_t>* transpose, float* cache, float* bg) {
+            const int thresholdRaw, const std::vector<uint8_t>* transpose, uint16_t* cache, uint16_t* bg) {
             const size_t offset = cache ? backgroundCacheIndex(x, y) : 0;
             bool complete = cache != nullptr;
             if (cache) {
                 for (int lane = 0; lane < 32; lane++) {
-                    if (std::isnan(cache[offset + lane])) { complete = false; break; }
+                    if (BackgroundIsMissing(cache[offset + lane])) { complete = false; break; }
                 }
             }
             if (complete) {
                 uint32_t mask = 0;
                 for (int lane = 0; lane < 32; lane++) {
-                    const float value = cache[offset + lane];
-                    bg[lane] = value >= 0.0f ? value : 0.0f;
-                    if (value >= 0.0f) mask |= 1u << lane;
+                    const uint16_t value = cache[offset + lane];
+                    bg[lane] = value;
+                    if (BackgroundIsValid(value)) mask |= 1u << lane;
                 }
                 return mask;
             }
-            const uint32_t mask = TryEstimateBgBlock32U8(frameWork, scanw, scanh,
+            const uint32_t mask = TryEstimateBgBlock32U8Fixed88(frameWork, scanw, scanh,
                 x, y, radius, thresholdRaw, bg, transpose);
             if (cache) {
-                for (int lane = 0; lane < 32; lane++) cache[offset + lane] = (mask & (1u << lane)) ? bg[lane] : -1.0f;
+                for (int lane = 0; lane < 32; lane++) cache[offset + lane] = (mask & (1u << lane)) ? bg[lane] : kBackgroundInvalid;
             }
             return mask;
         }
@@ -6993,10 +7028,14 @@ namespace {
             auto& lastObservedFg = statsPass.lastObservedFg;
             auto& lastObservedValid = statsPass.lastObservedValid;
             const bool reuseUnweighted = statsPass.reuseUnweighted;
-            float* cache = backgroundCacheFrame(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
+            using bg_t = std::conditional_t<std::is_same_v<pixel_t, uint8_t>, uint16_t, float>;
+            uint16_t* cache = nullptr;
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                cache = backgroundCacheFrame(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
+            }
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
-                auto collectOne = [&](const int x, const bool bgOk, const float bg, const float preparedEdge = -1.0f) {
+                auto collectOne = [&](const int x, const bool bgOk, const bg_t bg, const float preparedEdge = -1.0f) {
                     const int off = x + y * scanw;
                     if (off >= 0 && off < (int)tracePointIndexByOffset.size() && tracePointIndexByOffset[off] >= 0) {
                         return 0;
@@ -7030,7 +7069,8 @@ namespace {
                     }
                     if (!reuseUnweighted) s.totalCandidates++;
                     const double f = (double)frameWork[off] * invMaxv;
-                    const double b = (double)bg * invMaxv;
+                    const double b = (double)bg * (std::is_same_v<bg_t, uint16_t>
+                        ? (double)invMaxv / 256.0 : (double)invMaxv);
 
                     if (IsExtremeContrastSample(f, b)) {
                         if (!reuseUnweighted) s.rejectedExtreme++;
@@ -7059,7 +7099,7 @@ namespace {
                             && x + 32 <= xEnd
                             && x - radius >= 0 && x + 31 + radius < scanw;
                         if (blockInRange) {
-                            float bg[32];
+                            bg_t bg[32];
                             float preparedEdges[32];
                             if (!reuseUnweighted) {
                                 CalcCorrectedEdges32U8_AVX2(frameWork.data() + x + y * scanw, scanw, invMaxv, preparedEdges);
@@ -7073,16 +7113,23 @@ namespace {
                             continue;
                         }
                     }
-                    float bg = 0.0f;
+                    bg_t bg = 0;
                     bool bgOk = false;
                     const size_t offset = cache ? backgroundCacheIndex(x, y) : 0;
-                    if (cache && !std::isnan(cache[offset])) {
-                        bgOk = cache[offset] >= 0.0f;
+                    if (cache && !BackgroundIsMissing(cache[offset])) {
+                        bgOk = BackgroundIsValid(cache[offset]);
                         if (bgOk) bg = cache[offset];
                     } else {
-                        bgOk = TryEstimateBg(frameWork, scanw, scanh, x, y,
-                            radius, thresholdRaw, bg, nullptr, transposed);
-                        if (cache) cache[offset] = bgOk ? bg : -1.0f;
+                        if constexpr (std::is_same_v<bg_t, uint16_t>) {
+                            bgOk = TryEstimateBgFixed88(frameWork, scanw, scanh, x, y,
+                                radius, thresholdRaw, bg, transposed);
+                        } else {
+                            bgOk = TryEstimateBg(frameWork, scanw, scanh, x, y,
+                                radius, thresholdRaw, bg, nullptr, transposed);
+                        }
+                        if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                            if (cache) cache[offset] = bgOk ? bg : kBackgroundInvalid;
+                        }
                     }
                     localFrameCount += collectOne(x, bgOk, bg);
                     x++;
@@ -7217,6 +7264,10 @@ namespace {
                 float bg = 0.0f;
                 BgDebugInfo dbgBg{};
                 const bool bgOk = TryEstimateBg(frameWork, scanw, scanh, tp.x, tp.y, radius, thresholdRaw, bg, &dbgBg, transposed);
+                if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                    // 追跡点も通常の集計と同じ量子化値で判定する。
+                    if (bgOk) bg = EncodeBackgroundValue(bg) / 256.0f;
+                }
                 rec.bgOk = bgOk ? 1 : 0;
                 rec.bg = bg;
                 rec.bgSideCount = dbgBg.sideCount;

@@ -36,6 +36,8 @@ void removeLogoLineAVX2(float *dst, const float *src, const int srcStride, const
 void BilateralFilter5x5U8RangeLUT_AVX2(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 void BilateralFilter5x5U8RangeLUT_AVX512(uint8_t* dst, const uint8_t* srcBase, int srcPitch, int w, int h, const float* spatial, const float* rangeWeight, uint8_t maxv, int y0, int y1);
 bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int threshold, float& avg, uint8_t& minvOut, uint8_t& maxvOut);
+// 確定した背景値を小数8bitへ丸め、不適合laneは0xfffeで返す。
+void PackBackground32Fixed88_AVX2(const float* bg, uint32_t validMask, uint16_t* out);
 void CalcCorrectedEdges32U8_AVX2(const uint8_t* src, int stride, float invMaxv, float* edges);
 void CalcBgSideStatsVerticalBoundary32U8_AVX2(const uint8_t* src, int stride, int height, int x, int y, int radius, uint16_t* sums, uint8_t* mins, uint8_t* maxs);
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
