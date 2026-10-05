@@ -28,6 +28,29 @@
 #include "Caption.h"
 #include "CaptionData.h"
 
+// ネイティブ単体テストから映像パーサを呼び出すための入力 (1要素が1つのPESペイロードに相当)
+struct VideoAccessUnitForTest {
+    const uint8_t* data;
+    size_t length;
+    int64_t PTS; // 90kHz、情報がない場合は-1
+    int64_t DTS; // 90kHz、情報がない場合は-1
+};
+
+enum VideoParserForTestResult {
+    VIDEO_PARSER_FOR_TEST_SUCCESS = 0,
+    VIDEO_PARSER_FOR_TEST_INVALID_ARGUMENT = -1,
+    VIDEO_PARSER_FOR_TEST_BUFFER_TOO_SMALL = -2,
+    VIDEO_PARSER_FOR_TEST_FAILED = -3,
+};
+
+// ネイティブ単体テストから映像パーサ (MPEG-2/H.264/HEVC) を呼び出すためのC ABI。
+// アクセスユニットを順に入力し、得られたフレーム情報を連結してoutputへ返す。
+// unitResultsがnullptrでなければ、各アクセスユニットのinputFrame()の戻り値(0/1)を格納する。
+// outputCountには出力バッファの容量に関わらず必要なフレーム数を返す。
+extern "C" AMATSUKAZE_API int ParseVideoAccessUnitsForTest(int streamFormat,
+    const VideoAccessUnitForTest* units, size_t unitCount, int* unitResults,
+    VideoFrameInfo* output, size_t outputCapacity, size_t* outputCount);
+
 class VideoFrameParser : public AMTObject, public PesParser {
 public:
     VideoFrameParser(AMTContext&ctx);

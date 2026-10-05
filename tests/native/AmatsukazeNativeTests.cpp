@@ -4,6 +4,7 @@
 #include "FilteredSource.h"
 #include "StreamReform.h"
 #include "StreamUtils.h"
+#include "TsSplitter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -499,6 +500,460 @@ bool TestEncoderOption(tstring& diagnostic) {
     return true;
 }
 
+// テスト用ビットストリームを組み立てる (書き込んだビット数を保持し、SEIペイロード等の整列に使う)
+class BitstreamBuilder {
+public:
+    BitstreamBuilder() : writer(buffer), bitCount(0) {}
+    BitstreamBuilder& bits(uint32_t value, int count) {
+        if (count > 0) writer.writen(value, count);
+        bitCount += count;
+        return *this;
+    }
+    BitstreamBuilder& flag(bool value) { return bits(value ? 1 : 0, 1); }
+    // 符号なし指数ゴロム符号 ue(v)
+    BitstreamBuilder& ue(uint32_t codeNum) {
+        const uint32_t value = codeNum + 1;
+        int bitLength = 0;
+        for (uint32_t v = value; v != 0; v >>= 1) ++bitLength;
+        bits(0, bitLength - 1);
+        return bits(value, bitLength);
+    }
+    // 符号付き指数ゴロム符号 se(v)
+    BitstreamBuilder& se(int32_t value) {
+        return ue(value > 0 ? (uint32_t)(2 * value - 1) : (uint32_t)(-2 * value));
+    }
+    // バイト境界まで0で埋める
+    BitstreamBuilder& alignZero() {
+        while (bitCount % 8 != 0) bits(0, 1);
+        return *this;
+    }
+    // rbsp_trailing_bits / SEIペイロードの整列 (1を書いてから0で埋める)
+    BitstreamBuilder& trailingBits() {
+        bits(1, 1);
+        return alignZero();
+    }
+    BitstreamBuilder& bytes(const std::vector<uint8_t>& data) {
+        for (const auto b : data) bits(b, 8);
+        return *this;
+    }
+    bool isAligned() const { return bitCount % 8 == 0; }
+    std::vector<uint8_t> finish() {
+        alignZero();
+        writer.flush();
+        return std::vector<uint8_t>(buffer.ptr(), buffer.ptr() + buffer.size());
+    }
+private:
+    AutoBuffer buffer;
+    BitWriter writer;
+    size_t bitCount;
+};
+
+// 映像パーサにアクセスユニット列を入力し、フレーム情報と各ユニットの戻り値を得る
+bool ParseVideoUnits(int streamFormat, const std::vector<std::vector<uint8_t>>& units,
+    const std::vector<std::pair<int64_t, int64_t>>& timestamps, std::vector<VideoFrameInfo>& frames,
+    std::vector<int>& unitResults, tstring& diagnostic) {
+    std::vector<VideoAccessUnitForTest> inputs;
+    for (size_t i = 0; i < units.size(); ++i) {
+        inputs.push_back({ units[i].data(), units[i].size(), timestamps[i].first, timestamps[i].second });
+    }
+    unitResults.assign(units.size(), -1);
+    size_t frameCount = 0;
+    int status = ParseVideoAccessUnitsForTest(streamFormat, inputs.data(), inputs.size(), unitResults.data(),
+        nullptr, 0, &frameCount);
+    if (status != VIDEO_PARSER_FOR_TEST_SUCCESS) {
+        diagnostic = strsprintf(_T("映像パーサを実行できません: 結果=%d"), status);
+        return false;
+    }
+    frames.assign(frameCount, VideoFrameInfo());
+    status = ParseVideoAccessUnitsForTest(streamFormat, inputs.data(), inputs.size(), unitResults.data(),
+        frames.data(), frames.size(), &frameCount);
+    if (status != VIDEO_PARSER_FOR_TEST_SUCCESS || frameCount != frames.size()) {
+        diagnostic = strsprintf(_T("映像パーサのフレーム情報を取得できません: 結果=%d"), status);
+        return false;
+    }
+    return true;
+}
+
+struct ExpectedVideoFrame {
+    PICTURE_TYPE pic;
+    FRAME_TYPE type;
+    bool isGopStart;
+    int64_t PTS;
+    int64_t DTS;
+};
+
+bool ExpectVideoFrame(const VideoFrameInfo& actual, const ExpectedVideoFrame& expected, size_t index, tstring& diagnostic) {
+    if (actual.pic == expected.pic && actual.type == expected.type && actual.isGopStart == expected.isGopStart
+        && actual.PTS == expected.PTS && actual.DTS == expected.DTS) {
+        return true;
+    }
+    diagnostic = strsprintf(_T("フレーム%zu: pic=%d/%d, type=%d/%d, GOP先頭=%d/%d, PTS=%lld/%lld, DTS=%lld/%lld"), index,
+        actual.pic, expected.pic, actual.type, expected.type, actual.isGopStart, expected.isGopStart,
+        (long long)actual.PTS, (long long)expected.PTS, (long long)actual.DTS, (long long)expected.DTS);
+    return false;
+}
+
+struct ExpectedVideoFormat {
+    int width, height, displayWidth, displayHeight;
+    int sarWidth, sarHeight;
+    int frameRateNum, frameRateDenom;
+    int colorPrimaries;
+    bool progressive;
+};
+
+bool ExpectVideoFormat(const VideoFormat& actual, const ExpectedVideoFormat& expected, tstring& diagnostic) {
+    if (actual.width == expected.width && actual.height == expected.height
+        && actual.displayWidth == expected.displayWidth && actual.displayHeight == expected.displayHeight
+        && actual.sarWidth == expected.sarWidth && actual.sarHeight == expected.sarHeight
+        && actual.frameRateNum == expected.frameRateNum && actual.frameRateDenom == expected.frameRateDenom
+        && actual.colorPrimaries == expected.colorPrimaries && actual.progressive == expected.progressive) {
+        return true;
+    }
+    diagnostic = strsprintf(_T("映像フォーマット: %dx%d/%dx%d, 表示%dx%d/%dx%d, SAR=%d:%d/%d:%d, fps=%d/%d / %d/%d, 色=%d/%d, progressive=%d/%d"),
+        actual.width, actual.height, expected.width, expected.height,
+        actual.displayWidth, actual.displayHeight, expected.displayWidth, expected.displayHeight,
+        actual.sarWidth, actual.sarHeight, expected.sarWidth, expected.sarHeight,
+        actual.frameRateNum, actual.frameRateDenom, expected.frameRateNum, expected.frameRateDenom,
+        actual.colorPrimaries, expected.colorPrimaries, actual.progressive, expected.progressive);
+    return false;
+}
+
+// MPEG-2 映像ビットストリームの組み立て
+constexpr uint32_t MPEG2_SEQUENCE_HEADER_CODE = 0x000001B3;
+constexpr uint32_t MPEG2_EXTENSION_START_CODE = 0x000001B5;
+constexpr uint32_t MPEG2_PICTURE_START_CODE = 0x00000100;
+constexpr uint32_t MPEG2_GOP_START_CODE = 0x000001B8;
+constexpr uint32_t MPEG2_FIRST_SLICE_START_CODE = 0x00000101;
+constexpr int MPEG2_TOP_FIELD = 1;
+constexpr int MPEG2_BOTTOM_FIELD = 2;
+constexpr int MPEG2_FRAME_PICTURE = 3;
+constexpr int MPEG2_CODING_I = 1;
+constexpr int MPEG2_CODING_P = 2;
+constexpr int MPEG2_CODING_B = 3;
+
+struct Mpeg2SequenceParams {
+    int width, height;
+    int aspectRatioInfo;
+    int frameRateCode;
+    bool progressiveSequence;
+    uint32_t bitRateValue;   // 400bps単位、下位18bitがヘッダ、上位12bitが拡張
+    uint32_t vbvBufferSize;  // 下位10bitがヘッダ、上位8bitが拡張
+    bool hasDisplayExtension;
+    int displayWidth, displayHeight;
+    bool hasColourDescription;
+    uint8_t colour;          // colour_primaries/transfer/matrixに同じ値を入れる
+};
+
+void AppendMpeg2Sequence(BitstreamBuilder& b, const Mpeg2SequenceParams& p) {
+    constexpr uint32_t PROFILE_AND_LEVEL_MP_HL = 0x44;
+    constexpr uint32_t CHROMA_420 = 1;
+    b.bits(MPEG2_SEQUENCE_HEADER_CODE, 32).bits(p.width & 0xFFF, 12).bits(p.height & 0xFFF, 12)
+        .bits(p.aspectRatioInfo, 4).bits(p.frameRateCode, 4).bits(p.bitRateValue & 0x3FFFF, 18).bits(1, 1)
+        .bits(p.vbvBufferSize & 0x3FF, 10).bits(0, 1).bits(0, 1).bits(0, 1).alignZero();
+    b.bits(MPEG2_EXTENSION_START_CODE, 32).bits(1, 4).bits(PROFILE_AND_LEVEL_MP_HL, 8).flag(p.progressiveSequence)
+        .bits(CHROMA_420, 2).bits(p.width >> 12, 2).bits(p.height >> 12, 2).bits(p.bitRateValue >> 18, 12).bits(1, 1)
+        .bits(p.vbvBufferSize >> 10, 8).bits(0, 1).bits(0, 2).bits(0, 5).alignZero();
+    if (p.hasDisplayExtension) {
+        constexpr uint32_t VIDEO_FORMAT_UNSPECIFIED = 5;
+        b.bits(MPEG2_EXTENSION_START_CODE, 32).bits(2, 4).bits(VIDEO_FORMAT_UNSPECIFIED, 3).flag(p.hasColourDescription);
+        if (p.hasColourDescription) b.bits(p.colour, 8).bits(p.colour, 8).bits(p.colour, 8);
+        b.bits(p.displayWidth, 14).bits(1, 1).bits(p.displayHeight, 14).alignZero();
+    }
+}
+
+struct Mpeg2PictureParams {
+    int codingType;
+    int structure;
+    bool topFieldFirst;
+    bool repeatFirstField;
+    bool progressiveFrame;
+};
+
+void AppendMpeg2Picture(BitstreamBuilder& b, const Mpeg2PictureParams& p) {
+    constexpr uint32_t VBV_DELAY_VARIABLE = 0xFFFF;
+    constexpr uint32_t F_CODE_UNUSED = 7;
+    b.bits(MPEG2_PICTURE_START_CODE, 32).bits(0, 10).bits(p.codingType, 3).bits(VBV_DELAY_VARIABLE, 16);
+    if (p.codingType == MPEG2_CODING_P || p.codingType == MPEG2_CODING_B) b.bits(0, 1).bits(F_CODE_UNUSED, 3);
+    if (p.codingType == MPEG2_CODING_B) b.bits(0, 1).bits(F_CODE_UNUSED, 3);
+    b.bits(0, 1).alignZero(); // extra_bit_picture
+    // picture coding extension
+    b.bits(MPEG2_EXTENSION_START_CODE, 32).bits(8, 4).bits(0xFFFF, 16).bits(0, 2).bits(p.structure, 2)
+        .flag(p.topFieldFirst).flag(p.structure == MPEG2_FRAME_PICTURE).bits(0, 1).bits(0, 1).bits(0, 1).bits(0, 1)
+        .flag(p.repeatFirstField).flag(p.progressiveFrame).flag(p.progressiveFrame).bits(0, 1).alignZero();
+    // スライス (中身はパーサで解析されない)
+    b.bits(MPEG2_FIRST_SLICE_START_CODE, 32).bits(0x12345678, 32);
+}
+
+std::vector<uint8_t> MakeMpeg2Unit(const Mpeg2SequenceParams* sequence, std::initializer_list<Mpeg2PictureParams> pictures,
+    bool withGopHeader = false) {
+    BitstreamBuilder b;
+    if (sequence) AppendMpeg2Sequence(b, *sequence);
+    if (withGopHeader) {
+        // time_code(drop_frame, 時, 分, marker, 秒, ピクチャ) = 0:00:00.00, closed_gop=1
+        b.bits(MPEG2_GOP_START_CODE, 32).bits(0, 1).bits(0, 5).bits(0, 6).bits(1, 1).bits(0, 6).bits(0, 6)
+            .bits(1, 1).bits(0, 1).alignZero();
+    }
+    for (const auto& picture : pictures) AppendMpeg2Picture(b, picture);
+    return b.finish();
+}
+
+bool TestMpeg2VideoParser(tstring& diagnostic) {
+    // 1440x1080 16:9 29.97fps インタレース (BSデジタル放送の典型)
+    // 先頭はGOPヘッダを省略し、シーケンス拡張の直後にピクチャヘッダが続く (規格上許される配置)
+    const Mpeg2SequenceParams interlaced = { 1440, 1080, 3, 4, false, 50000, 488, false, 0, 0, false, 0 };
+    const std::vector<std::vector<uint8_t>> units = {
+        MakeMpeg2Unit(&interlaced, { { MPEG2_CODING_I, MPEG2_FRAME_PICTURE, true, false, false } }),
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_P, MPEG2_FRAME_PICTURE, false, false, false } }),
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_B, MPEG2_FRAME_PICTURE, true, true, false } }),
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_B, MPEG2_FRAME_PICTURE, false, true, false } }),
+        // フィールドピクチャのペアは1フレームになる
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_I, MPEG2_TOP_FIELD, false, false, false },
+            { MPEG2_CODING_P, MPEG2_BOTTOM_FIELD, false, false, false } }),
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_P, MPEG2_BOTTOM_FIELD, false, false, false },
+            { MPEG2_CODING_P, MPEG2_TOP_FIELD, false, false, false } }),
+        // 同じパリティのフィールドが続く不正な配置は拒否される
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_P, MPEG2_TOP_FIELD, false, false, false },
+            { MPEG2_CODING_P, MPEG2_TOP_FIELD, false, false, false } }),
+    };
+    std::vector<std::pair<int64_t, int64_t>> timestamps;
+    for (size_t i = 0; i < units.size(); ++i) timestamps.emplace_back(1000 + 3003 * (int64_t)i, 900 + 3003 * (int64_t)i);
+    std::vector<VideoFrameInfo> frames;
+    std::vector<int> unitResults;
+    if (!ParseVideoUnits(VS_MPEG2, units, timestamps, frames, unitResults, diagnostic)) return false;
+    const std::vector<int> expectedResults = { 1, 1, 1, 1, 1, 1, 0 };
+    if (unitResults != expectedResults) {
+        diagnostic = _T("MPEG-2のアクセスユニットごとの解析結果が一致しません:");
+        for (const auto r : unitResults) diagnostic += strsprintf(_T(" %d"), r);
+        return false;
+    }
+    const ExpectedVideoFrame expectedFrames[] = {
+        { PIC_TFF, FRAME_I, true, 1000, 900 },
+        { PIC_BFF, FRAME_P, false, 4003, 3903 },
+        { PIC_TFF_RFF, FRAME_B, false, 7006, 6906 },
+        { PIC_BFF_RFF, FRAME_B, false, 10009, 9909 },
+        { PIC_TFF, FRAME_I, false, 13012, 12912 },
+        { PIC_BFF, FRAME_P, false, 16015, 15915 },
+    };
+    if (!Expect(frames.size() == std::size(expectedFrames), _T("MPEG-2のフレーム数が一致しません"), diagnostic)) return false;
+    for (size_t i = 0; i < frames.size(); ++i) {
+        if (!ExpectVideoFrame(frames[i], expectedFrames[i], i, diagnostic)) return false;
+    }
+    // SAR = DAR(16:9) * 1080 / 1440 = 4:3、色情報なしは2(未指定)
+    if (!ExpectVideoFormat(frames[0].format, { 1440, 1080, 1440, 1080, 4, 3, 30000, 1001, 2, false }, diagnostic)) return false;
+    if (!Expect(frames[0].format.format == VS_MPEG2 && frames[0].format.mpeg2BitRateValue == 50000
+        && frames[0].format.mpeg2VbvBufferSizeValue == 488 && frames[0].format.mpeg2ProfileAndLevelIndication == 0x44,
+        _T("MPEG-2のビットレート/VBV/プロファイルが一致しません"), diagnostic)) return false;
+    if (!Expect(!frames[0].progressive, _T("インタレースのフレームがprogressive扱いです"), diagnostic)) return false;
+
+    // 720x480 4:3 23.976fps プログレッシブ、表示領域と色情報あり、GOPヘッダあり
+    const Mpeg2SequenceParams progressive = { 720, 480, 2, 1, true, 15000, 112, true, 704, 480, true, 1 };
+    const std::vector<std::vector<uint8_t>> progressiveUnits = {
+        MakeMpeg2Unit(&progressive, { { MPEG2_CODING_I, MPEG2_FRAME_PICTURE, false, false, true } }, true),
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_P, MPEG2_FRAME_PICTURE, false, true, true } }),
+        MakeMpeg2Unit(nullptr, { { MPEG2_CODING_B, MPEG2_FRAME_PICTURE, true, true, true } }),
+    };
+    const std::vector<std::pair<int64_t, int64_t>> noTimestamps(progressiveUnits.size(), { -1, -1 });
+    if (!ParseVideoUnits(VS_MPEG2, progressiveUnits, noTimestamps, frames, unitResults, diagnostic)) return false;
+    const ExpectedVideoFrame progressiveFrames[] = {
+        { PIC_FRAME, FRAME_I, true, -1, -1 },
+        { PIC_FRAME_DOUBLING, FRAME_P, false, -1, -1 },
+        { PIC_FRAME_TRIPLING, FRAME_B, false, -1, -1 },
+    };
+    if (!Expect(frames.size() == std::size(progressiveFrames), _T("プログレッシブMPEG-2のフレーム数が一致しません"), diagnostic)) return false;
+    for (size_t i = 0; i < frames.size(); ++i) {
+        if (!ExpectVideoFrame(frames[i], progressiveFrames[i], i, diagnostic)) return false;
+    }
+    // SAR = DAR(4:3) * 480 / 704 = 10:11
+    if (!ExpectVideoFormat(frames[0].format, { 720, 480, 704, 480, 10, 11, 24000, 1001, 1, true }, diagnostic)) return false;
+    return Expect(frames[0].progressive, _T("プログレッシブのフレームがprogressive扱いになりません"), diagnostic);
+}
+
+// H.264 映像ビットストリームの組み立て
+constexpr uint8_t H264_NAL_SLICE = 0x21;      // nal_ref_idc=1, type=1
+constexpr uint8_t H264_NAL_IDR_SLICE = 0x65;  // nal_ref_idc=3, type=5
+constexpr uint8_t H264_NAL_SEI = 0x06;
+constexpr uint8_t H264_NAL_SPS = 0x67;
+constexpr uint8_t H264_NAL_PPS = 0x68;
+constexpr uint8_t H264_NAL_AUD = 0x09;
+constexpr int H264_AUD_I = 0;
+constexpr int H264_AUD_P = 1;
+constexpr int H264_AUD_B = 2;
+constexpr uint32_t H264_HRD_DELAY_LENGTH = 24;
+
+// スタートコードとエミュレーション防止バイトを付けてNALユニットを追加する
+void AppendNal(std::vector<uint8_t>& out, uint8_t header, const std::vector<uint8_t>& rbsp) {
+    out.insert(out.end(), { 0x00, 0x00, 0x00, 0x01, header });
+    int zeroCount = 0;
+    for (const auto b : rbsp) {
+        if (zeroCount >= 2 && b <= 0x03) {
+            out.push_back(0x03);
+            zeroCount = 0;
+        }
+        out.push_back(b);
+        zeroCount = (b == 0) ? zeroCount + 1 : 0;
+    }
+}
+
+// 1440x1080 インタレース、4:3 SAR、29.97fps、NAL HRDとpic_structありのSPS (BSデジタル放送のH.264を想定)
+std::vector<uint8_t> MakeH264Sps() {
+    constexpr uint32_t PROFILE_HIGH = 100;
+    constexpr uint32_t LEVEL_40 = 40;
+    constexpr uint32_t ASPECT_RATIO_IDC_4_3 = 14;
+    BitstreamBuilder b;
+    b.bits(PROFILE_HIGH, 8).bits(0, 8).bits(LEVEL_40, 8).ue(0) // profile, constraint flags, level, sps_id
+        .ue(1).ue(0).ue(0).bits(0, 1).bits(0, 1)                // 4:2:0, 8bit, scaling matrixなし
+        .ue(0).ue(0).ue(0)                                       // log2_max_frame_num, poc_type=0, log2_max_poc_lsb
+        .ue(4).bits(0, 1)                                        // max_num_ref_frames, gaps
+        .ue(1440 / 16 - 1).ue(1088 / 32 - 1)                     // 幅90MB, 高さ34マップ単位(フィールド)
+        .bits(0, 1).bits(1, 1).bits(1, 1)                        // frame_mbs_only=0, mbaff=1, direct_8x8
+        .bits(1, 1).ue(0).ue(0).ue(0).ue(2)                      // 下を2単位(4:2:0インタレースで8ライン)クロップ
+        .bits(1, 1)                                              // VUIあり
+        .bits(1, 1).bits(ASPECT_RATIO_IDC_4_3, 8)
+        .bits(0, 1)                                              // overscan
+        .bits(1, 1).bits(5, 3).bits(0, 1).bits(1, 1).bits(1, 8).bits(1, 8).bits(1, 8) // BT.709
+        .bits(0, 1)                                              // chroma_loc
+        .bits(1, 1).bits(1001, 32).bits(60000, 32).bits(1, 1)    // timing (フィールドレート59.94)
+        .bits(1, 1).ue(0).bits(0, 4).bits(0, 4).ue(1000).ue(1000).bits(0, 1) // NAL HRD
+        .bits(H264_HRD_DELAY_LENGTH - 1, 5).bits(H264_HRD_DELAY_LENGTH - 1, 5).bits(H264_HRD_DELAY_LENGTH - 1, 5).bits(24, 5)
+        .bits(0, 1).bits(0, 1)                                   // VCL HRDなし, low_delay
+        .bits(1, 1).bits(0, 1)                                   // pic_struct_present, bitstream_restriction
+        .trailingBits();
+    return b.finish();
+}
+
+std::vector<uint8_t> MakeSeiMessage(int payloadType, const std::vector<uint8_t>& payload) {
+    std::vector<uint8_t> message = { (uint8_t)payloadType, (uint8_t)payload.size() };
+    message.insert(message.end(), payload.begin(), payload.end());
+    return message;
+}
+
+std::vector<uint8_t> MakeBufferingPeriod() {
+    BitstreamBuilder b;
+    b.ue(0).bits(90000, H264_HRD_DELAY_LENGTH).bits(0, H264_HRD_DELAY_LENGTH);
+    if (!b.isAligned()) b.trailingBits();
+    return MakeSeiMessage(0, b.finish());
+}
+
+std::vector<uint8_t> MakePicTiming(int picStruct, uint32_t cpbRemovalDelay, uint32_t dpbOutputDelay) {
+    // pic_structごとのNumClockTS
+    constexpr int NUM_CLOCK_TS[] = { 1, 1, 1, 2, 2, 3, 3, 2, 3 };
+    BitstreamBuilder b;
+    b.bits(cpbRemovalDelay, H264_HRD_DELAY_LENGTH).bits(dpbOutputDelay, H264_HRD_DELAY_LENGTH).bits(picStruct, 4)
+        .bits(0, NUM_CLOCK_TS[picStruct]); // clock_timestamp_flagはすべて0
+    if (!b.isAligned()) b.trailingBits();
+    return MakeSeiMessage(1, b.finish());
+}
+
+std::vector<uint8_t> MakePanScanRect(int left, int right, int top, int bottom) {
+    BitstreamBuilder b;
+    b.ue(0).bits(0, 1).ue(0).se(left).se(right).se(top).se(bottom).ue(0);
+    if (!b.isAligned()) b.trailingBits();
+    return MakeSeiMessage(2, b.finish());
+}
+
+void AppendSei(std::vector<uint8_t>& out, std::initializer_list<std::vector<uint8_t>> messages) {
+    std::vector<uint8_t> rbsp;
+    for (const auto& message : messages) rbsp.insert(rbsp.end(), message.begin(), message.end());
+    rbsp.push_back(0x80); // rbsp_trailing_bits
+    AppendNal(out, H264_NAL_SEI, rbsp);
+}
+
+void AppendAud(std::vector<uint8_t>& out, int primaryPicType) {
+    AppendNal(out, H264_NAL_AUD, { (uint8_t)((primaryPicType << 5) | 0x10) });
+}
+
+void AppendSlice(std::vector<uint8_t>& out, uint8_t header) {
+    AppendNal(out, header, { 0x88, 0x84, 0x21, 0xA0 }); // スライスの中身はパーサで解析されない
+}
+
+std::vector<uint8_t> MakeH264Unit(int primaryPicType, bool withParameterSets, std::initializer_list<std::vector<uint8_t>> seiMessages,
+    int sliceCount = 1) {
+    std::vector<uint8_t> unit;
+    AppendAud(unit, primaryPicType);
+    if (withParameterSets) {
+        AppendNal(unit, H264_NAL_SPS, MakeH264Sps());
+        AppendNal(unit, H264_NAL_PPS, BitstreamBuilder().ue(0).ue(0).trailingBits().finish());
+    }
+    AppendSei(unit, seiMessages);
+    for (int i = 0; i < sliceCount; ++i) AppendSlice(unit, withParameterSets ? H264_NAL_IDR_SLICE : H264_NAL_SLICE);
+    return unit;
+}
+
+bool TestH264VideoParser(tstring& diagnostic) {
+    constexpr int PIC_STRUCT_FRAME = 0;
+    constexpr int PIC_STRUCT_TOP = 1;
+    constexpr int PIC_STRUCT_BOTTOM = 2;
+    constexpr int PIC_STRUCT_TB = 3;
+    constexpr int PIC_STRUCT_BT = 4;
+    constexpr int PIC_STRUCT_TBT = 5;
+    constexpr int PIC_STRUCT_BTB = 6;
+    constexpr int PIC_STRUCT_DOUBLING = 7;
+    constexpr int PIC_STRUCT_TRIPLING = 8;
+    // PESのPTS/DTSとSEIの遅延を一致させる: DTS = 先頭DTS + cpb_removal_delay * 1501.5、PTS = DTS + dpb_output_delay * 1501.5
+    constexpr uint32_t DPB_DELAY = 2;
+    std::vector<std::vector<uint8_t>> units = {
+        MakeH264Unit(H264_AUD_I, true, { MakeBufferingPeriod(), MakePicTiming(PIC_STRUCT_TB, 0, DPB_DELAY) }),
+        MakeH264Unit(H264_AUD_P, false, { MakePicTiming(PIC_STRUCT_BT, 2, DPB_DELAY) }),
+        MakeH264Unit(H264_AUD_B, false, { MakePicTiming(PIC_STRUCT_TBT, 4, DPB_DELAY) }),
+        MakeH264Unit(H264_AUD_B, false, { MakePicTiming(PIC_STRUCT_BTB, 6, DPB_DELAY) }),
+        MakeH264Unit(H264_AUD_P, false, { MakePicTiming(PIC_STRUCT_FRAME, 8, DPB_DELAY) }),
+        MakeH264Unit(H264_AUD_P, false, { MakePicTiming(PIC_STRUCT_DOUBLING, 10, DPB_DELAY) }),
+        MakeH264Unit(H264_AUD_P, false, { MakePicTiming(PIC_STRUCT_TRIPLING, 12, DPB_DELAY) }),
+    };
+    // フィールドごとにSEIとスライスを持つアクセスユニットは1フレームになる
+    std::vector<uint8_t> fieldPair;
+    AppendAud(fieldPair, H264_AUD_P);
+    AppendSei(fieldPair, { MakePicTiming(PIC_STRUCT_TOP, 14, DPB_DELAY) });
+    AppendSlice(fieldPair, H264_NAL_SLICE);
+    AppendSei(fieldPair, { MakePicTiming(PIC_STRUCT_BOTTOM, 15, DPB_DELAY) });
+    AppendSlice(fieldPair, H264_NAL_SLICE);
+    units.push_back(fieldPair);
+
+    std::vector<std::pair<int64_t, int64_t>> timestamps;
+    for (size_t i = 0; i < units.size(); ++i) timestamps.emplace_back(10003 + 3003 * (int64_t)i, 7000 + 3003 * (int64_t)i);
+    std::vector<VideoFrameInfo> frames;
+    std::vector<int> unitResults;
+    if (!ParseVideoUnits(VS_H264, units, timestamps, frames, unitResults, diagnostic)) return false;
+    if (!Expect(std::all_of(unitResults.begin(), unitResults.end(), [](int r) { return r == 1; }),
+        _T("H.264のアクセスユニットの解析に失敗しました"), diagnostic)) return false;
+    const ExpectedVideoFrame expectedFrames[] = {
+        { PIC_TFF, FRAME_I, true, 10003, 7000 },
+        { PIC_BFF, FRAME_P, false, 13006, 10003 },
+        { PIC_TFF_RFF, FRAME_B, false, 16009, 13006 },
+        { PIC_BFF_RFF, FRAME_B, false, 19012, 16009 },
+        { PIC_FRAME, FRAME_P, false, 22015, 19012 },
+        { PIC_FRAME_DOUBLING, FRAME_P, false, 25018, 22015 },
+        { PIC_FRAME_TRIPLING, FRAME_P, false, 28021, 25018 },
+        { PIC_TFF, FRAME_P, false, 31024, 28021 },
+    };
+    if (!Expect(frames.size() == std::size(expectedFrames), _T("H.264のフレーム数が一致しません"), diagnostic)) return false;
+    for (size_t i = 0; i < frames.size(); ++i) {
+        if (!ExpectVideoFrame(frames[i], expectedFrames[i], i, diagnostic)) return false;
+    }
+    // クロップ後1440x1080、VUIのtime_scale/2/num_units_in_tickで29.97fps、BT.709
+    if (!ExpectVideoFormat(frames[0].format, { 1440, 1080, 1440, 1080, 4, 3, 30000, 1001, 1, false }, diagnostic)) return false;
+    return Expect(frames[0].format.format == VS_H264 && frames[0].format.fixedFrameRate,
+        _T("H.264のフォーマット種別/固定フレームレートが一致しません"), diagnostic);
+}
+
+bool TestH264PanScan(tstring& diagnostic) {
+    // pan_scan_rectのオフセットは1/16画素単位の符号付き値。表示幅 = 幅 + (right - left) / 16
+    const std::vector<std::vector<uint8_t>> units = {
+        MakeH264Unit(H264_AUD_I, true, { MakePicTiming(3, 0, 0), MakePanScanRect(128, -128, 0, 0) }),
+        MakeH264Unit(H264_AUD_P, false, { MakePicTiming(3, 2, 0), MakePanScanRect(0, 0, 0, 0) }),
+    };
+    const std::vector<std::pair<int64_t, int64_t>> timestamps = { { 3003, 0 }, { 6006, 3003 } };
+    std::vector<VideoFrameInfo> frames;
+    std::vector<int> unitResults;
+    if (!ParseVideoUnits(VS_H264, units, timestamps, frames, unitResults, diagnostic)) return false;
+    if (!Expect(frames.size() == 2, _T("pan-scanのフレーム数が一致しません"), diagnostic)) return false;
+    if (frames[0].format.displayWidth != 1424 || frames[1].format.displayWidth != 1440) {
+        diagnostic = strsprintf(_T("pan-scan適用後の表示幅が一致しません: 1枚目=%d/1424, 2枚目=%d/1440"),
+            frames[0].format.displayWidth, frames[1].format.displayWidth);
+        return false;
+    }
+    return true;
+}
 bool RunCaptionStreamCase(int testCase, tstring& diagnostic) {
     char message[2048] = {};
     if (CheckCaptionStreamForTest(testCase, message, sizeof(message)) == 1) return true;
@@ -525,6 +980,9 @@ constexpr TestCase TEST_CASES[] = {
     { _T("bit_reader"), TestBitReader },
     { _T("auto_buffer"), TestAutoBuffer },
     { _T("encoder_option"), TestEncoderOption },
+    { _T("mpeg2_video_parser"), TestMpeg2VideoParser },
+    { _T("h264_video_parser"), TestH264VideoParser },
+    { _T("h264_pan_scan"), TestH264PanScan },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },
