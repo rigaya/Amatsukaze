@@ -9,3 +9,17 @@ test('AmatsukazeNativeTests', amatsukaze_native_tests,
   suite : 'native',
   timeout : 30,
 )
+
+pgs_encoder_tests = executable('PgsEncoderTests',
+  'PgsEncoderTests.cpp',
+  '../../Amatsukaze/PgsEncoder.cpp',
+  '../../Amatsukaze/PgsPalette.cpp',
+  include_directories : include_directories('../../Amatsukaze'),
+  dependencies : ffmpeg_dep,
+  install : false,
+)
+
+test('PgsEncoderTests', pgs_encoder_tests,
+  suite : 'native',
+  timeout : 60,
+)

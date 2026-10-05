@@ -28,6 +28,8 @@ amatsukaze_sources = [
   'NicoJK.cpp',
   'OSUtil.cpp',
   'PacketCache.cpp',
+  'PgsEncoder.cpp',
+  'PgsPalette.cpp',
   'PerformanceUtil.cpp',
   'ProcessThread.cpp',
   'ReaderWriterFFmpeg.cpp',

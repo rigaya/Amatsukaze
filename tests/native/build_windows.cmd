@@ -41,6 +41,9 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 "%MSBUILD%" Amatsukaze.sln /t:AmatsukazeNativeTests /p:Configuration=Release /p:Platform=x64 /m:1
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+"%MSBUILD%" tests\native\PgsEncoderTests.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 set "TEST_RUNTIME=%CD%\x64\Release"
 if not "%AMT_NATIVE_TEST_RUNTIME_DIR%"=="" (
   set "TEST_RUNTIME=%AMT_NATIVE_TEST_RUNTIME_DIR%"
@@ -53,6 +56,8 @@ if not "%AMT_NATIVE_TEST_RUNTIME_DIR%"=="" (
   copy /y x64\Release\*.dll "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
   if errorlevel 1 exit /b 1
   copy /y x64\Release\AmatsukazeNativeTests.exe "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
+  if errorlevel 1 exit /b 1
+  copy /y x64\Release\PgsEncoderTests.exe "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
   if errorlevel 1 exit /b 1
   if exist lib\x64\*.dll copy /y lib\x64\*.dll "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
   if errorlevel 1 exit /b 1
@@ -79,5 +84,7 @@ pushd "%TEST_RUNTIME%"
 if errorlevel 1 exit /b %ERRORLEVEL%
 AmatsukazeNativeTests.exe
 set "TEST_EXIT=%ERRORLEVEL%"
+PgsEncoderTests.exe
+if errorlevel 1 set "TEST_EXIT=1"
 popd
 exit /b %TEST_EXIT%

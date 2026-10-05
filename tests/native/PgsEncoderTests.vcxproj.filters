@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="ソースファイル"><UniqueIdentifier>{D2C40198-7991-444D-A3B3-6D5C9450222F}</UniqueIdentifier></Filter>
+    <Filter Include="ヘッダーファイル"><UniqueIdentifier>{CA00EDDC-57C7-449B-AD1E-765923997476}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="PgsEncoderTests.cpp"><Filter>ソースファイル</Filter></ClCompile>
+    <ClCompile Include="..\..\Amatsukaze\PgsEncoder.cpp"><Filter>ソースファイル</Filter></ClCompile>
+    <ClCompile Include="..\..\Amatsukaze\PgsPalette.cpp"><Filter>ソースファイル</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Amatsukaze\PgsEncoder.h"><Filter>ヘッダーファイル</Filter></ClInclude>
+    <ClInclude Include="..\..\Amatsukaze\PgsPalette.h"><Filter>ヘッダーファイル</Filter></ClInclude>
+  </ItemGroup>
+</Project>

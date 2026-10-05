@@ -452,6 +452,8 @@
     <ClInclude Include="NicoJK.h" />
     <ClInclude Include="OSUtil.h" />
     <ClInclude Include="PacketCache.h" />
+    <ClInclude Include="PgsEncoder.h" />
+    <ClInclude Include="PgsPalette.h" />
     <ClInclude Include="PerformanceUtil.h" />
     <ClInclude Include="ProcessThread.h" />
     <ClInclude Include="ReaderWriterFFmpeg.h" />
@@ -593,6 +595,8 @@
     <ClCompile Include="NicoJK.cpp" />
     <ClCompile Include="OSUtil.cpp" />
     <ClCompile Include="PacketCache.cpp" />
+    <ClCompile Include="PgsEncoder.cpp" />
+    <ClCompile Include="PgsPalette.cpp" />
     <ClCompile Include="PerformanceUtil.cpp" />
     <ClCompile Include="ProcessThread.cpp" />
     <ClCompile Include="ReaderWriterFFmpeg.cpp" />
