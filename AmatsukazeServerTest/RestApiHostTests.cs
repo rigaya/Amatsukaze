@@ -1,10 +1,6 @@
-using System.Reflection;
-using System.Text;
+using EndpointFixture = AmatsukazeServerTest.RestEndpointTestFixture;
 using System.Text.Json;
 using Amatsukaze.Server;
-using Amatsukaze.Server.Rest;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Xunit;
 
@@ -12,41 +8,6 @@ namespace AmatsukazeServerTest;
 
 public sealed class RestApiHostTests
 {
-    private sealed class EndpointFixture : IAsyncDisposable
-    {
-        public RestQueueTestFixture Queue { get; } = new();
-        private readonly WebApplication app;
-        public EndpointFixture()
-        {
-            // 本番と同じJSON設定とMapEndpointsを使い、StartAsyncは呼ばずポートを開かない。
-            app = (WebApplication)typeof(RestApiHost).GetMethod("BuildWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(Queue.CreateRestHost(), new object[] { 0 })!;
-        }
-
-        public IReadOnlyList<RouteEndpoint> Endpoints => ((IEndpointRouteBuilder)app).DataSources
-            .SelectMany(source => source.Endpoints).OfType<RouteEndpoint>().ToList();
-
-        public async Task<(int Status, string Body)> Send(string method, string path, string query = "", string? body = null)
-        {
-            var endpoint = Assert.Single(Endpoints, e => e.RoutePattern.RawText == path &&
-                e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(method) == true);
-            var context = new DefaultHttpContext { RequestServices = app.Services };
-            context.Request.Method = method;
-            context.Request.Path = path;
-            context.Request.QueryString = new QueryString(query);
-            context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body ?? ""));
-            context.Request.ContentType = "application/json";
-            context.Request.ContentLength = context.Request.Body.Length;
-            context.Response.Body = new MemoryStream();
-            context.SetEndpoint(endpoint);
-            await endpoint.RequestDelegate!(context);
-            context.Response.Body.Position = 0;
-            return (context.Response.StatusCode, await new StreamReader(context.Response.Body).ReadToEndAsync());
-        }
-
-        public ValueTask DisposeAsync() => app.DisposeAsync();
-    }
-
     [Theory]
     [InlineData("/api/health", "GET")]
     [InlineData("/api/queue", "GET")]

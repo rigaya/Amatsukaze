@@ -20,25 +20,43 @@ internal sealed class RestQueueTestFixture
         // workerPoolは保守停止状態とキャンセル判定に必要。ワーカーは登録しない。
         Server = (EncodeServer)RuntimeHelpers.GetUninitializedObject(typeof(EncodeServer));
         Store = new RestStateStore(Server);
-        typeof(EncodeServer).GetProperty("Client", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(Server, Store);
+        SetProperty(Server, "Client", Store);
         SetField(Server, "scheduledQueue", new ScheduledQueue());
         SetField(Server, "workerPool", new WorkerPool());
         Manager = (QueueManager)RuntimeHelpers.GetUninitializedObject(typeof(QueueManager));
         SetField(Manager, "server", Server);
         SetField(Manager, "queueSync", new object());
-        typeof(QueueManager).GetProperty("Queue")!.SetValue(Manager, new List<QueueItem>());
+        SetProperty(Manager, "Queue", new List<QueueItem>());
         SetField(Server, "queueManager", Manager);
     }
 
     public RestApiHost CreateRestHost()
     {
-        // REST登録はserverとstateだけを使用する。画像処理サービスの生成は省略する。
-        var host = (RestApiHost)RuntimeHelpers.GetUninitializedObject(typeof(RestApiHost));
-        SetField(host, "server", Server);
-        SetField(host, "state", Store);
-        return host;
+        // サービス生成自体はネイティブDLLを使わない。DisposeでTrimのタイマーを停止する。
+        return new RestApiHost(Server, Store, 0);
     }
+
+    // 補助APIの確認に必要な要求フラグと終了通知。フィールド名への依存をfixtureへ集約する。
+    public bool AddQueueCanceled => (bool)GetField(Manager, "addQueueCanceled");
+    public bool LogoRescanRequested => (bool)GetField(Server, "serviceListUpdated");
+    public void SetFinishRequested(Action callback) => SetField(Server, "finishRequested", callback);
+    // REST追加要求の変換だけを検証する。受信スレッドを起動せず、実TS解析には渡さない。
+    public System.Threading.Tasks.Dataflow.BufferBlock<object> CaptureQueueRequests()
+    {
+        var requests = new System.Threading.Tasks.Dataflow.BufferBlock<object>();
+        SetField(Server, "queueQ", requests);
+        return requests;
+    }
+
+    public static object GetField(object target, string name) =>
+        (target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"必須フィールドが見つかりません: {target.GetType().Name}.{name}"))
+            .GetValue(target) ?? throw new InvalidOperationException($"必須フィールドが未設定です: {name}");
+
+    public static void SetProperty(object target, string name, object value) =>
+        (target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"必須プロパティが見つかりません: {target.GetType().Name}.{name}"))
+            .SetValue(target, value);
 
     public static void SetField(object target, string name, object value) =>
         (target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
