@@ -10,6 +10,9 @@
 #include "faad.h"
 #include <thread>
 #include <chrono>
+#include <filesystem>
+#include <cstring>
+#include <stdexcept>
 
 /* static */ int test::PrintCRCTable(AMTContext& ctx, const ConfigWrapper& setting) {
     CRC32 crc;
@@ -694,6 +697,189 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
         std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 1000));
         rm.wait(HOST_CMD_Mux);
         std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));
+    }
+    return 0;
+}
+
+namespace {
+
+constexpr int64_t CAPTION_TEST_WRAP = int64_t(1) << 33;
+constexpr int64_t CAPTION_TEST_BASE = CAPTION_TEST_WRAP - 6000;
+
+void CaptionStreamExpect(bool condition, const char* message) {
+    if (!condition) throw std::runtime_error(message);
+}
+
+// 30fpsの8フレームを33bitのPTS境界にまたがって作る。
+std::unique_ptr<StreamReformInfo> MakeCaptionStreamFixture(AMTContext& ctx, bool withText) {
+    std::vector<FileVideoFrameInfo> video(8);
+    std::vector<FileAudioFrameInfo> audio(8);
+    for (int i = 0; i < 8; ++i) {
+        auto& frame = video[i];
+        frame.PTS = frame.DTS = (CAPTION_TEST_BASE + 3000 * i) & (CAPTION_TEST_WRAP - 1);
+        frame.isGopStart = i == 0;
+        frame.progressive = true;
+        frame.pic = PIC_FRAME;
+        frame.type = i == 0 ? FRAME_I : FRAME_P;
+        frame.codedDataSize = 100;
+        frame.fileOffset = 100 * i;
+        frame.format.format = VS_MPEG2;
+        frame.format.width = frame.format.displayWidth = 1920;
+        frame.format.height = frame.format.displayHeight = 1080;
+        frame.format.sarWidth = frame.format.sarHeight = 1;
+        frame.format.frameRateNum = 30;
+        frame.format.frameRateDenom = 1;
+        frame.format.progressive = frame.format.fixedFrameRate = true;
+        audio[i].PTS = frame.PTS;
+        audio[i].numSamples = 1600;
+        audio[i].format.channels = AUDIO_STEREO;
+        audio[i].format.sampleRate = 48000;
+        audio[i].codedDataSize = 100;
+        audio[i].fileOffset = 100 * i;
+    }
+    std::vector<CaptionItem> captions;
+    if (withText) {
+        CaptionItem visible = {};
+        visible.PTS = CAPTION_TEST_BASE + 3000;
+        visible.line = std::make_unique<CaptionLine>();
+        visible.line->text = L"日";
+        captions.push_back(std::move(visible));
+        CaptionItem clear = {};
+        clear.PTS = (CAPTION_TEST_BASE + 15000) & (CAPTION_TEST_WRAP - 1);
+        captions.push_back(std::move(clear));
+    }
+    std::vector<CaptionPesItem> pes = {
+        { CAPTION_TEST_BASE, { 0x80, 0xff, 0x00, 0x01 } },
+        { (CAPTION_TEST_BASE + 9000) & (CAPTION_TEST_WRAP - 1), { 0x80, 0xff, 0x01 } },
+        { (CAPTION_TEST_BASE + 12000) & (CAPTION_TEST_WRAP - 1), {} },
+    };
+    std::vector<StreamEvent> events = {
+        { PID_TABLE_CHANGED, 0, 0, 1 },
+        { VIDEO_FORMAT_CHANGED, 0, 0, 0 },
+        { AUDIO_FORMAT_CHANGED, 0, 0, 0 },
+    };
+    std::vector<TimeInfo> times;
+    return std::make_unique<StreamReformInfo>(ctx, 1, video, audio, captions, events, times, std::move(pes));
+}
+
+class CaptionStreamTempFile {
+public:
+    std::filesystem::path path;
+    CaptionStreamTempFile() : path(std::filesystem::temp_directory_path() /
+        ("amatsukaze-caption-test-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()) + ".bin")) {}
+    ~CaptionStreamTempFile() {
+        std::error_code error;
+        std::filesystem::remove(path, error);
+    }
+};
+
+void CheckCaptionSerialization(AMTContext& ctx) {
+    auto original = MakeCaptionStreamFixture(ctx, false);
+    CaptionStreamTempFile temporary;
+    original->serialize(temporary.path.native());
+    auto restored = StreamReformInfo::deserialize(ctx, temporary.path.native());
+    const auto& expected = original->getCaptionPesList();
+    const auto& actual = restored.getCaptionPesList();
+    CaptionStreamExpect(actual.size() == expected.size(), "生PESの個数が保存後に変化した");
+    for (size_t i = 0; i < actual.size(); ++i) {
+        CaptionStreamExpect(actual[i].PTS == expected[i].PTS && actual[i].data == expected[i].data,
+            "生PESのPTSまたはペイロードが保存後に変化した");
+    }
+    // 旧形式は先頭がnumVideoFileで、バージョンヘッダーを持たない。
+    {
+        File legacy(temporary.path.native(), _T("wb"));
+        legacy.writeValue(1);
+    }
+    bool rejected = false;
+    try {
+        auto ignored = StreamReformInfo::deserialize(ctx, temporary.path.native());
+    } catch (const FormatException&) {
+        rejected = true;
+    }
+    CaptionStreamExpect(rejected, "旧ストリーム情報が拒否されなかった");
+}
+
+void CheckCaptionWrap(AMTContext& ctx) {
+    // 管理PESだけでCaption.dllの字幕文がなくても、prepareで補正される。
+    auto reform = MakeCaptionStreamFixture(ctx, false);
+    reform->prepare(false, false, false);
+    const auto& pts = reform->getModifiedCaptionPesPTS();
+    CaptionStreamExpect(pts.size() == 3 && pts[0] == CAPTION_TEST_BASE &&
+        pts[1] == CAPTION_TEST_BASE + 9000 && pts[2] == CAPTION_TEST_BASE + 12000,
+        "生PESの33bitラップ補正または管理PESのみの入力処理が不正");
+    reform->clearCaptionItems();
+    CaptionStreamExpect(reform->getCaptionPesList().empty() && reform->getModifiedCaptionPesPTS().empty(),
+        "字幕無効化後に生PESが残った");
+}
+
+void CheckCaptionMapping(AMTContext& ctx) {
+    auto reform = MakeCaptionStreamFixture(ctx, true);
+    reform->prepare(false, false, false);
+    reform->applyCMZones(0, { { 2, 4 } }, {});
+    reform->genAudio({ CMTYPE_NONCM });
+    const auto& keys = reform->getOutFileKeys();
+    CaptionStreamExpect(keys.size() == 1, "字幕写像fixtureの出力ファイル数が不正");
+    const auto key = keys.front();
+    struct Interval {
+        int startOffset, endOffset;
+        bool visible;
+        double expectedStart, expectedEnd;
+    };
+    const Interval intervals[] = {
+        { 3000, 15000, true, 1.0 / 30.0, 3.0 / 30.0 },
+        { 6000, 12000, false, 0.0, 0.0 },
+        { 12000, 15000, true, 2.0 / 30.0, 3.0 / 30.0 },
+        { 6001, 12001, true, 2.0 / 30.0, 3.0 / 30.0 },
+        { -3000, 3000, true, 0.0, 1.0 / 30.0 },
+        { 21000, 27000, true, 5.0 / 30.0, 6.0 / 30.0 },
+        { 24000, 27000, false, 0.0, 0.0 },
+        { 15000, 15000, false, 0.0, 0.0 },
+    };
+    for (const auto& interval : intervals) {
+        double start = -1.0, end = -1.0;
+        const bool visible = reform->mapCaptionInterval(key,
+            CAPTION_TEST_BASE + interval.startOffset, CAPTION_TEST_BASE + interval.endOffset, start, end);
+        CaptionStreamExpect(visible == interval.visible, "CM境界の字幕表示判定が不正");
+        if (visible) {
+            CaptionStreamExpect(std::abs(start - interval.expectedStart) < 1e-12 &&
+                std::abs(end - interval.expectedEnd) < 1e-12, "CM境界の字幕開始または終了時刻が不正");
+        }
+    }
+    const auto& ass = reform->getEncodeFile(key).captionList;
+    CaptionStreamExpect(ass.size() == 1 && ass[0].size() == 1 &&
+        ass[0][0].start == 3000.0 &&
+        ass[0][0].end == 9000.0,
+        "ASSの開始・終了境界が従来期待値と一致しない");
+    CaptionStreamExpect(reform->getLastCaptionSourcePTS(key) == CAPTION_TEST_BASE + 24000,
+        "PGS終端用の最終ソースPTSが不正");
+}
+
+}
+
+extern "C" AMATSUKAZE_API int CheckCaptionStreamForTest(
+    int testCase, char* diagnostic, size_t diagnosticSize) noexcept {
+    const auto writeDiagnostic = [&](const char* message) {
+        if (diagnostic && diagnosticSize) {
+            const size_t count = (std::min)(std::strlen(message), diagnosticSize - 1);
+            std::memcpy(diagnostic, message, count);
+            diagnostic[count] = '\0';
+        }
+    };
+    try {
+        AMTContext ctx;
+        switch (testCase) {
+        case 0: CheckCaptionSerialization(ctx); break;
+        case 1: CheckCaptionWrap(ctx); break;
+        case 2: CheckCaptionMapping(ctx); break;
+        default: throw std::invalid_argument("未対応の字幕ストリームテスト番号");
+        }
+        writeDiagnostic("");
+        return 1;
+    } catch (const std::exception& error) {
+        writeDiagnostic(error.what());
+    } catch (...) {
+        writeDiagnostic("字幕ストリームテストで不明な例外が発生した");
     }
     return 0;
 }

@@ -130,6 +130,8 @@ CaptionParser::CaptionParser(AMTContext&ctx)
 
     //int64_t DTS = packet.has_DTS() ? packet.DTS : PTS;
     MemoryChunk payload = packet.paylod();
+    // 管理データやデコード結果なしのPESも、同じ補正済みPTSで通知する。
+    onRawCaptionPesPacket(PTS, payload);
 
     captions.clear();
 
@@ -410,6 +412,9 @@ TsSplitter::SpAudioFrameParser::SpAudioFrameParser(AMTContext&ctx, TsSplitter& t
 }
 TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
     : CaptionParser(ctx), this_(this_) {}
+/* virtual */ void TsSplitter::SpCaptionParser::onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload) {
+    this_.onRawCaptionPesPacket(PTS, payload);
+}
 /* virtual */ void TsSplitter::SpCaptionParser::onCaptionPesPacket(int64_t clock, std::vector<CaptionItem>& captions, PESPacket packet) {
     this_.onCaptionPesPacket(clock, captions, packet);
 }

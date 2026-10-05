@@ -93,6 +93,8 @@ static void printHelp(const tchar* bin) {
         "                      使用可能デコーダ: default,QSV,CUVID\n"
         "  --chapter           チャプター・CM解析を行う\n"
         "  --subtitles         字幕を処理する\n"
+        "  --no-pgs-sub        MKV出力時のPGS字幕生成を無効にする\n"
+        "  --pgs-font <family> PGS字幕描画用フォント名[描画ライブラリの既定]\n"
         "  --nicojk            ニコニコ実況コメントを追加する\n"
         "  --logo <パス>       ロゴファイルを指定（いくつでも指定可能）\n"
         "  --erase-logo <パス> ロゴ消し用追加ロゴファイル。ロゴ消しに適用されます。（いくつでも指定可能）\n"
@@ -289,6 +291,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.tsreplaceRemoveTypeD = false;
     conf.muxTsTemp = false;
     conf.useMKVWhenSubExist = false;
+    conf.pgsSub = true;
+    conf.pgsFontFamily.clear();
     conf.mpeg2Partial = false;
     conf.outputChapter = false;
     bool nicojk = false;
@@ -441,6 +445,10 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.outputChapter = true;
         } else if (key == _T("--subtitles")) {
             conf.subtitles = true;
+        } else if (key == _T("--no-pgs-sub")) {
+            conf.pgsSub = false;
+        } else if (key == _T("--pgs-font")) {
+            conf.pgsFontFamily = getParam(argc, argv, i++);
         } else if (key == _T("--nicojk")) {
             nicojk = true;
         } else if (key == _T("-m") || key == _T("--muxer")) {

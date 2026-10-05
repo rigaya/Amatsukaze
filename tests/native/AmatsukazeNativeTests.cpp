@@ -202,6 +202,18 @@ bool TestVFRInputDetection(std::string& diagnostic) {
         "24/60/120fps混在をVFRとして検出できませんでした", diagnostic);
 }
 
+bool RunCaptionStreamCase(int testCase, std::string& diagnostic) {
+    char message[2048] = {};
+    if (CheckCaptionStreamForTest(testCase, message, sizeof(message)) == 1) return true;
+    diagnostic = message;
+    return false;
+}
+
+bool TestCaptionPesSerialization(std::string& diagnostic) { return RunCaptionStreamCase(0, diagnostic); }
+bool TestCaptionPesWrap(std::string& diagnostic) { return RunCaptionStreamCase(1, diagnostic); }
+bool TestCaptionIntervalMapping(std::string& diagnostic) { return RunCaptionStreamCase(2, diagnostic); }
+
+
 struct TestCase {
     const char* name;
     bool (*run)(std::string& diagnostic);
@@ -211,6 +223,9 @@ constexpr TestCase TEST_CASES[] = {
     { "caption_text_length", TestCaptionTextLength },
     { "bitrate_zones", TestBitrateZones },
     { "vfr_input_detection", TestVFRInputDetection },
+    { "caption_pes_serialization", TestCaptionPesSerialization },
+    { "caption_pes_wrap", TestCaptionPesWrap },
+    { "caption_interval_mapping", TestCaptionIntervalMapping },
 };
 
 void PrintUsage(const char* program) {

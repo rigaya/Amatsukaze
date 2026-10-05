@@ -624,6 +624,10 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
             sb.append(_T(" \"%s\""), inAudios[i]);
         }
         for (int i = 0; i < (int)inSubs.size(); i++) {
+            if (subsTitles[i] == _T("PGS")) {
+                // PGSを既定にせず、後続言語やWhisperを含む既存のテキスト字幕の優先順位を保つ。
+                sb.append(_T(" --default-track-flag 0:no"));
+            }
             sb.append(_T(" --track-name \"0:%s\" \"%s\""), subsTitles[i], inSubs[i]);
         }
         if (muxerAddEncoderCmd) {
@@ -1088,6 +1092,14 @@ bool ConfigWrapper::isSubtitlesEnabled() const {
     return conf.subtitles;
 }
 
+bool ConfigWrapper::isPgsSubEnabled() const {
+    return conf.pgsSub;
+}
+
+tstring ConfigWrapper::getPgsFontFamily() const {
+    return conf.pgsFontFamily;
+}
+
 bool ConfigWrapper::isNicoJKEnabled() const {
     return conf.nicojkmask != 0;
 }
@@ -1408,6 +1420,11 @@ tstring ConfigWrapper::getTmpASSFilePath(EncodeFileKey key, int langindex) const
 
 tstring ConfigWrapper::getTmpSRTFilePath(EncodeFileKey key, int langindex) const {
     return regtmp(StringFormat(_T("%s/c%d-%d-%d-%d%s.srt"),
+        tmpDir.path(), key.video, key.format, key.div, langindex, GetCMSuffix(key.cm)));
+}
+
+tstring ConfigWrapper::getTmpPGSFilePath(EncodeFileKey key, int langindex) const {
+    return regtmp(StringFormat(_T("%s/c%d-%d-%d-%d%s.sup"),
         tmpDir.path(), key.video, key.format, key.div, langindex, GetCMSuffix(key.cm)));
 }
 
@@ -1917,6 +1934,10 @@ void ConfigWrapper::dump() const {
     }
     ctx.infoF(_T("字幕: %s"), conf.subtitles ? _T("有効") : _T("無効"));
     if (conf.subtitles) {
+        ctx.infoF(_T("PGS字幕出力(MKV): %s"), conf.pgsSub ? _T("有効") : _T("無効"));
+        if (!conf.pgsFontFamily.empty()) {
+            ctx.infoF(_T("PGS字幕フォント: %s"), conf.pgsFontFamily);
+        }
         ctx.infoF(_T("WebVTT出力: %s"), conf.webvtt ? _T("有効") : _T("無効"));
         if (conf.webvtt) {
             ctx.infoF(_T("tsreadexパス: %s"), conf.tsreadexPath);

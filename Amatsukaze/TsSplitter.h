@@ -86,6 +86,7 @@ public:
     virtual void onPesPacket(int64_t clock, PESPacket packet);
 
     virtual void onCaptionPesPacket(int64_t clock, std::vector<CaptionItem>& captions, PESPacket packet) = 0;
+    virtual void onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload) = 0;
 
     virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5) = 0;
 
@@ -226,6 +227,7 @@ protected:
 
     protected:
         virtual void onCaptionPesPacket(int64_t clock, std::vector<CaptionItem>& captions, PESPacket packet);
+        virtual void onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload);
 
         virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5);
     };
@@ -271,6 +273,9 @@ protected:
         int64_t clock,
         std::vector<CaptionItem>& captions,
         PESPacket packet) = 0;
+
+    // 既存の字幕検出専用派生クラスでは、生PESの保存を行わない。
+    virtual void onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload) {}
 
     virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5) = 0;
 

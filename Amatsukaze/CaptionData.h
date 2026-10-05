@@ -83,6 +83,24 @@ struct CaptionLine {
     static std::unique_ptr<CaptionLine> Read(const File& file);
 };
 
+// ASS系と同じ補正済みPTSと、管理データを含む全字幕PESペイロード。
+struct CaptionPesItem {
+    int64_t PTS;
+    std::vector<uint8_t> data;
+
+    void Write(const File& file) const {
+        file.writeValue(PTS);
+        file.writeArray(data);
+    }
+
+    static CaptionPesItem Read(const File& file) {
+        CaptionPesItem item;
+        item.PTS = file.readValue<int64_t>();
+        item.data = file.readArray<uint8_t>();
+        return item;
+    }
+};
+
 struct CaptionItem {
     int64_t PTS;
     int langIndex;

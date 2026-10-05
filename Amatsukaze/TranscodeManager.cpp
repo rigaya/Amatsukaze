@@ -19,6 +19,7 @@
 #include "WaveWriter.h"
 #include <cmath>
 #include "Mpeg2PartialEncode.h"
+#include "CaptionPgs.h"
 #include <filesystem>
 
 namespace {
@@ -39,7 +40,7 @@ struct WhisperAudioEntry {
     int dualMonoChannel; // -1: original stereo, 0/1: dual mono channel selection
 };
 
-constexpr int RESUME_MANIFEST_VERSION = 3;
+constexpr int RESUME_MANIFEST_VERSION = 4;
 
 struct ResumeVideoInfo {
     int numFrames;
@@ -902,7 +903,7 @@ StreamReformInfo AMTSplitter::split() {
     printInteraceCount();
 
     return StreamReformInfo(ctx, videoFileCount_,
-        videoFrameList_, audioFrameList_, captionTextList_, streamEventList_, timeList_);
+        videoFrameList_, audioFrameList_, captionTextList_, streamEventList_, timeList_, std::move(captionPesList_));
 }
 
 int64_t AMTSplitter::getSrcFileSize() const {
@@ -1151,6 +1152,14 @@ void AMTSplitter::printInteraceCount() {
     for (auto& caption : captions) {
         captionTextList_.emplace_back(std::move(caption));
     }
+}
+
+// 管理データを含め、描画用デコーダに必要な全字幕PESを保持する。
+void AMTSplitter::onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload) {
+    CaptionPesItem item;
+    item.PTS = PTS;
+    item.data.assign(payload.data, payload.data + payload.length);
+    captionPesList_.push_back(std::move(item));
 }
 
 /* virtual */ DRCSOutInfo AMTSplitter::getDRCSOutPath(int64_t PTS, const std::string& md5) {
@@ -2332,6 +2341,80 @@ void DoBadThing() {
                 ctx.warnF(_T("psisiarcがエラーコード(%d)を返しました"), task.exitCode);
             }
         }
+    }
+
+    // フィルタ後の表示サイズが確定してから、最終muxと同じ規則でPGSを生成する。
+    if (setting.isPgsSubEnabled() && setting.isSubtitlesEnabled()) {
+        Stopwatch pgsWatch;
+        pgsWatch.start();
+        for (int i = 0; i < (int)keys.size(); ++i) {
+            const auto key = keys[i];
+            if (getActualOutputFormat(key, reformInfo, setting) != FORMAT_MKV) {
+                continue;
+            }
+            const auto& format = outFileInfo[i].vfmt;
+            // displayWidth/Heightはリサイズ後も入力値が残るため、最終フレームサイズを使う。
+            double width = format.width;
+            double height = format.height;
+            const auto userSAR = setting.getUserSAR();
+            const int sarWidth = userSAR.first > 0 && userSAR.second > 0 ? userSAR.first : format.sarWidth;
+            const int sarHeight = userSAR.first > 0 && userSAR.second > 0 ? userSAR.second : format.sarHeight;
+            if (sarWidth > 0 && sarHeight > 0) {
+                if (sarWidth >= sarHeight) {
+                    width *= static_cast<double>(sarWidth) / sarHeight;
+                } else {
+                    height *= static_cast<double>(sarHeight) / sarWidth;
+                }
+            }
+            const double scale = std::max(1.0, std::max(width, height) / 4096.0);
+            const int canvasWidth = static_cast<int>(std::lround(width / scale));
+            const int canvasHeight = static_cast<int>(std::lround(height / scale));
+            const auto& captions = reformInfo.getEncodeFile(key).captionList;
+            for (int lang = 0; lang < (int)captions.size(); ++lang) {
+                const auto path = setting.getTmpPGSFilePath(key, lang);
+                // 再開時の古いPGSを失敗後にmuxしないよう、生成前に除去する。
+                if (File::exists(path)) {
+                    rgy_file_remove(path.c_str());
+                }
+                try {
+                    const auto data = GenerateCaptionPgs(reformInfo, key, lang + 1,
+                        canvasWidth, canvasHeight, tchar_to_string(setting.getPgsFontFamily(), CP_UTF8),
+                        [&ctx](bool warning, const std::string& message) {
+                            const auto text = char_to_tstring(message, CP_UTF8);
+                            if (warning) {
+                                ctx.warnF(_T("PGS字幕: %s"), text.c_str());
+                            } else {
+                                ctx.infoF(_T("PGS字幕: %s"), text.c_str());
+                            }
+                        });
+                    if (!data.empty()) {
+                        FILE* file = fsopenT(path.c_str(), _T("wb"), _SH_DENYNO);
+                        if (!file) {
+                            throw std::runtime_error("PGS字幕ファイルを開けません");
+                        }
+                        const bool written = fwrite(data.data(), 1, data.size(), file) == data.size();
+                        const bool closed = fclose(file) == 0;
+                        if (!written || !closed) {
+                            throw std::runtime_error("PGS字幕ファイルの書き込みに失敗しました");
+                        }
+                        // 成功したファイルだけをmuxへ渡し、削除できない古い出力も除外する。
+                        outFileInfo[i].pgsFiles.push_back(path);
+                        ctx.infoF(_T("PGS字幕出力: %s (%dx%d)"), path.c_str(), canvasWidth, canvasHeight);
+                    }
+                } catch (const std::exception& e) {
+                    if (File::exists(path)) {
+                        rgy_file_remove(path.c_str());
+                    }
+                    ctx.warnF(_T("PGS字幕の生成に失敗、PGSなしで続行します: %s"), char_to_tstring(e.what(), CP_UTF8));
+                } catch (const Exception& e) {
+                    if (File::exists(path)) {
+                        rgy_file_remove(path.c_str());
+                    }
+                    ctx.warnF(_T("PGS字幕の生成に失敗、PGSなしで続行します: %s"), e.message());
+                }
+            }
+        }
+        ctx.infoF(_T("PGS字幕生成完了: %.2f秒"), pgsWatch.getAndReset());
     }
 
     rm.wait(HOST_CMD_Mux);

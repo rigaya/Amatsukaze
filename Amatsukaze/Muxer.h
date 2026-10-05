@@ -19,6 +19,7 @@
 struct EncodeFileOutput {
     VideoFormat vfmt;
     std::vector<tstring> outSubs; // 外部ファイルで出力された字幕
+    std::vector<tstring> pgsFiles; // 今回の生成と書き込みが完了したPGS字幕
     int64_t fileSize;
     double srcBitrate;
     double targetBitrate;

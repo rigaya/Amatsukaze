@@ -8,7 +8,8 @@
 
 #include "Muxer.h"
 
-/* static */ ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting) {
+// 字幕生成側もこの関数を使い、最終mux形式と同じ条件で判定する。
+ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting) {
     if (!setting.getUseMKVWhenSubExist() || setting.getFormat() == FORMAT_MKV) {
         return setting.getFormat();
     }
@@ -154,7 +155,7 @@ void AMTMuxder::mux(EncodeFileKey key,
             }
         }
     }
-    // ARIB生成字幕 (ASS/SRT/WebVTT)
+    // ARIB生成字幕(ASS/SRT/PGS/WebVTT)
     for (int lang = 0; lang < (int)fileIn.captionList.size(); lang++) {
         auto srcass = setting_.getTmpASSFilePath(key, lang);
         if (muxFormat == FORMAT_MKV) {
@@ -169,6 +170,14 @@ void AMTMuxder::mux(EncodeFileKey key,
         if (File::exists(srcsrt)) {
             subsFiles.push_back(srcsrt);
             subsTitles.push_back(_T("SRT"));
+        }
+        if (muxFormat == FORMAT_MKV && setting_.isPgsSubEnabled()) {
+            auto srcpgs = setting_.getTmpPGSFilePath(key, lang);
+            if (std::find(fileOut.pgsFiles.begin(), fileOut.pgsFiles.end(), srcpgs) != fileOut.pgsFiles.end()
+                && File::exists(srcpgs)) {
+                subsFiles.push_back(srcpgs);
+                subsTitles.push_back(_T("PGS"));
+            }
         }
         auto srcwebvtt = setting_.getTmpVTTFilePath(key, lang);
         if (File::exists(srcwebvtt)) {

@@ -68,6 +68,7 @@ protected:
     std::vector<FileAudioFrameInfo> audioFrameList_;
     std::vector<StreamEvent> streamEventList_;
     std::vector<CaptionItem> captionTextList_;
+    std::vector<CaptionPesItem> captionPesList_;
     std::vector<std::pair<int64_t, JSTTime>> timeList_;
 
     void readAll();
@@ -97,6 +98,8 @@ protected:
         int64_t clock,
         std::vector<CaptionItem>& captions,
         PESPacket packet);
+
+    virtual void onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload);
 
     virtual DRCSOutInfo getDRCSOutPath(int64_t PTS, const std::string& md5);
 

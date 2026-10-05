@@ -272,6 +272,8 @@ struct Config {
     bool chapter;
     bool outputChapter;
     bool subtitles;
+    bool pgsSub = true;
+    tstring pgsFontFamily;
     int nicojkmask;
     bool useNicoJKLog;
     BitrateSetting bitrate;
@@ -442,6 +444,10 @@ public:
 
     bool isSubtitlesEnabled() const;
 
+    bool isPgsSubEnabled() const;
+
+    tstring getPgsFontFamily() const;
+
     bool isNicoJKEnabled() const;
 
 
@@ -599,6 +605,8 @@ public:
     tstring getTmpASSFilePath(EncodeFileKey key, int langindex) const;
 
     tstring getTmpSRTFilePath(EncodeFileKey key, int langindex) const;
+
+    tstring getTmpPGSFilePath(EncodeFileKey key, int langindex) const;
 
     tstring getTmpAMTSourcePath(int vindex) const;
 

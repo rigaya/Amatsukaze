@@ -55,6 +55,10 @@ enum VFRInputDetectionForTestResult {
 extern "C" AMATSUKAZE_API int AnalyzeVFRFrameIntervalsForTest(
     const VFRFrameInterval* intervals, size_t intervalCount, VFRDetectionResult* result);
 
+// 字幕PES保持とCM境界の時刻写像をDLL本体で検証するC ABI。
+extern "C" AMATSUKAZE_API int CheckCaptionStreamForTest(
+    int testCase, char* diagnostic, size_t diagnosticSize) noexcept;
+
 struct FileAudioFrameInfo : public AudioFrameInfo {
     int audioIdx;
     int codedDataSize;
@@ -202,7 +206,8 @@ public:
         std::vector<FileAudioFrameInfo>& audioFrameList,
         std::vector<CaptionItem>& captionList,
         std::vector<StreamEvent>& streamEventList,
-        std::vector<TimeInfo>& timeList);
+        std::vector<TimeInfo>& timeList,
+        std::vector<CaptionPesItem> captionPesList = {});
 
     // 1. コンストラクト直後に呼ぶ
     // splitSub: メイン以外のフォーマットを結合しない
@@ -238,6 +243,16 @@ public:
     int getMainVideoFileIndex() const;
 
     double getFirstDataPTS() const;
+
+    const std::vector<CaptionPesItem>& getCaptionPesList() const { return captionPesList_; }
+    const std::vector<double>& getModifiedCaptionPesPTS() const { return modifiedCaptionPesPTS_; }
+
+    // genAudio後、出力ファイルの保持フレームへ字幕区間を写像する。
+    bool mapCaptionInterval(EncodeFileKey key, double startPTS, double endPTS,
+        double& outStart, double& outEnd) const;
+
+    // 出力に含まれる最終ソースフレームの終了PTS。無限字幕の終端に使う。
+    double getLastCaptionSourcePTS(EncodeFileKey key) const;
 
     // フィルタ入力映像フレーム
     const std::vector<FilterSourceFrame>& getFilterSourceFrames(int videoFileIndex) const;
@@ -335,6 +350,7 @@ private:
     std::vector<FileVideoFrameInfo> videoFrameList_; // [DTS順] 
     std::vector<FileAudioFrameInfo> audioFrameList_;
     std::vector<CaptionItem> captionItemList_;
+    std::vector<CaptionPesItem> captionPesList_;
     std::vector<StreamEvent> streamEventList_;
     std::vector<TimeInfo> timeList_;
 
@@ -351,6 +367,7 @@ private:
     std::vector<double> modifiedPTS_; // [DTS順] ラップアラウンドしないPTS
     std::vector<double> modifiedAudioPTS_; // ラップアラウンドしないPTS
     std::vector<double> modifiedCaptionPTS_; // ラップアラウンドしないPTS
+    std::vector<double> modifiedCaptionPesPTS_; // 生PESのラップアラウンドしないPTS
     std::vector<double> audioFrameDuration_; // 各音声フレームの時間
     std::vector<int> ordredVideoFrame_; // [PTS順] -> [DTS順] 変換
     std::vector<double> dataPTS_; // [DTS順] 映像フレームのストリーム上での位置とPTSの関連付け
@@ -381,6 +398,11 @@ private:
     // 出力ファイルリスト
     std::vector<EncodeFileKey> outFileKeys_; // [出力ファイル順]
     std::map<int, EncodeFileInput> outFiles_; // キーはEncodeFileKey.key()
+    std::map<int, std::vector<double>> captionFrameTimes_;
+
+    size_t getCaptionFrameIndex(EncodeFileKey key, double pts) const;
+    bool mapCaptionIntervalPTS(EncodeFileKey key, double startPTS, double endPTS,
+        double& outStart, double& outEnd) const;
 
     // 最初の映像フレームの時刻(UNIX時間)
     time_t firstFrameTime_;

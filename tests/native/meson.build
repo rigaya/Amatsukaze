@@ -35,3 +35,18 @@ test('AribCaptionSmokeTests', arib_caption_smoke_tests,
   suite : 'native',
   timeout : 30,
 )
+
+if host_machine.system() == 'linux'
+  caption_pgs_render_tests = executable('CaptionPgsRenderTests',
+    'CaptionPgsRenderTests.cpp',
+    include_directories : amatsukaze_include_dirs,
+    dependencies : amatsukaze_deps,
+    cpp_args : ['-ffunction-sections', '-fdata-sections'],
+    link_args : ['-Wl,--gc-sections'],
+    install : false,
+  )
+  test('CaptionPgsRenderTests', caption_pgs_render_tests,
+    suite : 'native',
+    timeout : 60,
+  )
+endif
