@@ -845,6 +845,18 @@ else
                 <tr class="profile-check-row">
                     <td colspan="2">
                         <label class="settings-check">
+                            <input type="checkbox" checked="@GetBoolValue("DisablePgsSub")" @onchange="@(e => OnBoolChanged(e, "DisablePgsSub"))" />
+                            PGS字幕を生成しない(MKV出力時)
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th>PGS字幕フォント</th>
+                    <td><input style="width: 70%;" value="@GetStringValue("PgsFontFamily")" @oninput="@(e => OnStringChanged(e, "PgsFontFamily"))" placeholder="空欄なら既定フォント" /></td>
+                </tr>
+                <tr class="profile-check-row">
+                    <td colspan="2">
+                        <label class="settings-check">
                             <input type="checkbox" checked="@GetBoolValue("EnableWebVTT")" @onchange="@(e => OnBoolChanged(e, "EnableWebVTT"))" />
                             WebVTT字幕を生成する
                         </label>

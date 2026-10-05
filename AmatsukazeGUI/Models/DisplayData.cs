@@ -2166,6 +2166,30 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region DisablePgsSub変更通知プロパティ
+        public bool DisablePgsSub {
+            get { return Data.DisablePgsSub; }
+            set {
+                if (Data.DisablePgsSub == value)
+                    return;
+                Data.DisablePgsSub = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
+        #region PgsFontFamily変更通知プロパティ
+        public string PgsFontFamily {
+            get { return Data.PgsFontFamily; }
+            set {
+                if (Data.PgsFontFamily == value)
+                    return;
+                Data.PgsFontFamily = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region EnableWebVTT変更通知プロパティ
         public bool EnableWebVTT {
             get { return Data.EnableWebVTT; }

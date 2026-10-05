@@ -2082,6 +2082,8 @@ namespace Amatsukaze.Models
                 profile.DisableChapter = data.Profile.DisableChapter;
                 profile.OutputChapter = data.Profile.OutputChapter;
                 profile.DisableSubs = data.Profile.DisableSubs;
+                profile.DisablePgsSub = data.Profile.DisablePgsSub;
+                profile.PgsFontFamily = data.Profile.PgsFontFamily;
                 profile.EnableWebVTT = data.Profile.EnableWebVTT;
                 profile.SubMode = (int)data.Profile.SubMode;
                 profile.WhisperModel = (int)data.Profile.WhisperModel;

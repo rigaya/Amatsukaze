@@ -690,6 +690,16 @@
                             </Style>
                         </StackPanel.Style>
 
+                        <CheckBox Height="16" Margin="0,3" Content="PGS字幕を生成しない(MKV出力時)"
+                                  IsChecked="{Binding Model.SelectedProfile.DisablePgsSub, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="MKVに追加する画像字幕を無効にします。ASS・SRT字幕は引き続き出力します。"/>
+                        <WrapPanel Margin="0,6,0,6" VerticalAlignment="Center">
+                            <TextBlock Text="PGS字幕フォント" VerticalAlignment="Center"/>
+                            <TextBox Width="230" Margin="8,0,0,0"
+                                     Text="{Binding Model.SelectedProfile.PgsFontFamily, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="描画に使用するフォント名。空欄なら既定のフォントを使用します。"/>
+                            <TextBlock Text="(空欄なら既定)" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </WrapPanel>
                         <CheckBox Height="16" Margin="0,3"  Content="WebVTT字幕を生成する"
                                   IsChecked="{Binding Model.SelectedProfile.EnableWebVTT, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   ToolTip="b24tovttを使用し、WebVTT字幕を生成します。"/>

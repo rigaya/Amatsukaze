@@ -457,6 +457,12 @@ namespace Amatsukaze.Server
         public bool OutputChapter { get; set; }
         [DataMember]
         public bool DisableSubs { get; set; }
+        // 旧プロファイルもfalseで読み込み、CLIと同じPGS有効を既定にする。
+        [DataMember]
+        public bool DisablePgsSub { get; set; }
+        // 空または未設定なら描画ライブラリの既定フォントを使う。
+        [DataMember]
+        public string PgsFontFamily { get; set; }
         [DataMember]
         public bool EnableWebVTT { get; set; }
 
@@ -625,6 +631,23 @@ namespace Amatsukaze.Server
         {
             return mode == (int)AudioFormatChangeMode.Split || mode == (int)AudioFormatChangeMode.Separate
                 ? mode : (int)AudioFormatChangeMode.Merge;
+        }
+
+        // 字幕有効時だけPGS設定を付け、フォント名を単一の引数として渡す。
+        public static string GetPgsSubtitleArguments(this ProfileSetting profile)
+        {
+            if (profile.DisableSubs) return "";
+            var arguments = new StringBuilder();
+            if (profile.DisablePgsSub) arguments.Append(" --no-pgs-sub");
+            if (!string.IsNullOrEmpty(profile.PgsFontFamily))
+            {
+                // ProcessStartInfo.Argumentsの引用符と末尾のバックスラッシュを保護する。
+                var family = Regex.Replace(profile.PgsFontFamily, @"(\\*)""",
+                    match => new string('\\', match.Groups[1].Length * 2 + 1) + "\"");
+                family = Regex.Replace(family, @"\\+$", match => match.Value + match.Value);
+                arguments.Append(" --pgs-font \"").Append(family).Append("\"");
+            }
+            return arguments.ToString();
         }
 
         public static string GetAudioFormatChangeModeArgument(this ProfileSetting profile)
@@ -1114,6 +1137,8 @@ namespace Amatsukaze.Server
             keyValueBool("字幕を無効にする", profile.DisableSubs);
             if (!profile.DisableSubs)
             {
+                keyValueBool("PGS字幕を生成しない(MKV出力時)", profile.DisablePgsSub);
+                keyValue("PGS字幕フォント", string.IsNullOrEmpty(profile.PgsFontFamily) ? "既定" : profile.PgsFontFamily);
                 keyValueBool("WebVTTを生成する", profile.EnableWebVTT);
                 keyValue("字幕モード", SubtitleModeList[(int)profile.SubMode]);
                 if (profile.SubMode != SubtitleMode.Arib)

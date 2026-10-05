@@ -804,6 +804,8 @@ namespace Amatsukaze.Server
                     FilterSetting = DefaultFilterSetting()
                 };
             }
+            // 旧XMLで欠落した文字列も、新規プロファイルと同じ空文字に揃える。
+            profile.PgsFontFamily ??= "";
             if (profile.Bitrate == null)
             {
                 profile.Bitrate = new BitrateSetting();

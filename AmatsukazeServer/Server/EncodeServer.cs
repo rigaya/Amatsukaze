@@ -2382,6 +2382,7 @@ namespace Amatsukaze.Server
                 if (!profile.DisableSubs)
                 {
                     sb.Append(" --subtitles");
+                    sb.Append(profile.GetPgsSubtitleArguments());
                     // 字幕モード
                     string subModeStr = "arib";
                     if (profile.SubMode != SubtitleMode.Arib)
