@@ -75,7 +75,8 @@ AdtsParser::AdtsParser(AMTContext&ctx)
     , hAacDec(NULL)
     , bytesConsumed_(0)
     , lastPTS_(-1)
-    , syncOK(false) {
+    , syncOK(false)
+    , decoderSamplingFrequencyIndex_(-1) {
     createChannelsMap();
 }
 AdtsParser::~AdtsParser() {
@@ -131,8 +132,10 @@ AdtsParser::~AdtsParser() {
             if (header.parse(ptr, len)
                 && header.frame_length <= len) {
                 // ストリームを解析するのは面倒なのでデコードしちゃう
-                if (hAacDec == NULL) {
+                // サンプリング周波数が変わってもfaadはエラーを返さず、初期化時の周波数を報告し続けるので作り直す
+                if (hAacDec == NULL || header.sampling_frequency_index != decoderSamplingFrequencyIndex_) {
                     resetDecoder(MemoryChunk(ptr, len));
+                    decoderSamplingFrequencyIndex_ = header.sampling_frequency_index;
                 }
                 NeAACDecFrameInfo frameInfo;
                 void* samples = NeAACDecDecode(hAacDec, &frameInfo, ptr, len);

@@ -71,6 +71,8 @@ private:
 
     AutoBuffer decodedBuffer;
     bool syncOK;
+    // デコーダを初期化したときのsampling_frequency_index (未初期化は-1)
+    int decoderSamplingFrequencyIndex_;
 
     void closeDecoder();
 
