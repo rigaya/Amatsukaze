@@ -1323,6 +1323,10 @@ namespace Amatsukaze.Server
             }
             else if(data.ChangeType == ChangeItemType.Move)
             {
+                if (data.Position < 0)
+                {
+                    return Task.FromResult(0);
+                }
                 int queueCount;
                 lock (queueSync)
                 {
