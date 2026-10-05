@@ -27,12 +27,14 @@ tests\native\build_windows.cmd
 | `CaptionText.UnicodeCharacterFormatting` | `caption_text_length` | 公開単体テストへ移行 |
 | `VfrZonesBug` の通常ゾーン計算 | `bitrate_zones` | 公開単体テストへ移行。外部入力を読む再現データ部分は非公開へ移管 |
 | VFR入力判定の実装内ケース | `vfr_input_detection` | 公開単体テストへ移行 |
-| `CRC.*`, `Util.readOpt`, `Util.AutoBufferTest` | 保留 | 呼出先と期待値を再確認してから追加 |
+| `CRC.*` | `crc32` | 公開単体テストへ移行。CRC-32/MPEG-2の検査値とPSIセクション検査で確認 |
+| `Util.readOpt`, `Util.AutoBufferTest` | `bit_reader`, `auto_buffer` | 公開単体テストへ移行。旧テストの `--mode test_*` は本体から削除済みのため、BitReader/BitWriter/AutoBuffer を直接検証 |
 | `MPEG2Parser`, `H264Parser`, `H264Parser1Seg`, `Pulldown`, `LargeTsParse`, `MPEG2PSVerifier` | 非公開コンポーネントテスト | 外部の映像・TS・MPEG-PS素材に依存 |
 | `AacDecodeVerifyTest`, `WaveWriter`, `SplitDualMonoAAC`, `AACDecodeTest` | 非公開コンポーネントテスト | 外部音声素材または出力検証が必要 |
 | `encodeMpeg2Test`, `fileStreamInfoTest`, `DamemojiTest`, `LosslessTest`, `LogoFrameTest`, `CaptionASSTest` | 非公開コンポーネント/統合テスト | 外部素材、AviSynth、ロゴまたは出力ファイルに依存 |
 | `Process.SimpleProcessTest` | 非公開コンポーネントテスト | 子プロセス実行を伴う |
-| `EncoderOptionTest01`～`EncoderOptionTest09`, `CLI.ArgumentTest` | 保留 | 入力と失敗期待を明文化してから追加 |
+| `EncoderOptionTest01`～`EncoderOptionTest09` | `encoder_option` | 公開単体テストへ移行。テスト専用の C ABI ラッパー `ParseEncoderOptionForTest` を通す |
+| `CLI.ArgumentTest` | 保留 | 引数解析が `AmatsukazeCLI.hpp` 内の static 関数で、実行ファイル位置に依存する既定値を含むため、公開方法を設計してから追加 |
 | `DecodePerformance` | 非公開ベンチマーク | 性能計測であり単体テストの合否に含めない |
 
 既存の `AmatsukazeUnitTest/` と GoogleTest は、この移行段階では削除しません。C# の `AmatsukazeServerTest` xUnit は維持し、ネットワークを使う任意テストは `Category=Network` としてオフラインの標準単体テストから分離します。標準群は次で実行します。
@@ -42,6 +44,8 @@ dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --filter "Category!
 ```
 
 `bitrate_zones` の入力はフレーム数+1個の終端時刻を含める。8フレーム単位で計算した期待値は `0-40: 2.5`、`40-64: 1.35`、`64-128: 1.1375`、`128-150: 2.0` である。第2・第3ゾーンの値はそれぞれ `(1.5+1.5+1.05)/3` と `(0.6+0.6+1+1+1.5+2+1.2+1.2)/8` から独立に計算できる。19単位のコスト上限は `19*0.15=2.85` で、5ゾーン時の累積値 `2.366666...` に最小併合コスト `0.8` を加えた4ゾーン時は `3.166666...` になる。実装は追加前の累積値で継続可否を判定するため、次の反復で停止し、4→3の併合コスト `0.927272...` は適用されない。旧テストの `40-128: 約1.195` はこの未実施の併合を前提とするため移植しない。
+
+テストは TCHAR を原則とし、出力は `_ftprintf`、書式化は `strsprintf` を使う。`common` の静的ライブラリをリンクし、本体DLLでは非公開の `StringFormat`（`THROW` が使用）のため `Amatsukaze/StringUtils.cpp` もテストに組み込む。
 
 Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones` と `vfr_input_detection` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
 

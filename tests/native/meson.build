@@ -1,5 +1,7 @@
 amatsukaze_native_tests = executable('AmatsukazeNativeTests',
   'AmatsukazeNativeTests.cpp',
+  # THROW/StringFormatの実装 (本体DLLでは非公開のため、テストにも組み込む)
+  '../../Amatsukaze/StringUtils.cpp',
   dependencies : [amatsukaze_dep] + amatsukaze_deps,
   cpp_args : host_machine.system() == 'windows' ? ['-DAMATSUKAZE_IMPORTS'] : [],
   install : false,

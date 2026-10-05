@@ -343,6 +343,30 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
     return info;
 }
 
+extern "C" int ParseEncoderOptionForTest(int encoder, const tchar* options, EncoderOptionInfoForTest* result) {
+    if (result == nullptr || options == nullptr) {
+        return ENCODER_OPTION_FOR_TEST_INVALID_ARGUMENT;
+    }
+    *result = {};
+    try {
+        const auto info = ParseEncoderOption((ENUM_ENCODER)encoder, options);
+        if (info.rcMode.size() >= ENCODER_OPTION_FOR_TEST_RC_MODE_LENGTH) {
+            return ENCODER_OPTION_FOR_TEST_PARSE_FAILED;
+        }
+        result->format = info.format;
+        result->deint = info.deint;
+        result->afsTimecode = info.afsTimecode ? 1 : 0;
+        result->selectEvery = info.selectEvery;
+        std::copy(info.rcMode.begin(), info.rcMode.end(), result->rcMode);
+        std::copy(std::begin(info.rcModeValue), std::end(info.rcModeValue), result->rcModeValue);
+        result->parallel = info.parallel;
+        return ENCODER_OPTION_FOR_TEST_SUCCESS;
+    } catch (...) {
+        *result = {};
+        return ENCODER_OPTION_FOR_TEST_PARSE_FAILED;
+    }
+}
+
 void PrintEncoderInfo(AMTContext& ctx, EncoderOptionInfo info) {
     switch (info.deint) {
     case ENCODER_DEINT_NONE:

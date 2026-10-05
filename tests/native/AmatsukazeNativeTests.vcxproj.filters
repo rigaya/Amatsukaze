@@ -8,5 +8,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AmatsukazeNativeTests.cpp"><Filter>ソース ファイル</Filter></ClCompile>
+    <ClCompile Include="..\..\Amatsukaze\StringUtils.cpp"><Filter>ソース ファイル</Filter></ClCompile>
   </ItemGroup>
 </Project>

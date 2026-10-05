@@ -48,10 +48,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AmatsukazeNativeTests.cpp" />
+    <ClCompile Include="..\..\Amatsukaze\StringUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Amatsukaze\Amatsukaze.vcxproj">
       <Project>{4E733A88-E41A-4370-B25F-1626A5F439F1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\common\common.vcxproj">
+      <Project>{cd658b7c-4597-411a-a54d-9958287813f5}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
