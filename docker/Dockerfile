@@ -64,10 +64,11 @@ ENV PATH="/app/exe_files:$PATH"
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 
-# 同梱されないPythonとGPU用の実行時依存を導入する
+# 同梱されないPython、字幕用フォントとGPU用の実行時依存を導入する
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl wget gpg tzdata locales gosu python3 xz-utils \
+        fontconfig fontconfig-config fonts-noto-cjk \
     && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${INTEL_GRAPHICS_PPA_KEY}" \
         | gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics-ppa.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/intel-graphics-ppa.gpg] https://ppa.launchpadcontent.net/kobuk-team/intel-graphics/ubuntu $UBUNTU_NAME main" \
@@ -117,6 +118,7 @@ RUN apt-get update \
         && rm -f /tmp/amdgpu-install.deb /tmp/amdgpu-pro-core.deb \
             /tmp/libamdenc-amdgpu-pro.deb /tmp/amf-amdgpu-pro.deb; \
     fi \
+    && fc-cache -f \
     && locale-gen ja_JP.UTF-8 en_US.UTF-8 \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo "$TZ" > /etc/timezone \

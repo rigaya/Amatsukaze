@@ -1,5 +1,11 @@
 # Dockerでの利用方法
 
+## 字幕用の日本語フォント
+
+コンテナにはARIB字幕の描画用に`fonts-noto-cjk`、`fontconfig`、`fontconfig-config`を導入します。描画ライブラリは静的リンクですが、フォントファイルと`/etc/fonts`の設定は実行環境のものを使用します。イメージ作成時に`fc-cache -f`でキャッシュを更新します。
+
+追加フォントはコンテナ内の`/usr/local/share/fonts`へ配置し、`fc-cache -f`を実行してください。`fc-match -f '%{family}\n' 'sans-serif:lang=ja'`で日本語フォントが解決できることを確認できます。
+
 ## 事前準備
 
 ### dockerのインストール

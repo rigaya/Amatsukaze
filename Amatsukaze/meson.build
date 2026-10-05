@@ -11,6 +11,7 @@ amatsukaze_sources = [
   'CMAnalyze.cpp',
   'CaptionData.cpp',
   'CaptionFormatter.cpp',
+  'CaptionPgs.cpp',
   'ComputeKernel.cpp',
   'ConvertPix.cpp',
   'Encoder.cpp',
@@ -65,6 +66,7 @@ amatsukaze_deps = [
   ffmpeg_dep,
   avisynth_dep,
   turbojpeg_dep,
+  aribcaption_dep,
   zlib_dep,
   version_dep,
 ]

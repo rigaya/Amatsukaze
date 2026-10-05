@@ -39,6 +39,9 @@
     <ClInclude Include="CaptionData.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="CaptionPgs.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="CaptionFormatter.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -180,6 +183,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="CaptionData.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="CaptionPgs.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="CaptionFormatter.cpp">

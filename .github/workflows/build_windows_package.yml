@@ -78,7 +78,7 @@ jobs:
           )
           call vcpkg\\bootstrap-vcpkg.bat
           set VCPKG_ROOT=%CD%\\vcpkg
-          vcpkg\\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
+          vcpkg\\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static libaribcaption:x64-windows-static
           echo VCPKG_ROOT=%CD%\\vcpkg>> %GITHUB_ENV%
 
       - name: Download dependencies

@@ -35,6 +35,11 @@ RUN apt update \
       yasm \
       ninja-build \
       pkg-config \
+      gettext \
+      gperf \
+      fontconfig \
+      fontconfig-config \
+      fonts-noto-cjk \
       patchelf \
       ruby \
       rake \

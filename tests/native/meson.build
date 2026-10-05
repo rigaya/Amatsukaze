@@ -23,3 +23,15 @@ test('PgsEncoderTests', pgs_encoder_tests,
   suite : 'native',
   timeout : 60,
 )
+
+arib_caption_smoke_tests = executable('AribCaptionSmokeTests',
+  'AribCaptionSmokeTests.cpp',
+  dependencies : amatsukaze_dep,
+  cpp_args : host_machine.system() == 'windows' ? ['-DAMATSUKAZE_IMPORTS'] : [],
+  install : false,
+)
+
+test('AribCaptionSmokeTests', arib_caption_smoke_tests,
+  suite : 'native',
+  timeout : 30,
+)

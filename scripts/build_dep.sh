@@ -61,6 +61,9 @@ if [ ! -d "${BUILD_DIR}/libjpeg-turbo-3.1.0" ]; then
   )
 fi
 
+# 通常ビルドと同じ字幕描画の依存をprebuiltへ組み込む。
+"${SCRIPT_DIR}/build_caption_deps.sh" "${BUILD_DIR}" "${BASELIBS_DIR}"
+
 # nv-codec-headers
 if [ ! -d "${BUILD_DIR}/nv-codec-headers-12.2.72.0" ]; then
   echo "nv-codec-headers のビルドを行います。"

@@ -1067,6 +1067,10 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 | [danmaku2ass.py](https://github.com/m13253/danmaku2ass) | GPL-3.0 |
 | [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) | BSD系ライセンス（複数） |
 | [zlib](https://zlib.net/) | zlib License |
+| [libaribcaption](https://github.com/xqq/libaribcaption) | MIT |
+| [FreeType](https://freetype.org/)（Linux字幕描画） | FreeType License（FTL） |
+| [fontconfig](https://gitlab.freedesktop.org/fontconfig/fontconfig)（Linuxフォント検索） | MIT系ライセンス |
+| [expat](https://github.com/libexpat/libexpat)（Linuxフォント設定の解析） | MIT |
 | [Microsoft Visual C++ランタイム](https://visualstudio.microsoft.com/license-terms/) | Microsoft Software License Terms |
 
 同梱AviSynthプラグイン
@@ -1119,11 +1123,13 @@ bootstrap-vcpkg.bat
 vcpkg integrate install
 ```
 
-次にzlibとlibjpeg-turboをインストールします。
+次にzlib、libjpeg-turbo、libaribcaptionを静的ライブラリとしてインストールします。
 
 ```bat
-vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
+vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static libaribcaption:x64-windows-static
 ```
+
+libaribcaptionのWindows描画はDirectWriteを使用します。インクルードと静的ライブラリの検索パスは、libjpeg-turboと同じvcpkgのMSBuild統合を使用します。Amatsukaze.vcxprojでaribcaption.libとWindows SDKのole32.lib、d2d1.lib、dwrite.lib、windowscodecs.libをリンクします。
 
 AvisynthNeoが必要です。ソースを落として、ビルドしてください。
 ビルドにはCMakeが必要です。AviSynth.libをlib/x64(or x86)へコピーしてください。

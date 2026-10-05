@@ -50,3 +50,9 @@ Windows では本体とテストを同じ Visual C++ ツールセットおよび
 `PgsEncoderTests`はPGS実装を直接コンパイルし、FFmpegの`pgssub`デコーダでSUPを往復検証する。本体DLLやlibaribcaptionに依存しない。Linuxでは`meson compile -C build-native PgsEncoderTests`と`meson test -C build-native PgsEncoderTests --print-errorlogs`で実行する。Windowsでは`build_windows.cmd`が専用`PgsEncoderTests.vcxproj`をビルドして実行する。
 
 255色以下ではRGBAの各成分の誤差を±2以内とし、透明画素のRGBは評価対象外とする。4096色のRGBAグラデーションでは非透明画素のRGBA成分全体のPSNRを30dB以上とする。480/576/577/1080行で色変換の切替境界を検証し、領域結合、透明行列の削除、ODS分割、RLEの長さ境界と行末、PCS/WDS/ENDの固定バイト列、消去WDSと直前エポックのウィンドウ定義の一致、消去後の透明画像、隣接イベントの消去省略、255/256色の共有パレット境界、半透明のsource-over合成、不正入力、空・全透明イベント、PTSとcomposition番号の折り返し、ファイル出力とメモリ出力の一致も検証する。
+
+## ARIB字幕描画のスモークテスト
+
+`AribCaptionSmokeTests`は本体ライブラリの`CaptionPgsCheckRenderer`を呼び、静的リンクしたlibaribcaptionの`Context`と`Renderer`を初期化する。1920×1080キャンバスに透明背景で「日」を描画し、非透明画素があることを確認する。LinuxではfontconfigとFreeTypeを明示し、`Noto Sans CJK JP`の実ファイルと日本語グリフを解決する。指定フォントが欠落した場合の代替フォントへの暗黙の置換は失敗として扱う。Windowsではlibaribcaptionの標準バックエンドと既定の日本語フォントを使う。
+
+Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson test -C build-native AribCaptionSmokeTests --print-errorlogs`で実行する。Windowsでは`build_windows.cmd`が専用プロジェクトをビルドし、本体DLLと同じディレクトリで実行する。テスト自身はlibaribcaptionを直接リンクせず、本体ライブラリの描画経路を検証する。不正キャンバス寸法、空のフォント指定、Linuxでの欠落フォント、診断バッファの終端とnullバッファも確認する。

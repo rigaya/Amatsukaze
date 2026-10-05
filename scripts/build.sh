@@ -220,6 +220,25 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
       echo "prebuilt baselibs を使用します。libjpeg-turbo のビルドをスキップします。"
     fi
 
+    ## ARIB字幕描画の依存ライブラリのビルド
+    if [ "${USE_PREBUILT_BASELIBS}" != "1" ]; then
+        "${SCRIPT_DIR}/build_caption_deps.sh" "${BUILD_DIR}" "${BUILD_DIR}/baselibs" || exit 1
+    else
+        for caption_dependency in expat freetype fontconfig aribcaption; do
+            caption_pc="${caption_dependency}"
+            case "${caption_dependency}" in
+                freetype) caption_pc=freetype2 ;;
+                aribcaption) caption_pc=libaribcaption ;;
+            esac
+            if [ ! -f "${BUILD_DIR}/baselibs/lib/lib${caption_dependency}.a" ] ||
+               [ ! -f "${BUILD_DIR}/baselibs/lib/pkgconfig/${caption_pc}.pc" ]; then
+                echo "prebuilt baselibsに${caption_dependency}がありません。docker/baseからベースイメージを再生成してください。"
+                exit 1
+            fi
+        done
+        echo "prebuilt baselibsを使用します。字幕描画の依存ビルドをスキップします。"
+    fi
+
     # ----- 地デジ/BS向け ffmpeg_nekopandaのAmatsukazeCLIのビルド -----
     if [ ! -d "build_ffnk" ]; then
         mkdir build_ffnk

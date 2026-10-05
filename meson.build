@@ -35,6 +35,24 @@ ffmpeg_dep = [
 # libjpeg-turbo (TurboJPEG API)
 turbojpeg_dep = dependency('libturbojpeg', required : true)
 
+# ARIB字幕描画とフォント依存は静的リンクする
+aribcaption_pkg_dep = dependency('libaribcaption', required : true, static : true)
+if host_machine.system() == 'linux'
+  # 上流pcの-lstdc++まで静的化すると、本体と呼出側でC++ランタイムが二重になる。
+  # コンパイル設定を保持し、字幕本体とフォント依存だけを静的にリンクする。
+  aribcaption_archive = meson.get_compiler('cpp').find_library('aribcaption',
+    dirs : aribcaption_pkg_dep.get_variable(pkgconfig : 'libdir'), static : true)
+  aribcaption_dep = declare_dependency(
+    dependencies : [
+      aribcaption_pkg_dep.partial_dependency(compile_args : true, includes : true),
+      aribcaption_archive,
+      dependency('fontconfig', required : true, static : true),
+    ],
+  )
+else
+  aribcaption_dep = aribcaption_pkg_dep
+endif
+
 # glibc 2.34未満では dlopen/dlsym/dladdr が libdl にあるため、明示的にリンクする。
 # 2.34以降はlibc本体へ統合され、libdlは互換用の空ライブラリになるので付けても害はない。
 dl_dep = dependency('', required : false)
