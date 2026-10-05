@@ -47,6 +47,37 @@ struct AdtsHeader {
 };
 #endif
 
+// ネイティブ単体テストからADTSパーサを呼び出すための入力 (1要素が1つのPESペイロードに相当)
+struct AudioPesForTest {
+    const uint8_t* data;
+    size_t length;
+    int64_t PTS; // 90kHz、情報がない場合は-1
+};
+
+// AudioFrameDataからポインタを除いたテスト用のフレーム情報
+struct AudioFrameInfoForTest {
+    int64_t PTS;
+    int numSamples;
+    int channels;   // AUDIO_CHANNELS
+    int sampleRate;
+    int codedDataSize;
+    int numDecodedSamples;
+    int decodedDataSize;
+};
+
+enum AdtsParserForTestResult {
+    ADTS_PARSER_FOR_TEST_SUCCESS = 0,
+    ADTS_PARSER_FOR_TEST_INVALID_ARGUMENT = -1,
+    ADTS_PARSER_FOR_TEST_BUFFER_TOO_SMALL = -2,
+    ADTS_PARSER_FOR_TEST_FAILED = -3,
+};
+
+// ネイティブ単体テストからADTSパーサを呼び出すためのC ABI。
+// PESを順に入力し、得られたフレーム情報を連結してoutputへ返す。
+// packetResultsがnullptrでなければ、各PESのinputFrame()の戻り値(0/1)を格納する。
+extern "C" AMATSUKAZE_API int ParseAdtsPacketsForTest(const AudioPesForTest* packets, size_t packetCount,
+    int* packetResults, AudioFrameInfoForTest* output, size_t outputCapacity, size_t* outputCount);
+
 struct NeAACDecFrameInfo;
 typedef void *NeAACDecHandle;
 

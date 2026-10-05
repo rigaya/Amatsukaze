@@ -1213,3 +1213,107 @@ void TsPacketSelector::printPMT(const PMT& pmt) {
         }
     }
 }
+
+namespace {
+// TsPacketParserの出力をTsPacketSelectorへ渡し、選択器のコールバックを記録する
+class TsSelectorRecorderForTest : public TsPacketParser, public TsPacketSelectorHandler {
+public:
+    TsSelectorRecorderForTest(AMTContext& ctx, int selectServiceIndex)
+        : TsPacketParser(ctx)
+        , selector(ctx)
+        , selectServiceIndex(selectServiceIndex)
+        , packetIndex(0) {
+        selector.setHandler(this);
+    }
+    std::vector<TsSelectorEventForTest> events;
+
+protected:
+    void onTsPacket(TsPacket packet) override {
+        selector.inputTsPacket(packetIndex++, packet);
+    }
+    int onPidSelect(int TSID, const std::vector<int>& pids) override {
+        auto& e = add(TS_SELECTOR_EVENT_PID_SELECT, -1, -1, -1);
+        e.values[0] = TSID;
+        e.values[1] = (int)pids.size();
+        for (int i = 0; i < (int)pids.size() && i < 4; i++) e.values[2 + i] = pids[i];
+        return selectServiceIndex;
+    }
+    void onPmtUpdated(int PcrPid) override {
+        add(TS_SELECTOR_EVENT_PMT_UPDATED, -1, -1, -1).values[0] = PcrPid;
+    }
+    void onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption) override {
+        auto& e = add(TS_SELECTOR_EVENT_PID_TABLE, -1, -1, -1);
+        e.values[0] = video.stype;
+        e.values[1] = video.pid;
+        e.values[2] = (int)audio.size();
+        e.values[3] = audio.size() > 0 ? audio[0].pid : -1;
+        e.values[4] = audio.size() > 1 ? audio[1].pid : -1;
+        e.values[5] = caption.pid;
+    }
+    void onVideoPacket(int64_t clock, TsPacket packet) override {
+        addPacket(TS_SELECTOR_EVENT_VIDEO_PACKET, clock, packet, -1);
+    }
+    void onAudioPacket(int64_t clock, TsPacket packet, int audioIdx) override {
+        addPacket(TS_SELECTOR_EVENT_AUDIO_PACKET, clock, packet, audioIdx);
+    }
+    void onCaptionPacket(int64_t clock, TsPacket packet) override {
+        addPacket(TS_SELECTOR_EVENT_CAPTION_PACKET, clock, packet, -1);
+    }
+    void onTime(int64_t clock, JSTTime time) override {
+        auto& e = add(TS_SELECTOR_EVENT_TIME, -1, -1, clock);
+        time.getDay(e.values[0], e.values[1], e.values[2]);
+        time.getTime(e.values[3], e.values[4], e.values[5]);
+    }
+
+private:
+    TsPacketSelector selector;
+    int selectServiceIndex;
+    int64_t packetIndex;
+
+    TsSelectorEventForTest& add(int type, int pid, int index, int64_t clock) {
+        TsSelectorEventForTest e = {};
+        e.type = type;
+        e.pid = pid;
+        e.index = index;
+        e.clock = clock;
+        events.push_back(e);
+        return events.back();
+    }
+    void addPacket(int type, int64_t clock, TsPacket& packet, int index) {
+        auto& e = add(type, packet.PID(), index, clock);
+        e.values[0] = packet.payload_unit_start_indicator();
+        e.values[1] = packet.continuity_counter();
+    }
+};
+}
+
+extern "C" int ParseTsForTest(const uint8_t* const* chunks, const size_t* chunkLengths, size_t chunkCount,
+    int selectServiceIndex, TsSelectorEventForTest* output, size_t outputCapacity, size_t* outputCount) {
+    if (outputCount == nullptr || (chunkCount != 0 && (chunks == nullptr || chunkLengths == nullptr))) {
+        return TS_SELECTOR_FOR_TEST_INVALID_ARGUMENT;
+    }
+    *outputCount = 0;
+    try {
+        AMTContext ctx;
+        TsSelectorRecorderForTest recorder(ctx, selectServiceIndex);
+        for (size_t i = 0; i < chunkCount; i++) {
+            if (chunks[i] == nullptr && chunkLengths[i] != 0) {
+                return TS_SELECTOR_FOR_TEST_INVALID_ARGUMENT;
+            }
+            recorder.inputTS(MemoryChunk(const_cast<uint8_t*>(chunks[i]), chunkLengths[i]));
+        }
+        recorder.flush();
+        *outputCount = recorder.events.size();
+        if (output == nullptr) {
+            return outputCapacity == 0 ? TS_SELECTOR_FOR_TEST_SUCCESS : TS_SELECTOR_FOR_TEST_INVALID_ARGUMENT;
+        }
+        if (outputCapacity < recorder.events.size()) {
+            return TS_SELECTOR_FOR_TEST_BUFFER_TOO_SMALL;
+        }
+        std::copy(recorder.events.begin(), recorder.events.end(), output);
+        return TS_SELECTOR_FOR_TEST_SUCCESS;
+    } catch (...) {
+        *outputCount = 0;
+        return TS_SELECTOR_FOR_TEST_FAILED;
+    }
+}

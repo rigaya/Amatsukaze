@@ -689,3 +689,34 @@ private:
     void printPMT(const PMT& pmt);
 };
 
+
+// ネイティブ単体テストからTSパケット分割とPSI/PID選択を呼び出すためのイベント種別
+enum TsSelectorEventTypeForTest {
+    TS_SELECTOR_EVENT_PID_SELECT = 1,  // values: [0]=TSID, [1]=サービス数, [2..5]=先頭4サービスのSID
+    TS_SELECTOR_EVENT_PMT_UPDATED,     // values: [0]=PCR PID
+    TS_SELECTOR_EVENT_PID_TABLE,       // values: [0]=映像stream_type, [1]=映像PID, [2]=音声数, [3..4]=先頭2音声のPID, [5]=字幕PID
+    TS_SELECTOR_EVENT_VIDEO_PACKET,    // pid, values: [0]=payload_unit_start_indicator, [1]=continuity_counter
+    TS_SELECTOR_EVENT_AUDIO_PACKET,    // pid, index=音声番号, values: [0]=payload_unit_start_indicator, [1]=continuity_counter
+    TS_SELECTOR_EVENT_CAPTION_PACKET,  // pid, values: [0]=payload_unit_start_indicator, [1]=continuity_counter
+    TS_SELECTOR_EVENT_TIME,            // values: [0..5]=年,月,日,時,分,秒 (JST)
+};
+
+struct TsSelectorEventForTest {
+    int type;
+    int pid;
+    int index;
+    int64_t clock;  // TsPacketParserが出力したパケットの通し番号
+    int values[6];
+};
+
+enum TsSelectorForTestResult {
+    TS_SELECTOR_FOR_TEST_SUCCESS = 0,
+    TS_SELECTOR_FOR_TEST_INVALID_ARGUMENT = -1,
+    TS_SELECTOR_FOR_TEST_BUFFER_TOO_SMALL = -2,
+    TS_SELECTOR_FOR_TEST_FAILED = -3,
+};
+
+// TSバイト列をchunks単位でTsPacketParserへ入力し、TsPacketSelectorのコールバックをイベントとして返す。
+// selectServiceIndexはonPidSelectで返すサービス番号。最後にflush()する。
+extern "C" AMATSUKAZE_API int ParseTsForTest(const uint8_t* const* chunks, const size_t* chunkLengths, size_t chunkCount,
+    int selectServiceIndex, TsSelectorEventForTest* output, size_t outputCapacity, size_t* outputCount);

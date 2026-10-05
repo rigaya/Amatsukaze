@@ -41,6 +41,23 @@ private:
 };
 }
 
+extern "C" int GenerateSilentAdtsFrameForTest(int layout, int samplingFrequencyIndex,
+    uint8_t* output, size_t outputCapacity, size_t* frameLength) {
+    constexpr int RESULT_INVALID = -1;
+    constexpr int RESULT_BUFFER_TOO_SMALL = -2;
+    if (frameLength == nullptr) return RESULT_INVALID;
+    *frameLength = 0;
+    try {
+        const auto frame = GenerateSilentAdtsFrame((AUDIO_CHANNELS)layout, samplingFrequencyIndex);
+        *frameLength = frame.size();
+        if (output == nullptr || outputCapacity < frame.size()) return RESULT_BUFFER_TOO_SMALL;
+        std::copy(frame.begin(), frame.end(), output);
+        return 0;
+    } catch (...) {
+        return RESULT_INVALID;
+    }
+}
+
 std::vector<uint8_t> GenerateSilentAdtsFrame(AUDIO_CHANNELS layout, int samplingFrequencyIndex) {
     const int config = GetAudioAdtsChannelConfiguration(layout);
     if (config < 0 || samplingFrequencyIndex < 0 || samplingFrequencyIndex > 12) {

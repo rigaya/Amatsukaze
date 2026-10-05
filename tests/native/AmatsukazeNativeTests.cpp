@@ -1,7 +1,10 @@
 ﻿// Amatsukaze の公開ネイティブ単体テスト実行器
+#include "AdtsParser.h"
+#include "AudioTrackBuilder.h"
 #include "CaptionData.h"
 #include "EncoderOptionParser.h"
 #include "FilteredSource.h"
+#include "Mpeg2TsParser.h"
 #include "StreamReform.h"
 #include "StreamUtils.h"
 #include "TsSplitter.h"
@@ -14,6 +17,7 @@
 #include <cstring>
 #include <exception>
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -967,6 +971,367 @@ bool TestCaptionPesWrap(tstring& diagnostic) { return RunCaptionStreamCase(1, di
 bool TestCaptionIntervalMapping(tstring& diagnostic) { return RunCaptionStreamCase(2, diagnostic); }
 
 
+// ADTS: 本体の無音フレーム生成を使って正しいAACフレームを用意する
+std::vector<uint8_t> MakeSilentAdts(AUDIO_CHANNELS layout, int samplingFrequencyIndex) {
+    size_t length = 0;
+    GenerateSilentAdtsFrameForTest(layout, samplingFrequencyIndex, nullptr, 0, &length);
+    std::vector<uint8_t> frame(length);
+    if (length == 0 || GenerateSilentAdtsFrameForTest(layout, samplingFrequencyIndex, frame.data(), frame.size(), &length) != 0) {
+        return {};
+    }
+    return frame;
+}
+
+bool ParseAdts(const std::vector<std::pair<std::vector<uint8_t>, int64_t>>& packets, std::vector<AudioFrameInfoForTest>& frames,
+    std::vector<int>& packetResults, tstring& diagnostic) {
+    std::vector<AudioPesForTest> inputs;
+    for (const auto& packet : packets) inputs.push_back({ packet.first.data(), packet.first.size(), packet.second });
+    packetResults.assign(packets.size(), -1);
+    size_t count = 0;
+    int status = ParseAdtsPacketsForTest(inputs.data(), inputs.size(), packetResults.data(), nullptr, 0, &count);
+    if (status == ADTS_PARSER_FOR_TEST_SUCCESS) {
+        frames.assign(count, AudioFrameInfoForTest());
+        status = ParseAdtsPacketsForTest(inputs.data(), inputs.size(), packetResults.data(), frames.data(), frames.size(), &count);
+    }
+    if (status != ADTS_PARSER_FOR_TEST_SUCCESS || count != frames.size()) {
+        diagnostic = strsprintf(_T("ADTSパーサを実行できません: 結果=%d"), status);
+        return false;
+    }
+    return true;
+}
+
+bool ExpectAudioFrame(const AudioFrameInfoForTest& actual, int64_t pts, AUDIO_CHANNELS channels, int sampleRate,
+    int codedDataSize, size_t index, tstring& diagnostic) {
+    constexpr int AAC_FRAME_SAMPLES = 1024;
+    constexpr int DOWNMIX_CHANNELS = 2;
+    constexpr int BYTES_PER_SAMPLE = 2;
+    if (actual.PTS == pts && actual.channels == channels && actual.sampleRate == sampleRate
+        && actual.numSamples == AAC_FRAME_SAMPLES && actual.codedDataSize == codedDataSize
+        && actual.decodedDataSize == actual.numDecodedSamples * DOWNMIX_CHANNELS * BYTES_PER_SAMPLE) {
+        return true;
+    }
+    diagnostic = strsprintf(_T("音声フレーム%zu: PTS=%lld/%lld, ch=%d/%d, rate=%d/%d, samples=%d, coded=%d/%d, decoded=%d(%dサンプル)"),
+        index, (long long)actual.PTS, (long long)pts, actual.channels, channels, actual.sampleRate, sampleRate,
+        actual.numSamples, actual.codedDataSize, codedDataSize, actual.decodedDataSize, actual.numDecodedSamples);
+    return false;
+}
+
+std::vector<uint8_t> Concat(std::initializer_list<std::vector<uint8_t>> parts) {
+    std::vector<uint8_t> out;
+    for (const auto& part : parts) out.insert(out.end(), part.begin(), part.end());
+    return out;
+}
+
+bool TestAdtsParser(tstring& diagnostic) {
+    constexpr int SFI_48000 = 3;
+    constexpr int SFI_44100 = 4;
+    constexpr int64_t FRAME_DURATION_48K = 90000 * 1024 / 48000; // 1920
+    const auto stereo = MakeSilentAdts(AUDIO_STEREO, SFI_48000);
+    const auto mono = MakeSilentAdts(AUDIO_MONO, SFI_44100);
+    const auto surround = MakeSilentAdts(AUDIO_32_LFE, SFI_48000);
+    if (!Expect(!stereo.empty() && !mono.empty() && !surround.empty(), _T("無音ADTSフレームを生成できません"), diagnostic)) return false;
+    const int stereoLength = (int)stereo.size();
+
+    std::vector<AudioFrameInfoForTest> frames;
+    std::vector<int> results;
+    // 1つのPESに3フレーム: 2番目以降はフレーム長から求めたPTS
+    if (!ParseAdts({ { Concat({ stereo, stereo, stereo }), 90000 } }, frames, results, diagnostic)) return false;
+    if (!Expect(frames.size() == 3 && results[0] == 1, _T("1つのPESに含まれる3フレームを取得できません"), diagnostic)) return false;
+    for (size_t i = 0; i < frames.size(); ++i) {
+        if (!ExpectAudioFrame(frames[i], 90000 + FRAME_DURATION_48K * (int64_t)i, AUDIO_STEREO, 48000, stereoLength, i, diagnostic)) return false;
+    }
+
+    // PES境界がフレームの途中にある場合: 前のPESから続くフレームは前のPTSを引き継ぎ、
+    // 新しいPESのPTSはその次のフレームに適用される
+    const size_t half = stereo.size() / 2;
+    const std::vector<uint8_t> head(stereo.begin(), stereo.begin() + half);
+    const std::vector<uint8_t> tail(stereo.begin() + half, stereo.end());
+    constexpr int64_t SECOND_PES_PTS = 1000 + FRAME_DURATION_48K * 2 + 5; // 実際のPTSで補正されることを確かめるため少しずらす
+    if (!ParseAdts({ { Concat({ stereo, head }), 1000 }, { Concat({ tail, stereo }), SECOND_PES_PTS } }, frames, results, diagnostic)) return false;
+    if (!Expect(frames.size() == 3, _T("PES境界をまたぐフレームを取得できません"), diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[0], 1000, AUDIO_STEREO, 48000, stereoLength, 0, diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[1], 1000 + FRAME_DURATION_48K, AUDIO_STEREO, 48000, stereoLength, 1, diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[2], SECOND_PES_PTS, AUDIO_STEREO, 48000, stereoLength, 2, diagnostic)) return false;
+
+    // 同期語を含まない先頭のゴミは読み飛ばす
+    const std::vector<uint8_t> garbage = { 0x00, 0x11, 0x22, 0xFF, 0x00, 0x47 };
+    if (!ParseAdts({ { Concat({ garbage, stereo }), 3000 } }, frames, results, diagnostic)) return false;
+    if (!Expect(frames.size() == 1, _T("先頭のゴミを読み飛ばせません"), diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[0], 3000, AUDIO_STEREO, 48000, stereoLength, 0, diagnostic)) return false;
+
+    // チャンネル構成とサンプリング周波数の変化: デコーダを作り直してフレームごとの形式を返す
+    if (!ParseAdts({ { stereo, 0 }, { mono, FRAME_DURATION_48K }, { surround, 10000 } }, frames, results, diagnostic)) return false;
+    if (!Expect(frames.size() == 3, _T("形式が変化するフレームを取得できません"), diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[0], 0, AUDIO_STEREO, 48000, stereoLength, 0, diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[1], FRAME_DURATION_48K, AUDIO_MONO, 44100, (int)mono.size(), 1, diagnostic)) return false;
+    if (!ExpectAudioFrame(frames[2], 10000, AUDIO_32_LFE, 48000, (int)surround.size(), 2, diagnostic)) return false;
+
+    // フレーム長に満たないデータだけでは出力しない
+    if (!ParseAdts({ { head, 0 } }, frames, results, diagnostic)) return false;
+    return Expect(frames.empty() && results[0] == 0, _T("不完全なフレームを出力しました"), diagnostic);
+}
+
+// TS: パケットとPSIセクションの組み立て
+constexpr int TS_PACKET_SIZE = 188;
+constexpr int TS_PAYLOAD_SIZE = 184;
+
+class TsStreamBuilder {
+public:
+    // PSIセクションをpointer_field付きで送出し、最終パケットの残りは0xFFで埋める
+    void addSection(int pid, const std::vector<uint8_t>& section) {
+        std::vector<uint8_t> payload = { 0x00 };
+        payload.insert(payload.end(), section.begin(), section.end());
+        for (size_t pos = 0; pos < payload.size(); pos += TS_PAYLOAD_SIZE) {
+            const size_t len = std::min<size_t>(TS_PAYLOAD_SIZE, payload.size() - pos);
+            std::vector<uint8_t> chunk(payload.begin() + pos, payload.begin() + pos + len);
+            chunk.resize(TS_PAYLOAD_SIZE, 0xFF);
+            addPacket(pid, pos == 0, chunk, false);
+        }
+    }
+    // PESなどのペイロードを送出し、最終パケットはアダプテーションフィールドで埋める
+    void addPayload(int pid, const std::vector<uint8_t>& data) {
+        for (size_t pos = 0; pos < data.size(); pos += TS_PAYLOAD_SIZE) {
+            const size_t len = std::min<size_t>(TS_PAYLOAD_SIZE, data.size() - pos);
+            addPacket(pid, pos == 0, std::vector<uint8_t>(data.begin() + pos, data.begin() + pos + len), true);
+        }
+    }
+    // パケットの通し番号 (ParseTsForTestのclock)
+    int64_t packetCount() const { return (int64_t)(bytes.size() / TS_PACKET_SIZE); }
+    std::vector<uint8_t> bytes;
+private:
+    std::map<int, int> continuityCounter;
+    void addPacket(int pid, bool unitStart, const std::vector<uint8_t>& payload, bool stuffWithAdaptationField) {
+        const int cc = continuityCounter[pid];
+        continuityCounter[pid] = (cc + 1) & 0xF;
+        const size_t stuffing = TS_PAYLOAD_SIZE - payload.size();
+        const bool hasAdaptation = stuffWithAdaptationField && stuffing > 0;
+        bytes.push_back(TS_SYNC_BYTE);
+        bytes.push_back((uint8_t)((unitStart ? 0x40 : 0) | ((pid >> 8) & 0x1F)));
+        bytes.push_back((uint8_t)(pid & 0xFF));
+        bytes.push_back((uint8_t)((hasAdaptation ? 0x30 : 0x10) | cc));
+        if (hasAdaptation) {
+            bytes.push_back((uint8_t)(stuffing - 1)); // adaptation_field_length
+            if (stuffing > 1) {
+                bytes.push_back(0x00);                // フラグなし
+                bytes.insert(bytes.end(), stuffing - 2, 0xFF);
+            }
+        }
+        bytes.insert(bytes.end(), payload.begin(), payload.end());
+    }
+};
+
+// section_syntax_indicator=1のセクション (CRC付き)
+std::vector<uint8_t> MakeLongSection(int tableId, int tableIdExtension, int version, const std::vector<uint8_t>& body) {
+    const int sectionLength = 5 + (int)body.size() + 4;
+    std::vector<uint8_t> section = {
+        (uint8_t)tableId, (uint8_t)(0xB0 | (sectionLength >> 8)), (uint8_t)(sectionLength & 0xFF),
+        (uint8_t)(tableIdExtension >> 8), (uint8_t)(tableIdExtension & 0xFF), (uint8_t)(0xC1 | (version << 1)), 0x00, 0x00,
+    };
+    section.insert(section.end(), body.begin(), body.end());
+    const CRC32 crc;
+    const uint32_t value = crc.calc(section.data(), (int)section.size(), 0xFFFFFFFFu);
+    section.resize(section.size() + 4);
+    write32(section.data() + section.size() - 4, value);
+    return section;
+}
+
+void AppendPid(std::vector<uint8_t>& out, int reservedHigh, int pid) {
+    out.push_back((uint8_t)(reservedHigh | (pid >> 8)));
+    out.push_back((uint8_t)(pid & 0xFF));
+}
+
+std::vector<uint8_t> MakePat(int tsid, const std::vector<std::pair<int, int>>& programs) {
+    std::vector<uint8_t> body;
+    for (const auto& [programNumber, pid] : programs) {
+        body.push_back((uint8_t)(programNumber >> 8));
+        body.push_back((uint8_t)(programNumber & 0xFF));
+        AppendPid(body, 0xE0, pid);
+    }
+    return MakeLongSection(0x00, tsid, 0, body);
+}
+
+struct PmtStream {
+    int streamType;
+    int pid;
+    std::vector<uint8_t> descriptors;
+};
+
+std::vector<uint8_t> MakePmt(int programNumber, int version, int pcrPid, const std::vector<PmtStream>& streams) {
+    std::vector<uint8_t> body;
+    AppendPid(body, 0xE0, pcrPid);
+    body.insert(body.end(), { 0xF0, 0x00 }); // program_info_length=0
+    for (const auto& stream : streams) {
+        body.push_back((uint8_t)stream.streamType);
+        AppendPid(body, 0xE0, stream.pid);
+        AppendPid(body, 0xF0, (int)stream.descriptors.size());
+        body.insert(body.end(), stream.descriptors.begin(), stream.descriptors.end());
+    }
+    return MakeLongSection(0x02, programNumber, version, body);
+}
+
+// ストリーム識別記述子 (component_tag)
+std::vector<uint8_t> StreamIdentifier(int componentTag) {
+    return { 0x52, 0x01, (uint8_t)componentTag };
+}
+
+// TDT: MJD(16bit) + 時分秒(BCD)
+std::vector<uint8_t> MakeTdt(int mjd16, int hour, int minute, int second) {
+    auto bcd = [](int v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); };
+    return { 0x70, 0x70, 0x05, (uint8_t)(mjd16 >> 8), (uint8_t)(mjd16 & 0xFF), bcd(hour), bcd(minute), bcd(second) };
+}
+
+bool ParseTs(const std::vector<uint8_t>& stream, size_t chunkSize, int serviceIndex,
+    std::vector<TsSelectorEventForTest>& events, tstring& diagnostic) {
+    std::vector<const uint8_t*> chunks;
+    std::vector<size_t> lengths;
+    for (size_t pos = 0; pos < stream.size(); pos += chunkSize) {
+        chunks.push_back(stream.data() + pos);
+        lengths.push_back(std::min(chunkSize, stream.size() - pos));
+    }
+    size_t count = 0;
+    int status = ParseTsForTest(chunks.data(), lengths.data(), chunks.size(), serviceIndex, nullptr, 0, &count);
+    if (status == TS_SELECTOR_FOR_TEST_SUCCESS) {
+        events.assign(count, TsSelectorEventForTest());
+        status = ParseTsForTest(chunks.data(), lengths.data(), chunks.size(), serviceIndex, events.data(), events.size(), &count);
+    }
+    if (status != TS_SELECTOR_FOR_TEST_SUCCESS || count != events.size()) {
+        diagnostic = strsprintf(_T("TS選択器を実行できません: 結果=%d"), status);
+        return false;
+    }
+    return true;
+}
+
+tstring DescribeTsEvents(const std::vector<TsSelectorEventForTest>& events) {
+    tstring text;
+    for (const auto& e : events) {
+        text += strsprintf(_T(" [type=%d pid=0x%x idx=%d clock=%lld v=%d,%d,%d,%d,%d,%d]"), e.type, e.pid, e.index, (long long)e.clock,
+            e.values[0], e.values[1], e.values[2], e.values[3], e.values[4], e.values[5]);
+    }
+    return text;
+}
+
+bool ExpectTsEvents(const std::vector<TsSelectorEventForTest>& actual, const std::vector<TsSelectorEventForTest>& expected,
+    const TCHAR* name, tstring& diagnostic) {
+    bool matched = actual.size() == expected.size();
+    for (size_t i = 0; matched && i < actual.size(); ++i) {
+        const auto& a = actual[i];
+        const auto& e = expected[i];
+        matched = a.type == e.type && a.pid == e.pid && a.index == e.index && a.clock == e.clock
+            && std::equal(std::begin(a.values), std::end(a.values), std::begin(e.values));
+    }
+    if (matched) return true;
+    diagnostic = tstring(name) + _T(": 期待=") + DescribeTsEvents(expected) + _T(" / 実際=") + DescribeTsEvents(actual);
+    return false;
+}
+
+TsSelectorEventForTest TsEvent(int type, int pid, int index, int64_t clock, std::initializer_list<int> values) {
+    TsSelectorEventForTest e = {};
+    e.type = type;
+    e.pid = pid;
+    e.index = index;
+    e.clock = clock;
+    std::copy(values.begin(), values.end(), e.values);
+    return e;
+}
+
+bool TestTsSelector(tstring& diagnostic) {
+    constexpr int TSID = 0x7FE0;
+    constexpr int SID_MAIN = 0x0400;
+    constexpr int SID_SUB = 0x0401;
+    constexpr int PMT_PID_MAIN = 0x01F0;
+    constexpr int PMT_PID_SUB = 0x01F1;
+    constexpr int PCR_PID = 0x01FF;
+    constexpr int VIDEO_PID = 0x0111;
+    constexpr int AUDIO1_PID = 0x0112;
+    constexpr int AUDIO2_PID = 0x0113;
+    constexpr int CAPTION_PID = 0x0130;
+    constexpr int DATA_PID = 0x0138;
+    constexpr int TDT_PID = 0x0014;
+    constexpr int STREAM_TYPE_MPEG2 = 0x02;
+    constexpr int STREAM_TYPE_AAC = 0x0F;
+    constexpr int STREAM_TYPE_PES_PRIVATE = 0x06;
+    constexpr int STREAM_TYPE_DSMCC = 0x0D;
+    constexpr int COMPONENT_TAG_CAPTION = 0x30;
+    constexpr int COMPONENT_TAG_DATA = 0x40;
+    constexpr int MJD_2026_10_05 = 61318;
+    constexpr int MJD16_2040_01_01 = 66154 & 0xFFFF;
+
+    // データ放送ESに長い記述子を付け、PMTを2パケットにまたがらせる
+    std::vector<uint8_t> longDescriptor = { 0xC0, 200 };
+    longDescriptor.resize(2 + 200, 0x55);
+    const std::vector<PmtStream> streams = {
+        { STREAM_TYPE_MPEG2, VIDEO_PID, StreamIdentifier(0x00) },
+        { STREAM_TYPE_AAC, AUDIO1_PID, StreamIdentifier(0x10) },
+        { STREAM_TYPE_AAC, AUDIO2_PID, StreamIdentifier(0x11) },
+        { STREAM_TYPE_PES_PRIVATE, CAPTION_PID, StreamIdentifier(COMPONENT_TAG_CAPTION) },
+        { STREAM_TYPE_PES_PRIVATE, DATA_PID, Concat({ StreamIdentifier(COMPONENT_TAG_DATA), longDescriptor }) },
+        { STREAM_TYPE_DSMCC, 0x0150, {} },
+    };
+    const std::vector<uint8_t> payload(300, 0xAB);
+
+    TsStreamBuilder ts;
+    ts.addSection(0x0000, MakePat(TSID, { { 0, 0x0010 }, { SID_MAIN, PMT_PID_MAIN }, { SID_SUB, PMT_PID_SUB } }));
+    // CRCが壊れたPMTは無視される
+    auto brokenPmt = MakePmt(SID_MAIN, 0, PCR_PID, streams);
+    brokenPmt[brokenPmt.size() - 1] ^= 0x01;
+    ts.addSection(PMT_PID_MAIN, brokenPmt);
+    ts.addSection(PMT_PID_MAIN, MakePmt(SID_MAIN, 0, PCR_PID, streams));
+    // 別サービスのPMTは選択されていないので処理されない
+    ts.addSection(PMT_PID_SUB, MakePmt(SID_SUB, 0, PCR_PID, { { STREAM_TYPE_MPEG2, 0x0211, {} } }));
+    // 映像の最初のパケットが来るまで、音声は振り分けられない
+    ts.addPayload(AUDIO1_PID, payload);
+    const int64_t videoClock = ts.packetCount();
+    ts.addPayload(VIDEO_PID, payload);
+    const int64_t audioClock = ts.packetCount();
+    ts.addPayload(AUDIO1_PID, payload);
+    ts.addPayload(AUDIO2_PID, payload);
+    ts.addPayload(CAPTION_PID, payload);
+    ts.addPayload(DATA_PID, payload);
+    const int64_t tdtClock = ts.packetCount();
+    ts.addSection(TDT_PID, MakeTdt(MJD_2026_10_05, 22, 15, 30));
+    // PMT更新で音声2を削除すると、そのPIDは振り分けられなくなる
+    const auto streamsWithoutAudio2 = std::vector<PmtStream>{ streams[0], streams[1], streams[3] };
+    ts.addSection(PMT_PID_MAIN, MakePmt(SID_MAIN, 1, PCR_PID, streamsWithoutAudio2));
+    const int64_t afterUpdateClock = ts.packetCount();
+    ts.addPayload(AUDIO2_PID, payload);
+    ts.addPayload(AUDIO1_PID, payload);
+    // MJDの16bitが一周した2038年以降の日付
+    const int64_t tdt2040Clock = ts.packetCount();
+    ts.addSection(TDT_PID, MakeTdt(MJD16_2040_01_01, 0, 0, 0));
+    // 同期探索のため末尾に8パケット以上の空パケットを置く
+    for (int i = 0; i < 8; ++i) ts.addPayload(0x1FFF, std::vector<uint8_t>(TS_PAYLOAD_SIZE, 0xFF));
+
+    using E = TsSelectorEventForTest;
+    const std::vector<E> expected = {
+        TsEvent(TS_SELECTOR_EVENT_PID_SELECT, -1, -1, -1, { TSID, 2, SID_MAIN, SID_SUB }),
+        TsEvent(TS_SELECTOR_EVENT_PMT_UPDATED, -1, -1, -1, { PCR_PID }),
+        TsEvent(TS_SELECTOR_EVENT_PID_TABLE, -1, -1, -1, { STREAM_TYPE_MPEG2, VIDEO_PID, 2, AUDIO1_PID, AUDIO2_PID, CAPTION_PID }),
+        TsEvent(TS_SELECTOR_EVENT_VIDEO_PACKET, VIDEO_PID, -1, videoClock, { 1, 0 }),
+        TsEvent(TS_SELECTOR_EVENT_VIDEO_PACKET, VIDEO_PID, -1, videoClock + 1, { 0, 1 }),
+        TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, AUDIO1_PID, 0, audioClock, { 1, 2 }),
+        TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, AUDIO1_PID, 0, audioClock + 1, { 0, 3 }),
+        TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, AUDIO2_PID, 1, audioClock + 2, { 1, 0 }),
+        TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, AUDIO2_PID, 1, audioClock + 3, { 0, 1 }),
+        TsEvent(TS_SELECTOR_EVENT_CAPTION_PACKET, CAPTION_PID, -1, audioClock + 4, { 1, 0 }),
+        TsEvent(TS_SELECTOR_EVENT_CAPTION_PACKET, CAPTION_PID, -1, audioClock + 5, { 0, 1 }),
+        TsEvent(TS_SELECTOR_EVENT_TIME, -1, -1, tdtClock, { 2026, 10, 5, 22, 15, 30 }),
+        TsEvent(TS_SELECTOR_EVENT_PMT_UPDATED, -1, -1, -1, { PCR_PID }),
+        TsEvent(TS_SELECTOR_EVENT_PID_TABLE, -1, -1, -1, { STREAM_TYPE_MPEG2, VIDEO_PID, 1, AUDIO1_PID, -1, CAPTION_PID }),
+        TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, AUDIO1_PID, 0, afterUpdateClock + 2, { 1, 4 }),
+        TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, AUDIO1_PID, 0, afterUpdateClock + 3, { 0, 5 }),
+        TsEvent(TS_SELECTOR_EVENT_TIME, -1, -1, tdt2040Clock, { 2040, 1, 1, 0, 0, 0 }),
+    };
+    std::vector<E> events;
+    if (!ParseTs(ts.bytes, ts.bytes.size(), 0, events, diagnostic)) return false;
+    if (!ExpectTsEvents(events, expected, _T("一括入力"), diagnostic)) return false;
+
+    // 先頭のゴミと半端な分割入力でも同じ結果になる (クロックはパケット番号なので変わらない)
+    std::vector<uint8_t> withGarbage = { 0x47, 0x00, 0x11, 0x47, 0x22, 0x33, 0x44 };
+    withGarbage.insert(withGarbage.end(), ts.bytes.begin(), ts.bytes.end());
+    if (!ParseTs(withGarbage, 97, 0, events, diagnostic)) return false;
+    return ExpectTsEvents(events, expected, _T("ゴミ付き分割入力"), diagnostic);
+}
+
 struct TestCase {
     const TCHAR* name;
     bool (*run)(tstring& diagnostic);
@@ -983,6 +1348,8 @@ constexpr TestCase TEST_CASES[] = {
     { _T("mpeg2_video_parser"), TestMpeg2VideoParser },
     { _T("h264_video_parser"), TestH264VideoParser },
     { _T("h264_pan_scan"), TestH264PanScan },
+    { _T("adts_parser"), TestAdtsParser },
+    { _T("ts_selector"), TestTsSelector },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },

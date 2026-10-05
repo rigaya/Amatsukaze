@@ -247,6 +247,46 @@ AdtsParser::~AdtsParser() {
     return info.size() > 0;
 }
 
+extern "C" int ParseAdtsPacketsForTest(const AudioPesForTest* packets, size_t packetCount,
+    int* packetResults, AudioFrameInfoForTest* output, size_t outputCapacity, size_t* outputCount) {
+    if (outputCount == nullptr || (packetCount != 0 && packets == nullptr)) {
+        return ADTS_PARSER_FOR_TEST_INVALID_ARGUMENT;
+    }
+    *outputCount = 0;
+    try {
+        AMTContext ctx;
+        AdtsParser parser(ctx);
+        std::vector<AudioFrameInfoForTest> frames;
+        std::vector<AudioFrameData> packetFrames;
+        for (size_t i = 0; i < packetCount; i++) {
+            if (packets[i].data == nullptr) {
+                return ADTS_PARSER_FOR_TEST_INVALID_ARGUMENT;
+            }
+            const bool ok = parser.inputFrame(MemoryChunk(const_cast<uint8_t*>(packets[i].data), packets[i].length),
+                packetFrames, packets[i].PTS);
+            if (packetResults != nullptr) {
+                packetResults[i] = ok ? 1 : 0;
+            }
+            for (const auto& frame : packetFrames) {
+                frames.push_back({ frame.PTS, frame.numSamples, frame.format.channels, frame.format.sampleRate,
+                    frame.codedDataSize, frame.numDecodedSamples, frame.decodedDataSize });
+            }
+        }
+        *outputCount = frames.size();
+        if (output == nullptr) {
+            return outputCapacity == 0 ? ADTS_PARSER_FOR_TEST_SUCCESS : ADTS_PARSER_FOR_TEST_INVALID_ARGUMENT;
+        }
+        if (outputCapacity < frames.size()) {
+            return ADTS_PARSER_FOR_TEST_BUFFER_TOO_SMALL;
+        }
+        std::copy(frames.begin(), frames.end(), output);
+        return ADTS_PARSER_FOR_TEST_SUCCESS;
+    } catch (...) {
+        *outputCount = 0;
+        return ADTS_PARSER_FOR_TEST_FAILED;
+    }
+}
+
 void AdtsParser::closeDecoder() {
     if (hAacDec != NULL) {
         NeAACDecClose(hAacDec);
