@@ -114,6 +114,32 @@ public sealed class SelfUpdaterScriptGeneratorTests
         Assert.True(bytes.Length > 2);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void プロセス名フォールバックは既定で有効で明示的に無効化できる(bool windows)
+    {
+        var os = windows ? UpdateOSKind.Windows : UpdateOSKind.Linux;
+        using var fixture = new UpdaterFixture("process fallback");
+        if (os == UpdateOSKind.Windows) fixture.CreateWindowsStaging();
+        else fixture.CreateStaging();
+
+        var generated = SelfUpdaterScriptGenerator.Generate(fixture.AppRoot, 999999,
+            fixture.Prepared, "1234abcd", os, fixture.GeneratedAt);
+        var defaultScript = File.ReadAllText(generated.ScriptPath);
+        var fallback = os == UpdateOSKind.Windows
+            ? "$_.ProcessName -in" : "pgrep -f";
+        var pidCheck = os == UpdateOSKind.Windows
+            ? "$_.Id -eq %SERVER_PID%" : "kill -0 \"$SERVER_PID\"";
+        Assert.Contains(fallback, defaultScript);
+        Assert.Contains(pidCheck, defaultScript);
+
+        generated = fixture.Generate(os);
+        var isolatedScript = File.ReadAllText(generated.ScriptPath);
+        Assert.DoesNotContain(fallback, isolatedScript);
+        Assert.Contains(pidCheck, isolatedScript);
+    }
+
     [Fact]
     public void 引用符を安全に埋め込めない場合は生成を拒否する()
     {
@@ -143,7 +169,8 @@ public sealed class SelfUpdaterScriptGeneratorTests
                 Path.Combine(fixture.Root, "存在しないサーバー"), []),
         };
         var generated = SelfUpdaterScriptGenerator.Generate(fixture.AppRoot, 999999,
-            prepared, "1234abcd", UpdateOSKind.Linux, fixture.GeneratedAt);
+            prepared, "1234abcd", UpdateOSKind.Linux, fixture.GeneratedAt,
+            new SelfUpdaterScriptOptions(UseProcessNameFallback: false));
 
         var result = await RunAsync(generated.ScriptPath);
 
@@ -238,7 +265,8 @@ public sealed class SelfUpdaterScriptGeneratorTests
         public GeneratedSelfUpdater Generate(UpdateOSKind os,
             SelfUpdaterScriptOptions? options = null, long serverPid = 999999) =>
             SelfUpdaterScriptGenerator.Generate(AppRoot, serverPid, Prepared, "1234abcd",
-                os, GeneratedAt, options);
+                os, GeneratedAt, (options ?? new SelfUpdaterScriptOptions()) with
+                { UseProcessNameFallback = false });
 
         public string Snapshot() => string.Join("\n", Directory.EnumerateFiles(AppRoot, "*",
                 SearchOption.AllDirectories)

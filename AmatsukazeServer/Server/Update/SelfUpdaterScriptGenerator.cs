@@ -10,7 +10,8 @@ namespace Amatsukaze.Server.Update
 {
     // updater の待機条件。失敗注入は使い捨て環境でロールバックを検証するためにだけ使う。
     internal sealed record SelfUpdaterScriptOptions(int WaitTimeoutSeconds = 120,
-        int PollIntervalSeconds = 1, int FailAfterPlacedItems = 0);
+        int PollIntervalSeconds = 1, int FailAfterPlacedItems = 0,
+        bool UseProcessNameFallback = true);
 
     // 生成したスクリプトと、サーバー側が P4c で監視するファイルのパス。
     internal sealed record GeneratedSelfUpdater(string ScriptPath, string LogPath,
@@ -163,8 +164,15 @@ namespace Amatsukaze.Server.Update
             L("}");
             L("server_running() {");
             L("  case \"$SERVER_PID\" in ''|*[!0-9]*) ;; *) kill -0 \"$SERVER_PID\" 2>/dev/null && return 0 ;; esac");
-            L("  command -v pgrep >/dev/null 2>&1 || return 1");
-            L("  pgrep -f '(^|/)([A]matsukazeServerCLI|[A]matsukazeGUI|[A]matsukazeCLI)([[:space:]]|$)' >/dev/null 2>&1");
+            if (options.UseProcessNameFallback)
+            {
+                L("  command -v pgrep >/dev/null 2>&1 || return 1");
+                L("  pgrep -f '(^|/)([A]matsukazeServerCLI|[A]matsukazeGUI|[A]matsukazeCLI)([[:space:]]|$)' >/dev/null 2>&1");
+            }
+            else
+            {
+                L("  return 1");
+            }
             L("}");
             L("spawn_server() {");
             L("  if [ -z \"$RESTART_EXE\" ]; then log_update S24_RESTART NG 'code=RESTART_COMMAND_MISSING'; return 1; fi");
@@ -437,18 +445,23 @@ namespace Amatsukaze.Server.Update
             L("call :write_result");
             L("if \"%STATUS%\"==\"success\" exit /b 0");
             L("exit /b 3");
-            AppendBatchFunctions(L, prepared.Version, plan);
+            AppendBatchFunctions(L, prepared.Version, plan, options);
             return builder.ToString();
         }
 
         private static void AppendBatchFunctions(Action<string> line, string version,
-            UpdatePlan plan)
+            UpdatePlan plan, SelfUpdaterScriptOptions options)
         {
             line(":log");
             line(">>\"%LOG_PATH%\" echo [Update][%TXID%][main][%~1] %~2 %~3 %~4 %~5");
             line("exit /b 0");
             line(":server_running");
-            line("powershell -NoProfile -Command \"$p=Get-Process -ErrorAction SilentlyContinue; if ($p | Where-Object { $_.Id -eq %SERVER_PID% -or $_.ProcessName -in @('AmatsukazeServerCLI','AmatsukazeGUI','AmatsukazeCLI') }) { exit 0 } else { exit 1 }\"");
+            var processCondition = "$_.Id -eq %SERVER_PID%";
+            if (options.UseProcessNameFallback)
+            {
+                processCondition += " -or $_.ProcessName -in @('AmatsukazeServerCLI','AmatsukazeGUI','AmatsukazeCLI')";
+            }
+            line("powershell -NoProfile -Command \"$p=Get-Process -ErrorAction SilentlyContinue; if ($p | Where-Object { " + processCondition + " }) { exit 0 } else { exit 1 }\"");
             line("exit /b %errorlevel%");
             line(":backup_file");
             line("if not exist \"%APP_ROOT%\\%~1\" exit /b 0");
