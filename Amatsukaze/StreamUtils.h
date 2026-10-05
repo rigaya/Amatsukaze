@@ -132,15 +132,16 @@ public:
     }
 
     uint32_t readExpGolom() {
-        uint64_t masked = bsm(current, 0, filled);
+        uint64_t masked = unreadBits();
         if (masked == 0) {
             fill();
-            masked = bsm(current, 0, filled);
+            masked = unreadBits();
             if (masked == 0) {
                 throw EOFException("BitReader.readExpGolomでオーバーラン");
             }
         }
-        int bodyLen = filled - __builtin_clzl(masked);
+        // 先頭の0の並びとそれに続く1を含めた長さ (=後続の値部分のビット長)
+        int bodyLen = filled - bitScanReverse64(masked);
         filled -= bodyLen - 1;
         if (bodyLen > filled) {
             fill();
@@ -200,6 +201,12 @@ private:
     void readByte() {
         current = (current << 8) | data.data[offset++];
         filled += 8;
+    }
+
+    // まだ読んでいないビットを下位に詰めて返す
+    // filledが64のときbsmでは(1<<64)となり未定義動作になるため、そのまま返す
+    uint64_t unreadBits() const {
+        return (filled >= 64) ? current : bsm(current, 0, filled);
     }
 
     uint32_t read_(int bits) {

@@ -46,8 +46,9 @@ inline void assertion_failed(const char* line, const char* file, int lineNum) {
 #define ASSERT(exp) do { if(!(exp)) assertion_failed(#exp, __FILE__, __LINE__); } while(0)
 #endif
 
+// 最上位の1のビット位置 (0始まり) を返す。maskは0以外であること
+inline int bitScanReverse64(uint64_t mask) {
 #if defined(_WIN32) || defined(_WIN64)
-inline int __builtin_clzl(uint64_t mask) {
     unsigned long index;
 #ifdef _WIN64
     _BitScanReverse64(&index, mask);
@@ -61,6 +62,8 @@ inline int __builtin_clzl(uint64_t mask) {
         _BitScanReverse(&index, lowWord);
     }
 #endif
-    return index;
-}
+    return (int)index;
+#else
+    return 63 - __builtin_clzll(mask);
 #endif
+}

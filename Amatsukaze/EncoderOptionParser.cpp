@@ -213,21 +213,27 @@ EncoderOptionInfo ParseEncoderOption(ENUM_ENCODER encoder, const tstring& str) {
                 std::wregex re(L"([^=]+)=([^,]+),?");
                 std::wsregex_iterator it(next.begin(), next.end(), re);
                 std::wsregex_iterator end;
-                std::vector<std::wstring> argv;
+                std::vector<std::pair<std::wstring, std::wstring>> params;
                 for (; it != end; it++) {
-                    auto key = (*it)[1].str();
                     auto val = (*it)[2].str();
                     std::transform(val.begin(), val.end(), val.begin(), ::tolower);
+                    params.emplace_back((*it)[1].str(), val);
+                }
+                // エンコーダ側と同じく、記述順に関係なくpresetを先に適用してから個別指定で上書きする
+                for (const auto& [key, val] : params) {
+                    if (key == L"preset") {
+                        is24 = (val == L"24fps");
+                        drop = (val == L"double" || val == L"anime" ||
+                            val == L"cinema" || val == L"min_afterimg" || val == L"24fps");
+                    }
+                }
+                for (const auto& [key, val] : params) {
                     if (key == L"24fps") {
                         is24 = (val == L"1" || val == L"true");
                     } else if (key == L"drop") {
                         drop = (val == L"1" || val == L"true");
                     } else if (key == L"timecode") {
                         timecode = (val == L"1" || val == L"true");
-                    } else if (key == L"preset") {
-                        is24 = (val == L"24fps");
-                        drop = (val == L"double" || val == L"anime" ||
-                            val == L"cinema" || val == L"min_afterimg" || val == L"24fps");
                     }
                 }
                 if (is24 && !drop) {
