@@ -1050,8 +1050,13 @@ private:
 #endif
 
 std::wstring GetAribString(MemoryChunk mc) {
-    int bufsize = (int)mc.length + 1;
-    auto buf = std::unique_ptr<wchar_t[]>(new wchar_t[bufsize]);
-    int dstLen = aribstring::CAribString::AribToString(buf.get(), bufsize, mc.data, (int)mc.length);
-    return std::wstring(buf.get(), buf.get() + dstLen);
+    // 追加記号は2バイトから最大6文字([年齢制限])に展開されるため、入力長では足りないことがある。
+    // 出力がバッファの上限に達した場合は切り詰められた可能性があるので、広げてやり直す
+    for (size_t bufsize = mc.length * 2 + 2;; bufsize *= 2) {
+        auto buf = std::unique_ptr<wchar_t[]>(new wchar_t[bufsize]);
+        const DWORD dstLen = aribstring::CAribString::AribToString(buf.get(), (DWORD)bufsize, mc.data, (DWORD)mc.length);
+        if (dstLen + 1 < bufsize) {
+            return std::wstring(buf.get(), buf.get() + dstLen);
+        }
+    }
 }

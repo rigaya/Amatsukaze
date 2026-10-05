@@ -13,8 +13,8 @@
 logo::LogoHeader::LogoHeader() {}
 
 logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int imgh, int imgx, int imgy, const std::string& name)
-    : magic(0x12345)
-    , version(1)
+    : magic(LOGO_EXTENDED_MAGIC)
+    , version(LOGO_EXTENDED_VERSION)
     , w(w)
     , h(h)
     , logUVx(logUVx)
@@ -25,7 +25,7 @@ logo::LogoHeader::LogoHeader(int w, int h, int logUVx, int logUVy, int imgw, int
     , imgy(imgy)
     , name()
     , reserved() {
-    strncpy_s(this->name, name.c_str(), sizeof(name) - 1);
+    strncpy_s(this->name, name.c_str(), sizeof(this->name) - 1);
 }
 
 /* static */ void logo::LogoData::ToYC48Y(float& y) {
@@ -239,7 +239,14 @@ void logo::LogoData::SaveAviUtl(const tstring& filepath, const LogoHeader* heade
 
     *header = file.readValue<LogoHeader>();
 
-    // TODO: magic,versionチェック
+    // 拡張部分の妥当性チェック (別形式や壊れたファイルの値で領域を確保しないように)
+    if (header->magic != LOGO_EXTENDED_MAGIC || header->version < LOGO_EXTENDED_VERSION) {
+        THROW(FormatException, "ロゴファイルの拡張ヘッダが不正です");
+    }
+    if (header->w <= 0 || header->h <= 0 || header->logUVx < 0 || header->logUVx > LOGO_MAX_LOG_UV
+        || header->logUVy < 0 || header->logUVy > LOGO_MAX_LOG_UV) {
+        THROW(FormatException, "ロゴファイルのサイズ情報が不正です");
+    }
 
     LogoData logo(header->w, header->h, header->logUVx, header->logUVy);
 
@@ -247,7 +254,10 @@ void logo::LogoData::SaveAviUtl(const tstring& filepath, const LogoHeader* heade
     int hUV = header->h >> header->logUVy;
     size_t sz = (header->w * header->h + wUV * hUV * 2) * 2;
 
-    file.read(MemoryChunk((uint8_t*)logo.data.get(), sz * sizeof(float)));
+    // 途中で切れたファイルを未初期化の係数で読み込まないよう、読めたサイズを確認する
+    if (file.read(MemoryChunk((uint8_t*)logo.data.get(), sz * sizeof(float))) != sz * sizeof(float)) {
+        THROW(IOException, "ロゴファイルの係数データが不足しています");
+    }
 
     return logo;
 }

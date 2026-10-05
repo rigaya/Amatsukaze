@@ -662,8 +662,8 @@ extern "C" AMATSUKAZE_API int LogoFile_ConvertAviUtlToExtended(
 
         // 拡張ヘッダを構築
         logo::LogoHeader ext;
-        ext.magic = 0x12345;
-        ext.version = 1;
+        ext.magic = logo::LOGO_EXTENDED_MAGIC;
+        ext.version = logo::LOGO_EXTENDED_VERSION;
         ext.w = w;
         ext.h = h;
         ext.logUVx = 1;

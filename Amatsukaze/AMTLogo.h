@@ -19,6 +19,12 @@
 
 namespace logo {
 
+// 拡張ヘッダの識別値とバージョン
+constexpr int LOGO_EXTENDED_MAGIC = 0x12345;
+constexpr int LOGO_EXTENDED_VERSION = 1;
+// 色差の間引き量(log2)の上限
+constexpr int LOGO_MAX_LOG_UV = 2;
+
 struct LogoHeader {
     int magic;
     int version;
