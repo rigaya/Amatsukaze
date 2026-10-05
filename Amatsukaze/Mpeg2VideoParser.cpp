@@ -289,7 +289,8 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
                     format.colorSpace = sequenceHeader.matrix_coefficients;
                 }
 
-                b += sequenceHeader.numReadBytes;
+                // 次のスタートコードの先頭へ (ループのb++で進む分を引く)
+                b += sequenceHeader.numReadBytes - 1;
                 hasSequenceHeader = true;
                 isGopStart = true;
             }
@@ -362,7 +363,8 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
                         break;
                     }
                 }
-                b += picHeader.numReadBytes;
+                // 次のスタートコードの先頭へ (ループのb++で進む分を引く)
+                b += picHeader.numReadBytes - 1;
             }
 
             if (receivedField > 2) {

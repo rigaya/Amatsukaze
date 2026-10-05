@@ -426,16 +426,19 @@ void H264SuplementaryEnhancementInformation::pic_timing(BitReader& reader_orig, 
 void H264SuplementaryEnhancementInformation::pan_scan_rect(BitReader& reader_orig, int payloadSize) {
     BitReader reader(reader_orig);
 
+    // 直前のSEIの矩形が残らないよう、このSEIの値だけを保持する
+    pan_scan_rect_offset.clear();
     uint32_t pan_scan_rect_id = reader.readExpGolom();
     pan_scan_rect_cancel_flag = reader.read<1>();
     if (!pan_scan_rect_cancel_flag) {
         pan_scan_cnt_minus1 = reader.readExpGolom();
         for (int i = 0; i <= (int)pan_scan_cnt_minus1; i++) {
             RECT rect;
-            rect.left = reader.readExpGolom();
-            rect.right = reader.readExpGolom();
-            rect.top = reader.readExpGolom();
-            rect.bottom = reader.readExpGolom();
+            // オフセットは1/16画素単位の符号付き値 se(v)
+            rect.left = reader.readExpGolomSigned();
+            rect.right = reader.readExpGolomSigned();
+            rect.top = reader.readExpGolomSigned();
+            rect.bottom = reader.readExpGolomSigned();
             pan_scan_rect_offset.push_back(rect);
         }
         pan_scan_rect_repetition_period = reader.readExpGolom();
