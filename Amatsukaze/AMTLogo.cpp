@@ -261,3 +261,75 @@ void logo::LogoData::SaveAviUtl(const tstring& filepath, const LogoHeader* heade
 
     return logo;
 }
+
+namespace {
+// テスト用に連結した平面とLogoDataの平面の対応 (aY, bY, aU, bU, aV, bV)
+template <typename Func>
+void ForEachLogoPlaneForTest(logo::LogoData& logo, Func func) {
+    const size_t sizeY = (size_t)logo.getWidth() * logo.getHeight();
+    const size_t sizeUV = (size_t)(logo.getWidth() >> logo.getLogUVx()) * (logo.getHeight() >> logo.getLogUVy());
+    func(logo.GetA(PLANAR_Y), sizeY);
+    func(logo.GetB(PLANAR_Y), sizeY);
+    func(logo.GetA(PLANAR_U), sizeUV);
+    func(logo.GetB(PLANAR_U), sizeUV);
+    func(logo.GetA(PLANAR_V), sizeUV);
+    func(logo.GetB(PLANAR_V), sizeUV);
+}
+size_t LogoPlaneValueCountForTest(int w, int h, int logUVx, int logUVy) {
+    return ((size_t)w * h + (size_t)(w >> logUVx) * (h >> logUVy) * 2) * 2;
+}
+}
+
+extern "C" void InitLogoHeaderForTest(logo::LogoHeader* header, int w, int h, int logUVx, int logUVy,
+    int imgw, int imgh, int imgx, int imgy, const char* name) {
+    if (header == nullptr) return;
+    new (header) logo::LogoHeader(w, h, logUVx, logUVy, imgw, imgh, imgx, imgy, name ? name : "");
+}
+
+extern "C" int SaveLogoForTest(const tchar* path, const logo::LogoHeader* header,
+    const float* planes, size_t planeValueCount, int aviUtlOnly) {
+    if (path == nullptr || header == nullptr || planes == nullptr
+        || planeValueCount != LogoPlaneValueCountForTest(header->w, header->h, header->logUVx, header->logUVy)) {
+        return -1;
+    }
+    try {
+        logo::LogoData data(header->w, header->h, header->logUVx, header->logUVy);
+        const float* src = planes;
+        ForEachLogoPlaneForTest(data, [&](float* dst, size_t count) {
+            std::copy(src, src + count, dst);
+            src += count;
+        });
+        if (aviUtlOnly) {
+            data.SaveAviUtl(path, header);
+        } else {
+            data.Save(path, header);
+        }
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+extern "C" int LoadLogoForTest(const tchar* path, logo::LogoHeader* header,
+    float* planes, size_t planeCapacity, size_t* planeValueCount) {
+    if (path == nullptr || header == nullptr || planeValueCount == nullptr) {
+        return -1;
+    }
+    *planeValueCount = 0;
+    try {
+        auto data = logo::LogoData::Load(path, header);
+        *planeValueCount = LogoPlaneValueCountForTest(data.getWidth(), data.getHeight(), data.getLogUVx(), data.getLogUVy());
+        if (planes == nullptr || planeCapacity < *planeValueCount) {
+            return -2;
+        }
+        float* dst = planes;
+        ForEachLogoPlaneForTest(data, [&](float* src, size_t count) {
+            std::copy(src, src + count, dst);
+            dst += count;
+        });
+        return 0;
+    } catch (...) {
+        *planeValueCount = 0;
+        return -1;
+    }
+}

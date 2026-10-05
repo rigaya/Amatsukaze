@@ -582,3 +582,20 @@ bool TsSlimFilter::exec(const tchar* srcpath, const tchar* dstpath, TS_SLIM_CALL
 extern "C" AMATSUKAZE_API void* TsSlimFilter_Create(AMTContext * ctx, int videoPid) { return new TsSlimFilter(*ctx, videoPid); }
 extern "C" AMATSUKAZE_API void TsSlimFilter_Delete(TsSlimFilter * ptr) { delete ptr; }
 extern "C" AMATSUKAZE_API bool TsSlimFilter_Exec(TsSlimFilter * ptr, const tchar * srcpath, const tchar * dstpath, TS_SLIM_CALLBACK cb) { return ptr->exec(srcpath, dstpath, cb); }
+
+extern "C" int DecodeAribStringForTest(const uint8_t* data, size_t length,
+    wchar_t* output, size_t outputCapacity, size_t* outputLength) {
+    constexpr int RESULT_INVALID = -1;
+    constexpr int RESULT_BUFFER_TOO_SMALL = -2;
+    if (outputLength == nullptr || (length != 0 && data == nullptr)) return RESULT_INVALID;
+    *outputLength = 0;
+    try {
+        const auto str = GetAribString(MemoryChunk(const_cast<uint8_t*>(data), length));
+        *outputLength = str.size();
+        if (output == nullptr || outputCapacity < str.size()) return RESULT_BUFFER_TOO_SMALL;
+        std::copy(str.begin(), str.end(), output);
+        return 0;
+    } catch (...) {
+        return RESULT_INVALID;
+    }
+}

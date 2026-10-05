@@ -89,3 +89,15 @@ public:
 
 } // namespace logo
 
+
+// ネイティブ単体テストからロゴファイルの保存/読み込みを呼び出すためのC ABI。
+// planesはaY, bY, aU, bU, aV, bVの順に連結した値 (Y: w*h個、UV: (w>>logUVx)*(h>>logUVy)個ずつ)。
+// aviUtlOnlyが0以外ならSaveAviUtl (AviUtl互換部分のみ) で保存する。
+// 成功時0、引数不正/例外時-1、出力バッファ不足時-2 (planeValueCountに必要数) を返す。
+// LogoHeaderのコンストラクタはDLL外へ公開されないため、テストが確保した領域を初期化する
+extern "C" AMATSUKAZE_API void InitLogoHeaderForTest(logo::LogoHeader* header, int w, int h, int logUVx, int logUVy,
+    int imgw, int imgh, int imgx, int imgy, const char* name);
+extern "C" AMATSUKAZE_API int SaveLogoForTest(const tchar* path, const logo::LogoHeader* header,
+    const float* planes, size_t planeValueCount, int aviUtlOnly);
+extern "C" AMATSUKAZE_API int LoadLogoForTest(const tchar* path, logo::LogoHeader* header,
+    float* planes, size_t planeCapacity, size_t* planeValueCount);

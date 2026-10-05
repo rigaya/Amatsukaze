@@ -249,3 +249,8 @@ private:
     int videoPid;
     bool videoOk;
 };
+
+// ネイティブ単体テストからARIB文字列変換(GetAribString)を呼び出すためのC ABI。
+// 成功時0、引数不正時-1、出力バッファ不足時-2 (outputLengthに必要な文字数) を返す。
+extern "C" AMATSUKAZE_API int DecodeAribStringForTest(const uint8_t* data, size_t length,
+    wchar_t* output, size_t outputCapacity, size_t* outputLength);

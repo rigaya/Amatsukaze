@@ -1,4 +1,5 @@
 ﻿// Amatsukaze の公開ネイティブ単体テスト実行器
+#include "AMTLogo.h"
 #include "AdtsParser.h"
 #include "AudioTrackBuilder.h"
 #include "CaptionData.h"
@@ -7,6 +8,7 @@
 #include "Mpeg2TsParser.h"
 #include "StreamReform.h"
 #include "StreamUtils.h"
+#include "TsInfo.h"
 #include "TsSplitter.h"
 
 #include <algorithm>
@@ -16,6 +18,8 @@
 #include <clocale>
 #include <cstring>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <map>
 #include <string>
@@ -1332,6 +1336,175 @@ bool TestTsSelector(tstring& diagnostic) {
     return ExpectTsEvents(events, expected, _T("ゴミ付き分割入力"), diagnostic);
 }
 
+bool DecodeArib(const std::vector<uint8_t>& data, std::wstring& decoded) {
+    size_t length = 0;
+    int status = DecodeAribStringForTest(data.data(), data.size(), nullptr, 0, &length);
+    if (status != 0 && status != -2) return false;
+    decoded.assign(length, L'\0');
+    if (length == 0) return true;
+    return DecodeAribStringForTest(data.data(), data.size(), &decoded[0], decoded.size(), &length) == 0;
+}
+
+bool TestAribString(tstring& diagnostic) {
+    struct TestCase {
+        const TCHAR* name;
+        std::vector<uint8_t> data;
+        const wchar_t* expected;
+    };
+    // 初期状態はG0=漢字(GL), G1=英数, G2=ひらがな(GR), G3=カタカナ
+    const TestCase testCases[] = {
+        { _T("空文字列"), {}, L"" },
+        { _T("漢字(GL)"), { 0x48, 0x56, 0x41, 0x48 }, L"番組" },
+        { _T("ひらがな(GR)"), { 0xA2, 0xA4 }, L"あい" },
+        { _T("カタカナ(SS3)"), { 0x1D, 0x22, 0x1D, 0x24 }, L"アイ" },
+        { _T("英数字(LS1/LS0)"), { 0x0E, 0x41, 0x42, 0x31, 0x0F, 0x48, 0x56 }, L"ＡＢ１番" },
+        { _T("改行(APR)"), { 0x48, 0x56, 0x0D, 0x41, 0x48 }, L"番\r\n組" },
+        { _T("番組名と追加記号"), { 0x45, 0x37, 0x35, 0x24, 0x4D, 0x3D, 0x4A, 0x73, 0x7A, 0x56 }, L"天気予報[字]" },
+        // 追加記号は2バイトから3文字以上に展開されるため、入力バイト数より出力が長くなる
+        { _T("追加記号の連続"), { 0x7A, 0x56, 0x7A, 0x50, 0x7A, 0x56, 0x7A, 0x50 }, L"[字][HV][字][HV]" },
+    };
+    for (const auto& testCase : testCases) {
+        std::wstring decoded;
+        if (!DecodeArib(testCase.data, decoded)) {
+            diagnostic = tstring(_T("ARIB文字列を変換できません: ")) + testCase.name;
+            return false;
+        }
+        if (decoded != testCase.expected) {
+            diagnostic = strsprintf(_T("ARIB文字列が一致しません: %s: 期待=%s, 実際=%s"), testCase.name,
+                wstring_to_tstring(testCase.expected).c_str(), wstring_to_tstring(decoded).c_str());
+            return false;
+        }
+    }
+    return true;
+}
+
+// テスト用の一時ファイル (デストラクタで削除する)
+class TempFile {
+public:
+    explicit TempFile(const TCHAR* name) {
+        path_ = std::filesystem::temp_directory_path() / (tstring(_T("amatsukaze_native_test_")) + name);
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+    }
+    ~TempFile() {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+    }
+    tstring path() const { return path_.native(); }
+    std::vector<uint8_t> read() const {
+        std::ifstream file(path_, std::ios::binary);
+        return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    }
+    void write(const std::vector<uint8_t>& data) const {
+        std::ofstream file(path_, std::ios::binary | std::ios::trunc);
+        file.write((const char*)data.data(), (std::streamsize)data.size());
+    }
+private:
+    std::filesystem::path path_;
+};
+
+// LogoHeaderのコンストラクタはDLL外へ公開されないため、領域だけ確保して窓口で初期化する
+struct LogoHeaderStorage {
+    alignas(logo::LogoHeader) unsigned char bytes[sizeof(logo::LogoHeader)] = {};
+    logo::LogoHeader* get() { return reinterpret_cast<logo::LogoHeader*>(bytes); }
+};
+
+bool TestLogoFile(tstring& diagnostic) {
+    constexpr int LOGO_W = 8, LOGO_H = 4, LOG_UV = 1;
+    constexpr size_t SIZE_Y = LOGO_W * LOGO_H;
+    constexpr size_t SIZE_UV = (LOGO_W >> LOG_UV) * (LOGO_H >> LOG_UV);
+    constexpr size_t PLANE_VALUES = (SIZE_Y + SIZE_UV * 2) * 2;
+    LogoHeaderStorage headerStorage;
+    // AviUtl互換部分(31文字まで)より長い名前も拡張ヘッダには残る
+    constexpr const char* LOGO_NAME = "AMT TEST LOGO 1024 with a name longer than thirty-one characters";
+    InitLogoHeaderForTest(headerStorage.get(), LOGO_W, LOGO_H, LOG_UV, LOG_UV, 1920, 1080, 1500, 50, LOGO_NAME);
+    logo::LogoHeader& header = *headerStorage.get();
+    header.serviceId = 1024;
+    // aY, bY, aU, bU, aV, bV。係数は「元の画素 = A * 観測値 + B」の形で、A = 1 / (1 - 不透明度)。
+    // 不透明度20%前後の白いロゴ (A≒1.25, B≒-0.25) とし、先頭画素(とそれを含むUV画素)は完全透明(A=1, B=0)にする
+    std::vector<float> planes(PLANE_VALUES);
+    const size_t planeOffsets[] = { 0, SIZE_Y, SIZE_Y * 2, SIZE_Y * 2 + SIZE_UV, SIZE_Y * 2 + SIZE_UV * 2, SIZE_Y * 2 + SIZE_UV * 3, PLANE_VALUES };
+    for (int plane = 0; plane < 6; ++plane) {
+        const bool isA = (plane % 2) == 0;
+        for (size_t i = planeOffsets[plane]; i < planeOffsets[plane + 1]; ++i) {
+            planes[i] = isA ? 1.25f + 0.001f * (float)(i - planeOffsets[plane]) : -0.25f - 0.001f * (float)(i - planeOffsets[plane]);
+        }
+    }
+    planes[0] = 1.0f;                           // aY[0]
+    planes[SIZE_Y] = 0.0f;                      // bY[0]
+    planes[SIZE_Y * 2] = 1.0f;                  // aU[0]
+    planes[SIZE_Y * 2 + SIZE_UV] = 0.0f;        // bU[0]
+    planes[SIZE_Y * 2 + SIZE_UV * 2] = 1.0f;    // aV[0]
+    planes[SIZE_Y * 2 + SIZE_UV * 3] = 0.0f;    // bV[0]
+
+    TempFile logoFile(_T("logo.lgd"));
+    if (!Expect(SaveLogoForTest(logoFile.path().c_str(), &header, planes.data(), planes.size(), 0) == 0,
+        _T("ロゴを保存できません"), diagnostic)) return false;
+
+    // 保存→読み込みでヘッダと係数が完全に一致する
+    LogoHeaderStorage loadedStorage;
+    logo::LogoHeader& loadedHeader = *loadedStorage.get();
+    std::vector<float> loadedPlanes(PLANE_VALUES, -1.0f);
+    size_t loadedCount = 0;
+    if (!Expect(LoadLogoForTest(logoFile.path().c_str(), &loadedHeader, loadedPlanes.data(), loadedPlanes.size(), &loadedCount) == 0
+        && loadedCount == PLANE_VALUES, _T("保存したロゴを読み込めません"), diagnostic)) return false;
+    if (!Expect(std::memcmp(&loadedHeader, &header, sizeof(header)) == 0 && std::strcmp(loadedHeader.name, LOGO_NAME) == 0
+        && loadedHeader.magic == 0x12345 && loadedHeader.version == 1, _T("読み込んだロゴヘッダが一致しません"), diagnostic)) return false;
+    if (!Expect(std::memcmp(loadedPlanes.data(), planes.data(), planes.size() * sizeof(float)) == 0,
+        _T("読み込んだロゴ係数が一致しません"), diagnostic)) return false;
+
+    // 先頭はAviUtl互換部分: ファイルヘッダ、LOGO_HEADER、LOGO_PIXEL、その後に拡張部分が続く
+    const auto bytes = logoFile.read();
+    const size_t baseSize = sizeof(LOGO_FILE_HEADER) + sizeof(LOGO_HEADER) + SIZE_Y * sizeof(LOGO_PIXEL);
+    if (!Expect(bytes.size() == baseSize + sizeof(logo::LogoHeader) + PLANE_VALUES * sizeof(float),
+        _T("ロゴファイルのサイズが一致しません"), diagnostic)) return false;
+    LOGO_FILE_HEADER fileHeader;
+    LOGO_HEADER logoHeader;
+    std::memcpy(&fileHeader, bytes.data(), sizeof(fileHeader));
+    std::memcpy(&logoHeader, bytes.data() + sizeof(fileHeader), sizeof(logoHeader));
+    if (!Expect(std::memcmp(fileHeader.str, LOGO_FILE_HEADER_STR, LOGO_FILE_HEADER_STR_SIZE) == 0
+        && fileHeader.logonum.c[0] == 0 && fileHeader.logonum.c[3] == 1, _T("AviUtlロゴファイルヘッダが一致しません"), diagnostic)) return false;
+    if (!Expect(std::strncmp(logoHeader.name, LOGO_NAME, LOGO_MAX_NAME - 1) == 0 && logoHeader.name[LOGO_MAX_NAME - 1] == '\0'
+        && logoHeader.x == 1500 && logoHeader.y == 50
+        && logoHeader.w == LOGO_W && logoHeader.h == LOGO_H, _T("AviUtlロゴヘッダが一致しません"), diagnostic)) return false;
+    std::vector<LOGO_PIXEL> pixels(SIZE_Y);
+    std::memcpy(pixels.data(), bytes.data() + sizeof(fileHeader) + sizeof(logoHeader), SIZE_Y * sizeof(LOGO_PIXEL));
+    // YC48への変換で量子化されるため、完全透明(A=1)でも不透明度はわずかに残る (1%未満)
+    constexpr short NEARLY_TRANSPARENT_DP = LOGO_MAX_DP / 100;
+    if (pixels[0].y != 0 || pixels[0].cb != 0 || pixels[0].cr != 0 || pixels[0].dp_y >= NEARLY_TRANSPARENT_DP
+        || pixels[0].dp_cb >= NEARLY_TRANSPARENT_DP || pixels[0].dp_cr >= NEARLY_TRANSPARENT_DP) {
+        diagnostic = strsprintf(_T("完全透明の画素がほぼ透明になりません: dp_y=%d y=%d dp_cb=%d cb=%d dp_cr=%d cr=%d"),
+            pixels[0].dp_y, pixels[0].y, pixels[0].dp_cb, pixels[0].cb, pixels[0].dp_cr, pixels[0].cr);
+        return false;
+    }
+    if (!(pixels[2].dp_y > 0 && pixels[2].dp_y < LOGO_MAX_DP && pixels[2].dp_cb > 0 && pixels[2].dp_cr > 0)) {
+        diagnostic = strsprintf(_T("半透明の画素の不透明度が範囲外です: dp_y=%d y=%d dp_cb=%d cb=%d dp_cr=%d cr=%d"),
+            pixels[2].dp_y, pixels[2].y, pixels[2].dp_cb, pixels[2].cb, pixels[2].dp_cr, pixels[2].cr);
+        return false;
+    }
+
+    // AviUtl互換部分だけのファイルは、拡張部分がないので読み込みに失敗する (異常終了しない)
+    TempFile aviUtlFile(_T("aviutl.lgd"));
+    if (!Expect(SaveLogoForTest(aviUtlFile.path().c_str(), &header, planes.data(), planes.size(), 1) == 0
+        && aviUtlFile.read().size() == baseSize, _T("AviUtl形式のロゴを保存できません"), diagnostic)) return false;
+    if (!Expect(LoadLogoForTest(aviUtlFile.path().c_str(), &loadedHeader, loadedPlanes.data(), loadedPlanes.size(), &loadedCount) != 0,
+        _T("拡張部分のないロゴを読み込めてしまいました"), diagnostic)) return false;
+
+    // 拡張ヘッダのmagicが壊れたファイルは読み込まない
+    auto broken = bytes;
+    broken[baseSize] ^= 0xFF;
+    TempFile brokenFile(_T("broken.lgd"));
+    brokenFile.write(broken);
+    if (!Expect(LoadLogoForTest(brokenFile.path().c_str(), &loadedHeader, loadedPlanes.data(), loadedPlanes.size(), &loadedCount) != 0,
+        _T("magicが不正なロゴを読み込めてしまいました"), diagnostic)) return false;
+
+    // 係数が途中で切れたファイルは読み込まない
+    TempFile truncatedFile(_T("truncated.lgd"));
+    truncatedFile.write(std::vector<uint8_t>(bytes.begin(), bytes.end() - sizeof(float)));
+    return Expect(LoadLogoForTest(truncatedFile.path().c_str(), &loadedHeader, loadedPlanes.data(), loadedPlanes.size(), &loadedCount) != 0,
+        _T("途中で切れたロゴを読み込めてしまいました"), diagnostic);
+}
+
 struct TestCase {
     const TCHAR* name;
     bool (*run)(tstring& diagnostic);
@@ -1350,6 +1523,8 @@ constexpr TestCase TEST_CASES[] = {
     { _T("h264_pan_scan"), TestH264PanScan },
     { _T("adts_parser"), TestAdtsParser },
     { _T("ts_selector"), TestTsSelector },
+    { _T("arib_string"), TestAribString },
+    { _T("logo_file"), TestLogoFile },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },
