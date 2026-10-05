@@ -465,7 +465,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.filterScriptPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("-pf") || key == _T("--postfilter")) {
             conf.postFilterScriptPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-s") || key == _T("--serivceid")) {
+        } else if (key == _T("-s") || key == _T("--serviceid") || key == _T("--serivceid")) { // --serivceid は旧来の綴り誤りで互換のために残す
             tstring sidstr = getParam(argc, argv, i++);
             if (sidstr.size() > 2 && sidstr.substr(0, 2) == _T("0x")) {
                 // 16進

@@ -1175,9 +1175,9 @@ void AMTSplitter::onRawCaptionPesPacket(int64_t PTS, MemoryChunk payload) {
     // ベースクラスの処理
     TsSplitter::onPidTableChanged(video, audio, caption);
 
-    ASSERT(audio.size() > 0);
+    // 音声のない TS もある。ASSERT はリリースビルドでは無効なので、空のまま audio[0] を読まない
     videoStreamType_ = video.stype;
-    audioStreamType_ = audio[0].stype;
+    audioStreamType_ = audio.empty() ? -1 : audio[0].stype;
 
     StreamEvent ev = StreamEvent();
     ev.type = PID_TABLE_CHANGED;
@@ -2496,6 +2496,9 @@ void DoBadThing() {
     if (ends_with(setting.getSrcFilePath(), _T(".ts"))) {
         ctx.warn(_T("一般ファイルモードでのTSファイルの処理は非推奨です"));
     }
+
+    // 一時ファイルのパスを使うので、transcodeMain と同じく最初に一時ディレクトリを作る
+    const_cast<ConfigWrapper&>(setting).CreateTempDir();
 
     auto encoder = std::unique_ptr<AMTSimpleVideoEncoder>(new AMTSimpleVideoEncoder(ctx, setting));
     encoder->encode();
