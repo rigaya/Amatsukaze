@@ -3715,9 +3715,20 @@ namespace Amatsukaze.Server
                     // リネーム
                     if (autoSelects.ContainsKey(data.Profile.Name))
                     {
-                        var profile = autoSelects[data.Profile.Name];
+                        // 名前を書き換える前に重複を拒否し、元の設定を保持する。
+                        if (data.NewName == data.Profile.Name)
+                        {
+                            return NotifyMessage("自動選択の名前は変更されていません", false);
+                        }
+                        if (!StringComparer.OrdinalIgnoreCase.Equals(data.Profile.Name, data.NewName) &&
+                            autoSelects.ContainsKey(data.NewName))
+                        {
+                            return NotifyError("自動選択「" + data.NewName + "」は既に存在します", false);
+                        }
+                        var oldName = data.Profile.Name;
+                        var profile = autoSelects[oldName];
                         profile.Name = data.NewName;
-                        autoSelects.Remove(data.Profile.Name);
+                        autoSelects.Remove(oldName);
                         autoSelects.Add(profile.Name, profile);
                         message = "自動選択「" + data.Profile.Name + "」を「" + profile.Name + "」にリネームしました";
                         autoSelectUpdated = true;

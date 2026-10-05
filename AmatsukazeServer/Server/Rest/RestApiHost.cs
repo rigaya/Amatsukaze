@@ -2086,6 +2086,17 @@ namespace Amatsukaze.Server.Rest
             };
         }
 
+        // RFC 4180に従い、区切り文字・引用符・改行を含む値を引用して引用符を二重化する。
+        private static string EscapeCsvField(string value)
+        {
+            if (value == null) return string.Empty;
+            if (value.Contains(',') || value.Contains('"') || value.Contains('\r') || value.Contains('\n'))
+            {
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            }
+            return value;
+        }
+
         private static string BuildEncodeCsv(List<LogItem> logs)
         {
             var sb = new StringBuilder();
@@ -2097,7 +2108,7 @@ namespace Amatsukaze.Server.Rest
                 "圧縮率（％）","入力音声フレーム","出力音声フレーム","ユニーク出力音声フレーム",
                 "未出力音声割合(%)","平均音ズレ(ms)","最大音ズレ(ms)","最大音ズレ位置(ms)"
             };
-            sb.AppendLine(string.Join(",", header));
+            sb.Append(string.Join(",", header.Select(EscapeCsvField))).Append("\r\n");
             foreach (var item in logs.AsEnumerable().Reverse())
             {
                 var row = new string[] {
@@ -2105,26 +2116,26 @@ namespace Amatsukaze.Server.Rest
                     item.Reason,
                     item.SrcPath,
                     (item.OutPath != null) ? string.Join(":", item.OutPath) : "-",
-                    (item.OutPath?.Count ?? 0).ToString(),
+                    (item.OutPath?.Count ?? 0).ToString(CultureInfo.InvariantCulture),
                     item.DisplayEncodeStart,
                     item.DisplayEncodeFinish,
-                    (item.EncodeFinishDate - item.EncodeStartDate).TotalSeconds.ToString(),
-                    item.SrcVideoDuration.TotalSeconds.ToString(),
-                    item.OutVideoDuration.TotalSeconds.ToString(),
-                    item.Incident.ToString(),
-                    item.SrcFileSize.ToString(),
-                    item.IntVideoFileSize.ToString(),
-                    item.OutFileSize.ToString(),
-                    item.DisplayCompressionRate,
-                    (item.AudioDiff?.TotalSrcFrames ?? 0).ToString(),
-                    (item.AudioDiff?.TotalOutFrames ?? 0).ToString(),
-                    (item.AudioDiff?.TotalOutUniqueFrames ?? 0).ToString(),
-                    (item.AudioDiff?.NotIncludedPer ?? 0).ToString(),
-                    (item.AudioDiff?.AvgDiff ?? 0).ToString(),
-                    (item.AudioDiff?.MaxDiff ?? 0).ToString(),
-                    (item.AudioDiff?.MaxDiffPos ?? 0).ToString()
+                    (item.EncodeFinishDate - item.EncodeStartDate).TotalSeconds.ToString(CultureInfo.InvariantCulture),
+                    item.SrcVideoDuration.TotalSeconds.ToString(CultureInfo.InvariantCulture),
+                    item.OutVideoDuration.TotalSeconds.ToString(CultureInfo.InvariantCulture),
+                    item.Incident.ToString(CultureInfo.InvariantCulture),
+                    item.SrcFileSize.ToString(CultureInfo.InvariantCulture),
+                    item.IntVideoFileSize.ToString(CultureInfo.InvariantCulture),
+                    item.OutFileSize.ToString(CultureInfo.InvariantCulture),
+                    ((double)item.OutFileSize / item.SrcFileSize * 100).ToString("F2", CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.TotalSrcFrames ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.TotalOutFrames ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.TotalOutUniqueFrames ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.NotIncludedPer ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.AvgDiff ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.MaxDiff ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (item.AudioDiff?.MaxDiffPos ?? 0).ToString(CultureInfo.InvariantCulture)
                 };
-                sb.AppendLine(string.Join(",", row));
+                sb.Append(string.Join(",", row.Select(EscapeCsvField))).Append("\r\n");
             }
             return sb.ToString();
         }
@@ -2135,7 +2146,7 @@ namespace Amatsukaze.Server.Rest
             var header = new string[] {
                 "種別","結果","入力ファイル","開始","終了","理由"
             };
-            sb.AppendLine(string.Join(",", header));
+            sb.Append(string.Join(",", header.Select(EscapeCsvField))).Append("\r\n");
             foreach (var item in logs.AsEnumerable().Reverse())
             {
                 var row = new string[] {
@@ -2146,7 +2157,7 @@ namespace Amatsukaze.Server.Rest
                     item.DisplayEncodeFinish,
                     item.Reason
                 };
-                sb.AppendLine(string.Join(",", row));
+                sb.Append(string.Join(",", row.Select(EscapeCsvField))).Append("\r\n");
             }
             return sb.ToString();
         }
