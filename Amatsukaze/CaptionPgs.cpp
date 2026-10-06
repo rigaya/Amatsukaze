@@ -191,6 +191,8 @@ struct CaptionFontResolution {
     std::map<uint32_t, std::string> codepointFamilies;
     size_t initialFamilyCount = 0;
     uint32_t blankCodepoint = 0x3000;
+    // 指定フォントで日本語(「日」)を描画できるか。指定なし、またはfontconfigを使わない環境では常にtrue。
+    bool preferredFamilyAvailable = true;
 };
 
 CaptionFontResolution ResolveCaptionFonts(std::set<uint32_t> codepoints,
@@ -240,6 +242,22 @@ CaptionFontResolution ResolveCaptionFonts(std::set<uint32_t> codepoints,
             continue;
         }
         const std::string resolved = reinterpret_cast<const char*>(family);
+        if (codepoint == 0x65e5 && !preferredFamily.empty()) {
+            // fontconfigは存在しないfamilyを黙って代替フォントへ置き換えるため、一致したfamily名の別名も含めて照合する。
+            // sans-serif等の総称名は実在のfamilyへ置き換わるのが正常なので、照合しない。
+            static const char* const GENERIC_FAMILIES[] = { "sans-serif", "sans", "serif", "monospace", "mono", "system-ui" };
+            bool found = std::any_of(std::begin(GENERIC_FAMILIES), std::end(GENERIC_FAMILIES), [&preferredFamily](const char* generic) {
+                return FcStrCmpIgnoreCase(reinterpret_cast<const FcChar8*>(generic),
+                    reinterpret_cast<const FcChar8*>(preferredFamily.c_str())) == 0;
+            });
+            for (int index = 0; FcPatternGetString(match.get(), FC_FAMILY, index, &family) == FcResultMatch; ++index) {
+                if (FcStrCmpIgnoreCase(family, reinterpret_cast<const FcChar8*>(preferredFamily.c_str())) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            resolution.preferredFamilyAvailable = found;
+        }
         resolution.codepointFamilies.emplace(codepoint, resolved);
         if (std::find(families.begin(), families.end(), resolved) == families.end()) {
             families.push_back(resolved);
@@ -711,6 +729,11 @@ std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFi
         return {};
     }
     const auto fonts = ResolveCaptionFonts(codepoints, fontFamily);
+    if (diagnostic && !fonts.preferredFamilyAvailable) {
+        // 指定フォントがなくても代替フォントで描画を続ける。指定の誤りに気づけるよう警告する。
+        diagnostic(true, "指定したPGS字幕フォント「" + fontFamily + "」が見つからないか日本語の字形を含まないため、代替フォント「" +
+            fonts.codepointFamilies.at(0x65e5) + "」で描画します");
+    }
     SetCaptionFontFamilies(renderer, fonts.families, fontFamily, languages);
     if (diagnostic && fonts.families.size() > fonts.initialFamilyCount) {
         std::string added;

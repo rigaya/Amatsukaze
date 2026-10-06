@@ -223,8 +223,16 @@ void CheckFontFallback() {
     const auto families = ResolveCaptionFonts({0x65e5, 0x269e, 0x269f}, "").families;
     Require(families.size() > 4 && families[0] == "Noto Sans CJK JP" && families[3] == "sans-serif",
         "日本語既定候補または記号用の補助フォントが失われた");
-    const auto alias = ResolveCaptionFonts({0x269e}, "sans-serif").families;
-    Require(alias[0] == "sans-serif", "指定フォントの別名を優先できない");
+    const auto alias = ResolveCaptionFonts({0x269e}, "sans-serif");
+    Require(alias.families[0] == "sans-serif", "指定フォントの別名を優先できない");
+    // 指定フォントの有無: 総称名と実在のfamilyは有効、存在しないfamilyは代替として警告対象になる
+    Require(alias.preferredFamilyAvailable, "総称名の指定を存在しないフォントと判定した");
+    Require(ResolveCaptionFonts({}, "Noto Sans CJK JP").preferredFamilyAvailable, "実在するフォントを存在しないと判定した");
+    Require(ResolveCaptionFonts({}, "noto sans cjk jp").preferredFamilyAvailable, "family名の大文字小文字を区別した");
+    const auto missing = ResolveCaptionFonts({}, "存在しないフォントAmatsukazeTest");
+    Require(!missing.preferredFamilyAvailable && !missing.codepointFamilies.at(0x65e5).empty(),
+        "存在しないフォントを検出できないか、代替フォントを解決できない");
+    Require(ResolveCaptionFonts({}, "").preferredFamilyAvailable, "フォント指定なしを存在しないフォントと判定した");
     Context context;
     std::string errors;
     context.SetLogcatCallback([&errors](LogLevel level, const char* text) {
@@ -240,7 +248,7 @@ void CheckFontFallback() {
     RenderResult result;
     Require(renderer.Render(0, result) == RenderStatus::kGotImage && errors.empty(),
         "fontconfig補助familyによる記号のfallback描画失敗");
-    std::printf("日本語既定候補・指定font別名・不足記号glyphのfallback確認成功\n");
+    std::printf("日本語既定候補・指定font別名・指定fontの有無・不足記号glyphのfallback確認成功\n");
 }
 
 void CheckImageConversion() {
