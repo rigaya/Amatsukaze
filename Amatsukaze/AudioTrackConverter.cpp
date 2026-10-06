@@ -343,6 +343,11 @@ std::vector<float> ConvertAudioChannels(const std::vector<float>& pcm, AUDIO_CHA
     const int outputChannels = ChannelCount(dst);
     if (pcm.size() % inputChannels) THROW(FormatException, "チャンネル変換のPCM長が不正です");
     if (src == dst) return pcm;
+    // モノラル⇔5.1ch は、既存のモノラル⇔ステレオとステレオ⇔5.1ch の変換を順に適用する
+    // (モノラル→5.1ch は FL/FR に同じ値を入れ、5.1ch→モノラルはステレオへダウンミックスしてから平均する)
+    if ((src == AUDIO_MONO && dst == AUDIO_32_LFE) || (src == AUDIO_32_LFE && dst == AUDIO_MONO)) {
+        return ConvertAudioChannels(ConvertAudioChannels(pcm, src, AUDIO_STEREO), AUDIO_STEREO, dst);
+    }
     const bool supported = (src == AUDIO_STEREO && dst == AUDIO_32_LFE) ||
         (src == AUDIO_32_LFE && dst == AUDIO_STEREO) || (src == AUDIO_MONO && dst == AUDIO_STEREO) ||
         (src == AUDIO_STEREO && dst == AUDIO_MONO);

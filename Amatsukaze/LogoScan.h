@@ -961,8 +961,19 @@ class LogoFrame : AMTObject {
         if (trims.size() == 0 || (trims.size() % 2) != 0) {
             targetAll = { { 0, vi.num_frames - 1 } };
         } else {
+            // trims は終了を含まない [開始, 終了) (CMAnalyze が Trim AVS の終了に +1 して保持する)。
+            // ここでは終了を含む範囲として扱うため 1 引き、素材のフレーム範囲に収める。
+            // (以前はそのまま使っていたため各区間が1フレームはみ出し、末尾で終わる区間では
+            //  直接ロゴ解析が範囲外の例外になっていた)
             for (int i = 0; i < (int)trims.size() / 2; i++) {
-                targetAll.push_back({ trims[i * 2], trims[i * 2 + 1] });
+                const int first = std::max(0, trims[i * 2]);
+                const int last = std::min(trims[i * 2 + 1], vi.num_frames) - 1;
+                if (first <= last) {
+                    targetAll.push_back({ first, last });
+                }
+            }
+            if (targetAll.empty()) {
+                targetAll = { { 0, vi.num_frames - 1 } };
             }
         }
         return targetAll;

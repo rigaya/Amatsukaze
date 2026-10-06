@@ -324,6 +324,23 @@ void StreamReformInfo::prepare(bool splitSub, bool isEncodeAudio, bool isTsrepla
             }
             if (reason) break;
         }
+        if (!reason) {
+            // merge/separate はトラック内のレイアウトの違いをチャンネル変換で埋める。
+            // 変換に対応するのはモノラル・ステレオ・5.1ch の間だけなので、ほかのレイアウトが
+            // 同じトラックの中で切り替わる場合は変換できずに失敗する。その場合は split にする
+            std::map<int, std::set<AUDIO_CHANNELS>> layoutsByTrack;
+            for (const auto& frame : audioFrameList_) {
+                layoutsByTrack[frame.audioIdx].insert(frame.format.channels);
+            }
+            for (const auto& [track, layouts] : layoutsByTrack) {
+                if (layouts.size() <= 1) continue;
+                for (const auto layout : layouts) {
+                    if (layout != AUDIO_MONO && layout != AUDIO_STEREO && layout != AUDIO_32_LFE && layout != AUDIO_2LANG) {
+                        reason = _T("チャンネル変換に未対応の音声レイアウトの切り替え");
+                    }
+                }
+            }
+        }
         audioCheckSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - audioCheckStart).count();
         if (reason) {
             audioMode_ = AFC_SPLIT;
