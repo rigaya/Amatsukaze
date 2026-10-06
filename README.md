@@ -1127,13 +1127,13 @@ bootstrap-vcpkg.bat
 vcpkg integrate install
 ```
 
-次にzlib、libjpeg-turbo、libaribcaptionを静的ライブラリとしてインストールします。
+次にzlib、libjpeg-turboを静的ライブラリとしてインストールします。
 
 ```bat
-vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static libaribcaption:x64-windows-static
+vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
 ```
 
-libaribcaptionのWindows描画はDirectWriteを使用します。インクルードと静的ライブラリの検索パスは、libjpeg-turboと同じvcpkgのMSBuild統合を使用します。Amatsukaze.vcxprojでaribcaption.libとWindows SDKのole32.lib、d2d1.lib、dwrite.lib、windowscodecs.libをリンクします。
+libaribcaptionのビルドを自動で行います。そのため、Visual Studio Installerで「Windows 用 C++ CMake ツール」を導入し、gitにパスを通しておいてください。
 
 AvisynthNeoが必要です。ソースを落として、ビルドしてください。
 ビルドにはCMakeが必要です。AviSynth.libをlib/x64(or x86)へコピーしてください。

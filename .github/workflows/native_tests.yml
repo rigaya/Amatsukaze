@@ -76,15 +76,17 @@ jobs:
           path: |
             vcpkg
             vcpkg_installed
-          key: vcpkg-windows-${{ hashFiles('**/vcpkg.json') }}
+          # libaribcaptionはvcpkgから外し、Amatsukaze.vcxprojのビルド前イベントで自前ビルドする。
+          # 旧キャッシュに残ったaribcaption.libが自動リンクされないよう、キーを変えて復元しない。
+          key: vcpkg-windows-v2-${{ hashFiles('**/vcpkg.json') }}
           restore-keys: |
-            vcpkg-windows-
+            vcpkg-windows-v2-
       - name: Setup native dependencies
         shell: cmd
         run: |
           if not exist vcpkg git clone https://github.com/microsoft/vcpkg vcpkg
           call vcpkg\bootstrap-vcpkg.bat
-          vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static libaribcaption:x64-windows-static
+          vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
           if not exist deps mkdir deps
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\ffmpeg.7z "%FFMPEG_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\deplib.7z "%DEPLIB_URL%"

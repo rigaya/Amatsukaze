@@ -1,0 +1,16 @@
+diff --git a/src/renderer/text_renderer_directwrite.cpp b/src/renderer/text_renderer_directwrite.cpp
+index ce94f1a..eee8deb 100644
+--- a/src/renderer/text_renderer_directwrite.cpp
++++ b/src/renderer/text_renderer_directwrite.cpp
+@@ -231,7 +231,10 @@ bool TextRendererDirectWrite::Initialize() {
+     }
+ 
+     // Create ID2D1Factory
+-    D2D1_FACTORY_OPTIONS d2d1_options = {D2D1_DEBUG_LEVEL_ERROR};
++    // Amatsukaze: Do not enable the Direct2D debug layer in release builds.
++    // When Windows Graphics Tools is installed, D2D1Debug3.dll raises a breakpoint
++    // exception (0x80000003) on process exit and the process exit code becomes non-zero.
++    D2D1_FACTORY_OPTIONS d2d1_options = {D2D1_DEBUG_LEVEL_NONE};
+ #ifndef NDEBUG
+     d2d1_options.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
+ #endif

@@ -66,9 +66,11 @@ jobs:
           path: |
             vcpkg
             vcpkg_installed
-          key: vcpkg-windows-${{ hashFiles('**/vcpkg.json') }}
+          # libaribcaptionはvcpkgから外し、Amatsukaze.vcxprojのビルド前イベントで自前ビルドする。
+          # 旧キャッシュに残ったaribcaption.libが自動リンクされないよう、キーを変えて復元しない。
+          key: vcpkg-windows-v2-${{ hashFiles('**/vcpkg.json') }}
           restore-keys: |
-            vcpkg-windows-
+            vcpkg-windows-v2-
 
       - name: Setup vcpkg
         shell: cmd
@@ -78,7 +80,7 @@ jobs:
           )
           call vcpkg\\bootstrap-vcpkg.bat
           set VCPKG_ROOT=%CD%\\vcpkg
-          vcpkg\\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static libaribcaption:x64-windows-static
+          vcpkg\\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
           echo VCPKG_ROOT=%CD%\\vcpkg>> %GITHUB_ENV%
 
       - name: Download dependencies
