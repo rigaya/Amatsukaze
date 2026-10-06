@@ -93,7 +93,7 @@ private:
     std::vector<int> sceneChanges;
     std::vector<int> divs;
 
-    void analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
+    void analyzeLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
     void analyzeChapterCM(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath);
 
@@ -103,10 +103,10 @@ private:
 
     int getPreferredThreads(const int processorCount) const;
 
-    void logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
+    void logoFrame(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
     // ロゴ不一致時に自動ロゴ枠検出→ロゴ生成→仮ロゴで再解析を試行する
-    bool tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
+    bool tryAutoDetectAndRetryLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath);
 
     tstring MakeChapterExeArgs(int videoFileIndex, const VideoFormat& inputFormat, const tstring& avspath);
 

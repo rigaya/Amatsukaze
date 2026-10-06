@@ -77,7 +77,7 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
             ctx.info(_T("チャプター・CM解析にロゴを使用しません。"));
         } else {
             // JLにLogoOffの記述がない場合は先にロゴ解析を行う
-            analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+            analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
         }
         // チャプター・CM解析本体
         analyzeChapterCM(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsChapterExe);
@@ -85,16 +85,16 @@ void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const Vid
 
     // ロゴ解析 (未実行かつロゴ消しする場合)
     if (!setting_.isNoDelogo()) {
-        analyzeLogo(videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
+        analyzeLogo(serviceId, videoFileIndex, inputFormat, numFrames, sw, avsAnalyzeLogo);
     }
 }
 
-void CMAnalyze::analyzeLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
+void CMAnalyze::analyzeLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, Stopwatch& sw, const tstring& avspath) {
     if (!logoAnalysisDone
         && (setting_.getLogoPath().size() > 0 || setting_.getEraseLogoPath().size() > 0)) {
         ctx.info(_T("[ロゴ解析]"));
         sw.start();
-        logoFrame(videoFileIndex, inputFormat, numFrames, avspath);
+        logoFrame(serviceId, videoFileIndex, inputFormat, numFrames, avspath);
         ctx.infoF(_T("完了: %.2f秒"), sw.getAndReset());
 
         ctx.info(_T("[ロゴ解析結果]"));
@@ -394,7 +394,7 @@ int CMAnalyze::getPreferredThreads(const int processorCount) const {
     return std::max(tmp[0].first, 1);
 }
 
-void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
+void CMAnalyze::logoFrame(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
     const auto& logoPath = setting_.getLogoPath();
     const auto& eraseLogoPath = setting_.getEraseLogoPath();
 
@@ -502,7 +502,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
             ctx.info(_T("この区間はマッチするロゴはありませんでした"));
             if (setting_.isAutoLogoDetectEnabled()) {
                 ctx.info(_T("[自動ロゴ検出] 自動ロゴ検出を試行します"));
-                if (tryAutoDetectAndRetryLogo(videoFileIndex, inputFormat, numFrames, avspath)) {
+                if (tryAutoDetectAndRetryLogo(serviceId, videoFileIndex, inputFormat, numFrames, avspath)) {
                     ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに成功しました"));
                 } else {
                     ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに失敗しました"));
@@ -518,7 +518,7 @@ void CMAnalyze::logoFrame(const int videoFileIndex, const VideoFormat& inputForm
     }
 }
 
-bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
+bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {
     const auto workfile = setting_.getTmpDir() + StringFormat(_T("/auto_logo_work_%d.dat"), videoFileIndex);
     const auto tmpLogoPath = setting_.getTmpDir() + StringFormat(_T("/auto_logo_%d.tmp.lgd"), videoFileIndex);
     auto cleanup = [&]() {
@@ -528,7 +528,8 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int videoFileIndex, const VideoF
 
     try {
         const auto srcpath = setting_.getSrcFilePath();
-        const int serviceId = setting_.getServiceId();
+        // -s 省略時も本処理と同じサービスで入力を開き直すよう、実際に選ばれたサービスIDを使う
+        // (設定値は省略時 -1 のままで、映像ストリームが見つからず検出に失敗していた)
         const int autoDetectThreadN = std::min(std::max(std::max(1, GetProcessorCount()) - 2, 1), 16);
 
         ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出を開始します (%dスレッド)"), autoDetectThreadN);
