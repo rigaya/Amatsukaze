@@ -3,6 +3,7 @@
 #include "AdtsParser.h"
 #include "AudioTrackBuilder.h"
 #include "CaptionData.h"
+#include "CaptionPgs.h"
 #include "EncoderOptionParser.h"
 #include "FilteredSource.h"
 #include "Mpeg2TsParser.h"
@@ -962,18 +963,6 @@ bool TestH264PanScan(tstring& diagnostic) {
     }
     return true;
 }
-bool RunCaptionStreamCase(int testCase, tstring& diagnostic) {
-    char message[2048] = {};
-    if (CheckCaptionStreamForTest(testCase, message, sizeof(message)) == 1) return true;
-    // DLL 側の診断メッセージは UTF-8
-    diagnostic = char_to_tstring(message, CP_UTF8);
-    return false;
-}
-
-bool TestCaptionPesSerialization(tstring& diagnostic) { return RunCaptionStreamCase(0, diagnostic); }
-bool TestCaptionPesWrap(tstring& diagnostic) { return RunCaptionStreamCase(1, diagnostic); }
-bool TestCaptionIntervalMapping(tstring& diagnostic) { return RunCaptionStreamCase(2, diagnostic); }
-
 
 // ADTS: 本体の無音フレーム生成を使って正しいAACフレームを用意する
 std::vector<uint8_t> MakeSilentAdts(AUDIO_CHANNELS layout, int samplingFrequencyIndex) {
@@ -1505,6 +1494,60 @@ bool TestLogoFile(tstring& diagnostic) {
         _T("途中で切れたロゴを読み込めてしまいました"), diagnostic);
 }
 
+bool RunCaptionStreamCase(int testCase, tstring& diagnostic) {
+    char message[2048] = {};
+    if (CheckCaptionStreamForTest(testCase, message, sizeof(message)) == 1) return true;
+    // DLL 側の診断メッセージは UTF-8
+    diagnostic = char_to_tstring(message, CP_UTF8);
+    return false;
+}
+
+bool TestCaptionPesSerialization(tstring& diagnostic) { return RunCaptionStreamCase(0, diagnostic); }
+bool TestCaptionPesWrap(tstring& diagnostic) { return RunCaptionStreamCase(1, diagnostic); }
+bool TestCaptionIntervalMapping(tstring& diagnostic) { return RunCaptionStreamCase(2, diagnostic); }
+
+bool TestCaptionPgsCanvasSize(tstring& diagnostic) {
+    // PGSのキャンバスは出力映像の表示サイズ (SAR反映後) で、長辺4096を超えると比例縮小する
+    const struct {
+        const TCHAR* name;
+        int width, height, sarWidth, sarHeight, userSarWidth, userSarHeight;
+        int expectedWidth, expectedHeight;
+    } testCases[] = {
+        { _T("1440x1080 SAR4:3"), 1440, 1080, 4, 3, 0, 0, 1920, 1080 },
+        { _T("1920x1080 SAR1:1"), 1920, 1080, 1, 1, 0, 0, 1920, 1080 },
+        { _T("720x480 SAR32:27 (SD 16:9)"), 720, 480, 32, 27, 0, 0, 853, 480 },
+        // SARが1未満なら幅を縮めず高さを伸ばす
+        { _T("720x480 SAR8:9 (SD 4:3)"), 720, 480, 8, 9, 0, 0, 720, 540 },
+        { _T("SAR不明"), 1440, 1080, 0, 0, 0, 0, 1440, 1080 },
+        { _T("SARの片方だけ不明"), 1440, 1080, 4, 0, 0, 0, 1440, 1080 },
+        { _T("ユーザーSAR優先"), 1440, 1080, 4, 3, 1, 1, 1440, 1080 },
+        { _T("ユーザーSARの片方だけ指定は無視"), 1440, 1080, 4, 3, 1, 0, 1920, 1080 },
+        { _T("長辺4096ちょうど"), 4096, 2160, 1, 1, 0, 0, 4096, 2160 },
+        { _T("SAR反映で4096超え"), 3840, 2160, 4, 3, 0, 0, 4096, 1728 },
+        { _T("縦長で4096超え"), 1080, 4000, 3, 4, 0, 0, 829, 4096 },
+        { _T("8K"), 7680, 4320, 1, 1, 0, 0, 4096, 2304 },
+    };
+    for (const auto& testCase : testCases) {
+        int canvasWidth = 0, canvasHeight = 0;
+        if (CaptionPgsCanvasSizeForTest(testCase.width, testCase.height, testCase.sarWidth, testCase.sarHeight,
+                testCase.userSarWidth, testCase.userSarHeight, &canvasWidth, &canvasHeight) != 1) {
+            diagnostic = strsprintf(_T("%s: キャンバスサイズを計算できません"), testCase.name);
+            return false;
+        }
+        if (canvasWidth != testCase.expectedWidth || canvasHeight != testCase.expectedHeight) {
+            diagnostic = strsprintf(_T("%s: 期待値=%dx%d, 実際=%dx%d"), testCase.name,
+                testCase.expectedWidth, testCase.expectedHeight, canvasWidth, canvasHeight);
+            return false;
+        }
+    }
+    int canvasWidth = 0, canvasHeight = 0;
+    if (!Expect(CaptionPgsCanvasSizeForTest(0, 1080, 1, 1, 0, 0, &canvasWidth, &canvasHeight) == 0,
+        _T("幅0を受け付けてしまいました"), diagnostic)) return false;
+    return Expect(CaptionPgsCanvasSizeForTest(1920, 1080, 1, 1, 0, 0, nullptr, &canvasHeight) == 0,
+        _T("出力先nullを受け付けてしまいました"), diagnostic);
+}
+
+
 struct TestCase {
     const TCHAR* name;
     bool (*run)(tstring& diagnostic);
@@ -1528,6 +1571,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },
+    { _T("caption_pgs_canvas_size"), TestCaptionPgsCanvasSize },
 };
 
 void PrintUsage(const TCHAR* program) {

@@ -584,13 +584,42 @@ int64_t OutputTicks(double seconds) {
 
 }
 
+std::pair<int, int> CaptionPgsCanvasSize(int width, int height, int sarWidth, int sarHeight,
+    int userSarWidth, int userSarHeight) {
+    const bool useUserSAR = userSarWidth > 0 && userSarHeight > 0;
+    const int effectiveSarWidth = useUserSAR ? userSarWidth : sarWidth;
+    const int effectiveSarHeight = useUserSAR ? userSarHeight : sarHeight;
+    double displayWidth = width;
+    double displayHeight = height;
+    if (effectiveSarWidth > 0 && effectiveSarHeight > 0) {
+        if (effectiveSarWidth >= effectiveSarHeight) {
+            displayWidth *= static_cast<double>(effectiveSarWidth) / effectiveSarHeight;
+        } else {
+            displayHeight *= static_cast<double>(effectiveSarHeight) / effectiveSarWidth;
+        }
+    }
+    const double scale = std::max(1.0, std::max(displayWidth, displayHeight) / CAPTION_PGS_CANVAS_MAX);
+    return { static_cast<int>(std::lround(displayWidth / scale)), static_cast<int>(std::lround(displayHeight / scale)) };
+}
+
+extern "C" AMATSUKAZE_API int CaptionPgsCanvasSizeForTest(int width, int height, int sarWidth, int sarHeight,
+    int userSarWidth, int userSarHeight, int* canvasWidth, int* canvasHeight) noexcept {
+    if (width <= 0 || height <= 0 || !canvasWidth || !canvasHeight) {
+        return 0;
+    }
+    const auto canvas = CaptionPgsCanvasSize(width, height, sarWidth, sarHeight, userSarWidth, userSarHeight);
+    *canvasWidth = canvas.first;
+    *canvasHeight = canvas.second;
+    return 1;
+}
+
 std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFileKey key,
     int language, int canvasWidth, int canvasHeight, const std::string& fontFamily,
     CaptionPgsDiagnostic diagnostic) {
     using namespace aribcaption;
     using amatsukaze::pgs::Event;
     if (language < 1 || language > 2 || canvasWidth <= 0 || canvasHeight <= 0 ||
-        canvasWidth > 4096 || canvasHeight > 4096) {
+        canvasWidth > CAPTION_PGS_CANVAS_MAX || canvasHeight > CAPTION_PGS_CANVAS_MAX) {
         throw std::invalid_argument("PGS字幕の言語またはキャンバス寸法が不正");
     }
     const auto& pesItems = reform.getCaptionPesList();

@@ -2354,21 +2354,9 @@ void DoBadThing() {
             }
             const auto& format = outFileInfo[i].vfmt;
             // displayWidth/Heightはリサイズ後も入力値が残るため、最終フレームサイズを使う。
-            double width = format.width;
-            double height = format.height;
             const auto userSAR = setting.getUserSAR();
-            const int sarWidth = userSAR.first > 0 && userSAR.second > 0 ? userSAR.first : format.sarWidth;
-            const int sarHeight = userSAR.first > 0 && userSAR.second > 0 ? userSAR.second : format.sarHeight;
-            if (sarWidth > 0 && sarHeight > 0) {
-                if (sarWidth >= sarHeight) {
-                    width *= static_cast<double>(sarWidth) / sarHeight;
-                } else {
-                    height *= static_cast<double>(sarHeight) / sarWidth;
-                }
-            }
-            const double scale = std::max(1.0, std::max(width, height) / 4096.0);
-            const int canvasWidth = static_cast<int>(std::lround(width / scale));
-            const int canvasHeight = static_cast<int>(std::lround(height / scale));
+            const auto [canvasWidth, canvasHeight] = CaptionPgsCanvasSize(format.width, format.height,
+                format.sarWidth, format.sarHeight, userSAR.first, userSAR.second);
             const auto& captions = reformInfo.getEncodeFile(key).captionList;
             for (int lang = 0; lang < (int)captions.size(); ++lang) {
                 const auto path = setting.getTmpPGSFilePath(key, lang);

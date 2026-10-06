@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 #if defined(_MSC_VER)
 #include <intrin.h>
@@ -16,6 +17,19 @@
 extern "C" AMATSUKAZE_API int CaptionPgsCheckRenderer(
     int width, int height, const char* fontFamily,
     char* diagnostic, size_t diagnosticSize) noexcept;
+
+// PGSのキャンバスの幅・高さの上限 (PGSのオブジェクト・表示サイズの上限)
+constexpr int CAPTION_PGS_CANVAS_MAX = 4096;
+
+// 出力映像のフレームサイズとSARから、PGSのキャンバス(SARを反映した表示サイズ)を求める。
+// userSARの幅・高さがともに正ならSARとしてそれを優先する。SARが不明(0以下)なら拡縮しない。
+// SARが1以上なら幅を、1未満なら高さを伸ばす。長辺がCAPTION_PGS_CANVAS_MAXを超える場合は比例縮小する。
+std::pair<int, int> CaptionPgsCanvasSize(int width, int height, int sarWidth, int sarHeight,
+    int userSarWidth, int userSarHeight);
+
+// CaptionPgsCanvasSizeをDLL境界越しに検証するC ABI。戻り値は成功時1、引数不正時0。
+extern "C" AMATSUKAZE_API int CaptionPgsCanvasSizeForTest(int width, int height, int sarWidth, int sarHeight,
+    int userSarWidth, int userSarHeight, int* canvasWidth, int* canvasHeight) noexcept;
 
 class StreamReformInfo;
 struct EncodeFileKey;
