@@ -322,7 +322,7 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
                             picType = picHeader.top_field_first ?
                                 PIC_TFF_RFF : PIC_BFF_RFF;
                         }
-                        ++receivedField;
+                        receivedField++;
                         break;
                     }
                     switch (picHeader.picture_coding_type) {

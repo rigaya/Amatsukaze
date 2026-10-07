@@ -32,7 +32,7 @@ std::vector<FileAudioFrameInfo> MakeFrames(std::initializer_list<AUDIO_CHANNELS>
     for (auto layout : layouts) {
         frames[index].format = { layout, 48000 };
         frames[index].numSamples = AAC_LC_FRAME_SAMPLES;
-        ++index;
+        index++;
     }
     return frames;
 }
@@ -153,7 +153,7 @@ void SilenceTests(const std::string& directory = "") {
         "fff14c8001dffc2064000190000e",
         "fff14d80039ffc00c800010320000c800011320000c8000306400038"
     };
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; i++) {
         const auto bytes = GenerateSilentAdtsFrame(layouts[i], 3);
         Check(bytes == FromHex(expected[i]), "無音AACのバイト列が設計書と一致しません");
     }
@@ -162,7 +162,7 @@ void SilenceTests(const std::string& directory = "") {
         if (!directory.empty()) {
             std::ofstream file(directory + "/silent" + std::to_string(GetAudioAdtsChannelConfiguration(layout)) + ".aac", std::ios::binary);
             Check(static_cast<bool>(file), "無音フレームの出力ファイルを開けません");
-            for (int frame = 0; frame < 200; ++frame) file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+            for (int frame = 0; frame < 200; frame++) file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
         }
     }
     ExpectFormatError([] { GenerateSilentAdtsFrame(AUDIO_2LANG, 3); });

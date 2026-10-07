@@ -753,7 +753,7 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     std::vector<uint8_t> srcBuffer;
     std::vector<uint8_t> dstBuffer;
 
-    for (size_t waveIndex = 0; waveIndex < waveFrames.size(); ++waveIndex) {
+    for (size_t waveIndex = 0; waveIndex < waveFrames.size(); waveIndex++) {
         const auto& frame = waveFrames[waveIndex];
         const int sourceDualMonoChannel = fileIn.isAudioTrackPlanned
             ? fileIn.audioTrackPlan.at(entry.localIndex).frames[waveIndex].dualMonoChannel : entry.dualMonoChannel;
@@ -781,7 +781,7 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
             if (fileIn.isAudioTrackPlanned && sourceDualMonoChannel >= 0) {
                 // mergeの目標が2chでも、元デュアルモノ区間は指定言語だけを両側へ渡す。
                 auto* samples = reinterpret_cast<int16_t*>(srcBuffer.data());
-                for (int sample = 0; sample < frameSamples; ++sample) {
+                for (int sample = 0; sample < frameSamples; sample++) {
                     const int16_t value = samples[sample * srcChannels + sourceDualMonoChannel];
                     samples[sample * srcChannels] = samples[sample * srcChannels + 1] = value;
                 }
@@ -1598,7 +1598,7 @@ void DoBadThing() {
         if (reformInfo.getVideoStreamFormat() != VS_MPEG2) {
             THROW(FormatException, "--mpeg2-partialの入力映像はMPEG-2である必要があります");
         }
-        for (int videoFileIndex = 0; videoFileIndex < reformInfo.getNumVideoFile(); ++videoFileIndex) {
+        for (int videoFileIndex = 0; videoFileIndex < reformInfo.getNumVideoFile(); videoFileIndex++) {
             const auto& videoFormat = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0)).videoFormat;
             if (videoFormat.format != VS_MPEG2 || !videoFormat.fixedFrameRate) {
                 THROW(FormatException, "--mpeg2-partialは固定フレームレートのMPEG-2映像だけに対応しています");
@@ -1807,7 +1807,7 @@ void DoBadThing() {
             const auto& fileIn = reformInfo.getEncodeFile(key);
             const auto fmt = reformInfo.getFormat(key);
             if (fileIn.isAudioTrackPlanned) {
-                for (int adst = 0; adst < (int)fileIn.audioTrackPlan.size(); ++adst) {
+                for (int adst = 0; adst < (int)fileIn.audioTrackPlan.size(); adst++) {
                     const auto& track = fileIn.audioTrackPlan[adst];
                     const auto filepath = setting.getIntAudioFilePath(key, adst, setting.getAudioEncoder());
                     BuildAudioTrack(ctx, audioCache, track, filepath, reformInfo.getAudioFrameList());
@@ -2347,7 +2347,7 @@ void DoBadThing() {
     if (setting.isPgsSubEnabled() && setting.isSubtitlesEnabled()) {
         Stopwatch pgsWatch;
         pgsWatch.start();
-        for (int i = 0; i < (int)keys.size(); ++i) {
+        for (int i = 0; i < (int)keys.size(); i++) {
             const auto key = keys[i];
             if (getActualOutputFormat(key, reformInfo, setting) != FORMAT_MKV) {
                 continue;
@@ -2358,7 +2358,7 @@ void DoBadThing() {
             const auto [canvasWidth, canvasHeight] = CaptionPgsCanvasSize(format.width, format.height,
                 format.sarWidth, format.sarHeight, userSAR.first, userSAR.second);
             const auto& captions = reformInfo.getEncodeFile(key).captionList;
-            for (int lang = 0; lang < (int)captions.size(); ++lang) {
+            for (int lang = 0; lang < (int)captions.size(); lang++) {
                 const auto path = setting.getTmpPGSFilePath(key, lang);
                 // 再開時の古いPGSを失敗後にmuxしないよう、生成前に除去する。
                 if (File::exists(path)) {

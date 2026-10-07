@@ -28,7 +28,7 @@ std::vector<uint8_t> MakePceSilentFrame(bool dualMono = false) {
     writer.write<1>(0);
     writer.write<1>(0);
     writer.write<1>(0);
-    for (int element = 0; element < (dualMono ? 2 : 1); ++element) {
+    for (int element = 0; element < (dualMono ? 2 : 1); element++) {
         writer.write<1>(dualMono ? 0 : 1);
         writer.write<4>(element);
     }
@@ -36,7 +36,7 @@ std::vector<uint8_t> MakePceSilentFrame(bool dualMono = false) {
     writer.write<8>(0); // コメントなし。
     writer.flush();
     if (dualMono) {
-        for (int channel = 0; channel < 2; ++channel) {
+        for (int channel = 0; channel < 2; channel++) {
             writer.write<3>(0); // SCE。
             writer.write<4>(channel);
             writer.write<8>(100);
@@ -64,7 +64,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     const int audioCount = 600;
     const int videoCount = 384;
     std::vector<FileVideoFrameInfo> video(videoCount);
-    for (int i = 0; i < videoCount; ++i) {
+    for (int i = 0; i < videoCount; i++) {
         auto& frame = video[i];
         frame.PTS = frame.DTS = i * 3000;
         frame.pic = PIC_FRAME;
@@ -81,7 +81,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     }
     std::vector<FileAudioFrameInfo> audio;
     int track1First = -1;
-    for (int i = 0; i < audioCount; ++i) {
+    for (int i = 0; i < audioCount; i++) {
         // track0の中央に閾値前後の欠落を置く。後半で5.1chへ切り替える。
         if (i < 100 || i >= 100 + missingFrames) {
             FileAudioFrameInfo frame;
@@ -107,7 +107,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
         }
     }
     int change = 0;
-    while (change < static_cast<int>(audio.size()) && audio[change].PTS < 300 * audioTicks) ++change;
+    while (change < static_cast<int>(audio.size()) && audio[change].PTS < 300 * audioTicks) change++;
     std::vector<StreamEvent> events = {
         { PID_TABLE_CHANGED, 0, 0, 1 }, { VIDEO_FORMAT_CHANGED, 0, 0, 0 },
         { AUDIO_FORMAT_CHANGED, 0, 0, 0 },
@@ -162,7 +162,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     Require(file.audioFrames[0].size() == file.audioFrames[1].size(), "音声列の長さが一致しません");
     Require(file.audioFrames[1].front() == -1 && file.audioFrames[1].back() == -1, "副音声の先頭と末尾が無音になりません");
     if (!cut) {
-        for (int i = 100; i < 100 + missingFrames; ++i) {
+        for (int i = 100; i < 100 + missingFrames; i++) {
             Require((file.audioFrames[0][i] == -1) == (missingFrames > 5), "MAX_DUP閾値前後の処理が不正です");
         }
         Require(file.audioFrames[1][210] >= 0 && file.audioFrames[1][300] == -1 && file.audioFrames[1][420] >= 0,
@@ -172,7 +172,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
         Require(originalTrack1 == 50, "CMカット後の副音声の再出現区間が不正です");
     }
     if (sourcePhaseTicks != 0) {
-        for (size_t i = 1; i < file.audioFrames[0].size(); ++i) {
+        for (size_t i = 1; i < file.audioFrames[0].size(); i++) {
             const int previous = file.audioFrames[0][i - 1];
             const int current = file.audioFrames[0][i];
             Require(previous >= 0 && current >= 0 && audioInfo[current].PTS - audioInfo[previous].PTS == audioTicks,
@@ -182,7 +182,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     if (mode == AFC_MERGE) {
         const size_t expectedTracks = fallback == 5 ? 3 : 2;
         Require(file.audioTrackPlan.size() == expectedTracks, "統合音声の論理トラック数が不正です");
-        for (size_t track = 0; track < file.audioTrackPlan.size(); ++track) {
+        for (size_t track = 0; track < file.audioTrackPlan.size(); track++) {
             Require(file.audioTrackPlan[track].name == _T("Audio") + std::to_string(track), "統合音声のトラック名が不正です");
         }
         if (fallback != 5) {
@@ -222,7 +222,7 @@ void BuilderCopyTest(const tstring& directory) {
     File result(destination, _T("rb"));
     std::vector<uint8_t> actual(3 * bytes.size());
     result.read(MemoryChunk(actual.data(), actual.size()));
-    for (size_t i = 0; i < actual.size(); ++i) Require(actual[i] == bytes[i % bytes.size()], "PacketCacheコピーと無音の結合が不正です");
+    for (size_t i = 0; i < actual.size(); i++) Require(actual[i] == bytes[i % bytes.size()], "PacketCacheコピーと無音の結合が不正です");
 }
 
 void BuilderDualMonoTest(const tstring& directory) {
@@ -230,7 +230,7 @@ void BuilderDualMonoTest(const tstring& directory) {
     auto dual = MakePceSilentFrame(true);
     AdtsParser parser(ctx);
     bool recognized = false;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; i++) {
         std::vector<AudioFrameData> frames;
         parser.inputFrame(MemoryChunk(dual.data(), dual.size()), frames, i * 1920);
         for (const auto& frame : frames) {
@@ -248,7 +248,7 @@ void BuilderDualMonoTest(const tstring& directory) {
         file.write(MemoryChunk(dual.data(), dual.size()));
     }
     std::vector<FileAudioFrameInfo> info(3);
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; i++) {
         info[i].format = { i == 1 ? AUDIO_STEREO : AUDIO_2LANG, 48000 };
         info[i].numSamples = AAC_LC_FRAME_SAMPLES;
     }
@@ -257,7 +257,7 @@ void BuilderDualMonoTest(const tstring& directory) {
     PacketCache cache(ctx, source, { 0, static_cast<int64_t>(dual.size()),
         static_cast<int64_t>(dual.size() + stereo.size()), static_cast<int64_t>(dual.size() * 2 + stereo.size()) }, 2, 2);
     Require(plans.size() == 3, "デュアルモノ混在の出力トラック数が不正です");
-    for (size_t track = 0; track < plans.size(); ++track) {
+    for (size_t track = 0; track < plans.size(); track++) {
         const auto destination = directory + _T("/builder-dual-") + std::to_string(track) + _T(".aac");
         BuildAudioTrack(ctx, cache, plans[track], destination);
         File result(destination, _T("rb"));
@@ -308,7 +308,7 @@ void BuilderMergeSilenceTest(const tstring& directory) {
         std::vector<int64_t> offsets = { 0 };
         {
             File file(source, _T("wb"));
-            for (int index = 0; index < 3; ++index) {
+            for (int index = 0; index < 3; index++) {
                 const auto layout = upmix ? (index == 0 ? AUDIO_STEREO : AUDIO_32_LFE)
                     : (index == 2 ? AUDIO_32_LFE : AUDIO_STEREO);
                 const auto& bytes = layout == AUDIO_STEREO ? stereo : surround;
@@ -351,7 +351,7 @@ int main(int argc, char** argv) {
             RunScenario(0, false, 0, 3, argv[1]);
             RunScenario(0, false, 0, 4, argv[1]);
             RunScenario(0, false, 0, 5, argv[1]);
-            for (int fallback = 1; fallback <= 5; ++fallback) RunScenario(0, false, 0, fallback, argv[1], AFC_MERGE);
+            for (int fallback = 1; fallback <= 5; fallback++) RunScenario(0, false, 0, fallback, argv[1], AFC_MERGE);
         }
         std::cout << "StreamReform合成入力テスト成功\n";
         return 0;

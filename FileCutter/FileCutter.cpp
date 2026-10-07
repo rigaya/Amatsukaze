@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     const char *srcpath = NULL, *dstpath = NULL;
     size_t fromBytes = 0, lengthBytes = 0;
 
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc; i++) {
         std::string inarg(argv[i]);
         if (inarg == "-from") {
             fromBytes = _atoi64(argv[++i]);

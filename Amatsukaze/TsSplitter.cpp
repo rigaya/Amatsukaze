@@ -274,7 +274,7 @@ void TsPacketBuffer::backAndInput() {
             numBefferedPackets_ = numMaxPackets - 1;
         }
         buffer.add(MemoryChunk(packet.data, TS_PACKET_LENGTH));
-        ++numBefferedPackets_;
+        numBefferedPackets_++;
     }
     if (handler != NULL) {
         handler->onTsPacket(-1, packet);
@@ -333,7 +333,7 @@ void TsSystemClock::inputTsPacket(TsPacket packet) {
                     if (af.PCR_flag()) {
                         pcrInfo[1].clock = af.program_clock_reference;
                         pcrInfo[1].packetIndex = numTotakPacketsReveived;
-                        ++numPcrReceived;
+                        numPcrReceived++;
                     }
 
                     // テスト用
@@ -344,7 +344,7 @@ void TsSystemClock::inputTsPacket(TsPacket packet) {
             }
         }
     }
-    ++numTotakPacketsReveived;
+    numTotakPacketsReveived++;
 }
 
 double TsSystemClock::currentBitrate() {
@@ -539,9 +539,9 @@ TsSplitter::SpCaptionParser::SpCaptionParser(AMTContext&ctx, TsSplitter& this_)
 }
 
 bool TsSplitter::checkScramble(TsPacket packet) {
-    ++numTotalPackets;
+    numTotalPackets++;
     if (packet.transport_scrambling_control()) {
-        ++numScramblePackets;
+        numScramblePackets++;
         return false;
     }
     return true;

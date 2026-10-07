@@ -128,7 +128,7 @@ NicoJK::MySubProcess::OutConv::OutConv(bool isErr) : nlines(0), isErr(isErr) {}
     line.push_back('\n');
     fwrite(line.data(), line.size(), 1, SUBPROC_OUT);
     fflush(SUBPROC_OUT);
-    ++nlines;
+    nlines++;
 }
 /* virtual */ void NicoJK::MySubProcess::onOut(bool isErr, MemoryChunk mc) {
     (isErr ? errConv : outConv).AddBytes(mc);

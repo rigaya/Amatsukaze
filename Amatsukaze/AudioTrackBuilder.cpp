@@ -110,7 +110,7 @@ void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& 
     auto silence = GenerateSilentAdtsFrame(plan.layout, plan.samplingFrequencyIndex);
     File file(path, _T("wb"));
     TrackDualMonoSplitter splitter(ctx, file);
-    for (size_t position = 0; position < plan.frames.size(); ++position) {
+    for (size_t position = 0; position < plan.frames.size(); position++) {
         const auto& ref = plan.frames[position];
         if (ref.dstLayout != plan.layout) THROW(FormatException, "出力音声のレイアウトが一致しません");
         switch (ref.operation) {
@@ -145,7 +145,7 @@ void BuildAudioTrack(AMTContext& ctx, PacketCache& cache, const AudioTrackPlan& 
         case AudioTrackOperation::CONVERT: {
             size_t end = position + 1;
             while (end < plan.frames.size() && plan.frames[end].operation == AudioTrackOperation::CONVERT &&
-                plan.frames[end].srcLayout == ref.srcLayout && plan.frames[end].dualMonoChannel == ref.dualMonoChannel) ++end;
+                plan.frames[end].srcLayout == ref.srcLayout && plan.frames[end].dualMonoChannel == ref.dualMonoChannel) end++;
             auto converted = ConvertAudioTrackRun(ctx, cache, plan, position, end, frameInfo);
             for (auto& frame : converted) file.write(MemoryChunk(frame.data(), frame.size()));
             position = end - 1;

@@ -3081,7 +3081,7 @@ namespace {
         }
         const std::string s(v);
         const std::regex re(R"((-?\d+)\s*,\s*(-?\d+))");
-        for (auto it = std::sregex_iterator(s.begin(), s.end(), re); it != std::sregex_iterator(); ++it) {
+        for (auto it = std::sregex_iterator(s.begin(), s.end(), re); it != std::sregex_iterator(); it++) {
             const int x = std::atoi((*it)[1].str().c_str());
             const int y = std::atoi((*it)[2].str().c_str());
             points.emplace_back(x, y);

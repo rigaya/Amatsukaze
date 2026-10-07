@@ -8,7 +8,7 @@
 
 int main(int argc, char** argv) {
     if (argc != 2) return 1;
-    for (int channels = 1; channels <= 6; ++channels) {
+    for (int channels = 1; channels <= 6; channels++) {
         std::ifstream file(std::string(argv[1]) + "/silent" + std::to_string(channels) + ".aac", std::ios::binary);
         const std::vector<unsigned char> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         if (data.empty()) return 1;
@@ -38,10 +38,10 @@ int main(int argc, char** argv) {
                 std::cerr << channels << "ch無音AACのfaadデコードに失敗しました エラー=" << static_cast<int>(info.error) << " 周波数=" << info.samplerate << " ch=" << static_cast<int>(info.channels) << " samples=" << info.samples << " frames=" << frames << "\n";
                 return 1;
             }
-            for (unsigned long i = 0; i < info.samples; ++i) maximum = std::max(maximum, std::abs(static_cast<int>(decoded[i])));
+            for (unsigned long i = 0; i < info.samples; i++) maximum = std::max(maximum, std::abs(static_cast<int>(decoded[i])));
             samples += info.samples;
             offset += length;
-            ++frames;
+            frames++;
         }
         NeAACDecClose(decoder);
         if (frames != 200 || samples != static_cast<unsigned long>(199 * 1024 * outputChannels) || maximum != 0) return 1;

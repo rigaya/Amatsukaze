@@ -103,14 +103,14 @@ bool TestBitrateZones(tstring& diagnostic) {
     std::vector<double> timeCodes;
     double elapsed = 0.0;
     const double tick = 1000.0 * 1001 / 60000;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 30; i++) {
         timeCodes.push_back(elapsed); elapsed += tick * 2;
         timeCodes.push_back(elapsed); elapsed += tick * 3;
     }
-    for (int i = 0; i < 40; ++i) {
+    for (int i = 0; i < 40; i++) {
         timeCodes.push_back(elapsed); elapsed += tick;
     }
-    for (int i = 0; i < 50; ++i) {
+    for (int i = 0; i < 50; i++) {
         timeCodes.push_back(elapsed); elapsed += tick * 2;
     }
     timeCodes.push_back(elapsed);
@@ -163,8 +163,8 @@ std::vector<VFRFrameInterval> MakeIntervals(int normalCount, int alternateCount,
     double normalRepeat = 1.0, double alternateRepeat = 1.0) {
     std::vector<VFRFrameInterval> intervals;
     intervals.reserve(normalCount + alternateCount);
-    for (int i = 0; i < normalCount; ++i) intervals.push_back({ normal, normalRepeat });
-    for (int i = 0; i < alternateCount; ++i) intervals.push_back({ alternate, alternateRepeat });
+    for (int i = 0; i < normalCount; i++) intervals.push_back({ normal, normalRepeat });
+    for (int i = 0; i < alternateCount; i++) intervals.push_back({ alternate, alternateRepeat });
     return intervals;
 }
 
@@ -247,7 +247,7 @@ bool TestCRC32(tstring& diagnostic) {
 void WriteExpGolomb(BitWriter& writer, uint32_t codeNum) {
     const uint32_t value = codeNum + 1;
     int bitLength = 0;
-    for (uint32_t v = value; v != 0; v >>= 1) ++bitLength;
+    for (uint32_t v = value; v != 0; v >>= 1) bitLength++;
     if (bitLength > 1) writer.writen(0, bitLength - 1);
     writer.writen(value, bitLength);
 }
@@ -315,7 +315,7 @@ bool TestBitReader(tstring& diagnostic) {
         BitWriter writer(buffer);
         std::vector<uint32_t> values;
         uint32_t seed = 12345;
-        for (int i = 0; i < VALUE_COUNT; ++i) {
+        for (int i = 0; i < VALUE_COUNT; i++) {
             seed = seed * 1103515245u + 12345u;
             values.push_back((seed >> 8) & ((1u << (i % 16)) - 1));
             writer.writen(i & 1, 1 + (i % 7)); // ずれを作るための固定長フィールド
@@ -324,7 +324,7 @@ bool TestBitReader(tstring& diagnostic) {
         writer.byteAlign<true>();
         writer.flush();
         BitReader reader(buffer.get());
-        for (int i = 0; i < VALUE_COUNT; ++i) {
+        for (int i = 0; i < VALUE_COUNT; i++) {
             if (!ExpectHex(reader.readn(1 + (i % 7)), i & 1, _T("固定長フィールドの往復"), diagnostic)) return false;
             if (!ExpectHex(reader.readExpGolom(), values[i], _T("指数ゴロム符号の往復"), diagnostic)) return false;
         }
@@ -374,7 +374,7 @@ bool TestAutoBuffer(tstring& diagnostic) {
     constexpr int KEEP_BYTES = 777;
     int nextValue = 0;
     int headValue = 0;
-    for (int i = 0; i < TOTAL_BYTES; ++i) {
+    for (int i = 0; i < TOTAL_BYTES; i++) {
         buffer.add(uint8_t(nextValue++ & 0xFF));
         if ((int)buffer.size() > KEEP_BYTES) {
             const int trim = (int)buffer.size() - KEEP_BYTES + (i % 5);
@@ -383,7 +383,7 @@ bool TestAutoBuffer(tstring& diagnostic) {
         }
     }
     if (!Expect((int)buffer.size() == nextValue - headValue, _T("繰り返し追加後のサイズが一致しません"), diagnostic)) return false;
-    for (size_t i = 0; i < buffer.size(); ++i) {
+    for (size_t i = 0; i < buffer.size(); i++) {
         if (buffer.ptr()[i] != uint8_t((headValue + i) & 0xFF)) {
             diagnostic = strsprintf(_T("再配置後のデータ順序が崩れています: 位置=%zu"), i);
             return false;
@@ -469,7 +469,7 @@ bool TestEncoderOption(tstring& diagnostic) {
         const int status = ParseEncoderOptionForTest(testCase.encoder, testCase.options, &info);
         bool matched = status == ENCODER_OPTION_FOR_TEST_SUCCESS && info.format == testCase.expectedFormat
             && std::strcmp(info.rcMode, testCase.expectedRCMode) == 0;
-        for (int i = 0; matched && i < 3; ++i) matched = std::abs(info.rcModeValue[i] - testCase.expectedValues[i]) < 1e-9;
+        for (int i = 0; matched && i < 3; i++) matched = std::abs(info.rcModeValue[i] - testCase.expectedValues[i]) < 1e-9;
         if (!matched) {
             diagnostic = strsprintf(_T("レート制御解析: 結果=%d, format=%d/%d, mode=%s/%s, 値=%.2f:%.2f:%.2f, オプション=%s"),
                 status, info.format, testCase.expectedFormat, char_to_tstring(info.rcMode).c_str(),
@@ -523,7 +523,7 @@ public:
     BitstreamBuilder& ue(uint32_t codeNum) {
         const uint32_t value = codeNum + 1;
         int bitLength = 0;
-        for (uint32_t v = value; v != 0; v >>= 1) ++bitLength;
+        for (uint32_t v = value; v != 0; v >>= 1) bitLength++;
         bits(0, bitLength - 1);
         return bits(value, bitLength);
     }
@@ -562,7 +562,7 @@ bool ParseVideoUnits(int streamFormat, const std::vector<std::vector<uint8_t>>& 
     const std::vector<std::pair<int64_t, int64_t>>& timestamps, std::vector<VideoFrameInfo>& frames,
     std::vector<int>& unitResults, tstring& diagnostic) {
     std::vector<VideoAccessUnitForTest> inputs;
-    for (size_t i = 0; i < units.size(); ++i) {
+    for (size_t i = 0; i < units.size(); i++) {
         inputs.push_back({ units[i].data(), units[i].size(), timestamps[i].first, timestamps[i].second });
     }
     unitResults.assign(units.size(), -1);
@@ -725,7 +725,7 @@ bool TestMpeg2VideoParser(tstring& diagnostic) {
             { MPEG2_CODING_P, MPEG2_TOP_FIELD, false, false, false } }),
     };
     std::vector<std::pair<int64_t, int64_t>> timestamps;
-    for (size_t i = 0; i < units.size(); ++i) timestamps.emplace_back(1000 + 3003 * (int64_t)i, 900 + 3003 * (int64_t)i);
+    for (size_t i = 0; i < units.size(); i++) timestamps.emplace_back(1000 + 3003 * (int64_t)i, 900 + 3003 * (int64_t)i);
     std::vector<VideoFrameInfo> frames;
     std::vector<int> unitResults;
     if (!ParseVideoUnits(VS_MPEG2, units, timestamps, frames, unitResults, diagnostic)) return false;
@@ -744,7 +744,7 @@ bool TestMpeg2VideoParser(tstring& diagnostic) {
         { PIC_BFF, FRAME_P, false, 16015, 15915 },
     };
     if (!Expect(frames.size() == std::size(expectedFrames), _T("MPEG-2のフレーム数が一致しません"), diagnostic)) return false;
-    for (size_t i = 0; i < frames.size(); ++i) {
+    for (size_t i = 0; i < frames.size(); i++) {
         if (!ExpectVideoFrame(frames[i], expectedFrames[i], i, diagnostic)) return false;
     }
     // SAR = DAR(16:9) * 1080 / 1440 = 4:3、色情報なしは2(未指定)
@@ -769,7 +769,7 @@ bool TestMpeg2VideoParser(tstring& diagnostic) {
         { PIC_FRAME_TRIPLING, FRAME_B, false, -1, -1 },
     };
     if (!Expect(frames.size() == std::size(progressiveFrames), _T("プログレッシブMPEG-2のフレーム数が一致しません"), diagnostic)) return false;
-    for (size_t i = 0; i < frames.size(); ++i) {
+    for (size_t i = 0; i < frames.size(); i++) {
         if (!ExpectVideoFrame(frames[i], progressiveFrames[i], i, diagnostic)) return false;
     }
     // SAR = DAR(4:3) * 480 / 704 = 10:11
@@ -884,7 +884,7 @@ std::vector<uint8_t> MakeH264Unit(int primaryPicType, bool withParameterSets, st
         AppendNal(unit, H264_NAL_PPS, BitstreamBuilder().ue(0).ue(0).trailingBits().finish());
     }
     AppendSei(unit, seiMessages);
-    for (int i = 0; i < sliceCount; ++i) AppendSlice(unit, withParameterSets ? H264_NAL_IDR_SLICE : H264_NAL_SLICE);
+    for (int i = 0; i < sliceCount; i++) AppendSlice(unit, withParameterSets ? H264_NAL_IDR_SLICE : H264_NAL_SLICE);
     return unit;
 }
 
@@ -919,7 +919,7 @@ bool TestH264VideoParser(tstring& diagnostic) {
     units.push_back(fieldPair);
 
     std::vector<std::pair<int64_t, int64_t>> timestamps;
-    for (size_t i = 0; i < units.size(); ++i) timestamps.emplace_back(10003 + 3003 * (int64_t)i, 7000 + 3003 * (int64_t)i);
+    for (size_t i = 0; i < units.size(); i++) timestamps.emplace_back(10003 + 3003 * (int64_t)i, 7000 + 3003 * (int64_t)i);
     std::vector<VideoFrameInfo> frames;
     std::vector<int> unitResults;
     if (!ParseVideoUnits(VS_H264, units, timestamps, frames, unitResults, diagnostic)) return false;
@@ -936,7 +936,7 @@ bool TestH264VideoParser(tstring& diagnostic) {
         { PIC_TFF, FRAME_P, false, 31024, 28021 },
     };
     if (!Expect(frames.size() == std::size(expectedFrames), _T("H.264のフレーム数が一致しません"), diagnostic)) return false;
-    for (size_t i = 0; i < frames.size(); ++i) {
+    for (size_t i = 0; i < frames.size(); i++) {
         if (!ExpectVideoFrame(frames[i], expectedFrames[i], i, diagnostic)) return false;
     }
     // クロップ後1440x1080、VUIのtime_scale/2/num_units_in_tickで29.97fps、BT.709
@@ -1030,7 +1030,7 @@ bool TestAdtsParser(tstring& diagnostic) {
     // 1つのPESに3フレーム: 2番目以降はフレーム長から求めたPTS
     if (!ParseAdts({ { Concat({ stereo, stereo, stereo }), 90000 } }, frames, results, diagnostic)) return false;
     if (!Expect(frames.size() == 3 && results[0] == 1, _T("1つのPESに含まれる3フレームを取得できません"), diagnostic)) return false;
-    for (size_t i = 0; i < frames.size(); ++i) {
+    for (size_t i = 0; i < frames.size(); i++) {
         if (!ExpectAudioFrame(frames[i], 90000 + FRAME_DURATION_48K * (int64_t)i, AUDIO_STEREO, 48000, stereoLength, i, diagnostic)) return false;
     }
 
@@ -1206,7 +1206,7 @@ tstring DescribeTsEvents(const std::vector<TsSelectorEventForTest>& events) {
 bool ExpectTsEvents(const std::vector<TsSelectorEventForTest>& actual, const std::vector<TsSelectorEventForTest>& expected,
     const TCHAR* name, tstring& diagnostic) {
     bool matched = actual.size() == expected.size();
-    for (size_t i = 0; matched && i < actual.size(); ++i) {
+    for (size_t i = 0; matched && i < actual.size(); i++) {
         const auto& a = actual[i];
         const auto& e = expected[i];
         matched = a.type == e.type && a.pid == e.pid && a.index == e.index && a.clock == e.clock
@@ -1292,7 +1292,7 @@ bool TestTsSelector(tstring& diagnostic) {
     const int64_t tdt2040Clock = ts.packetCount();
     ts.addSection(TDT_PID, MakeTdt(MJD16_2040_01_01, 0, 0, 0));
     // 同期探索のため末尾に8パケット以上の空パケットを置く
-    for (int i = 0; i < 8; ++i) ts.addPayload(0x1FFF, std::vector<uint8_t>(TS_PAYLOAD_SIZE, 0xFF));
+    for (int i = 0; i < 8; i++) ts.addPayload(0x1FFF, std::vector<uint8_t>(TS_PAYLOAD_SIZE, 0xFF));
 
     using E = TsSelectorEventForTest;
     const std::vector<E> expected = {
@@ -1413,9 +1413,9 @@ bool TestLogoFile(tstring& diagnostic) {
     // 不透明度20%前後の白いロゴ (A≒1.25, B≒-0.25) とし、先頭画素(とそれを含むUV画素)は完全透明(A=1, B=0)にする
     std::vector<float> planes(PLANE_VALUES);
     const size_t planeOffsets[] = { 0, SIZE_Y, SIZE_Y * 2, SIZE_Y * 2 + SIZE_UV, SIZE_Y * 2 + SIZE_UV * 2, SIZE_Y * 2 + SIZE_UV * 3, PLANE_VALUES };
-    for (int plane = 0; plane < 6; ++plane) {
+    for (int plane = 0; plane < 6; plane++) {
         const bool isA = (plane % 2) == 0;
-        for (size_t i = planeOffsets[plane]; i < planeOffsets[plane + 1]; ++i) {
+        for (size_t i = planeOffsets[plane]; i < planeOffsets[plane + 1]; i++) {
             planes[i] = isA ? 1.25f + 0.001f * (float)(i - planeOffsets[plane]) : -0.25f - 0.001f * (float)(i - planeOffsets[plane]);
         }
     }
@@ -1615,7 +1615,7 @@ int _tmain(int argc, TCHAR* argv[]) {
     std::setlocale(LC_CTYPE, "");
     bool listOnly = false;
     std::vector<tstring> selectedNames;
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc; i++) {
         const tstring argument = argv[i];
         if (argument == _T("--list")) {
             listOnly = true;
@@ -1650,7 +1650,7 @@ int _tmain(int argc, TCHAR* argv[]) {
     int failureCount = 0;
     for (const auto& testCase : TEST_CASES) {
         if (!IsSelected(testCase, selectedNames)) continue;
-        ++selectedCount;
+        selectedCount++;
         failureCount += RunTestCase(testCase);
     }
     if (selectedCount == 0) {

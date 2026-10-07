@@ -130,17 +130,17 @@ public:
             if (layout_ != AUDIO_STEREO && layout_ != AUDIO_32_LFE) {
                 THROW(FormatException, "音声変換元のチャンネル配置が未対応です");
             }
-            for (int ch = 0; ch < channels; ++ch) {
+            for (int ch = 0; ch < channels; ch++) {
                 order[ch] = -1;
-                for (int j = 0; j < info.channels; ++j) {
+                for (int j = 0; j < info.channels; j++) {
                     if (info.channel_position[j] == positions[ch]) order[ch] = j;
                 }
                 if (order[ch] < 0) THROW(FormatException, "FAADのチャンネル位置が一致しません");
             }
         }
         std::vector<float> output(AAC_LC_FRAME_SAMPLES * channels);
-        for (int i = 0; i < AAC_LC_FRAME_SAMPLES; ++i) {
-            for (int ch = 0; ch < channels; ++ch) output[i * channels + ch] = samples[i * info.channels + order[ch]];
+        for (int i = 0; i < AAC_LC_FRAME_SAMPLES; i++) {
+            for (int ch = 0; ch < channels; ch++) output[i * channels + ch] = samples[i * info.channels + order[ch]];
         }
         return output;
     }
@@ -253,9 +253,9 @@ public:
         while (pending_.size() - consumed >= frameValues) {
             auto frame = frame_();
             if (av_frame_make_writable(frame) < 0) THROW(FormatException, "AAC入力バッファが書き込みできません");
-            for (int ch = 0; ch < channels; ++ch) {
+            for (int ch = 0; ch < channels; ch++) {
                 auto output = reinterpret_cast<float*>(frame->extended_data[ch]);
-                for (int i = 0; i < AAC_LC_FRAME_SAMPLES; ++i) output[i] = pending_[consumed + i * channels + ch];
+                for (int i = 0; i < AAC_LC_FRAME_SAMPLES; i++) output[i] = pending_[consumed + i * channels + ch];
             }
             frame->pts = pts_;
             pts_ += AAC_LC_FRAME_SAMPLES;
@@ -353,7 +353,7 @@ std::vector<float> ConvertAudioChannels(const std::vector<float>& pcm, AUDIO_CHA
         (src == AUDIO_STEREO && dst == AUDIO_MONO);
     if (!supported) THROW(FormatException, "チャンネル変換の組み合わせが未対応です");
     std::vector<float> output(pcm.size() / inputChannels * outputChannels, 0);
-    for (size_t i = 0; i < pcm.size() / inputChannels; ++i) {
+    for (size_t i = 0; i < pcm.size() / inputChannels; i++) {
         const auto input = pcm.data() + i * inputChannels;
         auto target = output.data() + i * outputChannels;
         if (src == AUDIO_32_LFE) {
@@ -378,7 +378,7 @@ std::vector<std::vector<uint8_t>> ConvertAudioTrackRun(AMTContext& ctx, PacketCa
     }
     const auto& first = plan.frames[begin];
     std::vector<int> source;
-    for (size_t i = 0; i < frameInfo.size(); ++i) {
+    for (size_t i = 0; i < frameInfo.size(); i++) {
         if (frameInfo[i].audioIdx == plan.sourceTrack) source.push_back(static_cast<int>(i));
     }
     TrackEncoder encoder(ctx, plan, end - begin);
@@ -421,14 +421,14 @@ std::vector<std::vector<uint8_t>> ConvertAudioTrackRun(AMTContext& ctx, PacketCa
         previousPosition = currentPosition;
     };
     // 前後2枚は元ストリームの隣ではなく、カット・無音を反映した出力トラック上の隣を使う。
-    for (int64_t i = static_cast<int64_t>(begin) - PREROLL_FRAMES; i < static_cast<int64_t>(begin); ++i) inputFrame(i);
-    for (size_t i = begin; i < end; ++i) {
+    for (int64_t i = static_cast<int64_t>(begin) - PREROLL_FRAMES; i < static_cast<int64_t>(begin); i++) inputFrame(i);
+    for (size_t i = begin; i < end; i++) {
         const auto& ref = plan.frames[i];
         if (ref.operation != AudioTrackOperation::CONVERT || ref.srcLayout != first.srcLayout ||
             ref.dualMonoChannel != first.dualMonoChannel) THROW(FormatException, "連続音声変換区間の参照が一致しません");
         inputFrame(static_cast<int64_t>(i));
     }
-    for (int64_t i = static_cast<int64_t>(end); i < static_cast<int64_t>(end) + POSTROLL_FRAMES; ++i) inputFrame(i);
+    for (int64_t i = static_cast<int64_t>(end); i < static_cast<int64_t>(end) + POSTROLL_FRAMES; i++) inputFrame(i);
     auto output = encoder.finish();
     ctx.infoF(_T("音声変換: %s 開始=%zu N=%zu src=%d dst=%d rate=%d"), plan.name.c_str(), begin, end - begin,
         ChannelCount(first.srcLayout), ChannelCount(plan.layout), plan.sampleRate);

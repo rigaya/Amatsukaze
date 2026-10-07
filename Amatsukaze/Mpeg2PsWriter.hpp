@@ -209,19 +209,19 @@ private:
                 if (stream_id == info.stream_id) {
                     // ESストリーム
                     if (isVideoStream(stream_id)) {
-                        ++nVideoPackets;
+                        nVideoPackets++;
                     }
                     if (isAudioStream(stream_id)) {
-                        ++nAudioPackets;
+                        nAudioPackets++;
                     }
                     return skipPesPacket(packet);
                 }
             }
             if (isVideoStream(stream_id)) {
-                ++nVideoPackets;
+                nVideoPackets++;
             }
             if (isAudioStream(stream_id)) {
-                ++nAudioPackets;
+                nAudioPackets++;
             } else {
                 // PRINTF("不明stream: 0x%x\n", stream_id);
             }
@@ -341,7 +341,7 @@ public:
             this->audioStreamType != audioStreamType) {
             this->videoStreamType = videoStreamType;
             this->audioStreamType = audioStreamType;
-            ++psmVersion;
+            psmVersion++;
         }
         nextIsPSM = true;
     }

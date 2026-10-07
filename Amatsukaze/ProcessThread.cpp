@@ -315,7 +315,7 @@ std::vector<char> removeAnsiEscapeSequences(const std::vector<char>& input) {
                 // OSC終了：BEL文字 または ESC 
                 inOSC = false;
                 if (c == '\033') {
-                    ++i; // '\'をスキップ
+                    i++; // '\'をスキップ
                 }
             }
         }

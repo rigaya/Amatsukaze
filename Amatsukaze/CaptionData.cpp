@@ -191,7 +191,7 @@ uint32_t ReadUnicodeCodePoint(LPCWSTR& str) {
     if (sizeof(WCHAR) == 2 && HIGH_SURROGATE_FIRST <= first && first <= HIGH_SURROGATE_LAST) {
         const uint32_t second = static_cast<uint32_t>(*str);
         if (LOW_SURROGATE_FIRST <= second && second <= LOW_SURROGATE_LAST) {
-            ++str;
+            str++;
             return SUPPLEMENTARY_CODE_POINT_FIRST
                 + ((first - HIGH_SURROGATE_FIRST) << 10)
                 + (second - LOW_SURROGATE_FIRST);
@@ -214,7 +214,7 @@ int CountCaptionTextCharacters(LPCWSTR str) {
     while (*str) {
         const CaptionTextCharacter character = GetCaptionTextCharacter(str);
         str += character.length;
-        ++length;
+        length++;
     }
     return length;
 }

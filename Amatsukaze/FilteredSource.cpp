@@ -663,7 +663,7 @@ void AMTFilterSource::defineMakeSource(
             sb.append("\tlogo = \"%s\"\n", logopath);
             sb.append("\tAMTEraseLogo(AMTAnalyzeLogo(logo), logo, \"%s\", maxfade=%d)\n",
                 logoFramePath, setting_.getMaxFadeLength());
-            ++numEraseLogo;
+            numEraseLogo++;
         }
         };
     if (setting_.isNoDelogo() == false && logopath.size() > 0) {
@@ -1036,7 +1036,7 @@ extern "C" int MakeVFRBitrateZonesForTest(
         }
         std::vector<EncoderZone> inputCmzones;
         inputCmzones.reserve(cmzoneCount);
-        for (size_t i = 0; i < cmzoneCount; ++i) {
+        for (size_t i = 0; i < cmzoneCount; i++) {
             inputCmzones.push_back({ cmzones[i].startFrame, cmzones[i].endFrame });
         }
         const auto zones = MakeVFRBitrateZones(inputTimeCodes, inputCmzones, bitrateCM,
@@ -1049,7 +1049,7 @@ extern "C" int MakeVFRBitrateZonesForTest(
         if (outputCapacity < zones.size()) {
             return VFR_BITRATE_ZONES_FOR_TEST_BUFFER_TOO_SMALL;
         }
-        for (size_t i = 0; i < zones.size(); ++i) {
+        for (size_t i = 0; i < zones.size(); i++) {
             output[i] = {
                 zones[i].startFrame, zones[i].endFrame, zones[i].bitrate,
                 zones[i].qualityOffset, zones[i].startSec, zones[i].endSec,

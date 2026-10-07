@@ -6,7 +6,7 @@
 
 int GetAudioSamplingFrequencyIndex(int sampleRate) {
     static const int rates[] = { 96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350 };
-    for (int i = 0; i < static_cast<int>(sizeof(rates) / sizeof(rates[0])); ++i) {
+    for (int i = 0; i < static_cast<int>(sizeof(rates) / sizeof(rates[0])); i++) {
         if (rates[i] == sampleRate) return i;
     }
     return -1;
@@ -96,7 +96,7 @@ std::vector<AudioTrackPlan> PlanSeparateAudioTracks(
         }
     }
     std::vector<AudioTrackPlan> output;
-    for (size_t source = 0; source < input.size(); ++source) {
+    for (size_t source = 0; source < input.size(); source++) {
         const auto& track = input[source];
         bool hasDualMono = false;
         for (int index : track) {
@@ -104,14 +104,14 @@ std::vector<AudioTrackPlan> PlanSeparateAudioTracks(
         }
         struct Candidate { AudioTrackPlan plan; size_t copies = 0; };
         std::vector<Candidate> candidates;
-        for (int logical = 0; logical < (hasDualMono ? 2 : 1); ++logical) {
+        for (int logical = 0; logical < (hasDualMono ? 2 : 1); logical++) {
             std::map<AUDIO_CHANNELS, size_t> counts;
             for (int index : track) {
                 if (index < 0) continue;
                 auto layout = frameInfo[index].format.channels;
                 if (layout == AUDIO_2LANG) layout = AUDIO_MONO;
                 else if (logical == 1) continue;
-                ++counts[layout];
+                counts[layout]++;
             }
             for (const auto& entry : counts) {
                 Candidate candidate;
@@ -163,8 +163,8 @@ std::vector<AudioTrackPlan> PlanMergeAudioTracks(
     const FileAudioFrameList& input, const std::vector<FileAudioFrameInfo>& frameInfo, double duration90kHz) {
     const auto separated = PlanSeparateAudioTracks(input, frameInfo, duration90kHz);
     std::vector<AudioTrackPlan> output;
-    for (size_t source = 0; source < input.size(); ++source) {
-        for (int logical = 0; logical < 2; ++logical) {
+    for (size_t source = 0; source < input.size(); source++) {
+        for (int logical = 0; logical < 2; logical++) {
             const AudioTrackPlan* longest = nullptr;
             size_t longestCount = 0;
             for (const auto& plan : separated) {
@@ -183,7 +183,7 @@ std::vector<AudioTrackPlan> PlanMergeAudioTracks(
             merged.name = StringFormat(_T("Audio%d"), static_cast<int>(output.size()));
             for (const auto& plan : separated) {
                 if (plan.sourceTrack != static_cast<int>(source) || plan.logicalTrack != logical || plan.layout == merged.layout) continue;
-                for (size_t index = 0; index < plan.frames.size(); ++index) {
+                for (size_t index = 0; index < plan.frames.size(); index++) {
                     const auto& sourceRef = plan.frames[index];
                     if (sourceRef.operation != AudioTrackOperation::COPY) continue;
                     auto& targetRef = merged.frames[index];

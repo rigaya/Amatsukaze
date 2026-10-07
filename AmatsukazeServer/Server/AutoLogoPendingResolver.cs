@@ -475,7 +475,7 @@ namespace Amatsukaze.Server
 
         private void WaitForLogoRefresh(int serviceId)
         {
-            for (int i = 0; i < 25; ++i)
+            for (int i = 0; i < 25; i++)
             {
                 if (HasAnyExistingLogo(serviceId))
                 {

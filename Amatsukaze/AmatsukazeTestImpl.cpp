@@ -555,7 +555,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
                 THROW(FormatException, "avcodec_send_packet failed");
             }
             while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
-                ++nframes;
+                nframes++;
             }
         }
         av_packet_unref(&packet);
@@ -566,7 +566,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
         THROW(FormatException, "avcodec_send_packet failed");
     }
     while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
-        ++nframes;
+        nframes++;
     }
 
     sw.stop();
@@ -714,7 +714,7 @@ void CaptionStreamExpect(bool condition, const char* message) {
 std::unique_ptr<StreamReformInfo> MakeCaptionStreamFixture(AMTContext& ctx, bool withText) {
     std::vector<FileVideoFrameInfo> video(8);
     std::vector<FileAudioFrameInfo> audio(8);
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 8; i++) {
         auto& frame = video[i];
         frame.PTS = frame.DTS = (CAPTION_TEST_BASE + 3000 * i) & (CAPTION_TEST_WRAP - 1);
         frame.isGopStart = i == 0;
@@ -782,7 +782,7 @@ void CheckCaptionSerialization(AMTContext& ctx) {
     const auto& expected = original->getCaptionPesList();
     const auto& actual = restored.getCaptionPesList();
     CaptionStreamExpect(actual.size() == expected.size(), "生PESの個数が保存後に変化した");
-    for (size_t i = 0; i < actual.size(); ++i) {
+    for (size_t i = 0; i < actual.size(); i++) {
         CaptionStreamExpect(actual[i].PTS == expected[i].PTS && actual[i].data == expected[i].data,
             "生PESのPTSまたはペイロードが保存後に変化した");
     }

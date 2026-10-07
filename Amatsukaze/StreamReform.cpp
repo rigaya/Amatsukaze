@@ -53,7 +53,7 @@ std::vector<FrameIntervalCluster> clusterFrameIntervals(const std::vector<double
         const double tolerance = std::max(6.0, cluster.center * 0.005);
         if (std::abs(interval - cluster.center) <= tolerance) {
             cluster.center = (cluster.center * cluster.count + interval) / (cluster.count + 1);
-            ++cluster.count;
+            cluster.count++;
         } else {
             clusters.push_back({ interval, 1 });
         }
@@ -493,7 +493,7 @@ std::pair<int, int> StreamReformInfo::getVideoFrameRange(int videoFileIndex) con
     // frameFormatId_から範囲を求める（getEncoderIndexと同じ経路）。
     int start = -1;
     int end = -1;
-    for (int i = 0; i < (int)videoFrameList_.size(); ++i) {
+    for (int i = 0; i < (int)videoFrameList_.size(); i++) {
         if (format_[fileFormatId_[frameFormatId_[i]]].videoFileId == videoFileIndex) {
             if (start < 0) {
                 start = i;
@@ -886,7 +886,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
             if (!curFormat.videoFormat.isBasicEquals(videoFrameList_[ev.frameIdx].format)) {
                 // アスペクト比以外も変更されていたらファイルを分ける
                 //（AMTSplitterと条件を合わせなければならないことに注意）
-                ++curFormat.videoFileId;
+                curFormat.videoFileId++;
                 formatStartIndex_.push_back((int)format_.size());
             }
             curFormat.videoFormat = videoFrameList_[ev.frameIdx].format;
@@ -1144,7 +1144,7 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         const auto& frameList = filterFrameList_[video];
         int head = 0;
         while (head < (int)frameList.size() && frameList[head].cmType == CMTYPE_CM) {
-            ++head;
+            head++;
         }
         int tail = (int)frameList.size();
         while (tail > head && frameList[tail - 1].cmType == CMTYPE_CM) {
@@ -1508,7 +1508,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
                 if (gap < frameDuration * AUDIO_SYNC_MARGIN_FRAMES) {
                     frameIndex = *it;
                     state.lastFrame = (int)(it - frameList.begin());
-                    ++it;
+                    it++;
                     consumed = true;
                 } else {
                     const double previousPts = it == frameList.begin() ? modifiedPTS_.front() - frameDuration
@@ -1523,7 +1523,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
             }
             outFrameList.push_back(frameIndex);
             if (adiff) {
-                ++adiff->totalAudioFrames;
+                adiff->totalAudioFrames++;
                 if (frameIndex >= 0) {
                     const double diff = std::abs(modifiedAudioPTS_[frameIndex] - pts);
                     adiff->sumPtsDiff += diff;
@@ -1531,7 +1531,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
                         adiff->maxPtsDiff = diff;
                         adiff->maxPtsDiffPos = pts;
                     }
-                    if (consumed) ++adiff->totalUniquAudioFrames;
+                    if (consumed) adiff->totalUniquAudioFrames++;
                 }
             }
             state.time += frameDuration;
@@ -1560,7 +1560,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
         }
         if (modPTS + (frameDuration / 2) < pts) {
             // 前すぎるのでスキップ
-            ++nskipped;
+            nskipped++;
             continue;
         }
         if (format != nullptr && frame.format != *format) {
@@ -1590,7 +1590,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
                 nskipped = 0;
             }
 
-            ++adiff->totalUniquAudioFrames;
+            adiff->totalUniquAudioFrames++;
         }
 
         for (int t = 0; t < nframes; t++) {
@@ -1602,7 +1602,7 @@ void StreamReformInfo::fillAudioFramesInOrder(
                     adiff->maxPtsDiffPos = pts;
                 }
                 adiff->sumPtsDiff += diff;
-                ++adiff->totalAudioFrames;
+                adiff->totalAudioFrames++;
             }
 
             // フレームを出力

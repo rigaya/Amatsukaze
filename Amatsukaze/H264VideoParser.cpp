@@ -503,7 +503,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
         uint8_t nal_ref_idc = bsm(ptr[0], 5, 2);
         uint8_t nal_unit_type = bsm(ptr[0], 0, 5);
 
-        ++ptr; --payloadLength;
+        ptr++; --payloadLength;
 
         switch (nal_unit_type) {
         case 1: // IDR以外のピクチャのスライス

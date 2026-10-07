@@ -987,7 +987,7 @@ void MakeChapter::makeBase(std::vector<int> trims, std::vector<JlsElement> eleme
                 showSec = true;
             }
             if (prevCM) {
-                ++nChapter;
+                nChapter++;
                 prevCM = false;
             }
             c.comment = 'A' + (nChapter % 26);
