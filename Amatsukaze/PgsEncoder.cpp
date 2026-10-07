@@ -1,12 +1,42 @@
 ﻿#include "PgsEncoder.h"
+#include "PgsSimd.h"
 
 #include <algorithm>
 #include <fstream>
+#include <future>
+#include <thread>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
+#if AMT_PGS_X86 && defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace amatsukaze::pgs {
+namespace simd {
+bool HasAvx2() {
+    static const bool available = [] {
+#if defined(AMT_PGS_DISABLE_AVX2)
+        return false;
+#elif AMT_PGS_X86 && defined(_MSC_VER)
+        int regs[4];
+        __cpuid(regs, 0);
+        if (regs[0] < 7) return false;
+        __cpuidex(regs, 1, 0);
+        // CPUのAVX対応とOSによるYMMレジスタ保存を両方確認する。
+        if ((regs[2] & 0x18000000) != 0x18000000 || (_xgetbv(0) & 6) != 6) return false;
+        __cpuidex(regs, 7, 0);
+        return (regs[1] & (1 << 5)) != 0;
+#elif AMT_PGS_X86 && (defined(__GNUC__) || defined(__clang__))
+        return bool(__builtin_cpu_supports("avx2"));
+#else
+        return false;
+#endif
+    }();
+    return available;
+}
+}
 namespace {
 
 constexpr int MaxObjectDimension = 4096;
@@ -63,13 +93,22 @@ bool Overlaps(const Bounds& a, const Bounds& b) {
     return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
 
+
 Region Trim(const Region& region) {
     int left = region.width, top = region.height, right = 0, bottom = 0;
-    for (int y = 0; y < region.height; ++y) {
-        for (int x = 0; x < region.width; ++x) {
-            if (region.pixels[static_cast<size_t>(y) * region.width + x].a != 0) {
-                left = (std::min)(left, x); top = (std::min)(top, y);
-                right = (std::max)(right, x + 1); bottom = (std::max)(bottom, y + 1);
+#if AMT_PGS_X86
+    if (simd::HasAvx2()) {
+        const auto bounds = simd::AlphaBoundsAvx2(region);
+        left = bounds.left; top = bounds.top; right = bounds.right; bottom = bounds.bottom;
+    } else
+#endif
+    {
+        for (int y = 0; y < region.height; ++y) {
+            for (int x = 0; x < region.width; ++x) {
+                if (region.pixels[static_cast<size_t>(y) * region.width + x].a != 0) {
+                    left = (std::min)(left, x); top = (std::min)(top, y);
+                    right = (std::max)(right, x + 1); bottom = (std::max)(bottom, y + 1);
+                }
             }
         }
     }
@@ -156,6 +195,11 @@ std::vector<Region> Prepare(const Event& event, int canvasWidth, int canvasHeigh
 
     std::vector<Region> result;
     for (auto& group : groups) {
+        // 単独の領域は合成し直す必要がない。透明画素のRGBはパレット化時に無視される。
+        if (group.members.size() == 1) {
+            result.push_back(std::move(regions[group.members.front()]));
+            continue;
+        }
         Region out{group.box.left, group.box.top, group.box.right - group.box.left, group.box.bottom - group.box.top, {}};
         if (out.width > MaxObjectDimension || out.height > MaxObjectDimension)
             throw std::length_error("PGSオブジェクトは幅・高さ4096以下である必要があります");
@@ -220,13 +264,24 @@ void Object(std::vector<uint8_t>& dst, int64_t pts, int id, const IndexedImage& 
 std::vector<uint8_t> PgsEncoder::EncodeRle(const std::vector<uint8_t>& pixels, int width, int height) {
     if (pixels.size() != Area(width, height)) throw std::invalid_argument("PGSインデックス画像サイズが不正です");
     std::vector<uint8_t> result;
+    result.reserve(pixels.size() + static_cast<size_t>(height) * 2);
+#if AMT_PGS_X86
+    const bool avx2 = simd::HasAvx2();
+#endif
     for (int y = 0; y < height; ++y) {
         int x = 0;
         const size_t offset = static_cast<size_t>(y) * width;
         while (x < width) {
             const uint8_t color = pixels[offset + x];
             int length = 1;
-            while (length < MaxRunLength && length < width - x && pixels[offset + x + length] == color) ++length;
+            const int limit = (std::min)(MaxRunLength, width - x);
+            // 短いランは関数呼び出しを避け、長い同色区間だけ32byteずつ走査する。
+            while (length < limit && length < 8 && pixels[offset + x + length] == color) ++length;
+#if AMT_PGS_X86
+            if (avx2 && length == 8 && limit >= 32) length = simd::RunLengthAvx2(pixels.data() + offset + x, limit);
+            else
+#endif
+                while (length < limit && pixels[offset + x + length] == color) ++length;
             if (color != 0 && length <= 2) {
                 for (int i = 0; i < length; ++i) Byte(result, color);
             } else {
@@ -252,12 +307,14 @@ std::vector<uint8_t> PgsEncoder::Encode(int canvasWidth, int canvasHeight, const
             throw std::invalid_argument("PGSイベントは非負時刻の時系列・非重複区間である必要があります");
     }
 
-    std::vector<uint8_t> result;
-    uint16_t number = 0;
-    for (size_t index = 0; index < events.size(); ++index) {
+    const auto hasClear = [&](size_t index) {
+        return index + 1 == events.size() || events[index + 1].start90k != events[index].end90k;
+    };
+    const auto encodeEvent = [&](size_t index, uint16_t number) {
+        std::vector<uint8_t> chunk;
         const auto& event = events[index];
         const auto regions = Prepare(event, canvasWidth, canvasHeight);
-        Composition(result, event.start90k, canvasWidth, canvasHeight, number++, true, regions);
+        Composition(chunk, event.start90k, canvasWidth, canvasHeight, number++, true, regions);
         if (!regions.empty()) {
             std::vector<std::vector<Rgba>> images;
             std::vector<std::pair<int, int>> sizes;
@@ -268,13 +325,49 @@ std::vector<uint8_t> PgsEncoder::Encode(int canvasWidth, int canvasHeight, const
                 const auto& entry = palette.entries[i];
                 Byte(pds, static_cast<uint8_t>(i)); Byte(pds, entry.y); Byte(pds, entry.cr); Byte(pds, entry.cb); Byte(pds, entry.rgba.a);
             }
-            Segment(result, event.start90k, Pds, pds);
-            for (size_t i = 0; i < palette.images.size(); ++i) Object(result, event.start90k, static_cast<int>(i), palette.images[i]);
+            Segment(chunk, event.start90k, Pds, pds);
+            for (size_t i = 0; i < palette.images.size(); ++i) Object(chunk, event.start90k, static_cast<int>(i), palette.images[i]);
         }
-        Segment(result, event.start90k, End, {});
+        Segment(chunk, event.start90k, End, {});
         if (index + 1 == events.size() || events[index + 1].start90k != event.end90k) {
-            Composition(result, event.end90k, canvasWidth, canvasHeight, number++, false, regions);
-            Segment(result, event.end90k, End, {});
+            Composition(chunk, event.end90k, canvasWidth, canvasHeight, number++, false, regions);
+            Segment(chunk, event.end90k, End, {});
+        }
+        return chunk;
+    };
+
+    // 独立したイベントを最大4個のバッチに制限して処理し、一時画像のメモリ増加を抑える。
+    size_t totalPixels = 0;
+    for (const auto& event : events) for (const auto& region : event.regions) {
+        const size_t remaining = 262144 - (std::min)(totalPixels, size_t(262144));
+        totalPixels += (std::min)(region.pixels.size(), remaining);
+    }
+    const size_t workers = events.size() >= 2 && totalPixels >= 262144
+        ? (std::min)(size_t(4), size_t((std::max)(1u, std::thread::hardware_concurrency()))) : 1;
+    std::vector<uint8_t> result;
+    uint16_t number = 0;
+    for (size_t first = 0; first < events.size(); first += workers) {
+        const size_t count = (std::min)(workers, events.size() - first);
+        size_t batchPixels = 0;
+        for (size_t index = first; index < first + count; ++index) for (const auto& region : events[index].regions)
+            batchPixels += (std::min)(region.pixels.size(), size_t(65536) - batchPixels);
+        if (count == 1 || batchPixels < 65536) {
+            for (size_t index = first; index < first + count; ++index) {
+                const auto chunk = encodeEvent(index, number);
+                number = static_cast<uint16_t>(number + 1 + hasClear(index));
+                result.insert(result.end(), chunk.begin(), chunk.end());
+            }
+            continue;
+        }
+        std::vector<std::future<std::vector<uint8_t>>> pending;
+        pending.reserve(count);
+        for (size_t index = first; index < first + count; ++index) {
+            pending.push_back(std::async(std::launch::async, encodeEvent, index, number));
+            number = static_cast<uint16_t>(number + 1 + hasClear(index));
+        }
+        for (auto& task : pending) {
+            const auto chunk = task.get();
+            result.insert(result.end(), chunk.begin(), chunk.end());
         }
     }
     return result;

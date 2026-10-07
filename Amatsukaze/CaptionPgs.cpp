@@ -1,5 +1,6 @@
 ﻿#include "CaptionPgs.h"
 #include "PgsEncoder.h"
+#include "CaptionPgsPixels.h"
 #include "StreamReform.h"
 
 #include <aribcaption/aribcaption.hpp>
@@ -564,18 +565,13 @@ std::vector<amatsukaze::pgs::Region> ConvertCaptionImages(
         region.y = top;
         region.width = right - left;
         region.height = bottom - top;
-        region.pixels.reserve(static_cast<size_t>(region.width) * region.height);
+        region.pixels.resize(static_cast<size_t>(region.width) * region.height);
         for (int y = top; y < bottom; ++y) {
-            const auto* row = image.bitmap.data() + static_cast<size_t>(y - image.dst_y) * image.stride;
-            for (int x = left; x < right; ++x) {
-                const auto* pixel = row + static_cast<size_t>(x - image.dst_x) * 4;
-                const unsigned alpha = pixel[3];
-                const auto straight = [alpha](unsigned value) -> uint8_t {
-                    return alpha ? static_cast<uint8_t>(std::min(255u, (value * 255u + alpha / 2u) / alpha)) : 0;
-                };
-                // Canvasの字形合成結果はpremultiplied。PGSパレットにはstraightで渡す。
-                region.pixels.push_back({straight(pixel[0]), straight(pixel[1]), straight(pixel[2]), pixel[3]});
-            }
+            const auto* row = image.bitmap.data() + static_cast<size_t>(y - image.dst_y) * image.stride
+                + static_cast<size_t>(left - image.dst_x) * 4;
+            // Canvasの合成結果はpremultiplied。PGSパレットへ渡すstraight表現を復元する。
+            amatsukaze::pgs::RestoreStraightAlphaRow(
+                region.pixels.data() + static_cast<size_t>(y - top) * region.width, row, region.width);
         }
         regions.push_back(std::move(region));
     }

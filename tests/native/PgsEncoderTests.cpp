@@ -6,6 +6,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -271,6 +272,77 @@ void Rle() {
     const std::vector<uint8_t> pixels{1,0,0,2,2,3,0,3,3,0};
     Check(ReadRle(PgsEncoder::EncodeRle(pixels,5,2),5,2)==pixels,"混在RLE往復不一致");
 }
+void RleCompatibility() {
+    const auto reference = [](const std::vector<uint8_t>& pixels, int width, int height) {
+        std::vector<uint8_t> encoded;
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width;) {
+                const uint8_t color = pixels[size_t(y) * width + x];
+                int length = 1;
+                while (length < 16383 && x + length < width && pixels[size_t(y) * width + x + length] == color) ++length;
+                if (color && length <= 2) encoded.insert(encoded.end(), length, color);
+                else {
+                    encoded.push_back(0);
+                    const uint8_t flags = color ? 0x80 : 0;
+                    if (length < 64) encoded.push_back(uint8_t(flags | length));
+                    else { encoded.push_back(uint8_t(flags | 0x40 | (length >> 8))); encoded.push_back(uint8_t(length)); }
+                    if (color) encoded.push_back(color);
+                }
+                x += length;
+            }
+            encoded.insert(encoded.end(), 2, 0);
+        }
+        return encoded;
+    };
+    uint32_t random = 12345;
+    for (int width : {1,7,8,31,32,33,63,64,65,1919,1920,16383,16384}) {
+        std::vector<uint8_t> pixels(size_t(width) * 4);
+        for (size_t start = 0; start < pixels.size();) {
+            random = random * 1664525u + 1013904223u;
+            const size_t count = std::min(size_t((random >> 8) % 96 + 1), pixels.size() - start);
+            std::fill_n(pixels.begin() + start, count, uint8_t(random & 7));
+            start += count;
+        }
+        Check(PgsEncoder::EncodeRle(pixels,width,4)==reference(pixels,width,4),"SIMDのRLEが逐次参照とバイト不一致");
+    }
+}
+void ParallelCompatibility() {
+    std::vector<Event> events;
+    for (int i = 0; i < 7; ++i) {
+        auto region = Solid(10,20,1025,64,{77,88,99,0});
+        for (int y = 1; y < 63; ++y) for (int x = 3; x < 1022; ++x)
+            region.pixels[size_t(y) * region.width + x] = {uint8_t(i*20),90,180,uint8_t((x+y)%3 ? 255 : 128)};
+        events.push_back({90000 + int64_t(i)*180000,180000 + int64_t(i)*180000,{std::move(region)}});
+    }
+    const auto check = [&] {
+        std::vector<uint8_t> expected;
+        uint16_t number = 0;
+        for (const auto& event : events) {
+            auto single = PgsEncoder::Encode(1920,1080,{event});
+            for (size_t pos = 0; pos < single.size();) {
+                if (single[pos+10] == 0x16) {
+                    single[pos+18] = uint8_t(number >> 8); single[pos+19] = uint8_t(number);
+                    ++number;
+                }
+                pos += 13 + Read16(single,pos+11);
+            }
+            expected.insert(expected.end(),single.begin(),single.end());
+        }
+        Check(PgsEncoder::Encode(1920,1080,events)==expected,"イベント並列化が逐次出力とバイト不一致");
+    };
+    check();
+    // 隣接イベントでは、前イベントの消去を省略した連番を確認する。
+    for (size_t i = 1; i < events.size(); ++i) events[i].start90k = events[i-1].end90k;
+    const auto segments = Parse(PgsEncoder::Encode(1920,1080,events));
+    unsigned number = 0;
+    for (const auto& segment : segments) if (segment.type == 0x16)
+        Check(Read16(segment.payload,5)==number++,"並列処理でcomposition_numberが乱れた");
+    Check(number==events.size()+1,"並列処理で隣接イベントの消去省略が崩れた");
+    events[3].regions[0].pixels.pop_back();
+    bool threw = false;
+    try { PgsEncoder::Encode(1920,1080,events); } catch (const std::invalid_argument&) { threw = true; }
+    Check(threw,"並列処理中の不正画像の例外が伝播しない");
+}
 void Ods() {
     Region region = Solid(20,30,512,256,{0,0,0,255});
     for (int y=0;y<region.height;++y) for(int x=0;x<region.width;++x)
@@ -344,6 +416,45 @@ void PaletteBoundary() {
     RoundTrip(1080,{a,b},2,true);
     for(const auto& segment:Parse(PgsEncoder::Encode(1920,1080,{{90000,180000,{a,b}}})))
         if(segment.type==0x14) Check(segment.payload.size()<=2+256*5,"2領域の共有パレットが256色を超えた");
+}
+void PaletteNearestCompatibility() {
+    const auto coordinates = [](const Rgba& color) {
+        const double opacity = color.a / 255.0;
+        return std::array<double,4>{color.r*opacity,color.g*opacity,color.b*opacity,double(color.a)};
+    };
+    uint32_t random = 0x5274631u;
+    for (int trial = 0; trial < 12; ++trial) {
+        std::vector<std::vector<Rgba>> images(2, std::vector<Rgba>(37*31));
+        for (auto& image : images) for (size_t i = 0; i < image.size(); ++i) {
+            random = random * 1664525u + 1013904223u;
+            image[i] = {uint8_t(random),uint8_t(random>>8),uint8_t(random>>16),
+                uint8_t(i%16 == 0 ? 0 : (trial%3 == 0 ? 255 : 1+(random>>24)%255))};
+            if (i%7 == 0 && i) image[i] = image[i-1];
+        }
+        const auto palette = MakePalette(images,{{37,31},{37,31}},trial%2 ? 480 : 1080);
+        Check(palette.entries.size()==256,"最近傍互換テストで255色への減色が発生していない");
+        std::vector<std::array<double,4>> positions;
+        for (const auto& entry : palette.entries) positions.push_back(coordinates(entry.rgba));
+        for (size_t image = 0; image < images.size(); ++image) for (size_t pixel = 0; pixel < images[image].size(); ++pixel) {
+            const auto color = images[image][pixel];
+            uint8_t expected = 0;
+            if (color.a) {
+                const auto position = coordinates(color);
+                double best = std::numeric_limits<double>::max();
+                for (size_t index = 1; index < positions.size(); ++index) {
+                    double distance = 0;
+                    for (size_t axis = 0; axis < 4; ++axis) {
+                        const double difference = position[axis] - positions[index][axis];
+                        // FMAで積和をまとめず、従来の軸順の乗算・加算を参照にする。
+                        volatile double squared = difference * difference;
+                        distance += squared;
+                    }
+                    if (distance < best) { best = distance; expected = uint8_t(index); }
+                }
+            }
+            Check(palette.images[image].pixels[pixel]==expected,"減色の最近傍indexが逐次参照と不一致");
+        }
+    }
 }
 template<class Function> void Throws(Function action, const char* message) {
     bool threw=false;
@@ -425,7 +536,7 @@ void FileOutput() {
 }
 int main() {
     struct Test { const char* name; void (*run)(); };
-    const Test tests[]={{"colors",Colors},{"gradient",Gradient},{"regions",Regions},{"rle",Rle},{"ods",Ods},{"golden",Golden},{"palette_boundary",PaletteBoundary},{"validation",Validation},{"empty_wrap",EmptyAndWrap},{"file_output",FileOutput}};
+    const Test tests[]={{"colors",Colors},{"gradient",Gradient},{"regions",Regions},{"rle",Rle},{"rle_compatibility",RleCompatibility},{"parallel_compatibility",ParallelCompatibility},{"ods",Ods},{"golden",Golden},{"palette_boundary",PaletteBoundary},{"palette_nearest_compatibility",PaletteNearestCompatibility},{"validation",Validation},{"empty_wrap",EmptyAndWrap},{"file_output",FileOutput}};
     int failed=0;
     for(const auto& test:tests) {
         try { test.run(); std::printf("[PASS] pgs_%s\n",test.name); }

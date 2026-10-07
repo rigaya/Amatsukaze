@@ -123,6 +123,19 @@ if is_x86
   )
 endif
 
+# PGSのAVX2実装は単体テストとも共有し、通常処理の命令セットを変更しない。
+pgs_avx2_libs = []
+if is_x86
+  pgs_avx2_args = meson.get_compiler('cpp').get_id() == 'msvc' ? ['/arch:AVX2', '/fp:precise'] : ['-mavx2', '-ffp-contract=off']
+  pgs_avx2_libs += static_library('pgs_avx2_lib',
+    'PgsEncoderAVX2.cpp',
+    include_directories : amatsukaze_inc,
+    cpp_args : pgs_avx2_args,
+    pic : true,
+    install : false,
+  )
+endif
+
 # AribString.cppは_UNICODEマクロ付きで別途ビルド
 aribstring_lib = static_library('aribstring',
   'AribString.cpp',
@@ -139,7 +152,7 @@ amatsukaze_lib = shared_library('Amatsukaze',
   dependencies : amatsukaze_deps,
   cpp_args : amatsukaze_cpp_args,
   link_args : amatsukaze_link_args,
-  link_with : amatsukaze_simd_libs + [aribstring_lib],
+  link_with : amatsukaze_simd_libs + pgs_avx2_libs + [aribstring_lib],
   install : true,
 )
 

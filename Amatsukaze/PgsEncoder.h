@@ -27,6 +27,8 @@ public:
     // イベントは時系列の非重複区間[start90k,end90k)。空画像も表示の消去に使える。
     // キャンバスは幅・高さ1～4096。キャンバス外の領域、不正サイズ、PGSの長さ上限超過は例外で通知する。
     // SUPのPTSフィールドは32ビットなので、長時間の時刻はその幅で折り返す。
+    // 大きな入力は最大4イベントを並列に処理し、SUPは時系列順に連結する。
+    // AVX2は実行時に判定し、非対応CPUではスカラー処理を使う。
     static std::vector<uint8_t> Encode(int canvasWidth, int canvasHeight, const std::vector<Event>& events);
     static void WriteFile(const std::filesystem::path& path, int canvasWidth, int canvasHeight,
         const std::vector<Event>& events);

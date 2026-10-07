@@ -1,4 +1,5 @@
 ﻿#include "PgsPalette.h"
+#include "PgsSimd.h"
 
 #include <algorithm>
 #include <array>
@@ -119,6 +120,7 @@ std::vector<Rgba> ReduceColors(const std::vector<ColorSample>& samples)
     return colors;
 }
 
+
 PaletteEntry ConvertColor(const Rgba& color, bool bt709)
 {
     // FFmpegのpgssubdecが使う10bit固定小数点係数を逆に解く。
@@ -181,11 +183,24 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
             || images[i].size() != size_t(width) * size_t(height)) {
             throw std::invalid_argument("PGSパレットの画像寸法と画素数が一致しません");
         }
+        // 字幕の塗りつぶし領域では直前の色を再利用し、ハッシュ探索を省く。
+        uint32_t previousKey = 0;
+        size_t previousSample = 0;
         for (const auto& color : images[i]) {
             if (color.a == 0) continue;
-            const auto [it, inserted] = lookup.emplace(ColorKey(color), samples.size());
-            if (inserted) samples.push_back({ color, Coordinates(color), 0 });
-            ++samples[it->second].count;
+            const uint32_t key = ColorKey(color);
+            if (key != previousKey) {
+                const auto found = lookup.find(key);
+                if (found != lookup.end()) {
+                    previousSample = found->second;
+                } else {
+                    previousSample = samples.size();
+                    lookup.emplace(key, previousSample);
+                    samples.push_back({ color, Coordinates(color), 0 });
+                }
+                previousKey = key;
+            }
+            ++samples[previousSample].count;
         }
     }
 
@@ -203,6 +218,18 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
     std::vector<uint8_t> indices(samples.size());
     std::vector<std::array<double, 4>> positions;
     for (const auto& color : colors) positions.push_back(Coordinates(color));
+#if AMT_PGS_X86
+    if (samples.size() > MaxVisibleColors && simd::HasAvx2()) {
+        alignas(32) std::array<std::array<double, 256>, 4> coordinates;
+        for (size_t axis = 0; axis < 4; ++axis) {
+            coordinates[axis].fill(std::numeric_limits<double>::infinity());
+            for (size_t j = 0; j < positions.size(); ++j) coordinates[axis][j] = positions[j][axis];
+        }
+        for (size_t i = 0; i < samples.size(); ++i) {
+            indices[i] = simd::FindNearestColorAvx2(samples[i].position, coordinates, positions.size());
+        }
+    } else
+#endif
     for (size_t i = 0; i < samples.size(); ++i) {
         if (samples.size() <= MaxVisibleColors) {
             indices[i] = static_cast<uint8_t>(i + 1);
@@ -224,9 +251,18 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
     result.images.reserve(images.size());
     for (size_t i = 0; i < images.size(); ++i) {
         IndexedImage image{ sizes[i].first, sizes[i].second, {} };
-        image.pixels.reserve(images[i].size());
-        for (const auto& color : images[i]) {
-            image.pixels.push_back(color.a == 0 ? uint8_t(0) : indices[lookup.at(ColorKey(color))]);
+        image.pixels.resize(images[i].size());
+        uint32_t previousKey = 0;
+        uint8_t previousIndex = 0;
+        for (size_t offset = 0; offset < images[i].size(); ++offset) {
+            const auto& color = images[i][offset];
+            if (color.a == 0) continue;
+            const uint32_t key = ColorKey(color);
+            if (key != previousKey) {
+                previousIndex = indices[lookup.at(key)];
+                previousKey = key;
+            }
+            image.pixels[offset] = previousIndex;
         }
         result.images.push_back(std::move(image));
     }

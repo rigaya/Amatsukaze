@@ -53,6 +53,10 @@
   <ItemGroup>
     <ClCompile Include="PgsEncoderTests.cpp" />
     <ClCompile Include="..\..\Amatsukaze\PgsEncoder.cpp" />
+    <ClCompile Include="..\..\Amatsukaze\PgsEncoderAVX2.cpp">
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Precise</FloatingPointModel>
+    </ClCompile>
     <ClCompile Include="..\..\Amatsukaze\PgsPalette.cpp" />
   </ItemGroup>
   <ItemGroup>

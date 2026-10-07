@@ -251,6 +251,42 @@ void CheckFontFallback() {
     std::printf("日本語既定候補・指定font別名・指定fontの有無・不足記号glyphのfallback確認成功\n");
 }
 
+void CheckStraightAlphaTable() {
+    // premult範囲外も含め、従来の丸め・飽和と全65536組が一致することを確認する。
+    std::vector<uint8_t> source(256 * 256 * 4);
+    for (unsigned alpha = 0; alpha < 256; ++alpha) {
+        for (unsigned value = 0; value < 256; ++value) {
+            const size_t offset = (alpha * 256 + value) * 4;
+            source[offset] = static_cast<uint8_t>(value);
+            source[offset + 1] = static_cast<uint8_t>(255 - value);
+            source[offset + 2] = static_cast<uint8_t>((value * 13) % 256);
+            source[offset + 3] = static_cast<uint8_t>(alpha);
+        }
+    }
+    std::vector<amatsukaze::pgs::Rgba> restored(256 * 256);
+    // 非整列開始と短い末尾も含め、行単位の書き込み範囲を検証する。
+    for (const size_t width : {size_t(0), size_t(1), size_t(7), size_t(31), size_t(65535)}) {
+        std::fill(restored.begin(), restored.end(), amatsukaze::pgs::Rgba{1, 2, 3, 4});
+        amatsukaze::pgs::RestoreStraightAlphaRow(restored.data() + 1, source.data() + 4, width);
+        Require(restored[0].r == 1 && restored[0].a == 4, "アルファ復元が行の前へ書き込んだ");
+        for (size_t x = 1; x <= width; ++x) {
+            const auto* pixel = source.data() + x * 4;
+            const auto straight = [alpha = unsigned(pixel[3])](unsigned value) {
+                return alpha ? std::min(255u, (value * 255u + alpha / 2u) / alpha) : 0u;
+            };
+            Require(restored[x].r == straight(pixel[0]) && restored[x].g == straight(pixel[1]) &&
+                restored[x].b == straight(pixel[2]) && restored[x].a == pixel[3],
+                "アルファ復元が従来の整数除算と一致しない");
+        }
+        if (width + 1 < restored.size()) {
+            Require(restored[width + 1].r == 1 && restored[width + 1].a == 4,
+                "アルファ復元が行の後へ書き込んだ");
+        }
+    }
+    Require(amatsukaze::pgs::StraightAlphaTable()[0][0] == 0, "透明画素の復元失敗");
+    std::printf("アルファ復元の全65536組・行境界確認成功\n");
+}
+
 void CheckImageConversion() {
     aribcaption::Image image;
     image.width = 2;
@@ -317,6 +353,7 @@ int main() {
         CheckAlpha();
         CheckLanguages();
         CheckImageConversion();
+        CheckStraightAlphaTable();
         CheckFontFallback();
         CheckMissingGlyphs();
         return 0;

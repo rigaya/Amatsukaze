@@ -17,7 +17,8 @@ pgs_encoder_tests = executable('PgsEncoderTests',
   '../../Amatsukaze/PgsEncoder.cpp',
   '../../Amatsukaze/PgsPalette.cpp',
   include_directories : include_directories('../../Amatsukaze'),
-  dependencies : ffmpeg_dep,
+  dependencies : ffmpeg_dep + [dependency('threads')],
+  link_with : pgs_avx2_libs,
   install : false,
 )
 

@@ -475,6 +475,8 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClInclude Include="PacketCache.h" />
     <ClInclude Include="PgsEncoder.h" />
     <ClInclude Include="PgsPalette.h" />
+    <ClInclude Include="PgsSimd.h" />
+    <ClInclude Include="CaptionPgsPixels.h" />
     <ClInclude Include="PerformanceUtil.h" />
     <ClInclude Include="ProcessThread.h" />
     <ClInclude Include="ReaderWriterFFmpeg.h" />
@@ -618,6 +620,10 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClCompile Include="OSUtil.cpp" />
     <ClCompile Include="PacketCache.cpp" />
     <ClCompile Include="PgsEncoder.cpp" />
+    <ClCompile Include="PgsEncoderAVX2.cpp">
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Precise</FloatingPointModel>
+    </ClCompile>
     <ClCompile Include="PgsPalette.cpp" />
     <ClCompile Include="PerformanceUtil.cpp" />
     <ClCompile Include="ProcessThread.cpp" />
