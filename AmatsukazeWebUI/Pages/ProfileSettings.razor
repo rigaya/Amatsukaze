@@ -242,6 +242,10 @@ else
                             <input type="checkbox" checked="@GetBoolValue("TsreplaceRemoveTypeD")" @onchange="@(e => OnBoolChanged(e, "TsreplaceRemoveTypeD"))" disabled="@GetBoolValue("Mpeg2Partial")" />
                             データ放送を削除する
                         </label>
+                        <label class="settings-check" style="margin-left: 1rem;" title="出力tsの先頭にPSI/PCRを先行送出する準備区間(1500ms)を追加し、再生開始時の互換性を高めます (tsreplace --startup-preroll)">
+                            <input type="checkbox" checked="@GetBoolValue("AddTsreplaceStartupPreroll")" @onchange="@(e => OnBoolChanged(e, "AddTsreplaceStartupPreroll"))" />
+                            先頭に準備区間を追加
+                        </label>
                     </td>
                 </tr>
             }

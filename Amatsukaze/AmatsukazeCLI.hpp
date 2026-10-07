@@ -83,6 +83,7 @@ static void printHelp(const tchar* bin) {
         "  --mp4box <パス>     mp4boxへのパス（MP4で字幕処理する場合に必要）[mp4box.exe]\n"
         "  --mkvmerge <パス>   mkvmergeへのパス（--use-mkv-when-sub-exists使用時に必要）[mkvmerge.exe]\n"
         "  --tsreplace-remove-typed  tsreplace実行時に--remove-typedを指定する\n"
+        "  --tsreplace-startup-preroll <int>  tsreplace実行時に--startup-preroll <int>(ms)を指定する[0:指定しない]\n"
         "  --mux-ts-temp        tsreplace時に入力TSの一時コピーを作成してmuxを高速化する\n"
         "  --mpeg2-partial      カット境界再エンコードを有効にする（現在はMPEG-2/x262のみ）\n"
         "  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
@@ -289,6 +290,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.numParallelLogoAnalysis = 0;
     conf.directLogoAnalysis = true;
     conf.tsreplaceRemoveTypeD = false;
+    conf.tsreplaceStartupPreroll = 0;
     conf.muxTsTemp = false;
     conf.useMKVWhenSubExist = false;
     conf.pgsSub = true;
@@ -433,6 +435,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             }
         } else if (key == _T("--tsreplace-remove-typed")) {
             conf.tsreplaceRemoveTypeD = true;
+        } else if (key == _T("--tsreplace-startup-preroll")) {
+            conf.tsreplaceStartupPreroll = std::stoi(getParam(argc, argv, i++));
         } else if (key == _T("--mux-ts-temp")) {
             conf.muxTsTemp = true;
         } else if (key == _T("--use-mkv-when-sub-exists")) {

@@ -2648,6 +2648,18 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region AddTsreplaceStartupPreroll変更通知プロパティ
+        public bool AddTsreplaceStartupPreroll {
+            get { return Data.AddTsreplaceStartupPreroll; }
+            set {
+                if (Data.AddTsreplaceStartupPreroll == value)
+                    return;
+                Data.AddTsreplaceStartupPreroll = value;
+                RaisePropertyChanged();
+            }
+        }
+        #endregion
+
         #region TsreplaceMuxTsTempFile変更通知プロパティ
         public bool TsreplaceMuxTsTempFile {
             get { return Data.TsreplaceMuxTsTempFile; }

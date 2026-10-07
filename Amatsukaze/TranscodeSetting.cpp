@@ -468,6 +468,7 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     const std::vector<tstring>& subsTitles,
     const tstring& metapath,
     const bool tsreplaceRemoveTypeD,
+    const int tsreplaceStartupPreroll,
     const tstring& tsreplaceCutList,
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
@@ -706,6 +707,9 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         }
         if (tsreplaceRemoveTypeD) {
             sb.append(_T(" --remove-typed"));
+        }
+        if (tsreplaceStartupPreroll > 0) {
+            sb.append(_T(" --startup-preroll %d"), tsreplaceStartupPreroll);
         }
         sb.append(_T(" -o \"%s\""), outpath);
         ret.push_back(std::make_pair(sb.str(), true));
@@ -998,6 +1002,10 @@ ENUM_FORMAT ConfigWrapper::getFormat() const {
 
 bool ConfigWrapper::getTsreplaceRemoveTypeD() const {
     return conf.tsreplaceRemoveTypeD;
+}
+
+int ConfigWrapper::getTsreplaceStartupPreroll() const {
+    return conf.tsreplaceStartupPreroll;
 }
 
 bool ConfigWrapper::isMuxTsTempEnabled() const {

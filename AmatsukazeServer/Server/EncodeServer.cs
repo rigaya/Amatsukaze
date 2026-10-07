@@ -1470,6 +1470,8 @@ namespace Amatsukaze.Server
             return value > 0 ? value : defaultValue;
         }
 
+        // tsreplaceの先頭に追加する準備区間の長さ(ms)
+        private const int TsreplaceStartupPrerollMs = 1500;
         private const int AutoLogoPendingDefaultDivX = 5;
         private const int AutoLogoPendingDefaultDivY = 5;
         private const int AutoLogoPendingDefaultSearchFrames = 10000;
@@ -2228,6 +2230,10 @@ namespace Amatsukaze.Server
                     if (profile.OutputFormat == FormatType.TSREPLACE && profile.TsreplaceRemoveTypeD)
                     {
                         sb.Append(" --tsreplace-remove-typed");
+                    }
+                    if (profile.OutputFormat == FormatType.TSREPLACE && profile.AddTsreplaceStartupPreroll)
+                    {
+                        sb.Append(" --tsreplace-startup-preroll ").Append(TsreplaceStartupPrerollMs);
                     }
                     if (profile.OutputFormat == FormatType.TSREPLACE && profile.TsreplaceMuxTsTempFile)
                     {

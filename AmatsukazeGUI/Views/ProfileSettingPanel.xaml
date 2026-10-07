@@ -334,7 +334,7 @@
                                   ToolTip="ts一時ファイルを作成し、入力がネットワーク上にある場合のmux速度を向上させます"/>
                         </StackPanel>
 
-                        <StackPanel>
+                        <StackPanel Orientation="Horizontal">
                             <StackPanel.Style>
                                 <Style TargetType="StackPanel">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -349,6 +349,9 @@
                                   IsChecked="{Binding Model.SelectedProfile.TsreplaceRemoveTypeD, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsEnabled="{Binding Model.SelectedProfile.Mpeg2PartialConstraintsEnabled}"
                                   ToolTip="データ放送を削除し、出力tsの軽量化を図ります"/>
+                            <CheckBox Content="先頭に準備区間を追加" VerticalAlignment="Center" Margin="10,5,5,5"
+                                  IsChecked="{Binding Model.SelectedProfile.AddTsreplaceStartupPreroll, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="出力tsの先頭にPSI/PCRを先行送出する準備区間(1500ms)を追加し、再生開始時の互換性を高めます (tsreplace --startup-preroll)"/>
                         </StackPanel>
 
                     </DockPanel>

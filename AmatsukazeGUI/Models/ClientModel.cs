@@ -2117,6 +2117,7 @@ namespace Amatsukaze.Models
                 profile.OutputFormatInt = (int)data.Profile.OutputFormat;
                 profile.UseMKVWhenSubExists = data.Profile.UseMKVWhenSubExists;
                 profile.TsreplaceRemoveTypeD = data.Profile.TsreplaceRemoveTypeD;
+                profile.AddTsreplaceStartupPreroll = data.Profile.AddTsreplaceStartupPreroll;
                 profile.Data.TsreplaceMuxTsTempFile = data.Profile.TsreplaceMuxTsTempFile;
                 profile.EnableGunreFolder = data.Profile.EnableGunreFolder;
                 profile.EnableRename = data.Profile.EnableRename;

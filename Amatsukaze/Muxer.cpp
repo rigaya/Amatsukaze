@@ -280,7 +280,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         vfmt, audioFiles, setting_.getTmpDir(),
         outPath, tmpOut1Path, tmpOut2Path, chapterFile,
         fileOut.timecode, timebase, subsFiles, subsTitles, metaFile,
-        setting_.getTsreplaceRemoveTypeD(), tsreplaceCutList,
+        setting_.getTsreplaceRemoveTypeD(), setting_.getTsreplaceStartupPreroll(), tsreplaceCutList,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions(), audioTrackNames);
@@ -338,7 +338,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
         encVideoFile, encoderOutputInContainer(setting_.getEncoder(), setting_.getFormat()), false,
         videoFormat, audioFiles, setting_.getTmpDir(), outFilePath,
         tstring(), tstring(), tstring(), tstring(), std::pair<int, int>(),
-        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, tstring(),
+        std::vector<tstring>(), std::vector<tstring>(), tstring(), false, setting_.getTsreplaceStartupPreroll(), tstring(),
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
         setting_.getEncoderOptions());

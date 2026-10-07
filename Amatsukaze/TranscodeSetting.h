@@ -156,6 +156,7 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     const std::vector<tstring>& subsTitles,
     const tstring& metapath,
     const bool tsreplaceRemoveTypeD,
+    const int tsreplaceStartupPreroll,
     const tstring& tsreplaceCutList,
     bool muxerAddEncoderCmd,
     bool sarInContainerOnly,
@@ -263,6 +264,8 @@ struct Config {
     tstring preEncBatchFile;
     ENUM_FORMAT format;
     bool tsreplaceRemoveTypeD;
+    // tsreplaceの--startup-preroll値(ms) 0以下なら指定しない
+    int tsreplaceStartupPreroll;
     bool muxTsTemp;
     bool useMKVWhenSubExist;
     bool mpeg2Partial;
@@ -402,6 +405,8 @@ public:
     ENUM_FORMAT getFormat() const;
 
     bool getTsreplaceRemoveTypeD() const;
+
+    int getTsreplaceStartupPreroll() const;
 
     bool isMuxTsTempEnabled() const;
 

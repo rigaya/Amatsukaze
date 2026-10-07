@@ -413,6 +413,10 @@ namespace Amatsukaze.Server
         [DataMember]
         public bool TsreplaceRemoveTypeD { get; set; }
 
+        /// <summary>tsreplaceで出力の先頭に準備区間(--startup-preroll)を追加する</summary>
+        [DataMember]
+        public bool AddTsreplaceStartupPreroll { get; set; }
+
         [DataMember]
         public bool TsreplaceMuxTsTempFile { get; set; }
 
@@ -1171,6 +1175,7 @@ namespace Amatsukaze.Server
                 ? string.Format("{0}:{1}", profile.PmtCutHeadRate, profile.PmtCutTailRate) : "なし");
             keyValue("ロゴ最長フェードフレーム数指定", profile.EnableMaxFadeLength ? profile.MaxFadeLength.ToString() : "なし");
             keyValueBool("tsreplaceでTypeDを削除する", profile.TsreplaceRemoveTypeD);
+            keyValueBool("tsreplaceで先頭に準備区間を追加する", profile.AddTsreplaceStartupPreroll);
             keyValueBool("tsreplaceでts一時ファイルを作成しmuxを高速化", profile.TsreplaceMuxTsTempFile);
             keyValueBool("tsreplaceでビデオを置換する", profile.TSReplaceVideo);
             keyValueBool("JoinLogoScpオプションを有効にする", profile.EnableJLSOption);
