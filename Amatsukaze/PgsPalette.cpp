@@ -47,16 +47,16 @@ ColorBox MeasureBox(size_t begin, size_t end, const std::vector<size_t>& order,
     lower.fill(std::numeric_limits<double>::max());
     upper.fill(std::numeric_limits<double>::lowest());
     double weight = 0;
-    for (size_t i = begin; i < end; ++i) {
+    for (size_t i = begin; i < end; i++) {
         const auto& sample = samples[order[i]];
         weight += double(sample.count) * sample.color.a;
-        for (size_t axis = 0; axis < 4; ++axis) {
+        for (size_t axis = 0; axis < 4; axis++) {
             lower[axis] = std::min(lower[axis], sample.position[axis]);
             upper[axis] = std::max(upper[axis], sample.position[axis]);
         }
     }
     int axis = 0;
-    for (int candidate = 1; candidate < 4; ++candidate) {
+    for (int candidate = 1; candidate < 4; candidate++) {
         if (upper[candidate] - lower[candidate] > upper[axis] - lower[axis]) axis = candidate;
     }
     const double extent = upper[axis] - lower[axis];
@@ -85,7 +85,7 @@ std::vector<Rgba> ReduceColors(const std::vector<ColorSample>& samples)
                 return a != b ? a < b : lhs < rhs;
             });
         double total = 0;
-        for (size_t i = box.begin; i < box.end; ++i) {
+        for (size_t i = box.begin; i < box.end; i++) {
             const auto& sample = samples[order[i]];
             total += double(sample.count) * sample.color.a;
         }
@@ -104,7 +104,7 @@ std::vector<Rgba> ReduceColors(const std::vector<ColorSample>& samples)
     for (const auto& box : boxes) {
         std::array<double, 3> rgb{};
         double opacityWeight = 0, count = 0;
-        for (size_t i = box.begin; i < box.end; ++i) {
+        for (size_t i = box.begin; i < box.end; i++) {
             const auto& sample = samples[order[i]];
             const double weight = double(sample.count) * sample.color.a;
             rgb[0] += sample.color.r * weight;
@@ -142,9 +142,9 @@ PaletteEntry ConvertColor(const Rgba& color, bool bt709)
     const auto decode = [](double value) {
         return std::clamp(static_cast<int>(std::floor((value + FixedScale / 2) / FixedScale)), 0, 255);
     };
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dcb = -1; dcb <= 1; ++dcb) {
-            for (int dcr = -1; dcr <= 1; ++dcr) {
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dcb = -1; dcb <= 1; dcb++) {
+            for (int dcr = -1; dcr <= 1; dcr++) {
                 const int y = std::clamp(initialY + dy, 16, 235);
                 const int cb = std::clamp(initialCb + dcb, 16, 240);
                 const int cr = std::clamp(initialCr + dcr, 16, 240);
@@ -177,7 +177,7 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
     }
     std::vector<ColorSample> samples;
     std::unordered_map<uint32_t, size_t> lookup;
-    for (size_t i = 0; i < images.size(); ++i) {
+    for (size_t i = 0; i < images.size(); i++) {
         const auto [width, height] = sizes[i];
         if (width <= 0 || height <= 0 || size_t(width) > std::numeric_limits<size_t>::max() / size_t(height)
             || images[i].size() != size_t(width) * size_t(height)) {
@@ -200,7 +200,7 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
                 }
                 previousKey = key;
             }
-            ++samples[previousSample].count;
+            samples[previousSample].count++;
         }
     }
 
@@ -221,24 +221,24 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
 #if AMT_PGS_X86
     if (samples.size() > MaxVisibleColors && simd::HasAvx2()) {
         alignas(32) std::array<std::array<double, 256>, 4> coordinates;
-        for (size_t axis = 0; axis < 4; ++axis) {
+        for (size_t axis = 0; axis < 4; axis++) {
             coordinates[axis].fill(std::numeric_limits<double>::infinity());
-            for (size_t j = 0; j < positions.size(); ++j) coordinates[axis][j] = positions[j][axis];
+            for (size_t j = 0; j < positions.size(); j++) coordinates[axis][j] = positions[j][axis];
         }
-        for (size_t i = 0; i < samples.size(); ++i) {
+        for (size_t i = 0; i < samples.size(); i++) {
             indices[i] = simd::FindNearestColorAvx2(samples[i].position, coordinates, positions.size());
         }
     } else
 #endif
-    for (size_t i = 0; i < samples.size(); ++i) {
+    for (size_t i = 0; i < samples.size(); i++) {
         if (samples.size() <= MaxVisibleColors) {
             indices[i] = static_cast<uint8_t>(i + 1);
             continue;
         }
         double best = std::numeric_limits<double>::max();
-        for (size_t j = 0; j < positions.size(); ++j) {
+        for (size_t j = 0; j < positions.size(); j++) {
             double distance = 0;
-            for (size_t axis = 0; axis < 4; ++axis) {
+            for (size_t axis = 0; axis < 4; axis++) {
                 const double difference = samples[i].position[axis] - positions[j][axis];
                 distance += difference * difference;
             }
@@ -249,12 +249,12 @@ PaletteResult MakePalette(const std::vector<std::vector<Rgba>>& images,
         }
     }
     result.images.reserve(images.size());
-    for (size_t i = 0; i < images.size(); ++i) {
+    for (size_t i = 0; i < images.size(); i++) {
         IndexedImage image{ sizes[i].first, sizes[i].second, {} };
         image.pixels.resize(images[i].size());
         uint32_t previousKey = 0;
         uint8_t previousIndex = 0;
-        for (size_t offset = 0; offset < images[i].size(); ++offset) {
+        for (size_t offset = 0; offset < images[i].size(); offset++) {
             const auto& color = images[i][offset];
             if (color.a == 0) continue;
             const uint32_t key = ColorKey(color);

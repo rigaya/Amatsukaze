@@ -103,8 +103,8 @@ Region Trim(const Region& region) {
     } else
 #endif
     {
-        for (int y = 0; y < region.height; ++y) {
-            for (int x = 0; x < region.width; ++x) {
+        for (int y = 0; y < region.height; y++) {
+            for (int x = 0; x < region.width; x++) {
                 if (region.pixels[static_cast<size_t>(y) * region.width + x].a != 0) {
                     left = (std::min)(left, x); top = (std::min)(top, y);
                     right = (std::max)(right, x + 1); bottom = (std::max)(bottom, y + 1);
@@ -115,7 +115,7 @@ Region Trim(const Region& region) {
     if (right == 0) return {};
     Region out{region.x + left, region.y + top, right - left, bottom - top, {}};
     out.pixels.reserve(Area(out.width, out.height));
-    for (int y = top; y < bottom; ++y) {
+    for (int y = top; y < bottom; y++) {
         const auto begin = region.pixels.begin() + static_cast<size_t>(y) * region.width + left;
         out.pixels.insert(out.pixels.end(), begin, begin + out.width);
     }
@@ -159,11 +159,11 @@ std::vector<Region> Prepare(const Event& event, int canvasWidth, int canvasHeigh
     }
 
     std::vector<Group> groups;
-    for (size_t i = 0; i < regions.size(); ++i) groups.push_back({Box(regions[i]), {i}});
+    for (size_t i = 0; i < regions.size(); i++) groups.push_back({Box(regions[i]), {i}});
     while (groups.size() > 1) {
         bool merged = false;
-        for (size_t a = 0; a < groups.size() && !merged; ++a) {
-            for (size_t b = a + 1; b < groups.size(); ++b) {
+        for (size_t a = 0; a < groups.size() && !merged; a++) {
+            for (size_t b = a + 1; b < groups.size(); b++) {
                 if (Overlaps(groups[a].box, groups[b].box)) {
                     Merge(groups, a, b); merged = true; break;
                 }
@@ -176,8 +176,8 @@ std::vector<Region> Prepare(const Event& event, int canvasWidth, int canvasHeigh
         size_t bestA = 0, bestB = 1;
         int64_t bestDistance = (std::numeric_limits<int64_t>::max)();
         int64_t bestArea = bestDistance;
-        for (size_t a = 0; a < groups.size(); ++a) {
-            for (size_t b = a + 1; b < groups.size(); ++b) {
+        for (size_t a = 0; a < groups.size(); a++) {
+            for (size_t b = a + 1; b < groups.size(); b++) {
                 const auto& first = groups[a].box;
                 const auto& second = groups[b].box;
                 const int64_t dx = (std::max)({0, first.left - second.right, second.left - first.right});
@@ -208,8 +208,8 @@ std::vector<Region> Prepare(const Event& event, int canvasWidth, int canvasHeigh
         std::sort(group.members.begin(), group.members.end());
         for (const auto index : group.members) {
             const auto& source = regions[index];
-            for (int y = 0; y < source.height; ++y) {
-                for (int x = 0; x < source.width; ++x) {
+            for (int y = 0; y < source.height; y++) {
+                for (int x = 0; x < source.width; x++) {
                     auto& dst = out.pixels[static_cast<size_t>(y + source.y - out.y) * out.width + x + source.x - out.x];
                     dst = Blend(dst, source.pixels[static_cast<size_t>(y) * source.width + x]);
                 }
@@ -228,13 +228,13 @@ void Composition(std::vector<uint8_t>& dst, int64_t pts, int width, int height, 
     // Normalは消去専用。オブジェクトを外してもエポックのウィンドウ定義は維持する。
     const size_t objectCount = epoch ? regions.size() : 0;
     Byte(pcs, 0); Byte(pcs, 0); Byte(pcs, static_cast<uint8_t>(objectCount));
-    for (size_t i = 0; i < objectCount; ++i) {
+    for (size_t i = 0; i < objectCount; i++) {
         Be16(pcs, static_cast<int>(i)); Byte(pcs, static_cast<uint8_t>(i)); Byte(pcs, 0);
         Be16(pcs, regions[i].x); Be16(pcs, regions[i].y);
     }
     Segment(dst, pts, Pcs, pcs);
     std::vector<uint8_t> wds{static_cast<uint8_t>(regions.size())};
-    for (size_t i = 0; i < regions.size(); ++i) {
+    for (size_t i = 0; i < regions.size(); i++) {
         Byte(wds, static_cast<uint8_t>(i)); Be16(wds, regions[i].x); Be16(wds, regions[i].y);
         Be16(wds, regions[i].width); Be16(wds, regions[i].height);
     }
@@ -268,7 +268,7 @@ std::vector<uint8_t> PgsEncoder::EncodeRle(const std::vector<uint8_t>& pixels, i
 #if AMT_PGS_X86
     const bool avx2 = simd::HasAvx2();
 #endif
-    for (int y = 0; y < height; ++y) {
+    for (int y = 0; y < height; y++) {
         int x = 0;
         const size_t offset = static_cast<size_t>(y) * width;
         while (x < width) {
@@ -276,14 +276,14 @@ std::vector<uint8_t> PgsEncoder::EncodeRle(const std::vector<uint8_t>& pixels, i
             int length = 1;
             const int limit = (std::min)(MaxRunLength, width - x);
             // 短いランは関数呼び出しを避け、長い同色区間だけ32byteずつ走査する。
-            while (length < limit && length < 8 && pixels[offset + x + length] == color) ++length;
+            while (length < limit && length < 8 && pixels[offset + x + length] == color) length++;
 #if AMT_PGS_X86
             if (avx2 && length == 8 && limit >= 32) length = simd::RunLengthAvx2(pixels.data() + offset + x, limit);
             else
 #endif
-                while (length < limit && pixels[offset + x + length] == color) ++length;
+                while (length < limit && pixels[offset + x + length] == color) length++;
             if (color != 0 && length <= 2) {
-                for (int i = 0; i < length; ++i) Byte(result, color);
+                for (int i = 0; i < length; i++) Byte(result, color);
             } else {
                 Byte(result, 0);
                 const uint8_t flags = color != 0 ? 0x80 : 0;
@@ -301,7 +301,7 @@ std::vector<uint8_t> PgsEncoder::EncodeRle(const std::vector<uint8_t>& pixels, i
 std::vector<uint8_t> PgsEncoder::Encode(int canvasWidth, int canvasHeight, const std::vector<Event>& events) {
     if (canvasWidth <= 0 || canvasHeight <= 0 || canvasWidth > MaxCanvasDimension || canvasHeight > MaxCanvasDimension)
         throw std::invalid_argument("PGSキャンバスサイズが不正です");
-    for (size_t i = 0; i < events.size(); ++i) {
+    for (size_t i = 0; i < events.size(); i++) {
         if (events[i].start90k < 0 || events[i].end90k <= events[i].start90k ||
             (i != 0 && events[i].start90k < events[i - 1].end90k))
             throw std::invalid_argument("PGSイベントは非負時刻の時系列・非重複区間である必要があります");
@@ -321,12 +321,12 @@ std::vector<uint8_t> PgsEncoder::Encode(int canvasWidth, int canvasHeight, const
             for (const auto& region : regions) { images.push_back(region.pixels); sizes.emplace_back(region.width, region.height); }
             const auto palette = MakePalette(images, sizes, canvasHeight);
             std::vector<uint8_t> pds{0, 0};
-            for (size_t i = 0; i < palette.entries.size(); ++i) {
+            for (size_t i = 0; i < palette.entries.size(); i++) {
                 const auto& entry = palette.entries[i];
                 Byte(pds, static_cast<uint8_t>(i)); Byte(pds, entry.y); Byte(pds, entry.cr); Byte(pds, entry.cb); Byte(pds, entry.rgba.a);
             }
             Segment(chunk, event.start90k, Pds, pds);
-            for (size_t i = 0; i < palette.images.size(); ++i) Object(chunk, event.start90k, static_cast<int>(i), palette.images[i]);
+            for (size_t i = 0; i < palette.images.size(); i++) Object(chunk, event.start90k, static_cast<int>(i), palette.images[i]);
         }
         Segment(chunk, event.start90k, End, {});
         if (index + 1 == events.size() || events[index + 1].start90k != event.end90k) {
@@ -349,10 +349,10 @@ std::vector<uint8_t> PgsEncoder::Encode(int canvasWidth, int canvasHeight, const
     for (size_t first = 0; first < events.size(); first += workers) {
         const size_t count = (std::min)(workers, events.size() - first);
         size_t batchPixels = 0;
-        for (size_t index = first; index < first + count; ++index) for (const auto& region : events[index].regions)
+        for (size_t index = first; index < first + count; index++) for (const auto& region : events[index].regions)
             batchPixels += (std::min)(region.pixels.size(), size_t(65536) - batchPixels);
         if (count == 1 || batchPixels < 65536) {
-            for (size_t index = first; index < first + count; ++index) {
+            for (size_t index = first; index < first + count; index++) {
                 const auto chunk = encodeEvent(index, number);
                 number = static_cast<uint16_t>(number + 1 + hasClear(index));
                 result.insert(result.end(), chunk.begin(), chunk.end());
@@ -361,7 +361,7 @@ std::vector<uint8_t> PgsEncoder::Encode(int canvasWidth, int canvasHeight, const
         }
         std::vector<std::future<std::vector<uint8_t>>> pending;
         pending.reserve(count);
-        for (size_t index = first; index < first + count; ++index) {
+        for (size_t index = first; index < first + count; index++) {
             pending.push_back(std::async(std::launch::async, encodeEvent, index, number));
             number = static_cast<uint16_t>(number + 1 + hasClear(index));
         }

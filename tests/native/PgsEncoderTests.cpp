@@ -95,12 +95,12 @@ std::vector<Picture> Decode(const std::vector<uint8_t>& sup, int width, int heig
         Check(result >= 0, "pgssub復号失敗: " + std::to_string(result));
         if (got) {
             Picture picture{segment.pts, int(subtitle.num_rects), std::vector<Rgba>(size_t(width) * height, {0,0,0,0})};
-            for (unsigned i = 0; i < subtitle.num_rects; ++i) {
+            for (unsigned i = 0; i < subtitle.num_rects; i++) {
                 const AVSubtitleRect* rect = subtitle.rects[i];
                 Check(rect->type == SUBTITLE_BITMAP, "画像字幕ではない");
                 Check(rect->x >= 0 && rect->y >= 0 && rect->x + rect->w <= width && rect->y + rect->h <= height,
                     "復号画像がキャンバス範囲外");
-                for (int y = 0; y < rect->h; ++y) for (int x = 0; x < rect->w; ++x) {
+                for (int y = 0; y < rect->h; y++) for (int x = 0; x < rect->w; x++) {
                     const auto index = rect->data[0][size_t(y) * rect->linesize[0] + x];
                     uint32_t color;
                     std::memcpy(&color, rect->data[1] + size_t(index) * 4, 4);
@@ -120,7 +120,7 @@ Region Solid(int x, int y, int width, int height, Rgba color) {
 }
 std::vector<Rgba> Canvas(int width, int height, const std::vector<Region>& regions) {
     std::vector<Rgba> pixels(size_t(width) * height, {0,0,0,0});
-    for (const auto& region : regions) for (int y = 0; y < region.height; ++y) for (int x = 0; x < region.width; ++x) {
+    for (const auto& region : regions) for (int y = 0; y < region.height; y++) for (int x = 0; x < region.width; x++) {
         const auto color = region.pixels[size_t(y) * region.width + x];
         auto& target = pixels[size_t(region.y + y) * width + region.x + x];
         const double sourceAlpha = color.a / 255.0;
@@ -139,7 +139,7 @@ void Compare(const std::vector<Rgba>& expected, const std::vector<Rgba>& actual,
     double error = 0;
     size_t count = 0;
     int maxError = 0;
-    for (size_t i = 0; i < expected.size(); ++i) {
+    for (size_t i = 0; i < expected.size(); i++) {
         const auto a = expected[i];
         const auto b = actual[i];
         Check((a.a == 0) == (b.a == 0), "透明画素の位置不一致: " + std::to_string(i));
@@ -148,7 +148,7 @@ void Compare(const std::vector<Rgba>& expected, const std::vector<Rgba>& actual,
         for (int d : differences) {
             maxError = std::max(maxError, std::abs(d));
             error += double(d) * d;
-            ++count;
+            count++;
         }
     }
     if (!quantized) Check(maxError <= 2, "255色以下の誤差が±2を超えた: " + std::to_string(maxError));
@@ -191,17 +191,17 @@ void Colors() {
         Region region = Solid(7, 11, 64, 8, {0,0,0,255});
         const Rgba colors[] = {{255,0,0,255}, {0,255,0,255}, {0,0,255,255}, {255,255,255,255},
             {0,0,0,255}, {128,128,128,255}, {30,70,170,128}, {230,180,20,64}};
-        for (size_t i = 0; i < region.pixels.size(); ++i) region.pixels[i] = colors[i % 8];
+        for (size_t i = 0; i < region.pixels.size(); i++) region.pixels[i] = colors[i % 8];
         RoundTrip(height, {region}, 1);
     }
 }
 void Gradient() {
     Region region = Solid(30, 40, 128, 4, {255,255,255,255});
-    for (int x = 0; x < region.width; ++x) for (int y = 0; y < region.height; ++y)
+    for (int x = 0; x < region.width; x++) for (int y = 0; y < region.height; y++)
         region.pixels[size_t(y) * region.width + x] = {230,210,170,uint8_t(x * 2 + 1)};
     RoundTrip(1080, {region}, 1);
     region = Solid(30, 40, 64, 64, {0,0,0,255});
-    for (int y = 0; y < 64; ++y) for (int x = 0; x < 64; ++x)
+    for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++)
         region.pixels[size_t(y) * 64 + x] = {uint8_t(x * 4),uint8_t(y * 4),uint8_t((x+y)*2),uint8_t(128 + (x % 32)*4)};
     RoundTrip(1080, {region}, 1, true);
 }
@@ -213,7 +213,7 @@ void Regions() {
     RoundTrip(480, {a,Solid(20,25,20,10,{40,240,40,255})}, 1);
     RoundTrip(1080, {Solid(10,20,20,10,{240,40,40,80}),Solid(20,25,20,10,{40,240,40,120})}, 1);
     Region trim = Solid(100,100,16,10,{99,88,77,0});
-    for (int y = 3; y < 7; ++y) for (int x = 4; x < 12; ++x)
+    for (int y = 3; y < 7; y++) for (int x = 4; x < 12; x++)
         trim.pixels[size_t(y)*16+x] = {255,255,255,255};
     const auto sup = PgsEncoder::Encode(1920,1080,{{90000,180000,{trim}}});
     const auto segments = Parse(sup);
@@ -225,7 +225,7 @@ void Regions() {
 std::vector<uint8_t> ReadRle(const std::vector<uint8_t>& rle, int width, int height) {
     std::vector<uint8_t> pixels;
     size_t pos = 0;
-    for (int y = 0; y < height; ++y) {
+    for (int y = 0; y < height; y++) {
         size_t column = 0;
         bool ended = false;
         while (pos < rle.size()) {
@@ -275,11 +275,11 @@ void Rle() {
 void RleCompatibility() {
     const auto reference = [](const std::vector<uint8_t>& pixels, int width, int height) {
         std::vector<uint8_t> encoded;
-        for (int y = 0; y < height; ++y) {
+        for (int y = 0; y < height; y++) {
             for (int x = 0; x < width;) {
                 const uint8_t color = pixels[size_t(y) * width + x];
                 int length = 1;
-                while (length < 16383 && x + length < width && pixels[size_t(y) * width + x + length] == color) ++length;
+                while (length < 16383 && x + length < width && pixels[size_t(y) * width + x + length] == color) length++;
                 if (color && length <= 2) encoded.insert(encoded.end(), length, color);
                 else {
                     encoded.push_back(0);
@@ -308,9 +308,9 @@ void RleCompatibility() {
 }
 void ParallelCompatibility() {
     std::vector<Event> events;
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 7; i++) {
         auto region = Solid(10,20,1025,64,{77,88,99,0});
-        for (int y = 1; y < 63; ++y) for (int x = 3; x < 1022; ++x)
+        for (int y = 1; y < 63; y++) for (int x = 3; x < 1022; x++)
             region.pixels[size_t(y) * region.width + x] = {uint8_t(i*20),90,180,uint8_t((x+y)%3 ? 255 : 128)};
         events.push_back({90000 + int64_t(i)*180000,180000 + int64_t(i)*180000,{std::move(region)}});
     }
@@ -322,7 +322,7 @@ void ParallelCompatibility() {
             for (size_t pos = 0; pos < single.size();) {
                 if (single[pos+10] == 0x16) {
                     single[pos+18] = uint8_t(number >> 8); single[pos+19] = uint8_t(number);
-                    ++number;
+                    number++;
                 }
                 pos += 13 + Read16(single,pos+11);
             }
@@ -332,7 +332,7 @@ void ParallelCompatibility() {
     };
     check();
     // 隣接イベントでは、前イベントの消去を省略した連番を確認する。
-    for (size_t i = 1; i < events.size(); ++i) events[i].start90k = events[i-1].end90k;
+    for (size_t i = 1; i < events.size(); i++) events[i].start90k = events[i-1].end90k;
     const auto segments = Parse(PgsEncoder::Encode(1920,1080,events));
     unsigned number = 0;
     for (const auto& segment : segments) if (segment.type == 0x16)
@@ -345,7 +345,7 @@ void ParallelCompatibility() {
 }
 void Ods() {
     Region region = Solid(20,30,512,256,{0,0,0,255});
-    for (int y=0;y<region.height;++y) for(int x=0;x<region.width;++x)
+    for (int y=0;y<region.height;y++) for(int x=0;x<region.width;x++)
         region.pixels[size_t(y)*region.width+x] = x%2 ? Rgba{255,255,255,255} : Rgba{0,0,0,255};
     const auto segments = Parse(PgsEncoder::Encode(1920,1080,{{90000,180000,{region}}}));
     std::vector<Segment> ods;
@@ -355,7 +355,7 @@ void Ods() {
     const auto& first=ods.front().payload;
     Check(first.size()>=11,"ODS先頭の幅高さフィールド欠落");
     const unsigned declared=(unsigned(first[4])<<16)|(unsigned(first[5])<<8)|first[6];
-    for(size_t i=0;i<ods.size();++i){
+    for(size_t i=0;i<ods.size();i++){
         const auto& p=ods[i].payload;
         Check(p.size()<=65535 && p.size()>=4,"ODS断片長が不正");
         Check((p[3]&0xc0)==(uint8_t((i==0?0x80:0)|(i+1==ods.size()?0x40:0))),"ODS first/lastフラグ不一致");
@@ -369,7 +369,7 @@ void Golden() {
     const auto segments=Parse(PgsEncoder::Encode(720,480,{{90000,180000,{Solid(10,20,2,1,{255,255,255,255})}}}));
     const std::vector<uint8_t> types{0x16,0x17,0x14,0x15,0x80,0x16,0x17,0x80};
     Check(segments.size()==types.size(),"固定ケースのセグメント数不一致");
-    for(size_t i=0;i<types.size();++i) {
+    for(size_t i=0;i<types.size();i++) {
         Check(segments[i].type==types[i],"表示セット順序不一致");
         Check(segments[i].pts==(i<5?90000u:180000u),"SUP時刻不一致");
     }
@@ -404,7 +404,7 @@ void Golden() {
 }
 void PaletteBoundary() {
     Region region=Solid(10,20,255,1,{0,0,0,255});
-    for (int x=0;x<255;++x) region.pixels[x]={uint8_t(x),90,140,255};
+    for (int x=0;x<255;x++) region.pixels[x]={uint8_t(x),90,140,255};
     const auto segments=Parse(PgsEncoder::Encode(1920,1080,{{90000,180000,{region}}}));
     const auto palette=std::find_if(segments.begin(),segments.end(),[](const Segment& item){return item.type==0x14;});
     Check(palette!=segments.end() && palette->payload.size()==2+256*5,"255色は減色せず透明色とともに保持すること");
@@ -412,7 +412,7 @@ void PaletteBoundary() {
     RoundTrip(1080,{region},1);
     Region a=Solid(10,20,128,1,{0,0,0,255});
     Region b=Solid(10,30,128,1,{0,0,0,255});
-    for(int x=0;x<128;++x){a.pixels[x]={uint8_t(x),90,140,255};b.pixels[x]={uint8_t(x+128),90,140,255};}
+    for(int x=0;x<128;x++){a.pixels[x]={uint8_t(x),90,140,255};b.pixels[x]={uint8_t(x+128),90,140,255};}
     RoundTrip(1080,{a,b},2,true);
     for(const auto& segment:Parse(PgsEncoder::Encode(1920,1080,{{90000,180000,{a,b}}})))
         if(segment.type==0x14) Check(segment.payload.size()<=2+256*5,"2領域の共有パレットが256色を超えた");
@@ -423,9 +423,9 @@ void PaletteNearestCompatibility() {
         return std::array<double,4>{color.r*opacity,color.g*opacity,color.b*opacity,double(color.a)};
     };
     uint32_t random = 0x5274631u;
-    for (int trial = 0; trial < 12; ++trial) {
+    for (int trial = 0; trial < 12; trial++) {
         std::vector<std::vector<Rgba>> images(2, std::vector<Rgba>(37*31));
-        for (auto& image : images) for (size_t i = 0; i < image.size(); ++i) {
+        for (auto& image : images) for (size_t i = 0; i < image.size(); i++) {
             random = random * 1664525u + 1013904223u;
             image[i] = {uint8_t(random),uint8_t(random>>8),uint8_t(random>>16),
                 uint8_t(i%16 == 0 ? 0 : (trial%3 == 0 ? 255 : 1+(random>>24)%255))};
@@ -435,15 +435,15 @@ void PaletteNearestCompatibility() {
         Check(palette.entries.size()==256,"最近傍互換テストで255色への減色が発生していない");
         std::vector<std::array<double,4>> positions;
         for (const auto& entry : palette.entries) positions.push_back(coordinates(entry.rgba));
-        for (size_t image = 0; image < images.size(); ++image) for (size_t pixel = 0; pixel < images[image].size(); ++pixel) {
+        for (size_t image = 0; image < images.size(); image++) for (size_t pixel = 0; pixel < images[image].size(); pixel++) {
             const auto color = images[image][pixel];
             uint8_t expected = 0;
             if (color.a) {
                 const auto position = coordinates(color);
                 double best = std::numeric_limits<double>::max();
-                for (size_t index = 1; index < positions.size(); ++index) {
+                for (size_t index = 1; index < positions.size(); index++) {
                     double distance = 0;
-                    for (size_t axis = 0; axis < 4; ++axis) {
+                    for (size_t axis = 0; axis < 4; axis++) {
                         const double difference = position[axis] - positions[index][axis];
                         // FMAで積和をまとめず、従来の軸順の乗算・加算を参照にする。
                         volatile double squared = difference * difference;
@@ -506,15 +506,15 @@ void EmptyAndWrap() {
     }
     const int64_t time=int64_t(std::numeric_limits<uint32_t>::max())+123;
     const auto segments=Parse(PgsEncoder::Encode(720,480,{{time,time+90,{Solid(10,20,2,1,{255,255,255,255})}}}));
-    for(size_t i=0;i<segments.size();++i)
+    for(size_t i=0;i<segments.size();i++)
         Check(segments[i].pts==uint32_t(i<5?time:time+90),"32bitPTS折り返し不一致");
     Check(segments.front().pts==uint32_t(time) && segments.back().pts==uint32_t(time+90),"表示区間の32bitPTS折り返し不一致");
     std::vector<Event> events;
-    for(int i=0;i<65538;++i) events.push_back({i,i+1,{}});
+    for(int i=0;i<65538;i++) events.push_back({i,i+1,{}});
     unsigned composition=0;
     for(const auto& s:Parse(PgsEncoder::Encode(720,480,events))) if(s.type==0x16) {
         Check(Read16(s.payload,5)==uint16_t(composition),"composition_numberの16bit折り返し不一致");
-        ++composition;
+        composition++;
     }
     Check(composition>=65538,"composition_number折り返しを実行できていない");
 }
@@ -540,7 +540,7 @@ int main() {
     int failed=0;
     for(const auto& test:tests) {
         try { test.run(); std::printf("[PASS] pgs_%s\n",test.name); }
-        catch(const std::exception& e){++failed;std::fprintf(stderr,"[FAIL] pgs_%s: %s\n",test.name,e.what());}
+        catch(const std::exception& e){failed++;std::fprintf(stderr,"[FAIL] pgs_%s: %s\n",test.name,e.what());}
     }
     std::printf("実行: %zu件, 失敗: %d件\n",sizeof(tests)/sizeof(tests[0]),failed);
     return failed?1:0;

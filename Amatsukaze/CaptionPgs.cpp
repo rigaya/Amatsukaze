@@ -50,7 +50,7 @@ std::string ResolveJapaneseFont(const char* family) {
     // fontconfigの代替フォントを指定フォントの存在確認として扱わない。
     bool sameFamily = false;
     FcChar8* value = nullptr;
-    for (int index = 0; FcPatternGetString(matched.get(), FC_FAMILY, index, &value) == FcResultMatch; ++index) {
+    for (int index = 0; FcPatternGetString(matched.get(), FC_FAMILY, index, &value) == FcResultMatch; index++) {
         if (FcStrCmpIgnoreCase(value, reinterpret_cast<const FcChar8*>(family)) == 0) {
             sameFamily = true;
             break;
@@ -150,10 +150,10 @@ void CheckRenderer(int width, int height, const char* fontFamily, std::string& d
     }
     size_t paintedPixels = 0;
     for (const auto& image : result.images) {
-        for (int y = 0; y < image.height; ++y) {
-            for (int x = 0; x < image.width; ++x) {
+        for (int y = 0; y < image.height; y++) {
+            for (int x = 0; x < image.width; x++) {
                 if (image.bitmap[static_cast<size_t>(y) * image.stride + x * 4 + 3]) {
-                    ++paintedPixels;
+                    paintedPixels++;
                 }
             }
         }
@@ -251,7 +251,7 @@ CaptionFontResolution ResolveCaptionFonts(std::set<uint32_t> codepoints,
                 return FcStrCmpIgnoreCase(reinterpret_cast<const FcChar8*>(generic),
                     reinterpret_cast<const FcChar8*>(preferredFamily.c_str())) == 0;
             });
-            for (int index = 0; FcPatternGetString(match.get(), FC_FAMILY, index, &family) == FcResultMatch; ++index) {
+            for (int index = 0; FcPatternGetString(match.get(), FC_FAMILY, index, &family) == FcResultMatch; index++) {
                 if (FcStrCmpIgnoreCase(family, reinterpret_cast<const FcChar8*>(preferredFamily.c_str())) == 0) {
                     found = true;
                     break;
@@ -465,8 +465,8 @@ aribcaption::RenderResult RenderEnclosedCaption(aribcaption::Context& context,
         target.bitmap.resize(static_cast<size_t>(target.stride) * height);
         const auto fill = [&target](int left, int top, int right, int bottom, ColorRGBA color) {
             color = Premultiply(color);
-            for (int y = std::max(0, top); y < std::min(target.height, bottom); ++y) {
-                for (int x = std::max(0, left); x < std::min(target.width, right); ++x) {
+            for (int y = std::max(0, top); y < std::min(target.height, bottom); y++) {
+                for (int x = std::max(0, left); x < std::min(target.width, right); x++) {
                     auto* pixel = target.bitmap.data() + static_cast<size_t>(y) * target.stride + x * 4;
                     pixel[0] = color.r;
                     pixel[1] = color.g;
@@ -523,12 +523,12 @@ aribcaption::RenderResult RenderEnclosedCaption(aribcaption::Context& context,
                     image.dst_x != target.dst_x || image.dst_y != target.dst_y) {
                     throw std::runtime_error("囲み字幕の描画座標が一致しない");
                 }
-                for (int y = 0; y < image.height; ++y) {
-                    for (int x = 0; x < image.width; ++x) {
+                for (int y = 0; y < image.height; y++) {
+                    for (int x = 0; x < image.width; x++) {
                         const auto* source = image.bitmap.data() + static_cast<size_t>(y) * image.stride + x * 4;
                         auto* dest = target.bitmap.data() + static_cast<size_t>(y) * target.stride + x * 4;
                         const unsigned inverse = 255u - source[3];
-                        for (int channel = 0; channel < 4; ++channel) {
+                        for (int channel = 0; channel < 4; channel++) {
                             dest[channel] = static_cast<uint8_t>(std::min(255u,
                                 source[channel] + (dest[channel] * inverse + 127u) / 255u));
                         }
@@ -566,7 +566,7 @@ std::vector<amatsukaze::pgs::Region> ConvertCaptionImages(
         region.width = right - left;
         region.height = bottom - top;
         region.pixels.resize(static_cast<size_t>(region.width) * region.height);
-        for (int y = top; y < bottom; ++y) {
+        for (int y = top; y < bottom; y++) {
             const auto* row = image.bitmap.data() + static_cast<size_t>(y - image.dst_y) * image.stride
                 + static_cast<size_t>(left - image.dst_x) * 4;
             // Canvasの合成結果はpremultiplied。PGSパレットへ渡すstraight表現を復元する。
@@ -644,7 +644,7 @@ std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFi
     if (pesItems.empty()) {
         return {};
     }
-    for (size_t index = 0; index < pesPTS.size(); ++index) {
+    for (size_t index = 0; index < pesPTS.size(); index++) {
         if (!std::isfinite(pesPTS[index])) {
             throw std::invalid_argument("補正字幕PTSが不正: index=" + std::to_string(index) +
                 "、rawPTS=" + std::to_string(pesItems[index].PTS) +
@@ -689,7 +689,7 @@ std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFi
     std::map<int64_t, double> changes;
     std::map<int64_t, Caption> enclosedCaptions;
     std::map<int64_t, std::pair<Caption, double>> decodedCaptions;
-    for (size_t index = 0; index < pesItems.size(); ++index) {
+    for (size_t index = 0; index < pesItems.size(); index++) {
         const std::string pesDiagnostic = "index=" + std::to_string(index) +
             "、rawPTS=" + std::to_string(pesItems[index].PTS) +
             "、modifiedPTS=" + std::to_string(pesPTS[index]) +
@@ -733,7 +733,7 @@ std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFi
     SetCaptionFontFamilies(renderer, fonts.families, fontFamily, languages);
     if (diagnostic && fonts.families.size() > fonts.initialFamilyCount) {
         std::string added;
-        for (size_t index = fonts.initialFamilyCount; index < fonts.families.size(); ++index) {
+        for (size_t index = fonts.initialFamilyCount; index < fonts.families.size(); index++) {
             if (!added.empty()) added += ", ";
             added += fonts.families[index];
         }
@@ -775,7 +775,7 @@ std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFi
     std::vector<Event> events;
     std::set<int64_t> failedCaptions;
     std::set<int64_t> warnedCaptions;
-    for (size_t index = 0; index + 1 < points.size(); ++index) {
+    for (size_t index = 0; index + 1 < points.size(); index++) {
         const double sourceStart = points[index].second;
         const double sourceStop = points[index + 1].second;
         if (sourceStart >= sourceStop) {

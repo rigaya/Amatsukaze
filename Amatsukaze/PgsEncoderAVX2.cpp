@@ -19,7 +19,7 @@ inline int FirstBit(uint32_t bits) {
     return __builtin_ctz(bits);
 #else
     int index = 0;
-    while (!(bits & 1)) { bits >>= 1; ++index; }
+    while (!(bits & 1)) { bits >>= 1; index++; }
     return index;
 #endif
 }
@@ -32,7 +32,7 @@ inline int LastBit(uint32_t bits) {
     return 31 - __builtin_clz(bits);
 #else
     int index = 0;
-    while (bits >>= 1) ++index;
+    while (bits >>= 1) index++;
     return index;
 #endif
 }
@@ -43,7 +43,7 @@ Bounds AlphaBoundsAvx2(const Region& region) {
     const auto alpha = _mm256_set1_epi32(static_cast<int>(0xff000000u));
     const auto zero = _mm256_setzero_si256();
     static_assert(sizeof(Rgba) == 4, "RGBA画素は4byteである必要があります");
-    for (int y = 0; y < region.height; ++y) {
+    for (int y = 0; y < region.height; y++) {
         const auto* row = region.pixels.data() + static_cast<size_t>(y) * region.width;
         int left = region.width, right = 0, x = 0;
         for (; x + 8 <= region.width; x += 8) {
@@ -55,7 +55,7 @@ Bounds AlphaBoundsAvx2(const Region& region) {
                 right = x + LastBit(mask) + 1;
             }
         }
-        for (; x < region.width; ++x) if (row[x].a) {
+        for (; x < region.width; x++) if (row[x].a) {
             left = (std::min)(left, x); right = x + 1;
         }
         if (right) {
@@ -73,7 +73,7 @@ int RunLengthAvx2(const uint8_t* pixels, int limit) {
         const auto different = ~static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(block, color)));
         if (different) return length + FirstBit(different);
     }
-    while (length < limit && pixels[length] == *pixels) ++length;
+    while (length < limit && pixels[length] == *pixels) length++;
     return length;
 }
 
@@ -114,7 +114,7 @@ uint8_t FindNearestColorAvx2(const std::array<double, 4>& position,
     _mm256_store_pd(distances.data(), best);
     _mm256_store_si256(reinterpret_cast<__m256i*>(selected.data()), bestIndices);
     size_t closest = 0;
-    for (size_t lane = 1; lane < 4; ++lane) {
+    for (size_t lane = 1; lane < 4; lane++) {
         // 同距離なら先に登録されたパレット色を選ぶ。
         if (distances[lane] < distances[closest]
             || (distances[lane] == distances[closest] && selected[lane] < selected[closest])) {

@@ -76,7 +76,7 @@ void CheckAlpha() {
         Require(pixel[0] <= pixel[3] && pixel[1] <= pixel[3] && pixel[2] <= pixel[3],
             "合成画像のRGBがpremult範囲を超えた");
         if (pixel[1] && pixel[3] > 128) {
-            ++blended;
+            blended++;
             Require(pixel[0] < 128, "緑字形と赤背景のsource-over合成失敗");
         }
     }
@@ -89,14 +89,14 @@ void CheckAlpha() {
     const auto antialiasedStraight = ConvertCaptionImages(antialiasedImage.images, 1920, 1080);
     size_t edgePixels = 0;
     const auto& bitmap = antialiasedImage.images[0];
-    for (int y = 0; y < bitmap.height; ++y) {
-        for (int x = 0; x < bitmap.width; ++x) {
+    for (int y = 0; y < bitmap.height; y++) {
+        for (int x = 0; x < bitmap.width; x++) {
             const auto* premult = bitmap.bitmap.data() + static_cast<size_t>(y) * bitmap.stride + x * 4;
             const auto straight = antialiasedStraight[0].pixels[static_cast<size_t>(y) * bitmap.width + x];
             if (!premult[3]) continue;
-            if (premult[3] < 127) ++edgePixels;
+            if (premult[3] < 127) edgePixels++;
             const unsigned channels[] = {straight.r, straight.g, straight.b};
-            for (int channel = 0; channel < 3; ++channel) {
+            for (int channel = 0; channel < 3; channel++) {
                 const unsigned restored = (channels[channel] * straight.a + 127) / 255;
                 Require(std::abs(static_cast<int>(restored) - premult[channel]) <= 1,
                     "AA縁のstraight/premult往復で暗い縁が生じた");
@@ -254,8 +254,8 @@ void CheckFontFallback() {
 void CheckStraightAlphaTable() {
     // premult範囲外も含め、従来の丸め・飽和と全65536組が一致することを確認する。
     std::vector<uint8_t> source(256 * 256 * 4);
-    for (unsigned alpha = 0; alpha < 256; ++alpha) {
-        for (unsigned value = 0; value < 256; ++value) {
+    for (unsigned alpha = 0; alpha < 256; alpha++) {
+        for (unsigned value = 0; value < 256; value++) {
             const size_t offset = (alpha * 256 + value) * 4;
             source[offset] = static_cast<uint8_t>(value);
             source[offset + 1] = static_cast<uint8_t>(255 - value);
@@ -269,7 +269,7 @@ void CheckStraightAlphaTable() {
         std::fill(restored.begin(), restored.end(), amatsukaze::pgs::Rgba{1, 2, 3, 4});
         amatsukaze::pgs::RestoreStraightAlphaRow(restored.data() + 1, source.data() + 4, width);
         Require(restored[0].r == 1 && restored[0].a == 4, "アルファ復元が行の前へ書き込んだ");
-        for (size_t x = 1; x <= width; ++x) {
+        for (size_t x = 1; x <= width; x++) {
             const auto* pixel = source.data() + x * 4;
             const auto straight = [alpha = unsigned(pixel[3])](unsigned value) {
                 return alpha ? std::min(255u, (value * 255u + alpha / 2u) / alpha) : 0u;
