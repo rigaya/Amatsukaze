@@ -81,6 +81,9 @@ int RunLengthAvx2(const uint8_t* pixels, int limit) {
 #pragma float_control(precise, on, push)
 #pragma fp_contract(off)
 #endif
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("fp-contract=off")))
+#endif
 uint8_t FindNearestColorAvx2(const std::array<double, 4>& position,
     const std::array<std::array<double, 256>, 4>& coordinates, size_t count)
 {
