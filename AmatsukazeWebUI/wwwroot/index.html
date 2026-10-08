@@ -508,7 +508,7 @@
                 // 表の端のTabは通常のフォーカス移動に戻し、パネルから出られるようにする。
                 var rows = panel.querySelectorAll('[data-cmseg-idx]');
                 if (e.key === 'Tab' && ((!e.shiftKey && row === rows[rows.length - 1]) || (e.shiftKey && row === rows[0]))) return;
-                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Tab' || /^[0-9]$/.test(e.key)) {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Tab' || /^[0-9ab]$/.test(e.key)) {
                     e.preventDefault();
                     dotNetRef.invokeMethodAsync('OnCmSegKeyDown', parseInt(row.dataset.cmsegIdx, 10), e.key, e.shiftKey);
                 }

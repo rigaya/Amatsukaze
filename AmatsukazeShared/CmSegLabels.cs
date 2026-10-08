@@ -14,7 +14,9 @@ namespace Amatsukaze.Shared
                 ("3", "sponsor_over_main", "提供読上げ(本編映像)"), ("4", "next", "次回予告"),
                 ("5", "endcard", "エンドカード"), ("6", "self_promo", "自番組告知"),
                 ("7", "other_promo", "番宣(別番組予告)"), ("8", "cm", "CM"),
-                ("9", "station", "局ID/ジングル"), ("0", "unknown", "不明/その他")
+                ("9", "station", "局ID/ジングル"),
+                ("b", "block_ident", "番組枠ジングル"), ("a", "adjacent_program", "前後の番組"),
+                ("0", "unknown", "不明/その他")
             });
 
         public static bool IsValid(string label) =>

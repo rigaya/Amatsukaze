@@ -104,13 +104,13 @@ public sealed class CmSegAnnotationTests
     }
 
     [Fact]
-    public void 共通分類定義は全十クラスのキーとIDが一意で有効性を厳密に判定する()
+    public void 共通分類定義は全十二クラスのキーとIDが一意で有効性を厳密に判定する()
     {
-        Assert.Equal(new[] { "main", "sponsor", "sponsor_over_main", "next", "endcard", "self_promo", "other_promo", "cm", "station", "unknown" },
+        Assert.Equal(new[] { "main", "sponsor", "sponsor_over_main", "next", "endcard", "self_promo", "other_promo", "cm", "station", "block_ident", "adjacent_program", "unknown" },
             CmSegLabels.Classes.Select(c => c.Id));
-        Assert.Equal(new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" }, CmSegLabels.Classes.Select(c => c.Key));
-        Assert.Equal(10, CmSegLabels.Classes.Select(c => c.Id).Distinct().Count());
-        Assert.Equal(10, CmSegLabels.Classes.Select(c => c.Key).Distinct().Count());
+        Assert.Equal(new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "b", "a", "0" }, CmSegLabels.Classes.Select(c => c.Key));
+        Assert.Equal(12, CmSegLabels.Classes.Select(c => c.Id).Distinct().Count());
+        Assert.Equal(12, CmSegLabels.Classes.Select(c => c.Key).Distinct().Count());
         Assert.All(CmSegLabels.Classes, c => Assert.True(CmSegLabels.IsValid(c.Id)));
         foreach (var invalid in new[] { null, "", "MAIN", "main ", "invalid" })
             Assert.False(CmSegLabels.IsValid(invalid!));
@@ -174,6 +174,55 @@ public sealed class CmSegAnnotationTests
     {
         Assert.Equal("main", CmSegLabels.InitialLabel(label, true));
         Assert.Equal("cm", CmSegLabels.InitialLabel(label, false));
+    }
+
+    [Theory]
+    [InlineData("block_ident", "b", "番組枠ジングル")]
+    [InlineData("adjacent_program", "a", "前後の番組")]
+    public void 追加分類を保存して再開できる(string label, string key, string name)
+    {
+        Assert.Contains(CmSegLabels.Classes, c => c.Id == label && c.Key == key && c.Name == name);
+        using var f = new AnnotationFixture();
+        var request = f.Request();
+        request.Reviewed = true;
+        request.Segments[0].Label = label;
+        f.Open()!.Save(request);
+        var restored = f.Open()!.Get();
+        Assert.True(restored.Reviewed);
+        Assert.Equal(label, restored.Segments[0].Label);
+        Assert.True(restored.Segments[0].Edited);
+        Assert.Equal("sponsor", restored.Segments[1].Label);
+        Assert.Null(restored.Warning);
+        Assert.Empty(Directory.GetFiles(f.Root, "*.bak.json"));
+    }
+
+    [Theory]
+    [InlineData("main")]
+    [InlineData("sponsor")]
+    [InlineData("sponsor_over_main")]
+    [InlineData("next")]
+    [InlineData("endcard")]
+    [InlineData("self_promo")]
+    [InlineData("other_promo")]
+    [InlineData("cm")]
+    [InlineData("station")]
+    [InlineData("unknown")]
+    public void 旧十クラスの正解ファイルを変更せず再開できる(string label)
+    {
+        using var f = new AnnotationFixture();
+        // 従来と同じversion=1形式に旧分類だけを保存する。
+        var request = f.Request();
+        request.Reviewed = true;
+        request.Segments[0].Label = label;
+        f.Open()!.Save(request);
+        var bytes = File.ReadAllBytes(f.AnnotationPath);
+        var restored = f.Open()!.Get();
+        Assert.Equal(label, restored.Segments[0].Label);
+        Assert.Equal(label != "cm", restored.Segments[0].Edited);
+        Assert.True(restored.Reviewed);
+        Assert.Null(restored.Warning);
+        Assert.Equal(bytes, File.ReadAllBytes(f.AnnotationPath));
+        Assert.Empty(Directory.GetFiles(f.Root, "*.bak.json"));
     }
 
     [Fact]
