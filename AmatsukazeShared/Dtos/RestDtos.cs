@@ -580,6 +580,12 @@ namespace Amatsukaze.Shared
     public class TrimAdjustSessionResponse
     {
         public string? SessionId { get; set; }
+        // 無効時は既存のセッション応答にも項目を追加しない
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public bool CmSegAnnotationEnabled { get; set; }
+        // 全体で有効でも、この録画だけ利用できない場合の理由
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? CmSegAnnotationError { get; set; }
         public int NumFrames { get; set; }
         public int FrameWidth { get; set; }
         public int FrameHeight { get; set; }
@@ -600,6 +606,54 @@ namespace Amatsukaze.Shared
         public int LogoSeconds { get; set; }  // 区間内のロゴ表示秒数
         public string Label { get; set; } = ""; // "CM", "L", "Trailer(add)" など(旧形式は空)
         public bool JlsKeep { get; set; }     // jls出力Trim(trim0.avs)で本編として残る区間か
+    }
+
+    // 正解ファイルの区間末尾は既存のjls区間と同じ包含端
+    public class CmSegAnnotation
+    {
+        public int Version { get; set; } = 1;
+        public CmSegSource Source { get; set; } = new CmSegSource();
+        public string TempDir { get; set; } = "";
+        public int VideoIndex { get; set; }
+        public int NumFrames { get; set; }
+        public string Fps { get; set; } = "";
+        public string JlsSha1 { get; set; } = "";
+        public bool Reviewed { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public List<CmSegAnnotationSegment> Segments { get; set; } = new List<CmSegAnnotationSegment>();
+        // 警告はAPI応答専用で、正解ファイルには保存しない
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? Warning { get; set; }
+    }
+
+    public class CmSegSource
+    {
+        public string Path { get; set; } = "";
+        public long Size { get; set; }
+        public DateTime Mtime { get; set; }
+    }
+
+    public class CmSegAnnotationSegment
+    {
+        public int Idx { get; set; }
+        public int Start { get; set; }
+        public int End { get; set; }
+        public string JlsLabel { get; set; } = "";
+        public bool JlsKeep { get; set; }
+        public string Label { get; set; } = "";
+        public bool Edited { get; set; }
+    }
+
+    public class CmSegSaveRequest
+    {
+        public bool Reviewed { get; set; }
+        public List<CmSegLabelUpdate> Segments { get; set; } = new List<CmSegLabelUpdate>();
+    }
+
+    public class CmSegLabelUpdate
+    {
+        public int Idx { get; set; }
+        public string Label { get; set; } = "";
     }
 
     public class TrimSaveRequest

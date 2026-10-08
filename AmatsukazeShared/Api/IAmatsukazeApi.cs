@@ -103,6 +103,8 @@ namespace Amatsukaze.Shared
         // Trim調整
         Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req);
         Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber);
+        Task<ApiResult<CmSegAnnotation>> GetCmSegAnnotationAsync(string sessionId);
+        Task<ApiResult<bool>> SaveCmSegAnnotationAsync(string sessionId, CmSegSaveRequest req);
         Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req);
         Task<ApiResult<TrimRequeueResponse>> RequeueTrimAsync(TrimRequeueRequest req);
         Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId);

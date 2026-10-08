@@ -87,6 +87,7 @@ namespace Amatsukaze.Server.Rest
         public int QueueItemId { get; }
         public string SrcPath { get; }
         public string TempDir { get; }
+        public CmSegAnnotationStore CmSegAnnotation { get; set; }
         public DateTime LastAccessUtc => new DateTime(Interlocked.Read(ref lastAccessTicks), DateTimeKind.Utc);
 
         private readonly DecodeBundleContext onDemandContext;
@@ -483,18 +484,36 @@ namespace Amatsukaze.Server.Rest
 
                 // 全フレームPTS情報を取得
                 var framePts = new List<double>();
+                var cmSegEnabled = CmSegAnnotationStore.IsEnabled;
+                var durationCounts = new Dictionary<long, int>();
                 const double ptsToSeconds = 1.0 / 90000.0; // 90kHz PTS→秒
                 for (int i = 0; i < session.NumFrames; i++)
                 {
-                    if (session.GetFrameInfo(i, out var pts, out _, out _, out _))
+                    if (session.GetFrameInfo(i, out var pts, out var duration, out _, out _))
                     {
                         framePts.Add(pts * ptsToSeconds);
+                        if (cmSegEnabled && duration > 0)
+                        {
+                            durationCounts.TryGetValue(duration, out var count);
+                            durationCounts[duration] = count + 1;
+                        }
                     }
                 }
 
                 // Trim AVSを読み込み
                 var trims = LoadTrims(item.SrcPath, tempDir);
                 var divisionPoints = LoadDivisionPoints(item.SrcPath, tempDir, session.NumFrames);
+
+                var jlsSegments = LoadJlsSegments(tempDir);
+                string cmSegError = null;
+                if (cmSegEnabled)
+                {
+                    session.CmSegAnnotation = CmSegAnnotationStore.OpenForSession(item.SrcPath, tempDir, session.NumFrames,
+                        durationCounts, jlsSegments, out cmSegError);
+                    if (cmSegError != null) Util.AddLog("[CmSeg] " + cmSegError, null);
+                    if (session.CmSegAnnotation?.Get()?.Warning is string warning)
+                        Util.AddLog("[CmSeg] " + warning, null);
+                }
 
                 response = new TrimAdjustSessionResponse
                 {
@@ -505,7 +524,9 @@ namespace Amatsukaze.Server.Rest
                     Trims = trims,
                     DivisionPoints = divisionPoints,
                     FramePts = framePts,
-                    JlsSegments = LoadJlsSegments(tempDir)
+                    JlsSegments = jlsSegments,
+                    CmSegAnnotationEnabled = session.CmSegAnnotation != null,
+                    CmSegAnnotationError = cmSegError
                 };
                 return true;
             }

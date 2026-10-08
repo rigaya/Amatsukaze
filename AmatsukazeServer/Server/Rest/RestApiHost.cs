@@ -1933,6 +1933,44 @@ namespace Amatsukaze.Server.Rest
                 return Results.File(jpegBytes, "image/jpeg");
             });
 
+            app.MapGet("/api/trim/sessions/{sessionId}/cmseg", (HttpContext context, string sessionId) =>
+            {
+                if (!CmSegAnnotationStore.IsEnabled) return Results.NotFound();
+                var session = trimAdjust.GetSession(sessionId);
+                if (session?.CmSegAnnotation == null) return Results.NotFound();
+                session.Touch();
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(session.CmSegAnnotation.Get());
+            });
+
+            app.MapPut("/api/trim/sessions/{sessionId}/cmseg", async (HttpRequest request, string sessionId) =>
+            {
+                // 無効時はリクエスト本文にもアクセスせず404を返す
+                if (!CmSegAnnotationStore.IsEnabled) return Results.NotFound();
+                var session = trimAdjust.GetSession(sessionId);
+                if (session?.CmSegAnnotation == null) return Results.NotFound();
+                session.Touch();
+                try
+                {
+                    var data = await request.ReadFromJsonAsync<CmSegSaveRequest>();
+                    session.CmSegAnnotation.Save(data);
+                    return Results.Ok(new { });
+                }
+                catch (CmSegAnnotationConflictException ex) { return Results.Conflict(new { message = ex.Message }); }
+                catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+                catch (System.Text.Json.JsonException) { return Results.BadRequest(new { message = "正解入力のJSONが不正です" }); }
+                catch (IOException ex)
+                {
+                    Util.AddLog("[CmSeg] 正解入力の保存に失敗しました", ex);
+                    return Results.Problem("正解入力ファイルの保存に失敗しました");
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    Util.AddLog("[CmSeg] 正解入力の保存が拒否されました", ex);
+                    return Results.Problem("正解入力ファイルに書き込めません");
+                }
+            });
+
             app.MapPost("/api/trim/sessions/{sessionId}/save", async (HttpRequest request, string sessionId) =>
             {
                 var data = await request.ReadFromJsonAsync<TrimSaveRequest>();

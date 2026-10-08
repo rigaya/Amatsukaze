@@ -1334,3 +1334,31 @@
         display: none;
     }
 }
+
+/* 正解作成パネルは分類の変更と短区間を独立した目印で示す。 */
+.trim-cmseg-panel {
+    width: 460px;
+    max-width: 42%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-left: 1px solid var(--bs-border-color, #666);
+    font-size: 0.8rem;
+}
+.trim-cmseg-header { display: flex; flex-direction: column; gap: 5px; padding: 8px; }
+.trim-cmseg-header input { margin-right: 5px; }
+.trim-cmseg-table-wrap { overflow: auto; flex: 1; min-height: 0; }
+.trim-cmseg-table { width: 100%; border-collapse: collapse; }
+.trim-cmseg-table th { position: sticky; top: 0; background: var(--bs-body-bg); z-index: 1; }
+.trim-cmseg-table th, .trim-cmseg-table td { padding: 5px; border-bottom: 1px solid var(--bs-border-color, #666); }
+.trim-cmseg-table tr { cursor: pointer; }
+.trim-cmseg-table tr.is-short td:first-child { box-shadow: inset 4px 0 #d8a300; }
+.trim-cmseg-table tr.is-edited { background: rgba(45, 145, 220, 0.18); }
+.trim-cmseg-table tr.is-selected { outline: 2px solid #338ddd; outline-offset: -2px; }
+.trim-cmseg-table tr:focus { outline: 2px solid #338ddd; outline-offset: -2px; }
+.trim-cmseg-table select { width: 100%; max-width: 205px; color: var(--bs-body-color); background: var(--bs-body-bg); }
+.trim-cmseg-help { padding: 6px 8px; border-top: 1px solid var(--bs-border-color, #666); }
+@media (max-width: 640px) {
+    .trim-cmseg-panel { order: 3; width: 100%; max-width: none; height: 280px; min-height: 150px; border-left: none; border-top: 1px solid var(--bs-border-color, #666); }
+}

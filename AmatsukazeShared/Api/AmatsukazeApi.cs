@@ -505,6 +505,12 @@ namespace Amatsukaze.Shared
             }
         }
 
+        public Task<ApiResult<CmSegAnnotation>> GetCmSegAnnotationAsync(string sessionId)
+            => GetJsonAsync<CmSegAnnotation>($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/cmseg");
+
+        public Task<ApiResult<bool>> SaveCmSegAnnotationAsync(string sessionId, CmSegSaveRequest req)
+            => PutJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/cmseg", req, _ => true);
+
         public Task<ApiResult<bool>> SaveTrimsAsync(string sessionId, TrimSaveRequest req)
             => PostJsonAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/save", req, _ => true);
 

@@ -391,6 +391,59 @@
                     </div>
                 </div>
             </div>
+            @if (_session?.CmSegAnnotationEnabled == true || !string.IsNullOrEmpty(_session?.CmSegAnnotationError))
+            {
+                @if (_session?.CmSegAnnotationEnabled == true && string.IsNullOrEmpty(_session.CmSegAnnotationError))
+                {
+                    <NavigationLock ConfirmExternalNavigation="@_cmSegDirty" OnBeforeInternalNavigation="OnCmSegBeforeNavigationAsync" />
+                }
+                <aside class="trim-cmseg-panel" aria-label="CM区間の正解作成" @ref="_cmSegPanelRef">
+                    <div class="trim-cmseg-header">
+                        <strong>CM区間の正解作成</strong>
+                        @if (_cmSeg != null)
+                        {
+                            <label><input type="checkbox" checked="@_cmSeg.Reviewed" @onchange="OnCmSegReviewedChanged" />この録画は確認完了</label>
+                            <label><input type="checkbox" checked="@_cmSegShortOnly" @onchange="OnCmSegFilterChanged" />短区間のみ表示</label>
+                        }
+                        <span role="status" class="@(_cmSegSaveError ? "trim-status-error" : "")">@_cmSegStatus</span>
+                        @if (_cmSegSaveError && _cmSeg != null)
+                        {
+                            <button class="trim-btn trim-btn-sm" @onclick="FlushCmSegAsync">保存を再試行</button>
+                        }
+                        @if (!string.IsNullOrEmpty(_cmSeg?.Warning))
+                        {
+                            <div class="trim-status-error" role="alert">@_cmSeg.Warning</div>
+                        }
+                    </div>
+                    @if (_cmSeg != null)
+                    {
+                        <div class="trim-cmseg-table-wrap">
+                            <table class="trim-cmseg-table">
+                                <thead><tr><th>#</th><th>長さ(秒)</th><th>jls判定</th><th>分類</th></tr></thead>
+                                <tbody>
+                                    @foreach (var seg in VisibleCmSegSegments())
+                                    {
+                                        <tr @key="seg.Idx" data-cmseg-idx="@seg.Idx" tabindex="@(seg.Idx == _cmSegSelectedIdx ? 0 : -1)"
+                                            class="@(IsCmSegShort(seg) ? "is-short" : "") @(seg.Edited ? "is-edited" : "") @(seg.Idx == _cmSegSelectedIdx ? "is-selected" : "")"
+                                            @onclick="() => SelectCmSegAsync(seg.Idx)">
+                                            <td>@seg.Idx</td><td>@CmSegDuration(seg)</td><td>@seg.JlsLabel</td>
+                                            <td><select value="@seg.Label" aria-label="@($"区間{seg.Idx}の分類")"
+                                                        @onchange="e => OnCmSegLabelChanged(seg, e)" @onclick:stopPropagation="true"
+                                                        @onfocus="() => SelectCmSegAsync(seg.Idx, false)">
+                                                @foreach (var choice in CmSegLabels.Classes)
+                                                {
+                                                    <option value="@choice.Id">@choice.Key: @choice.Name</option>
+                                                }
+                                            </select></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="trim-cmseg-help">↑↓/Tab: 区間移動　数字: 分類して次へ<br />黄色: 14.5秒未満　青色: 初期分類から変更</div>
+                    }
+                </aside>
+            }
         </div>
     }
 
@@ -619,6 +672,10 @@
             await _pageRef.FocusAsync();
             await LoadShowJlsSettingAsync();
             await LoadSessionAsync();
+        }
+        if (_session?.CmSegAnnotationEnabled == true && !_loading)
+        {
+            await JS.InvokeVoidAsync("trimAdjustSetupCmSeg", _cmSegPanelRef, _objRef);
         }
         // セッション確立後、JSハンドラを設定
         if (_session != null && !_sessionExpired)
@@ -902,6 +959,7 @@
         _errorMessage = null;
         _session = result.Data;
         _sessionId = _session.SessionId;
+        await LoadCmSegAsync();
         _currentFrame = 0;
 
         // TrimsからEditPointsを構築
@@ -1001,6 +1059,11 @@
     // セッション再接続（編集点はWebUI側の状態を維持）
     private async Task ReconnectSessionAsync()
     {
+        var preservedCmSeg = _cmSeg;
+        if (!_cmSegSaveConflict) await FlushCmSegAsync();
+        var preservedCmSegDirty = _cmSegDirty;
+        var preservedCmSegConflict = _cmSegSaveConflict;
+        var preservedCmSegBaseline = _cmSegBaseline;
         _reconnecting = true;
         _reconnectError = null;
         StateHasChanged();
@@ -1030,6 +1093,35 @@
 
         _session = result.Data;
         _sessionId = _session.SessionId;
+        await LoadCmSegAsync();
+        // 境界と最後の保存基準が一致する場合だけ、未保存入力を新セッションへ引き継ぐ。
+        if (preservedCmSegDirty && preservedCmSeg != null && _session.CmSegAnnotationEnabled)
+        {
+            var sameBoundaries = preservedCmSeg.Segments.Select(seg => (seg.Start, seg.End))
+                .SequenceEqual(_session.JlsSegments.Select(seg => (seg.Start, seg.End)));
+            var sameBaseline = preservedCmSegBaseline != null && _cmSegBaseline == preservedCmSegBaseline;
+            if (_cmSeg != null && sameBoundaries && sameBaseline && !preservedCmSegConflict)
+            {
+                _cmSeg = preservedCmSeg;
+                _cmSegDirty = true;
+                _cmSegRevision++;
+                await FlushCmSegAsync();
+            }
+            else
+            {
+                var warning = _cmSeg == null
+                    ? "分類を読み込めず他の変更を確認できないため、未保存分類の自動引継ぎを停止しました。再接続して分類を再確認してください。"
+                    : !sameBoundaries
+                        ? "再接続でjls区間が変わったため、未保存の分類を引き継げませんでした。"
+                        : "別画面で変更されたため未保存分類の自動引継ぎを停止しました。分類を再確認してください。";
+                if (_cmSeg != null) _cmSeg.Warning = warning;
+                else
+                {
+                    _cmSegStatus = warning;
+                    _cmSegSaveError = true;
+                }
+            }
+        }
 
         // フレーム数が変わった場合は編集点・現在フレームをクランプ
         if (_session.NumFrames > 0)
@@ -1931,6 +2023,14 @@
         _requeueBusy = true;
         StateHasChanged();
 
+        await FlushCmSegAsync();
+        if (_cmSegDirty)
+        {
+            _requeueBusy = false;
+            StateHasChanged();
+            return;
+        }
+
         // 1. 編集点を保存
         if (_hasChanges)
         {
@@ -2506,6 +2606,9 @@
         _disposed = true;
         Interlocked.Increment(ref _bundleRequestToken);
         Interlocked.Exchange(ref _thumbRequestToken, _bundleRequestToken);
+        _cmSegDisposing = true;
+        _cmSegDebounce?.Cancel();
+        await FlushCmSegAsync();
         StopRepeat();
         _debounceTimer?.Dispose();
         _objRef?.Dispose();

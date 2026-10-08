@@ -497,6 +497,32 @@
                 e.preventDefault();
             }, { passive: false });
         };
+        // 正解作成パネル内のキーをBlazorのページ全体ハンドラーから隔離する。
+        window.trimAdjustSetupCmSeg = function (panel, dotNetRef) {
+            if (!panel || panel._cmSegSetup) return;
+            panel._cmSegSetup = true;
+            panel.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                var row = e.target.closest('[data-cmseg-idx]');
+                if (!row || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+                // 表の端のTabは通常のフォーカス移動に戻し、パネルから出られるようにする。
+                var rows = panel.querySelectorAll('[data-cmseg-idx]');
+                if (e.key === 'Tab' && ((!e.shiftKey && row === rows[rows.length - 1]) || (e.shiftKey && row === rows[0]))) return;
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Tab' || /^[0-9]$/.test(e.key)) {
+                    e.preventDefault();
+                    dotNetRef.invokeMethodAsync('OnCmSegKeyDown', parseInt(row.dataset.cmsegIdx, 10), e.key, e.shiftKey);
+                }
+            });
+            // 区間表のスクロールを映像のフレーム移動へ渡さない。
+            panel.addEventListener('wheel', function (e) { e.stopPropagation(); }, { passive: true });
+        };
+        window.trimAdjustFocusCmSeg = function (panel, idx) {
+            if (!panel) return;
+            var row = panel.querySelector('[data-cmseg-idx="' + idx + '"]');
+            if (!row) return;
+            row.focus({ preventScroll: true });
+            row.scrollIntoView({ block: 'nearest' });
+        };
         // Trim調整: 再投入後はウィンドウを閉じる（閉じられない場合は戻る）
         window.trimAdjustCloseWindow = function () {
             try {
