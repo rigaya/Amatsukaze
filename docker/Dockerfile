@@ -34,8 +34,8 @@ ARG ARCH=amd64
 ARG UBUNTU_NAME=noble
 # VCEEncCは常にVA-API (Mesa) で導入し、AMFは任意とする
 ARG ENABLE_VCEENC_AMF=0
-ARG QSVENCC_VER=8.32
-ARG NVENCC_VER=9.37
+ARG QSVENCC_VER=8.33
+ARG NVENCC_VER=9.38
 ARG VCEENCC_VER=9.21
 # NVEncCのnvrtc用。24.04向けリポジトリに11.8は無いため、22.04向けのdebを直接導入する
 # NVEncCは無印のlibnvrtc.soをdlopenするが、このdebには含まれないためリンクを追加する
