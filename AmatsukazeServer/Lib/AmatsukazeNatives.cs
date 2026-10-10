@@ -174,9 +174,10 @@ namespace Amatsukaze.Lib
         }
         #endregion
 
+        // ネイティブの getError() は Windows でも UTF-8 を返す
         public string GetError()
         {
-            return Marshal.PtrToStringAnsi(AMTContext_GetError(Ptr));
+            return Marshal.PtrToStringUTF8(AMTContext_GetError(Ptr));
         }
     }
 
