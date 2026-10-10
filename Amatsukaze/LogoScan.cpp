@@ -1516,35 +1516,42 @@ void logo::LogoAnalyzer::LogLogoQuality(const tchar* phase) const {
         logoQuality.uvResidualActiveMean, logoQuality.uvResidualActiveP90);
 }
 
+namespace {
+    // 品質検査の不合格は呼び出し側が続行できる失敗なので、THROWのように標準エラーへ出さない。
+    [[noreturn]] void ThrowLogoQuality(const tstring& message) {
+        throw RuntimeException(message);
+    }
+}
+
 void logo::LogoAnalyzer::ValidateLogoQuality() const {
     if (logoQuality.pixelCount <= 0) {
-        THROW(RuntimeException, "Logo quality validation failed: no metrics");
+        ThrowLogoQuality(_T("ロゴ生成の品質検査に失敗しました: 指標がありません"));
     }
     if (logoQuality.renderedYP99 < 0.02 && logoQuality.activeAreaRate < 0.02) {
-        THROWF(RuntimeException,
-            "Logo quality validation failed: no_logo (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+        ThrowLogoQuality(StringFormat(
+            _T("ロゴ生成の品質検査に失敗しました: ロゴとして使える画素がありません (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
             logoQuality.renderedYP99, logoQuality.activeAreaRate, logoQuality.alphaMean,
-            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90));
     }
     if (logoQuality.alphaP99 > 0.70 && logoQuality.opaqueAreaRate > 0.01) {
-        THROWF(RuntimeException,
-            "Logo quality validation failed: opaque_logo (alpha_p99=%.5f opaque_area=%.5f renderedY_p99=%.5f active_area=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+        ThrowLogoQuality(StringFormat(
+            _T("ロゴ生成の品質検査に失敗しました: 不透明な領域が広すぎます (alpha_p99=%.5f opaque_area=%.5f renderedY_p99=%.5f active_area=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
             logoQuality.alphaP99, logoQuality.opaqueAreaRate, logoQuality.renderedYP99,
-            logoQuality.activeAreaRate, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+            logoQuality.activeAreaRate, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90));
     }
     if (logoQuality.renderedYMean > 0.03 && logoQuality.renderedYP99 > 0.15
         && logoQuality.activeAreaRate < 0.10 && logoQuality.alphaMean < 0.05) {
-        THROWF(RuntimeException,
-            "Logo quality validation failed: unstable_logo (renderedY_mean=%.5f renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+        ThrowLogoQuality(StringFormat(
+            _T("ロゴ生成の品質検査に失敗しました: ロゴが不安定です (renderedY_mean=%.5f renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
             logoQuality.renderedYMean, logoQuality.renderedYP99, logoQuality.activeAreaRate,
-            logoQuality.alphaMean, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+            logoQuality.alphaMean, logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90));
     }
     if (logoQuality.renderedYP99 > 0.15 && logoQuality.alphaMean < 0.025
         && logoQuality.uvResidualActiveP90 > 0.006) {
-        THROWF(RuntimeException,
-            "Logo quality validation failed: chroma_noise (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+        ThrowLogoQuality(StringFormat(
+            _T("ロゴ生成の品質検査に失敗しました: 色差ノイズが強すぎます (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
             logoQuality.renderedYP99, logoQuality.activeAreaRate, logoQuality.alphaMean,
-            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90));
     }
     const double edgeAdjacentSideActiveRateMax = std::max(
         std::max(std::min(logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1]),
@@ -1552,14 +1559,14 @@ void logo::LogoAnalyzer::ValidateLogoQuality() const {
         std::max(std::min(logoQuality.edgeSideActiveRate[2], logoQuality.edgeSideActiveRate[3]),
             std::min(logoQuality.edgeSideActiveRate[3], logoQuality.edgeSideActiveRate[0])));
     if (logoQuality.edgeActiveAreaRate > 0.015 && edgeAdjacentSideActiveRateMax > 0.40) {
-        THROWF(RuntimeException,
-            "Logo quality validation failed: edge_signal (edge_band=%d edge_active=%d/%d edge_rate=%.5f edge_area=%.5f edge_adjacent_side_max=%.5f edge_sides=%.5f/%.5f/%.5f/%.5f active_area=%.5f renderedY_p99=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)",
+        ThrowLogoQuality(StringFormat(
+            _T("ロゴ生成の品質検査に失敗しました: 枠縁の誤検出です (edge_band=%d edge_active=%d/%d edge_rate=%.5f edge_area=%.5f edge_adjacent_side_max=%.5f edge_sides=%.5f/%.5f/%.5f/%.5f active_area=%.5f renderedY_p99=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
             logoQuality.edgeBand, logoQuality.edgeActivePixels, logoQuality.edgePixels,
             logoQuality.edgeActiveRate, logoQuality.edgeActiveAreaRate, edgeAdjacentSideActiveRateMax,
             logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1],
             logoQuality.edgeSideActiveRate[2], logoQuality.edgeSideActiveRate[3],
             logoQuality.activeAreaRate, logoQuality.renderedYP99, logoQuality.alphaMean,
-            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90);
+            logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90));
     }
 }
 

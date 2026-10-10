@@ -59,10 +59,33 @@ CMAnalyze::CMAnalyze(AMTContext& ctx,
     setting_(setting),
     logoAnalysisDone(false),
     logopath(),
+    logoMatchFailKind(LogoMatchFailKind::None),
+    logoMatchFailMessage(),
     trims(),
     cmzones(),
     sceneChanges(),
     divs() {}
+
+void CMAnalyze::setLogoMatchFail(const LogoMatchFailKind kind) {
+    logoMatchFailKind = kind;
+    switch (kind) {
+    case LogoMatchFailKind::AutoRect:
+        logoMatchFailMessage = _T("ロゴ検出に失敗し、自動ロゴの枠検出も失敗しました");
+        break;
+    case LogoMatchFailKind::AutoGenerate:
+        logoMatchFailMessage = _T("ロゴ検出に失敗し、自動ロゴ生成も失敗しました");
+        break;
+    case LogoMatchFailKind::AutoRematch:
+        logoMatchFailMessage = _T("ロゴ検出に失敗し、自動生成したロゴでもマッチしませんでした");
+        break;
+    case LogoMatchFailKind::AutoOther:
+        logoMatchFailMessage = _T("ロゴ検出に失敗し、自動ロゴ生成中にエラーが発生しました");
+        break;
+    default:
+        logoMatchFailMessage = _T("マッチするロゴが見つかりませんでした");
+        break;
+    }
+}
 
 void CMAnalyze::analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM) {
     Stopwatch sw;
@@ -505,8 +528,10 @@ void CMAnalyze::logoFrame(const int serviceId, const int videoFileIndex, const V
                 if (tryAutoDetectAndRetryLogo(serviceId, videoFileIndex, inputFormat, numFrames, avspath)) {
                     ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに成功しました"));
                 } else {
-                    ctx.info(_T("[自動ロゴ検出] 自動検出ロゴでのマッチに失敗しました"));
+                    ctx.infoF(_T("[自動ロゴ検出] %s"), logoMatchFailMessage.c_str());
                 }
+            } else {
+                setLogoMatchFail(LogoMatchFailKind::Registered);
             }
         } else {
             logopath = setting_.getLogoPath()[logof.getBestLogo()];
@@ -552,6 +577,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
             autoDetectCb);
         if (!ret || rectW <= 0 || rectH <= 0) {
             ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出に失敗しました (rectDetectFail=%d, logoAnalyzeFail=%d)"), rectDetectFail, logoAnalyzeFail);
+            setLogoMatchFail(LogoMatchFailKind::AutoRect);
             return false;
         }
         ctx.infoF(_T("[自動ロゴ検出] ロゴ枠検出完了: (%d, %d, %d, %d)"), rectX, rectY, rectW, rectH);
@@ -569,7 +595,13 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
             setting_.getAutoLogoDetectThreshold(),
             setting_.getAutoLogoDetectSearchFrames(),
             scanLogoCb)) {
-            ctx.info(_T("[自動ロゴ検出] ロゴ生成に失敗しました"));
+            const auto detail = char_to_tstring(ctx.getError(), CP_UTF8);
+            if (detail.empty()) {
+                ctx.info(_T("[自動ロゴ検出] ロゴ生成に失敗しました"));
+            } else {
+                ctx.infoF(_T("[自動ロゴ検出] ロゴ生成に失敗しました: %s"), detail.c_str());
+            }
+            setLogoMatchFail(LogoMatchFailKind::AutoGenerate);
             cleanup();
             return false;
         }
@@ -638,6 +670,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
                 }
                 if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60)) {
                     ctx.infoF(_T("[自動ロゴ検出] logo scan #%d: タイムアウト"), ith);
+                    setLogoMatchFail(LogoMatchFailKind::AutoOther);
                     cleanup();
                     return false;
                 }
@@ -648,6 +681,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
                 const auto& scanResult = logoScanThreads[ith].get();
                 if (scanResult.first != 0) {
                     ctx.infoF(_T("[自動ロゴ検出] logo scan #%d: %s"), ith, char_to_tstring(scanResult.second));
+                    setLogoMatchFail(LogoMatchFailKind::AutoOther);
                     cleanup();
                     return false;
                 }
@@ -657,6 +691,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
             const auto& scanResult = logoScanThreads[ith].get();
             if (scanResult.first != 0) {
                 ctx.infoF(_T("[自動ロゴ検出] logo scan #%d: %s"), (int)ith, char_to_tstring(scanResult.second));
+                setLogoMatchFail(LogoMatchFailKind::AutoOther);
                 cleanup();
                 return false;
             }
@@ -666,6 +701,7 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
         const float retryThreshold = setting_.isLooseLogoDetection() ? 0.03f : (duration <= 60 * 7) ? 0.03f : 0.1f;
         if (autoLogof.getLogoRatio() < retryThreshold) {
             ctx.infoF(_T("[自動ロゴ検出] 仮ロゴでもマッチしませんでした (ratio=%.4f, threshold=%.4f)"), autoLogof.getLogoRatio(), retryThreshold);
+            setLogoMatchFail(LogoMatchFailKind::AutoRematch);
             cleanup();
             return false;
         }
@@ -694,14 +730,17 @@ bool CMAnalyze::tryAutoDetectAndRetryLogo(const int serviceId, const int videoFi
         return true;
     } catch (const Exception& e) {
         ctx.infoF(_T("[自動ロゴ検出] 例外が発生しました: %s"), e.message());
+        setLogoMatchFail(LogoMatchFailKind::AutoOther);
         cleanup();
         return false;
     } catch (const std::exception& e) {
         ctx.infoF(_T("[自動ロゴ検出] 例外が発生しました: %s"), char_to_tstring(e.what()));
+        setLogoMatchFail(LogoMatchFailKind::AutoOther);
         cleanup();
         return false;
     } catch (...) {
         ctx.info(_T("[自動ロゴ検出] 不明な例外が発生しました"));
+        setLogoMatchFail(LogoMatchFailKind::AutoOther);
         cleanup();
         return false;
     }

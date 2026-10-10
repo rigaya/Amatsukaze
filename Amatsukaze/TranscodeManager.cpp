@@ -1656,7 +1656,12 @@ void DoBadThing() {
     } else {
         ctx.info(_T("[一時ファイル再利用] ロゴ・CM解析結果を再利用します"));
     }
-    std::vector<std::pair<size_t, bool>> logoFound;
+    struct LogoMatchState {
+        size_t frames;
+        bool found;
+        tstring message;
+    };
+    std::vector<LogoMatchState> logoFound;
     std::vector<std::unique_ptr<MakeChapter>> chapterMakers(numVideoFiles);
     for (int videoFileIndex = 0; videoFileIndex < numVideoFiles; videoFileIndex++) {
         cmanalyze.push_back(std::make_unique<CMAnalyze>(ctx, setting));
@@ -1693,7 +1698,10 @@ void DoBadThing() {
             }
         }
 
-        logoFound.emplace_back(numFrames, cma->getLogoPath().size() > 0);
+        logoFound.push_back(LogoMatchState{
+            (size_t)numFrames,
+            cma->getLogoPath().size() > 0,
+            cma->getLogoMatchFailMessage() });
         reformInfo.applyCMZones(videoFileIndex, cma->getZones(), cma->getDivs());
 
         if (analyzeChapterAndCM) {
@@ -1704,16 +1712,25 @@ void DoBadThing() {
     if (setting.isChapterEnabled()) {
         // ロゴがあったかチェック //
         // 映像ファイルをフレーム数でソート
-        std::sort(logoFound.begin(), logoFound.end());
+        std::sort(logoFound.begin(), logoFound.end(), [](const LogoMatchState& a, const LogoMatchState& b) {
+            return a.frames < b.frames;
+        });
         const bool logoRequired = !setting.isNoDelogo()
             || (setting.isChapterEnabled() && !setting.isNoLogoInCM());
-        if (setting.getLogoPath().size() > 0 && // ロゴ指定あり
+        if (!logoFound.empty() &&
+            setting.getLogoPath().size() > 0 && // ロゴ指定あり
             logoRequired &&
             setting.isIgnoreNoLogo() == false &&          // ロゴなし無視でない
-            logoFound.back().first >= 300 &&
-            logoFound.back().second == false)     // 最も長い映像でロゴが見つからなかった
+            logoFound.back().frames >= 300 &&
+            logoFound.back().found == false)     // 最も長い映像でロゴが見つからなかった
         {
-            THROW(NoLogoException, "マッチするロゴが見つかりませんでした");
+            const auto& longest = logoFound.back();
+            const tstring message = longest.message.empty()
+                ? tstring(_T("マッチするロゴが見つかりませんでした"))
+                : longest.message;
+            throw_exception_(NoLogoException(StringFormat(
+                _T("Exception thrown at %s:%d\r\nMessage: %s"),
+                core_utils::file_name_t(__FILENAME__).c_str(), __LINE__, message.c_str())));
         }
         ctx.infoF(_T("ロゴ・CM解析完了: %.2f秒"), sw.getAndReset());
     }

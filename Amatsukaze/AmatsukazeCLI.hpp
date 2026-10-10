@@ -919,7 +919,7 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
 
         return 0;
     } catch (const NoLogoException&) {
-        // ロゴ無しは100とする
+        // ロゴ無しは100とする。詳細は例外メッセージがログに出る。
         return 100;
     } catch (const NoDrcsMapException&) {
         // DRCSマッピングなしは101とする

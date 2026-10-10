@@ -52,6 +52,16 @@ public:
 #endif
 };
 
+// ロゴが採用されなかった理由。最終エラーで「検出失敗のあと何が失敗したか」を出すために使う。
+enum class LogoMatchFailKind {
+    None = 0,
+    Registered,
+    AutoRect,
+    AutoGenerate,
+    AutoRematch,
+    AutoOther,
+};
+
 class CMAnalyze : public AMTObject {
 public:
     CMAnalyze(AMTContext& ctx,
@@ -60,6 +70,7 @@ public:
     void analyze(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const bool analyzeChapterAndCM);
 
     const tstring& getLogoPath() const { return logopath; }
+    const tstring& getLogoMatchFailMessage() const { return logoMatchFailMessage; }
     const std::vector<int>& getTrims() const { return trims; }
     const std::vector<EncoderZone>& getZones() const { return cmzones; }
     const std::vector<int>& getDivs() const { return divs; }
@@ -88,6 +99,10 @@ private:
 
     bool logoAnalysisDone;
     tstring logopath;
+    LogoMatchFailKind logoMatchFailKind;
+    tstring logoMatchFailMessage;
+
+    void setLogoMatchFail(LogoMatchFailKind kind);
     std::vector<int> trims;
     std::vector<EncoderZone> cmzones;
     std::vector<int> sceneChanges;
