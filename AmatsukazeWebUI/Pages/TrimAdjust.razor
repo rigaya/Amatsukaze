@@ -143,10 +143,16 @@
                         }
                     }
 
-                    <img class="trim-preview-img"
+                    @{
+                        var imageFrame = _imageFrame;
+                        var imageToken = _frameImageToken;
+                    }
+                    <img @key="imageToken"
+                         class="trim-preview-img"
                          src="@_frameImageUrl"
-                         alt="Frame @_currentFrame"
-                         @ref="_imgRef" />
+                         alt="Frame @imageFrame"
+                         @onload="() => OnFrameLoaded(imageFrame, imageToken)"
+                         @onerror="() => OnFrameLoadError(imageFrame, imageToken)" />
                     <div class="trim-preview-frame-overlay @(IsFrameInTrimRange(_displayedFrame) ? "trim-range-active" : "trim-range-cut")">
                         @_displayedFrame
                     </div>
@@ -496,7 +502,6 @@
 
     private ElementReference _pageRef;
     private ElementReference _seekBarRef;
-    private ElementReference _imgRef;
 
     private bool _loading = true;
     private string? _errorMessage;
@@ -511,7 +516,6 @@
     private bool _reconnecting;
     private string? _reconnectError;
     private DotNetObjectReference<TrimAdjust>? _objRef;
-    private bool _imgErrorHandlerSet;
     private bool _seekbarHandlerSet;
     private bool _wheelHandlerSet;
 
@@ -523,8 +527,11 @@
     private int _bundleRequestToken;
     private int _thumbRequestToken;
     private int _displayedFrame; // 画像読み込み完了と同期して表示するフレーム番号
-    private int _loadingFrame; // 現在img srcにセットして読み込み中のフレーム
-    private bool _isFrameLoading; // 画像読み込み中フラグ
+    private int _imageFrame; // 現在imgに渡しているフレーム番号
+    private int _frameImageToken; // 画像要素ごとの通知を識別するトークン
+    private int _loadingFrame; // 現在データを取得中のフレーム番号
+    private bool _isFrameLoading; // データ取得中フラグ（画像イベントには依存しない）
+    private bool _disposed;
 
     private string _prevThumbUrl = "";
     private string _nextThumbUrl = "";
@@ -618,11 +625,6 @@
         {
             try
             {
-                if (!_imgErrorHandlerSet)
-                {
-                    await JS.InvokeVoidAsync("trimAdjustSetupImgHandler", _objRef);
-                    _imgErrorHandlerSet = true;
-                }
                 if (!_seekbarHandlerSet)
                 {
                     await JS.InvokeVoidAsync("trimAdjustSetupSeekbar", _objRef);
@@ -641,41 +643,19 @@
         }
     }
 
-    [JSInvokable]
-    public void OnFrameLoaded()
+    private void OnFrameLoaded(int frameNumber, int imageToken)
     {
-        InvokeAsync(() =>
-        {
-            _displayedFrame = _loadingFrame;
-            _isFrameLoading = false;
-            // まだ新しいフレームが要求されていれば続けてロード
-            if (_currentFrame != _loadingFrame)
-            {
-                RequestFrameLoad();
-            }
-            else
-            {
-                StateHasChanged();
-            }
-        });
+        var accepted = !_disposed && imageToken == _frameImageToken;
+        if (!accepted || string.IsNullOrEmpty(_frameImageUrl)) return;
+        _displayedFrame = frameNumber;
     }
 
-    [JSInvokable]
-    public void OnFrameLoadError()
+    private void OnFrameLoadError(int frameNumber, int imageToken)
     {
-        InvokeAsync(() =>
-        {
-            if (string.IsNullOrEmpty(_frameImageUrl) || _frameImageUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-            _isFrameLoading = false;
-            if (!_sessionExpired && !_loading)
-            {
-                _sessionExpired = true;
-                StateHasChanged();
-            }
-        });
+        var accepted = !_disposed && imageToken == _frameImageToken;
+        if (!accepted || string.IsNullOrEmpty(_frameImageUrl)) return;
+        _statusMessage = $"フレーム {frameNumber} の画像を表示できませんでした";
+        _isError = true;
     }
 
     [JSInvokable]
@@ -1084,16 +1064,15 @@
         _prevThumbUrl = "";
         _nextThumbUrl = "";
         ClearFrameCache();
-        RequestFrameLoad();
         _sessionExpired = false;
         _reconnecting = false;
         _reconnectError = null;
-        _imgErrorHandlerSet = false; // onerrorハンドラを再設定させる
         _seekbarHandlerSet = false; // シークバーハンドラを再設定させる
         _wheelHandlerSet = false; // ホイールハンドラを再設定させる
 
         _statusMessage = "再接続しました";
         _isError = false;
+        RequestFrameLoad();
         StateHasChanged();
     }
 
@@ -1397,12 +1376,12 @@
         SetCurrentFrame(_currentFrame + delta);
     }
 
-    // 画像読み込みリクエスト（ロード中でなければ即座にsrc更新、ロード中ならonload後に自動で次を読み込む）
+    // データ取得は1件ずつ進め、取得中の操作は完了時に最新フレームへまとめる。
+    // 画像のonload/onerrorは表示結果の通知だけに使い、次の取得を止めない。
     private void RequestFrameLoad()
     {
-        if (_session == null) return;
-        if (_isFrameLoading) return; // onload時に_currentFrameを拾って次をロードする
-        if (_currentFrame == _loadingFrame && _isFrameLoading) return;
+        if (_disposed || _session == null || _sessionExpired) return;
+        if (_isFrameLoading) return;
 
         _loadingFrame = _currentFrame;
         var reqToken = Interlocked.Increment(ref _bundleRequestToken);
@@ -1410,10 +1389,7 @@
 
         if (TryGetCachedTrimBundle(_loadingFrame, out var cachedBundle))
         {
-            _isFrameLoading = false;
-            _frameImageUrl = cachedBundle.FrameUrl;
-            _waveformImageUrl = cachedBundle.WaveformUrl; // 波形表示は常にnフレームのもののみ
-            _displayedFrame = _loadingFrame;
+            SetFrameImage(_loadingFrame, reqToken, cachedBundle);
             StateHasChanged();
             _ = UpdateNeighborThumbsAsync(_loadingFrame, reqToken);
             _ = PrefetchAroundFrameAsync(_loadingFrame, reqToken);
@@ -1426,39 +1402,57 @@
         _ = PrefetchAroundFrameAsync(_loadingFrame, reqToken);
     }
 
+    private void SetFrameImage(int frameNumber, int reqToken, CachedTrimBundle bundle)
+    {
+        _imageFrame = frameNumber;
+        _frameImageToken = reqToken;
+        _frameImageUrl = bundle.FrameUrl;
+        _waveformImageUrl = bundle.WaveformUrl; // 波形表示は常にnフレームのもののみ
+    }
+
     private async Task LoadBundleForFrameAsync(int frameNumber, int reqToken)
     {
-        if (string.IsNullOrEmpty(_sessionId))
+        var sessionId = _sessionId;
+        try
         {
-            _isFrameLoading = false;
-            return;
-        }
+            if (string.IsNullOrEmpty(sessionId)) return;
 
-        var res = await Api.GetTrimBundleAsync(_sessionId, frameNumber);
-        if (reqToken != _bundleRequestToken)
-        {
-            return;
-        }
+            var res = await Api.GetTrimBundleAsync(sessionId, frameNumber);
+            var accepted = !_disposed && reqToken == _bundleRequestToken && sessionId == _sessionId;
+            if (!accepted) return;
 
-        if (!res.Ok || res.Data == null || res.Data.VideoJpeg.Length == 0)
-        {
-            _isFrameLoading = false;
-            if (!_sessionExpired && !_loading)
+            if (!res.Ok || res.Data == null || res.Data.VideoJpeg.Length == 0)
             {
-                _sessionExpired = true;
-                await InvokeAsync(StateHasChanged);
+                if (!_sessionExpired && !_loading) _sessionExpired = true;
+                return;
             }
-            return;
-        }
 
-        // メイン表示フレームはフレーム+波形をセットでキャッシュする
-        CacheTrimBundle(frameNumber, res.Data.VideoJpeg, res.Data.WaveformJpeg);
-        if (TryGetCachedTrimBundle(frameNumber, out var cachedBundle))
-        {
-            _frameImageUrl = cachedBundle.FrameUrl;
-            _waveformImageUrl = cachedBundle.WaveformUrl; // 波形表示は常にnフレームのもののみ
+            // メイン表示フレームはフレーム+波形をセットでキャッシュする
+            CacheTrimBundle(frameNumber, res.Data.VideoJpeg, res.Data.WaveformJpeg);
+            if (TryGetCachedTrimBundle(frameNumber, out var cachedBundle))
+            {
+                SetFrameImage(frameNumber, reqToken, cachedBundle);
+            }
         }
-        await InvokeAsync(StateHasChanged);
+        catch (Exception)
+        {
+            if (!_disposed && reqToken == _bundleRequestToken && sessionId == _sessionId)
+            {
+                _statusMessage = "フレームの読み込みに失敗しました";
+                _isError = true;
+            }
+        }
+        finally
+        {
+            // 古いセッションや破棄済みページの処理で、新しい要求の待ち状態を解除しない。
+            if (!_disposed && reqToken == _bundleRequestToken && sessionId == _sessionId)
+            {
+                _isFrameLoading = false;
+                var loadNext = !_sessionExpired && _currentFrame != frameNumber;
+                StateHasChanged();
+                if (loadNext) RequestFrameLoad();
+            }
+        }
     }
 
     // フレーム移動（即時更新：キー/ボタン操作用）
@@ -1512,6 +1506,10 @@
 
     private void ClearFrameCache()
     {
+        // 再接続前の応答と画像通知を無効にする。
+        Interlocked.Increment(ref _bundleRequestToken);
+        Interlocked.Exchange(ref _thumbRequestToken, _bundleRequestToken);
+        _frameImageToken = _bundleRequestToken;
         lock (_frameCacheLock)
         {
             _frameUrlCache.Clear();
@@ -1675,6 +1673,8 @@
 
     private Task FetchFrameIntoCacheAsync(int frameNumber, int centerFrame, int reqToken)
     {
+        var sessionId = _sessionId;
+        if (_disposed || string.IsNullOrEmpty(sessionId)) return Task.CompletedTask;
         Task task;
         lock (_frameCacheLock)
         {
@@ -1682,17 +1682,18 @@
             {
                 return existing;
             }
-            task = FetchFrameIntoCacheCoreAsync(frameNumber, centerFrame, reqToken);
-            _frameFetchInFlight[frameNumber] = task;
+            task = FetchFrameIntoCacheCoreAsync(frameNumber, centerFrame, reqToken, sessionId);
+            // 同期完了した処理を登録すると、finallyで削除済みのTaskが残ってしまう。
+            if (!task.IsCompleted) _frameFetchInFlight[frameNumber] = task;
         }
         return task;
     }
 
-    private async Task FetchFrameIntoCacheCoreAsync(int frameNumber, int centerFrame, int reqToken)
+    private async Task FetchFrameIntoCacheCoreAsync(int frameNumber, int centerFrame, int reqToken, string sessionId)
     {
         try
         {
-            if (_session == null || string.IsNullOrEmpty(_sessionId))
+            if (_disposed || _session == null || sessionId != _sessionId)
             {
                 return;
             }
@@ -1706,11 +1707,12 @@
                 return;
             }
 
-            var res = await Api.GetTrimBundleAsync(_sessionId, frameNumber);
+            var res = await Api.GetTrimBundleAsync(sessionId, frameNumber);
             if (!res.Ok || res.Data == null || res.Data.VideoJpeg.Length == 0)
             {
                 return;
             }
+            if (_disposed || sessionId != _sessionId) return;
             CacheTrimBundle(frameNumber, res.Data.VideoJpeg, res.Data.WaveformJpeg);
 
             if (reqToken != _thumbRequestToken)
@@ -1739,7 +1741,7 @@
         {
             lock (_frameCacheLock)
             {
-                _frameFetchInFlight.Remove(frameNumber);
+                if (sessionId == _sessionId) _frameFetchInFlight.Remove(frameNumber);
             }
         }
     }
@@ -2501,6 +2503,9 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        Interlocked.Increment(ref _bundleRequestToken);
+        Interlocked.Exchange(ref _thumbRequestToken, _bundleRequestToken);
         StopRepeat();
         _debounceTimer?.Dispose();
         _objRef?.Dispose();
