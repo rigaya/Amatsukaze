@@ -646,7 +646,6 @@
     private void OnFrameLoaded(int frameNumber, int imageToken)
     {
         var accepted = !_disposed && imageToken == _frameImageToken;
-        System.Console.WriteLine($"[TrimAdjust] OnFrameLoaded frame={frameNumber} imageToken={imageToken} currentImageToken={_frameImageToken} accepted={accepted}");
         if (!accepted || string.IsNullOrEmpty(_frameImageUrl)) return;
         _displayedFrame = frameNumber;
     }
@@ -654,7 +653,6 @@
     private void OnFrameLoadError(int frameNumber, int imageToken)
     {
         var accepted = !_disposed && imageToken == _frameImageToken;
-        System.Console.WriteLine($"[TrimAdjust] OnFrameLoadError frame={frameNumber} imageToken={imageToken} currentImageToken={_frameImageToken} accepted={accepted}");
         if (!accepted || string.IsNullOrEmpty(_frameImageUrl)) return;
         _statusMessage = $"フレーム {frameNumber} の画像を表示できませんでした";
         _isError = true;
@@ -1383,7 +1381,6 @@
     private void RequestFrameLoad()
     {
         if (_disposed || _session == null || _sessionExpired) return;
-        System.Console.WriteLine($"[TrimAdjust] RequestFrameLoad enter current={_currentFrame} loading={_loadingFrame} isLoading={_isFrameLoading}");
         if (_isFrameLoading) return;
 
         _loadingFrame = _currentFrame;
@@ -1411,7 +1408,6 @@
         _frameImageToken = reqToken;
         _frameImageUrl = bundle.FrameUrl;
         _waveformImageUrl = bundle.WaveformUrl; // 波形表示は常にnフレームのもののみ
-        System.Console.WriteLine($"[TrimAdjust] SetFrameImage frame={frameNumber} imageToken={reqToken} srcLen={_frameImageUrl.Length}");
     }
 
     private async Task LoadBundleForFrameAsync(int frameNumber, int reqToken)
@@ -1423,7 +1419,6 @@
 
             var res = await Api.GetTrimBundleAsync(sessionId, frameNumber);
             var accepted = !_disposed && reqToken == _bundleRequestToken && sessionId == _sessionId;
-            System.Console.WriteLine($"[TrimAdjust] LoadBundleForFrameAsync result frame={frameNumber} ok={res.Ok} jpegLen={res.Data?.VideoJpeg?.Length ?? -1} reqToken={reqToken} curToken={_bundleRequestToken} accepted={accepted}");
             if (!accepted) return;
 
             if (!res.Ok || res.Data == null || res.Data.VideoJpeg.Length == 0)
@@ -1439,9 +1434,8 @@
                 SetFrameImage(frameNumber, reqToken, cachedBundle);
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            System.Console.WriteLine($"[TrimAdjust] LoadBundleForFrameAsync exception frame={frameNumber} reqToken={reqToken} curToken={_bundleRequestToken} error={ex}");
             if (!_disposed && reqToken == _bundleRequestToken && sessionId == _sessionId)
             {
                 _statusMessage = "フレームの読み込みに失敗しました";
@@ -1455,7 +1449,6 @@
             {
                 _isFrameLoading = false;
                 var loadNext = !_sessionExpired && _currentFrame != frameNumber;
-                System.Console.WriteLine($"[TrimAdjust] LoadBundleForFrameAsync finish frame={frameNumber} current={_currentFrame} reqToken={reqToken} isLoading={_isFrameLoading} loadNext={loadNext}");
                 StateHasChanged();
                 if (loadNext) RequestFrameLoad();
             }
