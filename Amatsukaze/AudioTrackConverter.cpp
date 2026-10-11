@@ -371,6 +371,23 @@ std::vector<float> ConvertAudioChannels(const std::vector<float>& pcm, AUDIO_CHA
     return output;
 }
 
+extern "C" int ConvertAudioChannelsForTest(const float* input, size_t inputCount, int src, int dst,
+    float* output, size_t outputCapacity, size_t* outputCount) {
+    constexpr int RESULT_INVALID = -1;
+    constexpr int RESULT_BUFFER_TOO_SMALL = -2;
+    if (outputCount == nullptr || (inputCount > 0 && input == nullptr)) return RESULT_INVALID;
+    *outputCount = 0;
+    try {
+        const auto converted = ConvertAudioChannels(std::vector<float>(input, input + inputCount), (AUDIO_CHANNELS)src, (AUDIO_CHANNELS)dst);
+        *outputCount = converted.size();
+        if (!converted.empty() && (output == nullptr || outputCapacity < converted.size())) return RESULT_BUFFER_TOO_SMALL;
+        std::copy(converted.begin(), converted.end(), output);
+        return 0;
+    } catch (...) {
+        return RESULT_INVALID;
+    }
+}
+
 std::vector<std::vector<uint8_t>> ConvertAudioTrackRun(AMTContext& ctx, PacketCache& cache,
     const AudioTrackPlan& plan, size_t begin, size_t end, const std::vector<FileAudioFrameInfo>& frameInfo) {
     if (begin >= end || end > plan.frames.size() || frameInfo.empty()) {

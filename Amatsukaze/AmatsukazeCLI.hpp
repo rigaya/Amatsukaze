@@ -810,6 +810,76 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     return std::unique_ptr<ConfigWrapper>(new ConfigWrapper(ctx, conf));
 }
 
+// ネイティブ単体テスト用: parseArgsの結果を「キー=値」の改行区切りテキストにして返す。
+// 実行ファイル位置やPATH探索に依存する既定値は含めず、引数で明示した値と固定の既定値だけを出す。
+// 作業ディレクトリはgetTmpDirが一時ディレクトリの作成を要するため含めない。
+// 成功時0、Amatsukaze例外 (引数の拒否) 時1、その他の例外 (数値変換の失敗など) 時2、
+// 引数不正時-1、出力バッファ不足時-2 (outputLengthに終端を除く必要文字数) を返す。
+extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* const* argv,
+    tchar* output, size_t outputCapacity, size_t* outputLength) {
+    constexpr int RESULT_REJECTED = 1;
+    constexpr int RESULT_OTHER_EXCEPTION = 2;
+    constexpr int RESULT_INVALID = -1;
+    constexpr int RESULT_BUFFER_TOO_SMALL = -2;
+    if (argv == nullptr || argc < 1 || outputLength == nullptr) return RESULT_INVALID;
+    *outputLength = 0;
+    try {
+        AMTContext ctx;
+        const auto setting = parseArgs(ctx, argc, const_cast<const tchar**>(argv));
+        tstring text;
+        auto add = [&](const tchar* key, const tstring& value) { text += tstring(key) + _T("=") + value + _T("\n"); };
+        auto addInt = [&](const tchar* key, long long value) { add(key, StringFormat(_T("%lld"), value)); };
+        auto join = [](const std::vector<tstring>& list) {
+            tstring joined;
+            for (const auto& item : list) joined += (joined.empty() ? _T("") : _T("|")) + item;
+            return joined;
+        };
+        add(_T("mode"), setting->getMode());
+        add(_T("mode_args"), setting->getModeArgs());
+        add(_T("src"), setting->getSrcFilePath());
+        add(_T("src_original"), setting->getSrcFileOriginalPath());
+        add(_T("out_base"), setting->getOutFileBaseWithoutPrefix());
+        add(_T("json"), setting->getOutInfoJsonPath());
+        add(_T("filter"), setting->getFilterScriptPath());
+        add(_T("post_filter"), setting->getPostFilterScriptPath());
+        addInt(_T("encoder"), setting->getEncoder());
+        add(_T("encoder_path"), setting->getEncoderPath());
+        add(_T("encoder_options"), setting->getEncoderOptions());
+        addInt(_T("encoder_filter"), setting->getEncoderFilter());
+        add(_T("muxer_path"), setting->getMuxerPath());
+        add(_T("timelineeditor_path"), setting->getTimelineEditorPath());
+        add(_T("mp4box_path"), setting->getMp4BoxPath());
+        add(_T("mkvmerge_path"), setting->getMkvMergePath());
+        addInt(_T("format"), setting->getFormat());
+        addInt(_T("service_id"), setting->getServiceId());
+        addInt(_T("dump"), setting->isDumpStreamInfo());
+        addInt(_T("no_remove_tmp"), setting->isNoRemoveTmp());
+        addInt(_T("chapter"), setting->isChapterEnabled());
+        addInt(_T("subtitles"), setting->isSubtitlesEnabled());
+        addInt(_T("two_pass"), setting->isTwoPass());
+        addInt(_T("audio_format_change"), setting->getAudioFormatChangeMode());
+        addInt(_T("enc_parallel"), setting->getEncoderParallel());
+        addInt(_T("min_output_duration"), setting->getMinOutputDuration());
+        addInt(_T("audio_bitrate"), setting->getAudioBitrateInKbps());
+        addInt(_T("max_frames"), setting->getMaxFrames());
+        addInt(_T("nicojk_mask"), setting->getNicoJKMask());
+        addInt(_T("print_prefix"), setting->getPrintPrefix());
+        addInt(_T("sar_x"), setting->getUserSAR().first);
+        addInt(_T("sar_y"), setting->getUserSAR().second);
+        add(_T("logo"), join(setting->getLogoPath()));
+        add(_T("erase_logo"), join(setting->getEraseLogoPath()));
+        *outputLength = text.size();
+        if (output == nullptr || outputCapacity < text.size() + 1) return RESULT_BUFFER_TOO_SMALL;
+        std::copy(text.begin(), text.end(), output);
+        output[text.size()] = 0;
+        return 0;
+    } catch (const Exception&) {
+        return RESULT_REJECTED;
+    } catch (const std::exception&) {
+        return RESULT_OTHER_EXCEPTION;
+    }
+}
+
 static std::mutex g_log_mutex;
 static void amatsukaze_av_log_callback(
     void* ptr, int level, const char* fmt, va_list vl) {

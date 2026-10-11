@@ -34,7 +34,12 @@ tests\native\build_windows.cmd
 | `encodeMpeg2Test`, `fileStreamInfoTest`, `DamemojiTest`, `LosslessTest`, `LogoFrameTest`, `CaptionASSTest` | 非公開コンポーネント/統合テスト | 外部素材、AviSynth、ロゴまたは出力ファイルに依存 |
 | `Process.SimpleProcessTest` | 非公開コンポーネントテスト | 子プロセス実行を伴う |
 | `EncoderOptionTest01`～`EncoderOptionTest09` | `encoder_option` | 公開単体テストへ移行。旧テストの `--mode test_eo` は解析結果を表示するだけで合否を判定しないため、テスト専用の C ABI ラッパー `ParseEncoderOptionForTest` を通して期待値と比較する |
-| `CLI.ArgumentTest` | 保留 | 引数解析が `AmatsukazeCLI.hpp` 内の static 関数で、実行ファイル位置に依存する既定値を含むため、公開方法を設計してから追加 |
+| `AudioTrack.SeparatePlanner` | `audio_track_separate_planner` | 公開単体テストへ移行。`PlanSeparateAudioTracks`/`ValidateAudioTrackPlans` はSTLコンテナを受け渡すため、テスト専用のC ABIラッパー `PlanAudioTracksForTest`/`ValidateAudioTrackPlansForTest` を通して、旧テストの期待値と比較する |
+| `AudioTrack.MergePlanner` | `audio_track_merge_planner` | 公開単体テストへ移行。分離と同じC ABIラッパーで `PlanMergeAudioTracks` を検証する |
+| `AudioTrack.SilentAdtsBytes` | `audio_silent_adts_bytes` | 公開単体テストへ移行。設計書の手組みバイト列との一致と拒否を `GenerateSilentAdtsFrameForTest` 経由で検証する。旧テストの `GetAudioSamplingFrequencyIndex` の逆引きは、分離プランのサンプリング周波数インデックスと未対応レートの拒否で確認する。PES経由の並行処理は既存の `audio_pes_pipeline` が担当 |
+| `AudioTrackConvertTest.cpp` | `audio_channel_conversion` | `ConvertAudioChannels` の素材不要な検証部分だけ公開単体テストへ移行 (テスト専用C ABI `ConvertAudioChannelsForTest`)。旧テストはモノラル⇔5.1chの変換を拒否する前提だが、現行実装はステレオ経由で変換するため、現行仕様に合わせた。入力ADTSからAACを再構築する部分と `run_audio_track_convert_test.py`、`run_audio_track_seam_test.py` は外部音声素材と`ffmpeg`CLIに依存する実験用スタンドアロンで、非公開コンポーネントテスト |
+| `AudioTrackStreamReformTest.cpp`, `AudioTrackFaadSilenceTest.cpp`, `run_audio_track_test.py` | 非公開コンポーネントテスト | `StreamReform` 全体、libfaad、出力ディレクトリのファイルを使う実験用スタンドアロンで、`compile_commands.json` から単体ビルドする。公開単体テストの対象外 |
+| `CLI.ArgumentTest` | `command_line_arguments` | 公開単体テストへ移行。旧テストの `--mode test_parseargs` は例外が出ないことしか見ていないため、`AmatsukazeCLI.hpp` の static `parseArgs` の結果を、同じ翻訳単位で定義したテスト専用C ABI `ParseCommandLineForTest` が「キー=値」の改行区切りテキストへ直列化して返し、呼出側バッファ経由で値を比較する。旧テストの3パターン (10進と`0x6308`のサービスID、未知オプション`--ourput`の拒否) に加え、全オプション指定時の入出力パス・エンコーダ種別・オプション・muxer・timelineeditor・JSON・dumpの値、パス区切りの`/`への正規化、既知拡張子 (`.mp4`/`.mkv`/`.m2ts`/`.ts`) だけが除かれる出力パス、最小構成の既定値、モード別の必須引数、値が欠けた末尾オプション、数値でない値 (`std::invalid_argument`として別扱い)、範囲外の値、実況マスクの有効化条件を確認する。実行ファイル位置やPATH探索に依存する既定の実行ファイル名は比較せず、比較する実行ファイルは存在しない絶対パスで明示指定する。作業ディレクトリは取得に一時ディレクトリの作成を要するため比較しない |
 | `DecodePerformance` | 非公開ベンチマーク | 性能計測であり単体テストの合否に含めない |
 
 既存の `AmatsukazeUnitTest/` と GoogleTest は、この移行段階では削除しません。C# の `AmatsukazeServerTest` xUnit は維持し、ネットワークを使う任意テストは `Category=Network` としてオフラインの標準単体テストから分離します。標準群は次で実行します。
@@ -51,7 +56,7 @@ dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --filter "Category!
 
 テストは TCHAR を原則とし、出力は `_ftprintf`、書式化は `strsprintf` を使う。`common` の静的ライブラリをリンクし、本体DLLでは非公開の `StringFormat`（`THROW` が使用）のため `Amatsukaze/StringUtils.cpp` もテストに組み込む。
 
-Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones` と `vfr_input_detection` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
+Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones`、`vfr_input_detection`、`audio_track_*_planner`、`audio_channel_conversion`、`command_line_arguments` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
 
 `caption_pgs_canvas_size` は、出力映像のフレームサイズとSARからPGSのキャンバス (表示サイズ) を求める `CaptionPgsCanvasSize` を、テスト専用の C ABI `CaptionPgsCanvasSizeForTest` を通して検証する。HD (1440x1080 SAR 4:3 → 1920x1080)、SD 16:9 (720x480 SAR 32:27 → 853x480)、SARが1未満のSD 4:3 (高さを伸ばして720x540)、SAR不明、`--sar` の優先と片方だけの指定の無視、長辺4096を超える場合の比例縮小 (横長・縦長・8K) と、不正な引数を確認する。
 

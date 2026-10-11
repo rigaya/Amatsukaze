@@ -198,3 +198,104 @@ std::vector<AudioTrackPlan> PlanMergeAudioTracks(
     ValidateAudioTrackPlans(output, duration90kHz);
     return output;
 }
+
+namespace {
+AudioTrackPlan ToPlan(const AudioTrackPlanForTest& src, const AudioTrackReferenceForTest* references) {
+    AudioTrackPlan plan;
+    plan.sourceTrack = src.sourceTrack;
+    plan.logicalTrack = src.logicalTrack;
+    plan.layout = (AUDIO_CHANNELS)src.layout;
+    plan.sampleRate = src.sampleRate;
+    plan.samplingFrequencyIndex = src.samplingFrequencyIndex;
+    plan.name = src.name;
+    for (size_t i = 0; i < src.frameCount; i++) {
+        AudioTrackReference ref;
+        ref.operation = (AudioTrackOperation)references[i].operation;
+        ref.frameIndex = references[i].frameIndex;
+        ref.dualMonoChannel = references[i].dualMonoChannel;
+        ref.srcLayout = (AUDIO_CHANNELS)references[i].srcLayout;
+        ref.dstLayout = (AUDIO_CHANNELS)references[i].dstLayout;
+        plan.frames.push_back(ref);
+    }
+    return plan;
+}
+}
+
+extern "C" int PlanAudioTracksForTest(int merge,
+    const int* frameIndices, const size_t* trackLengths, size_t trackCount,
+    const AudioTrackFrameInfoForTest* frameInfo, size_t frameInfoCount, double duration90kHz,
+    AudioTrackPlanForTest* plans, size_t planCapacity, size_t* planCount,
+    AudioTrackReferenceForTest* references, size_t referenceCapacity, size_t* referenceCount) {
+    if (planCount == nullptr || referenceCount == nullptr || (trackCount > 0 && trackLengths == nullptr) ||
+        (frameInfoCount > 0 && frameInfo == nullptr)) {
+        return AUDIO_TRACK_PLAN_FOR_TEST_INVALID_ARGUMENT;
+    }
+    *planCount = 0;
+    *referenceCount = 0;
+    try {
+        FileAudioFrameList input(trackCount);
+        size_t offset = 0;
+        for (size_t i = 0; i < trackCount; i++) {
+            if (trackLengths[i] > 0 && frameIndices == nullptr) return AUDIO_TRACK_PLAN_FOR_TEST_INVALID_ARGUMENT;
+            input[i].assign(frameIndices + offset, frameIndices + offset + trackLengths[i]);
+            offset += trackLengths[i];
+        }
+        std::vector<FileAudioFrameInfo> info(frameInfoCount);
+        for (size_t i = 0; i < frameInfoCount; i++) {
+            info[i].format = { (AUDIO_CHANNELS)frameInfo[i].channels, frameInfo[i].sampleRate };
+            info[i].numSamples = frameInfo[i].numSamples;
+        }
+        const auto result = merge ? PlanMergeAudioTracks(input, info, duration90kHz)
+                                  : PlanSeparateAudioTracks(input, info, duration90kHz);
+        size_t totalReferences = 0;
+        for (const auto& plan : result) {
+            if (plan.name.size() >= AUDIO_TRACK_PLAN_FOR_TEST_NAME_LENGTH) return AUDIO_TRACK_PLAN_FOR_TEST_INVALID_ARGUMENT;
+            totalReferences += plan.frames.size();
+        }
+        *planCount = result.size();
+        *referenceCount = totalReferences;
+        if ((!result.empty() && (plans == nullptr || planCapacity < result.size())) || (totalReferences > 0 && (references == nullptr || referenceCapacity < totalReferences))) {
+            return AUDIO_TRACK_PLAN_FOR_TEST_BUFFER_TOO_SMALL;
+        }
+        size_t refIndex = 0;
+        for (size_t i = 0; i < result.size(); i++) {
+            const auto& plan = result[i];
+            auto& dst = plans[i];
+            dst = {};
+            dst.sourceTrack = plan.sourceTrack;
+            dst.logicalTrack = plan.logicalTrack;
+            dst.layout = plan.layout;
+            dst.sampleRate = plan.sampleRate;
+            dst.samplingFrequencyIndex = plan.samplingFrequencyIndex;
+            std::copy(plan.name.begin(), plan.name.end(), dst.name);
+            dst.frameCount = plan.frames.size();
+            for (const auto& ref : plan.frames) {
+                references[refIndex++] = { (int)ref.operation, ref.frameIndex, ref.dualMonoChannel, (int)ref.srcLayout, (int)ref.dstLayout };
+            }
+        }
+        return AUDIO_TRACK_PLAN_FOR_TEST_SUCCESS;
+    } catch (const FormatException&) {
+        return AUDIO_TRACK_PLAN_FOR_TEST_REJECTED;
+    } catch (...) {
+        return AUDIO_TRACK_PLAN_FOR_TEST_INVALID_ARGUMENT;
+    }
+}
+
+extern "C" int ValidateAudioTrackPlansForTest(
+    const AudioTrackPlanForTest* plans, size_t planCount,
+    const AudioTrackReferenceForTest* references, double duration90kHz) {
+    if ((planCount > 0 && plans == nullptr) || references == nullptr) return AUDIO_TRACK_PLAN_FOR_TEST_INVALID_ARGUMENT;
+    try {
+        std::vector<AudioTrackPlan> input;
+        for (size_t i = 0; i < planCount; i++) {
+            input.push_back(ToPlan(plans[i], references));
+            references += plans[i].frameCount;
+        }
+        ValidateAudioTrackPlans(input, duration90kHz);
+        return AUDIO_TRACK_PLAN_FOR_TEST_SUCCESS;
+    } catch (const FormatException&) {
+        return AUDIO_TRACK_PLAN_FOR_TEST_REJECTED;
+    } catch (...) {
+        return AUDIO_TRACK_PLAN_FOR_TEST_INVALID_ARGUMENT;
+    }
+}
