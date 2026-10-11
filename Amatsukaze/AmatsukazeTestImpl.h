@@ -13,7 +13,7 @@
 #include "LogoScan.h"
 
 // ネイティブ単体テストからコマンドライン引数の解析結果を取得するためのC ABI (定義はAmatsukazeCLI.hpp)。
-// 結果は「キー=値」の改行区切りテキスト。成功時0、引数の拒否時1、その他の例外時2、
+// 結果は「キー=値」の改行区切りテキスト。成功時0、引数の拒否時1、想定外の例外時2、
 // 引数不正時-1、出力バッファ不足時-2 (outputLengthに終端を除く必要文字数) を返す。
 extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* const* argv,
     tchar* output, size_t outputCapacity, size_t* outputLength);

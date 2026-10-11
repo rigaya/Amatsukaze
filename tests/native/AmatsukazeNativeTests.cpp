@@ -1526,9 +1526,50 @@ bool TestCommandLineArguments(tstring& diagnostic) {
         if (!ExpectCommandLineStatus({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4"), option }, 1,
             strsprintf(_T("値が欠けた末尾の %s"), option).c_str(), diagnostic)) return false;
     }
-    // 数値変換の失敗は std::invalid_argument のため Amatsukaze 例外ではなく「その他の例外」として返る
-    if (!ExpectCommandLineStatus({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4"), _T("-s"), _T("abc") }, 2, _T("数値でないサービスID"), diagnostic)) return false;
-    if (!ExpectCommandLineStatus({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4"), _T("-s"), _T("0xZZ") }, 2, _T("16進でないサービスID"), diagnostic)) return false;
+    // 数値は厳密に解析し、空・末尾のゴミ・範囲外はすべて引数の拒否になる (その他の例外にはならない)
+    const std::vector<tstring> numberBase = { _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4") };
+    auto withNumber = [&numberBase](std::initializer_list<tstring> extra) {
+        std::vector<tstring> result = numberBase;
+        result.insert(result.end(), extra.begin(), extra.end());
+        return result;
+    };
+    for (const TCHAR* value : { _T("abc"), _T("12abc"), _T(""), _T("0x"), _T("0xZZ"), _T("0x-1"), _T("0x0x10"), _T("99999999999"), _T("1.5") }) {
+        if (!ExpectCommandLineStatus(withNumber({ _T("-s"), value }), 1, strsprintf(_T("不正なサービスID \"%s\""), value).c_str(), diagnostic)) return false;
+    }
+    if (!ExpectCommandLine(withNumber({ _T("-s"), _T("0X10") }), { { _T("service_id"), _T("16") } }, _T("大文字0Xの16進サービスID"), diagnostic)) return false;
+    if (!ExpectCommandLine(withNumber({ _T("-s"), _T("0xaBc") }), { { _T("service_id"), _T("2748") } }, _T("16進数字の大文字小文字混在"), diagnostic)) return false;
+    if (!ExpectCommandLine(withNumber({ _T("-s"), _T("-1") }), { { _T("service_id"), _T("-1") } }, _T("負のサービスID"), diagnostic)) return false;
+    for (const TCHAR* option : { _T("--enc-parallel"), _T("--min-output-duration"), _T("-ab"), _T("--tsreplace-startup-preroll"),
+        _T("-eb"), _T("--max-fade-length"), _T("--direct-logo-analysis"), _T("--auto-logo-detect"),
+        _T("--auto-logo-detect-search-frames"), _T("--auto-logo-detect-div-x"), _T("--auto-logo-detect-div-y"),
+        _T("--auto-logo-detect-block-size"), _T("--auto-logo-detect-threshold"), _T("--auto-logo-detect-margin-x"),
+        _T("--auto-logo-detect-margin-y"), _T("-om"), _T("--nicojkmask"), _T("--max-frames"), _T("--parallel-logo-analysis") }) {
+        for (const TCHAR* value : { _T("abc"), _T("1x"), _T(""), _T("99999999999") }) {
+            if (!ExpectCommandLineStatus(withNumber({ option, value }), 1,
+                strsprintf(_T("%s の不正値 \"%s\""), option, value).c_str(), diagnostic)) return false;
+        }
+        if (!ExpectCommandLineStatus(withNumber({ option, _T("1") }), 0, strsprintf(_T("%s の正常値"), option).c_str(), diagnostic)) return false;
+    }
+    if (!ExpectCommandLine(withNumber({ _T("--parallel-logo-analysis"), _T("auto") }), {}, _T("ロゴ解析並列数のauto"), diagnostic)) return false;
+
+    // 種別を表す値は、未知の名前を警告だけで通さず拒否する (サーバーが渡す綴りは受理する)
+    for (const TCHAR* option : { _T("-et"), _T("-eft"), _T("-aet"), _T("--mpeg2decoder"), _T("--h264decoder"), _T("--hevcdecoder") }) {
+        if (!ExpectCommandLineStatus(withNumber({ option, _T("unknown") }), 1, strsprintf(_T("%s の未知の値"), option).c_str(), diagnostic)) return false;
+    }
+    for (const TCHAR* name : { _T("x264"), _T("x265"), _T("QSVEnc"), _T("NVEnc"), _T("VCEEnc"), _T("SVT-AV1"), _T("nvenc"), _T("svt-av1") }) {
+        if (!ExpectCommandLineStatus(withNumber({ _T("-et"), name }), 0, strsprintf(_T("-et %s"), name).c_str(), diagnostic)) return false;
+    }
+    for (const TCHAR* name : { _T("QSVEnc"), _T("NVEnc"), _T("VCEEnc") }) {
+        if (!ExpectCommandLineStatus(withNumber({ _T("-eft"), name }), 0, strsprintf(_T("-eft %s"), name).c_str(), diagnostic)) return false;
+    }
+    for (const TCHAR* name : { _T("neroAac"), _T("qaac"), _T("fdkaac"), _T("opusenc") }) {
+        if (!ExpectCommandLineStatus(withNumber({ _T("-aet"), name }), 0, strsprintf(_T("-aet %s"), name).c_str(), diagnostic)) return false;
+    }
+    for (const TCHAR* option : { _T("--mpeg2decoder"), _T("--h264decoder"), _T("--hevcdecoder") }) {
+        for (const TCHAR* name : { _T("default"), _T("QSV"), _T("CUVID"), _T("vaapi") }) {
+            if (!ExpectCommandLineStatus(withNumber({ option, name }), 0, strsprintf(_T("%s %s"), option, name).c_str(), diagnostic)) return false;
+        }
+    }
 
     // 値の範囲と書式
     const std::vector<tstring> base = { _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4") };
