@@ -638,6 +638,7 @@ enum DECODER_TYPE {
     DECODER_DEFAULT = 0,
     DECODER_QSV,
     DECODER_CUVID,
+    DECODER_VAAPI,
 };
 
 struct DecoderSetting {

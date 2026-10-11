@@ -76,7 +76,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 \
-        libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-libopencl1 \
+        libmfx1 libmfx-gen1.2 libva2 libva-drm2 libva-x11-2 libdrm2 ocl-icd-libopencl1 \
         mesa-va-drivers mesa-opencl-icd i965-va-driver-shaders \
     && wget -q "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/${CUDA_NVRTC_DEB}" -O /tmp/cuda-nvrtc.deb \
     && echo "${CUDA_NVRTC_SHA256}  /tmp/cuda-nvrtc.deb" | sha256sum -c - \

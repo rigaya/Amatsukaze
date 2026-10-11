@@ -14,6 +14,17 @@ usage() {
     echo "  両方を実行すると、指定なしで実行した場合と同じ内容になる。"
 }
 
+# 依存FFmpegの再ビルド後は、以前のpkg-configリンク情報を再利用しない。
+# configure --clearcacheはUbuntu 22.04のMesonでも使用できる。
+setup_native_build() {
+    if [ -f meson-private/coredata.dat ]; then
+        meson configure --clearcache . || return 1
+        meson setup --reconfigure --buildtype release --pkg-config-path "$1" "${PROJECT_ROOT}"
+    else
+        meson setup --buildtype release --pkg-config-path "$1" "${PROJECT_ROOT}"
+    fi
+}
+
 DEBUG_BUILD=false
 DEPS_ONLY=false
 BUILD_NATIVE=true
@@ -84,6 +95,14 @@ if [ "${BUILD_DOTNET}" = "true" ] && [ "${DEPS_ONLY}" = "false" ]; then
     fi
     if ! dotnet --list-sdks | awk '{print $1}' | grep -Eq '^10\.'; then
         echo ".NET 10 SDK が見つかりません。dotnet --list-sdks を確認してください。"
+        exit 1
+    fi
+fi
+
+# LinuxのVAAPIは、画面サーバーなしで使えるDRM経由を必須にする。
+if [ "${BUILD_NATIVE}" = "true" ] || [ "${DEPS_ONLY}" = "true" ]; then
+    if ! pkg-config --exists libva libva-drm libdrm; then
+        echo "VAAPIの開発ライブラリがありません。libva-dev と libdrm-dev をインストールしてください。"
         exit 1
     fi
 fi
@@ -165,6 +184,18 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         USE_PREBUILT_FF612=1
     fi
 
+    # 古いベースイメージのVAAPI非対応FFmpegを黙って使わない。
+    for ffmpeg_variant in FFNK FF612; do
+        case "${ffmpeg_variant}" in
+            FFNK) prebuilt_enabled=${USE_PREBUILT_FFNK}; prebuilt_pc_dir=${AMT_PKGCONFIG_FFNK_DIR} ;;
+            FF612) prebuilt_enabled=${USE_PREBUILT_FF612}; prebuilt_pc_dir=${AMT_PKGCONFIG_FF612_DIR} ;;
+        esac
+        if [ "${prebuilt_enabled}" = "1" ] && [ ! -f "${prebuilt_pc_dir}/../../.amatsukaze-vaapi-enabled" ]; then
+            echo "prebuilt FFmpeg (${ffmpeg_variant}) がVAAPI未対応です。docker/baseからベースイメージを再生成してください。"
+            exit 1
+        fi
+    done
+
     echo "${BUILD_DIR} にインストールを行います。"
 
     if [ ! -d "nv-codec-headers-12.2.72.0" ]; then
@@ -244,8 +275,8 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         mkdir build_ffnk
     fi
     cd build_ffnk
-    # gray対応前のローカルキャッシュも再構築し、インストール完了後に印を残す。
-    if [ "${USE_PREBUILT_FFNK}" != "1" ] && { [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "ffmpeg_nekopanda/build/.amatsukaze-gray-enabled" ]; }; then
+    # gray/VAAPI対応前のローカルキャッシュも再構築し、インストール完了後に印を残す。
+    if [ "${USE_PREBUILT_FFNK}" != "1" ] && { [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "ffmpeg_nekopanda/build/.amatsukaze-gray-enabled" ] || [ ! -f "ffmpeg_nekopanda/build/.amatsukaze-vaapi-enabled" ]; }; then
         echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
         if [ ! -d "ffmpeg_nekopanda" ]; then
           (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
@@ -253,21 +284,26 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
           && wget https://github.com/FFmpeg/FFmpeg/commit/effadce6c756247ea8bae32dc13bb3e6f464f0eb.patch -O patch0.diff \
           && patch -p1 < patch0.diff) || exit 1
         fi
-        # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する
+        # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する。
+        # X11を無効にしたビルドにはVAAPIのX11依存を持ち込まない。
         (cd ffmpeg_nekopanda \
         && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
+        && sed -i 's/^    check_lib vaapi_x11 /    enabled xlib \&\& check_lib vaapi_x11 /' configure \
         && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
         && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
           --extra-cflags="-I${BUILD_DIR}/baselibs/include" --extra-ldflags="-L${BUILD_DIR}/baselibs/lib" \
-          --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
+          --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --enable-vaapi --enable-libdrm --enable-cuvid --enable-ffnvcodec \
           --enable-gpl --enable-version3 --enable-gray \
           --disable-doc --disable-network --disable-devices \
+        && grep -q "^#define CONFIG_VAAPI 1$" config.h \
+        && grep -q "^#define HAVE_VAAPI_DRM 1$" config.h \
+        && grep -q "^#define HAVE_VAAPI_X11 0$" config.h \
         && make -j$(nproc) \
         && make install) || exit 1
         # 旧FFmpeg(nekopanda版)のconfigureは -L を .pc へ書き出さないため、
         # baselibs の libz.a を解決できるよう後から補う。
         sed -i "s|^Libs: -L\${libdir}|Libs: -L\${libdir} -L${BUILD_DIR}/baselibs/lib|" ffmpeg_nekopanda/build/lib/pkgconfig/*.pc || exit 1
-        touch ffmpeg_nekopanda/build/.amatsukaze-gray-enabled || exit 1
+        touch ffmpeg_nekopanda/build/.amatsukaze-gray-enabled ffmpeg_nekopanda/build/.amatsukaze-vaapi-enabled || exit 1
     fi
 
     # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
@@ -277,7 +313,7 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         FFNK_PKGCFG_PATH="${AMT_PKGCONFIG_FFNK_DIR}"
     fi
     BASELIBS_PKGCFG_PATH="${BUILD_DIR}/baselibs/lib/pkgconfig"
-    (meson setup --buildtype release --pkg-config-path "${FFNK_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
+    (setup_native_build "${FFNK_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" && ninja) || exit 1
     cd ..
 
     # ----- BS4K向け ffmpeg_6.1.2ベースのAmatsukazeCLIのビルド -----
@@ -285,7 +321,7 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         mkdir build_ff612
     fi
     cd build_ff612
-    if [ "${USE_PREBUILT_FF612}" != "1" ] && { [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "ffmpeg-6.1.2/build/.amatsukaze-gray-enabled" ]; }; then
+    if [ "${USE_PREBUILT_FF612}" != "1" ] && { [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "ffmpeg-6.1.2/build/.amatsukaze-gray-enabled" ] || [ ! -f "ffmpeg-6.1.2/build/.amatsukaze-vaapi-enabled" ]; }; then
         echo "ffmpeg (BS4K向け) のビルドを行います。"
       if [ ! -d "ffmpeg-6.1.2" ]; then
         (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
@@ -294,12 +330,15 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
       (cd ffmpeg-6.1.2 \
         && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
           --extra-cflags="-I${BUILD_DIR}/baselibs/include" --extra-ldflags="-L${BUILD_DIR}/baselibs/lib" \
-          --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
+          --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --enable-vaapi --enable-libdrm --enable-cuvid --enable-ffnvcodec \
           --enable-gpl --enable-version3 --enable-gray \
           --disable-doc --disable-network --disable-devices \
+        && grep -q "^#define CONFIG_VAAPI 1$" config.h \
+        && grep -q "^#define HAVE_VAAPI_DRM 1$" config.h \
+        && grep -q "^#define HAVE_VAAPI_X11 0$" config.h \
         && make -j$(nproc) \
         && make install) || exit 1
-      touch ffmpeg-6.1.2/build/.amatsukaze-gray-enabled || exit 1
+      touch ffmpeg-6.1.2/build/.amatsukaze-gray-enabled ffmpeg-6.1.2/build/.amatsukaze-vaapi-enabled || exit 1
     fi
 
     # ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う
@@ -308,7 +347,7 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
     if [ "${USE_PREBUILT_FF612}" = "1" ]; then
       FF612_PKGCFG_PATH="${AMT_PKGCONFIG_FF612_DIR}"
     fi
-    (meson setup --buildtype release --pkg-config-path "${FF612_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" "${SCRIPT_DIR}/.." && ninja) || exit 1
+    (setup_native_build "${FF612_PKGCFG_PATH}:${BASELIBS_PKGCFG_PATH}" && ninja) || exit 1
     cp Amatsukaze/libAmatsukaze.so Amatsukaze/libAmatsukaze2.so
     cd ..
 

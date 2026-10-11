@@ -1349,7 +1349,20 @@ void AMTSimpleVideoEncoder::processAllData(int pass) {
     thread_.start();
 
     // エンコード
-    reader_.readAll(setting_.getSrcFilePath(), setting_.getDecoderSetting());
+    try {
+        reader_.readAll(setting_.getSrcFilePath(), setting_.getDecoderSetting());
+    } catch (...) {
+        // デコーダー初期化やデコードに失敗しても、スレッドを残して破棄しない。
+        thread_.force_clear();
+        thread_.join();
+        try {
+            encoder_->finish();
+        } catch (...) {
+            // 最初のデコードエラーを呼び出し元へ返す。
+        }
+        delete encoder_; encoder_ = NULL;
+        throw;
+    }
 
     // エンコードスレッドを終了して自分に引き継ぐ
     thread_.join();

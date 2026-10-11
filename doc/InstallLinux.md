@@ -66,12 +66,13 @@ dockerでのインストール方法は[こちら](../docker/readme.md)。
 
 ここでは、配布アーカイブを使用してインストールします。
 
-AviSynth、フィルタ、ソフトウェアエンコーダ、muxer、字幕ツールなどは同梱されているので、展開するだけで使用できます。
+AviSynth、フィルタ、ソフトウェアエンコーダ、muxer、字幕ツールなどは同梱されているので、展開して、下記のランタイム依存をインストールすると使用できます。
 
-追加でpython3.7以降が必要ですので、例えばUbuntu／Debianでは下記の通りインストールしてください。
+Python 3.7以降と、VAAPI/DRMのランタイムライブラリが必要です。GPUを使わない場合もライブラリは必要です。
+例えばUbuntu／Debianでは下記の通りインストールしてください。
 
 ```bash
-sudo apt install python3
+sudo apt install python3 libva2 libva-drm2 libdrm2
 ```
 
 [リリース一覧](https://github.com/rigaya/Amatsukaze/releases)からLinux x64向けアーカイブをダウンロードし、実行するユーザーが読み書きできる場所に展開します。ダウンロードしたアーカイブが現在のディレクトリにある場合の例です。
@@ -82,6 +83,17 @@ tar -xf ./Amatsukaze_linux_*.tar.xz -C "$HOME/Amatsukaze"
 ```
 
 自分で本体や依存モジュールをビルドする場合は[BuildLinux.md](./BuildLinux.md)を参照してください。
+
+### VAAPIによるHWデコード
+
+Linuxのプロファイル設定では、HWデコードに`VAAPI`を選択できます。
+GPUに合ったVAAPIドライバーを導入し、実行ユーザーが`/dev/dri/renderD*`へアクセスできるようにしてください。
+使用するGPUを固定する場合は、起動前に`LIBVA_DRM_DEVICE`へデバイスパスを設定します。
+
+```bash
+export LIBVA_DRM_DEVICE=/dev/dri/renderD128
+./AmatsukazeServer.sh
+```
 
 ### HWエンコーダの導入
 

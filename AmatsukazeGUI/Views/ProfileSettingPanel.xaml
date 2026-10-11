@@ -277,6 +277,7 @@
                             <TextBlock>
                                 デフォルト(CPU)が一番速いと思います。
                                 <LineBreak/>CUVIDにするとCPU負荷が減るのでトータルでは速くなるかもしれません。
+                                <LineBreak/>VAAPIはLinuxサーバー向けで、対応するGPUとVAAPIドライバーが必要です。
                                 <LineBreak/>QSVは現バージョンのFFmpegが壊れてて使えません。
                                 <LineBreak/>デフォルト以外にするとQP値が取得できないためデブロッキングフィルタが無効になります。
                             </TextBlock>
@@ -287,13 +288,13 @@
                     <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
                       ItemsSource="{Binding Model.SelectedProfile.H264DecoderList}"
                           SelectedIndex="{Binding Model.SelectedProfile.H264DecoderInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       ToolTip="CUVIDの方が速いです。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
+                       ToolTip="CUVIDの方が速いです。&#xA;VAAPIはLinuxサーバー向けで、対応するGPUとVAAPIドライバーが必要です。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
                 </StackPanel>
                 <StackPanel Grid.Row="8" Grid.Column="1" Margin="10,0">
                     <ComboBox HorizontalAlignment="Left" Margin="0,3" VerticalAlignment="Top" Width="120" Height="22"
                       ItemsSource="{Binding Model.SelectedProfile.HEVCDecoderList}"
                           SelectedIndex="{Binding Model.SelectedProfile.HEVCDecoderInt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       ToolTip="CUVIDの方が速いです。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
+                       ToolTip="CUVIDの方が速いです。&#xA;VAAPIはLinuxサーバー向けで、対応するGPUとVAAPIドライバーが必要です。&#xA;QSVは現バージョンのFFmpegが壊れてて使えません。"/>
                 </StackPanel>
                 <StackPanel Grid.Row="9" Grid.Column="1" Margin="10,0">
                     <DockPanel>

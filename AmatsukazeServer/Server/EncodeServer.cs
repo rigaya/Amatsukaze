@@ -2473,27 +2473,22 @@ namespace Amatsukaze.Server
                         .Append("\"");
                 }
 
-                string[] decoderNames = new string[] { "default", "QSV", "CUVID" };
-                if (!loadV2)
-                {
-                    decoderNames[1] = "default";
-                }
                 if (profile.Mpeg2Decoder != DecoderType.Default)
                 {
                     sb.Append("  --mpeg2decoder ");
-                    sb.Append(decoderNames[(int)profile.Mpeg2Decoder]);
+                    sb.Append(profile.Mpeg2Decoder.GetDecoderArgument(loadV2));
                 }
 
                 if (profile.H264Deocder != DecoderType.Default)
                 {
                     sb.Append("  --h264decoder ");
-                    sb.Append(decoderNames[(int)profile.H264Deocder]);
+                    sb.Append(profile.H264Deocder.GetDecoderArgument(loadV2));
                 }
 
                 if (profile.HEVCDecoder != DecoderType.Default)
                 {
                     sb.Append("  --hevcdecoder ");
-                    sb.Append(decoderNames[(int)profile.HEVCDecoder]);
+                    sb.Append(profile.HEVCDecoder.GetDecoderArgument(loadV2));
                 }
                 if (ignoreNoLogo)
                 {

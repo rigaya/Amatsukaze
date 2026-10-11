@@ -1976,6 +1976,7 @@ const tchar* ConfigWrapper::decoderToString(DECODER_TYPE decoder) const {
     switch (decoder) {
     case DECODER_QSV: return _T("QSV");
     case DECODER_CUVID: return _T("CUVID");
+    case DECODER_VAAPI: return _T("VAAPI");
     default: break;
     }
     return _T("default");

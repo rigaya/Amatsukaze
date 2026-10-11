@@ -26,6 +26,9 @@
 #pragma warning(disable:4819) //C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
 extern "C" {
 #include <libavutil/imgutils.h>
+#ifndef _WIN32
+#include <libavutil/hwcontext.h>
+#endif
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #if !(defined(_WIN32) && defined(AMATSUKAZE2DLL))
@@ -67,6 +70,12 @@ public:
 private:
     AVFrame* frame_;
 };
+
+// VAAPIの初期化とCPU転送は、映像読み込みとAvisynthソースで共用する。
+DECODER_TYPE GetDecoderType(AVCodecID codec, const DecoderSetting& setting);
+void InitVAAPI(AVCodecContext* codec, const AVCodec* decoder);
+void DownloadFrame(Frame& frame);
+bool ReceiveFrame(AVCodecContext* codec, Frame& frame);
 
 class CodecContext : NonCopyable {
 public:
