@@ -58,6 +58,13 @@ class GUITrimAdjust : public AMTObject {
         }
 
         try {
+            // システムのプラグインフォルダのオートロードを無効化する。
+            // AviSynth+はオートロード中にプロセスのカレントディレクトリを一時的にプラグインフォルダへ変更するため、
+            // サーバー(GUI)プロセス内で実行すると、並行して相対パスでファイルアクセスしている
+            // 別スレッド(キュー保存等)がプラグインフォルダを参照してしまう。
+            // ここではAMTSourceとAviSynth内蔵フィルタしか使わないので、オートロードは不要。
+            env->ClearAutoloadDirs();
+
             // 他のAviSynth経路と同じくDLLをLoadPluginしてAMTSourceを登録する
             AVSValue loadPluginResult;
             env->LoadPlugin(tchar_to_string(GetModulePath()).c_str(), true, &loadPluginResult);
