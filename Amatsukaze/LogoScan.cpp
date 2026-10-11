@@ -1971,9 +1971,18 @@ void logo::LogoFrame::scanFramesDirect(av::AMTSource& source, const std::vector<
     }
     const int threadTotalFrames = getTotalFrames(range);
     int finished = 0;
+    bool decodeFormatLogged = false;
     for (const auto& r : range) {
         source.ScanFramesDirect(r.first, r.second,
             [&](const int n, const AVFrame* top, const AVFrame* bottom, const int dstBitDepth, const int srcBitDepth) {
+                // 設定値ではなく実フレームの形式を、代表スレッドで一度だけ表示する。
+                if (threadId == 0 && !decodeFormatLogged) {
+                    const auto* formatName = av_get_pix_fmt_name((AVPixelFormat)top->format);
+                    ctx.infoF(_T("ロゴ解析デコード: %s (%s)"),
+                        top->format == AV_PIX_FMT_GRAY8 ? _T("輝度のみ") : _T("通常"),
+                        char_to_tstring(formatName ? formatName : "unknown").c_str());
+                    decodeFormatLogged = true;
+                }
                 ScanFrameDirect(top, bottom, dstBitDepth, srcBitDepth, memY.data(), memDeint.data(), memWork.data(),
                     &decodedResults[(size_t)n * numLogos]);
                 decodedValid[n] = 1;
