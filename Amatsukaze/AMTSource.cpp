@@ -65,6 +65,12 @@ void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
     if (avcodec_parameters_to_context(codecCtx(), videoStream->codecpar) != 0) {
         env->ThrowError("avcodec_parameters_to_context failed");
     }
+    // 直接ロゴ解析は輝度のみ参照する。ソフトウェアMPEG-2だけ色差の復元を省く。
+    // 通常の映像出力と、ほかのコーデック・HWデコーダには適用しない。
+    if (directScanUsed && vcodecId == AV_CODEC_ID_MPEG2VIDEO
+        && std::string(pCodec->name) == "mpeg2video") {
+        codecCtx()->flags |= AV_CODEC_FLAG_GRAY;
+    }
     codecCtx()->pkt_timebase = videoStream->time_base;
     codecCtx()->thread_count = GetFFmpegThreads((decodeThreads) ? decodeThreads : GetProcessorCount(), videoStream->codecpar->height);
 
@@ -751,7 +757,11 @@ void AMTSource::ScanFramesDirect(int begin, int end,
     std::lock_guard<std::mutex> guard(mutex);
     // 前回と異なるコールバックでも安全に再走査できるよう、画像を持たない到達印を破棄する
     ClearFrameCache();
-    directScanUsed = true;
+    if (!directScanUsed) {
+        directScanUsed = true;
+        // 色差付きの参照フレームを引き継がず、直接解析用の設定で開始する。
+        ResetDecoder(env);
+    }
     try {
         directFrameCallback = frameCallback;
         for (int n = begin; n <= end; n++) {

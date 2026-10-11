@@ -244,7 +244,8 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         mkdir build_ffnk
     fi
     cd build_ffnk
-    if [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FFNK}" != "1" ]; then
+    # gray対応前のローカルキャッシュも再構築し、インストール完了後に印を残す。
+    if [ "${USE_PREBUILT_FFNK}" != "1" ] && { [ ! -f "ffmpeg_nekopanda/build/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "ffmpeg_nekopanda/build/.amatsukaze-gray-enabled" ]; }; then
         echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
         if [ ! -d "ffmpeg_nekopanda" ]; then
           (git clone --depth 1 -b amatsukaze https://github.com/nekopanda/FFmpeg.git ffmpeg_nekopanda \
@@ -259,13 +260,14 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         && CFLAGS="-w" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
           --extra-cflags="-I${BUILD_DIR}/baselibs/include" --extra-ldflags="-L${BUILD_DIR}/baselibs/lib" \
           --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
-          --enable-gpl --enable-version3 \
+          --enable-gpl --enable-version3 --enable-gray \
           --disable-doc --disable-network --disable-devices \
         && make -j$(nproc) \
         && make install) || exit 1
         # 旧FFmpeg(nekopanda版)のconfigureは -L を .pc へ書き出さないため、
         # baselibs の libz.a を解決できるよう後から補う。
         sed -i "s|^Libs: -L\${libdir}|Libs: -L\${libdir} -L${BUILD_DIR}/baselibs/lib|" ffmpeg_nekopanda/build/lib/pkgconfig/*.pc || exit 1
+        touch ffmpeg_nekopanda/build/.amatsukaze-gray-enabled || exit 1
     fi
 
     # ffmpeg_nekopanda/buildを参照して、AmatsukazeCLIのビルドを行う
@@ -283,7 +285,7 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         mkdir build_ff612
     fi
     cd build_ff612
-    if [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] && [ "${USE_PREBUILT_FF612}" != "1" ]; then
+    if [ "${USE_PREBUILT_FF612}" != "1" ] && { [ ! -f "ffmpeg-6.1.2/build/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "ffmpeg-6.1.2/build/.amatsukaze-gray-enabled" ]; }; then
         echo "ffmpeg (BS4K向け) のビルドを行います。"
       if [ ! -d "ffmpeg-6.1.2" ]; then
         (wget https://www.ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz \
@@ -293,10 +295,11 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH=${BUILD_DIR}/baselibs/lib/pkgconfig ./configure --prefix=`pwd`/build --enable-pic \
           --extra-cflags="-I${BUILD_DIR}/baselibs/include" --extra-ldflags="-L${BUILD_DIR}/baselibs/lib" \
           --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
-          --enable-gpl --enable-version3 \
+          --enable-gpl --enable-version3 --enable-gray \
           --disable-doc --disable-network --disable-devices \
         && make -j$(nproc) \
         && make install) || exit 1
+      touch ffmpeg-6.1.2/build/.amatsukaze-gray-enabled || exit 1
     fi
 
     # ffmpeg_6.1.2/buildを参照して、AmatsukazeCLIのビルドを行う

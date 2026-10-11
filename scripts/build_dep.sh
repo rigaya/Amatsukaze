@@ -87,7 +87,8 @@ else
   FNNK_PREFIX="${SRC_DIR}/build"
 fi
 
-if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
+# gray対応前のキャッシュは再構築し、インストール完了後に印を残す。
+if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FNNK_PREFIX}/.amatsukaze-gray-enabled" ]; then
   echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
   if [ ! -d "${SRC_DIR}" ]; then
     (
@@ -105,7 +106,7 @@ if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
     && CFLAGS="-w" PKG_CONFIG_PATH="${BASELIBS_DIR}/lib/pkgconfig" ./configure --prefix="${FNNK_PREFIX}" --enable-pic \
       --extra-cflags="-I${BASELIBS_DIR}/include" --extra-ldflags="-L${BASELIBS_DIR}/lib" \
       --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
-      --enable-gpl --enable-version3 \
+      --enable-gpl --enable-version3 --enable-gray \
       --disable-doc --disable-network --disable-devices \
     && make -j"$(nproc)" \
     && make install
@@ -113,6 +114,7 @@ if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
   # 旧FFmpeg(nekopanda版)のconfigureは -L を .pc へ書き出さないため、
   # baselibs の libz.a を解決できるよう後から補う。
   sed -i "s|^Libs: -L\${libdir}|Libs: -L\${libdir} -L${BASELIBS_DIR}/lib|" "${FNNK_PREFIX}"/lib/pkgconfig/*.pc
+  touch "${FNNK_PREFIX}/.amatsukaze-gray-enabled"
 fi
 
 # ffmpeg-6.1.2 (BS4K向け)
@@ -127,7 +129,7 @@ else
   FF612_PREFIX="${FF612_SRC}/build"
 fi
 
-if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
+if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FF612_PREFIX}/.amatsukaze-gray-enabled" ]; then
   echo "ffmpeg (BS4K向け) のビルドを行います。"
   if [ ! -d "${FF612_SRC}" ]; then
     (
@@ -142,11 +144,12 @@ if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ]; then
     && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH="${BASELIBS_DIR}/lib/pkgconfig" ./configure --prefix="${FF612_PREFIX}" --enable-pic \
       --extra-cflags="-I${BASELIBS_DIR}/include" --extra-ldflags="-L${BASELIBS_DIR}/lib" \
       --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
-      --enable-gpl --enable-version3 \
+      --enable-gpl --enable-version3 --enable-gray \
       --disable-doc --disable-network --disable-devices \
     && make -j"$(nproc)" \
     && make install
   )
+  touch "${FF612_PREFIX}/.amatsukaze-gray-enabled"
 fi
 
 echo "依存ビルドが完了しました。出力先: ${DEST_ROOT:-${BUILD_DIR}}"
