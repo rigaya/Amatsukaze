@@ -15,6 +15,8 @@
 #include <vector>
 #include <map>
 #include <array>
+#include <functional>
+#include <memory>
 
 #include "StreamUtils.h"
 #include "Mpeg2TsParser.h"
@@ -183,6 +185,25 @@ private:
     PCR_Info pcrInfo[2];
 };
 
+// 同期/非同期の一致、入力所有、イベント順、終了・例外回収を検証するC ABI。
+extern "C" AMATSUKAZE_API int VerifyAudioPesPipelineForTest(const AudioPesForTest* packets, size_t packetCount);
+
+// PES解析と出力反映を分離し、音声解析だけを一つのワーカーで順に進める。
+// drain()は主スレッドで呼び、破棄時は未反映のコールバックを実行しない。
+class AudioPesPipeline {
+public:
+    using Callback = std::function<void(int, int64_t, const std::vector<AudioFrameData>&, PESPacket)>;
+    AudioPesPipeline(AMTContext& ctx, Callback callback, bool asynchronous = true);
+    ~AudioPesPipeline();
+    void submit(int audioIdx, int64_t clock, PESPacket packet);
+    void defer(std::function<void()> action, size_t bytes = 0);
+    void drain();
+    bool hasPending() const;
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 class TsSplitter : public AMTObject, protected TsPacketSelectorHandler {
 public:
     TsSplitter(AMTContext& ctx, bool enableVideo, bool enableAudio, bool enableCaption);
@@ -239,6 +260,7 @@ protected:
         SpAudioFrameParser(AMTContext&ctx, TsSplitter& this_, int audioIdx);
 
     protected:
+        virtual void onPesPacket(int64_t clock, PESPacket packet);
         virtual void onAudioPesPacket(int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet);
 
         virtual void onAudioFormatChanged(AudioFormat fmt);
@@ -283,6 +305,8 @@ protected:
         PESPacket packet) = 0;
 
     virtual void onVideoFormatChanged(VideoFormat fmt) = 0;
+
+    virtual bool onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet) { return false; }
 
     virtual void onAudioPesPacket(
         int audioIdx,

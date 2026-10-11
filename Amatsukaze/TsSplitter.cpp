@@ -7,6 +7,268 @@
 */
 
 #include "TsSplitter.h"
+#include <condition_variable>
+#include <deque>
+#include <future>
+#include <mutex>
+#include <thread>
+
+struct AudioPesPipeline::Impl {
+    struct Frame {
+        AudioFrameData info;
+        std::vector<uint8_t> coded;
+        std::vector<uint16_t> decoded;
+    };
+    struct Result {
+        std::vector<Frame> frames;
+        AudioDecodeDiagnostics diagnostics;
+    };
+    struct Job {
+        int audioIdx;
+        int64_t clock;
+        std::vector<uint8_t> packet;
+        std::promise<Result> result;
+    };
+    struct Event {
+        std::function<void()> action;
+        size_t bytes;
+    };
+    AMTContext& ctx;
+    Callback callback;
+    const bool asynchronous;
+    std::map<int, std::unique_ptr<AdtsParser>> parsers;
+    std::deque<Event> events;
+    size_t bufferedBytes = 0;
+    std::mutex mutex;
+    std::condition_variable available;
+    std::deque<std::shared_ptr<Job>> jobs;
+    bool stopping = false;
+    std::thread worker;
+
+    Impl(AMTContext& ctx, Callback callback, bool asynchronous)
+        : ctx(ctx), callback(std::move(callback)), asynchronous(asynchronous) {
+        if (asynchronous) worker = std::thread([this]() { run(); });
+    }
+    ~Impl() {
+        // ワーカーは主スレッドの反映を待たないので、例外中も確実に回収できる。
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            stopping = true;
+            jobs.clear();
+        }
+        available.notify_one();
+        if (worker.joinable()) worker.join();
+    }
+    Result decode(const Job& job) {
+        auto& parser = parsers[job.audioIdx];
+        if (!parser) parser.reset(new AdtsParser(ctx));
+        Result result;
+        parser->setDiagnostics(&result.diagnostics);
+        PESPacket packet(MemoryChunk(const_cast<uint8_t*>(job.packet.data()), job.packet.size()));
+        packet.parse();
+        std::vector<AudioFrameData> frames;
+        try {
+            parser->inputFrame(packet.paylod(), frames, packet.has_PTS() ? packet.PTS : -1);
+            result.frames.reserve(frames.size());
+            for (const auto& info : frames) {
+                Frame frame;
+                frame.info = info;
+                frame.coded.assign(info.codedData, info.codedData + info.codedDataSize);
+                if (info.decodedDataSize > 0) {
+                    frame.decoded.resize(info.decodedDataSize / sizeof(int16_t));
+                    memcpy(frame.decoded.data(), info.decodedData, info.decodedDataSize);
+                }
+                result.frames.emplace_back(std::move(frame));
+            }
+        } catch (...) {
+            parser->setDiagnostics(nullptr);
+            throw;
+        }
+        parser->setDiagnostics(nullptr);
+        return result;
+    }
+    void run() {
+        std::exception_ptr failure;
+        while (true) {
+            std::shared_ptr<Job> job;
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                available.wait(lock, [this]() { return stopping || !jobs.empty(); });
+                if (stopping) return;
+                job = std::move(jobs.front());
+                jobs.pop_front();
+            }
+            try {
+                if (failure) std::rethrow_exception(failure);
+                job->result.set_value(decode(*job));
+            } catch (...) {
+                failure = std::current_exception();
+                job->result.set_exception(failure);
+            }
+        }
+    }
+    void commit(const Job& job, Result& result) {
+        for (int i = 0; i < result.diagnostics.errors; ++i) ctx.incrementCounter(AMT_ERR_DECODE_AUDIO);
+        for (const auto& warning : result.diagnostics.warnings) ctx.warn(warning);
+        if (result.frames.empty()) return;
+        std::vector<AudioFrameData> frames;
+        frames.reserve(result.frames.size());
+        for (auto& frame : result.frames) {
+            frame.info.codedData = frame.coded.data();
+            frame.info.decodedData = frame.decoded.data();
+            frames.push_back(frame.info);
+        }
+        PESPacket packet(MemoryChunk(const_cast<uint8_t*>(job.packet.data()), job.packet.size()));
+        packet.parse();
+        callback(job.audioIdx, job.clock, frames, packet);
+    }
+    void pop() {
+        auto event = std::move(events.front());
+        events.pop_front();
+        bufferedBytes -= event.bytes;
+        event.action();
+    }
+    void reserve(size_t bytes) {
+        // 件数とデコード後の最大サイズ概算を制限する。単一の巨大PESは従来と同じく一件分だけ許容。
+        constexpr size_t MAX_BYTES = 64 * 1024 * 1024;
+        constexpr size_t MAX_EVENTS = 64;
+        while (!events.empty() && (events.size() >= MAX_EVENTS || bytes > MAX_BYTES || bufferedBytes > MAX_BYTES - bytes)) pop();
+    }
+};
+
+AudioPesPipeline::AudioPesPipeline(AMTContext& ctx, Callback callback, bool asynchronous)
+    : impl_(new Impl(ctx, std::move(callback), asynchronous)) {}
+AudioPesPipeline::~AudioPesPipeline() = default;
+
+void AudioPesPipeline::submit(int audioIdx, int64_t clock, PESPacket packet) {
+    if (clock == -1) {
+        drain();
+        impl_->ctx.error(_T("Audio PES Packet にクロック情報がありません"));
+        return;
+    }
+    // ADTSの最短ヘッダーとSBRを含むPCM最大長から、PESを跨いだ残りも見積もる。
+    constexpr size_t MAX_REMAINDER_BYTES = 8192;
+    constexpr size_t MAX_DECODED_EXPANSION = 1200;
+    const size_t estimatedBytes = packet.length > (SIZE_MAX / MAX_DECODED_EXPANSION - MAX_REMAINDER_BYTES)
+        ? SIZE_MAX : (packet.length + MAX_REMAINDER_BYTES) * MAX_DECODED_EXPANSION;
+    impl_->reserve(estimatedBytes);
+    auto job = std::make_shared<Impl::Job>();
+    job->audioIdx = audioIdx;
+    job->clock = clock;
+    job->packet.assign(packet.data, packet.data + packet.length);
+    if (!impl_->asynchronous) {
+        auto result = impl_->decode(*job);
+        impl_->commit(*job, result);
+        return;
+    }
+    auto future = std::make_shared<std::future<Impl::Result>>(job->result.get_future());
+    impl_->events.push_back({ [this, job, future]() {
+        auto result = future->get();
+        impl_->commit(*job, result);
+    }, estimatedBytes });
+    impl_->bufferedBytes += estimatedBytes;
+    {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        impl_->jobs.push_back(std::move(job));
+    }
+    impl_->available.notify_one();
+}
+
+void AudioPesPipeline::defer(std::function<void()> action, size_t bytes) {
+    if (!impl_->asynchronous || impl_->events.empty()) {
+        action();
+        return;
+    }
+    impl_->reserve(bytes);
+    impl_->events.push_back({ std::move(action), bytes });
+    impl_->bufferedBytes += bytes;
+}
+bool AudioPesPipeline::hasPending() const {
+    return !impl_->events.empty();
+}
+void AudioPesPipeline::drain() {
+    while (!impl_->events.empty()) impl_->pop();
+}
+
+
+namespace {
+std::vector<uint8_t> MakePipelineTestPes(const std::vector<uint8_t>& payload, int64_t pts) {
+    std::vector<uint8_t> data = { 0, 0, 1, 0xc0, 0, 0, 0x80, 0x80, 5, 0x21, 0, 1, 0, 1 };
+    data.insert(data.end(), payload.begin(), payload.end());
+    PESPacket packet(MemoryChunk(data.data(), data.size()));
+    packet.parse();
+    packet.changeTimestamp(pts, pts);
+    packet.writePacketLength();
+    return data;
+}
+
+}
+
+extern "C" AMATSUKAZE_API int VerifyAudioPesPipelineForTest(const AudioPesForTest* packets, size_t packetCount) {
+    if (packets == nullptr || packetCount == 0) return -5;
+    for (size_t i = 0; i < packetCount; ++i) {
+        if (packets[i].data == nullptr || packets[i].length == 0) return -5;
+    }
+    try {
+        auto run = [&](bool asynchronous) {
+            AMTContext ctx;
+            ctx.setTimePrefix(false);
+            std::vector<int64_t> metadata;
+            std::vector<uint8_t> bytes;
+            AudioPesPipeline pipeline(ctx, [&](int index, int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet) {
+                metadata.insert(metadata.end(), { index, clock, packet.PTS, (int64_t)frames.size() });
+                for (const auto& frame : frames) {
+                    metadata.insert(metadata.end(), { frame.PTS, frame.numSamples, frame.format.channels,
+                        frame.format.sampleRate, frame.numDecodedSamples, frame.codedDataSize, frame.decodedDataSize });
+                    bytes.insert(bytes.end(), frame.codedData, frame.codedData + frame.codedDataSize);
+                    const auto* decoded = reinterpret_cast<const uint8_t*>(frame.decodedData);
+                    if (frame.decodedDataSize > 0) bytes.insert(bytes.end(), decoded, decoded + frame.decodedDataSize);
+                }
+            }, asynchronous);
+            // 入力を直後に上書きし、複数トラック・PES跨ぎ・形式変更・多数イベントを混在させる。
+            for (int i = 0; i < 180; ++i) {
+                const auto& input = packets[i % packetCount];
+                std::vector<uint8_t> payload(input.data, input.data + input.length);
+                auto data = MakePipelineTestPes(payload, input.PTS + i * 4000);
+                PESPacket packet(MemoryChunk(data.data(), data.size()));
+                packet.parse();
+                pipeline.submit((i / 5) % 2, i * 270000, packet);
+                std::fill(data.begin(), data.end(), 0);
+                const int marker = i;
+                pipeline.defer([&, marker]() { metadata.insert(metadata.end(), { -2, marker }); }, 1024);
+                if (i == 77) pipeline.drain();
+            }
+            pipeline.drain();
+            return std::make_pair(metadata, bytes);
+        };
+        if (run(false) != run(true)) return -1;
+
+        AMTContext ctx;
+        int committed = 0;
+        auto data = MakePipelineTestPes(std::vector<uint8_t>(packets[0].data, packets[0].data + packets[0].length), packets[0].PTS);
+        PESPacket packet(MemoryChunk(data.data(), data.size()));
+        packet.parse();
+        {
+            AudioPesPipeline pipeline(ctx, [&](int, int64_t, const std::vector<AudioFrameData>&, PESPacket) { ++committed; });
+            pipeline.submit(0, 0, packet);
+            pipeline.defer([&]() { ++committed; });
+        }
+        if (committed != 0) return -2;
+        try {
+            AudioPesPipeline pipeline(ctx, [&](int, int64_t, const std::vector<AudioFrameData>&, PESPacket) {
+                throw std::runtime_error("反映時の例外");
+            });
+            for (int i = 0; i < 4; ++i) pipeline.submit(0, 0, packet);
+            pipeline.defer([&]() { ++committed; });
+            pipeline.drain();
+            return -3;
+        } catch (const std::runtime_error&) {
+        }
+        return committed == 0 ? 0 : -4;
+    } catch (...) {
+        return -6;
+    }
+}
 
 VideoFrameParser::VideoFrameParser(AMTContext&ctx)
     : AMTObject(ctx)
@@ -452,6 +714,9 @@ TsSplitter::SpVideoFrameParser::SpVideoFrameParser(AMTContext&ctx, TsSplitter& t
 }
 TsSplitter::SpAudioFrameParser::SpAudioFrameParser(AMTContext&ctx, TsSplitter& this_, int audioIdx)
     : AudioFrameParser(ctx), this_(this_), audioIdx(audioIdx) {}
+/* virtual */ void TsSplitter::SpAudioFrameParser::onPesPacket(int64_t clock, PESPacket packet) {
+    if (!this_.onAudioPesReady(audioIdx, clock, packet)) AudioFrameParser::onPesPacket(clock, packet);
+}
 /* virtual */ void TsSplitter::SpAudioFrameParser::onAudioPesPacket(int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet) {
     this_.onAudioPesPacket(audioIdx, clock, frames, packet);
 }

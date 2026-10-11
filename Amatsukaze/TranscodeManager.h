@@ -29,6 +29,7 @@
 class AMTSplitter : public TsSplitter {
 public:
     AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting);
+    ~AMTSplitter() override;
 
     StreamReformInfo split();
 
@@ -48,6 +49,12 @@ protected:
         void close();
         int64_t getTotalSize() const;
     };
+
+    std::unique_ptr<AudioPesPipeline> audioPipeline_;
+    std::map<int, AudioFormat> asyncAudioFormats_;
+    void drainAudio();
+    bool onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet) override;
+    void commitVideoPes(int64_t clock, const std::vector<VideoFrameInfo>& frames, PESPacket packet);
 
     const ConfigWrapper& setting_;
     PsStreamWriter psWriter;

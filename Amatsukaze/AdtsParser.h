@@ -81,16 +81,26 @@ extern "C" AMATSUKAZE_API int ParseAdtsPacketsForTest(const AudioPesForTest* pac
 struct NeAACDecFrameInfo;
 typedef void *NeAACDecHandle;
 
+// 非同期デコード中の診断は呼び出し元で順番に反映する。
+struct AudioDecodeDiagnostics {
+    std::vector<tstring> warnings;
+    int errors = 0;
+};
+
 class AdtsParser : public AMTObject {
 public:
     AdtsParser(AMTContext&ctx);
     ~AdtsParser();
 
     virtual void reset();
+    void setDiagnostics(AudioDecodeDiagnostics* diagnostics) { diagnostics_ = diagnostics; }
 
     virtual bool inputFrame(MemoryChunk frame__, std::vector<AudioFrameData>& info, int64_t PTS);
 
 private:
+    AudioDecodeDiagnostics* diagnostics_ = nullptr;
+    void warn(const tchar* message);
+    void decodeError();
     NeAACDecHandle hAacDec;
     AdtsHeader header;
     std::map<int64_t, AUDIO_CHANNELS> channelsMap;

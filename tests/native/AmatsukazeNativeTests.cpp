@@ -1080,6 +1080,28 @@ bool TestAdtsParser(tstring& diagnostic) {
     return Expect(frames.empty() && results[0] == 0, _T("不完全なフレームを出力しました"), diagnostic);
 }
 
+bool TestAudioPesPipeline(tstring& diagnostic) {
+    constexpr int SFI_48000 = 3;
+    constexpr int SFI_44100 = 4;
+    const auto stereo = MakeSilentAdts(AUDIO_STEREO, SFI_48000);
+    const auto mono = MakeSilentAdts(AUDIO_MONO, SFI_44100);
+    const auto surround = MakeSilentAdts(AUDIO_32_LFE, SFI_48000);
+    const size_t half = stereo.size() / 2;
+    const std::vector<uint8_t> head(stereo.begin(), stereo.begin() + half);
+    const std::vector<uint8_t> tail(stereo.begin() + half, stereo.end());
+    const std::vector<std::vector<uint8_t>> payloads = {
+        Concat({ stereo, head }), Concat({ tail, stereo }), mono, surround, stereo,
+    };
+    std::vector<AudioPesForTest> inputs;
+    for (const auto& payload : payloads) inputs.push_back({ payload.data(), payload.size(), 90000 });
+    const int status = VerifyAudioPesPipelineForTest(inputs.data(), inputs.size());
+    if (status != 0) {
+        diagnostic = strsprintf(_T("音声並行処理の一致・所有・順序・終了・例外回収の検証に失敗: %d"), status);
+        return false;
+    }
+    return true;
+}
+
 // TS: パケットとPSIセクションの組み立て
 constexpr int TS_PACKET_SIZE = 188;
 constexpr int TS_PAYLOAD_SIZE = 184;
@@ -1627,6 +1649,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("h264_video_parser"), TestH264VideoParser },
     { _T("h264_pan_scan"), TestH264PanScan },
     { _T("adts_parser"), TestAdtsParser },
+    { _T("audio_pes_pipeline"), TestAudioPesPipeline },
     { _T("ts_selector"), TestTsSelector },
     { _T("arib_string"), TestAribString },
     { _T("logo_file"), TestLogoFile },
