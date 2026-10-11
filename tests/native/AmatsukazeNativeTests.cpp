@@ -1,5 +1,6 @@
 ﻿// Amatsukaze の公開ネイティブ単体テスト実行器
 #include "AMTLogo.h"
+#include "LogoScan.h"
 #include "AdtsParser.h"
 #include "AudioTrackBuilder.h"
 #include "CaptionData.h"
@@ -1413,6 +1414,52 @@ struct LogoHeaderStorage {
     logo::LogoHeader* get() { return reinterpret_cast<logo::LogoHeader*>(bytes); }
 };
 
+// 少数・多数のマスク、暗部・明部、飽和、正負の相関を旧走査とbit単位で比較する。
+bool TestLogoCorrelationFusion(tstring& diagnostic) {
+    constexpr int width = 48, height = 40, scaleCount = 32;
+    std::vector<std::pair<int, int>> coordinates;
+    for (int y = 2; y < height - 2; y++) {
+        for (int x = 2; x < width - 2; x++) coordinates.emplace_back(x, y);
+    }
+    std::vector<float> work(width * height + 8);
+    std::vector<float> kernels(coordinates.size() * 25 + 8);
+    // idx==scaleCountの従来の境界参照を含め、末尾にも安全な番兵を置く。
+    std::vector<LogoCorrelationScaleLimit> scales(coordinates.size() * scaleCount + 1);
+    uint32_t state = 0x13579bdf;
+    auto random = [&]() { state = state * 1664525u + 1013904223u; return state; };
+    for (auto& k : kernels) k = ((int)(random() % 2001) - 1000) / 317.0f;
+    for (auto& scale : scales) {
+        scale.scale = ((int)(random() % 2001) - 1000) / 173.0f;
+        scale.scale2 = (random() % 1001) / 1000.0f;
+    }
+    for (float maxv : { 255.0f, 1023.0f }) {
+        for (int pattern = 0; pattern < 7; pattern++) {
+            for (size_t i = 0; i < work.size(); i++) {
+                switch (pattern) {
+                case 0: work[i] = 0.0f; break;
+                case 1: work[i] = maxv; break;
+                case 2: work[i] = -maxv * 0.25f; break;
+                case 3: work[i] = maxv * 1.1f; break;
+                case 4: work[i] = (i & 1) ? maxv : 0.0f; break;
+                case 5: work[i] = (random() % 1001) * (maxv / 1000.0f); break;
+                default: work[i] = ((int)(random() % 1401) - 200) * (maxv / 1000.0f); break;
+                }
+            }
+            for (size_t count : { size_t(0), size_t(1), size_t(7), size_t(31), coordinates.size() }) {
+                float reference = 0, fused = 0;
+                if (!CompareLogoCorrelationForTest(kernels.data(), work.data(), width, coordinates.data(),
+                    count, scales.data(), scaleCount, maxv, &reference, &fused)) return true;
+                if (std::memcmp(&reference, &fused, sizeof(float)) != 0) {
+                    diagnostic = strsprintf(_T("相関走査bit不一致: maxv=%.0f, pattern=%d, count=%d, 旧=%.9g, 新=%.9g"),
+                        maxv, pattern, (int)count, reference, fused);
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool TestLogoFile(tstring& diagnostic) {
     constexpr int LOGO_W = 8, LOGO_H = 4, LOG_UV = 1;
     constexpr size_t SIZE_Y = LOGO_W * LOGO_H;
@@ -1583,6 +1630,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("ts_selector"), TestTsSelector },
     { _T("arib_string"), TestAribString },
     { _T("logo_file"), TestLogoFile },
+    { _T("logo_correlation_fusion"), TestLogoCorrelationFusion },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },

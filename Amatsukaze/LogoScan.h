@@ -12,6 +12,7 @@
 #pragma once
 
 #include "common.h"
+#include "ComputeKernel.h"
 #include "TranscodeSetting.h"
 #include "logo.h"
 #include "AMTLogo.h"
@@ -25,6 +26,11 @@
 #include <vector>
 #include <fstream>
 #include <numeric>
+
+// 単体テストでは旧走査と融合走査を同じ入力で比較する。
+extern "C" AMATSUKAZE_API int CompareLogoCorrelationForTest(const float* kernels,
+    const float* work, int width, const std::pair<int, int>* coordinates, size_t count,
+    const LogoCorrelationScaleLimit* scales, int scaleCount, float maxv, float* reference, float* fused);
 
 namespace av {
 class AMTSource;
@@ -100,10 +106,7 @@ class LogoDataParam : public LogoData {
     std::unique_ptr<uint8_t[]> mask;
     std::vector<std::pair<int, int>> maskCoordinates;
     std::unique_ptr<float[]> kernels;
-    struct ScaleLimit {
-        float scale;   // 正規化用スケール（想定される相関が1になるようにするため）
-        float scale2;  // キャップ用スケール（想定される相関が小さすぎる場合に値を小さくするため）
-    };
+    using ScaleLimit = LogoCorrelationScaleLimit;
     std::unique_ptr<ScaleLimit[]> scales;
     float thresh;
     int maskpixels;

@@ -16,6 +16,35 @@ float CalcCorrelation5x5_AVX2(const float* k, const float* Y, int x, int y, int 
     return CalcCorrelation5x5_AVX_AVX2<true>(k, Y, x, y, w, pavg);
 }
 
+// 画素順と丸め順を保ち、相関・正規化・累積を同じ関数内で行う。
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("fp-contract=off")))
+#endif
+float CorrelationScore_AVX2(const float* kernels, const float* work, int width,
+    const std::pair<int, int>* coordinates, size_t count,
+    const LogoCorrelationScaleLimit* scales, int scaleCount, float maxv) {
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#endif
+    __m128 result = _mm_setzero_ps();
+    const __m128 scaleCountValue = _mm_set_ss((float)scaleCount);
+    const __m128 maxValue = _mm_set_ss(maxv);
+    for (size_t i = 0; i < count; i++) {
+        float avg;
+        const float sum = CalcCorrelation5x5_AVX_AVX2<true, true>(kernels + i * 25,
+            work, coordinates[i].first, coordinates[i].second, width, &avg);
+        // 逆数置換やFMA融合を避け、従来の乗算→除算と個別の丸めを維持する。
+        const __m128 indexValue = _mm_div_ss(_mm_mul_ss(_mm_set_ss(avg), scaleCountValue), maxValue);
+        const int index = std::max(0, std::min(scaleCount, _mm_cvttss_si32(indexValue)));
+        const auto& scale = scales[i * scaleCount + index];
+        const float scaled = _mm_cvtss_f32(_mm_mul_ss(_mm_set_ss(sum), _mm_set_ss(scale.scale)));
+        const float normalized = std::max(-1.0f, std::min(1.0f, scaled));
+        const __m128 score = _mm_mul_ss(_mm_set_ss(normalized), _mm_set_ss(scale.scale2));
+        result = _mm_add_ss(result, score);
+    }
+    return _mm_cvtss_f32(result);
+}
+
 // 各laneを別のfade候補とし、画素側のFMA順序を既存のAVX2経路に合わせる。
 void blendLogoBackgroundFadesAVX2(float* dst, const float* src, const float* background,
     int count, const float* fades, int activeFades) {

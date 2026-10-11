@@ -17,6 +17,8 @@
 #endif
 
 #include <cstdint>
+#include <cstddef>
+#include <utility>
 #if ENABLE_X86_SIMD
 #include <immintrin.h>
 #endif
@@ -25,6 +27,15 @@
 bool IsAVXAvailable();
 bool IsAVX2Available();
 bool IsAVX512BWAvailable();
+
+struct LogoCorrelationScaleLimit {
+    float scale;   // 想定される相関が1になる正規化用スケール
+    float scale2;  // 小さすぎる相関を抑えるキャップ用スケール
+};
+
+float CorrelationScore_AVX2(const float* kernels, const float* work, int width,
+    const std::pair<int, int>* coordinates, size_t count,
+    const LogoCorrelationScaleLimit* scales, int scaleCount, float maxv);
 
 // 関数宣言
 #if ENABLE_X86_SIMD

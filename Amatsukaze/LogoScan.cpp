@@ -532,22 +532,23 @@ std::unique_ptr<logo::LogoDataParam> logo::LogoDataParam::MakeFieldLogo(bool bot
     return logo;
 }
 
-// 画素ごとにロゴとの相関を計算
-float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
-    const float* kernels = GetKernels();
-
+// 従来の走査順・演算順を維持する参照経路。
+static float CorrelationScoreSequential(const float* kernels, const float* work, int w,
+    const std::pair<int, int>* coordinates, size_t countTotal,
+    const LogoCorrelationScaleLimit* scales, int scaleCount, float maxv,
+    decltype(CalcCorrelation5x5)* pCalcCorrelation5x5) {
     // マスクの有効座標を元の行優先順に走査する。
     float result = 0;
-    for (size_t count = 0; count < maskCoordinates.size(); count++) {
-        const int x = maskCoordinates[count].first;
-        const int y = maskCoordinates[count].second;
-        const float* k = &kernels[count * KLEN];
+    for (size_t count = 0; count < countTotal; count++) {
+        const int x = coordinates[count].first;
+        const int y = coordinates[count].second;
+        const float* k = &kernels[count * 25];
 
         float avg;
         float sum = pCalcCorrelation5x5(k, work, x, y, w, &avg);
         // avg単色の場合の相関値が1になるように正規化
-        const int idx = std::max(0, std::min((int)CLEN, (int)(avg * CLEN / maxv)));
-        ScaleLimit s = scales[count * CLEN + idx];
+        const int idx = std::max(0, std::min((int)scaleCount, (int)(avg * scaleCount / maxv)));
+        LogoCorrelationScaleLimit s = scales[count * scaleCount + idx];
         // 1を超える部分は捨てる（ロゴによる相関ではない部分なので）
         float normalized = std::max(-1.0f, std::min(1.0f, sum * s.scale));
         // 相関が下限値以下の場合は一部元に戻す
@@ -556,6 +557,32 @@ float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
     }
 
     return result;
+}
+
+extern "C" AMATSUKAZE_API int CompareLogoCorrelationForTest(const float* kernels,
+    const float* work, int width, const std::pair<int, int>* coordinates, size_t count,
+    const LogoCorrelationScaleLimit* scales, int scaleCount, float maxv, float* reference, float* fused) {
+    if (!IsAVX2Available()) return 0;
+#if ENABLE_X86_SIMD
+    *reference = CorrelationScoreSequential(kernels, work, width, coordinates, count,
+        scales, scaleCount, maxv, CalcCorrelation5x5_AVX2);
+    *fused = CorrelationScore_AVX2(kernels, work, width, coordinates, count, scales, scaleCount, maxv);
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+// 画素ごとにロゴとの相関を計算
+float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
+#if ENABLE_X86_SIMD
+    if (pCalcCorrelation5x5 == CalcCorrelation5x5_AVX2) {
+        return CorrelationScore_AVX2(GetKernels(), work, w, maskCoordinates.data(),
+            maskCoordinates.size(), scales.get(), CLEN, maxv);
+    }
+#endif
+    return CorrelationScoreSequential(GetKernels(), work, w, maskCoordinates.data(),
+        maskCoordinates.size(), scales.get(), CLEN, maxv, pCalcCorrelation5x5);
 }
 
 void logo::LogoDataParam::AddLogo(float* Y, int maxv) {
