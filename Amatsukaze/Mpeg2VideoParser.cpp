@@ -7,6 +7,7 @@
 */
 
 #include "Mpeg2VideoParser.h"
+#include <cstring>
 
 /* static */ bool mpeg2_next_start_code(BitReader& reader) {
     reader.byteAlign();
@@ -256,6 +257,12 @@ MPEG2VideoParser::MPEG2VideoParser(AMTContext& ctx)
     int codedDataSize = (int)frame.length;
 
     for (int b = 0; b <= (int)frame.length - 4; b++) {
+        // スタートコードの第3バイトだけを高速探索し、前後の範囲内で照合する。
+        const auto* candidate = static_cast<const uint8_t*>(std::memchr(
+            frame.data + b + 2, 1, (size_t)((int)frame.length - b - 3)));
+        if (candidate == nullptr) break;
+        b = (int)(candidate - frame.data) - 2;
+        if (frame.data[b] != 0 || frame.data[b + 1] != 0) continue;
         switch (read32(&frame.data[b])) {
         case SEQ_HEADER_START_CODE:
             if (sequenceHeader.parse(&frame.data[b], (int)frame.length - b)) {

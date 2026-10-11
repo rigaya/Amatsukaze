@@ -754,6 +754,21 @@ bool TestMpeg2VideoParser(tstring& diagnostic) {
         _T("MPEG-2のビットレート/VBV/プロファイルが一致しません"), diagnostic)) return false;
     if (!Expect(!frames[0].progressive, _T("インタレースのフレームがprogressive扱いです"), diagnostic)) return false;
 
+    // 長い非ヘッダー領域、偽候補、末尾の不完全コードを挟んでも解析結果を維持する。
+    auto paddedUnits = units;
+    for (auto& unit : paddedUnits) {
+        std::vector<uint8_t> prefix(4096, 0x55);
+        prefix.insert(prefix.end(), { 1, 0, 1, 0xb3, 0, 1, 0, 0, 0 });
+        unit.insert(unit.begin(), prefix.begin(), prefix.end());
+        unit.insert(unit.end(), { 0, 0, 1 });
+    }
+    if (!ParseVideoUnits(VS_MPEG2, paddedUnits, timestamps, frames, unitResults, diagnostic)) return false;
+    if (!Expect(unitResults == expectedResults && frames.size() == std::size(expectedFrames),
+        _T("MPEG-2の候補探索でフレーム数または解析結果が変わりました"), diagnostic)) return false;
+    for (size_t i = 0; i < frames.size(); i++) {
+        if (!ExpectVideoFrame(frames[i], expectedFrames[i], i, diagnostic)) return false;
+    }
+
     // 720x480 4:3 23.976fps プログレッシブ、表示領域と色情報あり、GOPヘッダあり
     const Mpeg2SequenceParams progressive = { 720, 480, 2, 1, true, 15000, 112, true, 704, 480, true, 1 };
     const std::vector<std::vector<uint8_t>> progressiveUnits = {
