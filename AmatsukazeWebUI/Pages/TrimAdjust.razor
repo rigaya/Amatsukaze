@@ -147,8 +147,9 @@
                         var imageFrame = _imageFrame;
                         var imageToken = _frameImageToken;
                     }
-                    <img @key="imageToken"
-                         class="trim-preview-img"
+                    @* @keyで要素を作り直すと新画像のデコード完了まで何も描画されず黒画面が挟まるため、
+                       同じimg要素のsrcを差し替えて前の画像を表示し続ける。古い通知はトークンで無視する *@
+                    <img class="trim-preview-img"
                          src="@_frameImageUrl"
                          alt="Frame @imageFrame"
                          @onload="() => OnFrameLoaded(imageFrame, imageToken)"
@@ -581,7 +582,7 @@
     private int _thumbRequestToken;
     private int _displayedFrame; // 画像読み込み完了と同期して表示するフレーム番号
     private int _imageFrame; // 現在imgに渡しているフレーム番号
-    private int _frameImageToken; // 画像要素ごとの通知を識別するトークン
+    private int _frameImageToken; // imgに渡した画像ごとのonload/onerror通知を識別するトークン
     private int _loadingFrame; // 現在データを取得中のフレーム番号
     private bool _isFrameLoading; // データ取得中フラグ（画像イベントには依存しない）
     private bool _disposed;
