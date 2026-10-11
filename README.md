@@ -57,7 +57,7 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc, x262
 - 各出力mp4(mkv)が単一フォーマットになるように必要に応じて分割
 - タイムスタンプを元にAAC音声を無劣化で再構築
 - デュアルモノAACを２つのモノラルAACに無劣化分離
-- 字幕をSRT、ASS、VTTに変換
+- 字幕をSRT、ASS、PGS、VTTに変換
 - Whisperによる文字起こしでSRT字幕を追加
 - ニコニコ実況や2ch実況のコメントをASS字幕として追加（NicoConvAss/nicojk_ass.py使用）
 - 独自Avisynthソースクリップによる安定したチャプター・CM解析
@@ -68,6 +68,7 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc, x262
 - 複数話構成の番組を各話で分割
 - ロゴあり区間を自動認識してロゴファイル生成
 - TSファイルからチャンネルや日時を取得してロゴを自動選択
+- ロゴ解析を並列して高速化実行
 - チャンネルやジャンルからプロファイルを自動選択
 - SCRenameによるリネームやジャンルごとにフォルダ分け
 - 複数映像チャンネルが入ってるTSファイルは全チャンネル認識してエンコード
@@ -1115,7 +1116,7 @@ Amatsukazeと同梱&依存ライブラリはすべて64bitに統一されてい�
 FFmpeg（ライブラリ）が必要です。
 ビルド例は[こちら](https://github.com/rigaya/build_scripts/tree/master/ffmpeg_dll)。
 ```bash
-build_ffmpeg_dll.sh -aur -t swscale
+build_ffmpeg_dll.sh -amtk
 ```
 
 vcpkgをインストールします。
@@ -1142,8 +1143,6 @@ AvisynthNeoが必要です。ソースを落として、ビルドしてくださ
 サブモジュールでgoogletestは追加してあるので、git submodule updateでコードを落として、
 googletest/googletest/msvc/gtest-md.slnを開いて、ビルドしてください。
 できたgtest.lib/gtestd.libをlib/x64(or x86)へコピーしてください。
-
-単体テストプロジェクト(AmatsukazeUnitTest)は、他にOpenCVも使っているので、OpenCV 3.2.0をビルドしてこれもlibをlib/x64(or x86)へコピーしてください。
 
 gitでバージョンを取得するので、gitにパスを通した状態で、gitリポジトリでビルドする必要があります。
 
