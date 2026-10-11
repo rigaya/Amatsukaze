@@ -26,6 +26,7 @@
 #pragma warning(disable:4819) //C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
 extern "C" {
 #include <libavutil/imgutils.h>
+#include <libavutil/error.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #if !(defined(_WIN32) && defined(AMATSUKAZE2DLL))
@@ -83,6 +84,7 @@ private:
 class InputContext : NonCopyable {
 public:
     InputContext(const tstring& src, const char* format = nullptr);
+    InputContext(const tstring& src, const char* format, uint32_t pathCodePage);
     ~InputContext();
     AVFormatContext* operator()();
 private:

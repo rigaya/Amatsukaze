@@ -87,13 +87,20 @@ AVCodecContext* av::CodecContext::operator()() {
     return ctx_;
 }
 av::InputContext::InputContext(const tstring& src, const char* format)
+    : InputContext(src, format, CP_THREAD_ACP) {}
+
+av::InputContext::InputContext(const tstring& src, const char* format, uint32_t pathCodePage)
     : ctx_() {
     auto inputFormat = (format != nullptr) ? av_find_input_format(format) : nullptr;
     if (format != nullptr && inputFormat == nullptr) {
         THROWF(FormatException, "unknown input format: %s", format);
     }
-    if (avformat_open_input(&ctx_, tchar_to_string(src).c_str(), inputFormat, NULL) != 0) {
-        THROW(IOException, "failed avformat_open_input");
+    const auto inputPath = tchar_to_string(src, pathCodePage);
+    const int openError = avformat_open_input(&ctx_, inputPath.c_str(), inputFormat, NULL);
+    if (openError != 0) {
+        char errorMessage[AV_ERROR_MAX_STRING_SIZE] = {};
+        av_strerror(openError, errorMessage, sizeof(errorMessage));
+        THROWF(IOException, "failed avformat_open_input (AVERROR=%d): %s", openError, errorMessage);
     }
 }
 av::InputContext::~InputContext() {
