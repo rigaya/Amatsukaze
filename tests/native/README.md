@@ -60,13 +60,28 @@ dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --filter "Category!
 - `bitrate_zones_properties` (旧 `VfrZonesBug`): 元の再現データ (`zone_param.dat`) は手元にないので、固定seedの乱数で作ったタイムコードとCMゾーン (1〜200000フレーム、24/30/60fps、変化の細かさ違い) で `MakeVFRBitrateZones` の不変条件を確認する。ゾーンが先頭0から末尾まで隙間なく覆うこと、境界が8フレームの倍数であること、ゾーン数が上限内であること、各ゾーンのビットレートが、フレーム間隔・時間係数・CMゾーンの補正から独立に求めた8フレーム単位のビットレートの平均と一致すること。既存の `bitrate_zones` は固定値の期待値、こちらは性質を見る。
 - `ps_writer_round_trip` (旧 `MPEG2PSVerifier`): 映像 (32000バイトを超えて分割されるPESと、33bit境界直前のPTSを含む) と音声のPESを `PsStreamWriter` に書かせ、`PsStreamVerifier` が受理することと、テスト内の独立したPS解析 (パックヘッダのマーカーとSCRの単調性、プログラムストリームマップのCRCと内容、PESのPTS/DTS、分割されたペイロードの結合、終了コード) の結果が入力と一致することを確認する。テスト専用C ABIは `WritePsStreamForTest`。
 
+## StreamReformと音声トラック構築の合成入力テスト
+
+旧 `AudioTrackStreamReformTest.cpp` (単体ビルドの実験用プログラム) の `Require` による判定を、期待値ごと次のケースへ移した。入力はすべてテスト内または本体ライブラリ内で合成し、素材は使わない。ファイルが必要なケースは `std::filesystem::temp_directory_path()` の下に専用の一時ディレクトリを作り、終了時に必ず削除する。
+
+テスト専用C ABIは2本で、どちらも合否を出さず、結果の要約だけを返す。判定と期待値はテスト側にある。
+- `RunAudioReformScenarioForTest`: 旧テストの `RunScenario` の入力生成 (映像384フレーム、音声600フレーム相当、トラック0は2ch→5.1chの切替と欠落、トラック1は2回の出現、PTS・イベント列) とフォールバック用の音声ファイル生成を本体側に置く。`StreamReformInfo` の構築から `prepare`、`applyCMZones`、`genAudio` までを実行し、出力ファイル数、音声トラック数、各トラックの参照列とPTS、プランの数・名前・フレーム数・CONVERT参照の有無、`ValidateAudioTrackPlans` の結果、無音参照のPCM入力を固定長の構造体と呼出側バッファで返す。`StreamReform` の入力 (映像・音声・字幕・イベントのSTLコンテナ) を一から C ABI にすると、DLL境界を越える型が多すぎるため、入力の生成側を本体に置いた。
+- `BuildAudioTracksForTest`: テストが連結済みのADTSフレーム列、各フレームのレイアウト、入力トラックのフレーム番号列を渡すと、プラン作成 (分離または統合) と `BuildAudioTrack` による書き出しを行い、プランごとの状態 (成功、またはFormatExceptionの文面) と出力バイト列を返す。入力フレーム (無音、デュアルモノ、PCE付きステレオ) はテスト側で組み立てる。
+
+- `audio_reform_separate`、`audio_reform_merge` (旧 `RunScenario` の `AFC_SEPARATE`・`AFC_MERGE` 各4本): 欠落フレーム数5と6 (欠落を無音で埋めるかを分ける閾値の前後)、CMカット (副音声の再出現区間だけが残る)、0.7フレームの位相ずれ (連続音声を再選択も欠落もせず1920ティック間隔で使う) について、音声変更でファイルが分割されないこと、途中で増えた音声トラックが保たれ全トラックの長さが揃うこと、副音声の先頭と末尾が無音、欠落・消失・再出現の位置、無音参照のPCM入力を確認する。統合では、論理トラック数とトラック名 (`Audio0`、`Audio1`)、異なるレイアウトがCONVERT参照になること、全プランの長さが参照列と一致することも確認する。
+- `audio_reform_unsupported_fallback` (旧 `fallback` 1〜4): 周波数の混在、未対応レイアウト、AAC Main、PCE付きステレオの音声があると、ジョブ全体が従来のsplit (エンコーダ数が2以上) に戻ることを、分離・統合の両方で確認する。
+- `audio_reform_cfg0_dual_mono` (旧 `fallback` 5): cfg0 (PCE) の2SCE音声が主副の2本のmonoトラックに展開され、プランが3本になることを確認する。
+- `audio_builder_copy_silence` (旧 `BuilderCopyTest`)、`audio_builder_dual_mono` (旧 `BuilderDualMonoTest`)、`audio_builder_reject_pce` (旧 `BuilderRejectPceTest`)、`audio_builder_merge_convert` (旧 `BuilderMergeSilenceTest`): コピーと無音の結合が入力フレームとバイト単位で一致すること、デュアルモノがADTSパーサで判定され分離後のチャンネル構成が主mono・副mono・ステレオになること、cfg0のステレオがCOPYで「ADTSヘッダ」のエラーとして拒否されること、統合の目標レイアウト (ステレオ→5.1chのアップミックス、5.1ch→ステレオのダウンミックス) と出力のフレーム数・チャンネル構成を確認する。旧テストは統合変換で例外が出ないことと目標レイアウトしか見ていなかったので、出力のADTSフレーム数とチャンネル構成の確認を加えた。
+
+`bitrate_zones_properties` には、映像の範囲外にはみ出すCMゾーン (開始が負、終了が映像末尾より後、完全に範囲外、空) の入力を加えた。`MakeVFRBitrateZones` は、これらでユニット配列の範囲外を読み書きしていたため、CMゾーンを映像の先頭と末尾で切り詰めるよう修正した。AddressSanitizerで修正前に `heap-buffer-overflow` を再現し、修正後に消えることを確認している。
+
 ## 既知の問題
 
 - H.264パーサはSEIのbuffering_periodで得たDTSを次のアクセスユニットへ引き継いでいないため、PESにPTS/DTSがないフレームはSEIのpic_timingから時刻を補完できず-1のままになる。PESのPTSとSEIから求めた値の照合も実質的に行われない。修正すると照合が有効になり、実放送で警告と`AMT_ERR_H264_PTS_MISMATCH`が増える可能性があるため、実TSでの確認なしには修正しない。放送のH.264ではPESに常にPTSが付くため実害は小さい。
 
 テストは TCHAR を原則とし、出力は `_ftprintf`、書式化は `strsprintf` を使う。`common` の静的ライブラリをリンクし、本体DLLでは非公開の `StringFormat`（`THROW` が使用）のため `Amatsukaze/StringUtils.cpp` もテストに組み込む。
 
-Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones`、`vfr_input_detection`、`audio_track_*_planner`、`audio_channel_conversion`、`command_line_arguments`、`wave_header`、`dual_mono_splitter`、`ps_writer_round_trip` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
+Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones`、`vfr_input_detection`、`audio_track_*_planner`、`audio_channel_conversion`、`command_line_arguments`、`wave_header`、`dual_mono_splitter`、`ps_writer_round_trip`、`audio_reform_*`、`audio_builder_*` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
 
 `caption_pgs_canvas_size` は、出力映像のフレームサイズとSARからPGSのキャンバス (表示サイズ) を求める `CaptionPgsCanvasSize` を、テスト専用の C ABI `CaptionPgsCanvasSizeForTest` を通して検証する。HD (1440x1080 SAR 4:3 → 1920x1080)、SD 16:9 (720x480 SAR 32:27 → 853x480)、SARが1未満のSD 4:3 (高さを伸ばして720x540)、SAR不明、`--sar` の優先と片方だけの指定の無視、長辺4096を超える場合の比例縮小 (横長・縦長・8K) と、不正な引数を確認する。
 

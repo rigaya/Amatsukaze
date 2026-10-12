@@ -898,8 +898,9 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
     // cmzonesを適用
     for (int i = 0; i < (int)cmzones.size(); i++) {
         // 半端部分はCMゾーンを小さくる方向に丸める
-        int start = nblocks(cmzones[i].startFrame, UNIT_FRAMES);
-        int end = cmzones[i].endFrame / UNIT_FRAMES;
+        // 映像の範囲外にはみ出したCMゾーンは、先頭と末尾の範囲に切り詰める
+        int start = nblocks(std::max(0, cmzones[i].startFrame), UNIT_FRAMES);
+        int end = std::min(numFrames, cmzones[i].endFrame) / UNIT_FRAMES;
         for (int k = start; k < end; k++) {
             units[k] *= bitrateCM;
         }
