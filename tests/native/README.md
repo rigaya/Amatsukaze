@@ -25,22 +25,31 @@ tests\native\build_windows.cmd
 | 旧 GoogleTest ケース | 移行先 | 扱い |
 |---|---|---|
 | `CaptionText.UnicodeCharacterFormatting` | `caption_text_length` | 公開単体テストへ移行 |
-| `VfrZonesBug` の通常ゾーン計算 | `bitrate_zones` | 公開単体テストへ移行。外部入力を読む再現データ部分は非公開へ移管 |
+| `VfrZonesBug` の通常ゾーン計算 | `bitrate_zones`, `bitrate_zones_properties` | 公開単体テストへ移行。通常ゾーン計算は固定値を比較する `bitrate_zones`。再現データ (`zone_param.dat`) は手元になく復元できないため、固定seedの乱数入力で不変条件を見る `bitrate_zones_properties` で代替する (映像範囲外にはみ出すCMゾーンの範囲外参照を見つけて修正) |
 | VFR入力判定の実装内ケース | `vfr_input_detection` | 公開単体テストへ移行 |
 | `CRC.*` | `crc32` | 公開単体テストへ移行。CRC-32/MPEG-2の検査値とPSIセクション検査で確認 |
 | `Util.readOpt`, `Util.AutoBufferTest` | `bit_reader`, `auto_buffer` | 公開単体テストへ移行。旧テストが呼ぶ `--mode test_read_bits` は値を表示するだけで合否を判定しないため、BitReader/BitWriter/AutoBuffer を直接検証 |
-| `MPEG2Parser`, `H264Parser`, `H264Parser1Seg`, `Pulldown`, `LargeTsParse`, `MPEG2PSVerifier` | 非公開コンポーネントテスト | 外部の映像・TS・MPEG-PS素材に依存 |
-| `AacDecodeVerifyTest`, `WaveWriter`, `SplitDualMonoAAC`, `AACDecodeTest` | 非公開コンポーネントテスト | 外部音声素材または出力検証が必要 |
-| `encodeMpeg2Test`, `fileStreamInfoTest`, `DamemojiTest`, `LosslessTest`, `LogoFrameTest`, `CaptionASSTest` | 非公開コンポーネント/統合テスト | 外部素材、AviSynth、ロゴまたは出力ファイルに依存 |
-| `Process.SimpleProcessTest` | 非公開コンポーネントテスト | 子プロセス実行を伴う |
+| `MPEG2Parser`, `Pulldown`, `LargeTsParse` | 廃止 | 旧ケースは `ReadTS` (TSの分割) が例外なく終わることしか見ていない。同じ分割を通し、出力の復号・ストリーム構成・長さ・想定外のwarn/errorを判定する cli_itest の `basic_mkv_caption` (MPEG-2)、`input_rff`・`input_saekano_rff` (RFF/プルダウン)、`input_resolution_long`・`cm_logo_cut_full` (長時間素材)、公開 `mpeg2_video_parser`・`ts_selector` が同等以上に担保している |
+| `H264Parser` | 廃止 | 旧ケースは `ReadTS` が例外なく終わることしか見ていない。H.264の放送を処理して出力を復号し判定する cli_itest の `input_resolution_1`・`input_resolution_3`・`input_resolution_4`、公開 `h264_video_parser`・`h264_pan_scan` が同等以上に担保している。旧素材 (`HD2-h264.ts`) は音声がAC3のみで、音声なしTSは未対応のため入力解析まで進まず、代替素材にならない |
+| `H264Parser1Seg` | cli_itest `input_oneseg_only` | 非公開 (cli_itest) へ移管。ワンセグ混在TSからワンセグ (SID 25016、H.264 320x180) を `-s` で選んで処理し、サービス選択のログ・出力の寸法とコーデック・終了コードを判定する |
+| `MPEG2PSVerifier` | `ps_writer_round_trip` | 公開単体テストへ移行。外部のMPEG-PS素材ではなく、本体の `PsStreamWriter` が書く出力を `PsStreamVerifier` と独立のPS解析で検証する |
+| `AacDecodeVerifyTest` | 保留 | 参照WAVとのサンプル精度の照合は未担保。動的に生成した素材のコンポーネントテストの受け皿を決めてから、移管または廃止する |
+| `WaveWriter` | `wave_header` | 公開単体テストへ移行。旧ケースはダミーWAVを書くだけだった。ヘッダ全フィールドを検証し、ブロックアライン等の不具合を修正 |
+| `SplitDualMonoAAC` | `dual_mono_splitter` | 公開単体テストへ移行。旧ケースは分離を実行するだけだった。デュアルモノのADTSをテスト内で組み立て、分離結果をバイト単位で検証 |
+| `AACDecodeTest` | `audio_silent_adts_decode` | 公開単体テストへ移行。旧ケースは実素材 (`a0-0-1.aac`) の復号エラーを見ていた。無音ADTSをFAADとlibavcodecで復号して全サンプル0を判定する。実放送の復号は cli_itest の `audio_encode_fdkaac`、`audio_mono_to_51_*` が通す |
+| `encodeMpeg2Test`, `fileStreamInfoTest`, `LosslessTest`, `CaptionASSTest` | 廃止 | `encodeMpeg2Test` は通常エンコードの終了コードだけ、`fileStreamInfoTest`・`CaptionASSTest` は結果を書き出すだけで判定がなく、`LosslessTest` は呼び出す `test_lossless` モードが存在せず失敗する。cli_itest の `basic_mkv_caption`・`enc_x265`・`format_mp4` (エンコードと出力の判定)、`misc_resume_dir`・`misc_dump` (streaminfoの再利用)、`subtitle_mkv_enabled`・`subtitle_mp4_enabled`、`tests/amatsukaze` の字幕検証器 (ASS/SRTの内容と時刻) が同等以上に担保している |
+| `DamemojiTest` | cli_itest `path_dame_moji` | 非公開 (cli_itest) へ移管。ケースのフォルダ名 (一時フォルダと出力先) にダメ文字を含め、エンコードからmuxまでの成功とログのパスを判定する |
+| `LogoFrameTest` | cli_itest `cm_two_logos_best_first`, `cm_two_logos_best_second` | 非公開 (cli_itest) へ移管。旧ケースは最適ロゴを表示するだけだった。本体が選んだロゴをログに出すようにし、2つのロゴの指定順を入れ替えても一致するロゴが選ばれることを判定する |
+| `Process.SimpleProcessTest` | 廃止 | `x264.exe --help` を起動して出力を表示するだけで判定がない。下位の `rgy_pipe` 層は `tools/ProcessLayerTest.cpp` が終了コード・シグナルを判定し、プロセスの起動失敗は cli_itest の `error_encoder_not_found` が判定する |
 | `EncoderOptionTest01`～`EncoderOptionTest09` | `encoder_option` | 公開単体テストへ移行。旧テストの `--mode test_eo` は解析結果を表示するだけで合否を判定しないため、テスト専用の C ABI ラッパー `ParseEncoderOptionForTest` を通して期待値と比較する |
 | `AudioTrack.SeparatePlanner` | `audio_track_separate_planner` | 公開単体テストへ移行。`PlanSeparateAudioTracks`/`ValidateAudioTrackPlans` はSTLコンテナを受け渡すため、テスト専用のC ABIラッパー `PlanAudioTracksForTest`/`ValidateAudioTrackPlansForTest` を通して、旧テストの期待値と比較する |
 | `AudioTrack.MergePlanner` | `audio_track_merge_planner` | 公開単体テストへ移行。分離と同じC ABIラッパーで `PlanMergeAudioTracks` を検証する |
 | `AudioTrack.SilentAdtsBytes` | `audio_silent_adts_bytes` | 公開単体テストへ移行。設計書の手組みバイト列との一致と拒否を `GenerateSilentAdtsFrameForTest` 経由で検証する。旧テストの `GetAudioSamplingFrequencyIndex` の逆引きは、分離プランのサンプリング周波数インデックスと未対応レートの拒否で確認する。PES経由の並行処理は既存の `audio_pes_pipeline` が担当 |
-| `AudioTrackConvertTest.cpp` | `audio_channel_conversion` | `ConvertAudioChannels` の素材不要な検証部分だけ公開単体テストへ移行 (テスト専用C ABI `ConvertAudioChannelsForTest`)。旧テストはモノラル⇔5.1chの変換を拒否する前提だが、現行実装はステレオ経由で変換するため、現行仕様に合わせた。入力ADTSからAACを再構築する部分と `run_audio_track_convert_test.py`、`run_audio_track_seam_test.py` は外部音声素材と`ffmpeg`CLIに依存する実験用スタンドアロンで、非公開コンポーネントテスト |
-| `AudioTrackStreamReformTest.cpp`, `AudioTrackFaadSilenceTest.cpp`, `run_audio_track_test.py` | 非公開コンポーネントテスト | `StreamReform` 全体、libfaad、出力ディレクトリのファイルを使う実験用スタンドアロンで、`compile_commands.json` から単体ビルドする。公開単体テストの対象外 |
+| `AudioTrackConvertTest.cpp` | `audio_channel_conversion` | `ConvertAudioChannels` の素材不要な検証部分だけ公開単体テストへ移行 (テスト専用C ABI `ConvertAudioChannelsForTest`)。旧テストはモノラル⇔5.1chの変換を拒否する前提だが、現行実装はステレオ経由で変換するため、現行仕様に合わせた。入力ADTSからAACを再構築する部分は、`audio_builder_merge_convert` で出力のフレーム数とチャンネル構成までを公開側が判定している。未担保で保留なのは、CONVERT出力のサンプル位置の厳密な判定 (`run_audio_track_convert_test.py`) と、100秒前の履歴が無音CONVERTへ漏れないこと (`run_audio_track_seam_test.py` の長欠落判定)。seamの `--experiment`・`--oracle` は設計判断用の実験で廃止 |
+| `AudioTrackStreamReformTest.cpp`, `AudioTrackFaadSilenceTest.cpp` | `audio_reform_separate`, `audio_reform_merge`, `audio_reform_unsupported_fallback`, `audio_reform_cfg0_dual_mono`, `audio_builder_*`, `audio_silent_adts_decode` | 公開単体テストへ移行。素材を使わず、StreamReformの音声プラン作成と `BuildAudioTrack`、無音ADTSの復号を判定する。詳細は下記の「StreamReformと音声トラック構築の合成入力テスト」 |
+| `run_audio_track_test.py` | 廃止 | `compile_commands.json` から旧テストを単体ビルドして実行するだけのスクリプト。個別のテストを公開側へ移したため不要 |
 | `CLI.ArgumentTest` | `command_line_arguments` | 公開単体テストへ移行。旧テストの `--mode test_parseargs` は例外が出ないことしか見ていないため、`AmatsukazeCLI.hpp` の static `parseArgs` の結果を、同じ翻訳単位で定義したテスト専用C ABI `ParseCommandLineForTest` が「キー=値」の改行区切りテキストへ直列化して返し、呼出側バッファ経由で値を比較する。旧テストの3パターン (10進と`0x6308`のサービスID、未知オプション`--ourput`の拒否) に加え、全オプション指定時の入出力パス・エンコーダ種別・オプション・muxer・timelineeditor・JSON・dumpの値、パス区切りの`/`への正規化、既知拡張子 (`.mp4`/`.mkv`/`.m2ts`/`.ts`) だけが除かれる出力パス、最小構成の既定値、モード別の必須引数、値が欠けた末尾オプション、整数オプションの厳密な解析 (空、`12abc`、`1.5`、intの範囲外、不正な16進を引数の拒否として扱い、サービスIDは`0x`と`0X`の両方を16進として受理する)、種別を表す値 (エンコーダ、音声エンコーダ、デコーダ) の不明な名前の拒否とサーバーが渡す綴りの受理、範囲外の値、実況マスクの有効化条件を確認する。実行ファイル位置やPATH探索に依存する既定の実行ファイル名は比較せず、比較する実行ファイルは存在しない絶対パスで明示指定する。作業ディレクトリは取得に一時ディレクトリの作成を要するため比較しない |
-| `DecodePerformance` | 非公開ベンチマーク | 性能計測であり単体テストの合否に含めない |
+| `DecodePerformance` | 廃止 | libavcodecの復号速度を表示するだけで判定がなく、本体のロジックを通らない。性能の確認は cli_itest の所要時間で見る |
 
 既存の `AmatsukazeUnitTest/` と GoogleTest は、この移行段階では削除しません。C# の `AmatsukazeServerTest` xUnit は維持し、ネットワークを使う任意テストは `Category=Network` としてオフラインの標準単体テストから分離します。標準群は次で実行します。
 

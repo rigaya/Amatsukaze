@@ -535,6 +535,7 @@ void CMAnalyze::logoFrame(const int serviceId, const int videoFileIndex, const V
             }
         } else {
             logopath = setting_.getLogoPath()[logof.getBestLogo()];
+            ctx.infoF(_T("選択したロゴ: %s (一致率: %.2f)"), logopath.c_str(), logof.getLogoRatio());
         }
     }
 
