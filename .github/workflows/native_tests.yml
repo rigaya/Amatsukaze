@@ -61,7 +61,7 @@ jobs:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_CRT_LINKAGE: static
       FFMPEG_URL: https://github.com/rigaya/ffmpeg_dlls_for_hwenc/releases/download/20241102/ffmpeg_dlls_for_hwenc_20241102.7z
-      DEPLIB_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.4.6/AmatsukazeDepLibs_20260131.7z
+      DEPLIB_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.1.1.1/AmatsukazeDepLibs_20261012.7z
       BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/AmatsukazeBasePkg_20260902.7z
       AMT_NATIVE_TEST_RUNTIME_DIR: ${{ github.workspace }}\native-test-runtime\exe_files
     steps:
