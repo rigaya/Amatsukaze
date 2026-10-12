@@ -957,6 +957,17 @@ else
                     <span> 秒</span>
                 </td>
             </tr>
+            <tr>
+                <th>CMカット点</th>
+                <td title="CMとの境界で本編を指定フレーム数だけ多めにカットします。trim.avsから読み込む場合は無効です。">
+                    <label>
+                        <input type="checkbox" checked="@IsCmCutOffsetEnabled()" @onchange="OnCmCutOffsetEnabledChanged" disabled="@(!IsCmCutOffsetAvailable())" />
+                        CMカット点を
+                    </label>
+                    <input type="number" min="1" style="width: 80px; margin-left: 6px;" value="@GetCmCutOffsetInputValue()" @oninput="@(e => OnIntChanged(e, "CmCutOffsetFrames"))" disabled="@(!IsCmCutOffsetEnabled())" />
+                    <span> フレーム内側にする</span>
+                </td>
+            </tr>
         </table>
 
         <hr class="settings-sep" />
@@ -1479,6 +1490,28 @@ else
         SetNodeValue("MinOutputDuration", JsonValue.Create(value ? GetMinOutputDurationInputValue() : 0));
     }
 
+    private bool IsCmCutOffsetAvailable()
+    {
+        return GetIntValue("OutputMask") is 2 or 8;
+    }
+
+    private bool IsCmCutOffsetEnabled()
+    {
+        return IsCmCutOffsetAvailable() && GetIntValue("CmCutOffsetFrames") > 0;
+    }
+
+    private int GetCmCutOffsetInputValue()
+    {
+        var value = GetIntValue("CmCutOffsetFrames");
+        return value > 0 ? value : 1;
+    }
+
+    private void OnCmCutOffsetEnabledChanged(ChangeEventArgs e)
+    {
+        var enabled = e.Value is bool b && b && IsCmCutOffsetAvailable();
+        SetNodeValue("CmCutOffsetFrames", JsonValue.Create(enabled ? GetCmCutOffsetInputValue() : 0));
+    }
+
     private void OnMoveInputFileChanged(ChangeEventArgs e)
     {
         var moveInputFile = e.Value is bool b && b;
@@ -1569,6 +1602,10 @@ else
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
             SetNodeValue("OutputMask", JsonValue.Create(value));
+            if (!IsCmCutOffsetAvailable())
+            {
+                SetNodeValue("CmCutOffsetFrames", JsonValue.Create(0));
+            }
             DisableMpeg2PartialIfUnavailable();
         }
     }
@@ -2479,6 +2516,7 @@ else
             case "MaxFadeLength":
                 return Math.Max(1, value);
             case "MinOutputDuration":
+            case "CmCutOffsetFrames":
                 return Math.Max(0, value);
             case "NumEncodeBufferFrames":
                 return Math.Clamp(value, 1, 54);

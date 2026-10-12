@@ -435,6 +435,9 @@ namespace Amatsukaze.Server
         public bool SplitSub { get; set; }
         [DataMember]
         public int MinOutputDuration { get; set; }
+        // 0なら無効、正値ならCMカット境界を本編側に縮める。
+        [DataMember]
+        public int CmCutOffsetFrames { get; set; }
         [DataMember]
         public int OutputMask { get; set; }
         [DataMember]
@@ -653,6 +656,12 @@ namespace Amatsukaze.Server
                 arguments.Append(" --pgs-font \"").Append(family).Append("\"");
             }
             return arguments.ToString();
+        }
+
+        public static string GetCmCutOffsetArguments(this ProfileSetting profile)
+        {
+            return profile.CmCutOffsetFrames > 0 && (profile.OutputMask == 2 || profile.OutputMask == 8)
+                ? " --cm-cut-offset " + profile.CmCutOffsetFrames : "";
         }
 
         public static string GetDecoderArgument(this DecoderType decoder, bool loadV2)
@@ -1179,6 +1188,9 @@ namespace Amatsukaze.Server
             keyValue("出力する最短区間（秒）", profile.MinOutputDuration > 0
                 ? profile.MinOutputDuration.ToString()
                 : "既定値 (5)");
+            keyValue("CMカット点を内側にする（フレーム）", profile.CmCutOffsetFrames > 0
+                ? profile.CmCutOffsetFrames.ToString()
+                : "無効");
             keyValueBool("システムにインストールされているAviSynthプラグインを有効にする", profile.SystemAviSynthPlugin);
             keyValueBool("エンコードログファイルを出力先に生成しない", profile.DisableLogFile);
             keyValueBool("CM解析ログファイルを出力先に生成する", profile.EnableCMLogFile);

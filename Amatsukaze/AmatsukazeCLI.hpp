@@ -69,6 +69,8 @@ static void printHelp(const tchar* bin) {
         "                      指定がない場合はビットレートオプションを追加しない\n"
         "  -bcm|--bitrate-cm <float>   CM判定されたところのビットレート倍率\n"
         "  --cm-quality-offset <float> CM判定されたところの品質オフセット\n"
+        "  --cm-cut-offset <frames> CMカット点を正の指定フレーム数だけ本編の内側にする\n"
+        "                      本編のみ/前後CMカット出力に適用。--trimavs指定時は無効\n"
         "  --2pass             2passエンコード\n"
         "  --splitsub          メイン以外のフォーマットは結合しない\n"
         "  -aet|--audio-encoder-type <タイプ> 音声エンコーダ[]"
@@ -298,6 +300,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.userSAR = { 0, 0 };
     conf.bitrateCM = 1.0;
     conf.cmQualityOffset = 0.0;
+    conf.cmCutOffsetFrames = 0;
     conf.x265TimeFactor = 0.25;
     conf.serviceId = -1;
     conf.cmoutmask = 1;
@@ -444,6 +447,11 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.cmQualityOffset);
             if (ret == 0) {
                 THROWF(ArgumentException, "--cm-quality-offsetの指定が間違っています");
+            }
+        } else if (key == _T("--cm-cut-offset")) {
+            conf.cmCutOffsetFrames = parseIntOption(key, getParam(argc, argv, i++));
+            if (conf.cmCutOffsetFrames <= 0) {
+                THROWF(ArgumentException, "--cm-cut-offsetには正のフレーム数を指定してください");
             }
         } else if (key == _T("--2pass")) {
             conf.twoPass = true;
@@ -887,6 +895,7 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         addInt(_T("audio_format_change"), setting->getAudioFormatChangeMode());
         addInt(_T("enc_parallel"), setting->getEncoderParallel());
         addInt(_T("min_output_duration"), setting->getMinOutputDuration());
+        addInt(_T("cm_cut_offset_frames"), setting->getCmCutOffsetFrames());
         addInt(_T("audio_bitrate"), setting->getAudioBitrateInKbps());
         addInt(_T("max_frames"), setting->getMaxFrames());
         addInt(_T("nicojk_mask"), setting->getNicoJKMask());

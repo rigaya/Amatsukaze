@@ -2270,6 +2270,7 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --min-output-duration ").Append(profile.MinOutputDuration);
                     }
+                    sb.Append(profile.GetCmCutOffsetArguments());
                     if (!profile.DisableChapter)
                     {
                         sb.Append(" --chapter");

@@ -28,6 +28,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <random>
 #include <string>
@@ -1605,6 +1606,87 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     return ExpectCommandLineStatus(with({ _T("--chapter") }), 1, _T("ロゴなしのチャプター生成"), diagnostic);
 }
 
+// 保持フレームの期待区間を手書きし、境界補正の実装とは独立に判定する。
+bool TestCMCutOffset(tstring& diagnostic) {
+    struct Scenario {
+        const TCHAR* name;
+        CMType type;
+        int offset;
+        std::vector<EncoderZone> cmzones;
+        std::vector<EncoderZone> expected;
+        std::vector<int> divisions;
+    };
+    const int maximum = (std::numeric_limits<int>::max)();
+    const Scenario scenarios[] = {
+        { _T("無効時の従来保持列"), CMTYPE_NONCM, 0, {{10,20},{30,40}}, {{0,10},{20,30},{40,60}}, {} },
+        { _T("全CM境界を2フレーム補正"), CMTYPE_NONCM, 2, {{10,20},{30,40}}, {{0,8},{22,28},{42,60}}, {} },
+        { _T("短い本編は消失"), CMTYPE_NONCM, 5, {{10,20},{30,40}}, {{0,5},{45,60}}, {} },
+        { _T("前後CMだけを補正"), CMTYPE_EDGE_TRIM, 5, {{0,10},{25,30},{50,60}}, {{15,45}}, {} },
+        { _T("前後CMなしの内部CMは維持"), CMTYPE_EDGE_TRIM, 5, {{10,20},{30,40}}, {{0,60}}, {} },
+        { _T("先頭CMだけ補正"), CMTYPE_NONCM, 5, {{0,10}}, {{15,60}}, {} },
+        { _T("末尾CMだけ補正"), CMTYPE_NONCM, 5, {{50,60}}, {{0,45}}, {} },
+        { _T("CM出力は補正しない"), CMTYPE_CM, 5, {{10,20},{30,40}}, {{10,20},{30,40}}, {} },
+        { _T("全体出力は補正しない"), CMTYPE_BOTH, 5, {{10,20},{30,40}}, {{0,60}}, {} },
+        { _T("CMなしは録画全体を保持"), CMTYPE_NONCM, maximum, {}, {{0,60}}, {} },
+        { _T("全CMは空出力"), CMTYPE_NONCM, 5, {{0,60}}, {}, {} },
+        { _T("前後カットの全CMは空出力"), CMTYPE_EDGE_TRIM, 5, {{0,60}}, {}, {} },
+        { _T("大値でもオーバーフローしない"), CMTYPE_NONCM, maximum, {{10,20},{30,40}}, {}, {} },
+        { _T("前後カットの短い本編は消失"), CMTYPE_EDGE_TRIM, maximum, {{0,10},{50,60}}, {}, {} },
+        { _T("短い先頭本編消失後も内部CMを維持"), CMTYPE_EDGE_TRIM, 5, {{0,10},{13,20},{50,60}}, {{13,45}}, {} },
+        { _T("前後の本編消失後も内部CMを維持"), CMTYPE_EDGE_TRIM, maximum, {{0,10},{25,30},{50,60}}, {{25,30}}, {} },
+        { _T("本編途中の分割では追加カットしない"), CMTYPE_NONCM, 2,
+            {{10,20},{30,40}}, {{0,8},{22,28},{42,60}}, {0,5,25,45,60} },
+        { _T("CM境界で分割しても補正する"), CMTYPE_NONCM, 2,
+            {{10,20},{30,40}}, {{0,8},{22,28},{42,60}}, {0,10,20,30,40,60} },
+        { _T("前後カットは分割点で補正しない"), CMTYPE_EDGE_TRIM, 5,
+            {{0,10},{25,30},{50,60}}, {{15,45}}, {0,20,40,60} },
+    };
+    constexpr int FRAME_COUNT = 60;
+    for (const auto& scenario : scenarios) {
+        std::vector<int> actual(FRAME_COUNT, -9), expected(FRAME_COUNT, -1);
+        for (const auto& range : scenario.expected) {
+            for (int frame = range.startFrame; frame < range.endFrame; frame++) {
+                const auto& divs = scenario.divisions;
+                expected[frame] = divs.empty() ? 0 : (int)(std::upper_bound(divs.begin(), divs.end(), frame) - divs.begin()) - 1;
+            }
+        }
+        const int status = ApplyCMCutOffsetForTest(FRAME_COUNT, scenario.cmzones.data(), scenario.cmzones.size(),
+            scenario.divisions.data(), scenario.divisions.size(), scenario.type, scenario.offset, actual.data(), actual.size());
+        if (status != 0) {
+            diagnostic = strsprintf(_T("%s: CM境界補正を実行できません(結果=%d)"), scenario.name, status);
+            return false;
+        }
+        for (int frame = 0; frame < FRAME_COUNT; frame++) {
+            if (actual[frame] != expected[frame]) {
+                diagnostic = strsprintf(_T("%s: フレーム%dの出力先期待値=%d、実際=%d"),
+                    scenario.name, frame, expected[frame], actual[frame]);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool TestCMCutOffsetCommandLine(tstring& diagnostic) {
+    const std::vector<tstring> base = { _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4") };
+    if (!ExpectCommandLine(base, {{_T("cm_cut_offset_frames"), _T("0")}},
+        _T("CMカット点補正の既定値"), diagnostic)) return false;
+    for (const TCHAR* value : { _T("1"), _T("5"), _T("2147483647") }) {
+        auto args = base;
+        args.insert(args.end(), {_T("--cm-cut-offset"), value});
+        if (!ExpectCommandLine(args, {{_T("cm_cut_offset_frames"), value}},
+            _T("正のCMカット点補正"), diagnostic)) return false;
+    }
+    for (const TCHAR* value : { _T("0"), _T("-1"), _T("abc"), _T("1x"), _T("1.5"), _T(""), _T("2147483648") }) {
+        auto args = base;
+        args.insert(args.end(), {_T("--cm-cut-offset"), value});
+        if (!ExpectCommandLineStatus(args, 1, strsprintf(_T("CMカット点補正の不正値%s"), value).c_str(), diagnostic)) return false;
+    }
+    auto args = base;
+    args.push_back(_T("--cm-cut-offset"));
+    return ExpectCommandLineStatus(args, 1, _T("CMカット点補正の値欠落"), diagnostic);
+}
+
 // WAVEヘッダ: 44バイトの全フィールドを仕様どおりに検証する
 bool ExpectLe(const std::vector<uint8_t>& bytes, size_t offset, int size, uint64_t expected, const TCHAR* name, tstring& diagnostic) {
     uint64_t actual = 0;
@@ -2890,6 +2972,8 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_silent_adts_bytes"), TestAudioSilentAdtsBytes },
     { _T("audio_channel_conversion"), TestAudioChannelConversion },
     { _T("command_line_arguments"), TestCommandLineArguments },
+    { _T("cm_cut_offset"), TestCMCutOffset },
+    { _T("cm_cut_offset_command_line"), TestCMCutOffsetCommandLine },
     { _T("wave_header"), TestWaveHeader },
     { _T("audio_silent_adts_decode"), TestAudioSilentAdtsDecode },
     { _T("dual_mono_splitter"), TestDualMonoSplitter },

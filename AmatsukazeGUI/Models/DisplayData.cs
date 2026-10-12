@@ -1872,6 +1872,50 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        #region CMカット点オフセット変更通知プロパティ
+        public bool CmCutOffsetAvailable
+        {
+            get { return Data.OutputMask == 2 || Data.OutputMask == 8; }
+        }
+
+        public bool EnableCmCutOffset
+        {
+            get { return CmCutOffsetAvailable && Data.CmCutOffsetFrames > 0; }
+            set { CmCutOffsetFrames = value && CmCutOffsetAvailable ? CmCutOffsetFramesInput : 0; }
+        }
+
+        public int CmCutOffsetFramesInput
+        {
+            get { return Data.CmCutOffsetFrames > 0 ? Data.CmCutOffsetFrames : 1; }
+            set { CmCutOffsetFrames = value; }
+        }
+
+        public int CmCutOffsetFrames
+        {
+            get { return Data.CmCutOffsetFrames; }
+            set
+            {
+                value = CmCutOffsetAvailable ? Math.Max(0, value) : 0;
+                if (Data.CmCutOffsetFrames == value)
+                    return;
+                Data.CmCutOffsetFrames = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged("EnableCmCutOffset");
+                RaisePropertyChanged("CmCutOffsetFramesInput");
+            }
+        }
+
+        private void UpdateCmCutOffsetAvailability()
+        {
+            if (!CmCutOffsetAvailable)
+            {
+                CmCutOffsetFrames = 0;
+            }
+            RaisePropertyChanged("CmCutOffsetAvailable");
+            RaisePropertyChanged("EnableCmCutOffset");
+        }
+        #endregion
+
         #region Mpeg2Partial変更通知プロパティ
         public bool Mpeg2Partial
         {
@@ -1986,6 +2030,7 @@ namespace Amatsukaze.Models
                 if (Data.OutputMask == value?.Mask)
                     return;
                 Data.OutputMask = value?.Mask ?? OutputOptionList_[0].Mask;
+                UpdateCmCutOffsetAvailability();
                 UpdateWarningText();
                 RaisePropertyChanged();
                 RaisePropertyChanged("CMQualityOffsetEnabled");
@@ -2610,6 +2655,7 @@ namespace Amatsukaze.Models
                 }
                 if (outputMaskChanged)
                 {
+                    UpdateCmCutOffsetAvailability();
                     UpdateMpeg2PartialAvailability();
                 }
                 RaisePropertyChanged("TsreplaceSelected");

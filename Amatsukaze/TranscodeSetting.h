@@ -284,6 +284,7 @@ struct Config {
     BitrateSetting bitrate;
     double bitrateCM;
     double cmQualityOffset;
+    int cmCutOffsetFrames;
     double x265TimeFactor;
     int serviceId;
     DecoderSetting decoderSetting;
@@ -467,6 +468,7 @@ public:
     double getBitrateCM() const;
 
     double getCMQualityOffset() const;
+    int getCmCutOffsetFrames() const;
 
     double getX265TimeFactor() const;
 

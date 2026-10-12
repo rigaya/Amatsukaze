@@ -1788,13 +1788,19 @@ void DoBadThing() {
             noDrcsMapCount, captionsParsed);
     }
 
+    int cmCutOffsetFrames = setting.getCmCutOffsetFrames();
+    if (cmCutOffsetFrames > 0 && !setting.getTrimAVSPath().empty()) {
+        ctx.info(_T("trim.avsからカット点を読み込むため、CMカット点の自動オフセットを無効にしました"));
+        cmCutOffsetFrames = 0;
+    }
+
     if (isNoEncode) {
         if (setting.isCopyTrimAVSEnabled()) {
             copyCutInfoForCMOnly(ctx, setting, reformInfo, cmanalyze, numVideoFiles);
         }
         if (setting.isOutputChapterEnabled()) {
             // CM解析のみでも、チャプター出力に使う出力キーと保持フレーム列を確定する。
-            reformInfo.genAudio(setting.getCMTypes());
+            reformInfo.genAudio(setting.getCMTypes(), cmCutOffsetFrames);
             ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {
                 const auto& fileIn = reformInfo.getEncodeFile(key);
@@ -1812,7 +1818,7 @@ void DoBadThing() {
         return; // CM解析のみならここで終了
     }
 
-    auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes());
+    auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes(), cmCutOffsetFrames);
     audioDiffInfo.printAudioPtsDiff(ctx);
 
     const auto& allKeys = reformInfo.getOutFileKeys();

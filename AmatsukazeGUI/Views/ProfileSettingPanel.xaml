@@ -855,6 +855,18 @@
                             <TextBlock VerticalAlignment="Center" Text="秒"/>
                         </WrapPanel>
                     </CheckBox>
+                    <CheckBox Margin="0,3"
+                              IsEnabled="{Binding Model.SelectedProfile.CmCutOffsetAvailable, Mode=OneWay}"
+                              IsChecked="{Binding Model.SelectedProfile.EnableCmCutOffset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="CMとの境界で本編を指定フレーム数だけ多めにカットします。trim.avsから読み込む場合は無効です。">
+                        <WrapPanel Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center" Text="CMカット点を"/>
+                            <TextBox Margin="4,0" Width="72"
+                                     IsEnabled="{Binding Model.SelectedProfile.EnableCmCutOffset, Mode=OneWay}"
+                                     Text="{Binding Model.SelectedProfile.CmCutOffsetFramesInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock VerticalAlignment="Center" Text="フレーム内側にする"/>
+                        </WrapPanel>
+                    </CheckBox>
                 </StackPanel>
 
                 <StackPanel Grid.Row="23" Grid.Column="0" Margin="0,20,0,0"

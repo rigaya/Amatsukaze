@@ -229,7 +229,7 @@ public:
 
     // 3. CM解析が終了したらエンコード前に呼ぶ
     // cmtypes: 出力するCMタイプリスト
-    AudioDiffInfo genAudio(const std::vector<CMType>& cmtypes);
+    AudioDiffInfo genAudio(const std::vector<CMType>& cmtypes, int cmCutOffsetFrames);
 
     // 中間映像ファイルの個数
     int getNumVideoFile() const;
@@ -414,7 +414,7 @@ private:
 
     void reformMain(bool splitSub);
 
-    void calcSizeAndTime(const std::vector<CMType>& cmtypes);
+    void calcSizeAndTime(const std::vector<CMType>& cmtypes, int cmCutOffsetFrames);
 
     template<typename I>
     void makeModifiedPTS(int64_t modifiedFirstPTS, std::vector<double>& modifiedPTS, const std::vector<I>& frames) {

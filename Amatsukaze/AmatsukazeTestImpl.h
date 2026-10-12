@@ -91,3 +91,9 @@ int ResourceTest(AMTContext& ctx, const ConfigWrapper& setting);
 
 } // namespace test
 
+
+// 合成した30fps映像に実際のCMカット処理を適用し、各入力フレームの出力分割番号を返す。
+// 非保持フレームは-1。成功時0、引数不正または処理失敗時-1。
+extern "C" AMATSUKAZE_API int ApplyCMCutOffsetForTest(int frameCount,
+    const EncoderZone* zones, size_t zoneCount, const int* divisions, size_t divisionCount,
+    int cmType, int offsetFrames, int* frameDivisions, size_t outputCapacity);

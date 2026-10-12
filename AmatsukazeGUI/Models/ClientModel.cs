@@ -2075,6 +2075,7 @@ namespace Amatsukaze.Models
                 profile.SplitSub = data.Profile.SplitSub;
                 profile.MinOutputDuration = data.Profile.MinOutputDuration;
                 profile.OutputMask = profile.OutputOptionList.FirstOrDefault(s => s.Mask == data.Profile.OutputMask);
+                profile.CmCutOffsetFrames = data.Profile.CmCutOffsetFrames;
                 profile.JLSCommandFile = data.Profile.JLSCommandFile;
                 profile.JLSOption = data.Profile.JLSOption;
                 profile.EnableJLSOption = data.Profile.EnableJLSOption;

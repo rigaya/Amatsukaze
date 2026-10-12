@@ -377,7 +377,7 @@
 /* static */ int test::FileStreamInfo(AMTContext& ctx, const ConfigWrapper& setting) {
     StreamReformInfo reformInfo = StreamReformInfo::deserialize(ctx, setting.getStreamInfoPath());
     reformInfo.prepare(false, false, false);
-    auto audioDiffInfo = reformInfo.genAudio({ CMTYPE_BOTH });
+    auto audioDiffInfo = reformInfo.genAudio({ CMTYPE_BOTH }, 0);
     audioDiffInfo.printAudioPtsDiff(ctx);
     reformInfo.printOutputMapping([&](EncodeFileKey key) {
         const auto& file = reformInfo.getEncodeFile(key);
@@ -486,7 +486,7 @@ test::TestSplitDualMono::TestSplitDualMono(AMTContext& ctx, const std::vector<ts
         StreamReformInfo reformInfo = StreamReformInfo::deserialize(ctx, setting.getStreamInfoPath());
 
         reformInfo.prepare(false, false, false);
-        auto audioDiffInfo = reformInfo.genAudio({ CMTYPE_BOTH });
+        auto audioDiffInfo = reformInfo.genAudio({ CMTYPE_BOTH }, 0);
         audioDiffInfo.printAudioPtsDiff(ctx);
 
         CaptionASSFormatter formatterASS(ctx);
@@ -817,7 +817,7 @@ void CheckCaptionMapping(AMTContext& ctx) {
     auto reform = MakeCaptionStreamFixture(ctx, true);
     reform->prepare(false, false, false);
     reform->applyCMZones(0, { { 2, 4 } }, {});
-    reform->genAudio({ CMTYPE_NONCM });
+    reform->genAudio({ CMTYPE_NONCM }, 0);
     const auto& keys = reform->getOutFileKeys();
     CaptionStreamExpect(keys.size() == 1, "字幕写像fixtureの出力ファイル数が不正");
     const auto key = keys.front();
@@ -957,6 +957,68 @@ extern "C" int WritePsStreamForTest(const PsWriterInputForTest* inputs, size_t i
         if (output == nullptr || outputCapacity < handler.data.size()) return -2;
         std::copy(handler.data.begin(), handler.data.end(), output);
         return verified;
+    } catch (...) {
+        return -1;
+    }
+}
+
+extern "C" AMATSUKAZE_API int ApplyCMCutOffsetForTest(int frameCount,
+    const EncoderZone* zones, size_t zoneCount, const int* divisions, size_t divisionCount,
+    int cmType, int offsetFrames, int* frameDivisions, size_t outputCapacity) {
+    if (frameCount <= 0 || !frameDivisions || outputCapacity < (size_t)frameCount ||
+        (zoneCount && !zones) || (divisionCount && !divisions) ||
+        cmType < CMTYPE_BOTH || cmType > CMTYPE_EDGE_TRIM) return -1;
+    try {
+        AMTContext ctx;
+        std::vector<FileVideoFrameInfo> video(frameCount);
+        std::vector<FileAudioFrameInfo> audio(frameCount);
+        for (int i = 0; i < frameCount; i++) {
+            auto& frame = video[i];
+            frame.PTS = frame.DTS = 90000 + 3000 * i;
+            frame.isGopStart = i == 0;
+            frame.progressive = true;
+            frame.pic = PIC_FRAME;
+            frame.type = i == 0 ? FRAME_I : FRAME_P;
+            frame.codedDataSize = 100;
+            frame.fileOffset = 100 * i;
+            frame.format.format = VS_MPEG2;
+            frame.format.width = frame.format.displayWidth = 1920;
+            frame.format.height = frame.format.displayHeight = 1080;
+            frame.format.sarWidth = frame.format.sarHeight = 1;
+            frame.format.frameRateNum = 30;
+            frame.format.frameRateDenom = 1;
+            frame.format.progressive = frame.format.fixedFrameRate = true;
+            audio[i].PTS = frame.PTS;
+            audio[i].numSamples = 1600;
+            audio[i].format.channels = AUDIO_STEREO;
+            audio[i].format.sampleRate = 48000;
+            audio[i].codedDataSize = 100;
+            audio[i].fileOffset = 100 * i;
+        }
+        std::vector<CaptionItem> captions;
+        std::vector<StreamEvent> events = {
+            { PID_TABLE_CHANGED, 0, 0, 1 },
+            { VIDEO_FORMAT_CHANGED, 0, 0, 0 },
+            { AUDIO_FORMAT_CHANGED, 0, 0, 0 },
+        };
+        std::vector<TimeInfo> times;
+        StreamReformInfo reform(ctx, 1, video, audio, captions, events, times);
+        reform.prepare(false, false, false);
+        std::vector<EncoderZone> cmzones;
+        if (zoneCount) cmzones.assign(zones, zones + zoneCount);
+        std::vector<int> divs;
+        if (divisionCount) divs.assign(divisions, divisions + divisionCount);
+        reform.applyCMZones(0, cmzones, divs);
+        reform.genAudio({ (CMType)cmType }, offsetFrames);
+        std::fill(frameDivisions, frameDivisions + frameCount, -1);
+        for (const auto& key : reform.getOutFileKeys()) {
+            const auto& file = reform.getEncodeFile(key);
+            for (const auto index : file.videoFrames) {
+                if (index < 0 || index >= frameCount || frameDivisions[index] != -1) return -1;
+                frameDivisions[index] = key.div;
+            }
+        }
+        return 0;
     } catch (...) {
         return -1;
     }

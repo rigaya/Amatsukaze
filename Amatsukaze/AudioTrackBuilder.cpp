@@ -401,7 +401,7 @@ extern "C" int RunAudioReformScenarioForTest(const AudioReformScenarioForTest* s
             std::vector<EncoderZone> zones;
             if (scenario->cut) zones.push_back({ 120, 220 });
             reform.applyCMZones(0, zones, {});
-            reform.genAudio({ scenario->cut ? CMTYPE_NONCM : CMTYPE_BOTH });
+            reform.genAudio({ scenario->cut ? CMTYPE_NONCM : CMTYPE_BOTH }, 0);
             const auto& keys = reform.getOutFileKeys();
             result->outFileCount = static_cast<int>(keys.size());
             if (keys.empty()) return 0;

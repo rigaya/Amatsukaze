@@ -7,6 +7,60 @@ namespace AmatsukazeServerTest;
 public sealed class ProfileSettingTests
 {
     [Fact]
+    public void 新規プロファイルではCMカット点のオフセットが無効になる()
+    {
+        Assert.Equal(0, ServerSupport.NormalizeProfile(null).CmCutOffsetFrames);
+    }
+
+    [Fact]
+    public void オフセット設定のない旧プロファイルではCMカット点のオフセットが無効になる()
+    {
+        var serializer = new DataContractSerializer(typeof(ProfileSetting));
+        using var stream = new MemoryStream();
+        serializer.WriteObject(stream, new ProfileSetting { OutputMask = 2, CmCutOffsetFrames = 5 });
+        stream.Position = 0;
+        var document = System.Xml.Linq.XDocument.Load(stream);
+        document.Root!.Elements().Single(element => element.Name.LocalName == "CmCutOffsetFrames").Remove();
+        using var reader = document.CreateReader();
+        var restored = Assert.IsType<ProfileSetting>(serializer.ReadObject(reader));
+
+        Assert.Equal(0, ServerSupport.NormalizeProfile(restored).CmCutOffsetFrames);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(8)]
+    public void CMカット点のオフセット設定は保存と読み込みで維持される(int outputMask)
+    {
+        var serializer = new DataContractSerializer(typeof(ProfileSetting));
+        using var stream = new MemoryStream();
+        serializer.WriteObject(stream, new ProfileSetting { OutputMask = outputMask, CmCutOffsetFrames = 5 });
+        stream.Position = 0;
+        var restored = Assert.IsType<ProfileSetting>(serializer.ReadObject(stream));
+
+        Assert.Equal(5, ServerSupport.NormalizeProfile(restored).CmCutOffsetFrames);
+        Assert.Equal(" --cm-cut-offset 5", restored.GetCmCutOffsetArguments());
+    }
+
+    [Theory]
+    [InlineData(2, -1)]
+    [InlineData(2, 0)]
+    [InlineData(8, -1)]
+    [InlineData(8, 0)]
+    [InlineData(0, 5)]
+    [InlineData(1, 5)]
+    [InlineData(4, 5)]
+    [InlineData(6, 5)]
+    [InlineData(10, 5)]
+    public void 無効なCMカット点のオフセットは補正されCLIに渡らない(int outputMask, int frames)
+    {
+        var profile = new ProfileSetting { OutputMask = outputMask, CmCutOffsetFrames = frames };
+
+        Assert.Equal("", profile.GetCmCutOffsetArguments());
+        Assert.Equal(0, ServerSupport.NormalizeProfile(profile).CmCutOffsetFrames);
+    }
+
+    [Fact]
     public void Tsreplaceはすべての出力選択に対応する()
     {
         Assert.Equal(new[] { 1, 2, 4, 6, 8 }, ProfileSettingExtensions.TsreplaceOutputMasks);

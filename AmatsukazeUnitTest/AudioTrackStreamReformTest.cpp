@@ -155,7 +155,7 @@ void RunScenario(int missingFrames, bool cut, int sourcePhaseTicks = 0, int fall
     std::vector<EncoderZone> zones;
     if (cut) zones.push_back({ 120, 220 });
     reform.applyCMZones(0, zones, {});
-    reform.genAudio({ cut ? CMTYPE_NONCM : CMTYPE_BOTH });
+    reform.genAudio({ cut ? CMTYPE_NONCM : CMTYPE_BOTH }, 0);
     Require(reform.getOutFileKeys().size() == 1, "音声変更でファイルが分割されました");
     const auto& file = reform.getEncodeFile(reform.getOutFileKeys()[0]);
     Require(file.audioFrames.size() == 2, "途中で増えた音声トラックが失われました");

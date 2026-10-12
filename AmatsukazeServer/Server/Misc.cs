@@ -849,6 +849,10 @@ namespace Amatsukaze.Server
             {
                 profile.MinOutputDuration = 0;
             }
+            if (profile.CmCutOffsetFrames < 0 || (profile.OutputMask != 2 && profile.OutputMask != 8))
+            {
+                profile.CmCutOffsetFrames = 0;
+            }
             if (profile.Mpeg2Partial)
             {
                 profile.X262Option = "";

@@ -1136,6 +1136,10 @@ double ConfigWrapper::getCMQualityOffset() const {
     return conf.cmQualityOffset;
 }
 
+int ConfigWrapper::getCmCutOffsetFrames() const {
+    return conf.cmCutOffsetFrames;
+}
+
 double ConfigWrapper::getX265TimeFactor() const {
     return conf.x265TimeFactor;
 }
@@ -1923,6 +1927,9 @@ void ConfigWrapper::dump() const {
         cmOutMaskToString(conf.cmoutmask).c_str());
     ctx.infoF(_T("エンコード分割並列: %d"), conf.encoderParallel);
     ctx.infoF(_T("出力する最短区間: %d秒"), conf.minOutputDuration);
+    if (conf.cmCutOffsetFrames > 0) {
+        ctx.infoF(_T("CMカット点の自動オフセット: %dフレーム内側"), conf.cmCutOffsetFrames);
+    }
     ctx.infoF(_T("カット境界再エンコード: %s"), conf.mpeg2Partial ? _T("有効") : _T("無効"));
     const bool logoRequiredForChapter = conf.chapter && (!conf.noLogoInCM || !conf.noDelogo);
     ctx.infoF(_T("チャプター解析: %s%s"),

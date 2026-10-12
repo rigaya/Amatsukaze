@@ -394,8 +394,8 @@ void StreamReformInfo::applyCMZones(int videoFileIndex, const std::vector<Encode
 
 // 3. CM解析が終了したらエンコード前に呼ぶ
 // cmtypes: 出力するCMタイプリスト
-AudioDiffInfo StreamReformInfo::genAudio(const std::vector<CMType>& cmtypes) {
-    calcSizeAndTime(cmtypes);
+AudioDiffInfo StreamReformInfo::genAudio(const std::vector<CMType>& cmtypes, int cmCutOffsetFrames) {
+    calcSizeAndTime(cmtypes, cmCutOffsetFrames);
     genCaptionStream();
     return genAudioStream();
 }
@@ -1128,7 +1128,8 @@ void StreamReformInfo::reformMain(bool splitSub) {
     fileDivs_.resize(numVideoFile_);
 }
 
-void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
+void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes, int cmCutOffsetFrames) {
+    cmCutOffsetFrames = std::max(0, cmCutOffsetFrames);
     // CM解析がないときはfileDivs_が設定されていないのでここで設定
     for (int i = 0; i < numVideoFile_; i++) {
         auto& divs = fileDivs_[i];
@@ -1138,6 +1139,8 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         }
     }
 
+    // 元のCM判定は保持し、出力モードごとの保持フレームだけを補正する。
+    std::vector<std::vector<bool>> nonCmKeepFrames(numVideoFile_);
     // ファイルごとの前後CM除去範囲
     std::vector<std::pair<int, int>> edgeTrimRanges(numVideoFile_, std::make_pair(0, 0));
     for (int video = 0; video < numVideoFile_; video++) {
@@ -1150,7 +1153,48 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
         while (tail > head && frameList[tail - 1].cmType == CMTYPE_CM) {
             --tail;
         }
+        const int numFrames = (int)frameList.size();
+        // CMに隣接する境界だけを内側へ移動し、ソース先頭と末尾は保持する。
+        int firstMainEnd = head;
+        while (firstMainEnd < tail && frameList[firstMainEnd].cmType == CMTYPE_NONCM) {
+            ++firstMainEnd;
+        }
+        int lastMainStart = tail;
+        while (lastMainStart > head && frameList[lastMainStart - 1].cmType == CMTYPE_NONCM) {
+            --lastMainStart;
+        }
+        // 短い前後本編が消失しても、内部CMへ補正を広げない。
+        if (head > 0) {
+            head += std::min(cmCutOffsetFrames, firstMainEnd - head);
+        }
+        if (tail < numFrames) {
+            tail -= std::min(cmCutOffsetFrames, tail - std::max(head, lastMainStart));
+        }
         edgeTrimRanges[video] = std::make_pair(head, tail);
+
+        auto& keepFrames = nonCmKeepFrames[video];
+        keepFrames.assign(numFrames, false);
+        for (int start = 0; start < numFrames;) {
+            if (frameList[start].cmType != CMTYPE_NONCM) {
+                ++start;
+                continue;
+            }
+            int end = start + 1;
+            while (end < numFrames && frameList[end].cmType == CMTYPE_NONCM) {
+                ++end;
+            }
+            int keepStart = start;
+            int keepEnd = end;
+            if (start > 0 && frameList[start - 1].cmType == CMTYPE_CM) {
+                keepStart += std::min(cmCutOffsetFrames, keepEnd - keepStart);
+            }
+            if (end < numFrames && frameList[end].cmType == CMTYPE_CM) {
+                keepEnd -= std::min(cmCutOffsetFrames, keepEnd - keepStart);
+            }
+            // 補正で消失した短区間は空のまま除外する。
+            std::fill(keepFrames.begin() + keepStart, keepFrames.begin() + keepEnd, true);
+            start = end;
+        }
     }
 
     // ファイルリスト生成
@@ -1227,13 +1271,11 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes) {
             auto trimRange = edgeTrimRanges[key.video];
             rangeStart = std::max(rangeStart, trimRange.first);
             rangeEnd = std::min(rangeEnd, trimRange.second);
-            if (rangeStart >= rangeEnd) {
-                continue;
-            }
         }
         for (int i = rangeStart; i < rangeEnd; i++) {
             if (foramtId == frameFormatId_[frameList[i].frameIndex]) {
-                if (useEdgeTrim || key.cm == CMTYPE_BOTH || key.cm == frameList[i].cmType) {
+                if (useEdgeTrim || key.cm == CMTYPE_BOTH
+                    || (key.cm == CMTYPE_NONCM ? nonCmKeepFrames[key.video][i] : key.cm == frameList[i].cmType)) {
                     file.videoFrames.push_back(i);
                 }
             }
