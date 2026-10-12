@@ -2419,6 +2419,309 @@ bool TestAudioBuilderMergeConvert(tstring& diagnostic) {
     return true;
 }
 
+// 既知PCM: 固定seedの周波数・位相を持つ正弦波の和 (チャンネルごとに別の周波数)
+std::vector<float> MakeKnownPcm(int channels, size_t samplesPerChannel, uint32_t seed, double amplitude, double noise = 0) {
+    std::mt19937 random(seed);
+    constexpr int PARTIALS = 5;
+    constexpr double PI = 3.14159265358979323846;
+    std::vector<double> frequency(channels * PARTIALS), phase(channels * PARTIALS);
+    for (int i = 0; i < channels * PARTIALS; i++) {
+        frequency[i] = 200.0 + (random() % 9000);
+        phase[i] = 2.0 * PI * (random() % 10000) / 10000.0;
+    }
+    std::vector<float> pcm(samplesPerChannel * channels);
+    for (size_t n = 0; n < samplesPerChannel; n++) {
+        for (int c = 0; c < channels; c++) {
+            double v = 0;
+            for (int k = 0; k < PARTIALS; k++) {
+                v += std::sin(2.0 * PI * frequency[c * PARTIALS + k] * n / 48000.0 + phase[c * PARTIALS + k]);
+            }
+            double sample = amplitude * v / PARTIALS;
+            if (noise > 0) {
+                // Box-Muller (std::normal_distributionは実装依存なので使わない)
+                const double u1 = ((random() >> 8) + 1.0) / 16777217.0, u2 = (random() >> 8) / 16777216.0;
+                sample += noise * std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * PI * u2);
+            }
+            pcm[n * channels + c] = (float)sample;
+        }
+    }
+    return pcm;
+}
+
+bool EncodeAdts(const std::vector<float>& pcm, int layout, std::vector<uint8_t>& adts, tstring& diagnostic) {
+    const size_t samples = pcm.size() / (layout == AUDIO_MONO ? 1 : layout == AUDIO_STEREO ? 2 : 6);
+    size_t length = 0;
+    if (!Expect(EncodePcmToAdtsForTest(pcm.data(), samples, layout, nullptr, 0, &length) == -2 && length > 0, _T("AACエンコード結果の大きさを取得できません"), diagnostic)) return false;
+    adts.assign(length, 0);
+    return Expect(EncodePcmToAdtsForTest(pcm.data(), samples, layout, adts.data(), adts.size(), &length) == 0 && length == adts.size(),
+        _T("PCMをAACへエンコードできません"), diagnostic);
+}
+
+bool DecodeAdts(const std::vector<uint8_t>& adts, int decoder, std::vector<float>& pcm, int& channels, tstring& diagnostic) {
+    size_t count = 0;
+    if (!Expect(DecodeAdtsToPcmForTest(adts.data(), adts.size(), decoder, nullptr, 0, &count, &channels) == -2 && count > 0,
+        _T("ADTSの復号結果の大きさを取得できません"), diagnostic)) return false;
+    pcm.assign(count, 0);
+    return Expect(DecodeAdtsToPcmForTest(adts.data(), adts.size(), decoder, pcm.data(), pcm.size(), &count, &channels) == 0,
+        _T("ADTSを復号できません"), diagnostic);
+}
+
+// FAADとlibavcodecで同じAACを復号した結果の一致。
+// 許容誤差は、AAC復号器の適合基準 (ISO/IEC 14496-4) の考え方による。16bit出力のフルアキュラシーでは、
+// 参照復号との差のRMSが16bit量子化誤差のRMS (2^-15/√12) 以下、最大誤差が2^-14以下であることが求められる。
+bool TestAudioAacDecoderAgreement(tstring& diagnostic) {
+    const double RMS_LIMIT = std::pow(2.0, -15) / std::sqrt(12.0);
+    const double MAX_LIMIT = std::pow(2.0, -14);
+    constexpr int FRAMES = 64;
+    const struct { int layout; int channels; } cases[] = { { AUDIO_MONO, 1 }, { AUDIO_STEREO, 2 } };
+    for (const auto& item : cases) {
+        const tstring name = strsprintf(_T("%dch"), item.channels);
+        const auto pcm = MakeKnownPcm(item.channels, (size_t)FRAMES * 1024, 20260928 + item.channels, 0.5);
+        std::vector<uint8_t> adts;
+        if (!EncodeAdts(pcm, item.layout, adts, diagnostic)) return false;
+        std::vector<float> faad, av;
+        int faadChannels = 0, avChannels = 0;
+        if (!DecodeAdts(adts, 0, faad, faadChannels, diagnostic) || !DecodeAdts(adts, 1, av, avChannels, diagnostic)) return false;
+        // libavcodecは全フレーム分を出力し、FAADは先頭1フレーム分の出力を出さない。FAADのモノラルはPS対応で2chへ展開される
+        const int expectedFaadChannels = item.channels == 1 ? 2 : item.channels;
+        if (!Expect(avChannels == item.channels && faadChannels == expectedFaadChannels, (name + _T(": 復号チャンネル数が不正です")).c_str(), diagnostic)) return false;
+        const size_t avFrames = av.size() / avChannels / 1024, faadFrames = faad.size() / faadChannels / 1024;
+        if (!Expect(avFrames == FRAMES && faadFrames == FRAMES - 1 && av.size() % (avChannels * 1024) == 0 && faad.size() % (faadChannels * 1024) == 0,
+            strsprintf(_T("%s: 復号フレーム数が不正です (libavcodec=%zu, FAAD=%zu)"), name.c_str(), avFrames, faadFrames).c_str(), diagnostic)) return false;
+        // 無音の一致で通らないよう、復号結果が十分な振幅を持つことを確かめる
+        float peak = 0;
+        for (float v : av) peak = std::max(peak, std::abs(v));
+        if (!Expect(peak > 0.2f, (name + _T(": 復号結果の振幅が小さすぎます")).c_str(), diagnostic)) return false;
+        for (int c = 0; c < expectedFaadChannels; c++) {
+            const int avChannel = item.channels == 1 ? 0 : c;
+            double squares = 0, maximum = 0;
+            const size_t count = faad.size() / faadChannels;
+            for (size_t i = 0; i < count; i++) {
+                const double d = (double)faad[i * faadChannels + c] - av[(i + 1024) * avChannels + avChannel];
+                squares += d * d;
+                maximum = std::max(maximum, std::abs(d));
+            }
+            const double rms = std::sqrt(squares / count);
+            if (!Expect(rms <= RMS_LIMIT && maximum <= MAX_LIMIT,
+                strsprintf(_T("%s ch%d: 復号結果の差が大きすぎます (RMS=%g/%g, 最大=%g/%g)"), name.c_str(), c, rms, RMS_LIMIT, maximum, MAX_LIMIT).c_str(), diagnostic)) return false;
+        }
+    }
+    return true;
+}
+
+// CONVERT (チャンネル数の変換と再エンコード)
+struct ConvertSources {
+    std::vector<std::vector<uint8_t>> frames[7]; // チャンネル数ごとのADTSフレーム
+};
+
+bool MakeConvertSources(ConvertSources& sources, tstring& diagnostic) {
+    constexpr size_t SAMPLES = 160 * 1024;
+    const struct { int channels; int layout; } layouts[] = { { 1, AUDIO_MONO }, { 2, AUDIO_STEREO }, { 6, AUDIO_32_LFE } };
+    for (const auto& item : layouts) {
+        // 広帯域の入力: 周期波だけだと相関ピークを誤判定しうるので雑音を加える
+        const auto pcm = MakeKnownPcm(item.channels, SAMPLES, 20260928 + item.channels, 0.25, 0.005);
+        std::vector<uint8_t> adts;
+        std::vector<std::pair<size_t, size_t>> frames;
+        if (!EncodeAdts(pcm, item.layout, adts, diagnostic)) return false;
+        if (!Expect(SplitAdtsStream(adts, frames) && frames.size() == SAMPLES / 1024, _T("変換元AACのフレーム数が不正です"), diagnostic)) return false;
+        for (const auto& f : frames) sources.frames[item.channels].emplace_back(adts.begin() + f.first, adts.begin() + f.first + f.second);
+    }
+    return true;
+}
+
+int LayoutOfChannels(int channels) { return channels == 1 ? AUDIO_MONO : channels == 2 ? AUDIO_STEREO : AUDIO_32_LFE; }
+
+struct ConvertResult {
+    int status = 0;
+    std::vector<uint8_t> adts;
+    tstring message;
+};
+
+ConvertResult RunConvert(const std::vector<std::vector<uint8_t>>& frames, const std::vector<int>& frameChannels,
+    const std::vector<int64_t>& pts, const std::vector<int>& refIndex, const std::vector<int>& refConvert,
+    int dstLayout, int dualMonoChannel, const tstring& directory) {
+    std::vector<uint8_t> stream;
+    std::vector<size_t> lengths;
+    for (const auto& f : frames) {
+        stream.insert(stream.end(), f.begin(), f.end());
+        lengths.push_back(f.size());
+    }
+    ConvertAdtsTrackInputForTest input = { stream.data(), stream.size(), lengths.data(), frameChannels.data(),
+        pts.empty() ? nullptr : pts.data(), frames.size(), refIndex.data(), refConvert.data(), refIndex.size(),
+        dstLayout, dualMonoChannel, directory.c_str() };
+    ConvertResult result;
+    size_t length = 0;
+    TCHAR message[96] = {};
+    result.status = ConvertAdtsTrackForTest(&input, nullptr, 0, &length, message, std::size(message));
+    if (result.status == -2) {
+        result.adts.assign(length, 0);
+        result.status = ConvertAdtsTrackForTest(&input, result.adts.data(), result.adts.size(), &length, message, std::size(message));
+    }
+    result.message = message;
+    return result;
+}
+
+double MaxAbs(const std::vector<float>& values, size_t begin, size_t end, size_t stride, size_t offset) {
+    double maximum = 0;
+    for (size_t i = begin; i < end; i++) maximum = std::max(maximum, (double)std::abs(values[i * stride + offset]));
+    return maximum;
+}
+
+bool ExpectConvertCase(const ConvertSources& sources, int src, int dst, int count, int prefix, int suffix,
+    const tstring& directory, tstring& diagnostic) {
+    const tstring name = strsprintf(_T("CONVERT %dch→%dch (N=%d 前=%d 後=%d)"), src, dst, count, prefix, suffix);
+    std::vector<std::vector<uint8_t>> selected;
+    std::vector<int> channels, convert;
+    for (int i = 0; i < prefix; i++) { selected.push_back(sources.frames[dst][10 + i]); channels.push_back(LayoutOfChannels(dst)); convert.push_back(0); }
+    for (int i = 0; i < count; i++) { selected.push_back(sources.frames[src][20 + i]); channels.push_back(LayoutOfChannels(src)); convert.push_back(1); }
+    for (int i = 0; i < suffix; i++) { selected.push_back(sources.frames[dst][30 + i]); channels.push_back(LayoutOfChannels(dst)); convert.push_back(0); }
+    std::vector<int> indices(selected.size());
+    for (size_t i = 0; i < indices.size(); i++) indices[i] = (int)i;
+    const auto result = RunConvert(selected, channels, {}, indices, convert, LayoutOfChannels(dst), -1, directory);
+    if (!Expect(result.status == 0, (name + _T(": 変換に失敗しました: ") + result.message).c_str(), diagnostic)) return false;
+    std::vector<std::pair<size_t, size_t>> frames;
+    if (!Expect(SplitAdtsStream(result.adts, frames) && frames.size() == selected.size(), (name + _T(": 出力のフレーム数が入力トラックと一致しません")).c_str(), diagnostic)) return false;
+    // 前後のCOPYはバイト単位で変化しない
+    for (size_t i = 0; i < frames.size(); i++) {
+        const bool copy = !convert[i];
+        const std::vector<uint8_t> actual(result.adts.begin() + frames[i].first, result.adts.begin() + frames[i].first + frames[i].second);
+        if (copy && !Expect(actual == selected[i], (name + _T(": COPYのフレームが変化しました")).c_str(), diagnostic)) return false;
+    }
+    std::vector<float> decoded;
+    int decodedChannels = 0;
+    if (!DecodeAdts(result.adts, 1, decoded, decodedChannels, diagnostic)) return false;
+    if (!Expect(decodedChannels == dst && decoded.size() == selected.size() * 1024 * dst, (name + _T(": 復号後のサンプル数が不正です")).c_str(), diagnostic)) return false;
+    if (count < 96) return true;
+
+    // CONVERT元の範囲だけを単独で復号し、変換後の期待信号を求める。両復号器の初期の重なりを除いた内部で位置を比較する
+    std::vector<uint8_t> sourceAdts;
+    for (int i = 0; i < count; i++) sourceAdts.insert(sourceAdts.end(), selected[prefix + i].begin(), selected[prefix + i].end());
+    std::vector<float> reference;
+    int referenceChannels = 0;
+    if (!DecodeAdts(sourceAdts, 1, reference, referenceChannels, diagnostic)) return false;
+    const double normalizer = 1 + 2 * 0.707;
+    const size_t total = (size_t)count * 1024;
+    const int outputSignals = dst == 1 ? 1 : 2;
+    std::vector<std::vector<double>> expected(outputSignals, std::vector<double>(total));
+    for (size_t n = 0; n < total; n++) {
+        const float* row = &reference[n * src];
+        if (src == 6) {
+            for (int side = 0; side < 2; side++) expected[side][n] = (row[side] + 0.707 * (row[2] + row[4 + side])) / normalizer;
+        } else if (src == 2 && dst == 1) {
+            expected[0][n] = (row[0] + row[1]) / 2;
+        } else if (src == 1) {
+            expected[0][n] = expected[1][n] = row[0];
+        } else {
+            expected[0][n] = row[0];
+            expected[1][n] = row[1];
+        }
+    }
+    const size_t begin = 4 * 1024, end = (size_t)(count - 4) * 1024;
+    for (int c = 0; c < outputSignals; c++) {
+        std::vector<double> converted(total);
+        for (size_t n = 0; n < total; n++) converted[n] = decoded[((size_t)prefix * 1024 + n) * dst + c];
+        int bestLag = 0;
+        double best = -2;
+        for (int lag = -32; lag <= 32; lag++) {
+            double ab = 0, aa = 0, bb = 0;
+            for (size_t n = begin; n < end; n++) {
+                const double a = expected[c][n], b = converted[n + lag];
+                ab += a * b; aa += a * a; bb += b * b;
+            }
+            const double correlation = ab / std::sqrt(aa * bb);
+            if (correlation > best) { best = correlation; bestLag = lag; }
+        }
+        if (!Expect(bestLag == 0, strsprintf(_T("%s ch%d: サンプル位置がずれています (ラグ=%d)"), name.c_str(), c, bestLag).c_str(), diagnostic)) return false;
+        if (!Expect(best > 0.9, strsprintf(_T("%s ch%d: 変換後の信号の相関が低すぎます (%g)"), name.c_str(), c, best).c_str(), diagnostic)) return false;
+    }
+    if (dst == 6) {
+        const size_t from = ((size_t)prefix + 4) * 1024, to = ((size_t)prefix + count - 4) * 1024;
+        for (int c = 2; c < 6; c++) {
+            if (!Expect(MaxAbs(decoded, from, to, 6, c) < 1e-6, strsprintf(_T("%s: 追加チャンネル%dが無音になりません"), name.c_str(), c).c_str(), diagnostic)) return false;
+        }
+    }
+    return true;
+}
+
+bool TestAudioConvertPosition(tstring& diagnostic) {
+    ScopedTempDirectory directory;
+    if (!Expect(directory.ok(), _T("一時ディレクトリを作成できません"), diagnostic)) return false;
+    ConvertSources sources;
+    if (!MakeConvertSources(sources, diagnostic)) return false;
+    const struct { int src, dst; } pairs[] = { { 2, 6 }, { 6, 2 }, { 1, 2 }, { 2, 1 } };
+    const struct { int count, prefix, suffix; } shapes[] = { { 1, 0, 0 }, { 2, 0, 0 }, { 96, 0, 0 }, { 1, 8, 8 }, { 2, 8, 8 }, { 96, 8, 8 }, { 12, 0, 8 }, { 12, 8, 0 } };
+    for (const auto& p : pairs) {
+        for (const auto& s : shapes) {
+            if (!ExpectConvertCase(sources, p.src, p.dst, s.count, s.prefix, s.suffix, directory.path(), diagnostic)) return false;
+        }
+    }
+    return true;
+}
+
+// cfg0 (PCE) のデュアルモノの無音を、主副それぞれのmonoからステレオへCONVERTしても無音のまま
+bool TestAudioConvertDualMono(tstring& diagnostic) {
+    ScopedTempDirectory directory;
+    if (!Expect(directory.ok(), _T("一時ディレクトリを作成できません"), diagnostic)) return false;
+    const auto dual = MakeDualMonoSilentAdts(3);
+    for (int language = 0; language < 2; language++) {
+        const tstring name = strsprintf(_T("デュアルモノの言語%d"), language + 1);
+        const std::vector<std::vector<uint8_t>> frames(12, dual);
+        const std::vector<int> channels(12, AUDIO_2LANG), convert(12, 1);
+        std::vector<int> indices(12);
+        for (int i = 0; i < 12; i++) indices[i] = i;
+        const auto result = RunConvert(frames, channels, {}, indices, convert, AUDIO_STEREO, language, directory.path());
+        std::vector<std::pair<size_t, size_t>> adts;
+        if (!Expect(result.status == 0 && SplitAdtsStream(result.adts, adts) && adts.size() == 12, (name + _T(": 変換結果のフレーム数が不正です")).c_str(), diagnostic)) return false;
+        std::vector<float> decoded;
+        int decodedChannels = 0;
+        if (!DecodeAdts(result.adts, 1, decoded, decodedChannels, diagnostic)) return false;
+        if (!Expect(decodedChannels == 2 && decoded.size() == 12 * 1024 * 2 && MaxAbs(decoded, 0, decoded.size(), 1, 0) == 0.0,
+            (name + _T(": 無音がゼロになりません")).c_str(), diagnostic)) return false;
+    }
+    return true;
+}
+
+// 100秒の欠落をまたぐと、前の有音の履歴は無音のCONVERTへ漏れない
+bool TestAudioConvertLongGap(tstring& diagnostic) {
+    ScopedTempDirectory directory;
+    if (!Expect(directory.ok(), _T("一時ディレクトリを作成できません"), diagnostic)) return false;
+    // 有音の2chフレーム1つと、その後の完全に無音の2chフレーム12個
+    std::vector<uint8_t> loudAdts;
+    std::vector<std::pair<size_t, size_t>> loudFrames;
+    if (!EncodeAdts(MakeKnownPcm(2, 48 * 1024, 20260928, 0.3), AUDIO_STEREO, loudAdts, diagnostic)) return false;
+    if (!Expect(SplitAdtsStream(loudAdts, loudFrames) && loudFrames.size() == 48, _T("有音フレームを作れません"), diagnostic)) return false;
+    const auto silence = MakeSilentAdts(AUDIO_STEREO, 3);
+    std::vector<std::vector<uint8_t>> frames = { std::vector<uint8_t>(loudAdts.begin() + loudFrames[40].first, loudAdts.begin() + loudFrames[40].first + loudFrames[40].second) };
+    for (int i = 0; i < 12; i++) frames.push_back(silence);
+    const std::vector<int> channels(13, AUDIO_STEREO), convert(12, 1);
+    std::vector<int> indices(12);
+    for (int i = 0; i < 12; i++) indices[i] = i + 1;
+    // 有音フレームの時刻が100秒前 (90kHzで9000000) の場合
+    std::vector<int64_t> pts = { 0 };
+    for (int i = 0; i < 12; i++) pts.push_back(9000000 + (int64_t)i * 1920);
+    const auto separated = RunConvert(frames, channels, pts, indices, convert, AUDIO_32_LFE, -1, directory.path());
+    std::vector<std::pair<size_t, size_t>> adts;
+    if (!Expect(separated.status == 0 && SplitAdtsStream(separated.adts, adts) && adts.size() == 12, _T("長欠落の変換結果のフレーム数が不正です"), diagnostic)) return false;
+    std::vector<float> decoded;
+    int decodedChannels = 0;
+    if (!DecodeAdts(separated.adts, 1, decoded, decodedChannels, diagnostic)) return false;
+    if (!Expect(decodedChannels == 6 && decoded.size() == 12 * 1024 * 6, _T("長欠落の復号後のサンプル数が不正です"), diagnostic)) return false;
+    double leaked = 0;
+    for (float v : decoded) leaked = std::max(leaked, (double)std::abs(v));
+    if (!Expect(leaked == 0.0, strsprintf(_T("100秒前の有音の履歴が無音のCONVERTへ漏れました (最大絶対値=%g)"), leaked).c_str(), diagnostic)) return false;
+
+    // 対照: 時刻が連続していれば有音フレームが履歴として使われ、その影響が出力に出る (上の判定が漏れを検出できる条件であることの確認)
+    std::vector<int64_t> contiguous;
+    for (int i = 0; i < 13; i++) contiguous.push_back((int64_t)i * 1920);
+    const auto joined = RunConvert(frames, channels, contiguous, indices, convert, AUDIO_32_LFE, -1, directory.path());
+    std::vector<float> joinedPcm;
+    int joinedChannels = 0;
+    if (!Expect(joined.status == 0, _T("連続した時刻の変換に失敗しました"), diagnostic) || !DecodeAdts(joined.adts, 1, joinedPcm, joinedChannels, diagnostic)) return false;
+    double used = 0;
+    for (float v : joinedPcm) used = std::max(used, (double)std::abs(v));
+    return Expect(used > 0.0, _T("対照の連続した時刻でも出力が無音のままで、漏れを検出できる条件ではありません"), diagnostic);
+}
+
 // TS: パケットとPSIセクションの組み立て
 constexpr int TS_PACKET_SIZE = 188;
 constexpr int TS_PAYLOAD_SIZE = 184;
@@ -2979,6 +3282,10 @@ constexpr TestCase TEST_CASES[] = {
     { _T("dual_mono_splitter"), TestDualMonoSplitter },
     { _T("bitrate_zones_properties"), TestBitrateZonesProperties },
     { _T("ps_writer_round_trip"), TestPsWriterRoundTrip },
+    { _T("audio_aac_decoder_agreement"), TestAudioAacDecoderAgreement },
+    { _T("audio_convert_position"), TestAudioConvertPosition },
+    { _T("audio_convert_dual_mono"), TestAudioConvertDualMono },
+    { _T("audio_convert_long_gap"), TestAudioConvertLongGap },
     { _T("audio_reform_separate"), TestAudioReformSeparate },
     { _T("audio_reform_merge"), TestAudioReformMerge },
     { _T("audio_reform_unsupported_fallback"), TestAudioReformUnsupportedFallback },

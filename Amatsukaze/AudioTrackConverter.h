@@ -27,3 +27,17 @@ struct SilentAdtsDecodeResultForTest {
 };
 extern "C" AMATSUKAZE_API int DecodeSilentAdtsForTest(int layout, int samplingFrequencyIndex, int frameCount,
     SilentAdtsDecodeResultForTest* result);
+
+// ネイティブ単体テスト用: インターリーブのPCM (48kHz、-1〜1) を、本体の変換用AACエンコーダ (libavcodecのaac) でADTSにする。
+// 出力はsamplesPerChannel/1024個のADTSフレームの連結で、入力フレームkと出力フレームkが対応する
+// (エンコーダの遅延は本体の変換と同じ方法で打ち消す)。samplesPerChannelは1024の倍数、layoutはモノラル・ステレオ・5.1ch。
+// 成功時0、失敗時-1、出力バッファ不足時-2 (lengthに必要バイト数) を返す。
+extern "C" AMATSUKAZE_API int EncodePcmToAdtsForTest(const float* pcm, size_t samplesPerChannel, int layout,
+    uint8_t* output, size_t outputCapacity, size_t* length);
+
+// ネイティブ単体テスト用: ADTSフレームの連結を復号し、インターリーブのfloatで返す。
+// decoder: 0=同梱FAAD (FAAD_FMT_FLOAT。チャンネル順はFAAD順、モノラルは2chへ展開される)、1=libavcodecのaac (WAV順)。
+// valueCountには全チャンネル合計のサンプル数、channelsには復号されたチャンネル数を返す。
+// 成功時0、復号失敗時-1、出力バッファ不足時-2 (valueCountに必要数) を返す。
+extern "C" AMATSUKAZE_API int DecodeAdtsToPcmForTest(const uint8_t* adts, size_t length, int decoder,
+    float* pcm, size_t pcmCapacity, size_t* valueCount, int* channels);

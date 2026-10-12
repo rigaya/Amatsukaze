@@ -33,7 +33,7 @@ tests\native\build_windows.cmd
 | `H264Parser` | 廃止 | 旧ケースは `ReadTS` が例外なく終わることしか見ていない。H.264の放送を処理して出力を復号し判定する cli_itest の `input_resolution_1`・`input_resolution_3`・`input_resolution_4`、公開 `h264_video_parser`・`h264_pan_scan` が同等以上に担保している。旧素材 (`HD2-h264.ts`) は音声がAC3のみで、音声なしTSは未対応のため入力解析まで進まず、代替素材にならない |
 | `H264Parser1Seg` | cli_itest `input_oneseg_only` | 非公開 (cli_itest) へ移管。ワンセグ混在TSからワンセグ (SID 25016、H.264 320x180) を `-s` で選んで処理し、サービス選択のログ・出力の寸法とコーデック・終了コードを判定する |
 | `MPEG2PSVerifier` | `ps_writer_round_trip` | 公開単体テストへ移行。外部のMPEG-PS素材ではなく、本体の `PsStreamWriter` が書く出力を `PsStreamVerifier` と独立のPS解析で検証する |
-| `AacDecodeVerifyTest` | 保留 | 参照WAVとのサンプル精度の照合は未担保。動的に生成した素材のコンポーネントテストの受け皿を決めてから、移管または廃止する |
+| `AacDecodeVerifyTest` | `audio_aac_decoder_agreement` | 公開単体テストへ移行。旧ケースは外部のAACと参照WAVを使っていた。既知のPCMをテスト内でAACにエンコードし、同梱FAADとlibavcodecの復号結果を、AAC復号器の適合基準に基づく許容誤差で比較する |
 | `WaveWriter` | `wave_header` | 公開単体テストへ移行。旧ケースはダミーWAVを書くだけだった。ヘッダ全フィールドを検証し、ブロックアライン等の不具合を修正 |
 | `SplitDualMonoAAC` | `dual_mono_splitter` | 公開単体テストへ移行。旧ケースは分離を実行するだけだった。デュアルモノのADTSをテスト内で組み立て、分離結果をバイト単位で検証 |
 | `AACDecodeTest` | `audio_silent_adts_decode` | 公開単体テストへ移行。旧ケースは実素材 (`a0-0-1.aac`) の復号エラーを見ていた。無音ADTSをFAADとlibavcodecで復号して全サンプル0を判定する。実放送の復号は cli_itest の `audio_encode_fdkaac`、`audio_mono_to_51_*` が通す |
@@ -45,7 +45,7 @@ tests\native\build_windows.cmd
 | `AudioTrack.SeparatePlanner` | `audio_track_separate_planner` | 公開単体テストへ移行。`PlanSeparateAudioTracks`/`ValidateAudioTrackPlans` はSTLコンテナを受け渡すため、テスト専用のC ABIラッパー `PlanAudioTracksForTest`/`ValidateAudioTrackPlansForTest` を通して、旧テストの期待値と比較する |
 | `AudioTrack.MergePlanner` | `audio_track_merge_planner` | 公開単体テストへ移行。分離と同じC ABIラッパーで `PlanMergeAudioTracks` を検証する |
 | `AudioTrack.SilentAdtsBytes` | `audio_silent_adts_bytes` | 公開単体テストへ移行。設計書の手組みバイト列との一致と拒否を `GenerateSilentAdtsFrameForTest` 経由で検証する。旧テストの `GetAudioSamplingFrequencyIndex` の逆引きは、分離プランのサンプリング周波数インデックスと未対応レートの拒否で確認する。PES経由の並行処理は既存の `audio_pes_pipeline` が担当 |
-| `AudioTrackConvertTest.cpp` | `audio_channel_conversion` | `ConvertAudioChannels` の素材不要な検証部分だけ公開単体テストへ移行 (テスト専用C ABI `ConvertAudioChannelsForTest`)。旧テストはモノラル⇔5.1chの変換を拒否する前提だが、現行実装はステレオ経由で変換するため、現行仕様に合わせた。入力ADTSからAACを再構築する部分は、`audio_builder_merge_convert` で出力のフレーム数とチャンネル構成までを公開側が判定している。未担保で保留なのは、CONVERT出力のサンプル位置の厳密な判定 (`run_audio_track_convert_test.py`) と、100秒前の履歴が無音CONVERTへ漏れないこと (`run_audio_track_seam_test.py` の長欠落判定)。seamの `--experiment`・`--oracle` は設計判断用の実験で廃止 |
+| `AudioTrackConvertTest.cpp` | `audio_channel_conversion`, `audio_convert_position`, `audio_convert_dual_mono`, `audio_convert_long_gap` | 公開単体テストへ移行。`ConvertAudioChannels` の係数と並びは `audio_channel_conversion` (テスト専用C ABI `ConvertAudioChannelsForTest`。旧テストはモノラル⇔5.1chの変換を拒否する前提だが、現行実装はステレオ経由で変換するため、現行仕様に合わせた)。CONVERT出力のフレーム数・COPY保持・サンプル位置・追加チャンネルの無音は `audio_convert_position`、cfg0デュアルモノは `audio_convert_dual_mono`、100秒前の履歴が無音CONVERTへ漏れないことは `audio_convert_long_gap` が判定する。`run_audio_track_seam_test.py` の `--experiment`・`--oracle` は設計判断用の実験で廃止 |
 | `AudioTrackStreamReformTest.cpp`, `AudioTrackFaadSilenceTest.cpp` | `audio_reform_separate`, `audio_reform_merge`, `audio_reform_unsupported_fallback`, `audio_reform_cfg0_dual_mono`, `audio_builder_*`, `audio_silent_adts_decode` | 公開単体テストへ移行。素材を使わず、StreamReformの音声プラン作成と `BuildAudioTrack`、無音ADTSの復号を判定する。詳細は下記の「StreamReformと音声トラック構築の合成入力テスト」 |
 | `run_audio_track_test.py` | 廃止 | `compile_commands.json` から旧テストを単体ビルドして実行するだけのスクリプト。個別のテストを公開側へ移したため不要 |
 | `CLI.ArgumentTest` | `command_line_arguments` | 公開単体テストへ移行。旧テストの `--mode test_parseargs` は例外が出ないことしか見ていないため、`AmatsukazeCLI.hpp` の static `parseArgs` の結果を、同じ翻訳単位で定義したテスト専用C ABI `ParseCommandLineForTest` が「キー=値」の改行区切りテキストへ直列化して返し、呼出側バッファ経由で値を比較する。旧テストの3パターン (10進と`0x6308`のサービスID、未知オプション`--ourput`の拒否) に加え、全オプション指定時の入出力パス・エンコーダ種別・オプション・muxer・timelineeditor・JSON・dumpの値、パス区切りの`/`への正規化、既知拡張子 (`.mp4`/`.mkv`/`.m2ts`/`.ts`) だけが除かれる出力パス、最小構成の既定値、モード別の必須引数、値が欠けた末尾オプション、整数オプションの厳密な解析 (空、`12abc`、`1.5`、intの範囲外、不正な16進を引数の拒否として扱い、サービスIDは`0x`と`0X`の両方を16進として受理する)、種別を表す値 (エンコーダ、音声エンコーダ、デコーダ) の不明な名前の拒否とサーバーが渡す綴りの受理、範囲外の値、実況マスクの有効化条件を確認する。実行ファイル位置やPATH探索に依存する既定の実行ファイル名は比較せず、比較する実行ファイルは存在しない絶対パスで明示指定する。作業ディレクトリは取得に一時ディレクトリの作成を要するため比較しない |
@@ -83,6 +83,15 @@ dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --filter "Category!
 - `audio_builder_copy_silence` (旧 `BuilderCopyTest`)、`audio_builder_dual_mono` (旧 `BuilderDualMonoTest`)、`audio_builder_reject_pce` (旧 `BuilderRejectPceTest`)、`audio_builder_merge_convert` (旧 `BuilderMergeSilenceTest`): コピーと無音の結合が入力フレームとバイト単位で一致すること、デュアルモノがADTSパーサで判定され分離後のチャンネル構成が主mono・副mono・ステレオになること、cfg0のステレオがCOPYで「ADTSヘッダ」のエラーとして拒否されること、統合の目標レイアウト (ステレオ→5.1chのアップミックス、5.1ch→ステレオのダウンミックス) と出力のフレーム数・チャンネル構成を確認する。旧テストは統合変換で例外が出ないことと目標レイアウトしか見ていなかったので、出力のADTSフレーム数とチャンネル構成の確認を加えた。
 
 `bitrate_zones_properties` には、映像の範囲外にはみ出すCMゾーン (開始が負、終了が映像末尾より後、完全に範囲外、空) の入力を加えた。`MakeVFRBitrateZones` は、これらでユニット配列の範囲外を読み書きしていたため、CMゾーンを映像の先頭と末尾で切り詰めるよう修正した。AddressSanitizerで修正前に `heap-buffer-overflow` を再現し、修正後に消えることを確認している。
+
+## AAC復号の一致とCONVERTの位置
+
+素材を使わず、既知のPCMから生成したAACを使う。PCMは固定seedの周波数・位相を持つ正弦波の和 (CONVERTの入力にはさらに雑音を加える) で、本体の変換用エンコーダ (libavcodecのaac) でADTSにする。テスト専用C ABIは `EncodePcmToAdtsForTest`、`DecodeAdtsToPcmForTest` (同梱FAADまたはlibavcodecで復号してインターリーブのfloatで返す)、`ConvertAdtsTrackForTest` (出力位置ごとの参照とCOPY/CONVERTを指定して `BuildAudioTrack` で書き出す) である。無音ADTSの復号 (`audio_silent_adts_decode`) も同じ復号関数を通る。
+
+- `audio_aac_decoder_agreement` (旧 `AacDecodeVerifyTest`): モノラルとステレオの64フレームを、FAADとlibavcodecで復号して比較する。libavcodecは全フレーム、FAADは先頭1フレーム分の出力を出さない (モノラルはPS対応で2chへ展開される) ので、フレーム数と、FAADの出力がlibavcodecの1フレーム後ろと対応することを確認する。許容誤差は、AAC復号器の適合基準 (ISO/IEC 14496-4) の考え方による。16bit出力のフルアキュラシーでは、参照復号との差のRMSが16bit量子化誤差のRMS (2^-15/√12 ≒ 8.8e-6) 以下、最大誤差が2^-14 (≒ 6.1e-5) 以下であることが求められるので、この値をそのまま使う。モノラルの実測は差のRMSが7e-7、最大誤差が7e-6で、この基準に十分収まる (ステレオも基準内)。復号結果の最大振幅が0.2以上であることも確認し、無音どうしの一致で通らないようにしている。
+- `audio_convert_position` (旧 `run_audio_track_convert_test.py` の本体): 2ch→5.1ch、5.1ch→2ch、モノラル→2ch、2ch→モノラルについて、CONVERT区間の長さ (1、2、96) と前後のCOPY (8フレームまたはなし) を変えた8通りで、出力のフレーム数が入力トラックと一致すること、前後のCOPYフレームがバイト単位で変化しないこと、復号後のサンプル数、CONVERT元を単独で復号して求めた変換後の期待信号との相互相関のピークが±32サンプルの探索でラグ0であること (相関0.9超)、5.1chへの変換で追加の4チャンネルが無音であることを確認する。ラグと相関は96フレームの場合に、両復号器の初期の重なりを除いた内部 (前後4フレームを除く) で測る。
+- `audio_convert_dual_mono` (旧 `run_audio_track_convert_test.py` のデュアルモノ): cfg0のデュアルモノの無音12フレームを、主音声・副音声それぞれからステレオへCONVERTしても、フレーム数が保たれ完全な無音のままであることを確認する。
+- `audio_convert_long_gap` (旧 `run_audio_track_seam_test.py --long-gap-source`): 有音のステレオ1フレームの後に、100秒 (90kHzで9000000) 後の無音のステレオ12フレームを置き、無音側を5.1chへCONVERTすると、出力が完全な無音であること (有音の履歴が漏れないこと) を確認する。対照として、時刻が連続している場合は有音のフレームが履歴として使われて出力が無音でなくなることも確認し、この判定が漏れを検出できる条件であることを保っている。
 
 ## 既知の問題
 

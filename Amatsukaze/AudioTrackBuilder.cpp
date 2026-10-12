@@ -446,3 +446,73 @@ extern "C" int RunAudioReformScenarioForTest(const AudioReformScenarioForTest* s
         return -1;
     }
 }
+
+extern "C" int ConvertAdtsTrackForTest(const ConvertAdtsTrackInputForTest* input,
+    uint8_t* output, size_t outputCapacity, size_t* length, tchar* message, size_t messageCapacity) {
+    if (input == nullptr || length == nullptr || input->directory == nullptr || input->stream == nullptr ||
+        input->frameLengths == nullptr || input->frameChannels == nullptr || input->refFrameIndex == nullptr ||
+        input->refConvert == nullptr) {
+        return -1;
+    }
+    *length = 0;
+    if (message != nullptr && messageCapacity > 0) message[0] = 0;
+    try {
+        AMTContext ctx;
+        const tstring source = tstring(input->directory) + _T("/convert-source.aac");
+        const tstring destination = tstring(input->directory) + _T("/convert-out.aac");
+        std::vector<int64_t> offsets = { 0 };
+        std::vector<FileAudioFrameInfo> info(input->frameCount);
+        {
+            File file(source, _T("wb"));
+            size_t position = 0;
+            for (size_t i = 0; i < input->frameCount; i++) {
+                const size_t size = input->frameLengths[i];
+                if (position + size > input->streamLength) return -1;
+                info[i].audioIdx = 0;
+                info[i].PTS = input->framePts ? input->framePts[i]
+                    : static_cast<int64_t>(i) * AAC_LC_FRAME_SAMPLES * MPEG_CLOCK_HZ / 48000;
+                info[i].format = { (AUDIO_CHANNELS)input->frameChannels[i], 48000 };
+                info[i].numSamples = AAC_LC_FRAME_SAMPLES;
+                info[i].fileOffset = offsets.back();
+                info[i].codedDataSize = static_cast<int>(size);
+                file.write(MemoryChunk(const_cast<uint8_t*>(input->stream) + position, size));
+                position += size;
+                offsets.push_back(offsets.back() + size);
+            }
+        }
+        AudioTrackPlan plan;
+        plan.logicalTrack = input->dualMonoChannel >= 0 ? input->dualMonoChannel : 0;
+        plan.layout = (AUDIO_CHANNELS)input->dstLayout;
+        plan.sampleRate = 48000;
+        plan.samplingFrequencyIndex = 3;
+        for (size_t i = 0; i < input->refCount; i++) {
+            const int index = input->refFrameIndex[i];
+            if (index < 0 || static_cast<size_t>(index) >= input->frameCount) return -1;
+            AudioTrackReference ref;
+            ref.operation = input->refConvert[i] ? AudioTrackOperation::CONVERT : AudioTrackOperation::COPY;
+            ref.frameIndex = index;
+            ref.srcLayout = info[index].format.channels;
+            ref.dstLayout = plan.layout;
+            if (info[index].format.channels == AUDIO_2LANG) {
+                ref.dualMonoChannel = input->dualMonoChannel;
+                ref.srcLayout = AUDIO_MONO;
+            }
+            plan.frames.push_back(ref);
+        }
+        PacketCache cache(ctx, source, offsets, 4, 8);
+        try {
+            BuildAudioTrack(ctx, cache, plan, destination, info);
+        } catch (const FormatException& error) {
+            CopyMessage(message, messageCapacity, error.message());
+            return 1;
+        }
+        File written(destination, _T("rb"));
+        const size_t size = static_cast<size_t>(written.size());
+        *length = size;
+        if (output == nullptr || outputCapacity < size) return -2;
+        written.read(MemoryChunk(output, size));
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}

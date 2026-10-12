@@ -77,3 +77,26 @@ struct AudioReformResultForTest {
 // 成功時0、シナリオ内の例外時1 (resultのmessageに文面)、引数不正時-1、バッファ不足時-2を返す。
 extern "C" AMATSUKAZE_API int RunAudioReformScenarioForTest(const AudioReformScenarioForTest* scenario,
     AudioReformResultForTest* result, int* track0, int64_t* track0Pts, int* track1, size_t trackCapacity);
+
+// ネイティブ単体テスト用: 出力位置ごとに元フレームの参照とCOPY/CONVERTを指定して、1本のトラックをBuildAudioTrackで書き出す。
+// 入力フレームはstreamへ連結済みで、frameLengths[i]バイト、frameChannels[i] (AUDIO_CHANNELS、デュアルモノはAUDIO_2LANG) を持つ。
+// framePtsがnullptrでなければ各フレームのPTS (90kHz)、nullptrなら連続したフレーム時刻を使う (CONVERTの履歴の連続判定に使われる)。
+// refFrameIndex[i]/refConvert[i] は出力位置iの元フレーム番号と、1ならCONVERT・0ならCOPY。
+// dualMonoChannelはデュアルモノ元フレームから取り出す言語 (0/1)。それ以外のフレームには影響しない。
+// 成功時0、BuildAudioTrackがFormatExceptionで失敗した場合1 (messageに文面)、引数不正・その他の失敗時-1、バッファ不足時-2 (lengthに必要バイト数) を返す。
+struct ConvertAdtsTrackInputForTest {
+    const uint8_t* stream;
+    size_t streamLength;
+    const size_t* frameLengths;
+    const int* frameChannels;
+    const int64_t* framePts;
+    size_t frameCount;
+    const int* refFrameIndex;
+    const int* refConvert;
+    size_t refCount;
+    int dstLayout;
+    int dualMonoChannel;
+    const tchar* directory;
+};
+extern "C" AMATSUKAZE_API int ConvertAdtsTrackForTest(const ConvertAdtsTrackInputForTest* input,
+    uint8_t* output, size_t outputCapacity, size_t* length, tchar* message, size_t messageCapacity);
