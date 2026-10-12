@@ -1042,7 +1042,6 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 - Amatsukaze: 一部GPLやその他のライセンスのコードを使っています。各ソースコードファイルにライセンスが書かれているのでそれを見てください。
 - AmatsukazeCLI: MITライセンス
 - AmatsukazeGUI: MITライセンス
-- AmatsukazeUnitTest: MITライセンス
 - FileCutter: MITライセンス
 - libfaad2: GPL
 
@@ -1138,11 +1137,6 @@ libaribcaptionのビルドを自動で行います。そのため、Visual Studi
 
 AvisynthNeoが必要です。ソースを落として、ビルドしてください。
 ビルドにはCMakeが必要です。AviSynth.libをlib/x64(or x86)へコピーしてください。
-
-単体テストプロジェクト(AmatsukazeUnitTest)は、他にgoogletestのライブラリが必要です。
-サブモジュールでgoogletestは追加してあるので、git submodule updateでコードを落として、
-googletest/googletest/msvc/gtest-md.slnを開いて、ビルドしてください。
-できたgtest.lib/gtestd.libをlib/x64(or x86)へコピーしてください。
 
 gitでバージョンを取得するので、gitにパスを通した状態で、gitリポジトリでビルドする必要があります。
 

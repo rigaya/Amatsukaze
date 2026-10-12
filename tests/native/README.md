@@ -51,7 +51,7 @@ tests\native\build_windows.cmd
 | `CLI.ArgumentTest` | `command_line_arguments` | 公開単体テストへ移行。旧テストの `--mode test_parseargs` は例外が出ないことしか見ていないため、`AmatsukazeCLI.hpp` の static `parseArgs` の結果を、同じ翻訳単位で定義したテスト専用C ABI `ParseCommandLineForTest` が「キー=値」の改行区切りテキストへ直列化して返し、呼出側バッファ経由で値を比較する。旧テストの3パターン (10進と`0x6308`のサービスID、未知オプション`--ourput`の拒否) に加え、全オプション指定時の入出力パス・エンコーダ種別・オプション・muxer・timelineeditor・JSON・dumpの値、パス区切りの`/`への正規化、既知拡張子 (`.mp4`/`.mkv`/`.m2ts`/`.ts`) だけが除かれる出力パス、最小構成の既定値、モード別の必須引数、値が欠けた末尾オプション、整数オプションの厳密な解析 (空、`12abc`、`1.5`、intの範囲外、不正な16進を引数の拒否として扱い、サービスIDは`0x`と`0X`の両方を16進として受理する)、種別を表す値 (エンコーダ、音声エンコーダ、デコーダ) の不明な名前の拒否とサーバーが渡す綴りの受理、範囲外の値、実況マスクの有効化条件を確認する。実行ファイル位置やPATH探索に依存する既定の実行ファイル名は比較せず、比較する実行ファイルは存在しない絶対パスで明示指定する。作業ディレクトリは取得に一時ディレクトリの作成を要するため比較しない |
 | `DecodePerformance` | 廃止 | libavcodecの復号速度を表示するだけで判定がなく、本体のロジックを通らない。性能の確認は cli_itest の所要時間で見る |
 
-既存の `AmatsukazeUnitTest/` と GoogleTest は、この移行段階では削除しません。C# の `AmatsukazeServerTest` xUnit は維持し、ネットワークを使う任意テストは `Category=Network` としてオフラインの標準単体テストから分離します。標準群は次で実行します。
+旧 `AmatsukazeUnitTest/` と GoogleTest (`googletest` サブモジュール、`include_win/gtest/`) は、上表の移行を終えて撤去しました。C# の `AmatsukazeServerTest` xUnit は維持し、ネットワークを使う任意テストは `Category=Network` としてオフラインの標準単体テストから分離します。標準群は次で実行します。
 
 ```bash
 dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --filter "Category!=Network"
