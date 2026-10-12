@@ -14,14 +14,14 @@
 
 struct RiffHeader {
     uint32_t riff;
-    int32_t  size;
+    uint32_t size;
     uint32_t type;
 };
 
 struct FormatChunk {
     uint32_t id;
-    int32_t size;
-    int16_t format;
+    uint32_t size;
+    uint16_t format;
     uint16_t channels;
     uint32_t samplerate;
     uint32_t bytepersec;
@@ -31,7 +31,7 @@ struct FormatChunk {
 
 struct DataChunk {
     uint32_t id;
-    int32_t size;
+    uint32_t size;
     // uint8_t waveformData[];
 };
 
@@ -41,7 +41,14 @@ enum {
 
 uint32_t toBigEndian(uint32_t a);
 
+// PCM WAVEのヘッダ (44バイト) を書き込む。
 // numSamples: 1チャンネルあたりのサンプル数
-// エラー検出のため numSamples が64bitになっているがintを超える範囲に対応している訳ではないことに注意
+// RIFFのサイズ欄は32bit符号なしなので、ファイル全体が2^32-1バイトを超える場合はFormatExceptionを投げる。
+// bitswidthは8の倍数、channels・samplerateは正でなければならない。
 void writeWaveHeader(FILE* fp, int channels, int samplerate, int bitswidth, int64_t numSamples);
+
+// ネイティブ単体テスト用: writeWaveHeaderの出力を無名の一時ファイル経由で読み戻して返す。
+// 成功時0、引数不正・サイズ超過時-1、出力バッファ不足時-2 (headerLengthに必要バイト数) を返す。
+extern "C" AMATSUKAZE_API int WriteWaveHeaderForTest(int channels, int samplerate, int bitswidth, int64_t numSamples,
+    uint8_t* output, size_t outputCapacity, size_t* headerLength);
 

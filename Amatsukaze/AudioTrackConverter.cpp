@@ -7,7 +7,10 @@
 extern "C" {
 #include "neaacdec.h"
 }
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 
 namespace {
@@ -369,6 +372,95 @@ std::vector<float> ConvertAudioChannels(const std::vector<float>& pcm, AUDIO_CHA
         }
     }
     return output;
+}
+
+extern "C" int DecodeSilentAdtsForTest(int layout, int samplingFrequencyIndex, int frameCount,
+    SilentAdtsDecodeResultForTest* result) {
+    if (result == nullptr || frameCount <= 0) return -1;
+    *result = {};
+    try {
+        const auto frame = GenerateSilentAdtsFrame((AUDIO_CHANNELS)layout, samplingFrequencyIndex);
+        // FAAD (16bit整数出力)
+        {
+            NeAACDecHandle handle = NeAACDecOpen();
+            if (!handle) return -1;
+            auto config = NeAACDecGetCurrentConfiguration(handle);
+            config->outputFormat = FAAD_FMT_16BIT;
+            config->downMatrix = 0;
+            bool ok = NeAACDecSetConfiguration(handle, config) != 0;
+            unsigned long rate = 0;
+            unsigned char channels = 0;
+            ok = ok && NeAACDecInit(handle, const_cast<uint8_t*>(frame.data()), (unsigned long)frame.size(), &rate, &channels) >= 0;
+            for (int i = 0; ok && i < frameCount; i++) {
+                NeAACDecFrameInfo info = {};
+                const auto pcm = static_cast<const int16_t*>(NeAACDecDecode(handle, &info, const_cast<uint8_t*>(frame.data()), (unsigned long)frame.size()));
+                if (info.error || (!pcm && info.samples)) {
+                    ok = false;
+                    break;
+                }
+                result->faadChannels = info.channels;
+                result->faadSamples += info.samples;
+                for (unsigned long s = 0; s < info.samples; s++) {
+                    result->faadMaxAbs = std::max(result->faadMaxAbs, std::abs((int)pcm[s]));
+                }
+            }
+            NeAACDecClose(handle);
+            if (!ok) return -1;
+        }
+        // libavcodec (浮動小数出力)
+        {
+            const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
+            if (!codec) return -1;
+            AVCodecContext* context = avcodec_alloc_context3(codec);
+            AVPacket* packet = av_packet_alloc();
+            AVFrame* decoded = av_frame_alloc();
+            bool ok = context && packet && decoded && avcodec_open2(context, codec, nullptr) >= 0;
+            auto receive = [&]() {
+                while (ok) {
+                    const int ret = avcodec_receive_frame(context, decoded);
+                    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+                    if (ret < 0 || (decoded->format != AV_SAMPLE_FMT_FLTP && decoded->format != AV_SAMPLE_FMT_FLT)) {
+                        ok = false;
+                        break;
+                    }
+#if LIBAVCODEC_VERSION_MAJOR >= 59
+                    const int channels = decoded->ch_layout.nb_channels;
+#else
+                    const int channels = decoded->channels;
+#endif
+                    result->avChannels = channels;
+                    result->avSamples += (long long)decoded->nb_samples * channels;
+                    const bool planar = decoded->format == AV_SAMPLE_FMT_FLTP;
+                    for (int c = 0; c < channels; c++) {
+                        for (int s = 0; s < decoded->nb_samples; s++) {
+                            const float v = planar ? ((const float*)decoded->extended_data[c])[s]
+                                                   : ((const float*)decoded->extended_data[0])[s * channels + c];
+                            result->avMaxAbs = std::max(result->avMaxAbs, (double)std::abs(v));
+                        }
+                    }
+                }
+            };
+            for (int i = 0; ok && i < frameCount; i++) {
+                ok = av_new_packet(packet, (int)frame.size()) >= 0;
+                if (!ok) break;
+                std::copy(frame.begin(), frame.end(), packet->data);
+                ok = avcodec_send_packet(context, packet) >= 0;
+                av_packet_unref(packet);
+                receive();
+            }
+            if (ok) {
+                ok = avcodec_send_packet(context, nullptr) >= 0;
+                receive();
+            }
+            av_frame_free(&decoded);
+            av_packet_free(&packet);
+            avcodec_free_context(&context);
+            if (!ok) return -1;
+        }
+        return 0;
+    } catch (...) {
+        return -1;
+    }
 }
 
 extern "C" int ConvertAudioChannelsForTest(const float* input, size_t inputCount, int src, int dst,

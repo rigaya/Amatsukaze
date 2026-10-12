@@ -18,6 +18,20 @@
 extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* const* argv,
     tchar* output, size_t outputCapacity, size_t* outputLength);
 
+// ネイティブ単体テスト用: PsStreamWriterでMPEG-PSを書き出し、PsStreamVerifierで検証した結果を返す。
+// 各入力は1つのPESパケット (映像はstream_id 0xE0、音声は0xC0) としてペイロードから組み立てる。
+// DTSが負の場合はPTSのみのPESにする。出力の末尾にはMPEG_program_end_code (00 00 01 B9) を付ける。
+struct PsWriterInputForTest {
+    int isVideo;
+    int64_t PTS;
+    int64_t DTS;
+    const uint8_t* payload;
+    size_t payloadLength;
+};
+// 成功時0、PsStreamVerifierの拒否時1、引数不正・その他の失敗時-1、出力バッファ不足時-2 (outputLengthに必要バイト数) を返す。
+extern "C" AMATSUKAZE_API int WritePsStreamForTest(const PsWriterInputForTest* inputs, size_t inputCount,
+    uint8_t* output, size_t outputCapacity, size_t* outputLength);
+
 namespace test {
 
 int PrintCRCTable(AMTContext& ctx, const ConfigWrapper& setting);

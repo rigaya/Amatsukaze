@@ -15,6 +15,7 @@
 #include "StreamUtils.h"
 #include "TsInfo.h"
 #include "TsSplitter.h"
+#include "WaveWriter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -27,6 +28,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -1602,6 +1604,422 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     return ExpectCommandLineStatus(with({ _T("--chapter") }), 1, _T("ロゴなしのチャプター生成"), diagnostic);
 }
 
+// WAVEヘッダ: 44バイトの全フィールドを仕様どおりに検証する
+bool ExpectLe(const std::vector<uint8_t>& bytes, size_t offset, int size, uint64_t expected, const TCHAR* name, tstring& diagnostic) {
+    uint64_t actual = 0;
+    for (int i = size - 1; i >= 0; i--) actual = (actual << 8) | bytes[offset + i];
+    if (actual == expected) return true;
+    diagnostic = strsprintf(_T("%s: 期待値=%llu, 実際=%llu"), name, (unsigned long long)expected, (unsigned long long)actual);
+    return false;
+}
+
+bool ExpectTag(const std::vector<uint8_t>& bytes, size_t offset, const char* tag, const TCHAR* name, tstring& diagnostic) {
+    if (std::equal(tag, tag + 4, bytes.begin() + offset)) return true;
+    diagnostic = strsprintf(_T("%s のタグが一致しません"), name);
+    return false;
+}
+
+int MakeWaveHeader(int channels, int sampleRate, int bits, int64_t samples, std::vector<uint8_t>& header) {
+    header.assign(64, 0);
+    size_t length = 0;
+    const int status = WriteWaveHeaderForTest(channels, sampleRate, bits, samples, header.data(), header.size(), &length);
+    header.resize(status == 0 ? length : 0);
+    return status;
+}
+
+bool ExpectWaveHeader(int channels, int sampleRate, int bits, int64_t samples, const TCHAR* name, tstring& diagnostic) {
+    std::vector<uint8_t> h;
+    if (!Expect(MakeWaveHeader(channels, sampleRate, bits, samples, h) == 0 && h.size() == 44, name, diagnostic)) return false;
+    const uint64_t blockAlign = (uint64_t)channels * (bits / 8);
+    const uint64_t dataSize = blockAlign * (uint64_t)samples;
+    return ExpectTag(h, 0, "RIFF", name, diagnostic) && ExpectLe(h, 4, 4, 36 + dataSize, _T("RIFFサイズ"), diagnostic) &&
+        ExpectTag(h, 8, "WAVE", name, diagnostic) && ExpectTag(h, 12, "fmt ", name, diagnostic) &&
+        ExpectLe(h, 16, 4, 16, _T("fmtチャンクサイズ"), diagnostic) && ExpectLe(h, 20, 2, 1, _T("PCM形式"), diagnostic) &&
+        ExpectLe(h, 22, 2, channels, _T("チャンネル数"), diagnostic) && ExpectLe(h, 24, 4, sampleRate, _T("サンプルレート"), diagnostic) &&
+        ExpectLe(h, 28, 4, (uint64_t)sampleRate * blockAlign, _T("バイトレート"), diagnostic) &&
+        ExpectLe(h, 32, 2, blockAlign, _T("ブロックアライン"), diagnostic) && ExpectLe(h, 34, 2, bits, _T("量子化ビット数"), diagnostic) &&
+        ExpectTag(h, 36, "data", name, diagnostic) && ExpectLe(h, 40, 4, dataSize, _T("dataサイズ"), diagnostic);
+}
+
+bool TestWaveHeader(tstring& diagnostic) {
+    if (!ExpectWaveHeader(2, 48000, 16, 1000, _T("16bitステレオ48kHz"), diagnostic)) return false;
+    if (!ExpectWaveHeader(1, 24000, 8, 7200000, _T("8bitモノラル24kHz"), diagnostic)) return false;
+    if (!ExpectWaveHeader(6, 48000, 24, 12345, _T("24bit 5.1ch"), diagnostic)) return false;
+    if (!ExpectWaveHeader(1, 16000, 16, 0, _T("サンプル0"), diagnostic)) return false;
+    // 全体が2^32-1バイトちょうどまでは書ける。RIFFサイズ欄 (全体-8) は32bitに収まる
+    const int64_t maxSamples = ((int64_t(1) << 32) - 1 - 44);
+    if (!ExpectWaveHeader(1, 8000, 8, maxSamples, _T("上限ちょうど"), diagnostic)) return false;
+    std::vector<uint8_t> h;
+    if (!Expect(MakeWaveHeader(1, 8000, 8, maxSamples + 1, h) == -1, _T("上限を1バイト超えるデータが拒否されませんでした"), diagnostic)) return false;
+    if (!Expect(MakeWaveHeader(2, 48000, 16, int64_t(1) << 40, h) == -1, _T("巨大なサンプル数が拒否されませんでした"), diagnostic)) return false;
+    if (!Expect(MakeWaveHeader(0, 48000, 16, 1, h) == -1, _T("チャンネル数0が拒否されませんでした"), diagnostic)) return false;
+    if (!Expect(MakeWaveHeader(2, 0, 16, 1, h) == -1, _T("サンプルレート0が拒否されませんでした"), diagnostic)) return false;
+    if (!Expect(MakeWaveHeader(2, 48000, 12, 1, h) == -1, _T("8の倍数でないビット数が拒否されませんでした"), diagnostic)) return false;
+    if (!Expect(MakeWaveHeader(2, 48000, 16, -1, h) == -1, _T("負のサンプル数が拒否されませんでした"), diagnostic)) return false;
+    size_t length = 0;
+    uint8_t small[10];
+    return Expect(WriteWaveHeaderForTest(2, 48000, 16, 1, small, sizeof(small), &length) == -2 && length == 44,
+        _T("小さい出力バッファが正しく扱われません"), diagnostic);
+}
+
+// 無音ADTSをFAADとlibavcodecで復号すると、全サンプルが0になる
+bool TestAudioSilentAdtsDecode(tstring& diagnostic) {
+    constexpr int SFI_48000 = 3;
+    constexpr int FRAMES = 20;
+    struct Case { AUDIO_CHANNELS layout; int channels; };
+    const Case cases[] = { { AUDIO_MONO, 1 }, { AUDIO_STEREO, 2 }, { AUDIO_30, 3 }, { AUDIO_31, 4 }, { AUDIO_32, 5 }, { AUDIO_32_LFE, 6 } };
+    for (const auto& item : cases) {
+        SilentAdtsDecodeResultForTest result = {};
+        if (!Expect(DecodeSilentAdtsForTest(item.layout, SFI_48000, FRAMES, &result) == 0,
+            strsprintf(_T("%dchの無音ADTSを復号できません"), item.channels).c_str(), diagnostic)) return false;
+        // 同梱FAADはモノラルをPS対応のため2chへ展開する
+        const int faadChannels = item.layout == AUDIO_MONO ? 2 : item.channels;
+        if (!Expect(result.faadChannels == faadChannels && result.avChannels == item.channels,
+            strsprintf(_T("%dch: 復号チャンネル数が不正 (FAAD=%d, libavcodec=%d)"), item.channels, result.faadChannels, result.avChannels).c_str(), diagnostic)) return false;
+        // 復号器の遅延で先頭フレームが出ない場合があるため、1フレーム分の不足までは許す
+        const long long faadUnit = 1024LL * faadChannels, avUnit = 1024LL * item.channels;
+        if (!Expect(result.faadSamples > 0 && result.faadSamples % faadUnit == 0 && result.faadSamples >= (FRAMES - 1) * faadUnit && result.faadSamples <= FRAMES * faadUnit,
+            strsprintf(_T("%dch: FAADのサンプル数が不正 (%lld)"), item.channels, result.faadSamples).c_str(), diagnostic)) return false;
+        if (!Expect(result.avSamples > 0 && result.avSamples % avUnit == 0 && result.avSamples >= (FRAMES - 1) * avUnit && result.avSamples <= FRAMES * avUnit,
+            strsprintf(_T("%dch: libavcodecのサンプル数が不正 (%lld)"), item.channels, result.avSamples).c_str(), diagnostic)) return false;
+        if (!Expect(result.faadMaxAbs == 0, strsprintf(_T("%dch: FAADの復号結果が無音ではありません (最大絶対値=%d)"), item.channels, result.faadMaxAbs).c_str(), diagnostic)) return false;
+        if (!Expect(result.avMaxAbs == 0.0, strsprintf(_T("%dch: libavcodecの復号結果が無音ではありません (最大絶対値=%g)"), item.channels, result.avMaxAbs).c_str(), diagnostic)) return false;
+    }
+    SilentAdtsDecodeResultForTest result = {};
+    return Expect(DecodeSilentAdtsForTest(AUDIO_2LANG, SFI_48000, FRAMES, &result) == -1, _T("未対応レイアウトが拒否されませんでした"), diagnostic);
+}
+
+// ビット単位でバイト列を組み立てる (本体のBitWriterに依存せず、期待値を独立に作る)
+class BitPacker {
+public:
+    void put(uint32_t value, int bits) {
+        for (int i = bits - 1; i >= 0; i--) {
+            if (bitCount % 8 == 0) bytes.push_back(0);
+            if ((value >> i) & 1) bytes.back() |= (uint8_t)(0x80 >> (bitCount % 8));
+            bitCount++;
+        }
+    }
+    void align() { bitCount = (bitCount + 7) / 8 * 8; }
+    std::vector<uint8_t> bytes;
+    int bitCount = 0;
+};
+
+std::vector<uint8_t> MakeAdtsFrame(int id, int channelConfig, int sfi, const std::vector<uint8_t>& payload) {
+    BitPacker header;
+    header.put(0xFFF, 12);
+    header.put(id, 1);
+    header.put(0, 2);
+    header.put(1, 1); // protection_absent
+    header.put(1, 2); // AAC-LC
+    header.put(sfi, 4);
+    header.put(0, 1);
+    header.put(channelConfig, 3);
+    header.put(0, 4); // original, home, copyright x2
+    header.put((uint32_t)(7 + payload.size()), 13);
+    header.put(0x7FF, 11);
+    header.put(0, 2);
+    std::vector<uint8_t> frame = header.bytes;
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    return frame;
+}
+
+// 無音のSCE (単一チャンネルエレメント): id(3) tag(4) global_gain(8) と、スペクトル情報を持たない14ビット
+void PutSilentSce(BitPacker& packer, int tag) {
+    packer.put(0, 3);
+    packer.put(tag, 4);
+    packer.put(100, 8);
+    packer.put(0, 14);
+}
+
+// channel_configuration=0 で、PCEが2つのSCEを宣言するデュアルモノの無音フレーム
+std::vector<uint8_t> MakeDualMonoSilentAdts(int sfi) {
+    BitPacker pce;
+    pce.put(5, 3);   // ID_PCE
+    pce.put(0, 4);   // element_instance_tag
+    pce.put(1, 2);   // object_type (AAC-LC)
+    pce.put(sfi, 4);
+    pce.put(2, 4);   // 前方のエレメント数
+    pce.put(0, 4);   // 側方
+    pce.put(0, 4);   // 後方
+    pce.put(0, 2);   // LFE
+    pce.put(0, 3);   // assoc data
+    pce.put(0, 4);   // valid cc
+    pce.put(0, 3);   // mono / stereo / matrix mixdown
+    for (int e = 0; e < 2; e++) {
+        pce.put(0, 1); // is_cpe=0 (SCE)
+        pce.put(e, 4);
+    }
+    pce.align();
+    pce.put(0, 8);   // コメントなし
+    PutSilentSce(pce, 0);
+    PutSilentSce(pce, 1);
+    pce.put(7, 3);   // ID_END
+    pce.align();
+    return MakeAdtsFrame(0, 0, sfi, pce.bytes);
+}
+
+// 分離後の1チャンネル分のフレーム: MPEG-2 ID、channel_configuration=1、元のエレメントのタグを保つ
+std::vector<uint8_t> MakeSplitMonoFrame(int sfi, int tag) {
+    BitPacker payload;
+    PutSilentSce(payload, tag);
+    payload.put(7, 3);
+    payload.align();
+    return MakeAdtsFrame(1, 1, sfi, payload.bytes);
+}
+
+bool TestDualMonoSplitter(tstring& diagnostic) {
+    constexpr int SFI_48000 = 3;
+    constexpr int REPEAT = 3;
+    const auto dual = MakeDualMonoSilentAdts(SFI_48000);
+    std::vector<uint8_t> out0(256), out1(256);
+    size_t length0 = 0, length1 = 0;
+    int frames0 = 0, frames1 = 0;
+    if (!Expect(SplitDualMonoAdtsForTest(dual.data(), dual.size(), REPEAT, out0.data(), out0.size(), &length0, &frames0,
+        out1.data(), out1.size(), &length1, &frames1) == 0, _T("デュアルモノの分離に失敗しました"), diagnostic)) return false;
+    if (!Expect(frames0 == REPEAT && frames1 == REPEAT, _T("分離後のフレーム数が入力と一致しません"), diagnostic)) return false;
+    out0.resize(length0);
+    out1.resize(length1);
+    // 主音声 (タグ0) と副音声 (タグ1) が、それぞれ1チャンネルのADTSフレームになる
+    std::vector<uint8_t> expected0, expected1;
+    for (int i = 0; i < REPEAT; i++) {
+        const auto f0 = MakeSplitMonoFrame(SFI_48000, 0);
+        const auto f1 = MakeSplitMonoFrame(SFI_48000, 1);
+        expected0.insert(expected0.end(), f0.begin(), f0.end());
+        expected1.insert(expected1.end(), f1.begin(), f1.end());
+    }
+    if (!Expect(out0 == expected0, _T("主音声のADTSフレームが期待値と一致しません"), diagnostic)) return false;
+    if (!Expect(out1 == expected1, _T("副音声のADTSフレームが期待値と一致しません"), diagnostic)) return false;
+    // 分離前後の長さ: 入力は2エレメント分、出力は各1エレメント分で、全フレームが7バイトのヘッダを持つ
+    if (!Expect(dual.size() > out0.size() / REPEAT, _T("分離後のフレームが入力より大きくなりました"), diagnostic)) return false;
+    // 不正入力: ADTSでないデータは拒否する
+    const uint8_t garbage[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    size_t l0 = 0, l1 = 0;
+    int c0 = 0, c1 = 0;
+    uint8_t buffer[64];
+    if (!Expect(SplitDualMonoAdtsForTest(garbage, sizeof(garbage), 1, buffer, sizeof(buffer), &l0, &c0, buffer, sizeof(buffer), &l1, &c1) == -1,
+        _T("ADTSでないデータが拒否されませんでした"), diagnostic)) return false;
+    // 通常のステレオ (エレメントが2つではない) は分離できない
+    const auto stereo = MakeSilentAdts(AUDIO_STEREO, SFI_48000);
+    if (!Expect(SplitDualMonoAdtsForTest(stereo.data(), stereo.size(), 1, buffer, sizeof(buffer), &l0, &c0, buffer, sizeof(buffer), &l1, &c1) == -1,
+        _T("デュアルモノでないフレームが拒否されませんでした"), diagnostic)) return false;
+    return Expect(SplitDualMonoAdtsForTest(dual.data(), dual.size(), 1, buffer, 3, &l0, &c0, buffer, sizeof(buffer), &l1, &c1) == -2 && l0 > 3,
+        _T("小さい出力バッファが正しく扱われません"), diagnostic);
+}
+
+// MakeVFRBitrateZones の性質テスト: 固定seedの乱数入力で、仕様から独立に求められる不変条件を検証する。
+// ゾーンは先頭から末尾までを隙間なく覆い、各ゾーンのビットレートは、その範囲の8フレーム単位の
+// ビットレート (フレーム間隔から求めた値にCMゾーンで補正をかけたもの) の平均になる。
+struct ZoneScenario {
+    int frames;
+    double fpsNum, fpsDenom;
+    int minRun, maxRun;
+    double bitrateCM, timeFactor, costLimit;
+    int cmZones;
+};
+
+bool CheckZoneScenario(const ZoneScenario& scenario, uint32_t seed, const TCHAR* name, tstring& diagnostic) {
+    std::mt19937 random(seed);
+    const double tick = 1000.0 * scenario.fpsDenom / scenario.fpsNum;
+    std::vector<double> timeCodes;
+    double elapsed = 0;
+    int remain = scenario.frames;
+    while (remain > 0) {
+        const int run = std::min(remain, scenario.minRun + (int)(random() % (uint32_t)(scenario.maxRun - scenario.minRun + 1)));
+        const int ticks = 1 + (int)(random() % 3);
+        for (int i = 0; i < run; i++) {
+            timeCodes.push_back(elapsed);
+            elapsed += tick * ticks;
+        }
+        remain -= run;
+    }
+    timeCodes.push_back(elapsed);
+    // 重ならないCMゾーン (フレーム範囲内)
+    std::vector<VFRBitrateZoneInputForTest> cmzones;
+    int position = 0;
+    for (int i = 0; i < scenario.cmZones && position < scenario.frames - 16; i++) {
+        const int start = position + (int)(random() % 200);
+        const int end = std::min(scenario.frames, start + 16 + (int)(random() % 600));
+        if (start >= end) break;
+        cmzones.push_back({ start, end });
+        position = end;
+    }
+    size_t count = 0;
+    int status = MakeVFRBitrateZonesForTest(timeCodes.data(), timeCodes.size(), cmzones.data(), cmzones.size(),
+        scenario.bitrateCM, (int)scenario.fpsNum, (int)scenario.fpsDenom, scenario.timeFactor, scenario.costLimit, nullptr, 0, &count);
+    if (!Expect(status == VFR_BITRATE_ZONES_FOR_TEST_SUCCESS && count > 0, strsprintf(_T("%s: ゾーンを生成できません"), name).c_str(), diagnostic)) return false;
+    std::vector<VFRBitrateZoneOutputForTest> zones(count);
+    status = MakeVFRBitrateZonesForTest(timeCodes.data(), timeCodes.size(), cmzones.data(), cmzones.size(),
+        scenario.bitrateCM, (int)scenario.fpsNum, (int)scenario.fpsDenom, scenario.timeFactor, scenario.costLimit, zones.data(), zones.size(), &count);
+    if (!Expect(status == VFR_BITRATE_ZONES_FOR_TEST_SUCCESS && count == zones.size(), strsprintf(_T("%s: ゾーンを取得できません"), name).c_str(), diagnostic)) return false;
+
+    // 独立に求める8フレーム単位のビットレート
+    const int unit = 8;
+    const int unitCount = (scenario.frames + unit - 1) / unit;
+    std::vector<double> units(unitCount);
+    for (int i = 0; i < unitCount; i++) {
+        const int start = i * unit;
+        const int end = std::min(scenario.frames, start + unit);
+        const double ratio = (timeCodes[end] - timeCodes[start]) / 1000.0 * scenario.fpsNum / scenario.fpsDenom / (end - start);
+        units[i] = (ratio - 1.0) * scenario.timeFactor + 1.0;
+    }
+    for (const auto& zone : cmzones) {
+        for (int k = (zone.startFrame + unit - 1) / unit; k < zone.endFrame / unit; k++) units[k] *= scenario.bitrateCM;
+    }
+    // 上限判定が末尾ブロックを数えないため、ゾーン数は最大で1000ではなく1001になる (既知。修正はゾーン数の分布を変える)
+    if (!Expect(zones.size() <= 1001, strsprintf(_T("%s: ゾーン数が上限を超えています (%zu)"), name, zones.size()).c_str(), diagnostic)) return false;
+    if (!Expect(zones.front().startFrame == 0 && zones.back().endFrame == scenario.frames,
+        strsprintf(_T("%s: ゾーンが先頭から末尾までを覆っていません"), name).c_str(), diagnostic)) return false;
+    for (size_t i = 0; i < zones.size(); i++) {
+        const auto& zone = zones[i];
+        if (!Expect(zone.startFrame < zone.endFrame && (i == 0 || zone.startFrame == zones[i - 1].endFrame) && zone.startFrame % unit == 0,
+            strsprintf(_T("%s: ゾーン%zuの境界が不正です (%d-%d)"), name, i, zone.startFrame, zone.endFrame).c_str(), diagnostic)) return false;
+        double sum = 0;
+        const int firstUnit = zone.startFrame / unit, lastUnit = (zone.endFrame + unit - 1) / unit;
+        for (int k = firstUnit; k < lastUnit; k++) sum += units[k];
+        if (!ExpectNear(zone.bitrate, sum / (lastUnit - firstUnit), 1e-9,
+            strsprintf(_T("%s: ゾーン%zuのビットレート"), name, i).c_str(), diagnostic)) return false;
+        if (!Expect(zone.bitrate > 0, strsprintf(_T("%s: ゾーン%zuのビットレートが正ではありません"), name, i).c_str(), diagnostic)) return false;
+    }
+    return true;
+}
+
+bool TestBitrateZonesProperties(tstring& diagnostic) {
+    const ZoneScenario scenarios[] = {
+        //  frames   fps                  run       bitrateCM timeFactor costLimit CMゾーン数
+        { 1,      60000, 1001, 1, 1,     1.0, 1.0, 0.15, 0 },
+        { 7,      60000, 1001, 1, 3,     1.0, 1.0, 0.15, 0 },
+        { 8,      30000, 1001, 1, 3,     1.0, 1.0, 0.15, 0 },
+        { 9,      30000, 1001, 1, 4,     0.6, 1.0, 0.15, 0 },
+        { 100,    60000, 1001, 1, 20,    0.6, 0.25, 0.15, 1 },
+        { 1234,   60000, 1001, 5, 60,    0.6, 1.0, 0.15, 3 },
+        { 1234,   24000, 1001, 5, 60,    1.5, 1.0, 0.0, 3 },
+        { 20000,  60000, 1001, 8, 200,   0.6, 1.0, 1.0, 20 },
+        { 20000,  30000, 1001, 1, 3,     0.6, 0.25, 0.15, 20 },
+        // 1時間級の長さで細かく変化し、上限1000を超えるブロック数から併合される
+        { 200000, 60000, 1001, 8, 16,    0.6, 1.0, 0.15, 100 },
+    };
+    uint32_t seed = 20261012;
+    for (size_t i = 0; i < std::size(scenarios); i++, seed += 7) {
+        if (!CheckZoneScenario(scenarios[i], seed, strsprintf(_T("シナリオ%zu"), i).c_str(), diagnostic)) return false;
+    }
+    return true;
+}
+
+// MPEG-PS: PsStreamWriterで書き出し、PsStreamVerifierと独立の構文解析の両方で検証する
+struct PsPesRecord {
+    int64_t pts = -1;
+    int64_t dts = -1;
+    std::vector<uint8_t> payload;
+};
+
+int64_t ReadPesTimestamp(const uint8_t* p) {
+    return ((int64_t)((p[0] >> 1) & 7) << 30) | ((int64_t)p[1] << 22) | ((int64_t)(p[2] >> 1) << 15) |
+        ((int64_t)p[3] << 7) | (int64_t)(p[4] >> 1);
+}
+
+bool ParsePsStream(const std::vector<uint8_t>& ps, std::vector<PsPesRecord> records[2], int& psmCount, tstring& diagnostic) {
+    const CRC32 crc;
+    size_t pos = 0;
+    int64_t previousScr = -1;
+    psmCount = 0;
+    bool first = true;
+    while (pos + 4 <= ps.size()) {
+        if (!Expect(ps[pos] == 0 && ps[pos + 1] == 0 && ps[pos + 2] == 1, _T("開始コードがありません"), diagnostic)) return false;
+        const uint8_t id = ps[pos + 3];
+        if (id == 0xB9) return Expect(pos + 4 == ps.size(), _T("終了コードの後にデータがあります"), diagnostic);
+        if (id == 0xBA) {
+            if (!Expect(pos + 14 <= ps.size(), _T("パックヘッダが途中で終わっています"), diagnostic)) return false;
+            const uint8_t* h = &ps[pos + 4];
+            if (!Expect((h[0] & 0xC4) == 0x44 && (h[2] & 4) && (h[4] & 4) && (h[5] & 1), _T("パックヘッダのマーカービットが不正です"), diagnostic)) return false;
+            const int64_t base = ((int64_t)((h[0] >> 3) & 7) << 30) | ((int64_t)(h[0] & 3) << 28) | ((int64_t)h[1] << 20) |
+                ((int64_t)((h[2] >> 3) & 0x1F) << 15) | ((int64_t)(h[2] & 3) << 13) | ((int64_t)h[3] << 5) | (int64_t)((h[4] >> 3) & 0x1F);
+            const int64_t scr = base * 300 + (((h[4] & 3) << 7) | (h[5] >> 1));
+            if (!Expect(scr >= previousScr, _T("SCRが逆行しています"), diagnostic)) return false;
+            previousScr = scr;
+            pos += 14 + (ps[pos + 13] & 7);
+            continue;
+        }
+        if (!Expect(pos + 6 <= ps.size(), _T("PESヘッダが途中で終わっています"), diagnostic)) return false;
+        const size_t length = ((size_t)ps[pos + 4] << 8) | ps[pos + 5];
+        if (!Expect(pos + 6 + length <= ps.size(), _T("PESパケットが途中で終わっています"), diagnostic)) return false;
+        const uint8_t* body = &ps[pos + 6];
+        if (id == 0xBC) {
+            psmCount++;
+            if (!Expect(first, _T("プログラムストリームマップが先頭にありません"), diagnostic)) return false;
+            // CRC付きセクションの全体のCRCは0になる
+            if (!Expect(crc.calc(&ps[pos], (int)(6 + length), 0xFFFFFFFFu) == 0, _T("プログラムストリームマップのCRCが不正です"), diagnostic)) return false;
+            // 単一のストリームマップ: (stream_type, elementary_stream_id) が映像 (MPEG-2=0x02, 0xE0) と音声 (ADTS AAC=0x0F, 0xC0)
+            // 本体 (2バイトのフラグ、program_stream_info_length、elementary_stream_map_length、2ストリーム分、CRC) = 18バイト
+            if (!Expect(length == 18 && body[6] == 0x02 && body[7] == 0xE0 && body[10] == 0x0F && body[11] == 0xC0,
+                _T("プログラムストリームマップの内容が不正です"), diagnostic)) return false;
+        } else if (id == 0xE0 || id == 0xC0) {
+            const bool video = id == 0xE0;
+            const int flags = body[1] >> 6;
+            const int headerLength = body[2];
+            if (!Expect((body[0] & 0xC0) == 0x80 && length >= 3 + (size_t)headerLength, _T("PESヘッダが不正です"), diagnostic)) return false;
+            auto& list = records[video ? 0 : 1];
+            if (flags != 0) {
+                PsPesRecord record;
+                record.pts = ReadPesTimestamp(body + 3);
+                if (flags == 3) record.dts = ReadPesTimestamp(body + 8);
+                list.push_back(record);
+            } else if (!Expect(!list.empty(), _T("タイムスタンプのない先頭PESがあります"), diagnostic)) {
+                return false;
+            }
+            list.back().payload.insert(list.back().payload.end(), body + 3 + headerLength, body + length);
+        } else if (!Expect(false, _T("想定外のstream_idです"), diagnostic)) {
+            return false;
+        }
+        first = false;
+        pos += 6 + length;
+    }
+    diagnostic = _T("終了コードがありません");
+    return false;
+}
+
+bool TestPsWriterRoundTrip(tstring& diagnostic) {
+    struct Packet { bool video; int64_t pts, dts; size_t size; };
+    // 映像は大きなPES (32000バイトごとに分割される) を含む。音声はPTSのみ
+    const Packet packets[] = {
+        { true, 90000, 86997, 100 }, { false, 90000, -1, 200 }, { true, 93003, 90000, 40000 }, { false, 91920, -1, 300 },
+        { true, 96006, 93003, 70000 }, { false, 93840, -1, 213 }, { true, (int64_t(1) << 33) - 3003, (int64_t(1) << 33) - 6006, 1 },
+    };
+    std::vector<std::vector<uint8_t>> payloads;
+    std::vector<PsWriterInputForTest> inputs;
+    for (size_t i = 0; i < std::size(packets); i++) {
+        std::vector<uint8_t> payload(packets[i].size);
+        for (size_t k = 0; k < payload.size(); k++) payload[k] = (uint8_t)(k * 7 + i * 13 + 1);
+        payloads.push_back(std::move(payload));
+    }
+    for (size_t i = 0; i < std::size(packets); i++) {
+        inputs.push_back({ packets[i].video ? 1 : 0, packets[i].pts, packets[i].dts, payloads[i].data(), payloads[i].size() });
+    }
+    size_t length = 0;
+    int status = WritePsStreamForTest(inputs.data(), inputs.size(), nullptr, 0, &length);
+    if (!Expect(status == -2 && length > 0, _T("PS出力の必要サイズを取得できません"), diagnostic)) return false;
+    std::vector<uint8_t> ps(length);
+    status = WritePsStreamForTest(inputs.data(), inputs.size(), ps.data(), ps.size(), &length);
+    if (!Expect(status == 0 && length == ps.size(), strsprintf(_T("PsStreamVerifierがPS出力を拒否しました (結果=%d)"), status).c_str(), diagnostic)) return false;
+
+    std::vector<PsPesRecord> records[2];
+    int psmCount = 0;
+    if (!ParsePsStream(ps, records, psmCount, diagnostic)) return false;
+    if (!Expect(psmCount == 1, _T("プログラムストリームマップの数が不正です"), diagnostic)) return false;
+    size_t videoIndex = 0, audioIndex = 0;
+    if (!Expect(records[0].size() == 4 && records[1].size() == 3, _T("映像・音声のPESの数が入力と一致しません"), diagnostic)) return false;
+    for (size_t i = 0; i < std::size(packets); i++) {
+        const auto& record = packets[i].video ? records[0][videoIndex++] : records[1][audioIndex++];
+        if (!Expect(record.pts == packets[i].pts && record.dts == packets[i].dts, strsprintf(_T("パケット%zuのPTS/DTSが一致しません"), i).c_str(), diagnostic)) return false;
+        if (!Expect(record.payload == payloads[i], strsprintf(_T("パケット%zuのペイロードが一致しません"), i).c_str(), diagnostic)) return false;
+    }
+    // 壊れたストリームは独立の解析でも拒否される (終了コードの欠落)
+    std::vector<uint8_t> truncated(ps.begin(), ps.end() - 4);
+    std::vector<PsPesRecord> unused[2];
+    int unusedCount = 0;
+    tstring ignored;
+    return Expect(!ParsePsStream(truncated, unused, unusedCount, ignored), _T("終了コードのないPSが受理されました"), diagnostic);
+}
+
 // TS: パケットとPSIセクションの組み立て
 constexpr int TS_PACKET_SIZE = 188;
 constexpr int TS_PAYLOAD_SIZE = 184;
@@ -2155,6 +2573,11 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_silent_adts_bytes"), TestAudioSilentAdtsBytes },
     { _T("audio_channel_conversion"), TestAudioChannelConversion },
     { _T("command_line_arguments"), TestCommandLineArguments },
+    { _T("wave_header"), TestWaveHeader },
+    { _T("audio_silent_adts_decode"), TestAudioSilentAdtsDecode },
+    { _T("dual_mono_splitter"), TestDualMonoSplitter },
+    { _T("bitrate_zones_properties"), TestBitrateZonesProperties },
+    { _T("ps_writer_round_trip"), TestPsWriterRoundTrip },
     { _T("ts_selector"), TestTsSelector },
     { _T("arib_string"), TestAribString },
     { _T("logo_file"), TestLogoFile },

@@ -883,3 +883,81 @@ extern "C" AMATSUKAZE_API int CheckCaptionStreamForTest(
     }
     return 0;
 }
+
+namespace {
+class CollectingPsHandler : public PsStreamWriter::EventHandler {
+public:
+    std::vector<uint8_t> data;
+    void onStreamData(MemoryChunk mc) override { data.insert(data.end(), mc.data, mc.data + mc.length); }
+};
+
+std::vector<uint8_t> MakePesForTest(uint8_t streamId, int64_t pts, int64_t dts, const uint8_t* payload, size_t length) {
+    const bool hasDts = dts >= 0;
+    const int headerData = hasDts ? 10 : 5;
+    std::vector<uint8_t> pes = { 0, 0, 1, streamId, 0, 0, 0x80, (uint8_t)(hasDts ? 0xC0 : 0x80), (uint8_t)headerData };
+    auto timestamp = [&](uint8_t prefix, int64_t t) {
+        pes.push_back((uint8_t)((prefix << 4) | (((t >> 30) & 7) << 1) | 1));
+        pes.push_back((uint8_t)((t >> 22) & 0xFF));
+        pes.push_back((uint8_t)((((t >> 15) & 0x7F) << 1) | 1));
+        pes.push_back((uint8_t)((t >> 7) & 0xFF));
+        pes.push_back((uint8_t)(((t & 0x7F) << 1) | 1));
+    };
+    timestamp(hasDts ? 3 : 2, pts);
+    if (hasDts) timestamp(1, dts);
+    pes.insert(pes.end(), payload, payload + length);
+    const size_t packetLength = pes.size() - 6;
+    if (packetLength <= 0xFFFF) {
+        pes[4] = (uint8_t)(packetLength >> 8);
+        pes[5] = (uint8_t)packetLength;
+    } // 映像の大きなPESはPES_packet_length=0 (長さ不定)
+    return pes;
+}
+}
+
+extern "C" int WritePsStreamForTest(const PsWriterInputForTest* inputs, size_t inputCount,
+    uint8_t* output, size_t outputCapacity, size_t* outputLength) {
+    if ((inputCount > 0 && inputs == nullptr) || outputLength == nullptr) return -1;
+    *outputLength = 0;
+    try {
+        AMTContext ctx;
+        PsStreamWriter writer(ctx);
+        CollectingPsHandler handler;
+        writer.setHandler(&handler);
+        writer.outHeader(0x02, 0x0F); // MPEG-2 video / AAC (ADTS)
+        int64_t clock = 0;
+        for (size_t i = 0; i < inputCount; i++) {
+            const auto& input = inputs[i];
+            auto pes = MakePesForTest(input.isVideo ? 0xE0 : 0xC0, input.PTS, input.DTS, input.payload, input.payloadLength);
+            PESPacket packet(MemoryChunk(pes.data(), pes.size()));
+            if (!packet.parse()) return -1;
+            if (input.isVideo) {
+                std::vector<VideoFrameInfo> frames(1);
+                frames[0] = VideoFrameInfo();
+                frames[0].PTS = input.PTS;
+                frames[0].DTS = input.DTS >= 0 ? input.DTS : input.PTS;
+                writer.outVideoPesPacket(clock, frames, packet);
+            } else {
+                std::vector<AudioFrameData> frames(1);
+                frames[0] = AudioFrameData();
+                frames[0].PTS = input.PTS;
+                frames[0].format = { AUDIO_STEREO, 48000 };
+                writer.outAudioPesPacket(0, clock, frames, packet);
+            }
+        }
+        const uint8_t endCode[] = { 0, 0, 1, 0xB9 };
+        handler.data.insert(handler.data.end(), endCode, endCode + sizeof(endCode));
+        int verified = 0;
+        try {
+            PsStreamVerifier verifier(ctx);
+            verifier.verify(MemoryChunk(handler.data.data(), handler.data.size()));
+        } catch (const Exception&) {
+            verified = 1;
+        }
+        *outputLength = handler.data.size();
+        if (output == nullptr || outputCapacity < handler.data.size()) return -2;
+        std::copy(handler.data.begin(), handler.data.end(), output);
+        return verified;
+    } catch (...) {
+        return -1;
+    }
+}

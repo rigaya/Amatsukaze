@@ -50,13 +50,23 @@ dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --filter "Category!
 
 `bitrate_zones` の入力はフレーム数+1個の終端時刻を含める。8フレーム単位で計算した期待値は `0-40: 2.5`、`40-64: 1.35`、`64-128: 1.1375`、`128-150: 2.0` である。第2・第3ゾーンの値はそれぞれ `(1.5+1.5+1.05)/3` と `(0.6+0.6+1+1+1.5+2+1.2+1.2)/8` から独立に計算できる。19単位のコスト上限は `19*0.15=2.85` で、5ゾーン時の累積値 `2.366666...` に最小併合コスト `0.8` を加えた4ゾーン時は `3.166666...` になる。実装は追加前の累積値で継続可否を判定するため、次の反復で停止し、4→3の併合コスト `0.927272...` は適用されない。旧テストの `40-128: 約1.195` はこの未実施の併合を前提とするため移植しない。
 
+## 素材依存だった旧ケースを置き換えた公開テスト
+
+次のケースは、外部の素材を使う旧ケース (表示するだけ、または例外が出ないことしか見ていなかったもの) の検証したかった観点を、テスト内で生成した入力と明示比較に置き換えたものである。旧ケースの移行対応表の行と監査 manifest への反映は、非公開側の移管状況とあわせて別途行う。
+
+- `wave_header` (旧 `WaveWriter`): `writeWaveHeader` が書く44バイトの全フィールドを、仕様から求めた期待値と比較する。16bitステレオ48kHz、8bitモノラル、24bit 5.1ch、サンプル数0、全体が2^32-1バイトちょうどの上限と1バイト超過、不正なチャンネル数・サンプルレート・ビット数・負のサンプル数の拒否、小さい出力バッファを確認する。テスト専用C ABI `WriteWaveHeaderForTest` は、無名の一時ファイル (`tmpfile`、閉じると自動削除) に書いたヘッダを読み戻して返す。このテストの追加で、旧実装の不具合 (ブロックアラインが `channels * bitswidth` でバイト換算されていない、量子化ビット数が常に16、サイズ欄の符号付き型と上限2^32-1のコメント不一致) を修正した。
+- `audio_silent_adts_decode` (旧 `AudioTrackFaadSilenceTest.cpp`、`AACDecodeTest` の復号エラー検出): `GenerateSilentAdtsFrame` で作る6種類 (1〜5.1ch) の無音ADTSを、同梱のFAAD (16bit整数) とlibavcodecのAAC復号器 (浮動小数) の両方で復号し、全サンプルが0であること、チャンネル数 (FAADはモノラルをPS対応で2chへ展開する)、サンプル数が1024の整数倍で全フレーム数から1フレーム分以内であることを確認する。復号はすべて本体ライブラリ内の `DecodeSilentAdtsForTest` で行うので、テスト実行ファイルにlibfaadやlibavcodecを直接リンクしない (meson・vcxprojの依存の追加なし)。
+- `dual_mono_splitter` (旧 `SplitDualMonoAAC`): PCEで2つのSCEを宣言する `channel_configuration=0` の無音ADTS (デュアルモノ) をテスト内で組み立て、`DualMonoSplitter` に3回入力し、主音声 (タグ0) と副音声 (タグ1) それぞれが、独立に組み立てた期待値 (MPEG-2のID、`channel_configuration=1`、元のエレメントのタグを保つ) とバイト単位で一致すること、ADTSでないデータとデュアルモノでないステレオフレームの拒否、小さい出力バッファを確認する。テスト専用C ABIは `SplitDualMonoAdtsForTest`。
+- `bitrate_zones_properties` (旧 `VfrZonesBug`): 元の再現データ (`zone_param.dat`) は手元にないので、固定seedの乱数で作ったタイムコードとCMゾーン (1〜200000フレーム、24/30/60fps、変化の細かさ違い) で `MakeVFRBitrateZones` の不変条件を確認する。ゾーンが先頭0から末尾まで隙間なく覆うこと、境界が8フレームの倍数であること、ゾーン数が上限内であること、各ゾーンのビットレートが、フレーム間隔・時間係数・CMゾーンの補正から独立に求めた8フレーム単位のビットレートの平均と一致すること。既存の `bitrate_zones` は固定値の期待値、こちらは性質を見る。
+- `ps_writer_round_trip` (旧 `MPEG2PSVerifier`): 映像 (32000バイトを超えて分割されるPESと、33bit境界直前のPTSを含む) と音声のPESを `PsStreamWriter` に書かせ、`PsStreamVerifier` が受理することと、テスト内の独立したPS解析 (パックヘッダのマーカーとSCRの単調性、プログラムストリームマップのCRCと内容、PESのPTS/DTS、分割されたペイロードの結合、終了コード) の結果が入力と一致することを確認する。テスト専用C ABIは `WritePsStreamForTest`。
+
 ## 既知の問題
 
 - H.264パーサはSEIのbuffering_periodで得たDTSを次のアクセスユニットへ引き継いでいないため、PESにPTS/DTSがないフレームはSEIのpic_timingから時刻を補完できず-1のままになる。PESのPTSとSEIから求めた値の照合も実質的に行われない。修正すると照合が有効になり、実放送で警告と`AMT_ERR_H264_PTS_MISMATCH`が増える可能性があるため、実TSでの確認なしには修正しない。放送のH.264ではPESに常にPTSが付くため実害は小さい。
 
 テストは TCHAR を原則とし、出力は `_ftprintf`、書式化は `strsprintf` を使う。`common` の静的ライブラリをリンクし、本体DLLでは非公開の `StringFormat`（`THROW` が使用）のため `Amatsukaze/StringUtils.cpp` もテストに組み込む。
 
-Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones`、`vfr_input_detection`、`audio_track_*_planner`、`audio_channel_conversion`、`command_line_arguments` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
+Windows では本体とテストを同じ Visual C++ ツールセットおよび `/MT` ランタイムでビルドする。`bitrate_zones`、`vfr_input_detection`、`audio_track_*_planner`、`audio_channel_conversion`、`command_line_arguments`、`wave_header`、`dual_mono_splitter`、`ps_writer_round_trip` はテスト専用の C ABI ラッパーを通し、DLL境界で `std::vector` の所有権や実装を受け渡ししない。
 
 `caption_pgs_canvas_size` は、出力映像のフレームサイズとSARからPGSのキャンバス (表示サイズ) を求める `CaptionPgsCanvasSize` を、テスト専用の C ABI `CaptionPgsCanvasSizeForTest` を通して検証する。HD (1440x1080 SAR 4:3 → 1920x1080)、SD 16:9 (720x480 SAR 32:27 → 853x480)、SARが1未満のSD 4:3 (高さを伸ばして720x540)、SAR不明、`--sar` の優先と片方だけの指定の無視、長辺4096を超える場合の比例縮小 (横長・縦長・8K) と、不正な引数を確認する。
 
@@ -75,3 +85,7 @@ AVX2は実行時にCPUとOSの対応を判定する。RLEは逐次参照との�
 `AribCaptionSmokeTests`は本体ライブラリの`CaptionPgsCheckRenderer`を呼び、静的リンクしたlibaribcaptionの`Context`と`Renderer`を初期化する。1920×1080キャンバスに透明背景で「日」を描画し、非透明画素があることを確認する。LinuxではfontconfigとFreeTypeを明示し、`Noto Sans CJK JP`の実ファイルと日本語グリフを解決する。指定フォントが欠落した場合の代替フォントへの暗黙の置換は失敗として扱う。Windowsではlibaribcaptionの標準バックエンドと既定の日本語フォントを使う。
 
 Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson test -C build-native AribCaptionSmokeTests --print-errorlogs`で実行する。Windowsでは`build_windows.cmd`が専用プロジェクトをビルドし、本体DLLと同じディレクトリで実行する。Windowsの本体DLLは`/execution-charset:shift_jis`でビルドされ診断文字列もShift-JISになるため、照合用リテラルが一致するようテストも同じ実行文字セットでビルドする。テスト自身はlibaribcaptionを直接リンクせず、本体ライブラリの描画経路を検証する。不正キャンバス寸法、空のフォント指定、Linuxでの欠落フォント、診断バッファの終端とnullバッファも確認する。
+
+## 既知の問題 (追記)
+
+- `MakeVFRBitrateZones` のゾーン数の上限判定は末尾のブロックを数えないため、細かく変化する入力では上限1000ではなく最大1001ゾーンになる。修正すると、通常の入力でも目標ゾーン数付近で併合が1回ずれ、ゾーン数が変わるため、実エンコードでの確認なしには修正しない。`bitrate_zones_properties` は現状の1001を上限として固定している。

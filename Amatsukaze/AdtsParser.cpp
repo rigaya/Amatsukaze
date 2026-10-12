@@ -519,3 +519,50 @@ bool DualMonoSplitter::resetDecoder(MemoryChunk data) {
     }
     return true;
 }
+
+namespace {
+class RecordingDualMonoSplitter : public DualMonoSplitter {
+public:
+    RecordingDualMonoSplitter(AMTContext& ctx) : DualMonoSplitter(ctx) {}
+    std::vector<uint8_t> data[2];
+    int frames[2] = { 0, 0 };
+    void OnOutFrame(int index, MemoryChunk mc) override {
+        data[index].insert(data[index].end(), mc.data, mc.data + mc.length);
+        frames[index]++;
+    }
+};
+}
+
+extern "C" int SplitDualMonoAdtsForTest(const uint8_t* frame, size_t frameLength, int repeat,
+    uint8_t* output0, size_t capacity0, size_t* length0, int* frameCount0,
+    uint8_t* output1, size_t capacity1, size_t* length1, int* frameCount1) {
+    constexpr int RESULT_INVALID = -1;
+    constexpr int RESULT_BUFFER_TOO_SMALL = -2;
+    if (frame == nullptr || frameLength == 0 || repeat <= 0 || length0 == nullptr || length1 == nullptr ||
+        frameCount0 == nullptr || frameCount1 == nullptr) {
+        return RESULT_INVALID;
+    }
+    *length0 = *length1 = 0;
+    *frameCount0 = *frameCount1 = 0;
+    try {
+        AMTContext ctx;
+        RecordingDualMonoSplitter splitter(ctx);
+        std::vector<uint8_t> input(frame, frame + frameLength);
+        for (int i = 0; i < repeat; i++) {
+            splitter.inputPacket(MemoryChunk(input.data(), input.size()));
+        }
+        *length0 = splitter.data[0].size();
+        *length1 = splitter.data[1].size();
+        *frameCount0 = splitter.frames[0];
+        *frameCount1 = splitter.frames[1];
+        if ((*length0 > 0 && (output0 == nullptr || capacity0 < *length0)) ||
+            (*length1 > 0 && (output1 == nullptr || capacity1 < *length1))) {
+            return RESULT_BUFFER_TOO_SMALL;
+        }
+        std::copy(splitter.data[0].begin(), splitter.data[0].end(), output0);
+        std::copy(splitter.data[1].begin(), splitter.data[1].end(), output1);
+        return 0;
+    } catch (...) {
+        return RESULT_INVALID;
+    }
+}

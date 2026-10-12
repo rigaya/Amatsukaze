@@ -78,6 +78,14 @@ enum AdtsParserForTestResult {
 extern "C" AMATSUKAZE_API int ParseAdtsPacketsForTest(const AudioPesForTest* packets, size_t packetCount,
     int* packetResults, AudioFrameInfoForTest* output, size_t outputCapacity, size_t* outputCount);
 
+// ネイティブ単体テストからデュアルモノ分離を呼び出すためのC ABI。
+// デュアルモノのADTSフレーム1つをrepeat回続けて入力し、主音声 (出力0) と副音声 (出力1) に出た
+// ADTSフレーム列をそれぞれ連結して返す。frameCount0/1にはそれぞれに出たフレーム数を返す。
+// 成功時0、引数不正または分離失敗時-1、出力バッファ不足時-2 (length0/length1に必要バイト数) を返す。
+extern "C" AMATSUKAZE_API int SplitDualMonoAdtsForTest(const uint8_t* frame, size_t frameLength, int repeat,
+    uint8_t* output0, size_t capacity0, size_t* length0, int* frameCount0,
+    uint8_t* output1, size_t capacity1, size_t* length1, int* frameCount1);
+
 struct NeAACDecFrameInfo;
 typedef void *NeAACDecHandle;
 
