@@ -635,6 +635,7 @@ public:
 };
 
 enum DECODER_TYPE {
+    DECODER_INVALID = -1, // 無効値 (不明な指定)
     DECODER_DEFAULT = 0,
     DECODER_QSV,
     DECODER_CUVID,

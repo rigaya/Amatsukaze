@@ -147,6 +147,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     case ENCODER_VCEENC: return _T("VCEEnc");
     case ENCODER_SVTAV1: return _T("SVT-AV1");
     case ENCODER_X262: return _T("x262");
+    case ENCODER_INVALID: break;
     }
     return _T("Unknown");
 }
@@ -238,6 +239,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
             THROW(ArgumentException, "AV1のインターレース出力には対応していません");
         }
         break;
+    case ENCODER_INVALID: break;
     }
 
     // タイムベースを明示指定する
@@ -283,6 +285,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     case ENCODER_SVTAV1:
         sb.append(_T(" -i stdin"));
         break;
+    case ENCODER_INVALID: break;
     }
 
     if (timecodepath.size() > 0
@@ -348,6 +351,7 @@ double BitrateSetting::getTargetBitrate(VIDEO_STREAM_FORMAT format, double srcBi
     case AUDIO_ENCODER_QAAC: return _T("qaac");
     case AUDIO_ENCODER_FDKAAC: return _T("fdkaac");
     case AUDIO_ENCODER_OPUSENC: return _T("opus");
+    case AUDIO_ENCODER_INVALID: break;
     }
     return _T("unknown");
 }
@@ -858,7 +862,7 @@ ConfigWrapper::ConfigWrapper(
         && (isEncodeAudio() || conf.format == FORMAT_TSREPLACE)) {
         ctx.info(_T("音声フォーマット変更設定は音声エンコードまたはtsreplace出力では無視し、splitとして扱います。"));
     }
-    if (this->conf.encoderFilter != (ENUM_ENCODER)-1
+    if (this->conf.encoderFilter != ENCODER_INVALID
         && this->conf.encoderFilter != ENCODER_QSVENC
         && this->conf.encoderFilter != ENCODER_NVENC
         && this->conf.encoderFilter != ENCODER_VCEENC) {

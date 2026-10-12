@@ -200,7 +200,7 @@ static ENUM_ENCODER encoderFtomString(const tstring& str) {
     } else if (str == _T("x262")) {
         return ENCODER_X262;
     }
-    return (ENUM_ENCODER)-1;
+    return ENCODER_INVALID;
 }
 
 static ENUM_AUDIO_ENCODER audioEncoderFtomString(const tstring& str) {
@@ -213,7 +213,7 @@ static ENUM_AUDIO_ENCODER audioEncoderFtomString(const tstring& str) {
     } else if (str == _T("opusenc")) {
         return AUDIO_ENCODER_OPUSENC;
     }
-    return (ENUM_AUDIO_ENCODER)-1;
+    return AUDIO_ENCODER_INVALID;
 }
 
 static DECODER_TYPE decoderFromString(const tstring& str) {
@@ -226,7 +226,7 @@ static DECODER_TYPE decoderFromString(const tstring& str) {
     } else if (str == _T("vaapi") || str == _T("VAAPI")) {
         return DECODER_VAAPI;
     }
-    return (DECODER_TYPE)-1;
+    return DECODER_INVALID;
 }
 
 // 整数オプションを厳密に解析する。値が空、末尾にゴミがある、intの範囲外の場合は引数エラーにする。
@@ -264,7 +264,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     Config conf = Config();
     conf.workDir = _T("./");
     conf.encoderOptions = _T("");
-    conf.encoderFilter = (ENUM_ENCODER)-1;
+    conf.encoderFilter = ENCODER_INVALID;
     conf.encoderFilterPath = _T("");
     conf.encoderFilterOptions = _T("");
     conf.encoderFilterDeinterlace = false;
@@ -361,7 +361,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("-et") || key == _T("--encoder-type")) {
             tstring arg = getParam(argc, argv, i++);
             conf.encoder = encoderFtomString(arg);
-            if (conf.encoder == (ENUM_ENCODER)-1) {
+            if (conf.encoder == ENCODER_INVALID) {
                 THROWF(ArgumentException, "--encoder-typeの指定が間違っています: %" PRITSTR "", arg);
             }
         } else if (key == _T("-e") || key == _T("--encoder")) {
@@ -371,7 +371,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("-eft") || key == _T("--encoder-filter-type")) {
             tstring arg = getParam(argc, argv, i++);
             conf.encoderFilter = encoderFtomString(arg);
-            if (conf.encoderFilter == (ENUM_ENCODER)-1) {
+            if (conf.encoderFilter == ENCODER_INVALID) {
                 THROWF(ArgumentException, "--encoder-filter-typeの指定が間違っています: %" PRITSTR "", arg);
             }
         } else if (key == _T("-ef") || key == _T("--encoder-filter")) {
@@ -402,7 +402,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("-aet") || key == _T("--audio-encoder-type")) {
             tstring arg = getParam(argc, argv, i++);
             conf.audioEncoder = audioEncoderFtomString(arg);
-            if (conf.audioEncoder == (ENUM_AUDIO_ENCODER)-1) {
+            if (conf.audioEncoder == AUDIO_ENCODER_INVALID) {
                 THROWF(ArgumentException, "--audio-encoder-typeの指定が間違っています: %" PRITSTR "", arg);
             }
         } else if (key == _T("--audio-format-change")) {
@@ -512,19 +512,19 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("--mpeg2decoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.mpeg2 = decoderFromString(arg);
-            if (conf.decoderSetting.mpeg2 == (DECODER_TYPE)-1) {
+            if (conf.decoderSetting.mpeg2 == DECODER_INVALID) {
                 THROWF(ArgumentException, "--mpeg2decoderの指定が間違っています: %" PRITSTR "", arg);
             }
         } else if (key == _T("--h264decoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.h264 = decoderFromString(arg);
-            if (conf.decoderSetting.h264 == (DECODER_TYPE)-1) {
+            if (conf.decoderSetting.h264 == DECODER_INVALID) {
                 THROWF(ArgumentException, "--h264decoderの指定が間違っています: %" PRITSTR "", arg);
             }
         } else if (key == _T("--hevcdecoder")) {
             tstring arg = getParam(argc, argv, i++);
             conf.decoderSetting.hevc = decoderFromString(arg);
-            if (conf.decoderSetting.hevc == (DECODER_TYPE)-1) {
+            if (conf.decoderSetting.hevc == DECODER_INVALID) {
                 THROWF(ArgumentException, "--hevcdecoderの指定が間違っています: %" PRITSTR "", arg);
             }
         } else if (key == _T("-eb") || key == _T("--encode-buffer")) {

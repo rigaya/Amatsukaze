@@ -19,7 +19,8 @@
 struct EncoderOptionInfo;
 
 enum ENUM_ENCODER {
-    ENCODER_X264,
+    ENCODER_INVALID = -1, // 無効値 (未指定・不明な指定)
+    ENCODER_X264 = 0,
     ENCODER_X265,
     ENCODER_QSVENC,
     ENCODER_NVENC,
@@ -115,7 +116,8 @@ tstring makeEncoderFilterArgs(
     ENUM_ENCODER outputEncoder);
 
 enum ENUM_AUDIO_ENCODER {
-    AUDIO_ENCODER_NONE,
+    AUDIO_ENCODER_INVALID = -1, // 無効値 (不明な指定)
+    AUDIO_ENCODER_NONE = 0,
     AUDIO_ENCODER_NEROAAC,
     AUDIO_ENCODER_QAAC,
     AUDIO_ENCODER_FDKAAC,
@@ -228,7 +230,7 @@ struct Config {
     ENUM_ENCODER encoder;
     tstring encoderPath;
     tstring encoderOptions;
-    ENUM_ENCODER encoderFilter; // エンコーダフィルタ。無効時は (ENUM_ENCODER)-1
+    ENUM_ENCODER encoderFilter; // エンコーダフィルタ。無効時は ENCODER_INVALID
     tstring encoderFilterPath;
     tstring encoderFilterOptions;
     // エンコーダフィルタでインタレース解除を行うか

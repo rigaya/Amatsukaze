@@ -243,6 +243,8 @@ public:
     }
 
     void add(MemoryChunk mc) {
+        // 長さ0のときは未確保 (data_ == NULL) の可能性があり、memcpyにNULLを渡せないので何もしない
+        if (mc.length == 0) return;
         ensure(mc.length);
         memcpy(data_ + tail_, mc.data, mc.length);
         tail_ += mc.length;

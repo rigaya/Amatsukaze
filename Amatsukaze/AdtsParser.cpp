@@ -352,7 +352,8 @@ int64_t AdtsParser::channelCanonical(int numElem, const uint8_t* elems) {
         numElem = 20;
     }
     for (int i = 0; i < numElem; i++) {
-        canonical = (canonical << 3) | elems[i];
+        // 負値の左シフトは未定義動作なので、符号なしでシフトする (結果のビット列は従来と同じ)
+        canonical = (int64_t)(((uint64_t)canonical << 3) | elems[i]);
     }
     return canonical;
 }
