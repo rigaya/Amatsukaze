@@ -4,7 +4,7 @@
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool libva-dev libdrm-dev
+sudo apt install -y build-essential git wget curl nasm cmake meson ninja-build pkg-config autoconf automake libtool
 ```
 次に .NET 10.0 SDKをインストールします。下記はUbuntu 24.04の例を示します。その他の環境については、[リンク先](https://learn.microsoft.com/ja-jp/dotnet/core/install/linux)を参照してください。
 
@@ -36,23 +36,6 @@ dotnet workload install wasm-tools --skip-manifest-update
 git clone https://github.com/rigaya/Amatsukaze.git --recursive
 cd Amatsukaze
 ./scripts/build.sh $HOME/Amatsukaze
-```
-
-## VAAPIによるハードウェアデコード
-
-LinuxではHWデコードに`VAAPI`を選択できます。CLIでは`--mpeg2decoder vaapi`、
-`--h264decoder vaapi`、`--hevcdecoder vaapi`を指定します。
-
-地デジ/BS用・BS4K用のFFmpegは、どちらもVAAPIとDRMを有効にしてビルドします。
-以前のビルドディレクトリにあるVAAPI非対応のFFmpegは自動的に再ビルドされます。
-Dockerの事前ビルドFFmpegを使う場合は、`docker/base`からベースイメージを再生成してください。
-
-実行にはGPUに合ったVAAPIドライバーと`/dev/dri/renderD*`へのアクセス権が必要です。
-Dockerで使う場合は`/dev/dri`をコンテナへ渡してください。
-使用するデバイスを固定する場合は、サーバー起動前に`LIBVA_DRM_DEVICE`を設定します。
-
-```bash
-export LIBVA_DRM_DEVICE=/dev/dri/renderD128
 ```
 
 ## 依存モジュールのビルド

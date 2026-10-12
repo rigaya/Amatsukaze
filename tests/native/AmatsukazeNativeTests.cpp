@@ -1570,9 +1570,10 @@ bool TestCommandLineArguments(tstring& diagnostic) {
         if (!ExpectCommandLineStatus(withNumber({ _T("-aet"), name }), 0, strsprintf(_T("-aet %s"), name).c_str(), diagnostic)) return false;
     }
     for (const TCHAR* option : { _T("--mpeg2decoder"), _T("--h264decoder"), _T("--hevcdecoder") }) {
-        for (const TCHAR* name : { _T("default"), _T("QSV"), _T("CUVID"), _T("vaapi") }) {
+        for (const TCHAR* name : { _T("default"), _T("QSV"), _T("CUVID") }) {
             if (!ExpectCommandLineStatus(withNumber({ option, name }), 0, strsprintf(_T("%s %s"), option, name).c_str(), diagnostic)) return false;
         }
+        if (!ExpectCommandLineStatus(withNumber({ option, _T("vaapi") }), 1, strsprintf(_T("%s vaapi"), option).c_str(), diagnostic)) return false;
     }
 
     // 値の範囲と書式

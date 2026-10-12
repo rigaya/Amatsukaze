@@ -92,17 +92,6 @@ docker run --rm -v "$test_dir:/test" "$builder_image" \
 
 cat > "$test_dir/container_test.sh" <<'TEST'
 set -euo pipefail
-# 配布版のランタイム要件だけを導入し、GPUやドライバーなしでも起動を検査する。
-case "${IMAGE}" in
-    ubuntu:*|debian:*)
-        apt-get update
-        apt-get install -y --no-install-recommends libva2 libva-drm2 libdrm2
-        ;;
-    fedora:*) dnf install -y libva libdrm ;;
-    archlinux:*) pacman -Sy --noconfirm libva libdrm ;;
-    *) echo "ランタイム依存の導入方法が未定義です: ${IMAGE}" >&2; exit 1 ;;
-esac
-
 export OPENSSL_MODULES=/source/exe_files/lib/ossl-modules
 export DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU=76.1
 cd /source

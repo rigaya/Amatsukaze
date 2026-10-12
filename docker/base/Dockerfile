@@ -35,8 +35,6 @@ RUN apt update \
       yasm \
       ninja-build \
       pkg-config \
-      libva-dev \
-      libdrm-dev \
       gettext \
       gperf \
       fontconfig \

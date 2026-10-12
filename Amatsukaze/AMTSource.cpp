@@ -73,11 +73,6 @@ void AMTSource::MakeCodecContext(IScriptEnvironment* env) {
     }
     codecCtx()->pkt_timebase = videoStream->time_base;
     codecCtx()->thread_count = GetFFmpegThreads((decodeThreads) ? decodeThreads : GetProcessorCount(), videoStream->codecpar->height);
-    if (GetDecoderType(vcodecId, decoderSetting) == DECODER_VAAPI) {
-        // VAAPIでも通常のデコーダーを使い、GPUデバイスと出力形式を指定する。
-        codecCtx()->flags &= ~AV_CODEC_FLAG_GRAY;
-        InitVAAPI(codecCtx(), pCodec);
-    }
 
     // export_mvs for codecview
     //AVDictionary *opts = NULL;
@@ -197,8 +192,7 @@ void AMTSource::MakeVideoInfo(const VideoFormat& vfmt, const AudioFormat& afmt) 
 void AMTSource::UpdateVideoInfo(IScriptEnvironment* env) {
     // ビット深度は取得してないのでffmpegから取得する
     const auto streamPixFmt = (AVPixelFormat)videoStream->codecpar->format;
-    const auto codecPixFmt = codecCtx()->pix_fmt == AV_PIX_FMT_VAAPI
-        ? codecCtx()->sw_pix_fmt : codecCtx()->pix_fmt;
+    const auto codecPixFmt = codecCtx()->pix_fmt;
     const int streamBitDepth = (streamPixFmt == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(streamPixFmt)->comp[0].depth;
     const int codecBitDepth = (codecPixFmt == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(codecPixFmt)->comp[0].depth;
     if (streamBitDepth > 8 && codecBitDepth > 8 && streamBitDepth < codecBitDepth) {
@@ -241,10 +235,6 @@ PVideoFrame AMTSource::MakeFrame(AVFrame* top, AVFrame* bottom, IScriptEnvironme
     const int srcBitDepth = (srcFormat == AV_PIX_FMT_P010LE) ? 16 : av_pix_fmt_desc_get(srcFormat)->comp[0].depth;
 
     if (srcBitDepth > 8) {
-        // VAAPIのP010出力は最初のデコード後に決まるため、実フレームから変換を選ぶ。
-        if (srcBitDepth == 16 && !convertPix.convert1) {
-            convertPix = ConvertPixFuncs(AVSFormatBitdepth(vi.pixel_type), srcBitDepth);
-        }
         MergeField<uint16_t>(ret, top, bottom, AVSFormatBitdepth(vi.pixel_type), srcBitDepth, env);
     } else {
         MergeField<uint8_t>(ret, top, bottom, AVSFormatBitdepth(vi.pixel_type), srcBitDepth, env);
@@ -573,14 +563,10 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
                 keyFramePTS = packet.pts;
             }
             if (avcodec_send_packet(codecCtx(), &packet) != 0) {
-                if (GetDecoderType(videoStream->codecpar->codec_id, decoderSetting) == DECODER_VAAPI) {
-                    av_packet_unref(&packet);
-                    env->ThrowError("VAAPIデコードに失敗しました。GPUが映像形式に対応しているか確認してください");
-                }
                 ctx.incrementCounter(AMT_ERR_DECODE_PACKET_FAILED);
                 ctx.warn(_T("avcodec_send_packet failed"));
             }
-            while (ReceiveFrame(codecCtx(), frame)) {
+            while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
                 // 最初はキーフレームまでスキップ
                 if (isFrameReady()) {
 #if ENABLE_FFMPEG_FILTER
@@ -594,18 +580,6 @@ void AMTSource::DecodeLoop(int goal, IScriptEnvironment* env) {
         av_packet_unref(&packet);
         if (lastDecodeFrame >= goal) {
             return;
-        }
-    }
-    // 遅延出力される末尾のフレームも回収する。
-    if (avcodec_send_packet(codecCtx(), nullptr) >= 0) {
-        while (ReceiveFrame(codecCtx(), frame)) {
-            if (isFrameReady()) {
-#if ENABLE_FFMPEG_FILTER
-                OnFrameDecoded(frame, env);
-#else
-                OnFrameOutput(frame, env);
-#endif
-            }
         }
     }
 #if ENABLE_FFMPEG_FILTER

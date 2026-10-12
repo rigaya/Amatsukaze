@@ -63,8 +63,7 @@ namespace Amatsukaze.Server
     {
         Default = 0,
         QSV,
-        CUVID,
-        VAAPI
+        CUVID
     }
 
     public enum FormatType
@@ -664,17 +663,6 @@ namespace Amatsukaze.Server
                 ? " --cm-cut-offset " + profile.CmCutOffsetFrames : "";
         }
 
-        public static string GetDecoderArgument(this DecoderType decoder, bool loadV2)
-        {
-            switch (decoder)
-            {
-                case DecoderType.QSV: return loadV2 ? "QSV" : "default";
-                case DecoderType.CUVID: return "CUVID";
-                case DecoderType.VAAPI: return "vaapi";
-                default: return "default";
-            }
-        }
-
         public static string GetAudioFormatChangeModeArgument(this ProfileSetting profile)
         {
             switch (NormalizeAudioFormatChangeMode(profile?.AudioFormatChangeMode ?? (int)AudioFormatChangeMode.Merge))
@@ -713,9 +701,9 @@ namespace Amatsukaze.Server
         }
 
         public static string[] EncoderList { get; } = new string[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVT-AV1", "x262" };
-        public static string[] Mpeg2DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID", "VAAPI (Linux)" };
-        public static string[] H264DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID", "VAAPI (Linux)" };
-        public static string[] HEVCDecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID", "VAAPI (Linux)" };
+        public static string[] Mpeg2DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
+        public static string[] H264DecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
+        public static string[] HEVCDecoderList { get; } = new string[] { "デフォルト", "QSV", "CUVID" };
         public static string[] FormatList { get; } = new string[] { "MP4", "MKV", "M2TS", "TS", "TS (replace)" };
         public static int[] TsreplaceOutputMasks { get; } = new int[] { 1, 2, 4, 6, 8 };
         public static int[] Mpeg2PartialOutputMasks { get; } = new int[] { 2, 4, 6, 8 };

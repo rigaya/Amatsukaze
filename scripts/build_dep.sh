@@ -23,12 +23,6 @@ else
   BASELIBS_DIR="${BUILD_DIR}/baselibs"
 fi
 
-# DRM経由のVAAPIに必要な開発パッケージを、取得やビルドの前に確認する。
-if ! pkg-config --exists libva libva-drm libdrm; then
-  echo "VAAPIの開発ライブラリがありません。libva-dev と libdrm-dev をインストールしてください。"
-  exit 1
-fi
-
 mkdir -p "${BASELIBS_DIR}"
 
 # zlib (静的ビルド)
@@ -93,8 +87,8 @@ else
   FNNK_PREFIX="${SRC_DIR}/build"
 fi
 
-# gray/VAAPI対応前のキャッシュは再構築し、インストール完了後に印を残す。
-if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FNNK_PREFIX}/.amatsukaze-gray-enabled" ] || [ ! -f "${FNNK_PREFIX}/.amatsukaze-vaapi-enabled" ]; then
+# gray対応前のキャッシュは再構築し、インストール完了後に印を残す。
+if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FNNK_PREFIX}/.amatsukaze-gray-enabled" ]; then
   echo "ffmpeg (地デジ/BS向け) のビルドを行います。"
   if [ ! -d "${SRC_DIR}" ]; then
     (
@@ -104,28 +98,23 @@ if [ ! -f "${FNNK_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FNNK_PREFI
       && patch -p1 < patch0.diff
     )
   fi
-  # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する。
-  # X11を無効にしたビルドにはVAAPIのX11依存を持ち込まない。
+  # この旧FFmpegはCUDAをx86限定で無効化するため、Linux ARM64も許可する
   (
     cd "${SRC_DIR}" \
     && sed -i 's/ffnvcodec_deps_any="[^"]*"/ffnvcodec_deps_any="libdl LoadLibrary"/' configure \
-    && sed -i 's/^    check_lib vaapi_x11 /    enabled xlib \&\& check_lib vaapi_x11 /' configure \
     && sed -i '/^if enabled x86; then$/ { N; /    case \$target_os in/ s/enabled x86/enabled_any x86 aarch64/; }' configure \
     && CFLAGS="-w" PKG_CONFIG_PATH="${BASELIBS_DIR}/lib/pkgconfig" ./configure --prefix="${FNNK_PREFIX}" --enable-pic \
       --extra-cflags="-I${BASELIBS_DIR}/include" --extra-ldflags="-L${BASELIBS_DIR}/lib" \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --enable-vaapi --enable-libdrm --enable-cuvid --enable-ffnvcodec \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
       --enable-gpl --enable-version3 --enable-gray \
       --disable-doc --disable-network --disable-devices \
-    && grep -q "^#define CONFIG_VAAPI 1$" config.h \
-    && grep -q "^#define HAVE_VAAPI_DRM 1$" config.h \
-    && grep -q "^#define HAVE_VAAPI_X11 0$" config.h \
     && make -j"$(nproc)" \
     && make install
   )
   # 旧FFmpeg(nekopanda版)のconfigureは -L を .pc へ書き出さないため、
   # baselibs の libz.a を解決できるよう後から補う。
   sed -i "s|^Libs: -L\${libdir}|Libs: -L\${libdir} -L${BASELIBS_DIR}/lib|" "${FNNK_PREFIX}"/lib/pkgconfig/*.pc
-  touch "${FNNK_PREFIX}/.amatsukaze-gray-enabled" "${FNNK_PREFIX}/.amatsukaze-vaapi-enabled"
+  touch "${FNNK_PREFIX}/.amatsukaze-gray-enabled"
 fi
 
 # ffmpeg-6.1.2 (BS4K向け)
@@ -140,7 +129,7 @@ else
   FF612_PREFIX="${FF612_SRC}/build"
 fi
 
-if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FF612_PREFIX}/.amatsukaze-gray-enabled" ] || [ ! -f "${FF612_PREFIX}/.amatsukaze-vaapi-enabled" ]; then
+if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FF612_PREFIX}/.amatsukaze-gray-enabled" ]; then
   echo "ffmpeg (BS4K向け) のビルドを行います。"
   if [ ! -d "${FF612_SRC}" ]; then
     (
@@ -154,16 +143,13 @@ if [ ! -f "${FF612_PREFIX}/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "${FF612_PRE
     cd "${FF612_SRC}" \
     && CFLAGS="-w" LDFLAGS="-lstdc++" PKG_CONFIG_PATH="${BASELIBS_DIR}/lib/pkgconfig" ./configure --prefix="${FF612_PREFIX}" --enable-pic \
       --extra-cflags="-I${BASELIBS_DIR}/include" --extra-ldflags="-L${BASELIBS_DIR}/lib" \
-      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --enable-vaapi --enable-libdrm --enable-cuvid --enable-ffnvcodec \
+      --disable-iconv --disable-xlib --disable-lzma --disable-bzlib --disable-vaapi --enable-cuvid --enable-ffnvcodec \
       --enable-gpl --enable-version3 --enable-gray \
       --disable-doc --disable-network --disable-devices \
-    && grep -q "^#define CONFIG_VAAPI 1$" config.h \
-    && grep -q "^#define HAVE_VAAPI_DRM 1$" config.h \
-    && grep -q "^#define HAVE_VAAPI_X11 0$" config.h \
     && make -j"$(nproc)" \
     && make install
   )
-  touch "${FF612_PREFIX}/.amatsukaze-gray-enabled" "${FF612_PREFIX}/.amatsukaze-vaapi-enabled"
+  touch "${FF612_PREFIX}/.amatsukaze-gray-enabled"
 fi
 
 echo "依存ビルドが完了しました。出力先: ${DEST_ROOT:-${BUILD_DIR}}"

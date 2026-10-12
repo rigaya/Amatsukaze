@@ -93,11 +93,9 @@ static void printHelp(const tchar* bin) {
         "  -f|--filter <パス>  フィルタAvisynthスクリプトへのパス[]\n"
         "  -pf|--postfilter <パス>  ポストフィルタAvisynthスクリプトへのパス[]\n"
         "  --mpeg2decoder <デコーダ>  MPEG2用デコーダ[default]\n"
-        "                      使用可能デコーダ: default,QSV,CUVID,VAAPI(Linux)\n"
+        "                      使用可能デコーダ: default,QSV,CUVID\n"
         "  --h264decoder <デコーダ>  H264用デコーダ[default]\n"
-        "                      使用可能デコーダ: default,QSV,CUVID,VAAPI(Linux)\n"
-        "  --hevcdecoder <デコーダ>  HEVC用デコーダ[default]\n"
-        "                      使用可能デコーダ: default,QSV,CUVID,VAAPI(Linux)\n"
+        "                      使用可能デコーダ: default,QSV,CUVID\n"
         "  --chapter           チャプター・CM解析を行う\n"
         "  --subtitles         字幕を処理する\n"
         "  --no-pgs-sub        MKV出力時のPGS字幕生成を無効にする\n"
@@ -225,8 +223,6 @@ static DECODER_TYPE decoderFromString(const tstring& str) {
         return DECODER_QSV;
     } else if (str == _T("cuvid") || str == _T("CUVID") || str == _T("nvdec") || str == _T("NVDec")) {
         return DECODER_CUVID;
-    } else if (str == _T("vaapi") || str == _T("VAAPI")) {
-        return DECODER_VAAPI;
     }
     return DECODER_INVALID;
 }

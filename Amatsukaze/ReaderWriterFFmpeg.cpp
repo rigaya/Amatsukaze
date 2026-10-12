@@ -7,81 +7,6 @@
 */
 
 #include "ReaderWriterFFmpeg.h"
-#include <cstdlib>
-#include <exception>
-
-DECODER_TYPE av::GetDecoderType(AVCodecID codec, const DecoderSetting& setting) {
-    switch (codec) {
-    case AV_CODEC_ID_MPEG2VIDEO: return setting.mpeg2;
-    case AV_CODEC_ID_H264: return setting.h264;
-    case AV_CODEC_ID_HEVC: return setting.hevc;
-    default: return DECODER_DEFAULT;
-    }
-}
-
-void av::InitVAAPI(AVCodecContext* codec, const AVCodec* decoder) {
-#ifndef _WIN32
-    bool supported = false;
-    for (int i = 0; const auto* config = avcodec_get_hw_config(decoder, i); ++i) {
-        if (config->device_type == AV_HWDEVICE_TYPE_VAAPI
-            && (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) {
-            supported = true;
-            break;
-        }
-    }
-    if (!supported) {
-        THROW(RuntimeException, "このFFmpegビルドではVAAPIデコードを使用できません");
-    }
-    const char* device = std::getenv("LIBVA_DRM_DEVICE");
-    if (device && !*device) device = nullptr;
-    const int ret = av_hwdevice_ctx_create(&codec->hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, device, nullptr, 0);
-    if (ret < 0) {
-        char error[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, error, sizeof(error));
-        THROWF(RuntimeException, "VAAPIデバイスを初期化できません: %s (ドライバーと/dev/driのアクセス権を確認してください)", error);
-    }
-    // ソフトウェアへの暗黙の切り替えを防ぎ、非対応の映像はエラーにする。
-    codec->get_format = [](AVCodecContext*, const AVPixelFormat* formats) {
-        for (const auto* format = formats; *format != AV_PIX_FMT_NONE; ++format) {
-            if (*format == AV_PIX_FMT_VAAPI) return *format;
-        }
-        return AV_PIX_FMT_NONE;
-    };
-    codec->thread_count = 1;
-    av_log(codec, AV_LOG_INFO, "VAAPIデコードを使用します (%s)\n", device ? device : "自動選択");
-#else
-    THROW(RuntimeException, "VAAPIデコードはLinuxでのみ使用できます");
-#endif
-}
-
-void av::DownloadFrame(Frame& frame) {
-#ifndef _WIN32
-    if (frame()->format == AV_PIX_FMT_VAAPI) {
-        Frame downloaded;
-        // 画素転送だけではPTSやインタレース情報が引き継がれないため、属性もコピーする。
-        if (av_hwframe_transfer_data(downloaded(), frame(), 0) < 0
-            || av_frame_copy_props(downloaded(), frame()) < 0) {
-            THROW(RuntimeException, "VAAPIフレームのCPUメモリへの転送に失敗しました");
-        }
-        av_frame_unref(frame());
-        av_frame_move_ref(frame(), downloaded());
-    }
-#endif
-}
-
-bool av::ReceiveFrame(AVCodecContext* codec, Frame& frame) {
-    const int ret = avcodec_receive_frame(codec, frame());
-    if (ret == 0) {
-        DownloadFrame(frame);
-        return true;
-    }
-    if (codec->hw_device_ctx && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
-        char error[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, error, sizeof(error));
-        THROWF(RuntimeException, "VAAPIデコードに失敗しました: %s", error);
-    }
-    return false;
-}
 
 int av::GetFFmpegThreads(int preferred, int height) {
     const int maxThreads = (height > 1080) ? 16 : 8;
@@ -276,50 +201,19 @@ void av::VideoReader::readAll(const tstring& src, const DecoderSetting& decoderS
     if (avcodec_parameters_to_context(codecCtx(), videoStream->codecpar) != 0) {
         THROW(FormatException, "avcodec_parameters_to_context failed");
     }
-    if (GetDecoderType(vcodecId, decoderSetting) == DECODER_VAAPI) {
-        InitVAAPI(codecCtx(), pCodec);
-    }
     if (avcodec_open2(codecCtx(), pCodec, NULL) != 0) {
         THROW(FormatException, "avcodec_open2 failed");
     }
 
     bool first = true;
     Frame frame;
-#ifndef _WIN32
-    std::unique_ptr<SwsContext, decltype(&sws_freeContext)> scaler(nullptr, sws_freeContext);
-#endif
-    auto prepareFrame = [&]() {
-#ifndef _WIN32
-        if (!codecCtx()->hw_device_ctx) return;
-        const auto format = (AVPixelFormat)frame()->format;
-        if (format != AV_PIX_FMT_NV12 && format != AV_PIX_FMT_P010LE) return;
-        // Y4Mとフィールド分離へ渡す前に、VAAPIの出力をプレーナ形式にする。
-        const auto planarFormat = format == AV_PIX_FMT_NV12 ? AV_PIX_FMT_YUV420P : AV_PIX_FMT_YUV420P10LE;
-        Frame planar;
-        planar()->format = planarFormat;
-        planar()->width = frame()->width;
-        planar()->height = frame()->height;
-        if (av_frame_get_buffer(planar(), 64) < 0 || av_frame_copy_props(planar(), frame()) < 0) {
-            THROW(RuntimeException, "VAAPI出力のプレーナ変換用メモリを確保できません");
-        }
-        scaler.reset(sws_getCachedContext(scaler.release(), frame()->width, frame()->height, format,
-            planar()->width, planar()->height, planarFormat, SWS_POINT, nullptr, nullptr, nullptr));
-        if (!scaler || sws_scale(scaler.get(), frame()->data, frame()->linesize, 0, frame()->height,
-            planar()->data, planar()->linesize) != frame()->height) {
-            THROW(RuntimeException, "VAAPI出力のプレーナ形式への変換に失敗しました");
-        }
-        av_frame_unref(frame());
-        av_frame_move_ref(frame(), planar());
-#endif
-    };
     AVPacket packet = AVPacket();
     while (av_read_frame(inputCtx(), &packet) == 0) {
         if (packet.stream_index == videoStream->index) {
             if (avcodec_send_packet(codecCtx(), &packet) != 0) {
                 THROW(FormatException, "avcodec_send_packet failed");
             }
-            while (ReceiveFrame(codecCtx(), frame)) {
-                prepareFrame();
+            while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
                 if (first) {
                     onFirstFrame(videoStream, frame());
                     first = false;
@@ -336,8 +230,7 @@ void av::VideoReader::readAll(const tstring& src, const DecoderSetting& decoderS
     if (avcodec_send_packet(codecCtx(), NULL) != 0) {
         THROW(FormatException, "avcodec_send_packet failed");
     }
-    while (ReceiveFrame(codecCtx(), frame)) {
-        prepareFrame();
+    while (avcodec_receive_frame(codecCtx(), frame()) == 0) {
         onFrame(frame);
     }
 
@@ -808,18 +701,10 @@ void av::EncodeWriter::inputFrame(Frame& frame) {
 }
 
 void av::EncodeWriter::finish() {
-    if (videoWriter_ != NULL && process_ != NULL) {
-        std::exception_ptr flushError;
-        try {
-            videoWriter_->flush();
-        } catch (...) {
-            flushError = std::current_exception();
-        }
-        // join()が入力パイプも閉じる。flush失敗時にも子プロセスと読み取りスレッドを終了する。
+    if (videoWriter_ != NULL) {
+        videoWriter_->flush();
+        process_->finishWrite();
         int ret = process_->join();
-        if (flushError) {
-            std::rethrow_exception(flushError);
-        }
         if (ret != 0) {
             ctx.error(_T("↓↓↓↓↓↓エンコーダ最後の出力↓↓↓↓↓↓"));
             for (auto v : process_->getLastLines()) {

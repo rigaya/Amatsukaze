@@ -165,7 +165,6 @@ else
 
         <hr class="settings-sep" />
         <h4>デコーダ</h4>
-        <p>VAAPIはLinux向けです。対応するGPUとVAAPIドライバーが必要です。</p>
         <table class="table">
             <tr>
                 <th>MPEG2デコーダ</th>
@@ -1052,7 +1051,7 @@ else
     private string _nameDialogTitle = "";
     private string _nameInput = "";
     private static readonly string[] _encoderEnumNames = new[] { "x264", "x265", "QSVEnc", "NVEnc", "VCEEnc", "SVTAV1", "x262" };
-    private static readonly string[] _decoderEnumNames = new[] { "Default", "QSV", "CUVID", "VAAPI" };
+    private static readonly string[] _decoderEnumNames = new[] { "Default", "QSV", "CUVID" };
     private static readonly string[] _formatEnumNames = new[] { "MP4", "MKV", "M2TS", "TS", "TSREPLACE" };
     private static readonly string[] _filterEnumNames = new[] { "None", "Setting", "Custom", "QSVEncFilter", "NVEncFilter", "VCEEncFilter" };
     private static readonly string[] _deblockStrengthEnumNames = new[] { "Strong", "Medium", "Weak", "Weaker" };
