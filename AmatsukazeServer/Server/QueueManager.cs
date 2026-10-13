@@ -55,6 +55,23 @@ namespace Amatsukaze.Server
         public List<string> TextLines { get { return consoleText.TextLines; } }
 
         private int nextItemId = 1;
+        private const string ItemIdLimitMessage = "タスクIDが上限に達したため追加できません。不要なキュー項目を削除してサーバーを再起動してください";
+
+        private bool TryReserveItemIds(int count, out int firstItemId)
+        {
+            // 上限確認と範囲の予約だけをロック内で行い、項目ごとの処理は含めない。
+            lock (queueSync)
+            {
+                firstItemId = 0;
+                if (nextItemId < 0 || (long)nextItemId + count > int.MaxValue)
+                {
+                    return false;
+                }
+                firstItemId = count > 0 ? nextItemId + 1 : 0;
+                nextItemId += count;
+                return true;
+            }
+        }
         private bool queueUpdated = false;
 
         // キャンセルサポート
@@ -620,6 +637,16 @@ namespace Amatsukaze.Server
                         }
                     }
 
+                    if (!TryReserveItemIds(addItems.Count, out int firstItemId))
+                    {
+                        waits.Add(server.NotifyError(ItemIdLimitMessage, enableLog));
+                        await Task.WhenAll(waits);
+                        return;
+                    }
+                    for (int i = 0; i < addItems.Count; ++i)
+                    {
+                        addItems[i].Id = firstItemId + i;
+                    }
                     // 1ソースファイルに対するaddはatomicに実行したいので、
                     // このループではawaitしないこと
                     foreach (var item in addItems)
@@ -632,7 +659,6 @@ namespace Amatsukaze.Server
                         // 追加
                         lock (queueSync)
                         {
-                            item.Id = Interlocked.Increment(ref nextItemId);
                             item.Order = Queue.Count;
                             Queue.Add(item);
                         }
@@ -740,12 +766,12 @@ namespace Amatsukaze.Server
             return false;
         }
 
-        private void DuplicateItem(QueueItem item, List<Task> waits)
+        private void DuplicateItem(QueueItem item, int itemId, List<Task> waits)
         {
             var newItem = ServerSupport.DeepCopy(item);
             lock (queueSync)
             {
-                newItem.Id = Interlocked.Increment(ref nextItemId);
+                newItem.Id = itemId;
                 newItem.Order = Queue.Count;
                 Queue.Add(newItem);
             }
@@ -826,6 +852,10 @@ namespace Amatsukaze.Server
                     throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
                 }
 
+                if (!TryReserveItemIds(1, out int itemId))
+                {
+                    throw new InvalidOperationException(ItemIdLimitMessage);
+                }
                 if (string.IsNullOrEmpty(sourceItem.SrcPath))
                 {
                     throw new InvalidOperationException("入力ファイルが見つかりません");
@@ -847,7 +877,7 @@ namespace Amatsukaze.Server
                 }
 
                 newItem = ServerSupport.DeepCopy(sourceItem);
-                newItem.Id = Interlocked.Increment(ref nextItemId);
+                newItem.Id = itemId;
                 newItem.Order = Queue.Count;
                 newItem.Mode = ProcMode.Batch;
                 newItem.Profile = null;
@@ -1152,6 +1182,11 @@ namespace Amatsukaze.Server
                 }
 
                 var waits = new List<Task>();
+                int duplicateId = 0;
+                if (data.ChangeType == ChangeItemType.Duplicate && !TryReserveItemIds(1, out duplicateId))
+                {
+                    return server.NotifyError(ItemIdLimitMessage, false);
+                }
 
                 try
                 {
@@ -1192,7 +1227,7 @@ namespace Amatsukaze.Server
                 }
                 else
                 {
-                    DuplicateItem(target, waits);
+                    DuplicateItem(target, duplicateId, waits);
                     waits.Add(server.NotifyMessage("複製しました", false));
                 }
 
