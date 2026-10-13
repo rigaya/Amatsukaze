@@ -1033,7 +1033,7 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
 void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb) {
     using namespace av;
 
-    InputContext inputCtx(src);
+    InputContext inputCtx(src, nullptr, CP_UTF8);
     if (avformat_find_stream_info(inputCtx(), NULL) < 0) {
         THROW(FormatException, "avformat_find_stream_info failed");
     }
