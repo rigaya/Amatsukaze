@@ -360,7 +360,7 @@ class GUIMediaFile : public AMTObject {
 public:
     GUIMediaFile(AMTContext& ctx, const tchar* filepath, int serviceid) :
         AMTObject(ctx),
-        inputCtx(filepath),
+        inputCtx(filepath, nullptr, CP_UTF8),
         codecCtx(),
         videoStream(nullptr),
 #if !defined(AMT_LOGO_GUI_WITHOUT_SWSCALE)
