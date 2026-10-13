@@ -110,14 +110,14 @@ namespace Amatsukaze.Server
                         // Idは/console/{taskId}の恒久リンクを再起動後も維持するため、
                         // 永続化された値をそのまま使う。不正値(0以下)・重複IDのみ振り直す。
                         int maxId = Queue.Count > 0 ? Queue.Max(item => item.Id) : 0;
-                        nextItemId = Math.Max(1, maxId + 1);
+                        nextItemId = Math.Max(0, maxId);
                         var seenIds = new HashSet<int>();
                         foreach (var item in Queue)
                         {
                             if (item.Id <= 0 || !seenIds.Add(item.Id))
                             {
                                 var oldId = item.Id;
-                                item.Id = nextItemId++;
+                                item.Id = Interlocked.Increment(ref nextItemId);
                                 seenIds.Add(item.Id);
                                 LOG.Warn($"Queue restore: invalid/duplicate id {oldId} reassigned to {item.Id}.");
                             }
