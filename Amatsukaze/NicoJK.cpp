@@ -145,6 +145,7 @@ void NicoJK::getJKNum(int serviceId) {
             int sid = strtol(m[3].str().c_str(), nullptr, 0);
             if (sid == serviceId) {
                 jknum_ = jknum;
+                // ch_sid.txt の tvname は UTF-8。表示時は CP_UTF8 で変換する
                 tvname_ = m[5].str();
                 return;
             }
@@ -303,7 +304,7 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
         t.tm_hour += 9; // GMT+9
         mktime(&t);
         ctx.infoF(_T("%s (jk%d) %d年%02d月%02d日 %02d時%02d分%02d秒 から %d時間%02d分%02d秒"),
-            char_to_tstring(tvname_), jknum_,
+            char_to_tstring(tvname_, CP_UTF8), jknum_,
             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
             duration / 3600, (duration / 60) % 60, duration % 60);
 
