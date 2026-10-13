@@ -93,7 +93,6 @@ namespace Amatsukaze.Server
                     lock (queueSync)
                     {
                         Queue = sanitized;
-                        nextItemId = 1;
                         foreach (var item in Queue)
                         {
                             // エンコードするアイテムはリセットしておく
@@ -106,8 +105,26 @@ namespace Amatsukaze.Server
                                 item.Profile = server.PendingProfile;
                             }
                             item.ClearAutoLogoTransientState();
-                            // IDを振り直す
-                            item.Order = item.Id = nextItemId++;
+                        }
+
+                        // Idは/console/{taskId}の恒久リンクを再起動後も維持するため、
+                        // 永続化された値をそのまま使う。不正値(0以下)・重複IDのみ振り直す。
+                        int maxId = Queue.Count > 0 ? Queue.Max(item => item.Id) : 0;
+                        nextItemId = Math.Max(1, maxId + 1);
+                        var seenIds = new HashSet<int>();
+                        foreach (var item in Queue)
+                        {
+                            if (item.Id <= 0 || !seenIds.Add(item.Id))
+                            {
+                                var oldId = item.Id;
+                                item.Id = nextItemId++;
+                                seenIds.Add(item.Id);
+                                LOG.Warn($"Queue restore: invalid/duplicate id {oldId} reassigned to {item.Id}.");
+                            }
+                        }
+                        for (int i = 0; i < Queue.Count; i++)
+                        {
+                            Queue[i].Order = i;
                         }
                     }
                     return;
