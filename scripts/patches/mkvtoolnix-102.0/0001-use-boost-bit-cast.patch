@@ -1,0 +1,28 @@
+--- a/src/input/r_qtmp4.cpp
++++ b/src/input/r_qtmp4.cpp
+@@ -20,6 +20,7 @@
+ #include <cstring>
+ #include <unordered_map>
+ 
++#include <boost/core/bit.hpp>
+ #include <boost/multiprecision/gmp.hpp>
+ 
+ #include <QRegularExpression>
+@@ -952,7 +953,7 @@
+ 
+   for (auto i = 0; i < 3; ++i) {
+     for (auto j = 0; j < 3; ++j)
+-      m_display_matrix[i][j] = std::bit_cast<int32_t>(get_uint32_be(&mvhd.display_matrix[i][j]));
++      m_display_matrix[i][j] = boost::core::bit_cast<int32_t>(get_uint32_be(&mvhd.display_matrix[i][j]));
+   }
+ 
+   if ((duration != std::numeric_limits<uint32_t>::max()) && (m_time_scale != 0))
+@@ -1586,7 +1587,7 @@
+   int32_t display_matrix[3][3];
+   for (auto i = 0; i < 3; ++i) {
+     for (auto j = 0; j < 3; ++j)
+-      display_matrix[i][j] = std::bit_cast<int32_t>(m_in->read_uint32_be());
++      display_matrix[i][j] = boost::core::bit_cast<int32_t>(m_in->read_uint32_be());
+   }
+ 
+   // Columns 1 and 2 are 16.16 fixed point, while column 3 is 2.30 fixed point.
