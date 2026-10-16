@@ -42,6 +42,12 @@ cd Amatsukaze
 
 配布用の依存モジュールは`scripts/build_dep_tools.sh`でビルドします。以下は従来の手動導入手順です。配布アーカイブを使う場合は不要です。
 
+BasePkgのmkvmergeはMKVToolNix102.0を使用します。Boost1.90.0、GMP6.3.0、Qt6.8.3を専用の配置先でビルドし、完全静的リンクします。現行のMKVToolNixはCLIにもQtCoreが必要ですが、実行環境へのQtのインストールは不要です。Qt6.8はUbuntu20.04のGCC10でビルドできる版として使用します。
+
+MKVToolNix102.0のMP4表示行列の読み込みには、GCC10の標準ライブラリが提供しない`std::bit_cast`が使われています。`scripts/patches/mkvtoolnix-102.0/`の互換パッチでBoostの`bit_cast`に置き換え、ビット列を保ったまま同じ処理を行います。
+
+BasePkgを更新するときは`build_basepkg.yml`でビルド・検証した成果物を公開し、`build_packages.yml`のBasePkg取得URLとアーカイブ名を新しい版へ切り替えます。BasePkgのビルドだけでは、配布パッケージが取得する固定URLは変わりません。
+
 ### AviSynth+/AvisynthCUDAFiltersのインストール
 
 [こちら](https://github.com/rigaya/AviSynthCUDAFilters/releases)から最新版のdebパッケージをダウンロードします。なお、自ビルドする場合は[こちら](https://github.com/rigaya/AviSynthCUDAFilters/blob/master/README_LINUX.md)を参考にしてください。

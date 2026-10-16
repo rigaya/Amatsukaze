@@ -631,7 +631,8 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         for (int i = 0; i < (int)inSubs.size(); i++) {
             if (subsTitles[i] == _T("PGS")) {
                 // PGSを既定にせず、後続言語やWhisperを含む既存のテキスト字幕の優先順位を保つ。
-                sb.append(_T(" --default-track-flag 0:no"));
+                // 同梱のmkvmerge v45でも使える旧名を指定する。v65以降も旧名に対応している。
+                sb.append(_T(" --default-track 0:no"));
             }
             sb.append(_T(" --track-name \"0:%s\" \"%s\""), subsTitles[i], inSubs[i]);
         }

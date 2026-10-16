@@ -221,12 +221,28 @@ build_source() {
     esac
 }
 
-build_mkvmerge() {
+build_mkvmerge() (
+    # 専用のビルド環境変数を後続のICUやOpenSSLへ持ち越さない。
+    local mkvtoolnix_version=102.0 boost_source=boost_1_90_0 qt_version=6.8.3 gmp_version=6.3.0
+    # 旧版のBoostなどを再利用しないよう、mkvmerge専用の依存配置先を使う。
+    local prefix=$prefix/mkvmerge-$mkvtoolnix_version
+    mkdir -p "$prefix"
     download zlib-1.3.1.tar.gz https://zlib.net/fossils/zlib-1.3.1.tar.gz
     download libogg-1.3.5.tar.xz https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.xz
     download libvorbis-1.3.7.tar.xz https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz
-    download boost_1_71_0.tar.gz https://archives.boost.io/release/1.71.0/source/boost_1_71_0.tar.gz
-    download mkvtoolnix-45.0.0.tar.xz https://mkvtoolnix.download/sources/mkvtoolnix-45.0.0.tar.xz
+    download "$boost_source.tar.gz" "https://archives.boost.io/release/1.90.0/source/$boost_source.tar.gz"
+    download "gmp-$gmp_version.tar.xz" "https://ftp.gnu.org/gnu/gmp/gmp-$gmp_version.tar.xz"
+    download "qtbase-everywhere-src-$qt_version.tar.xz" "https://download.qt.io/archive/qt/6.8/$qt_version/submodules/qtbase-everywhere-src-$qt_version.tar.xz"
+    download "mkvtoolnix-$mkvtoolnix_version.tar.xz" "https://mkvtoolnix.download/sources/mkvtoolnix-$mkvtoolnix_version.tar.xz"
+
+    # GCC10にはstd::bit_castがないため、同じビット列を保つBoostの実装へ置き換える。
+    local patch_file=$(dirname "$(realpath "${BASH_SOURCE[0]}")")/patches/mkvtoolnix-$mkvtoolnix_version/0001-use-boost-bit-cast.patch
+    if (cd "$sources/mkvtoolnix-$mkvtoolnix_version" && patch --dry-run --forward -p1 < "$patch_file") >/dev/null 2>&1; then
+        run_in "$sources/mkvtoolnix-$mkvtoolnix_version" patch --forward -p1 -i "$patch_file"
+    elif ! (cd "$sources/mkvtoolnix-$mkvtoolnix_version" && patch --dry-run --reverse -p1 < "$patch_file") >/dev/null 2>&1; then
+        echo "mkvmergeのGCC10互換パッチを適用できません" >&2
+        exit 1
+    fi
 
     export PKG_CONFIG_LIBDIR=$prefix/lib/pkgconfig
     export PKG_CONFIG_PATH=$PKG_CONFIG_LIBDIR
@@ -251,20 +267,38 @@ build_mkvmerge() {
         run_in "$sources/libvorbis-1.3.7" make install
     fi
     if [[ ! -f "$prefix/lib/libboost_filesystem.a" ]]; then
-        run_in "$sources/boost_1_71_0" ./bootstrap.sh --prefix="$prefix" --with-libraries=filesystem,system,date_time
-        run_in "$sources/boost_1_71_0" ./b2 -j4 --with-filesystem --with-system --with-date_time link=static threading=multi variant=release --prefix="$prefix" install
+        run_in "$sources/$boost_source" ./bootstrap.sh --prefix="$prefix" --with-libraries=filesystem
+        run_in "$sources/$boost_source" ./b2 -j4 --with-filesystem link=static threading=multi variant=release --prefix="$prefix" install
     fi
-    if [[ ! -f "$sources/mkvtoolnix-45.0.0/src/mkvmerge" ]]; then
-        run_in "$sources/mkvtoolnix-45.0.0" ./configure --enable-static --disable-qt --disable-magic --without-flac --without-gettext --with-boost="$prefix" --with-boost-libdir="$prefix/lib" --with-extra-includes="$prefix/include" --with-extra-libs="$prefix/lib"
-        run_in "$sources/mkvtoolnix-45.0.0" rake -j4 src/mkvmerge
+    if [[ ! -f "$prefix/lib/libgmp.a" ]]; then
+        run_in "$sources/gmp-$gmp_version" ./configure --prefix="$prefix" --disable-shared --enable-static --disable-assembly
+        run_in "$sources/gmp-$gmp_version" make -j4
+        run_in "$sources/gmp-$gmp_version" make install
     fi
-    local binary=$sources/mkvtoolnix-45.0.0/src/mkvmerge
+    # 現行版はCLIでもQtCoreが必要。GCC10でビルドできるQt6.8を静的に組み込む。
+    if [[ ! -f "$prefix/lib/libQt6Core.a" ]]; then
+        local qt_build=$builds/qtbase-$qt_version
+        mkdir -p "$qt_build"
+        run_in "$qt_build" "$sources/qtbase-everywhere-src-$qt_version/configure" \
+            -prefix "$prefix" -libdir lib -static -release -opensource -confirm-license \
+            -nomake examples -nomake tests -no-gui -no-widgets -no-opengl -no-dbus \
+            -no-icu -no-openssl -no-feature-network -no-feature-sql -no-feature-xml \
+            -no-feature-glib -no-feature-zstd
+        run_in "$qt_build" cmake --build . --parallel 4
+        run_in "$qt_build" cmake --install .
+    fi
+    if [[ ! -f "$sources/mkvtoolnix-$mkvtoolnix_version/src/mkvmerge" ]]; then
+        run_in "$sources/mkvtoolnix-$mkvtoolnix_version" ./configure --enable-static --disable-gui --disable-dbus --without-flac --without-gettext --without-dvdread --with-qmake6="$prefix/bin/qmake6" --with-boost="$prefix" --with-boost-libdir="$prefix/lib" --with-extra-includes="$prefix/include" --with-extra-libs="$prefix/lib"
+    fi
+    # キャッシュがあっても、適用したパッチや変更済みソースを増分ビルドで反映する。
+    run_in "$sources/mkvtoolnix-$mkvtoolnix_version" rake -j4 src/mkvmerge
+    local binary=$sources/mkvtoolnix-$mkvtoolnix_version/src/mkvmerge
     if readelf -d "$binary" | grep -q '(NEEDED)' || readelf -l "$binary" | grep -q INTERP; then
         echo "mkvmerge に共有依存が残っています" >&2
         exit 1
     fi
     cp "$binary" "$stage/exe_files/mkvmerge"
-}
+)
 
 build_opusenc() {
     local path
