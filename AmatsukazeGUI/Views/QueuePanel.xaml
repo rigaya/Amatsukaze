@@ -959,7 +959,8 @@
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}" />
                         <Separator />
                         <MenuItem Header="プロファイル変更" Style="{StaticResource MenuForSelectedItems}"
-                                  ItemsSource="{Binding SelectableProfile}">
+                                  ItemsSource="{Binding SelectableProfile}"
+                                  SubmenuOpened="ProfileMenu_SubmenuOpened">
                             <MenuItem.ItemContainerStyle>
                                 <Style TargetType="MenuItem">
                                     <Setter Property="Header" Value="{Binding Path=Item}"/>

@@ -33,6 +33,25 @@ namespace Amatsukaze.Views
             NameScope.SetNameScope(buttonProfileMenu, NameScope.GetNameScope(this));
         }
 
+        private const double ProfileMenuMaxHeight = 400;
+
+        private void ProfileMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            var menuItem = (MenuItem)sender;
+            if (menuItem.Template.FindName("PART_Popup", menuItem) is System.Windows.Controls.Primitives.Popup popup
+                && popup.Child != null)
+            {
+                var scrollViewer = ScrollViewerHelper.GetScrollViewer(popup.Child);
+                if (scrollViewer != null)
+                {
+                    // 一覧の高さを制限し、項目が多いときは縦スクロールバーで選択できるようにする。
+                    scrollViewer.MaxHeight = ProfileMenuMaxHeight;
+                    scrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                    scrollViewer.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                }
+            }
+        }
+
         private void ListBox_PreviewDragOver(object sender, DragEventArgs e)
         {
             e.Handled = e.Data.GetDataPresent(DataFormats.FileDrop) ||
