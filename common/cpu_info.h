@@ -104,6 +104,9 @@ int getCPUName(char *buffer, size_t nSize);
 bool get_cpu_info(cpu_info_t *cpu_info);
 cpu_info_t get_cpu_info();
 uint64_t get_mask(const cpu_info_t *cpu_info, RGYUnitType unit_type, int level, int id);
+// Logical の id は 64bitマスクで表現可能な 0-63 のみ。範囲外は nullptr
+const processor_info_t *get_core_info(const cpu_info_t *cpu_info, RGYCoreType type, int id);
+uint64_t get_core_mask(const cpu_info_t *cpu_info, RGYCoreType type, int id);
 
 tstring print_cpu_info(const cpu_info_t *cpu_info);
 

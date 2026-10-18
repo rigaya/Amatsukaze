@@ -439,11 +439,32 @@ CPUInfo::CPUInfo() {
 #else
 CPUInfo::CPUInfo() {
     const auto cpuInfo = get_cpu_info();
+    // エクスポートしたマスク (64bit) では表現できないCPUがaffinityに含まれる場合、
+    // 不完全な構成で固定すると一部のCPUしか使えなくなるため、構成を空にして
+    // CPUInfo_GetData側に固定を諦めさせる
+    {
+        cpu_set_t procAffinity;
+        CPU_ZERO(&procAffinity);
+        if (sched_getaffinity(0, sizeof(procAffinity), &procAffinity) == 0) {
+            int maskedCount = 0;
+            for (int i = 0; i < MAX_CORE_COUNT; i++) {
+                size_t mask = cpuInfo.proc_list[i].mask;
+                while (mask) {
+                    mask &= mask - 1;
+                    maskedCount++;
+                }
+            }
+            if (CPU_COUNT(&procAffinity) > maskedCount) {
+                return;
+            }
+        }
+    }
     intptr_t allcoremask = 0;
     // Core
+    // マスク0はaffinity外・64以上のCPUが属するコア。スキップする (空コアの後に許可コアが続く場合がある)
     for (int i = 0; i < MAX_CORE_COUNT; i++) {
         if (cpuInfo.proc_list[i].mask == 0) {
-            break;
+            continue;
         }
         GROUP_AFFINITY af = GROUP_AFFINITY();
         af.Mask = (intptr_t)cpuInfo.proc_list[i].mask;
@@ -459,7 +480,7 @@ CPUInfo::CPUInfo() {
     // L2
     for (int i = 0; i < MAX_CORE_COUNT; i++) {
         if (cpuInfo.caches[(int)RGYCacheLevel::L2][i].mask == 0) {
-            break;
+            continue;
         }
         GROUP_AFFINITY af = GROUP_AFFINITY();
         af.Mask = (intptr_t)cpuInfo.caches[(int)RGYCacheLevel::L2][i].mask;
@@ -468,7 +489,7 @@ CPUInfo::CPUInfo() {
     // L3
     for (int i = 0; i < MAX_CORE_COUNT; i++) {
         if (cpuInfo.caches[(int)RGYCacheLevel::L3][i].mask == 0) {
-            break;
+            continue;
         }
         GROUP_AFFINITY af = GROUP_AFFINITY();
         af.Mask = (intptr_t)cpuInfo.caches[(int)RGYCacheLevel::L3][i].mask;
@@ -510,6 +531,9 @@ bool SetCPUAffinity(int group, uint64_t mask) {
     SetProcessAffinityMask(GetCurrentProcess(), (DWORD_PTR)mask);
     return result;
 #else
+    if (mask == 0) { // Windowsと同様に「変更なし」
+        return true;
+    }
     SetProcessAffinityMask(GetCurrentProcess(), (size_t)mask);
     return true;
 #endif // defined(_WIN32) || defined(_WIN64)

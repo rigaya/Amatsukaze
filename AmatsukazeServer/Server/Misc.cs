@@ -487,6 +487,11 @@ namespace Amatsukaze.Server
                 throw new ArgumentException("ProcessGroupKind.Noneです");
             }
             var target = masks[(int)setting];
+            if (target == null || target.Length == 0)
+            {
+                // 空構成では固定しない (Mask=0はSetCPUAffinityで変更なし)
+                return new ProcessGroup { Group = -1, Mask = 0 };
+            }
             return target[pid % target.Length];
         }
     }

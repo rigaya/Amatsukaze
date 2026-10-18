@@ -104,10 +104,12 @@ std::map<uint32_t, uint64_t> getCPUPartARM() {
         if (pos != std::string::npos) {
             int i = 0;
             if (1 == sscanf(line.substr(line.find(":") + 1).c_str(), " %d", &i)) {
-                if (cpu_architecture.count(i) == 0) {
-                    cpu_architecture[i] = 0;
+                if (processorID >= 0 && processorID < 64) {
+                    if (cpu_architecture.count(i) == 0) {
+                        cpu_architecture[i] = 0;
+                    }
+                    cpu_architecture[i] |= (1llu << processorID);
                 }
-                cpu_architecture[i] |= (1llu << processorID);
             }
             continue;
         }
@@ -115,10 +117,12 @@ std::map<uint32_t, uint64_t> getCPUPartARM() {
         if (pos != std::string::npos) {
             uint32_t i = 0;
             if (1 == sscanf(line.substr(line.find(":") + 1).c_str(), " 0x%x", &i)) {
-                if (cpu_variant.count(i) == 0) {
-                    cpu_variant[i] = 0;
+                if (processorID >= 0 && processorID < 64) {
+                    if (cpu_variant.count(i) == 0) {
+                        cpu_variant[i] = 0;
+                    }
+                    cpu_variant[i] |= (1llu << processorID);
                 }
-                cpu_variant[i] |= (1llu << processorID);
             }
             continue;
         }
@@ -126,10 +130,12 @@ std::map<uint32_t, uint64_t> getCPUPartARM() {
         if (pos != std::string::npos) {
             uint32_t i = 0;
             if (1 == sscanf(line.substr(line.find(":") + 1).c_str(), " 0x%x", &i)) {
-                if (cpu_part.count(i) == 0) {
-                    cpu_part[i] = 0;
+                if (processorID >= 0 && processorID < 64) {
+                    if (cpu_part.count(i) == 0) {
+                        cpu_part[i] = 0;
+                    }
+                    cpu_part[i] |= (1llu << processorID);
                 }
-                cpu_part[i] |= (1llu << processorID);
             }
             continue;
         }
@@ -345,6 +351,7 @@ bool getCPUHybridMasks(cpu_info_t *info) {
 #endif
 #if defined(__x86__) || defined(__x86_64__) || defined(_M_X86) || defined(_M_IX86) || defined(_M_X64)
     const auto hThread = GetCurrentThread();
+#if defined(_WIN32) || defined(_WIN64)
     size_t maskOriginal = 0;
     for (int ith = 0; ith < threadCount; ith++) {
         const auto maskTarget = (size_t)1u << ith;
@@ -363,6 +370,31 @@ bool getCPUHybridMasks(cpu_info_t *info) {
         }
     }
     SetThreadAffinityMask(hThread, maskOriginal); // 元に戻す
+#else
+    // cpuid 0x1Aの判定はHYBRIDフラグがある場合のみ行う。affinityの保存・復元は64bit範囲外のCPUが落ちるためcpu_set_tを使う
+    int HybridCheck[4] = { 0 };
+    __cpuid(HybridCheck, 0x07);
+    if (HybridCheck[3 /*EDX*/] & (1 << 15) /*HYBRID*/) {
+        cpu_set_t cpusetOriginal;
+        CPU_ZERO(&cpusetOriginal);
+        pthread_getaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal);
+        for (int ith = 0; ith < threadCount; ith++) {
+            const auto maskTarget = (size_t)1u << ith;
+            SetThreadAffinityMask(hThread, maskTarget);
+            std::this_thread::sleep_for(std::chrono::microseconds(0));
+            int CPUInfo[4] = { 0 };
+            __cpuid(CPUInfo, 0x1A);
+            const auto hybridInfo = CPUInfo[0 /*EAX*/] >> 24;
+            if (hybridInfo == 0x20) {
+                info->maskCoreE |= maskTarget;
+            } else if (hybridInfo == 0x40) {
+                info->maskCoreP |= maskTarget;
+            }
+        }
+        // 元に戻す
+        pthread_setaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal);
+    }
+#endif
 
     info->physical_cores_e = 0;
     info->physical_cores_p = 0;
@@ -588,6 +620,21 @@ bool get_cpu_info(cpu_info_t *cpu_info) {
     cpu_info->physical_cores = 0;
     cpu_info->logical_cores = processor_list.size();
 
+    // 64bitマスクで表現できるCPU (0-63、プロセスのaffinity内) のみマスクに含める
+    cpu_set_t procAffinity;
+    CPU_ZERO(&procAffinity);
+    const bool procAffinityValid = (sched_getaffinity(0, sizeof(procAffinity), &procAffinity) == 0);
+    auto maskBitAllowed = [procAffinityValid, &procAffinity](int processor_id) -> bool {
+        return processor_id >= 0
+            && processor_id < 64
+            && (!procAffinityValid || CPU_ISSET(processor_id, &procAffinity));
+    };
+    auto setMaskBit = [](size_t& mask, int processor_id) -> void {
+        if (processor_id >= 0 && processor_id < 64) {
+            mask |= (size_t)1u << processor_id;
+        }
+    };
+
     processor_info_t *prevCore = nullptr;
     for (size_t ip = 0; ip < processor_list.size(); ip++) {
         if (prevCore != nullptr
@@ -595,12 +642,17 @@ bool get_cpu_info(cpu_info_t *cpu_info) {
             && prevCore->core_id   == processor_list[ip].core_id) {
             // 同じソケットの同じコアならそれは論理コア
             prevCore->logical_cores++;
-            prevCore->mask |= 1llu << processor_list[ip].processor_id;
+            if (maskBitAllowed(processor_list[ip].processor_id)) {
+                setMaskBit(prevCore->mask, processor_list[ip].processor_id);
+            }
         } else {
             auto targetCore = &cpu_info->proc_list[cpu_info->physical_cores];
             *targetCore = processor_list[ip];
             targetCore->logical_cores = 1;
-            targetCore->mask = 1llu << processor_list[ip].processor_id;
+            targetCore->mask = 0;
+            if (maskBitAllowed(processor_list[ip].processor_id)) {
+                setMaskBit(targetCore->mask, processor_list[ip].processor_id);
+            }
             cpu_info->physical_cores++;
             prevCore = targetCore;
         }
@@ -627,10 +679,14 @@ bool get_cpu_info(cpu_info_t *cpu_info) {
                         int value0 = 0, value1 = 0;
                         if (sscanf_s(numstr.c_str(), "%d-%d", &value0, &value1) == 2) {
                             for (int iv = value0; iv <= value1; iv++) {
-                                mask |= 1llu << iv;
+                                if (maskBitAllowed(iv)) {
+                                    setMaskBit(mask, iv);
+                                }
                             }
                         } else if (sscanf_s(numstr.c_str(), "%d", &value0) == 1) {
-                            mask |= 1llu << value0;
+                            if (maskBitAllowed(value0)) {
+                                setMaskBit(mask, value0);
+                            }
                         }
                     }
                 }
@@ -744,8 +800,11 @@ bool get_cpu_info(cpu_info_t *cpu_info) {
 
 const processor_info_t *get_core_info(const cpu_info_t *cpu_info, RGYCoreType type, int id) {
     switch (type) {
-    case RGYCoreType::Physical: return (id < cpu_info->physical_cores) ? &cpu_info->proc_list[id] : nullptr;
+    case RGYCoreType::Physical: return (id >= 0 && id < cpu_info->physical_cores) ? &cpu_info->proc_list[id] : nullptr;
     case RGYCoreType::Logical: {
+        if (id < 0 || id >= 64) {
+            return nullptr;
+        }
         const uint64_t mask = 1llu << id;
         for (int i = 0; i < cpu_info->physical_cores; i++) {
             if (mask & cpu_info->proc_list[i].mask) {
@@ -1009,7 +1068,7 @@ tstring print_cpu_info(const cpu_info_t *cpu_info) {
         }
         str += _T(" : ");
         for (int il = 0; il < cpu_info->logical_cores; il++) {
-            const auto mask = 1llu << il;
+            const auto mask = (il < 64) ? (1llu << il) : 0;
             str += (mask & targetCore.mask) ? _T("*") : _T("-");
         }
         str += _T("\n");
@@ -1022,7 +1081,7 @@ tstring print_cpu_info(const cpu_info_t *cpu_info) {
                 auto& targetCache = cpu_info->caches[icache_level][ic];
                 str += strsprintf(_T("  cache L%d%s : "), icache_level + 1, RGYCacheTypeToStr(targetCache.type));
                 for (int il = 0; il < cpu_info->logical_cores; il++) {
-                    const auto mask = 1llu << il;
+                    const auto mask = (il < 64) ? (1llu << il) : 0;
                     str += (mask & targetCache.mask) ? _T("*") : _T("-");
                 }
                 str += strsprintf(_T(" : %2dway %6dKB\n"), targetCache.associativity, targetCache.size / 1024);
