@@ -518,6 +518,14 @@ namespace Amatsukaze.Shared
             => PostJsonAsync("/api/trim/requeue", req,
                 element => element.Deserialize<TrimRequeueResponse>(jsonOptions) ?? new TrimRequeueResponse());
 
+        public async Task<ApiResult<byte[]>> GetTrimAudioAsync(string sessionId, int start, int end, CancellationToken cancellationToken = default)
+        {
+            using var res = await http.GetAsync($"/api/trim/sessions/{Uri.EscapeDataString(sessionId)}/audio?start={start}&end={end}", cancellationToken);
+            if (!res.IsSuccessStatusCode)
+                return ApiResult<byte[]>.Fail((int)res.StatusCode, await res.Content.ReadAsStringAsync(cancellationToken));
+            return ApiResult<byte[]>.Success(await res.Content.ReadAsByteArrayAsync(cancellationToken), (int)res.StatusCode);
+        }
+
         public async Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber)
         {
             try

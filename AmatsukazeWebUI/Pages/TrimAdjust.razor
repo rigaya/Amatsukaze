@@ -182,6 +182,22 @@
                          alt="Waveform" />
                 </div>
 
+                @if (_session?.AudioPlaybackEnabled == true)
+                {
+                    <div class="trim-audio-controls" @onkeydown:stopPropagation="true">
+                        <audio @ref="_audioRef" preload="none" @onended="OnAudioEnded" />
+                        <button class="trim-btn" @onclick="PlayAudioHereAsync">ここから再生</button>
+                        <label>秒数 <input type="number" min="1" max="120" value="@_audioSeconds" @onchange="SetAudioSecondsAsync" style="width:5em" /></label>
+                        @if (_cmSeg != null)
+                        {
+                            <button class="trim-btn" @onclick="PlaySelectedAudioAsync" disabled="@(_cmSegSelectedIdx < 0)">区間を再生</button>
+                            <label><input type="checkbox" checked="@_audioAutoPlay" @onchange="SetAudioAutoPlayAsync" />区間移動時に再生</label>
+                        }
+                        <button class="trim-btn" @onclick="StopAudioAsync" disabled="@(!_audioActive)">停止(Esc)</button>
+                        <span role="status">@_audioStatus</span>
+                    </div>
+                }
+
                 @* フレーム情報 *@
                 <div class="trim-frame-info">
                     <span>Frame: @_currentFrame</span>
@@ -420,7 +436,7 @@
                     {
                         <div class="trim-cmseg-table-wrap">
                             <table class="trim-cmseg-table">
-                                <thead><tr><th>#</th><th>長さ(秒)</th><th>jls判定</th><th>分類</th></tr></thead>
+                                <thead><tr><th>#</th><th>長さ(秒)</th><th>jls判定</th><th>分類</th>@if (_session?.AudioPlaybackEnabled == true) { <th>音声</th> }</tr></thead>
                                 <tbody>
                                     @foreach (var seg in VisibleCmSegSegments())
                                     {
@@ -436,6 +452,10 @@
                                                     <option value="@choice.Id">@choice.Key: @choice.Name</option>
                                                 }
                                             </select></td>
+                                            @if (_session?.AudioPlaybackEnabled == true)
+                                            {
+                                                <td><button class="trim-btn trim-btn-sm" @onclick="() => PlaySegmentAudioAsync(seg)" @onclick:stopPropagation="true">再生</button></td>
+                                            }
                                         </tr>
                                     }
                                 </tbody>
@@ -672,8 +692,11 @@
             _objRef = DotNetObjectReference.Create(this);
             await _pageRef.FocusAsync();
             await LoadShowJlsSettingAsync();
+            await LoadAudioSettingsAsync();
             await LoadSessionAsync();
         }
+        if (_session?.AudioPlaybackEnabled == true && !_loading)
+            await JS.InvokeVoidAsync("trimAdjustAudio.setup", _pageRef, _audioRef, _objRef);
         if (_session?.CmSegAnnotationEnabled == true && !_loading)
         {
             await JS.InvokeVoidAsync("trimAdjustSetupCmSeg", _cmSegPanelRef, _objRef);
@@ -1060,6 +1083,7 @@
     // セッション再接続（編集点はWebUI側の状態を維持）
     private async Task ReconnectSessionAsync()
     {
+        await StopAudioAsync();
         var preservedCmSeg = _cmSeg;
         if (!_cmSegSaveConflict) await FlushCmSegAsync();
         var preservedCmSegDirty = _cmSegDirty;
@@ -2605,6 +2629,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        await DisposeAudioAsync();
         Interlocked.Increment(ref _bundleRequestToken);
         Interlocked.Exchange(ref _thumbRequestToken, _bundleRequestToken);
         _cmSegDisposing = true;

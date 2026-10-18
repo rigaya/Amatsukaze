@@ -503,6 +503,9 @@ namespace Amatsukaze.Lib
         [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
         private static unsafe extern int TrimAdjust_GetWaveformJpeg(IntPtr ptr, int frameNumber,
             out IntPtr jpegData, out int jpegSize);
+        [DllImport(AmatsukazeNatives.AmatsukazeLibName)]
+        private static extern int TrimAdjust_GetAudioPcm(IntPtr ptr, int startFrame, int endFrame,
+            out IntPtr data, out int sampleCount, out int sampleRate, out int channels);
         #endregion
 
         public TrimAdjust(AMTContext ctx, string datFilePath, int scaleMode)
@@ -583,6 +586,22 @@ namespace Amatsukaze.Lib
             keyFrame = 0;
             cmType = 0;
             return TrimAdjust_GetFrameInfo(Ptr, frameNumber, ref pts, ref duration, ref keyFrame, ref cmType) != 0;
+        }
+
+        // 呼び出し元は取得からコピー完了まで音声用のロックを保持する。
+        public byte[] GetAudioPcm(int startFrame, int endFrame, out int sampleRate, out int channels)
+        {
+            var result = TrimAdjust_GetAudioPcm(Ptr, startFrame, endFrame, out var data,
+                out var sampleCount, out sampleRate, out channels);
+            if (result == -1) throw new ArgumentException("音声の範囲が不正、または120秒を超えています");
+            if (result < 0) throw new IOException("音声PCMの読み込みに失敗しました");
+            if (result == 0) return null;
+            if (data == IntPtr.Zero || sampleCount <= 0 || sampleRate <= 0 || channels != 2
+                || sampleCount % channels != 0 || (long)sampleCount > (long)sampleRate * channels * 120)
+                throw new IOException("音声PCMの形式が不正です");
+            var buffer = new byte[checked(sampleCount * sizeof(short))];
+            Marshal.Copy(data, buffer, 0, buffer.Length);
+            return buffer;
         }
 
         // 波形画像をJPEGバイト列として取得。音声データなしの場合はnull

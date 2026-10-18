@@ -102,6 +102,8 @@ namespace Amatsukaze.Shared
 
         // Trim調整
         Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req);
+        Task<ApiResult<byte[]>> GetTrimAudioAsync(string sessionId, int start, int end, System.Threading.CancellationToken cancellationToken = default);
+
         Task<ApiResult<TrimAdjustBundleResponse>> GetTrimBundleAsync(string sessionId, int frameNumber);
         Task<ApiResult<CmSegAnnotation>> GetCmSegAnnotationAsync(string sessionId);
         Task<ApiResult<bool>> SaveCmSegAnnotationAsync(string sessionId, CmSegSaveRequest req);

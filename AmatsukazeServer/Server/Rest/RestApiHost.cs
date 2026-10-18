@@ -353,6 +353,24 @@ namespace Amatsukaze.Server.Rest
             }
         }
 
+        internal static IResult BuildTrimAudioResult(HttpContext context, Func<byte[]> getAudioWav)
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            try
+            {
+                var wav = getAudioWav();
+                return wav == null || wav.Length == 0 ? Results.NoContent()
+                    : Results.File(wav, "audio/wav", enableRangeProcessing: true);
+            }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ObjectDisposedException) { return Results.NotFound(); }
+            catch (IOException ex)
+            {
+                Util.AddLog("[TrimAdjust] 音声の読み込みに失敗しました", ex);
+                return Results.Problem("音声の読み込みに失敗しました");
+            }
+        }
+
         public void Dispose()
         {
             trimAdjust?.Dispose();
@@ -1931,6 +1949,17 @@ namespace Amatsukaze.Server.Rest
                 }
                 context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
                 return Results.File(jpegBytes, "image/jpeg");
+            });
+
+            app.MapGet("/api/trim/sessions/{sessionId}/audio", (HttpContext context, string sessionId) =>
+            {
+                if (!TrimAdjustService.AudioPlaybackEnabled) return Results.NotFound();
+                if (!int.TryParse(context.Request.Query["start"], out var start)
+                    || !int.TryParse(context.Request.Query["end"], out var end))
+                    return Results.BadRequest(new { message = "開始・終了フレームを整数で指定してください" });
+                var session = trimAdjust.GetSession(sessionId);
+                if (session == null) return Results.NotFound();
+                return BuildTrimAudioResult(context, () => session.GetAudioWav(start, end));
             });
 
             app.MapGet("/api/trim/sessions/{sessionId}/cmseg", (HttpContext context, string sessionId) =>

@@ -7,6 +7,7 @@
 */
 
 #include "AMTSource.h"
+#include "TrimAdjustAudio.h"
 #include <string>
 #include <cstdint>
 
@@ -833,7 +834,8 @@ void SaveAMTSource(
     const VideoFormat& vfmt, const AudioFormat& afmt,
     const std::vector<FilterSourceFrame>& frames,
     const std::vector<FilterAudioFrame>& audioFrames,
-    const DecoderSetting& decoderSetting) {
+    const DecoderSetting& decoderSetting,
+    const std::vector<uint8_t>& primaryAudioFrames) {
     File file(savepath, _T("wb"));
     file.writeArray(std::vector<tchar>(srcpath.begin(), srcpath.end()));
     file.writeArray(std::vector<tchar>(audiopath.begin(), audiopath.end()));
@@ -842,6 +844,11 @@ void SaveAMTSource(
     file.writeArray(frames);
     file.writeArray(audioFrames);
     file.writeValue(decoderSetting);
+    // 既存読込経路は末尾を無視するため、従来のdat形式との互換性を保つ。
+    if (!primaryAudioFrames.empty()) {
+        file.writeValue<uint32_t>(trimadjust::AUDIO_PRIMARY_METADATA_MAGIC);
+        file.writeArray(primaryAudioFrames);
+    }
 }
 
 static std::unique_ptr<AMTSource> LoadAMTSourceInstance(AMTContext& ctx,

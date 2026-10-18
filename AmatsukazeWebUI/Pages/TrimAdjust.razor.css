@@ -1362,3 +1362,17 @@
 @media (max-width: 640px) {
     .trim-cmseg-panel { order: 3; width: 100%; max-width: none; height: 280px; min-height: 150px; border-left: none; border-top: 1px solid var(--bs-border-color, #666); }
 }
+
+.trim-audio-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+}
+
+.trim-audio-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}

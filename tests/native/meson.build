@@ -53,3 +53,12 @@ if host_machine.system() == 'linux'
     timeout : 60,
   )
 endif
+
+trim_adjust_audio_tests = executable('TrimAdjustAudioTests',
+  'TrimAdjustAudioTests.cpp',
+  install : false,
+)
+test('TrimAdjustAudioTests', trim_adjust_audio_tests,
+  suite : 'native',
+  timeout : 30,
+)

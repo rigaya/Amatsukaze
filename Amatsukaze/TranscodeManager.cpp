@@ -1685,13 +1685,21 @@ void DoBadThing() {
         auto& fmt = reformInfo.getFormat(EncodeFileKey(videoFileIndex, 0));
         auto amtsPath = setting.getTmpAMTSourcePath(videoFileIndex);
         ctx.infoF(_T("ソースファイル読み込み用データ保存[%d/%d]: %s"), videoFileIndex + 1, numVideoFiles, amtsPath.c_str());
+        const auto& filterAudioFrames = reformInfo.getFilterSourceAudioFrames(videoFileIndex);
+        const auto& sourceAudioFrames = reformInfo.getAudioFrameList();
+        std::vector<uint8_t> primaryAudioFrames;
+        primaryAudioFrames.reserve(filterAudioFrames.size());
+        for (const auto& frame : filterAudioFrames) {
+            primaryAudioFrames.push_back(frame.frameIndex >= 0
+                && sourceAudioFrames[frame.frameIndex].format.channels == AUDIO_2LANG ? 1 : 0);
+        }
         av::SaveAMTSource(amtsPath,
             setting.getIntVideoFilePath(videoFileIndex),
             setting.getWaveFilePath(),
             fmt.videoFormat, fmt.audioFormat[0],
             reformInfo.getFilterSourceFrames(videoFileIndex),
-            reformInfo.getFilterSourceAudioFrames(videoFileIndex),
-            setting.getDecoderSetting());
+            filterAudioFrames,
+            setting.getDecoderSetting(), primaryAudioFrames);
         ctx.infoF(_T("ソースファイル読み込み用データ保存完了[%d/%d]"), videoFileIndex + 1, numVideoFiles);
     }
 

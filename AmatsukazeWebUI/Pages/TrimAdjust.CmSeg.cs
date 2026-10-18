@@ -82,9 +82,16 @@ public partial class TrimAdjust
     {
         var seg = _cmSeg?.Segments.FirstOrDefault(seg => seg.Idx == idx);
         if (seg == null) return;
+        var changed = _cmSegSelectedIdx != idx;
         _cmSegSelectedIdx = idx;
         OnSeekBarJlsBoundaryClick(seg.Start);
         if (focus) await JS.InvokeVoidAsync("trimAdjustFocusCmSeg", _cmSegPanelRef, idx);
+        if (changed)
+        {
+            await StopAudioAsync();
+            if (_audioAutoPlay && _session?.AudioPlaybackEnabled == true && _cmSegSelectedIdx == idx)
+                await PlaySegmentAudioAsync(seg);
+        }
     }
 
     private async Task OnCmSegFilterChanged(ChangeEventArgs e)

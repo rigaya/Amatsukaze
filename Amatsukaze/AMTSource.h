@@ -272,7 +272,8 @@ void SaveAMTSource(
     const VideoFormat& vfmt, const AudioFormat& afmt,
     const std::vector<FilterSourceFrame>& frames,
     const std::vector<FilterAudioFrame>& audioFrames,
-    const DecoderSetting& decoderSetting);
+    const DecoderSetting& decoderSetting,
+    const std::vector<uint8_t>& primaryAudioFrames = {});
 
 PClip LoadAMTSource(const tstring& loadpath, const char* filterdesc, bool outputQP, IScriptEnvironment* env);
 

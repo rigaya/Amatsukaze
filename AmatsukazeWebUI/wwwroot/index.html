@@ -497,6 +497,41 @@
                 e.preventDefault();
             }, { passive: false });
         };
+        window.trimAdjustAudio = {
+            setup: function (page, audio, dotNetRef) {
+                if (!page || !audio || page._audioKeyHandler) return;
+                page._audioKeyHandler = function (e) {
+                    if (e.key !== 'Escape') return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // 取得待ちの再生も取り消す。入力欄内でも停止を受け付ける。
+                    dotNetRef.invokeMethodAsync('StopAudioAsync');
+                };
+                page.addEventListener('keydown', page._audioKeyHandler, true);
+            },
+            stop: function (audio, generation) {
+                if (!audio || !audio.pause) return;
+                audio._generation = generation;
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+                if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
+                audio._blobUrl = null;
+            },
+            play: async function (audio, bytes, generation) {
+                if (!audio || audio._generation !== generation) return;
+                audio._blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+                audio.src = audio._blobUrl;
+                await audio.play();
+            },
+            dispose: function (page, audio) {
+                if (page && page._audioKeyHandler) {
+                    page.removeEventListener('keydown', page._audioKeyHandler, true);
+                    delete page._audioKeyHandler;
+                }
+                this.stop(audio, -1);
+            }
+        };
         // 正解作成パネル内のキーをBlazorのページ全体ハンドラーから隔離する。
         window.trimAdjustSetupCmSeg = function (panel, dotNetRef) {
             if (!panel || panel._cmSegSetup) return;
