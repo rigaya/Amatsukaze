@@ -79,6 +79,7 @@ AmatsukazeGenLogo -i input.ts -o output.lgd --debug-dir ./debug_logo
 
 ## 備考
 
+- 動画デコーダのスレッド数は論理コア数から自動設定し、1～8に制限する
 - 背景推定と再走査時の統計の再利用は、自動ロゴ枠検出の並列数によらず行う（メモリ不足などでキャッシュを利用できない場合を除く）
 - service id は TS の program/service 情報から自動解決する
 - service 名と日付が取得できた場合、ロゴ名は `サービス名(yyyy-MM-dd)` になる
