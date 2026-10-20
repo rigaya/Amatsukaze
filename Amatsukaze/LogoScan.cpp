@@ -3441,7 +3441,6 @@ namespace {
             std::vector<std::vector<uint8_t>> batchRaw8;
             // 初回走査で受け取ったが、まだ統計へ反映していないフレーム数。
             int pendingInitialFrames = 0;
-            bool allFramesBatched = true;
             bool reuseUnweighted = false;
             std::vector<AutoDetectStats> stats;
             // タイル単位のヒストグラム蓄積バッファ: [タイル][bin][画素]
@@ -3455,7 +3454,6 @@ namespace {
 
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 pendingInitialFrames = 0;
-                allFramesBatched = true;
                 reuseUnweighted = false;
                 if (bitDepth <= 8) {
                     // 背景辺のAVX2処理が行末付近でも64 byteを直接ロードできるよう、
@@ -7197,7 +7195,8 @@ namespace {
 
         template<typename pixel_t>
         int collectFrameSamples(const std::vector<pixel_t>& frameWork, const float invMaxv, const float rawScale, const int thresholdRaw, StatsPassBuffers& statsPass, const std::vector<float>& traceFgRaw) {
-            statsPass.allFramesBatched = false;
+            // 背景値の再利用はバッチ化やワーカー数と独立させる。
+            initializeBackgroundCache();
             auto& stats = statsPass.stats;
             auto& binAccumBuf = statsPass.binAccumBuf;
             auto& lastObservedFg = statsPass.lastObservedFg;
@@ -8524,10 +8523,10 @@ namespace {
             // ケースを拾うため、ここは再走査してでも sample 単位で処理する。
             sampleResidualReweightActive = true;
             // 同じキャッシュと選別マスクを再走査する場合だけ、重みに依存しない統計を保持する。
-            const bool reuseUnweighted = bitDepth == 8 && hasStoredRoiCache()
-                && statsPass.allFramesBatched && threadN >= 8 && tracePoints.empty()
-                && ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1) > 1;
+            const bool reuseUnweighted = bitDepth == 8 && hasStoredRoiCache() && tracePoints.empty();
             if (reuseUnweighted) {
+                logCtx.infoF(_T("[LogoScan] 再重み付けで非加重統計を再利用: frames=%d threads=%d"),
+                    roiCacheStoredFrames, threadN);
                 readFrames = 0;
                 sourceFrameIndex = 0;
                 statsPass.frameValidCounts.clear();
