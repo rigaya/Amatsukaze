@@ -2789,13 +2789,14 @@ namespace {
         return false;
     }
 
+    constexpr int kSideRetryShift = 16;
+
     // 1辺しか取れない場合の救済探索。
     // firstSide 以外の辺を外側にシフトして再評価し、2辺一致を探す。
     // 評価順は通常時と同じ規則(反対側を最後)を使う。
     template<typename pixel_t>
     static bool TryEstimateBgFindRetryPair(const std::vector<pixel_t>& y, const int w, const int h, const int sideLen, const int threshold, const int baseSx[4], const int baseSy[4], const int sideDx[4], const int sideDy[4], const int retryOutX[4], const int retryOutY[4], TryEstimateBgState<pixel_t>& st) {
         constexpr int kSideRetryCount = 1;
-        constexpr int kSideRetryShift = 16;
         int order[3] = {};
         TryEstimateBgBuildRetryOrder(st.firstSide, order);
         for (int retry = 0; retry < kSideRetryCount; retry++) {
@@ -2890,7 +2891,7 @@ namespace {
     }
 
     // 隣接する32画素の基準4辺を一括評価し、通常版と同じ順序規則で背景値を確定する。
-    // 基準辺だけで確定しない画素の救済探索は、結果一致を優先して既存経路へ戻す。
+    // 救済辺は要求されたときだけ32画素分を集計し、辺の選択順は通常版と揃える。
     static uint32_t TryEstimateBgBlock32U8(const std::vector<uint8_t>& y, const int w, const int h,
         const int x, const int y0, const int radius, const int threshold, float bg[32],
         const std::vector<uint8_t>* transposed) {
@@ -2915,6 +2916,11 @@ namespace {
             { 0, 1, 3 },
             { 0, 1, 2 },
         };
+        alignas(32) uint16_t retrySums[4][lanes];
+        alignas(32) uint8_t retryMins[4][lanes], retryMaxs[4][lanes];
+        uint32_t retryInRange[4] = {};
+        bool retryComputed[4] = {};
+        (void)transposed;
         uint32_t validMask = 0;
         for (int lane = 0; lane < lanes; lane++) {
             float sideAvg[4];
@@ -2962,15 +2968,28 @@ namespace {
 
             bool pairFound = false;
             if (firstSide >= 0) {
-                const int centerX = x + lane;
-                const int baseSx[4] = { centerX - radius, centerX - radius, centerX - radius, centerX + radius };
-                const int baseSy[4] = { y0 - radius, y0 + radius, y0 - radius, y0 - radius };
-                const int sideDx[4] = { 1, 1, 0, 0 };
-                const int sideDy[4] = { 0, 0, 1, 1 };
-                const int retryOutX[4] = { 0, 0, -1, 1 };
-                const int retryOutY[4] = { -1, 1, 0, 0 };
-                pairFound = TryEstimateBgFindRetryPair(y, w, h, sideLen, threshold,
-                    baseSx, baseSy, sideDx, sideDy, retryOutX, retryOutY, st);
+                const int retrySx[4] = { x - radius, x - radius, x - radius - kSideRetryShift, x + radius + kSideRetryShift };
+                const int retrySy[4] = { y0 - radius - kSideRetryShift, y0 + radius + kSideRetryShift, y0 - radius, y0 - radius };
+                for (int i = 0; i < 3; i++) {
+                    const int side = retryOrder[firstSide][i];
+                    if (!retryComputed[side]) {
+                        retryInRange[side] = CalcBgRetrySideStats32U8_AVX2(y.data(), w, w, h,
+                            retrySx[side], retrySy[side], sideLen, side < 2,
+                            retrySums[side], retryMins[side], retryMaxs[side]);
+                        retryComputed[side] = true;
+                    }
+                    // 範囲外の救済辺は元の基準辺の状態を残す。
+                    if ((retryInRange[side] & (1u << lane)) == 0) continue;
+                    st.sideAvg[side] = (float)retrySums[side][lane] / sideLen;
+                    st.sideMin[side] = retryMins[side][lane];
+                    st.sideMax[side] = retryMaxs[side][lane];
+                    st.sideEvaluated[side] = 1;
+                    st.sideValid[side] = ((int)st.sideMax[side] - (int)st.sideMin[side] <= threshold) ? 1 : 0;
+                    if (st.sideValid[side] && TryEstimateBgTryPairWithFirst(side, threshold, st)) {
+                        pairFound = true;
+                        break;
+                    }
+                }
             }
             if (!pairFound) {
                 TryEstimateBgFinalizeSideStats(st);
@@ -11870,6 +11889,34 @@ namespace {
             THROW(RuntimeException, "Cancel requested");
         }
     }
+}
+
+// AVX2未対応環境では背景推定のSIMD比較テストだけを省略する。
+extern "C" AMATSUKAZE_API int HasLogoBackgroundAVX2ForTest() {
+    return HasAVX2AvailableCached() ? 1 : 0;
+}
+
+// 背景推定の32画素処理を、SIMDを使わない16bit入力の同一処理と照合する窓口。
+extern "C" AMATSUKAZE_API int CompareLogoBackgroundForTest(const uint8_t* src,
+    int width, int height, int x, int y, int radius, int threshold,
+    float* reference, float* vectorized, uint32_t* referenceMask, uint32_t* vectorizedMask) {
+    if (!HasAVX2AvailableCached() || src == nullptr || reference == nullptr || vectorized == nullptr
+        || referenceMask == nullptr || vectorizedMask == nullptr || radius < 0 || radius > 32
+        || width < 2 * radius + 32 || height <= 0 || y < 0 || y >= height
+        || x < radius || x + 31 + radius >= width) return 0;
+    std::vector<uint8_t> frame(src, src + size_t(width) * height);
+    std::vector<uint16_t> scalar(frame.begin(), frame.end());
+    *referenceMask = 0;
+    for (int lane = 0; lane < 32; lane++) {
+        reference[lane] = 0.0f;
+        vectorized[lane] = 0.0f;
+        if (TryEstimateBg(scalar, width, height, x + lane, y, radius, threshold, reference[lane])) {
+            *referenceMask |= 1u << lane;
+        }
+    }
+    *vectorizedMask = TryEstimateBgBlock32U8(frame, width, height, x, y, radius, threshold,
+        vectorized, nullptr);
+    return 1;
 }
 
 // 検出と生成を同じ呼び出しスレッドで行うCLI用の任意API。

@@ -3103,6 +3103,93 @@ bool TestLogoCorrelationFusion(tstring& diagnostic) {
     return true;
 }
 
+// 救済辺の選択順、上下左右境界、閾値ちょうどの判定をスカラー処理とbit比較する。
+bool TestLogoBackgroundRetry(tstring& diagnostic) {
+    if (!HasLogoBackgroundAVX2ForTest()) {
+        _ftprintf(stdout, _T("AVX2非対応のため背景推定SIMD比較を省略\n"));
+        return true;
+    }
+    // 救済での最初の一致、全有効辺の平均、画像外の辺を飛ばす場合を固定値で確認する。
+    for (int scenario = 0; scenario < 3; scenario++) {
+        constexpr int width = 128, height = 96, radius = 4, y = 48;
+        const int x = scenario == 2 ? radius : 32;
+        std::vector<uint8_t> frame(width * height);
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) frame[col + row * width] = ((row + col) & 1) ? 0 : 255;
+        }
+        for (int col = 0; col < width; col++) {
+            frame[col + (y - radius) * width] = 100;
+            frame[col + (y + radius) * width] = 200;
+            frame[col + (y + radius + 16) * width] = 200;
+        }
+        for (int row = y - radius; row <= y + radius; row++) {
+            if (x - radius - 16 >= 0) frame[x - radius - 16 + row * width] = scenario == 0 ? 100 : 140;
+            frame[x + radius + 16 + row * width] = scenario == 2 ? 120 : 160;
+        }
+        float reference[32] = {}, vectorized[32] = {};
+        uint32_t referenceMask = 0, vectorizedMask = 0;
+        if (!Expect(CompareLogoBackgroundForTest(frame.data(), width, height, x, y, radius, 0,
+            reference, vectorized, &referenceMask, &vectorizedMask) != 0,
+            _T("救済固定値比較の実行失敗"), diagnostic)) return false;
+        const float expected = scenario == 0 ? 100.0f : scenario == 1 ? 150.0f : 140.0f;
+        if (!Expect((referenceMask & 1) && (vectorizedMask & 1) && reference[0] == expected && vectorized[0] == expected,
+            _T("救済辺の選択順または全有効辺平均の不一致"), diagnostic)) return false;
+    }
+    uint32_t randomState = 0x625a9b17;
+    auto random = [&]() { randomState = randomState * 1664525u + 1013904223u; return randomState; };
+    for (int radius : { 1, 4, 8, 16, 32 }) {
+        for (int extraWidth : { 0, 37 }) {
+            const int width = radius * 2 + 32 + extraWidth;
+            constexpr int height = 161;
+            std::vector<uint8_t> frame(width * height);
+            for (int pattern = 0; pattern < 8; pattern++) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int value = 0;
+                        switch (pattern) {
+                        case 0: value = 100; break;
+                        case 1: value = (x * 7 + y * 11) & 255; break;
+                        case 2: value = random() >> 24; break;
+                        case 3: value = 100 + random() % 13; break;
+                        case 4: value = ((x / 13 + y / 17) & 1) ? 100 : 200; break;
+                        case 5: value = y % 19 == 0 ? 100 : ((x + y) & 1) * 255; break;
+                        case 6: value = x % 23 == 0 ? 100 : ((x + y) & 1) * 255; break;
+                        default: value = ((x / 11 + y / 7) % 3) * 100; break;
+                        }
+                        frame[x + y * width] = (uint8_t)value;
+                    }
+                }
+                for (int x : { radius, width - radius - 32 }) {
+                    for (int y : { 0, radius - 1, radius, radius + 15, radius + 16,
+                        height / 2, height - radius - 17, height - radius - 1, height - 1 }) {
+                        for (int threshold : { 0, 1, 11, 12, 13, 32, 255 }) {
+                            float reference[32] = {}, vectorized[32] = {};
+                            uint32_t referenceMask = 0, vectorizedMask = 0;
+                            if (!Expect(CompareLogoBackgroundForTest(frame.data(), width, height, x, y, radius,
+                                threshold, reference, vectorized, &referenceMask, &vectorizedMask) != 0,
+                                _T("背景推定比較の実行失敗"), diagnostic)) return false;
+                            if (referenceMask != vectorizedMask) {
+                                diagnostic = strsprintf(_T("背景推定マスク不一致: 半径=%d, 幅=%d, 模様=%d, x=%d, y=%d, 閾値=%d"),
+                                    radius, width, pattern, x, y, threshold);
+                                return false;
+                            }
+                            for (int lane = 0; lane < 32; lane++) {
+                                if ((referenceMask & (1u << lane)) &&
+                                    std::memcmp(reference + lane, vectorized + lane, sizeof(float)) != 0) {
+                                    diagnostic = strsprintf(_T("背景推定値bit不一致: 半径=%d, 幅=%d, 模様=%d, x=%d, y=%d, 閾値=%d, lane=%d, 旧=%.9g, 新=%.9g"),
+                                        radius, width, pattern, x, y, threshold, lane, reference[lane], vectorized[lane]);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool TestLogoFile(tstring& diagnostic) {
     constexpr int LOGO_W = 8, LOGO_H = 4, LOG_UV = 1;
     constexpr size_t SIZE_Y = LOGO_W * LOGO_H;
@@ -3299,6 +3386,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("arib_string"), TestAribString },
     { _T("logo_file"), TestLogoFile },
     { _T("logo_correlation_fusion"), TestLogoCorrelationFusion },
+    { _T("logo_background_retry"), TestLogoBackgroundRetry },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },

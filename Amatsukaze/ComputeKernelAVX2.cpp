@@ -360,6 +360,30 @@ void PackBackground32Fixed88_AVX2(const float* bg, uint32_t validMask, uint16_t*
     }
 }
 
+// 救済辺を32画素分まとめて集計し、画像内に辺全体が収まるlaneだけ返す。
+uint32_t CalcBgRetrySideStats32U8_AVX2(const uint8_t* src, int stride, int width, int height,
+    int sx, int sy, int len, bool horizontal, uint16_t* sums, uint8_t* mins, uint8_t* maxs) {
+    const int lastStart = width - (horizontal ? len : 1);
+    if (sy < 0 || sy + (horizontal ? 1 : len) > height) return 0;
+    const int firstLane = std::max(0, -sx);
+    const int lastLane = std::min(31, lastStart - sx);
+    if (firstLane > lastLane) return 0;
+    // 呼び出し元の基準32画素が左右半径を含めて収まるため、32本の安全な辺を確保できる。
+    assert(len > 0 && len <= 65 && lastStart >= 31);
+    // 境界ではロードの起点を内側へ寄せ、対象laneの結果だけ元の位置へ戻す。
+    const int safeX = std::max(0, std::min(sx, lastStart - 31));
+    alignas(32) uint16_t safeSums[32];
+    alignas(32) uint8_t safeMins[32], safeMaxs[32];
+    CalcBgSideStatsBlock32U8_AVX2Impl(src + sy * stride + safeX,
+        horizontal ? 1 : stride, len, safeSums, safeMins, safeMaxs);
+    const int count = lastLane - firstLane + 1;
+    const int offset = sx + firstLane - safeX;
+    memcpy(sums + firstLane, safeSums + offset, count * sizeof(uint16_t));
+    memcpy(mins + firstLane, safeMins + offset, count);
+    memcpy(maxs + firstLane, safeMaxs + offset, count);
+    return (uint32_t)(((uint64_t(1) << count) - 1) << firstLane);
+}
+
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs) {
     constexpr int lanes = 32;

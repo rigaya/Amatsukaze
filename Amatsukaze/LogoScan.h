@@ -32,6 +32,12 @@ extern "C" AMATSUKAZE_API int CompareLogoCorrelationForTest(const float* kernels
     const float* work, int width, const std::pair<int, int>* coordinates, size_t count,
     const LogoCorrelationScaleLimit* scales, int scaleCount, float maxv, float* reference, float* fused);
 
+// 背景推定のスカラー処理と32画素SIMD処理を同じ入力で比較する。
+extern "C" AMATSUKAZE_API int HasLogoBackgroundAVX2ForTest();
+extern "C" AMATSUKAZE_API int CompareLogoBackgroundForTest(const uint8_t* src,
+    int width, int height, int x, int y, int radius, int threshold,
+    float* reference, float* vectorized, uint32_t* referenceMask, uint32_t* vectorizedMask);
+
 namespace av {
 class AMTSource;
 }
@@ -57,6 +63,8 @@ bool TryEstimateBgEvalSideContiguousU8_AVX2(const uint8_t* ptr, int len, int thr
 void PackBackground32Fixed88_AVX2(const float* bg, uint32_t validMask, uint16_t* out);
 void CalcCorrectedEdges32U8_AVX2(const uint8_t* src, int stride, float invMaxv, float* edges);
 void CalcBgSideStatsVerticalBoundary32U8_AVX2(const uint8_t* src, int stride, int height, int x, int y, int radius, uint16_t* sums, uint8_t* mins, uint8_t* maxs);
+uint32_t CalcBgRetrySideStats32U8_AVX2(const uint8_t* src, int stride, int width, int height,
+    int sx, int sy, int len, bool horizontal, uint16_t* sums, uint8_t* mins, uint8_t* maxs);
 void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y, int radius,
     uint16_t* sideSums, uint8_t* sideMins, uint8_t* sideMaxs);
 
