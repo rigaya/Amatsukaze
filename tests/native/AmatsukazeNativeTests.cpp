@@ -2,6 +2,7 @@
 #include "AMTLogo.h"
 #include "LogoScan.h"
 #include "LogoScanPartition.h"
+#include "LogoResidualWeight.h"
 #include "AdtsParser.h"
 #include "AmatsukazeTestImpl.h"
 #include "AudioTrackBuilder.h"
@@ -3104,6 +3105,81 @@ bool TestLogoCorrelationFusion(tstring& diagnostic) {
     return true;
 }
 
+// 共有ヘッダを使わずに記述した従来式と、画素固定パラメータをbit単位で照合する。
+bool TestLogoResidualWeightParams(tstring& diagnostic) {
+    const auto referenceTrust = [](double consistency) {
+        return std::max(0.0, std::min(1.0, (consistency - 0.20) / 1.20));
+    };
+    const auto referenceSigma = [](double stdDiff, double trust) {
+        const double sigmaBase = std::max(6.0 / 255.0, stdDiff);
+        const double sigmaShrink = 1.0 + 1.65 * trust;
+        return std::max(4.0 / 255.0, sigmaBase / sigmaShrink);
+    };
+    const auto sameBits = [](double a, double b) { return std::memcmp(&a, &b, sizeof(double)) == 0; };
+    const auto verify = [&](double consistency, double stdDiff) {
+        const double trust = referenceTrust(consistency);
+        const bool enabled = trust > 1e-4;
+        const auto prepared = logo::PrepareLogoResidualWeight(consistency, stdDiff);
+        if (!sameBits(logo::CalcResidualReweightTrust(consistency), trust) || prepared.enabled != enabled ||
+            !sameBits(prepared.sigma, enabled ? referenceSigma(stdDiff, trust) : 1.0)) {
+            diagnostic = _T("残差重みの有効判定またはsigmaのbit不一致");
+            return false;
+        }
+        return true;
+    };
+    const double inf = std::numeric_limits<double>::infinity();
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const auto around = [&](double value) {
+        return std::vector<double>({ std::nextafter(value, -inf), value, std::nextafter(value, inf) });
+    };
+    std::vector<double> consistencies = { -inf, -std::numeric_limits<double>::max(), -1.0, -0.0, 0.0,
+        std::numeric_limits<double>::denorm_min(), 1.0, std::numeric_limits<double>::max(), inf, nan, -nan };
+    for (double threshold : { 0.20, 0.20 + 1.20 * 1e-4, 1.40 }) {
+        const auto values = around(threshold);
+        consistencies.insert(consistencies.end(), values.begin(), values.end());
+    }
+    std::vector<double> stdDiffs = { -inf, -std::numeric_limits<double>::max(), -1.0, -0.0, 0.0,
+        std::numeric_limits<double>::denorm_min(), 0.1, 1.0, std::numeric_limits<double>::max(), inf, nan, -nan };
+    for (double threshold : { 4.0 / 255.0, 6.0 / 255.0, (4.0 / 255.0) * 2.65 }) {
+        const auto values = around(threshold);
+        stdDiffs.insert(stdDiffs.end(), values.begin(), values.end());
+    }
+    for (double consistency : consistencies) {
+        for (double stdDiff : stdDiffs) if (!verify(consistency, stdDiff)) return false;
+    }
+    // NaN・無限大を含む信頼度を直接渡した場合も、従来のmaxの引数順を保つ。
+    for (double trust : { -inf, -1.0, -0.0, 0.0, 1e-4, 1.0, inf, nan }) {
+        for (double stdDiff : stdDiffs) {
+            if (!Expect(sameBits(logo::CalcResidualReweightSigma(stdDiff, trust), referenceSigma(stdDiff, trust)),
+                _T("残差重みsigmaの特殊値が従来式と一致しない"), diagnostic)) return false;
+        }
+    }
+    if (!Expect(logo::PrepareLogoResidualWeight(nan, 0.1).enabled &&
+        logo::PrepareLogoResidualWeight(inf, 0.1).enabled && !logo::PrepareLogoResidualWeight(-inf, 0.1).enabled,
+        _T("NaNまたは無限大で従来のtrust閾値判定を維持できない"), diagnostic)) return false;
+    uint64_t state = 0x6a09e667f3bcc909ULL;
+    const auto randomBits = [&]() {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        return state;
+    };
+    for (int i = 0; i < 20000; i++) {
+        // 生の浮動小数点bit列と、実入力に近い有限値を交互に調べる。
+        double consistency, stdDiff;
+        const uint64_t consistencyBits = randomBits(), stdDiffBits = randomBits();
+        if ((i & 1) == 0) {
+            std::memcpy(&consistency, &consistencyBits, sizeof(double));
+            std::memcpy(&stdDiff, &stdDiffBits, sizeof(double));
+        } else {
+            consistency = static_cast<double>(consistencyBits % 2000001) / 1000000.0 - 0.25;
+            stdDiff = static_cast<double>(stdDiffBits % 1000001) / 1000000.0;
+        }
+        if (!verify(consistency, stdDiff)) return false;
+    }
+    return true;
+}
+
 bool TestLogoCollectPartition(tstring& diagnostic) {
     if (!Expect(logo::BuildLogoCollectXBoundaries(288, 16, 32, 2, true) == std::vector<int>({ 16, 128, 272 }),
         _T("実素材相当の32画素境界が一致しない"), diagnostic)) return false;
@@ -3448,6 +3524,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("logo_correlation_fusion"), TestLogoCorrelationFusion },
     { _T("logo_background_retry"), TestLogoBackgroundRetry },
     { _T("logo_collect_partition"), TestLogoCollectPartition },
+    { _T("logo_residual_weight_params"), TestLogoResidualWeightParams },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },

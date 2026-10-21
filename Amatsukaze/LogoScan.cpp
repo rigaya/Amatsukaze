@@ -9,6 +9,7 @@
 #include "LogoScan.h"
 #include "LogoDecodeSession.h"
 #include "LogoScanPartition.h"
+#include "LogoResidualWeight.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -3517,6 +3518,8 @@ namespace {
         std::vector<std::vector<uint8_t>> roiCacheRamSlabs;
         // 8bit背景値は8.8固定小数点で保持する。
         std::vector<std::vector<uint16_t>> backgroundCacheSlabs;
+        // 全領域の収集完了後だけ立て、再走査の転置と未計算チェックを省略する。
+        std::vector<uint8_t> backgroundCacheComplete;
         bool backgroundCacheAttempted = false;
         int backgroundCacheWidth = 0, backgroundCacheHeight = 0;
         int backgroundCacheX = 0, backgroundCacheY = 0;
@@ -3551,6 +3554,7 @@ namespace {
         std::vector<float> provisionalLineConsistency;
         std::vector<float> provisionalLineStdDiff;
         std::vector<uint8_t> lowBgLeftReweightEligible;
+        std::vector<logo::LogoResidualWeightParams> sampleResidualWeightParams;
         bool sampleResidualReweightActive = false;
 
         struct ScoreStageBuffers {
@@ -4421,6 +4425,7 @@ namespace {
             roiCacheRamSlabs.shrink_to_fit();
             backgroundCacheSlabs.clear();
             backgroundCacheSlabs.shrink_to_fit();
+            backgroundCacheComplete.clear();
             backgroundCacheAttempted = false;
             filteredRoiCacheSlabs.clear();
             filteredRoiCacheSlabs.shrink_to_fit();
@@ -4670,6 +4675,7 @@ namespace {
             provisionalLineB.clear();
             provisionalLineConsistency.clear();
             provisionalLineStdDiff.clear();
+            sampleResidualWeightParams.clear();
             temporalHistBuf.clear();
             temporalHistBuf.shrink_to_fit();
             temporalHistCaptureActive = false;
@@ -7035,6 +7041,7 @@ namespace {
             }
             try {
                 const int slabs = (searchFrames + kRoiCacheFramesPerSlab - 1) / kRoiCacheFramesPerSlab;
+                backgroundCacheComplete.assign(searchFrames, 0);
                 backgroundCacheSlabs.reserve(slabs);
                 for (int slab = 0; slab < slabs; slab++) {
                     const int count = std::min(kRoiCacheFramesPerSlab, searchFrames - slab * kRoiCacheFramesPerSlab);
@@ -7050,6 +7057,7 @@ namespace {
                 logCtx.infoF(_T("[LogoScan] 背景推定キャッシュ: %") _T(PRIu64) _T(" bytes"), bytes);
             } catch (const std::bad_alloc&) {
                 backgroundCacheSlabs.clear();
+                backgroundCacheComplete.clear();
                 logCtx.info(_T("[LogoScan] 背景推定キャッシュの確保失敗により背景値を再計算する"));
             }
         }
@@ -7066,15 +7074,27 @@ namespace {
                 + (size_t)(frame % kRoiCacheFramesPerSlab) * pixels;
         }
 
+        bool hasCompleteBackgroundCache(const int frame, const int thresholdRaw) {
+            return backgroundCacheFrame(frame, thresholdRaw) != nullptr
+                && frame < (int)backgroundCacheComplete.size() && backgroundCacheComplete[frame] != 0;
+        }
+
+        void markBackgroundCacheComplete(const int frame, const int thresholdRaw) {
+            if (backgroundCacheFrame(frame, thresholdRaw) != nullptr
+                && frame < (int)backgroundCacheComplete.size()) {
+                backgroundCacheComplete[frame] = 1;
+            }
+        }
+
         size_t backgroundCacheIndex(const int x, const int y) const {
             return (size_t)(y - kScanEdgeMargin) * (scanw - 2 * kScanEdgeMargin) + x - kScanEdgeMargin;
         }
 
         uint32_t estimateBackgroundBlock(const std::vector<uint8_t>& frameWork, const int x, const int y,
-            const int thresholdRaw, const std::vector<uint8_t>* transpose, uint16_t* cache, uint16_t* bg) {
+            const int thresholdRaw, const std::vector<uint8_t>* transpose, uint16_t* cache, uint16_t* bg, const bool cacheComplete) {
             const size_t offset = cache ? backgroundCacheIndex(x, y) : 0;
             bool complete = cache != nullptr;
-            if (cache) {
+            if (cache && !cacheComplete) {
                 for (int lane = 0; lane < 32; lane++) {
                     if (BackgroundIsMissing(cache[offset + lane])) { complete = false; break; }
                 }
@@ -7111,6 +7131,8 @@ namespace {
             if constexpr (std::is_same_v<pixel_t, uint8_t>) {
                 cache = backgroundCacheFrame(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
             }
+            const bool cacheComplete = cache != nullptr
+                && hasCompleteBackgroundCache(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
                 auto collectOne = [&](const int x, const bool bgOk, const bg_t bg, const float preparedEdge = -1.0f) {
@@ -7182,7 +7204,7 @@ namespace {
                             if (!reuseUnweighted) {
                                 CalcCorrectedEdges32U8_AVX2(frameWork.data() + x + y * scanw, scanw, invMaxv, preparedEdges);
                             }
-                            const uint32_t bgValidMask = estimateBackgroundBlock(frameWork, x, y, thresholdRaw, transposed, cache, bg);
+                            const uint32_t bgValidMask = estimateBackgroundBlock(frameWork, x, y, thresholdRaw, transposed, cache, bg, cacheComplete);
                             for (int lane = 0; lane < 32; lane++) {
                                 localFrameCount += collectOne(x + lane,
                                     (bgValidMask & (1u << lane)) != 0, bg[lane], reuseUnweighted ? 0.0f : preparedEdges[lane]);
@@ -7194,7 +7216,7 @@ namespace {
                     bg_t bg = 0;
                     bool bgOk = false;
                     const size_t offset = cache ? backgroundCacheIndex(x, y) : 0;
-                    if (cache && !BackgroundIsMissing(cache[offset])) {
+                    if (cache && (cacheComplete || !BackgroundIsMissing(cache[offset]))) {
                         bgOk = BackgroundIsValid(cache[offset]);
                         if (bgOk) bg = cache[offset];
                     } else {
@@ -7261,7 +7283,7 @@ namespace {
             // 垂直辺を連続ロードできるよう、AVX2利用時だけROIを列優先に並べ替える。
             const std::vector<pixel_t>* transposed = nullptr;
             if constexpr (std::is_same_v<pixel_t, uint8_t>) {
-                if (!HasAVX2AvailableCached()) {
+                if (!HasAVX2AvailableCached() || hasCompleteBackgroundCache(readFrames, thresholdRaw)) {
                     transposed = nullptr;
                 } else {
                     auto& transpose = statsPass.frameTranspose8;
@@ -7409,6 +7431,11 @@ namespace {
                 rec.totalCandidatesAfter = s.totalCandidates;
                 statsPass.traceRecords.push_back(rec);
             }
+            // 例外なく全タイルが完了してから、フレーム全体を再利用可能にする。
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                markBackgroundCacheComplete(readFrames, thresholdRaw);
+            }
+
             return frameCount.load(std::memory_order_relaxed);
         }
 
@@ -7419,6 +7446,7 @@ namespace {
                 const uint8_t* src = nullptr;
                 int segmentConsensusIndex = 0;
                 bool active = false;
+                bool cachedBackground = false;
             };
 
             constexpr float kInvMaxv = 1.0f / 255.0f;
@@ -7463,9 +7491,10 @@ namespace {
                 info.segmentConsensusIndex = ClampInt((int)(((int64_t)frameIndex * kSegmentConsensusK)
                     / std::max(1, searchFrames)), 0, kSegmentConsensusK - 1);
                 info.active = true;
+                info.cachedBackground = hasCompleteBackgroundCache(frameIndex, thresholdRaw);
                 activeFrames.push_back(bi);
                 statsPass.batchFrameWork8[bi].resize(workSize);
-                if (useTranspose) {
+                if (useTranspose && !info.cachedBackground) {
                     statsPass.batchFrameTranspose8[bi].resize(workSize);
                 }
             }
@@ -7476,7 +7505,7 @@ namespace {
                     const int bi = activeFrames[ai];
                     preprocessStoredFrameSingleThread(frames[bi].src, scanw,
                         statsPass.batchFrameWork8[bi], thresholdRaw, firstFrame + bi);
-                    if (useTranspose) {
+                    if (useTranspose && !frames[bi].cachedBackground) {
                         buildFrameTranspose8(statsPass.batchFrameWork8[bi], statsPass.batchFrameTranspose8[bi]);
                     }
                 }
@@ -7513,7 +7542,8 @@ namespace {
                         if (!frames[bi].active) {
                             continue;
                         }
-                        const auto* transposed = useTranspose ? &statsPass.batchFrameTranspose8[bi] : nullptr;
+                        const auto* transposed = useTranspose && !frames[bi].cachedBackground
+                            ? &statsPass.batchFrameTranspose8[bi] : nullptr;
                         taskFrameCounts[(size_t)task * batchCount + bi] = collectFrameSampleRange(
                             statsPass.batchFrameWork8[bi], kInvMaxv, thresholdRaw, transitionThreshold,
                             statsPass, transposed, frames[bi].segmentConsensusIndex,
@@ -7538,6 +7568,10 @@ namespace {
                         THROW(RuntimeException, "Cancel requested");
                     }
                 }
+            }
+            // 通知まで正常終了したバッチだけを完成扱いにする。
+            for (const int bi : activeFrames) {
+                markBackgroundCacheComplete(firstFrame + bi, thresholdRaw);
             }
         }
 
@@ -8310,23 +8344,6 @@ namespace {
             return (float)bestPenalty;
         }
 
-        // trust は「この provisional line をどこまで信用してよいか」を表す係数。
-        // q43 の低スコア群では旧閾値(0.55)だと補正がまったく発火しなかったため、
-        // 0.20 からゆるやかに立ち上げ、1.40 で飽和するようにしている。
-        static double CalcResidualReweightTrust(const double provisionalConsistency) {
-            return std::max(0.0, std::min(1.0, (provisionalConsistency - 0.20) / 1.20));
-        }
-
-        // sigma は provisional line まわりの許容幅。
-        // provisionalStdDiff は「回帰残差」ではなく点全体の fg-bg 差の散らばりで、
-        // それを基準幅にしつつ、line を信用できる点ほど狭めて外れ枝を落とす。
-        // ただし下限を持たせ、誤った provisional line で潰しすぎないようにする。
-        static double CalcResidualReweightSigma(const double provisionalStdDiff, const double trust) {
-            const double sigmaBase = std::max(6.0 / 255.0, provisionalStdDiff);
-            const double sigmaShrink = 1.0 + 1.65 * trust;
-            return std::max(4.0 / 255.0, sigmaBase / sigmaShrink);
-        }
-
         // 2回目の走査では sample 単位で重みを掛けてから bin 平均を作る。
         // これにより、同じ fg bin に混ざる「時間連続の別 bg 枝」を hard reject せず
         // soft に弱めつつ、本流の representative point を保ちやすくする。
@@ -8517,10 +8534,10 @@ namespace {
                 return std::max(0.0, std::min(1.0, v));
             };
             const double predBg = provisionalLineA[off] * fg + provisionalLineB[off];
-            const double trust = CalcResidualReweightTrust(provisionalLineConsistency[off]);
+            const auto& params = sampleResidualWeightParams[off];
             double weight = 1.0;
-            if (trust > 1e-4) {
-                const double sigma = CalcResidualReweightSigma(provisionalLineStdDiff[off], trust);
+            if (params.enabled) {
+                const double sigma = params.sigma;
                 const double residual = (bg - predBg) / sigma;
                 // bg_desire=predBg を中心とするガウス重み。
                 // 回帰線から離れた枝は指数的に弱めるが、hard reject はせず平均化へ残す。
@@ -8548,6 +8565,14 @@ namespace {
             // provisional line ができた後にだけ raw sample へ戻って重み付けし直す。
             // q43 のように「bin代表点だけ見るとまだ二股だが、sample 単位では本流が見える」
             // ケースを拾うため、ここは再走査してでも sample 単位で処理する。
+            // segment consensusによる仮回帰線の更新後、画素固定の係数だけを保存する。
+            sampleResidualWeightParams.assign(provisionalLineValid.size(), {});
+            for (size_t off = 0; off < provisionalLineValid.size(); off++) {
+                if (provisionalLineValid[off]) {
+                    sampleResidualWeightParams[off] = logo::PrepareLogoResidualWeight(
+                        provisionalLineConsistency[off], provisionalLineStdDiff[off]);
+                }
+            }
             sampleResidualReweightActive = true;
             // 同じキャッシュと選別マスクを再走査する場合だけ、重みに依存しない統計を保持する。
             const bool reuseUnweighted = bitDepth == 8 && hasStoredRoiCache() && tracePoints.empty();

@@ -130,3 +130,9 @@ Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson tes
 `logo_collect_partition` は単フレーム処理とバッチ処理で共用するX方向の分割境界を検証する。幅・余白・半径・分割数・32画素整列の有無を組み合わせ、外端保持、単調性、全画素をちょうど一度だけ覆うことを確認する。整列無効時は従来の等分境界と一致し、整列によって空区間になる狭い分割は元の境界を保持する。実例の幅288・余白16・半径32・2分割で内部境界128になること、空ROIと大きい幅で安全に分割できることも確認する。
 
 選択実行は `AmatsukazeNativeTests --select logo_collect_partition`。CPUのAVX2対応には依存しない。
+
+## ロゴ残差重みの画素固定パラメータ
+
+`logo_residual_weight_params` は、再重み付けで画素ごとに事前計算する有効判定 (`trust > 1e-4`) と許容幅 `sigma` を、共有ヘッダから独立に記述した従来式とbit単位で比較する。閾値の直前・一致・直後、sigmaの下限、正負のゼロ、非正規化数、最大有限値、NaN、正負の無限大、および固定seedの乱数入力を確認する。無効な画素のsigmaは使用しない既定値1とし、有効な画素のsigmaは従来の除算にそのまま渡す。逆数化や指数関数の近似は行わない。
+
+選択実行は `AmatsukazeNativeTests --select logo_residual_weight_params`。
