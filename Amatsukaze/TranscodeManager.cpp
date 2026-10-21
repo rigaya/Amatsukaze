@@ -10,6 +10,9 @@
 #include "rgy_util.h"
 #include "rgy_thread_affinity.h"
 #include <thread>
+#include <condition_variable>
+#include <mutex>
+#include <exception>
 #include "AdtsParser.h"
 #include "PacketCache.h"
 #include "AudioTrackBuilder.h"
@@ -832,49 +835,102 @@ class TsReadExPipe {
 
 public:
     TsReadExPipe(AMTContext& ctx, const ConfigWrapper& setting)
-        : output_(new File(setting.getTmpTsReadExDumpPath(), _T("wb")))
-        , process_()
-        , writeEnabled_(true) {
+        : output_(new File(setting.getTmpTsReadExDumpPath(), _T("wb"))) {
         ctx.info(_T("[tsreadex 解析]"));
         const tstring args = StringFormat(
             _T("\"%s\" -n -1 -r - -"), setting.getTsReadExPath().c_str());
         ctx.infoF(_T("tsreadex コマンド: %s"), args.c_str());
         process_.reset(new TraceProcess(args, output_.get()));
+        try {
+            worker_ = std::thread([this]() { run(); });
+        } catch (...) {
+            // 構築失敗時も起動済みプロセスと出力回収スレッドを先に終了する。
+            process_->join();
+            throw;
+        }
     }
 
     ~TsReadExPipe() {
-        // EventBaseSubProcess::join()は2回呼ぶとclose済みパイプを操作してしまうため、
-        // 明示的にjoin()済みの場合はここでは何もしない。
-        if (process_ && !joined_) {
-            try {
-                process_->join();
-            } catch (...) {
-            }
+        try {
+            join();
+        } catch (...) {
         }
     }
 
     void write(MemoryChunk mc) {
-        if (!writeEnabled_) {
-            return;
-        }
-        try {
-            process_->write(mc);
-        } catch (const RuntimeException&) {
-            // tsreadexが早期終了してもTS解析は最後まで継続する。
-            writeEnabled_ = false;
-        }
+        std::unique_lock<std::mutex> lock(mutex_);
+        space_.wait(lock, [this]() { return pending_ < BUFFER_COUNT || failure_; });
+        if (failure_) std::rethrow_exception(failure_);
+        // 先読み領域は次のreadで再利用されるため、上限付きリングへコピーする。
+        auto& buffer = buffers_[tail_];
+        buffer.assign(mc.data, mc.data + mc.length);
+        tail_ = (tail_ + 1) % BUFFER_COUNT;
+        ++pending_;
+        lock.unlock();
+        ready_.notify_one();
     }
 
     int join() {
-        joined_ = true;
-        return process_->join();
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            finished_ = true;
+        }
+        ready_.notify_one();
+        if (worker_.joinable()) worker_.join();
+        // processのjoinは一度だけ実行し、デストラクタからの再呼出しも許す。
+        if (!joined_) {
+            joined_ = true;
+            exitCode_ = process_->join();
+        }
+        if (failure_) std::rethrow_exception(failure_);
+        return exitCode_;
     }
 
 private:
+    void run() {
+        try {
+            bool writeEnabled = true;
+            while (true) {
+                std::unique_lock<std::mutex> lock(mutex_);
+                ready_.wait(lock, [this]() { return pending_ != 0 || finished_; });
+                if (pending_ == 0) return;
+                auto& buffer = buffers_[head_];
+                lock.unlock();
+                if (writeEnabled) {
+                    try {
+                        process_->write(MemoryChunk(buffer.data(), buffer.size()));
+                    } catch (const RuntimeException&) {
+                        // 早期終了時は従来どおりTS解析を継続し、joinの終了コードで判定する。
+                        writeEnabled = false;
+                    }
+                }
+                lock.lock();
+                head_ = (head_ + 1) % BUFFER_COUNT;
+                --pending_;
+                lock.unlock();
+                space_.notify_one();
+            }
+        } catch (...) {
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                failure_ = std::current_exception();
+            }
+            space_.notify_one();
+        }
+    }
+
+    static constexpr size_t BUFFER_COUNT = 4;
     std::unique_ptr<File> output_;
     std::unique_ptr<TraceProcess> process_;
-    bool writeEnabled_;
+    std::array<std::vector<uint8_t>, BUFFER_COUNT> buffers_;
+    std::mutex mutex_;
+    std::condition_variable ready_, space_;
+    size_t head_ = 0, tail_ = 0, pending_ = 0;
+    bool finished_ = false;
     bool joined_ = false;
+    int exitCode_ = 0;
+    std::exception_ptr failure_;
+    std::thread worker_;
 };
 
 } // namespace
