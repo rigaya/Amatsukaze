@@ -3062,6 +3062,7 @@ struct LogoHeaderStorage {
 };
 
 // 少数・多数のマスク、暗部・明部、飽和、正負の相関を旧走査とbit単位で比較する。
+// 8座標バッチの境界と端数、符号付きゼロも含める。
 bool TestLogoCorrelationFusion(tstring& diagnostic) {
     constexpr int width = 48, height = 40, scaleCount = 32;
     std::vector<std::pair<int, int>> coordinates;
@@ -3080,7 +3081,7 @@ bool TestLogoCorrelationFusion(tstring& diagnostic) {
         scale.scale2 = (random() % 1001) / 1000.0f;
     }
     for (float maxv : { 255.0f, 1023.0f }) {
-        for (int pattern = 0; pattern < 7; pattern++) {
+        for (int pattern = 0; pattern < 8; pattern++) {
             for (size_t i = 0; i < work.size(); i++) {
                 switch (pattern) {
                 case 0: work[i] = 0.0f; break;
@@ -3089,10 +3090,12 @@ bool TestLogoCorrelationFusion(tstring& diagnostic) {
                 case 3: work[i] = maxv * 1.1f; break;
                 case 4: work[i] = (i & 1) ? maxv : 0.0f; break;
                 case 5: work[i] = (random() % 1001) * (maxv / 1000.0f); break;
-                default: work[i] = ((int)(random() % 1401) - 200) * (maxv / 1000.0f); break;
+                case 6: work[i] = ((int)(random() % 1401) - 200) * (maxv / 1000.0f); break;
+                default: work[i] = -0.0f; break;
                 }
             }
-            for (size_t count : { size_t(0), size_t(1), size_t(7), size_t(31), coordinates.size() }) {
+            for (size_t count : { size_t(0), size_t(1), size_t(7), size_t(8), size_t(9), size_t(15),
+                size_t(16), size_t(17), size_t(31), size_t(32), size_t(33), coordinates.size() }) {
                 float reference = 0, fused = 0;
                 if (!CompareLogoCorrelationForTest(kernels.data(), work.data(), width, coordinates.data(),
                     count, scales.data(), scaleCount, maxv, &reference, &fused)) return true;

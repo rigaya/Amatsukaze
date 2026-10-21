@@ -29,7 +29,42 @@ float CorrelationScore_AVX2(const float* kernels, const float* work, int width,
     __m128 result = _mm_setzero_ps();
     const __m128 scaleCountValue = _mm_set_ss((float)scaleCount);
     const __m128 maxValue = _mm_set_ss(maxv);
-    for (size_t i = 0; i < count; i++) {
+    constexpr size_t coordinatesPerBatch = 8;
+    const __m256 scaleCounts = _mm256_set1_ps((float)scaleCount);
+    const __m256 maxValues = _mm256_set1_ps(maxv);
+    const __m256 one = _mm256_set1_ps(1.0f);
+    const __m256 minusOne = _mm256_set1_ps(-1.0f);
+    size_t i = 0;
+    for (; i + coordinatesPerBatch <= count; i += coordinatesPerBatch) {
+        alignas(32) float avgs[coordinatesPerBatch], sums[coordinatesPerBatch];
+        alignas(32) int indices[coordinatesPerBatch];
+        alignas(32) float scaleValues[coordinatesPerBatch], scale2Values[coordinatesPerBatch];
+        for (size_t lane = 0; lane < coordinatesPerBatch; lane++) {
+            const size_t coordinate = i + lane;
+            sums[lane] = CalcCorrelation5x5_AVX_AVX2<true, true>(kernels + coordinate * 25,
+                work, coordinates[coordinate].first, coordinates[coordinate].second, width, avgs + lane);
+        }
+        // 座標内の画素縮約は変更せず、独立した8座標の乗算と除算だけをまとめる。
+        const __m256 indexValues = _mm256_div_ps(_mm256_mul_ps(_mm256_load_ps(avgs), scaleCounts), maxValues);
+        const __m256i indicesClamped = _mm256_max_epi32(_mm256_setzero_si256(),
+            _mm256_min_epi32(_mm256_set1_epi32(scaleCount), _mm256_cvttps_epi32(indexValues)));
+        _mm256_store_si256((__m256i*)indices, indicesClamped);
+        for (size_t lane = 0; lane < coordinatesPerBatch; lane++) {
+            const auto& scale = scales[(i + lane) * scaleCount + indices[lane]];
+            scaleValues[lane] = scale.scale;
+            scale2Values[lane] = scale.scale2;
+        }
+        const __m256 scaled = _mm256_mul_ps(_mm256_load_ps(sums), _mm256_load_ps(scaleValues));
+        // std::min(1, NaN)は1を返すので、MINPSでは定数を第2引数に置く。
+        const __m256 normalized = _mm256_max_ps(_mm256_min_ps(scaled, one), minusOne);
+        alignas(32) float scores[coordinatesPerBatch];
+        _mm256_store_ps(scores, _mm256_mul_ps(normalized, _mm256_load_ps(scale2Values)));
+        // 座標間の累積順も従来どおりに保つ。
+        for (size_t lane = 0; lane < coordinatesPerBatch; lane++) {
+            result = _mm_add_ss(result, _mm_load_ss(scores + lane));
+        }
+    }
+    for (; i < count; i++) {
         float avg;
         const float sum = CalcCorrelation5x5_AVX_AVX2<true, true>(kernels + i * 25,
             work, coordinates[i].first, coordinates[i].second, width, &avg);
