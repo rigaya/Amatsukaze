@@ -220,6 +220,8 @@ namespace Amatsukaze.Models
                 ApplyFontSize();
             }
         }
+        public bool IsServerWindows => serverInfo.Platform == PlatformID.Win32NT.ToString();
+
         public bool IsServerLinux
         {
             get { return serverInfo.Platform == PlatformID.Unix.ToString(); }
@@ -1804,6 +1806,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("ServerHostName");
                 RaisePropertyChanged("ServerVersion");
                 RaisePropertyChanged("IsServerLinux");
+                RaisePropertyChanged(nameof(IsServerWindows));
                 RaisePropertyChanged("FinishActionList");
                 RaisePropertyChanged(nameof(ServerCpuCoreCount));
                 _Setting.IsServerLinux = IsServerLinux;

@@ -92,6 +92,29 @@
                                   DisplayMemberPath="Label"
                                   SelectedValue="{Binding SelectedScriptType, Mode=TwoWay}"/>
                     </DockPanel>
+                    <StackPanel Margin="3">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Model.IsServerWindows}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedScriptType}" Value="sh">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <DockPanel>
+                            <TextBlock Text="起動ユーザー:" VerticalAlignment="Center"/>
+                            <TextBox Margin="5,0"
+                                     Text="{Binding Model.MakeScriptData.LaunchUser, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="PC名\ユーザー名、ドメイン\ユーザー名、またはSIDを指定します。空欄では指定しません。"/>
+                        </DockPanel>
+                        <TextBlock Text="サーバー未起動時に使用。空欄ではAddTaskと同じアカウントで起動します。"
+                                   TextWrapping="Wrap" Margin="0,3,0,0"/>
+                    </StackPanel>
                     <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="3" Foreground="Red"/>
                     <Button Margin="3" Height="25" Content="バッチファイル作成" Command="{Binding MakeBatchFileCommand}"/>
                 </StackPanel>

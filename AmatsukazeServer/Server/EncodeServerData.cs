@@ -2418,6 +2418,9 @@ namespace Amatsukaze.Server
         public int Priority { get; set; }
         [DataMember]
         public string AddQueueBat { get; set; }
+        // nullは初期値未設定、空文字列は起動ユーザーを指定しない。
+        [DataMember]
+        public string LaunchUser { get; set; }
     }
 
     [DataContract]

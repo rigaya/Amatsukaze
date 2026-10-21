@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using Amatsukaze.Lib;
 
 namespace Amatsukaze.Server.Rest
 {
@@ -80,6 +81,27 @@ namespace Amatsukaze.Server.Rest
             var lineBreak = isBat ? "\r\n" : "\n";
             var comment = isBat ? "rem" : "#";
 
+            // 入力欄の値を優先し、明示的な空欄では自動指定へ戻さない。
+            if (!isServerWindows || !isBat) launchUser = null;
+            else if (data.LaunchUser != null)
+            {
+                launchUser = data.LaunchUser.Trim();
+                if (launchUser.Length > 0 && (OperatingSystem.IsWindows() || !System.Text.RegularExpressions.Regex.IsMatch(launchUser, @"\AS-1-(?:[0-9]+-)+[0-9]+\z")))
+                {
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        error = "起動ユーザーの名前解決はWindowsでのみ使用できます";
+                        return false;
+                    }
+                    try { launchUser = LaunchUserIdentity.ResolveSid(launchUser); }
+                    catch (SystemException e)
+                    {
+                        error = "起動ユーザーを確認できません: " + e.Message;
+                        return false;
+                    }
+                }
+            }
+
             // batへ埋め込む値はSIDだけに限定し、コマンド展開文字を受け付けない。
             if (isBat && !string.IsNullOrEmpty(launchUser) &&
                 !System.Text.RegularExpressions.Regex.IsMatch(launchUser, @"\AS-1-(?:[0-9]+-)+[0-9]+\z"))
@@ -97,10 +119,14 @@ namespace Amatsukaze.Server.Rest
             {
                 sb.Append(comment).Append(" _EDCBX_DIRECT_").Append(lineBreak);
             }
-            if (isBat && string.IsNullOrEmpty(launchUser))
+            if (isBat && isServerWindows && data.LaunchUser != null && string.IsNullOrEmpty(launchUser))
+            {
+                sb.Append("rem 起動ユーザーは指定しません。サーバー未起動時はAddTaskと同じアカウントで起動します。").Append(lineBreak);
+            }
+            else if (isBat && isServerWindows && string.IsNullOrEmpty(launchUser))
             {
                 sb.Append("rem 起動ユーザーを自動指定できませんでした。生成元がサービスアカウント、非対話セッション、またはSID取得失敗です。").Append(lineBreak);
-                sb.Append("rem 処理完了後にサーバーを停止し、目的ユーザーでGUI版サーバーを起動して再生成してください。").Append(lineBreak);
+                sb.Append("rem 起動ユーザー欄にPC名\\ユーザー名またはSIDを指定して再生成してください。").Append(lineBreak);
                 sb.Append("rem または末尾へ --launch-user \"MYPC\\user\" を手動追加してください。起動済みサーバーのアカウントとAddTaskのコピー権限は変わりません。").Append(lineBreak);
                 Util.AddLog("[バッチ生成] 起動ユーザーを自動指定できませんでした。生成したbatの案内に従って再生成または手動指定してください。", null);
             }

@@ -4871,6 +4871,17 @@ namespace Amatsukaze.Models
     {
         public MakeScriptData Model { get; set; }
 
+        public string LaunchUser
+        {
+            get { return Model.LaunchUser ?? ""; }
+            set
+            {
+                if (Model.LaunchUser == value) return;
+                Model.LaunchUser = value ?? "";
+                RaisePropertyChanged();
+            }
+        }
+
         #region SelectedProfile変更通知プロパティ
         private object _SelectedProfile;
 

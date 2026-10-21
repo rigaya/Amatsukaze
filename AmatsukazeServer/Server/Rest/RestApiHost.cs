@@ -2231,6 +2231,7 @@ namespace Amatsukaze.Server.Rest
 
         private static bool TryBuildMakeScript(MakeScriptGenerateRequestInternal request, int serverPort, out string script, out string error)
         {
+            if (request?.MakeScriptData != null) ServerSupport.SetDefaultLaunchUserForScript(request.MakeScriptData);
             return MakeScriptBuilder.TryBuild(
                 request?.MakeScriptData,
                 request?.TargetHost,

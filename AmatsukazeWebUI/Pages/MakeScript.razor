@@ -62,6 +62,16 @@ else
                     </label>
                 </td>
             </tr>
+            @if (_serverIsWindows && IsBatSelected)
+            {
+                <tr>
+                    <th>起動ユーザー</th>
+                    <td>
+                        <input value="@_edit.LaunchUser" @onchange="OnLaunchUserChanged" placeholder="PC名\ユーザー名またはSID" />
+                        <div class="text-muted">サーバー未起動時に使用。空欄ではAddTaskと同じアカウントで起動します。</div>
+                    </td>
+                </tr>
+            }
             <tr>
                 <th>プロファイル</th>
                 <td>
@@ -184,6 +194,7 @@ else
     private string? _error;
     private bool _loading = true;
     private bool _updating;
+    private bool _updatePending;
     private readonly List<string> _profileNames = new();
     private readonly List<string> _addQueueBatFiles = new();
     private readonly List<int> _priorities = new() { 1, 2, 3, 4, 5 };
@@ -191,7 +202,7 @@ else
     private string _downloadName = "AmatsukazeAddTask.bat";
     private bool _isLocalHost;
     private string _scriptType = "bat";
-    private bool _serverIsWindows = true;
+    private bool _serverIsWindows;
     private string? _remoteHost;
     private string? _wolSubnet;
     private string? _wolMac;
@@ -201,6 +212,7 @@ else
     private async Task ReloadAsync()
     {
         _loading = true;
+        _serverIsWindows = false;
         _error = null;
         _data = null;
         _edit = null;
@@ -310,8 +322,16 @@ else
             WithRelated = src.WithRelated,
             IsDirect = src.IsDirect,
             Priority = src.Priority,
+            LaunchUser = src.LaunchUser,
             AddQueueBat = src.AddQueueBat
         };
+    }
+
+    private async Task OnLaunchUserChanged(ChangeEventArgs e)
+    {
+        if (_edit == null) return;
+        _edit.LaunchUser = e.Value?.ToString() ?? "";
+        await UpdatePreviewAsync();
     }
 
     private async Task OnProfileChanged(ChangeEventArgs e)
@@ -408,22 +428,38 @@ else
 
     private async Task UpdatePreviewAsync()
     {
-        if (_edit == null || _updating)
-        {
-            return;
-        }
+        if (_edit == null) return;
+        _updatePending = true;
+        if (_updating) return;
         _updating = true;
+        try
+        {
+            // 通信中に確定した入力も、最後の保存とプレビューに反映する。
+            while (_updatePending)
+            {
+                _updatePending = false;
+                await UpdatePreviewCoreAsync();
+            }
+        }
+        finally { _updating = false; }
+    }
+
+    private async Task UpdatePreviewCoreAsync()
+    {
         _error = null;
-        var updateRes = await Api.UpdateMakeScriptAsync(_edit);
+        _preview = null;
+        _downloadUrl = null;
+        var edit = Clone(_edit);
+        if (edit == null) return;
+        var updateRes = await Api.UpdateMakeScriptAsync(edit);
         if (!updateRes.Ok)
         {
             _error = updateRes.Error ?? "Failed to update makescript.";
-            _updating = false;
             return;
         }
         var req = new MakeScriptGenerateRequest
         {
-            MakeScriptData = _edit,
+            MakeScriptData = edit,
             TargetHost = _isLocalHost ? "local" : "remote",
             ScriptType = _scriptType,
             RemoteHost = _isLocalHost ? null : _remoteHost,
@@ -440,7 +476,6 @@ else
             _preview = previewRes.Data;
             UpdateDownload();
         }
-        _updating = false;
     }
 
     private void UpdateDownload()

@@ -1608,6 +1608,7 @@ namespace Amatsukaze.Server
             {
                 AppData_.scriptData = new MakeScriptData();
             }
+            ServerSupport.SetDefaultLaunchUserForScript(AppData_.scriptData);
             if (AppData_.services == null)
             {
                 AppData_.services = new ServiceSetting();
@@ -3814,6 +3815,7 @@ namespace Amatsukaze.Server
                 }
                 else if(data.MakeScriptData != null)
                 {
+                    ServerSupport.SetDefaultLaunchUserForScript(data.MakeScriptData);
                     AppData_.scriptData = data.MakeScriptData;
                     settingUpdated = true;
                     return Client.OnCommonData(new CommonData() {

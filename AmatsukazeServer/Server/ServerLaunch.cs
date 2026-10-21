@@ -21,6 +21,21 @@ namespace Amatsukaze.Server
 
         public static bool IsServiceAccount() => OperatingSystem.IsWindows() && GetAccountType() != "通常ユーザー";
 
+        // 初期値の決定はサーバーで行い、クライアントの実行ユーザーは使わない。
+        public static void SetDefaultLaunchUserForScript(MakeScriptData data)
+        {
+            if (data.LaunchUser != null || !OperatingSystem.IsWindows() || IsServiceAccount()) return;
+            try
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                data.LaunchUser = identity.Name;
+            }
+            catch (Exception e)
+            {
+                Util.AddLog("バッチの起動ユーザーの初期値を取得できません: " + e.Message, e);
+            }
+        }
+
         public static string GetLaunchUserForScript()
         {
             if (!OperatingSystem.IsWindows() || IsNonInteractiveServiceContext(out _)) return null;

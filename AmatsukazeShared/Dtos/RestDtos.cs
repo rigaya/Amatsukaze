@@ -510,6 +510,7 @@ namespace Amatsukaze.Shared
         public bool IsDirect { get; set; }
         public int Priority { get; set; }
         public string? AddQueueBat { get; set; }
+        public string? LaunchUser { get; set; }
     }
 
     public class MakeScriptPreview
