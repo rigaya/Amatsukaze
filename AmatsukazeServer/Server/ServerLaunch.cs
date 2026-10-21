@@ -21,5 +21,20 @@ namespace Amatsukaze.Server
 
         public static bool IsServiceAccount() => OperatingSystem.IsWindows() && GetAccountType() != "通常ユーザー";
 
+        public static string GetLaunchUserForScript()
+        {
+            if (!OperatingSystem.IsWindows() || IsNonInteractiveServiceContext(out _)) return null;
+            try
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                return identity.User?.Value;
+            }
+            catch (Exception e)
+            {
+                Util.AddLog("バッチの起動ユーザーを取得できません: " + e.Message, e);
+                return null;
+            }
+        }
+
     }
 }

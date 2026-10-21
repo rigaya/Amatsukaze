@@ -11,9 +11,9 @@ public sealed class MakeScriptBuilderTests
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "amt-script-test-" + Guid.NewGuid().ToString("N"));
         public Fixture() => Directory.CreateDirectory(Root);
         public MakeScriptData Data() => new() { Profile = "標準", OutDir = Root, Priority = 3, MoveAfter = true };
-        public bool Build(MakeScriptData? data, out string script, out string error, string target = "local", string type = "sh", string? remote = null, string? subnet = null, string? mac = null, int port = 0) =>
+        public bool Build(MakeScriptData? data, out string script, out string error, string target = "local", string type = "sh", string? remote = null, string? subnet = null, string? mac = null, int port = 0, string? launchUser = null) =>
             MakeScriptBuilder.TryBuild(data!, target, type, remote!, subnet!, mac!, port,
-                false, Root, Root, out script, out error);
+                false, Root, Root, out script, out error, launchUser);
         public void Dispose() => Directory.Delete(Root, true);
     }
 
@@ -84,4 +84,30 @@ public sealed class MakeScriptBuilderTests
         Assert.Contains("--mac \"00:11:22:33:44:55\"", script);
         Assert.Contains("-b \"追加処理.bat\"", script);
     }
+    [Theory]
+    [InlineData("bat", "S-1-5-21-1-2-3-1001", true)]
+    [InlineData("bat", null, false)]
+    [InlineData("sh", "S-1-5-21-1-2-3-1001", false)]
+    public void 起動ユーザーは指定したbatだけに付与する(string type, string? sid, bool expected)
+    {
+        using var fixture = new Fixture();
+        Assert.True(fixture.Build(fixture.Data(), out var script, out _, type: type, launchUser: sid));
+        // 未指定batの案内コメントはコマンドとして数えない。
+        string command = script.Split('\n').Last();
+        Assert.Equal(expected, command.Contains(" --launch-user "));
+        if (expected) Assert.Contains("--launch-user \"" + sid + "\"", command);
+        if (type == "bat" && sid == null) Assert.Contains("rem 起動ユーザーを自動指定できませんでした", script);
+    }
+
+    [Theory]
+    [InlineData("MYPC\\user")]
+    [InlineData("S-1-5-21-1&echo x")]
+    [InlineData("S-1-5-21-1\r\necho x")]
+    public void バッチに埋め込めない起動ユーザーを拒否する(string value)
+    {
+        using var fixture = new Fixture();
+        Assert.False(fixture.Build(fixture.Data(), out var script, out _, type: "bat", launchUser: value));
+        Assert.Empty(script);
+    }
+
 }

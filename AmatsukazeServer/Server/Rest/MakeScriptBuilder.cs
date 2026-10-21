@@ -18,7 +18,8 @@ namespace Amatsukaze.Server.Rest
             string addTaskBaseDir,
             string currentDirectory,
             out string script,
-            out string error)
+            out string error,
+            string launchUser = null)
         {
             script = string.Empty;
             error = string.Empty;
@@ -79,6 +80,14 @@ namespace Amatsukaze.Server.Rest
             var lineBreak = isBat ? "\r\n" : "\n";
             var comment = isBat ? "rem" : "#";
 
+            // batへ埋め込む値はSIDだけに限定し、コマンド展開文字を受け付けない。
+            if (isBat && !string.IsNullOrEmpty(launchUser) &&
+                !System.Text.RegularExpressions.Regex.IsMatch(launchUser, @"\AS-1-(?:[0-9]+-)+[0-9]+\z"))
+            {
+                error = "起動ユーザーのSIDが不正です";
+                return false;
+            }
+
             var sb = new StringBuilder();
             if (!isBat)
             {
@@ -87,6 +96,13 @@ namespace Amatsukaze.Server.Rest
             if (data.IsDirect)
             {
                 sb.Append(comment).Append(" _EDCBX_DIRECT_").Append(lineBreak);
+            }
+            if (isBat && string.IsNullOrEmpty(launchUser))
+            {
+                sb.Append("rem 起動ユーザーを自動指定できませんでした。生成元がサービスアカウント、非対話セッション、またはSID取得失敗です。").Append(lineBreak);
+                sb.Append("rem 処理完了後にサーバーを停止し、目的ユーザーでGUI版サーバーを起動して再生成してください。").Append(lineBreak);
+                sb.Append("rem または末尾へ --launch-user \"MYPC\\user\" を手動追加してください。起動済みサーバーのアカウントとAddTaskのコピー権限は変わりません。").Append(lineBreak);
+                Util.AddLog("[バッチ生成] 起動ユーザーを自動指定できませんでした。生成したbatの案内に従って再生成または手動指定してください。", null);
             }
             var filePathToken = data.IsDirect
                 ? (isBat ? "%FilePath%" : "${FilePath}")
@@ -98,6 +114,10 @@ namespace Amatsukaze.Server.Rest
                 .AppendFormat(" -o \"{0}\"", dst)
                 .AppendFormat(" -s \"{0}\"", prof)
                 .AppendFormat(" --priority {0}", data.Priority);
+            if (isBat && !string.IsNullOrEmpty(launchUser))
+            {
+                sb.AppendFormat(" --launch-user \"{0}\"", launchUser);
+            }
             if (!string.IsNullOrEmpty(nas))
             {
                 sb.AppendFormat(" -d \"{0}\"", nas);
