@@ -4,14 +4,17 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-using Amatsukaze.Lib;
+using Amatsukaze.Server;
+using System.ComponentModel;
+using System.Runtime.Versioning;
 
-namespace Amatsukaze.Win
+namespace Amatsukaze.Lib
 {
     /// <summary>
     /// Windows環境向けのシステムユーティリティ実装
     /// </summary>
-    public class WindowsSystemUtility : ISystemUtility
+    [SupportedOSPlatform("windows")]
+    public partial class WindowsSystemUtility : ISystemUtility
     {
         #region P/Invoke宣言
 
@@ -90,7 +93,11 @@ namespace Amatsukaze.Win
         private static extern int ResumeThread(IntPtr hThread);
 
         [DllImport("powrprof.dll", SetLastError = true)]
-        private static extern bool SetSuspendState(bool hibernate, bool forceCritical, bool disableWakeEvent);
+        [return: MarshalAs(UnmanagedType.U1)]
+        private static extern bool SetSuspendState(
+            [MarshalAs(UnmanagedType.U1)] bool hibernate,
+            [MarshalAs(UnmanagedType.U1)] bool forceCritical,
+            [MarshalAs(UnmanagedType.U1)] bool disableWakeEvent);
 
         #endregion
 
@@ -144,7 +151,9 @@ namespace Amatsukaze.Win
             var handle = CreateMailslot(path, 0, -1, IntPtr.Zero);
             if(handle.IsInvalid)
             {
-                throw new IOException("Failed to create mailslot");
+                int error = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                throw new Win32Exception(error, "CreateMailslotに失敗しました。");
             }
             return new FileStream(handle, FileAccess.Read, 1, true);
         }
@@ -152,24 +161,31 @@ namespace Amatsukaze.Win
         /// <summary>
         /// メールスロットをテストします
         /// </summary>
-        public bool TestMailslot(string path)
+        public bool TestMailslot(string path) => RequestMailslot(path).Status == MailslotRequestStatus.Sent;
+
+        public MailslotRequestResult RequestMailslot(string path)
         {
-            // FileStreamの引数にmailslot名を渡すとエラーになってしまうので
-            // CreateFileを直接呼び出す
-            var handle = CreateFile(path,
-                FileDesiredAccess.GenericWrite,
+            using var handle = CreateFile(path, FileDesiredAccess.GenericWrite,
                 FileShareMode.FileShareRead | FileShareMode.FileShareWrite,
                 IntPtr.Zero, FileCreationDisposition.OpenExisting, 0, IntPtr.Zero);
             if (handle.IsInvalid)
             {
-                return false;
+                int error = Marshal.GetLastWin32Error();
+                return new MailslotRequestResult {
+                    Status = error == 2 || error == 3 ? MailslotRequestStatus.NotFound : MailslotRequestStatus.Failed,
+                    Win32Error = error, Message = "CreateFile: " + new Win32Exception(error).Message };
             }
-            using(var fs = new FileStream(handle, FileAccess.Write))
+            try
             {
-                byte[] buf = new byte[1] { 0 };
-                fs.Write(buf, 0, 1);
+                using var stream = new FileStream(handle, FileAccess.Write);
+                stream.WriteByte(0);
+                return new MailslotRequestResult { Status = MailslotRequestStatus.Sent };
             }
-            return true;
+            catch (IOException ex)
+            {
+                return new MailslotRequestResult { Status = MailslotRequestStatus.Failed,
+                    Win32Error = ex.HResult & 0xffff, Message = ex.Message };
+            }
         }
 
         /// <summary>
@@ -185,23 +201,19 @@ namespace Amatsukaze.Win
             if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                 return;
 
-            IntPtr procHandle = GetCurrentProcess();
-
-            //トークンを取得する
-            IntPtr tokenHandle;
-            OpenProcessToken(procHandle,
-                TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out tokenHandle);
-            //LUIDを取得する
-            TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
-            tp.Attributes = SE_PRIVILEGE_ENABLED;
-            tp.PrivilegeCount = 1;
-            LookupPrivilegeValue(null, SE_SHUTDOWN_NAME, out tp.Luid);
-            //特権を有効にする
-            AdjustTokenPrivileges(
-                tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-
-            //閉じる
-            CloseHandle(tokenHandle);
+            if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out var tokenHandle))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "OpenProcessTokenに失敗しました。");
+            try
+            {
+                var privileges = new TOKEN_PRIVILEGES { Attributes = SE_PRIVILEGE_ENABLED, PrivilegeCount = 1 };
+                if (!LookupPrivilegeValue(null, SE_SHUTDOWN_NAME, out privileges.Luid))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "LookupPrivilegeValueに失敗しました。");
+                bool adjusted = AdjustTokenPrivileges(tokenHandle, false, ref privileges, 0, IntPtr.Zero, IntPtr.Zero);
+                int error = Marshal.GetLastWin32Error();
+                if (!adjusted || error != 0)
+                    throw new Win32Exception(error, "AdjustTokenPrivilegesに失敗しました。");
+            }
+            finally { CloseHandle(tokenHandle); }
         }
 
         /// <summary>
@@ -209,7 +221,13 @@ namespace Amatsukaze.Win
         /// </summary>
         public bool ExitWindowsExNative(ExitWindows flags, int reason)
         {
-            return ExitWindowsEx((uint)flags, reason);
+            bool result = ExitWindowsEx((uint)flags, reason);
+            if (!result)
+            {
+                int error = Marshal.GetLastWin32Error();
+                Util.AddLog($"[電源操作] ExitWindowsEx失敗。Win32={error}: {new Win32Exception(error).Message}", null);
+            }
+            return result;
         }
 
         /// <summary>
@@ -290,103 +308,65 @@ namespace Amatsukaze.Win
         /// newでサスペンド抑止
         /// サスペンドしてもOKになったらDispose()を呼ぶ
         /// </summary>
-        private class PreventSuspendContext : IDisposable
+        private sealed class PreventSuspendContext : IDisposable
         {
-            enum PowerRequestType
-            {
-                PowerRequestDisplayRequired = 0,
-                PowerRequestSystemRequired,
-                PowerRequestAwayModeRequired,
-                PowerRequestMaximum
-            }
-
-            const int POWER_REQUEST_CONTEXT_VERSION = 0;
-            const int POWER_REQUEST_CONTEXT_SIMPLE_STRING = 0x1;
-            const int POWER_REQUEST_CONTEXT_DETAILED_STRING = 0x2;
+            enum PowerRequestType { DisplayRequired, SystemRequired, AwayModeRequired }
 
             [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-            public struct POWER_REQUEST_CONTEXT
+            struct PowerRequestContext
             {
-                public UInt32 Version;
-                public UInt32 Flags;
-                [MarshalAs(UnmanagedType.LPWStr)]
-                public string
-                    SimpleReasonString;
+                public uint Version;
+                public uint Flags;
+                [MarshalAs(UnmanagedType.LPWStr)] public string Reason;
+                // REASON_CONTEXTの共用体全体の領域を確保する。
+                public uint Reserved1, Reserved2;
+                public IntPtr Reserved3;
             }
 
-            [StructLayout(LayoutKind.Sequential)]
-            public struct PowerRequestContextDetailedInformation
-            {
-                public IntPtr LocalizedReasonModule;
-                public UInt32 LocalizedReasonId;
-                public UInt32 ReasonStringCount;
-                [MarshalAs(UnmanagedType.LPWStr)]
-                public string[] ReasonStrings;
-            }
+            [DllImport("kernel32.dll", SetLastError = true)]
+            static extern SafeFileHandle PowerCreateRequest(ref PowerRequestContext context);
+            [DllImport("kernel32.dll", SetLastError = true)]
+            static extern bool PowerSetRequest(SafeFileHandle handle, PowerRequestType type);
+            [DllImport("kernel32.dll", SetLastError = true)]
+            static extern bool PowerClearRequest(SafeFileHandle handle, PowerRequestType type);
 
-            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-            public struct POWER_REQUEST_CONTEXT_DETAILED
-            {
-                public UInt32 Version;
-                public UInt32 Flags;
-                public PowerRequestContextDetailedInformation DetailedInformation;
-            }
-
-            [DllImport("kernel32.dll")]
-            static extern IntPtr PowerCreateRequest(ref POWER_REQUEST_CONTEXT Context);
-
-            [DllImport("kernel32.dll")]
-            static extern bool PowerSetRequest(IntPtr PowerRequestHandle, PowerRequestType RequestType);
-
-            [DllImport("kernel32.dll")]
-            static extern bool PowerClearRequest(IntPtr PowerRequestHandle, PowerRequestType RequestType);
-
-            [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true, ExactSpelling = true)]
-            internal static extern int CloseHandle(IntPtr hObject);
-
-
-            POWER_REQUEST_CONTEXT _PowerRequestContext;
-            IntPtr _PowerRequest; //HANDLE
+            readonly SafeFileHandle handle;
+            readonly bool systemRequired;
+            readonly bool awayModeRequired;
+            bool disposed;
 
             public PreventSuspendContext()
             {
-                _PowerRequestContext.Version = POWER_REQUEST_CONTEXT_VERSION;
-                _PowerRequestContext.Flags = POWER_REQUEST_CONTEXT_SIMPLE_STRING;
-                _PowerRequestContext.SimpleReasonString = "Amatsukazeがエンコード中です。";
-                _PowerRequest = PowerCreateRequest(ref _PowerRequestContext);
-                PowerSetRequest(_PowerRequest, PowerRequestType.PowerRequestSystemRequired);
-                PowerSetRequest(_PowerRequest, PowerRequestType.PowerRequestAwayModeRequired);
-            }
-
-            #region IDisposable Support
-            private bool disposedValue = false; // 重複する呼び出しを検出するには
-
-            protected virtual void Dispose(bool disposing)
-            {
-                if (!disposedValue)
+                var context = new PowerRequestContext { Flags = 1, Reason = "Amatsukazeがエンコード中です。" };
+                handle = PowerCreateRequest(ref context);
+                if (handle.IsInvalid)
                 {
-                    PowerClearRequest(_PowerRequest, PowerRequestType.PowerRequestAwayModeRequired);
-                    PowerClearRequest(_PowerRequest, PowerRequestType.PowerRequestSystemRequired);
-                    CloseHandle(_PowerRequest);
-                    _PowerRequest = IntPtr.Zero;
-                    disposedValue = true;
+                    Warn("PowerCreateRequest", "SystemRequired/AwayModeRequired", Marshal.GetLastWin32Error());
+                    handle.Dispose();
+                    return;
                 }
+                systemRequired = PowerSetRequest(handle, PowerRequestType.SystemRequired);
+                if (!systemRequired) Warn("PowerSetRequest", "SystemRequired", Marshal.GetLastWin32Error());
+                awayModeRequired = PowerSetRequest(handle, PowerRequestType.AwayModeRequired);
+                if (!awayModeRequired) Warn("PowerSetRequest", "AwayModeRequired", Marshal.GetLastWin32Error());
             }
 
-            ~PreventSuspendContext()
-            {
-                // このコードを変更しないでください。クリーンアップ コードを上の Dispose(bool disposing) に記述します。
-                Dispose(false);
-            }
+            static void Warn(string api, string type, int error)
+                => Util.AddLog($"[電源要求] 警告: {api}({type})失敗。Win32={error}: {new Win32Exception(error).Message}", null);
 
-            // このコードは、破棄可能なパターンを正しく実装できるように追加されました。
             public void Dispose()
             {
-                // このコードを変更しないでください。クリーンアップ コードを上の Dispose(bool disposing) に記述します。
-                Dispose(true);
-                GC.SuppressFinalize(this);
+                if (disposed) return;
+                disposed = true;
+                try
+                {
+                    if (awayModeRequired && !PowerClearRequest(handle, PowerRequestType.AwayModeRequired))
+                        Warn("PowerClearRequest", "AwayModeRequired", Marshal.GetLastWin32Error());
+                    if (systemRequired && !PowerClearRequest(handle, PowerRequestType.SystemRequired))
+                        Warn("PowerClearRequest", "SystemRequired", Marshal.GetLastWin32Error());
+                }
+                finally { handle.Dispose(); }
             }
-            #endregion
         }
 
         /// <summary>
@@ -395,7 +375,8 @@ namespace Amatsukaze.Win
         public void SetSuspendState(PowerState state, bool force, bool disableWakeEvent)
         {
             bool hibernate = state == PowerState.Hibernate;
-            SetSuspendState(hibernate, force, disableWakeEvent);
+            if (!SetSuspendState(hibernate, force, disableWakeEvent))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "SetSuspendStateに失敗しました。");
         }
     }
 } 

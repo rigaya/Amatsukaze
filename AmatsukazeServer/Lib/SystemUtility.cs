@@ -36,37 +36,9 @@ namespace Amatsukaze.Lib
                 if (_initialized)
                     return;
 
-                // Windows環境での初期化
-                if (Util.IsServerWindows())
-                {
-                    // Windows専用の実装をセットアップ
-                    try
-                    {
-                        // WindowsSystemUtilityはWindowsでのみ利用可能なクラス
-                        // リフレクションで探して、存在すれば初期化する
-                        var windowsSystemUtilityType = Type.GetType("Amatsukaze.Win.WindowsSystemUtility, AmatsukazeServerWin");
-
-                        if (windowsSystemUtilityType != null)
-                        {
-                            var systemUtility = Activator.CreateInstance(windowsSystemUtilityType);
-                            _instance = (ISystemUtility)systemUtility;
-                        }
-                        else
-                        {
-                            _instance = new DefaultSystemUtility();
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // 初期化に失敗したらデフォルト実装を使用
-                        _instance = new DefaultSystemUtility();
-                    }
-                }
-                else
-                {
-                    // Windows以外の環境ではデフォルト実装を使用
-                    _instance = new DefaultSystemUtility();
-                }
+                _instance = OperatingSystem.IsWindows()
+                    ? new WindowsSystemUtility()
+                    : new DefaultSystemUtility();
 
                 _initialized = true;
             }
@@ -95,6 +67,13 @@ namespace Amatsukaze.Lib
             }
             return _instance;
         }
+
+        public static string ImplementationName => GetInstance().GetType().Name;
+
+        public static UserSessionLaunchResult LaunchProcessInUserSession(string targetSid, string executablePath, string arguments, string workingDirectory)
+            => GetInstance().LaunchProcessInUserSession(targetSid, executablePath, arguments, workingDirectory);
+
+        public static MailslotRequestResult RequestMailslot(string path) => GetInstance().RequestMailslot(path);
 
         /// <summary>
         /// 最後のユーザー入力からの経過時間を取得します
@@ -206,6 +185,9 @@ namespace Amatsukaze.Lib
     /// </summary>
     public interface ISystemUtility
     {
+        UserSessionLaunchResult LaunchProcessInUserSession(string targetSid, string executablePath, string arguments, string workingDirectory);
+        MailslotRequestResult RequestMailslot(string path);
+
         /// <summary>
         /// 最後のユーザー入力からの経過時間を取得します
         /// </summary>

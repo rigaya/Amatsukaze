@@ -614,6 +614,7 @@ namespace Amatsukaze.Server
             try
             {
                 sb.Append($"アカウント={Environment.UserDomainName}\\{Environment.UserName}");
+                sb.Append($", システム機能={SystemUtility.ImplementationName}");
                 if (OperatingSystem.IsWindows())
                 {
                     // セッションID・対話型はWindowsでのみ意味を持つ（サービス起動の切り分け用）

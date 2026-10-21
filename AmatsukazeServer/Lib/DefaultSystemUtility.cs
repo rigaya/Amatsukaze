@@ -12,6 +12,12 @@ namespace Amatsukaze.Lib
     /// </summary>
     public class DefaultSystemUtility : ISystemUtility
     {
+        public UserSessionLaunchResult LaunchProcessInUserSession(string targetSid, string executablePath, string arguments, string workingDirectory)
+            => new UserSessionLaunchResult { Status = UserSessionLaunchStatus.NotSupported, Message = "Windows以外ではユーザーセッション起動を利用できません。" };
+
+        public MailslotRequestResult RequestMailslot(string path)
+            => new MailslotRequestResult { Status = MailslotRequestStatus.NotSupported };
+
         /// <summary>
         /// 最後のユーザー入力からの経過時間を取得します
         /// </summary>

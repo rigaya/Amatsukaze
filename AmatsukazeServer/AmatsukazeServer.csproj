@@ -35,8 +35,6 @@
   <ItemGroup>
     <!-- AssemblyInfo.cs はビルド時生成のため、クリーン環境では既定のCompile評価時に存在しない。 -->
     <Compile Remove="Properties\AssemblyInfo.cs" />
-    <Compile Remove="**\*Windows*.cs" />
-    <None Include="**\*Windows*.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
