@@ -7690,10 +7690,13 @@ namespace {
             return std::exp(-std::exp(-c * ((double)n - n0)));
         }
 
-        static void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
+        void AddBinAccumSample(BinAccum& bin, const double fg, const double bg, const double sampleWeight = 1.0) {
             bin.count++;
             bin.sum_fg += fg;
             bin.sum_bg += bg;
+            // 初回は重みが常に1なので非加重平均を使い、同じ和の二重更新を省く。
+            // 再重み付け中は重み1のサンプルも含めて加重統計へ蓄積する。
+            if (!sampleResidualReweightActive) return;
             const double w = std::max(0.0, sampleWeight);
             bin.sum_weight += w;
             bin.sum_weighted_fg += w * fg;
