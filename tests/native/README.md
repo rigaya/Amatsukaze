@@ -136,3 +136,9 @@ Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson tes
 `logo_residual_weight_params` は、再重み付けで画素ごとに事前計算する有効判定 (`trust > 1e-4`) と許容幅 `sigma` を、共有ヘッダから独立に記述した従来式とbit単位で比較する。閾値の直前・一致・直後、sigmaの下限、正負のゼロ、非正規化数、最大有限値、NaN、正負の無限大、および固定seedの乱数入力を確認する。無効な画素のsigmaは使用しない既定値1とし、有効な画素のsigmaは従来の除算にそのまま渡す。逆数化や指数関数の近似は行わない。
 
 選択実行は `AmatsukazeNativeTests --select logo_residual_weight_params`。
+
+## ロゴ時間ヒストグラムの配置
+
+`logo_temporal_histogram` は余白を除いた内側画素を、16画素ブロック内のbin優先配置へ変換する添字を検証する。従来のROI全体の画素優先配置を独立した参照にして、全256bin、uint16の飽和加算、P5のbit一致を確認する。末尾ブロックは余分なlaneを確保せず、全要素をちょうど一度使うことも調べる。幅非整列、余白16、小さいROI、空ROI、境界、固定seedの更新を含む。
+
+選択実行は `AmatsukazeNativeTests --select logo_temporal_histogram`。CPUのSIMD対応には依存しない。

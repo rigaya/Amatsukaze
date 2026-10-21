@@ -3,6 +3,7 @@
 #include "LogoScan.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
+#include "LogoTemporalHistogram.h"
 #include "AdtsParser.h"
 #include "AmatsukazeTestImpl.h"
 #include "AudioTrackBuilder.h"
@@ -32,6 +33,7 @@
 #include <iterator>
 #include <limits>
 #include <map>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>
@@ -3180,6 +3182,128 @@ bool TestLogoResidualWeightParams(tstring& diagnostic) {
     return true;
 }
 
+bool TestLogoTemporalHistogram(tstring& diagnostic) {
+    if (!Expect(logo::LogoTemporalHistogramIndex(1, 19, 0) == 1
+        && logo::LogoTemporalHistogramIndex(0, 19, 1) == 16
+        && logo::LogoTemporalHistogramIndex(15, 19, 255) == 4095
+        && logo::LogoTemporalHistogramIndex(16, 19, 0) == 4096
+        && logo::LogoTemporalHistogramIndex(16, 19, 1) == 4099
+        && logo::LogoTemporalHistogramIndex(18, 19, 255) == 4863,
+        _T("時間ヒストグラムの16laneと末尾3laneの配置が不正"), diagnostic)) return false;
+    uint64_t state = 0xbb67ae8584caa73bULL;
+    const auto randomBits = [&]() {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        return state;
+    };
+    for (int width : { 0, 1, 16, 31, 32, 33, 37, 49, 65 }) {
+        for (int height : { 0, 1, 31, 32, 33, 37, 49 }) {
+            for (int margin : { 0, 1, 16 }) {
+                const int innerWidth = std::max(0, width - margin * 2);
+                const int innerHeight = std::max(0, height - margin * 2);
+                const size_t pixels = static_cast<size_t>(innerWidth) * innerHeight;
+                std::vector<uint16_t> reference(static_cast<size_t>(width) * height * 256, 0);
+                std::vector<uint16_t> blocked(pixels * 256, 0);
+                const auto visited = std::make_unique<uint8_t[]>(blocked.size());
+                // 参照側は座標走査から連番を作り、共有ヘルパーの式を使わない。
+                int nextInner = 0;
+                for (int off = -1; off <= width * height; off++) {
+                    const int x = width > 0 && off >= 0 ? off % width : -1;
+                    const int y = width > 0 && off >= 0 ? off / width : -1;
+                    const bool inside = x >= margin && x < width - margin
+                        && y >= margin && y < height - margin;
+                    const int expected = inside ? nextInner++ : -1;
+                    const int actual = logo::LogoTemporalInnerPixelIndex(width, height, margin, off);
+                    const int actualXY = logo::LogoTemporalInnerPixelIndex(width, height, margin, x, y);
+                    if (!Expect(actual == expected && actualXY == expected,
+                        _T("時間ヒストグラムの画素番号または座標からの内側連番が不一致"), diagnostic)) return false;
+                    if (!inside) continue;
+                    for (int bin = 0; bin < 256; bin++) {
+                        const size_t index = logo::LogoTemporalHistogramIndex(actual, pixels, bin);
+                        if (!Expect(index < blocked.size() && visited[index] == 0,
+                            _T("時間ヒストグラムの添字が範囲外または重複"), diagnostic)) return false;
+                        visited[index] = 1;
+                        // 空の画素も残し、P5の未観測時の処理を検証する。
+                        const uint16_t count = off % 5 == 0 ? 0 : static_cast<uint16_t>((off * 17 + bin * 13) % 9);
+                        reference[static_cast<size_t>(off) * 256 + bin] = count;
+                        blocked[index] = count;
+                    }
+                }
+                if (!Expect(static_cast<size_t>(nextInner) == pixels
+                    && std::all_of(visited.get(), visited.get() + blocked.size(), [](uint8_t value) { return value == 1; }),
+                    _T("時間ヒストグラムの確保領域に未使用部分がある"), diagnostic)) return false;
+                if (pixels == 0) continue;
+                // 両レイアウトへ独立に飽和加算する。末尾ブロックも乱数更新の対象に含める。
+                for (int sample = 0; sample < 2048; sample++) {
+                    const int off = static_cast<int>(randomBits() % (static_cast<size_t>(width) * height));
+                    const int bin = static_cast<int>(randomBits() % 256);
+                    const int x = off % width, y = off / width;
+                    if (x < margin || x >= width - margin || y < margin || y >= height - margin) continue;
+                    auto& oldCount = reference[static_cast<size_t>(off) * 256 + bin];
+                    if (oldCount < std::numeric_limits<uint16_t>::max()) oldCount++;
+                    const int pixel = logo::LogoTemporalInnerPixelIndex(width, height, margin, off);
+                    auto& newCount = blocked[logo::LogoTemporalHistogramIndex(pixel, pixels, bin)];
+                    newCount = static_cast<uint16_t>(std::min<unsigned>(65535, unsigned(newCount) + 1));
+                }
+                // 内側25画素の末尾9laneで、65535を越える入力を与える。
+                if (width == 37 && height == 37 && margin == 16) {
+                    const int off = (height - margin - 1) * width + width - margin - 1;
+                    const int pixel = logo::LogoTemporalInnerPixelIndex(width, height, margin, off);
+                    for (int sample = 0; sample < 70000; sample++) {
+                        auto& oldCount = reference[static_cast<size_t>(off) * 256 + 255];
+                        if (oldCount < std::numeric_limits<uint16_t>::max()) oldCount++;
+                        auto& newCount = blocked[logo::LogoTemporalHistogramIndex(pixel, pixels, 255)];
+                        newCount = static_cast<uint16_t>(std::min<unsigned>(65535, unsigned(newCount) + 1));
+                    }
+                    if (!Expect(blocked[logo::LogoTemporalHistogramIndex(pixel, pixels, 255)] == 65535,
+                        _T("時間ヒストグラムのuint16飽和加算が不正"), diagnostic)) return false;
+                }
+                for (int y = margin; y < height - margin; y++) {
+                    for (int x = margin; x < width - margin; x++) {
+                        const int off = y * width + x;
+                        const int pixel = logo::LogoTemporalInnerPixelIndex(width, height, margin, off);
+                        int oldTotal = 0, newTotal = 0;
+                        for (int bin = 0; bin < 256; bin++) {
+                            const uint16_t oldCount = reference[static_cast<size_t>(off) * 256 + bin];
+                            const uint16_t newCount = blocked[logo::LogoTemporalHistogramIndex(pixel, pixels, bin)];
+                            if (!Expect(oldCount == newCount, _T("時間ヒストグラムの全bin比較が不一致"), diagnostic)) return false;
+                            oldTotal += oldCount;
+                            newTotal += newCount;
+                        }
+                        // 旧P5は累積加算、新P5は残り順位を減算し、演算実装を共有しない。
+                        float oldP5 = 0.0f, newP5 = 0.0f;
+                        if (oldTotal > 0) {
+                            const int target = std::max(1, static_cast<int>(std::ceil(oldTotal * 0.05f)));
+                            int accum = 0;
+                            for (int bin = 0; bin < 256; bin++) {
+                                accum += reference[static_cast<size_t>(off) * 256 + bin];
+                                if (accum >= target) { oldP5 = bin / 255.0f; break; }
+                            }
+                        }
+                        if (newTotal > 0) {
+                            int remaining = std::max(1, static_cast<int>(std::ceil(newTotal * 0.05f)));
+                            for (int bin = 0; bin < 256; bin++) {
+                                remaining -= blocked[logo::LogoTemporalHistogramIndex(pixel, pixels, bin)];
+                                if (remaining <= 0) { newP5 = static_cast<float>(bin) / 255; break; }
+                            }
+                        }
+                        if (!Expect(std::memcmp(&oldP5, &newP5, sizeof(float)) == 0,
+                            _T("時間ヒストグラムのP5がbit不一致"), diagnostic)) return false;
+                    }
+                }
+            }
+        }
+    }
+    if (!Expect(logo::LogoTemporalInnerPixelIndex(37, 37, -1, 0) == -1
+        && logo::LogoTemporalInnerPixelIndex(37, 37, -1, 0, 0) == -1
+        && logo::LogoTemporalInnerPixelIndex(37, 37, 0, 37, 0) == -1
+        && logo::LogoTemporalInnerPixelIndex(37, 37, 0, 0, 37) == -1
+        && logo::LogoTemporalInnerPixelIndex(37, 37, 0, 0, -1) == -1,
+        _T("時間ヒストグラムの不正な余白または領域外の座標を受理した"), diagnostic)) return false;
+    return true;
+}
+
 bool TestLogoCollectPartition(tstring& diagnostic) {
     if (!Expect(logo::BuildLogoCollectXBoundaries(288, 16, 32, 2, true) == std::vector<int>({ 16, 128, 272 }),
         _T("実素材相当の32画素境界が一致しない"), diagnostic)) return false;
@@ -3525,6 +3649,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("logo_background_retry"), TestLogoBackgroundRetry },
     { _T("logo_collect_partition"), TestLogoCollectPartition },
     { _T("logo_residual_weight_params"), TestLogoResidualWeightParams },
+    { _T("logo_temporal_histogram"), TestLogoTemporalHistogram },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },

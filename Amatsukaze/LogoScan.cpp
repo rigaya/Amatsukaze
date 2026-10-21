@@ -10,6 +10,7 @@
 #include "LogoDecodeSession.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
+#include "LogoTemporalHistogram.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -4746,17 +4747,18 @@ namespace {
             return (size_t)first * kHistBins + (size_t)bin * count + (off - first);
         }
 
-        void accumulateTemporalHistSample(const int off, const float rawValue, const float invMaxv) {
+        void accumulateTemporalHistSample(const int x, const int y, const float rawValue, const float invMaxv) {
             if (!temporalHistCaptureActive) {
                 return;
             }
-            const int pixelCount = scanw * scanh;
-            if (off < 0 || off >= pixelCount || temporalHistBuf.size() != (size_t)pixelCount * kTemporalHistBins) {
+            const int pixelCount = std::max(0, scanw - 2 * kScanEdgeMargin) * std::max(0, scanh - 2 * kScanEdgeMargin);
+            const int pixel = logo::LogoTemporalInnerPixelIndex(scanw, scanh, kScanEdgeMargin, x, y);
+            if (pixel < 0 || temporalHistBuf.size() != (size_t)pixelCount * kTemporalHistBins) {
                 return;
             }
             // bitDepth に依存しないよう invMaxv で 0..1 に正規化して 256bin へ入れる。
             const int binIdx = ClampInt((int)(rawValue * invMaxv * kTemporalHistBins), 0, kTemporalHistBins - 1);
-            uint16_t& count = temporalHistBuf[(size_t)off * kTemporalHistBins + binIdx];
+            uint16_t& count = temporalHistBuf[logo::LogoTemporalHistogramIndex(pixel, pixelCount, binIdx)];
             if (count < std::numeric_limits<uint16_t>::max()) {
                 count++;
             }
@@ -4764,7 +4766,8 @@ namespace {
 
         void computeTemporalPercentileMaps() {
             const int pixelCount = scanw * scanh;
-            if (pixelCount <= 0 || temporalHistBuf.size() != (size_t)pixelCount * kTemporalHistBins) {
+            const int histPixels = std::max(0, scanw - 2 * kScanEdgeMargin) * std::max(0, scanh - 2 * kScanEdgeMargin);
+            if (pixelCount <= 0 || temporalHistBuf.size() != (size_t)histPixels * kTemporalHistBins) {
                 temporalP5Map.clear();
                 temporalLiftMap.clear();
                 temporalLiftP995 = 0.0f;
@@ -4775,10 +4778,13 @@ namespace {
             temporalLiftMap.assign(pixelCount, 0.0f);
             temporalLiftP995 = 0.0f;
             for (int i = 0; i < pixelCount; i++) {
-                const uint16_t* hist = temporalHistBuf.data() + (size_t)i * kTemporalHistBins;
+                const int pixel = logo::LogoTemporalInnerPixelIndex(scanw, scanh, kScanEdgeMargin, i);
+                // 更新されない外周は確保せず、マップの初期値0をそのまま使う。
+                if (pixel < 0) continue;
+                const uint16_t* hist = temporalHistBuf.data();
                 int total = 0;
                 for (int b = 0; b < kTemporalHistBins; b++) {
-                    total += hist[b];
+                    total += hist[logo::LogoTemporalHistogramIndex(pixel, histPixels, b)];
                 }
                 if (total <= 0) {
                     continue;
@@ -4787,7 +4793,7 @@ namespace {
                 int accum = 0;
                 int binIdx = 0;
                 for (; binIdx < kTemporalHistBins; binIdx++) {
-                    accum += hist[binIdx];
+                    accum += hist[logo::LogoTemporalHistogramIndex(pixel, histPixels, binIdx)];
                     if (accum >= target) {
                         break;
                     }
@@ -6702,7 +6708,10 @@ namespace {
                 statsPass->reset(scanw, scanh, getCurrentProcessingBitDepth());
             }
             if (temporalHistCaptureActive) {
-                temporalHistBuf.assign((size_t)scanw * scanh * kTemporalHistBins, (uint16_t)0);
+                // 収集対象の内側だけ保持し、未観測の外周に256binを確保しない。
+                const size_t histPixels = (size_t)std::max(0, scanw - 2 * kScanEdgeMargin)
+                    * std::max(0, scanh - 2 * kScanEdgeMargin);
+                temporalHistBuf.assign(histPixels * kTemporalHistBins, (uint16_t)0);
                 temporalP5Map.assign((size_t)scanw * scanh, 0.0f);
                 temporalLiftMap.assign((size_t)scanw * scanh, 0.0f);
                 temporalLiftP995 = 0.0f;
@@ -7152,7 +7161,7 @@ namespace {
                     const float fgRaw = (float)frameWork[off];
                     AutoDetectStats& s = stats[off];
                     if (!reuseUnweighted) {
-                        accumulateTemporalHistSample(off, fgRaw, invMaxv);
+                        accumulateTemporalHistSample(x, y, fgRaw, invMaxv);
                         s.observed++;
                         if (lastObservedValid[off]) {
                             if (std::abs(lastObservedFg[off] - fgRaw) > transitionThreshold) {
@@ -7358,7 +7367,7 @@ namespace {
 
                 const int off = tp.x + tp.y * scanw;
                 const float fgFiltered = (float)frameWork[off];
-                accumulateTemporalHistSample(off, fgFiltered, invMaxv);
+                accumulateTemporalHistSample(tp.x, tp.y, fgFiltered, invMaxv);
                 rec.fgFiltered = fgFiltered;
 
                 AutoDetectStats& s = stats[off];
