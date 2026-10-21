@@ -4620,13 +4620,22 @@ namespace {
         static constexpr int kStatsLargeBatchMinThreads = 8;
 
         int statsFrameBatch() const {
-            constexpr int kSmallFrameBatch = 4;
+            constexpr int kSmallFrameBatch = 8;
             constexpr int kLargeFrameBatch = 16;
             constexpr int kMaxFrameBatch = 32;
             // 少数ワーカーでは小さなバッチで同期回数と統計の再読み込みを減らす。
             const int defaultBatch = threadN >= kStatsLargeBatchMinThreads ? kLargeFrameBatch
                 : (threadN >= kStatsBatchMinThreads ? kSmallFrameBatch : 1);
             return std::min(kMaxFrameBatch, ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", defaultBatch, 1));
+        }
+
+        int statsCollectYBlock() const {
+            constexpr int kSmallYBlock = 2;
+            constexpr int kDefaultYBlock = 16;
+            // 少数ワーカーの8bitキャッシュ経路では作業領域を小さくして再読み込みを抑える。
+            const int defaultYBlock = threadN >= kStatsBatchMinThreads && threadN < kStatsLargeBatchMinThreads
+                && bitDepth == 8 && roiCacheBackend == RoiCacheBackend::Ram ? kSmallYBlock : kDefaultYBlock;
+            return ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", defaultYBlock, 1);
         }
 
         void runStoredRoiStatsPassWithProgress(const int stage, const float stageBase, const float stageSpan,
@@ -7270,7 +7279,7 @@ namespace {
             std::atomic<int> frameCount(0);
             // 遷移検出閾値は rawScale から直接算出する。
             const float transitionThreshold = std::max(0.75f * rawScale, thresholdRaw * 0.125f);
-            const int collectYBlock = ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", 16, 1);
+            const int collectYBlock = statsCollectYBlock();
             const int collectXSplits = ParseEnvIntDefault("AMT_LOGO_COLLECT_X_SPLITS", 2, 1);
             const bool enableBgBlock32 = ParseEnvBoolDefault("AMT_LOGO_BG_BLOCK32", true);
             const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
@@ -7511,7 +7520,7 @@ namespace {
                 }
             }, 1);
 
-            const int collectYBlock = ParseEnvIntDefault("AMT_LOGO_COLLECT_Y_BLOCK", 16, 1);
+            const int collectYBlock = statsCollectYBlock();
             const int collectXSplits = ParseEnvIntDefault("AMT_LOGO_COLLECT_X_SPLITS", 2, 1);
             const int innerHeight = std::max(0, scanh - 2 * kScanEdgeMargin);
             const int innerWidth = std::max(0, scanw - 2 * kScanEdgeMargin);
