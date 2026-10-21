@@ -8,6 +8,7 @@
 
 #include "LogoScan.h"
 #include "LogoDecodeSession.h"
+#include "LogoScanPartition.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -4610,12 +4611,27 @@ namespace {
             }
         }
 
+        static constexpr int kStatsBatchMinThreads = 4;
+        static constexpr int kStatsLargeBatchMinThreads = 8;
+
+        int statsFrameBatch() const {
+            constexpr int kSmallFrameBatch = 4;
+            constexpr int kLargeFrameBatch = 16;
+            constexpr int kMaxFrameBatch = 32;
+            // 少数ワーカーでは小さなバッチで同期回数と統計の再読み込みを減らす。
+            const int defaultBatch = threadN >= kStatsLargeBatchMinThreads ? kLargeFrameBatch
+                : (threadN >= kStatsBatchMinThreads ? kSmallFrameBatch : 1);
+            return std::min(kMaxFrameBatch, ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", defaultBatch, 1));
+        }
+
         void runStoredRoiStatsPassWithProgress(const int stage, const float stageBase, const float stageSpan,
             const float overallBase, const float overallSpan, StatsPassBuffers& statsPass, Pass2Buffers* pass2) {
-            const int frameBatch = std::min(32, ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1));
+            const int frameBatch = statsFrameBatch();
             // 追跡点はフレームごとの詳細状態を記録するため、従来経路で処理する。
-            // 少数ワーカーでは同期削減よりバッチ内の作業集合増加が勝るため、従来経路を使う。
-            if (threadN < 8 || frameBatch <= 1 || !tracePoints.empty()) {
+            // 4～7並列では8bitのRAMキャッシュに小さなバッチを適用する。
+            const bool allowBatch = threadN >= kStatsLargeBatchMinThreads
+                || (threadN >= kStatsBatchMinThreads && bitDepth == 8 && roiCacheBackend == RoiCacheBackend::Ram);
+            if (!allowBatch || frameBatch <= 1 || !tracePoints.empty()) {
                 runStoredRoiPassWithProgress(stage, stageBase, stageSpan, overallBase, overallSpan,
                     [&](const uint8_t* frameY) { return processStoredFrame(frameY, &statsPass, pass2); });
                 return;
@@ -7269,6 +7285,8 @@ namespace {
                 const int xSplits = std::min(collectXSplits, innerWidth);
                 const int yTasks = (innerHeight + collectYBlock - 1) / collectYBlock;
                 const int totalTasks = yTasks * xSplits;
+                const auto xBoundaries = logo::BuildLogoCollectXBoundaries(
+                    scanw, kScanEdgeMargin, radius, xSplits, useBgBlock32);
                 RunParallelRange(threadPool, threadN, totalTasks, [&](int task0, int task1) {
                     for (int task = task0; task < task1; task++) {
                         const int tileY = task / xSplits;
@@ -7278,8 +7296,8 @@ namespace {
                         if (localY0 >= localY1) {
                             continue;
                         }
-                        const int localX0 = (innerWidth * tileX) / xSplits;
-                        const int localX1 = (innerWidth * (tileX + 1)) / xSplits;
+                        const int localX0 = xBoundaries[tileX] - kScanEdgeMargin;
+                        const int localX1 = xBoundaries[tileX + 1] - kScanEdgeMargin;
                         if (localX0 >= localX1) {
                             continue;
                         }
@@ -7472,20 +7490,8 @@ namespace {
                 ? 1 : std::min(collectXSplits, innerWidth);
             const int yTasks = (innerHeight + collectYBlock - 1) / collectYBlock;
             const int totalTasks = yTasks * xSplits;
-            std::vector<int> xBoundaries(xSplits + 1);
-            for (int tile = 0; tile <= xSplits; tile++) {
-                xBoundaries[tile] = kScanEdgeMargin + (innerWidth * tile) / xSplits;
-            }
-            if (useBgBlock32) {
-                // 内側の開始位置とタイル境界を同じ32画素の区切りへ合わせる。
-                const int anchor = std::max(kScanEdgeMargin, radius);
-                for (int tile = 1; tile < xSplits; tile++) {
-                    const int aligned = anchor + ((xBoundaries[tile] - anchor) / 32) * 32;
-                    if (aligned > xBoundaries[tile - 1] && aligned < xBoundaries[tile + 1]) {
-                        xBoundaries[tile] = aligned;
-                    }
-                }
-            }
+            const auto xBoundaries = logo::BuildLogoCollectXBoundaries(
+                scanw, kScanEdgeMargin, radius, xSplits, useBgBlock32);
             std::vector<int> taskFrameCounts((size_t)totalTasks * batchCount, 0);
 
             // 各空間タイルを一つのワーカーが所有し、同じ画素をフレーム順に更新する。
@@ -7537,9 +7543,9 @@ namespace {
 
         bool useInitialStatsBatch(const StatsPassBuffers* statsPass, const Pass2Buffers* pass2) const {
             // 高bit入力は元の精度を保ち、追跡ログとディスクキャッシュは従来経路へ戻す。
-            return threadN >= 8 && bitDepth == 8 && roiCacheCaptureActive
+            return threadN >= kStatsBatchMinThreads && bitDepth == 8 && roiCacheCaptureActive
                 && roiCacheBackend == RoiCacheBackend::Ram && statsPass != nullptr && pass2 == nullptr
-                && tracePoints.empty() && ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1) > 1;
+                && tracePoints.empty() && statsFrameBatch() > 1;
         }
 
         void flushInitialStatsBatch(StatsPassBuffers& statsPass) {
@@ -7572,7 +7578,7 @@ namespace {
                     appendDetectFrameToRoiCache(detectFrame8.data(), scanw);
                     statsPass->pendingInitialFrames++;
                     sourceFrameIndex++;
-                    const int frameBatch = std::min(32, ParseEnvIntDefault("AMT_LOGO_FRAME_BATCH", 16, 1));
+                    const int frameBatch = statsFrameBatch();
                     if (statsPass->pendingInitialFrames >= frameBatch
                         || readFrames + statsPass->pendingInitialFrames >= searchFrames) {
                         flushInitialStatsBatch(*statsPass);

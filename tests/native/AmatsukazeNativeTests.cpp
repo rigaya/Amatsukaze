@@ -1,6 +1,7 @@
 ﻿// Amatsukaze の公開ネイティブ単体テスト実行器
 #include "AMTLogo.h"
 #include "LogoScan.h"
+#include "LogoScanPartition.h"
 #include "AdtsParser.h"
 #include "AmatsukazeTestImpl.h"
 #include "AudioTrackBuilder.h"
@@ -3103,6 +3104,65 @@ bool TestLogoCorrelationFusion(tstring& diagnostic) {
     return true;
 }
 
+bool TestLogoCollectPartition(tstring& diagnostic) {
+    if (!Expect(logo::BuildLogoCollectXBoundaries(288, 16, 32, 2, true) == std::vector<int>({ 16, 128, 272 }),
+        _T("実素材相当の32画素境界が一致しない"), diagnostic)) return false;
+    if (!Expect(logo::BuildLogoCollectXBoundaries(37, 16, 32, 5, true) == std::vector<int>({ 16, 17, 18, 19, 20, 21 }),
+        _T("狭い区間の非整列境界を維持できない"), diagnostic)) return false;
+    if (!Expect(logo::BuildLogoCollectXBoundaries(16, 16, 32, 1, true) == std::vector<int>({ 16, 16 }),
+        _T("空のROI境界が一致しない"), diagnostic)) return false;
+    // 乗算はintの範囲を超えても、返す境界は元の幅に収まる。
+    const auto large = logo::BuildLogoCollectXBoundaries(std::numeric_limits<int>::max(), 16, 32, 3, false);
+    if (!Expect(large[2] == 16 + static_cast<int>((int64_t(std::numeric_limits<int>::max()) - 32) * 2 / 3),
+        _T("大きい幅の分割で整数オーバーフロー"), diagnostic)) return false;
+    for (int width : { 0, 1, 16, 31, 32, 33, 37, 63, 64, 65, 95, 96, 127, 128, 129, 288, 480, 1024 }) {
+        for (int margin : { 0, 1, 16, 32 }) {
+            const int innerWidth = std::max(0, width - margin * 2);
+            const int maxSplits = std::max(1, innerWidth);
+            for (int splits = 1; splits <= maxSplits; splits++) {
+                for (int radius : { 0, 1, 4, 16, 32, 48, 65, 512 }) {
+                    for (bool aligned : { false, true }) {
+                        const auto boundaries = logo::BuildLogoCollectXBoundaries(width, margin, radius, splits, aligned);
+                        if (boundaries.size() != static_cast<size_t>(splits) + 1 || boundaries.front() != margin ||
+                            boundaries.back() != margin + innerWidth) {
+                            diagnostic = _T("分割の個数または外端を維持できない");
+                            return false;
+                        }
+                        std::vector<int> coverage(innerWidth, 0);
+                        for (int tile = 0; tile < splits; tile++) {
+                            if (boundaries[tile] > boundaries[tile + 1] ||
+                                (innerWidth > 0 && boundaries[tile] == boundaries[tile + 1])) {
+                                diagnostic = _T("分割境界の単調性を維持できない");
+                                return false;
+                            }
+                            for (int x = boundaries[tile]; x < boundaries[tile + 1]; x++) {
+                                if (x < margin || x >= margin + innerWidth) {
+                                    diagnostic = _T("収集対象外の画素を分割に含めた");
+                                    return false;
+                                }
+                                coverage[x - margin]++;
+                            }
+                        }
+                        if (!std::all_of(coverage.begin(), coverage.end(), [](int count) { return count == 1; })) {
+                            diagnostic = _T("分割による画素の重複または欠落");
+                            return false;
+                        }
+                        for (int tile = 1; tile < splits; tile++) {
+                            const int original = margin + innerWidth * tile / splits;
+                            if ((!aligned && boundaries[tile] != original) ||
+                                (aligned && boundaries[tile] != original && (boundaries[tile] - std::max(margin, radius)) % 32 != 0)) {
+                                diagnostic = _T("非整列時の互換性または32画素整列が不正");
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 // 救済辺の選択順、上下左右境界、閾値ちょうどの判定をスカラー処理とbit比較する。
 bool TestLogoBackgroundRetry(tstring& diagnostic) {
     if (!HasLogoBackgroundAVX2ForTest()) {
@@ -3387,6 +3447,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("logo_file"), TestLogoFile },
     { _T("logo_correlation_fusion"), TestLogoCorrelationFusion },
     { _T("logo_background_retry"), TestLogoBackgroundRetry },
+    { _T("logo_collect_partition"), TestLogoCollectPartition },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
     { _T("caption_interval_mapping"), TestCaptionIntervalMapping },
