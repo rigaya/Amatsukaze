@@ -36,6 +36,8 @@ namespace Amatsukaze.Server
         public string RootDir;
         public LaunchType LaunchType = LaunchType.Standalone;
         public int ServerPort = ServerSupport.DEFAULT_PORT;
+        public string ServerIP;
+        public bool AutoStart;
 
         // ロゴGUI用
         public string FilePath;
@@ -52,6 +54,14 @@ namespace Amatsukaze.Server
                 {
                     ServerPort = int.Parse(args[i + 1]);
                     i++;
+                }
+                else if (arg == "--ip")
+                {
+                    ServerIP = args[++i];
+                }
+                else if (arg == "--auto-start")
+                {
+                    AutoStart = true;
                 }
                 else if(arg == "-l" || arg == "--launch")
                 {
@@ -483,7 +493,7 @@ namespace Amatsukaze.Server
 
     public class MultipleInstanceException : Exception { }
 
-    public static class ServerSupport
+    public static partial class ServerSupport
     {
         public static readonly int DEFAULT_PORT = 32768;
         public static readonly string AUTO_PREFIX = "自動選択_";
@@ -535,24 +545,26 @@ namespace Amatsukaze.Server
             return "デフォルト";
         }
 
-        public static FileStream GetLock()
+        public static ServerLock GetLock(ServerInstanceKind kind = ServerInstanceKind.ServerCLI, int port = 0, string rootDir = null)
         {
-            if (!Directory.Exists("data"))
-            {
-                Directory.CreateDirectory("data");
-            }
-            var lockPath = Path.Combine("data", "Server.lock");
-            Util.AddLog($"[GetLock] cwd='{Directory.GetCurrentDirectory()}', lock='{lockPath}', pid={Process.GetCurrentProcess().Id}, proc='{Process.GetCurrentProcess().ProcessName}'", null);
+            if (port == 0) port = DEFAULT_PORT;
+            rootDir = Path.GetFullPath(rootDir ?? Directory.GetCurrentDirectory());
+            string path = Path.Combine(rootDir, "data", "Server.lock");
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            FileStream stream;
             try
             {
-                return new FileStream(Path.Combine("data", "Server.lock"),
-                    FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+                stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             }
-            catch(Exception e)
+            catch (IOException e) when (IsLockConflict(e))
             {
-                Util.AddLog($"[GetLock] lock acquisition failed: {e.Message}", e);
                 throw new MultipleInstanceException();
             }
+            catch (Exception e)
+            {
+                throw new IOException("サーバーロックを取得できません: " + path + "。" + e.Message, e);
+            }
+            return new ServerLock(stream, rootDir, kind, port);
         }
 
         private static string GetStandaloneMailslotName(string rootDir)
@@ -697,25 +709,18 @@ namespace Amatsukaze.Server
         // サーバ（serverモード）が既に稼働しているかをロックファイルで推定する
         public static bool IsServerProcessRunning(string rootDir)
         {
+            string path = Path.Combine(rootDir ?? "", "data", "Server.lock");
             try
             {
-                var dataDir = Path.Combine(rootDir ?? "", "data");
-                var lockPath = Path.Combine(dataDir, "Server.lock");
-                if (!Directory.Exists(dataDir))
-                {
-                    return false;
-                }
-                // 共有なしで一瞬だけ開ければ未起動（すぐ閉じる）
-                using (var fs = new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                {
-                    fs.Close();
-                    return false;
-                }
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return false;
             }
-            catch
+            catch (FileNotFoundException) { return false; }
+            catch (DirectoryNotFoundException) { return false; }
+            catch (IOException e) when (IsLockConflict(e)) { return true; }
+            catch (Exception e)
             {
-                // 共有できなければ誰かが保持している = 稼働中とみなす
-                return true;
+                throw new IOException("サーバーロックの状態を確認できません: " + path + "。" + e.Message, e);
             }
         }
 

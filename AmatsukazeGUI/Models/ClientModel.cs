@@ -51,7 +51,11 @@ namespace Amatsukaze.Models
         private ClientData appData;
         public IEncodeServer Server { get; private set; }
         public Task CommTask { get; private set; }
-        private FileStream lockFile;
+        private ServerLock lockFile;
+
+        // 起動引数の接続先は保存済み設定から分離する。
+        private string temporaryServerIP;
+        private int temporaryServerPort;
         private ServerInfo serverInfo = new ServerInfo();
         private State state = new State();
 
@@ -112,12 +116,12 @@ namespace Amatsukaze.Models
 
         public string ServerIP
         {
-            get { return appData.ServerIP; }
+            get { return temporaryServerIP ?? appData.ServerIP; }
         }
 
         public int ServerPort
         {
-            get { return appData.ServerPort; }
+            get { return temporaryServerIP != null ? temporaryServerPort : appData.ServerPort; }
         }
 
         public int RestApiPort
@@ -837,6 +841,11 @@ namespace Amatsukaze.Models
             AddQueueConsole = new SimpleDisplayConsole(Setting);
 
             LoadAppData();
+            if (App.Option.LaunchType == LaunchType.Client && !string.IsNullOrEmpty(App.Option.ServerIP))
+            {
+                temporaryServerIP = App.Option.ServerIP;
+                temporaryServerPort = App.Option.ServerPort;
+            }
             ApplyTheme();
             ApplyFontSize();
             requestLogoThread = RequestLogoThread();
@@ -946,7 +955,7 @@ namespace Amatsukaze.Models
 
                     if(lockFile != null)
                     {
-                        lockFile.Close();
+                        lockFile.Dispose();
                         lockFile = null;
                     }
                 }
@@ -1153,15 +1162,23 @@ namespace Amatsukaze.Models
         {
             var serverPort = appData?.ServerPort > 0 ? appData.ServerPort : ServerSupport.DEFAULT_PORT;
             var server = new EncodeServer(serverPort, new ClientAdapter(this), null);
-            await server.Init();
-            return server;
+            try
+            {
+                await server.Init();
+                return server;
+            }
+            catch
+            {
+                server.Dispose();
+                throw;
+            }
         }
 
         public async Task Start()
         {
             if (App.Option.LaunchType == LaunchType.Standalone)
             {
-                lockFile = ServerSupport.GetLock();
+                lockFile = ServerSupport.GetLock(ServerInstanceKind.Standalone, ServerPort);
                 Server = new ServerAdapter(await MakeEncodeServer());
                 await Server.RefreshRequest();
             }
@@ -1175,6 +1192,7 @@ namespace Amatsukaze.Models
 
         public void SetServerAddress(string serverIp, int port)
         {
+            temporaryServerIP = null;
             appData.ServerIP = serverIp;
             appData.ServerPort = port;
             if (Server is ServerConnection)
@@ -1210,7 +1228,7 @@ namespace Amatsukaze.Models
         {
             if (firstAsked)
             {
-                (Server as ServerConnection).SetServerAddress(appData.ServerIP, appData.ServerPort);
+                (Server as ServerConnection).SetServerAddress(ServerIP, ServerPort);
                 firstAsked = false;
             }
             else

@@ -16,6 +16,8 @@ namespace Amatsukaze.Server
         {
             try
             {
+                GUIOPtion option = new GUIOPtion(args);
+                if (!string.IsNullOrEmpty(option.RootDir)) Directory.SetCurrentDirectory(Path.GetFullPath(option.RootDir));
                 Util.EnsureEncodingProviderRegistered();
 
                 // Debug.Printの出力を標準エラー出力に表示するためのリスナーを追加
@@ -42,8 +44,7 @@ namespace Amatsukaze.Server
                 loggerServer.AddAppender(consoleAppender);
 
                 TaskSupport.SetSynchronizationContext();
-                GUIOPtion option = new GUIOPtion(args);
-                using (var lockFile = ServerSupport.GetLock())
+                using (var lockFile = ServerSupport.GetLock(ServerInstanceKind.ServerCLI, option.ServerPort))
                 {
                     log4net.ILog LOG = log4net.LogManager.GetLogger("Server");
                     Util.LogHandlers.Add(text => LOG.Info(text));
@@ -52,7 +53,17 @@ namespace Amatsukaze.Server
                          TaskSupport.Finish();
                      }))
                     {
-                        var task = server.Init();
+                        async System.Threading.Tasks.Task InitializeServer()
+                        {
+                            try { await server.Init(); }
+                            catch (Exception e)
+                            {
+                                Util.AddLog("サーバー初期化に失敗しました: " + e.Message, e);
+                                Environment.ExitCode = 1;
+                                TaskSupport.Finish();
+                            }
+                        }
+                        var task = InitializeServer();
 
                         // この時点でtaskが完了していなくてもEnterMessageLoop()で続きが処理される
 
@@ -89,12 +100,13 @@ namespace Amatsukaze.Server
             }
             catch(MultipleInstanceException)
             {
-                Console.WriteLine("多重起動を検知しました");
+                Console.WriteLine("多重起動を検知しました。" + ServerSupport.GetRunningServerDescription(Directory.GetCurrentDirectory()));
                 return;
             }
             catch (Exception e)
             {
                 Console.WriteLine(e.Message);
+                Environment.ExitCode = 1;
                 return;
             }
         }

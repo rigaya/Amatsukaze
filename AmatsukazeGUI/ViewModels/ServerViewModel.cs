@@ -63,7 +63,7 @@ namespace Amatsukaze.ViewModels
 
         public EncodeServer Server { get; set; }
 
-        private FileStream lockFile;
+        private ServerLock lockFile;
 
         private bool disposed = false;
 
@@ -71,7 +71,8 @@ namespace Amatsukaze.ViewModels
 
         public async void Initialize()
         {
-            await GetGlobalLock();
+            if (!await GetGlobalLock())
+                return;
 
             try
             {
@@ -123,20 +124,25 @@ namespace Amatsukaze.ViewModels
         {
             try
             {
-                lockFile = ServerSupport.GetLock();
+                lockFile = ServerSupport.GetLock(ServerInstanceKind.ServerGUI, App.Option.ServerPort);
             }
             catch(MultipleInstanceException)
             {
                 Util.AddLog($"[GUI] MultipleInstance in ServerViewModel.GetGlobalLock. PID={Process.GetCurrentProcess().Id}, cwd='{Directory.GetCurrentDirectory()}'", null);
-                var message = new InformationMessage(
-                    "多重起動を検知しました",
-                    "AmatsukazeServer",
-                    "Message");
-
-                await Messenger.RaiseAsync(message);
+                Util.AddLog(ServerSupport.GetRunningServerDescription(Directory.GetCurrentDirectory()), null);
+                if (!App.Option.AutoStart)
+                    await ServerInstanceDialog.Show(this);
 
                 await RealCloseWindow();
 
+                return false;
+            }
+            catch (Exception e)
+            {
+                Util.AddLog("サーバーロックを取得できませんでした: " + e.Message, e);
+                if (!App.Option.AutoStart)
+                    await Messenger.RaiseAsync(new InformationMessage("サーバーロックを取得できませんでした。\r\n" + e.Message, "AmatsukazeServer", "Message"));
+                await RealCloseWindow();
                 return false;
             }
 
