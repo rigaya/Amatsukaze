@@ -588,34 +588,65 @@ namespace Amatsukaze.Server
 
         public static async Task TerminateStandalone(string rootDir)
         {
-            var path = GetStandaloneMailslotName(rootDir);
-            Util.AddLog($"[TerminateStandalone] mailslot='{path}', exists={SystemUtility.TestMailslot(path)}", null);
-            while (true)
+            if (!OperatingSystem.IsWindows()) return;
+            var result = SystemUtility.RequestMailslot(GetStandaloneMailslotName(rootDir));
+            if (result.Status == MailslotRequestStatus.NotFound || result.Status == MailslotRequestStatus.NotSupported) return;
+            if (result.Status != MailslotRequestStatus.Sent)
+                throw new IOException("スタンドアロン版への終了通知に失敗しました: " + result.Message);
+            const int shutdownTimeoutSeconds = 30;
+            var timer = Stopwatch.StartNew();
+            while (IsServerProcessRunning(rootDir))
             {
-                if (SystemUtility.TestMailslot(path))
-                {
-                    Util.AddLog("[TerminateStandalone] Server detected. Waiting 10s...", null);
-                    await Task.Delay(10 * 1000);
-                }
-                else
-                {
-                    Util.AddLog("[TerminateStandalone] No server detected. Proceed.", null);
-                    break;
-                }
+                if (timer.Elapsed >= TimeSpan.FromSeconds(shutdownTimeoutSeconds))
+                    throw new TimeoutException("スタンドアロン版が30秒以内に終了しませんでした。強制終了は行いません。");
+                await Task.Delay(250);
             }
         }
 
-        public static void LaunchLocalServer(int port, string rootDir)
+        public static UserSessionLaunchResult LaunchLocalServer(int port, string rootDir, string launchUser = null)
         {
-            var exeDefaultAppendix = Util.IsServerWindows() ? ".exe" : "";
-            var exename = Path.Combine(AppContext.BaseDirectory,
-                (Environment.UserInteractive ? "AmatsukazeGUI" + exeDefaultAppendix : "AmatsukazeServerCLI" + exeDefaultAppendix));
-            var args = "-l server -p " + port;
-            Util.AddLog($"[LaunchLocalServer] UserInteractive={Environment.UserInteractive}, exe='{exename}', args='{args}', workdir='{rootDir}'", null);
-            Process.Start(new ProcessStartInfo(exename, args)
+            rootDir = Path.GetFullPath(rootDir);
+            string guiPath = Path.Combine(AppContext.BaseDirectory, "AmatsukazeGUI.exe");
+            if (OperatingSystem.IsWindows() && !string.IsNullOrEmpty(launchUser))
+            {
+                string sid = LaunchUserIdentity.ResolveSid(launchUser);
+                using var identity = WindowsIdentity.GetCurrent();
+                if (identity.User?.Value != sid || IsNonInteractiveServiceContext(out _))
+                {
+                    var result = SystemUtility.LaunchProcessInUserSession(sid, guiPath,
+                        "-l server -p " + port + " --auto-start", rootDir);
+                    Console.WriteLine("[AddTask] 指定起動ユーザー={0}、状態={1}、API={2}、Win32={3}: {4}",
+                        launchUser, result.Status, result.ApiName, result.Win32Error, result.Message);
+                    if (result.Status == UserSessionLaunchStatus.Launched) return result;
+                    result.Dispose();
+                    Console.WriteLine("[AddTask] 警告: 現在のアカウントでの起動へ切り替えます。");
+                }
+            }
+            else if (!string.IsNullOrEmpty(launchUser))
+            {
+                Console.WriteLine("[AddTask] --launch-userはWindowsでのみ有効なため無視します。");
+            }
+            else if (IsNonInteractiveServiceContext(out _))
+            {
+                Console.WriteLine("[AddTask] 警告: 起動ユーザーの指定がありません。通常ユーザーでバッチを再生成するか--launch-userを指定してください。");
+            }
+            bool useGui = Environment.UserInteractive && !IsNonInteractiveServiceContext(out _);
+            string executable = Path.Combine(AppContext.BaseDirectory,
+                (useGui ? "AmatsukazeGUI" : "AmatsukazeServerCLI") + (OperatingSystem.IsWindows() ? ".exe" : ""));
+            var start = new ProcessStartInfo(executable)
             {
                 WorkingDirectory = rootDir,
-            });
+                UseShellExecute = false
+            };
+            start.ArgumentList.Add("-l");
+            start.ArgumentList.Add("server");
+            start.ArgumentList.Add("-p");
+            start.ArgumentList.Add(port.ToString(CultureInfo.InvariantCulture));
+            start.ArgumentList.Add("-r");
+            start.ArgumentList.Add(rootDir);
+            if (OperatingSystem.IsWindows() && useGui) start.ArgumentList.Add("--auto-start");
+            Console.WriteLine("[AddTask] サーバーを起動します: {0}、ルート={1}、ポート={2}", executable, rootDir, port);
+            return UserSessionLaunchResult.FromProcess(Process.Start(start));
         }
 
         // 実行コンテキスト情報（アカウント・セッション・権限・コードページ）をログ用の1行文字列で返す
@@ -682,16 +713,10 @@ namespace Amatsukaze.Server
                     reason = "セッション0（サービス用セッション）で実行されています";
                     return true;
                 }
-                using (var identity = WindowsIdentity.GetCurrent())
+                if (IsServiceAccount())
                 {
-                    var sid = identity.User;
-                    if (sid.IsWellKnown(WellKnownSidType.LocalSystemSid) ||
-                        sid.IsWellKnown(WellKnownSidType.LocalServiceSid) ||
-                        sid.IsWellKnown(WellKnownSidType.NetworkServiceSid))
-                    {
-                        reason = "サービス用アカウント（LocalSystem/LocalService/NetworkService）で実行されています";
-                        return true;
-                    }
+                    reason = "サービス用アカウント（LocalSystem/LocalService/NetworkService）で実行されています";
+                    return true;
                 }
                 if (!Environment.UserInteractive)
                 {

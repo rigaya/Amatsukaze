@@ -414,6 +414,25 @@ namespace Amatsukaze.Server
             stream = client.GetStream();
         }
 
+        // ローカルの起動待ちは名前解決と接続を含めて期限内に収める。
+        public async Task ConnectAsync(string serverIp, int port, TimeSpan timeout)
+        {
+            Close();
+            using var cancellation = new System.Threading.CancellationTokenSource(timeout);
+            try
+            {
+                var family = IPAddress.TryParse(serverIp, out var address) ? address.AddressFamily : AddressFamily.InterNetwork;
+                client = new TcpClient(family);
+                await client.ConnectAsync(serverIp, port, cancellation.Token);
+                stream = client.GetStream();
+            }
+            catch
+            {
+                Close();
+                throw;
+            }
+        }
+
         private void Close()
         {
             try
