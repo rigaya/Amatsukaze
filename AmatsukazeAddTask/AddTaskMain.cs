@@ -358,9 +358,14 @@ namespace Amatsukaze.AddTask
             {
                 await ExecCore();
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 if (okReceived) Console.WriteLine("[AddTask] タスクは受理済みですが後処理に失敗しました。再投入前にキューを確認してください。");
+                if (e is IOException || e is UnauthorizedAccessException)
+                {
+                    string hint = ServerSupport.GetServiceContextPathHintForProcess("AmatsukazeAddTask", option.FilePath, option.NasDir);
+                    if (hint != null) Console.WriteLine(hint);
+                }
                 throw;
             }
             finally

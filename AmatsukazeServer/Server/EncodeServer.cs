@@ -2724,7 +2724,7 @@ namespace Amatsukaze.Server
             if (!Directory.Exists(workPath))
             {
                 throw new InvalidOperationException(
-                    "一時フォルダパスが無効です: " + workPath);
+                    "一時フォルダパスが無効です: " + workPath + ServerSupport.GetServiceContextPathHint(workPath));
             }
 
             // パスが設定されていたらファイル存在チェック

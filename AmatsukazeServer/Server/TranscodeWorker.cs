@@ -770,11 +770,11 @@ namespace Amatsukaze.Server
             {
                 if(item.IsCheck)
                 {
-                    return MakeCheckLogItem(item.Mode, false, item, item.Profile.Name, "入力ファイルが見つかりません", now, now);
+                    return MakeCheckLogItem(item.Mode, false, item, item.Profile.Name, "入力ファイルが見つかりません" + ServerSupport.GetServiceContextPathHint(item.SrcPath), now, now);
                 }
                 else
                 {
-                    return FailLogItem(item, item.Profile.Name, "入力ファイルが見つかりません", now, now);
+                    return FailLogItem(item, item.Profile.Name, "入力ファイルが見つかりません" + ServerSupport.GetServiceContextPathHint(item.SrcPath), now, now);
                 }
             }
 
@@ -1186,7 +1186,8 @@ namespace Amatsukaze.Server
                         // その他
                         return MakeCheckLogItem(item.Mode, false, item, item.Profile.Name,
                             "Amatsukaze.exeはコード" +
-                            ServerSupport.ExitCodeString(exitCode) + "で終了しました。", start, finish);
+                            ServerSupport.ExitCodeString(exitCode) + "で終了しました。" +
+                            ServerSupport.GetServiceContextPathHint(item.SrcPath, item.DstPath, workPath), start, finish);
                     }
                 }
                 else
@@ -1270,7 +1271,8 @@ namespace Amatsukaze.Server
                         // その他
                         return FailLogItem(item, item.Profile.Name,
                             "Amatsukaze.exeはコード" + 
-                            ServerSupport.ExitCodeString(exitCode) + "で終了しました。", start, finish);
+                            ServerSupport.ExitCodeString(exitCode) + "で終了しました。" +
+                            ServerSupport.GetServiceContextPathHint(item.SrcPath, item.DstPath, workPath), start, finish);
                     }
                 }
             }
@@ -1571,9 +1573,12 @@ namespace Amatsukaze.Server
             }
             catch (Exception e)
             {
-                await server.FatalError(Id, "エンコード中にエラー", e);
+                string hint = e is IOException || e is UnauthorizedAccessException
+                    ? ServerSupport.GetServiceContextPathHint(item?.SrcPath, item?.DstPath, item?.GetEffectiveWorkPath(server.AppData_.setting)) : null;
+                await server.FatalError(Id, "エンコード中にエラー" + hint, e);
                 if(item != null)
                 {
+                    item.FailReason = e.Message + hint;
                     item.State = QueueState.Failed;
                     await server.NotifyQueueItemUpdate(item);
                     await server.RequestState(StateChangeEvent.EncodeFailed);

@@ -36,5 +36,40 @@ namespace Amatsukaze.Server
             }
         }
 
+        public static string GetServiceContextPathHint(params string[] paths)
+            => GetServiceContextPathHintForProcess("AmatsukazeServer", paths);
+
+        public static string GetServiceContextPathHintForProcess(string processName, params string[] paths)
+        {
+            try
+            {
+                if (!IsNonInteractiveServiceContext(out _) || !paths.Any(IsNetworkPathCandidate)) return null;
+                using var process = Process.GetCurrentProcess();
+                return $"（{processName}の実行アカウント={Environment.UserDomainName}\\{Environment.UserName}、" +
+                    $"セッションID={process.SessionId}。" +
+                    "共有先の認証・アクセス権、またはこのログオン環境から見えないドライブが原因の可能性があります。" +
+                    "UNCパスでも共有先への認証と権限は必要です。" +
+                    (processName == "AmatsukazeAddTask"
+                        ? "AddTask自身を必要な権限のあるユーザーで実行するか、共有先の権限を確認してください。--launch-userはコピー権限を変更しません。"
+                        : "ログオンユーザーでの起動にはバッチの再生成または--launch-userの指定を確認してください。起動済みサーバーのアカウントは変わりません。") + "）";
+            }
+            catch (Exception)
+            {
+                // 診断処理で元の障害を隠さない。
+                return null;
+            }
+        }
+
+        internal static bool IsNetworkPathCandidate(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            if (path.StartsWith(@"\\.\", StringComparison.Ordinal)) return false;
+            if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return true;
+            if (path.StartsWith(@"\\?\", StringComparison.Ordinal)) path = path.Substring(4);
+            else if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal)) return true;
+            if (path.Length < 3 || !char.IsLetter(path[0]) || path[1] != ':') return false;
+            var drive = new DriveInfo(path.Substring(0, 3));
+            return drive.DriveType == DriveType.Network || drive.DriveType == DriveType.NoRootDirectory;
+        }
     }
 }
