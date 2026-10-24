@@ -62,7 +62,7 @@ else
                     </label>
                 </td>
             </tr>
-            @if (_serverIsWindows && IsBatSelected)
+            @if (_serverEnvLoaded && _serverIsWindows && IsBatSelected)
             {
                 <tr>
                     <th>起動ユーザー</th>
@@ -202,7 +202,9 @@ else
     private string _downloadName = "AmatsukazeAddTask.bat";
     private bool _isLocalHost;
     private string _scriptType = "bat";
-    private bool _serverIsWindows;
+    private bool _serverIsWindows = true;
+    // 起動ユーザー欄はWindows専用なので、サーバー環境の取得に成功したときだけ表示する。
+    private bool _serverEnvLoaded;
     private string? _remoteHost;
     private string? _wolSubnet;
     private string? _wolMac;
@@ -212,7 +214,8 @@ else
     private async Task ReloadAsync()
     {
         _loading = true;
-        _serverIsWindows = false;
+        _serverIsWindows = true;
+        _serverEnvLoaded = false;
         _error = null;
         _data = null;
         _edit = null;
@@ -274,6 +277,7 @@ else
         if (envRes.Ok && envRes.Data != null)
         {
             _serverIsWindows = !envRes.Data.IsServerLinux;
+            _serverEnvLoaded = true;
         }
         _scriptType = _serverIsWindows ? "bat" : "sh";
         _remoteHost = GetRemoteHost();
