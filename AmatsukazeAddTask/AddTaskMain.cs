@@ -8,6 +8,8 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security.Principal;
 using System.Threading.Tasks;
 
 namespace Amatsukaze.AddTask
@@ -137,6 +139,24 @@ namespace Amatsukaze.AddTask
             }
         }
 
+        // 存在しないユーザー名はサーバー起動時まで持ち越さず、引数エラーとして終了する。
+        [SupportedOSPlatform("windows")]
+        private static void ValidateLaunchUser(string value)
+        {
+            try
+            {
+                LaunchUserIdentity.ResolveSid(value);
+            }
+            catch (IdentityNotMappedException)
+            {
+                throw new ArgumentException($"--launch-userのユーザー「{value}」が見つかりません。PC名\\ユーザー名、ドメイン\\ユーザー名、またはSIDを確認してください。");
+            }
+            catch (SystemException e) when (e is not ArgumentException)
+            {
+                throw new ArgumentException($"--launch-userのユーザー「{value}」を確認できません: {e.Message}");
+            }
+        }
+
         public GUIOPtion(string[] args)
         {
             // デフォルトはexeのあるディレクトリの１つ上
@@ -159,7 +179,7 @@ namespace Amatsukaze.AddTask
                 {
                     if (++i >= args.Length) throw new ArgumentException("--launch-userの値がありません");
                     LaunchUser = args[i];
-                    if (OperatingSystem.IsWindows()) LaunchUserIdentity.Validate(LaunchUser);
+                    if (OperatingSystem.IsWindows()) ValidateLaunchUser(LaunchUser);
                 }
                 else if (arg == "--proc-mode")
                 {
