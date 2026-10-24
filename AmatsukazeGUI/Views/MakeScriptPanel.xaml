@@ -107,10 +107,11 @@
                             </Style>
                         </StackPanel.Style>
                         <DockPanel>
-                            <TextBlock Text="起動ユーザー:" VerticalAlignment="Center"/>
+                            <TextBlock Text="起動ユーザー:" VerticalAlignment="Center"
+                                       ToolTip="PC名\ユーザー名、ドメイン\ユーザー名、またはSIDを指定します。空欄では指定しません。&#xA;バッチファイル作成時は&quot;S-1-&quot;ではじまるSIDに変換します。"/>
                             <TextBox Margin="5,0"
                                      Text="{Binding Model.MakeScriptData.LaunchUser, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="PC名\ユーザー名、ドメイン\ユーザー名、またはSIDを指定します。空欄では指定しません。"/>
+                                     ToolTip="PC名\ユーザー名、ドメイン\ユーザー名、またはSIDを指定します。空欄では指定しません。&#xA;バッチファイル作成時は&quot;S-1-&quot;ではじまるSIDに変換します。"/>
                         </DockPanel>
                         <TextBlock Text="サーバー未起動時に使用。空欄ではAddTaskと同じアカウントで起動します。"
                                    TextWrapping="Wrap" Margin="0,3,0,0"/>

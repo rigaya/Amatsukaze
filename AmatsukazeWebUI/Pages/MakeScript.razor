@@ -65,9 +65,10 @@ else
             @if (_serverEnvLoaded && _serverIsWindows && IsBatSelected)
             {
                 <tr>
-                    <th>起動ユーザー</th>
+                    <th title="PC名\ユーザー名、ドメイン\ユーザー名、またはSIDを指定します。空欄では指定しません。バッチファイル作成時は&quot;S-1-&quot;ではじまるSIDに変換します。">起動ユーザー</th>
                     <td>
-                        <input value="@_edit.LaunchUser" @onchange="OnLaunchUserChanged" placeholder="PC名\ユーザー名またはSID" />
+                        <input value="@_edit.LaunchUser" @onchange="OnLaunchUserChanged" placeholder="PC名\ユーザー名またはSID"
+                               title="PC名\ユーザー名、ドメイン\ユーザー名、またはSIDを指定します。空欄では指定しません。バッチファイル作成時は&quot;S-1-&quot;ではじまるSIDに変換します。" />
                         <div class="text-muted">サーバー未起動時に使用。空欄ではAddTaskと同じアカウントで起動します。</div>
                     </td>
                 </tr>
