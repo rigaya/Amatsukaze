@@ -703,9 +703,11 @@ namespace Amatsukaze.AddTask
                 }
             }
             if (await TryConnect()) return;
-            // 不明なロックのまま起動や終了通知を行わない。
-            ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot);
-            await ServerSupport.TerminateStandalone(option.AmatsukazeRoot);
+            // ロック状態を確認できない場合はIsServerProcessRunningが例外を投げるので、起動や終了通知を行わずに終了する。
+            // ロックが保持されていればスタンドアロン版の可能性があるので、終了を求める。
+            if (ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot))
+                await ServerSupport.TerminateStandalone(option.AmatsukazeRoot);
+            // 終了を求めた後のロックの状態で、起動するかを決める。
             using var launched = ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot)
                 ? null : ServerSupport.LaunchLocalServer(option.ServerPort, option.AmatsukazeRoot, option.LaunchUser);
             if (launched != null) Console.WriteLine("[AddTask] 作成PID={0}。サーバーへの接続を待ちます。", launched.ProcessId);
