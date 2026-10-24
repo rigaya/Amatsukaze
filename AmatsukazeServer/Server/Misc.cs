@@ -567,42 +567,6 @@ namespace Amatsukaze.Server
             return new ServerLock(stream, rootDir, kind, port);
         }
 
-        private static string GetStandaloneMailslotName(string rootDir)
-        {
-            return Path.Combine(@"\\.\mailslot", rootDir.Replace(':', '_'), "Amatsukaze");
-        }
-
-        public static FileStream CreateStandaloneMailslot()
-        {
-            var path = GetStandaloneMailslotName(Directory.GetCurrentDirectory());
-            return SystemUtility.CreateMailslot(path);
-        }
-
-        public static async Task WaitStandaloneMailslot(FileStream fs)
-        {
-            byte[] buf = new byte[1];
-            // CreateMailslotの引数を間違えたりすると
-            // ここがビジーウェイトになってしまうので注意
-            while (await fs.ReadAsync(buf, 0, 1) == 0) ;
-        }
-
-        public static async Task TerminateStandalone(string rootDir)
-        {
-            if (!OperatingSystem.IsWindows()) return;
-            var result = SystemUtility.RequestMailslot(GetStandaloneMailslotName(rootDir));
-            if (result.Status == MailslotRequestStatus.NotFound || result.Status == MailslotRequestStatus.NotSupported) return;
-            if (result.Status != MailslotRequestStatus.Sent)
-                throw new IOException("スタンドアロン版への終了通知に失敗しました: " + result.Message);
-            const int shutdownTimeoutSeconds = 30;
-            var timer = Stopwatch.StartNew();
-            while (IsServerProcessRunning(rootDir))
-            {
-                if (timer.Elapsed >= TimeSpan.FromSeconds(shutdownTimeoutSeconds))
-                    throw new TimeoutException("スタンドアロン版が30秒以内に終了しませんでした。強制終了は行いません。");
-                await Task.Delay(250);
-            }
-        }
-
         public static UserSessionLaunchResult LaunchLocalServer(int port, string rootDir, string launchUser = null)
         {
             rootDir = Path.GetFullPath(rootDir);

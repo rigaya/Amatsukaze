@@ -533,7 +533,8 @@ namespace Amatsukaze.AddTask
                 {
                     // サーバに接続
                     var connectIp = option.ServerIP;
-                    if (string.Equals(connectIp, "localhost", StringComparison.OrdinalIgnoreCase))
+                    // WindowsのローカルはConnectLocalServerと同じくloopbackへ接続する。
+                    if (windowsLocal || string.Equals(connectIp, "localhost", StringComparison.OrdinalIgnoreCase))
                     {
                         connectIp = "127.0.0.1";
                     }
@@ -564,8 +565,6 @@ namespace Amatsukaze.AddTask
                             Console.WriteLine("[AddTask] 回避するには、AmatsukazeServerをユーザーセッションで事前に起動しておいてください。");
                         }
                         Console.WriteLine("[AddTask] Local: attempt launch. Root='{0}', Port={1}", option.AmatsukazeRoot, option.ServerPort);
-                        await ServerSupport.TerminateStandalone(option.AmatsukazeRoot);
-                        Console.WriteLine("[AddTask] TerminateStandalone completed.");
                         // 既に起動中（起動処理中を含む）なら二重起動を避ける
                         if (ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot) == false)
                         {
@@ -685,8 +684,8 @@ namespace Amatsukaze.AddTask
         {
             const int startupTimeoutSeconds = 120;
             var timer = Stopwatch.StartNew();
-            string host = string.Equals(option.ServerIP, "localhost", StringComparison.OrdinalIgnoreCase) || option.ServerIP == "::1"
-                ? "127.0.0.1" : option.ServerIP;
+            // ローカルのサーバーは127.0.0.1でも接続でき、スタンドアロン版は127.0.0.1だけで待ち受けるため、常にloopbackへ接続する。
+            const string host = "127.0.0.1";
             async Task<bool> TryConnect()
             {
                 var remaining = TimeSpan.FromSeconds(startupTimeoutSeconds) - timer.Elapsed;
@@ -703,11 +702,8 @@ namespace Amatsukaze.AddTask
                 }
             }
             if (await TryConnect()) return;
-            // ロック状態を確認できない場合はIsServerProcessRunningが例外を投げるので、起動や終了通知を行わずに終了する。
-            // ロックが保持されていればスタンドアロン版の可能性があるので、終了を求める。
-            if (ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot))
-                await ServerSupport.TerminateStandalone(option.AmatsukazeRoot);
-            // 終了を求めた後のロックの状態で、起動するかを決める。
+            // ロック状態を確認できない場合はIsServerProcessRunningが例外を投げるので、起動せずに終了する。
+            // スタンドアロン版もloopbackで受け付けるので、ロックが保持されていれば起動せずに接続を待つ。
             using var launched = ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot)
                 ? null : ServerSupport.LaunchLocalServer(option.ServerPort, option.AmatsukazeRoot, option.LaunchUser);
             if (launched != null) Console.WriteLine("[AddTask] 作成PID={0}。サーバーへの接続を待ちます。", launched.ProcessId);
@@ -715,8 +711,8 @@ namespace Amatsukaze.AddTask
             {
                 if (await TryConnect()) return;
                 if (ServerSupport.TryGetRunningServerInfo(option.AmatsukazeRoot, out var info) &&
-                    info.Kind != ServerInstanceKind.Standalone && info.Port != option.ServerPort)
-                    throw new IOException("既存サーバーのポートが異なります。" + ServerSupport.GetRunningServerDescription(option.AmatsukazeRoot));
+                    info.Port != option.ServerPort)
+                    throw new IOException("起動中のAmatsukazeのポートが異なります。" + ServerSupport.GetRunningServerDescription(option.AmatsukazeRoot));
                 if (launched != null && launched.HasExited && !ServerSupport.IsServerProcessRunning(option.AmatsukazeRoot))
                     throw new IOException("サーバープロセスが接続前に終了しました。PID=" + launched.ProcessId + "。サーバーログを確認してください。");
                 var remaining = TimeSpan.FromSeconds(startupTimeoutSeconds) - timer.Elapsed;

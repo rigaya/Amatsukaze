@@ -153,13 +153,14 @@ namespace Amatsukaze.Server
             }
         }
 
-        public async Task Listen(int port)
+        // bindAddressを省略した場合は全アドレスで待ち受ける（サーバー版）。
+        public async Task Listen(int port, IPAddress bindAddress = null)
         {
             int errorCount = 0;
 
             while (finished == false)
             {
-                listener = new TcpListener(IPAddress.Any, port);
+                listener = new TcpListener(bindAddress ?? IPAddress.Any, port);
                 listener.Start();
                 try
                 {

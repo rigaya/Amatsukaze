@@ -54,6 +54,8 @@ namespace Amatsukaze.Server
 
         internal IUserClient Client { get; private set; }
         public Task ServerTask { get; private set; }
+        // スタンドアロン版でAddTaskから投入を受け付けるためのloopback待ち受け。サーバー版ではnull。
+        private ClientManager standaloneClientManager;
         internal AppData AppData_ { get; private set; }
 
         private readonly int serverPort;
@@ -208,8 +210,26 @@ namespace Amatsukaze.Server
         }
         #endregion
 
+        private static async Task ListenStandalone(ClientManager manager, int port)
+        {
+            try
+            {
+                await manager.Listen(port, IPAddress.Loopback);
+            }
+            catch (Exception e)
+            {
+                // 待ち受けに失敗してもスタンドアロン版の操作は続ける。この場合AddTaskからは投入できない。
+                Util.AddLog($"スタンドアロン版でAddTaskの受付を開始できませんでした。ポート: {port}", e);
+            }
+        }
+
         public ClientManager ClientManager {
             get {
+                // スタンドアロン版のloopback待ち受けはAddTask用なので、サーバー版のクライアント管理としては扱わない。
+                if (standaloneClientManager != null)
+                {
+                    return null;
+                }
                 if (Client is ClientManager manager)
                 {
                     return manager;
@@ -335,13 +355,9 @@ namespace Amatsukaze.Server
                 // スタンドアロン
                 this.Client = client;
 
-                // 終了待機
-                var fs = ServerSupport.CreateStandaloneMailslot();
-                ServerSupport.WaitStandaloneMailslot(fs).ContinueWith(task =>
-                {
-                    // 終了リクエストが来た
-                    client.Finish();
-                });
+                // AddTaskから投入できるよう、このPC内(127.0.0.1)だけで旧プロトコルを待ち受ける。
+                standaloneClientManager = new ClientManager(this);
+                _ = ListenStandalone(standaloneClientManager, port);
             }
             else
             {
@@ -352,6 +368,8 @@ namespace Amatsukaze.Server
             }
 
             multiClient = new MultiUserClient(this.Client);
+            // スタンドアロン版でも受理通知などをAddTaskの接続へ配る。
+            multiClient.Add(standaloneClientManager);
             this.Client = multiClient;
 
             var restPort = RestApiHost.GetEnabledPort(port);
@@ -657,6 +675,9 @@ namespace Amatsukaze.Server
                     // TODO: マネージ状態を破棄します (マネージ オブジェクト)。
 
                     UpdateManager?.Dispose();
+
+                    // スタンドアロン版の待ち受けを止め、接続中のAddTaskを切断する。
+                    standaloneClientManager?.Finish();
 
                     // キュー状態を保存する
                     try
