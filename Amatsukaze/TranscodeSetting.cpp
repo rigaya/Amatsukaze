@@ -588,6 +588,13 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
             sb.append(_T(" -new \"%s\""), outpath);
             ret.push_back(std::make_pair(sb.str(), true));
             sb.clear();
+        } else if (needTimecode && muxerAddEncoderCmd) {
+            // チャプターも字幕もない場合は、タイムコード埋め込み後の出力にタグを付与する
+            const tstring toolVal = tstring(_T("Amatsukaze ")) + encoderName + _T(" ") + encoderOptions;
+            sb.append(_T("\"%s\" -tmp \"%s\" -itags \"tool=%s\" \"%s\""),
+                mp4boxpath, tmpdir, escapeItagsValue(toolVal).c_str(), outpath);
+            ret.push_back(std::make_pair(sb.str(), true));
+            sb.clear();
         }
     } else if (format == FORMAT_MKV) {
 
