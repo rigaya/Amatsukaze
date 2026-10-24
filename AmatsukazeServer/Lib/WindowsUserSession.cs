@@ -90,6 +90,32 @@ namespace Amatsukaze.Lib
             finally { WTSFreeMemory(buffer); }
         }
 
+        // セッションのログオンユーザーのSIDを返す。ログオフ済み・セッション不一致はnull。
+        static string QuerySessionSid(int sessionId, bool useTokens)
+        {
+            if (!useTokens)
+            {
+                string user = QuerySessionText(sessionId, WtsInfoClass.UserName);
+                if (user.Length == 0) return null;
+                string domain = QuerySessionText(sessionId, WtsInfoClass.DomainName);
+                return ((SecurityIdentifier)new NTAccount(domain, user).Translate(typeof(SecurityIdentifier))).Value;
+            }
+            // 名前解決に依存せず、実際のログオンユーザーをSIDで照合する。
+            bool acquired = WTSQueryUserToken((uint)sessionId, out var token);
+            int error = acquired ? 0 : Marshal.GetLastWin32Error();
+            using (token)
+            {
+                if (!acquired)
+                {
+                    if (IsSessionGone(error)) return null;
+                    throw SessionApiFailure("WTSQueryUserToken", error);
+                }
+                using var identity = new WindowsIdentity(token.DangerousGetHandle());
+                if (QueryTokenInt(token, TokenInfoClass.SessionId) != sessionId) return null;
+                return identity.User?.Value;
+            }
+        }
+
         static List<UserSession> EnumerateUserSessions(bool useTokens)
         {
             if (!WTSEnumerateSessionsW(IntPtr.Zero, 0, WtsEnumerationVersion, out var buffer, out int count))
@@ -103,30 +129,17 @@ namespace Amatsukaze.Lib
                     if (entry.SessionId <= 0 || (entry.State != WtsConnectionState.Active &&
                             entry.State != WtsConnectionState.Disconnected)) continue;
                     string sid;
-                    if (useTokens)
+                    try
                     {
-                        // 名前解決に依存せず、実際のログオンユーザーをSIDで照合する。
-                        bool acquired = WTSQueryUserToken((uint)entry.SessionId, out var token);
-                        int error = acquired ? 0 : Marshal.GetLastWin32Error();
-                        using (token)
-                        {
-                            if (!acquired)
-                            {
-                                if (IsSessionGone(error)) continue;
-                                throw SessionApiFailure("WTSQueryUserToken", error);
-                            }
-                            using var identity = new WindowsIdentity(token.DangerousGetHandle());
-                            if (QueryTokenInt(token, TokenInfoClass.SessionId) != entry.SessionId) continue;
-                            sid = identity.User?.Value;
-                        }
+                        sid = QuerySessionSid(entry.SessionId, useTokens);
                     }
-                    else
+                    catch (SystemException e)
                     {
-                        string user = QuerySessionText(entry.SessionId, WtsInfoClass.UserName);
-                        if (user.Length == 0) continue;
-                        string domain = QuerySessionText(entry.SessionId, WtsInfoClass.DomainName);
-                        sid = ((SecurityIdentifier)new NTAccount(domain, user).Translate(typeof(SecurityIdentifier))).Value;
+                        // 1つのセッションの異常で他のセッションへの起動を妨げない。
+                        Util.AddLog($"[ユーザー起動] セッション={entry.SessionId}を確認できないため候補から除外します: {e.Message}", null);
+                        continue;
                     }
+                    if (sid == null) continue;
                     sessions.Add(new UserSession { SessionId = entry.SessionId, Sid = sid,
                         State = entry.State == WtsConnectionState.Active ? UserSessionState.Active : UserSessionState.Disconnected });
                 }
