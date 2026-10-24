@@ -11,9 +11,9 @@ public sealed class MakeScriptBuilderTests
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "amt-script-test-" + Guid.NewGuid().ToString("N"));
         public Fixture() => Directory.CreateDirectory(Root);
         public MakeScriptData Data() => new() { Profile = "標準", OutDir = Root, Priority = 3, MoveAfter = true };
-        public bool Build(MakeScriptData? data, out string script, out string error, string target = "local", string type = "sh", string? remote = null, string? subnet = null, string? mac = null, int port = 0, string? launchUser = null, bool windows = false) =>
+        public bool Build(MakeScriptData? data, out string script, out string error, string target = "local", string type = "sh", string? remote = null, string? subnet = null, string? mac = null, int port = 0, bool windows = false) =>
             MakeScriptBuilder.TryBuild(data!, target, type, remote!, subnet!, mac!, port,
-                windows, Root, Root, out script, out error, launchUser);
+                windows, Root, Root, out script, out error);
         public void Dispose() => Directory.Delete(Root, true);
     }
 
@@ -91,7 +91,9 @@ public sealed class MakeScriptBuilderTests
     public void 起動ユーザーは指定したbatだけに付与する(string type, string? sid, bool expected)
     {
         using var fixture = new Fixture();
-        Assert.True(fixture.Build(fixture.Data(), out var script, out _, type: type, launchUser: sid, windows: true));
+        var data = fixture.Data();
+        data.LaunchUser = sid;
+        Assert.True(fixture.Build(data, out var script, out _, type: type, windows: true));
         // 未指定batの案内コメントはコマンドとして数えない。
         string command = script.Split('\n').Last();
         Assert.Equal(expected, command.Contains(" --launch-user "));
@@ -106,23 +108,35 @@ public sealed class MakeScriptBuilderTests
     public void バッチに埋め込めない起動ユーザーを拒否する(string value)
     {
         using var fixture = new Fixture();
-        Assert.False(fixture.Build(fixture.Data(), out var script, out _, type: "bat", launchUser: value, windows: true));
+        var data = fixture.Data();
+        data.LaunchUser = value;
+        Assert.False(fixture.Build(data, out var script, out _, type: "bat", windows: true));
         Assert.Empty(script);
     }
 
     [Theory]
     [InlineData("S-1-5-21-1-2-3-1002", true)]
     [InlineData("", false)]
-    public void 入力欄の指定は自動選択より優先され空欄なら付与しない(string value, bool expected)
+    public void 入力欄の起動ユーザーを付与し空欄なら付与しない(string value, bool expected)
     {
         using var fixture = new Fixture();
         var data = fixture.Data();
         data.LaunchUser = value;
-        Assert.True(fixture.Build(data, out var script, out _, type: "bat", launchUser: "S-1-5-21-1-2-3-1001", windows: true));
+        Assert.True(fixture.Build(data, out var script, out _, type: "bat", windows: true));
         var command = script.Split('\n').Last();
         Assert.Equal(expected, command.Contains(" --launch-user "));
-        Assert.DoesNotContain("S-1-5-21-1-2-3-1001", command);
         if (expected) Assert.Contains(value, command);
+    }
+
+    [Fact]
+    public void 起動ユーザーの設定がなければ自動では付与しない()
+    {
+        using var fixture = new Fixture();
+        var data = fixture.Data();
+        data.LaunchUser = null;
+        Assert.True(fixture.Build(data, out var script, out _, type: "bat", windows: true));
+        Assert.DoesNotContain("--launch-user \"", script.Split('\n').Last());
+        Assert.Contains("rem 起動ユーザーを自動指定できませんでした", script);
     }
 
     [Theory]
@@ -133,7 +147,7 @@ public sealed class MakeScriptBuilderTests
         using var fixture = new Fixture();
         var data = fixture.Data();
         data.LaunchUser = "別のPCのユーザー";
-        Assert.True(fixture.Build(data, out var script, out _, type: type, launchUser: "S-1-5-21-1-2-3-1001", windows: windows));
+        Assert.True(fixture.Build(data, out var script, out _, type: type, windows: windows));
         Assert.DoesNotContain("--launch-user", script);
     }
 

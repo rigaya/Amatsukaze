@@ -36,21 +36,6 @@ namespace Amatsukaze.Server
             }
         }
 
-        public static string GetLaunchUserForScript()
-        {
-            if (!OperatingSystem.IsWindows() || IsNonInteractiveServiceContext(out _)) return null;
-            try
-            {
-                using var identity = WindowsIdentity.GetCurrent();
-                return identity.User?.Value;
-            }
-            catch (Exception e)
-            {
-                Util.AddLog("バッチの起動ユーザーを取得できません: " + e.Message, e);
-                return null;
-            }
-        }
-
         public static string GetServiceContextPathHint(params string[] paths)
             => GetServiceContextPathHintForProcess("AmatsukazeServer", paths);
 

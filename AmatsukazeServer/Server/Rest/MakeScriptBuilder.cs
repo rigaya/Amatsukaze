@@ -19,8 +19,7 @@ namespace Amatsukaze.Server.Rest
             string addTaskBaseDir,
             string currentDirectory,
             out string script,
-            out string error,
-            string launchUser = null)
+            out string error)
         {
             script = string.Empty;
             error = string.Empty;
@@ -81,9 +80,10 @@ namespace Amatsukaze.Server.Rest
             var lineBreak = isBat ? "\r\n" : "\n";
             var comment = isBat ? "rem" : "#";
 
-            // 入力欄の値を優先し、明示的な空欄では自動指定へ戻さない。
-            if (!isServerWindows || !isBat) launchUser = null;
-            else if (data.LaunchUser != null)
+            // 起動ユーザーは設定値（初期値はサーバー側で決める）だけを使う。
+            // nullは初期値未設定（サービス用アカウントのサーバーなど）、空文字列は指定しない。
+            string launchUser = null;
+            if (isServerWindows && isBat && data.LaunchUser != null)
             {
                 launchUser = data.LaunchUser.Trim();
                 if (launchUser.Length > 0 && (OperatingSystem.IsWindows() || !System.Text.RegularExpressions.Regex.IsMatch(launchUser, @"\AS-1-(?:[0-9]+-)+[0-9]+\z")))
@@ -125,7 +125,7 @@ namespace Amatsukaze.Server.Rest
             }
             else if (isBat && isServerWindows && string.IsNullOrEmpty(launchUser))
             {
-                sb.Append("rem 起動ユーザーを自動指定できませんでした。生成元がサービスアカウント、非対話セッション、またはSID取得失敗です。").Append(lineBreak);
+                sb.Append("rem 起動ユーザーを自動指定できませんでした。サーバーがサービス用アカウントで動いているか、初期値を取得できませんでした。").Append(lineBreak);
                 sb.Append("rem 起動ユーザー欄にPC名\\ユーザー名またはSIDを指定して再生成してください。").Append(lineBreak);
                 sb.Append("rem または末尾へ --launch-user \"MYPC\\user\" を手動追加してください。起動済みサーバーのアカウントとAddTaskのコピー権限は変わりません。").Append(lineBreak);
                 Util.AddLog("[バッチ生成] 起動ユーザーを自動指定できませんでした。生成したbatの案内に従って再生成または手動指定してください。", null);

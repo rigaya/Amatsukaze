@@ -2244,8 +2244,7 @@ namespace Amatsukaze.Server.Rest
                 AppContext.BaseDirectory,
                 Directory.GetCurrentDirectory(),
                 out script,
-                out error,
-                ServerSupport.GetLaunchUserForScript());
+                out error);
         }
 
         private static byte[] ReadImageAsPng(string path)

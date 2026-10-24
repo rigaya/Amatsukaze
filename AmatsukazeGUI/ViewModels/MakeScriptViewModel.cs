@@ -220,8 +220,7 @@ namespace Amatsukaze.ViewModels
                         AppContext.BaseDirectory,
                         Directory.GetCurrentDirectory(),
                         out var content,
-                        out var error,
-                        ServerSupport.GetLaunchUserForScript()))
+                        out var error))
                     {
                         Description = string.IsNullOrWhiteSpace(error) ? "バッチファイル作成に失敗" : error;
                         return;
