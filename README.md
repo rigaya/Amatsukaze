@@ -1061,7 +1061,6 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 - Amatsukaze: 一部GPLやその他のライセンスのコードを使っています。各ソースコードファイルにライセンスが書かれているのでそれを見てください。
 - AmatsukazeCLI: MITライセンス
 - AmatsukazeGUI: MITライセンス
-- FileCutter: MITライセンス
 - libfaad2: GPL
 
 ## 同梱&依存ライブラリ
