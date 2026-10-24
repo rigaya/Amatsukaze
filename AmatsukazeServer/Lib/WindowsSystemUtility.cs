@@ -201,20 +201,31 @@ namespace Amatsukaze.Lib
             if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                 return;
 
+            // 特権の調整に失敗しても、従来どおり電源操作自体は試みる。
             if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out var tokenHandle))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "OpenProcessTokenに失敗しました。");
+            {
+                LogPowerFailure("OpenProcessToken", Marshal.GetLastWin32Error());
+                return;
+            }
             try
             {
                 var privileges = new TOKEN_PRIVILEGES { Attributes = SE_PRIVILEGE_ENABLED, PrivilegeCount = 1 };
                 if (!LookupPrivilegeValue(null, SE_SHUTDOWN_NAME, out privileges.Luid))
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "LookupPrivilegeValueに失敗しました。");
+                {
+                    LogPowerFailure("LookupPrivilegeValue", Marshal.GetLastWin32Error());
+                    return;
+                }
                 bool adjusted = AdjustTokenPrivileges(tokenHandle, false, ref privileges, 0, IntPtr.Zero, IntPtr.Zero);
                 int error = Marshal.GetLastWin32Error();
                 if (!adjusted || error != 0)
-                    throw new Win32Exception(error, "AdjustTokenPrivilegesに失敗しました。");
+                    LogPowerFailure("AdjustTokenPrivileges", error);
             }
             finally { CloseHandle(tokenHandle); }
         }
+
+        // 電源操作の失敗は呼び出し元へ伝えずにログへ残す（完了後動作は待ち受けのないTaskで実行されるため）。
+        private static void LogPowerFailure(string api, int error)
+            => Util.AddLog($"[電源操作] {api}失敗。Win32={error}: {new Win32Exception(error).Message}", null);
 
         /// <summary>
         /// Windowsをシャットダウン、再起動、ログオフなどの操作を行います
@@ -225,7 +236,7 @@ namespace Amatsukaze.Lib
             if (!result)
             {
                 int error = Marshal.GetLastWin32Error();
-                Util.AddLog($"[電源操作] ExitWindowsEx失敗。Win32={error}: {new Win32Exception(error).Message}", null);
+                LogPowerFailure("ExitWindowsEx", error);
             }
             return result;
         }
@@ -376,7 +387,7 @@ namespace Amatsukaze.Lib
         {
             bool hibernate = state == PowerState.Hibernate;
             if (!SetSuspendState(hibernate, force, disableWakeEvent))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "SetSuspendStateに失敗しました。");
+                LogPowerFailure("SetSuspendState", Marshal.GetLastWin32Error());
         }
     }
 } 
