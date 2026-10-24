@@ -1014,7 +1014,7 @@ void BuildMpeg2PartialEncodePlan(
             int anchor = run.last - 1;
             while (anchor >= run.first
                 && !(isAnchor(frameAtDisplay(anchor)) && isFullyKept(anchor))) {
-                --anchor;
+                anchor--;
             }
             // アンカーが見つからない場合も同様にkeep区間を丸ごとpatchにする。
             addPatch(plan.patches, anchor + 1, run.last);

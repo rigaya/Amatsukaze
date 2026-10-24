@@ -123,7 +123,7 @@ namespace Amatsukaze.Lib
             try
             {
                 var sessions = new List<UserSession>();
-                for (int i = 0; i < count; ++i)
+                for (int i = 0; i < count; i++)
                 {
                     var entry = Marshal.PtrToStructure<WtsSessionInfo>(IntPtr.Add(buffer, i * Marshal.SizeOf<WtsSessionInfo>()));
                     if (entry.SessionId <= 0 || (entry.State != WtsConnectionState.Active &&
@@ -175,7 +175,7 @@ namespace Amatsukaze.Lib
             {
                 using var current = WindowsIdentity.GetCurrent();
                 bool isSystem = current.IsSystem;
-                for (int attempt = 0; attempt < MaxSessionSelectionAttempts; ++attempt)
+                for (int attempt = 0; attempt < MaxSessionSelectionAttempts; attempt++)
                 {
                     var selected = UserSessionSelector.Select(EnumerateUserSessions(isSystem), targetSid, WTSGetActiveConsoleSessionId());
                     if (selected == null)

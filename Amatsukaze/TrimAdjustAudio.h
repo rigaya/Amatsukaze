@@ -73,7 +73,7 @@ inline bool readAudioPcm(const Frames& frames, int samplesPerFrame, int sampleRa
     const int64_t end = std::min(requestedEnd, start + static_cast<int64_t>(sampleRate) * 120);
     if (start >= end) return false;
     pcm.assign(static_cast<size_t>(end - start) * 2, 0);
-    for (int64_t index = start / samplesPerFrame; index <= (end - 1) / samplesPerFrame; ++index) {
+    for (int64_t index = start / samplesPerFrame; index <= (end - 1) / samplesPerFrame; index++) {
         const auto& frame = frames[static_cast<size_t>(index)];
         const int64_t frameStart = index * samplesPerFrame;
         const int64_t overlapStart = std::max(start, frameStart);
@@ -84,7 +84,7 @@ inline bool readAudioPcm(const Frames& frames, int samplesPerFrame, int sampleRa
         const size_t count = static_cast<size_t>(availableEnd - overlapStart);
         read(frame.waveOffset + (overlapStart - frameStart) * 4, dest, count * 4);
         if (primaryOnly(static_cast<size_t>(index))) {
-            for (size_t i = 0; i < count; ++i) dest[i * 2 + 1] = dest[i * 2];
+            for (size_t i = 0; i < count; i++) dest[i * 2 + 1] = dest[i * 2];
         }
     }
     return true;

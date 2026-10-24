@@ -643,7 +643,7 @@ namespace Amatsukaze.Server
                         await Task.WhenAll(waits);
                         return;
                     }
-                    for (int i = 0; i < addItems.Count; ++i)
+                    for (int i = 0; i < addItems.Count; i++)
                     {
                         addItems[i].Id = firstItemId + i;
                     }

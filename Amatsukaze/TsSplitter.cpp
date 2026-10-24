@@ -108,7 +108,7 @@ struct AudioPesPipeline::Impl {
         }
     }
     void commit(const Job& job, Result& result) {
-        for (int i = 0; i < result.diagnostics.errors; ++i) ctx.incrementCounter(AMT_ERR_DECODE_AUDIO);
+        for (int i = 0; i < result.diagnostics.errors; i++) ctx.incrementCounter(AMT_ERR_DECODE_AUDIO);
         for (const auto& warning : result.diagnostics.warnings) ctx.warn(warning);
         if (result.frames.empty()) return;
         std::vector<AudioFrameData> frames;
@@ -206,7 +206,7 @@ std::vector<uint8_t> MakePipelineTestPes(const std::vector<uint8_t>& payload, in
 
 extern "C" AMATSUKAZE_API int VerifyAudioPesPipelineForTest(const AudioPesForTest* packets, size_t packetCount) {
     if (packets == nullptr || packetCount == 0) return -5;
-    for (size_t i = 0; i < packetCount; ++i) {
+    for (size_t i = 0; i < packetCount; i++) {
         if (packets[i].data == nullptr || packets[i].length == 0) return -5;
     }
     try {
@@ -226,7 +226,7 @@ extern "C" AMATSUKAZE_API int VerifyAudioPesPipelineForTest(const AudioPesForTes
                 }
             }, asynchronous);
             // 入力を直後に上書きし、複数トラック・PES跨ぎ・形式変更・多数イベントを混在させる。
-            for (int i = 0; i < 180; ++i) {
+            for (int i = 0; i < 180; i++) {
                 const auto& input = packets[i % packetCount];
                 std::vector<uint8_t> payload(input.data, input.data + input.length);
                 auto data = MakePipelineTestPes(payload, input.PTS + i * 4000);
@@ -249,17 +249,17 @@ extern "C" AMATSUKAZE_API int VerifyAudioPesPipelineForTest(const AudioPesForTes
         PESPacket packet(MemoryChunk(data.data(), data.size()));
         packet.parse();
         {
-            AudioPesPipeline pipeline(ctx, [&](int, int64_t, const std::vector<AudioFrameData>&, PESPacket) { ++committed; });
+            AudioPesPipeline pipeline(ctx, [&](int, int64_t, const std::vector<AudioFrameData>&, PESPacket) { committed++; });
             pipeline.submit(0, 0, packet);
-            pipeline.defer([&]() { ++committed; });
+            pipeline.defer([&]() { committed++; });
         }
         if (committed != 0) return -2;
         try {
             AudioPesPipeline pipeline(ctx, [&](int, int64_t, const std::vector<AudioFrameData>&, PESPacket) {
                 throw std::runtime_error("反映時の例外");
             });
-            for (int i = 0; i < 4; ++i) pipeline.submit(0, 0, packet);
-            pipeline.defer([&]() { ++committed; });
+            for (int i = 0; i < 4; i++) pipeline.submit(0, 0, packet);
+            pipeline.defer([&]() { committed++; });
             pipeline.drain();
             return -3;
         } catch (const std::runtime_error&) {

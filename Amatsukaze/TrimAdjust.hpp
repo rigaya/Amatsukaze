@@ -328,7 +328,7 @@ public:
                 }
             }, stereoSamples)) return false;
         std::vector<int16_t> monoSamples(stereoSamples.size() / 2);
-        for (size_t i = 0; i < monoSamples.size(); ++i) {
+        for (size_t i = 0; i < monoSamples.size(); i++) {
             monoSamples[i] = static_cast<int16_t>((static_cast<int>(stereoSamples[i * 2]) + stereoSamples[i * 2 + 1]) / 2);
         }
 

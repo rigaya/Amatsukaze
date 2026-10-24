@@ -24,7 +24,7 @@ int main() {
         check(!audioPlaybackRange(video, 2, 1, start, end), "逆順を拒否する");
         check(!audioPlaybackRange(video, 0, 3, start, end), "範囲外を拒否する");
         std::vector<VideoFrame> longVideo;
-        for (int i = 0; i <= 3700; ++i) longVideo.push_back({90000 + i * 3000});
+        for (int i = 0; i <= 3700; i++) longVideo.push_back({90000 + i * 3000});
         check(audioPlaybackRange(longVideo, 0, 3599, start, end), "120秒を受け付ける");
         check(!audioPlaybackRange(longVideo, 0, 3600, start, end), "120秒超を拒否する");
 

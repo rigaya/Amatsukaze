@@ -127,7 +127,7 @@ public partial class TrimAdjust
     [JSInvokable]
     public async Task StopAudioAsync()
     {
-        ++_audioGeneration;
+        _audioGeneration++;
         _audioRequest?.Cancel();
         _audioActive = false;
         _audioStatus = "";

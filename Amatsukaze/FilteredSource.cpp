@@ -584,7 +584,7 @@ std::vector<tstring> AMTFilterSource::GetSuitablePlugins(const tstring& basepath
     }
     // BaseName -> FileName
     std::map<tstring, tstring> pluginMap;
-    for (int i = (int)categories.size() - 1; i >= support; --i) {
+    for (int i = (int)categories.size() - 1; i >= support; i--) {
         for (auto& plugin : categoryList[i]) {
             pluginMap[plugin.BaseName] = plugin.FileName;
         }
@@ -990,7 +990,7 @@ std::vector<BitrateZone> MakeVFRBitrateZones(const std::vector<double>& timeCode
             cur.next = next.next;
             // 連結されるブロックは無効化
             next.next = -1;
-            --numZones;
+            numZones--;
             // 更に次のブロックがあれば
             auto& nextnext = blocks[cur.next];
             if (nextnext.index < (int)units.size()) {

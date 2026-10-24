@@ -503,7 +503,7 @@ H264VideoParser::H264VideoParser(AMTContext& ctx)
         uint8_t nal_ref_idc = bsm(ptr[0], 5, 2);
         uint8_t nal_unit_type = bsm(ptr[0], 0, 5);
 
-        ptr++; --payloadLength;
+        ptr++; payloadLength--;
 
         switch (nal_unit_type) {
         case 1: // IDR以外のピクチャのスライス
@@ -702,7 +702,7 @@ void H264VideoParser::pushNalUnit(int unitStart, int lastNonZero) {
         uint8_t& lastByte = buffer.ptr()[lastNonZero - 1];
         if (lastByte == 0x80) {
             // ペイロードはこのバイトにはないので1バイト削る
-            --lastNonZero;
+            lastNonZero--;
         } else {
             lastByte &= lastByte - 1;
         }

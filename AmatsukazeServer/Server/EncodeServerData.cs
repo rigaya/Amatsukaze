@@ -597,7 +597,7 @@ namespace Amatsukaze.Server
             get
             {
                 int mask = 0;
-                for (int i = NicoJKFormats.Length - 1; i >= 0; --i)
+                for (int i = NicoJKFormats.Length - 1; i >= 0; i--)
                 {
                     mask <<= 1;
                     mask |= NicoJKFormats[i] ? 1 : 0;

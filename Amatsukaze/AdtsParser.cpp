@@ -85,7 +85,7 @@ void AdtsParser::warn(const tchar* message) {
 }
 
 void AdtsParser::decodeError() {
-    if (diagnostics_) ++diagnostics_->errors;
+    if (diagnostics_) diagnostics_->errors++;
     else ctx.incrementCounter(AMT_ERR_DECODE_AUDIO);
 }
 

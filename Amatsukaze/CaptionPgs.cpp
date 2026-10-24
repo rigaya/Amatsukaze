@@ -333,7 +333,7 @@ void ReplaceMissingGlyphs(aribcaption::Caption& caption, const CaptionFontResolu
                 } else {
                     // 空白グリフもなければ透明なDRCSで字形だけを省略する。
                     uint32_t code = std::numeric_limits<uint32_t>::max();
-                    while (caption.drcs_map.count(code)) --code;
+                    while (caption.drcs_map.count(code)) code--;
                     aribcaption::DRCS blank;
                     blank.width = blank.height = blank.depth_bits = 1;
                     blank.depth = 2;
@@ -795,7 +795,7 @@ std::vector<uint8_t> GenerateCaptionPgs(const StreamReformInfo& reform, EncodeFi
         if (currentCaption == captionDescriptions.begin()) {
             continue;
         }
-        --currentCaption;
+        currentCaption--;
         const int64_t captionPTS = currentCaption->first;
         if (failedCaptions.count(captionPTS)) {
             continue;

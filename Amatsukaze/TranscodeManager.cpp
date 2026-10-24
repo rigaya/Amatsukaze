@@ -865,7 +865,7 @@ public:
         auto& buffer = buffers_[tail_];
         buffer.assign(mc.data, mc.data + mc.length);
         tail_ = (tail_ + 1) % BUFFER_COUNT;
-        ++pending_;
+        pending_++;
         lock.unlock();
         ready_.notify_one();
     }
@@ -906,7 +906,7 @@ private:
                 }
                 lock.lock();
                 head_ = (head_ + 1) % BUFFER_COUNT;
-                --pending_;
+                pending_--;
                 lock.unlock();
                 space_.notify_one();
             }

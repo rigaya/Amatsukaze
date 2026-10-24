@@ -766,7 +766,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     double curMin = INFINITY;
     double curMax = 0;
     dataPTS_.resize(videoFrameList_.size());
-    for (int i = (int)videoFrameList_.size() - 1; i >= 0; --i) {
+    for (int i = (int)videoFrameList_.size() - 1; i >= 0; i--) {
         curMin = std::min(curMin, modifiedPTS_[i]);
         curMax = std::max(curMax, modifiedPTS_[i]);
         dataPTS_[i] = curMin;
@@ -776,7 +776,7 @@ void StreamReformInfo::reformMain(bool splitSub) {
     // 言語ごとに終了時刻を管理する
     captionDuration_.resize(captionItemList_.size());
     std::vector<double> curEnd;
-    for (int i = (int)captionItemList_.size() - 1; i >= 0; --i) {
+    for (int i = (int)captionItemList_.size() - 1; i >= 0; i--) {
         double modPTS = modifiedCaptionPTS_[i] + (captionItemList_[i].waitTime * (MPEG_CLOCK_HZ / 1000));
         int langIndex = captionItemList_[i].langIndex;
         // 負値(未設定・破損キャッシュ等)は0として扱う (下位境界の防御)
@@ -1151,17 +1151,17 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes, int c
         }
         int tail = (int)frameList.size();
         while (tail > head && frameList[tail - 1].cmType == CMTYPE_CM) {
-            --tail;
+            tail--;
         }
         const int numFrames = (int)frameList.size();
         // CMに隣接する境界だけを内側へ移動し、ソース先頭と末尾は保持する。
         int firstMainEnd = head;
         while (firstMainEnd < tail && frameList[firstMainEnd].cmType == CMTYPE_NONCM) {
-            ++firstMainEnd;
+            firstMainEnd++;
         }
         int lastMainStart = tail;
         while (lastMainStart > head && frameList[lastMainStart - 1].cmType == CMTYPE_NONCM) {
-            --lastMainStart;
+            lastMainStart--;
         }
         // 短い前後本編が消失しても、内部CMへ補正を広げない。
         if (head > 0) {
@@ -1176,12 +1176,12 @@ void StreamReformInfo::calcSizeAndTime(const std::vector<CMType>& cmtypes, int c
         keepFrames.assign(numFrames, false);
         for (int start = 0; start < numFrames;) {
             if (frameList[start].cmType != CMTYPE_NONCM) {
-                ++start;
+                start++;
                 continue;
             }
             int end = start + 1;
             while (end < numFrames && frameList[end].cmType == CMTYPE_NONCM) {
-                ++end;
+                end++;
             }
             int keepStart = start;
             int keepEnd = end;
