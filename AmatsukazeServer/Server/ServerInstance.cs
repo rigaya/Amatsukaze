@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -105,6 +106,25 @@ namespace Amatsukaze.Server
                 (!OperatingSystem.IsWindows() && (code == unixTryAgain || code == unixWouldBlock));
         }
 
+        // 起動時刻が読めない（サービス用アカウントのプロセスを通常ユーザーから見た）場合は、プロセス名の一致で代用する。
+        // 情報ファイルはロック保持中に書き直し、解放前に削除するので、ロック確認と組み合わせれば取り違えは起きにくい。
+        internal static bool IsSameServerProcess(ServerInstanceInfo info, string processName, Func<DateTime> getStartTimeUtc)
+        {
+            const int errorAccessDenied = 5;
+            if (!string.Equals(processName, info.ProcessName, StringComparison.OrdinalIgnoreCase)) return false;
+            DateTime startTimeUtc;
+            try
+            {
+                startTimeUtc = getStartTimeUtc();
+            }
+            catch (Win32Exception e) when (e.NativeErrorCode == errorAccessDenied)
+            {
+                return true;
+            }
+            var expected = DateTime.ParseExact(info.ProcessStartTimeUtc, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+            return startTimeUtc == expected.ToUniversalTime();
+        }
+
         public static bool TryGetRunningServerInfo(string rootDir, out ServerInstanceInfo info)
         {
             info = null;
@@ -117,8 +137,8 @@ namespace Amatsukaze.Server
                 if (value == null || value.FormatVersion != 1 || value.Pid <= 0 ||
                     !Enum.IsDefined(value.Kind) || value.Port < 1 || value.Port > 65535) return false;
                 using var process = Process.GetProcessById(value.Pid);
-                var start = DateTime.ParseExact(value.ProcessStartTimeUtc, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-                if (process.StartTime.ToUniversalTime() != start.ToUniversalTime() || !IsServerProcessRunning(rootDir)) return false;
+                if (!IsSameServerProcess(value, process.ProcessName, () => process.StartTime.ToUniversalTime()) ||
+                    !IsServerProcessRunning(rootDir)) return false;
                 info = value;
                 return true;
             }
