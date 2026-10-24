@@ -84,6 +84,19 @@ public sealed class MakeScriptBuilderTests
         Assert.Contains("--mac \"00:11:22:33:44:55\"", script);
         Assert.Contains("-b \"追加処理.bat\"", script);
     }
+
+    [Fact]
+    public void リモート向けbatにもサーバー側の起動ユーザーを付与する()
+    {
+        using var fixture = new Fixture();
+        var data = fixture.Data();
+        data.LaunchUser = "S-1-5-21-1-2-3-1001";
+        Assert.True(fixture.Build(data, out var script, out var error, target: "remote", type: "bat", remote: "192.168.0.10", windows: true), error);
+        var command = script.Split('\n').Last();
+        Assert.Contains("-ip \"192.168.0.10\"", command);
+        Assert.Contains("--launch-user \"S-1-5-21-1-2-3-1001\"", command);
+    }
+
     [Theory]
     [InlineData("bat", "S-1-5-21-1-2-3-1001", true)]
     [InlineData("bat", null, false)]
