@@ -150,3 +150,9 @@ Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson tes
 `logo_bilateral` はAVX2のBilateralフィルタを、近傍の加算順とFMAを独立に記述した参照処理とバイト比較する。幅1から289、8画素・16画素の端数、画像端のclamp、入力の非整列と行ピッチ、定数・乱数・複数の色差重み、行範囲の分割を含む。出力の前後と処理対象外の行には番兵を置き、書き込み範囲も検証する。AVX2非対応CPUでは実行を省略する。
 
 選択実行は `AmatsukazeNativeTests --select logo_residual_skip` と `AmatsukazeNativeTests --select logo_bilateral`。
+
+## ロゴROIキャッシュのコピーと変換
+
+`logo_roi_cache_copy` は実際のROI保存で使う共有ヘルパーを、独立した64bit整数の参照式と全バイト比較する。8bit型の全256値、16bit型の全65536値、7/8/9/10/12/16bitの変換、値域外の飽和、空領域、非整列の開始位置、正負の行ピッチ、出力前後の番兵を確認する。8bitのコピー経路と高bitの変換経路の両方を検査し、CPUのSIMD対応には依存しない。
+
+選択実行は `AmatsukazeNativeTests --select logo_roi_cache_copy`。

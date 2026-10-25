@@ -10,6 +10,7 @@
 #include "LogoDecodeSession.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
+#include "LogoRoiCache.h"
 #include "LogoTemporalHistogram.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
@@ -4550,25 +4551,21 @@ namespace {
             if (roiCacheStoredFrames >= searchFrames) {
                 return;
             }
-            if ((int)roiReplayFrame.size() != roiCacheFrameBytes) {
-                roiReplayFrame.resize(roiCacheFrameBytes);
-            }
-            const int maxv = std::max(1, (1 << bitDepth) - 1);
-            for (int y = 0; y < scanh; y++) {
-                const pixel_t* srcLine = srcY + y * pitchY;
-                uint8_t* dstLine = roiReplayFrame.data() + y * scanw;
-                for (int x = 0; x < scanw; x++) {
-                    const int v = (int)srcLine[x];
-                    dstLine[x] = (uint8_t)ClampInt((v * 255 + maxv / 2) / maxv, 0, 255);
-                }
-            }
+            uint8_t* dst = nullptr;
             if (roiCacheBackend == RoiCacheBackend::Ram) {
                 const int slabIndex = roiCacheStoredFrames / kRoiCacheFramesPerSlab;
                 const int frameInSlab = roiCacheStoredFrames % kRoiCacheFramesPerSlab;
                 auto& slab = roiCacheRamSlabs[slabIndex];
-                std::memcpy(slab.data() + (size_t)frameInSlab * roiCacheFrameBytes,
-                    roiReplayFrame.data(), (size_t)roiCacheFrameBytes);
-            } else if (roiCacheBackend == RoiCacheBackend::TempFile && roiCacheFile) {
+                // RAMへ直接保存し、中間バッファへの変換と二重コピーを省く。
+                dst = slab.data() + (size_t)frameInSlab * roiCacheFrameBytes;
+            } else {
+                if ((int)roiReplayFrame.size() != roiCacheFrameBytes) {
+                    roiReplayFrame.resize(roiCacheFrameBytes);
+                }
+                dst = roiReplayFrame.data();
+            }
+            logo::CopyLogoRoiToCache(dst, srcY, pitchY, scanw, scanh, bitDepth);
+            if (roiCacheBackend == RoiCacheBackend::TempFile && roiCacheFile) {
                 roiCacheFile->write(MemoryChunk(roiReplayFrame.data(), (size_t)roiCacheFrameBytes));
             }
             roiCacheStoredFrames++;

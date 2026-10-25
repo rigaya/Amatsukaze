@@ -3,6 +3,7 @@
 #include "LogoScan.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
+#include "LogoRoiCache.h"
 #include "LogoTemporalHistogram.h"
 #include "AdtsParser.h"
 #include "AmatsukazeTestImpl.h"
@@ -3300,6 +3301,54 @@ bool TestLogoBilateral(tstring& diagnostic) {
     return true;
 }
 
+// 行ピッチと番兵を含めて従来の整数式を独立に評価し、変換結果を全バイト比較する。
+bool TestLogoRoiCacheCopy(tstring& diagnostic) {
+    const auto verify = [&](auto pixel, int bitDepth, int width, int height, int padding, bool reverse = false) {
+        using Pixel = decltype(pixel);
+        const int rowPitch = width + padding;
+        const int pitch = reverse ? -rowPitch : rowPitch;
+        std::vector<Pixel> source((size_t)rowPitch * height + 3);
+        for (size_t i = 0; i < source.size(); i++) source[i] = (Pixel)i;
+        std::vector<uint8_t> expected((size_t)width * height + 32, 0xA5), actual(expected);
+        const Pixel* src = source.data() + 1 + (reverse && height > 0 ? (size_t)(height - 1) * rowPitch : 0);
+        const uint64_t maxv = std::max<uint64_t>(1, (uint64_t(1) << bitDepth) - 1);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                const uint64_t value = src[(std::ptrdiff_t)y * pitch + x];
+                const uint64_t scaled = (value * 255 + maxv / 2) / maxv;
+                expected[16 + (size_t)y * width + x] = (uint8_t)std::min<uint64_t>(255, scaled);
+            }
+        }
+        logo::CopyLogoRoiToCache(actual.data() + 16, src, pitch, width, height, bitDepth);
+        if (actual != expected) {
+            diagnostic = strsprintf(_T("ROI保存の変換または番兵が不一致: 型=%d bit=%d 幅=%d 高さ=%d 余白=%d"),
+                (int)sizeof(Pixel), bitDepth, width, height, padding);
+            return false;
+        }
+        return true;
+    };
+    for (int width : { 0, 1, 7, 16, 31, 32, 33, 84, 256, 288, 289 }) {
+        for (int height : { 0, 1, 3, 17 }) {
+            for (int padding : { 0, 3, 31 }) {
+                for (int bitDepth : { 7, 8 }) {
+                    if (!verify(uint8_t(0), bitDepth, width, height, padding)
+                        || !verify(uint8_t(0), bitDepth, width, height, padding, true)) return false;
+                }
+                for (int bitDepth : { 8, 9, 10, 12, 16 }) {
+                    if (!verify(uint16_t(0), bitDepth, width, height, padding)
+                        || !verify(uint16_t(0), bitDepth, width, height, padding, true)) return false;
+                }
+            }
+        }
+    }
+    // 8bit全256値と、16bit型の全65536値を各変換深度で検査する。
+    if (!verify(uint8_t(0), 8, 256, 1, 0)) return false;
+    for (int bitDepth : { 8, 9, 10, 12, 16 }) {
+        if (!verify(uint16_t(0), bitDepth, 256, 256, 0)) return false;
+    }
+    return true;
+}
+
 bool TestLogoTemporalHistogram(tstring& diagnostic) {
     if (!Expect(logo::LogoTemporalHistogramIndex(1, 19, 0) == 1
         && logo::LogoTemporalHistogramIndex(0, 19, 1) == 16
@@ -3769,6 +3818,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("logo_residual_weight_params"), TestLogoResidualWeightParams },
     { _T("logo_residual_skip"), TestLogoResidualSkip },
     { _T("logo_bilateral"), TestLogoBilateral },
+    { _T("logo_roi_cache_copy"), TestLogoRoiCacheCopy },
     { _T("logo_temporal_histogram"), TestLogoTemporalHistogram },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
