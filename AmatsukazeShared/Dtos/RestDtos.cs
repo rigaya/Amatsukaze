@@ -565,6 +565,12 @@ namespace Amatsukaze.Shared
         public string? DebugImageUrl { get; set; }
     }
 
+    // REST APIのエラーコード。メッセージ文面に依存した分岐を避ける。
+    public static class RestApiErrorCodes
+    {
+        public const string TrimCacheUnavailable = "trim_cache_unavailable";
+    }
+
     // Trim調整用DTO
     public class TrimRange
     {

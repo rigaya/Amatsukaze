@@ -15,6 +15,8 @@ var baseAddress = !string.IsNullOrWhiteSpace(apiBaseUrl)
 
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = baseAddress });
 builder.Services.AddSingleton(new AmatsukazeWebUI.Api.ApiBaseAddress(baseAddress));
+builder.Services.AddKeyedScoped<HttpClient>("TrimRestore", (_, _) =>
+    new HttpClient { BaseAddress = baseAddress, Timeout = TimeSpan.FromMinutes(16) });
 builder.Services.AddScoped<IAmatsukazeApi>(sp =>
 {
     var http = sp.GetRequiredService<HttpClient>();
@@ -22,7 +24,9 @@ builder.Services.AddScoped<IAmatsukazeApi>(sp =>
     {
         PropertyNameCaseInsensitive = true
     };
-    return new AmatsukazeApi(http, options);
+    // TS再生成を待つ復元専用APIだけ待ち時間を延ばし、通常の読み込みには影響させない。
+    var trimRestoreHttp = sp.GetRequiredKeyedService<HttpClient>("TrimRestore");
+    return new AmatsukazeApi(http, options, trimRestoreHttp);
 });
 
 await builder.Build().RunAsync();

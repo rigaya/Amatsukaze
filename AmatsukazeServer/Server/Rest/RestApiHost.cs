@@ -99,10 +99,16 @@ namespace Amatsukaze.Server.Rest
             this.boundPort = port;
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
-            trimAdjust = new TrimAdjustService(server, state);
+            trimAdjust = new TrimAdjustService(server, state, server.TrimAdjustTempDirRegistry);
         }
 
         public int Port => boundPort;
+
+        internal bool TryDeleteQueueTaskTempDirs(QueueItem item, string loggedWorkDir, IEnumerable<QueueItem> remainingOwners, out bool handled, out string error)
+            => trimAdjust.TryDeleteQueueTaskTempDirs(item, loggedWorkDir, remainingOwners, out handled, out error);
+
+        internal bool ReleaseTrimAdjustSessionsForPath(string path)
+            => trimAdjust.ReleaseSessionsForTempDir(path);
 
         public async Task StartAsync(CancellationToken cancellationToken = default)
         {
@@ -320,36 +326,44 @@ namespace Amatsukaze.Server.Rest
 
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
-            if (host != null)
+            try
             {
-                // host.StopAsync()はタイムアウトしても戻らないケースがあるため、
-                // cancellationTokenによるタイムアウトは呼び出し側(EncodeServer.Dispose)に委ねる
-                try
+                if (host != null)
                 {
-                    await host.StopAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    Util.AddLog("[REST] StopAsync timeout -> Dispose", null);
-                }
-                catch (Exception ex)
-                {
-                    Util.AddLog($"[REST] StopAsync failed: {ex.GetType().Name}: {ex.Message}", ex);
-                }
+                    // host.StopAsync()はタイムアウトしても戻らないケースがあるため、
+                    // cancellationTokenによるタイムアウトは呼び出し側(EncodeServer.Dispose)に委ねる
+                    try
+                    {
+                        await host.StopAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Util.AddLog("[REST] StopAsync timeout -> Dispose", null);
+                    }
+                    catch (Exception ex)
+                    {
+                        Util.AddLog($"[REST] StopAsync failed: {ex.GetType().Name}: {ex.Message}", ex);
+                    }
 
-                // StopAsyncが戻らないケースがあるので、必ずDisposeして解放する
-                try
-                {
-                    host.Dispose();
+                    // StopAsyncが戻らないケースがあるので、必ずDisposeして解放する
+                    try
+                    {
+                        host.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Util.AddLog($"[REST] Dispose failed: {ex.GetType().Name}: {ex.Message}", ex);
+                    }
+                    finally
+                    {
+                        host = null;
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Util.AddLog($"[REST] Dispose failed: {ex.GetType().Name}: {ex.Message}", ex);
-                }
-                finally
-                {
-                    host = null;
-                }
+            }
+            finally
+            {
+                // HTTP受付停止・Kestrel破棄の後に復元ジョブを止め、既存要求との競合を避ける
+                trimAdjust?.Dispose();
             }
         }
 
@@ -373,14 +387,17 @@ namespace Amatsukaze.Server.Rest
 
         public void Dispose()
         {
-            trimAdjust?.Dispose();
-            if (host != null)
+            try
             {
-                host.Dispose();
+                if (host != null) host.Dispose();
+            }
+            finally
+            {
                 host = null;
+                // Hostを破棄した後に復元ジョブを止め、停止中の要求との競合を避ける
+                trimAdjust?.Dispose();
             }
         }
-
         private void MapEndpoints(WebApplication app)
         {
             app.MapGet("/api/health", () => Results.Json(new { ok = true }));
@@ -1904,9 +1921,12 @@ namespace Amatsukaze.Server.Rest
                 {
                     return Results.BadRequest();
                 }
-                if (!trimAdjust.TryCreateSession(data, out var response, out var error))
+                if (!trimAdjust.TryCreateSession(data, out var response, out var error, out var errorCode))
                 {
-                    return Results.BadRequest(new { message = error ?? "カット調整セッションを作成できませんでした" });
+                    var message = error ?? "カット調整セッションを作成できませんでした";
+                    return errorCode == null
+                        ? Results.BadRequest(new { message })
+                        : Results.BadRequest(new { code = errorCode, message });
                 }
                 return BuildMaybeGzippedJsonResult(request, response);
             });
@@ -2048,6 +2068,20 @@ namespace Amatsukaze.Server.Rest
                     return Results.Ok();
                 }
                 return Results.NotFound();
+            });
+
+            // カット調整用: キャッシュ消失時にストリーム改革のみ再実行してセッションを返す
+            app.MapPost("/api/trim/sessions/restore/{queueItemId:int}", async (HttpRequest request, int queueItemId, [Microsoft.AspNetCore.Mvc.FromQuery] int scaleMode) =>
+            {
+                // RequestAborted/15分期限はHTTP応答待機だけを終え、復元ジョブはサービス停止まで継続する
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(request.HttpContext.RequestAborted);
+                cts.CancelAfter(TimeSpan.FromMinutes(15));
+                var (response, error) = await trimAdjust.TryRestoreAndCreateSessionAsync(queueItemId, scaleMode, cts.Token);
+                if (response == null)
+                {
+                    return Results.BadRequest(new { message = error ?? "キャッシュ復元に失敗しました" });
+                }
+                return Results.Json(response);
             });
 
             // カット調整用: 指定キューアイテムの一時フォルダを削除するAPI

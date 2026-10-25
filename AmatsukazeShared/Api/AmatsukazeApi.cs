@@ -16,11 +16,13 @@ namespace Amatsukaze.Shared
     public sealed class AmatsukazeApi : IAmatsukazeApi
     {
         private readonly HttpClient http;
+        private readonly HttpClient trimRestoreHttp;
         private readonly JsonSerializerOptions jsonOptions;
 
-        public AmatsukazeApi(HttpClient http, JsonSerializerOptions? jsonOptions = null)
+        public AmatsukazeApi(HttpClient http, JsonSerializerOptions? jsonOptions = null, HttpClient? trimRestoreHttp = null)
         {
             this.http = http ?? throw new ArgumentNullException(nameof(http));
+            this.trimRestoreHttp = trimRestoreHttp ?? this.http;
             this.jsonOptions = jsonOptions ?? new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -477,6 +479,7 @@ namespace Amatsukaze.Shared
                 {
                     var body = await res.Content.ReadAsStringAsync();
                     var message = body;
+                    string? errorCode = null;
                     try
                     {
                         using var doc = JsonDocument.Parse(body);
@@ -485,12 +488,16 @@ namespace Amatsukaze.Shared
                         {
                             message = m.GetString() ?? body;
                         }
+                        if (root.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String)
+                        {
+                            errorCode = code.GetString();
+                        }
                     }
                     catch
                     {
                         // JSONでない場合は生本文をそのままエラー文字列にする
                     }
-                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, message);
+                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, message, errorCode);
                 }
                 var data = await res.Content.ReadFromJsonAsync<TrimAdjustSessionResponse>(jsonOptions);
                 if (data == null)
@@ -581,6 +588,41 @@ namespace Amatsukaze.Shared
 
         public Task<ApiResult<bool>> DeleteTrimTempDirAsync(int queueItemId)
             => DeleteAsync($"/api/trim/tempdir/{queueItemId}");
+
+        public async Task<ApiResult<TrimAdjustSessionResponse>> RestoreTrimSessionAsync(int queueItemId, int scaleMode)
+        {
+            try
+            {
+                using var res = await trimRestoreHttp.PostAsync(
+                    $"/api/trim/sessions/restore/{queueItemId}?scaleMode={scaleMode}",
+                    content: null);
+                if (!res.IsSuccessStatusCode)
+                {
+                    var body = await res.Content.ReadAsStringAsync();
+                    string message = body;
+                    try
+                    {
+                        var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(body);
+                        if (obj.TryGetProperty("message", out var msg))
+                        {
+                            message = msg.GetString() ?? body;
+                        }
+                    }
+                    catch { }
+                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, message);
+                }
+                var data = await res.Content.ReadFromJsonAsync<TrimAdjustSessionResponse>(jsonOptions);
+                if (data == null)
+                {
+                    return ApiResult<TrimAdjustSessionResponse>.Fail((int)res.StatusCode, "Empty response");
+                }
+                return ApiResult<TrimAdjustSessionResponse>.Success(data, (int)res.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<TrimAdjustSessionResponse>.Fail(0, ex.Message);
+            }
+        }
 
         public Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req)
         {

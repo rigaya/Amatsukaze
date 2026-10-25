@@ -17,7 +17,7 @@ namespace Amatsukaze.Server
     {
         private static readonly log4net.ILog LOG = log4net.LogManager.GetLogger("QueueManager");
         private static readonly Regex TaskTempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
-        private static readonly Regex AmtTaskDirNameRegex = new Regex(@"^amt[0-9]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex AmtTaskDirNameRegex = new Regex(@"^amt(?:[0-9]+|trim-[0-9a-f]{32})$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private EncodeServer server;
         private readonly object queueSync = new object();
 
@@ -984,26 +984,42 @@ namespace Amatsukaze.Server
                 }
 
                 var logPath = server.ResolveTaskLogPath(item);
-                if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))
+                string loggedWorkDir = null;
+                string normalizedLoggedPath = null;
+                if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
                 {
-                    LogTaskWorkDirDeleteSkipped(item, "ログファイルが見つかりません");
-                    return;
+                    if (TryExtractTaskWorkDirFromLog(logPath, out var workDir))
+                    {
+                        if (!TryNormalizeDeletableTaskWorkDir(workDir, out normalizedLoggedPath, out var reason))
+                        {
+                            LogTaskWorkDirDeleteSkipped(item, reason + "。復元フォルダー管理記録は別途確認します");
+                        }
+                        else
+                        {
+                            loggedWorkDir = normalizedLoggedPath;
+                        }
+                    }
+                    else
+                    {
+                        Util.AddLog($"[Queue] ログから元の一時フォルダを取得できません。復元フォルダ管理記録のみ確認します。ItemId={item.Id}", null);
+                    }
+                }
+                else
+                {
+                    Util.AddLog($"[Queue] ログが見つかりません。復元フォルダ管理記録のみ確認します。ItemId={item.Id}", null);
                 }
 
-                if (!TryExtractTaskWorkDirFromLog(logPath, out var workDir))
+                if (!server.TryDeleteTrimAdjustTaskTempDirs(item, loggedWorkDir, out var handled, out var deleteError))
                 {
-                    LogTaskWorkDirDeleteSkipped(item, "ログファイルから一時フォルダを取得できません");
+                    LogTaskWorkDirDeleteSkipped(item, deleteError ?? "一時フォルダーの削除に失敗しました");
                     return;
                 }
-
-                if (!TryNormalizeDeletableTaskWorkDir(workDir, out var fullPath, out var reason))
+                if (!handled)
                 {
-                    LogTaskWorkDirDeleteSkipped(item, reason);
+                    LogTaskWorkDirDeleteSkipped(item, "削除対象となる一時フォルダーがありません");
                     return;
                 }
-
-                Directory.Delete(fullPath, true);
-                Util.AddLog($"[Queue] タスク削除に伴い一時フォルダを削除しました。ItemId={item.Id}, Path={fullPath}", null);
+                Util.AddLog($"[Queue] タスク削除に伴い一時フォルダを削除しました。ItemId={item.Id}, Path={normalizedLoggedPath ?? "復元管理フォルダー"}", null);
             }
             catch (Exception ex)
             {
@@ -1042,7 +1058,7 @@ namespace Amatsukaze.Server
             return false;
         }
 
-        private static bool TryNormalizeDeletableTaskWorkDir(string workDir, out string fullPath, out string reason)
+        private bool TryNormalizeDeletableTaskWorkDir(string workDir, out string fullPath, out string reason)
         {
             fullPath = null;
             reason = null;
@@ -1069,6 +1085,19 @@ namespace Amatsukaze.Server
             }
 
             var normalized = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var configuredRoot = server.AppData_?.setting?.ActualWorkPath;
+            if (string.IsNullOrWhiteSpace(configuredRoot))
+            {
+                reason = "作業ルートが設定されていません";
+                return false;
+            }
+            var workRoot = Path.GetFullPath(configuredRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!normalized.StartsWith(workRoot + Path.DirectorySeparatorChar, comparison) || !string.Equals(Path.GetDirectoryName(normalized), workRoot, comparison))
+            {
+                reason = "一時フォルダが作業ルート直下ではありません";
+                return false;
+            }
             var dirName = Path.GetFileName(normalized);
             if (!AmtTaskDirNameRegex.IsMatch(dirName ?? ""))
             {

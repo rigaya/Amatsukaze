@@ -24,6 +24,8 @@
 #include "Mpeg2PartialEncode.h"
 #include "CaptionPgs.h"
 #include <filesystem>
+#include <array>
+#include <limits>
 
 namespace {
 
@@ -44,8 +46,18 @@ struct WhisperAudioEntry {
 };
 
 constexpr int RESUME_MANIFEST_VERSION = 4;
+constexpr int RESUME_MANIFEST_LEGACY_VERSION = 3;
+constexpr int RESUME_FILE_SLOT_COUNT = 4;
+// 各一時ファイルは小さなテキスト成果物だが、破損マニフェストによる巨大確保を防ぐ。
+constexpr int64_t MAX_RESUME_EMBEDDED_FILE_SIZE = 64LL * 1024 * 1024;
+
+struct ResumeFilePayload {
+    bool present = false;
+    std::vector<uint8_t> bytes;
+};
 
 struct ResumeVideoInfo {
+    std::array<ResumeFilePayload, RESUME_FILE_SLOT_COUNT> files;
     int numFrames;
     tstring logoPath;
     std::vector<int> trims;
@@ -302,6 +314,59 @@ static int64_t getFileSize(const tstring& path) {
     return file.size();
 }
 
+static void writeResumeFilePayload(const File& manifest, const tstring& path) {
+    const bool present = File::exists(path);
+    manifest.writeValue(present);
+    if (!present) {
+        manifest.writeValue((int64_t)0);
+        return;
+    }
+
+    File input(path, _T("rb"));
+    const int64_t byteCount = input.size();
+    if (byteCount < 0 || byteCount > MAX_RESUME_EMBEDDED_FILE_SIZE) {
+        THROW(FormatException, "再開情報に保存するファイルサイズが上限を超えています");
+    }
+    std::vector<uint8_t> bytes((size_t)byteCount);
+    if (input.read(MemoryChunk(bytes.data(), bytes.size())) != bytes.size()) {
+        THROW(IOException, "再開情報に保存するファイルを読み込めません");
+    }
+    manifest.writeValue(byteCount);
+    manifest.write(MemoryChunk(bytes.data(), bytes.size()));
+}
+
+static ResumeFilePayload readResumeFilePayload(const File& manifest) {
+    ResumeFilePayload payload;
+    payload.present = manifest.readValue<bool>();
+    const int64_t byteCount = manifest.readValue<int64_t>();
+    const int64_t remaining = manifest.size() - manifest.pos();
+    if (byteCount < 0 || byteCount > MAX_RESUME_EMBEDDED_FILE_SIZE
+        || byteCount > remaining || (!payload.present && byteCount != 0)) {
+        THROW(FormatException, "再開情報の埋め込みファイルサイズが不正です");
+    }
+    payload.bytes.resize((size_t)byteCount);
+    if (manifest.read(MemoryChunk(payload.bytes.data(), payload.bytes.size())) != payload.bytes.size()) {
+        THROW(FormatException, "再開情報の埋め込みファイルが途中で終わっています");
+    }
+    return payload;
+}
+
+static std::vector<int> readResumeIntArray(const File& file) {
+    const int64_t count = file.readValue<int64_t>();
+    const int64_t remaining = file.size() - file.pos();
+    if (count < 0
+        || (uint64_t)count > (uint64_t)std::numeric_limits<size_t>::max() / sizeof(int)
+        || count > remaining / (int64_t)sizeof(int)) {
+        THROW(FormatException, "再開情報の配列サイズが不正です");
+    }
+    std::vector<int> values((size_t)count);
+    const size_t byteCount = values.size() * sizeof(int);
+    if (file.read(MemoryChunk((uint8_t*)values.data(), byteCount)) != byteCount) {
+        THROW(FormatException, "再開情報の配列データが途中で終わっています");
+    }
+    return values;
+}
+
 static void saveResumeManifest(
     const ConfigWrapper& setting,
     StreamReformInfo& reformInfo,
@@ -312,10 +377,12 @@ static void saveResumeManifest(
     const int64_t totalIntVideoSize,
     const int64_t srcFileSize,
     const int noDrcsMapCount,
-    const bool captionsParsed) {
-    const auto srcPath = setting.getSrcFilePath();
+    const bool captionsParsed,
+    const tstring& outputPath = tstring(),
+    const tstring& identityPath = tstring()) {
+    const auto srcPath = identityPath.empty() ? setting.getSrcFilePath() : identityPath;
     const auto pmtCutSideRate = setting.getPmtCutSideRate();
-    File file(setting.getTmpResumePath(), _T("wb"));
+    File file(outputPath.empty() ? setting.getTmpResumePath() : outputPath, _T("wb"));
 
     file.writeValue(RESUME_MANIFEST_VERSION);
     file.writeValue(srcFileSize);
@@ -356,6 +423,11 @@ static void saveResumeManifest(
         const int numFrames = (int)reformInfo.getFilterSourceFrames(videoFileIndex).size();
         file.writeValue(numFrames);
         writeTString(file, cma->getLogoPath());
+        // Trim復元で参照する一時ファイルを、Trim配列より前に埋め込む。
+        writeResumeFilePayload(file, setting.getTmpJlsPath(videoFileIndex));
+        writeResumeFilePayload(file, setting.getTmpLogoFramePath(videoFileIndex));
+        writeResumeFilePayload(file, setting.getTmpChapterExePath(videoFileIndex));
+        writeResumeFilePayload(file, setting.getTmpChapterExeOutPath(videoFileIndex));
         file.writeArray(cma->getTrims());
         file.writeArray(cma->getDivs());
     }
@@ -364,7 +436,7 @@ static void saveResumeManifest(
 static ResumeInfo readResumeManifest(const tstring& path) {
     File file(path, _T("rb"));
     const auto version = file.readValue<int>();
-    if (version != RESUME_MANIFEST_VERSION) {
+    if (version != RESUME_MANIFEST_VERSION && version != RESUME_MANIFEST_LEGACY_VERSION) {
         THROWF(FormatException, "再開情報のバージョンが未対応です: %d", version);
     }
 
@@ -400,15 +472,26 @@ static ResumeInfo readResumeManifest(const tstring& path) {
     info.noDrcsMapCount = file.readValue<int>();
 
     const auto videoCount = file.readValue<int>();
-    if (videoCount < 0 || videoCount > INT_MAX) {
+    const int64_t minVideoRecordSize = (version >= RESUME_MANIFEST_VERSION) ? 64 : 28;
+    const int64_t remaining = file.size() - file.pos();
+    if (videoCount < 0 || videoCount > INT_MAX
+        || videoCount > remaining / minVideoRecordSize) {
         THROW(FormatException, "再開情報の映像数が不正です");
     }
     info.videos.resize(videoCount);
     for (auto& video : info.videos) {
         video.numFrames = file.readValue<int>();
+        if (video.numFrames < 0) {
+            THROW(FormatException, "再開情報のフレーム数が不正です");
+        }
         video.logoPath = readTString(file);
-        video.trims = file.readArray<int>();
-        video.divs = file.readArray<int>();
+        if (version >= RESUME_MANIFEST_VERSION) {
+            for (auto& payload : video.files) {
+                payload = readResumeFilePayload(file);
+            }
+        }
+        video.trims = readResumeIntArray(file);
+        video.divs = readResumeIntArray(file);
     }
     return info;
 }
@@ -589,15 +672,30 @@ static void saveResumeFiles(
     const int64_t srcFileSize,
     const int noDrcsMapCount,
     const bool captionsParsed) {
+    // 既存の再利用用マニフェストと永続保存用マニフェストは別々に出力する。
+    // パス変換用にTSをコピーした場合、永続保存側は元TSの更新時刻を記録する。
+    for (const bool persistent : { false, true }) {
+        const auto path = persistent ? setting.getSaveRestoreInfoPath() : setting.getTmpResumePath();
+        if ((persistent && path.empty()) || (!persistent && !setting.isNoRemoveTmp())) continue;
+        const auto writingPath = persistent ? path + _T(".writing") : path;
     try {
         saveResumeManifest(setting, reformInfo, cmanalyze,
             serviceId, numTotalPackets, numScramblePackets, totalIntVideoSize, srcFileSize,
-            noDrcsMapCount, captionsParsed);
-        ctx.infoF(_T("[一時ファイル再利用] 再開情報を保存しました: %s"), setting.getTmpResumePath().c_str());
+                noDrcsMapCount, captionsParsed, writingPath,
+                persistent ? setting.getSrcFileOriginalPath() : setting.getSrcFilePath());
+            if (persistent) {
+                // 閉じたファイルを既存の読込処理で検証し、完了したものだけを公開する。
+                readResumeManifest(writingPath);
+                std::filesystem::rename(writingPath, path);
+            }
+            ctx.infoF(_T("[一時ファイル再利用] 再開情報を保存しました: %s"), path.c_str());
     } catch (const Exception& e) {
+            if (persistent) rgy_file_remove(writingPath.c_str());
         ctx.warnF(_T("[一時ファイル再利用] 再開情報の保存に失敗しました: %s"), e.message());
     } catch (const std::exception& e) {
+            if (persistent) rgy_file_remove(writingPath.c_str());
         ctx.warnF(_T("[一時ファイル再利用] 再開情報の保存に失敗しました: %s"), char_to_tstring(e.what()));
+    }
     }
 }
 
@@ -1569,7 +1667,22 @@ void DoBadThing() {
     const_cast<ConfigWrapper&>(setting).CreateTempDir();
     setting.dump();
 
-    bool isNoEncode = (setting.getMode() == _T("cm"));
+    const bool restoreCutInfo = !setting.getRestoreInfoPath().empty();
+    ResumeInfo restoreInfo;
+    if (restoreCutInfo) {
+        restoreInfo = readResumeManifest(setting.getRestoreInfoPath());
+        const auto srcPath = setting.getSrcFilePath();
+        ctx.infoF(_T("[TrimAdjust復元] 入力照合: 保存サイズ=%lld 現サイズ=%lld 保存更新時刻=%lld 現更新時刻=%lld 保存SID=%d 要求SID=%d"),
+            restoreInfo.srcFileSize, getFileSize(srcPath), restoreInfo.srcWriteTime,
+            getFileWriteTime(srcPath), restoreInfo.serviceId, setting.getServiceId());
+        if (restoreInfo.srcFileSize != getFileSize(srcPath)
+            || restoreInfo.srcWriteTime != getFileWriteTime(srcPath)
+            || (setting.getServiceId() > 0 && setting.getServiceId() != restoreInfo.serviceId)) {
+            THROW(FormatException, "保存した再開情報と入力TSまたはサービスIDが一致しません");
+        }
+    }
+
+    bool isNoEncode = (setting.getMode() == _T("cm") || setting.getMode() == _T("reform_only"));
 
     auto eoInfo = ParseEncoderOption(setting.getEncoder(), setting.getEncoderOptions());
     ctx.info(_T("[本エンコーダ設定]"));
@@ -1649,8 +1762,8 @@ void DoBadThing() {
         noDrcsMapCount = resumeInfo.noDrcsMapCount;
     } else {
         auto splitter = std::unique_ptr<AMTSplitter>(new AMTSplitter(ctx, setting));
-        if (setting.getServiceId() > 0) {
-            splitter->setServiceId(setting.getServiceId());
+        if (restoreCutInfo || setting.getServiceId() > 0) {
+            splitter->setServiceId(restoreCutInfo ? restoreInfo.serviceId : setting.getServiceId());
         }
         reformInfoPtr = std::make_unique<StreamReformInfo>(splitter->split());
         ctx.infoF(_T("TS解析完了: %.2f秒"), sw.getAndReset());
@@ -1694,7 +1807,8 @@ void DoBadThing() {
     }
 
     if (!isReusingTmp) {
-        reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE,
+        reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio(),
+            restoreCutInfo ? restoreInfo.tsreplace : setting.getFormat() == FORMAT_TSREPLACE,
             setting.getAudioFormatChangeMode(), setting.getAudioFilePath());
     }
     if (setting.isMpeg2PartialEnabled()) {
@@ -1757,6 +1871,70 @@ void DoBadThing() {
             filterAudioFrames,
             setting.getDecoderSetting(), primaryAudioFrames);
         ctx.infoF(_T("ソースファイル読み込み用データ保存完了[%d/%d]"), videoFileIndex + 1, numVideoFiles);
+    }
+
+    if (setting.getMode() == _T("reform_only")) {
+        if (restoreCutInfo) {
+            if ((int)restoreInfo.videos.size() != numVideoFiles) {
+                THROW(FormatException, "再生成した映像数と保存した映像数が一致しません");
+            }
+            // 全映像を検証してから編集ファイルを出力する。
+            for (int index = 0; index < numVideoFiles; index++) {
+                const auto& video = restoreInfo.videos[index];
+                const int frames = (int)reformInfo.getFilterSourceFrames(index).size();
+                ctx.infoF(_T("[TrimAdjust復元] 映像%d: 保存フレーム数=%d 再生成フレーム数=%d Trim要素数=%d 分割点数=%d"),
+                    index, video.numFrames, frames, (int)video.trims.size(), (int)video.divs.size());
+                if (video.numFrames != frames || video.trims.size() % 2 != 0) {
+                    THROW(FormatException, "再生成したフレーム数または保存Trim情報が不正です");
+                }
+                for (size_t pair = 0; pair < video.trims.size(); pair += 2) {
+                    if (video.trims[pair] < 0 || video.trims[pair + 1] <= video.trims[pair]
+                        || video.trims[pair + 1] > frames) {
+                        THROW(FormatException, "保存したTrim区間が範囲外です");
+                    }
+                }
+                int previous = -1;
+                for (const int point : video.divs) {
+                    if (point < 0 || point > frames || point < previous) {
+                        THROW(FormatException, "保存した分割点が不正です");
+                    }
+                    previous = point;
+                }
+            }
+            for (int index = 0; index < numVideoFiles; index++) {
+                const tstring videoPayloadPaths[RESUME_FILE_SLOT_COUNT] = {
+                    setting.getTmpJlsPath(index), setting.getTmpLogoFramePath(index),
+                    setting.getTmpChapterExePath(index), setting.getTmpChapterExeOutPath(index)
+                };
+                const auto& video = restoreInfo.videos[index];
+                for (int slot = 0; slot < RESUME_FILE_SLOT_COUNT; slot++) {
+                    const auto& payload = video.files[slot];
+                    if (!payload.present) continue;
+                    File output(videoPayloadPaths[slot], _T("wb"));
+                    output.write(MemoryChunk(const_cast<uint8_t*>(payload.bytes.data()), payload.bytes.size()));
+                }
+            }
+            for (int index = 0; index < numVideoFiles; index++) {
+                const auto& video = restoreInfo.videos[index];
+                std::string trims;
+                for (size_t pair = 0; pair < video.trims.size(); pair += 2) {
+                    if (!trims.empty()) trims += " ++ ";
+                    // 内部の終了位置は排他的、AviSynthの終了位置は包含的。
+                    trims += "Trim(" + std::to_string(video.trims[pair]) + ","
+                        + std::to_string(video.trims[pair + 1] - 1) + ")";
+                }
+                trims += "\n";
+                File trimFile(setting.getTmpTrimAVSPath(index), _T("wb"));
+                trimFile.write(MemoryChunk((uint8_t*)trims.data(), trims.size()));
+                std::string divs;
+                for (const int point : video.divs) divs += std::to_string(point) + "\n";
+                File divFile(setting.getTmpDivPath(index), _T("wb"));
+                divFile.write(MemoryChunk((uint8_t*)divs.data(), divs.size()));
+                ctx.infoF(_T("[TrimAdjust復元] 編集情報を復元しました: 映像%d"), index);
+            }
+        }
+        ctx.info(_T("[reform_only] amts0.dat生成完了、処理終了"));
+        return;
     }
 
     // ロゴ・CM解析
@@ -1846,7 +2024,7 @@ void DoBadThing() {
         ctx.infoF(_T("ロゴ・CM解析完了: %.2f秒"), sw.getAndReset());
     }
 
-    if (setting.isNoRemoveTmp()) {
+    if (setting.isNoRemoveTmp() || !setting.getSaveRestoreInfoPath().empty()) {
         saveResumeFiles(ctx, setting, reformInfo, cmanalyze,
             serviceId, numTotalPackets, numScramblePackets, totalIntVideoSize, srcFileSize,
             noDrcsMapCount, captionsParsed);

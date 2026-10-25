@@ -7,6 +7,7 @@ namespace Amatsukaze.Shared
         public bool Ok { get; init; }
         public int StatusCode { get; init; }
         public string? Error { get; init; }
+        public string? ErrorCode { get; init; }
         public T? Data { get; init; }
 
         public static ApiResult<T> Success(T data, int statusCode = 200)
@@ -14,9 +15,9 @@ namespace Amatsukaze.Shared
             return new ApiResult<T> { Ok = true, Data = data, StatusCode = statusCode };
         }
 
-        public static ApiResult<T> Fail(int statusCode, string error)
+        public static ApiResult<T> Fail(int statusCode, string error, string? errorCode = null)
         {
-            return new ApiResult<T> { Ok = false, StatusCode = statusCode, Error = error };
+            return new ApiResult<T> { Ok = false, StatusCode = statusCode, Error = error, ErrorCode = errorCode };
         }
     }
 }

@@ -765,12 +765,13 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     }
     return desc;
 }
-TempDirectory::TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp, const tstring& resumeDir)
+TempDirectory::TempDirectory(AMTContext& ctx, const tstring& tmpdir, bool noRemoveTmp, const tstring& resumeDir, const tstring& tmpDirExact)
     : AMTObject(ctx)
     , path_(tmpdir)
     , initialized_(false)
     , noRemoveTmp_(noRemoveTmp)
-    , resumeDir_(resumeDir) {}
+    , resumeDir_(resumeDir)
+    , tmpDirExact_(tmpDirExact) {}
 TempDirectory::~TempDirectory() {
     if (!initialized_ || noRemoveTmp_) {
         return;
@@ -786,7 +787,13 @@ TempDirectory::~TempDirectory() {
 void TempDirectory::Initialize() {
     if (initialized_) return;
 
-    if (resumeDir_.size() > 0 && rgy_directory_exists(resumeDir_)) {
+    if (!tmpDirExact_.empty()) {
+        // 指定パスをそのまま使う（既存ディレクトリでも可）
+        if (!rgy_directory_exists(tmpDirExact_) && mkdirT(tmpDirExact_.c_str()) != 0) {
+            THROW(IOException, "復元用一時ディレクトリ作成失敗");
+        }
+        path_ = tmpDirExact_;
+    } else if (resumeDir_.size() > 0 && rgy_directory_exists(resumeDir_)) {
         path_ = resumeDir_;
         tstring abolutePath;
         const int sz = GetFullPathNameT(path_.c_str(), 0, 0, 0);
@@ -799,17 +806,17 @@ void TempDirectory::Initialize() {
         path_ = pathNormalize(abolutePath);
         initialized_ = true;
         return;
-    }
-
-    for (int code = (int)time(NULL) & 0xFFFFFF; code > 0; code++) {
-        auto path = genPath(path_, code);
-        if (mkdirT(path.c_str()) == 0) {
-            path_ = path;
-            break;
+    } else {
+        for (int code = (int)time(NULL) & 0xFFFFFF; code > 0; code++) {
+            auto path = genPath(path_, code);
+            if (mkdirT(path.c_str()) == 0) {
+                path_ = path;
+                break;
+            }
         }
-    }
-    if (path_.size() == 0) {
-        THROW(IOException, "一時ディレクトリ作成失敗");
+        if (path_.size() == 0) {
+            THROW(IOException, "一時ディレクトリ作成失敗");
+        }
     }
 
     tstring abolutePath;
@@ -858,7 +865,7 @@ ConfigWrapper::ConfigWrapper(
     const Config& conf)
     : AMTObject(ctx)
     , conf(conf)
-    , tmpDir(ctx, conf.workDir, conf.noRemoveTmp, conf.resumeDir) {
+    , tmpDir(ctx, conf.workDir, conf.noRemoveTmp, conf.resumeDir, conf.tmpDirExact) {
     if (conf.audioFormatChangeMode != AFC_SPLIT
         && (isEncodeAudio() || conf.format == FORMAT_TSREPLACE)) {
         ctx.info(_T("音声フォーマット変更設定は音声エンコードまたはtsreplace出力では無視し、splitとして扱います。"));
@@ -894,6 +901,14 @@ tstring ConfigWrapper::getModeArgs() const {
 
 tstring ConfigWrapper::getResumeDir() const {
     return conf.resumeDir;
+}
+
+tstring ConfigWrapper::getSaveRestoreInfoPath() const {
+    return conf.saveRestoreInfoPath;
+}
+
+tstring ConfigWrapper::getRestoreInfoPath() const {
+    return conf.restoreInfoPath;
 }
 
 tstring ConfigWrapper::getSrcFilePath() const {

@@ -60,6 +60,8 @@ namespace Amatsukaze.Server
         private MultiUserClient multiClient;
         private RestStateStore restState;
         private RestApiHost restApiHost;
+        private TrimAdjustTempDirRegistry trimAdjustTempDirRegistry;
+        internal TrimAdjustTempDirRegistry TrimAdjustTempDirRegistry => trimAdjustTempDirRegistry;
         internal UpdateManager UpdateManager { get; private set; }
 
         private Action finishRequested;
@@ -328,6 +330,7 @@ namespace Amatsukaze.Server
             drcsManager = new DRCSManager(this);
 
             LoadAppData();
+            trimAdjustTempDirRegistry = new TrimAdjustTempDirRegistry(AppData_.setting.ActualWorkPath);
             LoadUIState();
             LoadAutoSelectData();
             if (client != null)
@@ -2595,10 +2598,22 @@ namespace Amatsukaze.Server
             });
         }
 
+        internal List<QueueItem> GetQueueItemsSnapshot() => queueManager.GetQueueSnapshot();
+
+        internal bool TryDeleteTrimAdjustTaskTempDirs(QueueItem item, string loggedWorkDir, out bool handled, out string error)
+        {
+            var owners = queueManager.GetQueueSnapshot().Where(candidate => candidate != null && candidate.Id != item?.Id).ToArray();
+            if (restApiHost != null)
+                return restApiHost.TryDeleteQueueTaskTempDirs(item, loggedWorkDir, owners, out handled, out error);
+            var paths = trimAdjustTempDirRegistry.GetPathsForSource(item.SrcPath);
+            if (!string.IsNullOrWhiteSpace(loggedWorkDir)) paths.Add(loggedWorkDir);
+            return trimAdjustTempDirRegistry.TryDeletePaths(item.SrcPath, paths, owners, null, out handled, out error);
+        }
         private void CleanTmpDir()
         {
             var pathComparer = Util.IsServerWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
             var resumeDirs = new HashSet<string>(pathComparer);
+            var restoredDirs = trimAdjustTempDirRegistry?.PrepareStartupCleanup(queueManager.GetQueueSnapshot()) ?? new HashSet<string>(pathComparer);
             foreach (var item in queueManager.GetQueueSnapshot())
             {
                 if (string.IsNullOrWhiteSpace(item.ResumeDir))
@@ -2621,9 +2636,9 @@ namespace Amatsukaze.Server
             {
                 try
                 {
-                    if (resumeDirs.Contains(NormalizeDirectoryPath(dir)))
+                    if (resumeDirs.Contains(NormalizeDirectoryPath(dir)) || restoredDirs.Contains(NormalizeDirectoryPath(dir)))
                     {
-                        Util.AddLog("[Queue] キューで再利用予定の一時フォルダを削除対象から除外しました: " + dir, null);
+                        Util.AddLog("[Queue] キューで再利用予定または復元管理中の一時フォルダを削除対象から除外しました: " + dir, null);
                         continue;
                     }
                     Directory.Delete(dir, true);

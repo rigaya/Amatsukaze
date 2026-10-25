@@ -951,6 +951,8 @@ namespace Amatsukaze.Server
             string localsrc = null;
             string localdst = dstpath;
             string tmpBase = null;
+            string resumeInfoPath = item.SrcPath + ".resume.dat";
+            string resumeInfoStagePath = resumeInfoPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
             // Trim指定ファイル
             string trimavs = srcpath + ".trim.avs";
@@ -1020,6 +1022,10 @@ namespace Amatsukaze.Server
                     srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
                     item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, divfile, resumeDir, server.GetBatDirectoryPath(),
                     pipes?.InHandle, pipes?.OutHandle, Id);
+                if (item.IsBatch || item.Mode == ProcMode.CMCheck)
+                {
+                    args += " --save-restore-info \"" + resumeInfoStagePath + "\"";
+                }
                 string exename = server.AppData_.setting.AmatsukazePath;
 
                 int outputMask = profile.OutputMask;
@@ -1133,6 +1139,27 @@ namespace Amatsukaze.Server
                     else
                     {
                         return FailLogItem(item, item.Profile.Name, "ログファイル生成に失敗", now, now);
+                    }
+                }
+
+                // 完了した再開情報だけを公開する。ログ出力・一時ファイル保持設定には依存しない。
+                if (File.Exists(resumeInfoStagePath))
+                {
+                    try
+                    {
+                        if (exitCode == 0)
+                        {
+                            File.Move(resumeInfoStagePath, resumeInfoPath, overwrite: true);
+                            Util.AddLog(Id, "TrimAdjust復元用の再開情報を保存しました: " + resumeInfoPath, null);
+                        }
+                        else
+                        {
+                            File.Delete(resumeInfoStagePath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Util.AddLog(Id, "TrimAdjust復元用の再開情報保存に失敗しました: " + resumeInfoPath, ex);
                     }
                 }
 
@@ -1282,6 +1309,12 @@ namespace Amatsukaze.Server
             }
             finally
             {
+                // 責務: この実行で作成した未公開ファイルだけを片付ける。
+                foreach (var path in new[] { resumeInfoStagePath, resumeInfoStagePath + ".writing" })
+                {
+                    try { if (File.Exists(path)) File.Delete(path); }
+                    catch (Exception ex) { Util.AddLog(Id, "再開情報の一時ファイル削除に失敗しました: " + path, ex); }
+                }
                 if (tmpBase != null)
                 {
                     File.Delete(tmpBase);

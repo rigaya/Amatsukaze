@@ -2,6 +2,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -474,18 +476,43 @@ namespace Amatsukaze.Server.Rest
         private readonly ConcurrentDictionary<string, TrimAdjustSession> sessions = new ConcurrentDictionary<string, TrimAdjustSession>();
         // TTL経過後に確実にクリーンアップされるよう、SessionTtl間隔でバックグラウンド実行する
         private readonly Timer cleanupTimer;
+        // 復元先はサービス内で保持する。ログ・キューへの新規永続項目は不要。
+        private readonly TrimAdjustTempDirRegistry restoredTempDirs;
+        private readonly object tempDirMutationLock = new object();
+        // 元ブランチと同じく、全体で復元は1件だけ。追加要求を待ち行列に積まない。
+        private readonly object _restoreLock = new object();
+        private (int queueItemId, int scaleMode)? _restoringKey = null;
+        private readonly CancellationTokenSource _restoreLifetimeCts = new CancellationTokenSource();
+        private Task<(string restoredDir, string error)> _restoreJobTask;
+        private bool _disposed = false;
 
-        public TrimAdjustService(EncodeServer server, RestStateStore state)
+        internal TrimAdjustService(EncodeServer server, RestStateStore state, TrimAdjustTempDirRegistry restoredTempDirs)
         {
             this.server = server;
             this.state = state;
+            this.restoredTempDirs = restoredTempDirs ?? throw new ArgumentNullException(nameof(restoredTempDirs));
             cleanupTimer = new Timer(_ => CleanupExpired(), null, SessionTtl, SessionTtl);
         }
 
         public bool TryCreateSession(TrimAdjustSessionRequest request, out TrimAdjustSessionResponse response, out string error)
+            => TryCreateSession(request, out response, out error, out _);
+
+        public bool TryCreateSession(TrimAdjustSessionRequest request, out TrimAdjustSessionResponse response,
+            out string error, out string errorCode)
+            => TryCreateSession(request, ResolveTempDir(request?.QueueItemId ?? 0), out response, out error, out errorCode);
+
+        private bool TryCreateSession(TrimAdjustSessionRequest request, string tempDir,
+            out TrimAdjustSessionResponse response, out string error, out string errorCode)
+        {
+            lock (tempDirMutationLock)
+                return TryCreateSessionCore(request, tempDir, out response, out error, out errorCode);
+        }
+        private bool TryCreateSessionCore(TrimAdjustSessionRequest request, string tempDir,
+            out TrimAdjustSessionResponse response, out string error, out string errorCode)
         {
             response = null;
             error = null;
+            errorCode = null;
 
             if (request == null || request.QueueItemId <= 0)
             {
@@ -499,18 +526,11 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
-            // ログファイルから一時フォルダを取得
-            var logPath = state.ResolveTaskLogPathById(request.QueueItemId);
-            if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))
-            {
-                error = "ログファイルが見つかりません";
-                return false;
-            }
-
-            var tempDir = ExtractTempDirFromLog(logPath);
+            // 復元で作ったフォルダーを直接受け取り、ログから探し直さない。
             if (string.IsNullOrEmpty(tempDir))
             {
-                error = "ログファイルから一時フォルダが取得できませんでした";
+                error = "amts0.datが見つかりません（一時キャッシュがありません）";
+                errorCode = RestApiErrorCodes.TrimCacheUnavailable;
                 return false;
             }
 
@@ -519,6 +539,7 @@ namespace Amatsukaze.Server.Rest
             if (!File.Exists(datFilePath))
             {
                 error = $"amts0.datが見つかりません: {datFilePath}";
+                errorCode = RestApiErrorCodes.TrimCacheUnavailable;
                 return false;
             }
 
@@ -620,9 +641,58 @@ namespace Amatsukaze.Server.Rest
         // キューからの削除は呼び出し元が別途行うこと。
         // 成功時はtrue、フォルダが存在しない・取得できない場合もtrueを返す（エラーがなければ成功扱い）。
         // 失敗時はfalseと理由をerrorに設定する。
+        public bool TryDeleteQueueTaskTempDirs(QueueItem item, string loggedWorkDir, IEnumerable<QueueItem> remainingOwners, out bool handled, out string error)
+        {
+            lock (tempDirMutationLock)
+            {
+                handled = false;
+                error = null;
+                if (item == null || string.IsNullOrWhiteSpace(item.SrcPath))
+                {
+                    error = "キューアイテムまたは録画元パスが不正です";
+                    return false;
+                }
+                lock (_restoreLock)
+                {
+                    if (_restoringKey.HasValue && _restoringKey.Value.queueItemId == item.Id)
+                    {
+                        error = "一時ファイルを復元中のためフォルダー削除を保留しました";
+                        handled = true;
+                        return false;
+                    }
+                }
+                var paths = restoredTempDirs.GetPathsForSource(item.SrcPath);
+                if (!string.IsNullOrWhiteSpace(loggedWorkDir)) paths.Add(loggedWorkDir);
+                return restoredTempDirs.TryDeletePaths(item.SrcPath, paths, remainingOwners,
+                    ReleaseSessionsForTempDir, out handled, out error);
+            }
+        }
+
+        internal bool ReleaseSessionsForTempDir(string tempDir)
+        {
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            foreach (var pair in sessions.Where(pair => string.Equals(Path.GetFullPath(pair.Value.TempDir), Path.GetFullPath(tempDir), comparison)).ToArray())
+            {
+                RemoveSession(pair.Key);
+            }
+            return !sessions.Values.Any(session => string.Equals(Path.GetFullPath(session.TempDir), Path.GetFullPath(tempDir), comparison));
+        }
         public bool TryDeleteCmTaskTempDir(int queueItemId, out string error)
         {
+            lock (tempDirMutationLock)
+                return TryDeleteCmTaskTempDirCore(queueItemId, out error);
+        }
+        private bool TryDeleteCmTaskTempDirCore(int queueItemId, out string error)
+        {
             error = null;
+            lock (_restoreLock)
+            {
+                if (_restoringKey.HasValue && _restoringKey.Value.queueItemId == queueItemId)
+                {
+                    error = "一時ファイルを復元中のためフォルダー削除を保留しました";
+                    return false;
+                }
+            }
 
             if (!state.TryGetQueueItem(queueItemId, out var item))
             {
@@ -637,6 +707,17 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            var sourceIdentity = Path.GetFullPath(item.SrcPath);
+            var shared = server.GetQueueItemsSnapshot().Any(other => other != null && other.Id != item.Id
+                && (Path.GetFullPath(other.SrcPath).Equals(sourceIdentity, comparison)
+                    || (!string.IsNullOrWhiteSpace(item.ResumeDir) && !string.IsNullOrWhiteSpace(other.ResumeDir)
+                        && Path.GetFullPath(other.ResumeDir).Equals(Path.GetFullPath(item.ResumeDir), comparison))));
+            if (shared)
+            {
+                error = "同じ録画または再利用フォルダーを別キューが参照中です";
+                return false;
+            }
             // 処理中の場合は一時フォルダを削除できない
             if (item.State == Amatsukaze.Server.QueueState.Encoding)
             {
@@ -644,20 +725,18 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
-            var logPath = state.ResolveTaskLogPathById(queueItemId);
-            if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))
-            {
-                // ログがなければ一時フォルダも特定できないが、エラーにはしない
-                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})のログファイルが見つかりません。一時フォルダ削除をスキップします", null);
-                return true;
-            }
-
-            var tempDir = ExtractTempDirFromLog(logPath);
+            var tempDir = ResolveTempDir(queueItemId);
             if (string.IsNullOrEmpty(tempDir))
             {
-                // 一時フォルダが特定できなければスキップ（エラーにはしない）
-                Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})の一時フォルダがログから取得できませんでした。一時フォルダ削除をスキップします", null);
                 return true;
+            }
+            var sharedResumeDir = server.GetQueueItemsSnapshot().Any(other => other != null && other.Id != item.Id
+                && !string.IsNullOrWhiteSpace(other.ResumeDir)
+                && Path.GetFullPath(other.ResumeDir).Equals(Path.GetFullPath(tempDir), comparison));
+            if (sharedResumeDir)
+            {
+                error = "別キューのResumeDirとして使用中の一時フォルダーは削除できません";
+                return false;
             }
 
             if (!Directory.Exists(tempDir))
@@ -669,7 +748,13 @@ namespace Amatsukaze.Server.Rest
 
             try
             {
+                restoredTempDirs.MarkDeletePending(item.SrcPath, tempDir);
+                foreach (var pair in sessions.Where(pair => pair.Value.TempDir == tempDir))
+                {
+                    RemoveSession(pair.Key);
+                }
                 Directory.Delete(tempDir, true);
+                restoredTempDirs.CompleteDelete(item.SrcPath, tempDir);
                 Util.AddLog($"[TrimAdjust] CM解析タスク({queueItemId})の一時フォルダを削除しました: {tempDir}", null);
                 return true;
             }
@@ -787,16 +872,9 @@ namespace Amatsukaze.Server.Rest
                 throw new InvalidOperationException("入力ファイルが見つかりません");
             }
 
-            string resumeDir = null;
-            var logPath = state.ResolveTaskLogPathById(sourceItem.Id);
-            if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
-            {
-                var tempDir = ExtractTempDirFromLog(logPath);
-                if (!string.IsNullOrEmpty(tempDir) && File.Exists(Path.Combine(tempDir, "resume.dat")))
-                {
-                    resumeDir = tempDir;
-                }
-            }
+            var tempDir = ResolveTempDir(sourceItem.Id);
+            string resumeDir = !string.IsNullOrEmpty(tempDir) && File.Exists(Path.Combine(tempDir, "resume.dat"))
+                ? tempDir : null;
             if (string.IsNullOrEmpty(resumeDir))
             {
                 Util.AddLog($"[TrimAdjust] 再開情報が見つからないため通常処理として再投入します: ItemId={sourceItem.Id}", null);
@@ -868,7 +946,7 @@ namespace Amatsukaze.Server.Rest
             var avsPath = srcPath + ".trim.avs";
             if (!File.Exists(avsPath))
             {
-                avsPath = Path.Combine(tempDir, "trim0.avs");
+                avsPath = ResolveMovedCutInfoPath(srcPath, ".trim.avs") ?? Path.Combine(tempDir, "trim0.avs");
             }
             if (!File.Exists(avsPath))
             {
@@ -968,7 +1046,7 @@ namespace Amatsukaze.Server.Rest
             var divPath = srcPath + ".div.txt";
             if (!File.Exists(divPath))
             {
-                divPath = Path.Combine(tempDir, "div0.txt");
+                divPath = ResolveMovedCutInfoPath(srcPath, ".div.txt") ?? Path.Combine(tempDir, "div0.txt");
             }
             if (!File.Exists(divPath))
             {
@@ -1013,8 +1091,246 @@ namespace Amatsukaze.Server.Rest
             File.WriteAllLines(divPath, lines);
         }
 
+        private static string ResolveMovedCutInfoPath(string srcPath, string suffix)
+        {
+            if (ServerSupport.TryResolveInputFilePath(srcPath, out var actualPath)
+                && actualPath != srcPath && File.Exists(actualPath + suffix))
+            {
+                return actualPath + suffix;
+            }
+            return null;
+        }
+
+        private string ResolveTempDir(int queueItemId)
+        {
+            if (!state.TryGetQueueItem(queueItemId, out var item)) return null;
+            var restored = restoredTempDirs.GetRestoredPath(item.SrcPath);
+            if (!string.IsNullOrWhiteSpace(restored) && File.Exists(Path.Combine(restored, "amts0.dat"))) return restored;
+            if (!string.IsNullOrEmpty(item.ResumeDir) && File.Exists(Path.Combine(item.ResumeDir, "amts0.dat")))
+                return item.ResumeDir;
+            // 既存の一時キャッシュの探索にのみ、ログを任意で利用する。
+            var logPath = state.ResolveTaskLogPathById(queueItemId);
+            var legacy = !string.IsNullOrEmpty(logPath) && File.Exists(logPath) ? ExtractTempDirFromLog(logPath) : null;
+            return !string.IsNullOrEmpty(legacy) && File.Exists(Path.Combine(legacy, "amts0.dat")) ? legacy : null;
+        }
+
+        // 復元ジョブはHTTP要求より長く生存する。要求tokenは結果を待つ側だけに使う。
+        public async Task<(TrimAdjustSessionResponse response, string error)> TryRestoreAndCreateSessionAsync(
+            int queueItemId, int scaleMode, CancellationToken ct = default)
+        {
+            if (ct.IsCancellationRequested) return (null, "復元要求の待機が中断されました");
+            var request = new TrimAdjustSessionRequest { QueueItemId = queueItemId, ScaleMode = scaleMode };
+            var existing = ResolveTempDir(queueItemId);
+            if (existing != null)
+                return TryCreateSession(request, existing, out var ready, out var readyError, out _) ? (ready, null) : (null, readyError);
+
+            Task<(string restoredDir, string error)> restoreTask;
+            lock (tempDirMutationLock)
+            {
+                lock (_restoreLock)
+                {
+                    if (_disposed) return (null, "復元サービスは停止中です");
+                    if (_restoringKey != null)
+                    {
+                        var current = _restoringKey.Value;
+                        if (current.queueItemId == queueItemId && current.scaleMode == scaleMode)
+                            return (null, $"queueItemId={queueItemId} は現在キャッシュ復元中です。完了後にリトライしてください");
+                        return (null, $"別のキャッシュ復元が実行中です (queueItemId={current.queueItemId})。完了後にリトライしてください");
+                    }
+                    _restoringKey = (queueItemId, scaleMode);
+                    restoreTask = Task.Run(() => RestoreTempDirAsync(queueItemId, scaleMode, _restoreLifetimeCts.Token));
+                    _restoreJobTask = restoreTask;
+                    _ = restoreTask.ContinueWith(task =>
+                    {
+                        try { Util.AddLog($"[TrimAdjust] 復元ジョブ予期しない例外: ItemId={queueItemId}", task.Exception); }
+                        catch { /* 例外を観測する継続処理から例外を漏らさない */ }
+                    }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                }
+            }
+
+            try
+            {
+                var (restoredDir, error) = await restoreTask.WaitAsync(ct);
+                if (restoredDir == null) return (null, error ?? "一時ファイルの再生成に失敗しました");
+                return TryCreateSession(request, restoredDir, out var response, out var sessionError, out _)
+                    ? (response, null) : (null, sessionError);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // HTTP切断や待機期限はCLI復元へ伝播しない。ジョブはregistry登録まで継続する。
+                Util.AddLog($"[TrimAdjust] 復元要求の待機終了: ItemId={queueItemId}。復元ジョブは継続します", null);
+                return (null, "復元要求の待機が終了しました。復元処理は継続中です。完了後にリトライしてください");
+            }
+        }
+
+        private async Task<(string restoredDir, string error)> RestoreTempDirAsync(
+            int queueItemId, int scaleMode, CancellationToken jobCt)
+        {
+            string ownedDir = null;
+            string ownedRoot = null;
+            string ownedSourcePath = null;
+            bool keepCache = false;
+            try
+            {
+                jobCt.ThrowIfCancellationRequested();
+                if (queueItemId <= 0 || !state.TryGetQueueItem(queueItemId, out var item) || string.IsNullOrEmpty(item.SrcPath))
+                    return (null, "キューアイテムが見つかりません");
+                if (item.State != QueueState.Complete || (!item.IsBatch && item.Mode != ProcMode.CMCheck))
+                    return (null, "完了したエンコードまたはCM解析タスクだけ復元できます");
+                ownedSourcePath = item.SrcPath;
+                var existing = ResolveTempDir(item.Id);
+                if (existing != null) return (existing, null);
+                if (!ServerSupport.TryResolveInputFilePath(item.SrcPath, out var actualSrcPath))
+                    return (null, "復元元のTSファイルが見つかりません");
+                var setting = state.GetSetting();
+                if (string.IsNullOrWhiteSpace(setting?.AmatsukazePath)) return (null, "AmatsukazeCLIが設定されていません");
+                var workRoot = Path.GetFullPath(setting.ActualWorkPath);
+                ownedRoot = workRoot;
+                ownedDir = Path.Combine(workRoot, "amt-trim-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(ownedDir);
+                var resumePath = item.SrcPath + ".resume.dat";
+                if (!File.Exists(resumePath) && File.Exists(actualSrcPath + ".resume.dat")) resumePath = actualSrcPath + ".resume.dat";
+                var hasResume = File.Exists(resumePath);
+                var psi = new ProcessStartInfo(setting.AmatsukazePath)
+                {
+                    UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
+                    StandardOutputEncoding = Util.AmatsukazeDefaultEncoding, StandardErrorEncoding = Util.AmatsukazeDefaultEncoding,
+                    CreateNoWindow = true, WorkingDirectory = Directory.GetCurrentDirectory()
+                };
+                if (item.StreamFormat != VideoStreamFormat.MPEG2 && item.StreamFormat != VideoStreamFormat.H264)
+                    psi.ArgumentList.Add("--loadv2");
+                foreach (var arg in new[] { "--mode", "reform_only", "-i", actualSrcPath, "-s",
+                    item.ServiceId.ToString(System.Globalization.CultureInfo.InvariantCulture), "-w", workRoot,
+                    "--tmpdir", ownedDir, "--no-remove-tmp" }) psi.ArgumentList.Add(arg);
+                if (hasResume)
+                {
+                    psi.ArgumentList.Add("--restore-info");
+                    psi.ArgumentList.Add(resumePath);
+                }
+                Util.AddLog($"[TrimAdjust] 復元開始: ItemId={item.Id}, Src={actualSrcPath}, Resume={resumePath}, HasResume={hasResume}, Temp={ownedDir}", null);
+                var (exitCode, output) = await RunRestoreProcessAsync(psi, jobCt);
+                jobCt.ThrowIfCancellationRequested();
+                Util.AddLog($"[TrimAdjust] 復元実行結果: ItemId={item.Id}, ExitCode={exitCode}\n{output}", null);
+                if (exitCode != 0) return (null, $"一時ファイルの再生成に失敗しました（終了コード: {exitCode}）");
+                if (!hasResume)
+                {
+                    // 古い録画はログを代替の復元元にできる。ログがなくても映像の表示は可能。
+                    var trimLine = ExtractTrimLineFromLog(state.ResolveTaskLogPathById(item.Id));
+                    if (!string.IsNullOrEmpty(trimLine)) File.WriteAllText(Path.Combine(ownedDir, "trim0.avs"), trimLine);
+                }
+                jobCt.ThrowIfCancellationRequested();
+                restoredTempDirs.RegisterRestored(item.SrcPath, ownedDir);
+                keepCache = true;
+                return (ownedDir, null);
+            }
+            catch (OperationCanceledException) when (jobCt.IsCancellationRequested)
+            {
+                return (null, "サーバー停止により一時ファイルの再生成が中断されました");
+            }
+            catch (Exception ex)
+            {
+                Util.AddLog($"[TrimAdjust] 復元失敗: ItemId={queueItemId}, Temp={ownedDir}", ex);
+                return (null, $"一時ファイルの復元に失敗しました: {ex.Message}");
+            }
+            finally
+            {
+                try
+                {
+                    if (!keepCache && ownedDir != null) CleanupFailedRestore(ownedSourcePath, ownedDir, ownedRoot);
+                }
+                finally { lock (_restoreLock) { _restoringKey = null; } }
+            }
+        }
+        private static async Task<(int exitCode, string output)> RunRestoreProcessAsync(ProcessStartInfo psi, CancellationToken ct)
+        {
+            using var process = Process.Start(psi);
+            if (process == null) return (-1, "AmatsukazeCLIを起動できません");
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            try
+            {
+                await process.WaitForExitAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // 子プロセスを停止してからフォルダーを削除できる状態にする。
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
+                await Task.WhenAll(stdout, stderr);
+                throw;
+            }
+            return (process.ExitCode, await stdout + await stderr);
+        }
+
+        private void CleanupFailedRestore(string sourcePath, string path, string workRoot)
+        {
+            try
+            {
+                if (!ReleaseSessionsForTempDir(path))
+                {
+                    Util.AddLog("[TrimAdjust] 復元失敗後もセッションが残っているため、フォルダーを保持します: " + path, null);
+                    return;
+                }
+                // 削除待ちを先に永続化し、削除途中の失敗後も次回起動で追跡できるようにする。
+                restoredTempDirs.MarkDeletePending(sourcePath, path);
+                DeleteOwnedRestoreDir(path, workRoot);
+                if (Directory.Exists(path)) return;
+                restoredTempDirs.CompleteDelete(sourcePath, path);
+            }
+            catch (Exception ex)
+            {
+                Util.AddLog("[TrimAdjust] 復元失敗後の一時フォルダー管理に失敗しました。フォルダーを保持します: " + path, ex);
+            }
+        }
+
+        private static void DeleteOwnedRestoreDir(string path, string workRoot)
+        {
+            // 削除するパスは設定した作業ルート内の新規復元フォルダーに限定する。
+            var rootPrefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workRoot)) + Path.DirectorySeparatorChar;
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!Path.IsPathFullyQualified(path) || !Path.GetFullPath(path).StartsWith(rootPrefix, comparison)
+                || !Path.GetFileName(path).StartsWith("amt-trim-", StringComparison.Ordinal))
+                throw new InvalidOperationException("復元フォルダーの削除対象が不正です");
+            try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+            catch (Exception ex) { Util.AddLog("[TrimAdjust] 復元フォルダー削除に失敗しました: " + path, ex); }
+        }
+
+        private static string ExtractTrimLineFromLog(string logPath)
+        {
+            if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath)) return null;
+            try
+            {
+                var lines = File.ReadAllLines(logPath, Util.AmatsukazeDefaultEncoding);
+                for (int index = 0; index < lines.Length; index++)
+                {
+                    if (!lines[index].Contains("[CM解析結果 - TrimAVS]")) continue;
+                    for (int next = index + 1; next < lines.Length; next++)
+                    {
+                        var candidate = lines[next].Trim();
+                        if (candidate.Length == 0) continue;
+                        if (candidate.StartsWith("Trim(", StringComparison.Ordinal)) return candidate;
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex) { Util.AddLog("[TrimAdjust] ログからのTrim抽出に失敗しました", ex); }
+            return null;
+        }
+
         public void Dispose()
         {
+            // 停止時だけ復元ジョブをキャンセルし、子プロセス停止と所有フォルダー処理の完了を待つ
+            Task<(string restoredDir, string error)> restoreTask;
+            lock (_restoreLock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _restoreLifetimeCts.Cancel();
+                restoreTask = _restoreJobTask;
+            }
+            try { restoreTask?.GetAwaiter().GetResult(); }
+            catch (Exception ex) { Util.AddLog("[TrimAdjust] 停止時の復元ジョブ終了待ちに失敗しました", ex); }
+            _restoreLifetimeCts.Dispose();
             // タイマーを停止してから全セッションを破棄する
             cleanupTimer?.Dispose();
             foreach (var pair in sessions)

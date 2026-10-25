@@ -112,5 +112,7 @@ namespace Amatsukaze.Shared
         Task<ApiResult<bool>> DeleteTrimSessionAsync(string sessionId);
         // カット編集用: 指定キューアイテムの一時フォルダを削除する
         Task<ApiResult<bool>> DeleteTrimTempDirAsync(int queueItemId);
+        // カット調整キャッシュ復元: ストリーム改革のみ再実行してセッションを作成する
+        Task<ApiResult<TrimAdjustSessionResponse>> RestoreTrimSessionAsync(int queueItemId, int scaleMode);
     }
 }

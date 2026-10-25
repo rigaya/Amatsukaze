@@ -23,6 +23,10 @@ internal sealed class RestQueueTestFixture
         SetProperty(Server, "Client", Store);
         SetField(Server, "scheduledQueue", new ScheduledQueue());
         SetField(Server, "workerPool", new WorkerPool());
+        // RestApiHost->TrimAdjustServiceがserver.TrimAdjustTempDirRegistryを必須で参照するため、
+        // テスト専用の一時フォルダーで実体を用意する。
+        SetField(Server, "trimAdjustTempDirRegistry",
+            new TrimAdjustTempDirRegistry(Path.Combine(Path.GetTempPath(), "amt-trim-registry-" + Guid.NewGuid().ToString("N"))));
         Manager = (QueueManager)RuntimeHelpers.GetUninitializedObject(typeof(QueueManager));
         SetField(Manager, "server", Server);
         SetField(Manager, "queueSync", new object());

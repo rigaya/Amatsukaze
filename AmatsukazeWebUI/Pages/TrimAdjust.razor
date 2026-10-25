@@ -45,7 +45,17 @@
 
     @if (_loading)
     {
+        @if (_restoringCache)
+        {
+            <div class="trim-loading">
+                一時キャッシュが見つかりません。ストリームデータを復元中です...<br />
+                （目安: HDD 約25秒/GB、SSD 約6秒/GB）
+            </div>
+        }
+        else
+        {
         <div class="trim-loading">読み込み中...</div>
+    }
     }
     else if (!string.IsNullOrEmpty(_errorMessage))
     {
@@ -578,6 +588,7 @@
     private ElementReference _seekBarRef;
 
     private bool _loading = true;
+    private bool _restoringCache = false;
     private string? _errorMessage;
     private string? _statusMessage;
     private bool _isError;
@@ -974,10 +985,30 @@
 
         if (!result.Ok || result.Data == null)
         {
-            _errorMessage = result.Error ?? "セッションの作成に失敗しました";
+            var errMsg = result.Error ?? "セッションの作成に失敗しました";
+            // キャッシュ不足の専用エラーコードを受け取った場合は復元を再実行
+            if (result.ErrorCode == RestApiErrorCodes.TrimCacheUnavailable)
+            {
+                _restoringCache = true;
+                StateHasChanged();
+                var restoreResult = await Api.RestoreTrimSessionAsync(QueueItemId, _previewScaleMode);
+                _restoringCache = false;
+                if (!restoreResult.Ok || restoreResult.Data == null)
+                {
+                    _errorMessage = restoreResult.Error ?? "キャッシュ復元に失敗しました";
             _loading = false;
             StateHasChanged();
             return;
+        }
+                result = restoreResult;
+            }
+            else
+            {
+                _errorMessage = errMsg;
+                _loading = false;
+                StateHasChanged();
+                return;
+            }
         }
 
         _errorMessage = null;

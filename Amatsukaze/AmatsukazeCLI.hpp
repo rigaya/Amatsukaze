@@ -155,8 +155,11 @@ static void printHelp(const tchar* bin) {
         "                      8 : 1920x1080半透明\n"
         "                      ORも可 例) 15: すべて出力\n"
         "  --no-remove-tmp     一時ファイルを削除せずに残す\n"
+        "  --tmpdir <パス>     一時フォルダのパスを直接指定する（キャッシュ復元用）\n"
         "                      デフォルトは60fpsタイミングで生成\n"
         "  --resume-dir <パス> 保存済み一時フォルダを再利用する\n"
+        "  --save-restore-info <パス> 一時ファイル保持設定によらず再開情報を保存する\n"
+        "  --restore-info <パス> reform_onlyで保存済みTrim・分割点を復元する\n"
         "  --timefactor <数値>  x265やNVEncで疑似VFRレートコントロールするときの時間レートファクター[0.25]\n"
         "  --pmt-cut <数値>:<数値>  PMT変更でCM認識するときの最大CM認識時間割合。全再生時間に対する割合で指定する。\n"
         "                      例えば 0.1:0.2 とすると開始10%%までにPMT変更があった場合はそのPMT変更までをCM認識する。\n"
@@ -165,6 +168,7 @@ static void printHelp(const tchar* bin) {
         "  --mode <モード>     処理モード[ts]\n"
         "                      ts : MPGE2-TSを入力する通常エンコードモード\n"
         "                      cm : エンコードまで行わず、CM解析までで終了するモード\n"
+        "                      reform_only : ストリーム分割とamts0.dat生成のみで終了するモード（キャッシュ復元用）\n"
         "                      drcs : マッピングのないDRCS外字画像だけ出力するモード\n"
         "                      probe_subtitles : 字幕があるか判定\n"
         "                      probe_audio : 音声フォーマットを出力\n"
@@ -357,6 +361,12 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             if (conf.workDir.size() == 0) {
                 conf.workDir = _T("./");
             }
+        } else if (key == _T("--tmpdir")) {
+            conf.tmpDirExact = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--save-restore-info")) {
+            conf.saveRestoreInfoPath = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--restore-info")) {
+            conf.restoreInfoPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("-et") || key == _T("--encoder-type")) {
             tstring arg = getParam(argc, argv, i++);
             conf.encoder = encoderFtomString(arg);
@@ -838,6 +848,24 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         conf.srcFilePathOrg = conf.srcFilePath;
     }
 
+    if (conf.resumeDir.size() > 0 && conf.tmpDirExact.size() > 0) {
+        THROWF(ArgumentException, "--resume-dir と --tmpdir は同時に指定できません");
+    }
+
+    // 直接指定したフォルダーの削除は呼び出し側の責務とし、CLIでは削除しない。
+    if (!conf.tmpDirExact.empty() && !conf.noRemoveTmp) {
+        THROW(ArgumentException, "--tmpdir は --no-remove-tmp と同時に指定してください");
+    }
+
+    if (!conf.restoreInfoPath.empty() && conf.mode != _T("reform_only")) {
+        THROW(ArgumentException, "--restore-info は reform_only でのみ指定できます");
+    }
+    if (!conf.saveRestoreInfoPath.empty()
+        && (rgy_path_is_same(conf.saveRestoreInfoPath, conf.srcFilePath)
+            || rgy_path_is_same(conf.saveRestoreInfoPath, conf.srcFilePathOrg))) {
+        THROW(ArgumentException, "再開情報の出力先に入力TSは指定できません");
+    }
+
     return std::unique_ptr<ConfigWrapper>(new ConfigWrapper(ctx, conf));
 }
 
@@ -960,7 +988,7 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
         }
 
         tstring mode = setting.getMode();
-        if (mode == _T("ts") || mode == _T("cm"))
+        if (mode == _T("ts") || mode == _T("cm") || mode == _T("reform_only"))
             transcodeMain(ctx, setting);
         else if (mode == _T("g"))
             transcodeSimpleMain(ctx, setting);
