@@ -36,4 +36,10 @@ inline LogoResidualWeightParams PrepareLogoResidualWeight(const double provision
     return params;
 }
 
+// サンプル値に関係なく重みが1になる画素だけを、再走査から安全に除外する。
+inline bool NeedsLogoResidualReweight(const bool lineValid, const LogoResidualWeightParams& params,
+    const bool lowBgEligible) {
+    return lineValid && (params.enabled || lowBgEligible);
+}
+
 } // 名前空間 logo

@@ -577,6 +577,14 @@ extern "C" AMATSUKAZE_API int CompareLogoCorrelationForTest(const float* kernels
 }
 
 // 画素ごとにロゴとの相関を計算
+extern "C" AMATSUKAZE_API int ApplyLogoBilateralAVX2ForTest(uint8_t* dst, const uint8_t* src,
+    int pitch, int width, int height, const float* spatial, const float* rangeWeight, int y0, int y1) {
+    if (!IsAVX2Available() || !dst || !src || !spatial || !rangeWeight
+        || width <= 0 || height <= 0 || pitch < width || y0 < 0 || y1 < y0 || y1 > height) return 0;
+    BilateralFilter5x5U8RangeLUT_AVX2(dst, src, pitch, width, height, spatial, rangeWeight, 255, y0, y1);
+    return 1;
+}
+
 float logo::LogoDataParam::CorrelationScore(const float *work, float maxv) {
 #if ENABLE_X86_SIMD
     if (pCalcCorrelation5x5 == CalcCorrelation5x5_AVX2) {
@@ -3466,6 +3474,8 @@ namespace {
             // 初回走査で受け取ったが、まだ統計へ反映していないフレーム数。
             int pendingInitialFrames = 0;
             bool reuseUnweighted = false;
+            // 同じ行で次に重みの再計算が必要なX座標。空なら全画素を従来どおり走査する。
+            std::vector<int> residualReweightNextX;
             std::vector<AutoDetectStats> stats;
             // タイル単位のヒストグラム蓄積バッファ: [タイル][bin][画素]
             std::vector<BinAccum> binAccumBuf;
@@ -3479,6 +3489,7 @@ namespace {
             void reset(const int scanw, const int scanh, const int bitDepth) {
                 pendingInitialFrames = 0;
                 reuseUnweighted = false;
+                residualReweightNextX.clear();
                 if (bitDepth <= 8) {
                     // 背景辺のAVX2処理が行末付近でも64 byteを直接ロードできるよう、
                     // 作業画像と転置画像の末尾へ余白を持たせる。
@@ -7134,6 +7145,33 @@ namespace {
             return mask;
         }
 
+        // 完成済みの背景と非加重統計がある再走査だけを分離し、初回の画素ループを維持する。
+        RGY_NOINLINE int collectResidualFrameSampleRange(const std::vector<uint8_t>& frameWork, const float invMaxv,
+            StatsPassBuffers& statsPass, const uint16_t* cache,
+            const int yBegin, const int yEnd, const int xBegin, const int xEnd) {
+            const auto& nextX = statsPass.residualReweightNextX;
+            int localFrameCount = 0;
+            for (int y = yBegin; y < yEnd; y++) {
+                for (int x = nextX[y * scanw + xBegin]; x < xEnd; x = nextX[y * scanw + x + 1]) {
+                    const int off = x + y * scanw;
+                    const uint16_t bg = cache[backgroundCacheIndex(x, y)];
+                    if (!BackgroundIsValid(bg)) continue;
+                    const float fgRaw = (float)frameWork[off];
+                    const double f = (double)frameWork[off] * invMaxv;
+                    const double b = (double)bg * ((double)invMaxv / 256.0);
+                    if (IsExtremeContrastSample(f, b)) continue;
+                    const int binIdx = std::min(kHistBins - 1, (int)(fgRaw * invMaxv * kHistBins));
+                    auto& bin = statsPass.binAccumBuf[binAccumIndex(off, binIdx)];
+                    const double weight = std::max(0.0, calcSampleResidualWeight(off, f, b));
+                    bin.sum_weight += weight;
+                    bin.sum_weighted_fg += weight * f;
+                    bin.sum_weighted_bg += weight * b;
+                    localFrameCount++;
+                }
+            }
+            return localFrameCount;
+        }
+
         template<typename pixel_t>
         RGY_FORCEINLINE int collectFrameSampleRange(const std::vector<pixel_t>& frameWork, const float invMaxv,
             const int thresholdRaw, const float transitionThreshold, StatsPassBuffers& statsPass,
@@ -7151,6 +7189,12 @@ namespace {
             }
             const bool cacheComplete = cache != nullptr
                 && hasCompleteBackgroundCache(frameIndex >= 0 ? frameIndex : readFrames, thresholdRaw);
+            if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+                if (reuseUnweighted && !statsPass.residualReweightNextX.empty() && cacheComplete) {
+                    return collectResidualFrameSampleRange(frameWork, invMaxv, statsPass, cache,
+                        yBegin, yEnd, xBegin, xEnd);
+                }
+            }
             int localFrameCount = 0;
             for (int y = yBegin; y < yEnd; y++) {
                 auto collectOne = [&](const int x, const bool bgOk, const bg_t bg, const float preparedEdge = -1.0f) {
@@ -7578,7 +7622,7 @@ namespace {
                         frameCount += taskFrameCounts[(size_t)task * batchCount + bi];
                     }
                 }
-                statsPass.frameValidCounts.push_back(frameCount);
+                if (statsPass.residualReweightNextX.empty()) statsPass.frameValidCounts.push_back(frameCount);
                 readFrames++;
                 if (cb && (readFrames % 8) == 0) {
                     const float passProgress = readFrames / (float)searchFrames;
@@ -7654,7 +7698,7 @@ namespace {
                 appendDetectFrameToRoiCache(detectFrame16.data(), scanw);
             }
             if (statsPass != nullptr) {
-                statsPass->frameValidCounts.push_back(frameCount);
+                if (statsPass->residualReweightNextX.empty()) statsPass->frameValidCounts.push_back(frameCount);
             }
 
             readFrames++;
@@ -7675,7 +7719,7 @@ namespace {
 
             const int frameCount = addStoredFrame(srcY, scanw, statsPass, pass2);
             if (statsPass != nullptr) {
-                statsPass->frameValidCounts.push_back(frameCount);
+                if (statsPass->residualReweightNextX.empty()) statsPass->frameValidCounts.push_back(frameCount);
             }
 
             readFrames++;
@@ -8594,15 +8638,50 @@ namespace {
                         provisionalLineConsistency[off], provisionalLineStdDiff[off]);
                 }
             }
+            int totalPixels = 0, fixedPixels = 0, gaussianPixels = 0, lowBgPixels = 0;
+            for (int y = kScanEdgeMargin; y < scanh - kScanEdgeMargin; y++) {
+                for (int x = kScanEdgeMargin; x < scanw - kScanEdgeMargin; x++) {
+                    const int off = x + y * scanw;
+                    const bool valid = provisionalLineValid[off] != 0;
+                    const bool gaussian = valid && sampleResidualWeightParams[off].enabled;
+                    const bool lowBg = valid && off < (int)lowBgLeftReweightEligible.size() && lowBgLeftReweightEligible[off];
+                    totalPixels++;
+                    fixedPixels += !gaussian && !lowBg;
+                    gaussianPixels += gaussian;
+                    lowBgPixels += lowBg;
+                }
+            }
+            logCtx.infoF(_T("[LogoScan] 再重み付け対象: pass=%d 全画素=%d 固定1=%d Gaussian=%d lowBg=%d"),
+                passIndex, totalPixels, fixedPixels, gaussianPixels, lowBgPixels);
             sampleResidualReweightActive = true;
             // 同じキャッシュと選別マスクを再走査する場合だけ、重みに依存しない統計を保持する。
             const bool reuseUnweighted = bitDepth == 8 && hasStoredRoiCache() && tracePoints.empty();
+            statsPass.residualReweightNextX.clear();
+            // 省略した画素を欠損キャッシュとして完成扱いにしないよう、完成済みの背景だけを再利用する。
+            const bool completeBackground = backgroundCacheComplete.size() == (size_t)roiCacheStoredFrames
+                && std::all_of(backgroundCacheComplete.begin(), backgroundCacheComplete.end(), [](uint8_t value) { return value != 0; });
+            if (reuseUnweighted && completeBackground && fixedPixels > 0
+                && statsPass.frameValidCounts.size() == (size_t)roiCacheStoredFrames
+                && ParseEnvBoolDefault("AMT_LOGO_REWEIGHT_SKIP_FIXED", true)) {
+                statsPass.residualReweightNextX.assign(scanw * scanh, scanw);
+                for (int y = kScanEdgeMargin; y < scanh - kScanEdgeMargin; y++) {
+                    int nextX = scanw;
+                    for (int x = scanw - kScanEdgeMargin - 1; x >= kScanEdgeMargin; x--) {
+                        const int off = x + y * scanw;
+                        const bool lowBg = off < (int)lowBgLeftReweightEligible.size() && lowBgLeftReweightEligible[off];
+                        if (logo::NeedsLogoResidualReweight(provisionalLineValid[off] != 0,
+                            sampleResidualWeightParams[off], lowBg)) nextX = x;
+                        statsPass.residualReweightNextX[off] = nextX;
+                    }
+                }
+            }
             if (reuseUnweighted) {
                 logCtx.infoF(_T("[LogoScan] 再重み付けで非加重統計を再利用: frames=%d threads=%d"),
                     roiCacheStoredFrames, threadN);
                 readFrames = 0;
                 sourceFrameIndex = 0;
-                statsPass.frameValidCounts.clear();
+                // 省略画素も含むフレーム別の有効数は初回値を維持する。
+                if (statsPass.residualReweightNextX.empty()) statsPass.frameValidCounts.clear();
                 for (auto& bin : statsPass.binAccumBuf) {
                     bin.sum_weight = bin.sum_weighted_fg = bin.sum_weighted_bg = 0.0;
                 }
@@ -8615,7 +8694,10 @@ namespace {
             }
             struct RestoreReuseFlag {
                 StatsPassBuffers& buffers;
-                ~RestoreReuseFlag() { buffers.reuseUnweighted = false; }
+                ~RestoreReuseFlag() {
+                    buffers.reuseUnweighted = false;
+                    buffers.residualReweightNextX.clear();
+                }
             } restoreReuseFlag{ statsPass };
             if (hasStoredRoiCache()) {
                 runStoredRoiStatsPassWithProgress(progressPlan.stage, progressPlan.stageBase, progressPlan.stageSpan,

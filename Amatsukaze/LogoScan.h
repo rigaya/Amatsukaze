@@ -34,6 +34,9 @@ extern "C" AMATSUKAZE_API int CompareLogoCorrelationForTest(const float* kernels
 
 // 背景推定のスカラー処理と32画素SIMD処理を同じ入力で比較する。
 extern "C" AMATSUKAZE_API int HasLogoBackgroundAVX2ForTest();
+// 単体テストから、BilateralのAVX2実装を行範囲と番兵付きで直接比較する。
+extern "C" AMATSUKAZE_API int ApplyLogoBilateralAVX2ForTest(uint8_t* dst, const uint8_t* src,
+    int pitch, int width, int height, const float* spatial, const float* rangeWeight, int y0, int y1);
 extern "C" AMATSUKAZE_API int CompareLogoBackgroundForTest(const uint8_t* src,
     int width, int height, int x, int y, int radius, int threshold,
     float* reference, float* vectorized, uint32_t* referenceMask, uint32_t* vectorizedMask);

@@ -142,3 +142,11 @@ Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson tes
 `logo_temporal_histogram` は余白を除いた内側画素を、16画素ブロック内のbin優先配置へ変換する添字を検証する。従来のROI全体の画素優先配置を独立した参照にして、全256bin、uint16の飽和加算、P5のbit一致を確認する。末尾ブロックは余分なlaneを確保せず、全要素をちょうど一度使うことも調べる。幅非整列、余白16、小さいROI、空ROI、境界、固定seedの更新を含む。
 
 選択実行は `AmatsukazeNativeTests --select logo_temporal_histogram`。CPUのSIMD対応には依存しない。
+
+## ロゴの再重み付け省略とBilateralの一致
+
+`logo_residual_skip` は、仮回帰線・Gaussian補正・低背景補正の有効状態を組み合わせ、再走査から除外する画素の重みがサンプル値によらず1になることを従来式で検証する。保持した非加重和と、重み1で再計算した加重和のbit一致も確認する。
+
+`logo_bilateral` はAVX2のBilateralフィルタを、近傍の加算順とFMAを独立に記述した参照処理とバイト比較する。幅1から289、8画素・16画素の端数、画像端のclamp、入力の非整列と行ピッチ、定数・乱数・複数の色差重み、行範囲の分割を含む。出力の前後と処理対象外の行には番兵を置き、書き込み範囲も検証する。AVX2非対応CPUでは実行を省略する。
+
+選択実行は `AmatsukazeNativeTests --select logo_residual_skip` と `AmatsukazeNativeTests --select logo_bilateral`。

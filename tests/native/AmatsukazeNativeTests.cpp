@@ -3185,6 +3185,121 @@ bool TestLogoResidualWeightParams(tstring& diagnostic) {
     return true;
 }
 
+// 省略条件をサンプルごとの従来式と照合し、非加重統計への復帰がbit一致することを確認する。
+bool TestLogoResidualSkip(tstring& diagnostic) {
+    for (bool valid : { false, true }) {
+        for (bool gaussian : { false, true }) {
+            for (bool lowBg : { false, true }) {
+                logo::LogoResidualWeightParams params;
+                params.enabled = gaussian;
+                params.sigma = 0.05;
+                const bool needed = logo::NeedsLogoResidualReweight(valid, params, lowBg);
+                double rawF = 0.0, rawB = 0.0, weightedF = 0.0, weightedB = 0.0, sumWeight = 0.0;
+                bool changedWeight = false;
+                int count = 0;
+                for (int fg = 0; fg < 256; fg += 7) {
+                    for (int bg = 0; bg < 256; bg += 11) {
+                        const double f = fg * (1.0f / 255.0f), b = bg * (1.0f / 255.0f);
+                        double weight = 1.0;
+                        if (valid) {
+                            const double residual = b - (0.75 * f + 0.03);
+                            if (gaussian) {
+                                const double normalized = residual / params.sigma;
+                                weight = std::max(1e-4, std::exp(-0.5 * normalized * normalized));
+                            }
+                            if (lowBg) {
+                                const double gain = std::max(0.0, std::min(1.0, (0.25 - b) / 0.12));
+                                const double side = std::max(0.0, std::min(1.0, (residual + 0.005) / 0.045));
+                                weight = std::min(weight, std::max(0.05, 1.0 - 1.35 * gain * side));
+                            }
+                            weight = std::max(1e-4, weight);
+                        }
+                        changedWeight |= weight != 1.0;
+                        if (!needed && weight != 1.0) {
+                            diagnostic = _T("重みが変化するサンプルを再走査から除外した");
+                            return false;
+                        }
+                        rawF += f; rawB += b;
+                        weightedF += weight * f; weightedB += weight * b;
+                        sumWeight += weight; count++;
+                    }
+                }
+                if (needed && !changedWeight) {
+                    diagnostic = _T("補正が必要な組合せを検査できていない");
+                    return false;
+                }
+                if (!needed && (sumWeight != count || std::memcmp(&rawF, &weightedF, sizeof(double))
+                    || std::memcmp(&rawB, &weightedB, sizeof(double)))) {
+                    diagnostic = _T("省略画素の加重和と保持した非加重和がbit一致しない");
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+// SIMD部分は従来のFMA、端数と境界は従来のスカラー演算を独立に再現する。
+bool TestLogoBilateral(tstring& diagnostic) {
+    if (!HasLogoBackgroundAVX2ForTest()) {
+        _ftprintf(stdout, _T("AVX2非対応のためBilateral比較を省略\n"));
+        return true;
+    }
+    std::mt19937 random(1025);
+    for (int width : { 1, 2, 3, 4, 5, 11, 12, 13, 19, 20, 21, 27, 28, 29, 31, 32, 33, 84, 287, 288, 289 }) {
+        for (int height : { 1, 2, 3, 5, 16, 37 }) {
+            const int pitch = width + 7;
+            std::vector<uint8_t> input(pitch * height + 1), actual(width * height + 32), expected(actual.size());
+            float spatial[25], range[256];
+            for (int k = 0; k < 25; k++) {
+                spatial[k] = std::exp(-float((k / 5 - 2) * (k / 5 - 2) + (k % 5 - 2) * (k % 5 - 2)) / 8.0f);
+            }
+            for (int pattern = 0; pattern < 6; pattern++) {
+                for (auto& pixel : input) pixel = pattern == 0 ? 0 : pattern == 1 ? 255 : random() & 255;
+                const float sigma = 0.8f + pattern;
+                for (int i = 0; i < 256; i++) range[i] = std::exp(-float(i * i) / (2.0f * sigma * sigma));
+                for (int y0 = 0; y0 < height; y0 += std::max(1, height / 3)) {
+                    const int y1 = std::min(height, y0 + std::max(1, height / 2));
+                    std::fill(actual.begin(), actual.end(), 0xA5);
+                    std::fill(expected.begin(), expected.end(), 0xA5);
+                    if (!ApplyLogoBilateralAVX2ForTest(actual.data() + 16, input.data() + 1, pitch,
+                        width, height, spatial, range, y0, y1)) {
+                        diagnostic = _T("BilateralのSIMD実行に失敗した");
+                        return false;
+                    }
+                    const int vectorEnd = 2 + std::max(0, width - 4) / 8 * 8;
+                    for (int y = y0; y < y1; y++) {
+                        for (int x = 0; x < width; x++) {
+                            const int center = input[1 + y * pitch + x];
+                            float sumW = 0.0f, sumV = 0.0f;
+                            int k = 0;
+                            const bool vectorPixel = x >= 2 && x < vectorEnd;
+                            for (int dy = -2; dy <= 2; dy++) {
+                                const int sy = (std::clamp)(y + dy, 0, height - 1);
+                                for (int dx = -2; dx <= 2; dx++, k++) {
+                                    const int sx = (std::clamp)(x + dx, 0, width - 1);
+                                    const int value = input[1 + sy * pitch + sx];
+                                    const float weight = spatial[k] * range[std::abs(value - center)];
+                                    sumW += weight;
+                                    if (vectorPixel) sumV = std::fma(weight, (float)value, sumV);
+                                    else { const float product = weight * value; sumV += product; }
+                                }
+                            }
+                            const float value = vectorPixel || sumW > 1e-8f ? sumV / sumW : (float)center;
+                            expected[16 + y * width + x] = (uint8_t)(std::clamp)((int)(value + 0.5f), 0, 255);
+                        }
+                    }
+                    if (actual != expected) {
+                        diagnostic = strsprintf(_T("Bilateralの参照または番兵が不一致: 幅=%d 高さ=%d 模様=%d 行=%d..%d"), width, height, pattern, y0, y1);
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool TestLogoTemporalHistogram(tstring& diagnostic) {
     if (!Expect(logo::LogoTemporalHistogramIndex(1, 19, 0) == 1
         && logo::LogoTemporalHistogramIndex(0, 19, 1) == 16
@@ -3652,6 +3767,8 @@ constexpr TestCase TEST_CASES[] = {
     { _T("logo_background_retry"), TestLogoBackgroundRetry },
     { _T("logo_collect_partition"), TestLogoCollectPartition },
     { _T("logo_residual_weight_params"), TestLogoResidualWeightParams },
+    { _T("logo_residual_skip"), TestLogoResidualSkip },
+    { _T("logo_bilateral"), TestLogoBilateral },
     { _T("logo_temporal_histogram"), TestLogoTemporalHistogram },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },
