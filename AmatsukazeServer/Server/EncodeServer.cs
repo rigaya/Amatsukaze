@@ -59,6 +59,9 @@ namespace Amatsukaze.Server
         internal AppData AppData_ { get; private set; }
 
         private readonly int serverPort;
+        // スタンドアロンで前回使えたRESTポート。Initより前に設定する。0は未保存。
+        public int PreferredRestPort { get; set; }
+        public int ActualRestApiPort => restApiHost?.Port ?? 0;
         private MultiUserClient multiClient;
         private RestStateStore restState;
         private RestApiHost restApiHost;
@@ -377,7 +380,11 @@ namespace Amatsukaze.Server
             {
                 restState = new RestStateStore(this);
                 multiClient.Add(restState);
-                restApiHost = new RestApiHost(this, restState, restPort);
+                restApiHost = new RestApiHost(this, restState, restPort)
+                {
+                    // プロセス内クライアントがいるときがスタンドアロン。ポートは自動で空きを選ぶ。
+                    AutoSelectPort = client != null
+                };
             }
 #if PROFILE
             prof.PrintTime("EncodeServer 1");
@@ -649,12 +656,16 @@ namespace Amatsukaze.Server
             {
                 try
                 {
+                    restApiHost.PreferredPort = PreferredRestPort;
                     await restApiHost.StartAsync();
                     Util.AddLog($"[REST] APIサーバを起動しました。port={restApiHost.Port}", null);
                 }
                 catch (Exception ex)
                 {
-                    Util.AddLog($"[REST] APIサーバ起動失敗: {ex.GetType().Name}: {ex.Message}", ex);
+                    // サーバー/CLIは指定ポートで失敗したら起動自体を止める。
+                    // スタンドアロンも空きが一つも無いときは同様に止める。
+                    Util.AddLog($"[REST] APIサーバ起動失敗: {ex.Message}", ex);
+                    throw;
                 }
             }
             // 更新チェックはサーバー初期化の完了後にバックグラウンドで開始する

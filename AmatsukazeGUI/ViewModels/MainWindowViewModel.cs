@@ -133,7 +133,20 @@ namespace Amatsukaze.ViewModels
                 {
                     return "AmatsukazeClient@" + hostName;
                 }
-                return "Amatsukaze" + Model.ServerVersion + "@" + hostName;
+                var caption = "Amatsukaze" + Model.ServerVersion + "@" + hostName;
+                // スタンドアロンはWebUIポートがサーバーポート+1とは限らないので、両方をタイトルに出す。
+                if (Model.IsStandalone)
+                {
+                    if (Model.ServerPort > 0)
+                    {
+                        caption += " Client:" + Model.ServerPort;
+                    }
+                    if (Model.ServerInfo != null && Model.ServerInfo.RestApiPort > 0)
+                    {
+                        caption += " WebUI:" + Model.ServerInfo.RestApiPort;
+                    }
+                }
+                return caption;
             }
         }
         #endregion
@@ -225,6 +238,7 @@ namespace Amatsukaze.ViewModels
             modelListener.Add("IsScheduledSuspend", (_, __) => RaisePropertyChanged("RunningState"));
             modelListener.Add("ServerHostName", (_, __) => RaisePropertyChanged("WindowCaption"));
             modelListener.Add("ServerVersion", (_, __) => RaisePropertyChanged("WindowCaption"));
+            modelListener.Add("RestApiPort", (_, __) => RaisePropertyChanged("WindowCaption"));
             modelListener.Add("IsCurrentResultFail", (_, __) =>
             {
                 RaisePropertyChanged("StatusBackColor");

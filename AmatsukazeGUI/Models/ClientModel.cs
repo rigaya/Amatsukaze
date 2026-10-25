@@ -38,6 +38,9 @@ namespace Amatsukaze.Models
             public string ServerIP;
             [DataMember]
             public int ServerPort;
+            // スタンドアロンで前回待てたWebUIポート。使えなくなったらサーバー側で破棄される。
+            [DataMember]
+            public int RestApiPort;
             [DataMember]
             public byte[] windowPlacement;
             [DataMember]
@@ -1164,9 +1167,11 @@ namespace Amatsukaze.Models
         {
             var serverPort = appData?.ServerPort > 0 ? appData.ServerPort : ServerSupport.DEFAULT_PORT;
             var server = new EncodeServer(serverPort, new ClientAdapter(this), null);
+            server.PreferredRestPort = appData?.RestApiPort ?? 0;
             try
             {
                 await server.Init();
+                SaveRestPortIfChanged(server);
                 return server;
             }
             catch
@@ -1174,6 +1179,17 @@ namespace Amatsukaze.Models
                 server.Dispose();
                 throw;
             }
+        }
+
+        private void SaveRestPortIfChanged(EncodeServer server)
+        {
+            var actual = server.ActualRestApiPort;
+            if (actual <= 0 || appData == null || appData.RestApiPort == actual)
+            {
+                return;
+            }
+            appData.RestApiPort = actual;
+            SaveAppData();
         }
 
         public async Task Start()
@@ -1805,6 +1821,7 @@ namespace Amatsukaze.Models
                 serverInfo = data.ServerInfo;
                 RaisePropertyChanged("ServerHostName");
                 RaisePropertyChanged("ServerVersion");
+                RaisePropertyChanged(nameof(RestApiPort));
                 RaisePropertyChanged("IsServerLinux");
                 RaisePropertyChanged(nameof(IsServerWindows));
                 RaisePropertyChanged("FinishActionList");
