@@ -374,8 +374,9 @@ public:
 
     int64_t currentPos;
 
-    void readAll(const tstring& src, int serviceid);
-    void readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb);
+    // threadLimit > 0 のとき、デコードスレッド数は min(コア数, threadLimit) に収める。
+    void readAll(const tstring& src, int serviceid, int threadLimit = 0);
+    void readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb, int threadLimit = 0);
 
 protected:
     virtual void onFirstFrame(AVStream *videoStream, AVFrame* frame);;

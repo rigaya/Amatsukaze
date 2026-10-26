@@ -1038,13 +1038,14 @@ logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo
 logo::SimpleVideoReader::SimpleVideoReader(AMTContext& ctx)
     : AMTObject(ctx) {}
 
-void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid) {
+void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, int threadLimit) {
     readAll(src, serviceid,
         [&](AVStream *videoStream, AVFrame* frame) { onFirstFrame(videoStream, frame); },
-        [&](AVFrame* frame) { return onFrame(frame); });
+        [&](AVFrame* frame) { return onFrame(frame); },
+        threadLimit);
 }
 
-void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb) {
+void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb, int threadLimit) {
     using namespace av;
 
     InputContext inputCtx(src, nullptr, CP_UTF8);
@@ -1068,7 +1069,11 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
         const long value = std::strtol(text, &end, 10);
         return end == text || *end ? fallback : int(std::max(long(low), std::min(long(high), value)));
     };
-    const int decodeBudget = std::max(1, GetProcessorCount());
+    const int processorCount = std::max(1, GetProcessorCount());
+    // 解析並列数が指定されているときは、デコードもそのスレッド数を超えない。
+    const int decodeBudget = threadLimit > 0
+        ? std::max(1, std::min(processorCount, threadLimit))
+        : processorCount;
     // MPEG-2のGOP並列は明示指定で利用し、他の入力は従来経路を維持する。
     const int requestedDecoders = setting("AMT_LOGO_GOP_DECODERS", 1, 0, logo::kMaxLogoParallelDecoders);
     const int gopDecoders = requestedDecoders == 0 ? logo::GetPreferredLogoDecoderCount(decodeBudget) : requestedDecoders;
@@ -1115,7 +1120,7 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
         THROW(FormatException, "avcodec_parameters_to_context failed");
     }
     constexpr int kMaxLogoDecodeThreads = 8;
-    codecCtx()->thread_count = std::max(1, std::min(GetProcessorCount(), kMaxLogoDecodeThreads));
+    codecCtx()->thread_count = std::max(1, std::min(decodeBudget, kMaxLogoDecodeThreads));
     ctx.infoF(_T("[LogoScan] decoder threads: %d"), codecCtx()->thread_count);
     if (avcodec_open2(codecCtx(), pCodec, NULL) != 0) {
         THROW(FormatException, "avcodec_open2 failed");
@@ -5357,9 +5362,9 @@ namespace {
                 session->detect(onFirstFrame, onFrame, [&](AVFrame* frame) {
                     session->configure(frame, scanx, scany, scanw, scanh, detectScaleNum, detectScaleDen,
                         searchFrames, getAvailableSystemMemoryBytes());
-                });
+                }, threadN);
             } else {
-                readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame));
+                readAll(srcpath, serviceid, std::forward<FirstFrameCb>(onFirstFrame), std::forward<FrameCb>(onFrame), threadN);
             }
             // 入力終端がバッチ境界と一致しない場合も、最後の端数を集計する。
             if (pendingStats != nullptr) {

@@ -49,9 +49,9 @@ public:
 
     void detect(const SimpleVideoReader::FirstFrameCallback& first,
         const SimpleVideoReader::FrameCallback& frame,
-        const std::function<void(AVFrame*)>& configureCache) {
+        const std::function<void(AVFrame*)>& configureCache, int threadLimit = 0) {
         started = true;
-        decodeThread = std::thread([this, first, frame, configureCache]() {
+        decodeThread = std::thread([this, first, frame, configureCache, threadLimit]() {
             try {
                 reader.readAll(source, service,
                     [&](AVStream* stream, AVFrame* picture) {
@@ -81,7 +81,7 @@ public:
                             generate = generation;
                         }
                         return generate(picture, 0, 0, reader.currentPos);
-                    });
+                    }, threadLimit);
             } catch (...) {
                 std::lock_guard<std::mutex> lock(mutex);
                 error = std::current_exception();
