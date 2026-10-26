@@ -1,4 +1,5 @@
 ﻿#include "../../Amatsukaze/LogoGopDecoder.h"
+#include "../../Amatsukaze/LogoDecodeThreadPolicy.h"
 #include <cstdio>
 #include <string>
 extern "C" {
@@ -112,10 +113,10 @@ std::vector<Snapshot> Sequential(const Source& source, size_t start = 0) {
 }
 
 std::vector<Snapshot> Parallel(const Source& source, logo::LogoGopDecodeSettings settings, size_t start = 0,
-    int stopAt = 100000, int readErrorAt = -1, int frameErrorAt = -1) {
+    int stopAt = 100000, int readErrorAt = -1, int frameErrorAt = -1, logo::LogoGopDecodeReport* report = nullptr) {
     size_t next = start;
     std::vector<Snapshot> out;
-    logo::RunLogoGopDecode(source.parameters.get(), AVRational{1,25}, settings,
+    const auto result = logo::RunLogoGopDecode(source.parameters.get(), AVRational{1,25}, settings,
         [&](AVPacket* packet) {
             if (int(next) == readErrorAt) throw std::runtime_error("入力例外の検査");
             if (next >= source.packets.size()) return false;
@@ -126,12 +127,29 @@ std::vector<Snapshot> Parallel(const Source& source, logo::LogoGopDecodeSettings
             out.push_back(Copy(frame));
             return int(out.size()) < stopAt;
         });
+    if (report) *report = result;
     return out;
 }
 }
 
 int main() {
     try {
+        // CM解析と共通の配分規則を、代表的なCPU予算と上限・余りの境界で確認する。
+        struct Plan { int budget, decoders, threads; };
+        const Plan plans[] = {{1,1,1},{2,2,1},{4,4,1},{6,6,1},{8,8,1},{10,10,1},
+            {12,6,2},{14,7,2},{16,8,2},{20,10,2},{24,8,3},{32,8,4},{48,12,4},{64,8,8}};
+        for (const auto& plan : plans) {
+            const int count = logo::GetPreferredLogoDecoderCount(plan.budget);
+            CheckTest(count == plan.decoders, "自動配分のデコーダー数が異なる");
+            CheckTest(logo::GetLogoDecoderThreadCount(plan.budget, count) == plan.threads, "自動配分の内部スレッド数が異なる");
+        }
+        for (int budget = 1; budget <= 1024; budget++) {
+            const int count = logo::GetPreferredLogoDecoderCount(budget);
+            const int threads = logo::GetLogoDecoderThreadCount(budget, count);
+            CheckTest(count >= 1 && count <= std::min(budget,15), "デコーダー数が上限を超えた");
+            CheckTest(threads >= 1 && threads <= 8 && count * threads <= budget, "自動配分がCPU予算を超えた");
+        }
+        CheckTest(logo::GetPreferredLogoDecoderCount(0) == 1, "不明なCPU数を1へ補正していない");
         // 対応範囲外のフィールドピクチャーを、画素を出力する前に判別する。
         for (int structure : {1,2,3}) {
             Packet packet(av_packet_alloc(), PacketDeleter());
@@ -145,6 +163,14 @@ int main() {
             logo::LogoGopDecodeSettings originalSettings;
             originalSettings.gopsPerJob = 1;
             CheckTest(Parallel(source, originalSettings) == Sequential(source), "元の表示PTSと画素が一致しない");
+            // 固定フレーム数の指定時は、MiBの目安を極端に小さくしても8 GOPの割り当てを維持する。
+            logo::LogoGopDecodeSettings fixedFrames;
+            fixedFrames.gopsPerJob = 8;
+            fixedFrames.outputQueueDepth = 60;
+            fixedFrames.frameBufferBytes = 1;
+            logo::LogoGopDecodeReport fixedReport;
+            CheckTest(Parallel(source, fixedFrames, 0, 100000, -1, -1, &fixedReport) == Sequential(source), "固定バッファの画素・順序が異なる");
+            CheckTest(fixedReport.jobs == 2, "固定フレーム数指定時にMiBでGOP長が短縮された");
             for (int timestamps = 0; timestamps < 3; timestamps++) {
                 for (size_t i = 0; i < source.packets.size(); i++) {
                     // 画素の選別にtimestampを使わないことを、欠落・重複・wrap相当の値で確認する。

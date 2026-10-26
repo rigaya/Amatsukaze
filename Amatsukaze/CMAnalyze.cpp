@@ -16,6 +16,7 @@
 #include <thread>
 #include "CMAnalyze.h"
 #include "AMTSource.h"
+#include "LogoDecodeThreadPolicy.h"
 
 namespace {
 
@@ -397,24 +398,7 @@ std::string CMAnalyze::makePreamble() {
 }
 
 int CMAnalyze::getPreferredThreads(const int processorCount) const {
-    static const int MAX_THREADS = 15;
-    std::array<std::pair<int, int>, MAX_THREADS+1> tmp;
-    tmp[0] = std::make_pair(0, std::numeric_limits<int>::max()); // 0並列は無視
-    for (int i = 1; i <= MAX_THREADS; i++) {
-        const int decodeThreads = processorCount / i;
-        tmp[i] = std::make_pair(i, 
-            (processorCount % i /*割り切れない余り*/) +
-            std::max(0, decodeThreads - 4 /*デコードスレッドが多くてもあまり意味がない*/));
-    }
-    std::sort(tmp.begin(), tmp.end(), [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
-        const int bestThreads = 8;
-        if (a.second != b.second) return a.second < b.second;
-        const int da = std::abs(a.first - bestThreads);
-        const int db = std::abs(b.first - bestThreads);
-        if (da != db) return da < db;
-        return a.first < b.first;
-    });
-    return std::max(tmp[0].first, 1);
+    return logo::GetPreferredLogoDecoderCount(processorCount);
 }
 
 void CMAnalyze::logoFrame(const int serviceId, const int videoFileIndex, const VideoFormat& inputFormat, const int numFrames, const tstring& avspath) {

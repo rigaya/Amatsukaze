@@ -9,6 +9,7 @@
 #include "LogoScan.h"
 #include "LogoDecodeSession.h"
 #include "LogoGopDecoder.h"
+#include "LogoDecodeThreadPolicy.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
 #include "LogoRoiCache.h"
@@ -1067,18 +1068,20 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
         const long value = std::strtol(text, &end, 10);
         return end == text || *end ? fallback : int(std::max(long(low), std::min(long(high), value)));
     };
-    const int decodeThreads = std::max(1, std::min(GetProcessorCount(), 8));
+    const int decodeBudget = std::max(1, GetProcessorCount());
     // MPEG-2のGOP並列は明示指定で利用し、他の入力は従来経路を維持する。
-    const int gopDecoders = setting("AMT_LOGO_GOP_DECODERS", 1, 1, 8);
+    const int requestedDecoders = setting("AMT_LOGO_GOP_DECODERS", 1, 0, logo::kMaxLogoParallelDecoders);
+    const int gopDecoders = requestedDecoders == 0 ? logo::GetPreferredLogoDecoderCount(decodeBudget) : requestedDecoders;
     if (vcodecId == AV_CODEC_ID_MPEG2VIDEO && gopDecoders > 1
         && videoStream->codecpar->format >= 0 && videoStream->codecpar->width > 0 && videoStream->codecpar->height > 0) {
         LogoGopDecodeSettings config;
         config.decoders = gopDecoders;
-        config.threadsPerDecoder = setting("AMT_LOGO_GOP_THREADS", std::max(1, decodeThreads / gopDecoders), 1, 8);
-        config.gopsPerJob = setting("AMT_LOGO_GOPS_PER_JOB", 8, 1, 128);
+        config.threadsPerDecoder = setting("AMT_LOGO_GOP_THREADS", logo::GetLogoDecoderThreadCount(decodeBudget, gopDecoders), 1, 8);
+        config.gopsPerJob = setting("AMT_LOGO_GOPS_PER_JOB", config.gopsPerJob, 1, 128);
+        config.outputQueueDepth = setting("AMT_LOGO_GOP_BUFFER_FRAMES", config.outputQueueDepth, 0, 4096);
         config.frameBufferBytes = size_t(setting("AMT_LOGO_GOP_BUFFER_MIB", 2048, 64, 4096)) << 20;
-        ctx.infoF(_T("[LogoScan] GOP decode: decoders=%d threadsPerDecoder=%d gopsPerJob=%d bufferMiB=%d"),
-            config.decoders, config.threadsPerDecoder, config.gopsPerJob, int(config.frameBufferBytes >> 20));
+        ctx.infoF(_T("[LogoScan] GOP decode: decoders=%d threadsPerDecoder=%d gopsPerJob=%d bufferMiB=%d bufferFrames=%d"),
+            config.decoders, config.threadsPerDecoder, config.gopsPerJob, int(config.frameBufferBytes >> 20), config.outputQueueDepth);
         bool firstFrame = true;
         // demuxの先行中も、初回通知のフレームレート情報を固定して渡す。
         AVStream firstStream = *videoStream;

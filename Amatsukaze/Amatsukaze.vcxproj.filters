@@ -72,6 +72,9 @@
     <ClInclude Include="LogoGopDecoder.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="LogoDecodeThreadPolicy.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Mpeg2TsParser.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

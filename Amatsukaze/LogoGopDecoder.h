@@ -8,6 +8,7 @@
 #include <deque>
 #include <exception>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -27,7 +28,7 @@ struct LogoGopDecodeSettings {
     int decoders = 4;
     int threadsPerDecoder = 1;
     int gopsPerJob = 8;
-    int outputQueueDepth = 0;
+    int outputQueueDepth = 100;
     size_t frameBufferBytes = size_t(2048) << 20;
 };
 
@@ -274,7 +275,9 @@ inline LogoGopDecodeReport RunLogoGopDecode(const AVCodecParameters* parameters,
     for (int i = 0; i < settings.decoders; i++) permits.push(0);
     const int imageBytes = av_image_get_buffer_size(AVPixelFormat(parameters->format), parameters->width, parameters->height, 32);
     if (imageBytes <= 0) throw std::invalid_argument("GOP並列復号の画像サイズが不正");
-    const size_t packetsPerJob = std::max(size_t(1), settings.frameBufferBytes / size_t(settings.decoders) / size_t(imageBytes));
+    // フレーム数を明示した場合はGOP長と独立に制限し、MiBによるジョブ短縮を行わない。
+    const size_t packetsPerJob = settings.outputQueueDepth > 0 ? std::numeric_limits<size_t>::max()
+        : std::max(size_t(1), settings.frameBufferBytes / size_t(settings.decoders) / size_t(imageBytes));
     std::vector<std::unique_ptr<Queue<std::shared_ptr<Job>>>> inputs;
     std::vector<Codec> codecs;
     std::vector<std::thread> workers;
