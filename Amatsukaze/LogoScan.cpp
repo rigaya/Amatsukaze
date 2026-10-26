@@ -5441,8 +5441,7 @@ namespace {
             pass2.corr0.clear();
             pass2.corr1.clear();
             if (hasStoredRoiCache()) {
-                runStoredRoiPassWithProgress(2, 0.65f, 0.35f, 0.53f, 0.12f,
-                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, nullptr, &pass2); });
+                runStoredRoiCorrelationPass(pass2);
             } else {
                 runFramePassWithProgress(srcpath, 2, 0.65f, 0.35f, 0.53f, 0.12f,
                     [&](AVStream *videoStream, AVFrame* frame) { processFirstFrame(videoStream, frame, nullptr, &pass2); },
@@ -6879,29 +6878,98 @@ namespace {
             return pass2.logoScan->AddFrameYOnlyNeutralUV(srcY + offY, pitchY, inputBitDepth) ? 1 : 0;
         }
 
-        // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
-        template<typename pixel_t>
-        int addFramePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv, Pass2Buffers& pass2) {
-            // 仮ロゴが未構築なら何もしない。
-            if (!pass2.deintLogo || !pass2.deintLogo->isValid()) {
-                return 0;
+        void runStoredRoiCorrelationPass(Pass2Buffers& pass2) {
+            if (threadN <= 1 || !pass2.deintLogo || !pass2.deintLogo->isValid()) {
+                runStoredRoiPassWithProgress(2, 0.65f, 0.35f, 0.53f, 0.12f,
+                    [&](const uint8_t* frameY) { return processStoredFrame(frameY, nullptr, &pass2); });
+                return;
             }
+            // 通知間隔を維持しつつ、ワーカー起動・完了待ちを32フレームでまとめる。
+            constexpr int kFrameBatch = 32;
+            constexpr int kProgressInterval = 8;
+            struct EvaluationBuffers {
+                std::vector<float> deint;
+                std::vector<float> work;
+            };
+            std::vector<EvaluationBuffers> buffers(std::min(threadN, kFrameBatch));
+            std::vector<std::vector<uint8_t>> replayFrames(kFrameBatch);
+            std::vector<const uint8_t*> frames(kFrameBatch);
+            pass2.corr0.resize(roiCacheStoredFrames);
+            pass2.corr1.resize(roiCacheStoredFrames);
+            setProgressPlan(2, 0.65f, 0.35f, 0.53f, 0.12f);
+            if (!reportProgressInCurrentPlan(0.0f, 0, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+            readFrames = 0;
+            for (int start = 0; start < roiCacheStoredFrames; start += kFrameBatch) {
+                const int count = std::min(kFrameBatch, roiCacheStoredFrames - start);
+                for (int i = 0; i < count; i++) {
+                    frames[i] = getStoredRoiFramePointer(start + i);
+                    if (!frames[i]) {
+                        // ファイル位置は呼び出し元だけが更新し、読み込み完了後に共有する。
+                        if (!readStoredRoiFrame(start + i, replayFrames[i])) {
+                            THROW(IOException, "failed to read ROI cache frame");
+                        }
+                        frames[i] = replayFrames[i].data();
+                    }
+                }
+                const int slots = std::min((int)buffers.size(), count);
+                threadPool.run(slots, [&](const int firstSlot, const int lastSlot) {
+                    // スロットの作業領域は排他的に使い、結果は元のフレーム順に保存する。
+                    for (int slot = firstSlot; slot < lastSlot; slot++) {
+                        auto& buffer = buffers[slot];
+                        const int begin = count * slot / slots;
+                        const int end = count * (slot + 1) / slots;
+                        for (int i = begin; i < end; i++) {
+                            evaluatePass2Correlation(frames[i], scanw, (uint8_t)255, pass2,
+                                buffer.deint, buffer.work, pass2.corr0[start + i], pass2.corr1[start + i]);
+                        }
+                    }
+                }, 1);
+                // 全ワーカー停止後に通知するため、キャンセル時も共有バッファを安全に破棄できる。
+                for (int done = start + kProgressInterval; done <= start + count; done += kProgressInterval) {
+                    readFrames = done;
+                    if (!reportProgressInCurrentPlan(readFrames / (float)searchFrames, readFrames, searchFrames)) {
+                        THROW(RuntimeException, "Cancel requested");
+                    }
+                }
+                readFrames = start + count;
+            }
+            if (!reportProgressInCurrentPlan(1.0f, readFrames, searchFrames)) {
+                THROW(RuntimeException, "Cancel requested");
+            }
+        }
+
+        // 共有する仮ロゴは読み取り専用とし、作業領域と出力先を呼び出し側で分離する。
+        template<typename pixel_t>
+        void evaluatePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv, Pass2Buffers& pass2,
+            std::vector<float>& evalDeint, std::vector<float>& evalWork, float& corr0, float& corr1) {
             // ワークバッファを必要サイズへ拡張し、Y面をdeintする。
             const int w = pass2.deintLogo->getWidth();
             const int h = pass2.deintLogo->getHeight();
             const int required = w * h + 8;
-            if ((int)pass2.evalDeint.size() < required) {
-                pass2.evalDeint.resize(required, 0.0f);
+            if ((int)evalDeint.size() < required) {
+                evalDeint.resize(required, 0.0f);
             }
-            if ((int)pass2.evalWork.size() < required) {
-                pass2.evalWork.resize(required, 0.0f);
+            if ((int)evalWork.size() < required) {
+                evalWork.resize(required, 0.0f);
             }
             const int off = pass2.logoRectLocal.x + pass2.logoRectLocal.y * pitchY;
-            logo::DeintY(pass2.evalDeint.data(), srcY + off, pitchY, w, h);
+            logo::DeintY(evalDeint.data(), srcY + off, pitchY, w, h);
             // alpha=0/1 の相関を評価し、後段のロゴ有無推定用に保存する。
             const float maxvf = (float)maxv;
-            const float corr0 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 0.0f, pass2.evalWork.data());
-            const float corr1 = pass2.deintLogo->EvaluateLogo(pass2.evalDeint.data(), maxvf, 1.0f, pass2.evalWork.data());
+            corr0 = pass2.deintLogo->EvaluateLogo(evalDeint.data(), maxvf, 0.0f, evalWork.data());
+            corr1 = pass2.deintLogo->EvaluateLogo(evalDeint.data(), maxvf, 1.0f, evalWork.data());
+        }
+
+        // pass2専用: 仮ロゴ(EvaluateLogo)の相関値を1フレーム分だけ記録する。
+        template<typename pixel_t>
+        int addFramePass2Correlation(const pixel_t* srcY, const int pitchY, const pixel_t maxv, Pass2Buffers& pass2) {
+            if (!pass2.deintLogo || !pass2.deintLogo->isValid()) {
+                return 0;
+            }
+            float corr0, corr1;
+            evaluatePass2Correlation(srcY, pitchY, maxv, pass2, pass2.evalDeint, pass2.evalWork, corr0, corr1);
             pass2.corr0.push_back(corr0);
             pass2.corr1.push_back(corr1);
             return 0;
