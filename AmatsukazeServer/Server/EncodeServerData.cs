@@ -307,6 +307,9 @@ namespace Amatsukaze.Server
         public EncoderFilterAfsPreset AfsPreset;
         [DataMember]
         public EncoderFilterKfmMode KfmMode;
+        // vpp-kfm の ucf。既定は off
+        [DataMember]
+        public bool KfmEnableUcf;
         [DataMember]
         public EncoderFilterDeintMode NnediMode;
         [DataMember]
@@ -849,7 +852,9 @@ namespace Amatsukaze.Server
                             case EncoderFilterKfmMode.Fps24: kfmMode = "24"; break;
                             default: kfmMode = "vfr"; break;
                         }
-                        options.Add("--vpp-kfm mode=" + kfmMode);
+                        // チェックで ucf=on、未チェックで ucf=off（既定はoff）
+                        options.Add("--vpp-kfm mode=" + kfmMode +
+                            ",ucf=" + (s.KfmEnableUcf ? "on" : "off"));
                         break;
                     case EncoderFilterDeinterlace.NNEDI:
                         options.Add("--vpp-nnedi field=" +

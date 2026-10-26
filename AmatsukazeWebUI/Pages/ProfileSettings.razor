@@ -399,6 +399,13 @@ else
                                         }
                                     </select>
                                 }
+                                @if (IsEncoderKfm())
+                                {
+                                    <label style="margin-left: 8px;" title="@EncoderFilterHelp.KfmUcf">
+                                        <input type="checkbox" checked="@GetEncoderFilterBool("KfmEnableUcf")" @onchange="@(e => OnEncoderFilterBoolChanged(e, "KfmEnableUcf"))" disabled="@(!GetEncoderFilterBool("EnableDeinterlace"))" />
+                                        ucf
+                                    </label>
+                                }
                             </div>
                         </fieldset>
                         <fieldset class="profile-filter-panel">
@@ -2038,6 +2045,11 @@ else
     private bool HasEncoderDeinterlaceParam()
     {
         return GetEncoderDeinterlaceParamName().Length > 0;
+    }
+
+    private bool IsEncoderKfm()
+    {
+        return GetEncoderFilterEnumString("DeinterlaceAlgorithm", _encoderDeinterlaceEnumNames) == "KFM";
     }
 
     private IEnumerable<(string Value, string Label, bool Selected)> GetEncoderDeinterlaceParamOptions()

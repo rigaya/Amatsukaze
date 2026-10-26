@@ -32,6 +32,10 @@
                           SelectedIndex="{Binding KfmModeIndex, Mode=TwoWay}"
                           Visibility="{Binding KfmModeVisible, Converter={StaticResource BoolVisibilityConverter}}"
                           ToolTip="{Binding DeinterlaceParamToolTip}" ToolTipService.ShowOnDisabled="True"/>
+                <CheckBox Margin="8,0,0,0" VerticalAlignment="Center" Content="ucf"
+                          IsChecked="{Binding KfmEnableUcf, Mode=TwoWay}"
+                          Visibility="{Binding KfmModeVisible, Converter={StaticResource BoolVisibilityConverter}}"
+                          ToolTip="{Binding KfmUcfToolTip}" ToolTipService.ShowOnDisabled="True"/>
                 <ComboBox Width="120" Height="22" Margin="6,0,0,0" ItemsSource="{Binding DeintModeList}"
                           SelectedIndex="{Binding DeintModeIndex, Mode=TwoWay}"
                           Visibility="{Binding DeintModeVisible, Converter={StaticResource BoolVisibilityConverter}}"

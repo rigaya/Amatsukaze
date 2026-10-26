@@ -1218,6 +1218,7 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged("AfsPresetIndex");
                 RaisePropertyChanged("KfmModeVisible");
                 RaisePropertyChanged("KfmModeIndex");
+                RaisePropertyChanged("KfmEnableUcf");
                 RaisePropertyChanged("DeintModeVisible");
                 RaisePropertyChanged("DeintModeIndex");
                 RaisePropertyChanged("DeinterlaceAlgorithmToolTip");
@@ -1258,6 +1259,20 @@ namespace Amatsukaze.Models
                 RaisePropertyChanged();
             }
         }
+
+        // vpp-kfm の ucf。既定は off
+        public bool KfmEnableUcf
+        {
+            get { return Data.KfmEnableUcf; }
+            set
+            {
+                if (Data.KfmEnableUcf == value) return;
+                Data.KfmEnableUcf = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public string KfmUcfToolTip { get { return EncoderFilterHelp.KfmUcf; } }
 
         // nnedi/yadif/bwdifは選択肢が同じnormal/bobなので1つのComboBoxを共用する
         public bool DeintModeVisible

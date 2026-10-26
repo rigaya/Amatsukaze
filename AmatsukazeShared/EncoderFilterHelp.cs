@@ -84,6 +84,12 @@
             }
         }
 
+        // vpp-kfm の ucf
+        public const string KfmUcf =
+            "UCFを有効にします (--vpp-kfm の ucf)。\n" +
+            "汚いフレーム/フィールドを見つけて、きれいなフレーム/フィールドを残します。\n" +
+            "チェックで ucf=on、未チェックで ucf=off を指定します。既定は off です。";
+
         // ノイズ除去
         public const string Denoise =
             "ノイズ除去フィルタを有効にします。\n" +
