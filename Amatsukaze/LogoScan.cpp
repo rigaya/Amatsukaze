@@ -8,6 +8,7 @@
 
 #include "LogoScan.h"
 #include "LogoDecodeSession.h"
+#include "LogoGopDecoder.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
 #include "LogoRoiCache.h"
@@ -1057,6 +1058,54 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
     const AVCodec *pCodec = avcodec_find_decoder(vcodecId);
     if (pCodec == NULL) {
         THROW(FormatException, "Could not find decoder ...");
+    }
+    // GOP並列の検証と比較用に、単一デコーダーへ戻す設定も用意する。
+    auto setting = [](const char* name, int fallback, int low, int high) {
+        const char* text = std::getenv(name);
+        if (!text || !*text) return fallback;
+        char* end = nullptr;
+        const long value = std::strtol(text, &end, 10);
+        return end == text || *end ? fallback : int(std::max(long(low), std::min(long(high), value)));
+    };
+    const int decodeThreads = std::max(1, std::min(GetProcessorCount(), 8));
+    // MPEG-2のGOP並列は明示指定で利用し、他の入力は従来経路を維持する。
+    const int gopDecoders = setting("AMT_LOGO_GOP_DECODERS", 1, 1, 8);
+    if (vcodecId == AV_CODEC_ID_MPEG2VIDEO && gopDecoders > 1
+        && videoStream->codecpar->format >= 0 && videoStream->codecpar->width > 0 && videoStream->codecpar->height > 0) {
+        LogoGopDecodeSettings config;
+        config.decoders = gopDecoders;
+        config.threadsPerDecoder = setting("AMT_LOGO_GOP_THREADS", std::max(1, decodeThreads / gopDecoders), 1, 8);
+        config.gopsPerJob = setting("AMT_LOGO_GOPS_PER_JOB", 8, 1, 128);
+        config.frameBufferBytes = size_t(setting("AMT_LOGO_GOP_BUFFER_MIB", 2048, 64, 4096)) << 20;
+        ctx.infoF(_T("[LogoScan] GOP decode: decoders=%d threadsPerDecoder=%d gopsPerJob=%d bufferMiB=%d"),
+            config.decoders, config.threadsPerDecoder, config.gopsPerJob, int(config.frameBufferBytes >> 20));
+        bool firstFrame = true;
+        // demuxの先行中も、初回通知のフレームレート情報を固定して渡す。
+        AVStream firstStream = *videoStream;
+        try {
+            const auto report = RunLogoGopDecode(videoStream->codecpar, videoStream->time_base, config,
+                [&](AVPacket* packet) {
+                    while (av_read_frame(inputCtx(), packet) == 0) {
+                        if (packet->stream_index == videoStream->index) return true;
+                        av_packet_unref(packet);
+                    }
+                    return false;
+                }, [&](AVFrame* frame, int64_t position) {
+                    currentPos = position;
+                    if (firstFrame) {
+                        if (onFirstFrameCb) onFirstFrameCb(&firstStream, frame);
+                        firstFrame = false;
+                    }
+                    return !onFrameCb || onFrameCb(frame);
+                });
+            ctx.infoF(_T("[LogoScan] GOP decode completed: jobs=%lld packets=%lld frames=%lld prerollPackets=%lld"),
+                (long long)report.jobs, (long long)report.packets, (long long)report.frames, (long long)report.prerollPackets);
+        } catch (const Exception&) {
+            throw;
+        } catch (const std::exception& error) {
+            THROWF(FormatException, "GOP parallel decode failed: %s", error.what());
+        }
+        return;
     }
     CodecContext codecCtx(pCodec);
     if (avcodec_parameters_to_context(codecCtx(), videoStream->codecpar) != 0) {

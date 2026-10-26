@@ -80,6 +80,8 @@ AmatsukazeGenLogo -i input.ts -o output.lgd --debug-dir ./debug_logo
 ## 備考
 
 - 動画デコーダのスレッド数は論理コア数から自動設定し、1～8に制限する
+- MPEG-2では環境変数 `AMT_LOGO_GOP_DECODERS=4` でGOP並列復号を利用できる。既定値の `1` は従来経路。初期走査と初期ロゴ生成の両方に適用する。
+- GOP並列復号は既定で各デコーダーに全体のスレッド数を分配し、1ジョブを最大8 GOP、出力画像の保持量を目安2GiBまでとして構成する。`AMT_LOGO_GOP_THREADS`、`AMT_LOGO_GOPS_PER_JOB`、`AMT_LOGO_GOP_BUFFER_MIB` で比較・調整できる。内部の参照画像や大きな1 GOPなどによって保持量の目安は超える場合がある。設計と制約は `LogoGopDecoder.txt` を参照。
 - 背景推定と再走査時の統計の再利用は、自動ロゴ枠検出の並列数によらず行う（メモリ不足などでキャッシュを利用できない場合を除く）
 - 8bit入力で背景キャッシュと非加重統計が揃っている場合、重みが常に1となる画素の再重み付け走査を省く。比較・調査時は環境変数 `AMT_LOGO_REWEIGHT_SKIP_FIXED=0` で従来の全画素走査に戻せる。
 - service id は TS の program/service 情報から自動解決する

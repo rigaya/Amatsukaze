@@ -62,3 +62,13 @@ test('TrimAdjustAudioTests', trim_adjust_audio_tests,
   suite : 'native',
   timeout : 30,
 )
+
+logo_gop_decoder_tests = executable('LogoGopDecoderTests',
+  'LogoGopDecoderTests.cpp',
+  dependencies : ffmpeg_dep + [dependency('threads')],
+  install : false,
+)
+test('LogoGopDecoderTests', logo_gop_decoder_tests,
+  suite : 'native',
+  timeout : 60,
+)

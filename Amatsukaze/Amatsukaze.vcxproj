@@ -466,6 +466,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClInclude Include="JpegCompress.h" />
     <ClInclude Include="LogoScan.h" />
     <ClInclude Include="LogoDecodeSession.h" />
+    <ClInclude Include="LogoGopDecoder.h" />
     <ClInclude Include="Mpeg2TsParser.h" />
     <ClInclude Include="Mpeg2PartialEncode.h" />
     <ClInclude Include="Mpeg2VideoParser.h" />
