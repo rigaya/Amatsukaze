@@ -193,7 +193,7 @@ namespace Amatsukaze.ViewModels
             SelectableProfile.Add(new CollectionContainer() { Collection = ProfileList });
 
             queueListener = new CollectionItemListener<DisplayQueueItem>(Model.QueueItems,
-                item => item.PropertyChanged += QueueItemPropertyChanged,
+                item => { trimAdjustStates[item.Model.Id] = item.Model.State; item.PropertyChanged += QueueItemPropertyChanged; },
                 item => item.PropertyChanged -= QueueItemPropertyChanged);
 
             queueListener2 = new CollectionChangedEventListener(Model.QueueItems,
@@ -260,10 +260,20 @@ namespace Amatsukaze.ViewModels
                 (SearchChecks[2].Value && item.Model.Profile.Name.IndexOf(_SearchWord) != -1);
         }
 
+        private readonly Dictionary<int, QueueState> trimAdjustStates = new Dictionary<int, QueueState>();
+
         private void QueueItemPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (string.IsNullOrEmpty(e.PropertyName))
             {
+                var item = (DisplayQueueItem)sender;
+                if (trimAdjustStates.TryGetValue(item.Model.Id, out var previous) &&
+                    previous != QueueState.Complete && item.Model.State == QueueState.Complete &&
+                    item.Model.Mode == ProcMode.TrimAdjust)
+                {
+                    TryOpenWebTrimAdjust(item.Model.Id);
+                }
+                trimAdjustStates[item.Model.Id] = item.Model.State;
                 ItemStateUpdated();
             }
         }
@@ -746,7 +756,7 @@ namespace Amatsukaze.ViewModels
         {
             return item != null &&
                 item.Model != null &&
-                (item.Model.Mode == ProcMode.Batch || item.Model.Mode == ProcMode.AutoBatch || item.Model.Mode == ProcMode.CMCheck) &&
+                (item.Model.Mode == ProcMode.Batch || item.Model.Mode == ProcMode.AutoBatch || (item.Model.Mode == ProcMode.CMCheck || item.Model.Mode == ProcMode.TrimAdjust)) &&
                 item.Model.State == QueueState.Complete;
         }
 
@@ -1074,7 +1084,7 @@ namespace Amatsukaze.ViewModels
             }
 
             // CM解析のみの実行
-            if (item.Model.Mode == ProcMode.CMCheck)
+            if ((item.Model.Mode == ProcMode.CMCheck || item.Model.Mode == ProcMode.TrimAdjust))
             {
                 MessageBox.Show("CM解析のみの実行です。出力ファイルはありません。");
                 return;

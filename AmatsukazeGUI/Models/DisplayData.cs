@@ -262,6 +262,7 @@ namespace Amatsukaze.Models
                     case QueueState.Encoding:
                         switch (Model.Mode)
                         {
+                            case ProcMode.TrimAdjust:
                             case ProcMode.CMCheck:
                                 return "CM解析中→" + (Model.ConsoleId + 1);
                             case ProcMode.DrcsCheck:
@@ -325,20 +326,7 @@ namespace Amatsukaze.Models
         {
             get
             {
-                switch (Model.Mode)
-                {
-                    case ProcMode.AutoBatch:
-                        return "自動追加";
-                    case ProcMode.Batch:
-                        return "通常";
-                    case ProcMode.Test:
-                        return "テスト";
-                    case ProcMode.DrcsCheck:
-                        return "DRCSチェック";
-                    case ProcMode.CMCheck:
-                        return "CM解析";
-                }
-                return "不明モード";
+                return Amatsukaze.Shared.QueueSettingExtensions.GetProcModeDisplay((Amatsukaze.Shared.ProcMode)Model.Mode);
             }
         }
 

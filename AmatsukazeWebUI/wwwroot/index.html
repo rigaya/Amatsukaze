@@ -28,6 +28,9 @@
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
+        window.openTrimAdjustAutomatically = function (url) {
+            return window.open(url, "_blank") !== null;
+        };
         window.amatsukazeDnd = {
             lastDropIndex: -1,
             lastDropId: -999,

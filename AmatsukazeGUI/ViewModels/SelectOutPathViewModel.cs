@@ -246,6 +246,16 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
+        public ViewModelCommand TrimAdjustCommand => new ViewModelCommand(TrimAdjust);
+
+        private async void TrimAdjust()
+        {
+            if (!GetProfileName()) return;
+            Item.Mode = ProcMode.TrimAdjust;
+            Succeeded = true;
+            await Messenger.RaiseAsync(new WindowActionMessage(WindowAction.Close, "Close"));
+        }
+
         #region SelectedProfile変更通知プロパティ
         private object _SelectedProfile;
 

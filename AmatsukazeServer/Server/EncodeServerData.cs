@@ -1555,6 +1555,7 @@ namespace Amatsukaze.Server
         Test,
         DrcsCheck,
         CMCheck,
+        TrimAdjust,
     }
 
     [DataContract]
@@ -1603,7 +1604,7 @@ namespace Amatsukaze.Server
         public List<string> Tags { get; set; }
 
         public bool IsBatch { get { return Mode == ProcMode.Batch || Mode == ProcMode.AutoBatch; } }
-        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode == ProcMode.CMCheck; } }
+        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || (Mode == ProcMode.CMCheck || Mode == ProcMode.TrimAdjust); } }
     }
 
     public enum QueueState
@@ -1750,7 +1751,7 @@ namespace Amatsukaze.Server
         }
 
         public bool IsBatch { get { return Mode == ProcMode.Batch || Mode == ProcMode.AutoBatch; } }
-        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode == ProcMode.CMCheck; } }
+        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || (Mode == ProcMode.CMCheck || Mode == ProcMode.TrimAdjust); } }
         public bool IsTest { get { return Mode == ProcMode.Test; } }
 
         /// <summary>

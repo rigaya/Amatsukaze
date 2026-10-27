@@ -2065,7 +2065,7 @@ namespace Amatsukaze.Server
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
             string inHandle, string outHandle, int pid)
         {
-            if (mode != ProcMode.CMCheck && mode != ProcMode.DrcsCheck && profile != null)
+            if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
             {
                 CheckDoubleDeinterlace(profile);
             }
@@ -2081,7 +2081,7 @@ namespace Amatsukaze.Server
                 loadV2 = true;
             }
 
-            if (mode == ProcMode.CMCheck)
+            if ((mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust))
             {
                 sb.Append(" --mode cm");
             }
@@ -2166,7 +2166,7 @@ namespace Amatsukaze.Server
                     .Append(outputMask);
 
 
-                if (mode == ProcMode.CMCheck)
+                if ((mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust))
                 {
                     sb.Append(" --chapter");
                 }
@@ -2417,7 +2417,7 @@ namespace Amatsukaze.Server
                         }
 
                     }
-                } // if (mode != ProcMode.CMCheck)
+                } // if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust))
 
                 if (!profile.DisableSubs)
                 {
@@ -2563,7 +2563,7 @@ namespace Amatsukaze.Server
                         sb.Append(setting.NumParallelLogoAnalysis);
                     }
                 }
-                if (profile.NoRemoveTmp)
+                if (profile.NoRemoveTmp || mode == ProcMode.TrimAdjust)
                 {
                     sb.Append(" --no-remove-tmp");
                 }

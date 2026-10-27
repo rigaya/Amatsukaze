@@ -847,7 +847,7 @@ namespace Amatsukaze.Server
                 {
                     throw new InvalidOperationException("完了していないキューアイテムは再投入できません");
                 }
-                if (sourceItem.Mode != ProcMode.CMCheck && !sourceItem.IsBatch)
+                if ((sourceItem.Mode != ProcMode.CMCheck && sourceItem.Mode != ProcMode.TrimAdjust) && !sourceItem.IsBatch)
                 {
                     throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
                 }

@@ -1009,7 +1009,7 @@ namespace Amatsukaze.Server.Rest
                     Children = null
                 }).ToList(),
                 GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList(),
-                CanTrimAdjust = (item.Mode == ProcMode.Batch || item.Mode == ProcMode.AutoBatch || item.Mode == ProcMode.CMCheck) && item.State == QueueState.Complete
+                CanTrimAdjust = (item.Mode == ProcMode.Batch || item.Mode == ProcMode.AutoBatch || (item.Mode == ProcMode.CMCheck || item.Mode == ProcMode.TrimAdjust)) && item.State == QueueState.Complete
             };
         }
 
@@ -1022,6 +1022,7 @@ namespace Amatsukaze.Server.Rest
                 case QueueState.Encoding:
                     switch (item.Mode)
                     {
+                        case ProcMode.TrimAdjust:
                         case ProcMode.CMCheck:
                             return "CM解析中→" + (item.ConsoleId + 1);
                         case ProcMode.DrcsCheck:

@@ -9,7 +9,8 @@ namespace Amatsukaze.Shared
             ProcMode.Batch,
             ProcMode.Test,
             ProcMode.DrcsCheck,
-            ProcMode.CMCheck
+            ProcMode.CMCheck,
+            ProcMode.TrimAdjust
         };
 
         public static IReadOnlyList<int> PriorityList { get; } = new[] { 1, 2, 3, 4, 5 };
@@ -26,6 +27,8 @@ namespace Amatsukaze.Shared
                     return "DRCSチェック";
                 case ProcMode.CMCheck:
                     return "CM解析";
+                case ProcMode.TrimAdjust:
+                    return "カット調整";
                 case ProcMode.AutoBatch:
                     return "自動追加";
                 default:

@@ -8,7 +8,8 @@ namespace Amatsukaze.Shared
         AutoBatch,
         Test,
         DrcsCheck,
-        CMCheck
+        CMCheck,
+        TrimAdjust
     }
 
     public class AddQueueItem

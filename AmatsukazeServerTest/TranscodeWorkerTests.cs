@@ -14,10 +14,12 @@ public class TranscodeWorkerTests
         Assert.Equal("output/program-enc.log", TranscodeWorker.GetOutputLogPath(mode, "output/program", false, false));
     }
 
-    [Fact]
-    public void CM解析は出力先にCMログを生成する()
+    [Theory]
+    [InlineData(ProcMode.CMCheck)]
+    [InlineData(ProcMode.TrimAdjust)]
+    public void CM解析は出力先にCMログを生成する(ProcMode mode)
     {
-        Assert.Equal("output/program-cm.log", TranscodeWorker.GetOutputLogPath(ProcMode.CMCheck, "output/program", false, true));
+        Assert.Equal("output/program-cm.log", TranscodeWorker.GetOutputLogPath(mode, "output/program", false, true));
     }
 
     [Fact]

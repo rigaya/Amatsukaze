@@ -124,6 +124,12 @@
             </TextBlock>
         </Button>
 
+        <Button Margin="2" Height="Auto" Command="{Binding TrimAdjustCommand, Mode=OneWay}">
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap">
+                <Run FontSize="20" Text="カット調整"/><LineBreak/><Run Text="CM解析後、一時ファイルを残してカット調整画面を開きます。"/>
+            </TextBlock>
+        </Button>
+
         <Button Margin="2" Height="50" >
             <i:Interaction.Triggers>
                 <i:EventTrigger EventName="Click">

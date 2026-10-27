@@ -1,0 +1,85 @@
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IDisposable
+
+@code {
+    private readonly CancellationTokenSource cancellation = new();
+    private Dictionary<int, QueueItemView>? items;
+    private long version;
+
+    protected override void OnInitialized()
+    {
+        _ = WatchAsync();
+    }
+
+    private async Task WatchAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellation.Token))
+            {
+                await InvokeAsync(UpdateAsync);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task UpdateAsync()
+    {
+        if (items == null)
+        {
+            var initial = await Api.GetQueueAsync();
+            if (initial.Ok && initial.Data != null)
+            {
+                version = initial.Data.Version;
+                items = initial.Data.Items.ToDictionary(item => item.Id);
+            }
+            return;
+        }
+
+        var result = await Api.GetQueueChangesAsync(version);
+        if (!result.Ok || result.Data == null) return;
+        var changes = result.Data;
+        if (changes.FullSyncRequired)
+        {
+            var snapshot = await Api.GetQueueAsync();
+            if (!snapshot.Ok || snapshot.Data == null) return;
+            foreach (var item in snapshot.Data.Items)
+                await CheckCompletionAsync(item);
+            items = snapshot.Data.Items.ToDictionary(item => item.Id);
+            version = snapshot.Data.Version;
+            return;
+        }
+        foreach (var change in changes.Changes)
+        {
+            if (change.Item != null)
+            {
+                await CheckCompletionAsync(change.Item);
+                items[change.Item.Id] = change.Item;
+            }
+            else if (change.Type == QueueChangeType.Remove && change.Id.HasValue)
+            {
+                items.Remove(change.Id.Value);
+            }
+        }
+        version = changes.ToVersion;
+    }
+
+    private async Task CheckCompletionAsync(QueueItemView item)
+    {
+        if (item.Mode != ProcMode.TrimAdjust || !item.CanTrimAdjust ||
+            !items!.TryGetValue(item.Id, out var previous) || previous.CanTrimAdjust) return;
+        var url = $"/trim-adjust/{item.Id}";
+        if (!await JS.InvokeAsync<bool>("openTrimAdjustAutomatically", url))
+            Nav.NavigateTo(url);
+    }
+
+    public void Dispose()
+    {
+        cancellation.Cancel();
+        cancellation.Dispose();
+    }
+}

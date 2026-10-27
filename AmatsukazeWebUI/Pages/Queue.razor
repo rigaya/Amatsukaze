@@ -1667,20 +1667,7 @@ else
 
     private static string GetTaskLabel(QueueItemView item)
     {
-        switch (item.Mode)
-        {
-            case ProcMode.Batch:
-                return "通常";
-            case ProcMode.CMCheck:
-                return "CM解析のみ";
-            case ProcMode.DrcsCheck:
-                return "DRCSチェック";
-            case ProcMode.Test:
-                return "テスト";
-            case ProcMode.AutoBatch:
-                return "自動追加";
-        }
-        return "不明";
+        return QueueSettingExtensions.GetProcModeDisplay(item.Mode);
     }
 
     private static string GetBroadcastDateShort(QueueItemView item)
