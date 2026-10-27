@@ -43,6 +43,12 @@
         </span>
     </div>
 
+    @if (!string.IsNullOrEmpty(_queueItemSrcPath))
+    {
+        var fileName = _queueItemSrcPath.Substring(_queueItemSrcPath.LastIndexOfAny(new[] { '/', '\\' }) + 1);
+        <div class="trim-filename" title="@fileName">@fileName</div>
+    }
+
     @if (_loading)
     {
         <div class="trim-loading">読み込み中...</div>
@@ -1065,8 +1071,8 @@
                 if (!string.IsNullOrEmpty(_queueItemProfileName) && _profiles.Contains(_queueItemProfileName))
                 {
                     _selectedProfile = _queueItemProfileName;
-                    StateHasChanged();
                 }
+                StateHasChanged();
             }
         }
     }
