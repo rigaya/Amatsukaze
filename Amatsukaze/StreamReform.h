@@ -65,6 +65,7 @@ struct FileAudioFrameInfo : public AudioFrameInfo {
     int waveDataSize;
     int64_t fileOffset;
     int64_t waveOffset;
+    AudioComponentInfo component; // 受信時点の音声コンポーネント情報
 
     FileAudioFrameInfo();
 

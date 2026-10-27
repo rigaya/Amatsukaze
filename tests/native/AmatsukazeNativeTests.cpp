@@ -15,6 +15,7 @@
 #include "EncoderOptionParser.h"
 #include "FilteredSource.h"
 #include "Mpeg2TsParser.h"
+#include "Muxer.h"
 #include "StreamReform.h"
 #include "StreamUtils.h"
 #include "TsInfo.h"
@@ -2989,6 +2990,181 @@ bool TestTsSelector(tstring& diagnostic) {
     return ExpectTsEvents(events, expected, _T("ゴミ付き分割入力"), diagnostic);
 }
 
+// EITの現在番組に音声コンポーネント記述子を埋め込み、CRCを付ける。
+std::vector<uint8_t> MakeAudioEit(int serviceId, int tsid, int version,
+    const std::vector<uint8_t>& descriptors, int sectionNumber = 0, int tableId = 0x4E) {
+    std::vector<uint8_t> body = {
+        (uint8_t)(tsid >> 8), (uint8_t)tsid, 0x00, 0x01, 0x01, 0x4E,
+        0x00, 0x01,                           // event_id
+        0xEF, 0x86, 0x12, 0x00, 0x00,         // start_time
+        0x01, 0x00, 0x00,                     // duration
+        (uint8_t)(0x80 | (descriptors.size() >> 8)), (uint8_t)descriptors.size(),
+    };
+    body.insert(body.end(), descriptors.begin(), descriptors.end());
+    auto section = MakeLongSection(tableId, serviceId, version, body);
+    section[6] = (uint8_t)sectionNumber;
+    section[7] = 1;
+    const CRC32 crc;
+    write32(section.data() + section.size() - 4, crc.calc(section.data(), (int)section.size() - 4, 0xFFFFFFFFu));
+    return section;
+}
+
+std::vector<uint8_t> AudioComponent(int tag, bool main, bool dual, const char* language, const char* language2 = nullptr) {
+    std::vector<uint8_t> descriptor = {
+        0xC4, (uint8_t)(language2 ? 12 : 9), 0xF2, (uint8_t)(dual ? 0x02 : 0x03), (uint8_t)tag,
+        0x0F, 0xFF, (uint8_t)(0x0F | (main ? 0x40 : 0) | (language2 ? 0x80 : 0)),
+        (uint8_t)language[0], (uint8_t)language[1], (uint8_t)language[2],
+    };
+    if (language2) descriptor.insert(descriptor.end(), language2, language2 + 3);
+    return descriptor;
+}
+
+bool TestTsAudioComponent(tstring& diagnostic) {
+    constexpr int TSID = 0x7FE0;
+    constexpr int SID = 0x0400;
+    constexpr int OTHER_SID = 0x0401;
+    constexpr int PMT_PID = 0x01F0;
+    constexpr int VIDEO_PID = 0x0111;
+    constexpr int AUDIO_MAIN_PID = 0x0112;
+    constexpr int AUDIO_SUB_PID = 0x0113;
+    constexpr int EIT_PID = 0x0012;
+    constexpr int LANGUAGE_JPN = 0x6A706E;
+    constexpr int LANGUAGE_ENG = 0x656E67;
+    constexpr int FLAG_VALID = 1;
+    constexpr int FLAG_MAIN = 2;
+    constexpr int FLAG_DUAL = 4;
+    constexpr int FLAG_MULTI = 8;
+    const std::vector<uint8_t> payload(16, 0xAB);
+    const auto descriptors = Concat({ AudioComponent(0x10, true, false, "jpn"), AudioComponent(0x11, false, false, "eng") });
+    const std::vector<PmtStream> streams = {
+        { 0x02, VIDEO_PID, StreamIdentifier(0x00) },
+        { 0x0F, AUDIO_SUB_PID, StreamIdentifier(0x11) },
+        { 0x0F, AUDIO_MAIN_PID, StreamIdentifier(0x10) },
+    };
+    TsStreamBuilder ts;
+    std::vector<TsSelectorEventForTest> expected;
+    std::map<int, int> counters;
+    auto audio = [&](int pid, int index, int flags, int language, int language2 = 0) {
+        expected.push_back(TsEvent(TS_SELECTOR_EVENT_AUDIO_PACKET, pid, index, ts.packetCount(),
+            { 1, counters[pid]++ & 0xF, flags, language, language2 }));
+        ts.addPayload(pid, payload);
+    };
+    ts.addSection(0x0000, MakePat(TSID, { { SID, PMT_PID }, { OTHER_SID, PMT_PID + 1 } }));
+    // PMTより前にEITが来ても、後からcomponent_tagで音声に対応付ける。
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID, 0, descriptors));
+    ts.addSection(PMT_PID, MakePmt(SID, 0, VIDEO_PID, streams));
+    ts.addPayload(VIDEO_PID, payload);
+    audio(AUDIO_SUB_PID, 0, FLAG_VALID, LANGUAGE_ENG);
+    audio(AUDIO_MAIN_PID, 1, FLAG_VALID | FLAG_MAIN, LANGUAGE_JPN);
+
+    const auto conflicting = AudioComponent(0x10, false, false, "eng");
+    // 別サービス、別TS、次番組、自TS以外のEITでは現在の対応付けを上書きしない。
+    ts.addSection(EIT_PID, MakeAudioEit(OTHER_SID, TSID, 1, conflicting));
+    audio(AUDIO_MAIN_PID, 1, FLAG_VALID | FLAG_MAIN, LANGUAGE_JPN);
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID + 1, 1, conflicting));
+    audio(AUDIO_MAIN_PID, 1, FLAG_VALID | FLAG_MAIN, LANGUAGE_JPN);
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID, 1, conflicting, 1));
+    audio(AUDIO_MAIN_PID, 1, FLAG_VALID | FLAG_MAIN, LANGUAGE_JPN);
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID, 1, conflicting, 0, 0x4F));
+    audio(AUDIO_MAIN_PID, 1, FLAG_VALID | FLAG_MAIN, LANGUAGE_JPN);
+
+    // 現在番組の更新は直後の音声へ反映し、二か国語の両言語と主音声フラグを保持する。
+    const auto dual = AudioComponent(0x10, true, true, "jpn", "eng");
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID, 2, dual));
+    audio(AUDIO_MAIN_PID, 1, FLAG_VALID | FLAG_MAIN | FLAG_DUAL | FLAG_MULTI, LANGUAGE_JPN, LANGUAGE_ENG);
+    audio(AUDIO_SUB_PID, 0, 0, 0);
+    // PMTの順序が変わっても、インデックスではなくタグで最新情報を選ぶ。
+    ts.addSection(PMT_PID, MakePmt(SID, 1, VIDEO_PID, { streams[0], streams[2], streams[1] }));
+    audio(AUDIO_MAIN_PID, 0, FLAG_VALID | FLAG_MAIN | FLAG_DUAL | FLAG_MULTI, LANGUAGE_JPN, LANGUAGE_ENG);
+    audio(AUDIO_SUB_PID, 1, 0, 0);
+
+    // 最小長不足と、第2言語フラグに対して長さ不足の記述子を採用しない。
+    auto shortDescriptor = AudioComponent(0x10, true, false, "jpn");
+    shortDescriptor.resize(shortDescriptor.size() - 1);
+    shortDescriptor[1]--;
+    auto shortMultilingual = dual;
+    shortMultilingual.resize(shortMultilingual.size() - 3);
+    shortMultilingual[1] -= 3;
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID, 3, Concat({ shortDescriptor, shortMultilingual })));
+    audio(AUDIO_MAIN_PID, 0, 0, 0);
+    // 不正な更新の後でも正常な記述子を取得できる。
+    ts.addSection(EIT_PID, MakeAudioEit(SID, TSID, 4, descriptors));
+    audio(AUDIO_MAIN_PID, 0, FLAG_VALID | FLAG_MAIN, LANGUAGE_JPN);
+    audio(AUDIO_SUB_PID, 1, FLAG_VALID, LANGUAGE_ENG);
+    for (int i = 0; i < 8; i++) ts.addPayload(0x1FFF, std::vector<uint8_t>(TS_PAYLOAD_SIZE, 0xFF));
+
+    for (const size_t chunkSize : { ts.bytes.size(), size_t(97) }) {
+        std::vector<TsSelectorEventForTest> events;
+        if (!ParseTs(ts.bytes, chunkSize, 0, events, diagnostic)) return false;
+        events.erase(std::remove_if(events.begin(), events.end(), [](const TsSelectorEventForTest& event) {
+            return event.type != TS_SELECTOR_EVENT_AUDIO_PACKET;
+        }), events.end());
+        if (!ExpectTsEvents(events, expected, _T("音声コンポーネントの対応付け"), diagnostic)) return false;
+    }
+    return true;
+}
+
+bool TestAudioTrackMetadata(tstring& diagnostic) {
+    constexpr int LANGUAGE_JPN = 0x6A706E;
+    constexpr int LANGUAGE_ENG = 0x656E67;
+    const AudioComponentInfo japanese = { true, true, false, false, LANGUAGE_JPN, 0 };
+    const AudioComponentInfo english = { true, false, false, false, LANGUAGE_ENG, 0 };
+    const AudioComponentInfo bilingual = { true, true, true, true, LANGUAGE_JPN, LANGUAGE_ENG };
+    const AudioComponentInfo reversed = { true, false, true, true, LANGUAGE_ENG, LANGUAGE_JPN };
+    const AudioComponentInfo sameLanguage = { true, true, true, false, LANGUAGE_JPN, 0 };
+    const AudioComponentInfo explicitSameLanguage = { true, true, true, true, LANGUAGE_JPN, LANGUAGE_JPN };
+    const AudioComponentInfo invalidLanguage = { true, true, false, false, 0x4A504E, 0 };
+    const AudioComponentInfo unsafeLanguage = { true, true, false, false, 0x22613A, 0 };
+    const AudioComponentInfo unknownLanguage = { true, true, false, false, 0x716161, 0 };
+    const AudioComponentInfo invalidSecond = { true, true, true, true, LANGUAGE_JPN, 0 };
+    const AudioComponentInfo invalidFirst = { true, true, true, true, 0, LANGUAGE_ENG };
+    const AudioComponentInfo invalidBoth = { true, true, true, true, 0, 0 };
+    struct Case {
+        const TCHAR* label;
+        std::vector<AudioComponentInfo> components;
+        int logical;
+        const TCHAR* name;
+        const char* language;
+    };
+    const Case cases[] = {
+        { _T("情報なし"), {}, 0, _T(""), "" },
+        { _T("無効情報"), { {} }, 0, _T(""), "" },
+        { _T("主音声"), { japanese }, 0, _T("主音声（日本語）"), "jpn" },
+        { _T("副音声"), { english }, 0, _T("副音声（英語）"), "eng" },
+        { _T("本編の多数派"), { english, japanese, japanese }, 0, _T("主音声（日本語）"), "jpn" },
+        { _T("後半の多数派"), { japanese, english, english }, 0, _T("副音声（英語）"), "eng" },
+        { _T("無効情報を除外"), { {}, {}, {}, japanese }, 0, _T("主音声（日本語）"), "jpn" },
+        { _T("二か国語の第1音声"), { bilingual }, 0, _T("主音声（日本語）"), "jpn" },
+        { _T("二か国語の第2音声"), { bilingual }, 1, _T("副音声（英語）"), "eng" },
+        { _T("第1音声が副音声"), { reversed }, 0, _T("副音声（英語）"), "eng" },
+        { _T("第2音声が主音声"), { reversed }, 1, _T("主音声（日本語）"), "jpn" },
+        { _T("二か国語を混合"), { bilingual }, -1, _T("二重音声（日本語／英語）"), "mul" },
+        { _T("同一言語の第2音声"), { sameLanguage }, 1, _T("副音声（日本語）"), "jpn" },
+        { _T("同一言語を混合"), { sameLanguage }, -1, _T("二重音声（日本語）"), "jpn" },
+        { _T("同一言語を明示"), { explicitSameLanguage }, -1, _T("二重音声（日本語）"), "jpn" },
+        { _T("大文字コードを拒否"), { invalidLanguage }, 0, _T("主音声"), "" },
+        { _T("引数区切り文字を拒否"), { unsafeLanguage }, 0, _T("主音声"), "" },
+        { _T("未登録言語"), { unknownLanguage }, 0, _T("主音声（qaa）"), "qaa" },
+        { _T("不正な第2言語を選択"), { invalidSecond }, 1, _T("副音声"), "" },
+        { _T("不正な第2言語を混合"), { invalidSecond }, -1, _T("二重音声（日本語／言語不明）"), "mul" },
+        { _T("不正な第1言語を混合"), { invalidFirst }, -1, _T("二重音声（言語不明／英語）"), "mul" },
+        { _T("両言語不正を混合"), { invalidBoth }, -1, _T("二重音声（言語不明）"), "" },
+    };
+    for (const auto& testCase : cases) {
+        char name[256] = {};
+        char language[16] = {};
+        const int status = GetAudioTrackMetadataForTest(testCase.components.data(), testCase.components.size(), testCase.logical,
+            name, sizeof(name), language, sizeof(language));
+        const auto expectedName = tchar_to_string(testCase.name, CP_UTF8);
+        if (status != 0 || expectedName != name || std::string(testCase.language) != language) {
+            diagnostic = strsprintf(_T("音声名の生成: %s: 結果=%d, 名前=%s, 言語=%s"), testCase.label, status,
+                char_to_tstring(name, CP_UTF8).c_str(), char_to_tstring(language, CP_UTF8).c_str());
+            return false;
+        }
+    }
+    return true;
+}
+
 bool DecodeArib(const std::vector<uint8_t>& data, std::wstring& decoded) {
     size_t length = 0;
     int status = DecodeAribStringForTest(data.data(), data.size(), nullptr, 0, &length);
@@ -3810,6 +3986,8 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_builder_reject_pce"), TestAudioBuilderRejectPce },
     { _T("audio_builder_merge_convert"), TestAudioBuilderMergeConvert },
     { _T("ts_selector"), TestTsSelector },
+    { _T("ts_audio_component"), TestTsAudioComponent },
+    { _T("audio_track_metadata"), TestAudioTrackMetadata },
     { _T("arib_string"), TestAribString },
     { _T("logo_file"), TestLogoFile },
     { _T("logo_correlation_fusion"), TestLogoCorrelationFusion },

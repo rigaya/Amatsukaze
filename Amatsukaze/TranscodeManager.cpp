@@ -952,13 +952,13 @@ AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     psWriter.setHandler(&writeHandler);
     if (setting.getMode() == _T("cm") && GetProcessorCount() > 1) {
         audioPipeline_.reset(new AudioPesPipeline(ctx,
-            [this](int audioIdx, int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet) {
+            [this](int audioIdx, int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet, const AudioComponentInfo& component) {
                 auto& format = asyncAudioFormats_[audioIdx];
                 if (frames[0].format != format) {
                     format = frames[0].format;
                     onAudioFormatChanged(audioIdx, format);
                 }
-                onAudioPesPacket(audioIdx, clock, frames, packet);
+                onAudioPesPacket(audioIdx, clock, frames, packet, component);
             }));
     }
 }
@@ -972,9 +972,9 @@ void AMTSplitter::drainAudio() {
     if (audioPipeline_) audioPipeline_->drain();
 }
 
-bool AMTSplitter::onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet) {
+bool AMTSplitter::onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet, const AudioComponentInfo& component) {
     if (!audioPipeline_) return false;
-    audioPipeline_->submit(audioIdx, clock, packet);
+    audioPipeline_->submit(audioIdx, clock, packet, component);
     return true;
 }
 
@@ -1210,10 +1210,11 @@ void AMTSplitter::commitVideoPes(int64_t clock, const std::vector<VideoFrameInfo
     int audioIdx,
     int64_t clock,
     const std::vector<AudioFrameData>& frames,
-    PESPacket packet) {
+    PESPacket packet, const AudioComponentInfo& component) {
     for (const AudioFrameData& frame : frames) {
         FileAudioFrameInfo info = frame;
         info.audioIdx = audioIdx;
+        info.component = component;
         info.codedDataSize = frame.codedDataSize;
         info.waveDataSize = frame.decodedDataSize;
         info.fileOffset = audioFileSize_;
@@ -2684,7 +2685,7 @@ void DrcsSearchSplitter::readAll() {
     int audioIdx,
     int64_t clock,
     const std::vector<AudioFrameData>& frames,
-    PESPacket packet) {}
+    PESPacket packet, const AudioComponentInfo& component) {}
 
 /* virtual */ void DrcsSearchSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {}
 
@@ -2747,7 +2748,7 @@ bool SubtitleDetectorSplitter::getHasSubtitle() const {
     int audioIdx,
     int64_t clock,
     const std::vector<AudioFrameData>& frames,
-    PESPacket packet) {}
+    PESPacket packet, const AudioComponentInfo& component) {}
 
 /* virtual */ void SubtitleDetectorSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {}
 
@@ -2806,7 +2807,7 @@ void AudioDetectorSplitter::readAll(int maxframes) {
     int audioIdx,
     int64_t clock,
     const std::vector<AudioFrameData>& frames,
-    PESPacket packet) {}
+    PESPacket packet, const AudioComponentInfo& component) {}
 
 /* virtual */ void AudioDetectorSplitter::onAudioFormatChanged(int audioIdx, AudioFormat fmt) {
     _ftprintf(stdout, _T("インデックス: %d チャンネル: %s サンプルレート: %d\n"),

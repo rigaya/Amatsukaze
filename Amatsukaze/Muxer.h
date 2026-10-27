@@ -16,6 +16,10 @@
 #include "AdtsParser.h"
 #include "ProcessThread.h"
 
+// 出力名と言語属性の選択を検証するC ABI。
+extern "C" AMATSUKAZE_API int GetAudioTrackMetadataForTest(const AudioComponentInfo* components, size_t count, int logical,
+    char* name, size_t nameSize, char* language, size_t languageSize) noexcept;
+
 struct EncodeFileOutput {
     VideoFormat vfmt;
     std::vector<tstring> outSubs; // 外部ファイルで出力された字幕

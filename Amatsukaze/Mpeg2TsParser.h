@@ -181,6 +181,9 @@ public:
 protected:
     virtual void onPesPacket(int64_t clock, PESPacket packet) = 0;
 
+    // 先頭TSパケットを取り込む時点の付随情報を保持する。
+    virtual void onPesPacketStarted() {}
+
 private:
     AutoBuffer buffer;
     int contCounter;
@@ -244,6 +247,25 @@ struct StreamIdentifierDescriptor {
 private:
     Descriptor desc;
     uint8_t component_tag_;
+};
+
+// 出力トラックへ引き継ぐ音声コンポーネント情報。保存時にそのまま扱える値型にする。
+struct AudioComponentInfo {
+    bool valid = false;
+    bool mainComponent = false;
+    bool dualMono = false;
+    bool multilingual = false;
+    int language = 0;
+    int language2 = 0;
+};
+
+struct AudioComponentDescriptor {
+    explicit AudioComponentDescriptor(Descriptor desc);
+    bool parse();
+    int componentTag = -1;
+    AudioComponentInfo info;
+private:
+    Descriptor desc;
 };
 
 struct ContentElement {
@@ -552,6 +574,7 @@ private:
 struct PMTESInfo {
     int stype;
     int pid;
+    int componentTag = -1;
 
     PMTESInfo();
     PMTESInfo(int stype, int pid);
@@ -564,6 +587,9 @@ public:
     virtual int onPidSelect(int TSID, const std::vector<int>& pids) = 0;
 
     virtual void onPmtUpdated(int PcrPid) = 0;
+
+    // 更新前の情報で処理中の音声を確定させる。
+    virtual void onAudioComponentChanging() {}
 
     // TsPacketSelectorでPID Tableが変更された時変更後の情報が送られる
     virtual void onPidTableChanged(const PMTESInfo video, const std::vector<PMTESInfo>& audio, const PMTESInfo caption) = 0;
@@ -593,6 +619,8 @@ public:
 
     void inputTsPacket(int64_t clock, TsPacket packet);
 
+    AudioComponentInfo getAudioComponentInfo(int audioIdx) const;
+
 private:
     class PATDelegator : public PsiUpdatedDetector {
         TsPacketSelector& this_;
@@ -611,6 +639,12 @@ private:
     public:
         TDTDelegator(AMTContext&ctx, TsPacketSelector& this_);
         virtual void onTableUpdated(int64_t clock, PsiSection section);
+    };
+    class EITDelegator : public PsiParser {
+        TsPacketSelector& this_;
+    public:
+        EITDelegator(AMTContext& ctx, TsPacketSelector& this_);
+        void onPsiSection(int64_t clock, PsiSection section) override;
     };
     class VideoDelegator : public TsPacketHandler {
         TsPacketSelector& this_;
@@ -639,11 +673,16 @@ private:
     int SID_;
     PMTESInfo videoEs;
     std::vector<PMTESInfo> audioEs;
+    std::vector<PMTESInfo> activeAudioEs; // 映像切替待ち中も、現在処理中のPIDとの対応を保つ
     PMTESInfo captionEs;
 
     PATDelegator PsiParserPAT;
     PMTDelegator PsiParserPMT;
     TDTDelegator PsiParserTDT;
+    EITDelegator PsiParserHEIT;
+    EITDelegator PsiParserMEIT;
+    EITDelegator PsiParserLEIT;
+    std::map<int, AudioComponentInfo> audioComponents;
     int pmtPid;
     VideoDelegator videoDelegator;
     std::vector<AudioDelegator*> audioDelegators;
@@ -652,7 +691,7 @@ private:
     PidHandlerTable *curHandlerTable;
     PidHandlerTable *nextHandlerTable;
 
-    TsPacketSelectorHandler *selectorHandler;
+    TsPacketSelectorHandler *selectorHandler = nullptr;
 
     // 27MHzクロック
     int64_t startClock;
@@ -665,6 +704,8 @@ private:
     void onPmtUpdated(PsiSection section);
 
     void onTdtUpdated(int64_t clock, PsiSection section);
+
+    void onEitUpdated(PsiSection section);
 
     void onVideoPacket(int64_t clock, TsPacket packet);
 
@@ -696,7 +737,7 @@ enum TsSelectorEventTypeForTest {
     TS_SELECTOR_EVENT_PMT_UPDATED,     // values: [0]=PCR PID
     TS_SELECTOR_EVENT_PID_TABLE,       // values: [0]=映像stream_type, [1]=映像PID, [2]=音声数, [3..4]=先頭2音声のPID, [5]=字幕PID
     TS_SELECTOR_EVENT_VIDEO_PACKET,    // pid, values: [0]=payload_unit_start_indicator, [1]=continuity_counter
-    TS_SELECTOR_EVENT_AUDIO_PACKET,    // pid, index=音声番号, values: [0]=payload_unit_start_indicator, [1]=continuity_counter
+    TS_SELECTOR_EVENT_AUDIO_PACKET,    // pid, index=音声番号, values: [0]=開始フラグ, [1]=連続カウンタ, [2]=音声情報フラグ(有効1/主2/二重4/多言語8), [3..4]=言語コード
     TS_SELECTOR_EVENT_CAPTION_PACKET,  // pid, values: [0]=payload_unit_start_indicator, [1]=continuity_counter
     TS_SELECTOR_EVENT_TIME,            // values: [0..5]=年,月,日,時,分,秒 (JST)
 };

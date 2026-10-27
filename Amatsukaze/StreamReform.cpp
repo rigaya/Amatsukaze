@@ -19,7 +19,7 @@
 namespace {
 
 constexpr uint32_t STREAM_REFORM_MAGIC = 0x49524d41;
-constexpr uint32_t STREAM_REFORM_VERSION = 2;
+constexpr uint32_t STREAM_REFORM_VERSION = 3;
 constexpr int AAC_LC_PROFILE = 1;
 constexpr int MAX_DUP_GAP_FRAMES = 5;
 constexpr double AUDIO_SYNC_MARGIN_FRAMES = 0.75;

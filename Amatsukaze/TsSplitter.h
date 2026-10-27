@@ -192,10 +192,10 @@ extern "C" AMATSUKAZE_API int VerifyAudioPesPipelineForTest(const AudioPesForTes
 // drain()は主スレッドで呼び、破棄時は未反映のコールバックを実行しない。
 class AudioPesPipeline {
 public:
-    using Callback = std::function<void(int, int64_t, const std::vector<AudioFrameData>&, PESPacket)>;
+    using Callback = std::function<void(int, int64_t, const std::vector<AudioFrameData>&, PESPacket, const AudioComponentInfo&)>;
     AudioPesPipeline(AMTContext& ctx, Callback callback, bool asynchronous = true);
     ~AudioPesPipeline();
-    void submit(int audioIdx, int64_t clock, PESPacket packet);
+    void submit(int audioIdx, int64_t clock, PESPacket packet, const AudioComponentInfo& component = {});
     void defer(std::function<void()> action, size_t bytes = 0);
     void drain();
     bool hasPending() const;
@@ -256,10 +256,12 @@ protected:
     class SpAudioFrameParser : public AudioFrameParser {
         TsSplitter& this_;
         int audioIdx;
+        AudioComponentInfo component; // PES開始時点の情報を、完成するまで保持する
     public:
         SpAudioFrameParser(AMTContext&ctx, TsSplitter& this_, int audioIdx);
 
     protected:
+        void onPesPacketStarted() override;
         virtual void onPesPacket(int64_t clock, PESPacket packet);
         virtual void onAudioPesPacket(int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet);
 
@@ -306,13 +308,13 @@ protected:
 
     virtual void onVideoFormatChanged(VideoFormat fmt) = 0;
 
-    virtual bool onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet) { return false; }
+    virtual bool onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet, const AudioComponentInfo& component) { return false; }
 
     virtual void onAudioPesPacket(
         int audioIdx,
         int64_t clock,
         const std::vector<AudioFrameData>& frames,
-        PESPacket packet) = 0;
+        PESPacket packet, const AudioComponentInfo& component) = 0;
 
     virtual void onAudioFormatChanged(int audioIdx, AudioFormat fmt) = 0;
 

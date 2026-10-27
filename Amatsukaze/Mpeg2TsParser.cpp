@@ -334,6 +334,7 @@ PesParser::PesParser() : contCounter(0) {}
         }
 
         MemoryChunk payload = packet.payload();
+        if (buffer.size() == 0) onPesPacketStarted();
         buffer.add(payload);
 
         // 完了チェック
@@ -369,9 +370,11 @@ MemoryChunk Descriptor::payload() { return MemoryChunk(data + 2, desc_length());
 std::vector<Descriptor> ParseDescriptors(MemoryChunk mc) {
     std::vector<Descriptor> list;
     int offset = 0;
-    while (offset < (int)mc.length) {
-        list.push_back(Descriptor(&mc.data[offset], mc.data[offset + 1]));
-        offset += 2 + mc.data[offset + 1];
+    while (offset + 2 <= (int)mc.length) {
+        const int length = mc.data[offset + 1];
+        if (length > (int)mc.length - offset - 2) break;
+        list.push_back(Descriptor(&mc.data[offset], length));
+        offset += 2 + length;
     }
     return list;
 }
@@ -419,6 +422,25 @@ bool StreamIdentifierDescriptor::parse() {
     component_tag_ = payload.data[0];
     return true;
 }
+AudioComponentDescriptor::AudioComponentDescriptor(Descriptor desc) : desc(desc) {}
+
+bool AudioComponentDescriptor::parse() {
+    constexpr int minimumLength = 9;
+    const auto payload = desc.payload();
+    if (payload.length < minimumLength) return false;
+    const bool dualMono = (payload.data[1] & 0x1f) == 2;
+    const bool multilingual = dualMono && (payload.data[5] & 0x80) != 0;
+    if (multilingual && payload.length < minimumLength + 3) return false;
+    componentTag = payload.data[2];
+    info.valid = true;
+    info.mainComponent = (payload.data[5] & 0x40) != 0;
+    info.dualMono = dualMono;
+    info.multilingual = multilingual;
+    info.language = read24(payload.data + 6);
+    info.language2 = info.multilingual ? read24(payload.data + 9) : 0;
+    return true;
+}
+
 ContentElement::ContentElement(uint8_t* ptr) : ptr(ptr) {}
 
 uint8_t ContentElement::content_nibble_level_1() { return bsm(ptr[0], 4, 4); }
@@ -674,10 +696,16 @@ uint8_t EIT::last_table_id() { return payload_.data[5]; }
 
 bool EIT::parse() {
     payload_ = section.payload();
-    int offset = 6;
+    constexpr int headerLength = 6;
+    constexpr int eventHeaderLength = 12;
+    if (payload_.length < headerLength) return false;
+    int offset = headerLength;
     while (offset < (int)payload_.length) {
-        elems.emplace_back(&payload_.data[offset]);
-        offset += elems.back().size();
+        if ((int)payload_.length - offset < eventHeaderLength) return false;
+        EITElement elem(&payload_.data[offset]);
+        if (elem.size() > (int)payload_.length - offset) return false;
+        elems.push_back(elem);
+        offset += elem.size();
     }
     return true;
 }
@@ -838,6 +866,9 @@ TsPacketSelector::TsPacketSelector(AMTContext& ctx)
     , PsiParserPAT(ctx, *this)
     , PsiParserPMT(ctx, *this)
     , PsiParserTDT(ctx, *this)
+    , PsiParserHEIT(ctx, *this)
+    , PsiParserMEIT(ctx, *this)
+    , PsiParserLEIT(ctx, *this)
     , pmtPid(-1)
     , videoDelegator(*this)
     , captionDelegator(*this)
@@ -869,6 +900,9 @@ void TsPacketSelector::setStartClock(int64_t startClock) {
 void TsPacketSelector::resetParser() {
     PsiParserPAT.clear();
     PsiParserPMT.clear();
+    PsiParserHEIT.clear();
+    PsiParserMEIT.clear();
+    PsiParserLEIT.clear();
 }
 
 void TsPacketSelector::inputTsPacket(int64_t clock, TsPacket packet) {
@@ -876,6 +910,8 @@ void TsPacketSelector::inputTsPacket(int64_t clock, TsPacket packet) {
     currentClock = clock;
     if (waitingNewVideo && packet.PID() == videoEs.pid) {
         // 待っていた映像パケット来たのでテーブル変更
+        selectorHandler->onAudioComponentChanging();
+        activeAudioEs = audioEs;
         waitingNewVideo = false;
         swapHandlerTable();
         selectorHandler->onPidTableChanged(videoEs, audioEs, captionEs);
@@ -898,6 +934,10 @@ TsPacketSelector::TDTDelegator::TDTDelegator(AMTContext&ctx, TsPacketSelector& t
 /* virtual */ void TsPacketSelector::TDTDelegator::onTableUpdated(int64_t clock, PsiSection section) {
     this_.onTdtUpdated(clock, section);
 }
+TsPacketSelector::EITDelegator::EITDelegator(AMTContext& ctx, TsPacketSelector& this_) : PsiParser(ctx), this_(this_) {}
+void TsPacketSelector::EITDelegator::onPsiSection(int64_t clock, PsiSection section) {
+    this_.onEitUpdated(section);
+}
 TsPacketSelector::VideoDelegator::VideoDelegator(TsPacketSelector& this_) : this_(this_) {}
 /* virtual */ void TsPacketSelector::VideoDelegator::onTsPacket(int64_t clock, TsPacket packet) {
     this_.onVideoPacket(clock, packet);
@@ -915,6 +955,9 @@ TsPacketSelector::CaptionDelegator::CaptionDelegator(TsPacketSelector& this_) : 
 void TsPacketSelector::initHandlerTable(PidHandlerTable* table) {
     table->addConstant(0x0000, &PsiParserPAT);
     table->addConstant(0x0014, &PsiParserTDT);
+    table->addConstant(0x0012, &PsiParserHEIT);
+    table->addConstant(0x0026, &PsiParserMEIT);
+    table->addConstant(0x0027, &PsiParserLEIT);
 }
 
 void TsPacketSelector::onPatUpdated(PsiSection section) {
@@ -935,6 +978,8 @@ void TsPacketSelector::onPatUpdated(PsiSection section) {
         }
         if (TSID_ != patTSID) {
             // TSが変わった
+            selectorHandler->onAudioComponentChanging();
+            audioComponents.clear();
             curHandlerTable->clear();
             PsiParserPMT.clear();
             TSID_ = patTSID;
@@ -948,6 +993,8 @@ void TsPacketSelector::onPatUpdated(PsiSection section) {
             int pid = pids[progidx];
             if (SID_ != sid) {
                 // サービス選択が変わった
+                selectorHandler->onAudioComponentChanging();
+                audioComponents.clear();
                 curHandlerTable->clear();
                 PsiParserPMT.clear();
                 SID_ = sid;
@@ -979,6 +1026,12 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
                 videoEs.pid = elem.elementary_PID();
             } else if (isAudio(stream_type)) {
                 audioEs.emplace_back(stream_type, elem.elementary_PID());
+                for (auto desc : ParseDescriptors(elem.descriptor())) {
+                    constexpr int streamIdentifierTag = 0x52;
+                    if (desc.tag() != streamIdentifierTag) continue;
+                    StreamIdentifierDescriptor streamdesc(desc);
+                    if (streamdesc.parse()) audioEs.back().componentTag = streamdesc.component_tag();
+                }
             } else if (isCaption(stream_type)) {
                 auto descs = ParseDescriptors(elem.descriptor());
                 for (int i = 0; i < (int)descs.size(); i++) {
@@ -1018,6 +1071,8 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
             table = nextHandlerTable;
         }
 
+        // 非同期音声処理が旧PMTの対応付けを参照し終わるまで待つ。
+        selectorHandler->onAudioComponentChanging();
         this->videoEs = videoEs;
         this->audioEs = audioEs;
         this->captionEs = captionEs;
@@ -1038,9 +1093,44 @@ void TsPacketSelector::onPmtUpdated(PsiSection section) {
         ctx.infoF(_T("PID: 0x%04x TYPE: PCR"), pcr_pid);
         selectorHandler->onPmtUpdated(pcr_pid);
         if (table == curHandlerTable) {
+            activeAudioEs = audioEs;
             selectorHandler->onPidTableChanged(videoEs, audioEs, captionEs);
         }
     }
+}
+
+AudioComponentInfo TsPacketSelector::getAudioComponentInfo(int audioIdx) const {
+    if (audioIdx < 0 || audioIdx >= (int)activeAudioEs.size()) return {};
+    const auto it = audioComponents.find(activeAudioEs[audioIdx].componentTag);
+    return it == audioComponents.end() ? AudioComponentInfo{} : it->second;
+}
+
+void TsPacketSelector::onEitUpdated(PsiSection section) {
+    constexpr int presentFollowingActualTable = 0x4e;
+    constexpr int audioComponentTag = 0xc4;
+    if (selectorHandler == nullptr || section.table_id() != presentFollowingActualTable
+        || !section.current_next_indicator() || section.section_number() != 0 || section.id() != SID_) return;
+    EIT eit(section);
+    if (!eit.parse() || !eit.check() || eit.transport_stream_id() != TSID_) return;
+    std::map<int, AudioComponentInfo> components;
+    if (eit.numElems() > 0) {
+        for (auto desc : ParseDescriptors(eit.get(0).descriptor())) {
+            if (desc.tag() != audioComponentTag) continue;
+            AudioComponentDescriptor audio(desc);
+            if (audio.parse()) components[audio.componentTag] = audio.info;
+        }
+    }
+    const auto equal = [](const auto& a, const auto& b) {
+        const auto& x = a.second;
+        const auto& y = b.second;
+        return a.first == b.first && x.valid == y.valid && x.mainComponent == y.mainComponent
+            && x.dualMono == y.dualMono && x.multilingual == y.multilingual
+            && x.language == y.language && x.language2 == y.language2;
+    };
+    if (audioComponents.size() == components.size()
+        && std::equal(audioComponents.begin(), audioComponents.end(), components.begin(), equal)) return;
+    selectorHandler->onAudioComponentChanging();
+    audioComponents = std::move(components);
 }
 
 void TsPacketSelector::onTdtUpdated(int64_t clock, PsiSection section) {
@@ -1255,6 +1345,12 @@ protected:
     }
     void onAudioPacket(int64_t clock, TsPacket packet, int audioIdx) override {
         addPacket(TS_SELECTOR_EVENT_AUDIO_PACKET, clock, packet, audioIdx);
+        const auto info = selector.getAudioComponentInfo(audioIdx);
+        auto& e = events.back();
+        e.values[2] = (info.valid ? 1 : 0) | (info.mainComponent ? 2 : 0)
+            | (info.dualMono ? 4 : 0) | (info.multilingual ? 8 : 0);
+        e.values[3] = info.language;
+        e.values[4] = info.language2;
     }
     void onCaptionPacket(int64_t clock, TsPacket packet) override {
         addPacket(TS_SELECTOR_EVENT_CAPTION_PACKET, clock, packet, -1);

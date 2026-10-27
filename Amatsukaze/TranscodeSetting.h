@@ -164,7 +164,8 @@ std::vector<std::pair<tstring, bool>> makeMuxerArgs(
     bool sarInContainerOnly,
     const tstring& encoderName,
     const tstring& encoderOptions,
-    const std::vector<tstring>& audioTrackNames = std::vector<tstring>());
+    const std::vector<tstring>& audioTrackNames = std::vector<tstring>(),
+    const std::vector<tstring>& audioTrackLanguages = std::vector<tstring>());
 
 tstring makeTimelineEditorArgs(
     const tstring& binpath,

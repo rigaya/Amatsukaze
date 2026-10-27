@@ -8,6 +8,106 @@
 
 #include "Muxer.h"
 
+namespace {
+// 放送の文字列を引数へ直接埋め込まず、言語コードから表示名を生成する。
+tstring AudioLanguageCode(int language) {
+    tstring code;
+    for (int shift : { 16, 8, 0 }) {
+        const int ch = (language >> shift) & 0xff;
+        if (ch < 'a' || ch > 'z') return tstring();
+        code.push_back(static_cast<tchar>(ch));
+    }
+    return code;
+}
+
+tstring AudioLanguageName(const tstring& code) {
+    static const std::pair<const tchar*, const tchar*> languages[] = {
+        { _T("jpn"), _T("日本語") }, { _T("eng"), _T("英語") },
+        { _T("deu"), _T("ドイツ語") }, { _T("ger"), _T("ドイツ語") },
+        { _T("fra"), _T("フランス語") }, { _T("fre"), _T("フランス語") },
+        { _T("ita"), _T("イタリア語") }, { _T("spa"), _T("スペイン語") },
+        { _T("rus"), _T("ロシア語") }, { _T("kor"), _T("韓国語") },
+        { _T("zho"), _T("中国語") }, { _T("chi"), _T("中国語") },
+        { _T("por"), _T("ポルトガル語") }, { _T("und"), _T("言語不明") },
+        { _T("mul"), _T("多言語") }
+    };
+    for (const auto& item : languages) if (code == item.first) return item.second;
+    return code;
+}
+
+std::pair<tstring, tstring> ComponentTrackMetadata(const AudioComponentInfo& component, int logical) {
+    if (!component.valid) return {};
+    bool main = component.mainComponent;
+    tstring language = AudioLanguageCode(component.language);
+    tstring label = AudioLanguageName(language);
+    if (component.dualMono && logical == 1) {
+        main = !main;
+        if (component.multilingual) language = AudioLanguageCode(component.language2);
+        label = AudioLanguageName(language);
+    } else if (component.dualMono && logical < 0) {
+        const tstring second = AudioLanguageCode(component.language2);
+        if (component.multilingual && (second != language || language.empty())) {
+            if (language.empty() && second.empty()) {
+                label = _T("言語不明");
+            } else {
+                label = (language.empty() ? tstring(_T("言語不明")) : label)
+                    + _T("／") + (second.empty() ? tstring(_T("言語不明")) : AudioLanguageName(second));
+                language = _T("mul");
+            }
+        }
+    }
+    tstring name = component.dualMono && logical < 0 ? _T("二重音声") : (main ? _T("主音声") : _T("副音声"));
+    if (!label.empty()) name += _T("（") + label + _T("）");
+    return { name, language };
+}
+
+// カット後に実際に使われるフレームのうち、最も長い情報を採用する。
+std::pair<tstring, tstring> SelectAudioTrackMetadata(const std::vector<FileAudioFrameInfo>& frames,
+    const std::vector<int>& indices, int logical) {
+    std::map<std::pair<tstring, tstring>, double> durations;
+    for (const int index : indices) {
+        if (index < 0 || index >= static_cast<int>(frames.size())) continue;
+        const auto& frame = frames[index];
+        const auto metadata = ComponentTrackMetadata(frame.component, logical);
+        if (!metadata.first.empty() && frame.format.sampleRate > 0 && frame.numSamples > 0) {
+            durations[metadata] += static_cast<double>(frame.numSamples) / frame.format.sampleRate;
+        }
+    }
+    std::pair<tstring, tstring> result;
+    double longest = 0;
+    for (const auto& entry : durations) {
+        if (entry.second > longest) {
+            longest = entry.second;
+            result = entry.first;
+        }
+    }
+    return result;
+}
+}
+
+// 固定長の情報だけをDLL境界で受け渡し、命名と区間選択を検証する。
+extern "C" int GetAudioTrackMetadataForTest(const AudioComponentInfo* components, size_t count, int logical,
+    char* name, size_t nameSize, char* language, size_t languageSize) noexcept {
+    try {
+        if ((!components && count) || !name || !nameSize || !language || !languageSize) return -1;
+        std::vector<FileAudioFrameInfo> frames(count);
+        std::vector<int> indices;
+        for (size_t i = 0; i < count; i++) {
+            frames[i].component = components[i];
+            frames[i].format.sampleRate = 48000;
+            frames[i].numSamples = AAC_LC_FRAME_SAMPLES;
+            indices.push_back(static_cast<int>(i));
+        }
+        const auto result = SelectAudioTrackMetadata(frames, indices, logical);
+        const auto nameUtf8 = tchar_to_string(result.first, CP_UTF8);
+        const auto languageUtf8 = tchar_to_string(result.second, CP_UTF8);
+        if (nameUtf8.size() >= nameSize || languageUtf8.size() >= languageSize) return -1;
+        memcpy(name, nameUtf8.c_str(), nameUtf8.size() + 1);
+        memcpy(language, languageUtf8.c_str(), languageUtf8.size() + 1);
+        return 0;
+    } catch (...) { return -1; }
+}
+
 // 字幕生成側もこの関数を使い、最終mux形式と同じ条件で判定する。
 ENUM_FORMAT getActualOutputFormat(EncodeFileKey key, const StreamReformInfo& reformInfo, const ConfigWrapper& setting) {
     if (!setting.getUseMKVWhenSubExist() || setting.getFormat() == FORMAT_MKV) {
@@ -94,13 +194,27 @@ void AMTMuxder::mux(EncodeFileKey key,
     // 音声ファイルを作成
     std::vector<tstring> audioFiles;
     std::vector<tstring> audioTrackNames;
+    std::vector<tstring> audioTrackLanguages;
+    const auto& sourceFrames = reformInfo_.getAudioFrameList();
+    auto appendMetadata = [&](const std::vector<int>& indices, int logical, const tstring& fallback, const tstring& suffix = tstring()) {
+        const auto metadata = SelectAudioTrackMetadata(sourceFrames, indices, logical);
+        audioTrackNames.push_back(metadata.first.empty() ? fallback : metadata.first + suffix);
+        audioTrackLanguages.push_back(metadata.second);
+    };
     if (fileIn.isAudioTrackPlanned) {
         for (int i = 0; i < (int)fileIn.audioTrackPlan.size(); i++) {
             audioFiles.push_back(setting_.getIntAudioFilePath(key, i, setting_.getAudioEncoder()));
-            audioTrackNames.push_back(fileIn.audioTrackPlan[i].name);
+            const auto& plan = fileIn.audioTrackPlan[i];
+            std::vector<int> indices;
+            for (const auto& ref : plan.frames) {
+                if (ref.operation != AudioTrackOperation::SILENCE) indices.push_back(ref.frameIndex);
+            }
+            appendMetadata(indices, plan.logicalTrack, plan.name,
+                StringFormat(_T(" [%s]"), getAudioChannelString(plan.layout)));
         }
     } else if (setting_.isEncodeAudio()) {
         audioFiles.push_back(setting_.getIntAudioFilePath(key, 0, setting_.getAudioEncoder()));
+        appendMetadata(fileIn.audioFrames.empty() ? std::vector<int>() : fileIn.audioFrames[0], -1, tstring());
     } else if (setting_.getFormat() != FORMAT_TSREPLACE
         || (setting_.getSubtitleMode() == SUBMODE_WHISPER_ALWAYS || setting_.getSubtitleMode() == SUBMODE_WHISPER_FALLBACK)) {
         for (int asrc = 0, adst = 0; asrc < (int)fileIn.audioFrames.size(); asrc++) {
@@ -112,9 +226,12 @@ void AMTMuxder::mux(EncodeFileKey key,
                     tstring filepath1 = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
                     audioFiles.push_back(filepath0);
                     audioFiles.push_back(filepath1);
+                    appendMetadata(frameList, 0, tstring());
+                    appendMetadata(frameList, 1, tstring());
                 } else {
                     tstring filepath = setting_.getIntAudioFilePath(key, adst++, setting_.getAudioEncoder());
                     audioFiles.push_back(filepath);
+                    appendMetadata(frameList, -1, tstring());
                 }
             }
         }
@@ -283,7 +400,7 @@ void AMTMuxder::mux(EncodeFileKey key,
         setting_.getTsreplaceRemoveTypeD(), setting_.getTsreplaceStartupPreroll(), tsreplaceCutList,
         setting_.getMuxerAddEncoderCmd(), setting_.getSARInContainerOnly(),
         encoderToString(setting_.getEncoder()),
-        setting_.getEncoderOptions(), audioTrackNames);
+        setting_.getEncoderOptions(), audioTrackNames, audioTrackLanguages);
 
     for (int i = 0; i < (int)args.size(); i++) {
         ctx.infoF(_T("%s"), args[i].first);

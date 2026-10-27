@@ -53,7 +53,8 @@ protected:
     std::unique_ptr<AudioPesPipeline> audioPipeline_;
     std::map<int, AudioFormat> asyncAudioFormats_;
     void drainAudio();
-    bool onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet) override;
+    void onAudioComponentChanging() override { drainAudio(); }
+    bool onAudioPesReady(int audioIdx, int64_t clock, PESPacket packet, const AudioComponentInfo& component) override;
     void commitVideoPes(int64_t clock, const std::vector<VideoFrameInfo>& frames, PESPacket packet);
 
     const ConfigWrapper& setting_;
@@ -97,7 +98,7 @@ protected:
         int audioIdx,
         int64_t clock,
         const std::vector<AudioFrameData>& frames,
-        PESPacket packet);
+        PESPacket packet, const AudioComponentInfo& component);
 
     virtual void onAudioFormatChanged(int audioIdx, AudioFormat fmt);
 
@@ -193,7 +194,7 @@ protected:
         int audioIdx,
         int64_t clock,
         const std::vector<AudioFrameData>& frames,
-        PESPacket packet);
+        PESPacket packet, const AudioComponentInfo& component);
 
     virtual void onAudioFormatChanged(int audioIdx, AudioFormat fmt);
 
@@ -233,7 +234,7 @@ protected:
         int audioIdx,
         int64_t clock,
         const std::vector<AudioFrameData>& frames,
-        PESPacket packet);
+        PESPacket packet, const AudioComponentInfo& component);
 
     virtual void onAudioFormatChanged(int audioIdx, AudioFormat fmt);
 
@@ -272,7 +273,7 @@ protected:
         int audioIdx,
         int64_t clock,
         const std::vector<AudioFrameData>& frames,
-        PESPacket packet);
+        PESPacket packet, const AudioComponentInfo& component);
 
     virtual void onAudioFormatChanged(int audioIdx, AudioFormat fmt);
 

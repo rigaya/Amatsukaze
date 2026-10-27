@@ -478,9 +478,13 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
     bool sarInContainerOnly,
     const tstring& encoderName,
     const tstring& encoderOptions,
-    const std::vector<tstring>& audioTrackNames) {
+    const std::vector<tstring>& audioTrackNames,
+    const std::vector<tstring>& audioTrackLanguages) {
     if (!audioTrackNames.empty() && audioTrackNames.size() != inAudios.size()) {
         THROW(ArgumentException, "音声トラック名の数が音声ファイル数と一致しません");
+    }
+    if (!audioTrackLanguages.empty() && audioTrackLanguages.size() != inAudios.size()) {
+        THROW(ArgumentException, "音声言語の数が音声ファイル数と一致しません");
     }
     std::vector<std::pair<tstring, bool>> ret;
 
@@ -520,11 +524,14 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         }
         sb.append(_T("\""));
         for (int i = 0; i < (int)inAudios.size(); i++) {
-            if (audioTrackNames.empty()) {
-                sb.append(_T(" -add \"%s\"#audio:name=Audio%d"), inAudios[i], i);
-            } else {
-                sb.append(_T(" -add \"%s\"#audio:name=%s"), inAudios[i], audioTrackNames[i]);
+            // 名前に空白があっても分割されないよう、インポート指定全体を引用する。
+            sb.append(_T(" -add \"%s#audio:name=%s"), inAudios[i],
+                audioTrackNames.empty() || audioTrackNames[i].empty()
+                    ? StringFormat(_T("Audio%d"), i) : audioTrackNames[i]);
+            if (!audioTrackLanguages.empty() && !audioTrackLanguages[i].empty()) {
+                sb.append(_T(":lang=%s"), audioTrackLanguages[i]);
             }
+            sb.append(_T("\""));
         }
         if (needChapter && !needTimecode) {
             sb.append(_T(" -chap \"%s\""), chapterpath);
@@ -630,8 +637,11 @@ static bool hasMp4Subtitles(const std::vector<tstring>& subsTitles) {
         sb.append(_T(" \"%s\""), inVideo);
 
         for (int i = 0; i < (int)inAudios.size(); i++) {
-            if (!audioTrackNames.empty()) {
+            if (!audioTrackNames.empty() && !audioTrackNames[i].empty()) {
                 sb.append(_T(" --track-name \"0:%s\""), audioTrackNames[i]);
+            }
+            if (!audioTrackLanguages.empty() && !audioTrackLanguages[i].empty()) {
+                sb.append(_T(" --language \"0:%s\""), audioTrackLanguages[i]);
             }
             sb.append(_T(" \"%s\""), inAudios[i]);
         }
