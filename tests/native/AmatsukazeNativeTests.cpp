@@ -3969,10 +3969,13 @@ bool TestCpuInfoMasks(tstring& diagnostic) {
         return Expect(false, _T("コア数が不正です"), diagnostic);
     }
 
-    // プロセスの affinity を取得 (失敗した場合は affinity 制約なしとして扱う)
+    // 現在のスレッドのアフィニティを取得する
     cpu_set_t procAffinity;
     CPU_ZERO(&procAffinity);
     const bool affinityValid = (sched_getaffinity(0, sizeof(procAffinity), &procAffinity) == 0);
+    if (!affinityValid) {
+        return Expect(false, _T("アフィニティを取得できません"), diagnostic);
+    }
 
     // 各物理コアのマスクがプロセスの affinity に含まれることを確認
     for (int i = 0; i < cpuInfo.physical_cores; i++) {
@@ -3993,30 +3996,37 @@ bool TestCpuInfoMasks(tstring& diagnostic) {
         }
     }
 
-    // エクスポート層 (CPUInfo_Create/GetData) の検証:
-    // affinityによりマスクが0になったコアがあっても、許可されたコアが
-    // PROC_TAG_CORE に出力されること (break-on-zeroによる欠落がないこと)
+    // 表現できないCPUを含む場合は全構成を空にし、含まない場合は許可CPUを漏れなく出力する
     {
         void* cpuInfoApi = CPUInfo_Create(nullptr);
-        if (cpuInfoApi != nullptr) {
-            int coreCount = 0;
-            const GROUP_AFFINITY* cores = CPUInfo_GetData(cpuInfoApi, 1 /*PROC_TAG_CORE*/, &coreCount);
-            if (cores == nullptr || coreCount <= 0) {
-                // affinity内にマスク表現可能なCPUが存在するのに0コアは欠落バグ
-                // (エクスポート層が表現不能時に空にする場合を除く)
-                bool anyAllowed = false;
-                for (int id = 0; id < 64 && id < cpuInfo.logical_cores; id++) {
-                    if (affinityValid && CPU_ISSET(id, &procAffinity)) {
-                        anyAllowed = true;
-                        break;
-                    }
-                }
-                if (anyAllowed) {
-                    CPUInfo_Delete(cpuInfoApi);
-                    return Expect(false, _T("許可されたコアが存在するのにPROC_TAG_COREが空です"), diagnostic);
-                }
+        if (cpuInfoApi == nullptr) {
+            return Expect(false, _T("CPU構成を作成できません"), diagnostic);
+        }
+        bool hasHighCpu = false;
+        size_t expectedMask = 0;
+        for (int id = 0; id < CPU_SETSIZE; id++) {
+            if (CPU_ISSET(id, &procAffinity)) {
+                if (id < 64) expectedMask |= (size_t)1u << id;
+                else hasHighCpu = true;
             }
-            CPUInfo_Delete(cpuInfoApi);
+        }
+        int coreCount = 0;
+        const GROUP_AFFINITY* cores = CPUInfo_GetData(cpuInfoApi, 1 /*PROC_TAG_CORE*/, &coreCount);
+        size_t actualMask = 0;
+        if (cores != nullptr) {
+            for (int i = 0; i < coreCount; i++) actualMask |= (size_t)cores[i].Mask;
+        }
+        bool valid = hasHighCpu ? coreCount == 0 : (cores != nullptr && actualMask == expectedMask);
+        if (hasHighCpu) {
+            for (int tag = 2; tag <= 5; tag++) {
+                int count = 0;
+                CPUInfo_GetData(cpuInfoApi, tag, &count);
+                valid = valid && count == 0;
+            }
+        }
+        CPUInfo_Delete(cpuInfoApi);
+        if (!valid) {
+            return Expect(false, _T("出力されたCPU構成がアフィニティと一致しません"), diagnostic);
         }
     }
 
