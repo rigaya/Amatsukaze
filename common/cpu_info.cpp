@@ -356,6 +356,9 @@ bool getCPUHybridMasks(cpu_info_t *info) {
     for (int ith = 0; ith < threadCount; ith++) {
         const auto maskTarget = (size_t)1u << ith;
         auto maskPrev = SetThreadAffinityMask(hThread, maskTarget);
+        if (maskPrev == 0) {
+            continue;
+        }
         if (maskOriginal == 0) {
             maskOriginal = maskPrev;
         }
@@ -380,7 +383,12 @@ bool getCPUHybridMasks(cpu_info_t *info) {
         pthread_getaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal);
         for (int ith = 0; ith < threadCount; ith++) {
             const auto maskTarget = (size_t)1u << ith;
-            SetThreadAffinityMask(hThread, maskTarget);
+            cpu_set_t cpusetTarget;
+            CPU_ZERO(&cpusetTarget);
+            CPU_SET(ith, &cpusetTarget);
+            if (pthread_setaffinity_np(hThread, sizeof(cpusetTarget), &cpusetTarget) != 0) {
+                continue;
+            }
             std::this_thread::sleep_for(std::chrono::microseconds(0));
             int CPUInfo[4] = { 0 };
             __cpuid(CPUInfo, 0x1A);
