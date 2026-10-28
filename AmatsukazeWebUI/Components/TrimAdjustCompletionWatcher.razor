@@ -16,10 +16,11 @@
 
     private async Task WatchAsync()
     {
+        var token = cancellation.Token;
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            while (await timer.WaitForNextTickAsync(cancellation.Token))
+            while (await timer.WaitForNextTickAsync(token))
             {
                 await InvokeAsync(UpdateAsync);
             }
@@ -70,10 +71,11 @@
 
     private async Task CheckCompletionAsync(QueueItemView item)
     {
-        if (item.Mode != ProcMode.TrimAdjust || !item.CanTrimAdjust ||
+        // 自画面へ移動して監視が終了した場合、残りの完了通知では移動しない。
+        if (cancellation.IsCancellationRequested || item.Mode != ProcMode.TrimAdjust || !item.CanTrimAdjust ||
             !items!.TryGetValue(item.Id, out var previous) || previous.CanTrimAdjust) return;
         var url = $"/trim-adjust/{item.Id}";
-        if (!await JS.InvokeAsync<bool>("openTrimAdjustAutomatically", url))
+        if (!await JS.InvokeAsync<bool>("openTrimAdjustAutomatically", url) && !cancellation.IsCancellationRequested)
             Nav.NavigateTo(url);
     }
 

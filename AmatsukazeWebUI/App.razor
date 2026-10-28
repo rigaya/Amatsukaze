@@ -1,7 +1,13 @@
-﻿<TrimAdjustCompletionWatcher />
-<Router AppAssembly="@typeof(App).Assembly">
+﻿<Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        @* 編集中の画面から別タスクを自動起動して、編集中のURLを書き換えない。 *@
+        @if (routeData.PageType != typeof(Pages.TrimAdjust))
+        {
+            <TrimAdjustCompletionWatcher />
+        }
+        @* 同じページでもキューIDが変われば、編集セッションを含めて作り直す。 *@
+        <RouteView @key="@(routeData.RouteValues.GetValueOrDefault("QueueItemId"))"
+                   RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
     <NotFound>

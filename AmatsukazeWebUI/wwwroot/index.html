@@ -561,7 +561,7 @@
             row.focus({ preventScroll: true });
             row.scrollIntoView({ block: 'nearest' });
         };
-        // Trim調整: 再投入後はウィンドウを閉じる（閉じられない場合は戻る）
+        // カット調整: 再投入後はウィンドウを閉じ、閉じられなければキューへ戻る。
         window.trimAdjustCloseWindow = function () {
             try {
                 window.close();
@@ -570,7 +570,7 @@
             setTimeout(function () {
                 try {
                     if (!window.closed) {
-                        history.back();
+                        window.location.replace(new URL("queue", document.baseURI).href);
                     }
                 } catch (e) {
                 }
