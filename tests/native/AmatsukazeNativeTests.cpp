@@ -17,6 +17,10 @@
 #include "Mpeg2TsParser.h"
 #include "Muxer.h"
 #include "StreamReform.h"
+#include "cpu_info.h"
+#if !(defined(_WIN32) || defined(_WIN64))
+#include <sched.h>
+#endif
 #include "StreamUtils.h"
 #include "TsInfo.h"
 #include "TsSplitter.h"
@@ -3943,6 +3947,104 @@ bool TestCaptionPgsCanvasSize(tstring& diagnostic) {
 }
 
 
+#if !(defined(_WIN32) || defined(_WIN64))
+// ProcessThread.cpp がエクスポートするプラグイン向けAPI (ヘッダには宣言が無い)
+struct GROUP_AFFINITY {
+    intptr_t Mask;
+    uint16_t Group;
+    uint16_t Reserved[3];
+};
+extern "C" void* CPUInfo_Create(void* ctx);
+extern "C" void CPUInfo_Delete(void* ptr);
+extern "C" const GROUP_AFFINITY* CPUInfo_GetData(void* ptr, int tag, int* count);
+
+// get_cpu_info() のマスクが 64bit 表現の範囲 (CPU 0-63) と
+// プロセス自身の affinity に収まっていることを検証する。
+bool TestCpuInfoMasks(tstring& diagnostic) {
+    cpu_info_t cpuInfo = {};
+    if (!get_cpu_info(&cpuInfo)) {
+        return Expect(false, _T("get_cpu_info() が失敗しました"), diagnostic);
+    }
+    if (cpuInfo.physical_cores <= 0 || cpuInfo.logical_cores <= 0) {
+        return Expect(false, _T("コア数が不正です"), diagnostic);
+    }
+
+    // プロセスの affinity を取得 (失敗した場合は affinity 制約なしとして扱う)
+    cpu_set_t procAffinity;
+    CPU_ZERO(&procAffinity);
+    const bool affinityValid = (sched_getaffinity(0, sizeof(procAffinity), &procAffinity) == 0);
+
+    // 各物理コアのマスクがプロセスの affinity に含まれることを確認
+    for (int i = 0; i < cpuInfo.physical_cores; i++) {
+        const size_t mask = cpuInfo.proc_list[i].mask;
+        if (mask == 0) continue; // affinity に含まれるCPUが無いコアは 0 が正
+        if (!affinityValid) break;
+        bool allInAffinity = true;
+        for (int j = 0; j < 64; j++) {
+            if (mask & ((size_t)1 << j)) {
+                if (!CPU_ISSET(j, &procAffinity)) {
+                    allInAffinity = false;
+                    break;
+                }
+            }
+        }
+        if (!allInAffinity) {
+            return Expect(false, _T("コアマスクにプロセスの affinity 外のCPUが含まれています"), diagnostic);
+        }
+    }
+
+    // エクスポート層 (CPUInfo_Create/GetData) の検証:
+    // affinityによりマスクが0になったコアがあっても、許可されたコアが
+    // PROC_TAG_CORE に出力されること (break-on-zeroによる欠落がないこと)
+    {
+        void* cpuInfoApi = CPUInfo_Create(nullptr);
+        if (cpuInfoApi != nullptr) {
+            int coreCount = 0;
+            const GROUP_AFFINITY* cores = CPUInfo_GetData(cpuInfoApi, 1 /*PROC_TAG_CORE*/, &coreCount);
+            if (cores == nullptr || coreCount <= 0) {
+                // affinity内にマスク表現可能なCPUが存在するのに0コアは欠落バグ
+                // (エクスポート層が表現不能時に空にする場合を除く)
+                bool anyAllowed = false;
+                for (int id = 0; id < 64 && id < cpuInfo.logical_cores; id++) {
+                    if (affinityValid && CPU_ISSET(id, &procAffinity)) {
+                        anyAllowed = true;
+                        break;
+                    }
+                }
+                if (anyAllowed) {
+                    CPUInfo_Delete(cpuInfoApi);
+                    return Expect(false, _T("許可されたコアが存在するのにPROC_TAG_COREが空です"), diagnostic);
+                }
+            }
+            CPUInfo_Delete(cpuInfoApi);
+        }
+    }
+
+    // get_core_info(Logical, id): id >= 64 は nullptr、
+    // id < 64 は proc_list 内の情報と一致
+    if (get_core_info(&cpuInfo, RGYCoreType::Logical, 64) != nullptr) {
+        return Expect(false, _T("get_core_info(Logical, 64) は nullptr を返すべきです"), diagnostic);
+    }
+    if (get_core_info(&cpuInfo, RGYCoreType::Logical, -1) != nullptr) {
+        return Expect(false, _T("get_core_info(Logical, -1) は nullptr を返すべきです"), diagnostic);
+    }
+    for (int id = 0; id < 64 && id < cpuInfo.logical_cores; id++) {
+        const processor_info_t* info = get_core_info(&cpuInfo, RGYCoreType::Logical, id);
+        if (affinityValid && !CPU_ISSET(id, &procAffinity)) {
+            // affinity 外のCPUは nullptr が期待される (affinity外のCPUはマスクに含められないため)
+            if (info != nullptr) {
+                return Expect(false, (_T("affinity外のCPU ") + std::to_tstring(id)
+                    + _T(" が get_core_info で返されました")).c_str(), diagnostic);
+            }
+        } else if (info != nullptr && !(info->mask & ((size_t)1 << id))) {
+            return Expect(false, _T("get_core_info が対応するCPUのマスクを持たないコアを返しました"), diagnostic);
+        }
+    }
+    return true;
+}
+#endif //#if !(defined(_WIN32) || defined(_WIN64))
+
+
 struct TestCase {
     const TCHAR* name;
     bool (*run)(tstring& diagnostic);
@@ -3952,6 +4054,9 @@ constexpr TestCase TEST_CASES[] = {
     { _T("caption_text_length"), TestCaptionTextLength },
     { _T("bitrate_zones"), TestBitrateZones },
     { _T("vfr_input_detection"), TestVFRInputDetection },
+#if !(defined(_WIN32) || defined(_WIN64))
+    { _T("cpu_info_masks"), TestCpuInfoMasks },
+#endif
     { _T("crc32"), TestCRC32 },
     { _T("bit_reader"), TestBitReader },
     { _T("auto_buffer"), TestAutoBuffer },

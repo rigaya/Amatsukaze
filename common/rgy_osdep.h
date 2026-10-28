@@ -310,7 +310,7 @@ static size_t SetProcessAffinityMask(pid_t process, size_t mask) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     for (uint32_t j = 0; j < sizeof(mask) * 8; j++) {
-        if (mask & (1 << j)) {
+        if (mask & ((size_t)1u << j)) {
             CPU_SET(j, &cpuset);
         }
     }
@@ -331,7 +331,7 @@ static size_t SetThreadAffinityMask(pthread_t thread, size_t mask) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     for (uint32_t j = 0; j < sizeof(mask) * 8; j++) {
-        if (mask & (1 << j)) {
+        if (mask & ((size_t)1u << j)) {
             CPU_SET(j, &cpuset);
         }
     }
