@@ -346,8 +346,6 @@ bool getCPUHybridMasks(cpu_info_t *info) {
     }
     info->maskSystem = maskSysAff;
     const auto threadCount = CountSetBits(info->maskSystem);
-#else
-    const auto threadCount = info->physical_cores;
 #endif
 #if defined(__x86__) || defined(__x86_64__) || defined(_M_X86) || defined(_M_IX86) || defined(_M_X64)
     const auto hThread = GetCurrentThread();
@@ -380,12 +378,23 @@ bool getCPUHybridMasks(cpu_info_t *info) {
     if (HybridCheck[3 /*EDX*/] & (1 << 15) /*HYBRID*/) {
         cpu_set_t cpusetOriginal;
         CPU_ZERO(&cpusetOriginal);
-        pthread_getaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal);
-        for (int ith = 0; ith < threadCount; ith++) {
-            const auto maskTarget = (size_t)1u << ith;
+        if (pthread_getaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal) != 0) {
+            return false;
+        }
+        for (int core = 0; core < info->physical_cores; core++) {
+            const auto coreMask = info->proc_list[core].mask;
+            int cpu = 0;
+            for (; cpu < (int)(sizeof(coreMask) * 8); cpu++) {
+                if ((coreMask & ((size_t)1u << cpu)) && CPU_ISSET(cpu, &cpusetOriginal)) {
+                    break;
+                }
+            }
+            if (cpu == (int)(sizeof(coreMask) * 8)) {
+                continue;
+            }
             cpu_set_t cpusetTarget;
             CPU_ZERO(&cpusetTarget);
-            CPU_SET(ith, &cpusetTarget);
+            CPU_SET(cpu, &cpusetTarget);
             if (pthread_setaffinity_np(hThread, sizeof(cpusetTarget), &cpusetTarget) != 0) {
                 continue;
             }
@@ -394,13 +403,15 @@ bool getCPUHybridMasks(cpu_info_t *info) {
             __cpuid(CPUInfo, 0x1A);
             const auto hybridInfo = CPUInfo[0 /*EAX*/] >> 24;
             if (hybridInfo == 0x20) {
-                info->maskCoreE |= maskTarget;
+                info->maskCoreE |= coreMask;
             } else if (hybridInfo == 0x40) {
-                info->maskCoreP |= maskTarget;
+                info->maskCoreP |= coreMask;
             }
         }
         // 元に戻す
-        pthread_setaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal);
+        if (pthread_setaffinity_np(hThread, sizeof(cpusetOriginal), &cpusetOriginal) != 0) {
+            return false;
+        }
     }
 #endif
 
