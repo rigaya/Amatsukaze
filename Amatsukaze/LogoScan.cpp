@@ -1985,6 +1985,7 @@ void logo::LogoFrame::ScanFrameDirect(const AVFrame* top, const AVFrame* bottom,
     const int shift = srcBitDepth - dstBitDepth;
     const int rounding = (shift > 0) ? (1 << (shift - 1)) : 0;
     const int dstMax = (1 << dstBitDepth) - 1;
+    const bool directLuma = top == bottom && srcBitDepth == dstBitDepth;
 
     auto convert = [=](const int value) {
         if (shift > 0) {
@@ -2004,7 +2005,18 @@ void logo::LogoFrame::ScanFrameDirect(const AVFrame* top, const AVFrame* bottom,
         const int height = logo.getHeight();
         const int srcX = logo.getImgX();
         const int srcY = logo.getImgY();
-        if (srcBitDepth > 8) {
+        // 同じ画像でビット深度変換も不要なら、輝度面から直接インタレ解除する。
+        if (directLuma) {
+            if (srcBitDepth > 8) {
+                const int pitch = top->linesize[0] / (int)sizeof(uint16_t);
+                const auto* src = reinterpret_cast<const uint16_t*>(top->data[0]) + srcY * pitch + srcX;
+                DeintY(memDeint, src, pitch, width, height);
+            } else {
+                const int pitch = top->linesize[0];
+                const auto* src = top->data[0] + srcY * pitch + srcX;
+                DeintY(memDeint, src, pitch, width, height);
+            }
+        } else if (srcBitDepth > 8) {
             const int topPitch = top->linesize[0] / (int)sizeof(uint16_t);
             const int bottomPitch = bottom->linesize[0] / (int)sizeof(uint16_t);
             const auto* topY = reinterpret_cast<const uint16_t*>(top->data[0]);
@@ -2032,7 +2044,9 @@ void logo::LogoFrame::ScanFrameDirect(const AVFrame* top, const AVFrame* bottom,
             }
         }
 
-        DeintY(memDeint, memY, width, width, height);
+        if (!directLuma) {
+            DeintY(memDeint, memY, width, width, height);
+        }
         outResult[i].corr0 = logo.EvaluateLogo(memDeint, maxv, 0, memWork);
         outResult[i].corr1 = logo.EvaluateLogo(memDeint, maxv, 1, memWork);
     }

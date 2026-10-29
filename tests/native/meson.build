@@ -72,3 +72,13 @@ test('LogoGopDecoderTests', logo_gop_decoder_tests,
   suite : 'native',
   timeout : 60,
 )
+
+av_frame_pool_tests = executable('AVFramePoolTests',
+  'AVFramePoolTests.cpp',
+  dependencies : ffmpeg_dep + [common_dep, dependency('threads')],
+  install : false,
+)
+test('AVFramePoolTests', av_frame_pool_tests,
+  suite : 'native',
+  timeout : 30,
+)

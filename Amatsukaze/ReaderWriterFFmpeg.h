@@ -49,6 +49,10 @@ extern "C" {
 #pragma comment(lib, "avfilter.lib")
 #endif
 
+template<typename T, T* Talloc(), void Tunref(T*), void Tfree(T**)>
+class RGYPoolAV;
+using RGYPoolAVFrame = RGYPoolAV<AVFrame, av_frame_alloc, av_frame_unref, av_frame_free>;
+
 namespace av {
 
 int GetFFmpegThreads(int preferred, int height);
@@ -60,6 +64,8 @@ AVStream* GetVideoStream(AVFormatContext* ctx, int serviceid);
 class Frame {
 public:
     Frame();
+    // プールは、このフレームとコピー先のフレームより長く保持すること。
+    explicit Frame(RGYPoolAVFrame* pool);
     Frame(const Frame& src);
     ~Frame();
     AVFrame* operator()();
@@ -67,6 +73,7 @@ public:
     Frame& operator=(const Frame& src);
 private:
     AVFrame* frame_;
+    RGYPoolAVFrame* pool_;
 };
 
 class CodecContext : NonCopyable {

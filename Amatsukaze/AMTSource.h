@@ -95,8 +95,10 @@ private:
     // まだデコードしてない場合は-1
     int lastDecodeFrame;
 
-    // codecCtxが直前にデコードしたフレーム番号
-    // まだデコードしてない場合はnullptr
+    // 参照を持つprevFrameより先に宣言し、返却後にプールを破棄する。
+    std::unique_ptr<RGYPoolAVFrame> framePool;
+
+    // codecCtxが直前にデコードしたフレーム。まだない場合はnullptr。
     std::unique_ptr<Frame> prevFrame;
 
     // 直前のnon B QPテーブル

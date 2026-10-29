@@ -3529,6 +3529,55 @@ bool TestLogoRoiCacheCopy(tstring& diagnostic) {
     return true;
 }
 
+// 元画像の行ピッチを保った直接参照と、従来の16bit中間バッファ経由が完全一致することを確認する。
+bool TestLogoDirectLumaDeint(tstring& diagnostic) {
+    const auto verify = [&](auto pixel, int bitDepth, int width, int height, int padding, bool reverse) {
+        using Pixel = decltype(pixel);
+        constexpr int srcX = 3, srcY = 2, guard = 16;
+        constexpr float sentinel = -1234.5f;
+        const int rowPitch = srcX + width + padding;
+        const int rows = srcY + height + 2;
+        const int pitch = reverse ? -rowPitch : rowPitch;
+        const int maxv = (1 << bitDepth) - 1;
+        std::vector<Pixel> source((size_t)rowPitch * rows + 1);
+        uint32_t state = 0x9e3779b9;
+        for (auto& value : source) {
+            state = state * 1664525u + 1013904223u;
+            value = (Pixel)((state >> 8) & maxv);
+        }
+        const Pixel* frame = source.data() + 1 + (reverse ? (size_t)(rows - 1) * rowPitch : 0);
+        const Pixel* src = frame + srcY * pitch + srcX;
+        std::vector<uint16_t> staged((size_t)width * height);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                staged[(size_t)y * width + x] = src[(std::ptrdiff_t)y * pitch + x];
+            }
+        }
+        std::vector<float> expected((size_t)width * height + guard * 2, sentinel), actual(expected);
+        logo::DeintY(expected.data() + guard, staged.data(), width, width, height);
+        logo::DeintY(actual.data() + guard, src, pitch, width, height);
+        if (actual != expected) {
+            diagnostic = strsprintf(_T("直接輝度のインタレ解除または番兵が不一致: bit=%d 幅=%d 高さ=%d 余白=%d 逆順=%d"),
+                bitDepth, width, height, padding, (int)reverse);
+            return false;
+        }
+        return true;
+    };
+    for (int width : { 1, 2, 7, 16, 31, 32, 33, 127, 288 }) {
+        for (int height : { 1, 2, 3, 17, 64 }) {
+            for (int padding : { 0, 3, 31 }) {
+                for (bool reverse : { false, true }) {
+                    if (!verify(uint8_t(0), 8, width, height, padding, reverse)) return false;
+                    for (int bitDepth : { 10, 12 }) {
+                        if (!verify(uint16_t(0), bitDepth, width, height, padding, reverse)) return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool TestLogoTemporalHistogram(tstring& diagnostic) {
     if (!Expect(logo::LogoTemporalHistogramIndex(1, 19, 0) == 1
         && logo::LogoTemporalHistogramIndex(0, 19, 1) == 16
@@ -4112,6 +4161,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("logo_residual_skip"), TestLogoResidualSkip },
     { _T("logo_bilateral"), TestLogoBilateral },
     { _T("logo_roi_cache_copy"), TestLogoRoiCacheCopy },
+    { _T("logo_direct_luma_deint"), TestLogoDirectLumaDeint },
     { _T("logo_temporal_histogram"), TestLogoTemporalHistogram },
     { _T("caption_pes_serialization"), TestCaptionPesSerialization },
     { _T("caption_pes_wrap"), TestCaptionPesWrap },

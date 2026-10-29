@@ -7,6 +7,7 @@
 */
 
 #include "ReaderWriterFFmpeg.h"
+#include "RGYPoolAV.h"
 
 int av::GetFFmpegThreads(int preferred, int height) {
     const int maxThreads = (height > 1080) ? 16 : 8;
@@ -36,16 +37,22 @@ AVStream* av::GetVideoStream(AVFormatContext* ctx, int serviceid) {
     }
     return nullptr;
 }
-av::Frame::Frame()
-    : frame_() {
-    frame_ = av_frame_alloc();
+av::Frame::Frame() : Frame(nullptr) {}
+av::Frame::Frame(RGYPoolAVFrame* pool)
+    : frame_(pool ? pool->getFree().release() : av_frame_alloc()), pool_(pool) {
+    if (!frame_) throw std::bad_alloc();
 }
-av::Frame::Frame(const Frame& src) {
-    frame_ = av_frame_alloc();
-    av_frame_ref(frame_, src());
+av::Frame::Frame(const Frame& src) : Frame(src.pool_) {
+    if (av_frame_ref(frame_, src()) < 0) {
+        THROW(RuntimeException, "AVFrameの参照取得に失敗しました");
+    }
 }
 av::Frame::~Frame() {
-    av_frame_free(&frame_);
+    if (pool_) {
+        pool_->returnFree(&frame_);
+    } else {
+        av_frame_free(&frame_);
+    }
 }
 AVFrame* av::Frame::operator()() {
     return frame_;
@@ -54,8 +61,12 @@ const AVFrame* av::Frame::operator()() const {
     return frame_;
 }
 av::Frame& av::Frame::operator=(const Frame& src) {
-    av_frame_unref(frame_);
-    av_frame_ref(frame_, src());
+    if (this != &src) {
+        av_frame_unref(frame_);
+        if (av_frame_ref(frame_, src()) < 0) {
+            THROW(RuntimeException, "AVFrameの参照取得に失敗しました");
+        }
+    }
     return *this;
 }
 av::CodecContext::CodecContext(const AVCodec* pCodec)
