@@ -744,7 +744,8 @@ static tstring createWhisperWaveInput(AMTContext& ctx,
     }
 
     const tstring wavPath = setting.getTmpWhisperWavPath(key, entry.localIndex);
-    std::unique_ptr<FILE, decltype(&fclose)> fp(_tfopen(wavPath.c_str(), _T("wb")), &fclose);
+    auto closeFile = [](FILE* file) { fclose(file); };
+    std::unique_ptr<FILE, decltype(closeFile)> fp(_tfopen(wavPath.c_str(), _T("wb")), closeFile);
     if (!fp) {
         ctx.warnF(_T("Whisper入力wav作成: ファイルを開けません (%s)"), wavPath.c_str());
         return tstring();

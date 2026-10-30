@@ -52,10 +52,11 @@
 #endif
 
 #if defined(_MSC_VER)
-#define RGY_DO_PRAGMA(x)
-#define RGY_DISABLE_WARNING_PUSH
+#define RGY_DO_PRAGMA(x) __pragma(x)
+#define RGY_DISABLE_WARNING_PUSH RGY_DO_PRAGMA(warning(push))
+#define RGY_DISABLE_WARNING_NUM(num) RGY_DO_PRAGMA(warning(disable: num))
 #define RGY_DISABLE_WARNING_STR(str)
-#define RGY_DISABLE_WARNING_POP
+#define RGY_DISABLE_WARNING_POP RGY_DO_PRAGMA(warning(pop))
 #elif defined(__clang__)
 #define RGY_DO_PRAGMA_(x) _Pragma (#x)
 #define RGY_DO_PRAGMA(x)  RGY_DO_PRAGMA_(x)
@@ -66,10 +67,10 @@
 #elif defined(__GNUC__)
 #define RGY_DO_PRAGMA_(x) _Pragma (#x)
 #define RGY_DO_PRAGMA(x)  RGY_DO_PRAGMA_(x)
-#define RGY_DISABLE_WARNING_PUSH     RGY_DO_PRAGMA(GCC diagnostic push)
+#define RGY_DISABLE_WARNING_PUSH     RGY_DO_PRAGMA_(GCC diagnostic push)
 #define RGY_DISABLE_WARNING_NUM(num)
-#define RGY_DISABLE_WARNING_STR(str) RGY_DO_PRAGMA(GCC diagnostic ignored str)
-#define RGY_DISABLE_WARNING_POP      RGY_DO_PRAGMA(GCC diagnostic pop)
+#define RGY_DISABLE_WARNING_STR(str) RGY_DO_PRAGMA_(GCC diagnostic ignored str)
+#define RGY_DISABLE_WARNING_POP      RGY_DO_PRAGMA_(GCC diagnostic pop)
 #endif
 
 using std::vector;

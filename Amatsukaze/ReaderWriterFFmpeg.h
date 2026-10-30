@@ -15,6 +15,7 @@
 #include <memory>
 #include <cstdint>
 
+#include "rgy_util.h"
 #include "StreamUtils.h"
 #include "ProcessThread.h"
 
@@ -24,7 +25,10 @@
 // libffmpeg
 #pragma warning(push)
 #pragma warning(disable:4819) //C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wattributes")
 extern "C" {
+#include <libavutil/mem.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/error.h>
 #include <libavcodec/avcodec.h>
@@ -38,6 +42,7 @@ extern "C" {
 #include <libavutil/opt.h>
 #endif
 }
+RGY_DISABLE_WARNING_POP
 #pragma warning(pop)
 #pragma comment(lib, "avutil.lib")
 #pragma comment(lib, "avcodec.lib")

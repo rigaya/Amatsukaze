@@ -33,6 +33,9 @@ extern "C" AMATSUKAZE_API int AmatsukazeCLI(int argc, const tchar* argv[]) {
     return RunAmatsukazeCLI(argc, argv);
 }
 
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_NUM(4996)
+RGY_DISABLE_WARNING_STR("-Wdeprecated-declarations")
 extern "C" AMATSUKAZE_API void InitAmatsukazeDLL() {
     // FFMPEGライブラリ初期化
 #if LIBAVFORMAT_VERSION_MAJOR < 59
@@ -43,7 +46,12 @@ extern "C" AMATSUKAZE_API void InitAmatsukazeDLL() {
 #endif
 }
 
+RGY_DISABLE_WARNING_POP
+
 // CM解析用（＋デバッグ用）インターフェース
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_NUM(4996)
+RGY_DISABLE_WARNING_STR("-Wdeprecated-declarations")
 #if defined(_WIN32) || defined(_WIN64)
 extern "C" AMATSUKAZE_API const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
 #else
@@ -74,6 +82,7 @@ extern "C" AMATSUKAZE_API const char* AvisynthPluginInit3(IScriptEnvironment* en
 
     return "Amatsukaze plugin";
 }
+RGY_DISABLE_WARNING_POP
 
 
 #if defined(_WIN32) || defined(_WIN64)

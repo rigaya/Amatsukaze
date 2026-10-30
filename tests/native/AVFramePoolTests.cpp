@@ -1,13 +1,17 @@
 ﻿#include "../../Amatsukaze/RGYPoolAV.h"
+#include "rgy_util.h"
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
 #include <vector>
+RGY_DISABLE_WARNING_PUSH
+RGY_DISABLE_WARNING_STR("-Wattributes")
 extern "C" {
 #include <libavutil/buffer.h>
 #include <libavutil/frame.h>
 #include <libavutil/pixfmt.h>
 }
+RGY_DISABLE_WARNING_POP
 
 namespace {
 void Check(bool condition, const char* message) {
