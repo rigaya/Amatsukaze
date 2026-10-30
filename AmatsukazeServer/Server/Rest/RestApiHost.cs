@@ -268,6 +268,9 @@ namespace Amatsukaze.Server.Rest
 
         private WebApplication BuildWebApp(int port)
         {
+            var accessPolicy = RestAccessPolicy.Parse(
+                Environment.GetEnvironmentVariable("AMT_REST_ADD_ALLOW"),
+                message => Util.AddLog(message, null));
             var baseDir = AppContext.BaseDirectory;
             var webRoot = Path.Combine(baseDir, "wwwroot");
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -311,7 +314,7 @@ namespace Amatsukaze.Server.Rest
                             if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
                                 return true;
                             if (IPAddress.TryParse(uri.Host, out var originAddress))
-                                return IsAllowedRemote(originAddress);
+                                return accessPolicy.IsAllowed(originAddress);
                             return origin.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                                    origin.StartsWith("https://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                                    origin.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase) ||
@@ -329,7 +332,7 @@ namespace Amatsukaze.Server.Rest
             app.Use(async (context, next) =>
             {
                 var remote = context.Connection.RemoteIpAddress;
-                if (remote != null && !IsAllowedRemote(remote))
+                if (remote != null && !accessPolicy.IsAllowed(remote))
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     return;
@@ -2089,49 +2092,6 @@ namespace Amatsukaze.Server.Rest
                 }
                 return Results.Ok(new { });
             });
-        }
-
-        private static bool IsAllowedRemote(IPAddress address)
-        {
-            if (IPAddress.IsLoopback(address))
-            {
-                return true;
-            }
-
-            if (address.IsIPv4MappedToIPv6)
-            {
-                address = address.MapToIPv4();
-            }
-
-            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-            {
-                var bytes = address.GetAddressBytes();
-                if (bytes[0] == 10)
-                {
-                    return true;
-                }
-                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
-                {
-                    return true;
-                }
-                if (bytes[0] == 192 && bytes[1] == 168)
-                {
-                    return true;
-                }
-                return false;
-            }
-
-            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
-            {
-                if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal)
-                {
-                    return true;
-                }
-                var bytes = address.GetAddressBytes();
-                return (bytes[0] & 0xFE) == 0xFC; // Unique local (fc00::/7)
-            }
-
-            return false;
         }
 
         private static IResult BuildMaybeGzippedJsonResult(HttpRequest request, object payload)
