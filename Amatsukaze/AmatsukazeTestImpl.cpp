@@ -209,7 +209,7 @@
     enum {
         BUF_SIZE = 1400 * 1024 * 1024, // 1GB
     };
-    auto buf = std::unique_ptr<uint8_t>(new uint8_t[BUF_SIZE]);
+    auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[BUF_SIZE]);
     FILE* fp = fsopenT(setting.getSrcFilePath().c_str(), _T("rb"), _SH_DENYNO);
     if (fp == nullptr) {
         return 1;
@@ -258,7 +258,7 @@
     enum {
         BUF_SIZE = 1024 * 1024, // 1MB
     };
-    auto buf = std::unique_ptr<uint8_t>(new uint8_t[BUF_SIZE]);
+    auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[BUF_SIZE]);
     size_t readBytes = fread(buf.get(), 1, BUF_SIZE, fp);
 
     AutoBuffer decoded;
@@ -290,7 +290,7 @@
         return 1;
     }
 
-    auto testbuf = std::unique_ptr<uint8_t>(new uint8_t[BUF_SIZE]);
+    auto testbuf = std::unique_ptr<uint8_t[]>(new uint8_t[BUF_SIZE]);
     size_t testBytes = fread(testbuf.get(), 1, BUF_SIZE, testfp);
     // data chunkを探す
     for (int i = sizeof(RiffHeader); ; ) {

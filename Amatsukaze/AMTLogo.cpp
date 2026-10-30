@@ -139,7 +139,7 @@ void logo::LogoData::WriteBaseLogo(File& file, const LogoHeader* header, const L
     file.writeValue(fh);
 
     LOGO_HEADER h = { 0 };
-    strncpy_s(h.name, header->name, sizeof(h.name) - 1);
+    memcpy(h.name, header->name, std::min(strlen(header->name), sizeof(h.name) - 1));
     h.x = header->imgx;
     h.y = header->imgy;
     h.w = header->w;

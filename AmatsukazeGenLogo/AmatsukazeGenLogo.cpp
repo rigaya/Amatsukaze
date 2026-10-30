@@ -550,7 +550,7 @@ template<typename T>
 bool LoadSymbol(HMODULE module, const char* name, T& symbol) {
     symbol = reinterpret_cast<T>(RGY_GET_PROC_ADDRESS(module, name));
     if (symbol == nullptr) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: Failed to load symbol: %hs\n"), name);
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: Failed to load symbol: %s\n"), char_to_tstring(name).c_str());
         return false;
     }
     return true;
@@ -959,11 +959,11 @@ int Run(const NativeApi& api, const Options& opt) {
 
     std::unique_ptr<void, TsInfoDeleter> tsInfo(api.TsInfo_Create(ctx.get()), TsInfoDeleter{ &api });
     if (!tsInfo) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(SafeGetError(api, ctx.get())).c_str());
         return ERR_RUNTIME_NATIVE;
     }
     if (api.TsInfo_ReadFile(tsInfo.get(), opt.input.c_str()) == 0) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(SafeGetError(api, ctx.get())).c_str());
         return ERR_RUNTIME_NATIVE;
     }
 
@@ -1030,7 +1030,7 @@ int Run(const NativeApi& api, const Options& opt) {
             detailedDebug ? debugPaths.accepted.c_str() : nullptr,
             detailedDebug ? 1 : 0,
             ReportAutoDetectProgress) == 0) {
-            _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+            _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(SafeGetError(api, ctx.get())).c_str());
             g_autoDetectProgressState = nullptr;
             return ERR_RUNTIME_NATIVE;
         }
@@ -1065,7 +1065,7 @@ int Run(const NativeApi& api, const Options& opt) {
         aligned.x, aligned.y, aligned.w, aligned.h,
         opt.logoGenThreshold, opt.logoGenSamples,
         ReportAnalyzeProgress) == 0) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(SafeGetError(api, ctx.get())).c_str());
         g_logoGenProgressState = nullptr;
         return ERR_RUNTIME_NATIVE;
     }
@@ -1074,7 +1074,7 @@ int Run(const NativeApi& api, const Options& opt) {
 
     std::unique_ptr<void, LogoDeleter> logo(api.LogoFile_Create(ctx.get(), tempPaths.tempLogo.c_str()), LogoDeleter{ &api });
     if (!logo) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(SafeGetError(api, ctx.get())).c_str());
         return ERR_RUNTIME_NATIVE;
     }
     api.LogoFile_SetServiceId(logo.get(), serviceId);
@@ -1084,7 +1084,7 @@ int Run(const NativeApi& api, const Options& opt) {
         ? api.LogoFile_SaveAviUtl(logo.get(), tempPaths.finalTemp.c_str())
         : api.LogoFile_Save(logo.get(), tempPaths.finalTemp.c_str());
     if (saveOk == 0) {
-        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %hs\n"), SafeGetError(api, ctx.get()).c_str());
+        _ftprintf(stderr, _T("AmatsukazeGenLogo error: %s\n"), char_to_tstring(SafeGetError(api, ctx.get())).c_str());
         return ERR_RUNTIME_NATIVE;
     }
     if (!opt.logoImagePath.empty()) {
@@ -1094,7 +1094,7 @@ int Run(const NativeApi& api, const Options& opt) {
             PrintCliInfo(_T("warning: ロゴ画像のJPEG保存に失敗しました"));
             const std::string jpegErr = SafeGetError(api, ctx.get());
             if (!jpegErr.empty()) {
-                PrintCliInfo(_T("warning: %hs"), jpegErr.c_str());
+                PrintCliInfo(_T("warning: %s"), char_to_tstring(jpegErr).c_str());
             }
         } else {
             PrintCliInfo(_T("logo image saved: %s"), opt.logoImagePath.c_str());
