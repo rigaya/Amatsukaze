@@ -9,9 +9,17 @@ is_x86 = host_machine.cpu_family() == 'x86' or host_machine.cpu_family() == 'x86
 scripts_dir = meson.current_source_dir() / 'scripts'
 
 # コンパイラフラグ
+cpp_comp = meson.get_compiler('cpp')
 cpp_args = []
-if meson.get_compiler('cpp').get_id() == 'gcc' or meson.get_compiler('cpp').get_id() == 'clang'
-  cpp_args += ['-pthread', '-Wno-multichar', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unused-variable', '-Wno-unknown-pragmas', '-Wno-unused-but-set-variable']
+if cpp_comp.get_id() == 'gcc' or cpp_comp.get_id() == 'clang'
+  # ターゲット個別の cpp_args を付けない翻訳単位にも常に通す。
+  add_project_arguments(
+    '-Wno-unused-function',
+    '-Wno-unknown-pragmas',
+    '-Wno-unused-variable',
+    language : ['c', 'cpp'],
+  )
+  cpp_args += ['-pthread', '-Wno-multichar', '-Wno-unused-parameter', '-Wno-unused-but-set-variable']
 endif
 cpp_args += ['-DENABLE_X86_SIMD=' + (is_x86 ? '1' : '0')]
 
