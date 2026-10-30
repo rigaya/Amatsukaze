@@ -20,6 +20,8 @@ public:
     bool matches(const tstring& path, int id) const { return source == path && service == id; }
     bool hasStarted() const { return started; }
     size_t cachedFrames() const { return positions.size(); }
+    void setThreadLimit(int limit) { threadLimit = limit; }
+    int getThreadLimit() const { return threadLimit; }
 
     void configure(AVFrame* frame, int x, int y, int width, int height,
         int scaleNum, int scaleDen, int frameCount, uint64_t availableBytes) {
@@ -142,6 +144,7 @@ public:
     }
 
 private:
+    int threadLimit = 0;
     void disableCache() {
         cacheEnabled = false;
         std::vector<uint8_t>().swap(prefix);

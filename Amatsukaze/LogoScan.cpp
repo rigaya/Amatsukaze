@@ -1061,7 +1061,7 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
     if (pCodec == NULL) {
         THROW(FormatException, "Could not find decoder ...");
     }
-    // GOP並列の検証と比較用に、単一デコーダーへ戻す設定も用意する。
+    // GOP並列のバッファとジョブ単位を調整する。
     auto setting = [](const char* name, int fallback, int low, int high) {
         const char* text = std::getenv(name);
         if (!text || !*text) return fallback;
@@ -1074,14 +1074,13 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
     const int decodeBudget = threadLimit > 0
         ? std::max(1, std::min(processorCount, threadLimit))
         : processorCount;
-    // MPEG-2のGOP並列は明示指定で利用し、他の入力は従来経路を維持する。
-    const int requestedDecoders = setting("AMT_LOGO_GOP_DECODERS", 1, 0, logo::kMaxLogoParallelDecoders);
-    const int gopDecoders = requestedDecoders == 0 ? logo::GetPreferredLogoDecoderCount(decodeBudget) : requestedDecoders;
+    // MPEG-2のGOP並列は指定されたスレッド数から自動配分する。
+    const int gopDecoders = logo::GetPreferredLogoDecoderCount(decodeBudget);
     if (vcodecId == AV_CODEC_ID_MPEG2VIDEO && gopDecoders > 1
         && videoStream->codecpar->format >= 0 && videoStream->codecpar->width > 0 && videoStream->codecpar->height > 0) {
         LogoGopDecodeSettings config;
         config.decoders = gopDecoders;
-        config.threadsPerDecoder = setting("AMT_LOGO_GOP_THREADS", logo::GetLogoDecoderThreadCount(decodeBudget, gopDecoders), 1, 8);
+        config.threadsPerDecoder = logo::GetLogoDecoderThreadCount(decodeBudget, gopDecoders);
         config.gopsPerJob = setting("AMT_LOGO_GOPS_PER_JOB", config.gopsPerJob, 1, 128);
         config.outputQueueDepth = setting("AMT_LOGO_GOP_BUFFER_FRAMES", config.outputQueueDepth, 0, 4096);
         config.frameBufferBytes = size_t(setting("AMT_LOGO_GOP_BUFFER_MIB", 2048, 64, 4096)) << 20;
@@ -1451,7 +1450,11 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
             return onFrame(frame);
         });
     inputOriginX = inputOriginY = 0;
-    if (!reused) SimpleVideoReader::readAll(src, serviceid);
+    if (!reused) {
+        const int threadLimit = activeLogoDecodeSession != nullptr && activeLogoDecodeSession->matches(src, serviceid)
+            ? activeLogoDecodeSession->getThreadLimit() : 0;
+        SimpleVideoReader::readAll(src, serviceid, threadLimit);
+    }
     else pThis->ctx.infoF(_T("[GenLogo] decoded frame reuse: %zu"), cachedFrames);
 
     pThis->logodata = logoscan->GetLogo(false);
@@ -5371,6 +5374,7 @@ namespace {
                 THROW(RuntimeException, "Cancel requested");
             }
             auto* session = logo::activeLogoDecodeSession;
+            if (session != nullptr && session->matches(srcpath, serviceid)) session->setThreadLimit(threadN);
             if (session != nullptr && session->matches(srcpath, serviceid) && !session->hasStarted()
                 && roiCacheCaptureActive && frameWindowStart == 0 && pendingStats != nullptr) {
                 session->detect(onFirstFrame, onFrame, [&](AVFrame* frame) {
