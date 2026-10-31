@@ -23,6 +23,12 @@ extern "C" {
 
 namespace logo {
 
+// 並列復号だけで処理できない入力を、解析全体の再試行対象として区別する。
+class LogoGopDecodeError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 // パケットの復号順と表示順を分離し、timestampを変更せずに担当範囲を追跡する。
 struct LogoGopDecodeSettings {
     int decoders = 4;
@@ -43,9 +49,10 @@ namespace gopdecode {
 
 inline void Check(int result, const char* operation) {
     if (result < 0) {
+        if (result == AVERROR(ENOMEM)) throw std::bad_alloc();
         char detail[AV_ERROR_MAX_STRING_SIZE] = {};
         av_strerror(result, detail, sizeof(detail));
-        throw std::runtime_error(std::string(operation) + ": " + detail);
+        throw LogoGopDecodeError(std::string(operation) + ": " + detail);
     }
 }
 
@@ -154,10 +161,47 @@ struct Job {
 struct PacketHeader {
     bool startsGop = false;
     bool fieldPicture = false;
+    bool completeFieldPair = false;
     bool matrixUpdate = false;
     int sequenceOffset = -1;
     int pictureOffset = -1;
 };
+
+// 通常フレームの走査を増やさず、フィールド入力だけ上下ペア全体を検証する。
+inline bool InspectFieldPair(const AVPacket& packet, PacketHeader& header) {
+    if (header.pictureOffset < 0) return false;
+    int pictures = 0;
+    int temporalReference = -1;
+    int structures[2] = {};
+    bool slices[2] = {};
+    for (int i = header.pictureOffset; i + 3 < packet.size; i++) {
+        if (packet.data[i] || packet.data[i + 1] || packet.data[i + 2] != 1) continue;
+        const int code = packet.data[i + 3];
+        if (code == 0) {
+            if (++pictures > 2 || i + 5 >= packet.size) return false;
+            const int reference = (int(packet.data[i + 4]) << 2) | (packet.data[i + 5] >> 6);
+            if (temporalReference < 0) temporalReference = reference;
+            else if (reference != temporalReference) return false;
+        } else if (code >= 1 && code <= 0xaf) {
+            if (pictures == 0 || structures[pictures - 1] == 0) return false;
+            slices[pictures - 1] = true;
+        } else if (code == 0xb3 || code == 0xb8) {
+            return false;
+        } else if (code == 0xb5) {
+            if (i + 4 >= packet.size) return false;
+            const int extension = packet.data[i + 4] >> 4;
+            // ピクチャー開始後の行列更新は、後続ジョブへ状態を引き継げない。
+            if (extension == 3) header.matrixUpdate = true;
+            if (extension == 8) {
+                if (pictures == 0 || i + 6 >= packet.size || structures[pictures - 1] != 0) return false;
+                const int structure = packet.data[i + 6] & 3;
+                if (structure != 1 && structure != 2) return false;
+                structures[pictures - 1] = structure;
+            }
+        }
+    }
+    return pictures == 2 && structures[0] != structures[1] && slices[0] && slices[1];
+}
 
 inline PacketHeader Inspect(const AVPacket& packet) {
     PacketHeader out;
@@ -180,6 +224,7 @@ inline PacketHeader Inspect(const AVPacket& packet) {
             if (extension == 3 && (out.sequenceOffset < 0 || out.pictureOffset >= 0)) out.matrixUpdate = true;
         }
     }
+    if (out.fieldPicture) out.completeFieldPair = InspectFieldPair(packet, out);
     return out;
 }
 
@@ -198,7 +243,7 @@ inline void SetIdentity(AVCodecContext* codec, AVPacket* packet, int64_t number)
 inline int64_t Identity(const AVFrame* frame) {
 #ifdef AV_CODEC_FLAG_COPY_OPAQUE
     if (!frame->opaque_ref || frame->opaque_ref->size < sizeof(int64_t)) {
-        throw std::runtime_error("GOP復号結果に入力パケット番号がない");
+        throw LogoGopDecodeError("GOP復号結果に入力パケット番号がない");
     }
     int64_t number;
     std::memcpy(&number, frame->opaque_ref->data, sizeof(number));
@@ -219,7 +264,7 @@ inline void DecodeJob(AVCodecContext* codec, const std::shared_ptr<Job>& job) {
             Check(result, "GOPフレーム受信失敗");
             const int64_t number = Identity(frame.get());
             if (number < job->inputBegin || number >= job->outputEnd) {
-                throw std::runtime_error("GOP復号結果のパケット番号が入力範囲外");
+                throw LogoGopDecodeError("GOP復号結果のパケット番号が入力範囲外");
             }
             if (number >= job->outputBegin) {
                 Output output;
@@ -290,7 +335,7 @@ inline LogoGopDecodeReport RunLogoGopDecode(const AVCodecParameters* parameters,
     };
     try {
         const AVCodec* decoder = avcodec_find_decoder(parameters->codec_id);
-        if (!decoder) throw std::runtime_error("MPEG-2デコーダーがない");
+        if (!decoder) throw LogoGopDecodeError("MPEG-2デコーダーがない");
         for (int i = 0; i < settings.decoders; i++) {
             Codec codec(avcodec_alloc_context3(decoder));
             if (!codec) throw std::bad_alloc();
@@ -350,8 +395,11 @@ inline LogoGopDecodeReport RunLogoGopDecode(const AVCodecParameters* parameters,
                     if (!packet) throw std::bad_alloc();
                     if (!readPacket(packet.get())) break;
                     const auto header = Inspect(*packet);
-                    if (header.fieldPicture || header.matrixUpdate) {
-                        throw std::runtime_error("フィールドピクチャーまたは量子化行列の途中更新はGOP並列復号の対象外");
+                    if (header.fieldPicture && !header.completeFieldPair) {
+                        throw LogoGopDecodeError("同一パケット内で上下が揃わないフィールドピクチャーはGOP並列復号の対象外");
+                    }
+                    if (header.matrixUpdate) {
+                        throw LogoGopDecodeError("量子化行列の途中更新はGOP並列復号の対象外");
                     }
                     if (header.startsGop && !current->packets.empty()) {
                         if (!group.empty() && groupPackets + current->packets.size() > packetsPerJob && !dispatch()) return;
@@ -367,7 +415,7 @@ inline LogoGopDecodeReport RunLogoGopDecode(const AVCodecParameters* parameters,
                     if (current->packets.empty()) current->sequence = sequence;
                     bufferedBytes += size_t(packet->size);
                     // 境界を見つけられない壊れた入力で、圧縮パケットを無制限に保持しない。
-                    if (bufferedBytes > (64u << 20)) throw std::runtime_error("GOP分割待ちの圧縮データが64MiBを超えた");
+                    if (bufferedBytes > (64u << 20)) throw LogoGopDecodeError("GOP分割待ちの圧縮データが64MiBを超えた");
                     current->packets.push_back(std::move(packet));
                     report.packets++;
                 }

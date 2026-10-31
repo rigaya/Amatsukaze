@@ -82,3 +82,14 @@ test('AVFramePoolTests', av_frame_pool_tests,
   suite : 'native',
   timeout : 30,
 )
+
+logo_decode_fallback_tests = executable('LogoDecodeFallbackTests',
+  'LogoDecodeFallbackTests.cpp',
+  dependencies : [amatsukaze_dep] + amatsukaze_deps,
+  cpp_args : host_machine.system() == 'windows' ? ['-DAMATSUKAZE_IMPORTS'] : [],
+  install : false,
+)
+test('LogoDecodeFallbackTests', logo_decode_fallback_tests,
+  suite : 'native',
+  timeout : 120,
+)

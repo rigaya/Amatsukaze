@@ -86,6 +86,53 @@ Snapshot Copy(AVFrame* frame) {
     return out;
 }
 
+Packet HeaderPacket(const std::vector<uint8_t>& bytes) {
+    Packet packet(av_packet_alloc(), PacketDeleter());
+    Check(av_new_packet(packet.get(), int(bytes.size())), "ヘッダー検査領域確保失敗");
+    std::memcpy(packet->data, bytes.data(), bytes.size());
+    return packet;
+}
+
+void AppendPicture(std::vector<uint8_t>& bytes, int structure, int reference = 0, bool slice = true) {
+    const uint8_t picture[] = {0,0,1,0,uint8_t(reference >> 2),uint8_t(((reference & 3) << 6) | 8),0xff,0xff,
+        0,0,1,0xb5,0x8f,0xff,uint8_t(0xfc | structure),0};
+    bytes.insert(bytes.end(), std::begin(picture), std::end(picture));
+    if (slice) bytes.insert(bytes.end(), {0,0,1,1,0x80,0});
+}
+
+void VerifyFieldPairHeaders() {
+    for (int first : {1,2}) for (int reference : {0,1023}) {
+        std::vector<uint8_t> bytes;
+        AppendPicture(bytes, first, reference);
+        const auto firstPictureBytes = bytes.size();
+        AppendPicture(bytes, 3 - first, reference);
+        auto packet = HeaderPacket(bytes);
+        const auto header = Inspect(*packet);
+        CheckTest(header.fieldPicture && header.completeFieldPair, "同一パケット内の上下ペアを拒否した");
+        // 第２フィールドの手前にある量子化行列更新も見落とさない。
+        bytes.insert(bytes.begin() + firstPictureBytes, {0,0,1,0xb5,0x30,0,0,0});
+        packet = HeaderPacket(bytes);
+        CheckTest(Inspect(*packet).matrixUpdate, "フィールド間の量子化行列更新を検出していない");
+    }
+    for (int second : {-1,0,1,3}) {
+        std::vector<uint8_t> bytes;
+        AppendPicture(bytes, 1);
+        if (second >= 0) AppendPicture(bytes, second);
+        CheckTest(!Inspect(*HeaderPacket(bytes)).completeFieldPair, "片側・同一パリティ・不正構造のペアを許可した");
+    }
+    for (int invalid = 0; invalid < 8; invalid++) {
+        std::vector<uint8_t> bytes;
+        AppendPicture(bytes, 1, 0, invalid != 0);
+        if (invalid == 1) bytes.insert(bytes.end(), {0,0,1,0xb8,0,0});
+        if (invalid == 2) bytes.insert(bytes.end(), {0,0,1,0xb3,0,0});
+        if (invalid == 3) bytes.insert(bytes.end(), {0,0,1,0xb5,0x8f,0xff,0xfd,0});
+        AppendPicture(bytes, 2, invalid == 4 ? 1 : 0, invalid != 5);
+        if (invalid == 6) AppendPicture(bytes, 3);
+        if (invalid == 7) bytes.insert(bytes.end(), {0,0,1,0,0});
+        CheckTest(!Inspect(*HeaderPacket(bytes)).completeFieldPair, "不完全または余計なピクチャーを含むペアを許可した");
+    }
+}
+
 std::vector<Snapshot> Sequential(const Source& source, size_t start = 0) {
     const AVCodec* decoder = avcodec_find_decoder(AV_CODEC_ID_MPEG2VIDEO);
     Codec codec(avcodec_alloc_context3(decoder));
@@ -150,7 +197,8 @@ int main() {
             CheckTest(threads >= 1 && threads <= 8 && count * threads <= budget, "自動配分がCPU予算を超えた");
         }
         CheckTest(logo::GetPreferredLogoDecoderCount(0) == 1, "不明なCPU数を1へ補正していない");
-        // 対応範囲外のフィールドピクチャーを、画素を出力する前に判別する。
+        VerifyFieldPairHeaders();
+        // 単独のフィールドと通常のフレームを区別する。
         for (int structure : {1,2,3}) {
             Packet packet(av_packet_alloc(), PacketDeleter());
             Check(av_new_packet(packet.get(), 8), "ヘッダー検査領域確保失敗");
@@ -194,15 +242,41 @@ int main() {
             for (bool inputError : {false,true}) {
                 bool caught = false;
                 try { Parallel(source, settings, 0, 100000, inputError ? 50 : -1, inputError ? -1 : 17); }
+                catch (const logo::LogoGopDecodeError&) { caught = false; }
                 catch (const std::runtime_error& ex) { caught = std::string(ex.what()) == (inputError ? "入力例外の検査" : "出力例外の検査"); }
                 CheckTest(caught, "例外を呼び出し元へ返していない");
             }
+            // 未対応入力とFFmpegの復号失敗だけを、上位の再試行対象として区別する。
+            for (bool matrix : {false,true}) {
+                Source unsupported;
+                Check(avcodec_parameters_copy(unsupported.parameters.get(), source.parameters.get()), "未対応入力の設定コピー失敗");
+                std::vector<uint8_t> bytes;
+                AppendPicture(bytes, matrix ? 3 : 1);
+                if (matrix) bytes.insert(bytes.begin() + 8, {0,0,1,0xb5,0x30,0,0,0});
+                unsupported.packets.push_back(HeaderPacket(bytes));
+                bool caught = false;
+                try { Parallel(unsupported, settings); }
+                catch (const logo::LogoGopDecodeError&) { caught = true; }
+                CheckTest(caught, "未対応入力を再試行対象として報告していない");
+            }
+            Source malformed;
+            Check(avcodec_parameters_copy(malformed.parameters.get(), source.parameters.get()), "破損入力の設定コピー失敗");
+            // 幅と高さが０のシーケンスにピクチャーを続け、実際の復号エラーを発生させる。
+            malformed.packets.push_back(HeaderPacket({0,0,1,0xb3,0,0,0,0x13,0,0,0x20,0,0,0,1,0,0,8,0xff,0xff}));
+            bool decodeErrorCaught = false;
+            try { Parallel(malformed, settings); }
+            catch (const logo::LogoGopDecodeError&) { decodeErrorCaught = true; }
+            CheckTest(decodeErrorCaught, "FFmpegの復号エラーを再試行対象として報告していない");
+            bool allocationErrorCaught = false;
+            try { Check(AVERROR(ENOMEM), "確保エラーの検査"); }
+            catch (const std::bad_alloc&) { allocationErrorCaught = true; }
+            CheckTest(allocationErrorCaught, "メモリ不足を再試行対象に変えている");
             source.packets.resize(2);
             CheckTest(Parallel(source, settings) == Sequential(source), "短い入力の終端が異なる");
             source.packets.clear();
             CheckTest(Parallel(source, settings).empty(), "空入力からフレームが出た");
         }
-        std::puts("GOP並列復号: Open/Closed GOP、PTS欠落/不連続、端数、キャンセル、例外の検証成功");
+        std::puts("GOP並列復号: 上下フィールドペア、Open/Closed GOP、PTS欠落/不連続、端数、キャンセル、例外の検証成功");
         return 0;
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "%s\n", ex.what());

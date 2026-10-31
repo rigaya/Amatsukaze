@@ -1035,8 +1035,8 @@ logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo
 
     return metrics;
 }
-logo::SimpleVideoReader::SimpleVideoReader(AMTContext& ctx)
-    : AMTObject(ctx) {}
+logo::SimpleVideoReader::SimpleVideoReader(AMTContext& ctx, bool enableGopDecode)
+    : AMTObject(ctx), currentPos(0), gopDecodeEnabled(enableGopDecode) {}
 
 void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, int threadLimit) {
     readAll(src, serviceid,
@@ -1076,7 +1076,7 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
         : processorCount;
     // MPEG-2のGOP並列は指定されたスレッド数から自動配分する。
     const int gopDecoders = logo::GetPreferredLogoDecoderCount(decodeBudget);
-    if (vcodecId == AV_CODEC_ID_MPEG2VIDEO && gopDecoders > 1
+    if (gopDecodeEnabled && vcodecId == AV_CODEC_ID_MPEG2VIDEO && gopDecoders > 1
         && videoStream->codecpar->format >= 0 && videoStream->codecpar->width > 0 && videoStream->codecpar->height > 0) {
         LogoGopDecodeSettings config;
         config.decoders = gopDecoders;
@@ -1107,6 +1107,10 @@ void logo::SimpleVideoReader::readAll(const tstring& src, int serviceid, const F
                 });
             ctx.infoF(_T("[LogoScan] GOP decode completed: jobs=%lld packets=%lld frames=%lld prerollPackets=%lld"),
                 (long long)report.jobs, (long long)report.packets, (long long)report.frames, (long long)report.prerollPackets);
+        } catch (const LogoGopDecodeError&) {
+            throw;
+        } catch (const std::bad_alloc&) {
+            throw;
         } catch (const Exception&) {
             throw;
         } catch (const std::exception& error) {
@@ -1426,7 +1430,7 @@ void logo::LogoScanDataCompressed::decompress(void *ptr) {
 }
 
 logo::LogoAnalyzer::InitialLogoCreator::InitialLogoCreator(LogoAnalyzer* pThis) :
-    SimpleVideoReader(pThis->ctx),
+    SimpleVideoReader(pThis->ctx, pThis->enableGopDecode),
     pThis(pThis),
     scanDataSize(pThis->scanw * pThis->scanh * 3 / 2),
     bitDepth(8),
@@ -1453,6 +1457,8 @@ void logo::LogoAnalyzer::InitialLogoCreator::readAll(const tstring& src, int ser
     if (!reused) {
         const int threadLimit = activeLogoDecodeSession != nullptr && activeLogoDecodeSession->matches(src, serviceid)
             ? activeLogoDecodeSession->getThreadLimit() : 0;
+        if (activeLogoDecodeSession != nullptr && activeLogoDecodeSession->matches(src, serviceid)
+            && !activeLogoDecodeSession->isGopDecodeEnabled()) setGopDecodeEnabled(false);
         SimpleVideoReader::readAll(src, serviceid, threadLimit);
     }
     else pThis->ctx.infoF(_T("[GenLogo] decoded frame reuse: %zu"), cachedFrames);
@@ -1576,7 +1582,7 @@ void logo::RunLogoRemakeFrameEvaluation(const int numFrames, const int threadCou
 
 logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
     const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
-    LOGO_ANALYZE_CB cb, bool validateQuality) :
+    LOGO_ANALYZE_CB cb, bool validateQuality, bool enableGopDecode) :
     AMTObject(ctx),
     srcpath(srcpath),
     serviceid(serviceid),
@@ -1598,6 +1604,7 @@ logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serv
     logodata(),
     logoQuality(),
     validateQuality(validateQuality),
+    enableGopDecode(enableGopDecode),
     progressbase(0),
     creator() {
 }
@@ -4153,8 +4160,8 @@ namespace {
         }
 
     public:
-        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb)
-            : SimpleVideoReader(ctx)
+        AutoDetectLogoReader(AMTContext& ctx, int serviceid, int divx, int divy, int searchFrames, int blockSize, int threshold, int marginX, int marginY, int threadN, bool detailedDebug, logo::LOGO_AUTODETECT_CB cb, bool enableGopDecode = true)
+            : SimpleVideoReader(ctx, enableGopDecode)
             , serviceid(serviceid)
             , divx(std::max(1, divx))
             , divy(std::max(1, divy))
@@ -12212,20 +12219,61 @@ extern "C" AMATSUKAZE_API void LogoDecodeSession_Delete(void* session) {
     delete decoder;
 }
 
+namespace {
+// 再試行は解析オブジェクトの外側で行い、途中まで加算した統計を引き継がない。
+template<typename Attempt>
+int RunLogoAnalysisWithDecodeFallback(AMTContext* ctx, const tchar* srcpath, int serviceid,
+    const tchar* phase, const Attempt& run) {
+    auto* session = logo::activeLogoDecodeSession;
+    if (session != nullptr && !session->matches(srcpath, serviceid)) session = nullptr;
+    bool enableGopDecode = session == nullptr || session->isGopDecodeEnabled();
+    tstring parallelError;
+    const auto fail = [&](const tstring& reason) {
+        ctx->setError(FormatException(parallelError.empty() ? reason : StringFormat(
+            _T("GOP並列復号の失敗: %s\n通常復号での再試行の失敗: %s"),
+            parallelError.c_str(), reason.c_str())));
+        return false;
+    };
+    for (;;) {
+        try {
+            const int result = run(enableGopDecode);
+            if (!result && !parallelError.empty()) {
+                return fail(char_to_tstring(ctx->getError(), CP_UTF8));
+            }
+            return result;
+        } catch (const logo::LogoGopDecodeError& error) {
+            if (!enableGopDecode) {
+                return fail(FormatException(std::string(error.what())).message());
+            }
+            parallelError = FormatException(std::string(error.what())).message();
+            ctx->warnF(_T("[LogoScan] GOP decode fallback: GOP並列復号から通常復号へ再試行: 処理=%s 原因=%s"),
+                phase, parallelError.c_str());
+            // 停止中のデコーダーも回収してからキャッシュを破棄する。
+            if (session != nullptr) session->resetForSequentialDecode();
+            enableGopDecode = false;
+        } catch (const std::bad_alloc&) {
+            return fail(_T("ロゴ解析に必要なメモリを確保できませんでした"));
+        }
+    }
+}
+}
+
 // C API for P/Invoke
 static int ScanLogoImpl(AMTContext* ctx,
     const tchar * srcpath, int serviceid, const tchar * workfile, const tchar * dstpath,
     const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
     logo::LOGO_ANALYZE_CB cb, bool validateQuality) {
-    try {
-        logo::LogoAnalyzer analyzer(*ctx,
-            srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb, validateQuality);
-        analyzer.ScanLogo();
-        return true;
-    } catch (const Exception& exception) {
-        ctx->setError(exception);
-    }
-    return false;
+    return RunLogoAnalysisWithDecodeFallback(ctx, srcpath, serviceid, _T("ロゴ生成"), [&](bool enableGopDecode) {
+        try {
+            logo::LogoAnalyzer analyzer(*ctx,
+                srcpath, serviceid, workfile, dstpath, debugpath, imgx, imgy, w, h, thy, numMaxFrames, cb, validateQuality, enableGopDecode);
+            analyzer.ScanLogo();
+            return true;
+        } catch (const Exception& exception) {
+            ctx->setError(exception);
+        }
+        return false;
+    });
 }
 
 // C API for P/Invoke
@@ -12255,70 +12303,72 @@ extern "C" AMATSUKAZE_API int AutoDetectLogoRect(AMTContext* ctx,
     const tchar* scorePath, const tchar* binaryPath, const tchar* cclPath, const tchar* countPath, const tchar* aPath, const tchar* bPath, const tchar* alphaPath, const tchar* logoYPath, const tchar* consistencyPath, const tchar* fgVarPath, const tchar* bgVarPath, const tchar* transitionPath, const tchar* keepRatePath, const tchar* acceptedPath,
     int detailedDebug,
     logo::LOGO_AUTODETECT_CB cb) {
-    AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb);
-    if (outRectDetectFail) *outRectDetectFail = 0;
-    if (outLogoAnalyzeFail) *outLogoAnalyzeFail = 0;
-    if (outPass1ScoreMax) *outPass1ScoreMax = 0.0;
-    if (outPass2ScoreMax) *outPass2ScoreMax = 0.0;
-    if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = 0.0;
-    if (outPass2Entered) *outPass2Entered = 0;
-    if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = 0;
-    if (outPass2CollectSucceeded) *outPass2CollectSucceeded = 0;
-    if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = 0;
-    if (outPass2FailBeforeClear) *outPass2FailBeforeClear = 0;
-    if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = 0;
-    if (outPass2AcceptedFrames) *outPass2AcceptedFrames = 0;
-    if (outPass2SkippedFrames) *outPass2SkippedFrames = 0;
-    if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = 0;
-    if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = 0;
-    try {
-        const auto rect = reader.run(srcpath);
-        if (outX) *outX = rect.x;
-        if (outY) *outY = rect.y;
-        if (outW) *outW = rect.w;
-        if (outH) *outH = rect.h;
-        if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
-        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
-        if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
-        if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
-        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
-        if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
-        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
-        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
-        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
-        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
-        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
-        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
-        if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
-        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
-        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
-        if (scorePath && binaryPath && cclPath) {
-            reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
-        }
-        return true;
-    } catch (const Exception& exception) {
-        if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
-        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
-        if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
-        if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
-        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
-        if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
-        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
-        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
-        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
-        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
-        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
-        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
-        if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
-        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
-        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
-        if (scorePath && binaryPath && cclPath) {
-            try {
+    return RunLogoAnalysisWithDecodeFallback(ctx, srcpath, serviceid, _T("ロゴ枠検出"), [&](bool enableGopDecode) {
+        AutoDetectLogoReader reader(*ctx, serviceid, divx, divy, searchFrames, blockSize, threshold, marginX, marginY, threadN, detailedDebug != 0, cb, enableGopDecode);
+        if (outRectDetectFail) *outRectDetectFail = 0;
+        if (outLogoAnalyzeFail) *outLogoAnalyzeFail = 0;
+        if (outPass1ScoreMax) *outPass1ScoreMax = 0.0;
+        if (outPass2ScoreMax) *outPass2ScoreMax = 0.0;
+        if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = 0.0;
+        if (outPass2Entered) *outPass2Entered = 0;
+        if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = 0;
+        if (outPass2CollectSucceeded) *outPass2CollectSucceeded = 0;
+        if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = 0;
+        if (outPass2FailBeforeClear) *outPass2FailBeforeClear = 0;
+        if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = 0;
+        if (outPass2AcceptedFrames) *outPass2AcceptedFrames = 0;
+        if (outPass2SkippedFrames) *outPass2SkippedFrames = 0;
+        if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = 0;
+        if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = 0;
+        try {
+            const auto rect = reader.run(srcpath);
+            if (outX) *outX = rect.x;
+            if (outY) *outY = rect.y;
+            if (outW) *outW = rect.w;
+            if (outH) *outH = rect.h;
+            if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
+            if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+            if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
+            if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
+            if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
+            if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
+            if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
+            if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
+            if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
+            if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
+            if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
+            if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
+            if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
+            if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
+            if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
+            if (scorePath && binaryPath && cclPath) {
                 reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
-            } catch (...) {
             }
+            return true;
+        } catch (const Exception& exception) {
+            if (outRectDetectFail) *outRectDetectFail = reader.getRectDetectFailCode();
+            if (outLogoAnalyzeFail) *outLogoAnalyzeFail = reader.getLogoAnalyzeFailCode();
+            if (outPass1ScoreMax) *outPass1ScoreMax = reader.getPass1ScoreMax();
+            if (outPass2ScoreMax) *outPass2ScoreMax = reader.getPass2ScoreMax();
+            if (outFinalScoreBeforeRescueMax) *outFinalScoreBeforeRescueMax = reader.getFinalScoreBeforeRescueMax();
+            if (outPass2Entered) *outPass2Entered = reader.didEnterPass2() ? 1 : 0;
+            if (outPass2PrepareSucceeded) *outPass2PrepareSucceeded = reader.didPreparePass2() ? 1 : 0;
+            if (outPass2CollectSucceeded) *outPass2CollectSucceeded = reader.didCollectPass2() ? 1 : 0;
+            if (outPass2RescueFallbackApplied) *outPass2RescueFallbackApplied = reader.didFallbackToPass1Rescue() ? 1 : 0;
+            if (outPass2FailBeforeClear) *outPass2FailBeforeClear = reader.getPass2FailBeforeClearCode();
+            if (outPass2FrameMaskNonZero) *outPass2FrameMaskNonZero = reader.getPass2FrameMaskNonZero();
+            if (outPass2AcceptedFrames) *outPass2AcceptedFrames = reader.getPass2AcceptedFrames();
+            if (outPass2SkippedFrames) *outPass2SkippedFrames = reader.getPass2SkippedFrames();
+            if (outFrameGateRetryAttemptCount) *outFrameGateRetryAttemptCount = reader.getFrameGateRetryAttemptCount();
+            if (outFrameGateRetrySuccessAttempt) *outFrameGateRetrySuccessAttempt = reader.getFrameGateRetrySuccessAttempt();
+            if (scorePath && binaryPath && cclPath) {
+                try {
+                    reader.writeDebug(scorePath, binaryPath, cclPath, countPath, aPath, bPath, alphaPath, logoYPath, consistencyPath, fgVarPath, bgVarPath, transitionPath, keepRatePath, acceptedPath);
+                } catch (...) {
+                }
+            }
+            ctx->setError(exception);
         }
-        ctx->setError(exception);
-    }
-    return false;
+        return false;
+    });
 }

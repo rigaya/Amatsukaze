@@ -22,6 +22,16 @@ public:
     size_t cachedFrames() const { return positions.size(); }
     void setThreadLimit(int limit) { threadLimit = limit; }
     int getThreadLimit() const { return threadLimit; }
+    bool isGopDecodeEnabled() const { return reader.isGopDecodeEnabled(); }
+
+    // 失敗したデコードとROIを破棄し、通常復号で新しい解析を開始できる状態へ戻す。
+    void resetForSequentialDecode() {
+        stop();
+        reader.setGopDecodeEnabled(false);
+        started = cacheEnabled = paused = done = resume = cancelled = false;
+        generation = {};
+        error = nullptr;
+    }
 
     void configure(AVFrame* frame, int x, int y, int width, int height,
         int scaleNum, int scaleDen, int frameCount, uint64_t availableBytes) {

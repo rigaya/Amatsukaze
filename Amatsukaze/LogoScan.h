@@ -370,13 +370,18 @@ public:
     using FirstFrameCallback = std::function<void(AVStream *videoStream, AVFrame* frame)>;
     using FrameCallback = std::function<bool(AVFrame* frame)>;
 
-    SimpleVideoReader(AMTContext& ctx);
+    SimpleVideoReader(AMTContext& ctx, bool enableGopDecode = true);
+    void setGopDecodeEnabled(bool enabled) { gopDecodeEnabled = enabled; }
+    bool isGopDecodeEnabled() const { return gopDecodeEnabled; }
 
     int64_t currentPos;
 
     // threadLimit > 0 のとき、デコードスレッド数は min(コア数, threadLimit) に収める。
     void readAll(const tstring& src, int serviceid, int threadLimit = 0);
     void readAll(const tstring& src, int serviceid, const FirstFrameCallback& onFirstFrameCb, const FrameCallback& onFrameCb, int threadLimit = 0);
+
+private:
+    bool gopDecodeEnabled;
 
 protected:
     virtual void onFirstFrame(AVStream *videoStream, AVFrame* frame);;
@@ -523,6 +528,7 @@ class LogoAnalyzer : AMTObject {
     std::unique_ptr<LogoData> logodata;
     LogoQualityMetrics logoQuality;
     bool validateQuality;
+    bool enableGopDecode;
 
     float progressbase;
 
@@ -731,7 +737,7 @@ class LogoAnalyzer : AMTObject {
 public:
     LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serviceid, const tchar* workfile, const tchar* dstpath,
         const tchar* debugpath, int imgx, int imgy, int w, int h, int thy, int numMaxFrames,
-        LOGO_ANALYZE_CB cb, bool validateQuality);
+        LOGO_ANALYZE_CB cb, bool validateQuality, bool enableGopDecode = true);
 
     void ScanLogo();
 };
