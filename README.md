@@ -304,7 +304,7 @@ Windowsの場合、初回はファイアウォールの警告が出ると思う�
   - URLは `http://<サーバーIP>:<サーバーポート+1>/` です。  
     既定設定 (`32768`) の場合は `http://<サーバーIP>:32769/` になります。  
     AmatsukazeGUIではそのポートが使えないときは空いているポートを自動で選びます。(GUIの上部`WebUI:`で確認できます。)
-    <img src="./data/Amatsukaze_Client_WebUI_port_number.webp" width="720">
+    <img src="./data/Amatsukaze_Client_WebUI_port_number.png" width="720">
 
   - ローカルのみからのアクセスに制限しています。
     サーバー起動時に環境変数`AMT_REST_ADD_ALLOW`を設定すると、IPアドレス範囲またはCIDRを追加できます。複数指定するときはカンマで区切ります。
