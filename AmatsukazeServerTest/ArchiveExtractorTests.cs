@@ -492,10 +492,24 @@ public sealed class ArchiveExtractorTests
 
         private static string FindExtractor()
         {
-            var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-                "../../../../../build/exe_files/7z/7zzs"));
-            if (!File.Exists(path)) throw new InvalidOperationException("テスト用7zzsがありません: " + path);
-            return path;
+            var executable = OperatingSystem.IsWindows() ? "7za.exe" : "7zzs";
+            var searched = new HashSet<string>(OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            // 実行場所から対象の配置を優先し、DLLの実体パス側も補助的に調べる。
+            foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+            {
+                for (var directory = new DirectoryInfo(start); directory != null; directory = directory.Parent)
+                {
+                    foreach (var relative in new[] { "exe_files", "build_itest/exe_files", "build/exe_files" })
+                    {
+                        var path = Path.GetFullPath(Path.Combine(directory.FullName, relative, "7z", executable));
+                        if (searched.Add(path) && File.Exists(path))
+                            return path;
+                    }
+                }
+            }
+            throw new InvalidOperationException("テスト用の展開器がありません。対象のexe_files/7zに配置してください。探索先: " +
+                string.Join(", ", searched));
         }
 
         private static void Run(string fileName, IEnumerable<string> arguments,
