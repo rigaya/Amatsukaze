@@ -14,6 +14,7 @@
 #include "LogoResidualWeight.h"
 #include "LogoRoiCache.h"
 #include "LogoTemporalHistogram.h"
+#include "LogoScanWeakSideRescuePolicy.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -1003,6 +1004,10 @@ logo::LogoQualityMetrics logo::LogoScan::CalcQualityMetrics(LogoData& data, logo
     }
     metrics.renderedYMean = renderedYSum / metrics.pixelCount;
     metrics.renderedYP99 = QuantileCopy(renderedYValues, 0.99);
+    metrics.renderedYSpatialDetail = CalcRenderedYSpatialDetail(
+        renderedYValues.data(), scanw, scanh, metrics.activeAreaRate);
+    metrics.renderedYSpatialDetailNormalized = NormalizeRenderedYSpatialDetail(
+        metrics.renderedYSpatialDetail, metrics.renderedYP99);
     metrics.alphaMean = alphaSum / metrics.pixelCount;
     metrics.alphaP90 = QuantileCopy(alphaValues, 0.90);
     metrics.alphaP99 = QuantileCopy(alphaValues, 0.99);
@@ -1610,7 +1615,7 @@ logo::LogoAnalyzer::LogoAnalyzer(AMTContext& ctx, const tchar* srcpath, int serv
 }
 
 void logo::LogoAnalyzer::LogLogoQuality(const tchar* phase) const {
-    ctx.infoF(_T("[GenLogo] quality(%s): active=%d/%d %.4f opaque=%d %.4f edge(band=%d active=%d/%d rate=%.4f area=%.4f sideMax=%.4f sides=%.4f/%.4f/%.4f/%.4f) renderedY(mean=%.5f,p99=%.5f) alpha(mean=%.5f,p90=%.5f,p99=%.5f) residualY(mean=%.5f,p90=%.5f) residualUV(mean=%.5f,p90=%.5f)"),
+    ctx.infoF(_T("[GenLogo] quality(%s): active=%d/%d %.4f opaque=%d %.4f edge(band=%d active=%d/%d rate=%.4f area=%.4f sideMax=%.4f sides=%.4f/%.4f/%.4f/%.4f) renderedY(mean=%.5f,p99=%.5f,detail=%.5f,norm=%.5f) alpha(mean=%.5f,p90=%.5f,p99=%.5f) residualY(mean=%.5f,p90=%.5f) residualUV(mean=%.5f,p90=%.5f)"),
         phase,
         logoQuality.activePixels, logoQuality.pixelCount, logoQuality.activeAreaRate,
         logoQuality.opaquePixels, logoQuality.opaqueAreaRate,
@@ -1619,6 +1624,7 @@ void logo::LogoAnalyzer::LogLogoQuality(const tchar* phase) const {
         logoQuality.edgeSideActiveRate[0], logoQuality.edgeSideActiveRate[1],
         logoQuality.edgeSideActiveRate[2], logoQuality.edgeSideActiveRate[3],
         logoQuality.renderedYMean, logoQuality.renderedYP99,
+        logoQuality.renderedYSpatialDetail, logoQuality.renderedYSpatialDetailNormalized,
         logoQuality.alphaMean, logoQuality.alphaP90, logoQuality.alphaP99,
         logoQuality.yResidualActiveMean, logoQuality.yResidualActiveP90,
         logoQuality.uvResidualActiveMean, logoQuality.uvResidualActiveP90);
@@ -1635,10 +1641,16 @@ void logo::LogoAnalyzer::ValidateLogoQuality() const {
     if (logoQuality.pixelCount <= 0) {
         ThrowLogoQuality(_T("ロゴ生成の品質検査に失敗しました: 指標がありません"));
     }
-    if (logoQuality.renderedYP99 < 0.02 && logoQuality.activeAreaRate < 0.02) {
+    if (IsNoLogoSignal(
+        logoQuality.activeAreaRate,
+        logoQuality.renderedYP99,
+        logoQuality.renderedYSpatialDetail,
+        logoQuality.renderedYSpatialDetailNormalized)) {
         ThrowLogoQuality(StringFormat(
-            _T("ロゴ生成の品質検査に失敗しました: ロゴとして使える画素がありません (renderedY_p99=%.5f active_area=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
-            logoQuality.renderedYP99, logoQuality.activeAreaRate, logoQuality.alphaMean,
+            _T("ロゴ生成の品質検査に失敗しました: ロゴとして使える画素がありません (renderedY_p99=%.5f active_area=%.5f detail=%.5f detail_norm=%.5f alpha_mean=%.5f residualY_p90=%.5f residualUV_p90=%.5f)"),
+            logoQuality.renderedYP99, logoQuality.activeAreaRate,
+            logoQuality.renderedYSpatialDetail, logoQuality.renderedYSpatialDetailNormalized,
+            logoQuality.alphaMean,
             logoQuality.yResidualActiveP90, logoQuality.uvResidualActiveP90));
     }
     if (logoQuality.alphaP99 > 0.70 && logoQuality.opaqueAreaRate > 0.01) {
@@ -4091,6 +4103,7 @@ namespace {
         int countMaskOn(const std::vector<uint8_t>& mask) const;
         void buildBinaryFromThreshold(const ScoreStageBuffers& scoreStage, const int iterIndex, const float highTh, const float lowTh, std::vector<uint8_t>& outBinary, BuildBinaryDiag* dbg);
         void pruneBinaryByAnchor(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
+        int restoreWeakSideComponents(const ScoreStageBuffers& scoreStage, const float lowThreshold, std::vector<uint8_t>& binary) const;
         bool applyBinaryFallbackIfEmpty(const ScoreStageBuffers& scoreStage, BinaryStageBuffers& binaryStage);
 
         void collectBinaryProjection(std::vector<uint8_t>& xOn, std::vector<uint8_t>& yOn, const BinaryStageBuffers& binaryStage) const;
@@ -10155,6 +10168,131 @@ namespace {
         return c;
     }
 
+    int AutoDetectLogoReader::restoreWeakSideComponents(
+        const ScoreStageBuffers& scoreStage, const float lowThreshold, std::vector<uint8_t>& binary) const {
+        if (lowThreshold <= 0.0f || (int)binary.size() != scanw * scanh) return 0;
+        int anchorMinX = scanw, anchorMinY = scanh, anchorMaxX = -1, anchorMaxY = -1;
+        int globalMinY = scanh;
+        for (int i = 0; i < scanw * scanh; i++) {
+            if (binary[i]) globalMinY = std::min(globalMinY, i / scanw);
+        }
+        if (globalMinY >= scanh) return 0;
+        // 下側の孤立ノイズをアンカーにせず、上段ロゴ帯から側面候補の基準を作る。
+        const int anchorBandMaxY = std::min(scanh - 1, globalMinY + std::max(40, (int)std::round(scanh * 0.20)));
+        for (int y = globalMinY; y <= anchorBandMaxY; y++) {
+            for (int x = 0; x < scanw; x++) {
+                if (!binary[x + y * scanw]) continue;
+                anchorMinX = std::min(anchorMinX, x);
+                anchorMaxX = std::max(anchorMaxX, x);
+                anchorMinY = std::min(anchorMinY, y);
+                anchorMaxY = std::max(anchorMaxY, y);
+            }
+        }
+        if (anchorMaxX < anchorMinX || anchorMaxY < anchorMinY) return 0;
+        const int anchorHeight = anchorMaxY - anchorMinY + 1;
+        int anchorArea = 0;
+        for (int y = anchorMinY; y <= anchorMaxY; y++) {
+            for (int x = anchorMinX; x <= anchorMaxX; x++) {
+                anchorArea += binary[x + y * scanw] ? 1 : 0;
+            }
+        }
+        const int ySlack = std::max(8, (int)std::round(anchorHeight * 0.15));
+        const int candidateMinX = std::max(0, anchorMinX - 16);
+        const int candidateMinY = std::max(0, anchorMinY - ySlack);
+        const int candidateMaxY = std::min(scanh - 1, anchorMaxY + ySlack);
+        std::vector<uint8_t> candidateMask(scanw * scanh, 0);
+        for (int y = candidateMinY; y <= candidateMaxY; y++) {
+            for (int x = candidateMinX; x < anchorMinX; x++) {
+                const int off = x + y * scanw;
+                if (!scoreStage.validAB[off] || binary[off]) continue;
+                if (scoreStage.score[off] < std::max(0.12f, lowThreshold * 0.78f)) {
+                    continue;
+                }
+                if (scoreStage.mapRescueScore[off] < std::max(0.08f, lowThreshold * 0.30f)) {
+                    continue;
+                }
+                if (scoreStage.mapUpperGate[off] < 0.85f
+                    || scoreStage.mapBgVarGain[off] < 0.80f
+                    || scoreStage.mapPresenceGain[off] < 0.45f
+                    || scoreStage.mapMagGain[off] < 0.05f
+                    || scoreStage.mapConsistGain[off] < 0.20f) {
+                    continue;
+                }
+                candidateMask[off] = 1;
+            }
+        }
+
+        std::vector<uint8_t> visited(scanw * scanh, 0);
+        std::queue<int> q;
+        int restored = 0;
+        for (int y = candidateMinY; y <= candidateMaxY; y++) {
+            for (int x = candidateMinX; x < anchorMinX; x++) {
+                const int start = x + y * scanw;
+                if (!candidateMask[start] || visited[start]) continue;
+                visited[start] = 1;
+                q.push(start);
+                std::vector<int> pixels;
+                int minX = x, minY = y, maxX = x, maxY = y;
+                float peakScore = 0.0f;
+                float sumScore = 0.0f, sumRescue = 0.0f, sumUpper = 0.0f;
+                float sumBgVar = 0.0f, sumPresence = 0.0f, sumMag = 0.0f, sumConsist = 0.0f;
+                while (!q.empty()) {
+                    const int cur = q.front(); q.pop();
+                    const int cx = cur % scanw, cy = cur / scanw;
+                    pixels.push_back(cur);
+                    minX = std::min(minX, cx); minY = std::min(minY, cy);
+                    maxX = std::max(maxX, cx); maxY = std::max(maxY, cy);
+                    peakScore = std::max(peakScore, scoreStage.score[cur]);
+                    sumScore += scoreStage.score[cur];
+                    sumRescue += scoreStage.mapRescueScore[cur];
+                    sumUpper += scoreStage.mapUpperGate[cur];
+                    sumBgVar += scoreStage.mapBgVarGain[cur];
+                    sumPresence += scoreStage.mapPresenceGain[cur];
+                    sumMag += scoreStage.mapMagGain[cur];
+                    sumConsist += scoreStage.mapConsistGain[cur];
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (!dx && !dy) continue;
+                            const int nx = cx + dx, ny = cy + dy;
+                            if (nx < candidateMinX || nx >= anchorMinX || ny < candidateMinY || ny > candidateMaxY) continue;
+                            const int nidx = nx + ny * scanw;
+                            if (candidateMask[nidx] && !visited[nidx]) {
+                                visited[nidx] = 1;
+                                q.push(nidx);
+                            }
+                        }
+                    }
+                }
+                // 探索窓は上下に余裕を持たせるが、成分の採用根拠は実アンカー帯との重なりで測る。
+                const int overlapY = std::max(0, std::min(maxY, anchorMaxY)
+                    - std::max(minY, anchorMinY) + 1);
+                logo::WeakSideComponentEvidence e{};
+                e.peakScore = peakScore;
+                e.meanScore = sumScore / std::max(1, (int)pixels.size());
+                e.meanRescueScore = sumRescue / std::max(1, (int)pixels.size());
+                e.meanUpperGate = sumUpper / std::max(1, (int)pixels.size());
+                e.meanBgVarGain = sumBgVar / std::max(1, (int)pixels.size());
+                e.meanPresenceGain = sumPresence / std::max(1, (int)pixels.size());
+                e.meanMagGain = sumMag / std::max(1, (int)pixels.size());
+                e.meanConsistencyGain = sumConsist / std::max(1, (int)pixels.size());
+                e.lowThreshold = lowThreshold;
+                e.area = (int)pixels.size();
+                e.width = maxX - minX + 1;
+                e.height = maxY - minY + 1;
+                e.anchorArea = anchorArea;
+                e.horizontalGap = std::max(0, anchorMinX - maxX - 1);
+                e.verticalOverlap = overlapY;
+                e.validAB = true;
+                if (!logo::IsWeakSideComponentRescueAllowed(e)) continue;
+                for (const int pix : pixels) {
+                    binary[pix] = 1;
+                    restored++;
+                }
+            }
+        }
+        return restored;
+    }
+
     void AutoDetectLogoReader::writeTracePlotBitmap(const std::string& path, const ScoreStageBuffers& scoreStage, const std::vector<TraceSampleRecord>& traceRecords, const std::vector<TraceBinRepresentativeRecord>& traceBinRepresentatives) const {
         if (path.empty() || tracePoints.empty() || traceRecords.empty()) {
             return;
@@ -11623,6 +11761,7 @@ namespace {
         if (enablePruneBinaryByAnchor) {
             pruneBinaryByAnchor(scoreStage, binaryStage);
         }
+        restoreWeakSideComponents(scoreStage, curThLow, binaryStage.binary);
         usedBinaryFallback = applyBinaryFallbackIfEmpty(scoreStage, binaryStage);
         if (usedBinaryFallback) {
             setRectDetectFail(LogoRectDetectFail::BinaryFallbackUsed);

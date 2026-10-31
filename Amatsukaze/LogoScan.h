@@ -97,6 +97,8 @@ struct LogoQualityMetrics {
     double edgeSideActiveRate[4] = {};
     double renderedYMean = 0.0;
     double renderedYP99 = 0.0;
+    double renderedYSpatialDetail = 0.0;
+    double renderedYSpatialDetailNormalized = 0.0;
     double alphaMean = 0.0;
     double alphaP90 = 0.0;
     double alphaP99 = 0.0;
@@ -105,6 +107,76 @@ struct LogoQualityMetrics {
     double uvResidualActiveMean = 0.0;
     double uvResidualActiveP90 = 0.0;
 };
+
+// 外周のパディングを除いた renderedY の空間的ディテールを測る。
+// activeAreaRate で割ることで、ロゴ矩形の大きさに依存しにくくする。
+inline double CalcRenderedYSpatialDetail(
+    const double* renderedY, const int width, const int height, const double activeAreaRate) {
+    if (renderedY == nullptr || width < 3 || height < 3 || !std::isfinite(activeAreaRate)
+        || activeAreaRate <= 0.0) {
+        return 0.0;
+    }
+
+    double laplacianSum = 0.0;
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            const int off = x + y * width;
+            const double center = renderedY[off];
+            const double up = renderedY[off - width];
+            const double down = renderedY[off + width];
+            const double left = renderedY[off - 1];
+            const double right = renderedY[off + 1];
+            if (!std::isfinite(center) || !std::isfinite(up) || !std::isfinite(down)
+                || !std::isfinite(left) || !std::isfinite(right)) {
+                continue;
+            }
+            laplacianSum += std::abs(4.0 * center - up - down - left - right);
+        }
+    }
+
+    const double activePixels = activeAreaRate * width * height;
+    return activePixels > 1.0e-6 ? laplacianSum / activePixels : 0.0;
+}
+
+// renderedY の明るさを p99 で正規化したディテール値を返す。
+inline double NormalizeRenderedYSpatialDetail(const double spatialDetail, const double renderedYP99) {
+    if (!std::isfinite(spatialDetail) || spatialDetail <= 0.0) {
+        return 0.0;
+    }
+    const double scale = std::max(0.05, std::isfinite(renderedYP99) ? renderedYP99 : 0.0);
+    return spatialDetail / scale;
+}
+
+// renderedY の明るさと面積が小さくても、輪郭構造が残る低濃度ロゴは許可する。
+// no_logo 判定はこの関数だけで完結させ、呼び出し側の品質計算状態に依存させない。
+inline bool IsNoLogoSignal(
+    const double activeAreaRate,
+    const double renderedYP99,
+    const double spatialDetail,
+    const double normalizedSpatialDetail) {
+    static constexpr double kNoLogoMaxActiveAreaRate = 0.02;
+    static constexpr double kNoLogoMaxRenderedYP99 = 0.02;
+    static constexpr double kStructuredMinActiveAreaRate = 0.01;
+    static constexpr double kStructuredMinRenderedYP99 = 0.015;
+    static constexpr double kStructuredMinSpatialDetail = 0.10;
+    static constexpr double kStructuredMinNormalizedSpatialDetail = 1.0;
+
+    if (!std::isfinite(activeAreaRate) || !std::isfinite(renderedYP99)
+        || !std::isfinite(spatialDetail) || !std::isfinite(normalizedSpatialDetail)) {
+        return true;
+    }
+    if (!(renderedYP99 < kNoLogoMaxRenderedYP99
+        && activeAreaRate < kNoLogoMaxActiveAreaRate)) {
+        return false;
+    }
+
+    const bool structuredLowOpacitySignal =
+        activeAreaRate > kStructuredMinActiveAreaRate
+        && renderedYP99 > kStructuredMinRenderedYP99
+        && spatialDetail > kStructuredMinSpatialDetail
+        && normalizedSpatialDetail > kStructuredMinNormalizedSpatialDetail;
+    return !structuredLowOpacitySignal;
+}
 
 class LogoDataParam : public LogoData {
     enum {

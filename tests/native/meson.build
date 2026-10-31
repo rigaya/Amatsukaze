@@ -93,3 +93,26 @@ test('LogoDecodeFallbackTests', logo_decode_fallback_tests,
   suite : 'native',
   timeout : 120,
 )
+
+# ロゴ枠検出の左側弱輪郭救済の判定方針 (ヘッダーのみの純粋関数) を単体で確認する。
+logo_scan_weak_side_rescue_policy_tests = executable('LogoScanWeakSideRescuePolicyTests',
+  'LogoScanWeakSideRescuePolicyTests.cpp',
+  include_directories : include_directories('../../Amatsukaze'),
+  install : false,
+)
+test('LogoScanWeakSideRescuePolicyTests', logo_scan_weak_side_rescue_policy_tests,
+  suite : 'native',
+  timeout : 30,
+)
+
+# ロゴ生成の品質判定 (no_logo) の境界を確認する。
+logo_scan_quality_tests = executable('LogoScanQualityTests',
+  'LogoScanQualityTests.cpp',
+  include_directories : [include_directories('../../Amatsukaze'), amatsukaze_include_dirs],
+  dependencies : amatsukaze_deps,
+  install : false,
+)
+test('LogoScanQualityTests', logo_scan_quality_tests,
+  suite : 'native',
+  timeout : 30,
+)
