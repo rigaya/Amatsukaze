@@ -196,4 +196,33 @@ void CalcBgSideStatsBlock32U8_AVX2(const uint8_t* src, int stride, int x, int y,
         }
     }
 }
+
+// 非x86環境でもAVX2版と同じ救済辺の統計値と有効laneのマスクを返す。
+uint32_t CalcBgRetrySideStats32U8_AVX2(const uint8_t* src, int stride, int width, int height,
+    int sx, int sy, int len, bool horizontal, uint16_t* sums, uint8_t* mins, uint8_t* maxs) {
+    constexpr int lanes = 32;
+    const int lastStart = width - (horizontal ? len : 1);
+    if (sy < 0 || sy + (horizontal ? 1 : len) > height) return 0;
+    const int firstLane = std::max(0, -sx);
+    const int lastLane = std::min(lanes - 1, lastStart - sx);
+    uint32_t mask = 0;
+    for (int lane = firstLane; lane <= lastLane; lane++) {
+        uint16_t sum = 0;
+        uint8_t minValue = std::numeric_limits<uint8_t>::max();
+        uint8_t maxValue = 0;
+        const uint8_t* start = src + sy * stride + sx + lane;
+        const int step = horizontal ? 1 : stride;
+        for (int i = 0; i < len; i++) {
+            const uint8_t value = start[i * step];
+            sum += value;
+            minValue = std::min(minValue, value);
+            maxValue = std::max(maxValue, value);
+        }
+        sums[lane] = sum;
+        mins[lane] = minValue;
+        maxs[lane] = maxValue;
+        mask |= 1u << lane;
+    }
+    return mask;
+}
 #endif
