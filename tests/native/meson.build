@@ -116,3 +116,14 @@ test('LogoScanQualityTests', logo_scan_quality_tests,
   suite : 'native',
   timeout : 30,
 )
+
+# 行単位のロゴ枠統合と細線除去の純粋関数を確認する。
+logo_scan_row_group_policy_tests = executable('LogoScanRowGroupPolicyTests',
+  'LogoScanRowGroupPolicyTests.cpp',
+  include_directories : include_directories('../../Amatsukaze'),
+  install : false,
+)
+test('LogoScanRowGroupPolicyTests', logo_scan_row_group_policy_tests,
+  suite : 'native',
+  timeout : 30,
+)

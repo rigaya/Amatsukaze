@@ -15,6 +15,7 @@
 #include "LogoRoiCache.h"
 #include "LogoTemporalHistogram.h"
 #include "LogoScanWeakSideRescuePolicy.h"
+#include "LogoScanRowGroupPolicy.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -3445,12 +3446,19 @@ namespace {
         static constexpr float kSegmentConsensusMaxFullAlpha = 0.10f;
         static constexpr bool kEnableTwoPassFrameGate = true;
         static constexpr bool kEnablePruneBinaryByAnchor = true;
+        // 文字の範囲からはみ出した細線(テロップ枠の横線など)を矩形化の前に削る。
+        static constexpr bool kEnableLineTrim = true;
+        // 枠が小さすぎてサイズ異常になるときだけ、スコアの行帯を見て横へ伸ばす。
+        static constexpr bool kEnableRowExtend = true;
         // 時間枠をずらす frameGate retry は現状では改善効果が薄く、失敗時の挙動も追いづらくなるため無効化しておく。
         // retry の実装自体は検証用に残し、必要になったらこのフラグだけ戻す。
         static constexpr bool kEnableFrameGateRetry = false;
         static constexpr int kFrameGateRetryMax = 3;
         const bool enableTwoPassFrameGate;
         const bool enablePruneBinaryByAnchor;
+        // 細線除去とサイズ異常時の行帯拡張は、環境変数で個別に無効化できる。
+        const bool enableRowExtend;
+        const bool enableLineTrim;
         const std::vector<std::pair<int, int>> tracePointEnv;
         struct ProgressPlan {
             int stage = 0;
@@ -4135,14 +4143,18 @@ namespace {
                 THROWF(RuntimeException, "Logo rect detect failed: %s", ToString(rectDetectFail));
             }
         }
+        // 行帯拡張の発動条件と通常のサイズ検査で、小さすぎる枠の定義を共有する。
+        static constexpr int kRectMinWidth = 40;
+        static constexpr int kRectMinHeight = 25;
+        static constexpr int kRectMinArea = 1200;
+        bool isRectTooSmall(const AutoDetectRect& rect) const {
+            return rect.w < kRectMinWidth || rect.h < kRectMinHeight || rect.w * rect.h < kRectMinArea;
+        }
         bool isRectSizeAbnormal(const AutoDetectRect& rect) const {
             if (rect.w <= 0 || rect.h <= 0) {
                 return true;
             }
-            const int area = rect.w * rect.h;
-            return rect.w < 40
-                || rect.h < 25
-                || area < 1200
+            return isRectTooSmall(rect)
                 || rect.w > (int)std::round(scanw * 0.88)
                 || rect.h > (int)std::round(scanh * 0.62);
         }
@@ -4188,7 +4200,11 @@ namespace {
             , logCtx(ctx)
             , cb(cb)
             , threadPool(ResolveAutoDetectThreadCount(threadN))
-            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
+            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), enableRowExtend(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_ROW_EXTEND", kEnableRowExtend)), enableLineTrim(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_LINE_TRIM", kEnableLineTrim)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
+            if (detailedDebug) {
+                fprintf(stderr, "[AutoDetectLogo] 枠統合の設定: LINE_TRIM=%d ROW_EXTEND=%d\n",
+                    enableLineTrim ? 1 : 0, enableRowExtend ? 1 : 0);
+            }
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
             lastReportedStageProgress = 0.0f;
@@ -11766,6 +11782,14 @@ namespace {
         if (usedBinaryFallback) {
             setRectDetectFail(LogoRectDetectFail::BinaryFallbackUsed);
         }
+        // 救済・フォールバック後の最終binaryを対象にし、rect処理へ渡す前にだけ削る。
+        if (enableLineTrim) {
+            auto trimmed = logo::TrimOverhangingThinLines(binaryStage.binary, scanw, scanh);
+            binaryStage.binary.swap(trimmed.binary);
+            if (detailedDebug) {
+                fprintf(stderr, "[AutoDetectLogo] 細線除去: removedPixels=%d maxOverhang=%d\n", trimmed.removedPixels, trimmed.maxOverhang);
+            }
+        }
     }
 
     // binary の x/y 投影を作る。
@@ -12281,7 +12305,7 @@ namespace {
             setRectDetectFail(LogoRectDetectFail::NoBestComponent);
         }
 
-        // 位置決定は binary成分のみで行う。
+        // 通常の位置決定はbinary成分で行い、小さすぎる枠だけ任意の行帯拡張で救済する。
         AutoDetectRect finalRect = hasBest ? best : coarse;
         if (!hasBest && !hasCoarse) {
             finalRect = buildAcceptedFallbackRect(scoreStage);
@@ -12295,10 +12319,36 @@ namespace {
             mergeRectCandidates(mergeCandidates, best, finalRect);
         }
 
-        finalRect.x = std::max(0, finalRect.x - marginX);
-        finalRect.y = std::max(0, finalRect.y - marginY);
-        finalRect.w = std::min(scanw - finalRect.x, finalRect.w + marginX * 2);
-        finalRect.h = std::min(scanh - finalRect.y, finalRect.h + marginY * 2);
+        // 余白付与の順序と端での切り詰めは既存どおり。再試行も余白前の矩形から行う。
+        const AutoDetectRect beforeMargin = finalRect;
+        const auto addMargin = [&](AutoDetectRect rect) {
+            rect.x = std::max(0, rect.x - marginX);
+            rect.y = std::max(0, rect.y - marginY);
+            rect.w = std::min(scanw - rect.x, rect.w + marginX * 2);
+            rect.h = std::min(scanh - rect.y, rect.h + marginY * 2);
+            return rect;
+        };
+        finalRect = addMargin(beforeMargin);
+        const bool tryRowExtend = enableRowExtend && rectDetectFail == LogoRectDetectFail::None
+            && isRectSizeAbnormal(finalRect) && isRectTooSmall(finalRect);
+        logo::RowBandExtendResult rowExtend;
+        if (tryRowExtend) {
+            rowExtend = logo::TryExtendRowBand(scoreStage.score, scanw, scanh,
+                logo::RowBandRect{ beforeMargin.x, beforeMargin.y, beforeMargin.w, beforeMargin.h });
+            if (rowExtend.extended) {
+                const AutoDetectRect extendedRect{ rowExtend.minX, beforeMargin.y,
+                    rowExtend.maxX - rowExtend.minX + 1, beforeMargin.h };
+                finalRect = addMargin(extendedRect);
+            }
+        }
+        if (detailedDebug) {
+            fprintf(stderr, "[AutoDetectLogo] 行帯拡張: enabled=%d triggered=%d extended=%d floor=%.8f peak=%.8f threshold=%.8f bandH=%d before=%d..%d after=%d..%d\n",
+                enableRowExtend ? 1 : 0, tryRowExtend ? 1 : 0, rowExtend.extended ? 1 : 0,
+                rowExtend.floor, rowExtend.peak, rowExtend.threshold, rowExtend.bandH,
+                beforeMargin.x, beforeMargin.x + beforeMargin.w - 1,
+                tryRowExtend ? rowExtend.minX : beforeMargin.x,
+                tryRowExtend ? rowExtend.maxX : beforeMargin.x + beforeMargin.w - 1);
+        }
         if (isRectSizeAbnormal(finalRect)) {
             setRectDetectFail(LogoRectDetectFail::RectSizeAbnormal);
         } else if (isRectPositionAbnormal(finalRect)) {
