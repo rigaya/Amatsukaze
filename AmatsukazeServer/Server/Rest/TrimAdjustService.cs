@@ -463,7 +463,6 @@ namespace Amatsukaze.Server.Rest
     public class TrimAdjustService : IDisposable
     {
         public static bool AudioPlaybackEnabled => Environment.GetEnvironmentVariable("AMT_TRIM_AUDIO_PLAYBACK") == "1";
-        private static readonly Regex TempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
         private static readonly Regex TrimRegex = new Regex(@"Trim\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", RegexOptions.Compiled);
         // jls0.txt: "開始 終了 秒数 端数フレーム ロゴ秒数 :ラベル"(ラベルなしの旧形式もあり)
         private static readonly Regex JlsLineRegex = new Regex(@"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(\d+)(?:\s*:(\S*))?", RegexOptions.Compiled);
@@ -507,7 +506,7 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
-            var tempDir = ExtractTempDirFromLog(logPath);
+            var tempDir = ServerSupport.ExtractTempDirFromLog(logPath);
             if (string.IsNullOrEmpty(tempDir))
             {
                 error = "ログファイルから一時フォルダが取得できませんでした";
@@ -652,7 +651,7 @@ namespace Amatsukaze.Server.Rest
                 return true;
             }
 
-            var tempDir = ExtractTempDirFromLog(logPath);
+            var tempDir = ServerSupport.ExtractTempDirFromLog(logPath);
             if (string.IsNullOrEmpty(tempDir))
             {
                 // 一時フォルダが特定できなければスキップ（エラーにはしない）
@@ -791,7 +790,7 @@ namespace Amatsukaze.Server.Rest
             var logPath = state.ResolveTaskLogPathById(sourceItem.Id);
             if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
             {
-                var tempDir = ExtractTempDirFromLog(logPath);
+                var tempDir = ServerSupport.ExtractTempDirFromLog(logPath);
                 if (!string.IsNullOrEmpty(tempDir) && File.Exists(Path.Combine(tempDir, "resume.dat")))
                 {
                     resumeDir = tempDir;
@@ -814,49 +813,6 @@ namespace Amatsukaze.Server.Rest
                 QueueItemId = newItem.Id,
                 ReuseTempDir = !string.IsNullOrEmpty(resumeDir)
             };
-        }
-
-        // ログファイルから「一時フォルダ: {path}」を抽出
-        private static string ExtractTempDirFromLog(string logPath)
-        {
-            try
-            {
-                var bytes = File.ReadAllBytes(logPath);
-                var content = Util.AmatsukazeDefaultEncoding.GetString(bytes);
-                var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-
-                string rootedPathFallback = null;
-                foreach (var line in lines)
-                {
-                    var match = TempDirRegex.Match(line);
-                    if (match.Success)
-                    {
-                        var dir = match.Groups[1].Value.Trim().Trim('"');
-                        if (string.IsNullOrEmpty(dir))
-                        {
-                            continue;
-                        }
-                        if (Directory.Exists(dir))
-                        {
-                            return dir;
-                        }
-                        if (Path.IsPathRooted(dir))
-                        {
-                            rootedPathFallback = dir;
-                        }
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(rootedPathFallback))
-                {
-                    return rootedPathFallback;
-                }
-            }
-            catch
-            {
-                // ファイル読み込み失敗は無視
-            }
-            return null;
         }
 
         // Trim AVSを読み込み: {srcPath}.trim.avs 優先、なければ {tempDir}/trim0.avs

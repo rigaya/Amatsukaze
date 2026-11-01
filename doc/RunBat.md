@@ -85,6 +85,7 @@ batフォルダに指定のプリフィックスを付けてバッチファイ�
 | NUM_INCIDENT | インシデント数 | NO | `0` |
 | JSON_PATH | 出力JSONパス | Yes | `C:\ProgramEx\Amatsukaze\data\logs\2025-09-19_102809.387.json` |
 | LOG_PATH | ログファイルパス | Yes | `C:\ProgramEx\Amatsukaze\data\logs\2025-09-19_102809.387.log` |
+| TEMP_PATH | 一時フォルダ（エンコードログから抽出する。ログに見当たらない場合は空。一時ファイル削除設定が有効な場合は存在しないパスであることがある） | Yes | `Y:\Temp\amt12345678` |
 
 ### エンコード前で有効
 

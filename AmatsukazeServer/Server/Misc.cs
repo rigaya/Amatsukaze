@@ -550,6 +550,55 @@ namespace Amatsukaze.Server
             return "デフォルト";
         }
 
+        // 「一時フォルダ: {path}」行にマッチする正規表現。
+        // エンコードログの書式はAmatsukaze内部仕様だが、ログ出力側を変えるときはこれも同時に修正すること。
+        private static readonly Regex TempDirRegex = new Regex(@"一時フォルダ\s*[:：]\s*(.+)", RegexOptions.Compiled);
+
+        // エンコードログファイルから一時フォルダのパスを抽出する。
+        // 一時フォルダはCLIが実行時に決めるためサーバー側では計算できず、ログが唯一の受け渡し経路である点に注意。
+        // 見当たらない場合や読み込み失敗時はnullを返す。
+        public static string ExtractTempDirFromLog(string logPath)
+        {
+            try
+            {
+                var bytes = File.ReadAllBytes(logPath);
+                var content = Util.AmatsukazeDefaultEncoding.GetString(bytes);
+                var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
+                string rootedPathFallback = null;
+                foreach (var line in lines)
+                {
+                    var match = TempDirRegex.Match(line);
+                    if (match.Success)
+                    {
+                        var dir = match.Groups[1].Value.Trim().Trim('"');
+                        if (string.IsNullOrEmpty(dir))
+                        {
+                            continue;
+                        }
+                        if (Directory.Exists(dir))
+                        {
+                            return dir;
+                        }
+                        if (Path.IsPathRooted(dir))
+                        {
+                            rootedPathFallback = dir;
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(rootedPathFallback))
+                {
+                    return rootedPathFallback;
+                }
+            }
+            catch
+            {
+                // ファイル読み込み失敗は無視
+            }
+            return null;
+        }
+
         public static ServerLock GetLock(ServerInstanceKind kind = ServerInstanceKind.ServerCLI, int port = 0, string rootDir = null)
         {
             if (port == 0) port = DEFAULT_PORT;
