@@ -444,10 +444,10 @@ namespace Amatsukaze.Server
                 env.Add("LOGO_FILE", (Log.LogoFiles != null) ? string.Join(";", Log.LogoFiles) : "");
                 env.Add("NUM_INCIDENT", Log.Incident.ToString());
                 env.Add("JSON_PATH", Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".json"));
-                env.Add("LOG_PATH", Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".log"));
+                var logPath = Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".txt");
+                env.Add("LOG_PATH", logPath);
                 // 一時フォルダはCLIしか知り得ないため、カット調整機能と同じ方法でエンコードログから拾う
-                var tempPath = ServerSupport.ExtractTempDirFromLog(
-                    Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".txt"));
+                var tempPath = ServerSupport.ExtractTempDirFromLog(logPath);
                 env.Add("TEMP_PATH", tempPath ?? "");
             }
             else if(CheckLog != null)
@@ -455,10 +455,10 @@ namespace Amatsukaze.Server
                 env.Add("SUCCESS", CheckLog.Success ? "1" : "0");
                 env.Add("ERROR_MESSAGE", CheckLog.Reason ?? "");
                 env.Add("JSON_PATH", Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".json"));
-                env.Add("LOG_PATH", Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".log"));
+                var checkLogPath = Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".txt");
+                env.Add("LOG_PATH", checkLogPath);
                 // CM解析タスクの一時フォルダはカット調整で保持されるため、実行後バッチにも渡す
-                var tempPath = ServerSupport.ExtractTempDirFromLog(
-                    Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".txt"));
+                var tempPath = ServerSupport.ExtractTempDirFromLog(checkLogPath);
                 env.Add("TEMP_PATH", tempPath ?? "");
             }
 
