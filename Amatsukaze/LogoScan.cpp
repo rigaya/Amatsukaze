@@ -16,6 +16,7 @@
 #include "LogoTemporalHistogram.h"
 #include "LogoScanWeakSideRescuePolicy.h"
 #include "LogoScanRowGroupPolicy.h"
+#include "LogoScanEdgeAreaPolicy.h"
 #include "AMTSource.h"
 #include "FileUtils.h"
 #include "StringUtils.h"
@@ -3450,6 +3451,8 @@ namespace {
         static constexpr bool kEnableLineTrim = true;
         // 枠が小さすぎてサイズ異常になるときだけ、スコアの行帯を見て横へ伸ばす。
         static constexpr bool kEnableRowExtend = true;
+        // binary成分を選べなかった場合だけ、縁の出現率の塊で枠を救済する。
+        static constexpr bool kEnableEdgeAreaFallback = true;
         // 時間枠をずらす frameGate retry は現状では改善効果が薄く、失敗時の挙動も追いづらくなるため無効化しておく。
         // retry の実装自体は検証用に残し、必要になったらこのフラグだけ戻す。
         static constexpr bool kEnableFrameGateRetry = false;
@@ -3459,6 +3462,7 @@ namespace {
         // 細線除去とサイズ異常時の行帯拡張は、環境変数で個別に無効化できる。
         const bool enableRowExtend;
         const bool enableLineTrim;
+        const bool enableEdgeAreaFallback;
         const std::vector<std::pair<int, int>> tracePointEnv;
         struct ProgressPlan {
             int stage = 0;
@@ -4200,10 +4204,10 @@ namespace {
             , logCtx(ctx)
             , cb(cb)
             , threadPool(ResolveAutoDetectThreadCount(threadN))
-            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), enableRowExtend(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_ROW_EXTEND", kEnableRowExtend)), enableLineTrim(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_LINE_TRIM", kEnableLineTrim)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
+            , srcImgW(0), srcImgH(0), imgw(0), imgh(0), detectScaleNum(1), detectScaleDen(1), scanx(0), scany(0), scanw(0), scanh(0), radius(0), bitDepth(8), logUVx(1), logUVy(1), framesPerSec(30), readFrames(0), sourceFrameIndex(0), frameWindowStart(0), enableTwoPassFrameGate(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_TWOPASS", kEnableTwoPassFrameGate)), enablePruneBinaryByAnchor(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_PRUNE_BY_ANCHOR", kEnablePruneBinaryByAnchor)), enableRowExtend(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_ROW_EXTEND", kEnableRowExtend)), enableLineTrim(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_LINE_TRIM", kEnableLineTrim)), enableEdgeAreaFallback(ParseEnvBoolDefault("AMT_LOGO_AUTODETECT_EDGE_AREA_FALLBACK", kEnableEdgeAreaFallback)), tracePointEnv(ParseEnvPointList("AMT_LOGO_AUTODETECT_TRACE_POINTS")), tracePoints(), tracePointIndexByOffset(), debugStats(), debugTraceRecords(), debugScore(), debugBinary(), passIndex(0), iterBinaryHistory(), iterThresholdDebug(), promoteCompDebug(), deltaCompDebug(), rectMergeDebug(), debugAbsX(1380), debugAbsY(67), rectAbs{ 0, 0, 0, 0 }, rectLocal{ 0, 0, 0, 0 }, rectDetectFail(LogoRectDetectFail::None), logoAnalyzeFail(LogoAnalyzeFail::None), scoreValidPixelCount(0), scorePositivePixelCount(0), initialSeedCount(0), initialGrownCount(0), usedBinaryFallback(false), debugPass2Entered(false), debugPass2PrepareSucceeded(false), debugPass2CollectSucceeded(false), debugPass2RescueFallbackApplied(false), debugPass2FailBeforeClear(LogoAnalyzeFail::None), debugPass2FrameMaskNonZero(0), debugPass2AcceptedFrames(0), debugPass2SkippedFrames(0), debugFrameGateRetryAttemptCount(0), debugFrameGateRetrySuccessAttempt(0) {
             if (detailedDebug) {
-                fprintf(stderr, "[AutoDetectLogo] 枠統合の設定: LINE_TRIM=%d ROW_EXTEND=%d\n",
-                    enableLineTrim ? 1 : 0, enableRowExtend ? 1 : 0);
+                fprintf(stderr, "[AutoDetectLogo] 枠統合の設定: LINE_TRIM=%d ROW_EXTEND=%d EDGE_AREA_FALLBACK=%d\n",
+                    enableLineTrim ? 1 : 0, enableRowExtend ? 1 : 0, enableEdgeAreaFallback ? 1 : 0);
             }
             progressPlan = ProgressPlan{};
             lastReportedStage = 0;
@@ -12301,13 +12305,29 @@ namespace {
         std::vector<RectStageCompCandidate> candidates;
         std::vector<RectStageCompCandidate> mergeCandidates;
         collectRectCandidates(candidates, mergeCandidates, best, hasBest, bestScore, scoreStage, binaryStage);
-        if (!hasBest) {
+        const bool tryEdgeArea = enableEdgeAreaFallback && !hasBest;
+        logo::EdgeAreaResult edgeArea;
+        if (tryEdgeArea) {
+            edgeArea = logo::PickEdgeArea(scoreStage.mapEdgePresence, scanw, scanh, imgw, imgh);
+        }
+        if (detailedDebug) {
+            fprintf(stderr, "[AutoDetectLogo] 縁の塊フォールバック: enabled=%d triggered=%d accepted=%d middle=%.8f limit=%.8f 選択塊=(%d,%d,%d,%d) strong=%zu 括った枠=(%d,%d,%d,%d) strong=%zu rivals=%zu 独占率=%.8f 締めた枠=(%d,%d,%d,%d) 保留理由=%s\n",
+                enableEdgeAreaFallback ? 1 : 0, tryEdgeArea ? 1 : 0, edgeArea.accepted ? 1 : 0,
+                edgeArea.middle, edgeArea.limit, edgeArea.selected.x, edgeArea.selected.y, edgeArea.selected.w, edgeArea.selected.h,
+                edgeArea.selectedStrong, edgeArea.merged.x, edgeArea.merged.y, edgeArea.merged.w, edgeArea.merged.h,
+                edgeArea.mergedStrong, edgeArea.rivals, edgeArea.share, edgeArea.rect.x, edgeArea.rect.y, edgeArea.rect.w, edgeArea.rect.h,
+                tryEdgeArea ? logo::EdgeAreaHoldReasonText(edgeArea.reason) : (enableEdgeAreaFallback ? "通常成分を採用" : "無効"));
+        }
+        if (!hasBest && !edgeArea.accepted) {
             setRectDetectFail(LogoRectDetectFail::NoBestComponent);
         }
 
         // 通常の位置決定はbinary成分で行い、小さすぎる枠だけ任意の行帯拡張で救済する。
-        AutoDetectRect finalRect = hasBest ? best : coarse;
-        if (!hasBest && !hasCoarse) {
+        // 縁だけで選んだ枠は成分の追加統合を通さず、既存の余白・サイズ・位置検査へ渡す。
+        AutoDetectRect finalRect = edgeArea.accepted
+            ? AutoDetectRect{ edgeArea.rect.x, edgeArea.rect.y, edgeArea.rect.w, edgeArea.rect.h }
+            : (hasBest ? best : coarse);
+        if (!hasBest && !hasCoarse && !edgeArea.accepted) {
             finalRect = buildAcceptedFallbackRect(scoreStage);
         }
         if (finalRect.w <= 0 || finalRect.h <= 0) {

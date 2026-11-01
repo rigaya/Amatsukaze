@@ -127,3 +127,14 @@ test('LogoScanRowGroupPolicyTests', logo_scan_row_group_policy_tests,
   suite : 'native',
   timeout : 30,
 )
+
+# 縁の出現率から塊を選ぶフォールバックの純粋関数を確認する。
+logo_scan_edge_area_policy_tests = executable('LogoScanEdgeAreaPolicyTests',
+  'LogoScanEdgeAreaPolicyTests.cpp',
+  include_directories : include_directories('../../Amatsukaze'),
+  install : false,
+)
+test('LogoScanEdgeAreaPolicyTests', logo_scan_edge_area_policy_tests,
+  suite : 'native',
+  timeout : 30,
+)
