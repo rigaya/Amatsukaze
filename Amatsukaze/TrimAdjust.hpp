@@ -11,9 +11,49 @@
 #include "JpegCompress.h"
 #include "TrimAdjustAudio.h"
 
+#include <algorithm>
 #include <mutex>
 
 namespace trimadjust {
+
+namespace {
+
+// プレビュー色のためのYUV→RGB変換係数
+// デコード済みフレームはTV(限定)レンジ Y 16-235 / C 16-240 だが、
+// JPEGは色空間の指定を持たずブラウザは常にフルレンジとして解釈するため、
+// 限定レンジのYUVプレーンをそのままJPEGに渡すとコントラストと色が狂う。
+// そのためソースの色空間に合わせた行列でRGB化してからJPEG圧縮する。
+struct YuvRgbCoeffs {
+    float yScale; // (Y - 16) をフルレンジに伸長する係数
+    float rV;     // R = (Y-16)*yScale + rV*(V-128)
+    float gU, gV; // G = (Y-16)*yScale + gU*(U-128) + gV*(V-128)
+    float bU;     // B = (Y-16)*yScale + bU*(U-128)
+};
+// TV限定レンジ→フルレンジ合成係数 (BT.709: HD放送、BT.601: SD放送)
+constexpr YuvRgbCoeffs YUV_RGB_709_LIMITED = { 1.164383f, 1.792741f, -0.213249f, -0.532909f, 2.112402f };
+constexpr YuvRgbCoeffs YUV_RGB_601_LIMITED = { 1.164383f, 1.596027f, -0.391762f, -0.812968f, 2.017232f };
+
+// amts0.datに保存されたカラースペース(FFmpeg enumのmatrix_coefficients)から
+// BT.709/BT.601を選択する
+// 1=BT.709、4=FCC、5=BT.601(PAL系)、6=SMPTE170M(BT.601 NTSC)、7=SMPTE240M、
+// 9=BT.2020非一定亮度、10=BT.2020一定亮度、2=不指定
+// ソース本来の高さで判定する (プレビュー用に縮小後の高さでは判定しないこと)
+inline bool previewUseBT709(uint8_t colorSpace, int sourceHeight) {
+    switch (colorSpace) {
+    case 1: case 7: case 9: case 10: return true; // 709系 (240Mは係数が709と完全一致ではないが
+                                                  //       709に近いHD行列として近似、
+                                                  //       BT.2020はプレビュー用に709で近似)
+    case 4: case 5: case 6: return false;         // 601系 (SD放送)
+    default: return sourceHeight > 576; // 不指定の場合は解像度で推定 (SD→BT.601、HD→BT.709)
+    }
+}
+
+// float値を四捨五入してuint8にクランプする
+inline uint8_t clampToU8(float v) {
+    return static_cast<uint8_t>(v < 0.f ? 0 : (v > 255.f ? 255 : v + 0.5f));
+}
+
+} // namespace
 
 // amts0.datを読み込みAviSynth経由でフレーム取得を行うクラス
 class GUITrimAdjust : public AMTObject {
@@ -26,6 +66,7 @@ class GUITrimAdjust : public AMTObject {
     PClip yuvClip; // ConvertToYV16適用済みクリップ (planar YUV422P)
     int width, height;
     int numFrames;
+    int bitsPerComponent; // yuvClipのサンプルビット数 (AviSynth+ネイティブビット深度格納: 8/10/12)
 
     // amts0.datから読み込んだ音声データ（波形表示用）
     std::vector<FilterAudioFrame> audioFrames;
@@ -37,6 +78,8 @@ class GUITrimAdjust : public AMTObject {
     // JPEG出力バッファ（getFrameJpeg呼び出し間で再利用）
     static constexpr int JPEG_QUALITY = 85;
     std::vector<uint8_t> jpegBuffer;
+    // プレビュー用BGRバッファ（色空間を考慮したYUV→RGB変換結果、呼び出し間で再利用）
+    std::vector<uint8_t> previewBgrBuffer;
 
     // 波形レンダリング定数・バッファ
     static constexpr int WAVEFORM_HEIGHT = 56;
@@ -132,12 +175,46 @@ class GUITrimAdjust : public AMTObject {
             const VideoInfo& finalVi = yuvClip->GetVideoInfo();
             width = finalVi.width;
             height = finalVi.height;
+            // サンプルビット数を取得 (8bit以外なら16bit幅で格納されている)
+            bitsPerComponent = finalVi.BitsPerComponent();
         } catch (const AvisynthError& e) {
             if (env) {
                 env->DeleteScriptEnvironment();
                 env = nullptr;
             }
             THROWF(RuntimeException, "AviSynthエラー: %s", e.msg);
+        }
+    }
+
+    // YV16 (planar YUV422P) フレームを上下正しい向きのBGR24に変換してpreviewBgrBufferに格納する
+    // 限定レンジ・ソースの色空間 (BT.709/BT.601) を考慮した行列変換を行う。
+    // 10bit等のbits>8のサンプルは16bit幅で格納されているため、マスクして限定レンジのまま
+    // ビットシフトで8bit相当に正規化する (Y 64-940 → 16-235、C 64-960 → 16-240)。
+    template <typename TSample>
+    void convertYV16ToBgr(const PVideoFrame& frame, const YuvRgbCoeffs& coeffs,
+                          unsigned sampleMask, int shift) {
+        const uint8_t* yBase = frame->GetReadPtr(PLANAR_Y);
+        const uint8_t* uBase = frame->GetReadPtr(PLANAR_U);
+        const uint8_t* vBase = frame->GetReadPtr(PLANAR_V);
+        const int yPitch = frame->GetPitch(PLANAR_Y);
+        const int uPitch = frame->GetPitch(PLANAR_U);
+        const int vPitch = frame->GetPitch(PLANAR_V);
+        const int stride = width * 3;
+        for (int y = 0; y < height; y++) {
+            const TSample* yRow = reinterpret_cast<const TSample*>(yBase + (size_t)y * yPitch);
+            const TSample* uRow = reinterpret_cast<const TSample*>(uBase + (size_t)y * uPitch);
+            const TSample* vRow = reinterpret_cast<const TSample*>(vBase + (size_t)y * vPitch);
+            uint8_t* bgrRow = previewBgrBuffer.data() + (size_t)y * stride;
+            for (int x = 0; x < width; x++) {
+                // 限定レンジのサンプルはそのまま右シフトで8bit限定レンジ相当と同等
+                const float y1 = (float)(((unsigned)yRow[x] & sampleMask) >> shift) - 16.f;
+                const float cu = (float)(((unsigned)uRow[x >> 1] & sampleMask) >> shift) - 128.f;
+                const float cv = (float)(((unsigned)vRow[x >> 1] & sampleMask) >> shift) - 128.f;
+                const float yy = y1 * coeffs.yScale;
+                bgrRow[x * 3 + 0] = clampToU8(yy + coeffs.bU * cu);
+                bgrRow[x * 3 + 1] = clampToU8(yy + coeffs.gU * cu + coeffs.gV * cv);
+                bgrRow[x * 3 + 2] = clampToU8(yy + coeffs.rV * cv);
+            }
         }
     }
 
@@ -149,6 +226,7 @@ public:
         , width(0)
         , height(0)
         , numFrames(0)
+        , bitsPerComponent(8)
         , audioSamplesPerFrame(0) {
         // amts0.datを読み込んでフレーム情報とVideoFormatを取得
         tstring path(datFilePath);
@@ -216,6 +294,8 @@ public:
 
     // デコード済みフレームをJPEGに圧縮して内部バッファに格納
     // 成功時は jpegData にポインタ、jpegSize にサイズを返す
+    // YUVプレーンをそのままJPEGに渡すと色空間の限定レンジ/行列が無視されて
+    // 色が正しく表示されないため、色空間を考慮してBGR化してからJPEG圧縮する
     bool getFrameJpeg(int frameNumber, const uint8_t** jpegData, int* jpegSize) {
         std::lock_guard<std::mutex> lock(mutex);
         if (!yuvClip) {
@@ -223,18 +303,29 @@ public:
         }
         try {
             PVideoFrame frame = yuvClip->GetFrame(frameNumber, env);
-            // YV16 (planar YUV422P) の各プレーンを取得
-            const uint8_t* planes[3] = {
-                frame->GetReadPtr(PLANAR_Y),
-                frame->GetReadPtr(PLANAR_U),
-                frame->GetReadPtr(PLANAR_V),
-            };
-            const int strides[3] = {
-                frame->GetPitch(PLANAR_Y),
-                frame->GetPitch(PLANAR_U),
-                frame->GetPitch(PLANAR_V),
-            };
-            if (!jpeg_utils::compressYUV422PToJpeg(planes, strides, width, height, JPEG_QUALITY, jpegBuffer)) {
+            // 行列はプレビュー縮小前の元解像度で判定する
+            const YuvRgbCoeffs& coeffs = previewUseBT709(vfmt.colorSpace, vfmt.height)
+                ? YUV_RGB_709_LIMITED : YUV_RGB_601_LIMITED;
+            // AMTSourceは10bit/12bitをCS_YUV420P10/P12として宣言し、サンプル値は
+            // MergeField内のconv_bit_depth_で16bit格納(P010LE等)から10/12bitレンジへ
+            // 正規化済み。ConvertToYV16/BilinearResizeもビット深度を保持するため、
+            // ここでBitsPerComponent()が返すのは8/10/12のはずだが、万一の範囲外値も
+            // 8bit相当シフト(0-8)に収めて破綻しないようにする。
+            // (common/rgy_util.hのclampマクロと衝突するためstd::clampは使わない)
+            constexpr int MIN_PREVIEW_BITS = 8;
+            constexpr int MAX_PREVIEW_BITS = 16;
+            const int rawBits = bitsPerComponent;
+            const int bits = (rawBits < MIN_PREVIEW_BITS) ? MIN_PREVIEW_BITS
+                : ((rawBits > MAX_PREVIEW_BITS) ? MAX_PREVIEW_BITS : rawBits);
+            const int shift = bits - MIN_PREVIEW_BITS;
+            const unsigned sampleMask = (bits >= 32) ? ~0u : ((1u << bits) - 1u);
+            previewBgrBuffer.resize((size_t)width * height * 3);
+            if (bits > 8) {
+                convertYV16ToBgr<uint16_t>(frame, coeffs, sampleMask, shift);
+            } else {
+                convertYV16ToBgr<uint8_t>(frame, coeffs, sampleMask, shift);
+            }
+            if (!jpeg_utils::compressBGRToJpeg(previewBgrBuffer.data(), width * 3, width, height, JPEG_QUALITY, jpegBuffer)) {
                 return false;
             }
             *jpegData = jpegBuffer.data();
