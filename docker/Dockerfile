@@ -214,6 +214,19 @@ for GPU_NODE in /dev/dri/renderD* /dev/dri/card* /dev/kfd; do
     fi
     usermod -aG "$GPU_GROUP" "$USER_NAME"
 done
+# 指定された補助グループをコンテナ内で追加する
+for EXTRA_GID in ${RUN_GROUPS//,/ }; do
+    if [[ ! "$EXTRA_GID" =~ ^[0-9]+$ || "$EXTRA_GID" =~ ^0+$ ]]; then
+        echo "警告: 無効な補助グループIDを無視します: $EXTRA_GID" >&2
+        continue
+    fi
+    EXTRA_GROUP=$(getent group "$EXTRA_GID" | cut -d: -f1 || true)
+    if [ -z "$EXTRA_GROUP" ]; then
+        EXTRA_GROUP="grp$EXTRA_GID"
+        groupadd -g "$EXTRA_GID" "$EXTRA_GROUP"
+    fi
+    usermod -aG "$EXTRA_GROUP" "$USER_NAME"
+done
 chown -R --no-dereference "$DEFAULT_UID:$DEFAULT_GID" /app
 if [ -d /opt/Faster-Whisper-XXL ]; then
     find /opt/Faster-Whisper-XXL -type d -exec chown "$DEFAULT_UID:$DEFAULT_GID" {} +

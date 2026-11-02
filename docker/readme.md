@@ -120,6 +120,10 @@ cd Amatsukaze/docker
 vi compose.yml
 ```
 
+`setup.sh`は`/var/local/edcb/Common.ini`から録画フォルダを検出し、ホストと同じパスでマウントします。`RUN_UID`と`RUN_GID`には実行ユーザーのIDを設定し、アクセスに必要な補助グループを`RUN_GROUPS`に設定します。コンテナにはホストの補助グループが引き継がれないため、この指定が必要です。`sudo`実行時は元のユーザーを使用します。`--uid`、`--gid`、`--groups`で明示指定できます。`--uid`指定時は補助グループを自動検出しません。別の場所にある場合は`./setup.sh --edcb-dir <パス>`を指定してください。既存の`compose.yml`は変更せず、推奨設定を表示します。録画フォルダと出力フォルダは事前に作成し、実行ユーザーに必要なアクセス権限を付けてください。
+
+EDCB-Linuxの録画後スクリプトは`.sh`で作成し、実行権限を付けてください。
+
 ## 起動
 
 ```sh
@@ -154,14 +158,10 @@ Windowsから ```AmatsukazeClient.bat``` を実行して接続します。
 
 ## タスクの追加
 
-```AmatsukazeAddTask```でタスク追加を行います。このとき、```-o``` と ```-f``` は、docker内からどう見えているかを考慮してパスを置き換える必要があります。
-
-入力ファイルを ```./input``` に置いたとき、下記のようにタスク追加すると ```./output``` に出力されます。
+`AmatsukazeAddTask`でタスクを追加します。録画・出力フォルダはホストとコンテナで同じパスにマウントするため、パスの変換は不要です。
 
 ```sh
-#  (コンテナ外) ./input  -> (コンテナ内) /app/input
-#  (コンテナ外) ./output -> (コンテナ内) /app/output
-AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プロファイル名> -o /app/output -f /app/input/<入力tsファイル名>
+AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プロファイル名> -o /mnt/encoded -f /mnt/recorded/<入力tsファイル名>
 ```
 
 ## 設定
@@ -175,8 +175,8 @@ AmatsukazeAddTask -ip <コンテナを実行中のPCのIPアドレス> -s <プ�
 
 | | コンテナ外 | コンテナ内 |
 |:--|:--|:--|
-| 入力tsデータ用          | ```./input```   | ```./app/input```   |
-| エンコード結果データ用  | ```./output```  | ```./app/output```  |
+| 入力tsデータ用          | ```/mnt/recorded``` | ```/mnt/recorded```   |
+| エンコード結果データ用  | ```/mnt/encoded``` | ```/mnt/encoded```  |
 | Amatsuakze avsファイル  | ```./avs```     | ```./app/avs```     |
 | Amatsuakze batファイル  | ```./bat```     | ```./app/bat```     |
 | Amatsuakze 設定ファイル | ```./config```  | ```./app/config```  |
@@ -211,3 +211,7 @@ docker build -t amatsukaze .
 ```
 
 通常のDockerfileではローカルファイルをコピーせず、最新リリースのアーカイブを自動的に取得します。
+
+録画フォルダを`/app`配下にマウントしないでください。起動時の`chown -R /app`で、ホスト側の所有者も`RUN_UID`/`RUN_GID`に変更されます。録画フォルダに書き込めない場合もエンコードは実行され、入力ファイルの移動だけが行われません。
+
+従来の`./input:/app/input`、`./output:/app/output`構成の`compose.yml`も変更不要でそのまま使えます。ただし、この構成では`./input`と`./output`も起動時に所有者が変更されるため、EDCBの録画フォルダを直接`/app/input`にマウントすることは避けてください。

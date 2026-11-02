@@ -168,12 +168,15 @@ else
                     </td>
                 </tr>
             }
-            <tr>
-                <th>_EDCBX_DIRECT_</th>
-                <td>
-                    <input type="checkbox" checked="@_edit.IsDirect" @onchange="OnDirectChanged" />
-                </td>
-            </tr>
+            @if (!IsShSelected)
+            {
+                <tr>
+                    <th>_EDCBX_DIRECT_</th>
+                    <td>
+                        <input type="checkbox" checked="@_edit.IsDirect" @onchange="OnDirectChanged" />
+                    </td>
+                </tr>
+            }
         </table>
     }
 

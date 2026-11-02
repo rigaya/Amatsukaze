@@ -1348,6 +1348,17 @@ namespace Amatsukaze.Server
             return null;
         }
 
+        // 移動先を作れなくてもエンコード処理を継続する
+        internal static void PrepareInputMoveDirectories(bool isBatch, bool disableMove, string succeededDir, string failedDir, Action<string, Exception> warn)
+        {
+            if (!isBatch || disableMove) return;
+            foreach (var dir in new[] { succeededDir, failedDir })
+            {
+                try { Directory.CreateDirectory(dir); }
+                catch (Exception e) { warn(dir, e); }
+            }
+        }
+
         public async Task<bool> RunItem(QueueItem workerItem, bool forceStart)
         {
             try
@@ -1367,11 +1378,8 @@ namespace Amatsukaze.Server
                 var succeededDir = Path.Combine(srcDir, ServerSupport.SUCCESS_DIR);
                 var failedDir = Path.Combine(srcDir, ServerSupport.FAIL_DIR);
 
-                if (item.IsBatch)
-                {
-                    Directory.CreateDirectory(succeededDir);
-                    Directory.CreateDirectory(failedDir);
-                }
+                PrepareInputMoveDirectories(item.IsBatch, item.Profile?.DisableMoveInputFile ?? true,
+                    succeededDir, failedDir, (dir, e) => Util.AddLog(Id, "入力ファイルの移動先フォルダを作成できないため、移動は行いません: " + dir, e));
 
                 if (item.IsCheck == false)
                 {
