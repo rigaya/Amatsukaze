@@ -1036,6 +1036,12 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
         return 2;
     } catch (const Exception&) {
         return 1;
+    } catch (const std::bad_alloc&) {
+        ctx.error(_T("メモリの確保に失敗しました"));
+        return 1;
+    } catch (const std::exception& e) {
+        ctx.errorF(_T("標準例外: %s"), char_to_tstring(e.what()).c_str());
+        return 1;
     }
 }
 
