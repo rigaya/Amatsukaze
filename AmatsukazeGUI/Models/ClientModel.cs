@@ -2120,6 +2120,7 @@ namespace Amatsukaze.Models
                 profile.ChapterExeOptions = data.Profile.ChapterExeOption;
                 profile.DisableChapter = data.Profile.DisableChapter;
                 profile.OutputChapter = data.Profile.OutputChapter;
+                profile.CMCheckChapterDir = data.Profile.CMCheckChapterDir;
                 profile.DisableSubs = data.Profile.DisableSubs;
                 profile.DisablePgsSub = data.Profile.DisablePgsSub;
                 profile.PgsFontFamily = data.Profile.PgsFontFamily;

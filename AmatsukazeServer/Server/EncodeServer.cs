@@ -2169,6 +2169,14 @@ namespace Amatsukaze.Server
                 if ((mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust))
                 {
                     sb.Append(" --chapter");
+                    // CM解析のみでも、プロファイルでチャプター出力が有効ならチャプターファイルを出力する
+                    // カット調整では出力しない。dstはチャプター出力先のベースパス
+                    if (mode == ProcMode.CMCheck && !profile.DisableChapter && profile.OutputChapter)
+                    {
+                        sb.Append(" -o \"")
+                            .Append(dst)
+                            .Append("\" --output-chapter");
+                    }
                 }
                 else {
                     double bitrateCM = profile.BitrateCM;

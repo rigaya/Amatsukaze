@@ -788,6 +788,11 @@
                               IsChecked="{Binding Model.SelectedProfile.OutputChapter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               IsEnabled="{Binding Model.SelectedProfile.DisableChapter, Converter={StaticResource InverseBooleanConverter}}"
                               ToolTip="チャプターファイルを別ファイルとして出力します。「チャプター・CM解析を無効にする」がオンの場合は無効になります。" />
+                    <DockPanel Margin="20,3,0,3" IsEnabled="{Binding Model.SelectedProfile.OutputChapter}">
+                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,5,0" Text="CM解析時の出力先フォルダ"/>
+                        <TextBox Text="{Binding Model.SelectedProfile.CMCheckChapterDir, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="CM解析のみの処理でチャプターファイルを出力するフォルダです。空の場合は入力ファイルと同じフォルダに出力します。相対パスは入力ファイルのフォルダ基準です。" />
+                    </DockPanel>
                     <CheckBox Height="16" Margin="0,3"  Content="マッピングにないDRCS外字は無視する"
                               IsChecked="{Binding Model.SelectedProfile.IgnoreNoDrcsMap, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Height="16" Margin="0,3"  Content="ロゴ検出判定しきい値を低くする" 
