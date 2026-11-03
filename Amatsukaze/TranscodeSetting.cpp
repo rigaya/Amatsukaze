@@ -1693,6 +1693,21 @@ tstring ConfigWrapper::getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax
     return sb.str();
 }
 
+// 接尾辞はgetOutFileBaseと同じ規則で付与する
+tstring ConfigWrapper::getCMOnlyChapterPath(EncodeFileKey key, EncodeFileKey keyMax) const {
+    StringBuilderT sb;
+    sb.append(_T("%s"), pathRemoveExtension(conf.srcFilePathOrg));
+    if (key.format > 0) {
+        sb.append(_T("-%d"), key.format);
+    }
+    if (keyMax.div > 1) {
+        sb.append(_T("_div%d"), key.div + 1);
+    }
+    sb.append(_T("%s"), GetCMSuffix(key.cm));
+    sb.append(_T(".chapter.txt"));
+    return sb.str();
+}
+
 tstring ConfigWrapper::getOutSummaryPath() const {
     return StringFormat(_T("%s.txt"), conf.outVideoPath);
 }

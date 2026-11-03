@@ -1875,7 +1875,9 @@ void DoBadThing() {
                     chapterMakers[key.video]->exec(key);
                     const auto path = setting.getTmpChapterPath(key);
                     if (File::exists(path)) {
-                        const auto dstchapter = setting.getOutChapterPath(fileIn.outKey, fileIn.keyMax, setting.getFormat(), eoInfo.format);
+                        // CM解析のみでは-o(出力先)は使わず、入力ファイル名からチャプターの出力先を組み立てる
+                        const auto dstchapter = setting.getCMOnlyChapterPath(fileIn.outKey, fileIn.keyMax);
+                        ctx.infoF(_T("[CM解析のみ] チャプターを出力: %s"), dstchapter.c_str());
                         File::copy(path, dstchapter);
                     }
                 }
