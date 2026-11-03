@@ -465,10 +465,6 @@ namespace Amatsukaze.Server
         public bool DisableChapter { get; set; }
         [DataMember]
         public bool OutputChapter { get; set; }
-        // CM解析のみの処理でチャプターファイルを出力するフォルダ
-        // 空の場合は入力ファイルと同じフォルダ。相対パスは入力ファイルのフォルダ基準
-        [DataMember]
-        public string CMCheckChapterDir { get; set; }
         [DataMember]
         public bool DisableSubs { get; set; }
         // 旧プロファイルもfalseで読み込み、CLIと同じPGS有効を既定にする。
@@ -1156,7 +1152,6 @@ namespace Amatsukaze.Server
             keyValueBool("関連ファイル(*.err,*.program.txt)も処理", profile.MoveEDCBFiles);
             keyValueBool("チャプターを無効にする", profile.DisableChapter);
             keyValueBool("チャプターを出力する", profile.OutputChapter);
-            keyValue("CM解析時のチャプター出力先", string.IsNullOrWhiteSpace(profile.CMCheckChapterDir) ? "入力ファイルと同じフォルダ" : profile.CMCheckChapterDir);
             keyValueBool("字幕を無効にする", profile.DisableSubs);
             if (!profile.DisableSubs)
             {

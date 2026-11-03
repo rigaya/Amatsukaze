@@ -975,16 +975,13 @@ namespace Amatsukaze.Server
             string tmpBase = null;
 
             // CM解析のみでも、プロファイルでチャプター出力が有効ならチャプターファイルを出力する（カット調整では出力しない）
-            // 出力先は既定で入力ファイルと同じフォルダ。プロファイルで指定がある場合はそのフォルダ（相対パスは入力ファイルのフォルダ基準）
+            // 出力先は入力ファイルと同じフォルダ
             // ファイル名は通常エンコード時と同じく出力名（入力TSのファイル名）を使う
             string chapterBase = null;
             if (item.Mode == ProcMode.CMCheck && !profile.DisableChapter && profile.OutputChapter)
             {
                 var srcDir = Path.GetDirectoryName(item.SrcPath);
-                var chapterDir = string.IsNullOrWhiteSpace(profile.CMCheckChapterDir)
-                    ? srcDir : Path.Combine(srcDir, profile.CMCheckChapterDir.Trim());
-                Directory.CreateDirectory(chapterDir);
-                chapterBase = Path.Combine(chapterDir, Path.GetFileName(item.DstPath));
+                chapterBase = Path.Combine(srcDir, Path.GetFileName(item.DstPath));
             }
             string localChapterBase = chapterBase;
 

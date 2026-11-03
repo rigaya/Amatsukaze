@@ -918,10 +918,6 @@ else
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("MoveEDCBFiles")" @onchange="@(e => OnBoolChanged(e, "MoveEDCBFiles"))" disabled="@(!GetMoveInputFileValue())" />関連ファイル(*.err,*.program.txtなど)もコピー/移動する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("DisableChapter")" @onchange="@(e => OnBoolChanged(e, "DisableChapter"))" disabled="@GetBoolValue("Mpeg2Partial")" />チャプター・CM解析を無効にする</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("OutputChapter")" @onchange="@(e => OnBoolChanged(e, "OutputChapter"))" disabled="@(GetBoolValue("DisableChapter"))" />チャプターを別ファイルに出力する</label></td></tr>
-            <tr>
-                <td>CM解析時の出力先フォルダ</td>
-                <td><input style="width: 100%;" value="@GetStringValue("CMCheckChapterDir")" @oninput="@(e => OnStringChanged(e, "CMCheckChapterDir"))" disabled="@(!GetBoolValue("OutputChapter") || GetBoolValue("DisableChapter"))" placeholder="空欄: 入力ファイルと同じフォルダ（相対パスは入力ファイルのフォルダ基準）" /></td>
-            </tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoDrcsMap")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoDrcsMap"))" />マッピングにないDRCS外字は無視する</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("LooseLogoDetection")" @onchange="@(e => OnBoolChanged(e, "LooseLogoDetection"))" />ロゴ検出判定しきい値を低くする</label></td></tr>
             <tr class="profile-check-row"><td colspan="2"><label class="settings-check"><input type="checkbox" checked="@GetBoolValue("IgnoreNoLogo")" @onchange="@(e => OnBoolChanged(e, "IgnoreNoLogo"))" />ロゴ検出に失敗しても処理を続行する</label></td></tr>

@@ -2202,20 +2202,6 @@ namespace Amatsukaze.Models
         }
         #endregion
 
-        #region CMCheckChapterDir変更通知プロパティ
-        public string CMCheckChapterDir
-        {
-            get { return Data.CMCheckChapterDir; }
-            set
-            {
-                if (Data.CMCheckChapterDir == value)
-                    return;
-                Data.CMCheckChapterDir = value;
-                RaisePropertyChanged();
-            }
-        }
-        #endregion
-
         #region DisableSubs変更通知プロパティ
         public bool DisableSubs {
             get { return Data.DisableSubs; }
