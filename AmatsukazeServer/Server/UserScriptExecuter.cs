@@ -447,8 +447,8 @@ namespace Amatsukaze.Server
                 var logPath = Path.GetFullPath(Server.GetLogFileBase(Log.EncodeStartDate) + ".txt");
                 env.Add("LOG_PATH", logPath);
                 // 一時フォルダはCLIしか知り得ないため、カット調整機能と同じ方法でエンコードログから拾う
-                var tempPath = ServerSupport.ExtractTempDirFromLog(logPath);
-                env.Add("TEMP_PATH", tempPath ?? "");
+                var tempDir = ServerSupport.ExtractTempDirFromLog(logPath);
+                env.Add("AMT_TEMP_DIR", tempDir ?? "");
             }
             else if(CheckLog != null)
             {
@@ -458,8 +458,8 @@ namespace Amatsukaze.Server
                 var checkLogPath = Path.GetFullPath(Server.GetCheckLogFileBase(CheckLog.CheckStartDate) + ".txt");
                 env.Add("LOG_PATH", checkLogPath);
                 // CM解析タスクの一時フォルダはカット調整で保持されるため、実行後バッチにも渡す
-                var tempPath = ServerSupport.ExtractTempDirFromLog(checkLogPath);
-                env.Add("TEMP_PATH", tempPath ?? "");
+                var tempDir = ServerSupport.ExtractTempDirFromLog(checkLogPath);
+                env.Add("AMT_TEMP_DIR", tempDir ?? "");
             }
 
             // パイプ通信用

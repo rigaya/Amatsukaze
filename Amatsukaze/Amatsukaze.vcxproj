@@ -464,6 +464,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClInclude Include="HEVCVideoParser.h" />
     <ClInclude Include="InterProcessComm.h" />
     <ClInclude Include="JpegCompress.h" />
+    <ClInclude Include="PreviewColor.h" />
     <ClInclude Include="LogoScan.h" />
     <ClInclude Include="LogoDecodeSession.h" />
     <ClInclude Include="LogoGopDecoder.h" />
@@ -613,6 +614,11 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClCompile Include="HEVCVideoParser.cpp" />
     <ClCompile Include="InterProcessComm.cpp" />
     <ClCompile Include="JpegCompress.cpp" />
+    <ClCompile Include="PreviewColor.cpp" />
+    <ClCompile Include="PreviewColorAVX2.cpp">
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Precise</FloatingPointModel>
+    </ClCompile>
     <ClCompile Include="LogoScan.cpp" />
     <ClCompile Include="Mpeg2TsParser.cpp" />
     <ClCompile Include="Mpeg2PartialEncode.cpp" />

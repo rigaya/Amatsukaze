@@ -54,6 +54,18 @@ if host_machine.system() == 'linux'
   )
 endif
 
+preview_color_tests = executable('PreviewColorTests',
+  'PreviewColorTests.cpp',
+  '../../Amatsukaze/PreviewColor.cpp',
+  objects : preview_color_avx2_objects,
+  dependencies : common_dep,
+  install : false,
+)
+test('PreviewColorTests', preview_color_tests,
+  suite : 'native',
+  timeout : 30,
+)
+
 trim_adjust_audio_tests = executable('TrimAdjustAudioTests',
   'TrimAdjustAudioTests.cpp',
   install : false,

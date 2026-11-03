@@ -10,6 +10,7 @@
 #include "AMTSource.h"
 #include "JpegCompress.h"
 #include "TrimAdjustAudio.h"
+#include "PreviewColor.h"
 
 #include <mutex>
 
@@ -23,7 +24,8 @@ class GUITrimAdjust : public AMTObject {
 
     // AviSynth環境
     IScriptEnvironment2* env;
-    PClip yuvClip; // ConvertToYV16適用済みクリップ (planar YUV422P)
+    PClip yuvClip; // インタレはYUV422、プログレはYUV420
+    PreviewColorConverter colorConverter;
     int width, height;
     int numFrames;
 
@@ -85,11 +87,13 @@ class GUITrimAdjust : public AMTObject {
             width = srcVi.width;
             height = srcVi.height;
 
-            // インタレース判定に基づきConvertToYV16 (planar YUV422P) を適用
+            // インタレは従来の422経路を維持。プログレはAMTSourceの420をそのまま利用する。
             const bool interlaced = !vfmt.progressive;
             AVSValue convertArgs[] = { amtClip, interlaced };
             const char* convertNames[] = { nullptr, "interlaced" };
-            AVSValue yuvResult = env->Invoke("ConvertToYV16", AVSValue(convertArgs, 2), convertNames);
+            AVSValue yuvResult = interlaced
+                ? env->Invoke("ConvertToYUV422", AVSValue(convertArgs, 2), convertNames)
+                : (srcVi.Is420() ? amtClip : env->Invoke("ConvertToYUV420", AVSValue(convertArgs, 2), convertNames));
             PClip convertedClip = yuvResult.AsClip();
 
             // scaleMode!=0: 縮小プレビュー
@@ -104,8 +108,10 @@ class GUITrimAdjust : public AMTObject {
             }
 
             if (scaleDen > 1) {
-                const int resizeWidth = std::max(1, (width * scaleNum) / scaleDen);
-                const int resizeHeight = std::max(1, (height * scaleNum) / scaleDen);
+                const int resizeWidth = interlaced ? std::max(1, (width * scaleNum) / scaleDen)
+                    : std::max(2, ((width * scaleNum) / scaleDen) & ~1);
+                const int resizeHeight = interlaced ? std::max(1, (height * scaleNum) / scaleDen)
+                    : std::max(2, ((height * scaleNum) / scaleDen) & ~1);
                 if (interlaced) {
                     // interlaced=true: SeparateFields -> BilinearResize -> Weave
                     AVSValue sepArgs[] = { yuvResult };
@@ -128,6 +134,7 @@ class GUITrimAdjust : public AMTObject {
                 yuvClip = convertedClip;
             }
 
+            // 高ビット深度は保持し、最後の色変換と同時にJPEGの8bitへ丸める。
             // 最終的なサイズを取得
             const VideoInfo& finalVi = yuvClip->GetVideoInfo();
             width = finalVi.width;
@@ -223,18 +230,46 @@ public:
         }
         try {
             PVideoFrame frame = yuvClip->GetFrame(frameNumber, env);
-            // YV16 (planar YUV422P) の各プレーンを取得
+            // 422/420を維持してJPEGの行列・レンジへ変換する。
             const uint8_t* planes[3] = {
                 frame->GetReadPtr(PLANAR_Y),
                 frame->GetReadPtr(PLANAR_U),
                 frame->GetReadPtr(PLANAR_V),
             };
-            const int strides[3] = {
+            int strides[3] = {
                 frame->GetPitch(PLANAR_Y),
                 frame->GetPitch(PLANAR_U),
                 frame->GetPitch(PLANAR_V),
             };
-            if (!jpeg_utils::compressYUV422PToJpeg(planes, strides, width, height, JPEG_QUALITY, jpegBuffer)) {
+            const bool progressive = vfmt.progressive;
+            const bool bt2020 = vfmt.colorSpace == AVCOL_SPC_BT2020_NCL || vfmt.colorSpace == AVCOL_SPC_BT2020_CL;
+            const bool constantLuminance = vfmt.colorSpace == AVCOL_SPC_BT2020_CL;
+            const bool hlg = progressive && bt2020 && vfmt.transferCharacteristics == AVCOL_TRC_ARIB_STD_B67;
+            PreviewMatrix matrix;
+            switch (vfmt.colorSpace) {
+            case AVCOL_SPC_BT709: matrix = PreviewMatrix::BT709; break;
+            case AVCOL_SPC_BT470BG: case AVCOL_SPC_SMPTE170M: matrix = PreviewMatrix::BT601; break;
+            case AVCOL_SPC_BT2020_NCL: matrix = PreviewMatrix::BT2020; break;
+            case AVCOL_SPC_FCC: matrix = PreviewMatrix::FCC; break;
+            case AVCOL_SPC_SMPTE240M: matrix = PreviewMatrix::SMPTE240M; break;
+            default: matrix = vfmt.height > 576 ? PreviewMatrix::BT709 : PreviewMatrix::BT601; break;
+            }
+            // HLGと非線形な一定輝度BT.2020だけ浮動小数点経路を使う。
+            const auto& converted = hlg || constantLuminance
+                ? colorConverter.convert(planes, strides, width, height, yuvClip->GetVideoInfo().BitsPerComponent(),
+                    hlg, constantLuminance, !progressive)
+                : colorConverter.convertInteger(planes, strides, width, height, yuvClip->GetVideoInfo().BitsPerComponent(),
+                    matrix, !progressive);
+            const size_t ySize = size_t(width) * height;
+            planes[0] = converted.data();
+            planes[1] = planes[0] + ySize;
+            planes[2] = planes[1] + ySize / (progressive ? 4 : 2);
+            strides[0] = width;
+            strides[1] = strides[2] = width / 2;
+            const bool success = progressive
+                ? jpeg_utils::compressYUV420PToJpeg(planes, strides, width, height, JPEG_QUALITY, jpegBuffer)
+                : jpeg_utils::compressYUV422PToJpeg(planes, strides, width, height, JPEG_QUALITY, jpegBuffer);
+            if (!success) {
                 return false;
             }
             *jpegData = jpegBuffer.data();

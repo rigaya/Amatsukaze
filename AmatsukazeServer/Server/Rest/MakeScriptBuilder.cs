@@ -130,9 +130,7 @@ namespace Amatsukaze.Server.Rest
                 sb.Append("rem または末尾へ --launch-user \"MYPC\\user\" を手動追加してください。起動済みサーバーのアカウントとAddTaskのコピー権限は変わりません。").Append(lineBreak);
                 Util.AddLog("[バッチ生成] 起動ユーザーを自動指定できませんでした。生成したbatの案内に従って再生成または手動指定してください。", null);
             }
-            var filePathToken = data.IsDirect
-                ? (isBat ? "%FilePath%" : "${FilePath}")
-                : "$FilePath$";
+            var filePathToken = isBat ? (data.IsDirect ? "%FilePath%" : "$FilePath$") : "${FilePath}";
             sb.AppendFormat("\"{0}\"", addTaskPath)
                 .AppendFormat(" -r \"{0}\"", currentDirectory)
                 .AppendFormat(" -f \"{0}\" -ip \"{1}\"", filePathToken, ip)

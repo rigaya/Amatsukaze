@@ -11,6 +11,25 @@
 
 namespace jpeg_utils {
 
+bool compressYUV420PToJpeg(
+    const uint8_t* const planes[3], const int strides[3],
+    int width, int height, int quality, std::vector<uint8_t>& output)
+{
+    tjhandle handle = tj3Init(TJINIT_COMPRESS);
+    if (!handle) return false;
+    unsigned char* jpegBuf = nullptr;
+    size_t jpegSize = 0;
+    // RGBへの往復なしで、420の各プレーンを直接圧縮する。
+    const bool success = tj3Set(handle, TJPARAM_SUBSAMP, TJSAMP_420) == 0
+        && tj3Set(handle, TJPARAM_QUALITY, quality) == 0
+        && tj3CompressFromYUVPlanes8(handle, planes, width, strides, height, &jpegBuf, &jpegSize) == 0;
+    if (success) output.assign(jpegBuf, jpegBuf + jpegSize);
+    else output.clear();
+    tj3Free(jpegBuf);
+    tj3Destroy(handle);
+    return success;
+}
+
 bool compressYUV422PToJpeg(
     const uint8_t* const planes[3],
     const int strides[3],

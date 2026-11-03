@@ -64,8 +64,40 @@ ENV PATH="/app/exe_files:$PATH"
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 
-# 同梱されないPython、字幕用フォントとGPU用の実行時依存を導入する
-RUN apt-get update \
+# 外部debの取得ヘルパー。
+# developer.download.nvidia.com(Akamai配信)の一部エッジは、ステータス200で
+# Content-Lengthも16443616ではなく2097152(先頭2MiB)を返しながら応答を打ち切ることがある。
+# 自己整合的な応答なのでcurl/wgetは正常完了と判断し、--retryでは救われない
+# (ローカルで同じ応答を返させて curl exit=0 / size=2097152 を確認済み)。
+# 対策として「sha256一致」を成功条件に最大5回再取得する。失敗したファイルは
+# .partごと削除するので、次回以降の実行に不完全なファイルが残らない。
+# 試行2〜4回目はDoHで別リゾルバを強制し、Akamaiのエッジ(POP)を引き直す
+# (通常解決=104.79.x、1.1.1.1=96.7.x、dns.google=23.5x.x と remote_ipが変わることを確認)。
+# DoHが遮断されている環境でも1回目と最終回は通常解決で通るようにしている。
+# wgetからcurlへの変更に伴い、GitHub releasesはobjects.githubusercontent.comへ302で
+# 飛ぶため -L が必須 (-f だけでは3xxを失敗にせず、リダイレクト本文を保存してしまう)。
+RUN fetch_verified() { \
+        dest=$1; want=$2; url=$3; i=1; \
+        while :; do \
+            rm -f "${dest}.part"; \
+            doh=; \
+            case $i in 2|4) doh=https://1.1.1.1/dns-query ;; 3) doh=https://dns.google/dns-query ;; esac; \
+            if curl -fsSL --connect-timeout 20 --max-time 900 \
+                    --speed-limit 5120 --speed-time 30 --retry 3 --retry-delay 3 --retry-all-errors \
+                    ${doh:+--doh-url $doh} -o "${dest}.part" \
+                    -w "    試行 $i: http=%{http_code} ip=%{remote_ip} size=%{size_download}\n" "$url" \
+                    && echo "${want}  ${dest}.part" | sha256sum -c --status -; then \
+                mv "${dest}.part" "$dest"; \
+                return 0; \
+            fi; \
+            echo "    取得失敗またはハッシュ不一致 (試行 $i): $url" >&2; \
+            rm -f "${dest}.part"; \
+            i=$((i + 1)); \
+            if [ $i -gt 5 ]; then return 1; fi; \
+            sleep $((i * 3)); \
+        done; \
+    } \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl wget gpg tzdata locales gosu python3 xz-utils \
         fontconfig fontconfig-config fonts-noto-cjk \
@@ -78,19 +110,18 @@ RUN apt-get update \
         intel-media-va-driver-non-free intel-opencl-icd libigfxcmrt7 \
         libmfx1 libmfx-gen1.2 libva-drm2 libva-x11-2 ocl-icd-libopencl1 \
         mesa-va-drivers mesa-opencl-icd i965-va-driver-shaders \
-    && wget -q "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/${CUDA_NVRTC_DEB}" -O /tmp/cuda-nvrtc.deb \
-    && echo "${CUDA_NVRTC_SHA256}  /tmp/cuda-nvrtc.deb" | sha256sum -c - \
+    && fetch_verified /tmp/cuda-nvrtc.deb "${CUDA_NVRTC_SHA256}" \
+        "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/${CUDA_NVRTC_DEB}" \
     && apt-get install -y --no-install-recommends /tmp/cuda-nvrtc.deb \
     && ln -sf libnvrtc.so.11.2 /usr/local/cuda-11.8/targets/x86_64-linux/lib/libnvrtc.so \
     && echo /usr/local/cuda-11.8/targets/x86_64-linux/lib > /etc/ld.so.conf.d/cuda-nvrtc.conf \
     && ldconfig \
-    && wget -q "https://github.com/intel/intel-graphics-compiler/releases/download/igc-${INTEL_IGC_LEGACY_VER}/intel-igc-core_${INTEL_IGC_LEGACY_VER}_amd64.deb" -O /tmp/intel-igc-core.deb \
-    && wget -q "https://github.com/intel/intel-graphics-compiler/releases/download/igc-${INTEL_IGC_LEGACY_VER}/intel-igc-opencl_${INTEL_IGC_LEGACY_VER}_amd64.deb" -O /tmp/intel-igc-opencl.deb \
-    && wget -q "https://github.com/intel/compute-runtime/releases/download/${INTEL_OPENCL_LEGACY1_VER}/intel-opencl-icd-legacy1_${INTEL_OPENCL_LEGACY1_VER}_amd64.deb" -O /tmp/intel-opencl-icd-legacy1.deb \
-    && printf '%s  %s\n' \
-        "${INTEL_IGC_CORE_LEGACY_SHA256}" /tmp/intel-igc-core.deb \
-        "${INTEL_IGC_OPENCL_LEGACY_SHA256}" /tmp/intel-igc-opencl.deb \
-        "${INTEL_OPENCL_LEGACY1_SHA256}" /tmp/intel-opencl-icd-legacy1.deb | sha256sum -c - \
+    && fetch_verified /tmp/intel-igc-core.deb "${INTEL_IGC_CORE_LEGACY_SHA256}" \
+        "https://github.com/intel/intel-graphics-compiler/releases/download/igc-${INTEL_IGC_LEGACY_VER}/intel-igc-core_${INTEL_IGC_LEGACY_VER}_amd64.deb" \
+    && fetch_verified /tmp/intel-igc-opencl.deb "${INTEL_IGC_OPENCL_LEGACY_SHA256}" \
+        "https://github.com/intel/intel-graphics-compiler/releases/download/igc-${INTEL_IGC_LEGACY_VER}/intel-igc-opencl_${INTEL_IGC_LEGACY_VER}_amd64.deb" \
+    && fetch_verified /tmp/intel-opencl-icd-legacy1.deb "${INTEL_OPENCL_LEGACY1_SHA256}" \
+        "https://github.com/intel/compute-runtime/releases/download/${INTEL_OPENCL_LEGACY1_VER}/intel-opencl-icd-legacy1_${INTEL_OPENCL_LEGACY1_VER}_amd64.deb" \
     && apt-get install -y --no-install-recommends \
         /tmp/intel-igc-core.deb /tmp/intel-igc-opencl.deb /tmp/intel-opencl-icd-legacy1.deb \
     && ldconfig \
@@ -182,6 +213,19 @@ for GPU_NODE in /dev/dri/renderD* /dev/dri/card* /dev/kfd; do
         groupadd -g "$GPU_GID" "$GPU_GROUP"
     fi
     usermod -aG "$GPU_GROUP" "$USER_NAME"
+done
+# 指定された補助グループをコンテナ内で追加する
+for EXTRA_GID in ${RUN_GROUPS//,/ }; do
+    if [[ ! "$EXTRA_GID" =~ ^[0-9]+$ || "$EXTRA_GID" =~ ^0+$ ]]; then
+        echo "警告: 無効な補助グループIDを無視します: $EXTRA_GID" >&2
+        continue
+    fi
+    EXTRA_GROUP=$(getent group "$EXTRA_GID" | cut -d: -f1 || true)
+    if [ -z "$EXTRA_GROUP" ]; then
+        EXTRA_GROUP="grp$EXTRA_GID"
+        groupadd -g "$EXTRA_GID" "$EXTRA_GROUP"
+    fi
+    usermod -aG "$EXTRA_GROUP" "$USER_NAME"
 done
 chown -R --no-dereference "$DEFAULT_UID:$DEFAULT_GID" /app
 if [ -d /opt/Faster-Whisper-XXL ]; then

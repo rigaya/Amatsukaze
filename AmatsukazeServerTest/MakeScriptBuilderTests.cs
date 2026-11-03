@@ -64,6 +64,18 @@ public sealed class MakeScriptBuilderTests
         else Assert.DoesNotContain("\n", script.Replace("\r\n", ""));
     }
 
+    [Theory]
+    [InlineData("sh", "${FilePath}")]
+    [InlineData("bat", "$FilePath$")]
+    public void 非直接追加はOS別の録画パスを使う(string type, string token)
+    {
+        using var fixture = new Fixture();
+        Assert.True(fixture.Build(fixture.Data(), out var script, out var error, type: type), error);
+        Assert.Contains("-f \"" + token + "\"", script);
+        Assert.DoesNotContain("_EDCBX_DIRECT_", script);
+        if (type == "sh") Assert.DoesNotContain("$FilePath$", script);
+    }
+
     [Fact]
     public void リモート追加は任意ポートとNASなどの指定をコマンドへ反映する()
     {

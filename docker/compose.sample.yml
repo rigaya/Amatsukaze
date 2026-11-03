@@ -16,6 +16,8 @@ services:
           # Amatsukazeを実行するユーザーIDとグループIDを指定
           - RUN_UID=1000
           - RUN_GID=1000
+          # 録画フォルダ等へグループ権限でアクセスする場合の追加グループID(カンマ区切り)。setup.shが設定する
+          - RUN_GROUPS=
         volumes:
           - ./avs:/app/avs
           - ./bat:/app/bat
@@ -25,8 +27,10 @@ services:
           - ./JL:/app/JL
           - ./logo:/app/logo
           - ./profile:/app/profile
-          - ./input:/app/input
-          - ./output:/app/output
+          # 録画・出力フォルダをホストと同じパスでマウントする
+          # setup.shはEDCB-LinuxのCommon.iniから録画フォルダを検出する
+          - /mnt/recorded:/mnt/recorded  # amatsukaze-setup:recorded
+          - /mnt/encoded:/mnt/encoded
           - /tmp:/tmp
         # QSVEncC/VCEEncCを使うための設定
         # /dev/driが環境にない場合は無効化が必要
