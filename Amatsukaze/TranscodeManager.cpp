@@ -1877,8 +1877,10 @@ void DoBadThing() {
                     if (File::exists(path)) {
                         // CM解析のみでは-o(出力先)は使わず、入力ファイル名からチャプターの出力先を組み立てる
                         const auto dstchapter = setting.getCMOnlyChapterPath(fileIn.outKey, fileIn.keyMax);
+                        if (!rgy_file_copy(path, dstchapter, true)) {
+                            THROWF(IOException, "チャプターファイルの出力に失敗しました: %s", dstchapter.c_str());
+                        }
                         ctx.infoF(_T("[CM解析のみ] チャプターを出力: %s"), dstchapter.c_str());
-                        File::copy(path, dstchapter);
                     }
                 }
             }
