@@ -44,11 +44,12 @@ amatsukaze_sources = [
   'TsSplitter.cpp',
   'WaveWriter.cpp',
   'JpegCompress.cpp',
+  'PreviewColor.cpp',
 ]
 
 # AVX/AVX2用ファイル
 avx_sources = ['ComputeKernelAVX.cpp']
-avx2_sources = ['ComputeKernelAVX2.cpp', 'ConvertPixAVX2.cpp', 'PgsEncoderAVX2.cpp']
+avx2_sources = ['ComputeKernelAVX2.cpp', 'ConvertPixAVX2.cpp', 'PgsEncoderAVX2.cpp', 'PreviewColorAVX2.cpp']
 avx512_sources = ['ComputeKernelAVX512.cpp']
 
 amatsukaze_inc = include_directories('.')
@@ -99,6 +100,7 @@ endif
 
 amatsukaze_simd_libs = []
 pgs_avx2_objects = []
+preview_color_avx2_objects = []
 if is_x86
   # x86では実行時判定用にAVX/AVX2/AVX512実装を別ライブラリで作る
   amatsukaze_simd_libs += static_library('avx_lib',
@@ -117,6 +119,7 @@ if is_x86
   )
   amatsukaze_simd_libs += avx2_lib
   pgs_avx2_objects = avx2_lib.extract_objects('PgsEncoderAVX2.cpp')
+  preview_color_avx2_objects = avx2_lib.extract_objects('PreviewColorAVX2.cpp')
   amatsukaze_simd_libs += static_library('avx512_lib',
     avx512_sources,
     include_directories : amatsukaze_include_dirs,

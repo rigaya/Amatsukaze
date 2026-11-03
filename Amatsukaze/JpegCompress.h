@@ -13,6 +13,11 @@
 
 namespace jpeg_utils {
 
+// Planar YUV420PをJPEGに直接圧縮する。プレーンとピッチの指定は422と共通。
+bool compressYUV420PToJpeg(
+    const uint8_t* const planes[3], const int strides[3],
+    int width, int height, int quality, std::vector<uint8_t>& output);
+
 // Planar YUV422P (YV16等) のフレームデータを JPEG に圧縮する
 // planes[3]: Y, U, V 各プレーンへのポインタ
 // strides[3]: 各プレーンの行ピッチ(bytes)
