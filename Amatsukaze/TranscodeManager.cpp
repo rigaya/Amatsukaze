@@ -1865,8 +1865,8 @@ void DoBadThing() {
             copyCutInfoForCMOnly(ctx, setting, reformInfo, cmanalyze, numVideoFiles);
         }
         if (setting.isOutputChapterEnabled()) {
-            // CM解析のみでも、チャプター出力に使う出力キーと保持フレーム列を確定する。
-            reformInfo.genAudio(setting.getCMTypes(), cmCutOffsetFrames);
+            // 入力TS用のチャプターなので、CMを含む全フレームを補正なしで保持する。
+            reformInfo.genAudio({ CMTYPE_BOTH }, 0);
             ctx.info(_T("[チャプター生成]"));
             for (const auto& key : reformInfo.getOutFileKeys()) {
                 const auto& fileIn = reformInfo.getEncodeFile(key);
