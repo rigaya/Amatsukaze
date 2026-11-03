@@ -671,6 +671,8 @@ public:
 
     tstring getOutChapterPath(EncodeFileKey key, EncodeFileKey keyMax, ENUM_FORMAT format, VIDEO_STREAM_FORMAT codec) const;
 
+    tstring getCMOnlyChapterPath(EncodeFileKey key, EncodeFileKey keyMax) const;
+
     tstring getOutSummaryPath() const;
 
     tstring getDRCSMapPath() const;

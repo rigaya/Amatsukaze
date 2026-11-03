@@ -747,27 +747,6 @@ namespace Amatsukaze.Server
             }
         }
 
-        // CM解析のみで一時ファイル名で出力したチャプターファイル（分割・CM等のサフィックス付きを含む）を本来の出力先へ移動する
-        private async Task MoveCMCheckChapterFiles(string localBase, string dstBase)
-        {
-            const string ChapterExt = ".chapter.txt";
-            var localDir = Path.GetDirectoryName(localBase);
-            var localName = Path.GetFileName(localBase);
-            foreach (var path in Directory.GetFiles(localDir, localName + "*" + ChapterExt))
-            {
-                var dstPath = dstBase + Path.GetFileName(path).Substring(localName.Length);
-                try
-                {
-                    await CopyFileAsync(path, dstPath);
-                    File.Delete(path);
-                }
-                catch (Exception e)
-                {
-                    Util.AddLog(Id, "チャプターファイルの移動に失敗: " + dstPath, e);
-                }
-            }
-        }
-
         private static Encoding defaultEncoding = Util.AmatsukazeDefaultEncoding;
 
         // システムデフォルトエンコーディングで変換可能な文字列か？
@@ -974,17 +953,6 @@ namespace Amatsukaze.Server
             string localdst = dstpath;
             string tmpBase = null;
 
-            // CM解析のみでも、プロファイルでチャプター出力が有効ならチャプターファイルを出力する（カット調整では出力しない）
-            // 出力先は入力ファイルと同じフォルダ
-            // ファイル名は通常エンコード時と同じく出力名（入力TSのファイル名）を使う
-            string chapterBase = null;
-            if (item.Mode == ProcMode.CMCheck && !profile.DisableChapter && profile.OutputChapter)
-            {
-                var srcDir = Path.GetDirectoryName(item.SrcPath);
-                chapterBase = Path.Combine(srcDir, Path.GetFileName(item.DstPath));
-            }
-            string localChapterBase = chapterBase;
-
             // Trim指定ファイル
             string trimavs = srcpath + ".trim.avs";
             if(!File.Exists(trimavs))
@@ -997,7 +965,7 @@ namespace Amatsukaze.Server
             try
             {
                 // システムデフォルトエンコーディングで変換不可なファイル名の場合もコピー
-                bool needCopy = !IsEncodableString(srcpath + ";" + dstpath + (chapterBase != null ? ";" + chapterBase : ""));
+                bool needCopy = !IsEncodableString(srcpath + ";" + dstpath);
                 if (needCopy)
                 {
                     tmpBase = Util.CreateTmpFile(workPath);
@@ -1006,11 +974,6 @@ namespace Amatsukaze.Server
                     srcpathOrg = srcpath; // もともとのファイル名を記憶
                     srcpath = localsrc;
                     localdst = tmpBase + "-out";
-                    if (chapterBase != null)
-                    {
-                        // チャプターも一時ファイル名で出力し、終了後に本来の出力先へ移動する
-                        localChapterBase = localdst;
-                    }
                 }
 
                 // リソース管理用
@@ -1055,7 +1018,7 @@ namespace Amatsukaze.Server
                     item.Mode, profile,
                     server.AppData_.setting, workPath,
                     isMp4,
-                    srcpath, srcpathOrg, (localChapterBase ?? localdst) + ext, json, item.StreamFormat,
+                    srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
                     item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, divfile, resumeDir, server.GetBatDirectoryPath(),
                     pipes?.InHandle, pipes?.OutHandle, Id);
                 string exename = server.AppData_.setting.AmatsukazePath;
@@ -1221,10 +1184,6 @@ namespace Amatsukaze.Server
                     }
                     else if (exitCode == 0)
                     {
-                        if (needCopy && chapterBase != null)
-                        {
-                            await MoveCMCheckChapterFiles(localChapterBase, chapterBase);
-                        }
                         return MakeCheckLogItem(item.Mode, true, item, item.Profile.Name, "", start, finish);
                     }
                     else

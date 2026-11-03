@@ -2170,12 +2170,10 @@ namespace Amatsukaze.Server
                 {
                     sb.Append(" --chapter");
                     // CM解析のみでも、プロファイルでチャプター出力が有効ならチャプターファイルを出力する
-                    // カット調整では出力しない。dstはチャプター出力先のベースパス
+                    // カット調整では出力しない。出力先はAmatsukazeCLI側で入力ファイル名から組み立てるため-oは渡さない
                     if (mode == ProcMode.CMCheck && !profile.DisableChapter && profile.OutputChapter)
                     {
-                        sb.Append(" -o \"")
-                            .Append(dst)
-                            .Append("\" --output-chapter");
+                        sb.Append(" --output-chapter");
                     }
                 }
                 else {
