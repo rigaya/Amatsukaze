@@ -150,7 +150,9 @@ void AMTMuxder::mux(EncodeFileKey key,
     auto vfmt = fileOut.vfmt;
 
     tstring tsreplaceCutList;
-    if (muxFormat == FORMAT_TSREPLACE && key.cm != CMTYPE_BOTH) {
+    // CMカットなしでも、分割映像に対応する元TSの保持区間を音声へ反映する。
+    if (muxFormat == FORMAT_TSREPLACE
+        && (key.cm != CMTYPE_BOTH || fileIn.keyMax.format > 1 || fileIn.keyMax.div > 1)) {
         const auto manifest = reformInfo_.genTSReplaceCutManifest(key);
         if (!manifest.empty()) {
             tsreplaceCutList = setting_.getTmpTSReplaceCutListPath(key);
