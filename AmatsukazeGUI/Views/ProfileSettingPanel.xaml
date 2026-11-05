@@ -641,6 +641,14 @@
                                   IsChecked="{Binding Model.SelectedProfile.IgnoreNicoJKError, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsEnabled="{Binding IsChecked, ElementName=nicoJKCheck}"/>
                     </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,3" IsEnabled="{Binding IsChecked, ElementName=nicoJKCheck}">
+                        <TextBlock Text="別局の初回放送の実況コメント" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox SelectedIndex="{Binding Model.SelectedProfile.NicoJKReferenceMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBoxItem Content="使わない"/>
+                            <ComboBoxItem Content="置き換える"/>
+                            <ComboBoxItem Content="統合する"/>
+                        </ComboBox>
+                    </StackPanel>
                     <CheckBox Grid.Row="1" Content="NicoJKログから優先的にコメントを取得する" Margin="0,3"
                                   IsChecked="{Binding Model.SelectedProfile.NicoJKLog, Mode=TwoWay}"
                                   IsEnabled="{Binding IsChecked, ElementName=nicoJKCheck}">

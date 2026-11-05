@@ -1021,6 +1021,12 @@ namespace Amatsukaze.Server
                     srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
                     item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, divfile, resumeDir, server.GetBatDirectoryPath(),
                     pipes?.InHandle, pipes?.OutHandle, Id, item.EITStartTime);
+                var referenceLog = new List<string>();
+                args += await server.NicoJKReferenceFinder.GetArgumentsAsync(item, profile, line =>
+                {
+                    referenceLog.Add(line);
+                    Util.AddLog(Id, line, null);
+                });
                 string exename = server.AppData_.setting.AmatsukazePath;
 
                 int outputMask = profile.OutputMask;
@@ -1080,6 +1086,9 @@ namespace Amatsukaze.Server
                             {
                                 logWriter = new LogWriter(logpath);
                             }
+
+                            foreach (var line in referenceLog)
+                                await WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(line + "\n"));
 
                             // 起動コマンドをログ出力
                             await WriteTextBytes(Util.AmatsukazeDefaultEncoding.GetBytes(exename + " " + args + "\n"));

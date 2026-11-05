@@ -811,6 +811,16 @@ else
                     </label>
                 </td>
             </tr>
+            <tr>
+                <th>別局の初回放送の実況コメント</th>
+                <td>
+                    <select @onchange="@(e => OnIntChanged(e, "NicoJKReferenceMode"))" disabled="@(!GetBoolValue("EnableNicoJK"))">
+                        <option value="0" selected="@(GetIntValue("NicoJKReferenceMode") == 0)">使わない</option>
+                        <option value="1" selected="@(GetIntValue("NicoJKReferenceMode") == 1)">置き換える</option>
+                        <option value="2" selected="@(GetIntValue("NicoJKReferenceMode") == 2)">統合する</option>
+                    </select>
+                </td>
+            </tr>
             @if (GetBoolValue("EnableNicoJK"))
             {
                 <tr class="profile-check-row">
@@ -2528,6 +2538,7 @@ else
             case "ForceSARHeight":
                 return Math.Max(1, value);
             case "AudioFormatChangeMode":
+            case "NicoJKReferenceMode":
                 return value is >= 0 and <= 2 ? value : 0;
             case "AudioBitrateInKbps":
                 return Math.Max(1, value);

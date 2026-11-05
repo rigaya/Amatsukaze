@@ -329,11 +329,14 @@ namespace Amatsukaze.Server
             }
         }
 
+        internal NicoJKReferenceFinder NicoJKReferenceFinder { get; }
+
         public EncodeServer(int port, IUserClient client, Action finishRequested)
         {
 #if PROFILE
             var prof = new Profile();
 #endif
+            NicoJKReferenceFinder = new NicoJKReferenceFinder(GetBasePath(), Path.GetFullPath("data/syoboi_cache"));
             this.finishRequested = finishRequested;
             serverPort = port;
 

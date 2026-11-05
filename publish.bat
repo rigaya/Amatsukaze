@@ -107,5 +107,13 @@ if errorlevel 1 (
   echo nicojk_ass.py の配置に失敗しました。
   exit /b 1
 )
+rem 実況取得と別局録画の自動選択に使う局対応表
+for %%F in (ch_sid.txt syoboi_ch.txt) do (
+  copy /y ".\defaults\exe_files\%%F" "%MERGED_DIR%\%%F" >nul
+  if errorlevel 1 (
+    echo %%F の配置に失敗しました。
+    exit /b 1
+  )
+)
 echo Done. Merged outputs are in %MERGED_DIR% (WebUI is served on REST port+1).
 exit /b 0

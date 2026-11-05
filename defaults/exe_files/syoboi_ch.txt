@@ -1,0 +1,28 @@
+# syoboi_ch.txt - ServiceIdとしょぼいカレンダーのChIDの対応表
+# 形式: ChID<TAB>ServiceId<TAB>局名
+# 2026-11-05のChLookupのChName/ChiEPGNameとch_sid.txtの局名を照合し、全21行を確認。
+# 関東地上波11局・主要BS9局・AT-Xの主サービスを収録。サブチャンネルは含めない。
+# 出典: https://cal.syoboi.jp/db.php?Command=ChLookup
+# NHK BSはAPIに旧名NHK-BS1で登録。公式chmapのNHK BS→ChID9も確認。
+# 旧名(BSジャパン、BS-i、TwellVなど)はChLookupの注釈と現行ChNameで確認。
+1	1024	NHK総合
+2	1032	NHK Eテレ
+4	1040	日本テレビ
+5	1048	TBS
+3	1056	フジテレビ
+6	1064	テレビ朝日
+7	1072	テレビ東京
+19	23608	TOKYO MX
+8	24632	tvk
+13	27704	チバテレビ
+14	29752	テレ玉
+9	101	NHK BS
+71	141	BS日テレ
+18	151	BS朝日
+16	161	BS-TBS
+15	171	BSテレ東
+17	181	BSフジ
+128	211	BS11イレブン
+129	222	BS12トゥエルビ
+197	236	BSアニマックス
+20	333	AT-X

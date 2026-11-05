@@ -859,6 +859,10 @@ namespace Amatsukaze.Server
             {
                 profile.Bitrate = new BitrateSetting();
             }
+            if (profile.NicoJKReferenceMode < 0 || profile.NicoJKReferenceMode > 2)
+            {
+                profile.NicoJKReferenceMode = 0;
+            }
             if (profile.NicoJKFormats == null)
             {
                 profile.NicoJKFormats = new bool[4] { true, false, false, false };
