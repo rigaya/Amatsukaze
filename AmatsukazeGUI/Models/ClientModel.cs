@@ -2129,6 +2129,7 @@ namespace Amatsukaze.Models
                 profile.WhisperOption = data.Profile.WhisperOption;
                 profile.WhisperParallel = data.Profile.WhisperParallel;
                 profile.IgnoreNoDrcsMap = data.Profile.IgnoreNoDrcsMap;
+                profile.IgnoreVideoDisplayChanges = data.Profile.IgnoreVideoDisplayChanges;
                 profile.AudioFormatChangeMode = data.Profile.AudioFormatChangeMode;
                 profile.LooseLogoDetection = data.Profile.LooseLogoDetection;
                 profile.IgnoreNoLogo = data.Profile.IgnoreNoLogo;

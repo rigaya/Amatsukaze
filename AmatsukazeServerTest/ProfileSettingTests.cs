@@ -7,6 +7,41 @@ namespace AmatsukazeServerTest;
 public sealed class ProfileSettingTests
 {
     [Fact]
+    public void 新規プロファイルでは表示領域とSARの変更で分割する()
+    {
+        Assert.False(ServerSupport.NormalizeProfile(null).IgnoreVideoDisplayChanges);
+    }
+
+    [Fact]
+    public void 表示領域とSARの設定がない旧プロファイルでは分割する()
+    {
+        var serializer = new DataContractSerializer(typeof(ProfileSetting));
+        using var stream = new MemoryStream();
+        serializer.WriteObject(stream, new ProfileSetting { IgnoreVideoDisplayChanges = true });
+        stream.Position = 0;
+        var document = System.Xml.Linq.XDocument.Load(stream);
+        document.Root!.Elements().Single(element => element.Name.LocalName == "IgnoreVideoDisplayChanges").Remove();
+        using var reader = document.CreateReader();
+        var restored = Assert.IsType<ProfileSetting>(serializer.ReadObject(reader));
+
+        Assert.False(ServerSupport.NormalizeProfile(restored).IgnoreVideoDisplayChanges);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void 表示領域とSARの設定は保存と読み込みで維持される(bool enabled)
+    {
+        var serializer = new DataContractSerializer(typeof(ProfileSetting));
+        using var stream = new MemoryStream();
+        serializer.WriteObject(stream, new ProfileSetting { IgnoreVideoDisplayChanges = enabled });
+        stream.Position = 0;
+        var restored = Assert.IsType<ProfileSetting>(serializer.ReadObject(stream));
+
+        Assert.Equal(enabled, ServerSupport.NormalizeProfile(restored).IgnoreVideoDisplayChanges);
+    }
+
+    [Fact]
     public void 新規プロファイルではCMカット点のオフセットが無効になる()
     {
         Assert.Equal(0, ServerSupport.NormalizeProfile(null).CmCutOffsetFrames);

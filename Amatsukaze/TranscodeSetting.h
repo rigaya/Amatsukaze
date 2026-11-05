@@ -244,6 +244,7 @@ struct Config {
     std::pair<int, int> userSAR;
     ENUM_AUDIO_ENCODER audioEncoder;
     AUDIO_FORMAT_CHANGE_MODE audioFormatChangeMode = AFC_SPLIT;
+    bool ignoreVideoDisplayChanges = false;
     tstring audioEncoderPath;
     tstring audioEncoderOptions;
     tstring muxerPath;
@@ -397,6 +398,8 @@ public:
     bool isEncodeAudio() const;
 
     AUDIO_FORMAT_CHANGE_MODE getAudioFormatChangeMode() const;
+
+    bool isIgnoreVideoDisplayChanges() const;
 
     tstring getAudioEncoderPath() const;
 

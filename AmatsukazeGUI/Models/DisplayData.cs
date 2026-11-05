@@ -2895,6 +2895,16 @@ namespace Amatsukaze.Models
         }
         #endregion
 
+        public bool IgnoreVideoDisplayChanges {
+            get { return Data.IgnoreVideoDisplayChanges; }
+            set {
+                if (Data.IgnoreVideoDisplayChanges == value)
+                    return;
+                Data.IgnoreVideoDisplayChanges = value;
+                RaisePropertyChanged();
+            }
+        }
+
         #region AudioFormatChangeMode変更通知プロパティ
         public int AudioFormatChangeMode {
             get { return Server.ProfileSettingExtensions.NormalizeAudioFormatChangeMode(Data.AudioFormatChangeMode); }

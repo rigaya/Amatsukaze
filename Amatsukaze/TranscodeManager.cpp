@@ -559,7 +559,7 @@ static bool tryLoadResume(
             reformInfo->clearCaptionItems();
         }
         reformInfo->prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE,
-            setting.getAudioFormatChangeMode(), setting.getAudioFilePath());
+            setting.getAudioFormatChangeMode(), setting.getAudioFilePath(), setting.isIgnoreVideoDisplayChanges());
         ctx.info(_T("[一時ファイル再利用] ストリーム情報を読み込みました"));
         if (!validateResumeFiles(setting, *reformInfo, info, reason)) {
             ctx.warnF(_T("[一時ファイル再利用] %s。通常処理へ戻ります"), reason.c_str());
@@ -1697,7 +1697,7 @@ void DoBadThing() {
 
     if (!isReusingTmp) {
         reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE,
-            setting.getAudioFormatChangeMode(), setting.getAudioFilePath());
+            setting.getAudioFormatChangeMode(), setting.getAudioFilePath(), setting.isIgnoreVideoDisplayChanges());
     }
     if (setting.isMpeg2PartialEnabled()) {
         if (reformInfo.getVideoStreamFormat() != VS_MPEG2) {

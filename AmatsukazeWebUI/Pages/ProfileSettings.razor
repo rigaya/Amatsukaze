@@ -736,13 +736,14 @@ else
         </table>
 
         <hr class="settings-sep" />
-        <h4>音声エンコード</h4>
+        <h4>フォーマット変更・音声エンコード</h4>
         <table class="table">
-            <tr class="profile-check-row">
-                <td colspan="2">
-                    <label class="settings-check">
-                        <input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" disabled="@GetBoolValue("Mpeg2Partial")" />
-                        音声をエンコードする
+            <tr>
+                <th>映像フォーマット変更</th>
+                <td>
+                    <label class="settings-check" title="表示領域・SARの変更では分割しません。出力の表示領域・SARには、結合対象の入力映像（CMカット前）でフレーム数が最も多い組み合わせを使用します。解像度やフレームレートなどの変更では引き続き分割します。">
+                        <input type="checkbox" checked="@GetBoolValue("IgnoreVideoDisplayChanges")" @onchange="@(e => OnBoolChanged(e, "IgnoreVideoDisplayChanges"))" />
+                        表示領域・SARの変更では分割しない
                     </label>
                 </td>
             </tr>
@@ -760,6 +761,15 @@ else
                     </td>
                 </tr>
             }
+            <tr>
+                <th>音声エンコード</th>
+                <td>
+                    <label class="settings-check">
+                        <input type="checkbox" checked="@GetBoolValue("EnableAudioEncode")" @onchange="@(e => OnBoolChanged(e, "EnableAudioEncode"))" disabled="@GetBoolValue("Mpeg2Partial")" />
+                        音声をエンコードする
+                    </label>
+                </td>
+            </tr>
             @if (GetBoolValue("EnableAudioEncode"))
             {
                 <tr>

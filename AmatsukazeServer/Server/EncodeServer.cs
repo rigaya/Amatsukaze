@@ -2072,6 +2072,10 @@ namespace Amatsukaze.Server
             StringBuilder sb = new StringBuilder();
             // CLI省略時はsplitなので、既存プロファイルも含めて常に設定を明示する。
             sb.Append(" --audio-format-change ").Append(profile.GetAudioFormatChangeModeArgument());
+            if (profile?.IgnoreVideoDisplayChanges == true)
+            {
+                sb.Append(" --ignore-video-display-changes");
+            }
 
             bool loadV2 = false;
             if (   streamFormat != VideoStreamFormat.MPEG2

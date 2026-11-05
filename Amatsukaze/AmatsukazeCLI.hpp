@@ -78,6 +78,7 @@ static void printHelp(const tchar* bin) {
         "                      指定しなければ音声はエンコードしない\n"
         "  -ae|--audio-encoder <パス> 音声エンコーダ[]"
         "  -aeo|--audio-encoder-option <オプション> 音声エンコーダへ渡すオプション[]\n"
+        "  --ignore-video-display-changes 表示領域・SARの変更では分割しない[無効]\n"
         "  --audio-format-change split|merge|separate 音声フォーマット変更時の出力方法[split]\n"
         "  -fmt|--format <フォーマット> 出力フォーマット[mp4]\n"
         "                      対応フォーマット: mp4,mkv,m2ts,ts,tsreplace\n"
@@ -404,6 +405,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             if (conf.audioEncoder == AUDIO_ENCODER_INVALID) {
                 THROWF(ArgumentException, "--audio-encoder-typeの指定が間違っています: %" PRITSTR "", arg);
             }
+        } else if (key == _T("--ignore-video-display-changes")) {
+            conf.ignoreVideoDisplayChanges = true;
         } else if (key == _T("--audio-format-change")) {
             const tstring arg = getParam(argc, argv, i++);
             if (arg == _T("split")) {
@@ -889,6 +892,7 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         addInt(_T("subtitles"), setting->isSubtitlesEnabled());
         addInt(_T("two_pass"), setting->isTwoPass());
         addInt(_T("audio_format_change"), setting->getAudioFormatChangeMode());
+        addInt(_T("ignore_video_display_changes"), setting->isIgnoreVideoDisplayChanges());
         addInt(_T("enc_parallel"), setting->getEncoderParallel());
         addInt(_T("min_output_duration"), setting->getMinOutputDuration());
         addInt(_T("cm_cut_offset_frames"), setting->getCmCutOffsetFrames());
