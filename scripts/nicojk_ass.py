@@ -30,6 +30,8 @@ danmaku2ass でASS字幕に変換する薄いラッパー。
 """
 
 import argparse
+from decimal import Decimal, InvalidOperation
+import math
 import os
 import re
 import subprocess
@@ -53,6 +55,7 @@ DEFAULT_OPACITY = 1.0
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_CHANNEL_NOT_FOUND = 100
+EXIT_NO_COMMENTS = 101
 
 
 # ------------------------------------------------------------------ #
@@ -145,6 +148,74 @@ def rebase_vpos(xml_str, starttime):
               file=sys.stderr)
 
     return ET.tostring(root, encoding="unicode")
+
+
+def read_comments_file(path):
+    """XMLまたは見出しコメント付きのNicoJKログを読み込む。"""
+    with open(path, "r", encoding="utf-8-sig") as source:
+        contents = source.read()
+    if os.path.splitext(path)[1].lower() == ".jkl":
+        # ログの各行をpacketにまとめ、属性や本文のエスケープもXMLとして検証する。
+        root = ET.fromstring("<packet>" + contents + "</packet>")
+    else:
+        root = ET.fromstring(contents)
+    if root.tag != "packet":
+        return ET.Element("packet")
+    for chat in root.findall("chat"):
+        comment_time(chat)
+    return root
+
+
+def comment_time(chat):
+    """dateとdate_usecからコメントの絶対時刻を精度を落とさずに得る。"""
+    date = chat.get("date", "")
+    usec = chat.get("date_usec", "0")
+    if not re.fullmatch(r"-?\d+", date) or not re.fullmatch(r"\d+", usec):
+        raise ValueError("コメントのdate/date_usecが不正です")
+    microseconds = int(usec)
+    if not 0 <= microseconds < 1000000:
+        raise ValueError("コメントのdate_usecが範囲外です")
+    return Decimal(date) + Decimal(microseconds) / Decimal(1000000)
+
+
+def inspect_comments(root, starttime, endtime):
+    """全件数・最初の時刻・録画範囲内件数をC++側の取得元判定に返す。"""
+    times = [comment_time(chat) for chat in root.findall("chat")]
+    start, end = Decimal(str(starttime)), Decimal(str(endtime))
+    return (len(times), min(times) if times else Decimal(0),
+            sum(start <= stamp <= end for stamp in times))
+
+
+def rebase_file_vpos(root, starttime, endtime):
+    """ファイルのvposを信用せず、絶対時刻から取得範囲内だけを振り直す。"""
+    start, end = Decimal(str(starttime)), Decimal(str(endtime))
+    removed = 0
+    for number, chat in enumerate(list(root.findall("chat")), 1):
+        stamp = comment_time(chat)
+        if stamp < start or stamp > end:
+            root.remove(chat)
+            removed += 1
+        else:
+            chat.set("vpos", str(round((stamp - start) * 100)))
+            # NicoJKログにはnoがない場合もあるが、変換器では必須なので元の順序で補う。
+            if chat.get("no") is None:
+                chat.set("no", str(number))
+    if removed:
+        print(f"[nicojk_ass] 範囲外のコメントを{removed}件除外", file=sys.stderr)
+    if not root.findall("chat"):
+        print("[nicojk_ass] 警告: 範囲内のコメントは0件です", file=sys.stderr)
+    return ET.tostring(root, encoding="unicode")
+
+
+def parse_timestamp(value):
+    """既存の整数表記を維持しつつ、小数の取得範囲も受け付ける。"""
+    try:
+        number = Decimal(value)
+        if not number.is_finite():
+            raise ValueError()
+        return int(number) if number == number.to_integral_value() else number
+    except (InvalidOperation, ValueError):
+        raise argparse.ArgumentTypeError("有限のUNIX秒を指定してください")
 
 
 # ------------------------------------------------------------------ #
@@ -360,17 +431,19 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="ニコニコ実況 過去ログ取得 & ASS字幕変換スクリプト",
     )
-    parser.add_argument("--channel", required=True,
+    parser.add_argument("--channel",
                         help="実況チャンネルID (例: jk1, jk211)")
-    parser.add_argument("--starttime", required=True, type=int,
+    parser.add_argument("--input", help="ローカルのコメントファイル(XML/JKL)")
+    parser.add_argument("--inspect-input", help="コメントファイルの件数と時刻を検査する")
+    parser.add_argument("--starttime", required=True, type=parse_timestamp,
                         help="取得開始時刻（UNIXタイムスタンプ）")
-    parser.add_argument("--endtime", required=True, type=int,
+    parser.add_argument("--endtime", required=True, type=parse_timestamp,
                         help="取得終了時刻（UNIXタイムスタンプ）")
-    parser.add_argument("--width", required=True, type=int,
+    parser.add_argument("--width", type=int,
                         help="出力解像度 幅")
-    parser.add_argument("--height", required=True, type=int,
+    parser.add_argument("--height", type=int,
                         help="出力解像度 高さ")
-    parser.add_argument("--output", required=True,
+    parser.add_argument("--output",
                         help="出力ASSファイルパス")
     parser.add_argument("--font", default=DEFAULT_FONT,
                         help=f"フォント名 (デフォルト: {DEFAULT_FONT!r})")
@@ -382,11 +455,31 @@ def parse_args():
                         help=f"不透明度 0.0〜1.0 (デフォルト: {DEFAULT_OPACITY})")
     parser.add_argument("--api-url", default=DEFAULT_API_BASE,
                         help=f"過去ログAPIのベースURL (デフォルト: {DEFAULT_API_BASE})")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.endtime <= args.starttime:
+        parser.error("終了時刻は開始時刻より後にしてください")
+    if args.inspect_input:
+        if args.input:
+            parser.error("--inputと--inspect-inputは同時に指定できません")
+    else:
+        if not args.input and not args.channel:
+            parser.error("--channelまたは--inputが必要です")
+        if args.width is None or args.height is None or args.output is None:
+            parser.error("--width、--height、--outputが必要です")
+    return args
 
 
 def main():
     args = parse_args()
+    if args.inspect_input:
+        try:
+            count, first, overlap = inspect_comments(
+                read_comments_file(args.inspect_input), args.starttime, args.endtime)
+        except (OSError, UnicodeError, ET.ParseError, ValueError) as error:
+            print(f"[nicojk_ass] コメントファイルの読み込み失敗: {error}", file=sys.stderr)
+            sys.exit(EXIT_ERROR)
+        print(f"{count} {first} {overlap}")
+        sys.exit(EXIT_SUCCESS if count else EXIT_NO_COMMENTS)
     fontsize = args.fontsize if args.fontsize is not None \
         else default_fontsize(args.height)
 
@@ -397,9 +490,18 @@ def main():
           f"表示秒数={args.duration} 不透明度={args.opacity}",
           file=sys.stderr)
 
-    # 1. コメントXML取得
-    xml_str = fetch_comments_xml(
-        args.channel, args.starttime, args.endtime, args.api_url)
+    # ファイルの経路ではAPIへのアクセスと既存のvpos相対化を行わない。
+    if args.input:
+        try:
+            xml_str = rebase_file_vpos(
+                read_comments_file(args.input), args.starttime, args.endtime)
+        except (OSError, UnicodeError, ET.ParseError, ValueError) as error:
+            print(f"[nicojk_ass] コメントファイルの読み込み失敗: {error}", file=sys.stderr)
+            sys.exit(EXIT_ERROR)
+    else:
+        fetch_start, fetch_end = math.floor(args.starttime), math.ceil(args.endtime)
+        xml_str = fetch_comments_xml(
+            args.channel, fetch_start, fetch_end, args.api_url)
 
     # コメント数を表示
     try:
@@ -409,8 +511,23 @@ def main():
     except ET.ParseError:
         pass
 
-    # 2. vpos を番組開始時刻基準に相対化
-    xml_str = rebase_vpos(xml_str, args.starttime)
+    if not args.input:
+        # 整数の既存経路はそのまま使用し、小数指定時だけ端数を補正する。
+        xml_str = rebase_vpos(xml_str, fetch_start)
+        if args.starttime != fetch_start or args.endtime != fetch_end:
+            root = ET.fromstring(xml_str)
+            shift = (Decimal(str(args.starttime)) - fetch_start) * 100
+            duration = (Decimal(str(args.endtime)) - Decimal(str(args.starttime))) * 100
+            for chat in list(root.findall("chat")):
+                if chat.get("vpos") is None:
+                    continue
+                position = Decimal(chat.get("vpos")) - shift
+                if position < 0 or position > duration:
+                    root.remove(chat)
+                else:
+                    chat.set("vpos", str(round(position)))
+            xml_str = ET.tostring(root, encoding="unicode")
+
 
     # 3. 一時XMLファイルに保存して danmaku2ass に渡す
     with tempfile.NamedTemporaryFile(

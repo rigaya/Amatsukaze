@@ -1020,7 +1020,7 @@ namespace Amatsukaze.Server
                     isMp4,
                     srcpath, srcpathOrg, localdst + ext, json, item.StreamFormat,
                     item.ServiceId, logopaths, ignoreNoLogo, jlscmd, jlsopt, ceopt, trimavs, divfile, resumeDir, server.GetBatDirectoryPath(),
-                    pipes?.InHandle, pipes?.OutHandle, Id);
+                    pipes?.InHandle, pipes?.OutHandle, Id, item.EITStartTime);
                 string exename = server.AppData_.setting.AmatsukazePath;
 
                 int outputMask = profile.OutputMask;

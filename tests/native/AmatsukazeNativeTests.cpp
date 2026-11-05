@@ -16,6 +16,7 @@
 #include "FilteredSource.h"
 #include "Mpeg2TsParser.h"
 #include "Muxer.h"
+#include "NicoJKSource.h"
 #include "StreamReform.h"
 #include "cpu_info.h"
 #if !(defined(_WIN32) || defined(_WIN64))
@@ -1536,7 +1537,9 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     if (!ExpectCommandLineStatus({ _T("--mode"), _T("probe_audio") }, 1, _T("probeモードで入力なし"), diagnostic)) return false;
 
     // 値が欠けた末尾のオプションと、数値でない値
-    for (const TCHAR* option : { _T("-i"), _T("-o"), _T("-s"), _T("-e"), _T("--mode"), _T("--logo") }) {
+    for (const TCHAR* option : { _T("-i"), _T("-o"), _T("-s"), _T("-e"), _T("--mode"), _T("--logo"),
+        _T("--nicojk-file"), _T("--nicojk-channel"), _T("--nicojk-start"),
+        _T("--nicojk-program-start"), _T("--nicojk-offset") }) {
         if (!ExpectCommandLineStatus({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4"), option }, 1,
             strsprintf(_T("値が欠けた末尾の %s"), option).c_str(), diagnostic)) return false;
     }
@@ -1611,10 +1614,85 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     // 実況はオプションで有効化したときだけマスクが有効になる
     if (!ExpectCommandLine(with({ _T("--nicojkmask"), _T("3") }), { { _T("nicojk_mask"), _T("0") } }, _T("実況なしのマスク"), diagnostic)) return false;
     if (!ExpectCommandLine(with({ _T("--nicojk"), _T("--nicojkmask"), _T("3") }), { { _T("nicojk_mask"), _T("3") } }, _T("実況ありのマスク"), diagnostic)) return false;
+    if (!ExpectCommandLine(with({ _T("--nicojk-file"), _T("C:\\コメント\\log.xml"), _T("--nicojk-channel"), _T("jk9"),
+        _T("--nicojk-start"), _T("20231115071320"), _T("--nicojk-program-start"), _T("2023-11-15T07:13:20+09:00"),
+        _T("--nicojk-offset"), _T("-0.125") }), {
+        { _T("nicojk_file"), _T("C:/コメント/log.xml") }, { _T("nicojk_channel"), _T("9") },
+        { _T("nicojk_start"), _T("1700000000.000000") }, { _T("nicojk_program_start"), _T("1700000000.000000") },
+        { _T("nicojk_offset"), _T("-0.125000") }, { _T("nicojk_mask"), _T("0") },
+    }, _T("実況取得元の指定"), diagnostic)) return false;
+    for (const TCHAR* option : { _T("--nicojk-start"), _T("--nicojk-program-start") }) {
+        for (const TCHAR* value : { _T("1700000000"), _T("20231115071320"), _T("2023-11-15T07:13:20"),
+            _T("2023-11-14T22:13:20Z"), _T("2023-11-15T07:13:20+09:00") }) {
+            if (!ExpectCommandLineStatus(with({ option, value }), 0, _T("実況時刻の各書式"), diagnostic)) return false;
+        }
+        for (const TCHAR* value : { _T(""), _T("NaN"), _T("1700000000.5"), _T("2023-02-29T00:00:00"),
+            _T("2023-11-15T24:00:00"), _T("2023-11-15T00:00:00+09:60"), _T("20231131071320") }) {
+            if (!ExpectCommandLineStatus(with({ option, value }), 1, _T("実況時刻の不正値"), diagnostic)) return false;
+        }
+    }
+    for (const TCHAR* value : { _T("jk9"), _T("9") }) {
+        if (!ExpectCommandLineStatus(with({ _T("--nicojk-channel"), value }), 0, _T("実況チャンネルの正常値"), diagnostic)) return false;
+    }
+    for (const TCHAR* value : { _T("jk"), _T("jk0"), _T("0"), _T("-9"), _T("9x"), _T("99999999999") }) {
+        if (!ExpectCommandLineStatus(with({ _T("--nicojk-channel"), value }), 1, _T("実況チャンネルの不正値"), diagnostic)) return false;
+    }
+    for (const TCHAR* value : { _T("-1.25"), _T("0"), _T("2.5") }) {
+        if (!ExpectCommandLineStatus(with({ _T("--nicojk-offset"), value }), 0, _T("実況の小数ずれ量"), diagnostic)) return false;
+    }
+    for (const TCHAR* value : { _T(""), _T("nan"), _T("inf"), _T("2x"), _T("1e300") }) {
+        if (!ExpectCommandLineStatus(with({ _T("--nicojk-offset"), value }), 1, _T("実況ずれ量の不正値"), diagnostic)) return false;
+    }
     if (!ExpectCommandLine(with({ _T("--chapter"), _T("--ignore-no-logo"), _T("--subtitles"), _T("--2pass") }),
         { { _T("chapter"), _T("1") }, { _T("subtitles"), _T("1") }, { _T("two_pass"), _T("1") } }, _T("真偽値オプション"), diagnostic)) return false;
     // ロゴ未指定のチャプター生成は拒否する
     return ExpectCommandLineStatus(with({ _T("--chapter") }), 1, _T("ロゴなしのチャプター生成"), diagnostic);
+}
+
+bool TestNicoJKSource(tstring& diagnostic) {
+    // 既知のUNIX時刻で、ホストのタイムゾーンに依存しないことも調べる。
+    for (const TCHAR* value : { _T("1700000000"), _T("20231115071320"), _T("2023-11-15T07:13:20"),
+        _T("2023-11-14T22:13:20Z"), _T("2023-11-15T07:13:20+09:00"), _T("2023-11-14T17:13:20-05:00") }) {
+        if (!ExpectNear(ParseNicoJKTime(value), 1700000000.0, 0, _T("実況時刻の書式と時差"), diagnostic)) return false;
+    }
+    if (!ExpectNear(ParseNicoJKTime(_T("1970-01-01T09:00:00")), 0, 0, _T("UNIX時刻の起点"), diagnostic)) return false;
+    if (!ExpectNear(ParseNicoJKTime(_T("2000-02-29T00:00:00Z")), 951782400, 0, _T("世紀の閏年"), diagnostic)) return false;
+    if (!ExpectNear(ParseNicoJKOffset(_T("-0.125")), -0.125, 0, _T("負の小数ずれ量"), diagnostic)) return false;
+    // 録画は番組開始30秒前とし、正負のずれ量を独立した期待値で検証する。
+    if (!ExpectNear(NicoJKSourceStart(1970, 2000, 1000, 1.25), 968.75, 0,
+        _T("番組基準からの取得範囲"), diagnostic)) return false;
+    if (!ExpectNear(NicoJKSourceStart(1970, 2000, std::nullopt, -0.5), 1970.5, 0,
+        _T("基準未指定では番組時刻が相殺される"), diagnostic)) return false;
+    if (!ExpectNear(NicoJKFileReference(2000, 1000, 4, 2), 2000, 0,
+        _T("半数以上重なるファイルは絶対時刻を使用"), diagnostic)) return false;
+    if (!ExpectNear(NicoJKFileReference(2000, 1000, 5, 2), 1000, 0,
+        _T("半数未満なら最初のコメントを番組開始へ合わせる"), diagnostic)) return false;
+
+    const auto ini = ParseNicoJKIni({ "\xef\xbb\xbf# 実況取得元", "", " channel = jk9 ",
+        "start=20231115071320", "offset = -1.25", "file=comments.xml" });
+    if (!Expect(ini.specified && ini.strictFile && ini.file == _T("comments.xml") && ini.channel == 9 &&
+        ini.start == 1700000000.0 && ini.offset == -1.25,
+        _T("BOM・コメント・空行付き実況指定ファイル"), diagnostic)) return false;
+    for (const char* line : { "unknown=1", "channel", "channel=", "channel=jk0", "offset=nan",
+        "start=2026-02-30T00:00:00", "file=" }) {
+        bool rejected = false;
+        try { ParseNicoJKIni({ line }); } catch (const ArgumentException&) { rejected = true; }
+        if (!Expect(rejected, _T("実況指定ファイルの不正行を拒否"), diagnostic)) return false;
+    }
+    NicoJKSourceSpec cli;
+    cli.file = _T("cli.jkl"); cli.channel = 1; cli.start = 0; cli.offset = 0;
+    cli.programStart = 2000; cli.specified = true;
+    const auto merged = MergeNicoJKSource(cli, ini);
+    if (!Expect(merged.file == _T("cli.jkl") && merged.channel == 1 && merged.start == 0 && merged.offset == 0 &&
+        merged.programStart == 2000 && merged.specified && merged.strictFile,
+        _T("CLIはゼロ値を含めて実況指定ファイルより優先"), diagnostic)) return false;
+    const auto emptyIni = ParseNicoJKIni({ "# コメントだけ", "" });
+    if (!Expect(emptyIni.specified, _T("空の指定ファイルも取得元指定に含める"), diagnostic)) return false;
+    NicoJKSourceSpec programOnly;
+    programOnly.programStart = 2000;
+    if (!Expect(!MergeNicoJKSource(programOnly, {}).specified,
+        _T("番組開始の補助情報だけでは新経路に切り替えない"), diagnostic)) return false;
+    return true;
 }
 
 // 保持フレームの期待区間を手書きし、境界補正の実装とは独立に判定する。
@@ -4130,6 +4208,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_silent_adts_bytes"), TestAudioSilentAdtsBytes },
     { _T("audio_channel_conversion"), TestAudioChannelConversion },
     { _T("command_line_arguments"), TestCommandLineArguments },
+    { _T("nicojk_source"), TestNicoJKSource },
     { _T("cm_cut_offset"), TestCMCutOffset },
     { _T("cm_cut_offset_command_line"), TestCMCutOffsetCommandLine },
     { _T("wave_header"), TestWaveHeader },

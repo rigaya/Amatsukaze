@@ -147,6 +147,11 @@ static void printHelp(const tchar* bin) {
         "                      4 : CMのみ出力\n"
         "                      8 : 前後のCMのみカット\n"
         "                      ORも可 例) 6: 本編とCMを分離\n"
+        "  --nicojk-file <パス> xml/jklのコメントを使用する\n"
+        "  --nicojk-channel <jkN> 取得先チャンネル\n"
+        "  --nicojk-start <時刻> コメント基準(UNIX秒/ISO8601/JST14桁)\n"
+        "  --nicojk-offset <秒> 正の値でコメントを遅らせる\n"
+        "  --nicojk-program-start <時刻> 録画番組開始時刻\n"
         "  --nicojklog         ニコニコ実況コメントをNicoJKログフォルダから取得\n"
         "                      (NicoConvASSを -nicojk 1 で呼び出します)\n"
         "  --nicojkmask <数値> ニコニコ実況コメントマスク[1]\n"
@@ -620,6 +625,21 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             // Linux では旧オプションも Python スクリプト指定として扱う
             conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
 #endif
+        } else if (key == _T("--nicojk-file")) {
+            conf.nicoJKSource.file = pathNormalize(getParam(argc, argv, i++));
+            if (conf.nicoJKSource.file.empty()) THROW(ArgumentException, "実況ファイルが空です");
+            conf.nicoJKSource.specified = conf.nicoJKSource.strictFile = true;
+        } else if (key == _T("--nicojk-channel")) {
+            conf.nicoJKSource.channel = ParseNicoJKChannel(getParam(argc, argv, i++));
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-start")) {
+            conf.nicoJKSource.start = ParseNicoJKTime(getParam(argc, argv, i++));
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-offset")) {
+            conf.nicoJKSource.offset = ParseNicoJKOffset(getParam(argc, argv, i++));
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-program-start")) {
+            conf.nicoJKSource.programStart = ParseNicoJKTime(getParam(argc, argv, i++));
         } else if (key == _T("--nicojkass")) {
             conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--webvtt")) {
@@ -899,6 +919,12 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         addInt(_T("audio_bitrate"), setting->getAudioBitrateInKbps());
         addInt(_T("max_frames"), setting->getMaxFrames());
         addInt(_T("nicojk_mask"), setting->getNicoJKMask());
+        const auto& source = setting->getNicoJKSource();
+        add(_T("nicojk_file"), source.file);
+        add(_T("nicojk_channel"), source.channel ? StringFormat(_T("%d"), *source.channel) : _T(""));
+        add(_T("nicojk_start"), source.start ? StringFormat(_T("%.6f"), *source.start) : _T(""));
+        add(_T("nicojk_program_start"), source.programStart ? StringFormat(_T("%.6f"), *source.programStart) : _T(""));
+        add(_T("nicojk_offset"), source.offset ? StringFormat(_T("%.6f"), *source.offset) : _T(""));
         addInt(_T("print_prefix"), setting->getPrintPrefix());
         addInt(_T("sar_x"), setting->getUserSAR().first);
         addInt(_T("sar_y"), setting->getUserSAR().second);

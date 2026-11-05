@@ -9,6 +9,8 @@
 #include "NicoJK.h"
 #include "OSUtil.h"
 #include "rgy_filesystem.h"
+#include <filesystem>
+#include <iomanip>
 
 namespace {
 
@@ -285,7 +287,122 @@ void NicoJK::readASS() {
     }
 }
 
+// 元TSを基準に補助ファイルを読み、CLIの項目を最後に重ねる。
+bool NicoJK::resolveSource(time_t startTime, int duration) {
+    const auto base = PathRemoveExtensionS(setting_.getSrcFileOriginalPath());
+    const auto ini = base + _T(".nicojk.ini");
+    NicoJKSourceSpec defaults;
+    if (File::exists(ini)) {
+        File input(ini, _T("r"));
+        std::vector<std::string> lines;
+        std::string line;
+        while (input.getline(line)) lines.push_back(line);
+        defaults = ParseNicoJKIni(lines);
+        if (!defaults.file.empty()) {
+            auto path = std::filesystem::path(defaults.file);
+            if (path.is_relative()) path = std::filesystem::path(ini).parent_path() / path;
+            defaults.file = path.lexically_normal().native();
+        }
+    }
+    source_ = MergeNicoJKSource(setting_.getNicoJKSource(), defaults);
+    const bool explicitFile = !source_.file.empty();
+    if (!explicitFile) {
+        const tchar* suffixes[] = { _T(".nicojk.xml"), _T(".nicojk.jkl"), _T(".xml"), _T(".jkl") };
+        for (int i = 0; i < 4; ++i) {
+            const auto candidate = base + suffixes[i];
+            if (!File::exists(candidate)) continue;
+            source_.file = candidate;
+            source_.strictFile = i < 2;
+            break;
+        }
+    }
+    // 別用途の同名XMLだけならPython未導入でも従来経路へ戻せるようにする。
+    if (!source_.file.empty() && !source_.strictFile) {
+        File input(source_.file, _T("r"));
+        std::string line;
+        bool hasChat = false;
+        const std::regex chatTag("<chat([[:space:]]|>)");
+        while (input.getline(line)) {
+            if (std::regex_search(line, chatTag)) { hasChat = true; break; }
+        }
+        if (!hasChat) {
+            ctx.warn(_T("同名ファイルはコメントファイルではないため無視します"));
+            source_.file.clear();
+        }
+    }
+    if (!source_.specified && source_.file.empty()) return false;
+    sourceScript_ = setting_.getNicoJKAssPath();
+    if (sourceScript_.empty()) sourceScript_ = PathCombineS(GetModuleDirectory(), _T("nicojk_ass.py"));
+    if (!File::exists(sourceScript_)) THROW(RuntimeException, "nicojk_ass.pyが見つかりません");
+    const double program = source_.programStart.value_or((double)startTime);
+    if (!source_.file.empty()) {
+        const auto python = ResolvePythonCommand();
+        if (python.empty()) THROW(RuntimeException, "実況コメントの読み込みに必要なPython 3が見つかりません");
+        const auto args = StringFormat(_T("%s \"%s\" --inspect-input \"%s\" --starttime %lld --endtime %lld"),
+            python.c_str(), pathToOS(sourceScript_), pathToOS(source_.file), (long long)startTime, (long long)startTime + duration);
+        StdRedirectedSubProcess process(args, 0, true, false, true);
+        const int code = process.join();
+        if (code == 101 && !source_.strictFile) {
+            ctx.warn(_T("同名ファイルはコメントファイルではないため無視します"));
+            source_.file.clear();
+            if (!source_.specified) { sourceScript_.clear(); return false; }
+        } else if (code != 0 && code != 101) {
+            THROW(RuntimeException, "実況コメントファイルを読み込めません");
+        } else if (!source_.start && code == 0) {
+            size_t count = 0, overlap = 0;
+            double first = 0;
+            bool parsed = false;
+            for (const auto& line : process.getCapturedLines()) {
+                std::istringstream in(std::string(line.begin(), line.end()));
+                if (in >> count >> first >> overlap) { parsed = true; break; }
+            }
+            if (!parsed || !std::isfinite(first)) THROW(RuntimeException, "実況ファイルの時刻情報を取得できません");
+            source_.start = NicoJKFileReference(program, first, count, overlap);
+            source_.relative = count && overlap < (count + 1) / 2;
+            if (source_.relative) ctx.warn(_T("最初のコメントを番組開始に合わせます。正確に合わせるにはstartを指定してください"));
+        }
+    }
+    sourceStart_ = NicoJKSourceStart((double)startTime, program, source_.start, source_.offset.value_or(0));
+    return true;
+}
+
+static tstring NicoJKJST(double seconds) {
+    const time_t value = (time_t)std::floor(seconds) + 9 * 3600;
+    tm local = {};
+#if defined(_WIN32) || defined(_WIN64)
+    if (gmtime_s(&local, &value) != 0) return _T("範囲外");
+#else
+    if (!gmtime_r(&value, &local)) return _T("範囲外");
+#endif
+    return StringFormat(_T("%04d-%02d-%02d %02d:%02d:%02d.%03d JST"),
+        local.tm_year + 1900, local.tm_mon + 1, local.tm_mday, local.tm_hour, local.tm_min, local.tm_sec,
+        (int)std::floor((seconds - std::floor(seconds)) * 1000));
+}
+
+bool NicoJK::makeSourceASS(int serviceId, time_t startTime, int duration) {
+    if (source_.channel) jknum_ = *source_.channel;
+    else if (source_.file.empty()) getJKNum(serviceId);
+    else jknum_ = -1;
+    if (source_.file.empty() && jknum_ == -1) return false;
+    const double program = source_.programStart.value_or((double)startTime);
+    ctx.infoF(_T("コメント取得元: %s / jk%d / L=%.6f P=%.6f offset=%+.6f S=%.6f E=%.6f"),
+        source_.file.empty() ? _T("API") : source_.file.c_str(), jknum_, source_.start.value_or(program), program,
+        source_.offset.value_or(0), sourceStart_, sourceStart_ + duration);
+    ctx.infoF(_T("コメント時刻: 基準 %s → 録画 %s / 取得 %s ～ %s / %s"),
+        NicoJKJST(source_.start.value_or(program)), NicoJKJST(program), NicoJKJST(sourceStart_), NicoJKJST(sourceStart_ + duration),
+        source_.relative ? _T("先頭を番組開始に合わせる") : _T("指定時刻を使用"));
+    if (setting_.isUseNicoJKLog()) ctx.info(_T("取得元の指定をnicojklogより優先します"));
+    return makeASSByScript(startTime, duration);
+}
+
 bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
+    try {
+        if (resolveSource(startTime, duration)) return makeSourceASS(serviceId, startTime, duration);
+    } catch (Exception& e) {
+        isFail_ = true;
+        ctx.errorF(_T("実況コメントの生成に失敗: %s"), e.message());
+        return false;
+    }
     if (setting_.isNicoJKAssEnabled()) {
         getJKNum(serviceId);
         if (jknum_ == -1) return false;
@@ -317,6 +434,14 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
 // nicojk_ass.py スクリプトに渡すコマンドライン引数を生成する
 tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
     time_t startTime, int duration, NicoJKType type) {
+    if (!sourceScript_.empty()) {
+        const int widths[] = {1280,1280,1920,1920}, heights[] = {720,720,1080,1080};
+        auto args = StringFormat(_T("%s \"%s\" --channel jk%d --starttime %.6f --endtime %.6f --width %d --height %d --output \"%s\""),
+            pythonCommand.c_str(), pathToOS(sourceScript_), jknum_, sourceStart_, sourceStart_ + duration,
+            widths[(int)type], heights[(int)type], pathToOS(setting_.getTmpNicoJKASSPath(type)));
+        if (!source_.file.empty()) args += StringFormat(_T(" --input \"%s\""), pathToOS(source_.file));
+        return args;
+    }
     const int width[]  = { 1280, 1280, 1920, 1920 };
     const int height[] = {  720,  720, 1080, 1080 };
     return StringFormat(_T("%s \"%s\" --channel jk%d --starttime %lld --endtime %lld --width %d --height %d --output \"%s\""),

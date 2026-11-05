@@ -2054,6 +2054,15 @@ namespace Amatsukaze.Server
             }
         }
 
+        internal static string GetNicoJKProgramStartArgument(bool enabled, DateTime programStart)
+        {
+            if (!enabled || programStart <= new DateTime(2000, 1, 1)) return "";
+            // EITの年月日時分秒は実行環境のタイムゾーンにかかわらずJSTとして扱う。
+            var jst = DateTime.SpecifyKind(programStart, DateTimeKind.Unspecified);
+            var unixTime = new DateTimeOffset(jst, TimeSpan.FromHours(9)).ToUnixTimeSeconds();
+            return " --nicojk-program-start " + unixTime.ToString(CultureInfo.InvariantCulture);
+        }
+
         internal string MakeAmatsukazeArgs(
             ProcMode mode,
             ProfileSetting profile,
@@ -2063,7 +2072,7 @@ namespace Amatsukaze.Server
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
-            string inHandle, string outHandle, int pid)
+            string inHandle, string outHandle, int pid, DateTime programStart = default)
         {
             if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
             {
@@ -2325,6 +2334,7 @@ namespace Amatsukaze.Server
                     if (profile.EnableNicoJK)
                     {
                         sb.Append(" --nicojk");
+                        sb.Append(GetNicoJKProgramStartArgument(profile.EnableNicoJK, programStart));
                         if (profile.IgnoreNicoJKError)
                         {
                             sb.Append(" --ignore-nicojk-error");

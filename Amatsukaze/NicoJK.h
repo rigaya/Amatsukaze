@@ -63,6 +63,11 @@ private:
     std::array<std::vector<std::string>, NICOJK_MAX> headerlines_;
     std::array<std::vector<NicoJKLine>, NICOJK_MAX> dislogues_;
 
+    NicoJKSourceSpec source_;
+    tstring sourceScript_;
+    double sourceStart_ = 0;
+    bool resolveSource(time_t startTime, int duration);
+    bool makeSourceASS(int serviceId, time_t startTime, int duration);
     int jknum_;
     std::string tvname_;
 
