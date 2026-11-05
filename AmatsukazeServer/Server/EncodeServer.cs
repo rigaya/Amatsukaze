@@ -2075,7 +2075,7 @@ namespace Amatsukaze.Server
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
-            string inHandle, string outHandle, int pid, DateTime programStart = default)
+            string inHandle, string outHandle, int pid, DateTime programStart = default, bool enableNicoJK = true)
         {
             if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
             {
@@ -2334,7 +2334,7 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --output-chapter");
                     }
-                    if (profile.EnableNicoJK)
+                    if (profile.EnableNicoJK && enableNicoJK)
                     {
                         sb.Append(" --nicojk");
                         sb.Append(GetNicoJKProgramStartArgument(profile.EnableNicoJK, programStart));

@@ -87,25 +87,31 @@ namespace Amatsukaze.Server
                 .Select(part => part.Substring(0, Math.Min(5, part.Length))).Distinct().ToArray();
         }
 
-        public async Task<string> GetArgumentsAsync(QueueItem item, ProfileSetting profile, Action<string> log)
+        public async Task<(string Arguments, bool DisableNicoJK)> GetArgumentsAsync(QueueItem item, ProfileSetting profile, Action<string> log)
         {
             if (!profile.EnableNicoJK || profile.NicoJKReferenceMode is not (1 or 2) ||
-                item.Genre?.Any(g => g.Space == (int)GenreSpace.ARIB && g.Level1 == 7) != true) return "";
+                item.Genre?.Any(g => g.Space == (int)GenreSpace.ARIB && g.Level1 == 7) != true) return ("", false);
             try
             {
                 if (HasManualSource(item.SrcPath))
                 {
                     log("別局実況: 入力の隣に手動指定があるため自動選択しません");
-                    return "";
+                    return ("", false);
                 }
-                var reference = await FindAsync(item.SrcPath, item.ServiceId, item.EITStartTime, log);
-                return reference == null ? "" : " --nicojk-ref \"" + reference.Replace("\"", "\\\"") +
-                    "\" --nicojk-ref-mode " + (profile.NicoJKReferenceMode == 1 ? "replace" : "merge");
+                var (reference, replaceOnly) = await FindAsync(item.SrcPath, item.ServiceId, item.EITStartTime, log);
+                if (reference == null)
+                {
+                    if (replaceOnly) log("別局実況: 遅れネット・独自枠で基準録画がないため実況を付けません");
+                    return ("", replaceOnly);
+                }
+                if (replaceOnly) log("別局実況: 遅れネット・独自枠のため基準録画のコメントで置き換えます");
+                return (" --nicojk-ref \"" + reference.Replace("\"", "\\\"") +
+                    "\" --nicojk-ref-mode " + (replaceOnly || profile.NicoJKReferenceMode == 1 ? "replace" : "merge"), false);
             }
             catch (Exception e)
             {
                 log("別局実況: 自動選択に失敗したため対象局のコメントを使います (" + e.Message + ")");
-                return "";
+                return ("", false);
             }
         }
 
@@ -160,75 +166,89 @@ namespace Amatsukaze.Server
                 CultureInfo.InvariantCulture);
         }
 
-        public async Task<string> FindAsync(string sourcePath, int serviceId, DateTime start, Action<string> log)
+        public async Task<(string Reference, bool ReplaceOnly)> FindAsync(string sourcePath, int serviceId, DateTime start, Action<string> log)
         {
+            bool replaceOnly = false;
             try
             {
                 if (start <= new DateTime(2000, 1, 1))
                 {
                     log("別局実況: 番組開始時刻がないため検索しません");
-                    return null;
+                    return (null, replaceOnly);
                 }
                 var (channels, commentServices) = ReadChannels();
-                int channel = 0;
-                foreach (var pair in channels)
-                    if (pair.Value.ServiceId == serviceId) { channel = pair.Key; break; }
+                var recordedChannel = channels.FirstOrDefault(c => c.ServiceId == serviceId);
+                int channel = recordedChannel.Channel;
                 if (channel == 0)
                 {
                     log("別局実況: 対象局が局対応表にありません");
-                    return null;
+                    return (null, replaceOnly);
                 }
                 var target = await FindBroadcastAsync(channel, start, log);
                 if (target == null)
                 {
                     log("別局実況: 開始時刻が10分以内の放送がありません");
-                    return null;
+                    return (null, replaceOnly);
                 }
                 int tid = (int)target.Element("TID");
                 string count = (string)target.Element("Count");
                 if (string.IsNullOrEmpty(count))
                 {
                     log("別局実況: 話数がないため検索しません");
-                    return null;
+                    return (null, replaceOnly);
                 }
                 var broadcasts = await LoadAsync("ProgLookup&TID=" + tid + "&Count=" + Uri.EscapeDataString(count), false, log);
-                var candidates = SelectCandidates(broadcasts, target, channel, tid, count, channels, commentServices);
+                if (!recordedChannel.Reference)
+                {
+                    // キー局: 基準1の局のうち、録画した局と同じjk番号を持つ局。
+                    int targetJK = commentServices.GetValueOrDefault(serviceId);
+                    var keyChannels = channels.Where(c => c.Reference && commentServices.GetValueOrDefault(c.ServiceId) == targetJK)
+                        .Select(c => c.Channel).ToHashSet();
+                    var simulcast = broadcasts.Descendants("ProgItem").Any(item =>
+                        (int?)item.Element("Deleted") != 1 && keyChannels.Contains((int)item.Element("ChID")) &&
+                        Math.Abs((Start(item) - Start(target)).TotalSeconds) <= ReferenceToleranceSeconds);
+                    replaceOnly = !simulcast;
+                    log(simulcast ? "別局実況: キー局の同じ回と開始差が5分以内の同時ネットです" :
+                        "別局実況: キー局の同じ回が開始差5分以内にないため遅れネット・独自枠と判断しました");
+                }
+                var candidates = SelectCandidates(broadcasts, target, channel, tid, count, channels);
                 if (candidates.Length == 0)
                 {
                     log("別局実況: 実況のある別局の先行放送がありません");
-                    return null;
+                    return (null, replaceOnly);
                 }
                 var titleXml = await LoadAsync("TitleLookup&TID=" + tid, true, log);
                 var titleItem = titleXml.Descendants("TitleItem").First(p => (int?)p.Element("TID") == tid);
                 string title = (string)titleItem.Element("Title") ?? "";
                 var names = GetNameKeys(title, (string)titleItem.Element("ShortTitle") ?? "");
                 log("別局実況: " + title + " 第" + count + "話を特定しました");
-                return FindRecording(sourcePath, names, candidates, channels, log);
+                return (FindRecording(sourcePath, names, candidates, channels, log), replaceOnly);
             }
             catch (Exception e)
             {
-                log("別局実況: 検索に失敗したため対象局のコメントを使います (" + e.Message + ")");
+                log("別局実況: 検索に失敗したため" + (replaceOnly ? "実況を付けません" : "対象局のコメントを使います") + " (" + e.Message + ")");
             }
-            return null;
+            return (null, replaceOnly);
         }
 
-        private (Dictionary<int, (int ServiceId, string Name)> Channels, HashSet<int> CommentServices) ReadChannels()
+        private (List<(int Channel, int ServiceId, string Name, bool Reference)> Channels, Dictionary<int, int> CommentServices) ReadChannels()
         {
-            var channels = new Dictionary<int, (int ServiceId, string Name)>();
+            // 北海道の地域別ServiceIdは同じChIDに対応するので、ChIDを一意なキーにしない。
+            var channels = new List<(int Channel, int ServiceId, string Name, bool Reference)>();
             foreach (var line in File.ReadLines(Path.Combine(toolDirectory, "syoboi_ch.txt")))
             {
                 if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
                 var fields = line.Split('\t');
-                channels.Add(int.Parse(fields[0], CultureInfo.InvariantCulture),
-                    (int.Parse(fields[1], CultureInfo.InvariantCulture), fields[2]));
+                channels.Add((int.Parse(fields[0], CultureInfo.InvariantCulture),
+                    int.Parse(fields[1], CultureInfo.InvariantCulture), fields[2], fields[3] == "1"));
             }
-            var commentServices = new HashSet<int>();
+            var commentServices = new Dictionary<int, int>();
             foreach (var line in File.ReadLines(Path.Combine(toolDirectory, "ch_sid.txt")))
             {
                 if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
                 var fields = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
                 if (int.Parse(fields[0], CultureInfo.InvariantCulture) > 0)
-                    commentServices.Add(int.Parse(fields[2], CultureInfo.InvariantCulture));
+                    commentServices.Add(int.Parse(fields[2], CultureInfo.InvariantCulture), int.Parse(fields[0], CultureInfo.InvariantCulture));
             }
             return (channels, commentServices);
         }
@@ -250,18 +270,18 @@ namespace Amatsukaze.Server
         }
 
         private static XElement[] SelectCandidates(XDocument broadcasts, XElement target, int channel, int tid, string count,
-            Dictionary<int, (int ServiceId, string Name)> channels, HashSet<int> commentServices)
+            List<(int Channel, int ServiceId, string Name, bool Reference)> channels)
         {
             return broadcasts.Descendants("ProgItem").Where(item =>
                 (int?)item.Element("Deleted") != 1 && (int?)item.Element("ChID") != channel &&
                 (int?)item.Element("TID") == tid && (string)item.Element("Count") == count &&
-                channels.TryGetValue((int)item.Element("ChID"), out var candidate) &&
-                commentServices.Contains(candidate.ServiceId) && Start(item) < Start(target))
+                channels.Any(candidate => candidate.Channel == (int?)item.Element("ChID") && candidate.Reference) &&
+                Start(item) < Start(target))
                 .OrderBy(Start).ToArray();
         }
 
         private string FindRecording(string sourcePath, string[] names, XElement[] candidates,
-            Dictionary<int, (int ServiceId, string Name)> channels, Action<string> log)
+            List<(int Channel, int ServiceId, string Name, bool Reference)> channels, Action<string> log)
         {
             var files = Directory.EnumerateFiles(Path.GetDirectoryName(Path.GetFullPath(sourcePath)))
                 .Where(p => (string.Equals(Path.GetExtension(p), ".ts", StringComparison.OrdinalIgnoreCase) ||
@@ -276,7 +296,7 @@ namespace Amatsukaze.Server
             {
                 foreach (var item in candidates)
                 {
-                    var candidate = channels[(int)item.Element("ChID")];
+                    var candidate = channels.First(c => c.Channel == (int)item.Element("ChID") && c.Reference);
                     var candidateStart = Start(item);
                     var candidateEnd = DateTime.ParseExact((string)item.Element("EdTime"), "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
                     log("別局実況: 候補 " + candidate.Name + " " + candidateStart.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));

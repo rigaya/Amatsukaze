@@ -26,4 +26,41 @@ public class NicoJKProgramStartTests
         Assert.Empty(EncodeServer.GetNicoJKProgramStartArgument(false, new DateTime(2026, 10, 1)));
         Assert.NotEmpty(EncodeServer.GetNicoJKProgramStartArgument(true, new DateTime(2000, 1, 1, 0, 0, 1)));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ジョブで実況を付けないときは実況関連のCLI引数を出さない(bool enable)
+    {
+        // 起動処理を省き、引数生成に必要な設定だけを与える。
+        var server = (EncodeServer)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(EncodeServer));
+        var setting = new Setting { SchedulingEnabled = true, NicoJKAssPath = "nicojk_ass.py" };
+        RestQueueTestFixture.SetProperty(server, "AppData_", new EncodeServer.AppData { setting = setting });
+        var profile = new ProfileSetting
+        {
+            EnableNicoJK = true, NicoJKLog = true, IgnoreNicoJKError = true, NicoJKFormats = new[] { true, false, false, false },
+            EncoderType = EncoderType.x264, OutputFormat = FormatType.MKV, FilterOption = FilterOption.None
+        };
+        var arguments = server.MakeAmatsukazeArgs(
+            mode: ProcMode.Batch, profile: profile, setting: setting, workPath: "work", isGeneric: false,
+            src: "input.ts", srcOrg: null, dst: "output.mkv", json: "result.json", streamFormat: VideoStreamFormat.MPEG2,
+            serviceId: 3088, logofiles: null, ignoreNoLogo: true, jlscommand: null, jlsopt: null, ceopt: null,
+            trimavs: null, divfile: null, resumeDir: null, batDir: "bat", inHandle: null, outHandle: null, pid: 0,
+            programStart: new DateTime(2026, 10, 11, 1, 0, 0), enableNicoJK: enable);
+        if (enable)
+        {
+            Assert.Contains(" --nicojk ", arguments);
+            Assert.Contains(" --nicojk-program-start ", arguments);
+            Assert.Contains(" --ignore-nicojk-error", arguments);
+            Assert.Contains(" --nicojklog", arguments);
+            Assert.Contains(" --nicojkmask ", arguments);
+            Assert.True(arguments.Contains(" --nicojkass ") || arguments.Contains(" --nicoass "));
+        }
+        else
+        {
+            Assert.DoesNotContain("nicojk", arguments);
+            Assert.DoesNotContain(" --nicoass", arguments);
+        }
+        Assert.True(profile.EnableNicoJK);
+    }
 }

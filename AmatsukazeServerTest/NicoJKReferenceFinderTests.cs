@@ -22,7 +22,7 @@ public sealed class NicoJKReferenceFinderTests
     {
         using var f = new Fixture();
         f.Range = f.Episodes;
-        Assert.Null(await f.Finder.FindAsync(f.Source, 1064, Fixture.Earlier, f.Logs.Add));
+        Assert.Null((await f.Finder.FindAsync(f.Source, 1064, Fixture.Earlier, f.Logs.Add)).Reference);
         Assert.Empty(f.Reads);
         Assert.InRange(f.Requests.Count, 1, 3);
     }
@@ -75,16 +75,18 @@ public sealed class NicoJKReferenceFinderTests
     {
         using var f = new Fixture();
         f.AddRecording("ゾンビさがしてます.ts", 1064, Fixture.Earlier);
-        Assert.Null(await f.Finder.FindAsync(f.Source, 151, Fixture.Target.AddMinutes(11), f.Logs.Add));
+        Assert.Null((await f.Finder.FindAsync(f.Source, 151, Fixture.Target.AddMinutes(11), f.Logs.Add)).Reference);
         Assert.Empty(f.Reads);
     }
 
     [Fact]
-    public async Task jk番号のない局は基準にしない()
+    public async Task 基準ではない系列局は候補にしない()
     {
         using var f = new Fixture();
-        File.WriteAllText(Path.Combine(f.ToolDirectory, "ch_sid.txt"), "151\t4\t151\t0\tBS朝日\n");
-        f.AddRecording("ゾンビさがしてます.ts", 1064, Fixture.Earlier);
+        File.AppendAllText(Path.Combine(f.ToolDirectory, "syoboi_ch.txt"), "67\t3088\tメ～テレ\t0\n");
+        File.AppendAllText(Path.Combine(f.ToolDirectory, "ch_sid.txt"), "5\t15\t3088\t0\tメ～テレ\n");
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 67, "2", "2026-10-10 23:30:00"));
+        f.AddRecording("ゾンビさがしてます.ts", 3088, Fixture.Earlier);
         Assert.Null(await f.Find());
         Assert.Empty(f.Reads);
     }
@@ -129,8 +131,8 @@ public sealed class NicoJKReferenceFinderTests
         f.Title = Fixture.TitleResponse(8019, "#ゾンビさがしてます");
         var earlier = new DateTime(2026, 10, 21, 22, 0, 0);
         var reference = f.AddRecording("ゾンビさがしてます.ts", 333, earlier);
-        Assert.Equal(reference, await f.Finder.FindAsync(f.Source, 1064,
-            new DateTime(2026, 10, 22, 0, 0, 0), f.Logs.Add));
+        Assert.Equal(reference, (await f.Finder.FindAsync(f.Source, 1064,
+            new DateTime(2026, 10, 22, 0, 0, 0), f.Logs.Add)).Reference);
     }
 
     [Theory]
@@ -206,7 +208,7 @@ public sealed class NicoJKReferenceFinderTests
         var reference = f.AddRecording("ゾンビさがしてます.ts", 1064, Fixture.Earlier);
         var profile = new ProfileSetting { EnableNicoJK = true, NicoJKReferenceMode = mode };
         Assert.Equal(" --nicojk-ref \"" + reference + "\" --nicojk-ref-mode " + argument,
-            await f.Finder.GetArgumentsAsync(f.QueueItem(), profile, f.Logs.Add));
+            (await f.Finder.GetArgumentsAsync(f.QueueItem(), profile, f.Logs.Add)).Arguments);
         Assert.Equal(3, f.Requests.Count);
     }
 
@@ -222,7 +224,7 @@ public sealed class NicoJKReferenceFinderTests
         var item = f.QueueItem();
         item.Genre = new List<GenreItem> { new() { Space = space, Level1 = level1 } };
         var profile = new ProfileSetting { EnableNicoJK = enabled, NicoJKReferenceMode = mode };
-        Assert.Empty(await f.Finder.GetArgumentsAsync(item, profile, f.Logs.Add));
+        Assert.Equal(("", false), await f.Finder.GetArgumentsAsync(item, profile, f.Logs.Add));
         Assert.Empty(f.Requests);
         Assert.Empty(f.Reads);
     }
@@ -238,7 +240,7 @@ public sealed class NicoJKReferenceFinderTests
         using var f = new Fixture();
         File.WriteAllText(Path.ChangeExtension(f.Source, extension), "");
         var profile = new ProfileSetting { EnableNicoJK = true, NicoJKReferenceMode = 1 };
-        Assert.Empty(await f.Finder.GetArgumentsAsync(f.QueueItem(), profile, f.Logs.Add));
+        Assert.Equal(("", false), await f.Finder.GetArgumentsAsync(f.QueueItem(), profile, f.Logs.Add));
         Assert.Empty(f.Requests);
         Assert.Empty(f.Reads);
     }
@@ -249,7 +251,7 @@ public sealed class NicoJKReferenceFinderTests
         using var f = new Fixture();
         f.FetchFailure = new IOException("通信失敗");
         var profile = new ProfileSetting { EnableNicoJK = true, NicoJKReferenceMode = 1 };
-        Assert.Empty(await f.Finder.GetArgumentsAsync(f.QueueItem(), profile, f.Logs.Add));
+        Assert.Equal(("", false), await f.Finder.GetArgumentsAsync(f.QueueItem(), profile, f.Logs.Add));
         Assert.NotEmpty(f.Logs);
     }
 
@@ -360,6 +362,90 @@ public sealed class NicoJKReferenceFinderTests
         Assert.Empty(f.Reads);
     }
 
+    [Theory]
+    [InlineData(-300)]
+    [InlineData(0)]
+    [InlineData(300)]
+    public async Task 系列局とキー局が五分以内なら今までどおりにする(int difference)
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 6, "2",
+            Fixture.Target.AddSeconds(difference).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        var result = await f.AffiliateArguments();
+        Assert.Equal(("", false), result);
+        Assert.Contains(f.Logs, line => line.Contains("同時"));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task 遅れネットの録画があれば統合設定でも置き換える(int mode)
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        var reference = f.AddRecording("ゾンビさがしてます.ts", 1064, Fixture.Earlier);
+        Assert.Equal((" --nicojk-ref \"" + reference + "\" --nicojk-ref-mode replace", false),
+            await f.AffiliateArguments(mode));
+        Assert.Contains(f.Logs, line => line.Contains("置き換") || line.Contains("replace"));
+    }
+
+    [Theory]
+    [InlineData(301)]
+    [InlineData(5400)]
+    public async Task キー局と五分を超えて違い録画もなければ実況を付けない(int difference)
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 6, "2",
+            Fixture.Target.AddSeconds(-difference).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        Assert.Equal(("", true), await f.AffiliateArguments());
+        Assert.Contains(f.Logs, line => line.Contains("付けません"));
+    }
+
+    [Fact]
+    public async Task キー局の同じ回の放送がなければ実況を付けない()
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 67, "2", "2026-10-11 01:00:00"));
+        Assert.Equal(("", true), await f.AffiliateArguments());
+        Assert.Empty(f.Reads);
+    }
+
+    [Fact]
+    public async Task 系列局の録画した放送が特定できなければ今までどおりにする()
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        f.Range = Fixture.Programs();
+        Assert.Equal(("", false), await f.AffiliateArguments());
+        Assert.Single(f.Requests);
+    }
+
+    [Fact]
+    public async Task 系列局の話数がなければ今までどおりにする()
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        f.Range = ChangePrograms(f.Range, x => x.Element("Count")!.Value = "");
+        Assert.Equal(("", false), await f.AffiliateArguments());
+        Assert.Single(f.Requests);
+    }
+
+    [Theory]
+    [InlineData(3088)]
+    [InlineData(4000)]
+    public async Task 同じChIDの複数ServiceIdをどちらも対象として判定する(int serviceId)
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        File.AppendAllText(Path.Combine(f.ToolDirectory, "syoboi_ch.txt"), "67\t4000\tメ～テレ支局\t0\n");
+        File.AppendAllText(Path.Combine(f.ToolDirectory, "ch_sid.txt"), "5\t15\t4000\t0\tメ～テレ支局\n");
+        Assert.Equal(("", true), await f.AffiliateArguments(serviceId: serviceId));
+        Assert.Contains("ChID=67", f.Requests[0]);
+    }
+
     private static string ChangePrograms(string xml, Action<XElement> change)
     {
         var doc = XDocument.Parse(xml);
@@ -405,7 +491,7 @@ public sealed class NicoJKReferenceFinderTests
             Directory.CreateDirectory(ToolDirectory);
             File.WriteAllText(Source, "対象");
             File.WriteAllText(Path.Combine(ToolDirectory, "syoboi_ch.txt"),
-                "6\t1064\tテレビ朝日\n18\t151\tBS朝日\n20\t333\tAT-X\n");
+                "6\t1064\tテレビ朝日\t1\n18\t151\tBS朝日\t1\n20\t333\tAT-X\t1\n");
             File.WriteAllText(Path.Combine(ToolDirectory, "ch_sid.txt"),
                 "5\t15\t1064\t0\tテレビ朝日\n151\t4\t151\t0\tBS朝日\n333\t7\t333\t0\tAT-X\n");
             Finder = new NicoJKReferenceFinder(ToolDirectory, CacheDirectory, async url =>
@@ -427,6 +513,21 @@ public sealed class NicoJKReferenceFinderTests
                 Now += duration;
                 return Task.CompletedTask;
             });
+        }
+
+        public void SetAffiliate()
+        {
+            File.AppendAllText(Path.Combine(ToolDirectory, "syoboi_ch.txt"), "67\t3088\tメ～テレ\t0\n");
+            File.AppendAllText(Path.Combine(ToolDirectory, "ch_sid.txt"), "5\t15\t3088\t0\tメ～テレ\n");
+            Range = Programs(Program(8028, 67, "2", "2026-10-11 01:00:00"));
+        }
+
+        public Task<(string Arguments, bool DisableNicoJK)> AffiliateArguments(int mode = 2, int serviceId = 3088)
+        {
+            var item = QueueItem();
+            item.ServiceId = serviceId;
+            return Finder.GetArgumentsAsync(item,
+                new ProfileSetting { EnableNicoJK = true, NicoJKReferenceMode = mode }, Logs.Add);
         }
 
         public void SetTitle(string title, string shortTitle = "")
@@ -454,7 +555,7 @@ public sealed class NicoJKReferenceFinderTests
             Genre = new List<GenreItem> { new() { Space = (int)GenreSpace.ARIB, Level1 = 7 } }
         };
 
-        public Task<string> Find() => Finder.FindAsync(Source, 151, Target, Logs.Add);
+        public async Task<string> Find() => (await Finder.FindAsync(Source, 151, Target, Logs.Add)).Reference;
         public static XElement Program(int tid, int chid, string count, string stTime, int stOffset = 0) =>
             new("ProgItem", new XElement("TID", tid), new XElement("ChID", chid), new XElement("Count", count),
                 new XElement("StTime", stTime),
