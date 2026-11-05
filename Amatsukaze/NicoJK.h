@@ -26,7 +26,7 @@ public:
     NicoJK(AMTContext& ctx,
         const ConfigWrapper& setting);
 
-    bool makeASS(int serviceId, time_t startTime, int duration);
+    bool makeASS(int serviceId, time_t startTime, int duration, const StreamReformInfo* reform = nullptr);
 
     bool isFail() const;
 
@@ -63,6 +63,13 @@ private:
     std::array<std::vector<std::string>, NICOJK_MAX> headerlines_;
     std::array<std::vector<NicoJKLine>, NICOJK_MAX> dislogues_;
 
+    const StreamReformInfo* reform_ = nullptr;
+    tstring timeMapPath_;
+    double scriptDuration_ = 0;
+    int mergeChannel_ = -1;
+    time_t mergeStart_ = 0;
+    int mergeDuration_ = 0;
+    bool prepareReferenceSource(int serviceId, time_t startTime, int duration);
     NicoJKSourceSpec source_;
     tstring sourceScript_;
     double sourceStart_ = 0;

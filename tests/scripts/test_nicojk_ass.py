@@ -2,6 +2,7 @@ import contextlib
 from decimal import Decimal
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -187,6 +188,150 @@ class LocalCommentsTests(unittest.TestCase):
                 self.assertEqual(exit.exception.code, 0)
                 fetch.assert_called_once_with("jk9", 100, 102, NICOJK.DEFAULT_API_BASE)
                 rebase.assert_called_once_with(source, 100)
+
+
+class TimeMapTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.directory = Path(self.tempdir.name)
+
+    def write_map(self, entries):
+        path = self.directory / "timemap.json"
+        path.write_text(json.dumps(entries), encoding="utf-8-sig")
+        return path
+
+    def write_comments(self):
+        path = self.directory / "comments.xml"
+        path.write_text('<packet><chat date="1001" no="42" user_id="same">同じ本文</chat>'
+                        '<chat date="1003" no="99">後半</chat></packet>', encoding="utf-8")
+        return path
+
+    def argv(self, extra):
+        return [str(SCRIPT), "--starttime", "1000", "--endtime", "1010",
+                "--width", "1280", "--height", "720", "--output",
+                str(self.directory / "result.ass")] + extra
+
+    def run_main(self, argv, fetch=None):
+        converted = []
+
+        def convert(xml_path, output_path, *args):
+            converted.extend(ET.parse(xml_path).getroot().findall("chat"))
+            self.assertEqual(args[-1], NICOJK.DEFAULT_DURATION)
+            Path(output_path).write_text("[Events]\n", encoding="utf-8")
+
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(NICOJK, "fetch_comments_xml", side_effect=fetch) as api, \
+                mock.patch.object(NICOJK, "run_danmaku2ass", side_effect=convert) as converter, \
+                contextlib.redirect_stderr(io.StringIO()) as log, self.assertRaises(SystemExit) as exit:
+            NICOJK.main()
+        return exit.exception.code, converted, api, converter, log.getvalue()
+
+    def test_対応表をfloatの4つ組として読む(self):
+        result = NICOJK.read_timemap(self.write_map([[0, 1.25, 0, 2.5], [1.25, 3, 2.5, 4]]))
+        self.assertEqual(result[0], (0.0, 1.25, 0.0, 2.5))
+        self.assertEqual(NICOJK.read_timemap(self.write_map([])), [])
+
+
+    def test_半開区間で写して隙間と範囲外を捨て属性を保つ(self):
+        timemap = NICOJK.read_timemap(self.write_map([[1, 2, 10, 12], [3, 4, 15, 16]]))
+        xml = '<packet>' + ''.join('<chat vpos="{}" no="42" date="1000" mail="ue">{}</chat>'.format(
+            value, value) for value in (99, 100, 199, 200, 250, 300, 399, 400)) + '<chat>位置なし</chat></packet>'
+        result = ET.fromstring(NICOJK.apply_timemap(xml, timemap)).findall("chat")
+        self.assertEqual([chat.text for chat in result], ["100", "199", "300", "399"])
+        self.assertEqual([chat.get("vpos") for chat in result], ["1000", "1198", "1500", "1599"])
+        self.assertTrue(all(chat.get("no") == "42" and chat.get("date") == "1000"
+                            and chat.get("mail") == "ue" for chat in result))
+
+    def test_隣接境界のコメントを二重に写さない(self):
+        timemap = NICOJK.read_timemap(self.write_map([[0, 1, 0, 2], [1, 2, 5, 6]]))
+        result = ET.fromstring(NICOJK.apply_timemap(
+            '<packet><chat vpos="-1"/><chat vpos="100"/><chat vpos="200"/></packet>', timemap))
+        self.assertEqual([chat.get("vpos") for chat in result], ["500"])
+        self.assertEqual(len(ET.fromstring(NICOJK.apply_timemap('<packet><chat vpos="0"/></packet>', []))), 0)
+
+    def test_統合は時刻順で既存番号と重複を残す(self):
+        reference = '<packet><chat vpos="300" no="42" user_id="same">同じ本文</chat>' \
+                    '<chat vpos="100" no="7">基準</chat></packet>'
+        target = '<packet><chat vpos="100" no="42" user_id="same">同じ本文</chat></packet>'
+        result = ET.fromstring(NICOJK.merge_comments(reference, target)).findall("chat")
+        self.assertEqual([chat.get("vpos") for chat in result], ["100", "100", "300"])
+        self.assertEqual([chat.get("no") for chat in result], ["7", "42", "42"])
+        self.assertEqual(sum(chat.text == "同じ本文" for chat in result), 2)
+
+    def test_ファイルと対応表だけならAPIを使わず配置は1回(self):
+        code, chats, api, converter, _ = self.run_main(self.argv([
+            "--input", str(self.write_comments()), "--timemap", str(self.write_map([[0, 2, 2, 6]]))]),
+            fetch=AssertionError("API呼び出し禁止"))
+        self.assertEqual(code, 0)
+        self.assertEqual([chat.get("vpos") for chat in chats], ["400"])
+        self.assertEqual(chats[0].get("no"), "42")
+        api.assert_not_called()
+        converter.assert_called_once()
+
+    def test_APIも既存の相対化の後で対応表を使う(self):
+        source = '<packet><chat date="1001" vpos="1100" no="42">本文</chat></packet>'
+        timemap = self.write_map([[0, 2, 10, 12]])
+        with mock.patch.object(NICOJK, "rebase_vpos", wraps=NICOJK.rebase_vpos) as rebase:
+            code, chats, api, converter, _ = self.run_main(
+                self.argv(["--channel", "jk9", "--timemap", str(timemap)]),
+                fetch=lambda *args: source)
+        self.assertEqual(code, 0)
+        self.assertEqual([chat.get("vpos") for chat in chats], ["1100"])
+        api.assert_called_once_with("jk9", 1000, 1010, NICOJK.DEFAULT_API_BASE)
+        rebase.assert_called_once_with(source, 1000)
+        converter.assert_called_once()
+
+    def test_統合する対象も既存API経路を使い配置前に混ぜる(self):
+        target = ('<packet><chat date="201" vpos="500" no="42" user_id="same">同じ本文</chat>'
+                  '<chat date="203" vpos="700" no="88">対象後半</chat></packet>')
+        argv = self.argv(["--input", str(self.write_comments()), "--timemap", str(self.write_map([[0, 10, 2, 12]])),
+                          "--merge-channel", "jk1", "--merge-starttime", "200", "--merge-endtime", "210"])
+        with mock.patch.object(NICOJK, "rebase_vpos", wraps=NICOJK.rebase_vpos) as rebase:
+            code, chats, api, converter, _ = self.run_main(argv, fetch=lambda *args: target)
+        self.assertEqual(code, 0)
+        self.assertEqual([chat.get("vpos") for chat in chats], ["100", "300", "300", "500"])
+        self.assertEqual([chat.get("no") for chat in chats], ["42", "42", "88", "99"])
+        self.assertEqual(sum(chat.text == "同じ本文" for chat in chats), 2)
+        api.assert_called_once_with("jk1", 200, 210, NICOJK.DEFAULT_API_BASE)
+        rebase.assert_called_once_with(target, 200)
+        converter.assert_called_once()
+
+    def test_対象局未対応だけは警告して基準だけを使う(self):
+        argv = self.argv(["--input", str(self.write_comments()), "--timemap",
+                          str(self.write_map([[0, 10, 0, 10]])), "--merge-channel", "jk1",
+                          "--merge-starttime", "200", "--merge-endtime", "210"])
+        code, chats, api, converter, log = self.run_main(argv, fetch=SystemExit(100))
+        self.assertEqual(code, 0)
+        self.assertEqual([chat.get("vpos") for chat in chats], ["100", "300"])
+        self.assertIn("未対応", log)
+        converter.assert_called_once()
+        code, _, _, converter, _ = self.run_main(argv, fetch=SystemExit(1))
+        self.assertEqual(code, 1)
+        converter.assert_not_called()
+
+
+
+
+    def test_対応表で写したコメントも実変換で指定時刻に出る(self):
+        converter = Path(os.environ.get("NICOJK_DANMAKU2ASS", ""))
+        if not converter.is_file():
+            converter = Path(__file__).resolve().parents[3] / "build_itest" / "exe_files" / "danmaku2ass.py"
+        if not converter.is_file():
+            self.skipTest("実変換器未配置。NICOJK_DANMAKU2ASSで指定できます")
+        argv = self.argv(["--input", str(self.write_comments()), "--timemap",
+                          str(self.write_map([[0, 2, 2, 4]]))])
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(NICOJK, "fetch_comments_xml", side_effect=AssertionError("API呼び出し禁止")), \
+                mock.patch.object(NICOJK, "find_danmaku2ass", return_value=str(converter)), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exit:
+            NICOJK.main()
+        self.assertEqual(exit.exception.code, 0)
+        dialogues = [line for line in (self.directory / "result.ass").read_text().splitlines()
+                     if line.startswith("Dialogue:")]
+        self.assertEqual(len(dialogues), 1)
+        self.assertIn(",0:00:03.00,", dialogues[0])
+        self.assertIn("同じ本文", dialogues[0])
 
 
 if __name__ == "__main__":

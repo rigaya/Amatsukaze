@@ -30,6 +30,7 @@ danmaku2ass でASS字幕に変換する薄いラッパー。
 """
 
 import argparse
+import json
 from decimal import Decimal, InvalidOperation
 import math
 import os
@@ -216,6 +217,55 @@ def parse_timestamp(value):
         return int(number) if number == number.to_integral_value() else number
     except (InvalidOperation, ValueError):
         raise argparse.ArgumentTypeError("有限のUNIX秒を指定してください")
+
+
+def read_timemap(path):
+    """C++が出力した対応表をfloatの4つ組として読む。"""
+    with open(path, "r", encoding="utf-8-sig") as source:
+        return [(float(a), float(b), float(c), float(d)) for a, b, c, d in json.load(source)]
+
+
+def apply_timemap(xml_str, timemap):
+    """基準の相対vposを半開区間で対象へ写し、対応のないコメントを捨てる。"""
+    root = ET.fromstring(xml_str)
+    removed = 0
+    for chat in list(root.findall("chat")):
+        if chat.get("vpos") is None:
+            root.remove(chat)
+            removed += 1
+            continue
+        position = float(chat.get("vpos")) / 100
+        if not math.isfinite(position):
+            raise ValueError("コメントのvposが有限数ではありません")
+        for reference_start, reference_end, target_start, target_end in timemap:
+            if reference_start <= position < reference_end:
+                mapped = target_start + ((position - reference_start) * (target_end - target_start)
+                                         / (reference_end - reference_start))
+                chat.set("vpos", str(round(mapped * 100)))
+                break
+        else:
+            root.remove(chat)
+            removed += 1
+    if removed:
+        print(f"[nicojk_ass] 対応表の範囲外のコメントを{removed}件除外", file=sys.stderr)
+    return ET.tostring(root, encoding="unicode")
+
+
+def fetch_merge_comments(channel, starttime, endtime, api_base):
+    """対象局にも、C++から渡された整数範囲で従来の取得と相対化を使う。"""
+    xml_str = fetch_comments_xml(channel, starttime, endtime, api_base)
+    return rebase_vpos(xml_str, starttime)
+
+
+def merge_comments(reference_xml, target_xml):
+    """両局のコメントを時刻順に混ぜ、重複を残したまま1回の配置へ渡す。"""
+    reference = ET.fromstring(reference_xml)
+    target = ET.fromstring(target_xml)
+    chats = reference.findall("chat") + target.findall("chat")
+    root = ET.Element("packet")
+    for chat in sorted(chats, key=lambda item: int(item.get("vpos"))):
+        root.append(chat)
+    return ET.tostring(root, encoding="unicode")
 
 
 # ------------------------------------------------------------------ #
@@ -434,6 +484,10 @@ def parse_args():
     parser.add_argument("--channel",
                         help="実況チャンネルID (例: jk1, jk211)")
     parser.add_argument("--input", help="ローカルのコメントファイル(XML/JKL)")
+    parser.add_argument("--timemap", help="基準から対象への時刻対応表(JSON)")
+    parser.add_argument("--merge-channel", help="混ぜる対象局の実況チャンネル")
+    parser.add_argument("--merge-starttime", type=parse_timestamp, help="対象局の取得開始UNIX秒")
+    parser.add_argument("--merge-endtime", type=parse_timestamp, help="対象局の取得終了UNIX秒")
     parser.add_argument("--inspect-input", help="コメントファイルの件数と時刻を検査する")
     parser.add_argument("--starttime", required=True, type=parse_timestamp,
                         help="取得開始時刻（UNIXタイムスタンプ）")
@@ -480,6 +534,13 @@ def main():
             sys.exit(EXIT_ERROR)
         print(f"{count} {first} {overlap}")
         sys.exit(EXIT_SUCCESS if count else EXIT_NO_COMMENTS)
+    timemap = None
+    if args.timemap:
+        try:
+            timemap = read_timemap(args.timemap)
+        except (OSError, UnicodeError, ValueError, InvalidOperation) as error:
+            print(f"[nicojk_ass] 対応表の読み込み失敗: {error}", file=sys.stderr)
+            sys.exit(EXIT_ERROR)
     fontsize = args.fontsize if args.fontsize is not None \
         else default_fontsize(args.height)
 
@@ -528,6 +589,25 @@ def main():
                     chat.set("vpos", str(round(position)))
             xml_str = ET.tostring(root, encoding="unicode")
 
+
+    if timemap is not None:
+        try:
+            xml_str = apply_timemap(xml_str, timemap)
+            if args.merge_channel:
+                try:
+                    target_xml = fetch_merge_comments(args.merge_channel, args.merge_starttime,
+                                                      args.merge_endtime, args.api_url)
+                except SystemExit as error:
+                    # API側の400/404でも基準のコメントは使い続ける。
+                    if error.code != EXIT_CHANNEL_NOT_FOUND:
+                        raise
+                    print("[nicojk_ass] 警告: 対象局のチャンネルが未対応のため基準のコメントだけを使います",
+                          file=sys.stderr)
+                else:
+                    xml_str = merge_comments(xml_str, target_xml)
+        except (OSError, UnicodeError, ET.ParseError, ValueError, TypeError, InvalidOperation) as error:
+            print(f"[nicojk_ass] コメントの時刻変換・統合失敗: {error}", file=sys.stderr)
+            sys.exit(EXIT_ERROR)
 
     # 3. 一時XMLファイルに保存して danmaku2ass に渡す
     with tempfile.NamedTemporaryFile(

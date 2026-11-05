@@ -7,6 +7,10 @@
 // 取得元指定と番組開始の補助情報は別に保持する。
 struct NicoJKSourceSpec {
     tstring file;
+    tstring ref;
+    std::optional<int> refSid;
+    tstring refMode;
+    tstring refDump;
     std::optional<int> channel;
     std::optional<double> start, programStart, offset;
     bool specified = false;
@@ -81,6 +85,18 @@ inline std::string TrimNicoJKValue(const std::string& text) {
     const auto begin = text.find_first_not_of(" \t\r\n");
     return begin == std::string::npos ? "" : text.substr(begin, text.find_last_not_of(" \t\r\n") - begin + 1);
 }
+inline tstring ParseNicoJKRefMode(const tstring& value) {
+    if (value != _T("replace") && value != _T("merge")) {
+        THROW(ArgumentException, "実況の基準録画モードはreplaceまたはmergeで指定してください");
+    }
+    return value;
+}
+inline void ValidateNicoJKReference(const NicoJKSourceSpec& source) {
+    if (!source.ref.empty() && (source.channel || source.start || source.offset)) {
+        THROW(ArgumentException, "基準録画とchannel/start/offsetは同時に指定できません");
+    }
+}
+
 inline NicoJKSourceSpec ParseNicoJKIni(const std::vector<std::string>& lines) {
     NicoJKSourceSpec spec;
     spec.specified = true;
@@ -98,6 +114,8 @@ inline NicoJKSourceSpec ParseNicoJKIni(const std::vector<std::string>& lines) {
         else if (key == "start") spec.start = ParseNicoJKTime(value);
         else if (key == "offset") spec.offset = ParseNicoJKOffset(value);
         else if (key == "file") { spec.file = value; spec.strictFile = true; }
+        else if (key == "ref") spec.ref = value;
+        else if (key == "ref-mode") spec.refMode = ParseNicoJKRefMode(value);
         else THROW(ArgumentException, "実況指定ファイルに未知のキーがあります");
     }
     return spec;
@@ -107,7 +125,12 @@ inline NicoJKSourceSpec MergeNicoJKSource(const NicoJKSourceSpec& cli, NicoJKSou
     if (cli.channel) base.channel = cli.channel;
     if (cli.start) base.start = cli.start;
     if (cli.offset) base.offset = cli.offset;
+    if (!cli.ref.empty()) base.ref = cli.ref;
+    if (cli.refSid) base.refSid = cli.refSid;
+    if (!cli.refMode.empty()) base.refMode = cli.refMode;
+    if (!cli.refDump.empty()) base.refDump = cli.refDump;
     base.programStart = cli.programStart;
-    base.specified = base.specified || cli.specified;
+    base.specified = base.specified || cli.specified || !base.ref.empty();
+    ValidateNicoJKReference(base);
     return base;
 }

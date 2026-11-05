@@ -1718,7 +1718,7 @@ void DoBadThing() {
     if (!isNoEncode && setting.isNicoJKEnabled()) {
         ctx.info(_T("[ニコニコ実況コメント取得]"));
         auto srcDuration = reformInfo.getInDuration() / MPEG_CLOCK_HZ;
-        nicoOK = nicoJK.makeASS(serviceId, startTime, (int)srcDuration);
+        nicoOK = nicoJK.makeASS(serviceId, startTime, (int)srcDuration, &reformInfo);
         if (nicoOK) {
             reformInfo.SetNicoJKList(nicoJK.getDialogues());
         } else {

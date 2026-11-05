@@ -87,7 +87,8 @@ NicoJK::NicoJK(AMTContext& ctx,
     , isFail_()
     , jknum_() {}
 
-bool NicoJK::makeASS(int serviceId, time_t startTime, int duration) {
+bool NicoJK::makeASS(int serviceId, time_t startTime, int duration, const StreamReformInfo* reform) {
+    reform_ = reform;
     Stopwatch sw;
     sw.start();
     if (!makeASS_(serviceId, startTime, duration)) return false;
@@ -304,9 +305,14 @@ bool NicoJK::resolveSource(time_t startTime, int duration) {
             defaults.file = path.lexically_normal().native();
         }
     }
+    if (!defaults.ref.empty()) {
+        auto path = std::filesystem::path(defaults.ref);
+        if (path.is_relative()) path = std::filesystem::path(ini).parent_path() / path;
+        defaults.ref = path.lexically_normal().native();
+    }
     source_ = MergeNicoJKSource(setting_.getNicoJKSource(), defaults);
     const bool explicitFile = !source_.file.empty();
-    if (!explicitFile) {
+    if (!explicitFile && source_.ref.empty()) {
         const tchar* suffixes[] = { _T(".nicojk.xml"), _T(".nicojk.jkl"), _T(".xml"), _T(".jkl") };
         for (int i = 0; i < 4; ++i) {
             const auto candidate = base + suffixes[i];
@@ -335,7 +341,7 @@ bool NicoJK::resolveSource(time_t startTime, int duration) {
     if (sourceScript_.empty()) sourceScript_ = PathCombineS(GetModuleDirectory(), _T("nicojk_ass.py"));
     if (!File::exists(sourceScript_)) THROW(RuntimeException, "nicojk_ass.pyが見つかりません");
     const double program = source_.programStart.value_or((double)startTime);
-    if (!source_.file.empty()) {
+    if (!source_.file.empty() && source_.ref.empty()) {
         const auto python = ResolvePythonCommand();
         if (python.empty()) THROW(RuntimeException, "実況コメントの読み込みに必要なPython 3が見つかりません");
         const auto args = StringFormat(_T("%s \"%s\" --inspect-input \"%s\" --starttime %lld --endtime %lld"),
@@ -397,7 +403,16 @@ bool NicoJK::makeSourceASS(int serviceId, time_t startTime, int duration) {
 
 bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
     try {
-        if (resolveSource(startTime, duration)) return makeSourceASS(serviceId, startTime, duration);
+        if (resolveSource(startTime, duration)) {
+            if (source_.ref.empty()) return makeSourceASS(serviceId, startTime, duration);
+            if (prepareReferenceSource(serviceId, startTime, duration)) return makeASSByScript(startTime, duration);
+            // 基準用のファイルは対象側へ流用せず、元のAPI/旧経路へ戻る。
+            source_ = NicoJKSourceSpec();
+            timeMapPath_.clear();
+            scriptDuration_ = 0;
+            mergeChannel_ = -1;
+            sourceScript_.clear();
+        }
     } catch (Exception& e) {
         isFail_ = true;
         ctx.errorF(_T("実況コメントの生成に失敗: %s"), e.message());
@@ -437,9 +452,14 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
     if (!sourceScript_.empty()) {
         const int widths[] = {1280,1280,1920,1920}, heights[] = {720,720,1080,1080};
         auto args = StringFormat(_T("%s \"%s\" --channel jk%d --starttime %.6f --endtime %.6f --width %d --height %d --output \"%s\""),
-            pythonCommand.c_str(), pathToOS(sourceScript_), jknum_, sourceStart_, sourceStart_ + duration,
+            pythonCommand.c_str(), pathToOS(sourceScript_), jknum_, sourceStart_, sourceStart_ + (scriptDuration_ > 0 ? scriptDuration_ : duration),
             widths[(int)type], heights[(int)type], pathToOS(setting_.getTmpNicoJKASSPath(type)));
         if (!source_.file.empty()) args += StringFormat(_T(" --input \"%s\""), pathToOS(source_.file));
+        if (!timeMapPath_.empty()) args += StringFormat(_T(" --timemap \"%s\""), pathToOS(timeMapPath_));
+        if (mergeChannel_ > 0) {
+            args += StringFormat(_T(" --merge-channel jk%d --merge-starttime %lld --merge-endtime %lld"),
+                mergeChannel_, (long long)mergeStart_, (long long)mergeStart_ + mergeDuration_);
+        }
         return args;
     }
     const int width[]  = { 1280, 1280, 1920, 1920 };

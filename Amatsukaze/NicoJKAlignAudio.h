@@ -1,0 +1,27 @@
+﻿#pragma once
+
+#include "CoreUtils.hpp"
+#include <cstdint>
+
+class AMTContext;
+struct FileAudioFrameInfo;
+
+// samplesの時刻0は映像先頭。音声のない部分は0で埋める。
+struct NicoJKAlignAudio {
+    std::vector<float> samples;
+    double firstFrameTime = 0;
+    double duration = 0;
+    int serviceId = -1;
+    bool hasTime = false;
+};
+
+NicoJKAlignAudio ReadNicoJKTargetAudio(const tstring& wavePath, const std::vector<FileAudioFrameInfo>& frames,
+                                       double videoOriginPTS, double duration);
+
+NicoJKAlignAudio ReadNicoJKReferenceAudio(AMTContext& ctx, const tstring& path, int serviceId = -1);
+
+// 未知PTSを無視し、1フレームのL+R平均を8kHzの位置へ置く。
+void AddNicoJKAlignAudioFrame(std::vector<float>& samples, int64_t pts, double originPTS, int sampleRate,
+                              const int16_t* stereo, size_t count);
+
+double NicoJKAlignPtsDifference(int64_t pts, double origin);
