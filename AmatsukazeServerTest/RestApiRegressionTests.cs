@@ -107,6 +107,22 @@ public sealed class RestApiRegressionTests
         finally { CultureInfo.CurrentCulture = previous; }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CSVでは音声統計の未計測と実測ゼロを区別する(bool measured)
+    {
+        await using var f = new RestEndpointTestFixture();
+        await f.Queue.Store.OnUIData(new UIData { LogData = new LogData { Items = new() { new() {
+            SrcPath = "/架空/番組.ts", SrcFileSize = 1000, OutFileSize = 125,
+            AudioDiff = measured ? new AudioDiff() : null,
+        } } } });
+
+        var rows = ParseCsv((await f.Send("GET", "/api/logs/encode.csv")).Body);
+        Assert.Equal(22, rows[1].Count);
+        Assert.Equal(Enumerable.Repeat(measured ? "0" : "", 7), rows[1].Skip(15));
+    }
+
     // 引用内の改行を含めてCSVを読み、出力の列数と元の値を独立に確認する。
     private static List<List<string>> ParseCsv(string csv)
     {

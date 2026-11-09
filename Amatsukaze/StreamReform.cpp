@@ -1397,6 +1397,9 @@ AudioDiffInfo StreamReformInfo::genAudioStream() {
         }
     }
 
+    // tsreplaceは元TSの音声を使うため、中間音声の再配置計画から統計を作らない。
+    if (isTsreplace_) return initAudioDiffInfo();
+
     // 音ズレ統計情報のためもう1パス実行
     AudioDiffInfo adiff = initAudioDiffInfo();
     std::vector<OutFileState> states(fileFormatId_.size());

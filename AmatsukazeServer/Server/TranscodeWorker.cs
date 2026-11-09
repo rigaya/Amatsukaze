@@ -448,7 +448,7 @@ namespace Amatsukaze.Server
                 EncodeStartDate = start,
                 EncodeFinishDate = finish,
                 MachineName = Dns.GetHostName(),
-                AudioDiff = new AudioDiff()
+                AudioDiff = json.IsDefined("audiodiff") && json.audiodiff != null ? new AudioDiff()
                 {
                     TotalSrcFrames = (int)json.audiodiff.totalsrcframes,
                     TotalOutFrames = (int)json.audiodiff.totaloutframes,
@@ -457,7 +457,7 @@ namespace Amatsukaze.Server
                     AvgDiff = json.audiodiff.avgdiff,
                     MaxDiff = json.audiodiff.maxdiff,
                     MaxDiffPos = json.audiodiff.maxdiffpos
-                },
+                } : null,
                 Chapter = json.cmanalyze,
                 NicoJK = json.nicojk,
                 TrimAVS = json.trimavs,

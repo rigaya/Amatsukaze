@@ -1889,7 +1889,12 @@ void DoBadThing() {
     }
 
     auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes(), cmCutOffsetFrames);
-    audioDiffInfo.printAudioPtsDiff(ctx);
+    const bool reportAudioDiff = setting.getFormat() != FORMAT_TSREPLACE;
+    if (reportAudioDiff) {
+        audioDiffInfo.printAudioPtsDiff(ctx);
+    } else {
+        ctx.info(_T("音声再配置統計: tsreplace指定時は対象外です"));
+    }
 
     const auto& allKeys = reformInfo.getOutFileKeys();
     std::vector<EncodeFileKey> keys;
@@ -2600,8 +2605,10 @@ void DoBadThing() {
         auto duration = reformInfo.getInOutDuration();
         sb.append(", \"srcduration\": %.3f, \"outduration\": %.3f",
             (double)duration.first / MPEG_CLOCK_HZ, (double)duration.second / MPEG_CLOCK_HZ);
-        sb.append(", \"audiodiff\": ");
-        audioDiffInfo.printToJson(sb);
+        if (reportAudioDiff) {
+            sb.append(", \"audiodiff\": ");
+            audioDiffInfo.printToJson(sb);
+        }
         sb.append(", \"error\": {");
         for (int i = 0; i < AMT_ERR_MAX; i++) {
             if (i > 0) sb.append(", ");

@@ -1596,13 +1596,13 @@ namespace Amatsukaze.Models
                     item.IntVideoFileSize.ToString(),
                     item.OutFileSize.ToString(),
                     item.DisplayCompressionRate,
-                    (item.AudioDiff?.TotalSrcFrames ?? 0).ToString(),
-                    (item.AudioDiff?.TotalOutFrames ?? 0).ToString(),
-                    (item.AudioDiff?.TotalOutUniqueFrames ?? 0).ToString(),
-                    (item.AudioDiff?.NotIncludedPer ?? 0).ToString(),
-                    (item.AudioDiff?.AvgDiff ?? 0).ToString(),
-                    (item.AudioDiff?.MaxDiff ?? 0).ToString(),
-                    (item.AudioDiff?.MaxDiffPos ?? 0).ToString()
+                    item.AudioDiff?.TotalSrcFrames.ToString() ?? "",
+                    item.AudioDiff?.TotalOutFrames.ToString() ?? "",
+                    item.AudioDiff?.TotalOutUniqueFrames.ToString() ?? "",
+                    item.AudioDiff?.NotIncludedPer.ToString() ?? "",
+                    item.AudioDiff?.AvgDiff.ToString() ?? "",
+                    item.AudioDiff?.MaxDiff.ToString() ?? "",
+                    item.AudioDiff?.MaxDiffPos.ToString() ?? ""
                 };
                 sw.WriteLine(string.Join(",", row));
             }

@@ -2184,13 +2184,13 @@ namespace Amatsukaze.Server.Rest
                     item.IntVideoFileSize.ToString(CultureInfo.InvariantCulture),
                     item.OutFileSize.ToString(CultureInfo.InvariantCulture),
                     ((double)item.OutFileSize / item.SrcFileSize * 100).ToString("F2", CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.TotalSrcFrames ?? 0).ToString(CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.TotalOutFrames ?? 0).ToString(CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.TotalOutUniqueFrames ?? 0).ToString(CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.NotIncludedPer ?? 0).ToString(CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.AvgDiff ?? 0).ToString(CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.MaxDiff ?? 0).ToString(CultureInfo.InvariantCulture),
-                    (item.AudioDiff?.MaxDiffPos ?? 0).ToString(CultureInfo.InvariantCulture)
+                    item.AudioDiff?.TotalSrcFrames.ToString(CultureInfo.InvariantCulture) ?? "",
+                    item.AudioDiff?.TotalOutFrames.ToString(CultureInfo.InvariantCulture) ?? "",
+                    item.AudioDiff?.TotalOutUniqueFrames.ToString(CultureInfo.InvariantCulture) ?? "",
+                    item.AudioDiff?.NotIncludedPer.ToString(CultureInfo.InvariantCulture) ?? "",
+                    item.AudioDiff?.AvgDiff.ToString(CultureInfo.InvariantCulture) ?? "",
+                    item.AudioDiff?.MaxDiff.ToString(CultureInfo.InvariantCulture) ?? "",
+                    item.AudioDiff?.MaxDiffPos.ToString(CultureInfo.InvariantCulture) ?? ""
                 };
                 sb.Append(string.Join(",", row.Select(EscapeCsvField))).Append("\r\n");
             }
