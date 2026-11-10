@@ -127,24 +127,26 @@
                         var prevFrame = _currentFrame - 1;
                         if (prevFrame >= 0)
                         {
+                            var displayedPrevFrame = _prevThumbFrame >= 0 ? _prevThumbFrame : prevFrame;
                             <button type="button"
                                     class="trim-preview-thumb trim-preview-thumb-left @((string.IsNullOrEmpty(_prevThumbUrl) ? "is-loading" : ""))"
-                                    @onclick="() => JumpToFrame(prevFrame)"
-                                    aria-label="@($"前フレームへ ({prevFrame})")">
-                                <img class="trim-preview-thumb-img" src="@_prevThumbUrl" alt="@($"Frame {prevFrame}")" />
-                                <div class="trim-preview-thumb-label @(IsFrameInTrimRange(prevFrame) ? "trim-range-active" : "trim-range-cut")">@prevFrame</div>
+                                    @onclick="() => JumpToFrame(displayedPrevFrame)"
+                                    aria-label="@($"前フレームへ ({displayedPrevFrame})")">
+                                <img class="trim-preview-thumb-img" src="@_prevThumbUrl" alt="@($"Frame {displayedPrevFrame}")" />
+                                <div class="trim-preview-thumb-label @(IsFrameInTrimRange(displayedPrevFrame) ? "trim-range-active" : "trim-range-cut")">@displayedPrevFrame</div>
                             </button>
                         }
 
                         var nextFrame = _currentFrame + 1;
                         if (_session.NumFrames > 0 && nextFrame < _session.NumFrames)
                         {
+                            var displayedNextFrame = _nextThumbFrame >= 0 ? _nextThumbFrame : nextFrame;
                             <button type="button"
                                     class="trim-preview-thumb trim-preview-thumb-right @((string.IsNullOrEmpty(_nextThumbUrl) ? "is-loading" : ""))"
-                                    @onclick="() => JumpToFrame(nextFrame)"
-                                    aria-label="@($"次フレームへ ({nextFrame})")">
-                                <img class="trim-preview-thumb-img" src="@_nextThumbUrl" alt="@($"Frame {nextFrame}")" />
-                                <div class="trim-preview-thumb-label @(IsFrameInTrimRange(nextFrame) ? "trim-range-active" : "trim-range-cut")">@nextFrame</div>
+                                    @onclick="() => JumpToFrame(displayedNextFrame)"
+                                    aria-label="@($"次フレームへ ({displayedNextFrame})")">
+                                <img class="trim-preview-thumb-img" src="@_nextThumbUrl" alt="@($"Frame {displayedNextFrame}")" />
+                                <div class="trim-preview-thumb-label @(IsFrameInTrimRange(displayedNextFrame) ? "trim-range-active" : "trim-range-cut")">@displayedNextFrame</div>
                             </button>
                         }
                     }
@@ -615,6 +617,8 @@
 
     private string _prevThumbUrl = "";
     private string _nextThumbUrl = "";
+    private int _prevThumbFrame = -1;
+    private int _nextThumbFrame = -1;
 
     private const int MaxClientFrameCacheEntries = 360;
     private readonly object _frameCacheLock = new object();
@@ -1016,6 +1020,8 @@
         _isFrameLoading = false;
         _prevThumbUrl = "";
         _nextThumbUrl = "";
+        _prevThumbFrame = -1;
+        _nextThumbFrame = -1;
         ClearFrameCache();
         RequestFrameLoad();
         StateHasChanged();
@@ -1186,6 +1192,8 @@
         _waveformImageUrl = "";
         _prevThumbUrl = "";
         _nextThumbUrl = "";
+        _prevThumbFrame = -1;
+        _nextThumbFrame = -1;
         ClearFrameCache();
         _sessionExpired = false;
         _reconnecting = false;
@@ -1735,22 +1743,25 @@
 
         var prev = centerFrame - 1;
         var next = centerFrame + 1;
+        var sessionId = _sessionId;
+        var pendingLoads = new List<Task>(2);
 
         if (prev >= 0)
         {
             if (TryGetCachedFrameUrl(prev, out var url))
             {
                 _prevThumbUrl = url;
+                _prevThumbFrame = prev;
             }
             else
             {
-                _prevThumbUrl = "";
-                _ = FetchFrameIntoCacheAsync(prev, centerFrame, reqToken);
+                pendingLoads.Add(FetchFrameIntoCacheAsync(prev, centerFrame, reqToken));
             }
         }
         else
         {
             _prevThumbUrl = "";
+            _prevThumbFrame = -1;
         }
 
         if (next >= 0 && next < _session.NumFrames)
@@ -1758,18 +1769,42 @@
             if (TryGetCachedFrameUrl(next, out var url))
             {
                 _nextThumbUrl = url;
+                _nextThumbFrame = next;
             }
             else
             {
-                _nextThumbUrl = "";
-                _ = FetchFrameIntoCacheAsync(next, centerFrame, reqToken);
+                pendingLoads.Add(FetchFrameIntoCacheAsync(next, centerFrame, reqToken));
             }
         }
         else
         {
             _nextThumbUrl = "";
+            _nextThumbFrame = -1;
         }
 
+        await InvokeAsync(StateHasChanged);
+
+        if (pendingLoads.Count == 0)
+        {
+            return;
+        }
+
+        await Task.WhenAll(pendingLoads);
+        if (_disposed || _session == null || reqToken != _thumbRequestToken || centerFrame != _currentFrame || sessionId != _sessionId)
+        {
+            return;
+        }
+
+        if (prev >= 0 && TryGetCachedFrameUrl(prev, out var loadedPrevUrl))
+        {
+            _prevThumbUrl = loadedPrevUrl;
+            _prevThumbFrame = prev;
+        }
+        if (next < _session.NumFrames && TryGetCachedFrameUrl(next, out var loadedNextUrl))
+        {
+            _nextThumbUrl = loadedNextUrl;
+            _nextThumbFrame = next;
+        }
         await InvokeAsync(StateHasChanged);
     }
 
@@ -1848,10 +1883,12 @@
                 if (frameNumber == centerFrame - 1 && TryGetCachedFrameUrl(frameNumber, out var prevUrl))
                 {
                     _prevThumbUrl = prevUrl;
+                    _prevThumbFrame = frameNumber;
                 }
                 else if (frameNumber == centerFrame + 1 && TryGetCachedFrameUrl(frameNumber, out var nextUrl))
                 {
                     _nextThumbUrl = nextUrl;
+                    _nextThumbFrame = frameNumber;
                 }
                 await InvokeAsync(StateHasChanged);
             }
