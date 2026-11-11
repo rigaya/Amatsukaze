@@ -1149,11 +1149,11 @@ namespace Amatsukaze.Server
             keyValueBool("自動ビットレート指定", profile.AutoBuffer);
             keyValue("自動ビットレート係数", string.Format("{0}:{1}:{2}", profile.Bitrate.A, profile.Bitrate.B, profile.Bitrate.H264));
             keyValueBool("ニコニコ実況コメントを有効にする", profile.EnableNicoJK);
-            keyValue("別局の初回放送の実況コメント", profile.NicoJKReferenceMode switch
+            keyValue("アニメの先行放送のコメント", profile.NicoJKReferenceMode switch
             {
                 1 => "置き換える",
                 2 => "統合する",
-                _ => "使わない"
+                _ => "使用しない"
             });
             keyValueBool("ニコニコ実況コメントのエラーを無視する", profile.IgnoreNicoJKError);
             keyValueBool("NicoJKログから優先的にコメントを取得する", profile.NicoJKLog);

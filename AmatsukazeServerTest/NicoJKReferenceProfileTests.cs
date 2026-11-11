@@ -28,7 +28,7 @@ public sealed class NicoJKReferenceProfileTests
     }
 
     [Theory]
-    [InlineData(0, "使わない")]
+    [InlineData(0, "使用しない")]
     [InlineData(1, "置き換える")]
     [InlineData(2, "統合する")]
     public void 設定を保存復元して一覧に表示する(int mode, string label)
@@ -40,7 +40,7 @@ public sealed class NicoJKReferenceProfileTests
         var restored = ServerSupport.NormalizeProfile(Assert.IsType<ProfileSetting>(serializer.ReadObject(stream)));
         Assert.Equal(mode, restored.NicoJKReferenceMode);
         var description = restored.ToLongString();
-        Assert.Contains("別局の初回放送の実況コメント", description);
+        Assert.Contains("アニメの先行放送のコメント", description);
         Assert.Contains(label, description);
     }
 
@@ -49,7 +49,7 @@ public sealed class NicoJKReferenceProfileTests
     [InlineData(3)]
     [InlineData(int.MinValue)]
     [InlineData(int.MaxValue)]
-    public void 範囲外の値は使わないに戻す(int mode)
+    public void 範囲外の値は使用しないに戻す(int mode)
     {
         var profile = ServerSupport.NormalizeProfile(new ProfileSetting { NicoJKReferenceMode = mode });
         Assert.Equal(0, profile.NicoJKReferenceMode);
