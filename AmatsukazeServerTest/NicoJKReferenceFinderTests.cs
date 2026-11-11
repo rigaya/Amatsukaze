@@ -446,6 +446,85 @@ public sealed class NicoJKReferenceFinderTests
         Assert.Contains("ChID=67", f.Requests[0]);
     }
 
+    [Theory]
+    [InlineData(1, "replace")]
+    [InlineData(2, "merge")]
+    public async Task 同時刻でjk番号が違う局の録画を置き換えと統合に使う(int mode, string argument)
+    {
+        using var f = new Fixture();
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 6, "2", "2026-10-11 01:00:00"));
+        var reference = f.AddRecording("ゾンビさがしてます_同時刻.ts", 1064, Fixture.Target);
+        var result = await f.Finder.GetArgumentsAsync(f.QueueItem(),
+            new ProfileSetting { EnableNicoJK = true, NicoJKReferenceMode = mode }, f.Logs.Add);
+        Assert.Equal((" --nicojk-ref \"" + reference + "\" --nicojk-ref-mode " + argument, false), result);
+        Assert.Equal(reference, Assert.Single(f.Reads));
+    }
+
+    [Fact]
+    public async Task 同時刻でjk番号が同じ局の録画は使わない()
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 6, "2", "2026-10-11 01:00:00"));
+        f.AddRecording("ゾンビさがしてます_同時刻.ts", 1064, Fixture.Target);
+        Assert.Equal(("", false), await f.AffiliateArguments());
+        Assert.Empty(f.Reads);
+    }
+
+    [Fact]
+    public async Task 五分を超えて早い同じjk番号の局の録画は使える()
+    {
+        using var f = new Fixture();
+        f.SetAffiliate();
+        var start = Fixture.Target.AddSeconds(-301);
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 6, "2",
+            start.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        var reference = f.AddRecording("ゾンビさがしてます_先行.ts", 1064, start);
+        Assert.Equal((" --nicojk-ref \"" + reference + "\" --nicojk-ref-mode replace", false), await f.AffiliateArguments());
+        Assert.Equal(reference, Assert.Single(f.Reads));
+    }
+
+    [Fact]
+    public async Task 応答が同時刻の放送から並んでいても早い放送を優先する()
+    {
+        using var f = new Fixture();
+        f.Episodes = Fixture.Programs(
+            Fixture.Program(8028, 20, "2", "2026-10-11 01:00:00"),
+            Fixture.Program(8028, 6, "2", "2026-10-10 23:30:00"));
+        var simultaneous = f.AddRecording("a_ゾンビさがしてます_同時刻.ts", 333, Fixture.Target);
+        var earlier = f.AddRecording("z_ゾンビさがしてます_先行.ts", 1064, Fixture.Earlier);
+        File.SetLastWriteTime(simultaneous, Fixture.Target.AddMinutes(30));
+        File.SetLastWriteTime(earlier, Fixture.Earlier.AddMinutes(30));
+        Assert.Equal(earlier, await f.Find());
+        Assert.Equal(earlier, Assert.Single(f.Reads));
+    }
+
+    [Theory]
+    [InlineData(false, -301, true)]
+    [InlineData(false, -300, true)]
+    [InlineData(false, -299, true)]
+    [InlineData(false, 299, true)]
+    [InlineData(false, 300, true)]
+    [InlineData(false, 301, false)]
+    [InlineData(true, -301, true)]
+    [InlineData(true, -300, false)]
+    [InlineData(true, -299, false)]
+    [InlineData(true, 299, false)]
+    [InlineData(true, 300, false)]
+    [InlineData(true, 301, false)]
+    public async Task 候補の前後五分の境界ではjk番号によって選別する(bool sameJK, int difference, bool found)
+    {
+        using var f = new Fixture();
+        if (sameJK) f.SetAffiliate();
+        var start = Fixture.Target.AddSeconds(difference);
+        f.Episodes = Fixture.Programs(Fixture.Program(8028, 6, "2",
+            start.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        var reference = f.AddRecording("ゾンビさがしてます_境界.ts", 1064, start);
+        var result = await f.Finder.FindAsync(f.Source, sameJK ? 3088 : 151, Fixture.Target, f.Logs.Add);
+        Assert.Equal(found ? reference : null, result.Reference);
+        Assert.Equal(found ? 1 : 0, f.Reads.Count);
+    }
+
     private static string ChangePrograms(string xml, Action<XElement> change)
     {
         var doc = XDocument.Parse(xml);

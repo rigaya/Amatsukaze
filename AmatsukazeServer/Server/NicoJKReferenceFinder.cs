@@ -15,7 +15,7 @@ using System.Xml.Linq;
 
 namespace Amatsukaze.Server
 {
-    // 別局の先行放送と、同じフォルダにあるその録画を探す。
+    // 別局の先行放送・同時刻の放送と、同じフォルダにあるその録画を探す。
     public sealed class NicoJKReferenceFinder
     {
         private const int HttpTimeoutSeconds = 10;
@@ -211,10 +211,10 @@ namespace Amatsukaze.Server
                     log(simulcast ? "別局実況: キー局の同じ回と開始差が5分以内の同時ネットです" :
                         "別局実況: キー局の同じ回が開始差5分以内にないため遅れネット・独自枠と判断しました");
                 }
-                var candidates = SelectCandidates(broadcasts, target, channel, tid, count, channels);
+                var candidates = SelectCandidates(broadcasts, target, channel, tid, count, channels, commentServices, serviceId);
                 if (candidates.Length == 0)
                 {
-                    log("別局実況: 実況のある別局の先行放送がありません");
+                    log("別局実況: 実況のある別局の先行放送・同時刻の放送がありません");
                     return (null, replaceOnly);
                 }
                 var titleXml = await LoadAsync("TitleLookup&TID=" + tid, true, log);
@@ -270,14 +270,24 @@ namespace Amatsukaze.Server
         }
 
         private static XElement[] SelectCandidates(XDocument broadcasts, XElement target, int channel, int tid, string count,
-            List<(int Channel, int ServiceId, string Name, bool Reference)> channels)
+            List<(int Channel, int ServiceId, string Name, bool Reference)> channels, Dictionary<int, int> commentServices, int serviceId)
         {
-            return broadcasts.Descendants("ProgItem").Where(item =>
-                (int?)item.Element("Deleted") != 1 && (int?)item.Element("ChID") != channel &&
-                (int?)item.Element("TID") == tid && (string)item.Element("Count") == count &&
-                channels.Any(candidate => candidate.Channel == (int?)item.Element("ChID") && candidate.Reference) &&
-                Start(item) < Start(target))
-                .OrderBy(Start).ToArray();
+            var candidates = new List<XElement>();
+            var targetStart = Start(target);
+            int targetJK = commentServices.GetValueOrDefault(serviceId);
+            foreach (var item in broadcasts.Descendants("ProgItem"))
+            {
+                if ((int?)item.Element("Deleted") == 1 || (int?)item.Element("ChID") == channel ||
+                    (int?)item.Element("TID") != tid || (string)item.Element("Count") != count) continue;
+                var candidate = channels.FirstOrDefault(c => c.Channel == (int?)item.Element("ChID") && c.Reference);
+                if (candidate.Channel == 0) continue;
+                double difference = (Start(item) - targetStart).TotalSeconds;
+                // 同時刻に同じjk番号を使うと、同じコメントを二重に付けることになる。
+                if (difference < -ReferenceToleranceSeconds ||
+                    (Math.Abs(difference) <= ReferenceToleranceSeconds && commentServices.GetValueOrDefault(candidate.ServiceId) != targetJK))
+                    candidates.Add(item);
+            }
+            return candidates.OrderBy(Start).ToArray();
         }
 
         private string FindRecording(string sourcePath, string[] names, XElement[] candidates,
@@ -332,7 +342,7 @@ namespace Amatsukaze.Server
                     log("別局実況: この候補の録画が見つかりません");
                 }
             }
-            log("別局実況: 利用できる先行放送の録画がありません");
+            log("別局実況: 利用できる先行放送・同時刻の放送の録画がありません");
             return null;
         }
     }

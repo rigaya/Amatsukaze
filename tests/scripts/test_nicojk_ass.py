@@ -259,6 +259,23 @@ class TimeMapTests(unittest.TestCase):
         self.assertEqual([chat.get("no") for chat in result], ["7", "42", "42"])
         self.assertEqual(sum(chat.text == "同じ本文" for chat in result), 2)
 
+    def test_統合デバッグで基準だけ末尾に黄色を足す(self):
+        reference = '<packet><chat vpos="100" mail="red ue big blue2 #112233">基準</chat>' \
+                    '<chat vpos="200">色なし基準</chat></packet>'
+        target = '<packet><chat vpos="300" mail="shita small cyan">対象</chat></packet>'
+        with mock.patch.dict(os.environ, {"AMATSUKAZE_NICOJK_MERGE_DEBUG": "1"}):
+            chats = ET.fromstring(NICOJK.merge_comments(reference, target)).findall("chat")
+        self.assertEqual([chat.get("mail") for chat in chats], ["red ue big blue2 #112233 yellow", "yellow", "shita small cyan"])
+        self.assertEqual([chat.text for chat in chats], ["基準", "色なし基準", "対象"])
+
+    def test_統合デバッグ指定がなければ両局の色を保持する(self):
+        reference = '<packet><chat vpos="100" mail="ue red">基準</chat></packet>'
+        target = '<packet><chat vpos="200" mail="blue">対象</chat></packet>'
+        with mock.patch.dict(os.environ):
+            os.environ.pop("AMATSUKAZE_NICOJK_MERGE_DEBUG", None)
+            chats = ET.fromstring(NICOJK.merge_comments(reference, target)).findall("chat")
+        self.assertEqual([chat.get("mail") for chat in chats], ["ue red", "blue"])
+
     def test_ファイルと対応表だけならAPIを使わず配置は1回(self):
         code, chats, api, converter, _ = self.run_main(self.argv([
             "--input", str(self.write_comments()), "--timemap", str(self.write_map([[0, 2, 2, 6]]))]),

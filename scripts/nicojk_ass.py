@@ -261,6 +261,10 @@ def merge_comments(reference_xml, target_xml):
     """両局のコメントを時刻順に混ぜ、重複を残したまま1回の配置へ渡す。"""
     reference = ET.fromstring(reference_xml)
     target = ET.fromstring(target_xml)
+    if os.environ.get("AMATSUKAZE_NICOJK_MERGE_DEBUG") == "1":
+        # danmaku2assは後に書いた色を使うので、末尾に足せば元の色より優先される。
+        for chat in reference.findall("chat"):
+            chat.set("mail", (chat.get("mail", "") + " yellow").strip())
     chats = reference.findall("chat") + target.findall("chat")
     root = ET.Element("packet")
     for chat in sorted(chats, key=lambda item: int(item.get("vpos"))):
