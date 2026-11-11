@@ -339,7 +339,12 @@ bool NicoJK::resolveSource(time_t startTime, int duration) {
     if (!source_.specified && source_.file.empty()) return false;
     sourceScript_ = setting_.getNicoJKAssPath();
     if (sourceScript_.empty()) sourceScript_ = PathCombineS(GetModuleDirectory(), _T("nicojk_ass.py"));
-    if (!File::exists(sourceScript_)) THROW(RuntimeException, "nicojk_ass.pyが見つかりません");
+    const bool hasScript = File::exists(sourceScript_);
+    if (!source_.ref.empty() && source_.file.empty() && (!hasScript || ResolvePythonCommand().empty())) {
+        ctx.warn(_T("nicojk_ass.pyまたはPython 3が見つからないため、基準録画を使わず通常の実況取得に戻ります"));
+        return false;
+    }
+    if (!hasScript) THROW(RuntimeException, "nicojk_ass.pyが見つかりません");
     const double program = source_.programStart.value_or((double)startTime);
     if (!source_.file.empty() && source_.ref.empty()) {
         const auto python = ResolvePythonCommand();
@@ -406,13 +411,13 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
         if (resolveSource(startTime, duration)) {
             if (source_.ref.empty()) return makeSourceASS(serviceId, startTime, duration);
             if (prepareReferenceSource(serviceId, startTime, duration)) return makeASSByScript(startTime, duration);
-            // 基準用のファイルは対象側へ流用せず、元のAPI/旧経路へ戻る。
-            source_ = NicoJKSourceSpec();
-            timeMapPath_.clear();
-            scriptDuration_ = 0;
-            mergeChannel_ = -1;
-            sourceScript_.clear();
         }
+        // 基準の照合や実行環境が使えない場合も、取得元を残さず元のAPI/旧経路へ戻る。
+        source_ = NicoJKSourceSpec();
+        timeMapPath_.clear();
+        scriptDuration_ = 0;
+        mergeChannel_ = -1;
+        sourceScript_.clear();
     } catch (Exception& e) {
         isFail_ = true;
         ctx.errorF(_T("実況コメントの生成に失敗: %s"), e.message());
