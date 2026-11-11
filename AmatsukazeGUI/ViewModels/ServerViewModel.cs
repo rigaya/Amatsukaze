@@ -151,8 +151,8 @@ namespace Amatsukaze.ViewModels
 
         private async Task RealCloseWindow()
         {
-            CanCloseWindow = true;
             await DispatcherHelper.UIDispatcher.BeginInvoke((Action)(() => {
+                CanCloseWindow = true;
                 Messenger.Raise(new WindowActionMessage(WindowAction.Close, "WindowAction"));
             }));
         }
