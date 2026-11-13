@@ -468,6 +468,8 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClInclude Include="HEVCVideoParser.h" />
     <ClInclude Include="InterProcessComm.h" />
     <ClInclude Include="JpegCompress.h" />
+    <ClInclude Include="FilterPreview.h" />
+    <ClInclude Include="FilterPreview.hpp" />
     <ClInclude Include="PreviewColor.h" />
     <ClInclude Include="LogoScan.h" />
     <ClInclude Include="LogoDecodeSession.h" />

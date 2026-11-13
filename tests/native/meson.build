@@ -167,3 +167,11 @@ test('LatmToAdtsTests', latm_to_adts_tests,
   suite : 'native',
   timeout : 30,
 )
+
+filter_preview_tests = executable('FilterPreviewTests',
+  'FilterPreviewTests.cpp',
+  dependencies : [amatsukaze_dep] + amatsukaze_deps,
+  cpp_args : host_machine.system() == 'windows' ? ['-DAMATSUKAZE_IMPORTS'] : [],
+  install : false,
+)
+test('FilterPreviewTests', filter_preview_tests, suite : 'native', timeout : 30)

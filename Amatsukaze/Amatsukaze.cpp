@@ -9,6 +9,7 @@
 #include "AmatsukazeCLI.hpp"
 #include "LogoGUISupport.hpp"
 #include "TrimAdjust.hpp"
+#include "FilterPreview.hpp"
 
 // Avisynthフィルタデバッグ用
 #include "TextOut.cpp"

@@ -165,6 +165,12 @@
     <ClInclude Include="JpegCompress.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="FilterPreview.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="FilterPreview.hpp">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="PreviewColor.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
