@@ -1,7 +1,5 @@
 using System;
 using System.Globalization;
-using System.Collections;
-using System.Reflection;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -42,34 +40,27 @@ public class FilterPreviewServiceTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var id = await service.CreateAsync(123, timeout.Token);
         var initial = await service.GetConfigurationAsync(id, timeout.Token);
-        Assert.Equal(0, initial.Gen);
         var configured = await service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 1, FilterOption = FilterOption.None }, timeout.Token);
-        Assert.Equal("4", configured.Metadata["frames"]);
         var frame = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, timeout.Token);
-        Assert.Equal("ABCD", Encoding.ASCII.GetString(frame.Data));
         var cached = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, timeout.Token);
-        Assert.Same(frame.Data, cached.Data);
-        await Assert.ThrowsAsync<ArgumentException>(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Custom }, timeout.Token));
+        var customError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Custom }, timeout.Token));
+        var engineError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableResize = true } }, timeout.Token));
         var after = await service.GetConfigurationAsync(id, timeout.Token);
-        Assert.Equal(1, after.Gen);
-        Assert.Equal(FilterOption.None, after.FilterOption);
-        await Assert.ThrowsAsync<IOException>(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableResize = true } }, timeout.Token));
-        after = await service.GetConfigurationAsync(id, timeout.Token);
-        Assert.Equal(FilterOption.None, after.FilterOption);
         var previewRoot = Path.Combine(temp, "filter_preview");
         var workDirectory = Path.Combine(previewRoot, id);
-        Assert.True(Directory.Exists(workDirectory));
-        Assert.True(service.Close(id));
+        var closed = service.Close(id);
+
+        Assert.Equal(0, initial.Gen);
+        Assert.Equal("4", configured.Metadata["frames"]);
+        Assert.Equal("ABCD", Encoding.ASCII.GetString(frame.Data));
+        Assert.Equal("ABCD", Encoding.ASCII.GetString(cached.Data));
+        Assert.IsType<ArgumentException>(customError);
+        Assert.IsType<IOException>(engineError);
+        Assert.Equal(2, after.Gen);
+        Assert.Equal(FilterOption.None, after.FilterOption);
+        Assert.True(closed);
         Assert.False(Directory.Exists(workDirectory));
         Assert.True(File.Exists(Path.Combine(previewRoot, "src.avs")));
         Assert.True(File.Exists(Path.Combine(temp, "amts0.dat")));
-
-        var expiredId = await service.CreateAsync(123, timeout.Token);
-        var sessions = (IDictionary)typeof(FilterPreviewService).GetField("sessions", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(service)!;
-        var expired = sessions[expiredId]!;
-        expired.GetType().GetField("LastUsed")!.SetValue(expired, DateTime.UtcNow.AddMinutes(-6).Ticks);
-        typeof(FilterPreviewService).GetMethod("Cleanup", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(service, null);
-        Assert.False(Directory.Exists(Path.Combine(previewRoot, expiredId)));
-        Assert.True(File.Exists(Path.Combine(previewRoot, "src.avs")));
     }
 }

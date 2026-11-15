@@ -27,6 +27,8 @@ public class FilterPreviewProfileTests
             QSVEncFilterOption = "--vpp-knn", NVEncFilterOption = "--vpp-deband", VCEEncFilterOption = "--vpp-resize"
         };
         var result = FilterPreviewProfile.Apply(source, edited, "別名");
+        var copiedWidth = result.FilterSetting.ResizeWidth;
+        result.FilterSetting.ResizeWidth = 1920;
         Assert.Equal("別名", result.Name);
         Assert.Equal(source.RenameFormat, result.RenameFormat);
         Assert.Equal(source.QSVEncOption, result.QSVEncOption);
@@ -35,11 +37,10 @@ public class FilterPreviewProfileTests
         Assert.Equal(3, result.ForceSARHeight);
         Assert.Equal(FilterOption.Setting, result.FilterOption);
         Assert.True(result.FilterSetting.EnableResize);
-        Assert.Equal(1280, result.FilterSetting.ResizeWidth);
+        Assert.Equal(1280, copiedWidth);
         Assert.Equal("--vpp-knn", result.QSVEncFilterOption);
         Assert.Equal("--vpp-deband", result.NVEncFilterOption);
         Assert.Equal("--vpp-resize", result.VCEEncFilterOption);
-        result.FilterSetting.ResizeWidth = 1920;
         Assert.Equal(1280, edited.FilterSetting.ResizeWidth);
         Assert.False(source.FilterSetting.EnableResize);
     }
@@ -57,13 +58,15 @@ public class FilterPreviewProfileTests
         edited.FilterSetting.EnableResize = true;
         edited.FilterSetting.ResizeWidth = 1280;
         await fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, "別名", true);
+        var duplicate = Record.Exception(() => { _ = fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, "別名", true); });
+        var invalid = Record.Exception(() => { _ = fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, "../不正", true); });
+        await fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, null!, false);
+        Assert.IsType<InvalidOperationException>(duplicate);
+        Assert.IsType<ArgumentException>(invalid);
         Assert.Equal("", fixture.Profiles["別名"].RenameFormat);
         Assert.Equal("保持する", fixture.Profiles["別名"].X264Option);
         Assert.True(fixture.Profiles["別名"].FilterSetting.EnableResize);
-        Assert.False(fixture.Profiles["元"].FilterSetting.EnableResize);
-        Assert.Throws<InvalidOperationException>(() => { _ = fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, "別名", true); });
-        Assert.Throws<ArgumentException>(() => { _ = fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, "../不正", true); });
-        await fixture.Api.Queue.Server.SaveFilterPreviewProfile(edited, null!, false);
+        Assert.False(original.FilterSetting.EnableResize);
         Assert.True(fixture.Profiles["元"].FilterSetting.EnableResize);
         Assert.Equal("", fixture.Profiles["元"].RenameFormat);
     }

@@ -54,9 +54,12 @@ public class FilterPreviewScriptTests
         {
             foreach (var name in new[] { "a.dll", "a_avx.dll", "a_avx2.dll", "b.dll", "c_avx2.dll" })
                 File.WriteAllText(Path.Combine(dir, name), "");
-            Assert.Equal(new[] { "a.dll", "b.dll" }, Array.ConvertAll(FilterPreviewScripts.SelectPlugins(dir, false, false).ToArray(), Path.GetFileName));
-            Assert.Equal(new[] { "a_avx.dll", "b.dll" }, Array.ConvertAll(FilterPreviewScripts.SelectPlugins(dir, true, false).ToArray(), Path.GetFileName));
-            Assert.Equal(new[] { "a_avx2.dll", "b.dll", "c_avx2.dll" }, Array.ConvertAll(FilterPreviewScripts.SelectPlugins(dir, true, true).ToArray(), Path.GetFileName));
+            var noAvx = Array.ConvertAll(FilterPreviewScripts.SelectPlugins(dir, false, false).ToArray(), Path.GetFileName);
+            var avx = Array.ConvertAll(FilterPreviewScripts.SelectPlugins(dir, true, false).ToArray(), Path.GetFileName);
+            var avx2 = Array.ConvertAll(FilterPreviewScripts.SelectPlugins(dir, true, true).ToArray(), Path.GetFileName);
+            Assert.Equal(new[] { "a.dll", "b.dll" }, noAvx);
+            Assert.Equal(new[] { "a_avx.dll", "b.dll" }, avx);
+            Assert.Equal(new[] { "a_avx2.dll", "b.dll", "c_avx2.dll" }, avx2);
         }
         finally
         {
