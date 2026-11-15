@@ -212,8 +212,8 @@ namespace Amatsukaze.Server.Rest
                 if (primaryNames.TryGetValue(session.Format.ColorPrimaries, out var primaries)) cmd["primaries"] = primaries;
                 if (transferNames.TryGetValue(session.Format.TransferCharacteristics, out var transfer)) cmd["transfer"] = transfer;
                 if (matrixNames.TryGetValue(session.Format.ColorSpace, out var matrix)) cmd["matrix"] = matrix;
-                session.Generation = request.Gen;
                 pending = session.Engine.RequestAsync(cmd, request.Gen, false, cancellation);
+                session.Generation = request.Gen;
             }
             finally { session.ConfigLock.Release(); }
             var reply = await pending.ConfigureAwait(false);

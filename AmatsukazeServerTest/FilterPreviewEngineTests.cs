@@ -24,6 +24,34 @@ public class FilterPreviewEngineTests
         Assert.Equal("2", frame.Metadata["width"]);
     }
     [Fact]
+    public async Task 新しい設定は古い設定の待機を解除する()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        const string script = """
+            printf 'AMTPREVIEW READY version=1\n'
+            read first
+            read second
+            case "$first" in *'"gen":1'*) ;; *) exit 1;; esac
+            case "$second" in *'"gen":2'*) ;; *) exit 1;; esac
+            printf 'AMTPREVIEW INFO gen=2 frames=4\n'
+            read line
+            """;
+        using var engine = new FilterPreviewEngine("/bin/sh", new[] { "-c", script });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await engine.WaitReadyAsync(timeout.Token);
+        var old = engine.RequestAsync(new Dictionary<string, object> { ["cmd"] = "config" }, 1, false, timeout.Token);
+        var next = engine.RequestAsync(new Dictionary<string, object> { ["cmd"] = "config" }, 2, false, timeout.Token);
+        var oldResult = Record.ExceptionAsync(async () => await old);
+        var nextResult = Record.ExceptionAsync(async () => await next);
+        await Task.WhenAll(oldResult, nextResult);
+        var reply = await next;
+        Assert.IsAssignableFrom<OperationCanceledException>(await oldResult);
+        Assert.Null(await nextResult);
+        Assert.Equal("2", reply.Metadata["gen"]);
+        Assert.Equal("4", reply.Metadata["frames"]);
+    }
+
+    [Fact]
     public async Task 呼出前に取り消された要求は取消として終了する()
     {
         if (OperatingSystem.IsWindows()) return;

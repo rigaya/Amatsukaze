@@ -17,7 +17,9 @@ namespace Amatsukaze.Server.Rest
         private readonly Process process;
         private readonly ConcurrentDictionary<(long id, long gen), TaskCompletionSource<Reply>> pending = new();
         private readonly ConcurrentQueue<string> logs = new();
-        private readonly SemaphoreSlim writeLock = new(1, 1);
+        private readonly object requestSync = new();
+        private Task writeTail = Task.CompletedTask;
+        private Exception outputError;
         private readonly TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private long nextId;
         private long currentGeneration;
@@ -93,60 +95,77 @@ namespace Amatsukaze.Server.Rest
                         bytes = new byte[length];
                         await stream.ReadExactlyAsync(bytes).ConfigureAwait(false);
                     }
-                    if (pending.TryRemove((id, gen), out var waiter))
+                    lock (requestSync)
                     {
-                        if (tokens[1] == "ERROR") waiter.TrySetException(new IOException(values.GetValueOrDefault("message", "エンジンエラー")));
-                        else waiter.TrySetResult(new Reply(values, bytes));
+                        if (pending.TryRemove((id, gen), out var waiter))
+                        {
+                            if (tokens[1] == "ERROR") waiter.TrySetException(new IOException(values.GetValueOrDefault("message", "エンジンエラー")));
+                            else waiter.TrySetResult(new Reply(values, bytes));
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
                 ready.TrySetException(ex);
-                foreach (var entry in pending)
-                    if (pending.TryRemove(entry.Key, out var waiter)) waiter.TrySetException(ex);
+                lock (requestSync)
+                {
+                    outputError = ex;
+                    foreach (var entry in pending)
+                        if (pending.TryRemove(entry.Key, out var waiter)) waiter.TrySetException(ex);
+                }
             }
         }
 
-        public async Task<Reply> RequestAsync(Dictionary<string, object> command, long generation, bool frame, CancellationToken cancellation)
+        public Task<Reply> RequestAsync(Dictionary<string, object> command, long generation, bool frame, CancellationToken cancellation)
         {
-            await ready.Task.WaitAsync(cancellation).ConfigureAwait(false);
-            long id = frame ? Interlocked.Increment(ref nextId) : 0;
-            command["gen"] = generation;
-            if (frame) command["id"] = id;
-            var waiter = new TaskCompletionSource<Reply>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!pending.TryAdd((id, generation), waiter)) throw new InvalidOperationException("同じ世代の設定処理が実行中です");
+            cancellation.ThrowIfCancellationRequested();
+            lock (requestSync)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                if (outputError != null) return Task.FromException<Reply>(outputError);
+                long id = frame ? ++nextId : 0;
+                if (frame && generation != currentGeneration) throw new ArgumentException("設定の世代が一致しません");
+                if (!frame && generation <= currentGeneration) throw new ArgumentException("設定の世代が古いです");
+                var message = new Dictionary<string, object>(command) { ["gen"] = generation };
+                if (frame) message["id"] = id;
+                var serialized = JsonSerializer.Serialize(message);
+                var waiter = new TaskCompletionSource<Reply>(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (!pending.TryAdd((id, generation), waiter)) throw new InvalidOperationException("同じ世代の設定処理が実行中です");
+                if (!frame)
+                {
+                    currentGeneration = generation;
+                    foreach (var entry in pending)
+                        if (entry.Key.gen < generation && pending.TryRemove(entry.Key, out var stale)) stale.TrySetCanceled();
+                }
+                // 登録順の送信を予約し、旧世代の応答待ちは書き込み完了を待たずに解除する。
+                writeTail = WriteQueuedAsync(writeTail, serialized, waiter);
+                return AwaitReplyAsync(id, generation, frame, waiter, cancellation);
+            }
+        }
+
+        private async Task WriteQueuedAsync(Task previous, string message, TaskCompletionSource<Reply> waiter)
+        {
             try
             {
-                await writeLock.WaitAsync(cancellation).ConfigureAwait(false);
-                try
-                {
-                    if (frame && generation != currentGeneration) throw new ArgumentException("設定の世代が一致しません");
-                    if (!frame)
-                    {
-                        if (generation <= currentGeneration) throw new ArgumentException("設定の世代が古いです");
-                        currentGeneration = generation;
-                        foreach (var entry in pending)
-                            if (entry.Key.gen < generation && pending.TryRemove(entry.Key, out var stale)) stale.TrySetCanceled();
-                    }
-                    await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(command)).ConfigureAwait(false);
-                    await process.StandardInput.FlushAsync().ConfigureAwait(false);
-                }
-                finally { writeLock.Release(); }
-                return await waiter.Task.WaitAsync(cancellation).ConfigureAwait(false);
+                await previous.ConfigureAwait(false);
+                await ready.Task.ConfigureAwait(false);
+                await process.StandardInput.WriteLineAsync(message).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync().ConfigureAwait(false);
             }
+            catch (Exception ex) { waiter?.TrySetException(ex); }
+        }
+
+        private async Task<Reply> AwaitReplyAsync(long id, long generation, bool frame, TaskCompletionSource<Reply> waiter, CancellationToken cancellation)
+        {
+            try { return await waiter.Task.WaitAsync(cancellation).ConfigureAwait(false); }
             finally
             {
-                pending.TryRemove((id, generation), out _);
-                if (frame && cancellation.IsCancellationRequested)
+                lock (requestSync)
                 {
-                    try
-                    {
-                        await writeLock.WaitAsync().ConfigureAwait(false);
-                        try { await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { cmd = "cancel", id })).ConfigureAwait(false); await process.StandardInput.FlushAsync().ConfigureAwait(false); }
-                        finally { writeLock.Release(); }
-                    }
-                    catch (Exception) { }
+                    pending.TryRemove((id, generation), out _);
+                    if (frame && cancellation.IsCancellationRequested)
+                        writeTail = WriteQueuedAsync(writeTail, JsonSerializer.Serialize(new { cmd = "cancel", id }), null);
                 }
             }
         }
