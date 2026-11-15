@@ -1,0 +1,561 @@
+/* フィルタ調整画面。色はapp.cssの変数を使い、ライト/ダークの両方に合わせる。
+   映像の背景だけは、色の見え方が周りに引っ張られないよう常に中間の暗い灰色にする */
+.fa-page {
+    --fa-offset: calc(var(--topbar-height, 3.5rem) + 2.15rem);
+    --fa-stage-bg: #18191c;
+    --fa-line: var(--border, rgba(128, 128, 128, 0.3));
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--fa-offset));
+    min-height: 480px;
+    overflow: hidden;
+    outline: none;
+    color: var(--text);
+}
+
+/* 上の操作バー */
+.fa-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--fa-line);
+    flex-shrink: 0;
+}
+
+.fa-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    max-width: 32%;
+    margin-right: 4px;
+}
+
+.fa-title-main {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.fa-title-file {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+/* 押しボタンの組(表示・縮小・転送) */
+.fa-segment {
+    display: inline-flex;
+    border: 1px solid var(--input-border, var(--fa-line));
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.fa-segment button {
+    padding: 3px 10px;
+    border: 0;
+    border-left: 1px solid var(--input-border, var(--fa-line));
+    background: var(--input-bg, transparent);
+    color: inherit;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.fa-segment button:first-child {
+    border-left: 0;
+}
+
+.fa-segment button:hover:not(:disabled) {
+    background: var(--accent-soft);
+}
+
+/* 選択中はマウスが乗っていても色を変えない(淡い背景に白字で読めなくなるため) */
+.fa-segment button.is-active,
+.fa-segment button.is-active:hover:not(:disabled) {
+    background: var(--accent-strong);
+    color: #fff;
+}
+
+.fa-segment button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.fa-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.fa-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.fa-status > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fa-status-error {
+    color: var(--update-attention-text, #d33);
+    font-weight: 600;
+}
+
+.fa-spinner {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    border: 2px solid var(--accent-soft);
+    border-top-color: var(--accent-strong);
+    border-radius: 50%;
+    animation: fa-spin 0.8s linear infinite;
+}
+
+@keyframes fa-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 本体: 左が映像、右がフィルタ設定 */
+.fa-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 460px);
+    flex: 1;
+    min-height: 0;
+}
+
+.fa-stage {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* 映像の領域。左右比較では2つを並べ、それぞれをスクロールで見られるようにする */
+.fa-images {
+    position: relative;
+    display: flex;
+    gap: 2px;
+    flex: 1;
+    min-height: 240px;
+    background: var(--fa-stage-bg);
+}
+
+.fa-view {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    display: flex;
+}
+
+.fa-view[hidden] {
+    display: none;
+}
+
+.fa-viewport {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    display: flex;
+}
+
+/* 画像が領域より小さいときは中央に置き、大きいときは左上からスクロールできるようにする */
+.fa-viewport canvas {
+    display: block;
+    margin: auto;
+    flex-shrink: 0;
+}
+
+.fa-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #eee;
+    font-size: 0.75rem;
+    pointer-events: none;
+}
+
+/* 間引かれるフレームは枠の色で知らせる。内側の影は画像に隠れるので、枠だけの層を上に重ねる */
+.fa-view.is-dropped::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 3px solid #d9822b;
+    pointer-events: none;
+}
+
+.fa-badge-drop {
+    top: auto;
+    bottom: 8px;
+    background: #d9822b;
+    color: #1b1206;
+    font-weight: 600;
+}
+
+.fa-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 2;
+}
+
+.fa-overlay-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 24px;
+    border-radius: var(--radius-sm, 8px);
+    background: var(--bg-surface);
+    color: var(--text);
+    box-shadow: var(--shadow-md);
+}
+
+.fa-overlay-box.is-error {
+    color: var(--update-attention-text, #d33);
+}
+
+/* シークバーとコマ送り */
+.fa-transport {
+    padding: 6px 10px 4px;
+    border-top: 1px solid var(--fa-line);
+    flex-shrink: 0;
+}
+
+.fa-seek {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--accent-strong);
+}
+
+.fa-transport-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 0.85rem;
+}
+
+.fa-frame-input {
+    width: 7rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-spacer {
+    flex: 1;
+}
+
+.fa-chip {
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid var(--fa-line);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-chip-accent {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.fa-chip-warn {
+    border-color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 25%, transparent);
+}
+
+/* ボタン */
+.fa-btn {
+    padding: 3px 10px;
+    border: 1px solid var(--input-border, var(--fa-line));
+    border-radius: 6px;
+    background: var(--input-bg, transparent);
+    color: inherit;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.fa-btn:hover:not(:disabled) {
+    background: var(--accent-soft);
+}
+
+.fa-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.fa-btn-primary {
+    border-color: var(--accent-strong);
+    background: var(--accent-strong);
+    color: #fff;
+}
+
+.fa-btn-primary:hover:not(:disabled) {
+    background: var(--accent);
+}
+
+.fa-btn-step {
+    min-width: 34px;
+    font-size: 0.75rem;
+}
+
+/* 拡大範囲の指定。普段は畳んでおき、開いたときだけ上に浮かせる */
+.fa-popover {
+    position: relative;
+}
+
+.fa-popover > summary {
+    list-style: none;
+}
+
+.fa-popover > summary::-webkit-details-marker {
+    display: none;
+}
+
+.fa-popover[open] > summary {
+    background: var(--accent-soft);
+}
+
+.fa-popover-body {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 3;
+    width: 280px;
+    padding: 10px 12px;
+    border: 1px solid var(--fa-line);
+    border-radius: var(--radius-sm, 8px);
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-md);
+}
+
+.fa-popover-body p {
+    margin: 0 0 6px;
+    font-size: 0.78rem;
+}
+
+.fa-crop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    margin: 8px 0;
+}
+
+.fa-crop-grid label {
+    display: flex;
+    white-space: nowrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+}
+
+.fa-crop-grid input {
+    width: 100%;
+    min-width: 0;
+}
+
+/* 注意文 */
+.fa-notices {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 10px;
+    flex-shrink: 0;
+}
+
+.fa-notice {
+    padding: 3px 10px;
+    border-left: 3px solid var(--warning);
+    background: color-mix(in srgb, var(--warning) 14%, transparent);
+    font-size: 0.8rem;
+}
+
+.fa-notice.is-info {
+    border-left-color: var(--fa-line);
+    background: transparent;
+    color: var(--muted);
+}
+
+/* エンジンのログ */
+.fa-log {
+    margin: 2px 10px 8px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.fa-log summary {
+    cursor: pointer;
+    color: var(--muted);
+}
+
+.fa-log-actions {
+    margin: 4px 0;
+}
+
+.fa-log pre {
+    max-height: 14rem;
+    margin: 0;
+    padding: 6px 8px;
+    overflow: auto;
+    white-space: pre-wrap;
+    border: 1px solid var(--console-border, var(--fa-line));
+    border-radius: 6px;
+    background: var(--console-bg);
+    color: var(--console-text);
+}
+
+/* 右列: 上に種類の選択、中を設定欄のスクロール、下に保存を固定 */
+.fa-side {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-left: 1px solid var(--fa-line);
+}
+
+.fa-side-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--fa-line);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.fa-side-head select {
+    flex: 1;
+    min-width: 0;
+}
+
+.fa-side-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6px 10px;
+}
+
+.fa-side-body fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.fa-side-empty {
+    padding: 10px 2px;
+    font-size: 0.82rem;
+}
+
+/* 共通の設定欄は表の形で来るので、狭い右列では見出しを上、中身を下に積む */
+.fa-settings {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.fa-settings ::deep tr {
+    display: block;
+    padding: 4px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--fa-line) 60%, transparent);
+}
+
+.fa-settings ::deep th,
+.fa-settings ::deep td {
+    display: block;
+    padding: 0;
+    border: 0;
+}
+
+.fa-settings ::deep th {
+    margin-bottom: 2px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.fa-settings ::deep select,
+.fa-settings ::deep input[type=text],
+.fa-settings ::deep textarea {
+    max-width: 100%;
+}
+
+.fa-side-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--fa-line);
+    background: var(--glass-strong, var(--bg-surface));
+}
+
+.fa-save-as {
+    display: flex;
+    gap: 6px;
+}
+
+.fa-save-as input {
+    flex: 1;
+    min-width: 0;
+}
+
+.fa-muted {
+    color: var(--muted);
+}
+
+/* 狭い画面では右列を下に回し、ページ全体をスクロールさせる */
+@media (max-width: 900px) {
+    .fa-page {
+        height: auto;
+        overflow: visible;
+    }
+
+    .fa-main {
+        grid-template-columns: 1fr;
+    }
+
+    /* ページ全体がスクロールするので、映像の枠は高さを決めて中をスクロールさせる */
+    .fa-images {
+        flex: none;
+        height: 56vh;
+        min-height: 240px;
+    }
+
+    .fa-side {
+        border-left: 0;
+        border-top: 1px solid var(--fa-line);
+    }
+
+    .fa-side-body {
+        overflow: visible;
+    }
+
+    .fa-title {
+        max-width: 100%;
+        width: 100%;
+    }
+}

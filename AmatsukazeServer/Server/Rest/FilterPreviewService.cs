@@ -24,6 +24,7 @@ namespace Amatsukaze.Server.Rest
     public sealed class FilterPreviewSaveRequest
     {
         public bool SaveAs { get; set; }
+        public bool PreserveCustomFilter { get; set; }
         public string Name { get; set; }
     }
 
@@ -43,8 +44,9 @@ namespace Amatsukaze.Server.Rest
     {
         private sealed class Session : IDisposable
         {
-            public string Directory, WorkDirectory, Id, Dat, ModuleDirectory;
+            public string Directory, WorkDirectory, Id, Dat, ModuleDirectory, SourceName;
             public ProfileSetting Profile;
+            public FilterOption OriginalFilterOption;
             public Setting Setting;
             public FilterPreviewSourceFormat Format;
             public FilterPreviewEngine Engine;
@@ -101,6 +103,8 @@ namespace Amatsukaze.Server.Rest
             var module = AppContext.BaseDirectory;
             var executable = string.IsNullOrWhiteSpace(setting.FilterPreviewEnginePath)
                 ? Path.Combine(module, "HWEncVppPreview.Cli" + (OperatingSystem.IsWindows() ? ".exe" : "")) : setting.FilterPreviewEnginePath;
+            if (string.IsNullOrWhiteSpace(setting.FilterPreviewEnginePath) && !File.Exists(executable))
+                throw new FileNotFoundException("フィルタプレビューエンジンが見つかりません。HWEncVppPreview.Cliをサーバーと同じフォルダへ配置してください", executable);
             var dir = Path.Combine(temp, "filter_preview");
             System.IO.Directory.CreateDirectory(dir);
             var format = readSourceFormat(dat);
@@ -121,7 +125,7 @@ namespace Amatsukaze.Server.Rest
             var engine = new FilterPreviewEngine(executable, args);
             try { System.IO.Directory.CreateDirectory(workDirectory); }
             catch { engine.Dispose(); throw; }
-            var session = new Session { Id = id, Directory = dir, WorkDirectory = workDirectory, Dat = dat, ModuleDirectory = module, Profile = profile, Setting = setting, Format = format, Engine = engine };
+            var session = new Session { OriginalFilterOption = profile.FilterOption, SourceName = item.SrcPath?[(item.SrcPath.LastIndexOfAny(new[] { '/', '\\' }) + 1)..], Id = id, Directory = dir, WorkDirectory = workDirectory, Dat = dat, ModuleDirectory = module, Profile = profile, Setting = setting, Format = format, Engine = engine };
             try
             {
                 await session.Engine.WaitReadyAsync(cancellation).ConfigureAwait(false);
@@ -138,9 +142,16 @@ namespace Amatsukaze.Server.Rest
             return session;
         }
 
-        public static string[] GetNotices(FilterOption option, FilterSetting filter) =>
-            option == FilterOption.Setting && filter?.EnableDeinterlace == true && filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.AutoVfr
-                ? new[] { "Auto_Vfrはプレビュー非対応のため、インタレ解除なしで表示しています" } : Array.Empty<string>();
+        public static string[] GetNotices(FilterOption option, FilterSetting filter, string encoderOptions = null)
+        {
+            var notices = new List<string>();
+            if (option == FilterOption.Setting && filter?.EnableDeinterlace == true && filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.AutoVfr)
+                notices.Add("Auto_Vfrはプレビュー非対応のため、インタレ解除なしで表示しています");
+            if (ProfileSettingExtensions.GetFilterEncoderType(option).HasValue && encoderOptions != null
+                && new[] { "--output-res", "--crop", "--vpp-pad" }.Any(encoderOptions.Contains))
+                notices.Add("エンコーダフィルタによる解像度変更はコンテナのメタデータ(解像度/SAR)に反映されません");
+            return notices.ToArray();
+        }
 
         private static string[] SplitOptions(string options)
         {
@@ -279,13 +290,22 @@ namespace Amatsukaze.Server.Rest
             finally { session.ConfigLock.Release(); }
         }
 
-        public async Task<ProfileSetting> GetEditedProfileAsync(string id, CancellationToken cancellation)
+        public async Task<ProfileSetting> GetEditedProfileAsync(string id, CancellationToken cancellation, bool preserveCustomFilter = false)
         {
             var session = Get(id);
             await session.ConfigLock.WaitAsync(cancellation).ConfigureAwait(false);
-            try { return ServerSupport.DeepCopy(session.Profile); }
+            try
+            {
+                var profile = ServerSupport.DeepCopy(session.Profile);
+                // カスタムを表示用に置き換えただけなら、保存では元の指定を維持する。
+                if (preserveCustomFilter && session.OriginalFilterOption == FilterOption.Custom)
+                    profile.FilterOption = FilterOption.Custom;
+                return profile;
+            }
             finally { session.ConfigLock.Release(); }
         }
+
+        public string GetSourceName(string id) => Get(id, false).SourceName;
 
         public string[] GetLogs(string id) => Get(id, false).Engine.GetLogs();
 

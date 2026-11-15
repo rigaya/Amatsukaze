@@ -64,6 +64,10 @@ echo Using MSBuild: %MSBUILD%
 call "%VCVARS%" x64
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+rem 出力を消す前にフィルタプレビューのソースを確認する。
+"%MSBUILD%" Publish.proj /t:ValidateFilterPreviewSource /nologo
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 if exist ".\publish\win-x64" rmdir /s /q ".\publish\win-x64"
 if exist ".\publish\win-x64" (
   echo Failed to clean the publish output directory.

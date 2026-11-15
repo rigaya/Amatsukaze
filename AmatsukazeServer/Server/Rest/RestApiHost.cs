@@ -1936,7 +1936,11 @@ namespace Amatsukaze.Server.Rest
             {
                 var data = await context.Request.ReadFromJsonAsync<TrimAdjustSessionRequest>();
                 if (data == null) return Results.BadRequest();
-                try { return Results.Json(new { sessionId = await filterPreview.CreateAsync(data.QueueItemId, context.RequestAborted) }); }
+                try
+                {
+                    var sessionId = await filterPreview.CreateAsync(data.QueueItemId, context.RequestAborted);
+                    return Results.Json(new { sessionId, sourceName = filterPreview.GetSourceName(sessionId) });
+                }
                 catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException || ex is TimeoutException || ex is System.ComponentModel.Win32Exception) { return Results.BadRequest(new { message = ex.Message }); }
             });
             app.MapGet("/api/filter-preview/sessions/{sessionId}/config", async (HttpContext context, string sessionId) =>
@@ -1946,18 +1950,21 @@ namespace Amatsukaze.Server.Rest
             });
             app.MapPut("/api/filter-preview/sessions/{sessionId}/config", async (HttpContext context, string sessionId) =>
             {
-                var data = await context.Request.ReadFromJsonAsync<FilterPreviewConfigRequest>();
-                if (data == null) return Results.BadRequest();
                 try
                 {
+                    var node = await System.Text.Json.Nodes.JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+                    // 既存のプロファイルAPIと同じく、XML互換用の拡張情報は編集値から除く。
+                    RemoveExtensionData(node);
+                    var data = node?.Deserialize<FilterPreviewConfigRequest>(CreateRestJsonOptions());
+                    if (data == null) return Results.BadRequest();
                     var reply = await filterPreview.ConfigureAsync(sessionId, data, context.RequestAborted);
-                    var current = await filterPreview.GetConfigurationAsync(sessionId, context.RequestAborted);
+                    var current = await filterPreview.GetEditedProfileAsync(sessionId, context.RequestAborted);
                     var filter = data.FilterSetting ?? current.FilterSetting;
-                    var notices = FilterPreviewService.GetNotices(data.FilterOption, filter);
+                    var notices = FilterPreviewService.GetNotices(data.FilterOption, filter, ProfileSettingExtensions.GetFilterEncoderOption(current));
                     return Results.Json(new { info = reply.Metadata, notices });
                 }
                 catch (KeyNotFoundException) { return Results.NotFound(); }
-                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException) { return Results.BadRequest(new { message = ex.Message }); }
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException || ex is JsonException) { return Results.BadRequest(new { message = ex.Message }); }
             });
             app.MapPost("/api/filter-preview/sessions/{sessionId}/frame", async (HttpContext context, string sessionId) =>
             {
@@ -1993,7 +2000,7 @@ namespace Amatsukaze.Server.Rest
                 if (data == null) return Results.BadRequest();
                 try
                 {
-                    var edited = await filterPreview.GetEditedProfileAsync(sessionId, context.RequestAborted);
+                    var edited = await filterPreview.GetEditedProfileAsync(sessionId, context.RequestAborted, data.PreserveCustomFilter);
                     await server.SaveFilterPreviewProfile(edited, data.Name, data.SaveAs);
                     return Results.Ok();
                 }

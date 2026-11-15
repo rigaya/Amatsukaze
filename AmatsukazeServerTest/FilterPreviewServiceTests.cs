@@ -14,8 +14,10 @@ namespace AmatsukazeServerTest;
 [Collection("REST一時保存先")]
 public class FilterPreviewServiceTests
 {
-    [Fact]
-    public async Task 偽エンジンでセッションの設定取得とフレーム取得を行う()
+    [Theory]
+    [InlineData(FilterOption.None)]
+    [InlineData(FilterOption.Custom)]
+    public async Task 偽エンジンでセッションの設定取得とフレーム取得を行う(FilterOption originalOption)
     {
         if (OperatingSystem.IsWindows()) return;
         await using var fixture = new RestFileSystemFixture();
@@ -32,13 +34,17 @@ public class FilterPreviewServiceTests
         Directory.CreateDirectory(logs);
         File.WriteAllText(Path.Combine(logs, start.ToString("yyyy-MM-dd_HHmmss.fff", CultureInfo.InvariantCulture) + ".txt"), "一時フォルダ: " + temp, Util.AmatsukazeDefaultEncoding);
         var item = RestQueueTestFixture.Item(123, QueueState.Complete);
+        item.SrcPath = @"C:\録画\フィルタ確認.ts";
         item.EncodeStart = start;
         item.Profile = ServerSupport.NormalizeProfile(null!);
         item.Profile.Name = "標準";
+        item.Profile.FilterOption = originalOption;
+        item.Profile.FilterPath = "カスタム.avs";
         await fixture.Api.Queue.Seed(item);
         using var service = new FilterPreviewService(fixture.Api.Queue.Store, _ => new FilterPreviewSourceFormat { Progressive = 0, SarWidth = 4, SarHeight = 3, ColorSpace = 1 });
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var id = await service.CreateAsync(123, timeout.Token);
+        var sourceName = service.GetSourceName(id);
         var initial = await service.GetConfigurationAsync(id, timeout.Token);
         var configured = await service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 1, FilterOption = FilterOption.None }, timeout.Token);
         var frame = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, timeout.Token);
@@ -46,10 +52,16 @@ public class FilterPreviewServiceTests
         var customError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Custom }, timeout.Token));
         var engineError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableResize = true } }, timeout.Token));
         var after = await service.GetConfigurationAsync(id, timeout.Token);
+        var preserved = await service.GetEditedProfileAsync(id, timeout.Token, true);
+        var selected = await service.GetEditedProfileAsync(id, timeout.Token);
         var previewRoot = Path.Combine(temp, "filter_preview");
         var workDirectory = Path.Combine(previewRoot, id);
         var closed = service.Close(id);
 
+        Assert.Equal(originalOption, preserved.FilterOption);
+        Assert.Equal("カスタム.avs", preserved.FilterPath);
+        Assert.Equal(FilterOption.None, selected.FilterOption);
+        Assert.Equal("フィルタ確認.ts", sourceName);
         Assert.Equal(0, initial.Gen);
         Assert.Equal("4", configured.Metadata["frames"]);
         Assert.Equal("ABCD", Encoding.ASCII.GetString(frame.Data));

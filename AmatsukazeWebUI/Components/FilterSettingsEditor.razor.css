@@ -1,0 +1,25 @@
+.profile-filter-panel {
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: var(--radius-sm);
+    padding: 8px 8px 8px 20px;
+    margin-bottom: 8px;
+    background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    font-size: 0.85rem;
+    line-height: 2.0;
+}
+
+.profile-filter-legend {
+    padding: 0;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.profile-filter-legend label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: inherit;
+}

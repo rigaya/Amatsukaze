@@ -81,11 +81,15 @@ namespace Amatsukaze.Server.Rest
                     var tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     if (tokens.Length < 2 || tokens[0] != "AMTPREVIEW") throw new IOException("エンジン応答が不正です");
                     var values = new Dictionary<string, string>(StringComparer.Ordinal);
-                    foreach (var token in tokens.Skip(2))
+                    // ERRORの本文にはid=等を含む外部ログが入るため、ヘッダとして再解釈しない。
+                    var messageStart = tokens[1] == "ERROR" ? line.IndexOf(" message=", StringComparison.Ordinal) : -1;
+                    var headerTokens = messageStart >= 0 ? line[..messageStart].Split(' ', StringSplitOptions.RemoveEmptyEntries) : tokens;
+                    foreach (var token in headerTokens.Skip(2))
                     {
                         int split = token.IndexOf('=');
                         if (split > 0) values[token[..split]] = token[(split + 1)..];
                     }
+                    if (messageStart >= 0) values["message"] = line[(messageStart + " message=".Length)..];
                     if (!values.TryGetValue("gen", out var generation) || !long.TryParse(generation, out var gen)) throw new IOException("エンジン応答に世代がありません");
                     long id = values.TryGetValue("id", out var value) && long.TryParse(value, out var parsed) ? parsed : 0;
                     var bytes = Array.Empty<byte>();

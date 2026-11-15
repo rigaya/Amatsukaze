@@ -1,0 +1,197 @@
+@page "/filter-adjust/{QueueItemId:int}"
+@using Amatsukaze.Shared
+@using System.Globalization
+@using System.Text.Json.Nodes
+@using System.Threading
+@inject IAmatsukazeApi Api
+@inject HttpClient Http
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>フィルタ調整</PageTitle>
+@* 画面全体: 上の操作バー、左の映像、右のフィルタ設定。カット調整と同じく画面の高さに収める *@
+<div class="fa-page" tabindex="0" @onkeydown="OnKeyDown">
+    <header class="fa-toolbar">
+        <div class="fa-title">
+            <span class="fa-title-main">フィルタ調整</span>
+            @if (!string.IsNullOrEmpty(_sourceName))
+            {
+                <span class="fa-title-file" title="@_sourceName">@_sourceName</span>
+            }
+        </div>
+        @* 表示の切り替えは押しボタンの組で並べ、今の状態がひと目で分かるようにする *@
+        <div class="fa-segment" role="group" aria-label="表示">
+            @foreach (var (value, label) in ViewChoices)
+            {
+                <button type="button" class="@(_view == value ? "is-active" : "")" aria-pressed="@(_view == value)"
+                        disabled="@(!CanOperate)" @onclick="() => SetViewAsync(value)">@label</button>
+            }
+        </div>
+        <div class="fa-segment" role="group" aria-label="縮小">
+            @foreach (var (value, label) in ScaleChoices)
+            {
+                <button type="button" class="@(_scale == value ? "is-active" : "")" aria-pressed="@(_scale == value)"
+                        disabled="@(!CanOperate)" @onclick="() => SetScaleAsync(value)">@label</button>
+            }
+        </div>
+        <div class="fa-segment" role="group" aria-label="転送">
+            <button type="button" class="@(_quality == "yuv" ? "is-active" : "")" aria-pressed="@(_quality == "yuv")"
+                    disabled="@(!CanOperate)" @onclick="@(() => SetQualityAsync("yuv"))" title="劣化なしで転送します(既定)">可逆</button>
+            <button type="button" class="@(_quality == "jpeg" ? "is-active" : "")" aria-pressed="@(_quality == "jpeg")"
+                    disabled="@(!CanOperate)" @onclick="@(() => SetQualityAsync("jpeg"))" title="回線が細い場合に使います。細かな差は見えにくくなります">JPEG</button>
+        </div>
+        <label class="fa-switch" title="KFMの間引きで残るフレームだけをコマ送りします">
+            <input type="checkbox" @bind="_decimate" @bind:after="RefreshAsync" disabled="@(!CanOperate)" />
+            <span>間引き後で送る</span>
+        </label>
+        @* 試験はrole=statusの文言で同期するため、エラーは別の要素に出す *@
+        <div class="fa-status">
+            @if (_busy) { <span class="fa-spinner" aria-hidden="true"></span> }
+            <span role="status" aria-live="polite">@_status</span>
+            @if (_error != null && _profile != null)
+            {
+                <span class="fa-status-error" role="alert">@_error</span>
+            }
+        </div>
+    </header>
+
+    @* canvasは初回の描画からDOMに置く必要があるため、読み込み中も枠は出したまま上に重ねて知らせる *@
+    <div class="fa-main">
+        <section class="fa-stage">
+            <div class="fa-images @(_view == "compare" ? "is-compare" : "")">
+                <figure class="fa-view" hidden="@(_view == "after")">
+                    <div class="fa-viewport"><canvas @ref="_beforeCanvas" style="@_beforeStyle"></canvas></div>
+                    <figcaption class="fa-badge">フィルタ前</figcaption>
+                </figure>
+                <figure class="fa-view @(FrameKept == false ? "is-dropped" : "")" hidden="@(_view == "before")">
+                    <div class="fa-viewport"><canvas @ref="_afterCanvas" style="@_afterStyle"></canvas></div>
+                    <figcaption class="fa-badge">フィルタ後</figcaption>
+                    @if (FrameKept == false)
+                    {
+                        <div class="fa-badge fa-badge-drop">間引かれるフレーム</div>
+                    }
+                </figure>
+                @if (_profile == null)
+                {
+                    <div class="fa-overlay">
+                        <div class="fa-overlay-box @(_error != null ? "is-error" : "")">@(_error ?? "読み込み中…")</div>
+                    </div>
+                }
+                else if (_expired)
+                {
+                    <div class="fa-overlay">
+                        <div class="fa-overlay-box">
+                            <div>セッションが終了しました</div>
+                            <div class="fa-muted">無操作で5分経つと終了します。</div>
+                            <button type="button" class="fa-btn fa-btn-primary" @onclick="ReopenAsync">開き直す</button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* シークバーと位置の表示。KFMのときは60fps基準のフレーム番号 *@
+            <div class="fa-transport">
+                <input class="fa-seek" type="range" min="0" max="@MaxFrame" value="@_position"
+                       @oninput="SeekAsync" disabled="@(!CanOperate)" aria-label="シーク" />
+                <div class="fa-transport-row">
+                    <button type="button" class="fa-btn fa-btn-step" @onclick="() => StepAsync(-1)"
+                            disabled="@(!CanOperate || _position <= 0)" title="前のコマ (←)" aria-label="前のコマ">&#x25C0;</button>
+                    <input class="fa-frame-input" type="number" min="0" max="@MaxFrame" value="@_position"
+                           @onchange="SeekAsync" disabled="@(!CanOperate)" aria-label="フレーム番号" />
+                    <span class="fa-muted">/ @MaxFrame</span>
+                    <button type="button" class="fa-btn fa-btn-step" @onclick="() => StepAsync(1)"
+                            disabled="@(!CanOperate || _position >= MaxFrame)" title="次のコマ (→)" aria-label="次のコマ">&#x25B6;</button>
+                    <span class="fa-chip" title="先頭からの時間">@(TimeSpan.FromSeconds(_fps > 0 ? _position / _fps : 0).ToString(@"h\:mm\:ss\.fff", CultureInfo.InvariantCulture))</span>
+                    <span class="fa-chip">@FpsLabel</span>
+                    @if (!string.IsNullOrEmpty(FrameTypeLabel))
+                    {
+                        <span class="fa-chip fa-chip-accent" title="KFMの判定した画種と、60fps単位の表示の長さ">@FrameTypeLabel</span>
+                    }
+                    @if (DecimateInfoMissing)
+                    {
+                        <span class="fa-chip fa-chip-warn" title="古いKFMなどで間引きの情報がないため、間引きなしで表示しています">間引き情報なし</span>
+                    }
+                    <span class="fa-spacer"></span>
+                    <details class="fa-popover">
+                        <summary class="fa-btn">拡大範囲</summary>
+                        <div class="fa-popover-body">
+                            <p class="fa-muted">フィルタ前後で同じ範囲を切り出します。開始位置と寸法は偶数です。</p>
+                            <label class="fa-switch"><input type="checkbox" @bind="_cropEnabled" /><span>範囲を指定</span></label>
+                            <div class="fa-crop-grid">
+                                <label>X<input type="number" min="0" step="2" @bind="_cropX" /></label>
+                                <label>Y<input type="number" min="0" step="2" @bind="_cropY" /></label>
+                                <label>幅<input type="number" min="2" step="2" @bind="_cropWidth" /></label>
+                                <label>高さ<input type="number" min="2" step="2" @bind="_cropHeight" /></label>
+                            </div>
+                            <button type="button" class="fa-btn fa-btn-primary" @onclick="RefreshAsync" disabled="@(!CanOperate)">適用</button>
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+            @* 注意文。サーバーのnoticesと、画面側で分かる注意をまとめて出す *@
+            <div class="fa-notices">
+                @foreach (var notice in _notices)
+                {
+                    <div class="fa-notice">@notice</div>
+                }
+                @if (CustomReplaced)
+                {
+                    <div class="fa-notice">このプロファイルはカスタムフィルタのため、プレビューでは「フィルタなし」で開いています。種類を選び直さずに「プロファイルへ保存」すると、カスタムフィルタの指定は残します。</div>
+                }
+                @if (IsEncoder)
+                {
+                    <div class="fa-notice">コマ送りはソースのフレーム番号基準です。bobやdecimateなどでfpsが変わるフィルタでは、出力フレームを飛ばす場合があります。</div>
+                }
+                <div class="fa-notice is-info">プレビューは近似です。KFMの判定は本番の多パス処理と異なる場合があります。</div>
+            </div>
+
+            <details class="fa-log" @ontoggle="LoadLogsAsync">
+                <summary>エンジンのログ</summary>
+                <div class="fa-log-actions">
+                    <button type="button" class="fa-btn" @onclick="LoadLogsAsync" disabled="@(_sessionId == null)">更新</button>
+                </div>
+                <pre>@string.Join("\n", _logs)</pre>
+            </details>
+        </section>
+
+        <aside class="fa-side">
+            <div class="fa-side-head">
+                <label for="fa-filter-kind">フィルタ設定</label>
+                <select id="fa-filter-kind" value="@FilterKind" @onchange="KindChangedAsync" disabled="@(_expired)">
+                    <option value="None">フィルタなし</option>
+                    <option value="Setting">AviSynthフィルタ</option>
+                    <option value="QSVEncFilter">QSVEncフィルタ</option>
+                    <option value="NVEncFilter">NVEncフィルタ</option>
+                    <option value="VCEEncFilter">VCEEncフィルタ</option>
+                </select>
+            </div>
+            <div class="fa-side-body">
+                @if (_profile == null)
+                {
+                    <div class="fa-muted fa-side-empty">設定を読み込んでいます…</div>
+                }
+                else
+                {
+                    @if (FilterKind == "None")
+                    {
+                        <div class="fa-muted fa-side-empty">フィルタをかけずに表示しています。上で種類を選ぶと設定欄が出ます。</div>
+                    }
+                    <fieldset disabled="@(_expired || _saving)">
+                        <table class="fa-settings"><FilterSettingsEditor Profile="_profile" Options="_options" Changed="SettingsChangedAsync" /></table>
+                    </fieldset>
+                }
+            </div>
+            @* 保存は右列の下に固定し、設定欄を長くスクロールしても届くようにする *@
+            <div class="fa-side-foot">
+                <button type="button" class="fa-btn fa-btn-primary" @onclick="() => SaveAsync(false)"
+                        disabled="@(!Ready || _saving)" title="元のプロファイルのフィルタ設定を上書きします">プロファイルへ保存</button>
+                <div class="fa-save-as">
+                    <input aria-label="別名のプロファイル名" placeholder="新しいプロファイル名" @bind="_saveName" @bind:event="oninput" />
+                    <button type="button" class="fa-btn" @onclick="() => SaveAsync(true)"
+                            disabled="@(!Ready || _saving || string.IsNullOrWhiteSpace(_saveName))">別名で保存</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>

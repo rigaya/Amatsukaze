@@ -9,6 +9,20 @@ namespace AmatsukazeServerTest;
 
 public class FilterPreviewScriptTests
 {
+    [Theory]
+    [InlineData(FilterOption.QSVEncFilter, "--output-res 1280x720", true)]
+    [InlineData(FilterOption.NVEncFilter, "--crop 2,2,2,2", true)]
+    [InlineData(FilterOption.VCEEncFilter, "--vpp-pad left=2", true)]
+    [InlineData(FilterOption.QSVEncFilter, "--vpp-knn strength=0.08", false)]
+    [InlineData(FilterOption.Setting, "--output-res 1280x720", false)]
+    [InlineData(FilterOption.None, "--output-res 1280x720", false)]
+    public void 解像度のメタデータ注意は本番と同じオプションで判定する(FilterOption option, string options, bool expected)
+    {
+        var notices = FilterPreviewService.GetNotices(option, new FilterSetting(), options);
+        Assert.Equal(expected ? 1 : 0, notices.Length);
+        if (expected) Assert.Contains("コンテナのメタデータ", notices[0]);
+    }
+
     [Fact]
     public void KFMは本番のパス指定を維持しプレビューだけリアルタイムにする()
     {

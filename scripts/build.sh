@@ -1,13 +1,16 @@
 #!/bin/sh
 
 usage() {
-    echo "Usage: $0 installdir [builddir] [--debug] [--deps-only] [--native-only] [--dotnet-only]"
+    echo "Usage: $0 installdir [builddir] [--debug] [--deps-only] [--native-only] [--dotnet-only] [--hwenc-vpp-preview-source-dir PATH]"
     echo "  installdir: インストール先ディレクトリ"
     echo "  builddir: ビルド用ディレクトリ (省略時は 'build')"
     echo "  --debug: デバッグビルドを実行 (省略時はリリースビルド)"
     echo "  --deps-only: 依存ライブラリのみビルドして終了"
     echo "  --native-only: ネイティブ側(C++)のビルドと資材の配置のみ行う"
     echo "  --dotnet-only: .NET側のビルドと公開のみ行う"
+    echo "  --hwenc-vpp-preview-source-dir PATH: 別リポジトリのHWEncVppPreviewソース"
+    echo "    省略時はHWENC_VPP_PREVIEW_SOURCE_DIR、次にプロジェクトの隣のHWEncVppPreviewを使用"
+    echo "  HWENC_VPP_PREVIEW_REQUIRED=1: ソースやライセンスの欠損をエラーにする(既定0は警告して同梱を省略)"
     echo ""
     echo "  --native-only と --dotnet-only は、必要なツールチェインの異なる"
     echo "  ビルド環境へ処理を分割するためのもの。同じinstalldirに対して"
@@ -20,14 +23,33 @@ BUILD_NATIVE=true
 BUILD_DOTNET=true
 INSTALL_DIR=""
 BUILD_DIR=""
+HWENC_VPP_PREVIEW_SOURCE_DIR="${HWENC_VPP_PREVIEW_SOURCE_DIR:-}"
+HWENC_VPP_PREVIEW_REQUIRED="${HWENC_VPP_PREVIEW_REQUIRED-0}"
+BUILD_PREVIEW=false
 
 # オプションは位置に依存せず解釈する
-for arg in "$@"; do
+while [ "$#" -gt 0 ]; do
+    arg="$1"
     case "${arg}" in
         --debug)       DEBUG_BUILD=true ;;
         --deps-only)   DEPS_ONLY=true ;;
         --native-only) BUILD_DOTNET=false ;;
         --dotnet-only) BUILD_NATIVE=false ;;
+        --hwenc-vpp-preview-source-dir)
+            if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+                echo "--hwenc-vpp-preview-source-dirにはソースのパスを指定してください。" >&2
+                exit 1
+            fi
+            HWENC_VPP_PREVIEW_SOURCE_DIR="$2"
+            shift
+            ;;
+        --hwenc-vpp-preview-source-dir=*)
+            HWENC_VPP_PREVIEW_SOURCE_DIR="${arg#*=}"
+            if [ -z "${HWENC_VPP_PREVIEW_SOURCE_DIR}" ]; then
+                echo "--hwenc-vpp-preview-source-dirにはソースのパスを指定してください。" >&2
+                exit 1
+            fi
+            ;;
         -h|--help)     usage; exit 0 ;;
         -*)
             echo "不明なオプションです: ${arg}"
@@ -46,6 +68,7 @@ for arg in "$@"; do
             fi
             ;;
     esac
+    shift
 done
 
 if [ -z "${INSTALL_DIR}" ]; then
@@ -60,6 +83,39 @@ fi
 SCRIPT_DIR=`dirname $0`
 SCRIPT_DIR=`cd ${SCRIPT_DIR} && pwd`
 PROJECT_ROOT=`cd ${SCRIPT_DIR}/.. && pwd`
+
+# 依存のみ・ネイティブのみでは、外部リポジトリや.NET SDKを要求しない。
+# ソース指定は作業ディレクトリを移す前に解決し、必須の配布ビルドでは欠損を早期に検出する。
+if [ "${BUILD_DOTNET}" = "true" ] && [ "${DEPS_ONLY}" = "false" ]; then
+    case "${HWENC_VPP_PREVIEW_REQUIRED}" in
+        0|1) ;;
+        *) echo "HWENC_VPP_PREVIEW_REQUIREDには0または1を指定してください。" >&2; exit 1 ;;
+    esac
+    HWENC_VPP_PREVIEW_SOURCE_DIR="${HWENC_VPP_PREVIEW_SOURCE_DIR:-${PROJECT_ROOT}/../HWEncVppPreview}"
+    PREVIEW_SOURCE_ERROR=""
+    if [ ! -f "${HWENC_VPP_PREVIEW_SOURCE_DIR}/src/HWEncVppPreview.Cli/HWEncVppPreview.Cli.csproj" ]; then
+        PREVIEW_SOURCE_ERROR="HWEncVppPreview.Cliのソースが見つかりません: ${HWENC_VPP_PREVIEW_SOURCE_DIR}"
+    else
+        for preview_license in LICENSE THIRD_PARTY_NOTICES.txt; do
+            if [ ! -f "${HWENC_VPP_PREVIEW_SOURCE_DIR}/${preview_license}" ]; then
+                PREVIEW_SOURCE_ERROR="プレビューエンジンの同梱用ライセンスがありません: ${HWENC_VPP_PREVIEW_SOURCE_DIR}/${preview_license}"
+                break
+            fi
+        done
+    fi
+    if [ -n "${PREVIEW_SOURCE_ERROR}" ]; then
+        if [ "${HWENC_VPP_PREVIEW_REQUIRED}" = "1" ]; then
+            echo "${PREVIEW_SOURCE_ERROR}" >&2
+            exit 1
+        fi
+        echo "警告: ${PREVIEW_SOURCE_ERROR}" >&2
+        echo "警告: フィルタプレビューエンジンの同梱をスキップします。" >&2
+        echo "HWENC_VPP_PREVIEW_SOURCE_DIRまたは--hwenc-vpp-preview-source-dirで別リポジトリの場所を指定してください。" >&2
+    else
+        HWENC_VPP_PREVIEW_SOURCE_DIR=`cd "${HWENC_VPP_PREVIEW_SOURCE_DIR}" && pwd` || exit 1
+        BUILD_PREVIEW=true
+    fi
+fi
 
 INSTALL_DIR=`realpath -m "${INSTALL_DIR}"`
 BUILD_DIR="${BUILD_DIR:-build}"
@@ -453,6 +509,29 @@ AmatsukazeDockerConfigFix/AmatsukazeDockerConfigFix.csproj
             exit 1
         fi
     done
+
+    # .NETランタイムとネイティブ依存を内包した自己完結の単一CLIを既定探索先へ同梱する。
+    # 公開先と中間生成物を分離し、他のサーバー実行ファイルへ依存DLLを混ぜない。
+    if [ "${BUILD_PREVIEW}" = "true" ]; then
+        PREVIEW_PROJECT="${HWENC_VPP_PREVIEW_SOURCE_DIR}/src/HWEncVppPreview.Cli/HWEncVppPreview.Cli.csproj"
+        PREVIEW_PUBLISH_DIR="${BUILD_DIR}/filter_preview_publish"
+        PREVIEW_ARTIFACTS_DIR="${BUILD_DIR}/filter_preview_artifacts"
+        echo "フィルタプレビューエンジンを公開します: ${HWENC_VPP_PREVIEW_SOURCE_DIR}"
+        if ! dotnet publish "${PREVIEW_PROJECT}" -c "${DOTNET_PUBLISH_CONFIG}" -r "${DOTNET_RID}" --self-contained true -p:SelfContained=true -p:PublishSelfContained=true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --artifacts-path "${PREVIEW_ARTIFACTS_DIR}" -o "${PREVIEW_PUBLISH_DIR}"; then
+            echo "HWEncVppPreview.Cliの公開に失敗しました。" >&2
+            exit 1
+        fi
+        if [ ! -x "${PREVIEW_PUBLISH_DIR}/HWEncVppPreview.Cli" ]; then
+            echo "プレビューエンジンの実行ファイルが公開されていません。" >&2
+            exit 1
+        fi
+        install -m 755 "${PREVIEW_PUBLISH_DIR}/HWEncVppPreview.Cli" "${INSTALL_DIR}/exe_files/HWEncVppPreview.Cli" || exit 1
+        PREVIEW_LICENSE_DIR="${INSTALL_DIR}/exe_files/licenses/HWEncVppPreview"
+        mkdir -p "${PREVIEW_LICENSE_DIR}" || exit 1
+        for preview_license in LICENSE THIRD_PARTY_NOTICES.txt; do
+            cp "${HWENC_VPP_PREVIEW_SOURCE_DIR}/${preview_license}" "${PREVIEW_LICENSE_DIR}/" || exit 1
+        done
+    fi
 
     # WebUI 静的ファイルの公開（AmatsukazeServer.csproj の AfterPublish を利用）
     WEBUI_PUBLISH_DIR="${BUILD_DIR}/webui_publish"

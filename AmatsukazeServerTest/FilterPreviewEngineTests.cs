@@ -11,6 +11,31 @@ namespace AmatsukazeServerTest;
 public class FilterPreviewEngineTests
 {
     [Fact]
+    public async Task エラー本文のidとgenを応答の識別子として扱わない()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var engine = new FilterPreviewEngine("/bin/sh", new[] { "-c",
+            "printf 'AMTPREVIEW READY version=1\\n'; read line; printf 'AMTPREVIEW INFO gen=1 frames=4\\n'; read line; printf 'AMTPREVIEW ERROR id=1 gen=1 message=外部ログ id=99 gen=88 rc=-55\\n'; read line" });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = await engine.RequestAsync(new Dictionary<string, object> { ["cmd"] = "config" }, 1, false, timeout.Token);
+        var error = await Record.ExceptionAsync(() => engine.RequestAsync(
+            new Dictionary<string, object> { ["cmd"] = "frame" }, 1, true, timeout.Token));
+        var ioError = Assert.IsType<System.IO.IOException>(error);
+        Assert.Equal("外部ログ id=99 gen=88 rc=-55", ioError.Message);
+    }
+
+    [Fact]
+    public async Task 対応しないREADYの版は起動失敗として返す()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var engine = new FilterPreviewEngine("/bin/sh", new[] { "-c", "printf 'AMTPREVIEW READY version=2\\n'; read line" });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var error = await Record.ExceptionAsync(() => engine.WaitReadyAsync(timeout.Token));
+        Assert.IsType<System.IO.IOException>(error);
+        Assert.Contains("バージョン", error.Message);
+    }
+
+    [Fact]
     public async Task 偽エンジンのヘッダとバイナリを続けて受信できる()
     {
         if (OperatingSystem.IsWindows()) return;
