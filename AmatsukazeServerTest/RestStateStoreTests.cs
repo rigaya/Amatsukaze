@@ -114,6 +114,20 @@ public sealed class RestStateStoreTests
     }
 
     [Fact]
+    public async Task フィルタ調整モードは完了後に調整可能になる()
+    {
+        var store = new RestStateStore(null!);
+        var item = RestQueueTestFixture.Item(1, QueueState.Complete);
+        item.Mode = ProcMode.FilterAdjust;
+        await Update(store, UpdateType.Add, item);
+        var dto = Assert.Single(store.GetQueueView(null!).Items);
+        Assert.True(dto.CanTrimAdjust);
+        Assert.Equal(Amatsukaze.Shared.ProcMode.FilterAdjust, dto.Mode);
+        Assert.True(item.Mode.IsAnalysisOnly());
+        Assert.Equal("フィルタ調整", Amatsukaze.Shared.QueueSettingExtensions.GetProcModeDisplay(dto.Mode));
+    }
+
+    [Fact]
     public async Task キューの追加更新移動削除と全同期後の差分を返す()
     {
         var store = new RestStateStore(null!);

@@ -15,3 +15,8 @@ extern "C" AMATSUKAZE_API void* FilterPreview_Open(AMTContext* ctx, const tchar*
 extern "C" AMATSUKAZE_API int FilterPreview_GetFrame(void* p, int n, const uint8_t** planes, int* pitches);
 extern "C" AMATSUKAZE_API int FilterPreview_GetKFMProps(void* p, int n, int* frameType, int* duration);
 extern "C" AMATSUKAZE_API void FilterPreview_Close(void* p);
+
+struct FilterPreviewSourceFormat {
+    int progressive, sarWidth, sarHeight, colorPrimaries, transferCharacteristics, colorSpace;
+};
+extern "C" AMATSUKAZE_API int FilterPreview_GetSourceFormat(AMTContext* ctx, const tchar* path, FilterPreviewSourceFormat* format);

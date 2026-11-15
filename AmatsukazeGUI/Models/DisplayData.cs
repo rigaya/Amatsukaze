@@ -262,6 +262,7 @@ namespace Amatsukaze.Models
                     case QueueState.Encoding:
                         switch (Model.Mode)
                         {
+                            case ProcMode.FilterAdjust:
                             case ProcMode.TrimAdjust:
                             case ProcMode.CMCheck:
                                 return "CM解析中→" + (Model.ConsoleId + 1);

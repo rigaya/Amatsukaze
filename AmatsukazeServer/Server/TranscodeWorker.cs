@@ -501,6 +501,7 @@ namespace Amatsukaze.Server
                     return "エンコード（テスト）";
                 case ProcMode.DrcsCheck:
                     return "DRCSチェック";
+                case ProcMode.FilterAdjust:
                 case ProcMode.TrimAdjust:
                 case ProcMode.CMCheck:
                     return "CM解析";
@@ -516,7 +517,7 @@ namespace Amatsukaze.Server
             {
                 return null;
             }
-            if ((mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust))
+            if (mode.IsAnalysisOnly())
             {
                 return enableCMLogFile ? dstPath + "-cm.log" : null;
             }

@@ -2130,7 +2130,7 @@ namespace Amatsukaze.Server
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
             string inHandle, string outHandle, int pid, DateTime programStart = default, string nicoJKAlt = null, string programTitle = null)
         {
-            if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
+            if (!mode.IsAnalysisOnly() && mode != ProcMode.DrcsCheck && profile != null)
             {
                 CheckDoubleDeinterlace(profile);
             }
@@ -2150,7 +2150,7 @@ namespace Amatsukaze.Server
                 loadV2 = true;
             }
 
-            if ((mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust))
+            if (mode.IsAnalysisOnly())
             {
                 sb.Append(" --mode cm");
             }
@@ -2235,7 +2235,7 @@ namespace Amatsukaze.Server
                     .Append(outputMask);
 
 
-                if ((mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust))
+                if (mode.IsAnalysisOnly())
                 {
                     sb.Append(" --chapter");
                     // CM解析のみでも、プロファイルでチャプター出力が有効ならチャプターファイルを出力する
@@ -2490,7 +2490,7 @@ namespace Amatsukaze.Server
                         }
 
                     }
-                } // if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust))
+                } // if (!mode.IsAnalysisOnly())
 
                 if (!profile.DisableSubs)
                 {
@@ -2636,7 +2636,7 @@ namespace Amatsukaze.Server
                         sb.Append(setting.NumParallelLogoAnalysis);
                     }
                 }
-                if (profile.NoRemoveTmp || mode == ProcMode.TrimAdjust)
+                if (profile.NoRemoveTmp || (mode.IsAnalysisOnly() && mode != ProcMode.CMCheck))
                 {
                     sb.Append(" --no-remove-tmp");
                 }
@@ -3764,6 +3764,31 @@ namespace Amatsukaze.Server
             {
                 profile.RenameFormat = "$SCtitle$\\$SCtitle$ $SCpart$第$SCnumber$話 「$SCsubtitle$」 ($SCservice$) [$SCdate$]";
             }
+        }
+
+        public Task SaveFilterPreviewProfile(ProfileSetting edited, string destination, bool saveAs)
+        {
+            if (edited == null || string.IsNullOrWhiteSpace(edited.Name))
+                throw new ArgumentException("元のプロファイルが指定されていません");
+            if (!profiles.TryGetValue(edited.Name, out var original))
+                throw new InvalidOperationException("元のプロファイルが見つかりません");
+            var name = saveAs ? destination : edited.Name;
+            if (string.IsNullOrWhiteSpace(name) || name == "." || name == ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/') || name.Contains('\\'))
+                throw new ArgumentException("プロファイル名が不正です");
+            if (saveAs && (profiles.ContainsKey(name) || File.Exists(GetProfilePath(GetProfileDirectoryPath(), name))))
+                throw new InvalidOperationException("同じ名前のプロファイルが既に存在します");
+            var profile = Amatsukaze.Server.Rest.FilterPreviewProfile.Apply(original, edited, name);
+            CheckDoubleDeinterlace(profile);
+            var path = GetProfilePath(GetProfileDirectoryPath(), name);
+            SaveProfile(path, profile);
+            profile.LastUpdate = File.GetLastWriteTime(path);
+            profiles[name] = profile;
+            var waits = new List<Task>();
+            UpdateQueueItems(waits);
+            var update = new ProfileUpdate { Type = saveAs ? UpdateType.Add : UpdateType.Update, Profile = profile };
+            waits.Add(Client.OnProfile(update));
+            waits.Add(NotifyMessage("プロファイル「" + name + "」のフィルタを保存しました", false));
+            return Task.WhenAll(waits);
         }
 
         public Task SetProfile(ProfileUpdate data)

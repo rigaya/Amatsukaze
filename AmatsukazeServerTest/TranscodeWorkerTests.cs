@@ -17,6 +17,7 @@ public class TranscodeWorkerTests
     [Theory]
     [InlineData(ProcMode.CMCheck)]
     [InlineData(ProcMode.TrimAdjust)]
+    [InlineData(ProcMode.FilterAdjust)]
     public void CM解析は出力先にCMログを生成する(ProcMode mode)
     {
         Assert.Equal("output/program-cm.log", TranscodeWorker.GetOutputLogPath(mode, "output/program", false, true));

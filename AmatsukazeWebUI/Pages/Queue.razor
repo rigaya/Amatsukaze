@@ -379,6 +379,7 @@ else
                 <button class="queue-menu-item" @onclick='(() => ExecuteSelectedAsync(ChangeItemType.ForceStart, "強制実行"))' disabled="@(!_hasSelection)">強制実行</button>
                 <button class="queue-menu-item" @onclick="(() => OpenLogoAnalyzeSelectedAsync())" disabled="@(!_hasSelection)">ロゴ解析</button>
                 <button class="queue-menu-item" @onclick="OpenTrimAdjustSelected" disabled="@(!CanTrimAdjustSelected)">カット調整</button>
+                <button class="queue-menu-item" @onclick="OpenFilterAdjustSelected" disabled="@(!CanTrimAdjustSelected)">フィルタ調整</button>
                 <button class="queue-menu-item" @onclick="ClearSucceededAsync">成功済みをクリア</button>
             </div>
         }
@@ -469,6 +470,10 @@ else
                     }
                 </select>
             </div>
+            @if (_addMode == ProcMode.FilterAdjust)
+            {
+                <div>CM解析後、一時ファイルを残してフィルタ調整画面を開きます。</div>
+            }
             <div style="margin-top: 1rem;">
                 <button class="btn btn-primary" @onclick="SubmitAddQueueAsync" disabled="@_adding">Add</button>
                 <button class="btn btn-secondary" style="margin-left: 0.5rem;" @onclick="CloseAddDialog" disabled="@_adding">Cancel</button>
@@ -1972,6 +1977,15 @@ else
         }
         // 新しいタブでTrim調整ページを開く
         await JS.InvokeVoidAsync("open", $"/trim-adjust/{item.Id}", "_blank");
+    }
+
+    private async Task OpenFilterAdjustSelected()
+    {
+        CloseContextMenu();
+        if (_view == null || _selectedIds.Count == 0) return;
+        var item = _view.Items.FirstOrDefault(x => _selectedIds.Contains(x.Id));
+        if (item?.CanTrimAdjust != true) return;
+        await JS.InvokeVoidAsync("open", $"/filter-adjust/{item.Id}", "_blank");
     }
 
     private async Task ClearSucceededAsync()

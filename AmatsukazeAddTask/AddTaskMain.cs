@@ -52,9 +52,11 @@ namespace Amatsukaze.AddTask
                 "  -b|--bat <バッチファイル名> 追加時実行バッチ\r\n" +
                 "  -w|--work <パス>       このタスクで使用する一時フォルダ（サーバーから見えるパス）\r\n" +
                 "  --priority <優先度>     優先度\r\n" +
-                "  --proc-mode <mode>      タスクの処理モード(batch|auto|test|drcs|cm)\r\n" +
+                "  --proc-mode <mode>      タスクの処理モード(batch|auto|test|drcs|cm|trim|filter)\r\n" +
                 "                          batch: 一括バッチ, auto: 自動バッチ(デフォルト)\r\n" +
                 "                          test: テストエンコードのみ, drcs: DRCS解析のみ, cm: CM解析のみ\r\n" +
+                "                          trim: カット調整, filter: フィルタ調整\r\n" +
+                "                          CM解析後、一時ファイルを残してフィルタ調整画面を開きます。\r\n" +
                 "  -o|--outdir <パス>      出力先ディレクトリ（-f 指定時は必須）\r\n" +
                 "  -d|--nasdir <パス>      NASのTSファイル置き場\r\n" +
                 "  --remote-dir <パス>     サーバから入力ファイルにアクセスするときのディレクトリパス\r\n" +
@@ -109,6 +111,10 @@ namespace Amatsukaze.AddTask
                 case "cm":
                 case "cmcheck":
                     return ProcMode.CMCheck;
+                case "trim":
+                    return ProcMode.TrimAdjust;
+                case "filter":
+                    return ProcMode.FilterAdjust;
                 default:
                     throw new Exception("不正なモード名です");
             }

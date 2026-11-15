@@ -38,6 +38,7 @@ namespace Amatsukaze.Server.Rest
         private readonly LogoAnalyzeService logoAnalyze;
         private readonly LogoPreviewService logoPreview;
         private readonly TrimAdjustService trimAdjust;
+        private readonly FilterPreviewService filterPreview;
         private IHost host;
         private volatile int boundPort;
         private static readonly IntOptionView[] TrimAdjustPreviewScaleModeOptions = new[]
@@ -113,6 +114,7 @@ namespace Amatsukaze.Server.Rest
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
             trimAdjust = new TrimAdjustService(server, state);
+            filterPreview = new FilterPreviewService(state);
         }
 
         // スタンドアロンでは true。サーバー/CLIは指定ポートで失敗したらエラーにする。
@@ -407,6 +409,7 @@ namespace Amatsukaze.Server.Rest
         public void Dispose()
         {
             trimAdjust?.Dispose();
+            filterPreview?.Dispose();
             if (host != null)
             {
                 host.Dispose();
@@ -1928,6 +1931,81 @@ namespace Amatsukaze.Server.Rest
                 }
                 return Results.NotFound();
             });
+
+            app.MapPost("/api/filter-preview/sessions", async (HttpContext context) =>
+            {
+                var data = await context.Request.ReadFromJsonAsync<TrimAdjustSessionRequest>();
+                if (data == null) return Results.BadRequest();
+                try { return Results.Json(new { sessionId = await filterPreview.CreateAsync(data.QueueItemId, context.RequestAborted) }); }
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException || ex is TimeoutException || ex is System.ComponentModel.Win32Exception) { return Results.BadRequest(new { message = ex.Message }); }
+            });
+            app.MapGet("/api/filter-preview/sessions/{sessionId}/config", async (HttpContext context, string sessionId) =>
+            {
+                try { return Results.Json(await filterPreview.GetConfigurationAsync(sessionId, context.RequestAborted)); }
+                catch (KeyNotFoundException) { return Results.NotFound(); }
+            });
+            app.MapPut("/api/filter-preview/sessions/{sessionId}/config", async (HttpContext context, string sessionId) =>
+            {
+                var data = await context.Request.ReadFromJsonAsync<FilterPreviewConfigRequest>();
+                if (data == null) return Results.BadRequest();
+                try
+                {
+                    var reply = await filterPreview.ConfigureAsync(sessionId, data, context.RequestAborted);
+                    var current = await filterPreview.GetConfigurationAsync(sessionId, context.RequestAborted);
+                    var filter = data.FilterSetting ?? current.FilterSetting;
+                    var notices = FilterPreviewService.GetNotices(data.FilterOption, filter);
+                    return Results.Json(new { info = reply.Metadata, notices });
+                }
+                catch (KeyNotFoundException) { return Results.NotFound(); }
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException) { return Results.BadRequest(new { message = ex.Message }); }
+            });
+            app.MapPost("/api/filter-preview/sessions/{sessionId}/frame", async (HttpContext context, string sessionId) =>
+            {
+                var data = await context.Request.ReadFromJsonAsync<FilterPreviewFrameRequest>();
+                if (data == null) return Results.BadRequest();
+                try
+                {
+                    var reply = await filterPreview.FrameAsync(sessionId, data, context.RequestAborted);
+                    foreach (var pair in reply.Metadata) context.Response.Headers["X-Filter-Preview-" + pair.Key] = pair.Value;
+                    context.Response.Headers.AccessControlExposeHeaders = string.Join(", ", reply.Metadata.Keys.Select(key => "X-Filter-Preview-" + key));
+                    context.Response.Headers["Cache-Control"] = "no-store";
+                    var payload = reply.Data;
+                    if (data.Format == "yuv")
+                    {
+                        var accepted = context.Request.GetTypedHeaders().AcceptEncoding;
+                        bool Accepts(string name) => accepted?.Any(x => string.Equals(x.Value.Value, name, StringComparison.OrdinalIgnoreCase) && (x.Quality ?? 1) > 0) == true;
+                        if (Accepts("zstd"))
+                        {
+                            var compressed = FilterPreviewCompression.Zstd(payload);
+                            if (compressed != null) { payload = compressed; context.Response.Headers.ContentEncoding = "zstd"; }
+                        }
+                        if (!context.Response.Headers.ContainsKey("Content-Encoding") && Accepts("gzip")) { payload = FilterPreviewCompression.Gzip(payload); context.Response.Headers.ContentEncoding = "gzip"; }
+                        context.Response.Headers.Vary = "Accept-Encoding";
+                    }
+                    return Results.File(payload, data.Format == "png" ? "image/png" : data.Format == "jpeg" ? "image/jpeg" : "application/octet-stream");
+                }
+                catch (KeyNotFoundException) { return Results.NotFound(); }
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException) { return Results.BadRequest(new { message = ex.Message }); }
+            });
+            app.MapPost("/api/filter-preview/sessions/{sessionId}/save", async (HttpContext context, string sessionId) =>
+            {
+                var data = await context.Request.ReadFromJsonAsync<FilterPreviewSaveRequest>();
+                if (data == null) return Results.BadRequest();
+                try
+                {
+                    var edited = await filterPreview.GetEditedProfileAsync(sessionId, context.RequestAborted);
+                    await server.SaveFilterPreviewProfile(edited, data.Name, data.SaveAs);
+                    return Results.Ok();
+                }
+                catch (KeyNotFoundException) { return Results.NotFound(); }
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException) { return Results.BadRequest(new { message = ex.Message }); }
+            });
+            app.MapGet("/api/filter-preview/sessions/{sessionId}/logs", (string sessionId) =>
+            {
+                try { return Results.Json(filterPreview.GetLogs(sessionId)); }
+                catch (KeyNotFoundException) { return Results.NotFound(); }
+            });
+            app.MapDelete("/api/filter-preview/sessions/{sessionId}", (string sessionId) => filterPreview.Close(sessionId) ? Results.Ok() : Results.NotFound());
 
             // Trim調整API
             app.MapPost("/api/trim/sessions", async (HttpRequest request) =>

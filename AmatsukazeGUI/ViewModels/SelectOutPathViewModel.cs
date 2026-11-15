@@ -256,6 +256,16 @@ namespace Amatsukaze.ViewModels
             await Messenger.RaiseAsync(new WindowActionMessage(WindowAction.Close, "Close"));
         }
 
+        public ViewModelCommand FilterAdjustCommand => new ViewModelCommand(FilterAdjust);
+
+        private async void FilterAdjust()
+        {
+            if (!GetProfileName()) return;
+            Item.Mode = ProcMode.FilterAdjust;
+            Succeeded = true;
+            await Messenger.RaiseAsync(new WindowActionMessage(WindowAction.Close, "Close"));
+        }
+
         #region SelectedProfile変更通知プロパティ
         private object _SelectedProfile;
 

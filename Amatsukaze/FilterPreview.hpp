@@ -114,3 +114,21 @@ extern "C" AMATSUKAZE_API int FilterPreview_GetKFMProps(void* p, int n, int* typ
     return p ? static_cast<FilterPreview*>(p)->getProps(n, type, duration) : -1;
 }
 extern "C" AMATSUKAZE_API void FilterPreview_Close(void* p) { delete static_cast<FilterPreview*>(p); }
+
+extern "C" AMATSUKAZE_API int FilterPreview_GetSourceFormat(AMTContext* ctx, const tchar* path, FilterPreviewSourceFormat* format) {
+    if (!ctx) return 0;
+    ctx->setError(Exception());
+    if (!path || !format) { ctx->setError(RuntimeException("入力または出力先が指定されていません")); return 0; }
+    *format = {};
+    try {
+        File file(tstring(path), _T("rb"));
+        file.readArray<tchar>();
+        file.readArray<tchar>();
+        const auto v = file.readValue<VideoFormat>();
+        *format = { v.progressive ? 1 : 0, v.sarWidth, v.sarHeight,
+            v.colorPrimaries, v.transferCharacteristics, v.colorSpace };
+        return 1;
+    } catch (const Exception& e) { ctx->setError(e); }
+      catch (...) { ctx->setError(RuntimeException("映像形式の取得で不明な例外が発生しました")); }
+    return 0;
+}

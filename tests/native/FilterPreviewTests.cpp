@@ -12,6 +12,30 @@ int main() {
     const auto path = std::filesystem::temp_directory_path() / ("amatsukaze_filter_preview_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".avs");
     { std::ofstream file(path); file << "ClearAutoloadDirs()\nBlankClip(length=4, width=32, height=24, fps=25, pixel_type=\"YV12\", color_yuv=$108080)\n"; }
     AMTContext* ctx = AMTContext_Create();
+    const auto datPath = path.string() + ".dat";
+    VideoFormat source{};
+    source.progressive = false;
+    source.sarWidth = 4; source.sarHeight = 3;
+    source.colorPrimaries = 1; source.transferCharacteristics = 6; source.colorSpace = 9;
+    {
+        std::ofstream file(datPath, std::ios::binary);
+        const int64_t emptyLength = 0;
+        file.write(reinterpret_cast<const char*>(&emptyLength), sizeof(emptyLength));
+        file.write(reinterpret_cast<const char*>(&emptyLength), sizeof(emptyLength));
+        file.write(reinterpret_cast<const char*>(&source), sizeof(source));
+    }
+    FilterPreviewSourceFormat sourceFormat{};
+    if (!FilterPreview_GetSourceFormat(ctx, std::filesystem::path(datPath).c_str(), &sourceFormat) ||
+        sourceFormat.progressive != 0 || sourceFormat.sarWidth != 4 || sourceFormat.sarHeight != 3 ||
+        sourceFormat.colorPrimaries != 1 || sourceFormat.transferCharacteristics != 6 || sourceFormat.colorSpace != 9) {
+        std::fprintf(stderr, "映像形式の取得に失敗: %s\n", AMTContext_GetError(ctx));
+        ATMContext_Delete(ctx); return 1;
+    }
+    if (FilterPreview_GetSourceFormat(ctx, _T("存在しない.dat"), &sourceFormat) || !*AMTContext_GetError(ctx)) {
+        std::fprintf(stderr, "存在しない入力のエラーがありません\n");
+        ATMContext_Delete(ctx); return 1;
+    }
+    std::filesystem::remove(datPath);
     FilterPreviewInfo info{};
     auto preview = FilterPreview_Open(ctx, path.c_str(), &info);
     auto fail = [&](const char* msg) { std::fprintf(stderr, "%s: %s\n", msg, AMTContext_GetError(ctx)); };

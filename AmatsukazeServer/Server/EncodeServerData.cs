@@ -1250,6 +1250,8 @@ namespace Amatsukaze.Server
         [DataMember]
         public string AmatsukazePath { get; set; }
         [DataMember]
+        public string FilterPreviewEnginePath { get; set; }
+        [DataMember]
         public string X264Path { get; set; }
         [DataMember]
         public string X265Path { get; set; }
@@ -1567,6 +1569,13 @@ namespace Amatsukaze.Server
         DrcsCheck,
         CMCheck,
         TrimAdjust,
+        FilterAdjust,
+    }
+
+    public static class ProcModeExtensions
+    {
+        public static bool IsAnalysisOnly(this ProcMode mode) =>
+            Amatsukaze.Shared.QueueSettingExtensions.IsAnalysisOnly((Amatsukaze.Shared.ProcMode)mode);
     }
 
     [DataContract]
@@ -1615,7 +1624,7 @@ namespace Amatsukaze.Server
         public List<string> Tags { get; set; }
 
         public bool IsBatch { get { return Mode == ProcMode.Batch || Mode == ProcMode.AutoBatch; } }
-        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || (Mode == ProcMode.CMCheck || Mode == ProcMode.TrimAdjust); } }
+        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode.IsAnalysisOnly(); } }
     }
 
     public enum QueueState
@@ -1762,7 +1771,7 @@ namespace Amatsukaze.Server
         }
 
         public bool IsBatch { get { return Mode == ProcMode.Batch || Mode == ProcMode.AutoBatch; } }
-        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || (Mode == ProcMode.CMCheck || Mode == ProcMode.TrimAdjust); } }
+        public bool IsCheck { get { return Mode == ProcMode.DrcsCheck || Mode.IsAnalysisOnly(); } }
         public bool IsTest { get { return Mode == ProcMode.Test; } }
 
         /// <summary>

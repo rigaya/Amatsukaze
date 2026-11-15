@@ -72,9 +72,9 @@
     private async Task CheckCompletionAsync(QueueItemView item)
     {
         // 自画面へ移動して監視が終了した場合、残りの完了通知では移動しない。
-        if (cancellation.IsCancellationRequested || item.Mode != ProcMode.TrimAdjust || !item.CanTrimAdjust ||
+        if (cancellation.IsCancellationRequested || (item.Mode != ProcMode.TrimAdjust && item.Mode != ProcMode.FilterAdjust) || !item.CanTrimAdjust ||
             !items!.TryGetValue(item.Id, out var previous) || previous.CanTrimAdjust) return;
-        var url = $"/trim-adjust/{item.Id}";
+        var url = item.Mode == ProcMode.FilterAdjust ? $"/filter-adjust/{item.Id}" : $"/trim-adjust/{item.Id}";
         if (!await JS.InvokeAsync<bool>("openTrimAdjustAutomatically", url) && !cancellation.IsCancellationRequested)
             Nav.NavigateTo(url);
     }

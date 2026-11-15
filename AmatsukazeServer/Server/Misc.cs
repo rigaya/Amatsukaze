@@ -1416,7 +1416,7 @@ namespace Amatsukaze.Server
             return null;
         }
 
-        public static string FilterToString(FilterSetting filter, Setting setting, bool overrideBitDepth)
+        public static string FilterToString(FilterSetting filter, Setting setting, bool overrideBitDepth, bool preview = false)
         {
             StringBuilder sb = new StringBuilder();
             int svtAv1BitDepth = filter.SvtAv1BitDepth;
@@ -1432,7 +1432,7 @@ namespace Amatsukaze.Server
                 sb.AppendLine("dsrc = AMT_SOURCE");
             }
 
-            if (filter.EnableDeinterlace)
+            if (filter.EnableDeinterlace && !(preview && filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.AutoVfr))
             {
                 int videoOutPass = 0;
                 if (filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.D3DVP)
@@ -1456,7 +1456,11 @@ namespace Amatsukaze.Server
                 }
                 else if (filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.KFM)
                 {
-                    if (filter.KfmFps == FilterFPS.VFR || filter.KfmFps == FilterFPS.VFR30)
+                    if (preview)
+                    {
+                        sb.AppendLine("pass = 0");
+                    }
+                    else if (filter.KfmFps == FilterFPS.VFR || filter.KfmFps == FilterFPS.VFR30)
                     {
                         // VFR
                         sb.AppendLine("pass = Select(AMT_PASS, 1, 2, 3)");

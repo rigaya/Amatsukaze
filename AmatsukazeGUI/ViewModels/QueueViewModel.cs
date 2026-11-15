@@ -269,9 +269,10 @@ namespace Amatsukaze.ViewModels
                 var item = (DisplayQueueItem)sender;
                 if (trimAdjustStates.TryGetValue(item.Model.Id, out var previous) &&
                     previous != QueueState.Complete && item.Model.State == QueueState.Complete &&
-                    item.Model.Mode == ProcMode.TrimAdjust)
+                    (item.Model.Mode == ProcMode.TrimAdjust || item.Model.Mode == ProcMode.FilterAdjust))
                 {
-                    TryOpenWebTrimAdjust(item.Model.Id);
+                    if (item.Model.Mode == ProcMode.FilterAdjust) TryOpenWebPage($"/filter-adjust/{item.Model.Id}");
+                    else TryOpenWebTrimAdjust(item.Model.Id);
                 }
                 trimAdjustStates[item.Model.Id] = item.Model.State;
                 ItemStateUpdated();
@@ -756,8 +757,22 @@ namespace Amatsukaze.ViewModels
         {
             return item != null &&
                 item.Model != null &&
-                (item.Model.Mode == ProcMode.Batch || item.Model.Mode == ProcMode.AutoBatch || (item.Model.Mode == ProcMode.CMCheck || item.Model.Mode == ProcMode.TrimAdjust)) &&
+                (item.Model.Mode == ProcMode.Batch || item.Model.Mode == ProcMode.AutoBatch || item.Model.Mode.IsAnalysisOnly()) &&
                 item.Model.State == QueueState.Complete;
+        }
+
+        public ListenerCommand<IEnumerable> OpenFilterAdjustCommand => new ListenerCommand<IEnumerable>(OpenFilterAdjust);
+
+        private void OpenFilterAdjust(IEnumerable selectedItems)
+        {
+            var item = selectedItems?.OfType<DisplayQueueItem>().FirstOrDefault();
+            if (!CanOpenTrimAdjust(item))
+            {
+                MessageBox.Show("フィルタ調整はエンコードまたはCM解析が完了したアイテムでのみ使用できます");
+                return;
+            }
+            if (!TryOpenWebPage($"/filter-adjust/{item.Model.Id}"))
+                MessageBox.Show("フィルタ調整画面の起動に失敗しました");
         }
 
         #region OpenTrimAdjustCommand
@@ -1084,7 +1099,7 @@ namespace Amatsukaze.ViewModels
             }
 
             // CM解析のみの実行
-            if ((item.Model.Mode == ProcMode.CMCheck || item.Model.Mode == ProcMode.TrimAdjust))
+            if (item.Model.Mode.IsAnalysisOnly())
             {
                 MessageBox.Show("CM解析のみの実行です。出力ファイルはありません。");
                 return;

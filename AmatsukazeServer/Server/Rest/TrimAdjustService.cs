@@ -630,7 +630,7 @@ namespace Amatsukaze.Server.Rest
             }
 
             // CMCheck済みアイテムのみ対象
-            if ((item.Mode != Amatsukaze.Server.ProcMode.CMCheck && item.Mode != Amatsukaze.Server.ProcMode.TrimAdjust))
+            if (!item.Mode.IsAnalysisOnly())
             {
                 error = "CM解析タスク以外は削除できません";
                 return false;
@@ -776,7 +776,7 @@ namespace Amatsukaze.Server.Rest
             {
                 throw new InvalidOperationException("完了していないキューアイテムは再投入できません");
             }
-            if ((sourceItem.Mode != Amatsukaze.Server.ProcMode.CMCheck && sourceItem.Mode != Amatsukaze.Server.ProcMode.TrimAdjust) && !sourceItem.IsBatch)
+            if (!sourceItem.Mode.IsAnalysisOnly() && !sourceItem.IsBatch)
             {
                 throw new InvalidOperationException("CM解析またはエンコード済みのキューアイテムだけ再投入できます");
             }

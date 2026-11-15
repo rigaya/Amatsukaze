@@ -9,7 +9,8 @@ namespace Amatsukaze.Shared
         Test,
         DrcsCheck,
         CMCheck,
-        TrimAdjust
+        TrimAdjust,
+        FilterAdjust
     }
 
     public class AddQueueItem

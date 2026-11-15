@@ -10,8 +10,12 @@ namespace Amatsukaze.Shared
             ProcMode.Test,
             ProcMode.DrcsCheck,
             ProcMode.CMCheck,
-            ProcMode.TrimAdjust
+            ProcMode.TrimAdjust,
+            ProcMode.FilterAdjust
         };
+
+        public static bool IsAnalysisOnly(this ProcMode mode) =>
+            mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust || mode == ProcMode.FilterAdjust;
 
         public static IReadOnlyList<int> PriorityList { get; } = new[] { 1, 2, 3, 4, 5 };
 
@@ -29,6 +33,8 @@ namespace Amatsukaze.Shared
                     return "CM解析";
                 case ProcMode.TrimAdjust:
                     return "カット調整";
+                case ProcMode.FilterAdjust:
+                    return "フィルタ調整";
                 case ProcMode.AutoBatch:
                     return "自動追加";
                 default:
