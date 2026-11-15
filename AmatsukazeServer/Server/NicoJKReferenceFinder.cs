@@ -15,7 +15,7 @@ using System.Xml.Linq;
 
 namespace Amatsukaze.Server
 {
-    // 別局の先行放送・同時刻の放送と、同じフォルダにあるその録画を探す。
+    // 別局の先行放送・同時刻の放送と、同じフォルダや移動先にあるその録画を探す。
     public sealed class NicoJKReferenceFinder
     {
         private const int HttpTimeoutSeconds = 10;
@@ -293,7 +293,9 @@ namespace Amatsukaze.Server
         private string FindRecording(string sourcePath, string[] names, XElement[] candidates,
             List<(int Channel, int ServiceId, string Name, bool Reference)> channels, Action<string> log)
         {
-            var files = Directory.EnumerateFiles(Path.GetDirectoryName(Path.GetFullPath(sourcePath)))
+            var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+            var files = new[] { directory, Path.Combine(directory, ServerSupport.SUCCESS_DIR), Path.Combine(directory, ServerSupport.FAIL_DIR) }
+                .Where(Directory.Exists).SelectMany(path => Directory.EnumerateFiles(path))
                 .Where(p => (string.Equals(Path.GetExtension(p), ".ts", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(Path.GetExtension(p), ".m2ts", StringComparison.OrdinalIgnoreCase)) &&
                     !string.Equals(Path.GetFullPath(p), Path.GetFullPath(sourcePath),

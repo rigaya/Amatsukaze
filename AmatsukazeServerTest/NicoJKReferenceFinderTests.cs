@@ -101,11 +101,33 @@ public sealed class NicoJKReferenceFinderTests
         Assert.Empty(f.Reads);
     }
 
-    [Fact]
-    public async Task サブフォルダと入力自身は読まない()
+    [Theory]
+    [InlineData("succeeded")]
+    [InlineData("failed")]
+    public async Task 移動先のサブフォルダから基準録画を見つける(string directory)
     {
         using var f = new Fixture();
-        f.AddRecording("sub/ゾンビさがしてます.ts", 1064, Fixture.Earlier);
+        var reference = f.AddRecording(directory + "/ゾンビさがしてます.ts", 1064, Fixture.Earlier);
+        Assert.Equal(reference, await f.Find());
+        Assert.Equal(reference, Assert.Single(f.Reads));
+    }
+
+    [Fact]
+    public async Task 移動先フォルダがなくても同じフォルダの基準録画を見つける()
+    {
+        using var f = new Fixture();
+        Assert.False(Directory.Exists(Path.Combine(f.Root, "succeeded")));
+        Assert.False(Directory.Exists(Path.Combine(f.Root, "failed")));
+        var reference = f.AddRecording("ゾンビさがしてます.ts", 1064, Fixture.Earlier);
+        Assert.Equal(reference, await f.Find());
+        Assert.Equal(reference, Assert.Single(f.Reads));
+    }
+
+    [Fact]
+    public async Task ほかのサブフォルダと入力自身は読まない()
+    {
+        using var f = new Fixture();
+        f.AddRecording("other/ゾンビさがしてます.ts", 1064, Fixture.Earlier);
         Assert.Null(await f.Find());
         Assert.Empty(f.Reads);
     }
