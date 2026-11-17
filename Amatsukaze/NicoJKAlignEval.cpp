@@ -30,9 +30,11 @@ int NicoJKAlignEval(AMTContext& ctx, const ConfigWrapper& setting) {
     const auto base = setting.getOutFileBaseWithoutPrefix();
     File json(base + _T(".json"), _T("wb"));
     const auto text = "{\"result\":" + NicoJKAlignResultJSON(result, target.duration, reference.duration) +
-                      StringFormat(",\"read_seconds\":%.6f,\"target_start\":%.6f,\"reference_start\":%.6f,\"target_"
+                      StringFormat(",\"read_seconds\":%.6f,\"target_start\":%.6f,\"reference_start\":%.6f,"
+                                   "\"target_start_exact\":%.6f,\"reference_start_exact\":%.6f,\"target_"
                                    "sid\":%d,\"reference_sid\":%d}",
-                                   readSeconds, target.firstFrameTime, reference.firstFrameTime, target.serviceId,
+                                   readSeconds, target.firstFrameTime, reference.firstFrameTime,
+                                   target.firstFrameTimeExact, reference.firstFrameTimeExact, target.serviceId,
                                    reference.serviceId);
     json.write(MemoryChunk((uint8_t*)text.data(), text.size()));
     if (!pcmInput) {

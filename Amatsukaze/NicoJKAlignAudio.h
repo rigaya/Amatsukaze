@@ -10,6 +10,8 @@ struct FileAudioFrameInfo;
 struct NicoJKAlignAudio {
     std::vector<float> samples;
     double firstFrameTime = 0;
+    // TOTから映像先頭へ戻す幅を秒に丸めない先頭時刻。評価用(製品はfirstFrameTimeを使う)。
+    double firstFrameTimeExact = 0;
     double duration = 0;
     int serviceId = -1;
     bool hasTime = false;

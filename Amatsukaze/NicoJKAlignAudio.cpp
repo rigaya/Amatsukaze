@@ -51,6 +51,9 @@ class ReferenceAudioSplitter : public TsSplitter {
             time.tm_year -= 1900;
             time.tm_mon -= 1;
             time.tm_hour -= 9;
+            // 評価では丸めの±0.5秒が正解の誤差になるので、丸めない値も残す。
+            const double totTime = (double)amt_mkgmtime(&time);
+            result.firstFrameTimeExact = totTime - difference;
             time.tm_sec -= (int)std::round(difference);
             result.firstFrameTime = (double)amt_mkgmtime(&time);
         }
