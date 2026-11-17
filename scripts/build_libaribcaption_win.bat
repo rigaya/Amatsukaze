@@ -19,7 +19,7 @@ set "AMT_VSROOT=%~4"
 set "AMT_VSVER=%~5"
 if "%AMT_VSVER%"=="" (
   echo [libaribcaption] usage: %~nx0 Platform Configuration PlatformToolset VsInstallRoot VisualStudioVersion
-  exit /b 1
+  goto :fail
 )
 if "%AMT_VSROOT:~-1%"=="\" set "AMT_VSROOT=%AMT_VSROOT:~0,-1%"
 
@@ -52,7 +52,7 @@ if "%AMT_VSVER%"=="17.0" set "CMAKE_GENERATOR=Visual Studio 17 2022"
 if "%AMT_VSVER%"=="18.0" set "CMAKE_GENERATOR=Visual Studio 18 2026"
 if "%CMAKE_GENERATOR%"=="" (
   echo [libaribcaption] Unsupported VisualStudioVersion: %AMT_VSVER%
-  exit /b 1
+  goto :fail
 )
 
 rem Visual Studio同梱のCMake("C++ CMake tools for Windows")を優先し、なければPATHから探す
@@ -63,11 +63,29 @@ if not exist "%CMAKE_EXE%" (
 )
 if not defined CMAKE_EXE (
   echo [libaribcaption] cmake.exe not found. Install "C++ CMake tools for Windows" in Visual Studio Installer.
-  exit /b 1
+  goto :fail
 )
 
 if not exist "%ARIBCC_BASE%" mkdir "%ARIBCC_BASE%"
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
+
+rem Release と Release2 が同じ作業ディレクトリを同時に触らないよう排他する。
+rem publish では両方の PreBuild が Configuration=Release でここへ入る。
+set "LOCKDIR=%ARIBCC_BASE%\lock_%AMT_PLATFORM%_%AMT_CONFIG%"
+set /a LOCK_TRY=0
+:lock_acquire
+2>nul mkdir "%LOCKDIR%" && goto :lock_held
+set /a LOCK_TRY+=1
+if %LOCK_TRY%==1 echo [libaribcaption] waiting for another build: %AMT_PLATFORM% %AMT_CONFIG%
+if %LOCK_TRY% geq 600 (
+  echo [libaribcaption] lock timeout, removing stale lock "%LOCKDIR%"
+  rmdir "%LOCKDIR%" >nul 2>&1
+  set /a LOCK_TRY=0
+)
+ping -n 2 127.0.0.1 >nul
+goto :lock_acquire
+:lock_held
+set "LOCKHELD=1"
 
 rem 今回の入力をスタンプとして書き出し、前回ビルド時のスタンプと比較する
 > "%STAMP_NEW%" (
@@ -79,14 +97,14 @@ rem 今回の入力をスタンプとして書き出し、前回ビルド時の�
   echo config=%CMAKE_CONFIG%
   echo runtime=%CMAKE_RUNTIME%
 )
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 for %%P in ("%PATCH_DIR%\*.patch") do call :append_patch_stamp "%%~fP"
 if exist "%STAMP%" if exist "%ARIBCC_LIB%" (
   fc /b "%STAMP%" "%STAMP_NEW%" >nul 2>&1
   if not errorlevel 1 (
     del /q "%STAMP_NEW%" >nul 2>&1
     echo [libaribcaption] %AMT_PLATFORM% %AMT_CONFIG%: up to date.
-    exit /b 0
+    goto :success
   )
 )
 
@@ -100,7 +118,7 @@ if not exist "%ARIBCC_ARCHIVE%" (
   if errorlevel 1 (
     echo [libaribcaption] Download failed: %ARIBCC_URL%
     del /q "%ARIBCC_ARCHIVE%.*.tmp" >nul 2>&1
-    exit /b 1
+    goto :fail
   )
   for %%T in ("%ARIBCC_ARCHIVE%.*.tmp") do move /y "%%~fT" "%ARIBCC_ARCHIVE%" >nul
 )
@@ -110,17 +128,17 @@ if /i not "%ARCHIVE_HASH%"=="%ARIBCC_SHA256%" (
   echo [libaribcaption]   expected: %ARIBCC_SHA256%
   echo [libaribcaption]   actual  : %ARCHIVE_HASH%
   del /q "%ARIBCC_ARCHIVE%" >nul 2>&1
-  exit /b 1
+  goto :fail
 )
 
 rem パッチ適用済みのソースを再利用しないよう、毎回展開し直す
 if exist "%WORK_DIR%" rmdir /s /q "%WORK_DIR%"
 mkdir "%WORK_DIR%\src"
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 tar -xf "%ARIBCC_ARCHIVE%" -C "%WORK_DIR%\src"
 if errorlevel 1 (
   echo [libaribcaption] Failed to extract %ARIBCC_ARCHIVE%
-  exit /b 1
+  goto :fail
 )
 
 for %%P in ("%PATCH_DIR%\*.patch") do (
@@ -128,7 +146,7 @@ for %%P in ("%PATCH_DIR%\*.patch") do (
   git -C "%AMT_ROOT%" apply --directory="%SRC_REL%" "%%~fP"
   if errorlevel 1 (
     echo [libaribcaption] Failed to apply %%~nxP
-    exit /b 1
+    goto :fail
   )
 )
 
@@ -139,26 +157,39 @@ for %%P in ("%PATCH_DIR%\*.patch") do (
   -DARIBCC_USE_FREETYPE=OFF -DARIBCC_USE_EMBEDDED_FREETYPE=OFF
 if errorlevel 1 (
   echo [libaribcaption] CMake configure failed.
-  exit /b 1
+  goto :fail
 )
 "%CMAKE_EXE%" --build "%CMAKE_BUILD_DIR%" --config %CMAKE_CONFIG% --parallel
 if errorlevel 1 (
   echo [libaribcaption] CMake build failed.
-  exit /b 1
+  goto :fail
 )
 "%CMAKE_EXE%" --install "%CMAKE_BUILD_DIR%" --config %CMAKE_CONFIG%
 if errorlevel 1 (
   echo [libaribcaption] CMake install failed.
-  exit /b 1
+  goto :fail
 )
 if not exist "%ARIBCC_LIB%" (
   echo [libaribcaption] Library not found after install: %ARIBCC_LIB%
-  exit /b 1
+  goto :fail
 )
 
 move /y "%STAMP_NEW%" "%STAMP%" >nul
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 echo [libaribcaption] Done: %INSTALL_DIR%
+goto :success
+
+:success
+call :release_lock
+exit /b 0
+
+:fail
+call :release_lock
+exit /b 1
+
+:release_lock
+if defined LOCKHELD rmdir "%LOCKDIR%" >nul 2>&1
+set "LOCKHELD="
 exit /b 0
 
 rem パッチのファイル名とSHA256をスタンプへ追記する

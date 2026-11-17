@@ -125,8 +125,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <!-- libaribcaptionはビルド前イベントでscripts\build_libaribcaption_win.batがパッチ適用・ビルドしたものを静的リンクする -->
-    <AribCaptionInstallDir>$(MSBuildThisFileDirectory)..\build\libaribcaption\$(Platform)\$(Configuration)\install\</AribCaptionInstallDir>
+    <!-- libaribcaptionはビルド前イベントでscripts\build_libaribcaption_win.batがパッチ適用・ビルドしたものを静的リンクする。
+         Release2 は Release と同じ CRT / CMake 構成なので、成果物を共有して二重ビルドを避ける。 -->
+    <AribCaptionConfiguration>$(Configuration)</AribCaptionConfiguration>
+    <AribCaptionConfiguration Condition="'$(Configuration)'=='Release2'">Release</AribCaptionConfiguration>
+    <AribCaptionInstallDir>$(MSBuildThisFileDirectory)..\build\libaribcaption\$(Platform)\$(AribCaptionConfiguration)\install\</AribCaptionInstallDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
@@ -215,7 +218,7 @@
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -240,7 +243,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -265,7 +268,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -290,7 +293,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -325,7 +328,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -360,7 +363,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -394,7 +397,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -428,7 +431,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <PreBuildEvent>
       <Command>call .\Version.bat
 if errorlevel 1 exit /b 1
-call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(Configuration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
+call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Platform) $(AribCaptionConfiguration) $(PlatformToolset) "$(VsInstallRoot)" $(VisualStudioVersion)</Command>
     </PreBuildEvent>
     <ResourceCompile>
       <AdditionalOptions>/c 65001 %(AdditionalOptions)</AdditionalOptions>
@@ -676,4 +679,20 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <!-- Release2 の common / libfaad2 / Caption は Release とオプションが同じ。
+       参照先を Release に固定し、Amatsukaze.dll と Amatsukaze2.dll の LTCG を同時に走らせても
+       中間ファイルを取り合わないようにする。AssignProjectConfiguration の結果を
+       _SplitProjectReferencesByFileExistence がコピーする前に書き換える。 -->
+  <Target Name="ShareReleaseLibraries"
+          DependsOnTargets="AssignProjectConfiguration"
+          BeforeTargets="_SplitProjectReferencesByFileExistence"
+          Condition="'$(Configuration)'=='Release2'">
+    <ItemGroup>
+      <ProjectReferenceWithConfiguration Condition="'%(Filename)'=='common' or '%(Filename)'=='libfaad2' or '%(Filename)'=='Caption'">
+        <Configuration>Release</Configuration>
+        <FullConfiguration>Release|$(Platform)</FullConfiguration>
+        <SetConfiguration>Configuration=Release</SetConfiguration>
+      </ProjectReferenceWithConfiguration>
+    </ItemGroup>
+  </Target>
 </Project>

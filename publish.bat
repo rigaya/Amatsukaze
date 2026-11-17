@@ -74,20 +74,22 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Building solution with MSBuild (Release + Release2)...
-"%MSBUILD%" Amatsukaze.sln /restore /p:Configuration=Release /p:Platform=x64 /m
-if errorlevel 1 exit /b %ERRORLEVEL%
-"%MSBUILD%" Amatsukaze.sln /p:Configuration=Release2 /p:Platform=x64 /m
-if errorlevel 1 exit /b %ERRORLEVEL%
-
-echo Publishing .NET projects in parallel via Publish.proj...
+echo [%time%] Building native and .NET in parallel via Publish.proj...
 "%MSBUILD%" Publish.proj /m
 if errorlevel 1 exit /b %ERRORLEVEL%
+if not exist ".\x64\Release\Amatsukaze.dll" (
+  echo Amatsukaze.dll がありません。
+  exit /b 1
+)
+if not exist ".\x64\Release2\Amatsukaze2.dll" (
+  echo Amatsukaze2.dll がありません。
+  exit /b 1
+)
 
-echo Collecting published artifacts into a single folder...
+echo [%time%] Collecting published artifacts into a single folder...
 set MERGED_DIR=.\publish\win-x64
-
-set SRC_BASE=.\publish\win-x64
+rem publish 出力は消さずに残し、再実行では増分 publish にする。まとめ先だけ毎回空にする。
+set SRC_BASE=.\publish\intermediate\win-x64
 
 rem robocopy returns codes <8 for success; treat >=8 as failure
 if exist "%SRC_BASE%\AmatsukazeAddTask" robocopy "%SRC_BASE%\AmatsukazeAddTask" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
@@ -98,7 +100,11 @@ if exist "%SRC_BASE%\AmatsukazeGUI" robocopy "%SRC_BASE%\AmatsukazeGUI" "%MERGED
 if errorlevel 8 exit /b %ERRORLEVEL%
 if exist "%SRC_BASE%\ScriptCommand" robocopy "%SRC_BASE%\ScriptCommand" "%MERGED_DIR%" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
-if exist "%SRC_BASE%\AmatsukazeServer\wwwroot" robocopy "%SRC_BASE%\AmatsukazeServer\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
+if not exist "%SRC_BASE%\AmatsukazeWebUI\wwwroot\index.html" (
+  echo WebUI wwwroot がありません: %SRC_BASE%\AmatsukazeWebUI\wwwroot
+  exit /b 1
+)
+robocopy "%SRC_BASE%\AmatsukazeWebUI\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
 
 rem ニコニコ実況コメント取得・ASS変換スクリプト
