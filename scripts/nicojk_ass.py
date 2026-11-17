@@ -117,35 +117,36 @@ def rebase_vpos(xml_str, starttime):
 
     tsukumijima APIのvposは実況スレッド開始（4:00 JST）からのセンチ秒。
     danmaku2assはvposをそのまま出力時刻にするため、相対化が必要。
-    date属性（UNIXタイムスタンプ）を使い、starttime基準に変換する。"""
+    ただしvposは投稿者側の再生位置で、端末ごとに数秒ずれるうえ、0始まりや
+    別の基準で振られた外れ値も混じる。そこでvposは使わず、サーバーの受信時刻である
+    date/date_usec からstarttime基準のvposを振り直す(ファイル入力の経路と同じ)。"""
     root = ET.fromstring(xml_str)
     chats = root.findall("chat")
     if not chats:
         return xml_str
 
-    # 最初のコメントの date と vpos からスレッド基準時刻を算出
-    first = chats[0]
-    first_date = int(first.get("date", "0"))
-    first_vpos = int(first.get("vpos", "0"))
-    # thread_epoch: vpos=0 に相当するUNIXタイムスタンプ（センチ秒精度）
-    thread_epoch_cs = first_date * 100 - first_vpos
-    # starttime に対応する vpos オフセット
-    base_vpos = starttime * 100 - thread_epoch_cs
-
+    start = Decimal(str(starttime))
     removed = 0
+    invalid = 0
     for chat in list(chats):
-        vpos_str = chat.get("vpos")
-        if vpos_str is None:
+        try:
+            stamp = comment_time(chat)
+        except ValueError:
+            # 絶対時刻の分からないコメントは位置を決められないので捨てる
+            root.remove(chat)
+            invalid += 1
             continue
-        new_vpos = int(vpos_str) - base_vpos
-        if new_vpos < 0:
+        if stamp < start:
             root.remove(chat)
             removed += 1
         else:
-            chat.set("vpos", str(new_vpos))
+            chat.set("vpos", str(round((stamp - start) * 100)))
 
     if removed > 0:
         print(f"[nicojk_ass] vpos相対化: {removed}件の番組開始前コメントを除外",
+              file=sys.stderr)
+    if invalid > 0:
+        print(f"[nicojk_ass] vpos相対化: date/date_usecが不正なコメントを{invalid}件除外",
               file=sys.stderr)
 
     return ET.tostring(root, encoding="unicode")
