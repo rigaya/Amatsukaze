@@ -102,9 +102,9 @@ namespace Amatsukaze.Server.Rest
             var setting = state.GetSetting() ?? throw new InvalidOperationException("サーバー設定が見つかりません");
             var module = AppContext.BaseDirectory;
             var executable = string.IsNullOrWhiteSpace(setting.FilterPreviewEnginePath)
-                ? Path.Combine(module, "HWEncVppPreview.Cli" + (OperatingSystem.IsWindows() ? ".exe" : "")) : setting.FilterPreviewEnginePath;
+                ? Path.Combine(module, "HWEncVppPreview" + (OperatingSystem.IsWindows() ? ".exe" : "")) : setting.FilterPreviewEnginePath;
             if (string.IsNullOrWhiteSpace(setting.FilterPreviewEnginePath) && !File.Exists(executable))
-                throw new FileNotFoundException("フィルタプレビューエンジンが見つかりません。HWEncVppPreview.Cliをサーバーと同じフォルダへ配置してください", executable);
+                throw new FileNotFoundException("フィルタプレビューエンジンが見つかりません。HWEncVppPreviewをサーバーと同じフォルダへ配置してください", executable);
             var dir = Path.Combine(temp, "filter_preview");
             System.IO.Directory.CreateDirectory(dir);
             var format = readSourceFormat(dat);

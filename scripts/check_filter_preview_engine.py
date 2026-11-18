@@ -8,7 +8,7 @@ import tempfile
 
 def main():
     if len(sys.argv) != 2:
-        raise ValueError("確認するHWEncVppPreview.Cliのパスを指定してください")
+        raise ValueError("確認するHWEncVppPreviewのパスを指定してください")
     executable = pathlib.Path(sys.argv[1]).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="amatsukaze-preview-") as temporary:
         result = subprocess.run(

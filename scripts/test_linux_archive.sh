@@ -132,7 +132,8 @@ cli_count=0
 while IFS= read -r -d '' path; do
     [[ $(od -An -N4 -tx1 "$path" | tr -d ' \n') == 7f454c46 ]] || continue
     case "$path" in
-        */lib/*|*/plugins64/*|*.so|*.so.*|*/AmatsukazeServerCLI) continue ;;
+        # HWEncVppPreviewは画面を開くアプリで、--helpでは終了しない
+        */lib/*|*/plugins64/*|*.so|*.so.*|*/AmatsukazeServerCLI|*/HWEncVppPreview) continue ;;
     esac
     cli_count=$((cli_count + 1))
     result=$(timeout 10s "$path" --help </dev/null 2>&1) && status=0 || status=$?

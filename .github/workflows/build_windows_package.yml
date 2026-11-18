@@ -26,6 +26,7 @@ jobs:
       X262_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/x262_20260901.zip
       NNEDI3_URL: https://github.com/rigaya/NNEDI3/releases/download/0.00/nnedi3_0.00_x64.zip
       BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/AmatsukazeBasePkg_20260902.7z
+      HWENC_VPP_PREVIEW_URL: https://github.com/rigaya/HWEncVppPreview/releases/download/0.01/HWEncVppPreview_0.01_win-x64.zip
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -98,6 +99,7 @@ jobs:
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x262.zip "%X262_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\hwenc_vpp_preview.zip "%HWENC_VPP_PREVIEW_URL%"
           git clone --depth 1 --branch 0.05 --single-branch https://github.com/rigaya/SCRenamePy.git deps\\screname
           echo --- deps contents (after Download) ---
           tree /f deps
@@ -249,6 +251,13 @@ jobs:
 
           rem avisynth plugins64
           robocopy deps\\nnedi3 package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
+
+          rem フィルタプレビューのエンジン(単一実行ファイル)はサーバーと同じ場所へ置く
+          7z e -y -o"%GITHUB_WORKSPACE%\package\exe_files" deps\\hwenc_vpp_preview.zip HWEncVppPreview.exe
+          if not exist package\\exe_files\\HWEncVppPreview.exe (
+            echo ERROR: package\\exe_files\\HWEncVppPreview.exe がありません。
+            exit /b 1
+          )
 
           rem lsmash tools (muxer_x64.exe -> muxer.exe, timelineeditor_x64.exe -> timelineeditor.exe)
           for /r deps\\lsmash %%f in (muxer_x64.exe) do copy /y "%%f" package\\exe_files\\muxer.exe

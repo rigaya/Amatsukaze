@@ -39,29 +39,7 @@
     </DotNetWebUi>
   </ItemGroup>
 
-  <PropertyGroup>
-    <HWENC_VPP_PREVIEW_REQUIRED Condition="'$(HWENC_VPP_PREVIEW_REQUIRED)' == ''">0</HWENC_VPP_PREVIEW_REQUIRED>
-    <HWENC_VPP_PREVIEW_SOURCE_DIR Condition="'$(HWENC_VPP_PREVIEW_SOURCE_DIR)' == ''">$(RepoRoot)..\HWEncVppPreview</HWENC_VPP_PREVIEW_SOURCE_DIR>
-    <FilterPreviewProject>$(HWENC_VPP_PREVIEW_SOURCE_DIR)\src\HWEncVppPreview.Cli\HWEncVppPreview.Cli.csproj</FilterPreviewProject>
-    <FilterPreviewAvailable Condition="Exists('$(FilterPreviewProject)') and Exists('$(HWENC_VPP_PREVIEW_SOURCE_DIR)\LICENSE') and Exists('$(HWENC_VPP_PREVIEW_SOURCE_DIR)\THIRD_PARTY_NOTICES.txt')">true</FilterPreviewAvailable>
-    <FilterPreviewPublishDir>$(PublishIntermediate)HWEncVppPreview.Cli</FilterPreviewPublishDir>
-    <FilterPreviewPackageDir>$(RepoRoot)publish\win-x64</FilterPreviewPackageDir>
-  </PropertyGroup>
-
-  <Target Name="ValidateFilterPreviewSource">
-    <Error Condition="'$(HWENC_VPP_PREVIEW_REQUIRED)' != '0' and '$(HWENC_VPP_PREVIEW_REQUIRED)' != '1'" Text="HWENC_VPP_PREVIEW_REQUIREDには0または1を指定してください。" />
-    <Error Condition="'$(FilterPreviewAvailable)' != 'true' and '$(HWENC_VPP_PREVIEW_REQUIRED)' == '1'" Text="HWEncVppPreviewのソースまたはライセンスが見つかりません。HWENC_VPP_PREVIEW_SOURCE_DIRを指定してください: $(HWENC_VPP_PREVIEW_SOURCE_DIR)" />
-    <Warning Condition="'$(FilterPreviewAvailable)' != 'true' and '$(HWENC_VPP_PREVIEW_REQUIRED)' != '1'" Text="HWEncVppPreviewのソースまたはライセンスが見つからないため同梱を省略します。HWENC_VPP_PREVIEW_SOURCE_DIRを指定すると同梱できます: $(HWENC_VPP_PREVIEW_SOURCE_DIR)" />
-  </Target>
-
-  <Target Name="PublishFilterPreview" Condition="'$(FilterPreviewAvailable)' == 'true'">
-    <Exec Command="dotnet publish &quot;$(FilterPreviewProject)&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --artifacts-path &quot;$(PublishIntermediate)filter_preview_artifacts&quot; -o &quot;$(FilterPreviewPublishDir)&quot;" />
-    <MakeDir Directories="$(FilterPreviewPackageDir)\licenses\HWEncVppPreview" />
-    <Copy SourceFiles="$(FilterPreviewPublishDir)\HWEncVppPreview.Cli.exe" DestinationFolder="$(FilterPreviewPackageDir)" />
-    <Copy SourceFiles="$(HWENC_VPP_PREVIEW_SOURCE_DIR)\LICENSE;$(HWENC_VPP_PREVIEW_SOURCE_DIR)\THIRD_PARTY_NOTICES.txt" DestinationFolder="$(FilterPreviewPackageDir)\licenses\HWEncVppPreview" />
-  </Target>
-
-  <Target Name="PublishAll" DependsOnTargets="ValidateFilterPreviewSource">
+  <Target Name="PublishAll">
     <ItemGroup>
       <TopStage Include="$(MSBuildThisFileFullPath)">
         <AdditionalProperties>PublishStage=native</AdditionalProperties>
@@ -199,7 +177,6 @@
     <Message Importance="high" Text="dotnet: publish $([System.DateTime]::Now.ToString('HH:mm:ss'))" />
     <MSBuild Projects="@(DotNetApp);@(DotNetWebUi)" Targets="Publish" BuildInParallel="true" />
     <Error Text="WebUI wwwroot was not produced: $(WebUiPublishDir)wwwroot" Condition="!Exists('$(WebUiPublishDir)wwwroot')" />
-    <CallTarget Targets="PublishFilterPreview" />
     <Message Importance="high" Text="dotnet: done $([System.DateTime]::Now.ToString('HH:mm:ss'))" />
   </Target>
 </Project>

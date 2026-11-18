@@ -154,6 +154,13 @@ jobs:
             "https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/Amatsukaze_Linux_BasePkg_20261014_x64.tar.xz" \
             -o "parts/basepkg/Amatsukaze_Linux_BasePkg_20261014_x64.tar.xz"
 
+      - name: Download HWEncVppPreview
+        run: |
+          mkdir -p parts/hwenc_vpp_preview
+          curl -fL --retry 3 \
+            "https://github.com/rigaya/HWEncVppPreview/releases/download/0.01/HWEncVppPreview_0.01_linux-x64.tar.xz" \
+            -o "parts/hwenc_vpp_preview/HWEncVppPreview_0.01_linux-x64.tar.xz"
+
       - name: Create package
         id: create_pkg
         run: |
@@ -176,6 +183,10 @@ jobs:
           test "$(./nicojk_ass_x/nicojk_ass --version)" = "nicojk_ass ${NICOJK_ASS_VERSION}"
           rm -rf pkg/exe_files/nicojk_ass
           install -m 755 nicojk_ass_x/nicojk_ass pkg/exe_files/nicojk_ass
+          # フィルタプレビューのエンジン(単一実行ファイル)はサーバーと同じ場所へ置く
+          mkdir -p pkg/exe_files
+          tar -xJf parts/hwenc_vpp_preview/HWEncVppPreview_0.01_linux-x64.tar.xz -C pkg/exe_files HWEncVppPreview
+          test -x pkg/exe_files/HWEncVppPreview
           docker pull "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004"
           docker run --rm \
             -v "${{ github.workspace }}:/work" \
