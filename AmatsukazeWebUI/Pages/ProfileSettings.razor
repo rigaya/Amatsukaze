@@ -2457,7 +2457,8 @@ else
 
     private double GetBitrateValue(string name)
     {
-        var node = GetObjectNode("Bitrate")?[name];
+        // REST応答は camelCase（a/b/h264）のため、キーは大文字小文字を無視して取得する
+        var node = GetNodeFromObject(GetObjectNode("Bitrate"), name);
         return TryGetDoubleFromNode(node, out var value) ? value : 0;
     }
 
