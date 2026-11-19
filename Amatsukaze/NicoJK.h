@@ -64,8 +64,9 @@ private:
     std::array<std::vector<NicoJKLine>, NICOJK_MAX> dislogues_;
 
     const StreamReformInfo* reform_ = nullptr;
-    // 方式A(基準録画の音声照合)の結果。nicojk_assのmakeに--timemapなどで渡す。
-    tstring timeMapPath_;
+    // 方式A(基準録画の音声照合)。対象と基準の音声のWAVをnicojk_assのmakeに渡して照合させる。
+    tstring targetWavPath_;
+    tstring refWavPath_;
     int refServiceId_ = -1;
     double refStart_ = 0;
     double refDuration_ = 0;

@@ -474,7 +474,6 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClInclude Include="Mpeg2VideoParser.h" />
     <ClInclude Include="Muxer.h" />
     <ClInclude Include="NicoJK.h" />
-    <ClInclude Include="NicoJKAlign.h" />
     <ClInclude Include="NicoJKAlignAudio.h" />
     <ClInclude Include="OSUtil.h" />
     <ClInclude Include="PacketCache.h" />
@@ -627,11 +626,10 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
     <ClCompile Include="Mpeg2VideoParser.cpp" />
     <ClCompile Include="Muxer.cpp" />
     <ClCompile Include="NicoJK.cpp" />
-    <ClCompile Include="NicoJKAlign.cpp" />
     <ClCompile Include="NicoJKAlignSource.cpp" />
     <ClCompile Include="NicoJKAlignAudio.cpp" />
     <ClCompile Include="NicoJKAlignPCM.cpp" />
-    <ClCompile Include="NicoJKAlignEval.cpp" />
+    <ClCompile Include="NicoJKWav.cpp" />
     <ClCompile Include="OSUtil.cpp" />
     <ClCompile Include="PacketCache.cpp" />
     <ClCompile Include="PgsEncoder.cpp" />

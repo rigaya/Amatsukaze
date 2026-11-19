@@ -2,6 +2,7 @@
 #include "OSUtil.h"
 #include "StreamReform.h"
 #include "TsSplitter.h"
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -166,6 +167,28 @@ NicoJKAlignAudio ReadNicoJKTargetAudio(const tstring& wavePath, const std::vecto
     result.duration = duration;
     result.samples.resize((size_t)std::ceil(duration * SAMPLE_RATE), 0);
     return result;
+}
+
+void WriteNicoJKAlignWav(const tstring& path, const std::vector<float>& samples) {
+    std::vector<int16_t> pcm(samples.size());
+    for (size_t i = 0; i < pcm.size(); ++i) {
+        const long value = std::lround((double)samples[i] * 32768.0);
+        pcm[i] = (int16_t)std::max(-32768L, std::min(32767L, value));
+    }
+    const uint32_t dataBytes = (uint32_t)(pcm.size() * sizeof(int16_t));
+    uint8_t header[44] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, 1, 0, 1, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 16, 0, 'd', 'a', 't', 'a', 0, 0, 0, 0};
+    auto put32 = [&](int offset, uint32_t value) {
+        for (int i = 0; i < 4; ++i) header[offset + i] = (uint8_t)(value >> (8 * i));
+    };
+    put32(4, 36 + dataBytes);
+    put32(24, SAMPLE_RATE);
+    put32(28, SAMPLE_RATE * 2);
+    put32(40, dataBytes);
+    // PCMはリトルエンディアンで書く(ホストがリトルエンディアンの前提)。
+    File wav(path, _T("wb"));
+    wav.write(MemoryChunk(header, sizeof(header)));
+    wav.write(MemoryChunk((uint8_t*)pcm.data(), dataBytes));
 }
 
 NicoJKAlignAudio ReadNicoJKReferenceAudio(AMTContext& ctx, const tstring& path, int serviceId) {

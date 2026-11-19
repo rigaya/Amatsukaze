@@ -22,6 +22,9 @@ NicoJKAlignAudio ReadNicoJKTargetAudio(const tstring& wavePath, const std::vecto
 
 NicoJKAlignAudio ReadNicoJKReferenceAudio(AMTContext& ctx, const tstring& path, int serviceId = -1);
 
+// 8kHzのfloat(±1の目盛り)を16bit・モノラルのWAVに書く。int16へは丸めて飽和させる。
+void WriteNicoJKAlignWav(const tstring& path, const std::vector<float>& samples);
+
 // 未知PTSを無視し、1フレームのL+R平均を8kHzの位置へ置く。
 void AddNicoJKAlignAudioFrame(std::vector<float>& samples, int64_t pts, double originPTS, int sampleRate,
                               const int16_t* stereo, size_t count);

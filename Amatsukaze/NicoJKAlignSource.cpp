@@ -1,18 +1,8 @@
 ﻿#include "NicoJK.h"
-#include "NicoJKAlign.h"
 #include "NicoJKAlignAudio.h"
 #include "OSUtil.h"
 
-namespace {
-
-void WriteAlignJSON(const tstring& path, const std::string& text) {
-    File file(path, _T("wb"));
-    file.write(MemoryChunk((uint8_t*)text.data(), text.size()));
-}
-
-}
-
-// 対象は1パス目のPCMを使い、基準の録画だけを追加で読み込む。
+// 対象と基準の音声を一時フォルダにWAVで書く。照合と対応表の作成は、nicojk_assのmakeが行う。
 bool NicoJK::prepareReferenceSource(int serviceId, time_t startTime, int duration) {
     try {
         if (!reform_) {
@@ -23,20 +13,6 @@ bool NicoJK::prepareReferenceSource(int serviceId, time_t startTime, int duratio
         const auto reference = ReadNicoJKReferenceAudio(ctx, source_.ref, source_.refSid.value_or(-1));
         if (!reference.hasTime) {
             ctx.warn(_T("基準録画にTOTがありません。開始時刻0で実況コメントを扱います"));
-        }
-        const auto result = AlignNicoJKAudio(target.samples, reference.samples);
-        ctx.infoF(_T("実況音声照合: 基準 %s / 対象原点PTS %.3f / 照合 %.3f秒 / 区間 %zu"), source_.ref,
-                  reform_->getFirstDataPTS(), result.seconds, result.segments.size());
-        for (const auto& part : result.segments) {
-            ctx.infoF(_T("実況照合区間: %.3f～%.3f秒 / 基準－対象 %+.3f秒 / プローブ%d本 / 相関比%.3f"), part.start,
-                      part.end, part.delta, part.probes, part.ratio);
-        }
-        if (!source_.refDump.empty()) {
-            WriteAlignJSON(source_.refDump, NicoJKAlignResultJSON(result, target.duration, reference.duration));
-        }
-        if (!result.success) {
-            ctx.warnF(_T("実況音声照合に失敗したため対象局へ戻ります: %s"), char_to_tstring(result.reason, CP_UTF8));
-            return false;
         }
 
         // 基準用のfileは対象局の取得には使わない。
@@ -57,9 +33,10 @@ bool NicoJK::prepareReferenceSource(int serviceId, time_t startTime, int duratio
         } else {
             jknum_ = -1;
         }
-        timeMapPath_ = setting_.getTmpNicoJKASSPath(NICOJK_720S) + _T(".timemap.json");
-        WriteAlignJSON(timeMapPath_,
-                       NicoJKTimeMapJSON(MakeNicoJKTimeMap(result.segments, target.duration, reference.duration)));
+        targetWavPath_ = setting_.getTmpNicoJKASSPath(NICOJK_720S) + _T(".target.wav");
+        refWavPath_ = setting_.getTmpNicoJKASSPath(NICOJK_720S) + _T(".ref.wav");
+        WriteNicoJKAlignWav(targetWavPath_, target.samples);
+        WriteNicoJKAlignWav(refWavPath_, reference.samples);
         refServiceId_ = reference.serviceId;
         refStart_ = reference.firstFrameTime;
         refDuration_ = reference.duration;

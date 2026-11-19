@@ -363,7 +363,8 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
         }
         // 基準の照合や実行環境が使えない場合も、取得元を残さず元のAPI/旧経路へ戻る。
         source_ = NicoJKSourceSpec();
-        timeMapPath_.clear();
+        targetWavPath_.clear();
+        refWavPath_.clear();
         refServiceId_ = -1;
         refStart_ = 0;
         refDuration_ = 0;
@@ -409,7 +410,7 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
     if (source_.channel) args += StringFormat(_T(" --channel jk%d"), *source_.channel);
     else args += StringFormat(_T(" --sid %d"), serviceId);
     args += StringFormat(_T(" --start %lld --end %lld"), (long long)startTime, (long long)startTime + duration);
-    if (timeMapPath_.empty()) {
+    if (refWavPath_.empty()) {
         if (source_.programStart) args += StringFormat(_T(" --program-start %.6f"), *source_.programStart);
         if (!source_.file.empty()) {
             args += StringFormat(_T(" --comments-file \"%s\""), pathToOS(source_.file));
@@ -419,8 +420,8 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
         if (source_.start) args += StringFormat(_T(" --comments-start %.6f"), *source_.start);
         if (source_.offset) args += StringFormat(_T(" --comments-offset %.6f"), *source_.offset);
     } else {
-        // 方式A: 基準のコメントを対応表で対象の時刻へ写す
-        args += StringFormat(_T(" --timemap \"%s\""), pathToOS(timeMapPath_));
+        // 方式A: 音声照合は、nicojk_assが対象と基準のWAVから行う
+        args += StringFormat(_T(" --wav \"%s\" --ref-wav \"%s\""), pathToOS(targetWavPath_), pathToOS(refWavPath_));
         if (!source_.file.empty()) args += StringFormat(_T(" --ref-comments-file \"%s\""), pathToOS(source_.file));
         else args += StringFormat(_T(" --ref-sid %d"), refServiceId_);
         args += StringFormat(_T(" --ref-start %.6f --ref-end %.6f --mode %s"),
@@ -434,6 +435,7 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
             args += StringFormat(_T(" --output \"%dx%d=%s\""), widths[i], heights[i], pathToOS(setting_.getTmpNicoJKASSPath(types[i])));
         }
     }
+    if (!source_.refDump.empty()) args += StringFormat(_T(" --report \"%s\""), pathToOS(source_.refDump));
     const char* markDebug = std::getenv("AMATSUKAZE_NICOJK_MERGE_DEBUG");
     if (markDebug && std::string(markDebug) == "1") args += _T(" --mark-reference-color yellow");
     return args;

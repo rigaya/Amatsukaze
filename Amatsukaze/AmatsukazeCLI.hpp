@@ -1010,7 +1010,7 @@ static void amatsukaze_av_log_callback(
     }
 }
 
-int NicoJKAlignEval(AMTContext& ctx, const ConfigWrapper& setting);
+int NicoJKWavMain(AMTContext& ctx, const ConfigWrapper& setting);
 
 static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting) {
     try {
@@ -1032,8 +1032,8 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
         else if (mode == _T("probe_audio"))
             detectAudioMain(ctx, setting);
 
-        else if (mode == _T("test_nicojk_align"))
-            return NicoJKAlignEval(ctx, setting);
+        else if (mode == _T("nicojk_wav"))
+            return NicoJKWavMain(ctx, setting);
         else if (mode == _T("test_print_crc"))
             return test::PrintCRCTable(ctx, setting);
         else if (mode == _T("test_crc"))

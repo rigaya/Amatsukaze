@@ -151,13 +151,6 @@ test('LogoScanEdgeAreaPolicyTests', logo_scan_edge_area_policy_tests,
   timeout : 30,
 )
 
-# 照合中核は直接コンパイルし、STL型をDLL境界へ渡さない。
-nicojk_align_tests = executable('NicoJKAlignTests',
-  'NicoJKAlignTests.cpp', '../../Amatsukaze/NicoJKAlign.cpp',
-  dependencies : ffmpeg_dep, install : false,
-)
-test('NicoJKAlignTests', nicojk_align_tests, suite : 'native', timeout : 60)
-
 # 対象PCMの配置はTS読込から分けて直接検査する。
 nicojk_align_audio_tests = executable('NicoJKAlignAudioTests',
   'NicoJKAlignAudioTests.cpp', '../../Amatsukaze/NicoJKAlignPCM.cpp', '../../Amatsukaze/StringUtils.cpp',
