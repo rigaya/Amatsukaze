@@ -127,8 +127,8 @@ if exist "%NICOJK_ASS_DIR%\nicojk_ass.py" (
 echo 警告: nicojk_ass が見つからないため、実況ASS生成ツールを配置しません: %NICOJK_ASS_DIR%
 echo       環境変数 NICOJK_ASS_DIR で nicojk_ass リポジトリの場所を指定してください
 :nicojk_ass_done
-rem 実況取得と別局録画の自動選択に使う局対応表
-for %%F in (ch_sid.txt syoboi_ch.txt) do (
+rem NicoConvASSの実況取得に使う局対応表(nicojk_assは自分の表を持つ)
+for %%F in (ch_sid.txt) do (
   copy /y ".\defaults\exe_files\%%F" "%MERGED_DIR%\%%F" >nul
   if errorlevel 1 (
     echo %%F の配置に失敗しました。

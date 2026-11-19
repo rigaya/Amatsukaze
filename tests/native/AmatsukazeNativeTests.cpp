@@ -1560,7 +1560,7 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     for (const TCHAR* option : { _T("-i"), _T("-o"), _T("-s"), _T("-e"), _T("--mode"), _T("--logo"),
         _T("--nicojk-file"), _T("--nicojk-channel"), _T("--nicojk-start"),
         _T("--nicojk-program-start"), _T("--nicojk-offset"), _T("--nicojk-ref"),
-        _T("--nicojk-ref-sid"), _T("--nicojk-ref-mode"), _T("--nicojk-ref-dump") }) {
+        _T("--nicojk-ref-sid"), _T("--nicojk-ref-mode"), _T("--nicojk-alt"), _T("--nicojk-dump-dir") }) {
         if (!ExpectCommandLineStatus({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4"), option }, 1,
             strsprintf(_T("値が欠けた末尾の %s"), option).c_str(), diagnostic)) return false;
     }
@@ -1645,9 +1645,9 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     // 基準TSとコメントファイルは併用でき、サービス・統合方法・検査用出力を独立に保持する。
     if (!ExpectCommandLine(with({ _T("--nicojk-ref"), _T("C:\\録画\\ref.ts"),
         _T("--nicojk-ref-sid"), _T("1024"), _T("--nicojk-ref-mode"), _T("merge"),
-        _T("--nicojk-ref-dump"), _T("C:\\作業\\map.json"), _T("--nicojk-file"), _T("ref.xml") }), {
+        _T("--nicojk-dump-dir"), _T("C:\\作業\\dump"), _T("--nicojk-file"), _T("ref.xml") }), {
         { _T("nicojk_ref"), _T("C:/録画/ref.ts") }, { _T("nicojk_ref_sid"), _T("1024") },
-        { _T("nicojk_ref_mode"), _T("merge") }, { _T("nicojk_ref_dump"), _T("C:/作業/map.json") },
+        { _T("nicojk_ref_mode"), _T("merge") }, { _T("nicojk_dump_dir"), _T("C:/作業/dump") },
         { _T("nicojk_file"), _T("ref.xml") },
     }, _T("実況の基準TS・サービス・統合方法"), diagnostic)) return false;
     if (!ExpectCommandLine(with({ _T("--nicojk-ref"), _T("ref.ts") }), {
@@ -1660,6 +1660,14 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     for (const TCHAR* mode : { _T(""), _T("unknown"), _T("Merge") }) {
         if (!ExpectCommandLineStatus(with({ _T("--nicojk-ref"), _T("ref.ts"), _T("--nicojk-ref-mode"), mode }),
             1, _T("実況の基準コメントの未知の統合方法を拒否"), diagnostic)) return false;
+    }
+    // 先行放送のコメントは既定で空。replace/mergeだけを受け付ける。
+    if (!ExpectCommandLine(with({}), { { _T("nicojk_alt"), _T("") } }, _T("先行放送のコメントは既定で無効"), diagnostic)) return false;
+    if (!ExpectCommandLine(with({ _T("--nicojk-alt"), _T("merge") }), { { _T("nicojk_alt"), _T("merge") } },
+        _T("先行放送のコメントの指定"), diagnostic)) return false;
+    for (const TCHAR* mode : { _T(""), _T("unknown"), _T("Merge") }) {
+        if (!ExpectCommandLineStatus(with({ _T("--nicojk-alt"), mode }),
+            1, _T("先行放送のコメントの未知のモードを拒否"), diagnostic)) return false;
     }
     for (const TCHAR* sid : { _T(""), _T("abc"), _T("1.5"), _T("99999999999") }) {
         if (!ExpectCommandLineStatus(with({ _T("--nicojk-ref"), _T("ref.ts"), _T("--nicojk-ref-sid"), sid }),

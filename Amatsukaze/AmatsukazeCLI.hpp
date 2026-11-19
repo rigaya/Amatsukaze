@@ -150,6 +150,10 @@ static void printHelp(const tchar* bin) {
         "  --nicojk-ref <パス> 基準録画の音声に照合して実況を付ける\n"
         "  --nicojk-ref-sid <ID> 基準録画のサービスID\n"
         "  --nicojk-ref-mode replace|merge 基準のみ/対象の実況と統合[replace]\n"
+        "  --nicojk-alt replace|merge 先行放送のコメントを探して使う(アニメなど。\n"
+        "                      取得元の指定があればそちらを優先)\n"
+        "  --nicojk-dump-dir <フォルダ> 実況の調査用に、対象の音声・本編の区間・\n"
+        "                      nicojk_assのレポートなどを残す\n"
         "  --nicojk-file <パス> xml/jklのコメントを使用する\n"
         "  --nicojk-channel <jkN> 取得先チャンネル\n"
         "  --nicojk-start <時刻> コメント基準(UNIX秒/ISO8601/JST14桁)\n"
@@ -638,8 +642,10 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.nicoJKSource.refSid = sid;
         } else if (key == _T("--nicojk-ref-mode")) {
             conf.nicoJKSource.refMode = ParseNicoJKRefMode(getParam(argc, argv, i++));
-        } else if (key == _T("--nicojk-ref-dump")) {
-            conf.nicoJKSource.refDump = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--nicojk-alt")) {
+            conf.nicoJKSource.alt = ParseNicoJKRefMode(getParam(argc, argv, i++));
+        } else if (key == _T("--nicojk-dump-dir")) {
+            conf.nicoJKSource.dumpDir = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--nicojk-file")) {
             conf.nicoJKSource.file = pathNormalize(getParam(argc, argv, i++));
             if (conf.nicoJKSource.file.empty()) THROW(ArgumentException, "実況ファイルが空です");
@@ -949,7 +955,8 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         add(_T("nicojk_ref"), source.ref);
         add(_T("nicojk_ref_mode"), source.refMode.empty() ? _T("replace") : source.refMode);
         add(_T("nicojk_ref_sid"), source.refSid ? StringFormat(_T("%d"), *source.refSid) : _T(""));
-        add(_T("nicojk_ref_dump"), source.refDump);
+        add(_T("nicojk_alt"), source.alt);
+        add(_T("nicojk_dump_dir"), source.dumpDir);
         add(_T("nicojk_channel"), source.channel ? StringFormat(_T("%d"), *source.channel) : _T(""));
         add(_T("nicojk_start"), source.start ? StringFormat(_T("%.6f"), *source.start) : _T(""));
         add(_T("nicojk_program_start"), source.programStart ? StringFormat(_T("%.6f"), *source.programStart) : _T(""));

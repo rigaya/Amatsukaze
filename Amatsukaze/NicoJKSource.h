@@ -10,7 +10,10 @@ struct NicoJKSourceSpec {
     tstring ref;
     std::optional<int> refSid;
     tstring refMode;
-    tstring refDump;
+    // 先行放送のコメント(replace|merge)。取得元の指定がなければ、nicojk_assが録画を探して基準にする。
+    tstring alt;
+    // 調査用の置き場所。対象のWAV・本編の区間・nicojk_assの作業ファイルとレポートを残す。
+    tstring dumpDir;
     std::optional<int> channel;
     std::optional<double> start, programStart, offset;
     bool specified = false;
@@ -80,7 +83,7 @@ inline std::string TrimNicoJKValue(const std::string& text) {
 }
 inline tstring ParseNicoJKRefMode(const tstring& value) {
     if (value != _T("replace") && value != _T("merge")) {
-        THROW(ArgumentException, "実況の基準録画モードはreplaceまたはmergeで指定してください");
+        THROW(ArgumentException, "実況のモードはreplaceまたはmergeで指定してください");
     }
     return value;
 }
@@ -121,7 +124,8 @@ inline NicoJKSourceSpec MergeNicoJKSource(const NicoJKSourceSpec& cli, NicoJKSou
     if (!cli.ref.empty()) base.ref = cli.ref;
     if (cli.refSid) base.refSid = cli.refSid;
     if (!cli.refMode.empty()) base.refMode = cli.refMode;
-    if (!cli.refDump.empty()) base.refDump = cli.refDump;
+    if (!cli.alt.empty()) base.alt = cli.alt;
+    if (!cli.dumpDir.empty()) base.dumpDir = cli.dumpDir;
     base.programStart = cli.programStart;
     base.specified = base.specified || cli.specified || !base.ref.empty();
     ValidateNicoJKReference(base);

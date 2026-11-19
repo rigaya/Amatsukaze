@@ -26,7 +26,9 @@ public:
     NicoJK(AMTContext& ctx,
         const ConfigWrapper& setting);
 
-    bool makeASS(int serviceId, time_t startTime, int duration, const StreamReformInfo* reform = nullptr);
+    // mainTrimsは本編の区間(CM解析の結果のTrim。フレーム番号の[開始, 終了)の組の並び)。ないときはnullptr。
+    bool makeASS(int serviceId, time_t startTime, int duration, const StreamReformInfo* reform = nullptr,
+        const std::vector<int>* mainTrims = nullptr);
 
     bool isFail() const;
 
@@ -64,20 +66,24 @@ private:
     std::array<std::vector<NicoJKLine>, NICOJK_MAX> dislogues_;
 
     const StreamReformInfo* reform_ = nullptr;
-    // 方式A(基準録画の音声照合)。対象と基準の音声のWAVをnicojk_assのmakeに渡して照合させる。
+    const std::vector<int>* mainTrims_ = nullptr;
+    // 先行放送のコメント(replace|merge)。使わないときは空
+    tstring altMode_;
+    // 対象の音声のWAVと本編の区間のJSON。nicojk_assのmakeに渡す。
     tstring targetWavPath_;
-    tstring refWavPath_;
-    int refServiceId_ = -1;
-    double refStart_ = 0;
-    double refDuration_ = 0;
-    int mergeChannel_ = -1;
-    bool prepareReferenceSource(int serviceId, time_t startTime, int duration);
+    tstring spansPath_;
+    bool prepareTargetAudio();
+    bool prepareSpans();
+    tstring getDumpDir() const;
+    tstring getWorkFilePath(const tchar* name) const;
     NicoJKSourceSpec source_;
     bool resolveSource();
     int jknum_;
     std::string tvname_;
-
     void getJKNum(int serviceId);
+    void logTargetStation(int serviceId, time_t startTime, int duration);
+    bool canRunScript();
+    std::vector<tstring> getSearchDirs() const;
 
     enum NicoJKMask {
         MASK_720S = 1,

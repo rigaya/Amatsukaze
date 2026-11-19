@@ -329,14 +329,11 @@ namespace Amatsukaze.Server
             }
         }
 
-        internal NicoJKReferenceFinder NicoJKReferenceFinder { get; }
-
         public EncodeServer(int port, IUserClient client, Action finishRequested)
         {
 #if PROFILE
             var prof = new Profile();
 #endif
-            NicoJKReferenceFinder = new NicoJKReferenceFinder(GetBasePath(), Path.GetFullPath("data/syoboi_cache"));
             this.finishRequested = finishRequested;
             serverPort = port;
 
@@ -2069,6 +2066,14 @@ namespace Amatsukaze.Server
             }
         }
 
+        // アニメ(ARIBのジャンル大分類7)で、プロファイルが先行放送のコメントを使う設定のときの--nicojk-altの値
+        internal static string GetNicoJKAltMode(ProfileSetting profile, IEnumerable<GenreItem> genre)
+        {
+            if (!profile.EnableNicoJK || profile.NicoJKReferenceMode is not (1 or 2)) return null;
+            if (genre?.Any(g => g.Space == (int)GenreSpace.ARIB && g.Level1 == 7) != true) return null;
+            return profile.NicoJKReferenceMode == 1 ? "replace" : "merge";
+        }
+
         internal static string GetNicoJKProgramStartArgument(bool enabled, DateTime programStart)
         {
             if (!enabled || programStart <= new DateTime(2000, 1, 1)) return "";
@@ -2087,7 +2092,7 @@ namespace Amatsukaze.Server
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
-            string inHandle, string outHandle, int pid, DateTime programStart = default, bool enableNicoJK = true)
+            string inHandle, string outHandle, int pid, DateTime programStart = default, string nicoJKAlt = null)
         {
             if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
             {
@@ -2346,7 +2351,7 @@ namespace Amatsukaze.Server
                     {
                         sb.Append(" --output-chapter");
                     }
-                    if (profile.EnableNicoJK && enableNicoJK)
+                    if (profile.EnableNicoJK)
                     {
                         sb.Append(" --nicojk");
                         sb.Append(GetNicoJKProgramStartArgument(profile.EnableNicoJK, programStart));
@@ -2362,6 +2367,11 @@ namespace Amatsukaze.Server
                             .Append(profile.NicoJKFormatMask);
                         var useNicoConvAss = !Util.IsServerLinux()
                             && !string.IsNullOrEmpty(setting.NicoConvASSPath);
+                        // 先行放送のコメントは、nicojk_assを使うときだけ意味がある(手動の指定の有無はCLIが見る)
+                        if (!useNicoConvAss && !string.IsNullOrEmpty(nicoJKAlt))
+                        {
+                            sb.Append(" --nicojk-alt ").Append(nicoJKAlt);
+                        }
                         sb.Append(useNicoConvAss ? " --nicoass \"" : " --nicojkass \"")
                             .Append(useNicoConvAss ? setting.NicoConvASSPath : setting.NicoJKAssPath)
                             .Append("\"");
