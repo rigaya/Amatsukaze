@@ -15,7 +15,6 @@ struct NicoJKSourceSpec {
     std::optional<double> start, programStart, offset;
     bool specified = false;
     bool strictFile = false;
-    bool relative = false;
 };
 inline double ParseNicoJKOffset(const tstring& value) {
     try {
@@ -73,12 +72,6 @@ inline double ParseNicoJKTime(const tstring& value) {
     } catch (const std::exception&) {}
     THROW(ArgumentException, "実況の基準時刻が不正です");
     return 0;
-}
-inline double NicoJKSourceStart(double ts, double program, const std::optional<double>& start, double offset) {
-    return ts + (start.value_or(program) - program) - offset;
-}
-inline double NicoJKFileReference(double program, double first, size_t count, size_t overlap) {
-    return count && overlap >= (count + 1) / 2 ? program : first;
 }
 
 inline std::string TrimNicoJKValue(const std::string& text) {

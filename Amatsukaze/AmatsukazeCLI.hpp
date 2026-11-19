@@ -20,9 +20,9 @@
 #if defined(_WIN32) || defined(_WIN64)
 #define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     NicoConvASSへのパス\n")
 #else
-#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_ass.pyへのパス（互換オプション）\n")
+#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_assへのパス（互換オプション）\n")
 #endif
-#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_ass.pyへのパス\n")
+#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_ass/nicojk_ass.pyへのパス\n")
 
 static void printCopyright() {
     PRINTF(
@@ -292,8 +292,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.nicoJKAssPath = _T("");
 #else
     conf.nicoConvAssPath = _T("");
-    // Linux: Python スクリプト nicojk_ass.py を使用
-    conf.nicoJKAssPath = _T("nicojk_ass.py");
+    // Linux: Python スクリプト nicojk_ass/nicojk_ass.py を使用
+    conf.nicoJKAssPath = _T("nicojk_ass/nicojk_ass.py");
 #endif
     conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
@@ -857,9 +857,14 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
                 File::exists(script) ? nullptr : GetModuleDirectory().c_str()));
         }
         // ch_sid.txt は実際に使用する変換ツールと同じディレクトリに配置
+        // (nicojk_ass は exe_files/nicojk_ass/ にあるので、なければ1つ上の exe_files を探す)
         const auto& nicoJKToolPath = !conf.nicoJKAssPath.empty()
             ? conf.nicoJKAssPath : conf.nicoConvAssPath;
-        conf.nicoConvChSidPath = pathGetDirectory(pathNormalize(GetFullPathFrom(nicoJKToolPath.c_str()))) + _T("/ch_sid.txt");
+        const auto toolDir = pathGetDirectory(pathNormalize(GetFullPathFrom(nicoJKToolPath.c_str())));
+        conf.nicoConvChSidPath = toolDir + _T("/ch_sid.txt");
+        if (!File::exists(conf.nicoConvChSidPath) && File::exists(toolDir + _T("/../ch_sid.txt"))) {
+            conf.nicoConvChSidPath = pathNormalize(toolDir + _T("/../ch_sid.txt"));
+        }
         conf.mp4boxPath = search(conf.mp4boxPath);
         conf.mkvmergePath = search(conf.mkvmergePath);
         conf.muxerPath = search(conf.muxerPath);

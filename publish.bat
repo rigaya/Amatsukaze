@@ -101,12 +101,32 @@ if errorlevel 8 exit /b %ERRORLEVEL%
 if exist "%SRC_BASE%\AmatsukazeServer\wwwroot" robocopy "%SRC_BASE%\AmatsukazeServer\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
 
-rem ニコニコ実況コメント取得・ASS変換スクリプト
-copy /y ".\scripts\nicojk_ass.py" "%MERGED_DIR%\nicojk_ass.py" >nul
-if errorlevel 1 (
-  echo nicojk_ass.py の配置に失敗しました。
-  exit /b 1
+rem ニコニコ実況コメント取得・ASS変換ツール nicojk_ass(別リポジトリ。danmaku2assを同梱している)
+rem 旧版の nicojk_ass.py と danmaku2ass.py は使わなくなったので取り除く
+if exist "%MERGED_DIR%\nicojk_ass.py" del /f /q "%MERGED_DIR%\nicojk_ass.py"
+if exist "%MERGED_DIR%\danmaku2ass.py" del /f /q "%MERGED_DIR%\danmaku2ass.py"
+if not defined NICOJK_ASS_DIR set "NICOJK_ASS_DIR=..\nicojk_ass"
+if exist "%NICOJK_ASS_DIR%\nicojk_ass.py" (
+  if exist "%NICOJK_ASS_DIR%\src" (
+    if not exist "%MERGED_DIR%\nicojk_ass" mkdir "%MERGED_DIR%\nicojk_ass"
+    copy /y "%NICOJK_ASS_DIR%\nicojk_ass.py" "%MERGED_DIR%\nicojk_ass\nicojk_ass.py" >nul
+    if errorlevel 1 (
+      echo nicojk_ass の配置に失敗しました。
+      exit /b 1
+    )
+    robocopy "%NICOJK_ASS_DIR%\src" "%MERGED_DIR%\nicojk_ass\src" /E /XD __pycache__ /NFL /NDL /NJH /NJS
+    if errorlevel 8 exit /b %ERRORLEVEL%
+    copy /y "%NICOJK_ASS_DIR%\LICENSE*" "%MERGED_DIR%\nicojk_ass\" >nul
+    if errorlevel 1 (
+      echo nicojk_ass のライセンスファイルの配置に失敗しました。
+      exit /b 1
+    )
+    goto nicojk_ass_done
+  )
 )
+echo 警告: nicojk_ass が見つからないため、実況ASS生成ツールを配置しません: %NICOJK_ASS_DIR%
+echo       環境変数 NICOJK_ASS_DIR で nicojk_ass リポジトリの場所を指定してください
+:nicojk_ass_done
 rem 実況取得と別局録画の自動選択に使う局対応表
 for %%F in (ch_sid.txt syoboi_ch.txt) do (
   copy /y ".\defaults\exe_files\%%F" "%MERGED_DIR%\%%F" >nul

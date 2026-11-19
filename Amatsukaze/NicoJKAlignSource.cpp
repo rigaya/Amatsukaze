@@ -40,9 +40,8 @@ bool NicoJK::prepareReferenceSource(int serviceId, time_t startTime, int duratio
         }
 
         // 基準用のfileは対象局の取得には使わない。
+        mergeChannel_ = -1;
         if (source_.refMode == _T("merge")) {
-            mergeStart_ = startTime;
-            mergeDuration_ = duration;
             getJKNum(serviceId);
             mergeChannel_ = jknum_;
             if (mergeChannel_ <= 0) {
@@ -61,8 +60,9 @@ bool NicoJK::prepareReferenceSource(int serviceId, time_t startTime, int duratio
         timeMapPath_ = setting_.getTmpNicoJKASSPath(NICOJK_720S) + _T(".timemap.json");
         WriteAlignJSON(timeMapPath_,
                        NicoJKTimeMapJSON(MakeNicoJKTimeMap(result.segments, target.duration, reference.duration)));
-        sourceStart_ = reference.firstFrameTime;
-        scriptDuration_ = reference.duration;
+        refServiceId_ = reference.serviceId;
+        refStart_ = reference.firstFrameTime;
+        refDuration_ = reference.duration;
         if (setting_.isUseNicoJKLog()) {
             ctx.info(_T("基準録画の指定をnicojklogより優先します"));
         }

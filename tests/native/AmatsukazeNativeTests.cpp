@@ -1710,15 +1710,6 @@ bool TestNicoJKSource(tstring& diagnostic) {
     if (!ExpectNear(ParseNicoJKTime(_T("1970-01-01T09:00:00")), 0, 0, _T("UNIX時刻の起点"), diagnostic)) return false;
     if (!ExpectNear(ParseNicoJKTime(_T("2000-02-29T00:00:00Z")), 951782400, 0, _T("世紀の閏年"), diagnostic)) return false;
     if (!ExpectNear(ParseNicoJKOffset(_T("-0.125")), -0.125, 0, _T("負の小数ずれ量"), diagnostic)) return false;
-    // 録画は番組開始30秒前とし、正負のずれ量を独立した期待値で検証する。
-    if (!ExpectNear(NicoJKSourceStart(1970, 2000, 1000, 1.25), 968.75, 0,
-        _T("番組基準からの取得範囲"), diagnostic)) return false;
-    if (!ExpectNear(NicoJKSourceStart(1970, 2000, std::nullopt, -0.5), 1970.5, 0,
-        _T("基準未指定では番組時刻が相殺される"), diagnostic)) return false;
-    if (!ExpectNear(NicoJKFileReference(2000, 1000, 4, 2), 2000, 0,
-        _T("半数以上重なるファイルは絶対時刻を使用"), diagnostic)) return false;
-    if (!ExpectNear(NicoJKFileReference(2000, 1000, 5, 2), 1000, 0,
-        _T("半数未満なら最初のコメントを番組開始へ合わせる"), diagnostic)) return false;
 
     const auto ini = ParseNicoJKIni({ "\xef\xbb\xbf# 実況取得元", "", " channel = jk9 ",
         "start=20231115071320", "offset = -1.25", "file=comments.xml" });

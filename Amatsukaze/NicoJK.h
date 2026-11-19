@@ -64,17 +64,15 @@ private:
     std::array<std::vector<NicoJKLine>, NICOJK_MAX> dislogues_;
 
     const StreamReformInfo* reform_ = nullptr;
+    // 方式A(基準録画の音声照合)の結果。nicojk_assのmakeに--timemapなどで渡す。
     tstring timeMapPath_;
-    double scriptDuration_ = 0;
+    int refServiceId_ = -1;
+    double refStart_ = 0;
+    double refDuration_ = 0;
     int mergeChannel_ = -1;
-    time_t mergeStart_ = 0;
-    int mergeDuration_ = 0;
     bool prepareReferenceSource(int serviceId, time_t startTime, int duration);
     NicoJKSourceSpec source_;
-    tstring sourceScript_;
-    double sourceStart_ = 0;
-    bool resolveSource(time_t startTime, int duration);
-    bool makeSourceASS(int serviceId, time_t startTime, int duration);
+    bool resolveSource();
     int jknum_;
     std::string tvname_;
 
@@ -95,9 +93,10 @@ private:
 
     bool nicoConvASS(ConvMode mode, size_t startTime);
 
-    // Python スクリプトで API取得 + ASS変換
-    bool makeASSByScript(time_t startTime, int duration);
-    tstring MakeNicoJKScriptArgs(const tstring& pythonCommand, time_t startTime, int duration, NicoJKType type);
+    // nicojk_assのmakeを1回呼び出して、取得とASS変換(全解像度)を行う
+    bool makeASSByScript(int serviceId, time_t startTime, int duration);
+    tstring MakeNicoJKScriptArgs(const tstring& pythonCommand, int serviceId, time_t startTime, int duration);
+    tstring getNicoJKAssScriptPath() const;
 
     static double toClock(int h, int m, int s, int ss);
 

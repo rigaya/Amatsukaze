@@ -1454,11 +1454,23 @@ namespace Amatsukaze.Server
                 if (!Util.IsServerLinux())
                     setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
             }
+            // nicojk_assは exe_files/nicojk_ass/nicojk_ass.py に置く。
+            // 古い版の設定は実行モジュールと同じフォルダの nicojk_ass.py を指しているので、
+            // そのファイルがなくなっていれば新しい既定値に直す。
+            var nicoJKAssDefaultPath = Path.Combine(basePath, "nicojk_ass", "nicojk_ass.py");
+            if (!string.IsNullOrEmpty(setting.NicoJKAssPath)
+                && !File.Exists(setting.NicoJKAssPath)
+                && string.Equals(Path.GetFullPath(setting.NicoJKAssPath),
+                    Path.GetFullPath(Path.Combine(basePath, "nicojk_ass.py")),
+                    Util.IsServerWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                && File.Exists(nicoJKAssDefaultPath))
+            {
+                setting.NicoJKAssPath = nicoJKAssDefaultPath;
+            }
             if (string.IsNullOrEmpty(setting.NicoJKAssPath))
             {
-                var nicoJKAssPath = Path.Combine(basePath, "nicojk_ass.py");
-                if (File.Exists(nicoJKAssPath))
-                    setting.NicoJKAssPath = nicoJKAssPath;
+                if (File.Exists(nicoJKAssDefaultPath))
+                    setting.NicoJKAssPath = nicoJKAssDefaultPath;
             }
             if (string.IsNullOrEmpty(setting.SCRenamePath))
             {

@@ -44,7 +44,7 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
   完全互換ではありませんが、代替実装を用意しています。
 
   - AmatsukazeGUI -> WebUI
-  - ニコニコ実況関連 -> nicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass)
+  - ニコニコ実況関連 -> nicojk_ass(`exe_files/nicojk_ass/nicojk_ass.py`、[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)
 
 - 対応予定なし
   - 設定画面へのドラッグドロップによるタスク追加
