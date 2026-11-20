@@ -10,7 +10,7 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
     const signal = listeners.signal;
     let width = 0, height = 0;
     let zoom = null;
-    let split = 0.5, comparison = false;
+    let split = 0.5, view = "after";
     let wheel = 0, pendingSteps = 0, stepping = false;
     let drag = null;
 
@@ -39,8 +39,8 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
         if (!width || !height) return;
         const { x, y, scale, dpr } = geometry();
         const physicalScale = scale * dpr;
-        const beforeNearest = useNearest(before, physicalScale);
-        const afterNearest = useNearest(after, physicalScale);
+        const beforeNearest = view !== "after" && useNearest(before, physicalScale);
+        const afterNearest = view !== "before" && useNearest(after, physicalScale);
         // 補間なしで描くときは、前後の共通原点を物理画素にそろえる。
         const align = beforeNearest || afterNearest;
         const left = align ? Math.round(x * dpr) / dpr : x;
@@ -48,7 +48,7 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
         layer.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
         before.style.imageRendering = beforeNearest ? "pixelated" : "auto";
         after.style.imageRendering = afterNearest ? "pixelated" : "auto";
-        before.style.clipPath = comparison ? `inset(0 ${(1 - split) * 100}% 0 0)` : "";
+        before.style.clipPath = view === "compare" ? `inset(0 ${(1 - split) * 100}% 0 0)` : "";
         divider.style.left = `${left + width * scale * split}px`;
         zoomLabel.value = `${Math.round(physicalScale * 100)}%`;
     }
@@ -94,19 +94,19 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
     function onWheel(event) {
         event.preventDefault();
         if (!width || !height || !event.deltaY) return;
-        const delta = event.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? event.deltaY / pixelsPerWheelStep : event.deltaY;
+        const pixels = event.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? event.deltaY : event.deltaY * pixelsPerWheelStep;
         if (event.ctrlKey) {
-            zoomAt(event.clientX, event.clientY, wheelZoom ** -delta);
+            zoomAt(event.clientX, event.clientY, wheelZoom ** (-pixels / pixelsPerWheelStep));
             return;
         }
-        wheel += delta;
-        const count = Math.trunc(wheel);
-        wheel -= count;
+        wheel += pixels;
+        const count = Math.trunc(wheel / pixelsPerWheelStep);
+        wheel -= count * pixelsPerWheelStep;
         if (count) step(count).catch(error => { if (!signal.aborted) console.error(error); });
     }
 
     function isOnDivider(event) {
-        if (!comparison) return false;
+        if (view !== "compare") return false;
         const left = divider.getBoundingClientRect().left;
         return Math.abs(event.clientX - left) <= splitGrip;
     }
@@ -156,16 +156,15 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
     viewport.addEventListener("pointerdown", onPointerDown, { signal });
     viewport.addEventListener("pointermove", onPointerMove, { signal });
     viewport.addEventListener("lostpointercapture", endDrag, { signal });
-    viewport.addEventListener("dblclick", fit, { signal });
+    viewport.addEventListener("dblclick", event => {
+        if (!event.target.closest(".fa-overlay")) fit();
+    }, { signal });
     fitButton.addEventListener("click", fit, { signal });
     actualSizeButton.addEventListener("click", actualSize, { signal });
 
     return {
-        setView(isComparison) {
-            comparison = isComparison;
-            render();
-        },
-        setSize(nextWidth, nextHeight) {
+        present(nextView, nextWidth, nextHeight) {
+            view = nextView;
             // 解像度変更後も中央に表示する画像上の相対位置を保つ。
             if (zoom && width && height) {
                 zoom.x *= nextWidth / width;

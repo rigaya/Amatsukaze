@@ -63,16 +63,16 @@
     @* canvasは初回の描画からDOMに置く必要があるため、読み込み中も枠は出したまま上に重ねて知らせる *@
     <div class="fa-main">
         <section class="fa-stage">
-            <div class="fa-images @(_view == "compare" ? "is-compare" : "") @(FrameKept == false && _view != "before" ? "is-dropped" : "")"
+            <div class="fa-images @(_displayedView == "compare" ? "is-compare" : "") @(FrameKept == false && _displayedView != "before" ? "is-dropped" : "")"
                  @ref="_viewport" tabindex="0" aria-label="映像プレビュー">
                 <div class="fa-image-layer" @ref="_imageLayer">
-                    <canvas @ref="_afterCanvas" hidden="@(_view == "before")"></canvas>
-                    <canvas @ref="_beforeCanvas" hidden="@(_view == "after")"></canvas>
+                    <canvas @ref="_afterCanvas" hidden="@(_displayedView == "before")"></canvas>
+                    <canvas @ref="_beforeCanvas" hidden="@(_displayedView == "after")"></canvas>
                 </div>
                 <div class="fa-divider" @ref="_divider" aria-hidden="true"></div>
-                <span class="fa-badge" hidden="@(_view == "after")">フィルタ前</span>
-                <span class="fa-badge fa-badge-after" hidden="@(_view == "before")">フィルタ後</span>
-                @if (FrameKept == false && _view != "before")
+                <span class="fa-badge" hidden="@(_displayedView == "after")">フィルタ前</span>
+                <span class="fa-badge fa-badge-after" hidden="@(_displayedView == "before")">フィルタ後</span>
+                @if (FrameKept == false && _displayedView != "before")
                 {
                     <div class="fa-badge fa-badge-drop">間引かれるフレーム</div>
                 }

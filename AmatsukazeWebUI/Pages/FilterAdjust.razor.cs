@@ -25,7 +25,7 @@ public partial class FilterAdjust
     private DotNetObjectReference<FilterAdjust>? _callback;
     private ElementReference _beforeCanvas, _afterCanvas, _viewport, _imageLayer, _divider, _fitButton, _actualSizeButton, _zoomLabel;
     private string? _sessionId, _error;
-    private string _status = "読み込み中…", _view = "after", _scale = "1", _quality = "yuv", _saveName = "";
+    private string _status = "読み込み中…", _view = "after", _displayedView = "after", _scale = "1", _quality = "yuv", _saveName = "";
     private string[] _notices = [], _logs = [];
     private long _generation, _committedGeneration, _frameRevision, _seekRevision;
     private int? _pendingSeek;
@@ -216,12 +216,7 @@ public partial class FilterAdjust
         await StepAsync(direction);
         if (!_disposed) StateHasChanged();
     });
-    private async Task SetViewAsync(string value)
-    {
-        _view = value;
-        await _viewer!.InvokeVoidAsync("setView", value == "compare");
-        await RefreshAsync();
-    }
+    private Task SetViewAsync(string value) { _view = value; return RefreshAsync(); }
     private Task SetScaleAsync(string value) { _scale = value; return RefreshAsync(); }
     private Task SetQualityAsync(string value) { _quality = value; return QualityChangedAsync(); }
     private async Task OnKeyDown(KeyboardEventArgs e)
@@ -316,8 +311,9 @@ public partial class FilterAdjust
             var display = view == "before" ? before! : after!;
             var height = options.Crop?[3] ?? display.Height * options.Scale;
             var dar = _inputDar > 0 ? _inputDar : display.Width * display.Sar / display.Height;
-            await _viewer!.InvokeVoidAsync("setSize", height * dar, height);
+            await _viewer!.InvokeVoidAsync("present", view, height * dar, height);
             if (!Current()) return;
+            _displayedView = view;
             if (after != null) UpdateFrameInfo(after.Metadata);
             pos = after?.Position ?? before!.Position;
             // 中間フレームを描画しても、つまみは新しい入力位置に留める。
