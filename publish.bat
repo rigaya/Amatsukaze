@@ -107,23 +107,5 @@ if not exist "%SRC_BASE%\AmatsukazeWebUI\wwwroot\index.html" (
 robocopy "%SRC_BASE%\AmatsukazeWebUI\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
 
-rem nicojk_ass: ニコニコ実況コメント取得・ASS変換ツール 別リポジトリ
-rem リリースからの取り込みは、パッケージを作るCI build_windows_package.yml が行う
-rem 手元のビルドでは、隣のリポジトリで作った ..\nicojk_ass\dist\nicojk_ass.exe があればコピーする
-rem 旧版の nicojk_ass.py と danmaku2ass.py は使わなくなったので取り除く
-if exist "%MERGED_DIR%\nicojk_ass.py" del /f /q "%MERGED_DIR%\nicojk_ass.py"
-if exist "%MERGED_DIR%\danmaku2ass.py" del /f /q "%MERGED_DIR%\danmaku2ass.py"
-if exist "%~dp0..\nicojk_ass\dist\nicojk_ass.exe" (
-  copy /y "%~dp0..\nicojk_ass\dist\nicojk_ass.exe" "%MERGED_DIR%\nicojk_ass.exe" >nul
-  if errorlevel 1 exit /b 1
-)
-rem NicoConvASSの実況取得に使う局対応表(nicojk_assは自分の表を持つ)
-for %%F in (ch_sid.txt) do (
-  copy /y ".\defaults\exe_files\%%F" "%MERGED_DIR%\%%F" >nul
-  if errorlevel 1 (
-    echo %%F の配置に失敗しました。
-    exit /b 1
-  )
-)
 echo Done. Merged outputs are in %MERGED_DIR% (WebUI is served on REST port+1).
 exit /b 0
