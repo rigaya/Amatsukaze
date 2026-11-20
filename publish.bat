@@ -107,58 +107,16 @@ if not exist "%SRC_BASE%\AmatsukazeWebUI\wwwroot\index.html" (
 robocopy "%SRC_BASE%\AmatsukazeWebUI\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
 
-rem ニコニコ実況コメント取得・ASS変換ツール nicojk_ass(別リポジトリ。danmaku2assを同梱している)
-rem リリースの単一のexeのzipをダウンロードして nicojk_ass.exe に置く(ライセンスなどは license\nicojk_ass\ に置く)。版とリポジトリは nicojk_ass_version.txt に書く。
-rem NICOJK_ASS_ZIP にローカルのzipを指定すると、ダウンロードの代わりに使う。
+rem ニコニコ実況コメント取得・ASS変換ツール nicojk_ass(別リポジトリ)
+rem リリースからの取り込みは、パッケージを作るCI(build_windows_package.yml)が行う。
+rem 手元のビルドでは、隣のリポジトリで作ったexe(..\nicojk_ass\dist\nicojk_ass.exe)があればコピーする。
 rem 旧版の nicojk_ass.py と danmaku2ass.py は使わなくなったので取り除く
 if exist "%MERGED_DIR%\nicojk_ass.py" del /f /q "%MERGED_DIR%\nicojk_ass.py"
 if exist "%MERGED_DIR%\danmaku2ass.py" del /f /q "%MERGED_DIR%\danmaku2ass.py"
-for /f "usebackq eol=# tokens=1,* delims==" %%A in ("nicojk_ass_version.txt") do set "%%A=%%B"
-if not defined NICOJK_ASS_VERSION (
-  echo nicojk_ass_version.txt から版を読めませんでした。
-  exit /b 1
+if exist "%~dp0..\nicojk_ass\dist\nicojk_ass.exe" (
+  copy /y "%~dp0..\nicojk_ass\dist\nicojk_ass.exe" "%MERGED_DIR%\nicojk_ass.exe" >nul
+  if errorlevel 1 exit /b 1
 )
-set "NICOJK_ASS_TMP=.\publish\nicojk_ass_tmp"
-if exist "%NICOJK_ASS_TMP%" rmdir /s /q "%NICOJK_ASS_TMP%"
-mkdir "%NICOJK_ASS_TMP%"
-if errorlevel 1 exit /b 1
-set "NICOJK_ASS_ZIP_PATH=%NICOJK_ASS_ZIP%"
-if defined NICOJK_ASS_ZIP_PATH goto nicojk_ass_extract
-set "NICOJK_ASS_ZIP_PATH=%NICOJK_ASS_TMP%\nicojk_ass.zip"
-set "NICOJK_ASS_URL=%NICOJK_ASS_REPO%/releases/download/%NICOJK_ASS_VERSION%/nicojk_ass-%NICOJK_ASS_VERSION%-windows-x64.zip"
-echo nicojk_ass %NICOJK_ASS_VERSION% をダウンロードします: %NICOJK_ASS_URL%
-curl.exe -fL --retry 3 --retry-delay 10 -o "%NICOJK_ASS_ZIP_PATH%" "%NICOJK_ASS_URL%"
-if errorlevel 1 (
-  echo nicojk_ass のダウンロードに失敗しました。
-  exit /b 1
-)
-:nicojk_ass_extract
-powershell -NoProfile -Command "Expand-Archive -LiteralPath $env:NICOJK_ASS_ZIP_PATH -DestinationPath $env:NICOJK_ASS_TMP\x -Force"
-if errorlevel 1 (
-  echo nicojk_ass のzipの展開に失敗しました: %NICOJK_ASS_ZIP_PATH%
-  exit /b 1
-)
-set "NICOJK_ASS_ACTUAL="
-pushd "%NICOJK_ASS_TMP%\x"
-if errorlevel 1 exit /b 1
-for /f "usebackq delims=" %%V in (`nicojk_ass.exe --version`) do set "NICOJK_ASS_ACTUAL=%%V"
-popd
-if not "%NICOJK_ASS_ACTUAL%"=="nicojk_ass %NICOJK_ASS_VERSION%" (
-  echo nicojk_ass の版が一致しません: 期待 "nicojk_ass %NICOJK_ASS_VERSION%"、実際 "%NICOJK_ASS_ACTUAL%"
-  exit /b 1
-)
-rem 以前のフォルダの形(nicojk_ass\)が残っていると、exeを置けないので取り除く
-if exist "%MERGED_DIR%\nicojk_ass\" rmdir /s /q "%MERGED_DIR%\nicojk_ass"
-copy /y "%NICOJK_ASS_TMP%\x\nicojk_ass.exe" "%MERGED_DIR%\nicojk_ass.exe" >nul
-if errorlevel 1 exit /b 1
-if exist "%MERGED_DIR%\license\nicojk_ass" rmdir /s /q "%MERGED_DIR%\license\nicojk_ass"
-robocopy "%NICOJK_ASS_TMP%\x\danmaku2ass-license" "%MERGED_DIR%\license\nicojk_ass\danmaku2ass-license" /E /NFL /NDL /NJH /NJS
-if errorlevel 8 exit /b %ERRORLEVEL%
-copy /y "%NICOJK_ASS_TMP%\x\LICENSE" "%MERGED_DIR%\license\nicojk_ass\" >nul
-if errorlevel 1 exit /b 1
-copy /y "%NICOJK_ASS_TMP%\x\README.md" "%MERGED_DIR%\license\nicojk_ass\" >nul
-if errorlevel 1 exit /b 1
-rmdir /s /q "%NICOJK_ASS_TMP%"
 rem NicoConvASSの実況取得に使う局対応表(nicojk_assは自分の表を持つ)
 for %%F in (ch_sid.txt) do (
   copy /y ".\defaults\exe_files\%%F" "%MERGED_DIR%\%%F" >nul

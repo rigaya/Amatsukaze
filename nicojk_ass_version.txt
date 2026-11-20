@@ -1,3 +1,0 @@
-# 同梱するnicojk_assの版とリポジトリ(scripts/build.shとpublish.batが読む)
-NICOJK_ASS_VERSION=0.01
-NICOJK_ASS_REPO=https://github.com/rigaya/nicojk_ass

@@ -188,10 +188,6 @@ jobs:
           if exist publish\\win-x64\\*.dll copy /y publish\\win-x64\\*.dll package\\exe_files
           if exist publish\\win-x64\\*.dll.config copy /y publish\\win-x64\\*.dll.config package\\exe_files
           if exist publish\\win-x64\\*.xml copy /y publish\\win-x64\\*.xml package\\exe_files
-          rem nicojk_ass.exe(上のexeのコピーに含まれる)のライセンスなどは、publish.batが license\\nicojk_ass に置いたもの
-          if exist package\\exe_files\\license\\nicojk_ass rmdir /s /q package\\exe_files\\license\\nicojk_ass
-          if exist publish\\win-x64\\license\\nicojk_ass robocopy publish\\win-x64\\license\\nicojk_ass package\\exe_files\\license\\nicojk_ass /E /NFL /NDL /NJH /NJS
-          if errorlevel 8 exit /b %ERRORLEVEL%
 
           if exist package\\exe_files\\wwwroot rmdir /s /q package\\exe_files\\wwwroot
           if exist publish\\win-x64\\wwwroot robocopy publish\\win-x64\\wwwroot package\\exe_files\\wwwroot /E /NFL /NDL /NJH /NJS
@@ -266,6 +262,23 @@ jobs:
           echo --- package contents (after Assemble) ---
           tree /f package
 
+      # nicojk_ass(別リポジトリ)のリリースから、単一のexeとライセンスを取り込む。
+      # 版はここで決める。展開したexeの--versionが版と一致することを確かめる。
+      - name: Add nicojk_ass
+        shell: bash
+        env:
+          NICOJK_ASS_VERSION: "0.01"
+          NICOJK_ASS_REPO: https://github.com/rigaya/nicojk_ass
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 10 -o nicojk_ass.zip \
+            "${NICOJK_ASS_REPO}/releases/download/${NICOJK_ASS_VERSION}/nicojk_ass-${NICOJK_ASS_VERSION}-windows-x64.zip"
+          7z x -y -onicojk_ass_x nicojk_ass.zip
+          test "$(./nicojk_ass_x/nicojk_ass.exe --version | tr -d '\r')" = "nicojk_ass ${NICOJK_ASS_VERSION}"
+          cp nicojk_ass_x/nicojk_ass.exe package/exe_files/
+          rm -rf package/exe_files/license/nicojk_ass
+          mkdir -p package/exe_files/license/nicojk_ass
+          cp -r nicojk_ass_x/LICENSE nicojk_ass_x/README.md nicojk_ass_x/danmaku2ass-license package/exe_files/license/nicojk_ass/
       - name: Create archive
         shell: cmd
         run: |

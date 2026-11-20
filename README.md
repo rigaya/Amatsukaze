@@ -565,9 +565,9 @@ AddTaskの終了コードは、`0`がタスク追加成功 (エンコード完�
 
   同梱のnicojk_ass(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`。[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_assのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_assを使用します。
 
-  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(ビルドでは`nicojk_ass_version.txt`の版をダウンロードして配置します)。ライセンスは`exe_files/license/nicojk_ass/`にあります。
+  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(配布アーカイブを作るCIが、決めた版をリリースから取り込みます)。ライセンスは`exe_files/license/nicojk_ass/`にあります。
 
-  開発用に、nicojk_assのソースをそのまま動かすこともできます。基本設定のnicojk_assのパス(または`--nicojkass`)に、ソースの`nicojk_ass.py`を指定してください(この場合はPython 3が必要です)。ビルド時にローカルのzipを使うには、環境変数`NICOJK_ASS_ZIP`にzipのパスを指定します。
+  開発用に、nicojk_assのソースをそのまま動かすこともできます。基本設定のnicojk_assのパス(または`--nicojkass`)に、ソースの`nicojk_ass.py`を指定してください(この場合はPython 3が必要です)。手元のビルド(`publish.bat`、`scripts/build.sh`)は、隣のnicojk_assのリポジトリで作ったexe(`dist/nicojk_ass(.exe)`。`scripts/build.sh`では環境変数`NICOJK_ASS_EXE`で変えられます)があればコピーします。
 
   nicojk_assでは、ニコニコ実況の過去ログAPIからデータを取得し、danmaku2assでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
   NicoConvAssの出力と完全互換ではないほか、細かい調整を行うことはできません。
