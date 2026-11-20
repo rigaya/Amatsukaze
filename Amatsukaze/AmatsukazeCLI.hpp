@@ -149,7 +149,7 @@ static void printHelp(const tchar* bin) {
         "                      ORも可 例) 6: 本編とCMを分離\n"
         "  --nicojk-ref <パス> 基準録画の音声に照合して実況を付ける\n"
         "  --nicojk-ref-sid <ID> 基準録画のサービスID\n"
-        "  --nicojk-ref-mode replace|merge 基準のみ/対象の実況と統合[replace]\n"
+        "  --nicojk-ref-mode replace|merge 基準のみ/対象の実況と統合[merge]\n"
         "  --nicojk-alt replace|merge 先行放送のコメントを探して使う(アニメなど。\n"
         "                      取得元の指定があればそちらを優先)\n"
         "  --nicojk-dump-dir <フォルダ> 実況の調査用に、対象の音声・本編の区間・\n"
@@ -954,7 +954,7 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         add(_T("nicojk_ass_path"), setting->getNicoJKAssPath());
         add(_T("nicojk_ch_sid_path"), setting->getNicoConvChSidPath());
         add(_T("nicojk_ref"), source.ref);
-        add(_T("nicojk_ref_mode"), source.refMode.empty() ? _T("replace") : source.refMode);
+        add(_T("nicojk_ref_mode"), source.refMode.empty() ? _T("merge") : source.refMode);
         add(_T("nicojk_ref_sid"), source.refSid ? StringFormat(_T("%d"), *source.refSid) : _T(""));
         add(_T("nicojk_alt"), source.alt);
         add(_T("nicojk_dump_dir"), source.dumpDir);

@@ -498,7 +498,7 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
         args += StringFormat(_T(" --ref-ts \"%s\""), pathToOS(source_.ref));
         if (source_.refSid) args += StringFormat(_T(" --ref-sid %d"), *source_.refSid);
         if (!source_.file.empty()) args += StringFormat(_T(" --ref-comments-file \"%s\""), pathToOS(source_.file));
-        args += StringFormat(_T(" --mode %s"), source_.refMode == _T("merge") ? _T("merge") : _T("replace"));
+        args += StringFormat(_T(" --mode %s"), source_.refMode == _T("replace") ? _T("replace") : _T("merge"));
     }
     if (!targetWavPath_.empty() && (hasRef || !altMode_.empty())) {
         // 基準の録画のデコードは、nicojk_assがこのCLI自身を--mode nicojk_wavで呼んで行う

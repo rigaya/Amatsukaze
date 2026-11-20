@@ -635,8 +635,8 @@ start=2026-10-01T23:00:00
 |:--|:--|
 | `--nicojk-ref <基準のTS>` | 音声とコメントの基準にする録画を指定します。 |
 | `--nicojk-ref-sid <ServiceId>` | 基準TSのサービスを指定します。省略時は最初の映像があるサービスを選びます。 |
-| `--nicojk-ref-mode replace` | 基準のコメントへ置き換えます。省略時もこの動作です。 |
-| `--nicojk-ref-mode merge` | 基準のコメントと対象の局のコメントを、表示時刻順に混ぜます。 |
+| `--nicojk-ref-mode replace` | 基準のコメントへ置き換えます。 |
+| `--nicojk-ref-mode merge` | 基準のコメントと対象の局のコメントを、表示時刻順に混ぜます。省略時もこの動作です。 |
 
 ```text
 --nicojk --nicojk-ref "初回放送.ts"

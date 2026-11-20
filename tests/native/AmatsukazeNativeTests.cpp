@@ -1651,8 +1651,8 @@ bool TestCommandLineArguments(tstring& diagnostic) {
         { _T("nicojk_file"), _T("ref.xml") },
     }, _T("実況の基準TS・サービス・統合方法"), diagnostic)) return false;
     if (!ExpectCommandLine(with({ _T("--nicojk-ref"), _T("ref.ts") }), {
-        { _T("nicojk_ref_mode"), _T("replace") },
-    }, _T("実況の基準TSは既定で置換"), diagnostic)) return false;
+        { _T("nicojk_ref_mode"), _T("merge") },
+    }, _T("実況の基準TSは既定で統合"), diagnostic)) return false;
     for (const TCHAR* mode : { _T("replace"), _T("merge") }) {
         if (!ExpectCommandLineStatus(with({ _T("--nicojk-ref"), _T("ref.ts"), _T("--nicojk-ref-mode"), mode }),
             0, _T("実況の基準コメントの統合方法"), diagnostic)) return false;
