@@ -27,7 +27,9 @@ public partial class FilterAdjust
     private string? _sessionId, _error;
     private string _status = "読み込み中…", _view = "after", _scale = "1", _quality = "yuv", _saveName = "";
     private string[] _notices = [], _logs = [];
-    private long _generation, _committedGeneration, _frameRevision;
+    private long _generation, _committedGeneration, _frameRevision, _seekRevision;
+    private int? _pendingSeek;
+    private bool _seeking;
     private int _position, _frames, _width, _height, _cropX, _cropY, _cropWidth = 640, _cropHeight = 360;
     private double _fps = 60000d / 1001, _inputDar;
     private bool _decimate = true, _pngFallback, _expired, _disposed, _saving, _cropEnabled;
@@ -40,7 +42,7 @@ public partial class FilterAdjust
     private bool CustomReplaced;
     private int MaxFrame => Math.Max(0, _frames - 1);
     private bool CanOperate => !_disposed && !_expired && _sessionId != null && _frames > 0;
-    private bool _busy => _reopening || _configurationCancellation != null || _frameCancellation != null;
+    private bool _busy => _reopening || _configurationCancellation != null || _frameCancellation != null || _seeking;
     private bool Ready => !_disposed && !_expired && _sessionId != null && _frames > 0 && _generation == _committedGeneration;
     private string SessionUrl => $"{Root}/{_sessionId}";
     private string FilterKind => Node(_profile, "FilterOption")?.ToString() ?? "None";
@@ -131,6 +133,7 @@ public partial class FilterAdjust
     {
         if (_disposed || _expired || _profile == null || _sessionId == null) return Task.CompletedTask;
         _configurationCancellation?.Cancel();
+        ResetSeek();
         _frameCancellation?.Cancel();
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, _sessionCancellation.Token);
         _configurationCancellation = cancellation;
@@ -227,21 +230,50 @@ public partial class FilterAdjust
         if (await _lifecycle.InvokeAsync<bool>("inputFocused")) return;
         await StepAsync(e.Key == "ArrowLeft" ? -1 : 1);
     }
-    private async Task SeekAsync(ChangeEventArgs e)
+    private Task SeekAsync(ChangeEventArgs e)
     {
-        if (!CanOperate || !int.TryParse(e.Value?.ToString(), out var pos)) return;
-        _position = Math.Clamp(pos, 0, Math.Max(0, _frames - 1));
-        await RefreshAsync();
+        if (!CanOperate || !int.TryParse(e.Value?.ToString(), out var pos)) return Task.CompletedTask;
+        _position = Math.Clamp(pos, 0, MaxFrame);
+        if (!Ready) return Task.CompletedTask;
+        // ドラッグ中は進行中の処理を残し、保留位置だけを最新値で置き換える。
+        _pendingSeek = _position;
+        if (_seeking) return Task.CompletedTask;
+        _seeking = true;
+        return TrackAsync(DrainSeekAsync(_seekRevision));
     }
-    private Task StartFrameAsync(int? step)
+    private async Task DrainSeekAsync(long revision)
     {
+        try
+        {
+            while (revision == _seekRevision && Ready && _pendingSeek is int pos)
+            {
+                _pendingSeek = null;
+                var frame = StartFrameAsync(null, pos);
+                if (!_disposed) StateHasChanged();
+                await frame;
+            }
+        }
+        finally
+        {
+            if (revision == _seekRevision) ResetSeek();
+        }
+    }
+    private void ResetSeek()
+    {
+        _seekRevision++;
+        _pendingSeek = null;
+        _seeking = false;
+    }
+    private Task StartFrameAsync(int? step, int? seek = null)
+    {
+        if (!seek.HasValue) ResetSeek();
         if (!Ready) return Task.CompletedTask;
         _frameCancellation?.Cancel();
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, _sessionCancellation.Token);
         _frameCancellation = cancellation;
-        return TrackAsync(RenderFramesAsync(_generation, ++_frameRevision, step, cancellation));
+        return TrackAsync(RenderFramesAsync(_generation, ++_frameRevision, step, seek, cancellation));
     }
-    private async Task RenderFramesAsync(long gen, long revision, int? step, CancellationTokenSource cancellation)
+    private async Task RenderFramesAsync(long gen, long revision, int? step, int? seek, CancellationTokenSource cancellation)
     {
         var token = cancellation.Token;
         bool Current() => !_disposed && gen == _generation && revision == _frameRevision && !token.IsCancellationRequested;
@@ -252,7 +284,7 @@ public partial class FilterAdjust
             if (!Current()) return;
             _status = "フレームを取得中…";
             _error = null;
-            var pos = _position;
+            var pos = seek ?? _position;
             var view = _view;
             var options = CaptureFrameOptions();
             PreviewFrame? after = null, before = null;
@@ -288,7 +320,8 @@ public partial class FilterAdjust
             if (!Current()) return;
             if (after != null) UpdateFrameInfo(after.Metadata);
             pos = after?.Position ?? before!.Position;
-            _position = pos;
+            // 中間フレームを描画しても、つまみは新しい入力位置に留める。
+            if (!seek.HasValue || !_pendingSeek.HasValue) _position = pos;
             _status = _pngFallback && _quality == "yuv" ? "表示しました(PNG代替)" : "表示しました";
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -413,6 +446,7 @@ public partial class FilterAdjust
         _reopening = true;
         _sessionCancellation.Cancel();
         _configurationCancellation?.Cancel();
+        ResetSeek();
         _frameCancellation?.Cancel();
         try
         {
