@@ -1451,18 +1451,23 @@ namespace Amatsukaze.Server
                 if (!Util.IsServerLinux())
                     setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
             }
-            // nicojk_assは exe_files/nicojk_ass/nicojk_ass.py に置く。
-            // 古い版の設定は実行モジュールと同じフォルダの nicojk_ass.py を指しているので、
+            // nicojk_assは exe_files/nicojk_ass(.exe) に置く。
+            // 古い版の設定は nicojk_ass.py(実行モジュールと同じフォルダ、または nicojk_ass/ の下)や nicojk_ass/nicojk_ass(.exe) を指しているので、
             // そのファイルがなくなっていれば新しい既定値に直す。
-            var nicoJKAssDefaultPath = Path.Combine(basePath, "nicojk_ass", "nicojk_ass.py");
+            var nicoJKAssExeName = Util.IsServerWindows() ? "nicojk_ass.exe" : "nicojk_ass";
+            var nicoJKAssDefaultPath = Path.Combine(basePath, nicoJKAssExeName);
             if (!string.IsNullOrEmpty(setting.NicoJKAssPath)
                 && !File.Exists(setting.NicoJKAssPath)
-                && string.Equals(Path.GetFullPath(setting.NicoJKAssPath),
-                    Path.GetFullPath(Path.Combine(basePath, "nicojk_ass.py")),
-                    Util.IsServerWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
                 && File.Exists(nicoJKAssDefaultPath))
             {
-                setting.NicoJKAssPath = nicoJKAssDefaultPath;
+                var pathComparison = Util.IsServerWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                var fullPath = Path.GetFullPath(setting.NicoJKAssPath);
+                if (string.Equals(fullPath, Path.GetFullPath(Path.Combine(basePath, "nicojk_ass.py")), pathComparison)
+                    || string.Equals(fullPath, Path.GetFullPath(Path.Combine(basePath, "nicojk_ass", "nicojk_ass.py")), pathComparison)
+                    || string.Equals(fullPath, Path.GetFullPath(Path.Combine(basePath, "nicojk_ass", nicoJKAssExeName)), pathComparison))
+                {
+                    setting.NicoJKAssPath = nicoJKAssDefaultPath;
+                }
             }
             if (string.IsNullOrEmpty(setting.NicoJKAssPath))
             {
@@ -2821,7 +2826,7 @@ namespace Amatsukaze.Server
             CheckPath("ChapterExe", setting.ChapterExePath);
             CheckPath("JoinLogoScp", setting.JoinLogoScpPath);
             CheckPath("NicoConvAss", setting.NicoConvASSPath);
-            CheckPath("nicojk_ass.py", setting.NicoJKAssPath);
+            CheckPath("nicojk_ass", setting.NicoJKAssPath);
             CheckPath("tsMuxeR", setting.TsMuxeRPath);
             CheckPath("SCRename.vbs", setting.SCRenamePath);
             CheckPath("AutoVfr.exe", setting.AutoVfrPath);
@@ -2963,15 +2968,17 @@ namespace Amatsukaze.Server
                 {
                     if (Util.IsServerLinux() && string.IsNullOrEmpty(setting.NicoJKAssPath))
                     {
-                        throw new ArgumentException("nicojk_ass.pyパスが設定されていません");
+                        throw new ArgumentException("nicojk_assパスが設定されていません");
                     }
                     if (!Util.IsServerLinux()
                         && string.IsNullOrEmpty(setting.NicoConvASSPath)
                         && string.IsNullOrEmpty(setting.NicoJKAssPath))
                     {
-                        throw new ArgumentException("NicoConvASSまたはnicojk_ass.pyのパスが設定されていません");
+                        throw new ArgumentException("NicoConvASSまたはnicojk_assのパスが設定されていません");
                     }
+                    // exeは直接起動するので、Pythonが要るのは.pyを指定したときだけ
                     if (!string.IsNullOrEmpty(setting.NicoJKAssPath)
+                        && setting.NicoJKAssPath.EndsWith(".py", StringComparison.OrdinalIgnoreCase)
                         && (Util.IsServerLinux() || string.IsNullOrEmpty(setting.NicoConvASSPath)))
                     {
                         PythonExecutableResolver.ResolveOrThrow("nicojk_ass.py");

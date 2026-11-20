@@ -31,6 +31,7 @@ dotnet workload install wasm-tools --skip-manifest-update
 - AmatsuakzeServer, AmatsuakzeServerCLI, AmatsuakzeAddTask のビルド (C# dotnet)
 - WebUI静的ファイルの公開と配置 (`exe_files/wwwroot`)
 - インストール先への実行ファイルの配置
+- nicojk_assのリリース(`nicojk_ass_version.txt`の版)のダウンロードと配置 (`exe_files/nicojk_ass`。ライセンスは`exe_files/license/nicojk_ass/`)。ローカルのzipを使うときは環境変数`NICOJK_ASS_ZIP`にzipのパスを指定
 
 ```bash
 git clone https://github.com/rigaya/Amatsukaze.git --recursive

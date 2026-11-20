@@ -22,7 +22,7 @@
 #else
 #define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_assへのパス（互換オプション）\n")
 #endif
-#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_ass/nicojk_ass.pyへのパス\n")
+#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_assの実行ファイル(.pyならPythonで実行)へのパス\n")
 
 static void printCopyright() {
     PRINTF(
@@ -296,8 +296,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.nicoJKAssPath = _T("");
 #else
     conf.nicoConvAssPath = _T("");
-    // Linux: Python スクリプト nicojk_ass/nicojk_ass.py を使用
-    conf.nicoJKAssPath = _T("nicojk_ass/nicojk_ass.py");
+    // Linux: 同梱の実行ファイル nicojk_ass を使用
+    // カレントディレクトリの同名フォルダと取り違えないよう、実行モジュールのフォルダを明示する
+    conf.nicoJKAssPath = moduleDir + _T("/nicojk_ass") + exeAppendix;
 #endif
     conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
@@ -629,7 +630,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 #if defined(_WIN32) || defined(_WIN64)
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
 #else
-            // Linux では旧オプションも Python スクリプト指定として扱う
+            // Linux では旧オプションも nicojk_ass の指定として扱う
             conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
 #endif
         } else if (key == _T("--nicojk-ref")) {
@@ -863,7 +864,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
                 File::exists(script) ? nullptr : GetModuleDirectory().c_str()));
         }
         // ch_sid.txt は実際に使用する変換ツールと同じディレクトリに配置
-        // (nicojk_ass は exe_files/nicojk_ass/ にあるので、なければ1つ上の exe_files を探す)
+        // (nicojk_ass は exe_files 直下にあるが、.py を開発用に指定したときの場所にも対応して1つ上も探す)
         const auto& nicoJKToolPath = !conf.nicoJKAssPath.empty()
             ? conf.nicoJKAssPath : conf.nicoConvAssPath;
         const auto toolDir = pathGetDirectory(pathNormalize(GetFullPathFrom(nicoJKToolPath.c_str())));

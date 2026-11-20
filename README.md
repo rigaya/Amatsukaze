@@ -563,16 +563,18 @@ AddTaskの終了コードは、`0`がタスク追加成功 (エンコード完�
 
 - Windows/Linux環境 (nicojk_ass)
 
-  同梱のnicojk_ass(`exe_files/nicojk_ass/nicojk_ass.py`。[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_assのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_assを使用します。
+  同梱のnicojk_ass(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`。[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_assのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_assを使用します。
 
-  nicojk_assの実行にはPython 3が必要です。Windowsでは`python`、Linuxでは`python3`コマンドをPATHから実行できるようにしてください。
+  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(ビルドでは`nicojk_ass_version.txt`の版をダウンロードして配置します)。ライセンスは`exe_files/license/nicojk_ass/`にあります。
+
+  開発用に、nicojk_assのソースをそのまま動かすこともできます。基本設定のnicojk_assのパス(または`--nicojkass`)に、ソースの`nicojk_ass.py`を指定してください(この場合はPython 3が必要です)。ビルド時にローカルのzipを使うには、環境変数`NICOJK_ASS_ZIP`にzipのパスを指定します。
 
   nicojk_assでは、ニコニコ実況の過去ログAPIからデータを取得し、danmaku2assでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
   NicoConvAssの出力と完全互換ではないほか、細かい調整を行うことはできません。
 
   - 設定方法
   
-    1. 基本設定で、nicojk_ass.pyのパス(`exe_files/nicojk_ass/nicojk_ass.py`)を設定
+    1. 基本設定で、nicojk_assのパス(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`)を設定
     
     2. プロファイルでニコニコ実況コメントを有効化
    
@@ -621,7 +623,7 @@ start=2026-10-01T23:00:00
 
 時刻の対応は`録画時刻 = コメント時刻 - コメント基準時刻L + 録画基準時刻P + offset`です。`L`を指定しないAPI取得では`L=P`として、そのままの時刻で取得します。コメントファイルで`L`を省略すると、半数以上のコメントが元TSの録画時刻の範囲内にあればそのまま使い、それ以外は最初のコメントを`P`に合わせて警告します。`P`にEITの番組開始が指定されている場合、TS先頭ではなく番組開始へ合わせます。初回放送の番組開始を把握している場合は、`start`の明示を推奨します。ファイル内の表示位置`vpos`は使用せず、`date`と`date_usec`から表示時刻を計算します。CMカット時は、残した録画区間に対応するコメントだけを出力します。
 
-取得元を指定すると、WindowsでNicoConvAssを設定済みでも`nicojk_ass`を使用します。Python 3と、同梱の`exe_files/nicojk_ass/`を利用できるようにしてください。`--nicojkass`のパスが空なら、実行モジュールと同じフォルダの`nicojk_ass/nicojk_ass.py`を使用します。`--nicojklog`と併用したときは取得元の指定が優先されます。取得元の指定も有効な同名ファイルもなければ従来の経路で動作し、`--nicojk-program-start`だけではPython経路へ切り替わりません。
+取得元を指定すると、WindowsでNicoConvAssを設定済みでも`nicojk_ass`を使用します。同梱の`exe_files/nicojk_ass`を利用できるようにしてください。`--nicojkass`のパスが空なら、実行モジュールと同じフォルダの`nicojk_ass`(Windowsは`nicojk_ass.exe`)を使用します。`.py`で終わるパスを指定したときだけ、Python 3で実行します(開発用)。`--nicojklog`と併用したときは取得元の指定が優先されます。取得元の指定も有効な同名ファイルもなければ従来の経路で動作し、`--nicojk-program-start`だけではnicojk_assの経路へ切り替わりません。
 
 設定ファイルの未知のキー・書式の誤り、明示したコメントファイルや`.nicojk.*`の読み込み失敗はエラーになります。実況取得エラーを無視する設定、または`--ignore-nicojk-error`でエンコードを続行できます。汎用名の`.xml`・`.jkl`にコメントが1件もなければ、警告して無視します。指定範囲内にコメントがない場合は警告し、空のASSを生成します。
 
@@ -660,11 +662,11 @@ file=初回放送.xml
 
 一致した区間が録画の5割未満などで照合に失敗した場合は、警告して対象の局の通常のコメント取得に戻ります。このとき基準用のコメントファイルは流用しません。録画にTOTがない場合は先頭時刻を0として警告するため、ローカルファイルの時刻指定に注意してください。
 
-この機能にはPython経路を使います。WindowsでもPython 3と同梱の`exe_files/nicojk_ass/`が必要です。
+この機能にはnicojk_assの経路を使います。Windowsでも同梱の`exe_files/nicojk_ass.exe`が必要です。
 
 `--nicojk-alt replace|merge`を指定すると、`nicojk_ass`がしょぼいカレンダーで同じ回の先行放送を調べ、入力TSと同じフォルダと、その下の`succeeded`・`failed`フォルダから基準の録画を自動で探します。サーバーのプロファイルで「アニメの先行放送のコメント」を「置き換える」または「統合する」にすると、ニコニコ実況コメントが有効でジャンルがアニメの録画に、この引数が付きます。基準の録画の音声のデコードは、`nicojk_ass`がAmatsukazeCLI自身(`--mode nicojk_wav`)を呼んで行います。局対応表は、関東の地上波、主要なBS、AT-X、サンテレビ、KBS京都と、各地の民放の系列局を対象としています。系列局の録画は、キー局と同時の放送なら通常の実況取得を使います。遅れての放送なら先行放送の録画からコメントを置き換え、その録画が見つからなければコメントを付けません。
 
-自動選択した基準の録画を使う場合は、NicoConvAssを設定していても`nicojk_ass`とPython 3を使います。これらがない場合は警告を出し、通常の実況取得に戻ります。コメントファイルを明示した場合はエラーになります。
+自動選択した基準の録画を使う場合は、NicoConvAssを設定していても`nicojk_ass`を使います。これがない場合は警告を出し、通常の実況取得に戻ります。コメントファイルを明示した場合はエラーになります。
 
 入力TSと同名の`.nicojk.ini`やコメントファイル、`--nicojk-file`などの取得元の指定がある場合は手動指定を優先し、自動選択しません。録画が見つからない場合は、コメントの内容から時刻のずれを推定します。通信に失敗した場合は対象局のコメントを使います。自動選択の結果と見つからなかった理由はジョブログで確認できます。
 

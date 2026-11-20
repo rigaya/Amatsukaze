@@ -49,6 +49,12 @@ static bool CanRunPython3(const tstring& command) {
     }
 }
 
+static bool IsPythonScript(const tstring& path) {
+    auto lower = path;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](tchar c) { return (c >= 'A' && c <= 'Z') ? (tchar)(c - 'A' + 'a') : c; });
+    return ends_with(lower, _T(".py"));
+}
+
 static tstring ResolvePythonCommand() {
     std::vector<PythonCandidate> candidates;
     const auto moduleDir = GetModuleDirectory();
@@ -372,7 +378,10 @@ bool NicoJK::resolveSource() {
 }
 
 bool NicoJK::canRunScript() {
-    return File::exists(getNicoJKAssScriptPath()) && !ResolvePythonCommand().empty();
+    const auto script = getNicoJKAssScriptPath();
+    if (!File::exists(script)) return false;
+    // exeは直接起動するので、Pythonが要るのは.pyを指定したときだけ
+    return !IsPythonScript(script) || !ResolvePythonCommand().empty();
 }
 
 // 入力ファイルのフォルダと、その移動先のsucceeded・failed(あれば)
@@ -390,7 +399,12 @@ std::vector<tstring> NicoJK::getSearchDirs() const {
 
 tstring NicoJK::getNicoJKAssScriptPath() const {
     auto script = setting_.getNicoJKAssPath();
-    if (script.empty()) script = PathCombineS(PathCombineS(GetModuleDirectory(), _T("nicojk_ass")), _T("nicojk_ass.py"));
+#if defined(_WIN32) || defined(_WIN64)
+    const tstring exeName = _T("nicojk_ass.exe");
+#else
+    const tstring exeName = _T("nicojk_ass");
+#endif
+    if (script.empty()) script = PathCombineS(GetModuleDirectory(), exeName);
     return script;
 }
 
@@ -453,7 +467,10 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
 // nicojk_ass のmakeに渡すコマンドライン引数を生成する(全解像度の出力を1回で指定する)
 tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
     int serviceId, time_t startTime, int duration) {
-    auto args = StringFormat(_T("%s \"%s\" make"), pythonCommand.c_str(), pathToOS(getNicoJKAssScriptPath()));
+    // .pyならPythonで動かし、exeならそのまま起動する
+    auto args = pythonCommand.empty()
+        ? StringFormat(_T("\"%s\" make"), pathToOS(getNicoJKAssScriptPath()))
+        : StringFormat(_T("%s \"%s\" make"), pythonCommand.c_str(), pathToOS(getNicoJKAssScriptPath()));
     // 対象
     if (source_.channel) args += StringFormat(_T(" --channel jk%d"), *source_.channel);
     else args += StringFormat(_T(" --sid %d"), serviceId);
@@ -514,16 +531,27 @@ bool NicoJK::makeASSByScript(int serviceId, time_t startTime, int duration) {
     const NicoJKMask mask_t[] = { MASK_720T,  MASK_1080T  };
     const NicoJKType type_t[] = { NICOJK_720T, NICOJK_1080T };
 
-    const auto pythonCommand = ResolvePythonCommand();
-    if (pythonCommand.empty()) {
-        THROW(RuntimeException,
-            "nicojk_assの実行に必要なPython 3が見つかりません。"
-            "exe_filesにPythonを配置するか、Pythonの実行ファイルにPATHを通してください。");
+    // exeは直接起動するのでPythonを探さない。.pyを指定したときだけPythonで動かす(開発用)
+    tstring pythonCommand;
+    if (IsPythonScript(getNicoJKAssScriptPath())) {
+        pythonCommand = ResolvePythonCommand();
+        if (pythonCommand.empty()) {
+            THROW(RuntimeException,
+                "nicojk_assの実行に必要なPython 3が見つかりません。"
+                "exe_filesにPythonを配置するか、Pythonの実行ファイルにPATHを通してください。");
+        }
+        // 出力の文字コードをUTF-8にそろえる(exeは常にUTF-8で出力する)
+#if defined(_WIN32) || defined(_WIN64)
+        _putenv_s("PYTHONIOENCODING", "utf-8");
+#else
+        setenv("PYTHONIOENCODING", "utf-8", 1);
+#endif
     }
 
     const auto args = MakeNicoJKScriptArgs(pythonCommand, serviceId, startTime, duration);
     ctx.infoF(_T("%s"), args);
-    StdRedirectedSubProcess process(args);
+    // nicojk_assの出力はUTF-8なので、ログの文字コードへ変換して流す
+    StdRedirectedSubProcess process(args, 0, true);
     const int exitCode = process.join();
     if (exitCode == 100) {
         // 付けるコメントがない (nicojk_ass側で 100 を返す)

@@ -1532,8 +1532,8 @@ bool TestCommandLineArguments(tstring& diagnostic) {
         _T("実況チャンネル表がルート以外の絶対パスではない"), diagnostic)) return false;
     if (!scriptPath->second.empty()) {
         const std::filesystem::path script(scriptPath->second);
-        if (!Expect(script.is_absolute() && script.filename() == std::filesystem::path(_T("nicojk_ass.py")),
-            _T("既定の実況スクリプトがnicojk_ass.pyの絶対パスではない"), diagnostic)) return false;
+        if (!Expect(script.is_absolute() && script.filename() == std::filesystem::path(_T("nicojk_ass")),
+            _T("既定の実況ツールがnicojk_ass(同梱の実行ファイル)の絶対パスではない"), diagnostic)) return false;
         if (!Expect(sid.is_absolute() && sid.filename() == std::filesystem::path(_T("ch_sid.txt")) &&
             sid.parent_path() == script.parent_path() && sid != std::filesystem::path(_T("/ch_sid.txt")),
             _T("実況チャンネル表がスクリプトと同じディレクトリの絶対パスではない"), diagnostic)) return false;
