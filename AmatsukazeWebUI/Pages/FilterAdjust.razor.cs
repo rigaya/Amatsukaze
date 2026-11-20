@@ -28,7 +28,7 @@ public partial class FilterAdjust
     private string _status = "読み込み中…", _view = "after", _displayedView = "after", _scale = "1", _quality = "yuv", _saveName = "";
     private string[] _notices = [], _logs = [];
     private long _generation, _committedGeneration, _frameRevision, _seekRevision;
-    private int? _pendingSeek;
+    private int? _activeSeek, _pendingSeek;
     private bool _seeking;
     private int _position, _frames, _width, _height, _cropX, _cropY, _cropWidth = 640, _cropHeight = 360;
     private double _fps = 60000d / 1001, _inputDar;
@@ -230,8 +230,10 @@ public partial class FilterAdjust
         if (!CanOperate || !int.TryParse(e.Value?.ToString(), out var pos)) return Task.CompletedTask;
         _position = Math.Clamp(pos, 0, MaxFrame);
         if (!Ready) return Task.CompletedTask;
+        // AviSynth/KFMは未取得位置の読み込みが長引くため、途中の取得を打ち切って最新位置を優先する。
+        if (FilterKind == "Setting") return RefreshAsync();
         // ドラッグ中は進行中の処理を残し、保留位置だけを最新値で置き換える。
-        _pendingSeek = _position;
+        _pendingSeek = _position == _activeSeek ? null : _position;
         if (_seeking) return Task.CompletedTask;
         _seeking = true;
         return TrackAsync(DrainSeekAsync(_seekRevision));
@@ -243,6 +245,7 @@ public partial class FilterAdjust
             while (revision == _seekRevision && Ready && _pendingSeek is int pos)
             {
                 _pendingSeek = null;
+                _activeSeek = pos;
                 var frame = StartFrameAsync(null, pos);
                 if (!_disposed) StateHasChanged();
                 await frame;
@@ -256,7 +259,7 @@ public partial class FilterAdjust
     private void ResetSeek()
     {
         _seekRevision++;
-        _pendingSeek = null;
+        _activeSeek = _pendingSeek = null;
         _seeking = false;
     }
     private Task StartFrameAsync(int? step, int? seek = null)
