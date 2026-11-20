@@ -107,9 +107,9 @@ if not exist "%SRC_BASE%\AmatsukazeWebUI\wwwroot\index.html" (
 robocopy "%SRC_BASE%\AmatsukazeWebUI\wwwroot" "%MERGED_DIR%\wwwroot" /E /NFL /NDL /NJH /NJS
 if errorlevel 8 exit /b %ERRORLEVEL%
 
-rem ニコニコ実況コメント取得・ASS変換ツール nicojk_ass(別リポジトリ)
-rem リリースからの取り込みは、パッケージを作るCI(build_windows_package.yml)が行う。
-rem 手元のビルドでは、隣のリポジトリで作ったexe(..\nicojk_ass\dist\nicojk_ass.exe)があればコピーする。
+rem nicojk_ass: ニコニコ実況コメント取得・ASS変換ツール 別リポジトリ
+rem リリースからの取り込みは、パッケージを作るCI build_windows_package.yml が行う
+rem 手元のビルドでは、隣のリポジトリで作った ..\nicojk_ass\dist\nicojk_ass.exe があればコピーする
 rem 旧版の nicojk_ass.py と danmaku2ass.py は使わなくなったので取り除く
 if exist "%MERGED_DIR%\nicojk_ass.py" del /f /q "%MERGED_DIR%\nicojk_ass.py"
 if exist "%MERGED_DIR%\danmaku2ass.py" del /f /q "%MERGED_DIR%\danmaku2ass.py"
