@@ -101,10 +101,11 @@ namespace Amatsukaze.Server.Rest
             if (!File.Exists(dat)) throw new FileNotFoundException("amts0.datが見つかりません", dat);
             var setting = state.GetSetting() ?? throw new InvalidOperationException("サーバー設定が見つかりません");
             var module = AppContext.BaseDirectory;
+            // GUI版 HWEncVppPreview とは分離し、stdioエンジン専用の CLI を既定とする。
             var executable = string.IsNullOrWhiteSpace(setting.FilterPreviewEnginePath)
-                ? Path.Combine(module, "HWEncVppPreview" + (OperatingSystem.IsWindows() ? ".exe" : "")) : setting.FilterPreviewEnginePath;
+                ? Path.Combine(module, "HWEncVppPreviewCLI" + (OperatingSystem.IsWindows() ? ".exe" : "")) : setting.FilterPreviewEnginePath;
             if (string.IsNullOrWhiteSpace(setting.FilterPreviewEnginePath) && !File.Exists(executable))
-                throw new FileNotFoundException("フィルタプレビューエンジンが見つかりません。HWEncVppPreviewをサーバーと同じフォルダへ配置してください", executable);
+                throw new FileNotFoundException("フィルタプレビューエンジンが見つかりません。HWEncVppPreviewCLIをサーバーと同じフォルダへ配置してください", executable);
             var dir = Path.Combine(temp, "filter_preview");
             System.IO.Directory.CreateDirectory(dir);
             var format = readSourceFormat(dat);
